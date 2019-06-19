@@ -1,11 +1,11 @@
 
 <img align="left" width="100" height="100" src="doc/mimalloc-logo.png"/>
 
-# mi-malloc
+# mimalloc
 
 &nbsp;
 
-mi-malloc (pronounced "me-malloc")
+mimalloc (pronounced "me-malloc")
 is a general purpose allocator with excellent performance characteristics.
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
@@ -41,7 +41,7 @@ Notable aspects of the design include:
   and has no internal points of contention using atomic operations almost
   everywhere.
 
-Enjoy!
+Enjoy!  
 
 # Building
 
