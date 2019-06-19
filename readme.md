@@ -264,11 +264,13 @@ with 128GB ECC memory, running	Ubuntu 18.04.1 with LibC 2.27 and GCC 7.3.0.
 
 The first benchmark set consists of programs that allocate a lot:
 
-![bench-r5a-4xlarge-t1](doc/bench-r5a-4xlarge-t1.png)
+![bench-r5a-1](doc/bench-r5a-1.svg)
+![bench-r5a-2](doc/bench-r5a-2.svg)
 
 Memory usage:
 
-![bench-r5a-4xlarge-m1](doc/bench-r5a-4xlarge-m1.png)
+![bench-r5a-rss-1](doc/bench-r5a-rss-1.svg)
+![bench-r5a-rss-1](doc/bench-r5a-rss-2.svg)
 
 The benchmarks above are (with N=16 in our case):
 
@@ -309,9 +311,6 @@ diffrerences here when running with 16 cores in parallel.
 The second benchmark tests specific aspects of the allocators and
 shows more extreme differences between allocators:
 
-![bench-r5a-4xlarge-t2](doc/bench-r5a-4xlarge-t2.png)
-
-![bench-r5a-4xlarge-m2](doc/bench-r5a-4xlarge-m2.png)
 
 The benchmarks in the second set are (again with N=16):
 
@@ -353,6 +352,14 @@ as well (but the most recent version, jxmalloc, regresses). The
 Hoard allocator is specifically designed to avoid this false sharing and we
 are not sure why it is not doing well here (although it still runs almost 5&times;
 faster than tcmalloc and jxmalloc).
+
+## Benchmarks on a 4-core Intel workstation
+
+![bench-z4-1](doc/bench-z4-1.svg)
+![bench-z4-2](doc/bench-z4-2.svg)
+
+![bench-z4-rss-1](doc/bench-z4-rss-1.svg)
+![bench-z4-rss-2](doc/bench-z4-rss-2.svg)
 
 
 # References
