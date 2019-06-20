@@ -1235,18 +1235,7 @@ HTML_EXTRA_STYLESHEET  = mimalloc-doxygen.css
 # files will be copied as-is; there are no commands or markers available.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_EXTRA_FILES       = bench-r5a-4xlarge-t1.png \
-                         bench-r5a-4xlarge-t2.png \
-                         bench-r5a-4xlarge-m1.png \
-                         bench-r5a-4xlarge-m2.png \
-                         bench-c5d-2xlarge-t1.png \
-                         bench-c5d-2xlarge-t2.png \
-                         bench-c5d-2xlarge-m1.png \
-                         bench-c5d-2xlarge-m2.png \
-                         bench-z4-win-t1.png \
-                         bench-z4-win-t2.png \
-                         bench-z4-win-m1.png \
-                         bench-z4-win-m2.png
+HTML_EXTRA_FILES       = 
 
 # The HTML_COLORSTYLE_HUE tag controls the color of the HTML output. Doxygen
 # will adjust the colors in the style sheet and background images according to
