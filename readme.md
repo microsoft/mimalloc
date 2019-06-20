@@ -67,6 +67,7 @@ in the entire program.
 
 We use [`cmake`](https://cmake.org)<sup>1</sup> as the build system:
 
+- `mkdir -p out/release`
 - `cd out/release`
 - `cmake ../..` (generate the make file)
 - `make` (and build)
@@ -81,22 +82,29 @@ We use [`cmake`](https://cmake.org)<sup>1</sup> as the build system:
 You can build the debug version which does many internal checks and
 maintains detailed statistics as:
 
+-  `mkdir -p out/debug`
 -  `cd out/debug`
 -  `cmake -DCMAKE_BUILD_TYPE=Debug ../..`
 -  `make`
 
    This will name the shared library as `libmimalloc-debug.so`.
 
-Or build with `clang`:
+Finally, you can build a _secure_ version that uses guard pages, encrypted
+free lists, etc, as:
 
-- `CC=clang cmake ../..`
+-  `mkdir -p out/secure`
+-  `cd out/secure`
+-  `cmake -DSECURE=ON ../..`
+-  `make`
 
+This will name the shared library as `libmimalloc-secure.so`.
 Use `ccmake`<sup>2</sup> instead of `cmake`
 to see and customize all the available build options.
 
 Notes:
 1. Install CMake: `sudo apt-get install cmake`
 2. Install CCMake: `sudo apt-get install cmake-curses-gui`
+
 
 
 # Using the library
@@ -214,7 +222,7 @@ the `mimalloc-override-test` project for an example.
 
 On Unix systems, you can also statically link with _mimalloc_ to override the standard
 malloc interface. The recommended way is to link the final program with the
-_mimalloc_ single object file (`mimalloc-override.o` (or `.obj`)). We use
+_mimalloc_ single object file (`mimalloc-override.o`). We use
 an object file instead of a library file as linkers give preference to
 that over archives to resolve symbols. To ensure that the standard
 malloc interface resolves to the _mimalloc_ library, link it as the first
@@ -232,6 +240,11 @@ range of benchmarks, ranging from various real world programs to
 synthetic benchmarks that see how the allocator behaves under more
 extreme circumstances.
 
+In our benchmarks, _mimalloc_ always outperforms all other leading
+allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc), and usually uses less
+memory (up to 25% more in the worst case). A nice property is that it
+does *consistently* well over the wide range of benchmarks.
+
 Allocators are interesting as there exists no algorithm that is generally
 optimal -- for a given allocator one can usually construct a workload
 where it does not do so well. The goal is thus to find an allocation
@@ -239,14 +252,123 @@ strategy that performs well over a wide range of benchmarks without
 suffering from underperformance in less common situations (which is what
 the second half of our benchmark set tests for).
 
-In our benchmarks, _mimalloc_ always outperforms all other leading
-allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc), and usually uses less
-memory (up to 25% more in the worst case). A nice property is that it
-does *consistently* well over the wide range of benchmarks.
+We show here only the results on an AMD EPYC system (Apr 2019) -- for
+specific details and further benchmarks we refer to the technical report.
 
 The benchmark suite is scripted and available separately
 as [mimalloc-bench](https://github.com/daanx/mimalloc-bench).
 
+
+## On a 16-core AMD EPYC running Linux
+
+Testing on a big Amazon EC2 instance ([r5a.4xlarge](https://aws.amazon.com/ec2/instance-types/))
+consisting of a 16-core AMD EPYC 7000 at 2.5GHz
+with 128GB ECC memory, running	Ubuntu 18.04.1 with LibC 2.27 and GCC 7.3.0.
+The measured allocators are _mimalloc_ (**mi**),
+Google's [_tcmalloc_](https://github.com/gperftools/gperftools) (**tc**) used in Chrome,
+[_jemalloc_](https://github.com/jemalloc/jemalloc) (**je**) by Jason Evans used in Firefox and FreeBSD,
+[_snmalloc_](https://github.com/microsoft/snmalloc) (**sn**) by Liétar et al. \[8], [_rpmalloc_](https://github.com/rampantpixels/rpmalloc) (**rp**) by Mattias Jansson at Rampant Pixels,
+[_Hoard_](https://github.com/emeryberger/Hoard) by Emery Berger \[1],
+the system allocator (**glibc**) (based on _PtMalloc2_), and the Intel thread
+building blocks [allocator](https://github.com/intel/tbb) (**tbb**).
+
+![bench-r5a-1](doc/bench-r5a-1.svg)
+![bench-r5a-2](doc/bench-r5a-2.svg)
+
+Memory usage:
+
+![bench-r5a-rss-1](doc/bench-r5a-rss-1.svg)
+![bench-r5a-rss-1](doc/bench-r5a-rss-2.svg)
+
+(note: the _xmalloc-testN_ memory usage should be disregarded is it
+allocates more the faster the program runs).
+
+In the first five benchmarks we can see _mimalloc_ outperforms the other
+allocators moderately, but we also see that all these modern allocators
+perform well -- the times of large performance differences in regular
+workloads are over :-).
+In _cfrac_ and _espresso_, _mimalloc_ is a tad faster than _tcmalloc_ and
+_jemalloc_, but a solid 10\% faster than all other allocators on
+_espresso_. The _tbb_ allocator does not do so well here and lags more than
+20\% behind _mimalloc_. The _cfrac_ and _espresso_ programs do not use much
+memory (~1.5MB) so it does not matter too much, but still _mimalloc_ uses
+about half the resident memory of _tcmalloc_.
+
+The _leanN_ program is most interesting as a large realistic and
+concurrent workload of the [Lean](https://github.com/leanprover/lean) theorem prover
+compiling its own standard library, and there is a 8% speedup over _tcmalloc_. This is
+quite significant: if Lean spends 20% of its time in the
+allocator that means that _mimalloc_ is 1.3&times; faster than _tcmalloc_
+here. This is surprising as that is *not* measured in a pure
+allocation benchmark like _alloc-test_. We conjecture that we see this
+outsized improvement here because _mimalloc_ has better locality in
+the allocation which improves performance for the *other* computations
+in a program as well.
+
+The _redis_ benchmark shows more differences between the allocators where
+_mimalloc_ is 14\% faster than _jemalloc_. On this benchmark _tbb_ (and _Hoard_) do
+not do well and are over 40\% slower.
+
+The _larson_ server workload allocates and frees objects between
+many threads. Larson and Krishnan \[2] observe this
+behavior (which they call _bleeding_) in actual server applications, and the
+benchmark simulates this.
+Here, _mimalloc_ is more than 2.5&times; faster than _tcmalloc_ and _jemalloc_
+due to the object migration between different threads. This is a difficult
+benchmark for other allocators too where _mimalloc_ is still 48% faster than the next
+fastest (_snmalloc_).
+
+
+The second benchmark set tests specific aspects of the allocators and
+shows even more extreme differences between them.
+
+The _alloc-test_, by
+[OLogN Technologies AG](http://ithare.com/testing-memory-allocators-ptmalloc2-tcmalloc-hoard-jemalloc-while-trying-to-simulate-real-world-loads/), is a very allocation intensive benchmark doing millions of
+allocations in various size classes. The test is scaled such that when an
+allocator performs almost identically on _alloc-test1_ as _alloc-testN_ it
+means that it scales linearly. Here, _tcmalloc_, _snmalloc_, and
+_Hoard_ seem to scale less well and do more than 10% worse on the
+multi-core version. Even the best allocators (_tcmalloc_ and _jemalloc_) are
+more than 10% slower as _mimalloc_ here.
+
+The _sh6bench_ and _sh8bench_ benchmarks are
+developed by [MicroQuill](http://www.microquill.com/) as part of SmartHeap.
+In _sh6bench_ _mimalloc_ does much
+better than the others (more than 2&times; faster than _jemalloc_).
+We cannot explain this well but believe it is
+caused in part by the "reverse" free-ing pattern in _sh6bench_.
+Again in _sh8bench_ the _mimalloc_ allocator handles object migration
+between threads much better and is over 36% faster than the next best
+allocator, _snmalloc_. Whereas _tcmalloc_ did well on _sh6bench_, the
+addition of object migration caused it to be almost 3 times slower
+than before.
+
+The _xmalloc-testN_ benchmark by Lever and Boreham \[5] and Christian Eder,
+simulates an asymmetric workload where
+some threads only allocate, and others only free. The _snmalloc_
+allocator was especially developed to handle this case well as it
+often occurs in concurrent message passing systems (like the [Pony] language
+for which _snmalloc_ was initially developed). Here we see that
+the _mimalloc_ technique of having non-contended sharded thread free
+lists pays off as it even outperforms _snmalloc_ here.
+Only _jemalloc_ also handles this reasonably well, while the
+others underperform by a large margin.
+
+The _cache-scratch_ benchmark by Emery Berger \[1], and introduced with the Hoard
+allocator to test for _passive-false_ sharing of cache lines. With a single thread they all
+perform the same, but when running with multiple threads the potential allocator
+induced false sharing of the cache lines causes large run-time
+differences, where _mimalloc_ is more than 18&times; faster than _jemalloc_ and
+_tcmalloc_! Crundal \[6] describes in detail why the false cache line
+sharing occurs in the _tcmalloc_ design, and also discusses how this
+can be avoided with some small implementation changes.
+Only _snmalloc_ and _tbb_ also avoid the
+cache line sharing like _mimalloc_. Kukanov and Voss \[7] describe in detail
+how the design of _tbb_ avoids the false cache line sharing.
+
+
+
+<!--
 
 ## Tested Allocators
 
@@ -495,6 +617,7 @@ encodes the free lists and uses randomized initial free lists, and we
 expected it would perform quite a bit worse -- but on the first benchmark set
 it performed only about 3% slower on average, and is second best overall.
 
+-->
 
 # References
 
