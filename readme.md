@@ -33,11 +33,8 @@ Notable aspects of the design include:
   due to free list sharding) the memory is marked to the OS as unused ("reset" or "purged")
   reducing (real) memory pressure and fragmentation, especially in long running
   programs.
-- __lazy initialization__: pages in a segment are lazily initialized so
-  no memory is touched until it becomes allocated, reducing the resident
-  memory and potential page faults.
 - __secure__: mimalloc can be build in secure mode, adding guard pages,
-  randomized allocation, encoded free lists, etc. to protect against various
+  randomized allocation, encrypted free lists, etc. to protect against various
   heap vulnerabilities. The performance penalty is only around 3% on average
   over our benchmarks.
 - __first-class heaps__: efficiently create and use multiple heaps to allocate across different regions.
@@ -50,7 +47,8 @@ Notable aspects of the design include:
   and usually uses less memory (up to 25% more in the worst case). A nice property
   is that it does consistently well over a wide range of benchmarks.
 
-You can read more on the design of _mimalloc_ in the upcoming technical report.   
+You can read more on the design of _mimalloc_ in the upcoming technical report
+which also has detailed benchmark results.   
 
 Enjoy!  
 
@@ -259,18 +257,18 @@ The benchmark suite is scripted and available separately
 as [mimalloc-bench](https://github.com/daanx/mimalloc-bench).
 
 
-## On a 16-core AMD EPYC running Linux
+## Benchmark Results
 
 Testing on a big Amazon EC2 instance ([r5a.4xlarge](https://aws.amazon.com/ec2/instance-types/))
 consisting of a 16-core AMD EPYC 7000 at 2.5GHz
 with 128GB ECC memory, running	Ubuntu 18.04.1 with LibC 2.27 and GCC 7.3.0.
-The measured allocators are _mimalloc_ (**mi**),
-Google's [_tcmalloc_](https://github.com/gperftools/gperftools) (**tc**) used in Chrome,
-[_jemalloc_](https://github.com/jemalloc/jemalloc) (**je**) by Jason Evans used in Firefox and FreeBSD,
-[_snmalloc_](https://github.com/microsoft/snmalloc) (**sn**) by Liétar et al. \[8], [_rpmalloc_](https://github.com/rampantpixels/rpmalloc) (**rp**) by Mattias Jansson at Rampant Pixels,
+The measured allocators are _mimalloc_ (mi),
+Google's [_tcmalloc_](https://github.com/gperftools/gperftools) (tc) used in Chrome,
+[_jemalloc_](https://github.com/jemalloc/jemalloc) (je) by Jason Evans used in Firefox and FreeBSD,
+[_snmalloc_](https://github.com/microsoft/snmalloc) (sn) by Liétar et al. \[8], [_rpmalloc_](https://github.com/rampantpixels/rpmalloc) (rp) by Mattias Jansson at Rampant Pixels,
 [_Hoard_](https://github.com/emeryberger/Hoard) by Emery Berger \[1],
-the system allocator (**glibc**) (based on _PtMalloc2_), and the Intel thread
-building blocks [allocator](https://github.com/intel/tbb) (**tbb**).
+the system allocator (glibc) (based on _PtMalloc2_), and the Intel thread
+building blocks [allocator](https://github.com/intel/tbb) (tbb).
 
 ![bench-r5a-1](doc/bench-r5a-1.svg)
 ![bench-r5a-2](doc/bench-r5a-2.svg)
@@ -299,11 +297,11 @@ concurrent workload of the [Lean](https://github.com/leanprover/lean) theorem pr
 compiling its own standard library, and there is a 8% speedup over _tcmalloc_. This is
 quite significant: if Lean spends 20% of its time in the
 allocator that means that _mimalloc_ is 1.3&times; faster than _tcmalloc_
-here. This is surprising as that is *not* measured in a pure
+here. (This is surprising as that is not measured in a pure
 allocation benchmark like _alloc-test_. We conjecture that we see this
 outsized improvement here because _mimalloc_ has better locality in
 the allocation which improves performance for the *other* computations
-in a program as well.
+in a program as well).
 
 The _redis_ benchmark shows more differences between the allocators where
 _mimalloc_ is 14\% faster than _jemalloc_. On this benchmark _tbb_ (and _Hoard_) do
@@ -375,34 +373,34 @@ how the design of _tbb_ avoids the false cache line sharing.
 We tested _mimalloc_ with 9 leading allocators over 12 benchmarks
 and the SpecMark benchmarks. The tested allocators are:
 
-- **mi**: The _mimalloc_ allocator, using version tag `v1.0.0`.
-  We also test a secure version of _mimalloc_ as **smi** which uses
+- mi: The _mimalloc_ allocator, using version tag `v1.0.0`.
+  We also test a secure version of _mimalloc_ as smi which uses
   the techniques described in Section [#sec-secure].
-- **tc**: The [_tcmalloc_](https://github.com/gperftools/gperftools)
+- tc: The [_tcmalloc_](https://github.com/gperftools/gperftools)
   allocator which comes as part of
   the Google performance tools and is used in the Chrome browser.
   Installed as package `libgoogle-perftools-dev` version
   `2.5-2.2ubuntu3`.
-- **je**: The [_jemalloc_](https://github.com/jemalloc/jemalloc)
+- je: The [_jemalloc_](https://github.com/jemalloc/jemalloc)
   allocator by Jason Evans is developed at Facebook
   and widely used in practice, for example in FreeBSD and Firefox.
   Using version tag 5.2.0.
-- **sn**: The [_snmalloc_](https://github.com/microsoft/snmalloc) allocator
+- sn: The [_snmalloc_](https://github.com/microsoft/snmalloc) allocator
   is a recent concurrent message passing
   allocator by Liétar et al. \[8]. Using `git-0b64536b`.
-- **rp**: The [_rpmalloc_](https://github.com/rampantpixels/rpmalloc) allocator
+- rp: The [_rpmalloc_](https://github.com/rampantpixels/rpmalloc) allocator
    uses 32-byte aligned allocations and is developed by Mattias Jansson at Rampant Pixels.
    Using version tag 1.3.1.
-- **hd**: The [_Hoard_](https://github.com/emeryberger/Hoard) allocator by
+- hd: The [_Hoard_](https://github.com/emeryberger/Hoard) allocator by
   Emery Berger \[1]. This is one of the first
   multi-thread scalable allocators. Using version tag 3.13.
-- **glibc**: The system allocator. Here we use the _glibc_ allocator (which is originally based on
+- glibc: The system allocator. Here we use the _glibc_ allocator (which is originally based on
   _Ptmalloc2_), using version 2.27.0. Note that version 2.26 significantly improved scalability over
   earlier versions.
-- **sm**: The [_Supermalloc_](https://github.com/kuszmaul/SuperMalloc) allocator by
+- sm: The [_Supermalloc_](https://github.com/kuszmaul/SuperMalloc) allocator by
   Bradley Kuszmaul uses hardware transactional memory
   to speed up parallel operations. Using version `git-709663fb`.
-- **tbb**: The Intel [TBB](https://github.com/intel/tbb) allocator that comes with
+- tbb: The Intel [TBB](https://github.com/intel/tbb) allocator that comes with
   the Thread Building Blocks (TBB) library \[7].
   Installed as package `libtbb-dev`, version `2017~U7-8`.
 
@@ -604,7 +602,7 @@ This time SuperMalloc (_sm_) is included as this platform supports
 hardware transactional memory. Unfortunately,
 there are no entries for _SuperMalloc_ in the _leanN_ and _xmalloc-testN_ benchmarks
 as it faulted on those. We also added the secure version of
-_mimalloc_ as **smi**.
+_mimalloc_ as smi.
 
 Overall, the relative results are quite similar as before. Most
 allocators fare better on the _larsonN_ benchmark now -- either due to
