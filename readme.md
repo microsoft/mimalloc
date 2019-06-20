@@ -6,7 +6,7 @@
 &nbsp;
 
 mimalloc (pronounced "me-malloc")
-is a general purpose allocator with excellent performance characteristics.
+is a general purpose allocator with excellent [performance](#performance) characteristics.
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
 
@@ -45,7 +45,7 @@ Notable aspects of the design include:
 - __bounded__: it does not suffer from _blowup_ \[1\], has bounded worst-case allocation
   times (_wcat_), bounded space overhead (~0.2% meta-data, with at most 16.7% waste in allocation sizes),
   and has no internal points of contention using only atomic operations.
-- __fast__: In our benchmarks (see below),
+- __fast__: In our benchmarks (see [below](#performance)),
   _mimalloc_ always outperforms all other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
   and usually uses less memory (up to 25% more in the worst case). A nice property
   is that it does consistently well over a wide range of benchmarks.
@@ -371,8 +371,9 @@ Memory usage:
 
 ![bench-r5a-rss-1](doc/bench-r5a-rss-1.svg)
 ![bench-r5a-rss-1](doc/bench-r5a-rss-2.svg)
+
 (note: the _xmalloc-testN_ memory usage should be disregarded is it
-allocetes more the faster the program runs).
+allocates more the faster the program runs).
 
 In the first five benchmarks we can see _mimalloc_ outperforms the other
 allocators moderately, but we also see that all these modern allocators
@@ -473,8 +474,9 @@ Memory usage:
 
 ![bench-z4-rss-1](doc/bench-z4-rss-1.svg)
 ![bench-z4-rss-2](doc/bench-z4-rss-2.svg)
+
 (note: the _xmalloc-testN_ memory usage should be disregarded is it
-allocetes more the faster the program runs).
+allocates more the faster the program runs).
 
 This time SuperMalloc (_sm_) is included as this platform supports
 hardware transactional memory. Unfortunately,
