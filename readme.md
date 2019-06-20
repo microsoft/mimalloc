@@ -44,8 +44,11 @@ Notable aspects of the design include:
   A heap can be destroyed at once instead of deallocating each object separately.  
 - __bounded__: it does not suffer from _blowup_ \[1\], has bounded worst-case allocation
   times (_wcat_), bounded space overhead (~0.2% meta-data, with at most 16.7% waste in allocation sizes),
-  and has no internal points of contention using atomic operations almost
-  everywhere.
+  and has no internal points of contention using only atomic operations.
+- __fast__: In our benchmarks (see below),
+  _mimalloc_ always outperforms all other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
+  and usually uses less memory (up to 25% more in the worst case). A nice property
+  is that it does consistently well over a wide range of benchmarks.
 
 You can read more on the design of _mimalloc_ in the upcoming technical report.   
 
@@ -278,8 +281,7 @@ and the SpecMark benchmarks. The tested allocators are:
   Bradley Kuszmaul uses hardware transactional memory
   to speed up parallel operations. Using version `git-709663fb`.
 - **tbb**: The Intel [TBB](https://github.com/intel/tbb) allocator that comes with
-  the Thread Building Blocks (TBB) library
-  [@kukanov2007foundations;@hudson2006mcrt].
+  the Thread Building Blocks (TBB) library \[7].
   Installed as package `libtbb-dev`, version `2017~U7-8`.
 
 All allocators run exactly the same benchmark programs on Ubuntu 18.04.1
@@ -369,6 +371,8 @@ Memory usage:
 
 ![bench-r5a-rss-1](doc/bench-r5a-rss-1.svg)
 ![bench-r5a-rss-1](doc/bench-r5a-rss-2.svg)
+(note: the _xmalloc-testN_ memory usage should be disregarded is it
+allocetes more the faster the program runs).
 
 In the first five benchmarks we can see _mimalloc_ outperforms the other
 allocators moderately, but we also see that all these modern allocators
@@ -465,8 +469,12 @@ ECC memory, running Ubuntu 18.04.1 with LibC 2.27 and GCC 7.3.0.
 ![bench-z4-1](doc/bench-z4-1.svg)
 ![bench-z4-2](doc/bench-z4-2.svg)
 
+Memory usage:
+
 ![bench-z4-rss-1](doc/bench-z4-rss-1.svg)
 ![bench-z4-rss-2](doc/bench-z4-rss-2.svg)
+(note: the _xmalloc-testN_ memory usage should be disregarded is it
+allocetes more the faster the program runs).
 
 This time SuperMalloc (_sm_) is included as this platform supports
 hardware transactional memory. Unfortunately,
