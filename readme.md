@@ -36,10 +36,16 @@ Notable aspects of the design include:
 - __lazy initialization__: pages in a segment are lazily initialized so
   no memory is touched until it becomes allocated, reducing the resident
   memory and potential page faults.
+- __secure__: mimalloc can be build in secure mode, adding guard pages,
+  randomized allocation, encoded free lists, etc. to protect against various
+  heap vulnerabilities. The performance penalty is only around 3% on average
+  over our benchmarks.
 - __bounded__: it does not suffer from _blowup_ \[1\], has bounded worst-case allocation
   times (_wcat_), bounded space overhead (~0.2% meta-data, with at most 16.7% waste in allocation sizes),
   and has no internal points of contention using atomic operations almost
   everywhere.
+
+You can read more on the design of mimalloc in the upcoming technical report. 
 
 Enjoy!  
 
