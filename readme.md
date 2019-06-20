@@ -65,36 +65,37 @@ in the entire program.
 
 We use [`cmake`](https://cmake.org)<sup>1</sup> as the build system:
 
-- `mkdir -p out/release`
-- `cd out/release`
-- `cmake ../..` (generate the make file)
-- `make` (and build)
+```
+> mkdir -p out/release
+> cd out/release
+> cmake ../..
+> make
+```
+This builds the library as a shared (dynamic)
+library (`.so` or `.dylib`), a static library (`.a`), and
+as a single object file (`.o`).
 
-  This builds the library as a shared (dynamic)
-  library (`.so` or `.dylib`), a static library (`.a`), and
-  as a single object file (`.o`).
-
-- `sudo make install` (install the library and header files in `/usr/local/lib`  and `/usr/local/include`)
-
+`> sudo make install` (install the library and header files in `/usr/local/lib`  and `/usr/local/include`)
 
 You can build the debug version which does many internal checks and
 maintains detailed statistics as:
 
--  `mkdir -p out/debug`
--  `cd out/debug`
--  `cmake -DCMAKE_BUILD_TYPE=Debug ../..`
--  `make`
-
-   This will name the shared library as `libmimalloc-debug.so`.
+```
+> mkdir -p out/debug
+> cd out/debug
+> cmake -DCMAKE_BUILD_TYPE=Debug ../..
+> make
+```
+This will name the shared library as `libmimalloc-debug.so`.
 
 Finally, you can build a _secure_ version that uses guard pages, encrypted
 free lists, etc, as:
-
--  `mkdir -p out/secure`
--  `cd out/secure`
--  `cmake -DSECURE=ON ../..`
--  `make`
-
+```
+> mkdir -p out/secure
+> cd out/secure
+> cmake -DSECURE=ON ../..
+> make
+```
 This will name the shared library as `libmimalloc-secure.so`.
 Use `ccmake`<sup>2</sup> instead of `cmake`
 to see and customize all the available build options.
