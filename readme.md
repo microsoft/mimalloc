@@ -47,7 +47,7 @@ Notable aspects of the design include:
   and usually uses less memory (up to 25% more in the worst case). A nice property
   is that it does consistently well over a wide range of benchmarks.
 
-You can read more on the design of _mimalloc_ in the upcoming technical report
+You can read more on the design of _mimalloc_ in the [technical report](https://www.microsoft.com/en-us/research/publication/mimalloc-free-list-sharding-in-action)
 which also has detailed benchmark results.   
 
 Enjoy!  
@@ -252,7 +252,7 @@ suffering from underperformance in less common situations (which is what
 the second half of our benchmark set tests for).
 
 We show here only the results on an AMD EPYC system (Apr 2019) -- for
-specific details and further benchmarks we refer to the technical report.
+specific details and further benchmarks we refer to the [technical report](https://www.microsoft.com/en-us/research/publication/mimalloc-free-list-sharding-in-action).
 
 The benchmark suite is scripted and available separately
 as [mimalloc-bench](https://github.com/daanx/mimalloc-bench).
