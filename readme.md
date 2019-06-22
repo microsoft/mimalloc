@@ -387,10 +387,10 @@ how the design of _tbb_ avoids the false cache line sharing.
 
 - \[5] C. Lever, and D. Boreham. _Malloc() Performance in a Multithreaded Linux Environment._
   In USENIX Annual Technical Conference, Freenix Session. San Diego, CA. Jun. 2000.
-  Available at <https://​github.​com/​kuszmaul/​SuperMalloc/​tree/​master/​tests>
+  Available at <https://github.com/kuszmaul/SuperMalloc/tree/master/tests>
 
 - \[6] Timothy Crundal. _Reducing Active-False Sharing in TCMalloc._
-   2016. <http://​courses.​cecs.​anu.​edu.​au/​courses/​CSPROJECTS/​16S1/​Reports/​Timothy*​Crundal*​Report.​pdf>. CS16S1 project at the Australian National University.
+   2016. <http://courses.cecs.anu.edu.au/courses/CSPROJECTS/16S1/Reports/Timothy*Crundal*Report.pdf>. CS16S1 project at the Australian National University.
 
 - \[7] Alexey Kukanov, and Michael J Voss.
    _The Foundations for Scalable Multi-Core Software in Intel Threading Building Blocks._
