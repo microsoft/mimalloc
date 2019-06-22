@@ -34,7 +34,7 @@ by us is freed after we unpatched.
 
 There are two tricky situations to deal with:
 
-1. The Thread Local Storage (TLS): when the main thead stops it will call registered
+1. The Thread Local Storage (TLS): when the main thread stops it will call registered
    callbacks on TLS entries (allocated by `FlsAlloc`). This is done by the OS
    before any DLL's are unloaded. Unfortunately, the C runtime registers such
    TLS entries with CRT allocated memory which is freed in the callback.

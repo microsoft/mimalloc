@@ -201,7 +201,7 @@ static void __attribute__((constructor)) _mi_macosx_override_malloc()
   zone.pressure_relief = &zone_pressure_relief;
   intro.zone_locked = &intro_zone_locked;
 
-  // force the purgable zone to exist to avoid strange bugs
+  // force the purgeable zone to exist to avoid strange bugs
   if (malloc_default_purgeable_zone) {
     purgeable_zone = malloc_default_purgeable_zone();
   }
