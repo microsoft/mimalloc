@@ -404,7 +404,7 @@ static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size
 
 #else
 #pragma message("define a way to get process info")
-static size_t mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim) {
+static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim) {
   *peak_rss = 0;
   *page_faults = 0;
   *page_reclaim = 0;
