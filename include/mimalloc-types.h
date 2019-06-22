@@ -96,7 +96,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Maximum number of size classes. (spaced exponentially in 16.7% increments)
 #define MI_BIN_HUGE  (64U)
 
-// Minimal aligment necessary. On most platforms 16 bytes are needed
+// Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
 #define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 
@@ -150,7 +150,7 @@ typedef union mi_thread_free_u {
 // `thread_free` for freed blocks by other threads
 // The `local_free` and `thread_free` lists are migrated to the `free` list
 // when it is exhausted. The separate `local_free` list is necessary to
-// implement a monotonic heartbeat. The `thead_free` list is needed for
+// implement a monotonic heartbeat. The `thread_free` list is needed for
 // avoiding atomic operations in the common case.
 //
 // `used - thread_freed` == actual blocks that are in use (alive)

@@ -18,13 +18,13 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 #if (MI_MAX_ALIGN_SIZE > 4*MI_INTPTR_SIZE)
-  #error "define aligment for more than 4x word size for this platform"
+  #error "define alignment for more than 4x word size for this platform"
 #elif (MI_MAX_ALIGN_SIZE > 2*MI_INTPTR_SIZE)
   #define MI_ALIGN4W   // 4 machine words minimal alignment
 #elif (MI_MAX_ALIGN_SIZE > MI_INTPTR_SIZE)
   #define MI_ALIGN2W   // 2 machine words minimal alignment
 #else
-  // ok, default aligment is 1 word
+  // ok, default alignment is 1 word
 #endif
 
 
