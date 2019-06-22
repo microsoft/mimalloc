@@ -269,7 +269,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, mi_os_tld_t* tld)
   // on BSD, use the aligned mmap api
   size_t n = _mi_bsr(alignment);
   if ((size_t)1 << n == alignment && n >= 12) {  // alignment is a power of 2 and >= 4096
-    p = mi_mmap(suggest, size, MAP_ALIGNED(n));     // use the freeBSD aligned flags
+    p = mi_mmap(suggest, size, MAP_ALIGNED(n), tld->stats);     // use the NetBSD/freeBSD aligned flags
   }
 #endif
   if (p==NULL && (tld->mmap_next_probable % alignment) == 0) {
