@@ -153,8 +153,7 @@ static inline mi_heap_t* mi_get_default_heap() {
   // TODO: patch ourselves dynamically to avoid this check every time?
   if (!_mi_process_is_initialized) return &_mi_heap_main;
 #endif
-  return _mi_
-  ault;
+  return _mi_heap_default;
 }
 
 static inline bool mi_heap_is_default(const mi_heap_t* heap) {
