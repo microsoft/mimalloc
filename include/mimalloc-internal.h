@@ -25,7 +25,7 @@ void       _mi_verbose_message(const char* fmt, ...);
 extern mi_stats_t       _mi_stats_main;
 extern const mi_page_t  _mi_page_empty;
 bool       _mi_is_main_thread();
-uintptr_t  _mi_ptr_cookie(const void* p); 
+uintptr_t  _mi_ptr_cookie(const void* p);
 uintptr_t  _mi_random_shuffle(uintptr_t x);
 uintptr_t  _mi_random_init(uintptr_t seed /* can be zero */);
 
@@ -138,7 +138,6 @@ static inline size_t _mi_wsize_from_size(size_t size) {
   return (size + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
 }
 
-//extern mi_decl_thread mi_heap_t* _mi_backing_heap;  // thread local heap
 extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
 extern mi_heap_t _mi_heap_main;         // statically allocated main backing heap
 extern bool _mi_process_is_initialized;
@@ -154,7 +153,8 @@ static inline mi_heap_t* mi_get_default_heap() {
   // TODO: patch ourselves dynamically to avoid this check every time?
   if (!_mi_process_is_initialized) return &_mi_heap_main;
 #endif
-  return _mi_heap_default;
+  return _mi_
+  ault;
 }
 
 static inline bool mi_heap_is_default(const mi_heap_t* heap) {
@@ -309,7 +309,7 @@ static inline uintptr_t _mi_thread_id() mi_attr_noexcept {
 #else
 // otherwise use standard C
 static inline uintptr_t _mi_thread_id() mi_attr_noexcept {
-  return (uintptr_t)&_mi_backing_heap;
+  return (uintptr_t)&_mi_heap_default;
 }
 #endif
 
