@@ -47,8 +47,8 @@ Notable aspects of the design include:
   and usually uses less memory (up to 25% more in the worst case). A nice property
   is that it does consistently well over a wide range of benchmarks.
 
-You can read more on the design of _mimalloc_ in the [technical report](https://www.microsoft.com/en-us/research/publication/mimalloc-free-list-sharding-in-action)
-which also has detailed benchmark results.   
+The [documentation](https://microsoft.github.io/mimalloc) gives a full overview of the API.
+You can read more on the design of _mimalloc_ in the [technical report](https://www.microsoft.com/en-us/research/publication/mimalloc-free-list-sharding-in-action) which also has detailed benchmark results.   
 
 Enjoy!  
 
