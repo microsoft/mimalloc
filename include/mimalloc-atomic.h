@@ -46,14 +46,8 @@ static inline bool mi_atomic_compare_exchange_ptr(volatile void** p, void* newp,
   return mi_atomic_compare_exchange((volatile uintptr_t*)p, (uintptr_t)newp, (uintptr_t)compare);
 }
 
-// Atomically exchange a pointer value.
-static inline void* mi_atomic_exchange_ptr(volatile void** p, void* exchange) {
-  return (void*)mi_atomic_exchange((volatile uintptr_t*)p, (uintptr_t)exchange);
-}
 
 
-
-#define mi_atomic_locked(mutex) for(bool _mheld = mi_mutex_lock(mutex); _mheld; _mheld = mi_mutex_unlock(mutex))
 
 #ifdef _MSC_VER
 #define WIN32_LEAN_AND_MEAN
