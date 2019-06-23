@@ -140,6 +140,24 @@ uintptr_t _mi_random_shuffle(uintptr_t x) {
   return x;
 }
 
+#if defined __APPLE__
+static int64_t rdtsc()
+{
+#ifdef __x86_64__
+    unsigned int a, d;
+    __asm__ volatile ("rdtsc" : "=a" (a), "=d" (d));
+    return (unsigned long)a | ((unsigned long)d << 32);
+#elif defined(__i386__)
+    unsigned long long int x;
+    __asm__ volatile ("rdtsc" : "=A" (x));
+    return x;
+#else
+#define NO_CYCLE_COUNTER
+    return 0;
+#endif
+}
+#endif
+
 uintptr_t _mi_random_init(uintptr_t seed /* can be zero */) {
    // Hopefully, ASLR makes our function address random
   uintptr_t x = (uintptr_t)((void*)&_mi_random_init);
@@ -149,6 +167,9 @@ uintptr_t _mi_random_init(uintptr_t seed /* can be zero */) {
   LARGE_INTEGER pcount;
   QueryPerformanceCounter(&pcount);
   x ^= (uintptr_t)(pcount.QuadPart);
+#elif defined __APPLE__
+  int64_t time = rdtsc();
+  x ^= time;
 #else
   struct timespec time;
   clock_gettime(CLOCK_MONOTONIC, &time);
