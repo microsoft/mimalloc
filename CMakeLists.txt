@@ -44,7 +44,6 @@ endif()
 # Options
 if(OVERRIDE MATCHES "ON")
   message(STATUS "Override standard malloc (OVERRIDE=ON)")
-  list(APPEND mi_defines MI_MALLOC_OVERRIDE)
   if(APPLE)
     if(INTERPOSE MATCHES "ON")
       # use interpose on MacOSX
@@ -111,14 +110,30 @@ endif()
 add_library(mimalloc SHARED ${mi_sources})
 set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} NO_SONAME "YES" OUTPUT_NAME ${mi_basename} )
 target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
+if(OVERRIDE MATCHES "ON")
+  target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)
+endif()
 target_compile_options(mimalloc PRIVATE ${mi_cflags})
 target_include_directories(mimalloc PRIVATE include PUBLIC $<INSTALL_INTERFACE:${mi_install_dir}/include>)
 target_link_libraries(mimalloc PUBLIC ${mi_libraries})
 
 # static library
 add_library(mimalloc-static STATIC ${mi_sources})
-set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_basename})
+if(WIN32)
+  # When building both static and shared libraries on Windows,
+  # a static library should use a different output name to 
+  # avoid the conflict with the import library of a shared one.
+  string(REPLACE "mimalloc" "mimalloc-static" mi_output_name ${mi_basename})
+  set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_output_name})
+else()
+  set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_basename})
+endif()
 target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
+if(NOT WIN32 AND OVERRIDE MATCHES "ON")
+  # It is only possible to override malloc on Windows when building as a DLL.
+  # (src/alloc-override.c)
+  target_compile_definitions(mimalloc-static PRIVATE MI_MALLOC_OVERRIDE)
+endif()
 target_compile_options(mimalloc-static PRIVATE ${mi_cflags})
 target_include_directories(mimalloc-static PRIVATE include PUBLIC $<INSTALL_INTERFACE:${mi_install_dir}/include>)
 target_link_libraries(mimalloc-static PUBLIC ${mi_libraries})
@@ -134,7 +149,12 @@ install(FILES "$<TARGET_FILE:mimalloc>" DESTINATION lib)  # duplicate the .so in
 
 # single object file for more predictable static overriding
 add_library(mimalloc-obj OBJECT src/static.c)
-target_compile_definitions(mimalloc-obj PRIVATE ${mi_defines} MI_MALLOC_OVERRIDE)
+target_compile_definitions(mimalloc-obj PRIVATE ${mi_defines})
+if(NOT WIN32 AND OVERRIDE MATCHES "ON")
+  # It is only possible to override malloc on Windows when building as a DLL.
+  # (src/alloc-override.c)
+  target_compile_definitions(mimalloc-obj PRIVATE MI_MALLOC_OVERRIDE)
+endif()
 target_compile_options(mimalloc-obj PRIVATE ${mi_cflags})
 target_include_directories(mimalloc-obj PRIVATE include PUBLIC $<INSTALL_INTERFACE:include>)
 
