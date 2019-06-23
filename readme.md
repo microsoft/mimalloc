@@ -33,7 +33,7 @@ Notable aspects of the design include:
   due to free list sharding) the memory is marked to the OS as unused ("reset" or "purged")
   reducing (real) memory pressure and fragmentation, especially in long running
   programs.
-- __secure__: _mimalloc_ can be build in secure mode, adding guard pages,
+- __secure__: _mimalloc_ can be built in secure mode, adding guard pages,
   randomized allocation, encrypted free lists, etc. to protect against various
   heap vulnerabilities. The performance penalty is only around 3% on average
   over our benchmarks.
