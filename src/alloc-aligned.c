@@ -94,19 +94,17 @@ static void* mi_realloc_zero_aligned_at(void* p, size_t newsize, size_t alignmen
       && (((uintptr_t)p + offset) % alignment) == 0) {
     return p;  // reallocation still fits, is aligned and not more than 50% waste
   }
-  else {
-    void* newp = mi_malloc_aligned_at(newsize,alignment,offset);
-    if (newp != NULL) {
-      if (zero && newsize > size) {
-        // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
-        size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
-        memset((uint8_t*)newp + start, 0, newsize - start);
-      }
-      memcpy(newp, p, (newsize > size ? size : newsize));
-      mi_free(p); // only free if succesfull
+  void* newp = mi_malloc_aligned_at(newsize,alignment,offset);
+  if (newp != NULL) {
+    if (zero && newsize > size) {
+      // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
+      size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
+      memset((uint8_t*)newp + start, 0, newsize - start);
     }
-    return newp;
+    memcpy(newp, p, (newsize > size ? size : newsize));
+    mi_free(p); // only free if succesfull
   }
+  return newp;
 }
 
 static void* _mi_realloc_aligned(void* p, size_t newsize, size_t alignment, bool zero) mi_attr_noexcept {

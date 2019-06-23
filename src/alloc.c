@@ -266,9 +266,7 @@ size_t mi_usable_size(void* p) mi_attr_noexcept {
     mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);
     return (size - adjust);
   }
-  else {
-    return size;
-  }
+  return size;
 }
 
 
@@ -418,9 +416,7 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
   else if (resolved_name != NULL) {
     return resolved_name;
   }
-  else {
-    return mi_heap_strndup(heap, buf, PATH_MAX);
-  }
+  return mi_heap_strndup(heap, buf, PATH_MAX);
 }
 #else
 #include <limits.h>
@@ -432,11 +428,9 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
   if (resolved_name != NULL) {
     return realpath(fname,resolved_name);
   }
-  else {
-    char buf[PATH_MAX+1];
-    char* rname = realpath(fname,buf);
-    return mi_heap_strndup(heap,rname,PATH_MAX); // ok if `rname==NULL`
-  }
+  char buf[PATH_MAX+1];
+  char* rname = realpath(fname,buf);
+  return mi_heap_strndup(heap,rname,PATH_MAX); // ok if `rname==NULL`
 }
 #endif
 

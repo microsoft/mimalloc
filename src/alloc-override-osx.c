@@ -154,10 +154,8 @@ static malloc_zone_t* mi_get_default_zone()
   if (ret == KERN_SUCCESS && count > 0) {
     return zones[0];
   }
-  else {
-    // fallback
-    return malloc_default_zone();
-  }
+  // fallback
+  return malloc_default_zone();
 }
 
 

@@ -493,9 +493,7 @@ static bool mi_heap_area_visitor(const mi_heap_t* heap, const mi_heap_area_ex_t*
   if (args->visit_blocks) {
     return mi_heap_area_visit_blocks(xarea, args->visitor, args->arg);
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 // Visit all blocks in a heap

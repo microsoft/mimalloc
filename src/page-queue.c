@@ -150,9 +150,7 @@ size_t mi_good_size(size_t size) mi_attr_noexcept {
   if (size <= MI_LARGE_SIZE_MAX) {
     return _mi_bin_size(_mi_bin(size));
   }
-  else {
-    return _mi_align_up(size,_mi_os_page_size());
-  }
+  return _mi_align_up(size,_mi_os_page_size());
 }
 
 #if (MI_DEBUG>1)
