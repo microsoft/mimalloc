@@ -19,7 +19,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define NDEBUG in the release version to disable assertions.
 // #define NDEBUG
 
-// Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed statitistics (but costs some performance).
+// Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
 // #define MI_STAT 1
 
 // Define MI_SECURE as 1 to encode free lists
