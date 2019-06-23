@@ -156,10 +156,17 @@ static inline uintptr_t mi_atomic_exchange(volatile uintptr_t* p, uintptr_t exch
   static inline void mi_atomic_yield() {
     std::this_thread::yield();
   }
-#elif (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__))
+#elif (defined(__GNUC__) || defined(__clang__)) && \
+      (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))
+#if defined(__x86_64__) || defined(__i386__)
   static inline void mi_atomic_yield() {
     asm volatile ("pause" ::: "memory");
   }
+#elif defined(__arm__) || defined(__aarch64__)
+  static inline void mi_atomic_yield() {
+    asm volatile("yield");
+  }
+#endif
 #else
   #include <unistd.h>
   static inline void mi_atomic_yield() {
