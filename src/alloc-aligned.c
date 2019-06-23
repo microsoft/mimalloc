@@ -103,7 +103,7 @@ static void* mi_realloc_zero_aligned_at(void* p, size_t newsize, size_t alignmen
         memset((uint8_t*)newp + start, 0, newsize - start);
       }
       memcpy(newp, p, (newsize > size ? size : newsize));
-      mi_free(p); // only free if succesfull
+      mi_free(p); // only free if successful
     }
     return newp;
   }

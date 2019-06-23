@@ -337,7 +337,7 @@ void* _mi_realloc_zero(void* p, size_t newsize, bool zero) {
       memset((uint8_t*)newp + start, 0, newsize - start);
     }
     memcpy(newp, p, (newsize > size ? size : newsize));
-    mi_free(p); // only free if succesfull
+    mi_free(p); // only free if successful
   }
   return newp;
 }
