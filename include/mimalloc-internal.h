@@ -291,7 +291,8 @@ static inline uintptr_t _mi_thread_id() mi_attr_noexcept {
   // Windows: works on Intel and ARM in both 32- and 64-bit
   return (uintptr_t)NtCurrentTeb();
 }
-#elif (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__))
+#elif (defined(__GNUC__) || defined(__clang__)) && \
+      (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))
 // TLS register on x86 is in the FS or GS register
 // see: https://akkadia.org/drepper/tls.pdf
 static inline uintptr_t _mi_thread_id() mi_attr_noexcept {
@@ -300,8 +301,12 @@ static inline uintptr_t _mi_thread_id() mi_attr_noexcept {
   __asm__("movl %%gs:0, %0" : "=r" (tid) : : );  // 32-bit always uses GS
   #elif defined(__MACH__)
   __asm__("movq %%gs:0, %0" : "=r" (tid) : : );  // x86_64 MacOSX uses GS
-  #else
+  #elif defined(__x86_64__)
   __asm__("movq %%fs:0, %0" : "=r" (tid) : : );  // x86_64 Linux, BSD uses FS
+  #elif defined(__arm__)
+  asm volatile ("mrc p15, 0, %0, c13, c0, 3" : "=r" (tid));
+  #elif defined(__aarch64__)
+  asm volatile ("mrs %0, tpidr_el0" : "=r" (tid));
   #endif
   return tid;
 }
