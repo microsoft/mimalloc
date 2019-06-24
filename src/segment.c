@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memset
 #include <stdio.h>
 
-#define MI_PAGE_HUGE_ALIGN  (256*1024)  
+#define MI_PAGE_HUGE_ALIGN  (256*1024)
 
 /* -----------------------------------------------------------
   Segment allocation
@@ -111,13 +111,13 @@ static void mi_segment_enqueue(mi_segment_queue_t* queue, mi_segment_t* segment)
 static void mi_segment_queue_insert_before(mi_segment_queue_t* queue, mi_segment_t* elem, mi_segment_t* segment) {
   mi_assert_expensive(elem==NULL || mi_segment_queue_contains(queue, elem));
   mi_assert_expensive(segment != NULL && !mi_segment_queue_contains(queue, segment));
-  
+
   segment->prev = (elem == NULL ? queue->last : elem->prev);
   if (segment->prev != NULL) segment->prev->next = segment;
                         else queue->first = segment;
   segment->next = elem;
   if (segment->next != NULL) segment->next->prev = segment;
-                        else queue->last = segment;  
+                        else queue->last = segment;
 }
 
 
@@ -172,7 +172,7 @@ static size_t mi_segment_size(size_t capacity, size_t required, size_t* pre_size
 ;
   if (info_size != NULL) *info_size = isize;
   if (pre_size != NULL)  *pre_size  = isize + guardsize;
-  return (required==0 ? MI_SEGMENT_SIZE : required + isize + 2*guardsize);
+  return (required==0 ? MI_SEGMENT_SIZE : _mi_align_up( required + isize + 2*guardsize, MI_PAGE_HUGE_ALIGN) );
 }
 
 
@@ -206,7 +206,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
 // Get a segment of at least `required` size.
 // If `required == MI_SEGMENT_SIZE` the `segment_size` will match exactly
 static mi_segment_t* _mi_segment_cache_findx(mi_segments_tld_t* tld, size_t required, bool reverse) {
-  mi_assert_internal(required % _mi_os_page_size() == 0);  
+  mi_assert_internal(required % _mi_os_page_size() == 0);
   mi_segment_t* segment = (reverse ? tld->cache.last : tld->cache.first);
   while (segment != NULL) {
     if (segment->segment_size >= required) {
@@ -214,14 +214,14 @@ static mi_segment_t* _mi_segment_cache_findx(mi_segments_tld_t* tld, size_t requ
       tld->cache_size -= segment->segment_size;
       mi_segment_queue_remove(&tld->cache, segment);
       // exact size match?
-      if (segment->segment_size == required) {
+      if (required==0 || segment->segment_size == required) {
         return segment;
       }
       // not more than 25% waste and on a huge page segment? (in that case the segment size does not need to match required)
       else if (required != MI_SEGMENT_SIZE && segment->segment_size - (segment->segment_size/4) <= required) {
         return segment;
       }
-      // try to shrink the memory to match exactly  
+      // try to shrink the memory to match exactly
       else {
         if (mi_option_is_enabled(mi_option_secure)) {
           _mi_os_unprotect(segment, segment->segment_size);
@@ -258,7 +258,7 @@ static bool mi_segment_cache_full(mi_segments_tld_t* tld) {
       tld->cache_size*MI_SEGMENT_CACHE_FRACTION < tld->peak_size) return false;
   // take the opportunity to reduce the segment cache if it is too large (now)
   while (tld->cache_size*MI_SEGMENT_CACHE_FRACTION >= tld->peak_size + 1) {
-    mi_segment_t* segment = mi_segment_cache_evict(tld); 
+    mi_segment_t* segment = mi_segment_cache_evict(tld);
     mi_assert_internal(segment != NULL);
     if (segment != NULL) mi_segment_os_free(segment, segment->segment_size, tld);
   }
@@ -327,9 +327,9 @@ static mi_segment_t* mi_segment_alloc( size_t required, mi_page_kind_t page_kind
 
   // try to get it from our caches
   segment = mi_segment_cache_find(tld,segment_size);
-  mi_assert_internal(segment == NULL || 
-                     (segment_size==MI_SEGMENT_SIZE && segment_size == segment->segment_size) || 
-                      (segment_size!=MI_SEGMENT_SIZE && segment_size >= segment->segment_size));
+  mi_assert_internal(segment == NULL ||
+                     (segment_size==MI_SEGMENT_SIZE && segment_size == segment->segment_size) ||
+                      (segment_size!=MI_SEGMENT_SIZE && segment_size <= segment->segment_size));
   if (segment != NULL && mi_option_is_enabled(mi_option_secure) && (segment->page_kind != page_kind || segment->segment_size != segment_size)) {
     _mi_os_unprotect(segment,segment->segment_size);
   }
@@ -666,7 +666,7 @@ static mi_page_t* mi_segment_large_page_alloc(mi_segments_tld_t* tld, mi_os_tld_
 
 static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 {
-  mi_segment_t* segment = mi_segment_alloc(_mi_align_up(size, MI_PAGE_HUGE_ALIGN), MI_PAGE_HUGE, MI_SEGMENT_SHIFT,tld,os_tld);
+  mi_segment_t* segment = mi_segment_alloc(size, MI_PAGE_HUGE, MI_SEGMENT_SHIFT,tld,os_tld);
   if (segment == NULL) return NULL;
   mi_assert_internal(segment->segment_size - segment->segment_info_size >= size);
   segment->used = 1;
