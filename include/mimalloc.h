@@ -109,11 +109,11 @@ mi_decl_export size_t mi_good_size(size_t size) mi_attr_noexcept;
 
 mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
 mi_decl_export void mi_stats_print(FILE* out) mi_attr_noexcept;
-mi_decl_export void mi_stats_reset()          mi_attr_noexcept;
+mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
 
-mi_decl_export void mi_process_init()         mi_attr_noexcept;
-mi_decl_export void mi_thread_init()          mi_attr_noexcept;
-mi_decl_export void mi_thread_done()          mi_attr_noexcept;
+mi_decl_export void mi_process_init(void)     mi_attr_noexcept;
+mi_decl_export void mi_thread_init(void)      mi_attr_noexcept;
+mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_stats_print(FILE* out) mi_attr_noexcept;
 
 typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat);
@@ -149,12 +149,12 @@ mi_decl_export mi_decl_allocator void* mi_recalloc_aligned_at(void* p, size_t co
 struct mi_heap_s;
 typedef struct mi_heap_s mi_heap_t;
 
-mi_decl_export mi_heap_t* mi_heap_new();
+mi_decl_export mi_heap_t* mi_heap_new(void);
 mi_decl_export void       mi_heap_delete(mi_heap_t* heap);
 mi_decl_export void       mi_heap_destroy(mi_heap_t* heap);
 mi_decl_export mi_heap_t* mi_heap_set_default(mi_heap_t* heap);
-mi_decl_export mi_heap_t* mi_heap_get_default();
-mi_decl_export mi_heap_t* mi_heap_get_backing();
+mi_decl_export mi_heap_t* mi_heap_get_default(void);
+mi_decl_export mi_heap_t* mi_heap_get_backing(void);
 mi_decl_export void       mi_heap_collect(mi_heap_t* heap, bool force) mi_attr_noexcept;
 
 mi_decl_export mi_decl_allocator void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
