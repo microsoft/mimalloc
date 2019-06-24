@@ -126,7 +126,7 @@ static void* mi_os_page_align_region(void* addr, size_t size, size_t* newsize) {
   if (diff <= 0) return NULL;
 
   mi_assert_internal((size_t)diff <= size);
-  if (newsize != NULL) *newsize = (size_t)diff;  
+  if (newsize != NULL) *newsize = (size_t)diff;
   return start;
 }
 
@@ -177,7 +177,7 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   BOOL ok = VirtualProtect(start,csize,protect ? PAGE_NOACCESS : PAGE_READWRITE,&oldprotect);
   err = (ok ? 0 : -1);
 #else
-  err = mprotect(start,csize,protect ? PROT_NONE : (PROT_READ|PROT_WRITE));  
+  err = mprotect(start,csize,protect ? PROT_NONE : (PROT_READ|PROT_WRITE));
 #endif
   if (err != 0) {
     _mi_warning_message("mprotect error: start: 0x%8p, csize: 0x%8zux, errno: %i\n", start, csize, errno);
@@ -280,7 +280,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, mi_os_tld_t* tld)
     if (((uintptr_t)p % alignment) == 0) mi_stat_increase(tld->stats->mmap_right_align, 1);
   }
   //fprintf(stderr, "segment address guess: %s, p=%lxu, guess:%lxu\n", (p != NULL && (uintptr_t)p % alignment ==0 ? "correct" : "incorrect"), (uintptr_t)p, next_probable);
-  
+
   if (p==NULL || ((uintptr_t)p % alignment) != 0) {
     // if `p` is not yet aligned after all, free the block and use a slower
     // but guaranteed way to allocate an aligned block
@@ -321,7 +321,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, mi_os_tld_t* tld)
 // For now, we disable it on windows as VirtualFree must
 // be called on the original allocation and cannot be called
 // for individual fragments.
-#if !defined(_WIN32) || (MI_INTPTR_SIZE<8)
+#if defined(_WIN32) || (MI_INTPTR_SIZE<8)
 
 static void* os_pool_alloc(size_t size, size_t alignment, mi_os_tld_t* tld) {
   UNUSED(size);
