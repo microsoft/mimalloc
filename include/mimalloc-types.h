@@ -25,7 +25,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define MI_SECURE as 1 to encode free lists
 // #define MI_SECURE 1
 
-#if !defined(MI_SECURE) 
+#if !defined(MI_SECURE)
 #define MI_SECURE 0
 #endif
 
@@ -104,11 +104,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "define more bins"
 #endif
 
-typedef uintptr_t mi_encoded_t; 
+typedef uintptr_t mi_encoded_t;
 
 // free lists contain blocks
 typedef struct mi_block_s {
-  mi_encoded_t next;  
+  mi_encoded_t next;
 } mi_block_t;
 
 
@@ -175,7 +175,7 @@ typedef struct mi_page_s {
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   uintptr_t             cookie;            // random cookie to encode the free lists
   size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
-  
+
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   volatile uintptr_t    thread_freed;      // at least this number of blocks are in `thread_free`
   volatile mi_thread_free_t thread_free;   // list of deferred free blocks freed by other threads
@@ -373,7 +373,7 @@ typedef struct mi_segments_tld_s {
   size_t              count;        // current number of segments
   size_t              peak;         // peak number of segments
   size_t              cache_count;  // number of segments in the cache
-  mi_segment_t*       cache;        // small cache of segments (to avoid repeated mmap calls)
+  mi_segment_queue_t  cache;        // (small) cache of segments for small and large pages (to avoid repeated mmap calls)
   mi_stats_t*         stats;        // points to tld stats
 } mi_segments_tld_t;
 
@@ -390,7 +390,7 @@ typedef struct mi_os_tld_s {
 struct mi_tld_s {
   unsigned long long  heartbeat;     // monotonic heartbeat count
   mi_heap_t*          heap_backing;  // backing heap of this thread (cannot be deleted)
-  mi_segments_tld_t   segments;      // segment tld 
+  mi_segments_tld_t   segments;      // segment tld
   mi_os_tld_t         os;            // os tld
   mi_stats_t          stats;         // statistics
 };
