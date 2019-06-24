@@ -390,6 +390,7 @@ static void mi_process_done(void) {
 
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     UNUSED(reserved);
+    UNUSED(inst);
     if (reason==DLL_PROCESS_ATTACH) {
       mi_process_init();
     }
