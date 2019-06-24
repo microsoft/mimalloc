@@ -49,7 +49,7 @@ long mi_option_get(mi_option_t option) {
   if (desc->init == UNINIT) {
     mi_option_init(desc);
     if (option != mi_option_verbose) {
-      _mi_verbose_message("option '%s': %zd\n", desc->name, desc->value);
+      _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
     }
   }
   return desc->value;
