@@ -370,9 +370,10 @@ typedef struct mi_segment_queue_s {
 // Segments thread local data
 typedef struct mi_segments_tld_s {
   mi_segment_queue_t  small_free;   // queue of segments with free small pages
-  size_t              count;        // current number of segments
-  size_t              peak;         // peak number of segments
+  size_t              current_size; // current size of all segments
+  size_t              peak_size;    // peak size of all segments
   size_t              cache_count;  // number of segments in the cache
+  size_t              cache_size;   // total size of all segments in the cache
   mi_segment_queue_t  cache;        // (small) cache of segments for small and large pages (to avoid repeated mmap calls)
   mi_stats_t*         stats;        // points to tld stats
 } mi_segments_tld_t;

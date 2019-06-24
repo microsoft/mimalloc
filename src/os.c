@@ -66,9 +66,9 @@ size_t _mi_os_page_size() {
 }
 
 
-static void mi_munmap(void* addr, size_t size)
+static bool mi_munmap(void* addr, size_t size)
 {
-  if (addr == NULL || size == 0) return;
+  if (addr == NULL || size == 0) return true;
   bool err = false;
 #if defined(_WIN32)
   err = (VirtualFree(addr, 0, MEM_RELEASE) == 0);
@@ -78,6 +78,10 @@ static void mi_munmap(void* addr, size_t size)
   if (err) {
     #pragma warning(suppress:4996)
     _mi_warning_message("munmap failed: %s, addr 0x%8li, size %lu\n", strerror(errno), (size_t)addr, size);
+    return false;
+  }
+  else {
+    return true;
   }
 }
 
@@ -191,6 +195,26 @@ bool _mi_os_protect(void* addr, size_t size) {
 
 bool _mi_os_unprotect(void* addr, size_t size) {
   return mi_os_protectx(addr, size, false);
+}
+
+bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize) {
+  // page align conservatively within the range
+  mi_assert_internal(oldsize > newsize && p != NULL);
+  if (oldsize < newsize || p==NULL) return false;
+  if (oldsize == newsize) return true;
+
+  // oldsize and newsize should be page aligned or we cannot shrink precisely
+  void* addr = (uint8_t*)p + newsize;
+  size_t size = 0;
+  void* start = mi_os_page_align_region(addr, oldsize - newsize, &size);
+  if (size==0 || start != addr) return false;
+
+  #ifdef _WIN32
+  // we cannot shrink on windows
+  return false;
+  #else
+  return mi_munmap( start, size );
+  #endif
 }
 
 /* -----------------------------------------------------------
