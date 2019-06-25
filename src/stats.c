@@ -312,10 +312,10 @@ static double mi_clock_now() {
 }
 #else
 #include <time.h>
-#ifdef TIME_UTC
+#ifdef CLOCK_REALTIME
 static double mi_clock_now() {
   struct timespec t;
-  timespec_get(&t, TIME_UTC);
+  clock_gettime(CLOCK_REALTIME, &t);
   return (double)t.tv_sec + (1.0e-9 * (double)t.tv_nsec);
 }
 #else

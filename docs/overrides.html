@@ -105,11 +105,11 @@ $(document).ready(function(){initNavTree('overrides.html','');});
 <div class="textblock"><p>Overriding the standard <code>malloc</code> can be done either <em>dynamically</em> or <em>statically</em>.</p>
 <h2>Dynamic override</h2>
 <p>This is the recommended way to override the standard malloc interface.</p>
-<h3>Unix, BSD, MacOSX</h3>
+<h3>Unix, BSD, macOS</h3>
 <p>On these systems we preload the mimalloc shared library so all calls to the standard <code>malloc</code> interface are resolved to the <em>mimalloc</em> library.</p>
 <ul>
 <li><code>env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram</code> (on Linux, BSD, etc.)</li>
-<li><p class="startli"><code>env DYLD_INSERT_LIBRARIES=usr/lib/libmimalloc.dylib myprogram</code> (On MacOSX)</p>
+<li><p class="startli"><code>env DYLD_INSERT_LIBRARIES=usr/lib/libmimalloc.dylib myprogram</code> (On macOS)</p>
 <p class="startli">Note certain security restrictions may apply when doing this from the <a href="https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash">shell</a>.</p>
 </li>
 </ul>

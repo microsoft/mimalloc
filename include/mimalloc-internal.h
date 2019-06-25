@@ -147,7 +147,7 @@ extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate 
 
 static inline mi_heap_t* mi_get_default_heap() {
 #ifdef MI_TLS_RECURSE_GUARD
-  // on some platforms, like MacOSX, the dynamic loader calls `malloc`
+  // on some platforms, like macOS, the dynamic loader calls `malloc`
   // to initialize thread local data. To avoid recursion, we need to avoid
   // accessing the thread local `_mi_default_heap` until our module is loaded
   // and use the statically allocated main heap until that time.
@@ -301,7 +301,7 @@ static inline uintptr_t _mi_thread_id() mi_attr_noexcept {
   #if defined(__i386__)
   __asm__("movl %%gs:0, %0" : "=r" (tid) : : );  // 32-bit always uses GS
   #elif defined(__MACH__)
-  __asm__("movq %%gs:0, %0" : "=r" (tid) : : );  // x86_64 MacOSX uses GS
+  __asm__("movq %%gs:0, %0" : "=r" (tid) : : );  // x86_64 macOS uses GS
   #elif defined(__x86_64__)
   __asm__("movq %%fs:0, %0" : "=r" (tid) : : );  // x86_64 Linux, BSD uses FS
   #elif defined(__arm__)

@@ -47,11 +47,11 @@ if(OVERRIDE MATCHES "ON")
   list(APPEND mi_defines MI_MALLOC_OVERRIDE)
   if(APPLE)
     if(INTERPOSE MATCHES "ON")
-      # use interpose on MacOSX
+      # use interpose on macOS
       message(STATUS "  Use interpose to override malloc (INTERPOSE=ON)")
       list(APPEND mi_defines MI_INTERPOSE)
     else()
-      # use zone's on MacOSX
+      # use zone's on macOS
       message(STATUS "  Use zone's to override malloc (INTERPOSE=OFF)")
       list(APPEND mi_sources src/alloc-override-osx.c)
     endif()
