@@ -256,15 +256,15 @@ static void _mi_stats_print(mi_stats_t* stats, double secs, FILE* out) mi_attr_n
 }
 
 static double mi_clock_end(double start);
-static double mi_clock_start();
+static double mi_clock_start(void);
 static double mi_time_start = 0.0;
 
-static mi_stats_t* mi_stats_get_default() {
+static mi_stats_t* mi_stats_get_default(void) {
   mi_heap_t* heap = mi_heap_get_default();
   return &heap->tld->stats;
 }
 
-void mi_stats_reset() mi_attr_noexcept {
+void mi_stats_reset(void) mi_attr_noexcept {
   mi_stats_t* stats = mi_stats_get_default();
   if (stats != &_mi_stats_main) { memset(stats, 0, sizeof(mi_stats_t)); }
   memset(&_mi_stats_main, 0, sizeof(mi_stats_t));
@@ -305,7 +305,7 @@ static double mi_to_seconds(LARGE_INTEGER t) {
   return ((double)(t.QuadPart) / freq);
 }
 
-static double mi_clock_now() {
+static double mi_clock_now(void) {
   LARGE_INTEGER t;
   QueryPerformanceCounter(&t);
   return mi_to_seconds(t);
@@ -313,14 +313,14 @@ static double mi_clock_now() {
 #else
 #include <time.h>
 #ifdef CLOCK_REALTIME
-static double mi_clock_now() {
+static double mi_clock_now(void) {
   struct timespec t;
   clock_gettime(CLOCK_REALTIME, &t);
   return (double)t.tv_sec + (1.0e-9 * (double)t.tv_nsec);
 }
 #else
 // low resolution timer
-static double mi_clock_now() {
+static double mi_clock_now(void) {
   return ((double)clock() / (double)CLOCKS_PER_SEC);
 }
 #endif
@@ -329,7 +329,7 @@ static double mi_clock_now() {
 
 static double mi_clock_diff = 0.0;
 
-static double mi_clock_start() {
+static double mi_clock_start(void) {
   if (mi_clock_diff == 0.0) {
     double t0 = mi_clock_now();
     mi_clock_diff = mi_clock_now() - t0;

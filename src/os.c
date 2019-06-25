@@ -50,7 +50,7 @@ static void* mi_align_down_ptr(void* p, size_t alignment) {
 static void* os_pool_alloc(size_t size, size_t alignment, mi_os_tld_t* tld);
 
 // cached OS page size
-size_t _mi_os_page_size() {
+size_t _mi_os_page_size(void) {
   static size_t page_size = 0;
   if (page_size == 0) {
 #if defined(_WIN32)
