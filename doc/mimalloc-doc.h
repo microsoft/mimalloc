@@ -648,7 +648,7 @@ The `mimalloc` project builds a static library (in `out/msvc-x64`), while the
 `mimalloc-override` project builds a DLL for overriding malloc
 in the entire program.
 
-## MacOSX, Linux, BSD, etc.
+## macOS, Linux, BSD, etc.
 
 We use [`cmake`](https://cmake.org)<sup>1</sup> as the build system:
 
@@ -772,14 +772,14 @@ Overriding the standard `malloc` can be done either _dynamically_ or _statically
 
 This is the recommended way to override the standard malloc interface.
 
-### Unix, BSD, MacOSX
+### Unix, BSD, macOS
 
 On these systems we preload the mimalloc shared
 library so all calls to the standard `malloc` interface are
 resolved to the _mimalloc_ library.
 
 - `env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram` (on Linux, BSD, etc.)
-- `env DYLD_INSERT_LIBRARIES=usr/lib/libmimalloc.dylib myprogram` (On MacOSX)
+- `env DYLD_INSERT_LIBRARIES=usr/lib/libmimalloc.dylib myprogram` (On macOS)
 
   Note certain security restrictions may apply when doing this from
   the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).

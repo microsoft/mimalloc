@@ -11,11 +11,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #if defined(MI_MALLOC_OVERRIDE) 
 
 #if !defined(__APPLE__)
-#error "this file should only be included on MacOSX"
+#error "this file should only be included on macOS"
 #endif
 
 /* ------------------------------------------------------
-   Override system malloc on MacOSX
+   Override system malloc on macOS
    This is done through the malloc zone interface.
 ------------------------------------------------------ */
 
@@ -161,7 +161,7 @@ static malloc_zone_t* mi_get_default_zone()
 }
 
 
-static void __attribute__((constructor)) _mi_macosx_override_malloc()
+static void __attribute__((constructor)) _mi_macos_override_malloc()
 {
   static malloc_introspection_t intro;
   memset(&intro, 0, sizeof(intro));
