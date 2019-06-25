@@ -194,7 +194,7 @@ static void __attribute__((constructor)) _mi_macosx_override_malloc()
 
 #if defined(MAC_OS_X_VERSION_10_6) && \
     MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
-  // rwitch to version 9 on OSX 10.6 to support memalign.
+  // switch to version 9 on OSX 10.6 to support memalign.
   zone.version = 9;
   zone.memalign = &zone_memalign;
   zone.free_definite_size = &zone_free_definite_size;
