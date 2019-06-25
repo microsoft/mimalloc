@@ -52,9 +52,6 @@ static inline void* mi_atomic_exchange_ptr(volatile void** p, void* exchange) {
 }
 
 
-
-#define mi_atomic_locked(mutex) for(bool _mheld = mi_mutex_lock(mutex); _mheld; _mheld = mi_mutex_unlock(mutex))
-
 #ifdef _MSC_VER
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -175,23 +172,5 @@ static inline uintptr_t mi_atomic_exchange(volatile uintptr_t* p, uintptr_t exch
 #endif
 
 #endif
-
-// Light weight mutex for low contention situations
-typedef struct mi_mutex_s {
-  volatile uint32_t value;
-} mi_mutex_t;
-
-static inline bool mi_mutex_lock(mi_mutex_t* mutex) {
-  while(!mi_atomic_compare_exchange32(&mutex->value, 1, 0)) {
-    mi_atomic_yield();
-  }
-  return true;
-}
-
-static inline bool mi_mutex_unlock(mi_mutex_t* mutex) {
-  mutex->value = 0;
-  return false;
-}
-
 
 #endif // __MIMALLOC_ATOMIC_H
