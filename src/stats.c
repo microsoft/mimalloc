@@ -123,7 +123,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
 static void mi_printf_amount(int64_t n, int64_t unit, FILE* out, const char* fmt) {
   char buf[32];
   int  len = 32;
-  char* suffix = (unit <= 0 ? " " : "b");
+  const char* suffix = (unit <= 0 ? " " : "b");
   double base = (unit == 0 ? 1000.0 : 1024.0);
   if (unit>0) n *= unit;
 
