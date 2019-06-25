@@ -115,8 +115,10 @@ mi_stats_t _mi_stats_main = { MI_STATS_NULL };
   Initialization of random numbers
 ----------------------------------------------------------- */
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <mach/mach_time.h>
 #else
 #include <time.h>
 #endif
@@ -145,10 +147,12 @@ uintptr_t _mi_random_init(uintptr_t seed /* can be zero */) {
   uintptr_t x = (uintptr_t)((void*)&_mi_random_init);
   x ^= seed;
   // xor with high res time
-#ifdef _WIN32
+#if defined(_WIN32)
   LARGE_INTEGER pcount;
   QueryPerformanceCounter(&pcount);
   x ^= (uintptr_t)(pcount.QuadPart);
+#elif defined(__APPLE__)
+  x ^= (uintptr_t)mach_absolute_time();
 #else
   struct timespec time;
   clock_gettime(CLOCK_MONOTONIC, &time);
@@ -156,7 +160,7 @@ uintptr_t _mi_random_init(uintptr_t seed /* can be zero */) {
   x ^= (uintptr_t)time.tv_nsec;
 #endif
   // and do a few randomization steps
-  uintptr_t max = ((x ^ (x >> 7)) & 0x0F) + 1;
+  uintptr_t max = ((x ^ (x >> 17)) & 0x0F) + 1;
   for (uintptr_t i = 0; i < max; i++) {
     x = _mi_random_shuffle(x);
   }
