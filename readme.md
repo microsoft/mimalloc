@@ -93,7 +93,7 @@ free lists, etc, as:
 ```
 > mkdir -p out/secure
 > cd out/secure
-> cmake -DSECURE=ON ../..
+> cmake -DMI_SECURE=ON ../..
 > make
 ```
 This will name the shared library as `libmimalloc-secure.so`.
