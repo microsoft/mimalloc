@@ -5,8 +5,6 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef __MIMALLOC_TYPES_H
-#define __MIMALLOC_TYPES_H
 
 #include <stdlib.h>   // size_t etc.
 #include <stddef.h>   // ptrdiff_t
@@ -395,5 +393,3 @@ struct mi_tld_s {
   mi_os_tld_t         os;            // os tld
   mi_stats_t          stats;         // statistics
 };
-
-#endif

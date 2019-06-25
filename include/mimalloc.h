@@ -5,8 +5,6 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef __MIMALLOC_H
-#define __MIMALLOC_H
 
 #define MI_MALLOC_VERSION 100   // major + 2 digits minor
 
@@ -232,6 +230,4 @@ mi_decl_export void  mi_option_set_default(mi_option_t option, long value);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

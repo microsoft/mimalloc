@@ -5,8 +5,6 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef __MIMALLOC_INTERNAL_H
-#define __MIMALLOC_INTERNAL_H
 
 #include "mimalloc-types.h"
 
@@ -316,7 +314,4 @@ static inline uintptr_t _mi_thread_id() mi_attr_noexcept {
 static inline uintptr_t _mi_thread_id() mi_attr_noexcept {
   return (uintptr_t)&_mi_heap_default;
 }
-#endif
-
-
 #endif
