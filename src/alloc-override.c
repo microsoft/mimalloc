@@ -25,7 +25,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
   // use aliasing to alias the exported function to one of our `mi_` functions
-  #define MI_FORWARD(fun)      __attribute__((alias(#fun), used));
+  #define MI_FORWARD(fun)      __attribute__((alias(#fun), used, visibility("default")));
   #define MI_FORWARD1(fun,x)   MI_FORWARD(fun)
   #define MI_FORWARD2(fun,x,y) MI_FORWARD(fun)
   #define MI_FORWARD0(fun,x)   MI_FORWARD(fun)
@@ -58,6 +58,10 @@ terms of the MIT license. A copy of the license can be found in the file
   void* calloc(size_t size, size_t n)    mi_attr_noexcept  MI_FORWARD2(mi_calloc, size, n)
   void* realloc(void* p, size_t newsize) mi_attr_noexcept  MI_FORWARD2(mi_realloc, p, newsize)
   void  free(void* p)                    mi_attr_noexcept  MI_FORWARD0(mi_free, p)
+#endif
+
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
+#pragma GCC visibility push(default)
 #endif
 
 // ------------------------------------------------------
@@ -187,6 +191,10 @@ void* reallocarray( void* p, size_t count, size_t size ) {  // BSD
 
 #ifdef __cplusplus
 }
+#endif
+
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
+#pragma GCC visibility pop
 #endif
 
 #endif // MI_MALLOC_OVERRIDE & !_WIN32
