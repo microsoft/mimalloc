@@ -5,8 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef __MIMALLOC_INTERNAL_H
-#define __MIMALLOC_INTERNAL_H
+#ifndef MIMALLOC_INTERNAL_H
+#define MIMALLOC_INTERNAL_H
 
 #include "mimalloc-types.h"
 
