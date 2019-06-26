@@ -57,10 +57,9 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   }
 }
 
-void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {
-  // TODO: add thread safe code
-  stat->count++;
-  stat->total += amount;
+void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {  
+  mi_atomic_add( &stat->count, 1 );
+  mi_atomic_add( &stat->total, (int64_t)amount );
 }
 
 
