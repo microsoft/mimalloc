@@ -9,7 +9,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-atomic.h"
 
 #include <string.h> // memset
-
+#include <pthread.h> // mutex
+ 
 
 /* -----------------------------------------------------------
   Merge thread statistics with the main one.
@@ -59,8 +60,13 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
 
 void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {
   // TODO: add thread safe code
+  static pthread_mutex_t stat_counter_mutex = PTHREAD_MUTEX_INITIALIZER;
+  pthread_mutex_lock(&stat_counter_mutex);
+  
   stat->count++;
   stat->total += amount;
+
+  pthread_mutex_unlock(&stat_counter_mutex);
 }
 
 
