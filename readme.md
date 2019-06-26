@@ -279,7 +279,7 @@ Memory usage:
 ![bench-r5a-rss-1](doc/bench-r5a-rss-1.svg)
 ![bench-r5a-rss-1](doc/bench-r5a-rss-2.svg)
 
-(note: the _xmalloc-testN_ memory usage should be disregarded is it
+(note: the _xmalloc-testN_ memory usage should be disregarded as it
 allocates more the faster the program runs).
 
 In the first five benchmarks we can see _mimalloc_ outperforms the other
