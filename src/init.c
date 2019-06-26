@@ -234,10 +234,12 @@ static bool _mi_heap_done() {
     }
     _mi_os_free(heap, sizeof(mi_thread_data_t), &_mi_stats_main);
   }
-  else if (MI_DEBUG > 0) {
+#if (MI_DEBUG > 0)
+  else {
     _mi_heap_destroy_pages(heap);
     mi_assert_internal(heap->tld->heap_backing == &_mi_heap_main);
   }
+#endif
   return false;
 }
 
