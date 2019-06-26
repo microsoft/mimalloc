@@ -290,7 +290,7 @@ static inline void mi_block_set_next(mi_page_t* page, mi_block_t* block, mi_bloc
 #include <windows.h>
 static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
   // Windows: works on Intel and ARM in both 32- and 64-bit
-  return (uintptr_t)NtCurrentTeb(void);
+  return (uintptr_t)NtCurrentTeb();
 }
 #elif (defined(__GNUC__) || defined(__clang__)) && \
       (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))
