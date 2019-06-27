@@ -694,7 +694,12 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   // huge allocation?
   mi_page_t* page;
   if (mi_unlikely(size > MI_LARGE_SIZE_MAX)) {
-    page = mi_huge_page_alloc(heap,size);
+    if (mi_unlikely(size >= (SIZE_MAX - MI_MAX_ALIGN_SIZE))) {
+      page = NULL;
+    }
+    else {
+      page = mi_huge_page_alloc(heap,size);
+    }
   }
   else {
     // otherwise find a page with free blocks in our size segregated queues
