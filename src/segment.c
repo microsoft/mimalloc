@@ -688,6 +688,6 @@ mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_
     page = mi_segment_large_page_alloc(tld, os_tld);
   else
     page = mi_segment_huge_page_alloc(block_size,tld,os_tld);
-  mi_assert_expensive(mi_segment_is_valid(_mi_page_segment(page)));
+  mi_assert_expensive(page == NULL || mi_segment_is_valid(_mi_page_segment(page)));
   return page;
 }
