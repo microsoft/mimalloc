@@ -132,10 +132,8 @@ size_t malloc_usable_size(void *p)       MI_FORWARD1(mi_usable_size,p)
 void   cfree(void* p)                    MI_FORWARD0(mi_free, p)
 
 int posix_memalign(void** p, size_t alignment, size_t size) {
-  // TODO: the spec says we should return EINVAL also if alignment is not a power of 2.
-  // The spec also dictates we should not modify `*p` on an error. (issue#27)
-  // <http://man7.org/linux/man-pages/man3/posix_memalign.3.html>
-  if (alignment % sizeof(void*) != 0) return EINVAL;  // no `p==NULL` check as it is declared as non-null
+  if ((alignment % sizeof(void*) != 0 ) &&
+      ((alignment & (~alignment + 1)) == alignment)) return EINVAL;  // no `p==NULL` check as it is declared as non-null
   void* q = mi_malloc_aligned(size, alignment);
   if (q==NULL && size != 0) return ENOMEM;
   *p = q;
