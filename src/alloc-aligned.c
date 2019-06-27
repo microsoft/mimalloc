@@ -17,7 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* heap, size_t size, size_t alignment, size_t offset, bool zero) mi_attr_noexcept {
   // note: we don't require `size > offset`, we just guarantee that
   // the address at offset is aligned regardless of the allocated size.
-  mi_assert(alignment > 0);
+  mi_assert(alignment > 0 && alignment % sizeof(uintptr_t) == 0);
   if (alignment <= sizeof(uintptr_t)) return _mi_heap_malloc_zero(heap,size,zero);
   if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
 
@@ -143,4 +143,3 @@ void* mi_recalloc_aligned(void* p, size_t count, size_t size, size_t alignment) 
   if (mi_mul_overflow(count,size,&total)) return NULL;
   return mi_rezalloc_aligned(p,total,alignment);
 }
-
