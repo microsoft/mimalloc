@@ -302,9 +302,12 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   for (size_t i = 0; i < MI_BIN_FULL; i++) {
     mi_page_queue_t* pq = &heap->pages[i];
     mi_page_queue_t* append = &from->pages[i];
-    _mi_page_queue_append(heap, pq, append);
+    size_t pcount = _mi_page_queue_append(heap, pq, append);
+    heap->page_count += pcount;
+    from->page_count -= pcount;
   }
   mi_assert_internal(from->thread_delayed_free == NULL);
+  mi_assert_internal(from->page_count == 0);
   
   // and reset the `from` heap
   mi_heap_reset_pages(from);

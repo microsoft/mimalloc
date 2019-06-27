@@ -323,15 +323,17 @@ static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* fro
   page->flags.in_full = mi_page_queue_is_full(to);
 }
 
-void _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append) {
+size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append) {
   mi_assert_internal(mi_heap_contains_queue(heap,pq));
   mi_assert_internal(pq->block_size == append->block_size);
 
-  if (append->first==NULL) return;
+  if (append->first==NULL) return 0;
 
-  // set append pages to new heap
+  // set append pages to new heap and count
+  size_t count = 0;
   for (mi_page_t* page = append->first; page != NULL; page = page->next) {
     page->heap = heap;
+    count++;
   }
 
   if (pq->last==NULL) {
@@ -349,4 +351,5 @@ void _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t
     append->first->prev = pq->last;
     pq->last = append->last;
   }
+  return count;
 }

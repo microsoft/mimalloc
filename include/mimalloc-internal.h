@@ -59,7 +59,7 @@ void       _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);            //
 void       _mi_heap_delayed_free(mi_heap_t* heap);
 
 void       _mi_page_use_delayed_free(mi_page_t* page, bool enable);
-void       _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append);
+size_t     _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append);
 void       _mi_deferred_free(mi_heap_t* heap, bool force);
 
 void       _mi_page_free_collect(mi_page_t* page);
@@ -136,6 +136,7 @@ static inline bool mi_mul_overflow(size_t size, size_t count, size_t* total) {
 // Align a byte size to a size in _machine words_,
 // i.e. byte size == `wsize*sizeof(void*)`.
 static inline size_t _mi_wsize_from_size(size_t size) {
+  mi_assert_internal(size <= SIZE_MAX - sizeof(uintptr_t));
   return (size + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
 }
 
@@ -190,7 +191,7 @@ static inline mi_segment_t* _mi_ptr_segment(const void* p) {
 // Segment belonging to a page
 static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
   mi_segment_t* segment = _mi_ptr_segment(page);
-  mi_assert_internal(page == &segment->pages[page->segment_idx]);
+  mi_assert_internal(segment == NULL || page == &segment->pages[page->segment_idx]);
   return segment;
 }
 
