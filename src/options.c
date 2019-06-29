@@ -31,6 +31,7 @@ static mi_option_desc_t options[_mi_option_last] = {
   { 0, UNINIT, "page_reset" },
   { 0, UNINIT, "cache_reset" },
   { 0, UNINIT, "pool_commit" },
+  { 0, UNINIT, "large_os_pages" },   // use large OS pages
   #if MI_SECURE
   { MI_SECURE, INITIALIZED, "secure" }, // in secure build the environment setting is ignored
   #else

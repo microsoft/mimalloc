@@ -608,7 +608,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   else {
     mi_assert(pq->first == page);
   }
-  mi_assert_internal(mi_page_immediate_available(page));
+  mi_assert_internal(page == NULL || mi_page_immediate_available(page));
   return page;
 }
 

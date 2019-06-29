@@ -368,6 +368,7 @@ void mi_process_init(void) mi_attr_noexcept {
   atexit(&mi_process_done);
   mi_process_setup_auto_thread_done();
   mi_stats_reset();
+  _mi_os_init();
 }
 
 static void mi_process_done(void) {

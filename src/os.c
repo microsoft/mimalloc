@@ -16,21 +16,86 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <errno.h>
 
 /* -----------------------------------------------------------
-  Raw allocation on Windows (VirtualAlloc) and Unix's (mmap).
-  Defines a portable `mmap`, `munmap` and `mmap_trim`.
+  Initialization.
+  On windows initializes support for aligned allocation and 
+  large OS pages (if MIMALLOC_LARGE_OS_PAGES is true).
 ----------------------------------------------------------- */
 
 #if defined(_WIN32)
-  #include <windows.h>
-  #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS) // rough check it VirtualAlloc2 is available (needs windows 10 or Windows server 2016)
-    #pragma comment(lib, "mincore.lib") // seems needed to resolve VirtualAlloc2
-    #define  USE_VIRTUALALLOC2          // allows aligned allocation
-  #endif
+  #include <windows.h>  
 #else
   #include <sys/mman.h>  // mmap
   #include <unistd.h>    // sysconf
 #endif
 
+// if non-zero, use large page allocation
+static size_t large_os_page_size = 0;
+
+static bool use_large_os_page(size_t size, size_t alignment) {
+  // if we have access, check the size and alignment requirements
+  if (large_os_page_size == 0) return false;
+  return ((size % large_os_page_size) == 0 && (alignment % large_os_page_size) == 0);
+}
+
+
+#if defined(_WIN32)
+// We use VirtualAlloc2 for aligned allocation, but it is only supported on Windows 10 and Windows Server 2016.
+// So, we need to look it up dynamically to run on older systems.
+typedef PVOID (*VirtualAlloc2Ptr)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MEM_EXTENDED_PARAMETER*, ULONG );
+static VirtualAlloc2Ptr pVirtualAlloc2 = NULL;
+
+void _mi_os_init(void) {
+  // Try to get the VirtualAlloc2 function (only supported on Windows 10 and Windows Server 2016)
+  HINSTANCE  hDll;
+  hDll = LoadLibrary("kernelbase.dll");
+  if (hDll!=NULL) {
+    pVirtualAlloc2 = (VirtualAlloc2Ptr)GetProcAddress(hDll, "VirtualAlloc2");
+    FreeLibrary(hDll);
+  }
+  // Try to see if large OS pages are supported
+  unsigned long err = 0;
+  bool ok = mi_option_is_enabled(mi_option_large_os_pages);
+  if (ok) {
+    // To use large pages on Windows, we first need access permission
+    // Set "Lock pages in memory" permission in the group policy editor
+    // <https://devblogs.microsoft.com/oldnewthing/20110128-00/?p=11643>
+    HANDLE token = NULL;
+    ok = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token);
+    if (ok) {
+      TOKEN_PRIVILEGES tp;
+      ok = LookupPrivilegeValue(NULL, "SeLockMemoryPrivilege", &tp.Privileges[0].Luid);
+      if (ok) {
+        tp.PrivilegeCount = 1;
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        ok = AdjustTokenPrivileges(token, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+        if (ok) {
+          err = GetLastError();
+          ok = (err == ERROR_SUCCESS);
+          if (ok) {
+            large_os_page_size = GetLargePageMinimum();
+          }
+        }
+      }
+      CloseHandle(token);
+    }
+    if (!ok) {
+      if (err==0) err = GetLastError();
+      _mi_warning_message("cannot enable large OS page support, error %lu\n", err);
+    }
+  }  
+}
+#else
+void _mi_os_init() {
+  // nothing to do
+  use_large_os_page(0, 0); // dummy call to suppress warnings
+}
+#endif
+
+
+/* -----------------------------------------------------------
+  Raw allocation on Windows (VirtualAlloc) and Unix's (mmap).
+  Defines a portable `mmap`, `munmap` and `mmap_trim`.
+----------------------------------------------------------- */
 
 uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   uintptr_t x = (sz / alignment) * alignment;
@@ -92,9 +157,14 @@ static bool mi_munmap(void* addr, size_t size)
 static void* mi_mmap(void* addr, size_t size, int extra_flags, mi_stats_t* stats) {
   UNUSED(stats);
   if (size == 0) return NULL;
-  void* p;
+  void* p = NULL;
 #if defined(_WIN32)
-  p = VirtualAlloc(addr, size, MEM_RESERVE | MEM_COMMIT | extra_flags, PAGE_READWRITE);
+  if (use_large_os_page(size, 0)) {
+    p = VirtualAlloc(addr, size, MEM_LARGE_PAGES | MEM_RESERVE | MEM_COMMIT | extra_flags, PAGE_READWRITE);
+  }
+  if (p == NULL) {
+    p = VirtualAlloc(addr, size, MEM_RESERVE | MEM_COMMIT | extra_flags, PAGE_READWRITE);
+  }
 #else
   #if !defined(MAP_ANONYMOUS)
   #define MAP_ANONYMOUS  MAP_ANON
@@ -124,14 +194,18 @@ static void* mi_mmap(void* addr, size_t size, int extra_flags, mi_stats_t* stats
 static void* mi_mmap_aligned(size_t size, size_t alignment, mi_stats_t* stats) {
   if (alignment < _mi_os_page_size() || ((alignment & (~alignment + 1)) != alignment)) return NULL;
   void* p = NULL;
-  #if defined(_WIN32) && defined(USE_VIRTUALALLOC2)
-  // on modern Windows use VirtualAlloc2
-  MEM_ADDRESS_REQUIREMENTS reqs = {0};
-  reqs.Alignment = alignment;
-  MEM_EXTENDED_PARAMETER param = { 0 };
-  param.Type = MemExtendedParameterAddressRequirements;
-  param.Pointer = &reqs; 
-  p = VirtualAlloc2(NULL, NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE, &param, 1);
+  #if defined(_WIN32) && defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
+  if (pVirtualAlloc2 != NULL) {
+    // on modern Windows try use VirtualAlloc2
+    MEM_ADDRESS_REQUIREMENTS reqs = {0};
+    reqs.Alignment = alignment;
+    MEM_EXTENDED_PARAMETER param = { 0 };
+    param.Type = MemExtendedParameterAddressRequirements;
+    param.Pointer = &reqs; 
+    DWORD extra_flags = 0;
+    if (use_large_os_page(size, alignment)) extra_flags |= MEM_LARGE_PAGES;
+    p = (*pVirtualAlloc2)(NULL, NULL, size, MEM_RESERVE | MEM_COMMIT | extra_flags, PAGE_READWRITE, &param, 1);  
+  }
   #elif defined(MAP_ALIGNED)
   // on BSD, use the aligned mmap api
   size_t n = _mi_bsr(alignment);

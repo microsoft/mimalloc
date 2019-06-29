@@ -216,6 +216,7 @@ typedef enum mi_option_e {
   mi_option_page_reset,
   mi_option_cache_reset,
   mi_option_pool_commit,
+  mi_option_large_os_pages,
   mi_option_secure,
   mi_option_show_stats,
   mi_option_show_errors,
