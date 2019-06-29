@@ -22,6 +22,10 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(_WIN32)
   #include <windows.h>
+  #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS) // rough check it VirtualAlloc2 is available (needs windows 10 or Windows server 2016)
+    #pragma comment(lib, "mincore.lib") // seems needed to resolve VirtualAlloc2
+    #define  USE_VIRTUALALLOC2          // allows aligned allocation
+  #endif
 #else
   #include <sys/mman.h>  // mmap
   #include <unistd.h>    // sysconf
@@ -117,6 +121,32 @@ static void* mi_mmap(void* addr, size_t size, int extra_flags, mi_stats_t* stats
   return p;
 }
 
+static void* mi_mmap_aligned(size_t size, size_t alignment, mi_stats_t* stats) {
+  if (alignment < _mi_os_page_size() || ((alignment & (~alignment + 1)) != alignment)) return NULL;
+  void* p = NULL;
+  #if defined(_WIN32) && defined(USE_VIRTUALALLOC2)
+  // on modern Windows use VirtualAlloc2
+  MEM_ADDRESS_REQUIREMENTS reqs = {0};
+  reqs.Alignment = alignment;
+  MEM_EXTENDED_PARAMETER param = { 0 };
+  param.Type = MemExtendedParameterAddressRequirements;
+  param.Pointer = &reqs; 
+  p = VirtualAlloc2(NULL, NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE, &param, 1);
+  #elif defined(MAP_ALIGNED)
+  // on BSD, use the aligned mmap api
+  size_t n = _mi_bsr(alignment);
+  if ((size_t)1 << n == alignment && n >= 12) {  // alignment is a power of 2 and >= 4096
+    p = mi_mmap(suggest, size, MAP_ALIGNED(n), tld->stats);     // use the NetBSD/freeBSD aligned flags
+  }
+  #else
+  UNUSED(size);
+  UNUSED(alignment);
+  #endif
+  mi_assert(p == NULL || (uintptr_t)p % alignment == 0);
+  if (p != NULL) mi_stat_increase(stats->mmap_calls, 1);
+  return p;
+}
+
 
 static void* mi_os_page_align_region(void* addr, size_t size, size_t* newsize) {
   mi_assert(addr != NULL && size > 0);
@@ -208,7 +238,7 @@ bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize) {
   size_t size = 0;
   void* start = mi_os_page_align_region(addr, oldsize - newsize, &size);
   if (size==0 || start != addr) return false;
-
+  
   #ifdef _WIN32
   // we cannot shrink on windows
   return false;
@@ -289,13 +319,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, mi_os_tld_t* tld)
 
   void* suggest = NULL;
 
-#if defined(MAP_ALIGNED)
-  // on BSD, use the aligned mmap api
-  size_t n = _mi_bsr(alignment);
-  if ((size_t)1 << n == alignment && n >= 12) {  // alignment is a power of 2 and >= 4096
-    p = mi_mmap(suggest, size, MAP_ALIGNED(n), tld->stats);     // use the NetBSD/freeBSD aligned flags
-  }
-#endif
+  p = mi_mmap_aligned(size,alignment,tld->stats);
   if (p==NULL && (tld->mmap_next_probable % alignment) == 0) {
     // if the next probable address is aligned,
     // then try to just allocate `size` and hope it is aligned...

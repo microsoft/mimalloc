@@ -28,7 +28,6 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
-
 // ---------------------------------------------------------------------------
 // Test macros: CHECK(name,predicate) and CHECK_BODY(name,body)
 // ---------------------------------------------------------------------------
@@ -139,7 +138,6 @@ int main() {
   // ---------------------------------------------------
   CHECK("heap_destroy", test_heap1());
   CHECK("heap_delete", test_heap2());
-
 
   // ---------------------------------------------------
   // Done
