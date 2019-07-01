@@ -127,10 +127,20 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
   size_t   psize = (segment->page_kind == MI_PAGE_HUGE ? segment->segment_size : (size_t)1 << segment->page_shift);
   uint8_t* p     = (uint8_t*)segment + page->segment_idx*psize;
 
- if (page->segment_idx == 0) {
-    // the first page starts after the segment info (and possible guard page)
-    p     += segment->segment_info_size;
-    psize -= segment->segment_info_size;
+  if (page->segment_idx == 0) {
+    //  the first page starts after the segment info, optional alignment padding
+    //  (and possible guard page). to end up with the same small block alignment
+    //  as in regular pages, the page start is aligned to block_size. note that
+    //  this does not waste memory in most cases but moves padding from the end
+    //  of the page to the start. in addition, also in the first page the small
+    //  blocks for powers of two are perfectly aligned to these powers of two.
+    mi_assert_internal(page->block_size > 0);
+    const size_t misalignment = segment->page_kind == MI_PAGE_SMALL
+                              ? segment->segment_info_size % page->block_size
+                              : 0;
+    const size_t adjustment   = misalignment ? page->block_size - misalignment : 0;
+    p     += segment->segment_info_size + adjustment;
+    psize -= segment->segment_info_size + adjustment;
   }
   long secure = mi_option_get(mi_option_secure);
   if (secure > 1 || (secure == 1 && page->segment_idx == segment->capacity - 1)) {
