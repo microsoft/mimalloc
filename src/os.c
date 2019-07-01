@@ -105,7 +105,11 @@ static void* mi_mmap(void* addr, size_t size, int extra_flags, mi_stats_t* stats
       flags |= MAP_FIXED;
     #endif
   }
-  p = mmap(addr, size, (PROT_READ | PROT_WRITE), flags, -1, 0);
+  int pflags = PROT_READ | PROT_WRITE;
+#if defined(PROT_MAX)
+  pflags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
+#endif
+  p = mmap(addr, size, pflags, flags, -1, 0);
   if (p == MAP_FAILED) p = NULL;
   if (addr != NULL && p != addr) {
     mi_munmap(p, size);
