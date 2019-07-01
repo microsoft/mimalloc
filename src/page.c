@@ -516,9 +516,9 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert(segment != NULL);
   // set fields
   size_t page_size;
-  _mi_segment_page_start(segment, page, &page_size);
-  page->block_size = block_size;
   mi_assert_internal(block_size>0);
+  page->block_size = block_size;
+  _mi_segment_page_start(segment, page, &page_size);
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
   page->cookie = _mi_heap_random(heap) | 1;  
