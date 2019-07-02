@@ -58,6 +58,7 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 
@@ -90,7 +91,7 @@ mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 static mi_tld_t tld_main = {
   0,
   &_mi_heap_main,
-  { { NULL, NULL }, 0, 0, 0, 0, {NULL,NULL}, tld_main_stats }, // segments
+  { { NULL, NULL }, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
   { 0, NULL, NULL, 0, tld_main_stats },              // os
   { MI_STATS_NULL }                                  // stats
 };

@@ -224,6 +224,7 @@
     <ClCompile Include="..\..\src\alloc.c" />
     <ClCompile Include="..\..\src\heap.c" />
     <ClCompile Include="..\..\src\init.c" />
+    <ClCompile Include="..\..\src\memory.c" />
     <ClCompile Include="..\..\src\options.c" />
     <ClCompile Include="..\..\src\page-queue.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>

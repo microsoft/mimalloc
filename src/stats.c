@@ -94,12 +94,14 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   mi_stat_add(&stats->reserved, &src->reserved, 1);
   mi_stat_add(&stats->committed, &src->committed, 1);
   mi_stat_add(&stats->reset, &src->reset, 1);
+  mi_stat_add(&stats->page_committed, &src->page_committed, 1);
 
   mi_stat_add(&stats->pages_abandoned, &src->pages_abandoned, 1);
   mi_stat_add(&stats->segments_abandoned, &src->segments_abandoned, 1);
   mi_stat_add(&stats->mmap_calls, &src->mmap_calls, 1);
   mi_stat_add(&stats->mmap_ensure_aligned, &src->mmap_ensure_aligned, 1);
   mi_stat_add(&stats->mmap_right_align, &src->mmap_right_align, 1);
+  mi_stat_add(&stats->commit_calls, &src->commit_calls, 1);
   mi_stat_add(&stats->threads, &src->threads, 1);
   mi_stat_add(&stats->pages_extended, &src->pages_extended, 1);
 
@@ -226,9 +228,10 @@ static void _mi_stats_print(mi_stats_t* stats, double secs, FILE* out) mi_attr_n
   _mi_fprintf(out, "malloc requested:     ");
   mi_print_amount(stats->malloc.allocated, 1, out);
   _mi_fprintf(out, "\n\n");
-  mi_stat_print(&stats->committed, "committed", 1, out);
   mi_stat_print(&stats->reserved, "reserved", 1, out);
+  mi_stat_print(&stats->committed, "committed", 1, out);
   mi_stat_print(&stats->reset, "reset", -1, out);
+  mi_stat_print(&stats->page_committed, "touched", 1, out);
   mi_stat_print(&stats->segments, "segments", -1, out);
   mi_stat_print(&stats->segments_abandoned, "-abandoned", -1, out);
   mi_stat_print(&stats->pages, "pages", -1, out);
@@ -237,6 +240,7 @@ static void _mi_stats_print(mi_stats_t* stats, double secs, FILE* out) mi_attr_n
   mi_stat_print(&stats->mmap_calls, "mmaps", 0, out);
   mi_stat_print(&stats->mmap_right_align, "mmap fast", 0, out);
   mi_stat_print(&stats->mmap_ensure_aligned, "mmap slow", 0, out);
+  mi_stat_print(&stats->commit_calls, "commits", 0, out);
   mi_stat_print(&stats->threads, "threads", 0, out);
   mi_stat_counter_print(&stats->searches, "searches", out);
 #endif
