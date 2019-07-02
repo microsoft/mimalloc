@@ -216,6 +216,7 @@ static void* mi_mmap_aligned(size_t size, size_t alignment, mi_stats_t* stats) {
   UNUSED(size);
   UNUSED(alignment);
   #endif
+  UNUSED(stats);
   mi_assert(p == NULL || (uintptr_t)p % alignment == 0);
   if (p != NULL) mi_stat_increase(stats->mmap_calls, 1);
   return p;

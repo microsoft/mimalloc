@@ -76,7 +76,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   
   mi_segment_t* segment = _mi_page_segment(page);
   uint8_t* start = _mi_page_start(segment,page,NULL);
-  mi_assert_internal(start == _mi_segment_page_start(segment,page,NULL));
+  mi_assert_internal(start == _mi_segment_page_start(segment,page,page->block_size,NULL));
   //mi_assert_internal(start + page->capacity*page->block_size == page->top);
 
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
@@ -514,11 +514,11 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert(page != NULL);
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert(segment != NULL);
+  mi_assert_internal(block_size > 0);
   // set fields
   size_t page_size;
-  _mi_segment_page_start(segment, page, &page_size);
+  _mi_segment_page_start(segment, page, block_size, &page_size);
   page->block_size = block_size;
-  mi_assert_internal(block_size>0);
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
   page->cookie = _mi_heap_random(heap) | 1;  
