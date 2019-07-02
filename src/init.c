@@ -364,7 +364,7 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_heap_main.thread_id = _mi_thread_id();
   _mi_verbose_message("process init: 0x%zx\n", _mi_heap_main.thread_id);
   uintptr_t random = _mi_random_init(_mi_heap_main.thread_id)  ^ (uintptr_t)h;
-  #ifndef __APPLE
+  #ifndef __APPLE__
   _mi_heap_main.cookie = (uintptr_t)&_mi_heap_main ^ random;
   #endif
   _mi_heap_main.random = _mi_random_shuffle(random);
