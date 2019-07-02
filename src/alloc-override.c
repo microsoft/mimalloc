@@ -168,7 +168,7 @@ void* reallocarray( void* p, size_t count, size_t size ) {  // BSD
 }
 
 #if defined(__GLIBC__) && defined(__linux__)
-  // forward __libc interface (needed for redhat linux)
+  // forward __libc interface (needed for glibc-based Linux distributions)
   void* __libc_malloc(size_t size)                  MI_FORWARD1(mi_malloc,size)
   void* __libc_calloc(size_t count, size_t size)    MI_FORWARD2(mi_calloc,count,size)
   void* __libc_realloc(void* p, size_t size)        MI_FORWARD2(mi_realloc,p,size)
