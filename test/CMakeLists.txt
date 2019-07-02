@@ -13,7 +13,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Import mimalloc (if installed)
-find_package(mimalloc 1.0 REQUIRED)
+find_package(mimalloc 1.0 REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 
 # Tests
 add_executable(static-override  main-override.c)
