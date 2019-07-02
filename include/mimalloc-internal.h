@@ -10,7 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc-types.h"
 
-#if defined(MI_MALLOC_OVERRIDE) && defined(MI_INTERPOSE)
+#if defined(MI_MALLOC_OVERRIDE) && defined(__APPLE__)
 #define MI_TLS_RECURSE_GUARD
 #endif
 
