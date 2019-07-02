@@ -425,10 +425,8 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
 }
 #else
 #include <limits.h>
-#ifndef PATH_MAX
-#define PATH_MAX 260
-#endif
 
+#ifdef PATH_MAX
 char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
   if (resolved_name != NULL) {
     return realpath(fname,resolved_name);
@@ -439,6 +437,54 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
     return mi_heap_strndup(heap,rname,PATH_MAX); // ok if `rname==NULL`
   }
 }
+#else
+#include <unistd.h>
+#define PATH_MAX_GUESS 4096  // Linux default
+
+static long _mi_path_max(void) {
+  static long path_max = 0;
+
+  if (path_max == 0) {
+    /* This code based on example from the Advanced Programming in the UNIX environment
+     * on how to determine the max path length
+     */
+    static long posix_version = 0;
+    static long xsi_version = 0;
+    if (posix_version == 0)
+      posix_version = sysconf(_SC_VERSION);
+
+    if (xsi_version == 0)
+      xsi_version = sysconf(_SC_XOPEN_VERSION);
+
+    if ((path_max = pathconf("/",_PC_PATH_MAX)) < 0)
+      path_max = PATH_MAX_GUESS;
+    else
+      path_max++;    /* add one since it's relative to root */
+
+    /*
+     * Before POSIX.1-2001, we aren't guaranteed that PATH_MAX includes
+     * the terminating null byte.  Same goes for XPG3.
+     */
+    if ((posix_version < 200112L) && (xsi_version < 4))
+      path_max++;
+  }
+
+  return path_max;
+}
+
+char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
+  if (resolved_name != NULL) {
+    return realpath(fname,resolved_name);
+  }
+  else {
+    char* buf= mi_heap_malloc(heap,_mi_path_max());
+    char* rname = realpath(fname,buf);
+    char* mi_rname = mi_heap_strndup(heap,rname,PATH_MAX); // ok if `rname==NULL`
+    mi_free(buf);
+    return mi_rname;
+  }
+}
+#endif
 #endif
 
 char* mi_realpath(const char* fname, char* resolved_name) mi_attr_noexcept {
