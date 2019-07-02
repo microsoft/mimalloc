@@ -115,7 +115,10 @@ if(MI_OVERRIDE MATCHES "ON")
   target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)
 endif()
 target_compile_options(mimalloc PRIVATE ${mi_cflags})
-target_include_directories(mimalloc PRIVATE include PUBLIC $<INSTALL_INTERFACE:${mi_install_dir}/include>)
+target_include_directories(mimalloc PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${mi_install_dir}/include>
+)
 target_link_libraries(mimalloc PUBLIC ${mi_libraries})
 
 # static library
@@ -134,7 +137,11 @@ if(NOT WIN32 AND MI_OVERRIDE MATCHES "ON")
   target_compile_definitions(mimalloc-static PRIVATE MI_MALLOC_OVERRIDE)
 endif()
 target_compile_options(mimalloc-static PRIVATE ${mi_cflags})
-target_include_directories(mimalloc-static PRIVATE include PUBLIC $<INSTALL_INTERFACE:${mi_install_dir}/include>)
+
+target_include_directories(mimalloc-static PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${mi_install_dir}/include>
+)
 target_link_libraries(mimalloc-static PUBLIC ${mi_libraries})
 
 # install static and shared library, and the include files
@@ -154,7 +161,10 @@ if(NOT WIN32 AND MI_OVERRIDE MATCHES "ON")
   target_compile_definitions(mimalloc-obj PRIVATE MI_MALLOC_OVERRIDE)
 endif()
 target_compile_options(mimalloc-obj PRIVATE ${mi_cflags})
-target_include_directories(mimalloc-obj PRIVATE include PUBLIC $<INSTALL_INTERFACE:include>)
+target_include_directories(mimalloc-obj PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${mi_install_dir}/include>
+)
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}
         DESTINATION ${mi_install_dir}
