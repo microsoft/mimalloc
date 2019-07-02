@@ -103,7 +103,7 @@ mi_heap_t _mi_heap_main = {
   NULL,
   0,
   0,
-  0,
+  0xCDCDCDCDCDCDCDL,
   0,
   false   // can reclaim
 };
@@ -356,12 +356,18 @@ static void mi_process_done(void);
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   if (_mi_process_is_initialized) return;
+  // access _mi_heap_default before setting _mi_process_is_initialized to ensure
+  // that the TLS slot is allocated without getting into recursion on macOS
+  // when using dynamic linking with interpose.
+  mi_heap_t* h = _mi_heap_default;
   _mi_process_is_initialized = true;
 
   _mi_heap_main.thread_id = _mi_thread_id();
   _mi_verbose_message("process init: 0x%zx\n", _mi_heap_main.thread_id);
-  uintptr_t random = _mi_random_init(_mi_heap_main.thread_id);
+  uintptr_t random = _mi_random_init(_mi_heap_main.thread_id)  ^ (uintptr_t)h;
+  #ifndef __APPLE__
   _mi_heap_main.cookie = (uintptr_t)&_mi_heap_main ^ random;
+  #endif
   _mi_heap_main.random = _mi_random_shuffle(random);
   #if (MI_DEBUG)
   _mi_verbose_message("debug level : %d\n", MI_DEBUG);

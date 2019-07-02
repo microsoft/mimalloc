@@ -199,6 +199,11 @@ static void* mi_os_mem_alloc(void* addr, size_t size, bool commit, int extra_fla
       flags |= MAP_FIXED;
     #endif
   }
+  int pflags = (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE);
+  #if defined(PROT_MAX)
+  pflags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
+  #endif
+
   if (large_os_page_size > 0 && use_large_os_page(size, 0) && ((uintptr_t)addr % large_os_page_size) == 0) {
     int lflags = flags;
     #ifdef MAP_ALIGNED_SUPER
@@ -212,12 +217,12 @@ static void* mi_os_mem_alloc(void* addr, size_t size, bool commit, int extra_fla
     #endif
     if (lflags != flags) {
       // try large page allocation
-      p = mmap(addr, size, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE), lflags, -1, 0);
-      if (p == MAP_FAILED) p = NULL;
+      p = mmap(addr, size, pflags, lflags, -1, 0);
+      if (p == MAP_FAILED) p = NULL; // fall back to regular mmap if large is exhausted or no permission
     }
   }
   if (p == NULL) {
-    p = mmap(addr, size, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE), flags, -1, 0);
+    p = mmap(addr, size, pflags, flags, -1, 0);
     if (p == MAP_FAILED) p = NULL;
   }
   if (addr != NULL && p != addr) {

@@ -108,16 +108,25 @@ static void mi_segment_enqueue(mi_segment_queue_t* queue, mi_segment_t* segment)
   }
 }
 
-// Start of the page available memory
-uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size)
+// Start of the page available memory; can be used on uninitialized pages (only `segment_idx` must be set)
+uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size)
 {
   size_t   psize = (segment->page_kind == MI_PAGE_HUGE ? segment->segment_size : (size_t)1 << segment->page_shift);
   uint8_t* p     = (uint8_t*)segment + page->segment_idx*psize;
 
  if (page->segment_idx == 0) {
-    // the first page starts after the segment info (and possible guard page)
-    p     += segment->segment_info_size;
-    psize -= segment->segment_info_size;
+   // the first page starts after the segment info (and possible guard page)
+   p     += segment->segment_info_size;
+   psize -= segment->segment_info_size;
+   // for small objects, ensure the page start is aligned with the block size (PR#66 by kickunderscore)
+   if (block_size > 0 && segment->page_kind == MI_PAGE_SMALL) {
+     size_t adjust = block_size - ((uintptr_t)p % block_size);
+     if (adjust < block_size) {
+       p     += adjust;
+       psize -= adjust;
+     }
+     mi_assert_internal((uintptr_t)p % block_size == 0);
+   }
   }
   long secure = mi_option_get(mi_option_secure);
   if (secure > 1 || (secure == 1 && page->segment_idx == segment->capacity - 1)) {
@@ -125,7 +134,7 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
     // secure >  1: every page has an os guard page
     psize -= _mi_os_page_size();
   }
-
+  
   if (page_size != NULL) *page_size = psize;
   mi_assert_internal(_mi_ptr_page(p) == page);
   mi_assert_internal(_mi_ptr_segment(p) == segment);
@@ -338,7 +347,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
 // Available memory in a page
 static size_t mi_page_size(const mi_page_t* page) {
   size_t psize;
-  _mi_segment_page_start(_mi_page_segment(page), page, &psize);
+  _mi_page_start(_mi_page_segment(page), page, &psize);
   return psize;
 }
 #endif
@@ -422,7 +431,7 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_sta
   // reset the page memory to reduce memory pressure?
   if (!page->is_reset && mi_option_is_enabled(mi_option_page_reset)) {
     size_t psize;
-    uint8_t* start = _mi_segment_page_start(segment, page, &psize);
+    uint8_t* start = _mi_page_start(segment, page, &psize);
     page->is_reset = true;
     if (inuse > 0) {
       _mi_mem_reset(start, psize, stats); // TODO: just `inuse`?

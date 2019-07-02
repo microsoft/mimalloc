@@ -117,7 +117,10 @@ add_library(mimalloc SHARED ${mi_sources})
 set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} NO_SONAME "YES" OUTPUT_NAME ${mi_basename} )
 target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
 target_compile_options(mimalloc PRIVATE ${mi_cflags})
-target_include_directories(mimalloc PRIVATE include PUBLIC $<INSTALL_INTERFACE:${mi_install_dir}/include>)
+target_include_directories(mimalloc PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${mi_install_dir}/include>
+)
 target_link_libraries(mimalloc PUBLIC ${mi_libraries})
 
 # static library
@@ -132,7 +135,11 @@ else()
 endif()
 target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
 target_compile_options(mimalloc-static PRIVATE ${mi_cflags})
-target_include_directories(mimalloc-static PRIVATE include PUBLIC $<INSTALL_INTERFACE:${mi_install_dir}/include>)
+
+target_include_directories(mimalloc-static PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${mi_install_dir}/include>
+)
 target_link_libraries(mimalloc-static PUBLIC ${mi_libraries})
 
 # install static and shared library, and the include files
@@ -148,9 +155,12 @@ install(FILES "$<TARGET_FILE:mimalloc>" DESTINATION lib)  # duplicate the .so in
 add_library(mimalloc-obj OBJECT src/static.c)
 target_compile_definitions(mimalloc-obj PRIVATE ${mi_defines})
 target_compile_options(mimalloc-obj PRIVATE ${mi_cflags})
-target_include_directories(mimalloc-obj PRIVATE include PUBLIC $<INSTALL_INTERFACE:include>)
+target_include_directories(mimalloc-obj PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${mi_install_dir}/include>
+)
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}
+install(FILES $<TARGET_OBJECTS:mimalloc-obj>
         DESTINATION ${mi_install_dir}
         RENAME ${mi_basename}${CMAKE_C_OUTPUT_EXTENSION} )
 
