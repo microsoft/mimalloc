@@ -13,7 +13,7 @@ void free_p() {
 }
 
 int main() {
-  mi_stats_reset();
+  mi_stats_reset();  
   atexit(free_p);
   void* p1 = malloc(78);
   void* p2 = malloc(24);

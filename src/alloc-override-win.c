@@ -526,7 +526,7 @@ static void mi_module_resolve(HMODULE mod) {
   // see if any patches apply
   for (size_t i = 0; patches[i].name != NULL; i++) {
     mi_patch_t* patch = &patches[i];
-    if (!patch->applied && patch->original==NULL) {
+    if (!patch->applied && patch->original==NULL) { // we apply only the first found dll
       void* addr = GetProcAddress(mod, patch->name);
       if (addr != NULL) {
         // found it! set the address
@@ -554,9 +554,11 @@ static bool mi_patches_resolve(void) {
   size_t count = needed / sizeof(HMODULE);
   size_t ucrtbase_index = 0;
   size_t mimalloc_index = 0;
-  // iterate through the loaded modules
-  for (size_t i = 0; i < count; i++) {
-    HMODULE mod = modules[i];
+  // iterate through the loaded modules; do this from the end so we prefer the
+  // first loaded DLL as sometimes both "msvcr" and "ucrt" are both loaded and we should
+  // override "ucrt" in that situation.
+  for (size_t i = count; i > 0; i--) {
+    HMODULE mod = modules[i-1];
     char filename[MAX_PATH] = { 0 };
     DWORD slen = GetModuleFileName(mod, filename, MAX_PATH);
     if (slen > 0 && slen < MAX_PATH) {
@@ -566,7 +568,7 @@ static bool mi_patches_resolve(void) {
       const char* basename = (lastsep==NULL ? filename : lastsep+1);
       if (i==0                                    // main module to allow static crt linking
         || _strnicmp(basename, "ucrt", 4) == 0    // new ucrtbase.dll in windows 10
-        || _strnicmp(basename, "msvcr", 5) == 0)  // older runtimes
+        || _strnicmp(basename, "msvcr", 5) == 0)  // older runtimes      
       {
         // remember indices so we can check load order (in debug mode)
         if (_stricmp(basename, MIMALLOC_NAME) == 0) mimalloc_index = i;

@@ -62,7 +62,7 @@ static size_t mi_os_good_alloc_size(size_t size, size_t alignment) {
 #if defined(_WIN32)
 // We use VirtualAlloc2 for aligned allocation, but it is only supported on Windows 10 and Windows Server 2016.
 // So, we need to look it up dynamically to run on older systems.
-typedef PVOID (*VirtualAlloc2Ptr)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MEM_EXTENDED_PARAMETER*, ULONG );
+typedef PVOID (__stdcall *VirtualAlloc2Ptr)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MEM_EXTENDED_PARAMETER*, ULONG );
 static VirtualAlloc2Ptr pVirtualAlloc2 = NULL;
 
 void _mi_os_init(void) {
