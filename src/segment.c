@@ -201,7 +201,6 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
 #define MI_SEGMENT_CACHE_MAX      (4)
 #define MI_SEGMENT_CACHE_FRACTION (8)
 
-
 static mi_segment_t* mi_segment_cache_pop(size_t segment_size, mi_segments_tld_t* tld) {
   if (segment_size != 0 && segment_size != MI_SEGMENT_SIZE) return NULL;
   mi_segment_t* segment = tld->cache;

@@ -415,6 +415,7 @@ bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats) {
   return mi_os_commitx(addr, size, false, stats);
 }
 
+
 /* -----------------------------------------------------------
   OS allocation using mmap/munmap
 ----------------------------------------------------------- */
