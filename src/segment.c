@@ -147,7 +147,7 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
     // secure >  1: every page has an os guard page
     psize -= _mi_os_page_size();
   }
-  
+
   if (page_size != NULL) *page_size = psize;
   mi_assert_internal(_mi_ptr_page(p) == page);
   mi_assert_internal(_mi_ptr_segment(p) == segment);
