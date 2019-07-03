@@ -173,7 +173,6 @@ static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 }
 
 static void* mi_os_mem_alloc(void* addr, size_t size, bool commit, int extra_flags, mi_stats_t* stats) {
-  UNUSED(stats);
   if (size == 0) return NULL;
   void* p = NULL;
 #if defined(_WIN32)
@@ -230,12 +229,11 @@ static void* mi_os_mem_alloc(void* addr, size_t size, bool commit, int extra_fla
     p = NULL;
   }
 #endif
-  UNUSED(stats);
   mi_assert(p == NULL || (addr == NULL && p != addr) || (addr != NULL && p == addr));
   if (p != NULL) {
-    mi_stat_increase(stats->mmap_calls, 1);
-    mi_stat_increase(stats->reserved, size);
-    if (commit) mi_stat_increase(stats->committed, size);
+    _mi_stat_increase(&stats->mmap_calls, 1);
+    _mi_stat_increase(&stats->reserved, size);
+    if (commit) _mi_stat_increase(&stats->committed, size);
   }
   return p;
 }
@@ -266,12 +264,11 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
   UNUSED(size);
   UNUSED(alignment);
   #endif
-  UNUSED(stats); // if !STATS
   mi_assert(p == NULL || (uintptr_t)p % alignment == 0);
   if (p != NULL) {
-    mi_stat_increase(stats->mmap_calls, 1);
-    mi_stat_increase(stats->reserved, size);
-    if (commit) mi_stat_increase(stats->committed, size);
+    _mi_stat_increase(&stats->mmap_calls, 1);
+    _mi_stat_increase(&stats->reserved, size);
+    if (commit) _mi_stat_increase(&stats->committed, size);
   }
   return p;
 }
@@ -312,8 +309,7 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr,size,&csize);
   if (csize==0) return true;
-  UNUSED(stats); // if !STATS
-  mi_stat_increase(stats->reset, csize);
+  _mi_stat_increase(&stats->reset, csize);
 
 #if defined(_WIN32)
   // Testing shows that for us (on `malloc-large`) MEM_RESET is 2x faster than DiscardVirtualMemory
@@ -389,13 +385,12 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, mi_stats_t* stat
   void* start = mi_os_page_align_areax(!commit, addr, size, &csize);
   if (csize == 0) return true;
   int err = 0;
-  UNUSED(stats); // if !STATS
   if (commit) {
-    mi_stat_increase(stats->committed, csize);
-    mi_stat_increase(stats->commit_calls,1);
+    _mi_stat_increase(&stats->committed, csize);
+    _mi_stat_increase(&stats->commit_calls,1);
   }
   else {
-    mi_stat_decrease(stats->committed, csize);
+    _mi_stat_decrease(&stats->committed, csize);
   }
 
 #if defined(_WIN32)
@@ -439,7 +434,7 @@ bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize, mi_stats_t* stats) {
 
   #ifdef _WIN32
   // we cannot shrink on windows, but we can decommit
-  return mi_os_decommit(start, size, stats);
+  return _mi_os_decommit(start, size, stats);
   #else
   return mi_os_mem_free(start, size, stats);
   #endif
@@ -469,17 +464,16 @@ void  _mi_os_free(void* p, size_t size, mi_stats_t* stats) {
 static void* mi_os_alloc_aligned_ensured(size_t size, size_t alignment, bool commit, size_t trie, mi_stats_t* stats)
 {
   if (trie >= 3) return NULL; // stop recursion (only on Windows)
-  size_t alloc_size = size + alignment;
-  mi_assert(alloc_size >= size); // overflow?
-  if (alloc_size < size) return NULL;
-
+  if (size > SIZE_MAX - alignment) return NULL; // overflow
+  size_t alloc_size = size + alignment; // no need for -1 as we need to be page aligned anyways
+  
   // allocate a chunk that includes the alignment
   void* p = mi_os_mem_alloc(NULL, alloc_size, commit, 0, stats);
   if (p == NULL) return NULL;
   // create an aligned pointer in the allocated area
   void* aligned_p = mi_align_up_ptr(p, alignment);
   mi_assert(aligned_p != NULL);
-
+#if _WIN32
   // free it and try to allocate `size` at exactly `aligned_p`
   // note: this may fail in case another thread happens to allocate
   // concurrently at that spot. We try up to 3 times to mitigate this.
@@ -487,9 +481,9 @@ static void* mi_os_alloc_aligned_ensured(size_t size, size_t alignment, bool com
   p = mi_os_mem_alloc(aligned_p, size, commit, 0, stats);
   if (p != aligned_p) {
     if (p != NULL) mi_os_mem_free(p, size, stats);
-    return mi_os_alloc_aligned_ensured(size, alignment, commit, trie++, stats);
+    return mi_os_alloc_aligned_ensured(size, alignment, commit, trie+1, stats);
   }
-#if 0  // could use this on mmap systems
+#else  
   // we selectively unmap parts around the over-allocated area.
   size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
   size_t mid_size = _mi_align_up(size, _mi_os_page_size());
@@ -522,7 +516,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, mi_os_tld
     // then try to just allocate `size` and hope it is aligned...
     p = mi_os_mem_alloc(suggest, size, commit, 0, tld->stats);
     if (p == NULL) return NULL;
-    if (((uintptr_t)p % alignment) == 0) mi_stat_increase(tld->stats->mmap_right_align, 1);
+    if (((uintptr_t)p % alignment) == 0) _mi_stat_increase(&tld->stats->mmap_right_align, 1);
   }
   //fprintf(stderr, "segment address guess: %s, p=%lxu, guess:%lxu\n", (p != NULL && (uintptr_t)p % alignment ==0 ? "correct" : "incorrect"), (uintptr_t)p, next_probable);
 
@@ -530,7 +524,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, mi_os_tld
     // if `p` is not yet aligned after all, free the block and use a slower
     // but guaranteed way to allocate an aligned block
     if (p != NULL) mi_os_mem_free(p, size, tld->stats);
-    mi_stat_increase( tld->stats->mmap_ensure_aligned, 1);
+    _mi_stat_increase( &tld->stats->mmap_ensure_aligned, 1);
     //fprintf(stderr, "mimalloc: slow mmap 0x%lx\n", _mi_thread_id());
     p = mi_os_alloc_aligned_ensured(size, alignment,commit,0,tld->stats);
   }
