@@ -235,7 +235,7 @@ static mi_segment_t* _mi_segment_cache_findx(mi_segments_tld_t* tld, size_t requ
         if (mi_option_is_enabled(mi_option_secure)) {
           _mi_os_unprotect(segment, segment->segment_size);
         }
-        if (_mi_os_shrink(segment, segment->segment_size, required)) {
+        if (_mi_os_shrink(segment, segment->segment_size, required, tld->stats)) {
           tld->current_size -= segment->segment_size;
           tld->current_size += required;
           segment->segment_size = required;
@@ -280,7 +280,7 @@ static bool mi_segment_cache_insert(mi_segment_t* segment, mi_segments_tld_t* tl
   mi_assert_expensive(!mi_segment_queue_contains(&tld->cache, segment));
   if (mi_segment_cache_full(tld)) return false;
   if (mi_option_is_enabled(mi_option_cache_reset) && !mi_option_is_enabled(mi_option_page_reset)) {
-    _mi_os_reset((uint8_t*)segment + segment->segment_info_size, segment->segment_size - segment->segment_info_size);
+    _mi_os_reset((uint8_t*)segment + segment->segment_info_size, segment->segment_size - segment->segment_info_size, tld->stats);
   }
   // insert ordered
   mi_segment_t* seg = tld->cache.first;
@@ -345,7 +345,7 @@ static mi_segment_t* mi_segment_alloc( size_t required, mi_page_kind_t page_kind
 
   // and otherwise allocate it from the OS
   if (segment == NULL) {
-    segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, os_tld);
+    segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, true, os_tld);
     if (segment == NULL) return NULL;
     mi_segments_track_size((long)segment_size,tld);
   }
@@ -381,7 +381,7 @@ static mi_segment_t* mi_segment_alloc( size_t required, mi_page_kind_t page_kind
   for (uint8_t i = 0; i < segment->capacity; i++) {
     segment->pages[i].segment_idx = i;
   }
-  mi_stat_increase(tld->stats->committed, segment->segment_info_size);
+  mi_stat_increase(tld->stats->page_committed, segment->segment_info_size);
   //fprintf(stderr,"mimalloc: alloc segment at %p\n", (void*)segment);
   return segment;
 }
@@ -412,7 +412,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   mi_assert_expensive(!mi_segment_queue_contains(&tld->small_free, segment));
   mi_assert(segment->next == NULL);
   mi_assert(segment->prev == NULL);
-  mi_stat_decrease( tld->stats->committed, segment->segment_info_size);
+  mi_stat_decrease( tld->stats->page_committed, segment->segment_info_size);
   segment->thread_id = 0;
 
   // update reset memory statistics
@@ -470,7 +470,7 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_sta
   mi_assert_internal(page->segment_in_use);
   mi_assert_internal(mi_page_all_free(page));
   size_t inuse = page->capacity * page->block_size;
-  mi_stat_decrease( stats->committed, inuse);
+  mi_stat_decrease( stats->page_committed, inuse);
   mi_stat_decrease( stats->pages, 1);
 
   // reset the page memory to reduce memory pressure?
@@ -480,7 +480,7 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_sta
     mi_stat_increase( stats->reset, psize);  // for stats we assume resetting the full page
     page->is_reset = true;
     if (inuse > 0) {
-      _mi_os_reset(start, inuse);
+      _mi_os_reset(start, inuse, stats);
     }
   }
 

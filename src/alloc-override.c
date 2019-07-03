@@ -52,8 +52,7 @@ terms of the MIT license. A copy of the license can be found in the file
     MI_INTERPOSE_MI(realloc),
     MI_INTERPOSE_MI(free),
     MI_INTERPOSE_MI(strdup),
-    MI_INTERPOSE_MI(strndup),
-    MI_INTERPOSE_MI(realpath)
+    MI_INTERPOSE_MI(strndup)    
   };
 #else
   // On all other systems forward to our API
@@ -62,8 +61,7 @@ terms of the MIT license. A copy of the license can be found in the file
   void* realloc(void* p, size_t newsize) mi_attr_noexcept  MI_FORWARD2(mi_realloc, p, newsize);
   void  free(void* p)                    mi_attr_noexcept  MI_FORWARD0(mi_free, p);
   char* strdup(const char* s)                              MI_FORWARD1(mi_strdup, s);
-  char* strndup(const char* s, size_t n)                   MI_FORWARD2(mi_strndup, s, n);
-  char* realpath(const char* fname, char* resolved_name)   MI_FORWARD2(mi_realpath, fname, resolved_name);
+  char* strndup(const char* s, size_t n)                   MI_FORWARD2(mi_strndup, s, n);  
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)

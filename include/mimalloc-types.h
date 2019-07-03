@@ -322,12 +322,14 @@ typedef struct mi_stats_s {
   mi_stat_count_t reserved;
   mi_stat_count_t committed;
   mi_stat_count_t reset;
+  mi_stat_count_t page_committed;
   mi_stat_count_t segments_abandoned;
   mi_stat_count_t pages_abandoned;
   mi_stat_count_t pages_extended;
   mi_stat_count_t mmap_calls;
   mi_stat_count_t mmap_right_align;
   mi_stat_count_t mmap_ensure_aligned;
+  mi_stat_count_t commit_calls;
   mi_stat_count_t threads;
   mi_stat_count_t huge;
   mi_stat_count_t malloc;

@@ -453,7 +453,7 @@ static void mi_page_free_list_extend( mi_heap_t* heap, mi_page_t* page, size_t e
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;
-  mi_stat_increase(stats->committed, extend * page->block_size);
+  mi_stat_increase(stats->page_committed, extend * page->block_size);
 }
 
 /* -----------------------------------------------------------

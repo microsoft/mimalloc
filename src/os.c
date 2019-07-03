@@ -12,7 +12,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-internal.h"
 
 #include <string.h>  // memset
-#include <stdio.h>   // debug fprintf
 #include <errno.h>
 
 /* -----------------------------------------------------------
@@ -28,8 +27,24 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <unistd.h>    // sysconf
 #endif
 
+// page size (initialized properly in `os_init`)
+static size_t os_page_size = 4096;
+
+// minimal allocation granularity
+static size_t os_alloc_granularity = 4096;
+
 // if non-zero, use large page allocation
 static size_t large_os_page_size = 0;
+
+// OS (small) page size
+size_t _mi_os_page_size() {
+  return os_page_size;
+}
+
+// if large OS pages are supported (2 or 4MiB), then return the size, otherwise return the small page size (4KiB)
+size_t _mi_os_large_page_size() {
+  return (large_os_page_size != 0 ? large_os_page_size : _mi_os_page_size());
+}
 
 static bool use_large_os_page(size_t size, size_t alignment) {
   // if we have access, check the size and alignment requirements
@@ -37,6 +52,12 @@ static bool use_large_os_page(size_t size, size_t alignment) {
   return ((size % large_os_page_size) == 0 && (alignment % large_os_page_size) == 0);
 }
 
+// round to a good allocation size
+static size_t mi_os_good_alloc_size(size_t size, size_t alignment) {
+  UNUSED(alignment);
+  if (size >= (SIZE_MAX - os_alloc_granularity)) return size; // possible overflow?
+  return _mi_align_up(size, os_alloc_granularity);  
+}
 
 #if defined(_WIN32)
 // We use VirtualAlloc2 for aligned allocation, but it is only supported on Windows 10 and Windows Server 2016.
@@ -45,11 +66,17 @@ typedef PVOID (*VirtualAlloc2Ptr)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MEM_EXTEN
 static VirtualAlloc2Ptr pVirtualAlloc2 = NULL;
 
 void _mi_os_init(void) {
-  // Try to get the VirtualAlloc2 function (only supported on Windows 10 and Windows Server 2016)
+  // get the page size
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  if (si.dwPageSize > 0) os_page_size = si.dwPageSize;
+  if (si.dwAllocationGranularity > 0) os_alloc_granularity = si.dwAllocationGranularity;
+  // get the VirtualAlloc2 function
   HINSTANCE  hDll;
   hDll = LoadLibrary("kernelbase.dll");
   if (hDll!=NULL) {
-    pVirtualAlloc2 = (VirtualAlloc2Ptr)GetProcAddress(hDll, "VirtualAlloc2");
+    // use VirtualAlloc2FromApp as it is available to Windows store apps
+    pVirtualAlloc2 = (VirtualAlloc2Ptr)GetProcAddress(hDll, "VirtualAlloc2FromApp");  
     FreeLibrary(hDll);
   }
   // Try to see if large OS pages are supported
@@ -86,8 +113,15 @@ void _mi_os_init(void) {
 }
 #else
 void _mi_os_init() {
-  // nothing to do
-  use_large_os_page(0, 0); // dummy call to suppress warnings
+  // get the page size
+  long result = sysconf(_SC_PAGESIZE);
+  if (result > 0) {
+    os_page_size = (size_t)result;
+    os_alloc_granularity = os_page_size;
+  }
+  if (mi_option_is_enabled(mi_option_large_os_pages)) {
+    large_os_page_size = (1UL<<21); // 2MiB
+  }
 }
 #endif
 
@@ -116,26 +150,8 @@ static void* mi_align_down_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_down((uintptr_t)p, alignment);
 }
 
-static void* os_pool_alloc(size_t size, size_t alignment, mi_os_tld_t* tld);
 
-// cached OS page size
-size_t _mi_os_page_size(void) {
-  static size_t page_size = 0;
-  if (page_size == 0) {
-#if defined(_WIN32)
-    SYSTEM_INFO si;
-    GetSystemInfo(&si);
-    page_size = (si.dwPageSize > 0 ? si.dwPageSize : 4096);
-#else
-    long result = sysconf(_SC_PAGESIZE);
-    page_size = (result > 0 ? (size_t)result : 4096);
-#endif
-  }
-  return page_size;
-}
-
-
-static bool mi_munmap(void* addr, size_t size)
+static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 {
   if (addr == NULL || size == 0) return true;
   bool err = false;
@@ -144,6 +160,8 @@ static bool mi_munmap(void* addr, size_t size)
 #else
   err = (munmap(addr, size) == -1);
 #endif
+  _mi_stat_decrease(&stats->committed, size); // TODO: what if never committed?
+  _mi_stat_decrease(&stats->reserved, size);
   if (err) {
     #pragma warning(suppress:4996)
     _mi_warning_message("munmap failed: %s, addr 0x%8li, size %lu\n", strerror(errno), (size_t)addr, size);
@@ -154,16 +172,18 @@ static bool mi_munmap(void* addr, size_t size)
   }
 }
 
-static void* mi_mmap(void* addr, size_t size, int extra_flags, mi_stats_t* stats) {
+static void* mi_os_mem_alloc(void* addr, size_t size, bool commit, int extra_flags, mi_stats_t* stats) {
   UNUSED(stats);
   if (size == 0) return NULL;
   void* p = NULL;
 #if defined(_WIN32)
+  int flags = MEM_RESERVE | extra_flags;
+  if (commit) flags |= MEM_COMMIT;
   if (use_large_os_page(size, 0)) {
-    p = VirtualAlloc(addr, size, MEM_LARGE_PAGES | MEM_RESERVE | MEM_COMMIT | extra_flags, PAGE_READWRITE);
+    p = VirtualAlloc(addr, size, MEM_LARGE_PAGES | flags, PAGE_READWRITE);
   }
   if (p == NULL) {
-    p = VirtualAlloc(addr, size, MEM_RESERVE | MEM_COMMIT | extra_flags, PAGE_READWRITE);
+    p = VirtualAlloc(addr, size, flags, PAGE_READWRITE);
   }
 #else
   #if !defined(MAP_ANONYMOUS)
@@ -179,23 +199,48 @@ static void* mi_mmap(void* addr, size_t size, int extra_flags, mi_stats_t* stats
       flags |= MAP_FIXED;
     #endif
   }
-  int pflags = PROT_READ | PROT_WRITE;
-#if defined(PROT_MAX)
+  int pflags = (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE);
+  #if defined(PROT_MAX)
   pflags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
-#endif
-  p = mmap(addr, size, pflags, flags, -1, 0);
-  if (p == MAP_FAILED) p = NULL;
+  #endif
+
+  if (large_os_page_size > 0 && use_large_os_page(size, 0) && ((uintptr_t)addr % large_os_page_size) == 0) {
+    int lflags = flags;
+    #ifdef MAP_ALIGNED_SUPER
+    lflags |= MAP_ALIGNED_SUPER;
+    #endif
+    #ifdef MAP_HUGETLB
+    lflags |= MAP_HUGETLB;
+    #endif
+    #ifdef MAP_HUGE_2MB
+    lflags |= MAP_HUGE_2MB;
+    #endif
+    if (lflags != flags) {
+      // try large page allocation
+      p = mmap(addr, size, pflags, lflags, -1, 0);
+      if (p == MAP_FAILED) p = NULL; // fall back to regular mmap if large is exhausted or no permission
+    }
+  }
+  if (p == NULL) {
+    p = mmap(addr, size, pflags, flags, -1, 0);
+    if (p == MAP_FAILED) p = NULL;
+  }
   if (addr != NULL && p != addr) {
-    mi_munmap(p, size);
+    mi_os_mem_free(p, size, stats);
     p = NULL;
   }
 #endif
+  UNUSED(stats);
   mi_assert(p == NULL || (addr == NULL && p != addr) || (addr != NULL && p == addr));
-  if (p != NULL) mi_stat_increase(stats->mmap_calls, 1);
+  if (p != NULL) {
+    mi_stat_increase(stats->mmap_calls, 1);
+    mi_stat_increase(stats->reserved, size);
+    if (commit) mi_stat_increase(stats->committed, size);
+  }
   return p;
 }
 
-static void* mi_mmap_aligned(size_t size, size_t alignment, mi_stats_t* stats) {
+static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit, mi_stats_t* stats) {
   if (alignment < _mi_os_page_size() || ((alignment & (~alignment + 1)) != alignment)) return NULL;
   void* p = NULL;
   #if defined(_WIN32) && defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
@@ -206,28 +251,33 @@ static void* mi_mmap_aligned(size_t size, size_t alignment, mi_stats_t* stats) {
     MEM_EXTENDED_PARAMETER param = { 0 };
     param.Type = MemExtendedParameterAddressRequirements;
     param.Pointer = &reqs; 
-    DWORD extra_flags = 0;
-    if (use_large_os_page(size, alignment)) extra_flags |= MEM_LARGE_PAGES;
-    p = (*pVirtualAlloc2)(NULL, NULL, size, MEM_RESERVE | MEM_COMMIT | extra_flags, PAGE_READWRITE, &param, 1);  
+    DWORD flags = MEM_RESERVE;
+    if (commit) flags |= MEM_COMMIT;
+    if (use_large_os_page(size, alignment)) flags |= MEM_LARGE_PAGES;
+    p = (*pVirtualAlloc2)(NULL, NULL, size, flags, PAGE_READWRITE, &param, 1);  
   }
   #elif defined(MAP_ALIGNED)
   // on BSD, use the aligned mmap api
   size_t n = _mi_bsr(alignment);
-  if ((size_t)1 << n == alignment && n >= 12) {  // alignment is a power of 2 and >= 4096
-    p = mi_mmap(suggest, size, MAP_ALIGNED(n), tld->stats);     // use the NetBSD/freeBSD aligned flags
+  if (((size_t)1 << n) == alignment && n >= 12) {  // alignment is a power of 2 and >= 4096
+    p = mi_os_mem_alloc(suggest, size, commit, MAP_ALIGNED(n), tld->stats);     // use the NetBSD/freeBSD aligned flags
   }
   #else
   UNUSED(size);
   UNUSED(alignment);
   #endif
-  UNUSED(stats);
+  UNUSED(stats); // if !STATS
   mi_assert(p == NULL || (uintptr_t)p % alignment == 0);
-  if (p != NULL) mi_stat_increase(stats->mmap_calls, 1);
+  if (p != NULL) {
+    mi_stat_increase(stats->mmap_calls, 1);
+    mi_stat_increase(stats->reserved, size);
+    if (commit) mi_stat_increase(stats->committed, size);
+  }
   return p;
 }
 
-
-static void* mi_os_page_align_region(void* addr, size_t size, size_t* newsize) {
+// Conservatively OS page align within a given area
+static void* mi_os_page_align_area(void* addr, size_t size, size_t* newsize) {
   mi_assert(addr != NULL && size > 0);
   if (newsize != NULL) *newsize = 0;
   if (size == 0 || addr == NULL) return NULL;
@@ -247,16 +297,31 @@ static void* mi_os_page_align_region(void* addr, size_t size, size_t* newsize) {
 // but may be used later again. This will release physical memory
 // pages and reduce swapping while keeping the memory committed.
 // We page align to a conservative area inside the range to reset.
-bool _mi_os_reset(void* addr, size_t size) {
+bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
   // page align conservatively within the range
   size_t csize;
-  void* start = mi_os_page_align_region(addr,size,&csize);
+  void* start = mi_os_page_align_area(addr,size,&csize);
   if (csize==0) return true;
+  UNUSED(stats); // if !STATS
+  mi_stat_increase(stats->reset, csize);
 
 #if defined(_WIN32)
+  // Testing shows that for us (on `malloc-large`) MEM_RESET is 2x faster than DiscardVirtualMemory
+  // (but this is for an access pattern that immediately reuses the memory)
+  /*
+  DWORD ok = DiscardVirtualMemory(start, csize);
+  return (ok != 0);
+  */
   void* p = VirtualAlloc(start, csize, MEM_RESET, PAGE_READWRITE);
   mi_assert(p == start);
-  return (p == start);
+  if (p != start) return false;
+  /*
+  // VirtualUnlock removes the memory eagerly from the current working set (which MEM_RESET does lazily on demand)
+  // TODO: put this behind an option?
+  DWORD ok = VirtualUnlock(start, csize); 
+  if (ok != 0) return false;
+  */
+  return true;  
 #else
   #if defined(MADV_FREE)
     static int advice = MADV_FREE;
@@ -281,19 +346,19 @@ bool _mi_os_reset(void* addr, size_t size) {
 static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   // page align conservatively within the range
   size_t csize = 0;
-  void* start = mi_os_page_align_region(addr, size, &csize);
+  void* start = mi_os_page_align_area(addr, size, &csize);
   if (csize==0) return false;
 
   int err = 0;
 #ifdef _WIN32
   DWORD oldprotect = 0;
   BOOL ok = VirtualProtect(start,csize,protect ? PAGE_NOACCESS : PAGE_READWRITE,&oldprotect);
-  err = (ok ? 0 : -1);
+  err = (ok ? 0 : GetLastError());
 #else
   err = mprotect(start,csize,protect ? PROT_NONE : (PROT_READ|PROT_WRITE));
 #endif
   if (err != 0) {
-    _mi_warning_message("mprotect error: start: 0x%8p, csize: 0x%8zux, errno: %i\n", start, csize, errno);
+    _mi_warning_message("mprotect error: start: 0x%8p, csize: 0x%8zux, err: %i\n", start, csize, err);
   }
   return (err==0);
 }
@@ -306,7 +371,51 @@ bool _mi_os_unprotect(void* addr, size_t size) {
   return mi_os_protectx(addr, size, false);
 }
 
-bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize) {
+// Commit/Decommit memory.
+// We page align to a conservative area inside the range to reset.
+static bool mi_os_commitx(void* addr, size_t size, bool commit, mi_stats_t* stats) {
+  // page align conservatively within the range
+  size_t csize;
+  void* start = mi_os_page_align_area(addr, size, &csize);
+  if (csize == 0) return true;
+  int err = 0;
+  UNUSED(stats); // if !STATS
+  if (commit) {
+    mi_stat_increase(stats->committed, csize);
+    mi_stat_increase(stats->commit_calls,1);
+  }
+  else {
+    mi_stat_decrease(stats->committed, csize);
+  }
+
+#if defined(_WIN32)
+  if (commit) {
+    void* p = VirtualAlloc(start, csize, MEM_COMMIT, PAGE_READWRITE);
+    err = (p == start ? 0 : GetLastError());
+  }
+  else {
+    BOOL ok = VirtualFree(start, csize, MEM_DECOMMIT);
+    err = (ok ? 0 : GetLastError());
+  }
+#else
+  err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
+#endif
+  if (err != 0) {
+    _mi_warning_message("commit/decommit error: start: 0x%8p, csize: 0x%8zux, err: %i\n", start, csize, err);
+  }
+  mi_assert_internal(err == 0);
+  return (err == 0);
+}
+
+bool _mi_os_commit(void* addr, size_t size, mi_stats_t* stats) {
+  return mi_os_commitx(addr, size, true, stats);
+}
+
+bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats) {
+  return mi_os_commitx(addr, size, false, stats);
+}
+
+bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize, mi_stats_t* stats) {
   // page align conservatively within the range
   mi_assert_internal(oldsize > newsize && p != NULL);
   if (oldsize < newsize || p==NULL) return false;
@@ -315,14 +424,14 @@ bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize) {
   // oldsize and newsize should be page aligned or we cannot shrink precisely
   void* addr = (uint8_t*)p + newsize;
   size_t size = 0;
-  void* start = mi_os_page_align_region(addr, oldsize - newsize, &size);
+  void* start = mi_os_page_align_area(addr, oldsize - newsize, &size);
   if (size==0 || start != addr) return false;
-  
+
   #ifdef _WIN32
   // we cannot shrink on windows
   return false;
   #else
-  return mi_munmap( start, size );
+  return mi_os_mem_free(start, size, stats);
   #endif
 }
 
@@ -332,22 +441,21 @@ bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize) {
 
 void* _mi_os_alloc(size_t size, mi_stats_t* stats) {
   if (size == 0) return NULL;
-  void* p = mi_mmap(NULL, size, 0, stats);
+  size = mi_os_good_alloc_size(size, 0);
+  void* p = mi_os_mem_alloc(NULL, size, true, 0, stats);
   mi_assert(p!=NULL);
-  if (p != NULL) mi_stat_increase(stats->reserved, size);
   return p;
 }
 
 void  _mi_os_free(void* p, size_t size, mi_stats_t* stats) {
   UNUSED(stats);
-  mi_munmap(p, size);
-  mi_stat_decrease(stats->reserved, size);
+  mi_os_mem_free(p, size, stats);
 }
 
 // Slow but guaranteed way to allocated aligned memory
 // by over-allocating and then reallocating at a fixed aligned
 // address that should be available then.
-static void* mi_os_alloc_aligned_ensured(size_t size, size_t alignment, size_t trie, mi_stats_t* stats)
+static void* mi_os_alloc_aligned_ensured(size_t size, size_t alignment, bool commit, size_t trie, mi_stats_t* stats)
 {
   if (trie >= 3) return NULL; // stop recursion (only on Windows)
   size_t alloc_size = size + alignment;
@@ -355,28 +463,28 @@ static void* mi_os_alloc_aligned_ensured(size_t size, size_t alignment, size_t t
   if (alloc_size < size) return NULL;
 
   // allocate a chunk that includes the alignment
-  void* p = mi_mmap(NULL, alloc_size, 0, stats);
+  void* p = mi_os_mem_alloc(NULL, alloc_size, commit, 0, stats);
   if (p == NULL) return NULL;
   // create an aligned pointer in the allocated area
   void* aligned_p = mi_align_up_ptr(p, alignment);
   mi_assert(aligned_p != NULL);
-#if defined(_WIN32)
+
   // free it and try to allocate `size` at exactly `aligned_p`
-  // note: this may fail in case another thread happens to VirtualAlloc
+  // note: this may fail in case another thread happens to allocate
   // concurrently at that spot. We try up to 3 times to mitigate this.
-  mi_munmap(p, alloc_size);
-  p = mi_mmap(aligned_p, size, 0, stats);
+  mi_os_mem_free(p, alloc_size, stats);
+  p = mi_os_mem_alloc(aligned_p, size, commit, 0, stats);
   if (p != aligned_p) {
-    if (p != NULL) mi_munmap(p, size);
-    return mi_os_alloc_aligned_ensured(size, alignment, trie++, stats);
+    if (p != NULL) mi_os_mem_free(p, size, stats);
+    return mi_os_alloc_aligned_ensured(size, alignment, commit, trie++, stats);
   }
-#else
+#if 0  // could use this on mmap systems
   // we selectively unmap parts around the over-allocated area.
   size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
   size_t mid_size = _mi_align_up(size, _mi_os_page_size());
   size_t post_size = alloc_size - pre_size - mid_size;
-  if (pre_size > 0)  mi_munmap(p, pre_size);
-  if (post_size > 0) mi_munmap((uint8_t*)aligned_p + mid_size, post_size);
+  if (pre_size > 0)  mi_os_mem_free(p, pre_size, stats);
+  if (post_size > 0) mi_os_mem_free((uint8_t*)aligned_p + mid_size, post_size, stats);
 #endif
 
   mi_assert(((uintptr_t)aligned_p) % alignment == 0);
@@ -387,22 +495,21 @@ static void* mi_os_alloc_aligned_ensured(size_t size, size_t alignment, size_t t
 // Since `mi_mmap` is relatively slow we try to allocate directly at first and
 // hope to get an aligned address; only when that fails we fall back
 // to a guaranteed method by overallocating at first and adjusting.
-// TODO: use VirtualAlloc2 with alignment on Windows 10 / Windows Server 2016.
-void* _mi_os_alloc_aligned(size_t size, size_t alignment, mi_os_tld_t* tld)
+void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, mi_os_tld_t* tld)
 {
   if (size == 0) return NULL;
-  if (alignment < 1024) return _mi_os_alloc(size, tld->stats);
+  size = mi_os_good_alloc_size(size,alignment);
+  if (alignment < 1024) return mi_os_mem_alloc(NULL, size, commit, 0, tld->stats);
 
-  void* p = os_pool_alloc(size,alignment,tld);
-  if (p != NULL) return p;
-
+  // try direct OS aligned allocation; only supported on BSD and Windows 10+
   void* suggest = NULL;
+  void* p = mi_os_mem_alloc_aligned(size,alignment,commit,tld->stats);
 
-  p = mi_mmap_aligned(size,alignment,tld->stats);
+  // Fall back 
   if (p==NULL && (tld->mmap_next_probable % alignment) == 0) {
     // if the next probable address is aligned,
     // then try to just allocate `size` and hope it is aligned...
-    p = mi_mmap(suggest, size, 0, tld->stats);
+    p = mi_os_mem_alloc(suggest, size, commit, 0, tld->stats);
     if (p == NULL) return NULL;
     if (((uintptr_t)p % alignment) == 0) mi_stat_increase(tld->stats->mmap_right_align, 1);
   }
@@ -411,75 +518,23 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, mi_os_tld_t* tld)
   if (p==NULL || ((uintptr_t)p % alignment) != 0) {
     // if `p` is not yet aligned after all, free the block and use a slower
     // but guaranteed way to allocate an aligned block
-    if (p != NULL) mi_munmap(p, size);
+    if (p != NULL) mi_os_mem_free(p, size, tld->stats);
     mi_stat_increase( tld->stats->mmap_ensure_aligned, 1);
     //fprintf(stderr, "mimalloc: slow mmap 0x%lx\n", _mi_thread_id());
-    p = mi_os_alloc_aligned_ensured(size, alignment,0,tld->stats);
+    p = mi_os_alloc_aligned_ensured(size, alignment,commit,0,tld->stats);
   }
-  if (p != NULL) {
-    mi_stat_increase( tld->stats->reserved, size);
-
-    // next probable address is the page-aligned address just after the newly allocated area.
-    const size_t alloc_align =
-#if defined(_WIN32)
-      64 * 1024; // Windows allocates 64kb aligned
-#else
-      _mi_os_page_size(); // page size on other OS's
-#endif
+  if (p != NULL) {    
+    // next probable address is the page-aligned address just after the newly allocated area.    
     size_t probable_size = MI_SEGMENT_SIZE;
     if (tld->mmap_previous > p) {
       // Linux tends to allocate downward
-      tld->mmap_next_probable = _mi_align_down((uintptr_t)p - probable_size, alloc_align); // ((uintptr_t)previous - (uintptr_t)p);
+      tld->mmap_next_probable = _mi_align_down((uintptr_t)p - probable_size, os_alloc_granularity); // ((uintptr_t)previous - (uintptr_t)p);
     }
     else {
       // Otherwise, guess the next address is page aligned `size` from current pointer
-      tld->mmap_next_probable = _mi_align_up((uintptr_t)p + probable_size, alloc_align);
+      tld->mmap_next_probable = _mi_align_up((uintptr_t)p + probable_size, os_alloc_granularity);
     }
     tld->mmap_previous = p;
   }
   return p;
 }
-
-// Pooled allocation: on 64-bit systems with plenty
-// of virtual addresses, we allocate 10 segments at the
-// time to minimize `mmap` calls and increase aligned
-// allocations. This is only good on systems that
-// do overcommit so we put it behind the `MIMALLOC_POOL_COMMIT` option.
-// For now, we disable it on windows as VirtualFree must
-// be called on the original allocation and cannot be called
-// for individual fragments.
-#if defined(_WIN32) || (MI_INTPTR_SIZE<8)
-
-static void* os_pool_alloc(size_t size, size_t alignment, mi_os_tld_t* tld) {
-  UNUSED(size);
-  UNUSED(alignment);
-  UNUSED(tld);
-  return NULL;
-}
-
-#else
-
-#define MI_POOL_ALIGNMENT   MI_SEGMENT_SIZE
-#define MI_POOL_SIZE        (10*MI_POOL_ALIGNMENT)
-
-static void* os_pool_alloc(size_t size, size_t alignment, mi_os_tld_t* tld)
-{
-  if (!mi_option_is_enabled(mi_option_pool_commit)) return NULL;
-  if (alignment != MI_POOL_ALIGNMENT) return NULL;
-  size = _mi_align_up(size,MI_POOL_ALIGNMENT);
-  if (size > MI_POOL_SIZE) return NULL;
-
-  if (tld->pool_available == 0) {
-    tld->pool = (uint8_t*)mi_os_alloc_aligned_ensured(MI_POOL_SIZE,MI_POOL_ALIGNMENT,0,tld->stats);
-    if (tld->pool == NULL) return NULL;
-    tld->pool_available += MI_POOL_SIZE;
-  }
-
-  if (size > tld->pool_available) return NULL;
-  void* p = tld->pool;
-  tld->pool_available -= size;
-  tld->pool += size;
-  return p;
-}
-
-#endif
