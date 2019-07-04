@@ -14,12 +14,19 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_TLS_RECURSE_GUARD
 #endif
 
+#if (MI_DEBUG>0)
+#define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
+#else
+#define mi_trace_message(...)  
+#endif
+
 
 // "options.c"
 void       _mi_fprintf(FILE* out, const char* fmt, ...);
 void       _mi_error_message(const char* fmt, ...);
 void       _mi_warning_message(const char* fmt, ...);
 void       _mi_verbose_message(const char* fmt, ...);
+void       _mi_trace_message(const char* fmt, ...);
 
 // "init.c"
 extern mi_stats_t       _mi_stats_main;
@@ -119,6 +126,11 @@ bool        _mi_page_is_valid(mi_page_t* page);
   Inlined definitions
 ----------------------------------------------------------- */
 #define UNUSED(x)     (void)(x)
+#if (MI_DEBUG>0) 
+#define UNUSED_RELEASE(x)  
+#else
+#define UNUSED_RELEASE(x)  UNUSED(x)
+#endif
 
 #define MI_INIT4(x)   x(),x(),x(),x()
 #define MI_INIT8(x)   MI_INIT4(x),MI_INIT4(x)
