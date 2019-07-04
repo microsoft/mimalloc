@@ -261,14 +261,18 @@ static int mi_register_atexit(exit_list_t* list, cbfun_t* fn) {
 }
 
 // Register a global `atexit` function
-static int mi__crt_atexit(cbfun_t* fn) {
+static int mi_atexit(cbfun_t* fn) {
   return mi_register_atexit(&atexit_list,fn);
 }
 
-static int mi__crt_at_quick_exit(cbfun_t* fn) {
+static int mi_at_quick_exit(cbfun_t* fn) {
   return mi_register_atexit(&at_quick_exit_list,fn);
 }
 
+static int mi_register_onexit(void* table, cbfun_t* fn) {
+  // TODO: how can we distinguish a quick_exit from atexit?
+  return mi_atexit(fn);
+}
 
 // Execute exit functions in a list
 static void mi_execute_exit_list(exit_list_t* list) {
@@ -393,9 +397,12 @@ typedef struct mi_patch_s {
 
 static mi_patch_t patches[] = {
   // we implement our own global exit handler (as the CRT versions do a realloc internally)
-  MI_PATCH2(_crt_atexit, mi__crt_atexit),
-  MI_PATCH2(_crt_at_quick_exit, mi__crt_at_quick_exit),
+  //MI_PATCH2(_crt_atexit, mi_atexit),
+  //MI_PATCH2(_crt_at_quick_exit, mi_at_quick_exit),
   MI_PATCH2(_setmaxstdio, mi_setmaxstdio),
+  MI_PATCH2(_register_onexit_function, mi_register_onexit),
+  MI_PATCH2(atexit, mi_atexit),
+  MI_PATCH2(at_quick_exit, mi_at_quick_exit),
 
   // base versions
   MI_PATCH2(_malloc_base, mi_malloc),
