@@ -104,7 +104,7 @@ mi_decl_export mi_decl_allocator void* mi_reallocf(void* p, size_t newsize)     
 mi_decl_export mi_decl_allocator void* mi_rezalloc(void* p, size_t newsize)             mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_export mi_decl_allocator void* mi_recalloc(void* p, size_t count, size_t size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2,3);
 
-mi_decl_export size_t mi_usable_size(void* p)   mi_attr_noexcept;
+mi_decl_export size_t mi_usable_size(const void* p)   mi_attr_noexcept;
 mi_decl_export size_t mi_good_size(size_t size) mi_attr_noexcept;
 
 mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
@@ -117,7 +117,7 @@ mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_stats_print(FILE* out) mi_attr_noexcept;
 
 typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat);
-mi_decl_export void mi_register_deferred_free(mi_deferred_free_fun* deferred_free) mi_attr_noexcept;
+mi_decl_export void mi_register_deferred_free(const mi_deferred_free_fun* deferred_free) mi_attr_noexcept;
 
 
 // ------------------------------------------------------
@@ -186,9 +186,9 @@ typedef struct mi_heap_area_s {
   size_t block_size;  // size in bytes of each block
 } mi_heap_area_t;
 
-typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
+typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, const void* arg);
 
-mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block_visit_fun* visitor, void* arg);
+mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block_visit_fun* visitor, const void* arg);
 
 // ------------------------------------------------------
 // Convenience

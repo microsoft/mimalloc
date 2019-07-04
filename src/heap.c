@@ -17,10 +17,10 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 // return `true` if ok, `false` to break
-typedef bool (heap_page_visitor_fun)(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2);
+typedef bool (heap_page_visitor_fun)(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, const void* arg1, const void* arg2);
 
 // Visit all pages in a heap; returns `false` if break was called.
-static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void* arg1, void* arg2)
+static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, const void* arg1, const void* arg2)
 {
   if (heap==NULL || heap->page_count==0) return 0;
 
@@ -46,7 +46,7 @@ static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void
 
 
 #if MI_DEBUG>1
-static bool _mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
+static bool _mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, const void* arg1, const void* arg2) {
   UNUSED(arg1);
   UNUSED(arg2);
   UNUSED(pq);
@@ -81,7 +81,7 @@ typedef enum mi_collect_e {
 } mi_collect_t;
 
 
-static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg_collect, void* arg2 ) {
+static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, const void* arg_collect, const void* arg2 ) {
   UNUSED(arg2);
   UNUSED(heap);
   mi_collect_t collect = (mi_collect_t)arg_collect;
@@ -221,7 +221,7 @@ static void mi_heap_free(mi_heap_t* heap) {
   Heap destroy
 ----------------------------------------------------------- */
 
-static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
+static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, const void* arg1, const void* arg2) {
   UNUSED(arg1);
   UNUSED(arg2);
   UNUSED(heap);
@@ -362,7 +362,7 @@ bool mi_heap_contains_block(mi_heap_t* heap, const void* p) {
 }
 
 
-static bool mi_heap_page_check_owned(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* p, void* vfound) {
+static bool mi_heap_page_check_owned(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, const void* p, const void* vfound) {
   UNUSED(heap);
   UNUSED(pq);
   bool* found = (bool*)vfound;
@@ -398,7 +398,7 @@ typedef struct mi_heap_area_ex_s {
   mi_page_t*     page;
 } mi_heap_area_ex_t;
 
-static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_visit_fun* visitor, void* arg) {
+static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_visit_fun* visitor, const void* arg) {
   mi_assert(xarea != NULL);
   if (xarea==NULL) return true;
   const mi_heap_area_t* area = &xarea->area;
@@ -457,10 +457,10 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
   return true;
 }
 
-typedef bool (mi_heap_area_visit_fun)(const mi_heap_t* heap, const mi_heap_area_ex_t* area, void* arg);
+typedef bool (mi_heap_area_visit_fun)(const mi_heap_t* heap, mi_heap_area_ex_t* area, const void* arg);
 
 
-static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* vfun, void* arg) {
+static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, const void* vfun, const void* arg) {
   UNUSED(heap);
   UNUSED(pq);
   mi_heap_area_visit_fun* fun = (mi_heap_area_visit_fun*)vfun;
@@ -475,7 +475,7 @@ static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
 }
 
 // Visit all heap pages as areas
-static bool mi_heap_visit_areas(const mi_heap_t* heap, mi_heap_area_visit_fun* visitor, void* arg) {
+static bool mi_heap_visit_areas(const mi_heap_t* heap, mi_heap_area_visit_fun* visitor, const void* arg) {
   if (visitor == NULL) return false;
   return mi_heap_visit_pages((mi_heap_t*)heap, &mi_heap_visit_areas_page, visitor, arg);
 }
@@ -483,11 +483,11 @@ static bool mi_heap_visit_areas(const mi_heap_t* heap, mi_heap_area_visit_fun* v
 // Just to pass arguments
 typedef struct mi_visit_blocks_args_s {
   bool  visit_blocks;
-  mi_block_visit_fun* visitor;
-  void* arg;
+   mi_block_visit_fun* visitor;
+  const void* arg;
 } mi_visit_blocks_args_t;
 
-static bool mi_heap_area_visitor(const mi_heap_t* heap, const mi_heap_area_ex_t* xarea, void* arg) {
+static bool mi_heap_area_visitor(const mi_heap_t* heap, mi_heap_area_ex_t* xarea, const void* arg) {
   mi_visit_blocks_args_t* args = (mi_visit_blocks_args_t*)arg;
   if (!args->visitor(heap, &xarea->area, NULL, xarea->area.block_size, arg)) return false;
   if (args->visit_blocks) {
@@ -499,8 +499,8 @@ static bool mi_heap_area_visitor(const mi_heap_t* heap, const mi_heap_area_ex_t*
 }
 
 // Visit all blocks in a heap
-bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
-  mi_visit_blocks_args_t args = { visit_blocks, visitor, arg };
+bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, const void* arg) {
+  const mi_visit_blocks_args_t args = { visit_blocks, visitor, arg };
   return mi_heap_visit_areas(heap, &mi_heap_area_visitor, &args);
 }
 
