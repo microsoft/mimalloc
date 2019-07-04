@@ -377,6 +377,7 @@ typedef enum patch_apply_e {
 
 typedef struct mi_patch_s {
   const char*   name;       // name of the function to patch
+  int           priority;   // priority to patch this one (used to prioritize over multiple entries in various dll's)
   void*         original;   // the resolved address of the function (or NULL)
   void*         target;     // the address of the new target (never NULL)
   void*         target_term;// the address of the target during termination (or NULL)
@@ -384,8 +385,8 @@ typedef struct mi_patch_s {
   mi_jump_t     save;       // the saved instructions in case it was applied
 } mi_patch_t;
 
-#define MI_PATCH_NAME3(name,target,term)  { name, NULL, &target, &term, false }
-#define MI_PATCH_NAME2(name,target)       { name, NULL, &target, NULL, false }
+#define MI_PATCH_NAME3(name,target,term)  { name, 0, NULL, &target, &term, PATCH_NONE }
+#define MI_PATCH_NAME2(name,target)       { name, 0, NULL, &target, NULL, PATCH_NONE }
 #define MI_PATCH3(name,target,term)       MI_PATCH_NAME3(#name, target, term)
 #define MI_PATCH2(name,target)            MI_PATCH_NAME2(#name, target)
 #define MI_PATCH1(name)                   MI_PATCH2(name,mi_##name)
@@ -447,7 +448,7 @@ static mi_patch_t patches[] = {
   MI_PATCH_NAME3("??_V@YAXPAXABUnothrow_t@std@@@Z", mi_free, mi_free_term),
 #endif
 
-  { NULL, NULL, NULL, false }
+  { NULL, 0, NULL, NULL, NULL, PATCH_NONE }
 };
 
 
@@ -522,15 +523,16 @@ static int __cdecl mi_setmaxstdio(int newmax) {
 // ------------------------------------------------------
 
 // Try to resolve patches for a given module (DLL)
-static void mi_module_resolve(HMODULE mod) {
+static void mi_module_resolve(HMODULE mod, int priority) {
   // see if any patches apply
   for (size_t i = 0; patches[i].name != NULL; i++) {
     mi_patch_t* patch = &patches[i];
-    if (!patch->applied && patch->original==NULL) {
+    if (!patch->applied && patch->priority < priority) { 
       void* addr = GetProcAddress(mod, patch->name);
       if (addr != NULL) {
         // found it! set the address
         patch->original = addr;
+        patch->priority = priority;
       }
     }
   }
@@ -554,9 +556,11 @@ static bool mi_patches_resolve(void) {
   size_t count = needed / sizeof(HMODULE);
   size_t ucrtbase_index = 0;
   size_t mimalloc_index = 0;
-  // iterate through the loaded modules
-  for (size_t i = 0; i < count; i++) {
-    HMODULE mod = modules[i];
+  // iterate through the loaded modules; do this from the end so we prefer the
+  // first loaded DLL as sometimes both "msvcr" and "ucrt" are both loaded and we should
+  // override "ucrt" in that situation.
+  for (size_t i = count; i > 0; i--) {
+    HMODULE mod = modules[i-1];
     char filename[MAX_PATH] = { 0 };
     DWORD slen = GetModuleFileName(mod, filename, MAX_PATH);
     if (slen > 0 && slen < MAX_PATH) {
@@ -564,16 +568,19 @@ static bool mi_patches_resolve(void) {
       filename[slen] = 0;
       const char* lastsep = strrchr(filename, '\\');
       const char* basename = (lastsep==NULL ? filename : lastsep+1);
-      if (i==0                                    // main module to allow static crt linking
-        || _strnicmp(basename, "ucrt", 4) == 0    // new ucrtbase.dll in windows 10
-        || _strnicmp(basename, "msvcr", 5) == 0)  // older runtimes
-      {
+
+      int priority = 0; 
+      if (i == 0) priority = 2; // main module to allow static crt linking
+      else if (_strnicmp(basename, "ucrt", 4) == 0) priority = 3;   // new ucrtbase.dll in windows 10
+      else if (_strnicmp(basename, "msvcr", 5) == 0) priority = 1;  // older runtimes      
+      
+      if (priority > 0) {
         // remember indices so we can check load order (in debug mode)
         if (_stricmp(basename, MIMALLOC_NAME) == 0) mimalloc_index = i;
         if (_stricmp(basename, UCRTBASE_NAME) == 0) ucrtbase_index = i;
 
         // probably found a crt module, try to patch it
-        mi_module_resolve(mod);
+        mi_module_resolve(mod,priority);
 
         // try to find the atexit functions for the main process (in `ucrtbase.dll`)
         if (crt_atexit==NULL) crt_atexit = (atexit_fun_t*)GetProcAddress(mod, "_crt_atexit");

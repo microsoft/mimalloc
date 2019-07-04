@@ -89,7 +89,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SMALL_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_SMALL_PAGE_SIZE)
 #define MI_LARGE_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_LARGE_PAGE_SIZE)
 
-#define MI_LARGE_SIZE_MAX                 (MI_LARGE_PAGE_SIZE/4)   // 1MiB on 64-bit
+#define MI_LARGE_SIZE_MAX                 (MI_LARGE_PAGE_SIZE/8)   // 512KiB on 64-bit
 #define MI_LARGE_WSIZE_MAX                (MI_LARGE_SIZE_MAX>>MI_INTPTR_SHIFT)
 
 

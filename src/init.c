@@ -103,7 +103,11 @@ mi_heap_t _mi_heap_main = {
   NULL,
   0,
   0,
-  0xCDCDCDCDCDCDCDL,
+#if MI_INTPTR_SIZE==8   // the cookie of the main heap can be fixed (unlike page cookies that need to be secure!)
+  0xCDCDCDCDCDCDCDCDUL,
+#else
+  0xCDCDCDCDUL,
+#endif
   0,
   false   // can reclaim
 };
