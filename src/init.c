@@ -333,7 +333,9 @@ void mi_thread_init(void) mi_attr_noexcept
     pthread_setspecific(mi_pthread_key, (void*)(_mi_thread_id()|1)); // set to a dummy value so that `mi_pthread_done` is called
   #endif
 
+  #if (MI_DEBUG>0) // not in release mode as that leads to crashes on Windows dynamic override
   _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
+  #endif
 }
 
 void mi_thread_done(void) mi_attr_noexcept {
@@ -346,9 +348,11 @@ void mi_thread_done(void) mi_attr_noexcept {
   // abandon the thread local heap
   if (_mi_heap_done()) return; // returns true if already ran
 
+  #if (MI_DEBUG>0)
   if (!_mi_is_main_thread()) {
     _mi_verbose_message("thread done: 0x%zx\n", _mi_thread_id());
   }
+  #endif
 }
 
 
