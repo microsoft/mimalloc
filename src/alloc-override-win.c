@@ -401,27 +401,33 @@ static mi_patch_t patches[] = {
   //MI_PATCH2(_crt_at_quick_exit, mi_at_quick_exit),
   MI_PATCH2(_setmaxstdio, mi_setmaxstdio),
   MI_PATCH2(_register_onexit_function, mi_register_onexit),
+
+  // override higher level atexit functions so we can implement at_quick_exit correcty
   MI_PATCH2(atexit, mi_atexit),
   MI_PATCH2(at_quick_exit, mi_at_quick_exit),
 
-  // base versions
+  // regular entries
+  MI_PATCH2(malloc, mi_malloc),
+  MI_PATCH2(calloc, mi_calloc),
+  MI_PATCH3(realloc, mi_realloc,mi_realloc_term),
+  MI_PATCH3(free, mi_free,mi_free_term),
+  
+  // extended api
+  MI_PATCH2(_strdup, mi_strdup),
+  MI_PATCH2(_strndup, mi_strndup),
+  MI_PATCH3(_expand, mi__expand,mi__expand_term),
+  MI_PATCH3(_recalloc, mi_recalloc,mi__recalloc_term),
+  MI_PATCH3(_msize, mi_usable_size,mi__msize_term),
+
+  // base versions 
   MI_PATCH2(_malloc_base, mi_malloc),
   MI_PATCH2(_calloc_base, mi_calloc),
   MI_PATCH3(_realloc_base, mi_realloc,mi_realloc_term),
   MI_PATCH3(_free_base, mi_free,mi_free_term),
 
-  // regular entries
-  MI_PATCH3(_expand, mi__expand,mi__expand_term),
-  MI_PATCH3(_recalloc, mi_recalloc,mi__recalloc_term),
-  MI_PATCH3(_msize, mi_usable_size,mi__msize_term),
-
   // these base versions are in the crt but without import records
   MI_PATCH_NAME3("_recalloc_base", mi_recalloc,mi__recalloc_term),
   MI_PATCH_NAME3("_msize_base", mi_usable_size,mi__msize_term),
-
-  // utility
-  MI_PATCH2(_strdup, mi_strdup),
-  MI_PATCH2(_strndup, mi_strndup),
 
   // debug
   MI_PATCH2(_malloc_dbg, mi__malloc_dbg),
@@ -433,6 +439,8 @@ static mi_patch_t patches[] = {
   MI_PATCH3(_recalloc_dbg, mi__recalloc_dbg, mi__recalloc_dbg_term),
   MI_PATCH3(_msize_dbg, mi__msize_dbg, mi__msize_dbg_term),
 
+#if 0
+  // override new/delete variants for efficiency (?)
 #ifdef _WIN64
   // 64 bit new/delete
   MI_PATCH_NAME2("??2@YAPEAX_K@Z", mi_malloc),
@@ -454,7 +462,7 @@ static mi_patch_t patches[] = {
   MI_PATCH_NAME3("??3@YAXPAXABUnothrow_t@std@@@Z", mi_free, mi_free_term),
   MI_PATCH_NAME3("??_V@YAXPAXABUnothrow_t@std@@@Z", mi_free, mi_free_term),
 #endif
-
+#endif
   { NULL, 0, NULL, NULL, NULL, PATCH_NONE }
 };
 
@@ -530,7 +538,7 @@ static int __cdecl mi_setmaxstdio(int newmax) {
 // ------------------------------------------------------
 
 // Try to resolve patches for a given module (DLL)
-static void mi_module_resolve(HMODULE mod, int priority) {
+static void mi_module_resolve(const char* fname, HMODULE mod, int priority) {
   // see if any patches apply
   for (size_t i = 0; patches[i].name != NULL; i++) {
     mi_patch_t* patch = &patches[i];
@@ -540,13 +548,15 @@ static void mi_module_resolve(HMODULE mod, int priority) {
         // found it! set the address
         patch->original = addr;
         patch->priority = priority;
+        _mi_trace_message("  override %s at %s!%p, priority %i\n", patch->name, fname, addr, priority);
       }
     }
   }
 }
 
-#define MIMALLOC_NAME "mimalloc-override"
-#define UCRTBASE_NAME "ucrtbase"
+#define MIMALLOC_NAME "mimalloc-override.dll"
+#define UCRTBASE_NAME "ucrtbase.dll"
+#define UCRTBASED_NAME "ucrtbased.dll"
 
 // Resolve addresses of all patches by inspecting the loaded modules
 static atexit_fun_t* crt_atexit = NULL;
@@ -560,14 +570,13 @@ static bool mi_patches_resolve(void) {
   HMODULE modules[400];  // try to stay under 4k to not trigger the guard page
   EnumProcessModules(process, modules, sizeof(modules), &needed);
   if (needed == 0) return false;
-  size_t count = needed / sizeof(HMODULE);
-  size_t ucrtbase_index = 0;
-  size_t mimalloc_index = 0;
-  // iterate through the loaded modules; do this from the end so we prefer the
-  // first loaded DLL as sometimes both "msvcr" and "ucrt" are both loaded and we should
-  // override "ucrt" in that situation.
-  for (size_t i = count; i > 0; i--) {
-    HMODULE mod = modules[i-1];
+  int count = needed / sizeof(HMODULE);
+  int ucrtbase_index = 0;
+  int mimalloc_index = 0;
+  // iterate through the loaded modules
+  _mi_trace_message("overriding malloc dynamically...\n");
+  for (int i = 0; i < count;  i++) {
+    HMODULE mod = modules[i];
     char filename[MAX_PATH] = { 0 };
     DWORD slen = GetModuleFileName(mod, filename, MAX_PATH);
     if (slen > 0 && slen < MAX_PATH) {
@@ -575,19 +584,22 @@ static bool mi_patches_resolve(void) {
       filename[slen] = 0;
       const char* lastsep = strrchr(filename, '\\');
       const char* basename = (lastsep==NULL ? filename : lastsep+1);
+      _mi_trace_message("  %i: dynamic module %s\n", i, filename);
 
+      // remember indices so we can check load order (in debug mode)
+      if (_stricmp(basename, MIMALLOC_NAME) == 0) mimalloc_index = i;
+      if (_stricmp(basename, UCRTBASE_NAME) == 0) ucrtbase_index = i;
+      if (_stricmp(basename, UCRTBASED_NAME) == 0) ucrtbase_index = i;
+
+      // see if we potentially patch in this module
       int priority = 0; 
       if (i == 0) priority = 2; // main module to allow static crt linking
       else if (_strnicmp(basename, "ucrt", 4) == 0) priority = 3;   // new ucrtbase.dll in windows 10
       else if (_strnicmp(basename, "msvcr", 5) == 0) priority = 1;  // older runtimes      
       
       if (priority > 0) {
-        // remember indices so we can check load order (in debug mode)
-        if (_stricmp(basename, MIMALLOC_NAME) == 0) mimalloc_index = i;
-        if (_stricmp(basename, UCRTBASE_NAME) == 0) ucrtbase_index = i;
-
         // probably found a crt module, try to patch it
-        mi_module_resolve(mod,priority);
+        mi_module_resolve(basename,mod,priority);
 
         // try to find the atexit functions for the main process (in `ucrtbase.dll`)
         if (crt_atexit==NULL) crt_atexit = (atexit_fun_t*)GetProcAddress(mod, "_crt_atexit");
@@ -595,13 +607,11 @@ static bool mi_patches_resolve(void) {
       }
     }
   }
-#if (MI_DEBUG)
-  size_t diff = (mimalloc_index > ucrtbase_index ? mimalloc_index - ucrtbase_index : ucrtbase_index - mimalloc_index);
-  if ((mimalloc_index > 0 || ucrtbase_index > 0) && (diff != 1)) {
-    _mi_warning_message("warning: the \"mimalloc-override\" DLL seems not to load right before or after the C runtime (\"ucrtbase\").\n"
-                        "  Try to fix this by changing the linking order.");
+  int diff = mimalloc_index - ucrtbase_index;
+  if (diff > 1) {
+    _mi_warning_message("warning: the \"mimalloc-override\" DLL seems not to load before or right after the C runtime (\"ucrtbase\").\n"
+                        "  Try to fix this by changing the linking order.\n");
   }
-#endif
   return true;
 }
 
