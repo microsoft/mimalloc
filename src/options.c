@@ -39,7 +39,7 @@ static mi_option_desc_t options[_mi_option_last] = {
   #endif
   { 0, UNINIT, "show_stats" },
   { MI_DEBUG, UNINIT, "show_errors" },
-  { MI_DEBUG, UNINIT, "verbose" }
+  { 0, UNINIT, "verbose" }
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -102,6 +102,14 @@ void _mi_fprintf( FILE* out, const char* fmt, ... ) {
   va_list args;
   va_start(args,fmt);
   mi_vfprintf(out,NULL,fmt,args);
+  va_end(args);
+}
+
+void _mi_trace_message(const char* fmt, ...) {
+  if (mi_option_get(mi_option_verbose) <= 1) return;  // only with verbose level 2 or higher
+  va_list args;
+  va_start(args, fmt);
+  mi_vfprintf(stderr, "mimalloc: ", fmt, args);
   va_end(args);
 }
 
