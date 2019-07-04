@@ -455,7 +455,19 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
     mi_assert_internal((uint8_t*)block >= pstart && (uint8_t*)block < (pstart + psize));
     size_t offset = (uint8_t*)block - pstart;
     mi_assert_internal(offset % page->block_size == 0);
-    size_t blockidx = offset / page->block_size;  // Todo: avoid division?
+    size_t blockidx;
+    size_t divident = page->block_size;
+    blockidx = offset >> mi_ffs32(divident);
+    divident >>= mi_ffs32(divident);
+    switch (divident)
+    {
+    case 3: blockidx/=3; 
+      break;
+    case 5: blockidx/=5;
+      break;
+    case 7: blockidx/=7;
+      break;
+    }
     mi_assert_internal( blockidx < MI_MAX_BLOCKS);
     size_t bitidx = (blockidx / sizeof(uintptr_t));
     size_t bit = blockidx - (bitidx * sizeof(uintptr_t));
