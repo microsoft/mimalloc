@@ -19,6 +19,7 @@ set(mi_sources
     src/page.c
     src/alloc.c
     src/alloc-aligned.c
+    src/alloc-posix.c
     src/heap.c
     src/options.c
     src/init.c)

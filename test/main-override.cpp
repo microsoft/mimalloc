@@ -21,7 +21,7 @@ public:
 };
 
 int main() {
-  mi_stats_reset();  
+  mi_stats_reset();
   atexit(free_p);
   void* p1 = malloc(78);
   void* p2 = malloc(24);
@@ -36,8 +36,10 @@ int main() {
   free(s);
   Test* t = new Test(42);
   delete t;
+  int err = mi_posix_memalign(&p1,32,60); 
+  if (!err) free(p);
   mi_collect(true);
-  // mi_stats_print(NULL);  // MIMALLOC_VERBOSE env is set to 2 
+  mi_stats_print(NULL);  // MIMALLOC_VERBOSE env is set to 2 
   return 0;
 }
 

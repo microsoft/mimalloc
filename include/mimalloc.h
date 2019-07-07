@@ -232,6 +232,26 @@ mi_decl_export long  mi_option_get(mi_option_t option);
 mi_decl_export void  mi_option_set(mi_option_t option, long value);
 mi_decl_export void  mi_option_set_default(mi_option_t option, long value);
 
+
+// ------------------------------------------------------
+// mi prefixed implementations of various posix, unix,
+// and C++ allocation functions.
+// ------------------------------------------------------
+
+mi_decl_export size_t mi_malloc_size(void* p) mi_attr_noexcept;
+mi_decl_export size_t mi_malloc_usable_size(void *p) mi_attr_noexcept;
+mi_decl_export void   mi_cfree(void* p) mi_attr_noexcept;
+
+mi_decl_export int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept;
+mi_decl_export int mi__posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept;
+mi_decl_export mi_decl_allocator void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_export mi_decl_allocator void* mi_valloc(size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
+
+mi_decl_export mi_decl_allocator void* mi_pvalloc(size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_export mi_decl_allocator void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_export mi_decl_allocator void* mi_reallocarray(void* p, size_t count, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2,3);
+
+
 #ifdef __cplusplus
 }
 #endif
