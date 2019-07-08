@@ -326,7 +326,7 @@ void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
 void* _mi_realloc_zero(void* p, size_t newsize, bool zero) {
   if (p == NULL) return _mi_heap_malloc_zero(mi_get_default_heap(),newsize,zero);
   size_t size = mi_usable_size(p);
-  if (newsize <= size && newsize >= (size / 2)) {
+  if (newsize <= size && newsize >= (size >> 1)) {
     return p;  // reallocation still fits and not more than 50% waste
   }
   void* newp = mi_malloc(newsize); // maybe in another heap

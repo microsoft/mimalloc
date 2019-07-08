@@ -90,7 +90,7 @@ static void* mi_realloc_zero_aligned_at(void* p, size_t newsize, size_t alignmen
   if (alignment <= sizeof(uintptr_t)) return _mi_realloc_zero(p,newsize,zero);
   if (p == NULL) return mi_malloc_zero_aligned_at(newsize,alignment,offset,zero);
   size_t size = mi_usable_size(p);
-  if (newsize <= size && newsize >= (size - (size / 2))
+  if (newsize <= size && newsize >= (size - (size >> 1))
       && (((uintptr_t)p + offset) % alignment) == 0) {
     return p;  // reallocation still fits, is aligned and not more than 50% waste
   }

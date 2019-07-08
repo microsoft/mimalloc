@@ -243,7 +243,7 @@ static inline bool mi_page_all_used(mi_page_t* page) {
 // is more than 7/8th of a page in use?
 static inline bool mi_page_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
-  uint16_t frac = page->reserved / 8U;
+  uint16_t frac = page->reserved >> 3;
   return (page->reserved - page->used + page->thread_freed < frac);
 }
 
