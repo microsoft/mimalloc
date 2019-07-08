@@ -177,7 +177,7 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
 
 
 // Adjust a block that was allocated aligned, to the actual start of the block in the page.
-mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, void* p) {
+mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
   size_t diff   = (uint8_t*)p - _mi_page_start(segment, page, NULL);
   size_t adjust = (diff % page->block_size);
@@ -256,7 +256,7 @@ void _mi_free_delayed_block(mi_block_t* block) {
 }
 
 // Bytes available in a block
-size_t mi_usable_size(void* p) mi_attr_noexcept {
+size_t mi_usable_size(const void* p) mi_attr_noexcept {
   if (p==NULL) return 0;
   const mi_segment_t* segment = _mi_ptr_segment(p);
   const mi_page_t* page = _mi_segment_page_of(segment,p);

@@ -27,11 +27,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 
-size_t mi_malloc_size(void* p) mi_attr_noexcept {
+size_t mi_malloc_size(const void* p) mi_attr_noexcept {
   return mi_usable_size(p);
 }
 
-size_t mi_malloc_usable_size(void *p) mi_attr_noexcept {
+size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept {
   return mi_usable_size(p);
 }
 

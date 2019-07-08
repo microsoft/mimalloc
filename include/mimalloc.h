@@ -107,8 +107,8 @@ mi_decl_export mi_decl_allocator void* mi_reallocf(void* p, size_t newsize)     
 mi_decl_export mi_decl_allocator void* mi_rezalloc(void* p, size_t newsize)             mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_export mi_decl_allocator void* mi_recalloc(void* p, size_t count, size_t size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2,3);
 
-mi_decl_export size_t mi_usable_size(void* p)   mi_attr_noexcept;
-mi_decl_export size_t mi_good_size(size_t size) mi_attr_noexcept;
+mi_decl_export size_t mi_usable_size(const void* p)   mi_attr_noexcept;
+mi_decl_export size_t mi_good_size(size_t size)       mi_attr_noexcept;
 
 mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
 mi_decl_export void mi_stats_print(FILE* out) mi_attr_noexcept;
@@ -240,8 +240,8 @@ mi_decl_export void  mi_option_set_default(mi_option_t option, long value);
 // mi prefixed implementations of various posix, unix, and C++ allocation functions.
 // -----------------------------------------------------------------------------------
 
-mi_decl_export size_t mi_malloc_size(void* p) mi_attr_noexcept;
-mi_decl_export size_t mi_malloc_usable_size(void *p) mi_attr_noexcept;
+mi_decl_export size_t mi_malloc_size(const void* p) mi_attr_noexcept;
+mi_decl_export size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept;
 mi_decl_export void   mi_cfree(void* p) mi_attr_noexcept;
 
 mi_decl_export int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept;
