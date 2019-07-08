@@ -233,10 +233,9 @@ mi_decl_export void  mi_option_set(mi_option_t option, long value);
 mi_decl_export void  mi_option_set_default(mi_option_t option, long value);
 
 
-// ------------------------------------------------------
-// mi prefixed implementations of various posix, unix,
-// and C++ allocation functions.
-// ------------------------------------------------------
+// ----------------------------------------------------------------------------------
+// mi prefixed implementations of various posix, unix, and C++ allocation functions.
+// -----------------------------------------------------------------------------------
 
 mi_decl_export size_t mi_malloc_size(void* p) mi_attr_noexcept;
 mi_decl_export size_t mi_malloc_usable_size(void *p) mi_attr_noexcept;
@@ -251,9 +250,19 @@ mi_decl_export mi_decl_allocator void* mi_pvalloc(size_t size) mi_attr_noexcept 
 mi_decl_export mi_decl_allocator void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_export mi_decl_allocator void* mi_reallocarray(void* p, size_t count, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2,3);
 
-
+mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
+mi_decl_export void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept;
+mi_decl_export void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept;
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef __cplusplus
+mi_decl_export void* mi_decl_allocator mi_new(std::size_t n) noexcept(false) mi_attr_malloc mi_attr_alloc_size(1);
+#if (__cplusplus > 201402L || defined(__cpp_aligned_new))
+#include <new>
+mi_decl_export void* mi_decl_allocator mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false) mi_attr_malloc mi_attr_alloc_size(1);
+#endif
 #endif
 
 #endif

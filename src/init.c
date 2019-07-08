@@ -426,7 +426,7 @@ static void mi_process_done(void) {
   // C++: use static initialization to detect process start
   static bool _mi_process_init(void) {
     mi_process_init();
-    return (mi_main_thread_id != 0);
+    return (_mi_heap_main.thread_id != 0);
   }
   static bool mi_initialized = _mi_process_init();
 

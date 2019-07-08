@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.0)
-project(libmimalloc C)
+project(libmimalloc C CXX)
 include("cmake/mimalloc-config-version.cmake")
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 option(MI_OVERRIDE   "Override the standard malloc interface" ON)
 option(MI_INTERPOSE  "Use interpose to override standard malloc on macOS" ON)
@@ -76,6 +77,7 @@ endif()
 if(MI_USE_CXX MATCHES "ON")
   message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c PROPERTIES LANGUAGE CXX )
 endif()
 
 # Compiler flags

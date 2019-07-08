@@ -30,12 +30,14 @@ terms of the MIT license. A copy of the license can be found in the file
   #define MI_FORWARD2(fun,x,y)    MI_FORWARD(fun)
   #define MI_FORWARD3(fun,x,y,z)  MI_FORWARD(fun)
   #define MI_FORWARD0(fun,x)      MI_FORWARD(fun)
+  #define MI_FORWARD02(fun,x,y)   MI_FORWARD(fun)
 #else
   // use forwarding by calling our `mi_` function
   #define MI_FORWARD1(fun,x)      { return fun(x); }
   #define MI_FORWARD2(fun,x,y)    { return fun(x,y); }
   #define MI_FORWARD3(fun,x,y,z)  { return fun(x,y,z); }
   #define MI_FORWARD0(fun,x)      { fun(x); }
+  #define MI_FORWARD02(fun,x,y)   { fun(x,y); }
 #endif
 
 #if defined(__APPLE__) && defined(MI_SHARED_LIB_EXPORT) && defined(MI_INTERPOSE)
@@ -81,17 +83,42 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <new>
   void operator delete(void* p) noexcept              MI_FORWARD0(mi_free,p);
   void operator delete[](void* p) noexcept            MI_FORWARD0(mi_free,p);
-  void* operator new(std::size_t n) noexcept(false)   MI_FORWARD1(mi_malloc,n);
-  void* operator new[](std::size_t n) noexcept(false) MI_FORWARD1(mi_malloc,n);
 
-  #if (__cplusplus >= 201703L)
-  void* operator new( std::size_t n, std::align_val_t align) noexcept(false)   MI_FORWARD2(mi_malloc_aligned,n,align);
-  void* operator new[]( std::size_t n, std::align_val_t align) noexcept(false) MI_FORWARD2(mi_malloc_aligned,n,align);
+  void* operator new(std::size_t n) noexcept(false)   { return mi_new(n); }
+  void* operator new[](std::size_t n) noexcept(false) { return mi_new(n); }
+
+  void* operator new  (std::size_t n, const std::nothrow_t& tag) noexcept MI_FORWARD1(mi_malloc, n);
+  void* operator new[](std::size_t n, const std::nothrow_t& tag) noexcept MI_FORWARD1(mi_malloc, n);
+
+  #if (__cplusplus >= 201402L)
+  void operator delete  (void* p, std::size_t sz) MI_FORWARD02(mi_free_size,p,sz);
+  void operator delete[](void* p, std::size_t sz) MI_FORWARD02(mi_free_size,p,sz);
+  #endif 
+
+  #if (__cplusplus > 201402L || defined(__cpp_aligned_new))
+  void operator delete  (void* p, std::align_val_t al) noexcept { mi_free_aligned(p, static_cast<size_t>(al)); }
+  void operator delete[](void* p, std::align_val_t al) noexcept { mi_free_aligned(p, static_cast<size_t>(al)); }
+  void operator delete  (void* p, std::size_t sz, std::align_val_t al) noexcept { mi_free_size_aligned(p, sz, static_cast<size_t>(al)); };
+  void operator delete[](void* p, std::size_t sz, std::align_val_t al) noexcept { mi_free_size_aligned(p, sz, static_cast<size_t>(al)); };
+
+  void* operator new( std::size_t n, std::align_val_t al)   noexcept(false) { return mi_new_aligned(n,al); }
+  void* operator new[]( std::size_t n, std::align_val_t al) noexcept(false) { return mi_new_aligned(n,al); }
+  void* operator new  (std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_malloc_aligned(n, static_cast<size_t>(al)); }
+  void* operator new[](std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_malloc_aligned(n, static_cast<size_t>(al)); }
   #endif
+
 #else
   // ------------------------------------------------------
-  // With a C compiler we override the new/delete operators
-  // by defining the mangled C++ names of the operators (as
+  // With a C compiler we cannot override the new/delete operators
+  // as the standard requires calling into `get_new_handler` and/or 
+  // throwing C++ exceptions (and we cannot do that from C). So, we
+  // hope the standard new uses `malloc` internally which will be 
+  // redirected anyways.
+  // ------------------------------------------------------
+
+  #if 0
+  // ------------------------------------------------------
+  // Override by defining the mangled C++ names of the operators (as
   // used by GCC and CLang).
   // See <https://itanium-cxx-abi.github.io/cxx-abi/abi.html#mangling>
   // ------------------------------------------------------
@@ -109,6 +136,7 @@ terms of the MIT license. A copy of the license can be found in the file
     void* _Znajj(uint32_t n, uint32_t align) { return mi_malloc_aligned(n,align); }  // aligned new[] 32-bit
   #else
   #error "define overloads for new/delete for this platform (just for performance, can be skipped)"
+  #endif
   #endif
 #endif // __cplusplus
 

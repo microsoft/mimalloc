@@ -130,7 +130,7 @@ typedef union mi_page_flags_u {
 // Thread free list.
 // We use 2 bits of the pointer for the `use_delayed_free` and `delayed_freeing` flags.
 typedef union mi_thread_free_u {
-  uintptr_t value;
+  volatile uintptr_t value;
   struct {
     mi_delayed_t delayed:2;
 #if MI_INTPTR_SIZE==8
