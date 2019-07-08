@@ -162,6 +162,8 @@ target_include_directories(mimalloc-obj PUBLIC
     $<INSTALL_INTERFACE:${mi_install_dir}/include>
 )
 
+install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_dir})
+
 install(FILES $<TARGET_OBJECTS:mimalloc-obj>
         DESTINATION ${mi_install_dir}
         RENAME ${mi_basename}${CMAKE_C_OUTPUT_EXTENSION} )
