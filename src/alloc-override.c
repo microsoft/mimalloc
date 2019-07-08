@@ -25,7 +25,11 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
   // use aliasing to alias the exported function to one of our `mi_` functions
-  #define MI_FORWARD(fun)         __attribute__((alias(#fun), used, visibility("default")))
+  #if (defined(__GNUC__) && __GNUC__ >= 9)
+    #define MI_FORWARD(fun)      __attribute__((alias(#fun), used, visibility("default"), copy(fun)))
+  #else
+    #define MI_FORWARD(fun)      __attribute__((alias(#fun), used, visibility("default")))
+  #endif
   #define MI_FORWARD1(fun,x)      MI_FORWARD(fun)
   #define MI_FORWARD2(fun,x,y)    MI_FORWARD(fun)
   #define MI_FORWARD3(fun,x,y,z)  MI_FORWARD(fun)
@@ -63,7 +67,7 @@ terms of the MIT license. A copy of the license can be found in the file
   void* malloc(size_t size)              mi_attr_noexcept  MI_FORWARD1(mi_malloc, size);
   void* calloc(size_t size, size_t n)    mi_attr_noexcept  MI_FORWARD2(mi_calloc, size, n);
   void* realloc(void* p, size_t newsize) mi_attr_noexcept  MI_FORWARD2(mi_realloc, p, newsize);
-  void  free(void* p)                    mi_attr_noexcept  MI_FORWARD0(mi_free, p);  
+  void  free(void* p)                    mi_attr_noexcept  MI_FORWARD0(mi_free, p);
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
@@ -93,7 +97,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #if (__cplusplus >= 201402L)
   void operator delete  (void* p, std::size_t sz) MI_FORWARD02(mi_free_size,p,sz);
   void operator delete[](void* p, std::size_t sz) MI_FORWARD02(mi_free_size,p,sz);
-  #endif 
+  #endif
 
   #if (__cplusplus > 201402L || defined(__cpp_aligned_new))
   void operator delete  (void* p, std::align_val_t al) noexcept { mi_free_aligned(p, static_cast<size_t>(al)); }
@@ -110,9 +114,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #else
   // ------------------------------------------------------
   // With a C compiler we cannot override the new/delete operators
-  // as the standard requires calling into `get_new_handler` and/or 
+  // as the standard requires calling into `get_new_handler` and/or
   // throwing C++ exceptions (and we cannot do that from C). So, we
-  // hope the standard new uses `malloc` internally which will be 
+  // hope the standard new uses `malloc` internally which will be
   // redirected anyways.
   // ------------------------------------------------------
 
