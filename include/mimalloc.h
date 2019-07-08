@@ -41,6 +41,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_malloc
   #define mi_attr_alloc_size(s)
   #define mi_attr_alloc_size2(s1,s2)
+  #define mi_cdecl                   __cdecl
 #elif defined(__GNUC__) || defined(__clang__)
   #define mi_decl_thread              __thread
   #define mi_decl_export              __attribute__((visibility("default")))
@@ -51,7 +52,8 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_alloc_size2(s1,s2)
   #else
   #define mi_attr_alloc_size(s)       __attribute__((alloc_size(s)))
-  #define mi_attr_alloc_size2(s1,s2)  __attribute__((alloc_size(s1,s2)))
+  #define mi_attr_alloc_size2(s1,s2)  __attribute__((alloc_size(s1,s2)))  
+  #define mi_cdecl                    // leads to warnings... __attribute__((cdecl))  
   #endif
 #else
   #define mi_decl_thread              __thread
@@ -60,6 +62,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_malloc
   #define mi_attr_alloc_size(s)
   #define mi_attr_alloc_size2(s1,s2)
+  #define mi_cdecl                   
 #endif
 
 // ------------------------------------------------------
@@ -186,7 +189,7 @@ typedef struct mi_heap_area_s {
   size_t block_size;  // size in bytes of each block
 } mi_heap_area_t;
 
-typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
+typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
 
 mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block_visit_fun* visitor, void* arg);
 

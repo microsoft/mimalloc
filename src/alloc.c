@@ -489,6 +489,7 @@ void* mi_new(std::size_t n) noexcept(false) {
                        else return mi_new_try(n);
 }
 
+#if (__cplusplus > 201402L || defined(__cpp_aligned_new))
 // for aligned allocation its fine as it is not inlined anyways
 void* mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false) {
   void* p;
@@ -500,5 +501,6 @@ void* mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false) 
   };
   return p;
 }
+#endif
 
 #endif
