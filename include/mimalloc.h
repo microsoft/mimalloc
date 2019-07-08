@@ -258,10 +258,11 @@ mi_decl_export void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept;
 #endif
 
 #ifdef __cplusplus
-mi_decl_export void* mi_decl_allocator mi_new(std::size_t n) noexcept(false) mi_attr_malloc mi_attr_alloc_size(1);
+#include <cstddef>
+mi_decl_export void* mi_new(std::size_t n) noexcept(false) mi_attr_malloc mi_attr_alloc_size(1);
 #if (__cplusplus > 201402L || defined(__cpp_aligned_new))
 #include <new>
-mi_decl_export void* mi_decl_allocator mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false) mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_export void* mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false) mi_attr_malloc mi_attr_alloc_size(1);
 #endif
 #endif
 

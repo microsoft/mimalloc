@@ -137,8 +137,8 @@ void _mi_page_use_delayed_free(mi_page_t* page, bool enable) {
 static void mi_page_thread_free_collect(mi_page_t* page)
 {
   mi_block_t* head;
-  mi_thread_free_t tfree;
-  mi_thread_free_t tfreex;
+  mi_thread_free_t tfree = {0};
+  mi_thread_free_t tfreex = {0};
   do {
     tfreex.value = tfree.value = page->thread_free.value;
     head = (mi_block_t*)((uintptr_t)tfree.head << MI_TF_PTR_SHIFT);

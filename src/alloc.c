@@ -106,8 +106,8 @@ void* mi_zalloc(size_t size) mi_attr_noexcept {
 // multi-threaded free
 static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* block)
 {
-  mi_thread_free_t tfree;
-  mi_thread_free_t tfreex;
+  mi_thread_free_t tfree = {0};
+  mi_thread_free_t tfreex = {0};
   bool use_delayed;
 
   do {
