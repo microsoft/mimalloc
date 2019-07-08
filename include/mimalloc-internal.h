@@ -92,7 +92,7 @@ void       _mi_stats_done(mi_stats_t* stats);
 void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept;  // called from `_mi_malloc_generic`
 void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero);
 void*       _mi_realloc_zero(void* p, size_t size, bool zero);
-mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, void* p);
+mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 void        _mi_free_delayed_block(mi_block_t* block);
 
 #if MI_DEBUG>1

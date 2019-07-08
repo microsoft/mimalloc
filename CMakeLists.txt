@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.0)
-project(libmimalloc C)
+project(libmimalloc C CXX)
 include("cmake/mimalloc-config-version.cmake")
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 option(MI_OVERRIDE   "Override the standard malloc interface" ON)
 option(MI_INTERPOSE  "Use interpose to override standard malloc on macOS" ON)
@@ -20,6 +21,7 @@ set(mi_sources
     src/page.c
     src/alloc.c
     src/alloc-aligned.c
+    src/alloc-posix.c
     src/heap.c
     src/options.c
     src/init.c)
@@ -76,6 +78,7 @@ endif()
 if(MI_USE_CXX MATCHES "ON")
   message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c PROPERTIES LANGUAGE CXX )
 endif()
 
 # Compiler flags
@@ -159,6 +162,8 @@ target_include_directories(mimalloc-obj PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${mi_install_dir}/include>
 )
+
+install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_dir})
 
 install(FILES $<TARGET_OBJECTS:mimalloc-obj>
         DESTINATION ${mi_install_dir}

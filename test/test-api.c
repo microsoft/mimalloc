@@ -87,33 +87,33 @@ int main() {
   // ---------------------------------------------------
   #if defined(MI_MALLOC_OVERRIDE) && !defined(_WIN32)
   CHECK_BODY("posix_memalign1", {
-    void* p = &main;
+    void* p = &p;
     int err = posix_memalign(&p, sizeof(void*), 32);
-    mi_assert((err==0 && (uintptr_t)p % sizeof(void*) == 0) || p==&main);
+    mi_assert((err==0 && (uintptr_t)p % sizeof(void*) == 0) || p==&p);
     mi_free(p);
     result = (err==0);
   });
   CHECK_BODY("posix_memalign_no_align", {
-    void* p = &main;
+    void* p = &p;
     int err = posix_memalign(&p, 3, 32);
-    mi_assert(p==&main);
+    mi_assert(p==&p);
     result = (err==EINVAL);
   });
   CHECK_BODY("posix_memalign_zero", {
-    void* p = &main;
+    void* p = &p;
     int err = posix_memalign(&p, sizeof(void*), 0);
     mi_free(p);
     result = (err==0);
   });
   CHECK_BODY("posix_memalign_nopow2", {
-    void* p = &main;
+    void* p = &p;
     int err = posix_memalign(&p, 3*sizeof(void*), 32);
-    result = (err==EINVAL && p==&main);
+    result = (err==EINVAL && p==&p);
   });
   CHECK_BODY("posix_memalign_nomem", {
-    void* p = &main;
+    void* p = &p;
     int err = posix_memalign(&p, sizeof(void*), SIZE_MAX);
-    result = (err==ENOMEM && p==&main);
+    result = (err==ENOMEM && p==&p);
   });
   #endif
 

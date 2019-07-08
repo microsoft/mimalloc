@@ -114,7 +114,7 @@ void _mi_page_use_delayed_free(mi_page_t* page, bool enable) {
   mi_thread_free_t tfreex;
 
   do {
-    tfreex = tfree = page->thread_free;
+    tfreex.value = tfree.value = page->thread_free.value;
     tfreex.delayed = (enable ? MI_USE_DELAYED_FREE : MI_NO_DELAYED_FREE);
     if (mi_unlikely(tfree.delayed == MI_DELAYED_FREEING)) {
       mi_atomic_yield(); // delay until outstanding MI_DELAYED_FREEING are done.
@@ -137,10 +137,10 @@ void _mi_page_use_delayed_free(mi_page_t* page, bool enable) {
 static void mi_page_thread_free_collect(mi_page_t* page)
 {
   mi_block_t* head;
-  mi_thread_free_t tfree;
-  mi_thread_free_t tfreex;
+  mi_thread_free_t tfree = {0};
+  mi_thread_free_t tfreex = {0};
   do {
-    tfreex = tfree = page->thread_free;
+    tfreex.value = tfree.value = page->thread_free.value;
     head = (mi_block_t*)((uintptr_t)tfree.head << MI_TF_PTR_SHIFT);
     tfreex.head = 0;
   } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex.value, tfree.value));

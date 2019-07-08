@@ -106,12 +106,12 @@ void* mi_zalloc(size_t size) mi_attr_noexcept {
 // multi-threaded free
 static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* block)
 {
-  mi_thread_free_t tfree;
-  mi_thread_free_t tfreex;
+  mi_thread_free_t tfree = {0};
+  mi_thread_free_t tfreex = {0};
   bool use_delayed;
 
   do {
-    tfreex = tfree = page->thread_free;
+    tfreex.value = tfree.value = page->thread_free.value;
     use_delayed = (tfree.delayed == MI_USE_DELAYED_FREE);
     if (mi_unlikely(use_delayed)) {
       // unlikely: this only happens on the first concurrent free in a page that is in the full list
@@ -143,7 +143,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
 
     // and reset the MI_DELAYED_FREEING flag
     do {
-      tfreex = tfree = page->thread_free;
+      tfreex.value = tfree.value = page->thread_free.value;
       tfreex.delayed = MI_NO_DELAYED_FREE;
     } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex.value, tfree.value));
   }
@@ -177,7 +177,7 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
 
 
 // Adjust a block that was allocated aligned, to the actual start of the block in the page.
-mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, void* p) {
+mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
   size_t diff   = (uint8_t*)p - _mi_page_start(segment, page, NULL);
   size_t adjust = (diff % page->block_size);
@@ -256,7 +256,7 @@ void _mi_free_delayed_block(mi_block_t* block) {
 }
 
 // Bytes available in a block
-size_t mi_usable_size(void* p) mi_attr_noexcept {
+size_t mi_usable_size(const void* p) mi_attr_noexcept {
   if (p==NULL) return 0;
   const mi_segment_t* segment = _mi_ptr_segment(p);
   const mi_page_t* page = _mi_segment_page_of(segment,p);
@@ -282,8 +282,11 @@ size_t mi_usable_size(void* p) mi_attr_noexcept {
 #ifdef __cplusplus
 void* _mi_externs[] = {
   (void*)&_mi_page_malloc,
-  (void*)&mi_malloc_small,
   (void*)&mi_malloc,
+  (void*)&mi_malloc_small,
+  (void*)&mi_heap_malloc,
+  (void*)&mi_heap_zalloc,
+  (void*)&mi_heap_malloc_small
 };
 
 
@@ -293,6 +296,24 @@ void* _mi_externs[] = {
 // ------------------------------------------------------
 // Allocation extensions
 // ------------------------------------------------------
+
+void mi_free_size(void* p, size_t size) mi_attr_noexcept {
+  UNUSED_RELEASE(size);
+  mi_assert(size <= mi_usable_size(p));
+  mi_free(p);
+}
+
+void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept {
+  UNUSED_RELEASE(alignment);
+  mi_assert(((uintptr_t)p % alignment) == 0);
+  mi_free_size(p,size);
+}
+
+void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
+  UNUSED_RELEASE(alignment);
+  mi_assert(((uintptr_t)p % alignment) == 0);
+  mi_free(p);
+}
 
 extern inline void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
@@ -444,3 +465,42 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
 char* mi_realpath(const char* fname, char* resolved_name) mi_attr_noexcept {
   return mi_heap_realpath(mi_get_default_heap(),fname,resolved_name);
 }
+
+
+#ifdef __cplusplus
+#include <new>
+
+static mi_decl_noinline void* mi_new_try(std::size_t n) noexcept(false) {
+  void* p;
+  do {
+    std::new_handler h = std::get_new_handler();
+    if (h==NULL) throw std::bad_alloc();
+    h();
+    // and try again
+    p = mi_malloc(n);
+  } while (p==NULL);
+  return p;
+}
+
+// spit out `new_try` for better assembly code
+void* mi_new(std::size_t n) noexcept(false) {
+  void* p = mi_malloc(n);
+  if (mi_likely(p != NULL)) return p;
+                       else return mi_new_try(n);
+}
+
+#if (__cplusplus > 201402L || defined(__cpp_aligned_new))
+// for aligned allocation its fine as it is not inlined anyways
+void* mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false) {
+  void* p;
+  while ((p = mi_malloc_aligned(n,static_cast<size_t>(alignment))) == NULL) {
+    std::new_handler h = std::get_new_handler();
+    if (h==NULL) throw std::bad_alloc();
+    h();
+    // and try again    
+  };
+  return p;
+}
+#endif
+
+#endif

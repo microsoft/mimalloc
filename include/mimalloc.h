@@ -41,6 +41,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_malloc
   #define mi_attr_alloc_size(s)
   #define mi_attr_alloc_size2(s1,s2)
+  #define mi_cdecl                   __cdecl
 #elif defined(__GNUC__) || defined(__clang__)
   #define mi_decl_thread              __thread
   #define mi_decl_export              __attribute__((visibility("default")))
@@ -51,7 +52,8 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_alloc_size2(s1,s2)
   #else
   #define mi_attr_alloc_size(s)       __attribute__((alloc_size(s)))
-  #define mi_attr_alloc_size2(s1,s2)  __attribute__((alloc_size(s1,s2)))
+  #define mi_attr_alloc_size2(s1,s2)  __attribute__((alloc_size(s1,s2)))  
+  #define mi_cdecl                    // leads to warnings... __attribute__((cdecl))  
   #endif
 #else
   #define mi_decl_thread              __thread
@@ -60,6 +62,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_malloc
   #define mi_attr_alloc_size(s)
   #define mi_attr_alloc_size2(s1,s2)
+  #define mi_cdecl                   
 #endif
 
 // ------------------------------------------------------
@@ -104,8 +107,8 @@ mi_decl_export mi_decl_allocator void* mi_reallocf(void* p, size_t newsize)     
 mi_decl_export mi_decl_allocator void* mi_rezalloc(void* p, size_t newsize)             mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_export mi_decl_allocator void* mi_recalloc(void* p, size_t count, size_t size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2,3);
 
-mi_decl_export size_t mi_usable_size(void* p)   mi_attr_noexcept;
-mi_decl_export size_t mi_good_size(size_t size) mi_attr_noexcept;
+mi_decl_export size_t mi_usable_size(const void* p)   mi_attr_noexcept;
+mi_decl_export size_t mi_good_size(size_t size)       mi_attr_noexcept;
 
 mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
 mi_decl_export void mi_stats_print(FILE* out) mi_attr_noexcept;
@@ -186,7 +189,7 @@ typedef struct mi_heap_area_s {
   size_t block_size;  // size in bytes of each block
 } mi_heap_area_t;
 
-typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
+typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
 
 mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block_visit_fun* visitor, void* arg);
 
@@ -232,8 +235,38 @@ mi_decl_export long  mi_option_get(mi_option_t option);
 mi_decl_export void  mi_option_set(mi_option_t option, long value);
 mi_decl_export void  mi_option_set_default(mi_option_t option, long value);
 
+
+// ----------------------------------------------------------------------------------
+// mi prefixed implementations of various posix, unix, and C++ allocation functions.
+// -----------------------------------------------------------------------------------
+
+mi_decl_export size_t mi_malloc_size(const void* p) mi_attr_noexcept;
+mi_decl_export size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept;
+mi_decl_export void   mi_cfree(void* p) mi_attr_noexcept;
+
+mi_decl_export int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept;
+mi_decl_export int mi__posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept;
+mi_decl_export mi_decl_allocator void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_export mi_decl_allocator void* mi_valloc(size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
+
+mi_decl_export mi_decl_allocator void* mi_pvalloc(size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_export mi_decl_allocator void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_export mi_decl_allocator void* mi_reallocarray(void* p, size_t count, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2,3);
+
+mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
+mi_decl_export void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept;
+mi_decl_export void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept;
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef __cplusplus
+#include <cstddef>
+mi_decl_export void* mi_new(std::size_t n) noexcept(false) mi_attr_malloc mi_attr_alloc_size(1);
+#if (__cplusplus > 201402L || defined(__cpp_aligned_new))
+#include <new>
+mi_decl_export void* mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false) mi_attr_malloc mi_attr_alloc_size(1);
+#endif
 #endif
 
 #endif
