@@ -139,15 +139,15 @@ static inline uint32_t mi_atomic_subtract32(volatile uint32_t* p, uint32_t sub) 
 }
 static inline bool mi_atomic_compare_exchange32(volatile uint32_t* p, uint32_t exchange, uint32_t compare) {
   MI_USING_STD
-  return atomic_compare_exchange_weak_explicit((volatile _Atomic(uint32_t)*)p, &compare, exchange, memory_order_relaxed, memory_order_seq_cst);
+  return atomic_compare_exchange_weak_explicit((volatile _Atomic(uint32_t)*)p, &compare, exchange, memory_order_release, memory_order_relaxed);
 }
 static inline bool mi_atomic_compare_exchange(volatile uintptr_t* p, uintptr_t exchange, uintptr_t compare) {
   MI_USING_STD
-  return atomic_compare_exchange_weak_explicit((volatile atomic_uintptr_t*)p, &compare, exchange, memory_order_relaxed, memory_order_seq_cst);
+  return atomic_compare_exchange_weak_explicit((volatile atomic_uintptr_t*)p, &compare, exchange, memory_order_release, memory_order_relaxed);
 }
 static inline uintptr_t mi_atomic_exchange(volatile uintptr_t* p, uintptr_t exchange) {
   MI_USING_STD
-  return atomic_exchange_explicit((volatile atomic_uintptr_t*)p, exchange, memory_order_relaxed);
+  return atomic_exchange_explicit((volatile atomic_uintptr_t*)p, exchange, memory_order_acquire);
 }
 
 #if defined(__cplusplus)
