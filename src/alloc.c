@@ -344,13 +344,13 @@ void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
   return p; // it fits
 }
 
-void* _mi_realloc_zero(void* p, size_t newsize, bool zero) {
-  if (p == NULL) return _mi_heap_malloc_zero(mi_get_default_heap(),newsize,zero);
+void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) {
+  if (p == NULL) return _mi_heap_malloc_zero(heap,newsize,zero);
   size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size / 2)) {
     return p;  // reallocation still fits and not more than 50% waste
   }
-  void* newp = mi_malloc(newsize); // maybe in another heap
+  void* newp = mi_heap_malloc(heap,newsize); 
   if (mi_likely(newp != NULL)) {
     if (zero && newsize > size) {
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
@@ -363,32 +363,41 @@ void* _mi_realloc_zero(void* p, size_t newsize, bool zero) {
   return newp;
 }
 
-void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
-  return _mi_realloc_zero(p,newsize,false);
+void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+  return _mi_heap_realloc_zero(heap, p, newsize, false);
 }
 
-// Zero initialized reallocation
-void* mi_rezalloc(void* p, size_t newsize) mi_attr_noexcept {
-  return _mi_realloc_zero(p,newsize,true);
+void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
+  size_t total;
+  if (mi_mul_overflow(count, size, &total)) return NULL;
+  return mi_heap_realloc(heap, p, total);
+}
+
+
+// Reallocate but free `p` on errors
+void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+  void* newp = mi_heap_realloc(heap, p, newsize);
+  if (newp==NULL && p!=NULL) mi_free(p);
+  return newp;
+}
+
+void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
+  return mi_heap_realloc(mi_get_default_heap(),p,newsize);
 }
 
 void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
-  if (mi_mul_overflow(count,size,&total)) return NULL;
-  return mi_rezalloc(p,total);
+  if (mi_mul_overflow(count, size, &total)) return NULL;
+  return _mi_heap_realloc_zero(mi_get_default_heap(),p,total,true);
 }
 
 void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
-  size_t total;
-  if (mi_mul_overflow(count,size,&total)) return NULL;
-  return mi_realloc(p,total);
+  return mi_heap_reallocn(mi_get_default_heap(),p,count,size);
 }
 
 // Reallocate but free `p` on errors
 void* mi_reallocf(void* p, size_t newsize) mi_attr_noexcept {
-  void* newp = mi_realloc(p,newsize);
-  if (newp==NULL && p!=NULL) mi_free(p);
-  return newp;
+  return mi_heap_reallocf(mi_get_default_heap(),p,newsize);
 }
 
 // `strdup` using mi_malloc

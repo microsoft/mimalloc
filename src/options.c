@@ -12,6 +12,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <ctype.h>  // toupper
 #include <stdarg.h>
 
+int mi_version(void) mi_attr_noexcept {
+  return MI_MALLOC_VERSION;
+}
+
 // --------------------------------------------------------
 // Options
 // --------------------------------------------------------
