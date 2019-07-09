@@ -454,19 +454,30 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
   }
 }
 #else
-#include <limits.h>
-#ifndef PATH_MAX
-#define PATH_MAX 260
-#endif
+#include <unistd.h>
+static size_t mi_path_max() {
+  static size_t path_max = 0;
+  if (path_max <= 0) {
+    long m = pathconf("/",_PC_PATH_MAX);
+    if (m <= 0) path_max = 4096;      // guess
+    else if (m < 256) path_max = 256; // at least 256
+    else path_max = m;
+  }
+  return path_max;
+}
 
 char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
   if (resolved_name != NULL) {
     return realpath(fname,resolved_name);
   }
   else {
-    char buf[PATH_MAX+1];
-    char* rname = realpath(fname,buf);
-    return mi_heap_strndup(heap,rname,PATH_MAX); // ok if `rname==NULL`
+    size_t n  = mi_path_max();
+    char* buf = (char*)mi_malloc(n+1);
+    if (buf==NULL) return NULL;
+    char* rname  = realpath(fname,buf);
+    char* result = mi_heap_strndup(heap,rname,n); // ok if `rname==NULL`
+    mi_free(buf);
+    return result;
   }
 }
 #endif
