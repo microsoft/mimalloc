@@ -60,7 +60,7 @@ function toggleLevel(level)
       $(this).show();
     } else if (l==level+1) {
       i.removeClass('iconfclosed iconfopen').addClass('iconfclosed');
-      a.html('&#9654;');
+      a.html('&#9658;');
       $(this).show();
     } else {
       $(this).hide();
@@ -87,7 +87,7 @@ function toggleFolder(id)
     // replace down arrow by right arrow for current row
     var currentRowSpans = currentRow.find("span");
     currentRowSpans.filter(".iconfopen").removeClass("iconfopen").addClass("iconfclosed");
-    currentRowSpans.filter(".arrow").html('&#9654;');
+    currentRowSpans.filter(".arrow").html('&#9658;');
     rows.filter("[id^=row_"+id+"]").hide(); // hide all children
   } else { // we are SHOWING
     // replace right arrow by down arrow for current row
@@ -97,7 +97,7 @@ function toggleFolder(id)
     // replace down arrows by right arrows for child rows
     var childRowsSpans = childRows.find("span");
     childRowsSpans.filter(".iconfopen").removeClass("iconfopen").addClass("iconfclosed");
-    childRowsSpans.filter(".arrow").html('&#9654;');
+    childRowsSpans.filter(".arrow").html('&#9658;');
     childRows.show(); //show all children
   }
   updateStripes();

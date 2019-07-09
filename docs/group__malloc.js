@@ -9,8 +9,7 @@ var group__malloc =
     [ "mi_reallocf", "group__malloc.html#gafe68ac7c5e24a65cd55c9d6b152211a0", null ],
     [ "mi_reallocn", "group__malloc.html#ga61d57b4144ba24fba5c1e9b956d13853", null ],
     [ "mi_realpath", "group__malloc.html#ga08cec32dd5bbe7da91c78d19f1b5bebe", null ],
-    [ "mi_recalloc", "group__malloc.html#ga381641d2f98e1e7863ac9e3960dab6c1", null ],
-    [ "mi_rezalloc", "group__malloc.html#ga8c292e142110229a2980b37ab036dbc6", null ],
+    [ "mi_recalloc", "group__malloc.html#ga23a0fbb452b5dce8e31fab1a1958cacc", null ],
     [ "mi_strdup", "group__malloc.html#gac7cffe13f1f458ed16789488bf92b9b2", null ],
     [ "mi_strndup", "group__malloc.html#gaaabf971c2571891433477e2d21a35266", null ],
     [ "mi_zalloc", "group__malloc.html#gafdd9d8bb2986e668ba9884f28af38000", null ]

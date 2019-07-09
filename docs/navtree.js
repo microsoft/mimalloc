@@ -23,7 +23,7 @@
  */
 var navTreeSubIndices = new Array();
 var arrowDown = '&#9660;';
-var arrowRight = '&#9654;';
+var arrowRight = '&#9658;';
 
 function getData(varName)
 {
