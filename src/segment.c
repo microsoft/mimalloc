@@ -359,13 +359,16 @@ static mi_segment_t* mi_segment_alloc( size_t required, mi_page_kind_t page_kind
         protection_still_good = true; // otherwise, the guard pages are still in place
       }
     }
+    if (page_kind != MI_PAGE_SMALL && !mi_option_is_enabled(mi_option_eager_commit) &&
+      (mi_option_is_enabled(mi_option_cache_reset) || mi_option_is_enabled(mi_option_page_reset))) {
+      _mi_os_commit(segment, segment->segment_size, tld->stats);
+    }
   }
   // and otherwise allocate it from the OS
   else {
     segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, commit, os_tld);
     if (segment == NULL) return NULL;
     mi_segments_track_size((long)segment_size,tld);
-
   }
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
   if (!commit) {
