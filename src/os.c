@@ -391,29 +391,74 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
   return mi_os_page_align_areax(true, addr, size, newsize);
 }
 
+// Commit/Decommit memory. Commit is aligned liberal, while decommit is aligned conservative.
+static bool mi_os_commitx(void* addr, size_t size, bool commit, mi_stats_t* stats) {
+  // page align in the range, commit liberally, decommit conservative
+  size_t csize;
+  void* start = mi_os_page_align_areax(!commit, addr, size, &csize);
+  if (csize == 0) return true;
+  int err = 0;
+  if (commit) {
+    _mi_stat_increase(&stats->committed, csize);
+    _mi_stat_increase(&stats->commit_calls, 1);
+  }
+  else {
+    _mi_stat_decrease(&stats->committed, csize);
+  }
 
+  #if defined(_WIN32)
+  if (commit) {
+    void* p = VirtualAlloc(start, csize, MEM_COMMIT, PAGE_READWRITE);
+    err = (p == start ? 0 : GetLastError());
+  }
+  else {
+    BOOL ok = VirtualFree(start, csize, MEM_DECOMMIT);
+    err = (ok ? 0 : GetLastError());
+  }
+  #else
+  err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
+  #endif
+  if (err != 0) {
+    _mi_warning_message("commit/decommit error: start: 0x%8p, csize: 0x%8zux, err: %i\n", start, csize, err);
+  }
+  mi_assert_internal(err == 0);
+  return (err == 0);
+}
+
+bool _mi_os_commit(void* addr, size_t size, mi_stats_t* stats) {
+  return mi_os_commitx(addr, size, true, stats);
+}
+
+bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats) {
+  return mi_os_commitx(addr, size, false, stats);
+}
 
 // Signal to the OS that the address range is no longer in use
 // but may be used later again. This will release physical memory
 // pages and reduce swapping while keeping the memory committed.
 // We page align to a conservative area inside the range to reset.
-bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
+static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats) {
   // page align conservatively within the range
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return true;
-  _mi_stat_increase(&stats->reset, csize);
+  if (reset) _mi_stat_increase(&stats->reset, csize);
+        else _mi_stat_decrease(&stats->reset, csize);
+  if (!reset) return true; // nothing to do on unreset!
 
 #if defined(_WIN32)
   // Testing shows that for us (on `malloc-large`) MEM_RESET is 2x faster than DiscardVirtualMemory
   // (but this is for an access pattern that immediately reuses the memory)
-  /*
-  DWORD ok = DiscardVirtualMemory(start, csize);
-  return (ok != 0);
-  */
-  void* p = VirtualAlloc(start, csize, MEM_RESET, PAGE_READWRITE);
-  mi_assert(p == start);
-  if (p != start) return false;
+  if (mi_option_is_enabled(mi_option_reset_discards)) {
+    DWORD ok = DiscardVirtualMemory(start, csize);
+    mi_assert_internal(ok == 0);
+    if (ok != 0) return false;
+  }
+  else {
+    void* p = VirtualAlloc(start, csize, MEM_RESET, PAGE_READWRITE);
+    mi_assert_internal(p == start);
+    if (p != start) return false;
+  }
   /*
   // VirtualUnlock removes the memory eagerly from the current working set (which MEM_RESET does lazily on demand)
   // TODO: put this behind an option?
@@ -440,6 +485,29 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
   return (err == 0);
 #endif
 }
+
+// Signal to the OS that the address range is no longer in use
+// but may be used later again. This will release physical memory
+// pages and reduce swapping while keeping the memory committed.
+// We page align to a conservative area inside the range to reset.
+bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
+  if (mi_option_is_enabled(mi_option_reset_decommits)) {
+    return _mi_os_decommit(addr,size,stats);
+  }
+  else {
+    return mi_os_resetx(addr, size, true, stats);
+  }
+}
+
+bool _mi_os_unreset(void* addr, size_t size, mi_stats_t* stats) {
+  if (mi_option_is_enabled(mi_option_reset_decommits)) {
+    return _mi_os_commit(addr, size, stats);  // re-commit it
+  }
+  else {
+    return mi_os_resetx(addr, size, false, stats);
+  }
+}
+
 
 // Protect a region in memory to be not accessible.
 static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
@@ -470,47 +538,7 @@ bool _mi_os_unprotect(void* addr, size_t size) {
   return mi_os_protectx(addr, size, false);
 }
 
-// Commit/Decommit memory. Commit is aligned liberal, while decommit is aligned conservative.
-static bool mi_os_commitx(void* addr, size_t size, bool commit, mi_stats_t* stats) {
-  // page align in the range, commit liberally, decommit conservative
-  size_t csize;
-  void* start = mi_os_page_align_areax(!commit, addr, size, &csize);
-  if (csize == 0) return true;
-  int err = 0;
-  if (commit) {
-    _mi_stat_increase(&stats->committed, csize);
-    _mi_stat_increase(&stats->commit_calls, 1);
-  }
-  else {
-    _mi_stat_decrease(&stats->committed, csize);
-  }
 
-#if defined(_WIN32)
-  if (commit) {
-    void* p = VirtualAlloc(start, csize, MEM_COMMIT, PAGE_READWRITE);
-    err = (p == start ? 0 : GetLastError());
-  }
-  else {
-    BOOL ok = VirtualFree(start, csize, MEM_DECOMMIT);
-    err = (ok ? 0 : GetLastError());
-  }
-#else
-  err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
-#endif
-  if (err != 0) {
-    _mi_warning_message("commit/decommit error: start: 0x%8p, csize: 0x%8zux, err: %i\n", start, csize, err);
-  }
-  mi_assert_internal(err == 0);
-  return (err == 0);
-}
-
-bool _mi_os_commit(void* addr, size_t size, mi_stats_t* stats) {
-  return mi_os_commitx(addr, size, true, stats);
-}
-
-bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats) {
-  return mi_os_commitx(addr, size, false, stats);
-}
 
 bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize, mi_stats_t* stats) {
   // page align conservatively within the range

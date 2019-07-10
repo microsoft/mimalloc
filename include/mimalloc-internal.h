@@ -38,6 +38,7 @@ uintptr_t  _mi_random_init(uintptr_t seed /* can be zero */);
 
 // "os.c"
 bool       _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
+bool       _mi_os_unreset(void* addr, size_t size, mi_stats_t* stats);
 void*      _mi_os_alloc(size_t size, mi_stats_t* stats);
 bool       _mi_os_shrink(void* p, size_t oldsize, size_t newsize, mi_stats_t* stats);
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);
