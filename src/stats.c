@@ -204,7 +204,7 @@ static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bin
 #endif
 
 
-static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim);
+static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit);
 
 static void _mi_stats_print(mi_stats_t* stats, double secs, FILE* out) mi_attr_noexcept {
   if (out == NULL) out = stderr;
@@ -252,9 +252,14 @@ static void _mi_stats_print(mi_stats_t* stats, double secs, FILE* out) mi_attr_n
   size_t peak_rss;
   size_t page_faults;
   size_t page_reclaim;
-  mi_process_info(&user_time, &sys_time, &peak_rss, &page_faults, &page_reclaim);
+  size_t peak_commit;
+  mi_process_info(&user_time, &sys_time, &peak_rss, &page_faults, &page_reclaim, &peak_commit);
   _mi_fprintf(out,"%10s: user: %.3f s, system: %.3f s, faults: %lu, reclaims: %lu, rss: ", "process", user_time, sys_time, (unsigned long)page_faults, (unsigned long)page_reclaim );
   mi_printf_amount((int64_t)peak_rss, 1, out, "%s");
+  if (peak_commit > 0) {
+    _mi_fprintf(out,", commit charge: ");
+    mi_printf_amount((int64_t)peak_commit, 1, out, "%s");
+  }
   _mi_fprintf(out,"\n");
 }
 
@@ -362,7 +367,7 @@ static double filetime_secs(const FILETIME* ftime) {
   double secs = (double)(i.QuadPart) * 1.0e-7; // FILETIME is in 100 nano seconds
   return secs;
 }
-static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim) {
+static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
   FILETIME ct;
   FILETIME ut;
   FILETIME st;
@@ -375,6 +380,7 @@ static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size
   GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
   *peak_rss = (size_t)info.PeakWorkingSetSize;
   *page_faults = (size_t)info.PageFaultCount;
+  *peak_commit = (size_t)info.PeakPagefileUsage;
   *page_reclaim = 0;
 }
 
@@ -391,7 +397,7 @@ static double timeval_secs(const struct timeval* tv) {
   return (double)tv->tv_sec + ((double)tv->tv_usec * 1.0e-6);
 }
 
-static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim) {
+static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
   struct rusage rusage;
   getrusage(RUSAGE_SELF, &rusage);
 #if defined(__APPLE__) && defined(__MACH__)
@@ -401,16 +407,18 @@ static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size
 #endif
   *page_faults = rusage.ru_majflt;
   *page_reclaim = rusage.ru_minflt;
+  *peak_commit = 0;
   *utime = timeval_secs(&rusage.ru_utime);
   *stime = timeval_secs(&rusage.ru_stime);
 }
 
 #else
 #pragma message("define a way to get process info")
-static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim) {
+static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
   *peak_rss = 0;
   *page_faults = 0;
   *page_reclaim = 0;
+  *peak_commit = 0;
   *utime = 0.0;
   *stime = 0.0;
 }
