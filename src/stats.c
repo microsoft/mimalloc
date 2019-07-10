@@ -407,7 +407,11 @@ static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size
 }
 
 #else
+#ifndef __wasi__
+// WebAssembly instances are not processes
 #pragma message("define a way to get process info")
+#endif
+
 static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
   *peak_rss = 0;
   *page_faults = 0;

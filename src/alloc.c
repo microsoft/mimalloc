@@ -442,6 +442,7 @@ char* mi_strndup(const char* s, size_t n) mi_attr_noexcept {
   return mi_heap_strndup(mi_get_default_heap(),s,n);
 }
 
+#ifndef __wasi__
 // `realpath` using mi_malloc
 #ifdef _WIN32
 #ifndef PATH_MAX
@@ -498,6 +499,7 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
 char* mi_realpath(const char* fname, char* resolved_name) mi_attr_noexcept {
   return mi_heap_realpath(mi_get_default_heap(),fname,resolved_name);
 }
+#endif
 
 
 #ifdef __cplusplus

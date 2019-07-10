@@ -16,6 +16,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(_WIN32)
 #include <windows.h>
+#elif defined(__wasi__)
+// stdlib.h is all we need, and has already been included in mimalloc.h
 #else
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf
@@ -136,6 +138,11 @@ void _mi_os_init(void) {
     }
   }
 }
+#elif defined(__wasi__)
+void _mi_os_init() {
+  os_page_size = 0x10000; // WebAssembly has a fixed page size: 64KB
+  os_alloc_granularity = 16;
+}
 #else
 void _mi_os_init() {
   // get the page size
@@ -161,6 +168,8 @@ static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
   bool err = false;
 #if defined(_WIN32)
   err = (VirtualFree(addr, 0, MEM_RELEASE) == 0);
+#elif defined(__wasi__)
+  err = 0; // WebAssembly's heap cannot be shrunk
 #else
   err = (munmap(addr, size) == -1);
 #endif
@@ -204,6 +213,19 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
   return p;
 }
 
+#elif defined(__wasi__)
+static void* mi_wasm_heap_grow(size_t size, size_t try_alignment) {
+  uintptr_t base = __builtin_wasm_memory_size(0) * os_page_size;
+  uintptr_t aligned_base = _mi_align_up(base, (uintptr_t) try_alignment);
+  size_t alloc_size = aligned_base - base + size;
+  mi_assert(alloc_size >= size);
+  if (alloc_size < size) return NULL;
+  if (__builtin_wasm_memory_grow(0, alloc_size / os_page_size) == SIZE_MAX) {
+    errno = ENOMEM;
+    return NULL;
+  }
+  return (void*) aligned_base;
+}
 #else
 static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) {
   void* p = NULL;
@@ -260,6 +282,8 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, mi_
   int flags = MEM_RESERVE;
   if (commit) flags |= MEM_COMMIT;
   p = mi_win_virtual_alloc(NULL, size, try_alignment, flags);
+#elif defined(__wasi__)
+  p = mi_wasm_heap_grow(size, try_alignment);
 #else
   int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
   p = mi_unix_mmap(size, try_alignment, protect_flags);
@@ -422,6 +446,8 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
     BOOL ok = VirtualFree(start, csize, MEM_DECOMMIT);
     err = (ok ? 0 : GetLastError());
   }
+  #elif defined(__wasi__)
+  // WebAssembly guests can't control memory protection
   #else
   err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
   #endif
@@ -484,6 +510,8 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
     advice = MADV_DONTNEED;
     err = madvise(start, csize, advice);
   }
+#elif defined(__wasi__)
+  int err = 0;
 #else
   int err = madvise(start, csize, MADV_DONTNEED);
 #endif
@@ -531,6 +559,8 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   DWORD oldprotect = 0;
   BOOL ok = VirtualProtect(start, csize, protect ? PAGE_NOACCESS : PAGE_READWRITE, &oldprotect);
   err = (ok ? 0 : GetLastError());
+#elif defined(__wasi__)
+  err = 0;
 #else
   err = mprotect(start, csize, protect ? PROT_NONE : (PROT_READ | PROT_WRITE));
 #endif
