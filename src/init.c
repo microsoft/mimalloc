@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
-  0, false, false, {0},
+  0, false, false, false, {0},
   0, 0,
   NULL, 0, 0,   // free, used, cookie
   NULL, 0, {0},
