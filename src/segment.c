@@ -584,7 +584,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   } while (!mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, segment, segment->abandoned_next));
   mi_atomic_increment(&abandoned_count);
   _mi_stat_increase(&tld->stats->segments_abandoned,1);
-  mi_segments_track_size((long)segment->segment_size, tld);
+  mi_segments_track_size(-((long)segment->segment_size), tld);
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
@@ -628,10 +628,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
     mi_assert_internal(segment->next == NULL && segment->prev == NULL);
     mi_assert_expensive(mi_segment_is_valid(segment));
     _mi_stat_decrease(&tld->stats->segments_abandoned,1);
-    // add its free pages to the the current thread
-    if (segment->page_kind == MI_PAGE_SMALL && mi_segment_has_free(segment)) {
-      mi_segment_enqueue(&tld->small_free, segment);
-    }
+    
     // add its abandoned pages to the current thread
     mi_assert(segment->abandoned == segment->used);
     for (size_t i = 0; i < segment->capacity; i++) {
@@ -656,6 +653,10 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
     }
     else {
       reclaimed++;
+      // add its free pages to the the current thread free small segment queue
+      if (segment->page_kind == MI_PAGE_SMALL && mi_segment_has_free(segment)) {
+        mi_segment_enqueue(&tld->small_free, segment);
+      }
     }
   }
   return (reclaimed>0);
