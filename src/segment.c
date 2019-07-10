@@ -344,6 +344,7 @@ static mi_segment_t* mi_segment_alloc( size_t required, mi_page_kind_t page_kind
   mi_segment_t* segment = NULL;
 
   // try to get it from our caches  
+  bool commit = mi_option_is_enabled(mi_option_eager_commit) || (page_kind != MI_PAGE_SMALL);
   bool protection_still_good = false;
   segment = mi_segment_cache_find(tld,segment_size);
   mi_assert_internal(segment == NULL ||
@@ -361,13 +362,17 @@ static mi_segment_t* mi_segment_alloc( size_t required, mi_page_kind_t page_kind
   }
   // and otherwise allocate it from the OS
   else {
-    segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, true, os_tld);
+    segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, commit, os_tld);
     if (segment == NULL) return NULL;
     mi_segments_track_size((long)segment_size,tld);
+
   }
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
-
+  if (!commit) {
+    _mi_os_commit(segment,info_size,tld->stats);
+  }
   memset(segment, 0, info_size);
+
   if (mi_option_is_enabled(mi_option_secure) && !protection_still_good) {
     // in secure mode, we set up a protected page in between the segment info
     // and the page data
@@ -395,6 +400,7 @@ static mi_segment_t* mi_segment_alloc( size_t required, mi_page_kind_t page_kind
   segment->cookie = _mi_ptr_cookie(segment);
   for (uint8_t i = 0; i < segment->capacity; i++) {
     segment->pages[i].segment_idx = i;
+    segment->pages[i].is_reset = !commit;
   }
   _mi_stat_increase(&tld->stats->page_committed, segment->segment_info_size);
   //fprintf(stderr,"mimalloc: alloc segment at %p\n", (void*)segment);
@@ -472,7 +478,14 @@ static mi_page_t* mi_segment_find_free(mi_segment_t* segment, mi_stats_t* stats)
         size_t psize;
         uint8_t* start = _mi_page_start(segment, page, &psize);
         page->is_reset = false;
-        _mi_os_unreset(start, psize, stats);
+        if (mi_option_is_enabled(mi_option_eager_commit)) {
+          _mi_os_unreset(start, psize, stats);
+        } 
+        else {
+          // note we could allow both lazy commit, and page level reset if we add a `is_commit` flag...
+          // for now we use commit for both
+          _mi_os_commit(start, psize, stats);
+        }
       }
       return page;
     }
