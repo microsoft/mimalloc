@@ -359,14 +359,6 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   return segment;
 }
 
-#if MI_STAT
-// Available memory in a page
-static size_t mi_page_size(const mi_page_t* page) {
-  size_t psize;
-  _mi_page_start(_mi_page_segment(page), page, &psize);
-  return psize;
-}
-#endif
 
 static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
   UNUSED(force);
