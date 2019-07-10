@@ -297,7 +297,7 @@ static bool mi_segment_cache_insert(mi_segment_t* segment, mi_segments_tld_t* tl
 void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
   mi_segment_t* segment;
   while ((segment = mi_segment_cache_find(tld,0)) != NULL) {
-    mi_segment_os_free(segment, MI_SEGMENT_SIZE, tld);
+    mi_segment_os_free(segment, segment->segment_size, tld);
   }
   mi_assert_internal(tld->cache_count == 0 && tld->cache_size == 0);
   mi_assert_internal(mi_segment_queue_is_empty(&tld->cache));
