@@ -44,7 +44,7 @@ static mi_option_desc_t options[_mi_option_last] = {
   #else
   { 0, UNINIT, "secure" },
   #endif
-  { 1, UNINIT, "show_stats" },
+  { 0, UNINIT, "show_stats" },
   { MI_DEBUG, UNINIT, "show_errors" },
   { 0, UNINIT, "verbose" }
 };

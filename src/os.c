@@ -397,7 +397,7 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
 static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservative, mi_stats_t* stats) {
   // page align in the range, commit liberally, decommit conservative
   size_t csize;
-  void* start = mi_os_page_align_areax(!commit, addr, size, &csize);
+  void* start = mi_os_page_align_areax(conservative, addr, size, &csize);
   if (csize == 0) return true;
   int err = 0;
   if (commit) {
