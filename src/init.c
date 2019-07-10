@@ -230,13 +230,16 @@ static bool _mi_heap_done(void) {
   heap = heap->tld->heap_backing;
   if (!mi_heap_is_initialized(heap)) return false;
 
+  // collect if not the main thread 
+  if (heap != &_mi_heap_main) {
+    _mi_heap_collect_abandon(heap);
+  }
+
+  // merge stats
   _mi_stats_done(&heap->tld->stats);
 
-  // free if not the main thread (or in debug mode)
+  // free if not the main thread
   if (heap != &_mi_heap_main) {
-    if (heap->page_count > 0) {
-      _mi_heap_collect_abandon(heap);
-    }
     _mi_os_free(heap, sizeof(mi_thread_data_t), &_mi_stats_main);
   }
 #if (MI_DEBUG > 0)
@@ -322,7 +325,7 @@ void mi_thread_init(void) mi_attr_noexcept
   // don't further initialize for the main thread
   if (_mi_is_main_thread()) return;
 
-  mi_stat_increase(mi_get_default_heap()->tld->stats.threads, 1);
+  _mi_stat_increase(&mi_get_default_heap()->tld->stats.threads, 1);
 
   // set hooks so our mi_thread_done() will be called
   #if defined(_WIN32) && defined(MI_SHARED_LIB)
@@ -342,7 +345,7 @@ void mi_thread_done(void) mi_attr_noexcept {
   // stats
   mi_heap_t* heap = mi_get_default_heap();
   if (!_mi_is_main_thread() && mi_heap_is_initialized(heap))  {
-    mi_stat_decrease(heap->tld->stats.threads, 1);
+    _mi_stat_decrease(&heap->tld->stats.threads, 1);
   }
 
   // abandon the thread local heap
