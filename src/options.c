@@ -34,7 +34,7 @@ typedef struct mi_option_desc_s {
 static mi_option_desc_t options[_mi_option_last] = {
   { 0, UNINIT, "page_reset" },
   { 0, UNINIT, "cache_reset" },
-  { 0, UNINIT, "eager_commit" },     
+  { 1, UNINIT, "eager_commit" },     
   { 0, UNINIT, "eager_region_commit" },     
   { 0, UNINIT, "large_os_pages" },   // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, "reset_decommits" },

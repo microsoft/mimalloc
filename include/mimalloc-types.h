@@ -166,6 +166,7 @@ typedef struct mi_page_s {
   uint8_t               segment_idx;       // index in the segment `pages` array, `page == &segment->pages[page->segment_idx]`
   bool                  segment_in_use:1;  // `true` if the segment allocated this page
   bool                  is_reset:1;        // `true` if the page memory was reset
+  bool                  is_committed:1;    // `true` if the page virtual memory is committed
 
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   mi_page_flags_t       flags;

@@ -391,8 +391,10 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
   return mi_os_page_align_areax(true, addr, size, newsize);
 }
 
-// Commit/Decommit memory. Commit is aligned liberal, while decommit is aligned conservative.
-static bool mi_os_commitx(void* addr, size_t size, bool commit, mi_stats_t* stats) {
+// Commit/Decommit memory. 
+// Usuelly commit is aligned liberal, while decommit is aligned conservative.
+// (but not for the reset version where we want commit to be conservative as well)
+static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservative, mi_stats_t* stats) {
   // page align in the range, commit liberally, decommit conservative
   size_t csize;
   void* start = mi_os_page_align_areax(!commit, addr, size, &csize);
@@ -426,12 +428,17 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, mi_stats_t* stat
 }
 
 bool _mi_os_commit(void* addr, size_t size, mi_stats_t* stats) {
-  return mi_os_commitx(addr, size, true, stats);
+  return mi_os_commitx(addr, size, true, false /* conservative? */, stats);
 }
 
 bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats) {
-  return mi_os_commitx(addr, size, false, stats);
+  return mi_os_commitx(addr, size, false, true /* conservative? */, stats);
 }
+
+bool _mi_os_commit_unreset(void* addr, size_t size, mi_stats_t* stats) {
+  return mi_os_commitx(addr, size, true, true /* conservative? */, stats);
+}
+
 
 // Signal to the OS that the address range is no longer in use
 // but may be used later again. This will release physical memory
@@ -445,6 +452,10 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   if (reset) _mi_stat_increase(&stats->reset, csize);
         else _mi_stat_decrease(&stats->reset, csize);
   if (!reset) return true; // nothing to do on unreset!
+
+  #if MI_DEBUG>1
+  memset(start, 0, csize); // pretend it is eagerly reset
+  #endif
 
 #if defined(_WIN32)
   // Testing shows that for us (on `malloc-large`) MEM_RESET is 2x faster than DiscardVirtualMemory
@@ -465,7 +476,6 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   DWORD ok = VirtualUnlock(start, csize);
   if (ok != 0) return false;
   */
-  return true;
 #else
 #if defined(MADV_FREE)
   static int advice = MADV_FREE;
@@ -482,8 +492,9 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
     _mi_warning_message("madvise reset error: start: 0x%8p, csize: 0x%8zux, errno: %i\n", start, csize, errno);
   }
   //mi_assert(err == 0);
-  return (err == 0);
+  if (err != 0) return false;
 #endif
+  return true;
 }
 
 // Signal to the OS that the address range is no longer in use
@@ -501,7 +512,7 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
 
 bool _mi_os_unreset(void* addr, size_t size, mi_stats_t* stats) {
   if (mi_option_is_enabled(mi_option_reset_decommits)) {
-    return _mi_os_commit(addr, size, stats);  // re-commit it
+    return _mi_os_commit_unreset(addr, size, stats);  // re-commit it (conservatively!)
   }
   else {
     return mi_os_resetx(addr, size, false, stats);
