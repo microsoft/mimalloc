@@ -44,11 +44,13 @@ void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocat
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
 
 // memory.c
-void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, size_t* id, mi_os_tld_t* tld);
-void*      _mi_mem_alloc(size_t size, size_t* id, mi_os_tld_t* tld);
+void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* id, mi_os_tld_t* tld);
+void*      _mi_mem_alloc(size_t size, bool commit, size_t* id, mi_os_tld_t* tld);
 void       _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats);
 
 bool       _mi_mem_reset(void* p, size_t size, mi_stats_t* stats);
+bool       _mi_mem_unreset(void* p, size_t size, mi_stats_t* stats);
+bool       _mi_mem_commit(void* p, size_t size, mi_stats_t* stats);
 bool       _mi_mem_protect(void* addr, size_t size);
 bool       _mi_mem_unprotect(void* addr, size_t size);
 
