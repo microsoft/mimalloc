@@ -123,7 +123,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   if (collect == ABANDON) {
     for (mi_page_t* page = heap->pages[MI_BIN_FULL].first; page != NULL; page = page->next) {
       _mi_page_use_delayed_free(page, false);  // set thread_free.delayed to MI_NO_DELAYED_FREE      
-    }
+    }    
   }
 
   // free thread delayed blocks. 
