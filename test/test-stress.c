@@ -19,11 +19,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
 
-const size_t N = 10;  // scaling factor
-const size_t THREADS = 32;
+#define N             (10)  // scaling factor
+#define THREADS       (32)
+#define TRANSFERS     (1000)
 
-#define transfer_size (1000)
-static volatile void* transfer[transfer_size];
+static volatile void* transfer[TRANSFERS];
 
 #if (MI_INTPTR_SIZE==8)
 const uintptr_t cookie = 0xbf58476d1ce4e5b9UL;
@@ -90,7 +90,7 @@ static void stress(intptr_t tid) {
     if ((tid%2)==0 && (rand()%4)==0 && data_top > 0) {
       // 25% transfer-swap of half the threads
       size_t data_idx = rand() % data_top;
-      size_t transfer_idx = rand() % transfer_size;
+      size_t transfer_idx = rand() % TRANSFERS;
       void* p = data[data_idx];
       void* q = mi_atomic_exchange_ptr(&transfer[transfer_idx],p);
       data[data_idx] = q;
@@ -111,9 +111,9 @@ static void run_os_threads();
 
 int main() {
   srand(42);
-  memset(transfer,0,transfer_size*sizeof(void*));
+  memset((void*)transfer,0,TRANSFERS*sizeof(void*));
   run_os_threads();
-  for (int i = 0; i < transfer_size; i++) {
+  for (int i = 0; i < TRANSFERS; i++) {
     free_items((void*)transfer[i]);
   }
   mi_collect(false);
