@@ -92,6 +92,10 @@ static void mi_segment_enqueue(mi_segment_queue_t* queue, mi_segment_t* segment)
   }
 }
 
+/* -----------------------------------------------------------
+ Invariant checking
+----------------------------------------------------------- */
+
 #if (MI_DEBUG > 1)
 static size_t mi_segment_pagesize(mi_segment_t* segment) {
   return ((size_t)1 << segment->page_shift);
