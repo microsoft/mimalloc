@@ -38,7 +38,15 @@ jobs:
       Release:
         CC: gcc
         BuildType: release
-        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
+      Debug Clang:
+        CC: clang
+        BuildType: debug-clang
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_CHECK_FULL=ON
+      Release Clang:
+        CC: clang
+        BuildType: release-clang
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
 
   steps:
   - task: CMake@1
@@ -52,11 +60,6 @@ jobs:
 
   - upload: $(Build.SourcesDirectory)/$(BuildType)
     artifact: ubuntu-$(BuildType)
-
-  - task: PublishTestResults@2
-    inputs:
-      testResultsFormat: cTest
-      testResultsFiles: '$(BuildType)/Testing/Temporary/LastTest.log'
 
 - job:
   displayName: macOS
