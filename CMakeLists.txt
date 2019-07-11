@@ -172,15 +172,21 @@ install(FILES $<TARGET_OBJECTS:mimalloc-obj>
 # -----------------------------------------------------------------------------
 # API surface testing
 # -----------------------------------------------------------------------------
-add_executable(mimalloc-test test/test-api.c)
-target_compile_definitions(mimalloc-test PRIVATE ${mi_defines})
-target_compile_options(mimalloc-test PRIVATE ${mi_cflags})
-target_include_directories(mimalloc-test PRIVATE include)
-target_link_libraries(mimalloc-test PRIVATE mimalloc-static)
+add_executable(mimalloc-test-api test/test-api.c)
+target_compile_definitions(mimalloc-test-api PRIVATE ${mi_defines})
+target_compile_options(mimalloc-test-api PRIVATE ${mi_cflags})
+target_include_directories(mimalloc-test-api PRIVATE include)
+target_link_libraries(mimalloc-test-api PRIVATE mimalloc-static)
+
+add_executable(mimalloc-test-stress test/test-stress.c)
+target_compile_definitions(mimalloc-test-stress PRIVATE ${mi_defines})
+target_compile_options(mimalloc-test-stress PRIVATE ${mi_cflags})
+target_include_directories(mimalloc-test-stress PRIVATE include)
+target_link_libraries(mimalloc-test-stress PRIVATE mimalloc-static)
 
 enable_testing()
-add_test(test_api, mimalloc-test)
-
+add_test(test_api, mimalloc-test-api)
+add_test(test_stress, mimalloc-test-stress)
 
 # -----------------------------------------------------------------------------
 # Set override properties
@@ -191,6 +197,5 @@ if (MI_OVERRIDE MATCHES "ON")
     # It is only possible to override malloc on Windows when building as a DLL. (src/alloc-override.c)
     target_compile_definitions(mimalloc-static PRIVATE MI_MALLOC_OVERRIDE)
     target_compile_definitions(mimalloc-obj PRIVATE MI_MALLOC_OVERRIDE)
-    target_compile_definitions(mimalloc-test PRIVATE MI_MALLOC_OVERRIDE)
   endif()
 endif()

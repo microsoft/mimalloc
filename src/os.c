@@ -93,7 +93,7 @@ void _mi_os_init(void) {
   if (si.dwAllocationGranularity > 0) os_alloc_granularity = si.dwAllocationGranularity;
   // get the VirtualAlloc2 function
   HINSTANCE  hDll;
-  hDll = LoadLibrary("kernelbase.dll");
+  hDll = LoadLibrary(TEXT("kernelbase.dll"));
   if (hDll != NULL) {
     // use VirtualAlloc2FromApp as it is available to Windows store apps
     pVirtualAlloc2 = (VirtualAlloc2Ptr)GetProcAddress(hDll, "VirtualAlloc2FromApp");
@@ -110,7 +110,7 @@ void _mi_os_init(void) {
     ok = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token);
     if (ok) {
       TOKEN_PRIVILEGES tp;
-      ok = LookupPrivilegeValue(NULL, "SeLockMemoryPrivilege", &tp.Privileges[0].Luid);
+      ok = LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &tp.Privileges[0].Luid);
       if (ok) {
         tp.PrivilegeCount = 1;
         tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
