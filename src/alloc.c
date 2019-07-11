@@ -112,7 +112,9 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
 
   do {
     tfreex.value = tfree.value = page->thread_free.value;
-    use_delayed = (tfree.delayed == MI_USE_DELAYED_FREE);
+    use_delayed = (tfree.delayed == MI_USE_DELAYED_FREE ||
+                   (tfree.delayed == MI_NO_DELAYED_FREE && page->used == page->thread_freed+1)
+                  );
     if (mi_unlikely(use_delayed)) {
       // unlikely: this only happens on the first concurrent free in a page that is in the full list
       tfreex.delayed = MI_DELAYED_FREEING;
@@ -144,7 +146,8 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
     // and reset the MI_DELAYED_FREEING flag
     do {
       tfreex.value = tfree.value = page->thread_free.value;
-      tfreex.delayed = MI_NO_DELAYED_FREE;
+      mi_assert_internal(tfree.delayed == MI_NEVER_DELAYED_FREE || tfree.delayed == MI_DELAYED_FREEING);
+      if (tfree.delayed != MI_NEVER_DELAYED_FREE) tfreex.delayed = MI_NO_DELAYED_FREE;
     } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex.value, tfree.value));
   }
 }
