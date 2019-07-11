@@ -53,6 +53,11 @@ jobs:
   - upload: $(Build.SourcesDirectory)/$(BuildType)
     artifact: ubuntu-$(BuildType)
 
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: cTest
+      testResultsFiles: '$(BuildType)/Testing/Temporary/LastTest.log'
+
 - job:
   displayName: macOS
   pool:
