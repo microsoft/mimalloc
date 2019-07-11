@@ -46,12 +46,10 @@ jobs:
       workingDirectory: $(BuildType)
       cmakeArgs: .. $(cmakeExtraArgs)
 
-  - script: make -j$(nproc)
-      workingDirectory: $(BuildType)
+  - script: make -j$(nproc) -C $(BuildType)
 
-  - script: ctest
+  - script: make test -C $(BuildType)
       failOnStderr: true
-      workingDirectory: $(BuildType)
 
   - upload: $(Build.SourcesDirectory)/$(BuildType)
     artifact: ubuntu-$(BuildType)
