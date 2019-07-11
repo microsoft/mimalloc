@@ -75,8 +75,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Main tuning parameters for segment and page sizes
 // Sizes for 64-bit, divide by two for 32-bit
-#define MI_SMALL_PAGE_SHIFT               (13 + MI_INTPTR_SHIFT)      // 64kb
-#define MI_LARGE_PAGE_SHIFT               ( 6 + MI_SMALL_PAGE_SHIFT)  // 4mb
+#define MI_SMALL_PAGE_SHIFT               (14 + MI_INTPTR_SHIFT)      // 64kb
+#define MI_LARGE_PAGE_SHIFT               ( 5 + MI_SMALL_PAGE_SHIFT)  // 4mb
 #define MI_SEGMENT_SHIFT                  ( MI_LARGE_PAGE_SHIFT)      // 4mb
 
 // Derived constants
@@ -114,8 +114,9 @@ typedef struct mi_block_s {
 
 typedef enum mi_delayed_e {
   MI_NO_DELAYED_FREE = 0,
-  MI_USE_DELAYED_FREE,
-  MI_DELAYED_FREEING
+  MI_USE_DELAYED_FREE = 1,
+  MI_DELAYED_FREEING = 2,
+  MI_NEVER_DELAYED_FREE = 3
 } mi_delayed_t;
 
 
@@ -132,7 +133,7 @@ typedef union mi_page_flags_u {
 typedef union mi_thread_free_u {
   volatile uintptr_t value;
   struct {
-    mi_delayed_t delayed:2;
+    uintptr_t delayed:2;
 #if MI_INTPTR_SIZE==8
     uintptr_t head:62;    // head free block in the list (right-shifted by 2)
 #elif MI_INTPTR_SIZE==4

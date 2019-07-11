@@ -97,6 +97,14 @@ static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t
   return true; // don't break
 }
 
+static bool mi_heap_page_never_delayed_free(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
+  UNUSED(arg1);
+  UNUSED(arg2);
+  UNUSED(heap);
+  UNUSED(pq);
+  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE);
+  return true; // don't break
+}
 
 static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 {
@@ -119,11 +127,12 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
     #endif
   }
 
-  // if abandoning, mark all full pages to no longer add to delayed_free
+  // if abandoning, mark all pages to no longer add to delayed_free
   if (collect == ABANDON) {
-    for (mi_page_t* page = heap->pages[MI_BIN_FULL].first; page != NULL; page = page->next) {
-      _mi_page_use_delayed_free(page, false);  // set thread_free.delayed to MI_NO_DELAYED_FREE      
-    }
+    //for (mi_page_t* page = heap->pages[MI_BIN_FULL].first; page != NULL; page = page->next) {
+    //  _mi_page_use_delayed_free(page, false);  // set thread_free.delayed to MI_NO_DELAYED_FREE      
+    //}    
+    mi_heap_visit_pages(heap, &mi_heap_page_never_delayed_free, NULL, NULL);
   }
 
   // free thread delayed blocks. 
@@ -228,7 +237,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   UNUSED(pq);
 
   // ensure no more thread_delayed_free will be added
-  _mi_page_use_delayed_free(page, false);  
+  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE);  
 
   // stats
   if (page->block_size > MI_LARGE_SIZE_MAX) {
