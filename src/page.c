@@ -542,6 +542,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert(mi_page_immediate_available(page));
 }
 
+
 /* -----------------------------------------------------------
   Find pages with free blocks
 -------------------------------------------------------------*/
@@ -618,7 +619,6 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
 
 // Find a page with free blocks of `size`.
 static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
-  _mi_heap_delayed_free(heap);
   mi_page_queue_t* pq = mi_page_queue(heap,size);
   mi_page_t* page = pq->first;
   if (page != NULL) {
@@ -674,7 +674,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(page->block_size == block_size);
     mi_heap_stat_increase( heap, huge, block_size);
-  }
+  }  
   return page;
 }
 
@@ -693,6 +693,9 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
 
   // call potential deferred free routines
   _mi_deferred_free(heap, false);
+
+  // free delayed frees from other threads
+  _mi_heap_delayed_free(heap);
 
   // huge allocation?
   mi_page_t* page;
@@ -714,5 +717,10 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   mi_assert_internal(page->block_size >= size);
 
   // and try again, this time succeeding! (i.e. this should never recurse)
-  return _mi_page_malloc(heap, page, size);
+  void* p = _mi_page_malloc(heap, page, size);
+  if (page->used == page->reserved) {
+    // needed for huge pages to free reliably from other threads.
+    mi_page_to_full(page,mi_page_queue_of(page));
+  }
+  return p;
 }

@@ -293,7 +293,7 @@ static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* fro
   mi_assert_expensive(mi_page_queue_contains(from, page));
   mi_assert_expensive(!mi_page_queue_contains(to, page));
   mi_assert_internal(page->block_size == to->block_size ||
-                     (page->block_size > MI_LARGE_SIZE_MAX && mi_page_queue_is_huge(to)) ||
+                     (page->block_size > MI_LARGE_SIZE_MAX && (mi_page_queue_is_huge(to) || mi_page_queue_is_full(to))) ||
                       (page->block_size == from->block_size && mi_page_queue_is_full(to)));
 
   if (page->prev != NULL) page->prev->next = page->next;
