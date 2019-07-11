@@ -23,19 +23,31 @@ jobs:
       solution: build/libmimalloc.sln
   - upload: $(Build.SourcesDirectory)/build
     artifact: windows
+
 - job:
   displayName: Linux
   pool:
     vmImage:
      ubuntu-16.04
+  strategy:
+    matrix:
+      Debug:
+        CC: gcc
+        BuildType: Debug
+      Release:
+        CC: gcc
+        BuildType: Release
+
   steps:
   - task: CMake@1
     inputs:
-      workingDirectory: 'build'
+      workingDirectory: $(BuildType)
       cmakeArgs: ..
-  - script: make -j$(nproc) -C build
-  - upload: $(Build.SourcesDirectory)/build
+  - script: make -j$(nproc) -C $(BuildType)
+  - script: ctest -C $(BuildType)
+  - upload: $(Build.SourcesDirectory)/$(BuildType)
     artifact: ubuntu
+
 - job:
   displayName: macOS
   pool:
