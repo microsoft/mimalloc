@@ -35,22 +35,6 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 
-#if (MI_DEBUG > 1)
-static bool mi_segment_is_valid(mi_segment_t* segment) {
-  mi_assert_internal(segment != NULL);
-  mi_assert_internal(_mi_ptr_cookie(segment) == segment->cookie);
-  mi_assert_internal(segment->used <= segment->capacity);
-  mi_assert_internal(segment->abandoned <= segment->used);
-  size_t nfree = 0;
-  for (size_t i = 0; i < segment->capacity; i++) {
-    if (!segment->pages[i].segment_in_use) nfree++;
-  }
-  mi_assert_internal(nfree + segment->used == segment->capacity);
-  mi_assert_internal(segment->thread_id == _mi_thread_id()); // or 0
-  return true;
-}
-#endif
-
 /* -----------------------------------------------------------
   Queue of segments containing free pages
 ----------------------------------------------------------- */
@@ -120,6 +104,31 @@ static void mi_segment_queue_insert_before(mi_segment_queue_t* queue, mi_segment
                         else queue->last = segment;
 }
 
+
+#if (MI_DEBUG > 1)
+static size_t mi_segment_pagesize(mi_segment_t* segment) {
+  return ((size_t)1 << segment->page_shift);
+}
+static bool mi_segment_is_valid(mi_segment_t* segment) {
+  mi_assert_internal(segment != NULL);
+  mi_assert_internal(_mi_ptr_cookie(segment) == segment->cookie);
+  mi_assert_internal(segment->used <= segment->capacity);
+  mi_assert_internal(segment->abandoned <= segment->used);
+  size_t nfree = 0;
+  for (size_t i = 0; i < segment->capacity; i++) {
+    if (!segment->pages[i].segment_in_use) nfree++;
+  }
+  mi_assert_internal(nfree + segment->used == segment->capacity);
+  mi_assert_internal(segment->thread_id == _mi_thread_id()); // or 0
+  mi_assert_internal(segment->page_kind == MI_PAGE_HUGE ||
+                     (mi_segment_pagesize(segment) * segment->capacity == segment->segment_size));
+  return true;
+}
+#endif
+
+/* -----------------------------------------------------------
+ Segment size calculations
+----------------------------------------------------------- */
 
 // Start of the page available memory; can be used on uninitialized pages (only `segment_idx` must be set)
 uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size)
@@ -196,6 +205,8 @@ proves to be too small for certain workloads).
 static void mi_segments_track_size(long segment_size, mi_segments_tld_t* tld) {
   if (segment_size>=0) _mi_stat_increase(&tld->stats->segments,1);
                   else _mi_stat_decrease(&tld->stats->segments,1);
+  tld->count += (segment_size >= 0 ? 1 : -1);
+  if (tld->count > tld->peak_count) tld->peak_count = tld->count;
   tld->current_size += segment_size;
   if (tld->current_size > tld->peak_size) tld->peak_size = tld->current_size;
 }
@@ -725,7 +736,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
 
 mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
   mi_page_t* page;
-  if (block_size < MI_SMALL_PAGE_SIZE / 8)
+  if (block_size <= (MI_SMALL_PAGE_SIZE / 8))
     // smaller blocks than 8kb (assuming MI_SMALL_PAGE_SIZE == 64kb)
     page = mi_segment_small_page_alloc(tld,os_tld);
   else if (block_size < (MI_LARGE_SIZE_MAX - sizeof(mi_segment_t)))
