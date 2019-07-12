@@ -173,7 +173,7 @@ void _mi_page_free_collect(mi_page_t* page) {
   // free the local free list
   if (page->local_free != NULL) {
     if (mi_likely(page->free == NULL)) {
-      // usual caes
+      // usual case
       page->free = page->local_free;
     }
     else {
