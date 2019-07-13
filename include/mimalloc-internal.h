@@ -218,7 +218,7 @@ static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const 
   mi_assert_internal(diff >= 0 && diff < MI_SEGMENT_SIZE);
   uintptr_t idx = (uintptr_t)diff >> segment->page_shift;
   mi_assert_internal(idx < segment->capacity);
-  mi_assert_internal(segment->page_kind == MI_PAGE_SMALL || idx == 0);
+  mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM || idx == 0);
   return &((mi_segment_t*)segment)->pages[idx];
 }
 
