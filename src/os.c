@@ -82,8 +82,11 @@ static size_t mi_os_good_alloc_size(size_t size, size_t alignment) {
 #if defined(_WIN32)
 // We use VirtualAlloc2 for aligned allocation, but it is only supported on Windows 10 and Windows Server 2016.
 // So, we need to look it up dynamically to run on older systems. (use __stdcall for 32-bit compatibility)
-typedef PVOID(__stdcall *VirtualAlloc2Ptr)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MEM_EXTENDED_PARAMETER*, ULONG);
-static VirtualAlloc2Ptr pVirtualAlloc2 = NULL;
+// Same for DiscardVirtualMemory
+typedef PVOID(__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MEM_EXTENDED_PARAMETER*, ULONG);
+typedef DWORD(__stdcall *PDiscardVirtualMemory)(PVOID,SIZE_T);
+static PVirtualAlloc2 pVirtualAlloc2 = NULL;
+static PDiscardVirtualMemory pDiscardVirtualMemory = NULL;
 
 void _mi_os_init(void) {
   // get the page size
@@ -95,8 +98,10 @@ void _mi_os_init(void) {
   HINSTANCE  hDll;
   hDll = LoadLibrary(TEXT("kernelbase.dll"));
   if (hDll != NULL) {
-    // use VirtualAlloc2FromApp as it is available to Windows store apps
-    pVirtualAlloc2 = (VirtualAlloc2Ptr)GetProcAddress(hDll, "VirtualAlloc2FromApp");
+    // use VirtualAlloc2FromApp if possible as it is available to Windows store apps
+    pVirtualAlloc2 = (PVirtualAlloc2)GetProcAddress(hDll, "VirtualAlloc2FromApp");
+    if (pVirtualAlloc2==NULL) pVirtualAlloc2 = (PVirtualAlloc2)GetProcAddress(hDll, "VirtualAlloc2");
+    pDiscardVirtualMemory = (PDiscardVirtualMemory)GetProcAddress(hDll, "DiscardVirtualMemory");
     FreeLibrary(hDll);
   }
   // Try to see if large OS pages are supported
@@ -460,22 +465,16 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
 #if defined(_WIN32)
   // Testing shows that for us (on `malloc-large`) MEM_RESET is 2x faster than DiscardVirtualMemory
   // (but this is for an access pattern that immediately reuses the memory)
-  if (mi_option_is_enabled(mi_option_reset_discards)) {
-    DWORD ok = DiscardVirtualMemory(start, csize);
-    mi_assert_internal(ok == 0);
-    if (ok != 0) return false;
+  if (mi_option_is_enabled(mi_option_reset_discards) && pDiscardVirtualMemory != NULL) {
+    DWORD ok = (*pDiscardVirtualMemory)(start, csize);
+    mi_assert_internal(ok == ERROR_SUCCESS);
+    if (ok != ERROR_SUCCESS) return false;
   }
   else {
     void* p = VirtualAlloc(start, csize, MEM_RESET, PAGE_READWRITE);
     mi_assert_internal(p == start);
     if (p != start) return false;
-  }
-  /*
-  // VirtualUnlock removes the memory eagerly from the current working set (which MEM_RESET does lazily on demand)
-  // TODO: put this behind an option?
-  DWORD ok = VirtualUnlock(start, csize);
-  if (ok != 0) return false;
-  */
+  }  
 #else
 #if defined(MADV_FREE)
   static int advice = MADV_FREE;
