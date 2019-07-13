@@ -21,7 +21,8 @@ terms of the MIT license. A copy of the license can be found in the file
   owns its own segments.
 
   Currently we have:
-  - small pages (64kb), 32 in one segment
+  - small pages (64kb), 64 in one segment
+  - medium pages (512kb), 8 in one segment
   - large pages (4mb), 1 in one segment
   - huge blocks > MI_LARGE_SIZE_MAX (512kb) are directly allocated by the OS
 
@@ -70,16 +71,6 @@ static bool mi_segment_queue_contains(const mi_segment_queue_t* queue, mi_segmen
 }
 #endif
 
-// quick test to see if a segment is in the free pages queue
-static bool mi_segment_is_in_free_queue(mi_segment_t* segment, mi_segments_tld_t* tld) {
-  bool in_queue = (segment->next != NULL || segment->prev != NULL || tld->small_free.first == segment);
-  if (in_queue) {
-    mi_assert(segment->page_kind == MI_PAGE_SMALL); // for now we only support small pages
-    mi_assert_expensive(mi_segment_queue_contains(&tld->small_free, segment));
-  }
-  return in_queue;
-}
-
 static bool mi_segment_queue_is_empty(const mi_segment_queue_t* queue) {
   return (queue->first == NULL);
 }
@@ -120,6 +111,39 @@ static void mi_segment_queue_insert_before(mi_segment_queue_t* queue, mi_segment
                         else queue->last = segment;
 }
 
+static mi_segment_queue_t* mi_segment_free_queue_of_kind(mi_page_kind_t kind, mi_segments_tld_t* tld) {
+  if (kind == MI_PAGE_SMALL) return &tld->small_free;
+  else if (kind == MI_PAGE_MEDIUM) return &tld->medium_free;
+  else return NULL;
+}
+
+static mi_segment_queue_t* mi_segment_free_queue(mi_segment_t* segment, mi_segments_tld_t* tld) {
+  return mi_segment_free_queue_of_kind(segment->page_kind,tld);
+}
+
+// remove from free queue if it is in one
+static void mi_segment_remove_from_free_queue(mi_segment_t* segment, mi_segments_tld_t* tld) {
+  mi_segment_queue_t* queue = mi_segment_free_queue(segment,tld); // may be NULL
+  bool in_queue = (queue!=NULL && (segment->next != NULL || segment->prev != NULL || queue->first == segment));
+  if (in_queue) {    
+    mi_segment_queue_remove(queue,segment);
+  }  
+}
+
+static void mi_segment_insert_in_free_queue(mi_segment_t* segment, mi_segments_tld_t* tld) {
+  mi_segment_enqueue(mi_segment_free_queue(segment, tld), segment);
+}
+
+#if MI_DEBUG > 1
+static bool mi_segment_is_in_free_queue(mi_segment_t* segment, mi_segments_tld_t* tld) {
+  mi_segment_queue_t* queue = mi_segment_free_queue(segment, tld);
+  bool in_queue = (queue!=NULL && (segment->next != NULL || segment->prev != NULL || queue->first == segment));
+  if (in_queue) {
+    mi_assert_expensive(mi_segment_queue_contains(queue, segment));
+  }
+  return in_queue;
+}
+#endif
 
 // Start of the page available memory; can be used on uninitialized pages (only `segment_idx` must be set)
 uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size)
@@ -131,8 +155,8 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
    // the first page starts after the segment info (and possible guard page)
    p     += segment->segment_info_size;
    psize -= segment->segment_info_size;
-   // for small objects, ensure the page start is aligned with the block size (PR#66 by kickunderscore)
-   if (block_size > 0 && segment->page_kind == MI_PAGE_SMALL) {
+   // for small and medium objects, ensure the page start is aligned with the block size (PR#66 by kickunderscore)
+   if (block_size > 0 && segment->page_kind <= MI_PAGE_MEDIUM) {
      size_t adjust = block_size - ((uintptr_t)p % block_size);
      if (adjust < block_size) {
        p     += adjust;
@@ -398,18 +422,10 @@ static size_t mi_page_size(const mi_page_t* page) {
 static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
   //fprintf(stderr,"mimalloc: free segment at %p\n", (void*)segment);
   mi_assert(segment != NULL);
-  if (mi_segment_is_in_free_queue(segment,tld)) {
-    if (segment->page_kind != MI_PAGE_SMALL) {
-      fprintf(stderr, "mimalloc: expecting small segment: %i, %p, %p, %p\n", segment->page_kind, segment->prev, segment->next, tld->small_free.first);
-      fflush(stderr);
-    }
-    else {
-      mi_assert_internal(segment->page_kind == MI_PAGE_SMALL); // for now we only support small pages
-      mi_assert_expensive(mi_segment_queue_contains(&tld->small_free, segment));
-      mi_segment_queue_remove(&tld->small_free, segment);
-    }
-  }
+  mi_segment_remove_from_free_queue(segment,tld);
+  
   mi_assert_expensive(!mi_segment_queue_contains(&tld->small_free, segment));
+  mi_assert_expensive(!mi_segment_queue_contains(&tld->medium_free, segment));
   mi_assert(segment->next == NULL);
   mi_assert(segment->prev == NULL);
   mi_stat_decrease( tld->stats->page_committed, segment->segment_info_size);
@@ -513,9 +529,9 @@ void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
       mi_segment_abandon(segment,tld);
     }
     else if (segment->used + 1 == segment->capacity) {
-      mi_assert_internal(segment->page_kind == MI_PAGE_SMALL); // for now we only support small pages
-      // move back to segments small pages free list
-      mi_segment_enqueue(&tld->small_free, segment);
+      mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM); // for now we only support small and medium pages
+      // move back to segments  free list
+      mi_segment_insert_in_free_queue(segment,tld);
     }
   }
 }
@@ -538,11 +554,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(segment->abandoned_next == NULL);
   mi_assert_expensive(mi_segment_is_valid(segment));
   // remove the segment from the free page queue if needed
-  if (mi_segment_is_in_free_queue(segment,tld)) {
-    mi_assert(segment->page_kind == MI_PAGE_SMALL); // for now we only support small pages
-    mi_assert_expensive(mi_segment_queue_contains(&tld->small_free, segment));
-    mi_segment_queue_remove(&tld->small_free, segment);
-  }
+  mi_segment_remove_from_free_queue(segment,tld);
   mi_assert_internal(segment->next == NULL && segment->prev == NULL);
   // all pages in the segment are abandoned; add it to the abandoned list
   segment->thread_id = 0;
@@ -634,7 +646,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
 
 // Allocate a small page inside a segment.
 // Requires that the page has free pages
-static mi_page_t* mi_segment_small_page_alloc_in(mi_segment_t* segment, mi_segments_tld_t* tld) {
+static mi_page_t* mi_segment_page_alloc_in(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(mi_segment_has_free(segment));
   mi_page_t* page = mi_segment_find_free(segment);
   page->segment_in_use = true;
@@ -643,22 +655,29 @@ static mi_page_t* mi_segment_small_page_alloc_in(mi_segment_t* segment, mi_segme
   if (segment->used == segment->capacity) {
     // if no more free pages, remove from the queue
     mi_assert_internal(!mi_segment_has_free(segment));
-    mi_assert_expensive(mi_segment_queue_contains(&tld->small_free, segment));
-    mi_segment_queue_remove(&tld->small_free, segment);
+    mi_segment_remove_from_free_queue(segment,tld);
   }
   return page;
 }
 
-static mi_page_t* mi_segment_small_page_alloc(mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
-  if (mi_segment_queue_is_empty(&tld->small_free)) {
-    mi_segment_t* segment = mi_segment_alloc(0,MI_PAGE_SMALL,MI_SMALL_PAGE_SHIFT,tld,os_tld);
+static mi_page_t* mi_segment_page_alloc(mi_page_kind_t kind, size_t page_shift, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
+  mi_segment_queue_t* free_queue = mi_segment_free_queue_of_kind(kind,tld);
+  if (mi_segment_queue_is_empty(free_queue)) {
+    mi_segment_t* segment = mi_segment_alloc(0,kind,page_shift,tld,os_tld);
     if (segment == NULL) return NULL;
-    mi_segment_enqueue(&tld->small_free, segment);
+    mi_segment_enqueue(free_queue, segment);
   }
-  mi_assert_internal(tld->small_free.first != NULL);
-  return mi_segment_small_page_alloc_in(tld->small_free.first,tld);
+  mi_assert_internal(free_queue->first != NULL);
+  return mi_segment_page_alloc_in(free_queue->first,tld);
 }
 
+static mi_page_t* mi_segment_small_page_alloc(mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
+  return mi_segment_page_alloc(MI_PAGE_SMALL,MI_SMALL_PAGE_SHIFT,tld,os_tld);
+}
+
+static mi_page_t* mi_segment_medium_page_alloc(mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
+  return mi_segment_page_alloc(MI_PAGE_MEDIUM, MI_MEDIUM_PAGE_SHIFT, tld, os_tld);
+}
 
 /* -----------------------------------------------------------
    large page allocation
@@ -690,9 +709,10 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
 
 mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
   mi_page_t* page;
-  if (block_size < MI_SMALL_PAGE_SIZE / 8)
-    // smaller blocks than 8kb (assuming MI_SMALL_PAGE_SIZE == 64kb)
+  if (block_size <= (MI_SMALL_PAGE_SIZE/16)*3)
     page = mi_segment_small_page_alloc(tld,os_tld);
+  else if (block_size <= (MI_MEDIUM_PAGE_SIZE/16)*3)
+    page = mi_segment_medium_page_alloc(tld, os_tld);
   else if (block_size < (MI_LARGE_SIZE_MAX - sizeof(mi_segment_t)))
     page = mi_segment_large_page_alloc(tld, os_tld);
   else

@@ -76,7 +76,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // Main tuning parameters for segment and page sizes
 // Sizes for 64-bit, divide by two for 32-bit
 #define MI_SMALL_PAGE_SHIFT               (13 + MI_INTPTR_SHIFT)      // 64kb
-#define MI_LARGE_PAGE_SHIFT               ( 6 + MI_SMALL_PAGE_SHIFT)  // 4mb
+#define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SMALL_PAGE_SHIFT)  // 512kb
+#define MI_LARGE_PAGE_SHIFT               ( 3 + MI_MEDIUM_PAGE_SHIFT) // 4mb
 #define MI_SEGMENT_SHIFT                  ( MI_LARGE_PAGE_SHIFT)      // 4mb
 
 // Derived constants
@@ -84,12 +85,16 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SEGMENT_MASK                   ((uintptr_t)MI_SEGMENT_SIZE - 1)
 
 #define MI_SMALL_PAGE_SIZE                (1<<MI_SMALL_PAGE_SHIFT)
+#define MI_MEDIUM_PAGE_SIZE               (1<<MI_MEDIUM_PAGE_SHIFT)
 #define MI_LARGE_PAGE_SIZE                (1<<MI_LARGE_PAGE_SHIFT)
 
 #define MI_SMALL_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_SMALL_PAGE_SIZE)
+#define MI_MEDIUM_PAGES_PER_SEGMENT       (MI_SEGMENT_SIZE/MI_MEDIUM_PAGE_SIZE)
 #define MI_LARGE_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_LARGE_PAGE_SIZE)
 
-#define MI_LARGE_SIZE_MAX                 (MI_LARGE_PAGE_SIZE/8)   // 512kb on 64-bit
+#define MI_MEDIUM_SIZE_MAX                (MI_MEDIUM_PAGE_SIZE/8)   // 64kb on 64-bit
+
+#define MI_LARGE_SIZE_MAX                 (MI_LARGE_PAGE_SIZE/8)    // 512kb on 64-bit
 #define MI_LARGE_WSIZE_MAX                (MI_LARGE_SIZE_MAX>>MI_INTPTR_SHIFT)
 
 
@@ -199,6 +204,7 @@ typedef struct mi_page_s {
 
 typedef enum mi_page_kind_e {
   MI_PAGE_SMALL,    // small blocks go into 64kb pages inside a segment
+  MI_PAGE_MEDIUM,   // medium blocks go into 512kb pages inside a segment
   MI_PAGE_LARGE,    // larger blocks go into a single page spanning a whole segment
   MI_PAGE_HUGE      // huge blocks (>512kb) are put into a single page in a segment of the exact size (but still 2mb aligned)
 } mi_page_kind_t;
@@ -373,6 +379,7 @@ typedef struct mi_segment_queue_s {
 // Segments thread local data
 typedef struct mi_segments_tld_s {
   mi_segment_queue_t  small_free;   // queue of segments with free small pages
+  mi_segment_queue_t  medium_free;  // queue of segments with free medium pages
   size_t              current_size; // current size of all segments
   size_t              peak_size;    // peak size of all segments
   size_t              cache_count;  // number of segments in the cache
