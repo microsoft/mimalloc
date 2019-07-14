@@ -235,6 +235,11 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
 #define MI_SEGMENT_CACHE_MAX (32)
 #define MI_SEGMENT_CACHE_FRACTION (8)
 
+static void mi_segment_cache_remove(mi_segment_t* segment, mi_segments_tld_t* tld) {
+  tld->cache_count--;
+  tld->cache_size -= segment->segment_size;
+  mi_segment_queue_remove(&tld->cache, segment);
+}
 
 // Get a segment of at least `required` size.
 // If `required == MI_SEGMENT_SIZE` the `segment_size` will match exactly
@@ -242,10 +247,17 @@ static mi_segment_t* _mi_segment_cache_findx(mi_segments_tld_t* tld, size_t requ
   mi_assert_internal(required % _mi_os_page_size() == 0);
   mi_segment_t* segment = (reverse ? tld->cache.last : tld->cache.first);
   while (segment != NULL) {
-    if (segment->segment_size >= required) {
-      tld->cache_count--;
-      tld->cache_size -= segment->segment_size;
-      mi_segment_queue_remove(&tld->cache, segment);
+    mi_segment_t* next = (reverse ? segment->prev : segment->next); // remember in case we remove it from the cach
+    if (segment->segment_size < MI_SEGMENT_SIZE && segment->segment_size < required) {
+      // to prevent irregular sized smallish segments to stay in the cache forever, we purge them eagerly
+      mi_segment_cache_remove(segment,tld);
+      mi_segment_os_free(segment, segment->segment_size, tld);
+      // and look further...
+    }
+    else if (segment->segment_size >= required) {      
+      // always remove it from the cache
+      mi_segment_cache_remove(segment, tld);
+      
       // exact size match?
       if (required==0 || segment->segment_size == required) {
         return segment;
@@ -272,7 +284,7 @@ static mi_segment_t* _mi_segment_cache_findx(mi_segments_tld_t* tld, size_t requ
         }
       }
     }
-    segment = (reverse ? segment->prev : segment->next);
+    segment = next;
   }
   return NULL;
 }

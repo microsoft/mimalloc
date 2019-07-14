@@ -116,7 +116,8 @@ int main() {
   for (int i = 0; i < TRANSFERS; i++) {
     free_items((void*)transfer[i]);
   }
-  mi_collect(false);
+  mi_collect(false); // ensures abandoned segments are reclaimed
+  mi_collect(true);  // frees everything
   mi_stats_print(NULL);
   return 0;
 }
