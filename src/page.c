@@ -82,7 +82,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
   mi_assert_internal(mi_page_list_is_valid(page,page->local_free));
 
-  mi_block_t* tfree = (mi_block_t*)((uintptr_t)page->thread_free.head << MI_TF_PTR_SHIFT);
+  mi_block_t* tfree = mi_tf_block(page->thread_free);
   mi_assert_internal(mi_page_list_is_valid(page, tfree));
   size_t tfree_count = mi_page_list_count(page, tfree);
   mi_assert_internal(tfree_count <= page->thread_freed + 1);
@@ -114,17 +114,17 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay  ) {
   mi_thread_free_t tfreex;
 
   do {
-    tfreex.value = tfree.value = page->thread_free.value;
-    if (mi_unlikely(tfree.delayed < MI_DELAYED_FREEING)) {
-      tfreex.delayed = delay;
+    tfreex = tfree = page->thread_free;
+    if (mi_unlikely(mi_tf_delayed(tfree) < MI_DELAYED_FREEING)) {
+      tfreex = mi_tf_set_delayed(tfree,delay);
     }
-    else if (mi_unlikely(tfree.delayed == MI_DELAYED_FREEING)) {
+    else if (mi_unlikely(mi_tf_delayed(tfree) == MI_DELAYED_FREEING)) {
       mi_atomic_yield(); // delay until outstanding MI_DELAYED_FREEING are done.
       continue;          // and try again
     }    
   }
-  while(tfreex.delayed != tfree.delayed && // avoid atomic operation if already equal
-        !mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex.value, tfree.value));
+  while((mi_tf_delayed(tfreex) !=  mi_tf_delayed(tfree)) && // avoid atomic operation if already equal
+        !mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
 }
 
 
@@ -139,13 +139,13 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay  ) {
 static void mi_page_thread_free_collect(mi_page_t* page)
 {
   mi_block_t* head;
-  mi_thread_free_t tfree = {0};
-  mi_thread_free_t tfreex = {0};
+  mi_thread_free_t tfree;
+  mi_thread_free_t tfreex;
   do {
-    tfreex.value = tfree.value = page->thread_free.value;
-    head = (mi_block_t*)((uintptr_t)tfree.head << MI_TF_PTR_SHIFT);
-    tfreex.head = 0;
-  } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex.value, tfree.value));
+    tfreex = tfree = page->thread_free;
+    head = mi_tf_block(tfree);
+    tfreex = mi_tf_set_block(tfree,NULL);
+  } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
 
   // return if the list is empty
   if (head == NULL) return;
@@ -175,7 +175,7 @@ void _mi_page_free_collect(mi_page_t* page) {
   // free the local free list
   if (page->local_free != NULL) {
     if (mi_likely(page->free == NULL)) {
-      // usual caes
+      // usual case
       page->free = page->local_free;
     }
     else {
@@ -189,7 +189,7 @@ void _mi_page_free_collect(mi_page_t* page) {
     page->local_free = NULL;
   }
   // and the thread free list
-  if (page->thread_free.head != 0) {  // quick test to avoid an atomic operation
+  if (mi_tf_block(page->thread_free) != NULL) {  // quick test to avoid an atomic operation
     mi_page_thread_free_collect(page);
   }
 }
@@ -259,7 +259,16 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
   while(block != NULL) {
     mi_block_t* next = mi_block_nextx(heap->cookie,block);
     // use internal free instead of regular one to keep stats etc correct
-    _mi_free_delayed_block(block);
+    if (!_mi_free_delayed_block(block)) {
+      // we might already start delayed freeing while another thread has not yet 
+      // reset the delayed_freeing flag; in that case delay it further by reinserting.
+      mi_block_t* dfree;
+      do {
+        dfree = (mi_block_t*)heap->thread_delayed_free;
+        mi_block_set_nextx(heap->cookie, block, dfree);
+      } while (!mi_atomic_compare_exchange_ptr((volatile void**)&heap->thread_delayed_free, block, dfree));
+
+    }
     block = next;
   }
 }
@@ -334,11 +343,9 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   mi_assert_internal(mi_page_all_free(page));
   #if MI_DEBUG>1
   // check if we can safely free
-  mi_thread_free_t free;
-  free.value = page->thread_free.value;
-  free.delayed = MI_NEVER_DELAYED_FREE;
-  free.value = mi_atomic_exchange(&page->thread_free.value, free.value);
-  mi_assert_internal(free.delayed != MI_DELAYED_FREEING);
+  mi_thread_free_t free = mi_tf_set_delayed(page->thread_free,MI_NEVER_DELAYED_FREE);
+  free = mi_atomic_exchange(&page->thread_free, free);
+  mi_assert_internal(mi_tf_delayed(free) != MI_DELAYED_FREEING);
   #endif
 
   page->flags.has_aligned = false;
@@ -377,7 +384,7 @@ void _mi_page_retire(mi_page_t* page) {
   // is the only page left with free blocks. It is not clear
   // how to check this efficiently though... for now we just check
   // if its neighbours are almost fully used.
-  if (mi_likely(page->block_size <= MI_LARGE_SIZE_MAX)) {
+  if (mi_likely(page->block_size <= MI_SMALL_SIZE_MAX)) {
     if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
       return; // dont't retire after all
     }
@@ -533,7 +540,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->used == 0);
-  mi_assert_internal(page->thread_free.value == 0);
+  mi_assert_internal(page->thread_free == 0);
   mi_assert_internal(page->thread_freed == 0);
   mi_assert_internal(page->next == NULL);
   mi_assert_internal(page->prev == NULL);
