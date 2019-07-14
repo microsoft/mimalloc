@@ -90,7 +90,7 @@ void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_at
 void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero);
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero);
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
-void        _mi_free_delayed_block(mi_page_t* page, mi_block_t* block);
+bool        _mi_free_delayed_block(mi_block_t* block);
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);

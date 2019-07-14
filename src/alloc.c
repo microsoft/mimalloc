@@ -249,8 +249,20 @@ void mi_free(void* p) mi_attr_noexcept
   }
 }
 
-void _mi_free_delayed_block(mi_page_t* page, mi_block_t* block) {
+bool _mi_free_delayed_block(mi_block_t* block) {
+  // get segment and page
+  const mi_segment_t* segment = _mi_ptr_segment(block);
+  mi_assert_internal(_mi_ptr_cookie(segment) == segment->cookie);
+  mi_assert_internal(_mi_thread_id() == segment->thread_id);
+  mi_page_t* page = _mi_segment_page_of(segment, block);
+  if (mi_tf_delayed(page->thread_free) == MI_DELAYED_FREEING) {
+    // we might already start delayed freeing while another thread has not yet 
+    // reset the delayed_freeing flag; in that case don't free it quite yet if 
+    // this is the last block remaining.
+    if (page->used - page->thread_freed == 1) return false;
+  }
   _mi_free_block(page,true,block);
+  return true;
 }
 
 // Bytes available in a block

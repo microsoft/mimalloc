@@ -139,8 +139,8 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay  ) {
 static void mi_page_thread_free_collect(mi_page_t* page)
 {
   mi_block_t* head;
-  mi_thread_free_t tfree = 0;
-  mi_thread_free_t tfreex = 0;
+  mi_thread_free_t tfree;
+  mi_thread_free_t tfreex;
   do {
     tfreex = tfree = page->thread_free;
     head = mi_tf_block(tfree);
@@ -258,18 +258,10 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
   // and free them all
   while(block != NULL) {
     mi_block_t* next = mi_block_nextx(heap->cookie,block);
-    // get segment and page
-    const mi_segment_t* segment = _mi_ptr_segment(block);
-    mi_assert_internal(_mi_ptr_cookie(segment) == segment->cookie);
-    mi_assert_internal(_mi_thread_id() == segment->thread_id);
-    mi_page_t* page = _mi_segment_page_of(segment, block);
-    if (mi_tf_delayed(page->thread_free) != MI_DELAYED_FREEING) {
-      // use internal free instead of regular one to keep stats etc correct
-      _mi_free_delayed_block(page,block);
-    }
-    else {
+    // use internal free instead of regular one to keep stats etc correct
+    if (!_mi_free_delayed_block(block)) {
       // we might already start delayed freeing while another thread has not yet 
-      // reset the flag; in that case delay it further :-(
+      // reset the delayed_freeing flag; in that case delay it further by reinserting.
       mi_block_t* dfree;
       do {
         dfree = (mi_block_t*)heap->thread_delayed_free;
