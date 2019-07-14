@@ -14,7 +14,7 @@ const mi_page_t _mi_page_empty = {
   0, false, false, {0},
   0, 0,
   NULL, 0, 0,   // free, used, cookie
-  NULL, 0, {0},
+  NULL, 0, 0,
   0, NULL, NULL, NULL
   #if (MI_INTPTR_SIZE==4)
   , { NULL }
