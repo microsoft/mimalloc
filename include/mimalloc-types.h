@@ -176,7 +176,7 @@ typedef struct mi_page_s {
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   mi_page_flags_t       flags;
   uint16_t              capacity;          // number of blocks committed
-  uint16_t              reserved;          // numbes of blocks reserved in memory
+  uint16_t              reserved;          // number of blocks reserved in memory
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   uintptr_t             cookie;            // random cookie to encode the free lists
