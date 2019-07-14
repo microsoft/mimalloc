@@ -93,7 +93,7 @@ void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_at
 void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero);
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero);
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
-void        _mi_free_delayed_block(mi_block_t* block);
+bool        _mi_free_delayed_block(mi_block_t* block);
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
@@ -232,6 +232,23 @@ static inline mi_page_t* _mi_ptr_page(void* p) {
   return _mi_segment_page_of(_mi_ptr_segment(p), p);
 }
 
+// Thread free access
+static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
+  return (mi_block_t*)(tf & ~0x03);
+}
+static inline mi_delayed_t mi_tf_delayed(mi_thread_free_t tf) {
+  return (mi_delayed_t)(tf & 0x03);
+}
+static inline mi_thread_free_t mi_tf_make(mi_block_t* block, mi_delayed_t delayed) {
+  return (mi_thread_free_t)((uintptr_t)block | (uintptr_t)delayed);
+}
+static inline mi_thread_free_t mi_tf_set_delayed(mi_thread_free_t tf, mi_delayed_t delayed) {
+  return mi_tf_make(mi_tf_block(tf),delayed);
+}
+static inline mi_thread_free_t mi_tf_set_block(mi_thread_free_t tf, mi_block_t* block) {
+  return mi_tf_make(block, mi_tf_delayed(tf));
+}
+
 // are all blocks in a page freed?
 static inline bool mi_page_all_free(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
@@ -246,7 +263,7 @@ static inline bool mi_page_immediate_available(const mi_page_t* page) {
 // are there free blocks in this page?
 static inline bool mi_page_has_free(mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  bool hasfree = (mi_page_immediate_available(page) || page->local_free != NULL || (page->thread_free.head != 0));
+  bool hasfree = (mi_page_immediate_available(page) || page->local_free != NULL || (mi_tf_block(page->thread_free) != NULL));
   mi_assert_internal(hasfree || page->used - page->thread_freed == page->capacity);
   return hasfree;
 }

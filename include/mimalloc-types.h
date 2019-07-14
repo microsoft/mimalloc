@@ -134,20 +134,9 @@ typedef union mi_page_flags_u {
 } mi_page_flags_t;
 
 // Thread free list.
-// We use 2 bits of the pointer for the `use_delayed_free` and `delayed_freeing` flags.
-typedef union mi_thread_free_u {
-  volatile uintptr_t value;
-  struct {
-    uintptr_t delayed:2;
-#if MI_INTPTR_SIZE==8
-    uintptr_t head:62;    // head free block in the list (right-shifted by 2)
-#elif MI_INTPTR_SIZE==4
-    uintptr_t head:30;
-#endif
-  };
-} mi_thread_free_t;
+// We use bottom 2 bits of the pointer for mi_delayed_t flags
+typedef uintptr_t mi_thread_free_t;
 
-#define MI_TF_PTR_SHIFT (2)
 
 // A page contains blocks of one specific size (`block_size`).
 // Each page has three list of free blocks:

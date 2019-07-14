@@ -106,25 +106,25 @@ void* mi_zalloc(size_t size) mi_attr_noexcept {
 // multi-threaded free
 static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* block)
 {
-  mi_thread_free_t tfree = {0};
-  mi_thread_free_t tfreex = {0};
+  mi_thread_free_t tfree;
+  mi_thread_free_t tfreex;
   bool use_delayed;
 
   do {
-    tfreex.value = tfree.value = page->thread_free.value;
-    use_delayed = (tfree.delayed == MI_USE_DELAYED_FREE ||
-                   (tfree.delayed == MI_NO_DELAYED_FREE && page->used == page->thread_freed+1)
+    tfree = page->thread_free;
+    use_delayed = (mi_tf_delayed(tfree) == MI_USE_DELAYED_FREE ||
+                   (mi_tf_delayed(tfree) == MI_NO_DELAYED_FREE && page->used == page->thread_freed+1)
                   );
     if (mi_unlikely(use_delayed)) {
       // unlikely: this only happens on the first concurrent free in a page that is in the full list
-      tfreex.delayed = MI_DELAYED_FREEING;
+      tfreex = mi_tf_set_delayed(tfree,MI_DELAYED_FREEING);
     }
     else {
       // usual: directly add to page thread_free list
-      mi_block_set_next(page, block, (mi_block_t*)((uintptr_t)tfree.head << MI_TF_PTR_SHIFT));
-      tfreex.head = (uintptr_t)block >> MI_TF_PTR_SHIFT;
+      mi_block_set_next(page, block, mi_tf_block(tfree));
+      tfreex = mi_tf_set_block(tfree,block);
     }
-  } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex.value, tfree.value));
+  } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
 
   if (mi_likely(!use_delayed)) {
     // increment the thread free count and return
@@ -145,10 +145,10 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
 
     // and reset the MI_DELAYED_FREEING flag
     do {
-      tfreex.value = tfree.value = page->thread_free.value;
-      mi_assert_internal(tfree.delayed == MI_NEVER_DELAYED_FREE || tfree.delayed == MI_DELAYED_FREEING);
-      if (tfree.delayed != MI_NEVER_DELAYED_FREE) tfreex.delayed = MI_NO_DELAYED_FREE;
-    } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex.value, tfree.value));
+      tfreex = tfree = page->thread_free;
+      mi_assert_internal(mi_tf_delayed(tfree) == MI_NEVER_DELAYED_FREE || mi_tf_delayed(tfree) == MI_DELAYED_FREEING);
+      if (mi_tf_delayed(tfree) != MI_NEVER_DELAYED_FREE) tfreex = mi_tf_set_delayed(tfree,MI_NO_DELAYED_FREE);
+    } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
   }
 }
 
@@ -249,13 +249,20 @@ void mi_free(void* p) mi_attr_noexcept
   }
 }
 
-void _mi_free_delayed_block(mi_block_t* block) {
-  mi_assert_internal(block != NULL);
+bool _mi_free_delayed_block(mi_block_t* block) {
+  // get segment and page
   const mi_segment_t* segment = _mi_ptr_segment(block);
   mi_assert_internal(_mi_ptr_cookie(segment) == segment->cookie);
   mi_assert_internal(_mi_thread_id() == segment->thread_id);
-  mi_page_t* page = _mi_segment_page_of(segment,block);
+  mi_page_t* page = _mi_segment_page_of(segment, block);
+  if (mi_tf_delayed(page->thread_free) == MI_DELAYED_FREEING) {
+    // we might already start delayed freeing while another thread has not yet 
+    // reset the delayed_freeing flag; in that case don't free it quite yet if 
+    // this is the last block remaining.
+    if (page->used - page->thread_freed == 1) return false;
+  }
   _mi_free_block(page,true,block);
+  return true;
 }
 
 // Bytes available in a block

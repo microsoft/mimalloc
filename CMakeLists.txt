@@ -162,10 +162,12 @@ target_include_directories(mimalloc-obj PUBLIC
     $<INSTALL_INTERFACE:${mi_install_dir}/include>
 )
 
-# seems to lead to cmake warnings/errors on some systems, disable for now :-(
+# the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
 # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_dir})
 
-install(FILES $<TARGET_OBJECTS:mimalloc-obj>
+# the FILES expression can also be: $<TARGET_OBJECTS:mimalloc-obj>
+# but that fails cmake versions less than 3.10 so we leave it as is for now
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}
         DESTINATION ${mi_install_dir}
         RENAME ${mi_basename}${CMAKE_C_OUTPUT_EXTENSION} )
 
