@@ -164,13 +164,14 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
 
   const uintptr_t mask = mi_region_block_mask(blocks,0);
   const size_t bitidx_max = MI_REGION_MAP_BITS - blocks;
-  size_t bitidx = 0;
+  size_t bitidx ;
   uintptr_t map;
   uintptr_t newmap;
   do {   // while no atomic claim success and not all bits seen
     // find the first free range of bits
     map = mi_atomic_read(&region->map);
     size_t m = map;
+    bitidx = 0;
     do {
       // skip ones
       while ((m&1) == 1) { bitidx++; m>>=1; }
