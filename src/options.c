@@ -36,6 +36,7 @@ typedef struct mi_option_desc_s {
   const char* name;   // option name without `mimalloc_` prefix
 } mi_option_desc_t;
 
+<<<<<<< HEAD
 static mi_option_desc_t options[_mi_option_last] =
 {
   // stable options
@@ -43,6 +44,16 @@ static mi_option_desc_t options[_mi_option_last] =
   { MI_DEBUG, UNINIT, "show_errors" },
   { 0, UNINIT, "verbose" },
 
+=======
+static mi_option_desc_t options[_mi_option_last] = {
+  { 0, UNINIT, "page_reset" },
+  { 0, UNINIT, "cache_reset" },
+  { 0, UNINIT, "pool_commit" },
+  { 0, UNINIT, "eager_commit" },     // secure and large pages must have eager commit
+  { 0, UNINIT, "large_os_pages" },   // use large OS pages
+  { 0, UNINIT, "reset_decommits" },
+  { 0, UNINIT, "reset_discards" },
+>>>>>>> add comment about large pages
   #if MI_SECURE
   { MI_SECURE, INITIALIZED, "secure" }, // in a secure build the environment setting is ignored
   #else
