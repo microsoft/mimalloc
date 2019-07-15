@@ -187,16 +187,9 @@ target_compile_options(mimalloc-test-stress PRIVATE ${mi_cflags})
 target_include_directories(mimalloc-test-stress PRIVATE include)
 target_link_libraries(mimalloc-test-stress PRIVATE mimalloc-static)
 
-add_executable(mimalloc-test-map-frag test/test-leak.cpp)
-target_compile_definitions(mimalloc-test-map-frag PRIVATE ${mi_defines})
-target_compile_options(mimalloc-test-map-frag PRIVATE ${mi_cflags})
-target_include_directories(mimalloc-test-map-frag PRIVATE include)
-target_link_libraries(mimalloc-test-map-frag PRIVATE mimalloc-static)
-
 enable_testing()
 add_test(test_api, mimalloc-test-api)
 add_test(test_stress, mimalloc-test-stress)
-add_test(test_map_frag, mimalloc-test-map-frag)
 
 # -----------------------------------------------------------------------------
 # Set override properties
