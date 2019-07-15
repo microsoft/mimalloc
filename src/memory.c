@@ -336,6 +336,31 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
   }
 }
 
+
+/* ----------------------------------------------------------------------------
+  collection
+-----------------------------------------------------------------------------*/
+void _mi_mem_collect(mi_stats_t* stats) {
+  // free every region that has no segments in use.
+  for (size_t i = 0; i < regions_count; i++) {
+    mem_region_t* region = &regions[i];
+    if (mi_atomic_read(&region->map) == 0 && region->start != NULL) {  
+      // if no segments used, try to claim the whole region
+      uintptr_t m;
+      do {
+        m = mi_atomic_read(&region->map);
+      } while(m == 0 && !mi_atomic_compare_exchange(&region->map, ~((uintptr_t)0), 0 ));
+      if (m == 0) {
+        // on success, free the whole region
+        if (region->start != NULL) _mi_os_free((void*)region->start, MI_REGION_SIZE, stats);
+        // and release 
+        region->start = 0;
+        mi_atomic_write(&region->map,0);
+      }
+    }
+  }
+}
+
 /* ----------------------------------------------------------------------------
   Other
 -----------------------------------------------------------------------------*/

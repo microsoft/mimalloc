@@ -147,6 +147,11 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   if (collect >= FORCE) {
     _mi_segment_thread_collect(&heap->tld->segments);
   }
+
+  // collect regions
+  if (collect >= FORCE && _mi_is_main_thread()) {
+    _mi_mem_collect(&heap->tld->stats);
+  }
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {

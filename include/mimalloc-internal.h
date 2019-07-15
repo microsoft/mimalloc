@@ -54,6 +54,8 @@ bool       _mi_mem_commit(void* p, size_t size, mi_stats_t* stats);
 bool       _mi_mem_protect(void* addr, size_t size);
 bool       _mi_mem_unprotect(void* addr, size_t size);
 
+void        _mi_mem_collect(mi_stats_t* stats);
+
 // "segment.c"
 mi_page_t* _mi_segment_page_alloc(size_t block_wsize, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
 void       _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld);
