@@ -218,17 +218,19 @@ mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_b
 // ------------------------------------------------------
 
 typedef enum mi_option_e {
+  // stable options
+  mi_option_show_stats,
+  mi_option_show_errors,
+  mi_option_verbose,
+  // the following options are experimental
   mi_option_page_reset,
   mi_option_cache_reset,
   mi_option_eager_commit,
   mi_option_eager_region_commit,
-  mi_option_large_os_pages,  // implies eager commit
+  mi_option_large_os_pages,      // implies eager commit
   mi_option_reset_decommits,
   mi_option_reset_discards,
   mi_option_secure,
-  mi_option_show_stats,
-  mi_option_show_errors,
-  mi_option_verbose,
   _mi_option_last
 } mi_option_t;
 

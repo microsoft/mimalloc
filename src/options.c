@@ -31,22 +31,26 @@ typedef struct mi_option_desc_s {
   const char* name;   // option name without `mimalloc_` prefix
 } mi_option_desc_t;
 
-static mi_option_desc_t options[_mi_option_last] = {
+static mi_option_desc_t options[_mi_option_last] = 
+{
+  // stable options
+  { 0, UNINIT, "show_stats" },
+  { MI_DEBUG, UNINIT, "show_errors" },
+  { 0, UNINIT, "verbose" },
+
+  // the following options are experimental and not all combinations make sense.
   { 0, UNINIT, "page_reset" },
   { 0, UNINIT, "cache_reset" },
   { 1, UNINIT, "eager_commit" },     
-  { 1, UNINIT, "eager_region_commit" },
-  { 0, UNINIT, "large_os_pages" },   // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
-  { 0, UNINIT, "reset_decommits" },
-  { 0, UNINIT, "reset_discards" },
+  { 1, UNINIT, "eager_region_commit" }, // eager_commit should be on when eager_region_commit is on 
+  { 0, UNINIT, "large_os_pages" },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
+  { 0, UNINIT, "reset_decommits" },     
+  { 0, UNINIT, "reset_discards" },   
   #if MI_SECURE
-  { MI_SECURE, INITIALIZED, "secure" }, // in secure build the environment setting is ignored
+  { MI_SECURE, INITIALIZED, "secure" } // in a secure build the environment setting is ignored
   #else
-  { 0, UNINIT, "secure" },
+  { 0, UNINIT, "secure" }              
   #endif
-  { 0, UNINIT, "show_stats" },
-  { MI_DEBUG, UNINIT, "show_errors" },
-  { 0, UNINIT, "verbose" }
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
