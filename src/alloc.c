@@ -256,8 +256,8 @@ bool _mi_free_delayed_block(mi_block_t* block) {
   mi_assert_internal(_mi_thread_id() == segment->thread_id);
   mi_page_t* page = _mi_segment_page_of(segment, block);
   if (mi_tf_delayed(page->thread_free) == MI_DELAYED_FREEING) {
-    // we might already start delayed freeing while another thread has not yet 
-    // reset the delayed_freeing flag; in that case don't free it quite yet if 
+    // we might already start delayed freeing while another thread has not yet
+    // reset the delayed_freeing flag; in that case don't free it quite yet if
     // this is the last block remaining.
     if (page->used - page->thread_freed == 1) return false;
   }
@@ -282,9 +282,6 @@ size_t mi_usable_size(const void* p) mi_attr_noexcept {
 }
 
 
-
-
-
 // ------------------------------------------------------
 // ensure explicit external inline definitions are emitted!
 // ------------------------------------------------------
@@ -298,8 +295,6 @@ void* _mi_externs[] = {
   (void*)&mi_heap_zalloc,
   (void*)&mi_heap_malloc_small
 };
-
-
 #endif
 
 
@@ -360,7 +355,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
   if (newsize <= size && newsize >= (size / 2)) {
     return p;  // reallocation still fits and not more than 50% waste
   }
-  void* newp = mi_heap_malloc(heap,newsize); 
+  void* newp = mi_heap_malloc(heap,newsize);
   if (mi_likely(newp != NULL)) {
     if (zero && newsize > size) {
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
@@ -409,6 +404,10 @@ void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
 void* mi_reallocf(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_reallocf(mi_get_default_heap(),p,newsize);
 }
+
+// ------------------------------------------------------
+// strdup, strndup, and realpath
+// ------------------------------------------------------
 
 // `strdup` using mi_malloc
 char* mi_heap_strdup(mi_heap_t* heap, const char* s) mi_attr_noexcept {
@@ -496,41 +495,91 @@ char* mi_realpath(const char* fname, char* resolved_name) mi_attr_noexcept {
   return mi_heap_realpath(mi_get_default_heap(),fname,resolved_name);
 }
 
+/*-------------------------------------------------------
+C++ new and new_aligned
+The standard requires calling into `get_new_handler` and
+throwing the bad_alloc exception on failure. If we compile
+with a C++ compiler we can implement this precisely. If we
+use a C compiler we cannot throw a `bad_alloc` exception
+but we call `exit` instead (i.e. not returning).
+-------------------------------------------------------*/
 
 #ifdef __cplusplus
 #include <new>
-
-static mi_decl_noinline void* mi_new_try(std::size_t n) noexcept(false) {
-  void* p;
-  do {
-    std::new_handler h = std::get_new_handler();
-    if (h==NULL) throw std::bad_alloc();
+static bool mi_try_new_handler(bool nothrow) {
+  std::new_handler h = std::get_new_handler();
+  if (h==NULL) {
+    if (!nothrow) throw std::bad_alloc();
+    return false;
+  }
+  else {
     h();
-    // and try again
+    return true;
+  }
+}
+#else
+#include <errno.h>
+#ifndef ENOMEM
+#define ENOMEM 12
+#endif
+typedef void (*std_new_handler_t)();
+
+#if (defined(__GNUC__) || defined(__clang__))
+std_new_handler_t __attribute((weak)) _ZSt15get_new_handlerv() {
+  return NULL;
+}
+std_new_handler_t mi_get_new_handler() {
+  return _ZSt15get_new_handlerv();
+}
+#else
+std_new_handler_t mi_get_new_handler() {
+  return NULL;
+}
+#endif
+
+static bool mi_try_new_handler(bool nothrow) {
+  std_new_handler_t h = mi_get_new_handler();
+  if (h==NULL) {
+    if (!nothrow) exit(ENOMEM);
+    return false;
+  }
+  else {
+    h();
+    return true;
+  }
+}
+#endif
+
+static mi_decl_noinline void* mi_try_new(size_t n, bool nothrow ) {
+  void* p = NULL;
+  while(p == NULL && mi_try_new_handler(nothrow)) {
     p = mi_malloc(n);
-  } while (p==NULL);
+  }
   return p;
 }
 
-// spit out `new_try` for better assembly code
-void* mi_new(std::size_t n) noexcept(false) {
+void* mi_new(size_t n) {
   void* p = mi_malloc(n);
-  if (mi_likely(p != NULL)) return p;
-                       else return mi_new_try(n);
-}
-
-#if (__cplusplus > 201402L || defined(__cpp_aligned_new))
-// for aligned allocation its fine as it is not inlined anyways
-void* mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false) {
-  void* p;
-  while ((p = mi_malloc_aligned(n,static_cast<size_t>(alignment))) == NULL) {
-    std::new_handler h = std::get_new_handler();
-    if (h==NULL) throw std::bad_alloc();
-    h();
-    // and try again    
-  };
+  if (mi_unlikely(p == NULL)) return mi_try_new(n,false);
   return p;
 }
-#endif
 
-#endif
+void* mi_new_aligned(size_t n, size_t alignment) {
+  void* p;
+  do { p = mi_malloc_aligned(n, alignment); }
+  while(p == NULL && mi_try_new_handler(false));
+  return p;
+}
+
+void* mi_new_nothrow(size_t n) {
+  void* p = mi_malloc(n);
+  if (mi_unlikely(p == NULL)) return mi_try_new(n,true);
+  return p;
+}
+
+void* mi_new_aligned_nothrow(size_t n, size_t alignment) {
+  void* p;
+  do { p = mi_malloc_aligned(n, alignment); }
+  while (p == NULL && mi_try_new_handler(true));
+  return p;
+}
