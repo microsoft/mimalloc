@@ -19,6 +19,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #else
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf
+#if defined(__APPLE__)
+#include <mach/vm_statistics.h>
+#endif
 #endif
 
 /* -----------------------------------------------------------
@@ -231,6 +234,7 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
   #endif
   if (large_os_page_size > 0 && use_large_os_page(size, try_alignment)) {
     int lflags = flags;
+    int fd = -1;
     #ifdef MAP_ALIGNED_SUPER
     lflags |= MAP_ALIGNED_SUPER;
     #endif
@@ -240,11 +244,14 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
     #ifdef MAP_HUGE_2MB
     lflags |= MAP_HUGE_2MB;
     #endif
+    #ifdef VM_FLAGS_SUPERPAGE_SIZE_2MB
+    fd = VM_FLAGS_SUPERPAGE_SIZE_2MB;
+    #endif
     if (lflags != flags) {
       // try large page allocation 
       // TODO: if always failing due to permissions or no huge pages, try to avoid repeatedly trying? 
       // Should we check this in _mi_os_init? (as on Windows)
-      p = mmap(NULL, size, protect_flags, lflags, -1, 0);
+      p = mmap(NULL, size, protect_flags, lflags, fd, 0);
       if (p == MAP_FAILED) p = NULL; // fall back to regular mmap if large is exhausted or no permission
     }
   }
