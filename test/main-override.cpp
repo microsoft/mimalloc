@@ -5,6 +5,8 @@
 
 #include <mimalloc.h>
 
+#include <new>
+
 static void* p = malloc(8);
 
 void free_p() {
@@ -35,6 +37,8 @@ int main() {
   free(p2);
   free(s);
   Test* t = new Test(42);
+  delete t;
+  t = new (std::nothrow) Test(42);
   delete t;
   int err = mi_posix_memalign(&p1,32,60);
   if (!err) free(p1);

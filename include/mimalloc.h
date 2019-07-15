@@ -259,17 +259,15 @@ mi_decl_export mi_decl_allocator void* mi_reallocarray(void* p, size_t count, si
 mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
 mi_decl_export void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept;
 mi_decl_export void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept;
+
+mi_decl_export void* mi_new(size_t n) mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_export void* mi_new_aligned(size_t n, size_t alignment) mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_export void* mi_new_nothrow(size_t n) mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_export void* mi_new_aligned_nothrow(size_t n, size_t alignment) mi_attr_malloc mi_attr_alloc_size(1);
+
 #ifdef __cplusplus
 }
 #endif
 
-#ifdef __cplusplus
-#include <cstddef>
-mi_decl_export void* mi_new(std::size_t n) noexcept(false) mi_attr_malloc mi_attr_alloc_size(1);
-#if (__cplusplus > 201402L || defined(__cpp_aligned_new))
-#include <new>
-mi_decl_export void* mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false) mi_attr_malloc mi_attr_alloc_size(1);
-#endif
-#endif
 
 #endif
