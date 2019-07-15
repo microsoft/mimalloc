@@ -196,6 +196,11 @@ static inline void mi_atomic_write(volatile uintptr_t* p, uintptr_t x) {
     asm volatile("yield");
   }
 #endif
+#elif defined(__wasi__)
+  #include <sched.h>
+  static inline void mi_atomic_yield() {
+    sched_yield();
+  }
 #else
   #include <unistd.h>
   static inline void mi_atomic_yield(void) {
