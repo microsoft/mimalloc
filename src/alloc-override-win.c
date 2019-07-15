@@ -98,18 +98,32 @@ static int __cdecl mi_setmaxstdio(int newmax);
 // Microsoft allocation extensions
 // ------------------------------------------------------
 
-#define UNUSED(x) (void)(x)  // suppress unused variable warnings
-
 static void* mi__expand(void* p, size_t newsize) {
   void* res = mi_expand(p, newsize);
   if (res == NULL) errno = ENOMEM;
   return res;
 }
 
+typedef size_t mi_nothrow_t;
+
+static void mi_free_nothrow(void* p, mi_nothrow_t tag) {
+  UNUSED(tag);
+  mi_free(p);
+}
 
 // Versions of `free`, `realloc`, `recalloc`, `expand` and `msize`
 // that are used during termination and are no-ops.
 static void mi_free_term(void* p) {
+  UNUSED(p);
+}
+
+static void mi_free_size_term(void* p, size_t size) {
+  UNUSED(size);
+  UNUSED(p);
+}
+
+static void mi_free_nothrow_term(void* p, mi_nothrow_t tag) {
+  UNUSED(tag);
   UNUSED(p);
 }
 
@@ -444,24 +458,32 @@ static mi_patch_t patches[] = {
   // override new/delete variants for efficiency (?)
 #ifdef _WIN64
   // 64 bit new/delete
-  MI_PATCH_NAME2("??2@YAPEAX_K@Z", mi_malloc),
-  MI_PATCH_NAME2("??_U@YAPEAX_K@Z", mi_malloc),
-  MI_PATCH_NAME3("??3@YAXPEAX@Z", mi_free, mi_free_term),
-  MI_PATCH_NAME3("??_V@YAXPEAX@Z", mi_free, mi_free_term),
-  MI_PATCH_NAME2("??2@YAPEAX_KAEBUnothrow_t@std@@@Z", mi_malloc),
-  MI_PATCH_NAME2("??_U@YAPEAX_KAEBUnothrow_t@std@@@Z", mi_malloc),
-  MI_PATCH_NAME3("??3@YAXPEAXAEBUnothrow_t@std@@@Z", mi_free, mi_free_term),
-  MI_PATCH_NAME3("??_V@YAXPEAXAEBUnothrow_t@std@@@Z", mi_free, mi_free_term),
+  MI_PATCH_NAME2("??2@YAPEAX_K@Z", mi_new),
+  MI_PATCH_NAME2("??_U@YAPEAX_K@Z", mi_new),
+  MI_PATCH_NAME3("??3@YAXPEAX@Z", mi_free, mi_free_term),  
+  MI_PATCH_NAME3("??_V@YAXPEAX@Z", mi_free, mi_free_term), 
+  MI_PATCH_NAME3("??3@YAXPEAX_K@Z", mi_free_size, mi_free_size_term), // delete sized
+  MI_PATCH_NAME3("??_V@YAXPEAX_K@Z", mi_free_size, mi_free_size_term), // delete sized
+  MI_PATCH_NAME2("??2@YAPEAX_KAEBUnothrow_t@std@@@Z", mi_new),
+  MI_PATCH_NAME2("??_U@YAPEAX_KAEBUnothrow_t@std@@@Z", mi_new),
+  MI_PATCH_NAME3("??3@YAXPEAXAEBUnothrow_t@std@@@Z", mi_free_nothrow, mi_free_nothrow_term),
+  MI_PATCH_NAME3("??_V@YAXPEAXAEBUnothrow_t@std@@@Z", mi_free_nothrow, mi_free_nothrow_term),
+  
+  
 #else
   // 32 bit new/delete
-  MI_PATCH_NAME2("??2@YAPAXI@Z", mi_malloc),
-  MI_PATCH_NAME2("??_U@YAPAXI@Z", mi_malloc),
+  MI_PATCH_NAME2("??2@YAPAXI@Z", mi_new),
+  MI_PATCH_NAME2("??_U@YAPAXI@Z", mi_new),
   MI_PATCH_NAME3("??3@YAXPAX@Z", mi_free, mi_free_term),
   MI_PATCH_NAME3("??_V@YAXPAX@Z", mi_free, mi_free_term),
-  MI_PATCH_NAME2("??2@YAPAXIABUnothrow_t@std@@@Z", mi_malloc),
-  MI_PATCH_NAME2("??_U@YAPAXIABUnothrow_t@std@@@Z", mi_malloc),
-  MI_PATCH_NAME3("??3@YAXPAXABUnothrow_t@std@@@Z", mi_free, mi_free_term),
-  MI_PATCH_NAME3("??_V@YAXPAXABUnothrow_t@std@@@Z", mi_free, mi_free_term),
+  MI_PATCH_NAME3("??3@YAXPAXI@Z", mi_free_size, mi_free_size_term), // delete sized
+  MI_PATCH_NAME3("??_V@YAXPAXI@Z", mi_free_size, mi_free_size_term), // delete sized
+
+  MI_PATCH_NAME2("??2@YAPAXIABUnothrow_t@std@@@Z", mi_new),
+  MI_PATCH_NAME2("??_U@YAPAXIABUnothrow_t@std@@@Z", mi_new),
+  MI_PATCH_NAME3("??3@YAXPAXABUnothrow_t@std@@@Z", mi_free_nothrow, mi_free_nothrow_term),
+  MI_PATCH_NAME3("??_V@YAXPAXABUnothrow_t@std@@@Z", mi_free_nothrow, mi_free_nothrow_term),
+
 #endif
 #endif
   { NULL, NULL, NULL, PATCH_NONE, {NULL,NULL,NULL,NULL} }
