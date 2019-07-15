@@ -312,11 +312,13 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
     // TODO: implement delayed decommit/reset as these calls are too expensive 
     // if the memory is reused soon.
     // reset: 10x slowdown on malloc-large, decommit: 17x slowdown on malloc-large
-    if (mi_option_is_enabled(mi_option_eager_region_commit)) {
-      _mi_os_reset(p, size, stats);      // 10x slowdown on malloc-large
-    }
-    else {      
-      _mi_os_decommit(p, size, stats);  // 17x slowdown on malloc-large
+    if (!mi_option_is_enabled(mi_option_large_os_pages)) {
+      if (mi_option_is_enabled(mi_option_eager_region_commit)) {
+        _mi_os_reset(p, size, stats);      // 10x slowdown on malloc-large
+      }
+      else {      
+        _mi_os_decommit(p, size, stats);  // 17x slowdown on malloc-large
+      }
     }
 
     // TODO: should we free empty regions? 
