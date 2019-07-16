@@ -42,13 +42,21 @@ static inline uintptr_t mi_atomic_exchange(volatile uintptr_t* p, uintptr_t exch
 // Atomically read a value
 static inline uintptr_t mi_atomic_read(volatile uintptr_t* p);
 
-// Atomically read a pointer
-static inline void* mi_atomic_read_ptr(volatile void** p);
-
 // Atomically write a value
 static inline void mi_atomic_write(volatile uintptr_t* p, uintptr_t x);
 
+// Atomically read a pointer
+static inline void* mi_atomic_read_ptr(volatile void** p) {
+  return (void*)mi_atomic_read( (volatile uintptr_t*)p );
+}
+
 static inline void mi_atomic_yield(void);
+
+
+// Atomically write a pointer
+static inline void mi_atomic_write_ptr(volatile void** p, void* x) {
+  mi_atomic_write((volatile uintptr_t*)p, (uintptr_t)x );
+}
 
 // Atomically compare and exchange a pointer; returns `true` if successful.
 static inline bool mi_atomic_compare_exchange_ptr(volatile void** p, void* newp, void* compare) {
@@ -98,9 +106,6 @@ static inline uintptr_t mi_atomic_exchange(volatile uintptr_t* p, uintptr_t exch
 }
 static inline uintptr_t mi_atomic_read(volatile uintptr_t* p) {
   return *p;
-}
-static inline void* mi_atomic_read_ptr(volatile void** p) {
-  return (void*)(*p);
 }
 static inline void mi_atomic_write(volatile uintptr_t* p, uintptr_t x) {
   *p = x;
@@ -170,10 +175,6 @@ static inline uintptr_t mi_atomic_exchange(volatile uintptr_t* p, uintptr_t exch
 static inline uintptr_t mi_atomic_read(volatile uintptr_t* p) {
   MI_USING_STD
   return atomic_load_explicit((volatile atomic_uintptr_t*)p, memory_order_relaxed);
-}
-static inline void* mi_atomic_read_ptr(volatile void** p) {
-  MI_USING_STD
-  return atomic_load_explicit((volatile _Atomic(void*)*)p, memory_order_relaxed);
 }
 static inline void mi_atomic_write(volatile uintptr_t* p, uintptr_t x) {
   MI_USING_STD

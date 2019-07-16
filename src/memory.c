@@ -7,13 +7,16 @@ terms of the MIT license. A copy of the license can be found in the file
 
 /* ----------------------------------------------------------------------------
 This implements a layer between the raw OS memory (VirtualAlloc/mmap/sbrk/..)
-and the segment and huge object allocation by mimalloc. In contrast to the
-rest of mimalloc, this uses thread-shared "regions" that are accessed using
-atomic operations. We need this layer because of:
+and the segment and huge object allocation by mimalloc. There may be multiple
+implementations of this (one could be the identity going directly to the OS,
+another could be a simple cache etc), but the current one uses large "regions".
+In contrast to the rest of mimalloc, the "regions" are shared between threads and
+need to be accessed using atomic operations. 
+We need this memory layer between the raw OS calls because of:
 1. on `sbrk` like systems (like WebAssembly) we need our own memory maps in order
-   to reuse memory 
+   to reuse memory effectively.
 2. It turns out that for large objects, between 1MiB and 32MiB (?), the cost of
-   an OS allocation/free is still too expensive relative to the accesses in that
+   an OS allocation/free is still (much) too expensive relative to the accesses in that
    object :-( (`mallloc-large` tests this). This means we need a cheaper way to 
    reuse memory.
 3. This layer can help with a NUMA aware allocation in the future.
@@ -34,7 +37,7 @@ Possible issues:
 
 #include <string.h>  // memset
 
-// Internal OS interface
+// Internal raw OS interface
 size_t  _mi_os_large_page_size();
 bool  _mi_os_protect(void* addr, size_t size);
 bool  _mi_os_unprotect(void* addr, size_t size);
@@ -76,7 +79,7 @@ typedef struct mem_region_s {
 static mem_region_t regions[MI_REGION_MAX];
 
 static volatile size_t regions_count = 0;        // allocated regions
-static volatile uintptr_t region_next_idx = 0;
+static volatile uintptr_t region_next_idx = 0;   // good place to start searching
 
 
 /* ----------------------------------------------------------------------------
@@ -105,6 +108,8 @@ static size_t mi_good_commit_size(size_t size) {
 Commit from a region
 -----------------------------------------------------------------------------*/
 
+#define ALLOCATING  ((void*)1)
+
 // Commit the `blocks` in `region` at `idx` and `bitidx` of a given `size`. 
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/SIZE_MAX before the call. 
@@ -115,9 +120,25 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
   mi_assert_internal((mask & mi_atomic_read(&region->map)) == mask);
 
   // ensure the region is reserved
-  void* start = mi_atomic_read_ptr(&region->start);
-  if (start == NULL) {    
+  void* start;
+  do {
+    start = mi_atomic_read_ptr(&region->start);
+    if (start == NULL) {
+      start = ALLOCATING;  // try to start allocating
+    }
+    else if (start == ALLOCATING) {
+      mi_atomic_yield(); // another thead is already allocating.. wait it out
+      continue;
+    }    
+  } while( start == ALLOCATING && !mi_atomic_compare_exchange_ptr(&region->start, ALLOCATING, NULL) );
+  mi_assert_internal(start != NULL);
+
+  // allocate the region if needed
+  if (start == ALLOCATING) {    
     start = _mi_os_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, mi_option_is_enabled(mi_option_eager_region_commit), tld);
+    // set the new allocation (or NULL on failure) -- this releases any waiting threads.
+    mi_atomic_write_ptr(&region->start, start);
+    
     if (start == NULL) {
       // failure to allocate from the OS! unclaim the blocks and fail
       size_t map;
@@ -126,22 +147,14 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       } while (!mi_atomic_compare_exchange(&region->map, map & ~mask, map));
       return false;
     }
-    // set the newly allocated region
-    if (mi_atomic_compare_exchange_ptr(&region->start, start, NULL)) {
-      // update the region count
-      mi_atomic_increment(&regions_count);
-    }    
-    else {
-      // failed, another thread allocated just before us, free our allocated memory
-      // TODO: should we keep the allocated memory and assign it to some other region?
-      _mi_os_free(start, MI_REGION_SIZE, tld->stats);
-      start = mi_atomic_read_ptr(&region->start);
-    }    
+
+    // update the region count if this is a new max idx.
+    mi_atomic_compare_exchange(&regions_count, idx+1, idx);        
   }
+  mi_assert_internal(start != NULL && start != ALLOCATING);
+  mi_assert_internal(start == mi_atomic_read_ptr(&region->start));
 
   // Commit the blocks to memory
-  mi_assert_internal(start == mi_atomic_read_ptr(&region->start));
-  mi_assert_internal(start != NULL);
   void* blocks_start = (uint8_t*)start + (bitidx * MI_SEGMENT_SIZE);
   if (commit && !mi_option_is_enabled(mi_option_eager_region_commit)) {
     _mi_os_commit(blocks_start, mi_good_commit_size(size), tld->stats);  // only commit needed size (unless using large OS pages)
@@ -174,7 +187,7 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
     bitidx = 0;
     do {
       // skip ones
-      while ((m&1) == 1) { bitidx++; m>>=1; }
+      while ((m&1) != 0) { bitidx++; m>>=1; }
       // count zeros
       mi_assert_internal((m&1)==0);
       size_t zeros = 1;
@@ -315,14 +328,14 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
     // reset: 10x slowdown on malloc-large, decommit: 17x slowdown on malloc-large
     if (!mi_option_is_enabled(mi_option_large_os_pages)) {
       if (mi_option_is_enabled(mi_option_eager_region_commit)) {
-        //_mi_os_reset(p, size, stats);      // 10x slowdown on malloc-large
+        //_mi_os_reset(p, size, stats);      
       }
       else {      
-        //_mi_os_decommit(p, size, stats);  // 17x slowdown on malloc-large
+        //_mi_os_decommit(p, size, stats);  
       }
     }
 
-    // TODO: should we free empty regions? 
+    // TODO: should we free empty regions? currently only done _mi_mem_collect.
     // this frees up virtual address space which
     // might be useful on 32-bit systems?
     
