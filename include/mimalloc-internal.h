@@ -47,7 +47,6 @@ void       _mi_os_init(void);  // called from process init
 
 void*      _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, mi_os_tld_t* tld);
 size_t     _mi_os_page_size(void);
-uintptr_t  _mi_align_up(uintptr_t sz, size_t alignment);
 
 // "segment.c"
 mi_page_t* _mi_segment_page_alloc(size_t block_wsize, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
@@ -137,6 +136,19 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #define MI_INIT128(x) MI_INIT64(x),MI_INIT64(x)
 #define MI_INIT256(x) MI_INIT128(x),MI_INIT128(x)
 
+// Return the smallest alignment multiple that is >= sz
+static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
+  return ((sz + (alignment - 1)) & (-alignment));
+}
+
+static inline void* mi_align_up_ptr(void* p, size_t alignment) {
+  return (void*)_mi_align_up((uintptr_t)p, alignment);
+}
+
+// Return the nearest aligned address at or below p
+static inline void* mi_align_down_ptr(void* p, size_t alignment) {
+  return ((void *)((uintptr_t)p & (-alignment)));
+}
 
 // Overflow detecting multiply
 #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
