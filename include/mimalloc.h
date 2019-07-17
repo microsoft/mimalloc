@@ -121,7 +121,6 @@ mi_decl_export void mi_thread_stats_print(FILE* out) mi_attr_noexcept;
 typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat);
 mi_decl_export void mi_register_deferred_free(mi_deferred_free_fun* deferred_free) mi_attr_noexcept;
 
-
 // ------------------------------------------------------
 // Aligned allocation
 // ------------------------------------------------------
@@ -195,6 +194,8 @@ typedef struct mi_heap_area_s {
 typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
 
 mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block_visit_fun* visitor, void* arg);
+
+mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
 
 // ------------------------------------------------------
 // Convenience

@@ -104,6 +104,16 @@ static size_t mi_good_commit_size(size_t size) {
   return _mi_align_up(size, _mi_os_large_page_size());  
 }
 
+// Return if a pointer points into a region reserved by us.
+bool mi_is_in_heap_region(const void* p) {
+  size_t count = mi_atomic_read(&regions_count);
+  for (size_t i = 0; i < count; i++) {
+    uint8_t* start = (uint8_t*)mi_atomic_read_ptr(&regions[i].start);
+    if (start != NULL && (uint8_t*)p >= start && (uint8_t*)p < start + MI_REGION_SIZE) return true;
+  }
+  return false;
+}
+
 /* ----------------------------------------------------------------------------
 Commit from a region
 -----------------------------------------------------------------------------*/
