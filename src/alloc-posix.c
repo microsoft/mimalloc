@@ -65,8 +65,10 @@ void* mi_valloc(size_t size) mi_attr_noexcept {
 
 void* mi_pvalloc(size_t size) mi_attr_noexcept {
   size_t psize = _mi_os_page_size();
-  if (size >= SIZE_MAX - psize) return NULL; // overflow
-  size_t asize = ((size + psize - 1) / psize) * psize;
+  size_t asize;
+  if (mi_unlikely(mi_add_overflow(size, psize, &asize)))
+    return NULL; // overflow
+  asize = ((asize - 1) / psize) * psize; // TODO: use _mi_align_down
   return mi_malloc_aligned(asize, psize);
 }
 

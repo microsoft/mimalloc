@@ -302,8 +302,9 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
   // if not aligned, free it, overallocate, and unmap around it
   if (((uintptr_t)p % alignment != 0)) {
     mi_os_mem_free(p, size, stats);
-    if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
-    size_t over_size = size + alignment;
+    size_t over_size;
+    if (mi_unlikely(mi_add_overflow(size, alignment, &over_size)))
+      return NULL; // overflow
 
 #if _WIN32
     // over-allocate and than re-allocate exactly at an aligned address in there.

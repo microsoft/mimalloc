@@ -109,6 +109,9 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #define mi_likely(x)       (x)
 #endif
 
+#ifndef __has_builtin
+#define __has_builtin(x)  0
+#endif
 
 #if defined(_MSC_VER)
 #define mi_decl_noinline   __declspec(noinline)
@@ -144,6 +147,17 @@ static inline bool mi_mul_overflow(size_t size, size_t count, size_t* total) {
   *total = size * count;
   return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
           && size > 0 && (SIZE_MAX / size) < count);
+}
+
+// Overflow detecting addition
+static inline bool mi_add_overflow(size_t a, size_t b, size_t* total) {
+#if __has_builtin(__builtin_add_overflow) || __GNUC__ >= 5
+  return __builtin_add_overflow(a, b, total);
+#else
+   if (a >= (SIZE_MAX - b)) return true; // overflow
+   *total = a + b;
+   return false;
+#endif
 }
 
 // Align a byte size to a size in _machine words_,
