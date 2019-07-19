@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <mimalloc.h>
+#include <mimalloc-override.h>
 
 #include <new>
 
@@ -40,11 +41,6 @@ int main() {
   delete t;
   t = new (std::nothrow) Test(42);
   delete t;
-  int err = mi_posix_memalign(&p1,32,60);
-  if (!err) free(p1);
-  free(p);
-  mi_collect(true);
-  mi_stats_print(NULL);  // MIMALLOC_VERBOSE env is set to 2
   return 0;
 }
 
