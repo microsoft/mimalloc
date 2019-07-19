@@ -6,6 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
+#include "mimalloc-atomic.h"
 
 #include <stdio.h>
 #include <string.h> // strcmp
@@ -50,7 +51,7 @@ static mi_option_desc_t options[_mi_option_last] =
 
   // the following options are experimental and not all combinations make sense.
   { 1, UNINIT, "eager_commit" },        // note: if eager_region_commit is on, this should be on too.
-  #ifdef _WIN32
+  #ifdef _WIN32   // and BSD?
   { 0, UNINIT, "eager_region_commit" }, // don't commit too eagerly on windows (just for looks...)
   #else
   { 1, UNINIT, "eager_region_commit" },
@@ -58,8 +59,8 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, "large_os_pages" },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, "page_reset" },
   { 0, UNINIT, "cache_reset" },
-  { 0, UNINIT, "reset_decommits" },
-  { 0, UNINIT, "reset_discards" }
+  { 0, UNINIT, "reset_decommits" },     // note: cannot enable this if secure is on 
+  { 0, UNINIT, "reset_discards" }       // note: cannot enable this if secure is on
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -106,6 +107,8 @@ void mi_option_enable_default(mi_option_t option, bool enable) {
 // --------------------------------------------------------
 // Messages
 // --------------------------------------------------------
+#define MAX_ERROR_COUNT (10)
+static uintptr_t error_count = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
 
 // Define our own limited `fprintf` that avoids memory allocation.
 // We do this using `snprintf` with a limited buffer.
@@ -153,6 +156,7 @@ void _mi_verbose_message(const char* fmt, ...) {
 
 void _mi_error_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
+  if (mi_atomic_increment(&error_count) > MAX_ERROR_COUNT) return;
   va_list args;
   va_start(args,fmt);
   mi_vfprintf(stderr, "mimalloc: error: ", fmt, args);
@@ -162,6 +166,7 @@ void _mi_error_message(const char* fmt, ...) {
 
 void _mi_warning_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
+  if (mi_atomic_increment(&error_count) > MAX_ERROR_COUNT) return;
   va_list args;
   va_start(args,fmt);
   mi_vfprintf(stderr, "mimalloc: warning: ", fmt, args);
