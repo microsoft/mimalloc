@@ -23,6 +23,9 @@
     <ClInclude Include="..\..\include\mimalloc-atomic.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc-override.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\alloc.c">

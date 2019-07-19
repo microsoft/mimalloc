@@ -246,10 +246,10 @@ mi_decl_export void  mi_option_set(mi_option_t option, long value);
 mi_decl_export void  mi_option_set_default(mi_option_t option, long value);
 
 
-// --------------------------------------------------------------------------------------------
-// mi prefixed implementations of various posix, Unix, Windows, and C++ allocation functions.
-// (This can be convenient when providing overrides of these functions.)
-// --------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------------
+// "mi" prefixed implementations of various posix, Unix, Windows, and C++ allocation functions.
+// (This can be convenient when providing overrides of these functions as done in `mimalloc-override.h`.)
+// -------------------------------------------------------------------------------------------------------
 
 mi_decl_export size_t mi_malloc_size(const void* p) mi_attr_noexcept;
 mi_decl_export size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept;
