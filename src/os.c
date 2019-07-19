@@ -471,7 +471,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
   #endif
   if (err != 0) {
-    _mi_warning_message("commit/decommit error: start: 0x%8p, csize: 0x%8zux, err: %i\n", start, csize, err);
+    _mi_warning_message("commit/decommit error: start: 0x%p, csize: 0x%x, err: %i\n", start, csize, err);
   }
   mi_assert_internal(err == 0);
   return (err == 0);
@@ -503,8 +503,10 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
         else _mi_stat_decrease(&stats->reset, csize);
   if (!reset) return true; // nothing to do on unreset!
 
-  #if MI_DEBUG>1
-  memset(start, 0, csize); // pretend it is eagerly reset
+  #if (MI_DEBUG>1) 
+  if (!mi_option_is_enabled(mi_option_secure)) {
+    memset(start, 0, csize); // pretend it is eagerly reset
+  }
   #endif
 
 #if defined(_WIN32)
@@ -535,7 +537,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   int err = madvise(start, csize, MADV_DONTNEED);
 #endif
   if (err != 0) {
-    _mi_warning_message("madvise reset error: start: 0x%8p, csize: 0x%8zux, errno: %i\n", start, csize, errno);
+    _mi_warning_message("madvise reset error: start: 0x%p, csize: 0x%x, errno: %i\n", start, csize, errno);
   }
   //mi_assert(err == 0);
   if (err != 0) return false;
@@ -584,7 +586,7 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   err = mprotect(start, csize, protect ? PROT_NONE : (PROT_READ | PROT_WRITE));
 #endif
   if (err != 0) {
-    _mi_warning_message("mprotect error: start: 0x%8p, csize: 0x%8zux, err: %i\n", start, csize, err);
+    _mi_warning_message("mprotect error: start: 0x%p, csize: 0x%x, err: %i\n", start, csize, err);
   }
   return (err == 0);
 }
