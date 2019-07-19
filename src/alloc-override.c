@@ -19,10 +19,6 @@ terms of the MIT license. A copy of the license can be found in the file
 // Override system malloc
 // ------------------------------------------------------
 
-#if defined(_MSC_VER)
-#pragma warning(disable:4273)  // inconsistent dll linking
-#endif
-
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
   // use aliasing to alias the exported function to one of our `mi_` functions
   #if (defined(__GNUC__) && __GNUC__ >= 9)
@@ -62,6 +58,9 @@ terms of the MIT license. A copy of the license can be found in the file
     MI_INTERPOSE_MI(strdup),
     MI_INTERPOSE_MI(strndup)
   };
+#elif defined(_MSC_VER)
+  // cannot override malloc unless using a dll.
+  // we just override new/delete which does work in a static library.
 #else
   // On all other systems forward to our API
   void* malloc(size_t size)              mi_attr_noexcept  MI_FORWARD1(mi_malloc, size);
@@ -94,7 +93,7 @@ terms of the MIT license. A copy of the license can be found in the file
   void* operator new  (std::size_t n, const std::nothrow_t& tag) noexcept { UNUSED(tag); return mi_new_nothrow(n); }
   void* operator new[](std::size_t n, const std::nothrow_t& tag) noexcept { UNUSED(tag); return mi_new_nothrow(n); }
 
-  #if (__cplusplus >= 201402L)
+  #if (__cplusplus >= 201402L || _MSC_VER >= 1916)
   void operator delete  (void* p, std::size_t n) MI_FORWARD02(mi_free_size,p,n);
   void operator delete[](void* p, std::size_t n) MI_FORWARD02(mi_free_size,p,n);
   #endif

@@ -43,8 +43,7 @@ int main() {
   delete t;
   t = new (std::nothrow) Test(42);
   delete t;
-  free(p);
- return 0;
+  return 0;
 }
 
 class Static {
