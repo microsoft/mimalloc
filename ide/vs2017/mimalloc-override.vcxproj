@@ -70,21 +70,25 @@
     <OutDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
     <TargetExt>.dll</TargetExt>
+    <TargetName>mimalloc</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
     <TargetExt>.dll</TargetExt>
+    <TargetName>mimalloc</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
     <TargetExt>.dll</TargetExt>
+    <TargetName>mimalloc</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
     <TargetExt>.dll</TargetExt>
+    <TargetName>mimalloc</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -96,6 +100,7 @@
       <PreprocessorDefinitions>MI_SHARED_LIB;MI_SHARED_LIB_EXPORT;MI_MALLOC_OVERRIDE;_MBCS;%(PreprocessorDefinitions);</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <SupportJustMyCode>false</SupportJustMyCode>
+      <CompileAs>Default</CompileAs>
     </ClCompile>
     <PostBuildEvent>
       <Command>
@@ -106,8 +111,7 @@
       </Message>
     </PostBuildEvent>
     <Link>
-      <EntryPointSymbol>DllEntry</EntryPointSymbol>
-      <AdditionalDependencies>kernel32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>../../bin/mimalloc-redirect32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>
       <ModuleDefinitionFile>
@@ -124,6 +128,7 @@
       <PreprocessorDefinitions>MI_SHARED_LIB;MI_SHARED_LIB_EXPORT;MI_MALLOC_OVERRIDE;_MBCS;%(PreprocessorDefinitions);</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <SupportJustMyCode>false</SupportJustMyCode>
+      <CompileAs>Default</CompileAs>
     </ClCompile>
     <PostBuildEvent>
       <Command>
@@ -134,8 +139,7 @@
       </Message>
     </PostBuildEvent>
     <Link>
-      <EntryPointSymbol>DllEntry</EntryPointSymbol>
-      <AdditionalDependencies>kernel32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>../../bin/mimalloc-redirect.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>
       <ModuleDefinitionFile>
@@ -156,12 +160,12 @@
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <WholeProgramOptimization>false</WholeProgramOptimization>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <CompileAs>Default</CompileAs>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <EntryPointSymbol>DllEntry</EntryPointSymbol>
-      <AdditionalDependencies>kernel32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>../../bin/mimalloc-redirect32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
     </Link>
@@ -188,12 +192,12 @@
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <WholeProgramOptimization>false</WholeProgramOptimization>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <CompileAs>Default</CompileAs>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <EntryPointSymbol>DllEntry</EntryPointSymbol>
-      <AdditionalDependencies>kernel32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>../../bin/mimalloc-redirect.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
     </Link>
@@ -219,7 +223,18 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="..\..\src\alloc-override-win.c" />
+    <ClCompile Include="..\..\src\alloc-override-win.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\src\alloc-override.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\src\alloc-posix.c" />
     <ClCompile Include="..\..\src\alloc.c" />
     <ClCompile Include="..\..\src\heap.c" />

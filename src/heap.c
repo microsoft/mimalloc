@@ -172,7 +172,7 @@ void mi_collect(bool force) mi_attr_noexcept {
 ----------------------------------------------------------- */
 
 mi_heap_t* mi_heap_get_default(void) {
-  mi_thread_init();
+  // mi_thread_init();
   return mi_get_default_heap();
 }
 

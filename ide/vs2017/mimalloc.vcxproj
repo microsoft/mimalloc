@@ -70,21 +70,25 @@
     <OutDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
     <TargetExt>.lib</TargetExt>
+    <TargetName>mimalloc-static</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
     <TargetExt>.lib</TargetExt>
+    <TargetName>mimalloc-static</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
     <TargetExt>.lib</TargetExt>
+    <TargetName>mimalloc-static</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
     <TargetExt>.lib</TargetExt>
+    <TargetName>mimalloc-static</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>

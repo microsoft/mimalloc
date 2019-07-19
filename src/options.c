@@ -16,6 +16,10 @@ int mi_version(void) mi_attr_noexcept {
   return MI_MALLOC_VERSION;
 }
 
+#ifdef _WIN32
+#include <conio.h>
+#endif
+
 // --------------------------------------------------------
 // Options
 // --------------------------------------------------------
@@ -31,7 +35,7 @@ typedef struct mi_option_desc_s {
   const char* name;   // option name without `mimalloc_` prefix
 } mi_option_desc_t;
 
-static mi_option_desc_t options[_mi_option_last] = 
+static mi_option_desc_t options[_mi_option_last] =
 {
   // stable options
   { 0, UNINIT, "show_stats" },
@@ -41,15 +45,15 @@ static mi_option_desc_t options[_mi_option_last] =
   // the following options are experimental and not all combinations make sense.
   { 0, UNINIT, "page_reset" },
   { 0, UNINIT, "cache_reset" },
-  { 1, UNINIT, "eager_commit" },     
-  { 1, UNINIT, "eager_region_commit" }, // eager_commit should be on when eager_region_commit is on 
+  { 1, UNINIT, "eager_commit" },
+  { 1, UNINIT, "eager_region_commit" }, // eager_commit should be on when eager_region_commit is on
   { 0, UNINIT, "large_os_pages" },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
-  { 0, UNINIT, "reset_decommits" },     
-  { 0, UNINIT, "reset_discards" },   
+  { 0, UNINIT, "reset_decommits" },
+  { 0, UNINIT, "reset_discards" },
   #if MI_SECURE
   { MI_SECURE, INITIALIZED, "secure" } // in a secure build the environment setting is ignored
   #else
-  { 0, UNINIT, "secure" }              
+  { 0, UNINIT, "secure" }
   #endif
 };
 
@@ -104,7 +108,17 @@ static void mi_vfprintf( FILE* out, const char* prefix, const char* fmt, va_list
   char buf[256];
   if (fmt==NULL) return;
   if (out==NULL) out = stdout;
+  if (_mi_preloading()) return;  
   vsnprintf(buf,sizeof(buf)-1,fmt,args);
+  #ifdef _WIN32
+  // on windows with redirection, the C runtime uses us and we cannot call `fputs` 
+  // while called from the C runtime itself, so use a non-locking option
+  if (out==stderr) { 
+    if (prefix != NULL) _cputs(prefix); 
+    _cputs(buf); 
+    return; 
+  }
+  #endif
   if (prefix != NULL) fputs(prefix,out);
   fputs(buf,out);
 }
@@ -174,21 +188,29 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
   dest[dest_size - 1] = 0;
 }
 
-static void mi_option_init(mi_option_desc_t* desc) {
-  desc->init = DEFAULTED;
-  // Read option value from the environment
-  char buf[32];
-  mi_strlcpy(buf, "mimalloc_", sizeof(buf));
-  mi_strlcat(buf, desc->name, sizeof(buf));
+static const char* mi_getenv(const char* name) {
+  if (_mi_preloading()) return NULL;  // don't call getenv too early
   #pragma warning(suppress:4996)
-  char* s = getenv(buf);
+  const char* s = getenv(name);
   if (s == NULL) {
+    char buf[64+1];
+    strncpy_s(buf,64,name,64); buf[64] = 0;
     for (size_t i = 0; i < strlen(buf); i++) {
-      buf[i] = toupper(buf[i]);
+      buf[i] = toupper(name[i]);
     }
     #pragma warning(suppress:4996)
     s = getenv(buf);
   }
+  return s;
+}
+
+static void mi_option_init(mi_option_desc_t* desc) {
+  if (!_mi_preloading()) desc->init = DEFAULTED;
+  // Read option value from the environment
+  char buf[64];
+  mi_strlcpy(buf, "mimalloc_", sizeof(buf));
+  mi_strlcat(buf, desc->name, sizeof(buf));
+  const char* s = mi_getenv(buf);  
   if (s != NULL) {
     mi_strlcpy(buf, s, sizeof(buf));
     for (size_t i = 0; i < strlen(buf); i++) {

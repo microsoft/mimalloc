@@ -194,4 +194,5 @@ int posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_me
 #pragma GCC visibility pop
 #endif
 
-#endif // MI_MALLOC_OVERRIDE & !_WIN32
+#endif // MI_MALLOC_OVERRIDE && !_WIN32
+

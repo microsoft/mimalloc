@@ -46,9 +46,6 @@
     <ClCompile Include="..\..\src\alloc-aligned.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\alloc-override-win.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\heap.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -61,7 +58,13 @@
     <ClCompile Include="..\..\src\memory.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\alloc-override.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\alloc-posix.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\alloc-override-win.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -393,12 +393,6 @@ void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_realloc(mi_get_default_heap(),p,newsize);
 }
 
-void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
-  size_t total;
-  if (mi_mul_overflow(count, size, &total)) return NULL;
-  return _mi_heap_realloc_zero(mi_get_default_heap(),p,total,true);
-}
-
 void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
   return mi_heap_reallocn(mi_get_default_heap(),p,count,size);
 }
@@ -537,6 +531,7 @@ std_new_handler_t mi_get_new_handler() {
   return _ZSt15get_new_handlerv();
 }
 #else
+// note: on windows we could dynamically link to `?get_new_handler@std@@YAP6AXXZXZ`.
 std_new_handler_t mi_get_new_handler() {
   return NULL;
 }

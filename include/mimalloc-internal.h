@@ -35,6 +35,7 @@ bool       _mi_is_main_thread(void);
 uintptr_t  _mi_ptr_cookie(const void* p);
 uintptr_t  _mi_random_shuffle(uintptr_t x);
 uintptr_t  _mi_random_init(uintptr_t seed /* can be zero */);
+bool       _mi_preloading();  // true while the C runtime is not ready
 
 // os.c
 size_t     _mi_os_page_size(void);

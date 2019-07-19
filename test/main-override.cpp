@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <mimalloc.h>
+#include <windows.h>
 
 #include <new>
 
@@ -22,15 +23,17 @@ public:
   ~Test() { }
 };
 
-int main() {
-  mi_stats_reset();
+
+int main() {   
+  //mi_malloc_override();
+  mi_stats_reset();    
   atexit(free_p);
   void* p1 = malloc(78);
-  void* p2 = malloc(24);
+  void* p2 = _aligned_malloc(24,16);
   free(p1);
   p1 = malloc(8);
-  char* s = mi_strdup("hello\n");
-  free(p2);
+  char* s = _strdup("hello\n");
+  _aligned_free(p2);
   p2 = malloc(16);
   p1 = realloc(p1, 32);
   free(p1);
@@ -40,12 +43,8 @@ int main() {
   delete t;
   t = new (std::nothrow) Test(42);
   delete t;
-  int err = mi_posix_memalign(&p1,32,60);
-  if (!err) free(p1);
   free(p);
-  mi_collect(true);
-  mi_stats_print(NULL);  // MIMALLOC_VERBOSE env is set to 2
-  return 0;
+ return 0;
 }
 
 class Static {

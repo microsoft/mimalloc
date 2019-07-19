@@ -98,11 +98,6 @@ static int __cdecl mi_setmaxstdio(int newmax);
 // Microsoft allocation extensions
 // ------------------------------------------------------
 
-static void* mi__expand(void* p, size_t newsize) {
-  void* res = mi_expand(p, newsize);
-  if (res == NULL) errno = ENOMEM;
-  return res;
-}
 
 typedef size_t mi_nothrow_t;
 

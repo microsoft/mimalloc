@@ -80,3 +80,14 @@ void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  
   return newp;
 }
 
+void* mi__expand(void* p, size_t newsize) mi_attr_noexcept {  // Microsoft
+  void* res = mi_expand(p, newsize);
+  if (res == NULL) errno = ENOMEM;
+  return res;
+}
+
+void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept { // Microsoft
+  size_t total;
+  if (mi_mul_overflow(count, size, &total)) return NULL;
+  return _mi_heap_realloc_zero(mi_get_default_heap(), p, total, true);
+}
