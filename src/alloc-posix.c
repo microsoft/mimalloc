@@ -18,6 +18,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // ------------------------------------------------------
 
 #include <errno.h>
+#include <string.h>  // memcpy
 
 #ifndef EINVAL
 #define EINVAL 22
@@ -91,3 +92,58 @@ void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept { // Micr
   if (mi_mul_overflow(count, size, &total)) return NULL;
   return _mi_heap_realloc_zero(mi_get_default_heap(), p, total, true);
 }
+
+unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept {
+  if (s==NULL) return NULL;
+  size_t len;
+  for(len = 0; s[len] != 0; len++) { }
+  size_t size = (len+1)*sizeof(unsigned short);
+  unsigned short* p = (unsigned short*)mi_malloc(size);
+  if (p != NULL) {
+    memcpy(p,s,size);
+  }
+  return p;
+}
+
+unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexcept {
+  return (unsigned char*)mi_strdup((const char*)s);
+}
+
+int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
+  if (buf==NULL || name==NULL) return EINVAL;
+  if (size != NULL) *size = 0;
+  #pragma warning(suppress:4996)
+  char* p = getenv(name);
+  if (p==NULL) {
+    *buf = NULL;    
+  }
+  else {
+    *buf = mi_strdup(p);
+    if (*buf==NULL) return ENOMEM;
+    if (size != NULL) *size = strlen(p);
+  }
+  return 0;
+}
+
+int mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name) mi_attr_noexcept {
+  if (buf==NULL || name==NULL) return EINVAL;
+  if (size != NULL) *size = 0;
+#if !defined(_WIN32) || (defined(WINAPI_FAMILY) && (WINAPI_FAMILY != WINAPI_FAMILY_DESKTOP_APP))
+  // not supported
+  *buf = NULL;
+  return EINVAL;
+#else
+  #pragma warning(suppress:4996)
+  unsigned short* p = (unsigned short*)_wgetenv((const wchar_t*)name);
+  if (p==NULL) {
+    *buf = NULL;
+  }
+  else {
+    *buf = mi_wcsdup(p);
+    if (*buf==NULL) return ENOMEM;
+    if (size != NULL) *size = wcslen((const wchar_t*)p);
+  }
+  return 0;
+#endif
+}
+

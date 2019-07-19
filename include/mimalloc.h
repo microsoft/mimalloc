@@ -269,6 +269,11 @@ mi_decl_export void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noe
 mi_decl_export void* mi_aligned_recalloc(void* p, size_t size, size_t newcount, size_t alignment) mi_attr_noexcept;
 mi_decl_export void* mi_aligned_offset_recalloc(void* p, size_t size, size_t newcount, size_t alignment, size_t offset) mi_attr_noexcept;
 
+mi_decl_export unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept;
+mi_decl_export unsigned char*  mi_mbsdup(const unsigned char* s)  mi_attr_noexcept;
+mi_decl_export int  mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept;
+mi_decl_export int  mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name) mi_attr_noexcept;
+
 mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
 mi_decl_export void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept;
 mi_decl_export void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept;

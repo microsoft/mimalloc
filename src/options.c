@@ -194,7 +194,7 @@ static const char* mi_getenv(const char* name) {
   const char* s = getenv(name);
   if (s == NULL) {
     char buf[64+1];
-    strncpy_s(buf,64,name,64); buf[64] = 0;
+    mi_strlcpy(buf,name,64);
     for (size_t i = 0; i < strlen(buf); i++) {
       buf[i] = toupper(name[i]);
     }

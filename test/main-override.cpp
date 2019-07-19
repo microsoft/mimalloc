@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include <mimalloc.h>
-#include <windows.h>
+#include <mimalloc-override.h>
 
 #include <new>
 
