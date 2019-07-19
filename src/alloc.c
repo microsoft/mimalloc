@@ -198,28 +198,29 @@ static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, mi_pag
 
 // Free a block
 void mi_free(void* p) mi_attr_noexcept
-{
-  // optimize: merge null check with the segment masking (below)
-  //if (p == NULL) return;
-
+{  
 #if (MI_DEBUG>0)
   if (mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0)) {
     _mi_error_message("trying to free an invalid (unaligned) pointer: %p\n", p);
     return;
   }
 #endif
-
+  
   const mi_segment_t* const segment = _mi_ptr_segment(p);
-  if (segment == NULL) return;  // checks for (p==NULL)
-  bool local = (_mi_thread_id() == segment->thread_id);  // preload, note: putting the thread_id in the page->flags does not improve performance
+  if (segment == NULL) return;  // checks for (p==NULL) 
 
 #if (MI_DEBUG>0)
+  if (mi_unlikely(!mi_is_in_heap_region(p))) {
+    _mi_warning_message("possibly trying to mi_free a pointer that does not point to a valid heap region: %p\n"
+      "(this may still be a valid very large allocation (over 64MiB))\n", p);
+  }
   if (mi_unlikely(_mi_ptr_cookie(segment) != segment->cookie)) {
     _mi_error_message("trying to mi_free a pointer that does not point to a valid heap space: %p\n", p);
     return;
   }
 #endif
 
+  bool local = (_mi_thread_id() == segment->thread_id);  // preload, note: putting the thread_id in the page->flags does not improve performance
   mi_page_t* page = _mi_segment_page_of(segment, p);
 
 #if (MI_STAT>1)
