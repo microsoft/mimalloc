@@ -31,14 +31,14 @@ jobs:
      ubuntu-16.04
   strategy:
     matrix:
-      Debug:
-        CC: gcc
-        CXX: g++
+      GCC-7 Debug:
+        CC: gcc-7
+        CXX: g++-7
         BuildType: debug
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_CHECK_FULL=ON
-      Release:
-        CC: gcc
-        CXX: g++
+      GCC-7 Release:
+        CC: gcc-7
+        CXX: g++-7
         BuildType: release
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
       Debug Clang:
@@ -53,6 +53,15 @@ jobs:
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
 
   steps:
+  - script: |
+      sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+      sudo apt-get update
+      sudo apt-get install -y libc++-dev libc++abi-dev libc++abi1 libstdc++-7-dev gcc-7 g++-7
+      sudo update-alternatives --install /usr/bin/cc cc /usr/bin/$(CC) 100
+      sudo update-alternatives --set cc /usr/bin/$(CC)
+      sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/$(CXX) 100
+      sudo update-alternatives --set c++ /usr/bin/$(CXX)
+
   - task: CMake@1
     inputs:
       workingDirectory: $(BuildType)
