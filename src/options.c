@@ -79,7 +79,7 @@ static void mi_option_init(mi_option_desc_t* desc);
 long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
   mi_option_desc_t* desc = &options[option];
-  if (desc->init == UNINIT) {
+  if (mi_unlikely(desc->init == UNINIT)) {
     mi_option_init(desc);
     if (option != mi_option_verbose) {
       _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
