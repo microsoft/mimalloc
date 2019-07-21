@@ -191,7 +191,7 @@ library so all calls to the standard `malloc` interface are
 resolved to the _mimalloc_ library.
 
 - `env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram` (on Linux, BSD, etc.)
-- `env DYLD_INSERT_LIBRARIES=usr/lib/libmimalloc.dylib myprogram` (On macOS)
+- `env DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram` (On macOS)
 
   Note certain security restrictions may apply when doing this from
   the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
