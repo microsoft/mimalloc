@@ -216,8 +216,8 @@ reuse and avoid setting/clearing guard pages in secure mode.
 ------------------------------------------------------------------------------- */
 
 static void mi_segments_track_size(long segment_size, mi_segments_tld_t* tld) {
-  if (segment_size>=0) _mi_stat_increase(&tld->stats->segments,1);
-                  else _mi_stat_decrease(&tld->stats->segments,1);
+  if (segment_size>=0) mi_stat_increase(tld->stats->segments,1);
+                  else mi_stat_decrease(tld->stats->segments,1);
   tld->count += (segment_size >= 0 ? 1 : -1);
   if (tld->count > tld->peak_count) tld->peak_count = tld->count;
   tld->current_size += segment_size;
@@ -391,11 +391,10 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
     segment->pages[i].is_reset = false;
     segment->pages[i].is_committed = commit;
   }
-  _mi_stat_increase(&tld->stats->page_committed, segment->segment_info_size);
+  mi_stat_increase(tld->stats->page_committed, segment->segment_info_size);
   //fprintf(stderr,"mimalloc: alloc segment at %p\n", (void*)segment);
   return segment;
 }
-
 
 static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
   UNUSED(force);
@@ -407,7 +406,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   mi_assert_expensive(!mi_segment_queue_contains(&tld->medium_free, segment));
   mi_assert(segment->next == NULL);
   mi_assert(segment->prev == NULL);
-  _mi_stat_decrease(&tld->stats->page_committed, segment->segment_info_size);
+  mi_stat_decrease(tld->stats->page_committed, segment->segment_info_size);
   segment->thread_id = 0;
 
   // update reset memory statistics
@@ -477,9 +476,11 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_sta
   mi_assert_internal(page->segment_in_use);
   mi_assert_internal(mi_page_all_free(page));
   mi_assert_internal(page->is_committed);
+#if MI_STAT>0  
   size_t inuse = page->capacity * page->block_size;
-  _mi_stat_decrease(&stats->page_committed, inuse);
-  _mi_stat_decrease(&stats->pages, 1);
+#endif
+  mi_stat_decrease(stats->page_committed, inuse);
+  mi_stat_decrease(stats->pages, 1);
 
   // reset the page memory to reduce memory pressure?
   if (!page->is_reset && mi_option_is_enabled(mi_option_page_reset)) {
@@ -553,7 +554,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
     segment->abandoned_next = (mi_segment_t*)abandoned;
   } while (!mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, segment, segment->abandoned_next));
   mi_atomic_increment(&abandoned_count);
-  _mi_stat_increase(&tld->stats->segments_abandoned,1);
+  mi_stat_increase(tld->stats->segments_abandoned,1);
   mi_segments_track_size(-((long)segment->segment_size), tld);
 }
 
@@ -562,7 +563,7 @@ void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert_expensive(mi_segment_is_valid(segment));
   segment->abandoned++;
-  _mi_stat_increase(&tld->stats->pages_abandoned, 1);
+  mi_stat_increase(tld->stats->pages_abandoned, 1);
   mi_assert_internal(segment->abandoned <= segment->used);
   if (segment->used == segment->abandoned) {
     // all pages are abandoned, abandon the entire segment
@@ -597,7 +598,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
     mi_segments_track_size((long)segment->segment_size,tld);
     mi_assert_internal(segment->next == NULL && segment->prev == NULL);
     mi_assert_expensive(mi_segment_is_valid(segment));
-    _mi_stat_decrease(&tld->stats->segments_abandoned,1);
+    mi_stat_decrease(tld->stats->segments_abandoned,1);
 
     // add its abandoned pages to the current thread
     mi_assert(segment->abandoned == segment->used);
@@ -606,7 +607,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
       if (page->segment_in_use) {
         segment->abandoned--;
         mi_assert(page->next == NULL);
-        _mi_stat_decrease(&tld->stats->pages_abandoned, 1);
+        mi_stat_decrease(tld->stats->pages_abandoned, 1);
         if (mi_page_all_free(page)) {
           // if everything free by now, free the page
           mi_segment_page_clear(segment,page,tld->stats);

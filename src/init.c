@@ -334,7 +334,7 @@ void mi_thread_init(void) mi_attr_noexcept
   // don't further initialize for the main thread
   if (_mi_is_main_thread()) return;
 
-  _mi_stat_increase(&mi_get_default_heap()->tld->stats.threads, 1);
+  mi_stat_increase(mi_get_default_heap()->tld->stats.threads, 1);
 
   // set hooks so our mi_thread_done() will be called
   #if defined(_WIN32) && defined(MI_SHARED_LIB)
@@ -354,7 +354,7 @@ void mi_thread_done(void) mi_attr_noexcept {
   // stats
   mi_heap_t* heap = mi_get_default_heap();
   if (!_mi_is_main_thread() && mi_heap_is_initialized(heap))  {
-    _mi_stat_decrease(&heap->tld->stats.threads, 1);
+    mi_stat_decrease(heap->tld->stats.threads, 1);
   }
 
   // abandon the thread local heap

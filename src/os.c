@@ -170,6 +170,9 @@ void _mi_os_init() {
 
 static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 {
+#if MI_STAT==0
+  UNUSED(stats);
+#endif
   if (addr == NULL || size == 0) return true;
   bool err = false;
 #if defined(_WIN32)
@@ -179,8 +182,8 @@ static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 #else
   err = (munmap(addr, size) == -1);
 #endif
-  _mi_stat_decrease(&stats->committed, size); // TODO: what if never committed?
-  _mi_stat_decrease(&stats->reserved, size);
+  mi_stat_decrease(stats->committed, size); // TODO: what if never committed?
+  mi_stat_decrease(stats->reserved, size);
   if (err) {
 #pragma warning(suppress:4996)
     _mi_warning_message("munmap failed: %s, addr 0x%8li, size %lu\n", strerror(errno), (size_t)addr, size);
@@ -303,6 +306,9 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
 // Primitive allocation from the OS.
 // Note: the `alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
 static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, mi_stats_t* stats) {
+#if MI_STAT==0
+  UNUSED(stats);
+#endif
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   if (size == 0) return NULL;
 
@@ -317,10 +323,10 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, mi_
   int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
   p = mi_unix_mmap(size, try_alignment, protect_flags);
 #endif
-  _mi_stat_increase(&stats->mmap_calls, 1);
+  mi_stat_increase(stats->mmap_calls, 1);
   if (p != NULL) {
-    _mi_stat_increase(&stats->reserved, size);
-    if (commit) _mi_stat_increase(&stats->committed, size);
+    mi_stat_increase(stats->reserved, size);
+    if (commit) mi_stat_increase(stats->committed, size);
   }
   return p;
 }
@@ -453,17 +459,20 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
 // Usuelly commit is aligned liberal, while decommit is aligned conservative.
 // (but not for the reset version where we want commit to be conservative as well)
 static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservative, mi_stats_t* stats) {
+#if MI_STATS==0
+  UNUSED(stats);
+#endif  
   // page align in the range, commit liberally, decommit conservative
   size_t csize;
   void* start = mi_os_page_align_areax(conservative, addr, size, &csize);
   if (csize == 0) return true;
   int err = 0;
   if (commit) {
-    _mi_stat_increase(&stats->committed, csize);
-    _mi_stat_increase(&stats->commit_calls, 1);
+    mi_stat_increase(stats->committed, csize);
+    mi_stat_increase(stats->commit_calls, 1);
   }
   else {
-    _mi_stat_decrease(&stats->committed, csize);
+    mi_stat_decrease(stats->committed, csize);
   }
 
   #if defined(_WIN32)
@@ -505,12 +514,15 @@ bool _mi_os_commit_unreset(void* addr, size_t size, mi_stats_t* stats) {
 // pages and reduce swapping while keeping the memory committed.
 // We page align to a conservative area inside the range to reset.
 static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats) {
+#if MI_STAT==0
+  UNUSED(stats);
+#endif
   // page align conservatively within the range
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return true;
-  if (reset) _mi_stat_increase(&stats->reset, csize);
-        else _mi_stat_decrease(&stats->reset, csize);
+  if (reset) mi_stat_increase(stats->reset, csize);
+        else mi_stat_decrease(stats->reset, csize);
   if (!reset) return true; // nothing to do on unreset!
 
   #if MI_DEBUG>1
@@ -606,8 +618,6 @@ bool _mi_os_protect(void* addr, size_t size) {
 bool _mi_os_unprotect(void* addr, size_t size) {
   return mi_os_protectx(addr, size, false);
 }
-
-
 
 bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize, mi_stats_t* stats) {
   // page align conservatively within the range

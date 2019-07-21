@@ -28,6 +28,7 @@ void _mi_stats_done(mi_stats_t* stats) {
   Statistics operations
 ----------------------------------------------------------- */
 
+#if MI_STAT>0
 static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   if (amount == 0) return;
   bool in_main = ((uint8_t*)stat >= (uint8_t*)&_mi_stats_main
@@ -62,7 +63,6 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {
   mi_atomic_add( &stat->total, (int64_t)amount );
 }
 
-
 void _mi_stat_increase(mi_stat_count_t* stat, size_t amount) {
   mi_stat_update(stat, (int64_t)amount);
 }
@@ -70,6 +70,7 @@ void _mi_stat_increase(mi_stat_count_t* stat, size_t amount) {
 void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
   mi_stat_update(stat, -((int64_t)amount));
 }
+#endif /* MI_STAT>0 */
 
 // must be thread safe as it is called from stats_merge
 static void mi_stat_add(mi_stat_count_t* stat, const mi_stat_count_t* src, int64_t unit) {

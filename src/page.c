@@ -472,7 +472,7 @@ static void mi_page_free_list_extend( mi_heap_t* heap, mi_page_t* page, size_t e
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;
-  _mi_stat_increase(&stats->page_committed, extend * page->block_size);
+  mi_stat_increase(stats->page_committed, extend * page->block_size);
 }
 
 /* -----------------------------------------------------------
@@ -501,7 +501,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
 
   size_t page_size;
   _mi_page_start(_mi_page_segment(page), page, &page_size);  
-  _mi_stat_increase(&stats->pages_extended, 1);
+  mi_stat_increase(stats->pages_extended, 1);
 
   // calculate the extend count
   size_t extend = page->reserved - page->capacity;
@@ -607,7 +607,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
     page = next;
   } // for each page
 
-  _mi_stat_counter_increase(&heap->tld->stats.searches,count);
+  mi_stat_counter_increase(heap->tld->stats.searches,count);
 
   if (page == NULL) {
     page = rpage;
