@@ -69,7 +69,6 @@ terms of the MIT license. A copy of the license can be found in the file
 // Includes
 // ------------------------------------------------------
 
-#include <stdlib.h>     // size_t, malloc etc.
 #include <stdbool.h>    // bool
 #include <stdio.h>      // FILE
 
