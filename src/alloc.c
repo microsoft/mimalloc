@@ -8,7 +8,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
 
-#include <string.h>  // memset
+#include <string.h>  // memset, memcpy, strlen
+#include <stdlib.h>  // malloc, exit
 
 #define MI_IN_ALLOC_C
 #include "alloc-override.c"
@@ -463,7 +464,7 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
   }
 }
 #else
-#include <unistd.h>
+#include <unistd.h>  // pathconf
 static size_t mi_path_max() {
   static size_t path_max = 0;
   if (path_max <= 0) {

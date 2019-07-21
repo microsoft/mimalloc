@@ -15,8 +15,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
 
-#include <string.h>  // memset, memcpy
-
 /* -----------------------------------------------------------
   Definition of page queues for each block size
 ----------------------------------------------------------- */

@@ -8,7 +8,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-internal.h"
 
 #include <stdio.h>
-#include <string.h> // strcmp
+#include <stdlib.h> // strtol
+#include <string.h> // strncpy, strncat, strlen, strstr
 #include <ctype.h>  // toupper
 #include <stdarg.h>
 
