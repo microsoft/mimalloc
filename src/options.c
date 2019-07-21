@@ -214,10 +214,16 @@ static const char* mi_getenv(const char* name) {
   #pragma warning(suppress:4996)
   const char* s = getenv(name);
   if (s == NULL) {
+<<<<<<< HEAD
     char buf[64+1];
     mi_strlcpy(buf,name,64);
     for (size_t i = 0; i < strlen(buf); i++) {
       buf[i] = toupper(name[i]);
+=======
+    size_t buf_size = strlen(buf);
+    for (size_t i = 0; i < buf_size; i++) {
+      buf[i] = toupper(buf[i]);
+>>>>>>> Avoid using strlen function in loop
     }
     #pragma warning(suppress:4996)
     s = getenv(buf);
@@ -234,7 +240,8 @@ static void mi_option_init(mi_option_desc_t* desc) {
   const char* s = mi_getenv(buf);  
   if (s != NULL) {
     mi_strlcpy(buf, s, sizeof(buf));
-    for (size_t i = 0; i < strlen(buf); i++) {
+    size_t buf_size = strlen(buf); // TODO: use strnlen?
+    for (size_t i = 0; i < buf_size; i++) {
       buf[i] = toupper(buf[i]);
     }
     if (buf[0]==0 || strstr("1;TRUE;YES;ON", buf) != NULL) {
