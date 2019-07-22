@@ -75,7 +75,7 @@ including this header is not necessary.
 // ------------------------------------------------------
 #ifdef __cplusplus
   #include <new>
-  
+
   void operator delete(void* p) noexcept              { mi_free(p); };
   void operator delete[](void* p) noexcept            { mi_free(p); };
 
@@ -103,4 +103,4 @@ including this header is not necessary.
   #endif
 #endif
 
-#endif MIMALLOC_OVERRIDE_H
+#endif // MIMALLOC_OVERRIDE_H
