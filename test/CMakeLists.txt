@@ -24,14 +24,21 @@ target_link_libraries(dynamic-override PUBLIC mimalloc)
 add_executable(dynamic-override-cxx  main-override.cpp)
 target_link_libraries(dynamic-override-cxx PUBLIC mimalloc)
 
-# with a static library
+# overriding with a static object file works reliable as the symbols in the
+# object file have priority over those in library files
+add_executable(static-override-obj main-override.c ${MIMALLOC_TARGET_DIR}/mimalloc.o)
+target_include_directories(static-override-obj PUBLIC ${MIMALLOC_TARGET_DIR}/include)
+target_link_libraries(static-override-obj PUBLIC pthread)
+
+# overriding with a static library works too if using the `mimalloc-override.h`
+# header to redefine malloc/free.
+add_executable(static-override-static main-override-static.c)
+target_link_libraries(static-override-static PUBLIC mimalloc-static)
+
+
+# overriding with a static library: this may not work if the library is linked too late
 add_executable(static-override main-override.c)
 target_link_libraries(static-override PUBLIC mimalloc-static)
 
 add_executable(static-override-cxx  main-override.cpp)
 target_link_libraries(static-override-cxx PUBLIC mimalloc-static)
-
-# and with a static object file
-add_executable(static-override-obj main-override.c ${MIMALLOC_TARGET_DIR}/mimalloc.o)
-target_include_directories(static-override-obj PUBLIC ${MIMALLOC_TARGET_DIR}/include)
-target_link_libraries(static-override-obj PUBLIC pthread)

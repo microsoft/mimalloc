@@ -4,9 +4,10 @@
 #include <string.h>
 
 #include <mimalloc.h>
+#include <mimalloc-override.h>  // redefines malloc etc.
 
 int main() {
-  mi_version();       // ensure mimalloc library is linked
+  mi_version();
   void* p1 = malloc(78);
   void* p2 = malloc(24);
   free(p1);
