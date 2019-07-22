@@ -109,7 +109,7 @@ $(document).ready(function(){initNavTree('overrides.html','');});
 <p>On these systems we preload the mimalloc shared library so all calls to the standard <code>malloc</code> interface are resolved to the <em>mimalloc</em> library.</p>
 <ul>
 <li><code>env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram</code> (on Linux, BSD, etc.)</li>
-<li><p class="startli"><code>env DYLD_INSERT_LIBRARIES=usr/lib/libmimalloc.dylib myprogram</code> (On macOS)</p>
+<li><p class="startli"><code>env DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram</code> (On macOS)</p>
 <p class="startli">Note certain security restrictions may apply when doing this from the <a href="https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash">shell</a>.</p>
 </li>
 </ul>
