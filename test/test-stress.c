@@ -180,7 +180,7 @@ static DWORD WINAPI thread_entry(LPVOID param) {
 static void run_os_threads(size_t nthreads) {
   DWORD* tids = (DWORD*)malloc(nthreads * sizeof(DWORD));
   HANDLE* thandles = (HANDLE*)malloc(nthreads * sizeof(HANDLE));
-  for (intptr_t i = 0; i < nthreads; i++) {
+  for (uintptr_t i = 0; i < nthreads; i++) {
     thandles[i] = CreateThread(0, 4096, &thread_entry, (void*)(i), 0, &tids[i]);
   }
   for (int i = 0; i < nthreads; i++) {

@@ -19,6 +19,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <errno.h>
 #include <string.h>  // memcpy
+#include <stdlib.h>  // getenv
 
 #ifndef EINVAL
 #define EINVAL 22
@@ -115,7 +116,7 @@ int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
   #pragma warning(suppress:4996)
   char* p = getenv(name);
   if (p==NULL) {
-    *buf = NULL;    
+    *buf = NULL;
   }
   else {
     *buf = mi_strdup(p);
@@ -146,4 +147,3 @@ int mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name)
   return 0;
 #endif
 }
-
