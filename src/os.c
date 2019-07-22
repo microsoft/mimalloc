@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
-#include <string.h>  // memset
+#include <string.h>  // strerror
 #include <errno.h>
 
 #if defined(_WIN32)
