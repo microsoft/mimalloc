@@ -12,7 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 This header can be used to statically redirect malloc/free and new/delete
 to the mimalloc variants. This can be useful if one can include this file on
 each source file in a project (but be careful when using external code to
-not accidentally mix pointer from different allocators).
+not accidentally mix pointers from different allocators).
 
 On windows it can still be good to always try to include this header even
 when dynamically overriding since this will give better performance especially

@@ -384,12 +384,18 @@ bool _mi_preloading() {
 
 // Communicate with the redirection module on Windows
 #if defined(_WIN32) && defined(MI_SHARED_LIB) 
+#ifdef __cplusplus
+extern "C" {
+#endif
 mi_decl_export void _mi_redirect_init() {
   // called on redirection
   mi_redirected = true;
 }
 __declspec(dllimport) bool mi_allocator_init(const char** message);
 __declspec(dllimport) void mi_allocator_done();
+#ifdef __cplusplus
+}
+#endif
 #else
 static bool mi_allocator_init(const char** message) {
   if (message != NULL) *message = NULL;
