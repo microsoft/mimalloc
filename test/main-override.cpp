@@ -4,8 +4,6 @@
 #include <string.h>
 
 #include <mimalloc.h>
-#include <mimalloc-override.h>
-
 #include <new>
 
 static void* p = malloc(8);
@@ -24,16 +22,15 @@ public:
 };
 
 
-int main() {   
-  //mi_malloc_override();
-  mi_stats_reset();    
+int main() {
+  mi_version();
   atexit(free_p);
   void* p1 = malloc(78);
-  void* p2 = _aligned_malloc(24,16);
+  void* p2 = mi_malloc_aligned(16,24);
   free(p1);
   p1 = malloc(8);
-  char* s = _strdup("hello\n");
-  _aligned_free(p2);
+  char* s = mi_strdup("hello\n");
+  mi_free(p2);
   p2 = malloc(16);
   p1 = realloc(p1, 32);
   free(p1);

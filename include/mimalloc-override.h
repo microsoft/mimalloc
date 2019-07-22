@@ -69,11 +69,15 @@ including this header is not necessary.
 #define _aligned_offset_recalloc(p,s,n,a,o)   mi_recalloc_aligned_at(p,s,n,a,o)
 
 
-// ------------------------------------------------------
-// With a C++ compiler we override the new/delete operators.
+// -----------------------------------------------------------------
+// With a C++ compiler we can override all the new/delete operators
+// by defining 'MIMALLOC_DEFINE_NEW_DELETE' in some source file and
+// then including this header file. This is not needed when linking 
+// statically with the mimalloc library, but it can be more performant 
+// on Windows when using dynamic overiding as well.
 // see <https://en.cppreference.com/w/cpp/memory/new/operator_new>
-// ------------------------------------------------------
-#ifdef __cplusplus
+// -----------------------------------------------------------------
+#if defined(__cplusplus) && defined(MIMALLOC_DEFINE_NEW_DELETE)
   #include <new>
 
   void operator delete(void* p) noexcept              { mi_free(p); };
