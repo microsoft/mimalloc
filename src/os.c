@@ -10,6 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
+#include "mimalloc-atomic.h"
 
 #include <string.h>  // strerror
 #include <errno.h>
@@ -242,6 +243,23 @@ static void* mi_wasm_heap_grow(size_t size, size_t try_alignment) {
   return (void*) aligned_base;
 }
 #else
+static void* mi_unix_mmapx(size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
+  void* p = NULL;
+  #if (MI_INTPTR_SIZE >= 8) && !defined(MAP_ALIGNED)
+  // on 64-bit systems, use a special area for 4MiB aligned allocations
+  static volatile intptr_t aligned_base = ((intptr_t)1 << 42); // starting at 4TiB
+  if (try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE)==0 && (aligned_base%try_alignment)==0) {
+    intptr_t hint = mi_atomic_add(&aligned_base,size) - size;
+    p = mmap((void*)hint,size,protect_flags,flags,fd,0);
+    if (p==MAP_FAILED) p = NULL; // fall back to regular mmap
+  }
+  #endif
+  if (p==NULL) {
+    p = mmap(NULL,size,protect_flags,flags,fd,0);
+  }
+  return p;
+}
+
 static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) {
   void* p = NULL;
   #if !defined(MAP_ANONYMOUS)
@@ -278,12 +296,12 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
       // try large page allocation
       // TODO: if always failing due to permissions or no huge pages, try to avoid repeatedly trying?
       // Should we check this in _mi_os_init? (as on Windows)
-      p = mmap(NULL, size, protect_flags, lflags, fd, 0);
+      p = mi_unix_mmapx(size, try_alignment, protect_flags, lflags, fd);
       if (p == MAP_FAILED) p = NULL; // fall back to regular mmap if large is exhausted or no permission
     }
   }
   if (p == NULL) {
-    p = mmap(NULL, size, protect_flags, flags, -1, 0);
+    p = mi_unix_mmapx(size, try_alignment, protect_flags, flags, -1);
     if (p == MAP_FAILED) p = NULL;
   }
   return p;
@@ -439,7 +457,7 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
   return mi_os_page_align_areax(true, addr, size, newsize);
 }
 
-// Commit/Decommit memory. 
+// Commit/Decommit memory.
 // Usuelly commit is aligned liberal, while decommit is aligned conservative.
 // (but not for the reset version where we want commit to be conservative as well)
 static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservative, mi_stats_t* stats) {
@@ -503,7 +521,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
         else _mi_stat_decrease(&stats->reset, csize);
   if (!reset) return true; // nothing to do on unreset!
 
-  #if (MI_DEBUG>1) 
+  #if (MI_DEBUG>1)
   if (!mi_option_is_enabled(mi_option_secure)) {
     memset(start, 0, csize); // pretend it is eagerly reset
   }
@@ -521,7 +539,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
     void* p = VirtualAlloc(start, csize, MEM_RESET, PAGE_READWRITE);
     mi_assert_internal(p == start);
     if (p != start) return false;
-  }  
+  }
 #else
 #if defined(MADV_FREE)
   static int advice = MADV_FREE;
