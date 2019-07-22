@@ -8,7 +8,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_TYPES_H
 #define MIMALLOC_TYPES_H
 
-#include <stdlib.h>   // size_t etc.
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
 

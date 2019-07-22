@@ -12,7 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
 
-#include <string.h>  // memset
+#include <string.h>  // strerror
 #include <errno.h>
 
 #if defined(_WIN32)
@@ -211,7 +211,7 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
   if (use_large_os_page(size, try_alignment)) {
     uintptr_t try_ok = mi_atomic_read(&large_page_try_ok);
     if (try_ok > 0) {
-      // if a large page page allocation fails, it seems the calls to VirtualAlloc get very expensive.
+      // if a large page allocation fails, it seems the calls to VirtualAlloc get very expensive.
       // therefore, once a large page allocation failed, we don't try again for `large_page_try_ok` times.
       mi_atomic_compare_exchange(&large_page_try_ok, try_ok - 1, try_ok);
     }

@@ -7,7 +7,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
-#include <string.h>  // memcpy
+#include <string.h>  // memcpy, memset
+#include <stdlib.h>  // atexit
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {

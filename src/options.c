@@ -9,7 +9,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-atomic.h"
 
 #include <stdio.h>
-#include <string.h> // strcmp
+#include <stdlib.h> // strtol
+#include <string.h> // strncpy, strncat, strlen, strstr
 #include <ctype.h>  // toupper
 #include <stdarg.h>
 
@@ -59,7 +60,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, "large_os_pages" },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, "page_reset" },
   { 0, UNINIT, "cache_reset" },
-  { 0, UNINIT, "reset_decommits" },     // note: cannot enable this if secure is on 
+  { 0, UNINIT, "reset_decommits" },     // note: cannot enable this if secure is on
   { 0, UNINIT, "reset_discards" }       // note: cannot enable this if secure is on
 };
 
@@ -68,7 +69,7 @@ static void mi_option_init(mi_option_desc_t* desc);
 long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
   mi_option_desc_t* desc = &options[option];
-  if (desc->init == UNINIT) {
+  if (mi_unlikely(desc->init == UNINIT)) {
     mi_option_init(desc);
     if (option != mi_option_verbose) {
       _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
@@ -116,15 +117,15 @@ static void mi_vfprintf( FILE* out, const char* prefix, const char* fmt, va_list
   char buf[256];
   if (fmt==NULL) return;
   if (out==NULL) out = stdout;
-  if (_mi_preloading()) return;  
+  if (_mi_preloading()) return;
   vsnprintf(buf,sizeof(buf)-1,fmt,args);
   #ifdef _WIN32
-  // on windows with redirection, the C runtime uses us and we cannot call `fputs` 
+  // on windows with redirection, the C runtime uses us and we cannot call `fputs`
   // while called from the C runtime itself, so use a non-locking option
-  if (out==stderr) { 
-    if (prefix != NULL) _cputs(prefix); 
-    _cputs(buf); 
-    return; 
+  if (out==stderr) {
+    if (prefix != NULL) _cputs(prefix);
+    _cputs(buf);
+    return;
   }
   #endif
   if (prefix != NULL) fputs(prefix,out);
@@ -204,10 +205,12 @@ static const char* mi_getenv(const char* name) {
   const char* s = getenv(name);
   if (s == NULL) {
     char buf[64+1];
-    mi_strlcpy(buf,name,64);
-    for (size_t i = 0; i < strlen(buf); i++) {
+    size_t len = strlen(name);
+    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+    for (size_t i = 0; i < len; i++) {
       buf[i] = toupper(name[i]);
     }
+    buf[len] = 0;
     #pragma warning(suppress:4996)
     s = getenv(buf);
   }
@@ -217,15 +220,17 @@ static const char* mi_getenv(const char* name) {
 static void mi_option_init(mi_option_desc_t* desc) {
   if (!_mi_preloading()) desc->init = DEFAULTED;
   // Read option value from the environment
-  char buf[64];
+  char buf[64+1];
   mi_strlcpy(buf, "mimalloc_", sizeof(buf));
   mi_strlcat(buf, desc->name, sizeof(buf));
-  const char* s = mi_getenv(buf);  
+  const char* s = mi_getenv(buf);
   if (s != NULL) {
-    mi_strlcpy(buf, s, sizeof(buf));
-    for (size_t i = 0; i < strlen(buf); i++) {
-      buf[i] = toupper(buf[i]);
+    size_t len = strlen(s);
+    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+    for (size_t i = 0; i < len; i++) {
+      buf[i] = toupper(s[i]);
     }
+    buf[len] = 0;
     if (buf[0]==0 || strstr("1;TRUE;YES;ON", buf) != NULL) {
       desc->value = 1;
       desc->init = INITIALIZED;
