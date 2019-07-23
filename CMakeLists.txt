@@ -132,9 +132,9 @@ target_include_directories(mimalloc PUBLIC
 )
 if(WIN32)
   # On windows copy the mimalloc redirection dll too.
-  target_link_libraries(mimalloc PRIVATE ../../bin/mimalloc-redirect)
+  target_link_libraries(mimalloc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect.lib)
   add_custom_command(TARGET mimalloc POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" -E copy "../../bin/mimalloc-redirect.dll" $<TARGET_FILE_DIR:mimalloc>
+    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect.dll" $<TARGET_FILE_DIR:mimalloc>
     COMMENT "Copy mimalloc-redirect.dll to output directory")
 endif()
 
