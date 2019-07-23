@@ -52,8 +52,8 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_alloc_size2(s1,s2)
   #else
   #define mi_attr_alloc_size(s)       __attribute__((alloc_size(s)))
-  #define mi_attr_alloc_size2(s1,s2)  __attribute__((alloc_size(s1,s2)))  
-  #define mi_cdecl                    // leads to warnings... __attribute__((cdecl))  
+  #define mi_attr_alloc_size2(s1,s2)  __attribute__((alloc_size(s1,s2)))
+  #define mi_cdecl                    // leads to warnings... __attribute__((cdecl))
   #endif
 #else
   #define mi_decl_thread              __thread
@@ -62,7 +62,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_malloc
   #define mi_attr_alloc_size(s)
   #define mi_attr_alloc_size2(s1,s2)
-  #define mi_cdecl                   
+  #define mi_cdecl
 #endif
 
 // ------------------------------------------------------

@@ -235,8 +235,8 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
 
 
 // The thread local segment cache is limited to be at most 1/8 of the peak size of segments in use,
-// and no more than 4.
-#define MI_SEGMENT_CACHE_MAX      (4)
+// and no more than 2.
+#define MI_SEGMENT_CACHE_MAX      (2)
 #define MI_SEGMENT_CACHE_FRACTION (8)
 
 // note: returned segment may be partially reset
@@ -252,7 +252,7 @@ static mi_segment_t* mi_segment_cache_pop(size_t segment_size, mi_segments_tld_t
 }
 
 static bool mi_segment_cache_full(mi_segments_tld_t* tld) {
-  if (tld->cache_count < MI_SEGMENT_CACHE_MAX &&
+  if (tld->cache_count <  MI_SEGMENT_CACHE_MAX &&
       tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))) { // always allow 1 element cache
     return false;
   }
@@ -318,7 +318,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   size_t page_size = (page_kind == MI_PAGE_HUGE ? segment_size : (size_t)1 << page_shift);
 
   // Try to get it from our thread local cache first
-  bool commit = mi_option_is_enabled(mi_option_eager_commit) || (page_kind > MI_PAGE_MEDIUM); 
+  bool commit = mi_option_is_enabled(mi_option_eager_commit) || (page_kind > MI_PAGE_MEDIUM);
   bool protection_still_good = false;
   mi_segment_t* segment = mi_segment_cache_pop(segment_size, tld);
   if (segment != NULL) {
@@ -702,10 +702,10 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
 
 mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
   mi_page_t* page;
-  if (block_size <= (MI_SMALL_PAGE_SIZE/16)*3) {
+  if (block_size <= (MI_SMALL_PAGE_SIZE/4)) {
     page = mi_segment_small_page_alloc(tld,os_tld);
   }
-  else if (block_size <= (MI_MEDIUM_PAGE_SIZE/16)*3) {
+  else if (block_size <= (MI_MEDIUM_PAGE_SIZE/4)) {
     page = mi_segment_medium_page_alloc(tld, os_tld);
   }
   else if (block_size < (MI_LARGE_SIZE_MAX - sizeof(mi_segment_t))) {

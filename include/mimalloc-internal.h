@@ -39,7 +39,6 @@ bool       _mi_preloading();  // true while the C runtime is not ready
 
 // os.c
 size_t     _mi_os_page_size(void);
-uintptr_t  _mi_align_up(uintptr_t sz, size_t alignment);
 void       _mi_os_init(void);                                      // called from process init
 void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocate thread local data
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
@@ -163,6 +162,20 @@ static inline bool mi_mul_overflow(size_t size, size_t count, size_t* total) {
   return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
           && size > 0 && (SIZE_MAX / size) < count);
 #endif
+}
+
+// Align upwards
+static inline uintptr_t _mi_is_power_of_two(uintptr_t x) {
+  return ((x & (x - 1)) == 0);
+}
+static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
+  uintptr_t mask = alignment - 1;
+  if ((alignment & mask) == 0) {  // power of two?
+    return ((sz + mask) & ~mask);
+  }
+  else {
+    return (((sz + mask)/alignment)*alignment);
+  }
 }
 
 // Align a byte size to a size in _machine words_,
@@ -324,12 +337,23 @@ static inline void mi_block_set_nextx(uintptr_t cookie, mi_block_t* block, mi_bl
 }
 
 static inline mi_block_t* mi_block_next(mi_page_t* page, mi_block_t* block) {
+  #if MI_SECURE
   return mi_block_nextx(page->cookie,block);
+  #else
+  UNUSED(page);
+  return mi_block_nextx(0, block);
+  #endif
 }
 
 static inline void mi_block_set_next(mi_page_t* page, mi_block_t* block, mi_block_t* next) {
+  #if MI_SECURE
   mi_block_set_nextx(page->cookie,block,next);
+  #else
+  UNUSED(page);
+  mi_block_set_nextx(0, block, next);
+  #endif
 }
+
 // -------------------------------------------------------------------
 // Getting the thread id should be performant
 // as it is called in the fast path of `_mi_free`,

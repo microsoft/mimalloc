@@ -93,7 +93,9 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
 
 bool _mi_page_is_valid(mi_page_t* page) {
   mi_assert_internal(mi_page_is_valid_init(page));
+  #if MI_SECURE
   mi_assert_internal(page->cookie != 0);
+  #endif
   if (page->heap!=NULL) {
     mi_segment_t* segment = _mi_page_segment(page);
     mi_assert_internal(!_mi_process_is_initialized || segment->thread_id == page->heap->thread_id);
@@ -119,7 +121,7 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay  ) {
     else if (mi_unlikely(mi_tf_delayed(tfree) == MI_DELAYED_FREEING)) {
       mi_atomic_yield(); // delay until outstanding MI_DELAYED_FREEING are done.
       continue;          // and try again
-    }    
+    }
   }
   while((mi_tf_delayed(tfreex) !=  mi_tf_delayed(tfree)) && // avoid atomic operation if already equal
         !mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
@@ -258,7 +260,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
     mi_block_t* next = mi_block_nextx(heap->cookie,block);
     // use internal free instead of regular one to keep stats etc correct
     if (!_mi_free_delayed_block(block)) {
-      // we might already start delayed freeing while another thread has not yet 
+      // we might already start delayed freeing while another thread has not yet
       // reset the delayed_freeing flag; in that case delay it further by reinserting.
       mi_block_t* dfree;
       do {
@@ -498,7 +500,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
   if (page->capacity >= page->reserved) return;
 
   size_t page_size;
-  _mi_page_start(_mi_page_segment(page), page, &page_size);  
+  _mi_page_start(_mi_page_segment(page), page, &page_size);
   _mi_stat_increase(&stats->pages_extended, 1);
 
   // calculate the extend count
@@ -533,7 +535,9 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   page->block_size = block_size;
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
+  #if MI_SECURE
   page->cookie = _mi_heap_random(heap) | 1;
+  #endif
 
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);
@@ -543,7 +547,9 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->next == NULL);
   mi_assert_internal(page->prev == NULL);
   mi_assert_internal(page->flags.has_aligned == false);
+  #if MI_SECURE
   mi_assert_internal(page->cookie != 0);
+  #endif
   mi_assert_expensive(mi_page_is_valid_init(page));
 
   // initialize an initial free list
@@ -683,7 +689,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(page->block_size == block_size);
     mi_heap_stat_increase( heap, huge, block_size);
-  }  
+  }
   return page;
 }
 
