@@ -291,7 +291,16 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
       // TODO: if always failing due to permissions or no huge pages, try to avoid repeatedly trying?
       // Should we check this in _mi_os_init? (as on Windows)
       p = mi_unix_mmapx(size, try_alignment, protect_flags, lflags, fd);
+      #ifdef MADV_HUGEPAGE
+      if (p == MAP_FAILED) {
+        lflags &= MAP_HUGETLB; // large page could be set to madvise only
+        p = mi_unix_mmapx(size, try_alignment, protect_flags, lflags, fd);
+        if (p == MAP_FAILED) p = NULL; // we did what we could at this stage
+        else madvise(p, size, MADV_HUGEPAGE);
+      }
+      #else
       if (p == MAP_FAILED) p = NULL; // fall back to regular mmap if large is exhausted or no permission
+      #endif
     }
   }
   if (p == NULL) {
