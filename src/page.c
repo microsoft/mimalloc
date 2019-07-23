@@ -733,11 +733,4 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
 
   // and try again, this time succeeding! (i.e. this should never recurse)
   return _mi_page_malloc(heap, page, size);
-  /*
-  if (page->used == page->reserved) {
-    // needed for huge pages to free reliably from other threads.
-    mi_page_to_full(page,mi_page_queue_of(page));
-  }
-  return p;
-  */
 }
