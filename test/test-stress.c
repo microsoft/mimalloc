@@ -27,7 +27,7 @@ static int N       = 10;    // scaling factor
 
 static volatile void* transfer[TRANSFERS];
 
-#if (INTPTR_MAX != UINT32_MAX)
+#if (UINTPTR_MAX != UINT32_MAX)
 const uintptr_t cookie = 0xbf58476d1ce4e5b9UL;
 #else
 const uintptr_t cookie = 0x1ce4e5b9UL;
@@ -39,7 +39,7 @@ typedef uintptr_t* random_t;
 
 static uintptr_t pick(random_t r) {
   uintptr_t x = *r;
-  #if (INTPTR_MAX > UINT32_MAX)
+  #if (UINTPTR_MAX > UINT32_MAX)
     // by Sebastiano Vigna, see: <http://xoshiro.di.unimi.it/splitmix64.c>
   x ^= x >> 30;
   x *= 0xbf58476d1ce4e5b9UL;
@@ -183,7 +183,7 @@ static void run_os_threads(size_t nthreads) {
   for (uintptr_t i = 0; i < nthreads; i++) {
     thandles[i] = CreateThread(0, 4096, &thread_entry, (void*)(i), 0, &tids[i]);
   }
-  for (int i = 0; i < nthreads; i++) {
+  for (size_t i = 0; i < nthreads; i++) {
     WaitForSingleObject(thandles[i], INFINITE);
   }
 }
