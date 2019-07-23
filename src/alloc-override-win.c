@@ -143,7 +143,11 @@ static size_t mi__msize_term(void* p) {
 }
 
 
-// Debug versions, forward to base versions (that get patched)
+// Debug versions, forward to base versions in ucrtbase (that get patched)
+void* _malloc_base(size_t size);
+void* _calloc_base(size_t size, size_t count);
+void* _realloc_base(void* p, size_t new_size);
+void  _free_base(void* p);
 
 static void* mi__malloc_dbg(size_t size, int block_type, const char* fname, int line) {
   UNUSED(block_type); UNUSED(fname); UNUSED(line);
