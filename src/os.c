@@ -277,9 +277,6 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
     #ifdef MAP_ALIGNED_SUPER
     lflags |= MAP_ALIGNED_SUPER;
     #endif
-    #ifdef MAP_HUGETLB
-    lflags |= MAP_HUGETLB;
-    #endif
     #ifdef MAP_HUGE_2MB
     lflags |= MAP_HUGE_2MB;
     #endif
@@ -292,11 +289,12 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
       // Should we check this in _mi_os_init? (as on Windows)
       p = mi_unix_mmapx(size, try_alignment, protect_flags, lflags, fd);
       #ifdef MADV_HUGEPAGE
-      if (p == MAP_FAILED) {
-        lflags = flags; // large page could be set to madvise only
-        p = mi_unix_mmapx(size, try_alignment, protect_flags, lflags, fd);
-        if (p == MAP_FAILED) return NULL; // we did what we could at this stage
-        else madvise(p, size, MADV_HUGEPAGE);
+      if (p != MAP_FAILED) {
+        int err = madvise(p, size, MADV_HUGEPAGE);
+        if (err != 0) {
+          // page will be just a regular mapping no need to trash it
+          _mi_warning_message("madvise thp error: address: 0x%p, size: 0x%x, errno: %i\n", p, size, errno);
+        }
       }
       #else
       if (p == MAP_FAILED) p = NULL; // fall back to regular mmap if large is exhausted or no permission
