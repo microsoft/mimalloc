@@ -237,9 +237,9 @@ void mi_free(void* p) mi_attr_noexcept
 #endif
 
   // adjust if it might be an un-aligned block
-  if (mi_likely(page->flags.value==0)) {  // note: merging both tests (local | value) does not matter for performance
+  if (mi_likely(page->flags.value==0)) {  // not full or aligned
     mi_block_t* block = (mi_block_t*)p;
-    if (mi_likely(local)) {
+    if (mi_likely(local)) {  // note: merging both tests (local | value) does not matter for performance
       // owning thread can free a block directly
       mi_block_set_next(page, block, page->local_free);  // note: moving this write earlier does not matter for performance
       page->local_free = block;
@@ -248,7 +248,7 @@ void mi_free(void* p) mi_attr_noexcept
     }
     else {
       // use atomic operations for a multi-threaded free
-      _mi_free_block_mt(page, block);
+      _mi_free_block_mt(page, block);      
     }
   }
   else {

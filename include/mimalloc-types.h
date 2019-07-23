@@ -132,9 +132,8 @@ typedef union mi_page_flags_u {
 } mi_page_flags_t;
 
 // Thread free list.
-// We use bottom 2 bits of the pointer for mi_delayed_t flags
+// We use the bottom 2 bits of the pointer for mi_delayed_t flags
 typedef uintptr_t mi_thread_free_t;
-
 
 // A page contains blocks of one specific size (`block_size`).
 // Each page has three list of free blocks:
@@ -165,9 +164,11 @@ typedef struct mi_page_s {
   mi_page_flags_t       flags;
   uint16_t              capacity;          // number of blocks committed
   uint16_t              reserved;          // number of blocks reserved in memory
-
+  
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
+  #if MI_SECURE
   uintptr_t             cookie;            // random cookie to encode the free lists
+  #endif
   size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
 
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
@@ -182,9 +183,9 @@ typedef struct mi_page_s {
 
 // improve page index calculation
 #if MI_INTPTR_SIZE==8
-  //void*                 padding[1];        // 10 words on 64-bit
+  //void*                 padding[1];        // 12 words on 64-bit
 #elif MI_INTPTR_SIZE==4
-  void*                 padding[1];          // 12 words on 32-bit
+  void*                 padding[1];         // 12 words on 32-bit
 #endif
 } mi_page_t;
 

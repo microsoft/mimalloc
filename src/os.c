@@ -34,13 +34,6 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
 
-uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
-  uintptr_t x = (sz / alignment) * alignment;
-  if (x < sz) x += alignment;
-  if (x < sz) return 0; // overflow
-  return x;
-}
-
 static void* mi_align_up_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
 }
