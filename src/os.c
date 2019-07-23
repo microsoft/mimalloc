@@ -293,9 +293,9 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
       p = mi_unix_mmapx(size, try_alignment, protect_flags, lflags, fd);
       #ifdef MADV_HUGEPAGE
       if (p == MAP_FAILED) {
-        lflags &= MAP_HUGETLB; // large page could be set to madvise only
+        lflags = flags; // large page could be set to madvise only
         p = mi_unix_mmapx(size, try_alignment, protect_flags, lflags, fd);
-        if (p == MAP_FAILED) p = NULL; // we did what we could at this stage
+        if (p == MAP_FAILED) return NULL; // we did what we could at this stage
         else madvise(p, size, MADV_HUGEPAGE);
       }
       #else
