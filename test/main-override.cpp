@@ -30,12 +30,12 @@ int main() {
   free(p1);
   p1 = malloc(8);
   char* s = mi_strdup("hello\n");
-  free(p2);
+  mi_free(p2);
   p2 = malloc(16);
   p1 = realloc(p1, 32);
   free(p1);
   free(p2);
-  free(s);
+  mi_free(s);
   Test* t = new Test(42);
   delete t;
   t = new (std::nothrow) Test(42);

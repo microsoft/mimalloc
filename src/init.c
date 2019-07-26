@@ -385,7 +385,7 @@ bool _mi_preloading() {
 }
 
 // Communicate with the redirection module on Windows
-#if defined(_WIN32) && defined(XMI_SHARED_LIB) 
+#if 0
 #ifdef __cplusplus
 extern "C" {
 #endif

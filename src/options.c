@@ -60,7 +60,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, "large_os_pages" },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, "page_reset" },
   { 0, UNINIT, "cache_reset" },
-  { 0, UNINIT, "reset_decommits" },     // note: cannot enable this if secure is on 
+  { 0, UNINIT, "reset_decommits" },     // note: cannot enable this if secure is on
   { 0, UNINIT, "reset_discards" }       // note: cannot enable this if secure is on
 };
 
@@ -213,12 +213,13 @@ static const char* mi_getenv(const char* name) {
   #pragma warning(suppress:4996)
   const char* s = getenv(name);
   if (s == NULL) {
-    char buf[64];
-    mi_strlcpy(buf,name,sizeof(buf));
-    size_t buf_size = strlen(buf);
-    for (size_t i = 0; i < buf_size; i++) {
-      buf[i] = toupper(buf[i]);
+    char buf[64+1];
+    size_t len = strlen(name);
+    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+    for (size_t i = 0; i < len; i++) {
+      buf[i] = toupper(name[i]);
     }
+    buf[len] = 0;
     #pragma warning(suppress:4996)
     s = getenv(buf);
   }
@@ -228,16 +229,17 @@ static const char* mi_getenv(const char* name) {
 static void mi_option_init(mi_option_desc_t* desc) {
   if (!_mi_preloading()) desc->init = DEFAULTED;
   // Read option value from the environment
-  char buf[64];
+  char buf[64+1];
   mi_strlcpy(buf, "mimalloc_", sizeof(buf));
   mi_strlcat(buf, desc->name, sizeof(buf));
-  const char* s = mi_getenv(buf);  
+  const char* s = mi_getenv(buf);
   if (s != NULL) {
-    mi_strlcpy(buf, s, sizeof(buf));
-    size_t buf_size = strlen(buf); // TODO: use strnlen?
-    for (size_t i = 0; i < buf_size; i++) {
-      buf[i] = toupper(buf[i]);
+    size_t len = strlen(s);
+    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+    for (size_t i = 0; i < len; i++) {
+      buf[i] = toupper(s[i]);
     }
+    buf[len] = 0;
     if (buf[0]==0 || strstr("1;TRUE;YES;ON", buf) != NULL) {
       desc->value = 1;
       desc->init = INITIALIZED;

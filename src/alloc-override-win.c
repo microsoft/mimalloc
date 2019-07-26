@@ -15,6 +15,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <windows.h>
 #include <psapi.h>
 
+#include <stdlib.h> // getenv
+#include <string.h> // strstr
+
 
 /*
 To override the C runtime `malloc` on Windows we need to patch the allocation
@@ -142,12 +145,6 @@ static size_t mi__msize_term(void* p) {
   return 0;
 }
 
-
-// Debug versions, forward to base versions in ucrtbase (that get patched)
-void* _malloc_base(size_t size);
-void* _calloc_base(size_t size, size_t count);
-void* _realloc_base(void* p, size_t new_size);
-void  _free_base(void* p);
 
 static void* mi__malloc_dbg(size_t size, int block_type, const char* fname, int line) {
   UNUSED(block_type); UNUSED(fname); UNUSED(line);
@@ -578,7 +575,7 @@ static void mi_module_resolve(const char* fname, HMODULE mod, int priority) {
         if (addr != NULL) {
           // found it! set the address
           patch->originals[i] = addr;          
-          _mi_trace_message("  override %s at %s!%p (entry %i)\n", patch->name, fname, addr, i);
+          _mi_trace_message("  found %s at %s!%p (entry %i)\n", patch->name, fname, addr, i);
         }
       }
     }
@@ -605,7 +602,6 @@ static bool mi_patches_resolve(void) {
   int ucrtbase_index = 0;
   int mimalloc_index = 0;
   // iterate through the loaded modules
-  _mi_trace_message("overriding malloc dynamically...\n");
   for (int i = 0; i < count;  i++) {
     HMODULE mod = modules[i];
     char filename[MAX_PATH] = { 0 };
@@ -679,27 +675,39 @@ __declspec(dllexport) BOOL WINAPI DllEntry(HINSTANCE inst, DWORD reason, LPVOID 
     mi_patches_enable_term();
   }
   // C runtime main
-  BOOL ok = _DllMainCRTStartup(inst, reason, reserved);
+  BOOL ok = _DllMainCRTStartup(inst, reason, reserved);  
   if (reason == DLL_PROCESS_ATTACH && ok) {
+    // initialize at exit lists
+    mi_initialize_atexit();
+
     // Now resolve patches
     ok = mi_patches_resolve();
     if (ok) {
-      // and register our unwind entry (this must be after resolving due to possible delayed DLL initialization from GetProcAddress)
-      mi_fls_unwind_entry = FlsAlloc(&mi_fls_unwind);
-      if (mi_fls_unwind_entry != FLS_OUT_OF_INDEXES) {
-        FlsSetValue(mi_fls_unwind_entry, (void*)1);
+      // check if patching is not disabled
+      #pragma warning(suppress:4996)
+      const char* s = getenv("MIMALLOC_OVERRIDE");
+      bool enabled = (s == NULL || strstr("1;TRUE;YES;ON", s) != NULL);
+      if (!enabled) {
+        _mi_verbose_message("override is disabled\n");
       }
+      else {        
+        // and register our unwind entry (this must be after resolving due to possible delayed DLL initialization from GetProcAddress)
+        mi_fls_unwind_entry = FlsAlloc(&mi_fls_unwind);
+        if (mi_fls_unwind_entry != FLS_OUT_OF_INDEXES) {
+          FlsSetValue(mi_fls_unwind_entry, (void*)1);
+        }
 
-      // register our patch disabler in the global exit list
-      mi_initialize_atexit();
-      if (crt_atexit != NULL)        (*crt_atexit)(&mi_patches_atexit);
-      if (crt_at_quick_exit != NULL) (*crt_at_quick_exit)(&mi_patches_at_quick_exit);
+        // register our patch disabler in the global exit list
+        if (crt_atexit != NULL)        (*crt_atexit)(&mi_patches_atexit);
+        if (crt_at_quick_exit != NULL) (*crt_at_quick_exit)(&mi_patches_at_quick_exit);
 
-      // and patch !  this also redirects the `atexit` handling for the global exit list
-      mi_patches_enable();
+        // and patch !  this also redirects the `atexit` handling for the global exit list
+        mi_patches_enable();
+        _mi_verbose_message("override is enabled\n");
 
-      // hide internal allocation
-      mi_stats_reset();
+        // hide internal allocation
+        mi_stats_reset();
+      }
     }
   }
   return ok;
