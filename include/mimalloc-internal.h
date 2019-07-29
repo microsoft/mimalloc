@@ -170,7 +170,7 @@ static inline uintptr_t _mi_is_power_of_two(uintptr_t x) {
 }
 static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   uintptr_t mask = alignment - 1;
-  if ((alignment & mask) == 0) {  // power of two?
+  if (_mi_is_power_of_two(alignment)) {
     return ((sz + mask) & ~mask);
   }
   else {

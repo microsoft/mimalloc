@@ -46,7 +46,7 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
   // <http://man7.org/linux/man-pages/man3/posix_memalign.3.html>
   if (p == NULL) return EINVAL;
   if (alignment % sizeof(void*) != 0) return EINVAL;      // natural alignment
-  if ((alignment & (alignment - 1)) != 0) return EINVAL;  // not a power of 2
+  if ((_mi_is_power_of_two(alignment) != 0)) return EINVAL;
   void* q = mi_malloc_aligned(size, alignment);
   if (q==NULL && size != 0) return ENOMEM;
   *p = q;
