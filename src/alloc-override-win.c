@@ -685,8 +685,8 @@ __declspec(dllexport) BOOL WINAPI DllEntry(HINSTANCE inst, DWORD reason, LPVOID 
     if (ok) {
       // check if patching is not disabled
       #pragma warning(suppress:4996)
-      const char* s = getenv("MIMALLOC_OVERRIDE");
-      bool enabled = (s == NULL || strstr("1;TRUE;YES;ON", s) != NULL);
+      const char* s = getenv("MIMALLOC_DISABLE_OVERRIDE");
+      bool enabled = (s == NULL || !(strstr("1;TRUE;YES;ON", s) != NULL));
       if (!enabled) {
         _mi_verbose_message("override is disabled\n");
       }
