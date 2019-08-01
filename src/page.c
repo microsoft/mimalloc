@@ -327,7 +327,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
 
   // and then remove from our page list
   mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
-  mi_page_queue_remove(pq, page);
+  mi_page_queue_remove_clear(pq, page);
 
   // and abandon it
   mi_assert_internal(page->heap == NULL);
@@ -358,7 +358,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   // remove from the page list
   // (no need to do _mi_heap_delayed_free first as all blocks are already free)
   mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
-  mi_page_queue_remove(pq, page);
+  mi_page_queue_remove_clear(pq, page);
 
   // and free it
   mi_assert_internal(page->heap == NULL);
