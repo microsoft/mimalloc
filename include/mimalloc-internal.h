@@ -307,7 +307,7 @@ static inline bool mi_page_all_used(mi_page_t* page) {
 static inline bool mi_page_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / 8U;
-  return (page->reserved - page->used + page->thread_freed < frac);
+  return (page->reserved - page->used + page->thread_freed <= frac);
 }
 
 static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size) {

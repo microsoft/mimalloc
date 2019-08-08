@@ -324,12 +324,12 @@ typedef struct mi_stats_s {
   mi_stat_count_t pages_abandoned;
   mi_stat_count_t pages_extended;
   mi_stat_count_t mmap_calls;
-  mi_stat_count_t mmap_right_align;
-  mi_stat_count_t mmap_ensure_aligned;
   mi_stat_count_t commit_calls;
   mi_stat_count_t threads;
   mi_stat_count_t huge;
   mi_stat_count_t malloc;
+  mi_stat_count_t segments_cache;
+  mi_stat_counter_t page_no_retire;
   mi_stat_counter_t searches;
 #if MI_STAT>1
   mi_stat_count_t normal[MI_BIN_HUGE+1];

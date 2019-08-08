@@ -216,7 +216,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   mi_page_t* page = _mi_segment_page_alloc(block_size, &heap->tld->segments, &heap->tld->os);
   if (page == NULL) return NULL;
   mi_page_init(heap, page, block_size, &heap->tld->stats);
-  mi_heap_stat_increase( heap, pages, 1);
+  _mi_stat_increase( &heap->tld->stats.pages, 1);
   mi_page_queue_push(heap, pq, page);
   mi_assert_expensive(_mi_page_is_valid(page));
   return page;
@@ -352,7 +352,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
 
   // account for huge pages here
   if (page->block_size > MI_LARGE_SIZE_MAX) {
-    mi_heap_stat_decrease(page->heap, huge, page->block_size);
+    _mi_stat_decrease(&page->heap->tld->stats.huge, page->block_size);
   }
 
   // remove from the page list
@@ -386,6 +386,7 @@ void _mi_page_retire(mi_page_t* page) {
   // if its neighbours are almost fully used.
   if (mi_likely(page->block_size <= MI_SMALL_SIZE_MAX)) {
     if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
+      _mi_stat_counter_increase(&page->heap->tld->stats.page_no_retire,1);
       return; // dont't retire after all
     }
   }
@@ -700,7 +701,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
   if (page != NULL) {
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(page->block_size == block_size);
-    mi_heap_stat_increase( heap, huge, block_size);
+    _mi_stat_increase( &heap->tld->stats.huge, block_size);
   }
   return page;
 }

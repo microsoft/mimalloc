@@ -248,17 +248,19 @@ static mi_segment_t* mi_segment_cache_pop(size_t segment_size, mi_segments_tld_t
   tld->cache = segment->next;
   segment->next = NULL;
   mi_assert_internal(segment->segment_size == MI_SEGMENT_SIZE);
+  _mi_stat_decrease(&tld->stats->segments_cache, 1);
   return segment;
 }
 
 static bool mi_segment_cache_full(mi_segments_tld_t* tld) {
-  if (tld->cache_count <  MI_SEGMENT_CACHE_MAX &&
-      tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))) { // always allow 1 element cache
+  if (tld->cache_count <  MI_SEGMENT_CACHE_MAX 
+      && tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))
+     ) { // always allow 1 element cache
     return false;
   }
   // take the opportunity to reduce the segment cache if it is too large (now)
   // TODO: this never happens as we check against peak usage, should we use current usage instead?
-  while (tld->cache_count > (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))) {
+  while (tld->cache_count > MI_SEGMENT_CACHE_MAX ) { //(1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))) {
     mi_segment_t* segment = mi_segment_cache_pop(0,tld);
     mi_assert_internal(segment != NULL);
     if (segment != NULL) mi_segment_os_free(segment, segment->segment_size, tld);
@@ -269,7 +271,9 @@ static bool mi_segment_cache_full(mi_segments_tld_t* tld) {
 static bool mi_segment_cache_push(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(!mi_segment_is_in_free_queue(segment, tld));
   mi_assert_internal(segment->next == NULL);
-  if (segment->segment_size != MI_SEGMENT_SIZE || mi_segment_cache_full(tld)) return false;
+  if (segment->segment_size != MI_SEGMENT_SIZE || mi_segment_cache_full(tld)) {
+    return false;
+  }
   mi_assert_internal(segment->segment_size == MI_SEGMENT_SIZE);
   if (mi_option_is_enabled(mi_option_cache_reset)) {
     _mi_mem_reset((uint8_t*)segment + segment->segment_info_size, segment->segment_size - segment->segment_info_size, tld->stats);
@@ -277,6 +281,7 @@ static bool mi_segment_cache_push(mi_segment_t* segment, mi_segments_tld_t* tld)
   segment->next = tld->cache;
   tld->cache = segment;
   tld->cache_count++;
+  _mi_stat_increase(&tld->stats->segments_cache,1);
   return true;
 }
 
