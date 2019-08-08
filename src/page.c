@@ -71,10 +71,11 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(page->block_size > 0);
   mi_assert_internal(page->used <= page->capacity);
   mi_assert_internal(page->capacity <= page->reserved);
-
+  
   mi_segment_t* segment = _mi_page_segment(page);
   uint8_t* start = _mi_page_start(segment,page,NULL);
   mi_assert_internal(start == _mi_segment_page_start(segment,page,page->block_size,NULL));
+  mi_assert_internal(segment->thread_id == mi_page_thread_id(page));
   //mi_assert_internal(start + page->capacity*page->block_size == page->top);
 
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
@@ -458,7 +459,7 @@ static void mi_page_free_list_extend_secure(mi_heap_t* heap, mi_page_t* page, si
   heap->random = _mi_random_shuffle(rnd);
 }
 
-static void mi_page_free_list_extend( mi_heap_t* heap, mi_page_t* page, size_t extend, mi_stats_t* stats)
+static void mi_page_free_list_extend( mi_page_t* page, size_t extend, mi_stats_t* stats)
 {
   UNUSED(stats);
   mi_assert_internal(page->free == NULL);
@@ -524,7 +525,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
 
   // and append the extend the free list
   if (extend < MI_MIN_SLICES || !mi_option_is_enabled(mi_option_secure)) {
-    mi_page_free_list_extend(heap, page, extend, stats );
+    mi_page_free_list_extend(page, extend, stats );
   }
   else {
     mi_page_free_list_extend_secure(heap, page, extend, stats);

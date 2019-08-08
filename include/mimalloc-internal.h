@@ -314,6 +314,10 @@ static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size)
   return &((mi_heap_t*)heap)->pages[_mi_bin(size)];
 }
 
+static inline uintptr_t mi_page_thread_id(const mi_page_t* page) {
+  return (page->flags.padding << MI_PAGE_FLAGS_BITS);
+}
+
 // -------------------------------------------------------------------
 // Encoding/Decoding the free list next pointers
 // -------------------------------------------------------------------

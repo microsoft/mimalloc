@@ -123,13 +123,25 @@ typedef enum mi_delayed_e {
 } mi_delayed_t;
 
 
+// Use the lowest two bits of a thread id for the `in_full` and `has_aligned` flags
+// This allows a single test in `mi_free` to check for unlikely cases
+// (namely, non-local free, aligned free, or freeing in a full page)
+#define MI_PAGE_FLAGS_BITS (2)
 typedef union mi_page_flags_u {
-  uint16_t value;
+  uintptr_t threadidx;
   struct {
-    bool has_aligned;
-    bool in_full;
+    #ifdef MI_BIG_ENDIAN
+    uintptr_t padding : (MI_INTPTR_SIZE*8 - MI_PAGE_FLAGS_BITS);
+    uintptr_t in_full : 1;
+    uintptr_t has_aligned : 1;
+    #else
+    uintptr_t in_full : 1;
+    uintptr_t has_aligned : 1;
+    uintptr_t padding : (MI_INTPTR_SIZE*8 - MI_PAGE_FLAGS_BITS);
+    #endif
   };
 } mi_page_flags_t;
+
 
 // Thread free list.
 // We use the bottom 2 bits of the pointer for mi_delayed_t flags
@@ -160,16 +172,16 @@ typedef struct mi_page_s {
   bool                  is_reset:1;        // `true` if the page memory was reset
   bool                  is_committed:1;    // `true` if the page virtual memory is committed
 
-  // layout like this to optimize access in `mi_malloc` and `mi_free`
-  mi_page_flags_t       flags;
+  // layout like this to optimize access in `mi_malloc` and `mi_free`  
   uint16_t              capacity;          // number of blocks committed
   uint16_t              reserved;          // number of blocks reserved in memory
-  
+                                           // 16 bits padding 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   #if MI_SECURE
   uintptr_t             cookie;            // random cookie to encode the free lists
   #endif
   size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
+  mi_page_flags_t       flags;             // threadid:62 | has_aligned:1 | in_full:1
 
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   volatile uintptr_t    thread_freed;      // at least this number of blocks are in `thread_free`
@@ -182,10 +194,10 @@ typedef struct mi_page_s {
   struct mi_page_s*     prev;              // previous page owned by this thread with the same `block_size`
 
 // improve page index calculation
-#if MI_INTPTR_SIZE==8
-  //void*                 padding[1];        // 12 words on 64-bit
+#if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
+  void*                 padding[1];        // 12 words on 64-bit
 #elif MI_INTPTR_SIZE==4
-  void*                 padding[1];         // 12 words on 32-bit
+  // void*                 padding[1];         // 12 words on 32-bit
 #endif
 } mi_page_t;
 
@@ -215,7 +227,7 @@ typedef struct mi_segment_s {
 
   // layout like this to optimize access in `mi_free`
   size_t          page_shift;  // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).
-  uintptr_t       thread_id;   // unique id of the thread owning this segment
+  volatile uintptr_t thread_id;   // unique id of the thread owning this segment
   mi_page_kind_t  page_kind;   // kind of pages: small, large, or huge
   mi_page_t       pages[1];    // up to `MI_SMALL_PAGES_PER_SEGMENT` pages
 } mi_segment_t;

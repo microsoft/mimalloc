@@ -226,6 +226,7 @@ static void mi_segments_track_size(long segment_size, mi_segments_tld_t* tld) {
 
 
 static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_segments_tld_t* tld) {
+  segment->thread_id = 0;
   mi_segments_track_size(-((long)segment_size),tld);
   if (mi_option_is_enabled(mi_option_secure)) {
     _mi_mem_unprotect(segment, segment->segment_size); // ensure no more guard pages are set
@@ -412,8 +413,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   mi_assert_expensive(!mi_segment_queue_contains(&tld->medium_free, segment));
   mi_assert(segment->next == NULL);
   mi_assert(segment->prev == NULL);
-  _mi_stat_decrease(&tld->stats->page_committed, segment->segment_info_size);
-  segment->thread_id = 0;
+  _mi_stat_decrease(&tld->stats->page_committed, segment->segment_info_size);  
 
   // update reset memory statistics
   /*
@@ -618,6 +618,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
         }
         else {
           // otherwise reclaim it
+          page->flags.threadidx = segment->thread_id;
           _mi_page_reclaim(heap,page);
         }
       }
@@ -648,6 +649,7 @@ static mi_page_t* mi_segment_page_alloc_in(mi_segment_t* segment, mi_segments_tl
   mi_assert_internal(mi_segment_has_free(segment));
   mi_page_t* page = mi_segment_find_free(segment, tld->stats);
   page->segment_in_use = true;
+  page->flags.threadidx = segment->thread_id;
   segment->used++;
   mi_assert_internal(segment->used <= segment->capacity);
   if (segment->used == segment->capacity) {
@@ -687,6 +689,7 @@ static mi_page_t* mi_segment_large_page_alloc(mi_segments_tld_t* tld, mi_os_tld_
   segment->used = 1;
   mi_page_t* page = &segment->pages[0];
   page->segment_in_use = true;
+  page->flags.threadidx = segment->thread_id;
   return page;
 }
 
@@ -698,6 +701,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
   segment->used = 1;
   mi_page_t* page = &segment->pages[0];
   page->segment_in_use = true;
+  page->flags.threadidx = segment->thread_id;
   return page;
 }
 

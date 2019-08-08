@@ -12,15 +12,16 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
-  0, false, false, false, {0}, 0, 0, 
-  NULL, 0,   // free, used
+  0, false, false, false, 0, 0, 
+  NULL,    // free
   #if MI_SECURE
   0,
   #endif
+  0, {0}, // used, flags
   NULL, 0, 0,
   0, NULL, NULL, NULL
-  #if (MI_INTPTR_SIZE==4)
-  , { NULL }
+  #if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
+  , { NULL } 
   #endif
 };
 
