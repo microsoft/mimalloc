@@ -57,6 +57,7 @@ extern inline void* mi_malloc_small(size_t size) mi_attr_noexcept {
   return mi_heap_malloc_small(mi_get_default_heap(), size);
 }
 
+
 // zero initialized small block
 void* mi_zalloc_small(size_t size) mi_attr_noexcept {
   void* p = mi_malloc_small(size);
@@ -71,7 +72,7 @@ extern inline void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcep
   void* p;
   if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
     p = mi_heap_malloc_small(heap, size);
-  }
+  }  
   else {
     p = _mi_malloc_generic(heap, size);
   }
@@ -223,8 +224,7 @@ void mi_free(void* p) mi_attr_noexcept
     return;
   }
 #endif
-
-  bool local = (_mi_thread_id() == segment->thread_id);  // preload, note: putting the thread_id in the page->flags does not improve performance
+  
   mi_page_t* page = _mi_segment_page_of(segment, p);
 
 #if (MI_STAT>1)
@@ -236,24 +236,18 @@ void mi_free(void* p) mi_attr_noexcept
   // huge page stat is accounted for in `_mi_page_retire`
 #endif
 
-  // adjust if it might be an un-aligned block
-  if (mi_likely(page->flags.value==0)) {  // not full or aligned
+  uintptr_t tid = _mi_thread_id();
+  if (mi_likely(tid == page->flags.value)) {  
+    // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
-    if (mi_likely(local)) {  // note: merging both tests (local | value) does not matter for performance
-      // owning thread can free a block directly
-      mi_block_set_next(page, block, page->local_free);  // note: moving this write earlier does not matter for performance
-      page->local_free = block;
-      page->used--;
-      if (mi_unlikely(mi_page_all_free(page))) { _mi_page_retire(page); }
-    }
-    else {
-      // use atomic operations for a multi-threaded free
-      _mi_free_block_mt(page, block);      
-    }
+    mi_block_set_next(page, block, page->local_free);  
+    page->local_free = block;
+    page->used--;
+    if (mi_unlikely(mi_page_all_free(page))) { _mi_page_retire(page); }
   }
   else {
-    // aligned blocks, or a full page; use the more generic path
-    mi_free_generic(segment, page, local, p);
+    // non-local, aligned blocks, or a full page; use the more generic path
+    mi_free_generic(segment, page, tid == mi_page_thread_id(page), p);
   }
 }
 

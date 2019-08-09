@@ -307,11 +307,21 @@ static inline bool mi_page_all_used(mi_page_t* page) {
 static inline bool mi_page_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / 8U;
-  return (page->reserved - page->used + page->thread_freed < frac);
+  return (page->reserved - page->used + page->thread_freed <= frac);
 }
 
 static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size) {
   return &((mi_heap_t*)heap)->pages[_mi_bin(size)];
+}
+
+static inline uintptr_t mi_page_thread_id(const mi_page_t* page) {
+  return (page->flags.xthread_id << MI_PAGE_FLAGS_BITS);
+}
+
+static inline void mi_page_init_flags(mi_page_t* page, uintptr_t thread_id) {
+  page->flags.value = 0;
+  page->flags.xthread_id = (thread_id >> MI_PAGE_FLAGS_BITS);
+  mi_assert(page->flags.value == thread_id);
 }
 
 // -------------------------------------------------------------------

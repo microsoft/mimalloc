@@ -38,7 +38,9 @@ size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept {
 }
 
 void mi_cfree(void* p) mi_attr_noexcept {
-  mi_free(p);
+  if (mi_is_in_heap_region(p)) {
+    mi_free(p);
+  }
 }
 
 int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept {

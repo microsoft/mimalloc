@@ -12,15 +12,16 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
-  0, false, false, false, {0}, 0, 0, 
-  NULL, 0,   // free, used
+  0, false, false, false, 0, 0, 
+  NULL,    // free
   #if MI_SECURE
   0,
   #endif
+  0, {0}, // used, flags
   NULL, 0, 0,
   0, NULL, NULL, NULL
-  #if (MI_INTPTR_SIZE==4)
-  , { NULL }
+  #if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
+  , { NULL } 
   #endif
 };
 
@@ -33,22 +34,23 @@ const mi_page_t _mi_page_empty = {
 #define QNULL(sz)  { NULL, NULL, (sz)*sizeof(uintptr_t) }
 #define MI_PAGE_QUEUES_EMPTY \
   { QNULL(1), \
-    QNULL(1), QNULL(2), QNULL(3), QNULL(4), QNULL(5), QNULL(6), QNULL(7), QNULL(8), \
-    QNULL(10), QNULL(12), QNULL(14), QNULL(16), QNULL(20), QNULL(24), QNULL(28), QNULL(32), \
-    QNULL(40), QNULL(48), QNULL(56), QNULL(64), QNULL(80), QNULL(96), QNULL(112), QNULL(128), \
-    QNULL(160), QNULL(192), QNULL(224), QNULL(256), QNULL(320), QNULL(384), QNULL(448), QNULL(512), \
-    QNULL(640), QNULL(768), QNULL(896), QNULL(1024), QNULL(1280), QNULL(1536), QNULL(1792), QNULL(2048), \
-    QNULL(2560), QNULL(3072), QNULL(3584), QNULL(4096), QNULL(5120), QNULL(6144), QNULL(7168), QNULL(8192), \
-    QNULL(10240), QNULL(12288), QNULL(14336), QNULL(16384), QNULL(20480), QNULL(24576), QNULL(28672), QNULL(32768), \
-    QNULL(40960), QNULL(49152), QNULL(57344), QNULL(65536), QNULL(81920), QNULL(98304), QNULL(114688), \
-    QNULL(MI_LARGE_WSIZE_MAX + 1  /*131072, Huge queue */), \
+    QNULL(     1), QNULL(     2), QNULL(     3), QNULL(     4), QNULL(     5), QNULL(     6), QNULL(     7), QNULL(     8), /* 8 */ \
+    QNULL(    10), QNULL(    12), QNULL(    14), QNULL(    16), QNULL(    20), QNULL(    24), QNULL(    28), QNULL(    32), /* 16 */ \
+    QNULL(    40), QNULL(    48), QNULL(    56), QNULL(    64), QNULL(    80), QNULL(    96), QNULL(   112), QNULL(   128), /* 24 */ \
+    QNULL(   160), QNULL(   192), QNULL(   224), QNULL(   256), QNULL(   320), QNULL(   384), QNULL(   448), QNULL(   512), /* 32 */ \
+    QNULL(   640), QNULL(   768), QNULL(   896), QNULL(  1024), QNULL(  1280), QNULL(  1536), QNULL(  1792), QNULL(  2048), /* 40 */ \
+    QNULL(  2560), QNULL(  3072), QNULL(  3584), QNULL(  4096), QNULL(  5120), QNULL(  6144), QNULL(  7168), QNULL(  8192), /* 48 */ \
+    QNULL( 10240), QNULL( 12288), QNULL( 14336), QNULL( 16384), QNULL( 20480), QNULL( 24576), QNULL( 28672), QNULL( 32768), /* 56 */ \
+    QNULL( 40960), QNULL( 49152), QNULL( 57344), QNULL( 65536), QNULL( 81920), QNULL( 98304), QNULL(114688), QNULL(131072), /* 64 */ \
+    QNULL(163840), QNULL(196608), QNULL(229376), QNULL(262144), QNULL(327680), /* 69 */ \
+    QNULL(MI_LARGE_WSIZE_MAX + 1  /* 393216, Huge queue */), \
     QNULL(MI_LARGE_WSIZE_MAX + 2) /* Full queue */ }
 
 #define MI_STAT_COUNT_NULL()  {0,0,0,0}
 
 // Empty statistics
 #if MI_STAT>1
-#define MI_STAT_COUNT_END_NULL()  , { MI_STAT_COUNT_NULL(), MI_INIT64(MI_STAT_COUNT_NULL) }
+#define MI_STAT_COUNT_END_NULL()  , { MI_STAT_COUNT_NULL(), MI_INIT32(MI_STAT_COUNT_NULL) }
 #else
 #define MI_STAT_COUNT_END_NULL()
 #endif
@@ -61,7 +63,8 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  MI_STAT_COUNT_NULL(), \
+  { 0, 0 }, \
   { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 
@@ -95,8 +98,8 @@ static mi_tld_t tld_main = {
   0,
   &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
-  { 0, NULL, NULL, 0, tld_main_stats },              // os
-  { MI_STATS_NULL }                                  // stats
+  { 0, NULL, NULL, 0, tld_main_stats },          // os
+  { MI_STATS_NULL }                              // stats
 };
 
 mi_heap_t _mi_heap_main = {
@@ -385,7 +388,7 @@ bool _mi_preloading() {
 }
 
 // Communicate with the redirection module on Windows
-#if defined(_WIN32) && defined(MI_SHARED_LIB) 
+#if 0
 #ifdef __cplusplus
 extern "C" {
 #endif
