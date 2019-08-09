@@ -315,7 +315,13 @@ static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size)
 }
 
 static inline uintptr_t mi_page_thread_id(const mi_page_t* page) {
-  return (page->flags.padding << MI_PAGE_FLAGS_BITS);
+  return (page->flags.xthread_id << MI_PAGE_FLAGS_BITS);
+}
+
+static inline void mi_page_init_flags(mi_page_t* page, uintptr_t thread_id) {
+  page->flags.value = 0;
+  page->flags.xthread_id = (thread_id >> MI_PAGE_FLAGS_BITS);
+  mi_assert(page->flags.value == thread_id);
 }
 
 // -------------------------------------------------------------------

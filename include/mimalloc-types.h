@@ -126,18 +126,18 @@ typedef enum mi_delayed_e {
 // Use the lowest two bits of a thread id for the `in_full` and `has_aligned` flags
 // This allows a single test in `mi_free` to check for unlikely cases
 // (namely, non-local free, aligned free, or freeing in a full page)
-#define MI_PAGE_FLAGS_BITS (2)
+#define MI_PAGE_FLAGS_BITS         (2)
+#define MI_PAGE_FLAGS_TID_BITS (MI_INTPTR_SIZE*8 - MI_PAGE_FLAGS_BITS)
 typedef union mi_page_flags_u {
-  uintptr_t threadidx;
+  uintptr_t value;
   struct {
     #ifdef MI_BIG_ENDIAN
-    uintptr_t padding : (MI_INTPTR_SIZE*8 - MI_PAGE_FLAGS_BITS);
+    uintptr_t xthread_id : MI_PAGE_FLAGS_TID_BITS;
+    #endif
     uintptr_t in_full : 1;
     uintptr_t has_aligned : 1;
-    #else
-    uintptr_t in_full : 1;
-    uintptr_t has_aligned : 1;
-    uintptr_t padding : (MI_INTPTR_SIZE*8 - MI_PAGE_FLAGS_BITS);
+    #ifndef MI_BIG_ENDIAN
+    uintptr_t xthread_id : MI_PAGE_FLAGS_TID_BITS;
     #endif
   };
 } mi_page_flags_t;

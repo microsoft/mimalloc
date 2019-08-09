@@ -75,7 +75,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_segment_t* segment = _mi_page_segment(page);
   uint8_t* start = _mi_page_start(segment,page,NULL);
   mi_assert_internal(start == _mi_segment_page_start(segment,page,page->block_size,NULL));
-  mi_assert_internal(segment->thread_id == mi_page_thread_id(page));
+  mi_assert_internal(segment->thread_id==0 || segment->thread_id == mi_page_thread_id(page));
   //mi_assert_internal(start + page->capacity*page->block_size == page->top);
 
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
@@ -387,7 +387,7 @@ void _mi_page_retire(mi_page_t* page) {
   // if its neighbours are almost fully used.
   if (mi_likely(page->block_size <= MI_SMALL_SIZE_MAX)) {
     if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
-      _mi_stat_counter_increase(&page->heap->tld->stats.page_no_retire,1);
+      _mi_stat_counter_increase(&_mi_stats_main.page_no_retire,1);
       return; // dont't retire after all
     }
   }

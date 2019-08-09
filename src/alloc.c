@@ -237,7 +237,7 @@ void mi_free(void* p) mi_attr_noexcept
 
   // adjust if it might be an un-aligned block
   uintptr_t tid = _mi_thread_id();
-  if (mi_likely(tid == page->flags.threadidx)) {  // local, and not full or aligned
+  if (mi_likely(tid == page->flags.value)) {  // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
     mi_block_set_next(page, block, page->local_free);  // note: moving this write earlier does not matter for performance
     page->local_free = block;
