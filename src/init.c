@@ -32,24 +32,37 @@ const mi_page_t _mi_page_empty = {
 
 // Empty page queues for every bin
 #define QNULL(sz)  { NULL, NULL, (sz)*sizeof(uintptr_t) }
+#ifdef MI_BIN4
 #define MI_PAGE_QUEUES_EMPTY \
   { QNULL(1), \
-    QNULL(1), QNULL(2), QNULL(3), QNULL(4), QNULL(5), QNULL(6), QNULL(7), QNULL(8), \
-    QNULL(10), QNULL(12), QNULL(14), QNULL(16), QNULL(20), QNULL(24), QNULL(28), QNULL(32), \
-    QNULL(40), QNULL(48), QNULL(56), QNULL(64), QNULL(80), QNULL(96), QNULL(112), QNULL(128), \
-    QNULL(160), QNULL(192), QNULL(224), QNULL(256), QNULL(320), QNULL(384), QNULL(448), QNULL(512), \
-    QNULL(640), QNULL(768), QNULL(896), QNULL(1024), QNULL(1280), QNULL(1536), QNULL(1792), QNULL(2048), \
-    QNULL(2560), QNULL(3072), QNULL(3584), QNULL(4096), QNULL(5120), QNULL(6144), QNULL(7168), QNULL(8192), \
-    QNULL(10240), QNULL(12288), QNULL(14336), QNULL(16384), QNULL(20480), QNULL(24576), QNULL(28672), QNULL(32768), \
-    QNULL(40960), QNULL(49152), QNULL(57344), QNULL(65536), QNULL(81920), QNULL(98304), QNULL(114688), \
-    QNULL(MI_LARGE_WSIZE_MAX + 1  /*131072, Huge queue */), \
+    QNULL(     1), QNULL(     2), QNULL(     3), QNULL(     4), QNULL(     5), QNULL(     6), QNULL(     7), QNULL(     8), /* 8 */ \
+    QNULL(    11), QNULL(    15), QNULL(    23), QNULL(    31), QNULL(    47), QNULL(    63), QNULL(    95), QNULL(   127), /* 16 */ \
+    QNULL(   191), QNULL(   255), QNULL(   383), QNULL(   511), QNULL(   767), QNULL(  1023), QNULL(  1535), QNULL(  2047), /* 24 */ \
+    QNULL(  3071), QNULL(  4095), QNULL(  6143), QNULL(  8191), QNULL( 12287), QNULL( 16383), QNULL( 24575), QNULL( 32767), /* 32 */ \
+    QNULL( 49151), QNULL( 65535), QNULL( 98303), QNULL(131071), QNULL(196607), QNULL(262143), QNULL(393215), /* 39 */ \
+    QNULL(MI_LARGE_WSIZE_MAX + 1  /* 524287, Huge queue */), \
     QNULL(MI_LARGE_WSIZE_MAX + 2) /* Full queue */ }
+#else
+#define MI_PAGE_QUEUES_EMPTY \
+  { QNULL(1), \
+    QNULL(     1), QNULL(     2), QNULL(     3), QNULL(     4), QNULL(     5), QNULL(     6), QNULL(     7), QNULL(     8), /* 8 */ \
+    QNULL(    10), QNULL(    12), QNULL(    14), QNULL(    16), QNULL(    20), QNULL(    24), QNULL(    28), QNULL(    32), /* 16 */ \
+    QNULL(    40), QNULL(    48), QNULL(    56), QNULL(    64), QNULL(    80), QNULL(    96), QNULL(   112), QNULL(   128), /* 24 */ \
+    QNULL(   160), QNULL(   192), QNULL(   224), QNULL(   256), QNULL(   320), QNULL(   384), QNULL(   448), QNULL(   512), /* 32 */ \
+    QNULL(   640), QNULL(   768), QNULL(   896), QNULL(  1024), QNULL(  1280), QNULL(  1536), QNULL(  1792), QNULL(  2048), /* 40 */ \
+    QNULL(  2560), QNULL(  3072), QNULL(  3584), QNULL(  4096), QNULL(  5120), QNULL(  6144), QNULL(  7168), QNULL(  8192), /* 48 */ \
+    QNULL( 10240), QNULL( 12288), QNULL( 14336), QNULL( 16384), QNULL( 20480), QNULL( 24576), QNULL( 28672), QNULL( 32768), /* 56 */ \
+    QNULL( 40960), QNULL( 49152), QNULL( 57344), QNULL( 65536), QNULL( 81920), QNULL( 98304), QNULL(114688), QNULL(131072), /* 64 */ \
+    QNULL(163840), QNULL(196608), QNULL(229376), QNULL(262144), QNULL(327680), /* 69 */ \
+    QNULL(MI_LARGE_WSIZE_MAX + 1  /* 393216, Huge queue */), \
+    QNULL(MI_LARGE_WSIZE_MAX + 2) /* Full queue */ }
+#endif
 
 #define MI_STAT_COUNT_NULL()  {0,0,0,0}
 
 // Empty statistics
 #if MI_STAT>1
-#define MI_STAT_COUNT_END_NULL()  , { MI_STAT_COUNT_NULL(), MI_INIT64(MI_STAT_COUNT_NULL) }
+#define MI_STAT_COUNT_END_NULL()  , { MI_STAT_COUNT_NULL(), MI_INIT32(MI_STAT_COUNT_NULL) }
 #else
 #define MI_STAT_COUNT_END_NULL()
 #endif
@@ -97,8 +110,8 @@ static mi_tld_t tld_main = {
   0,
   &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
-  { 0, NULL, NULL, 0, tld_main_stats },              // os
-  { MI_STATS_NULL }                                  // stats
+  { 0, NULL, NULL, 0, tld_main_stats },          // os
+  { MI_STATS_NULL }                              // stats
 };
 
 mi_heap_t _mi_heap_main = {

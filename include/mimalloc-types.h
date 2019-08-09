@@ -91,20 +91,30 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_MEDIUM_PAGES_PER_SEGMENT       (MI_SEGMENT_SIZE/MI_MEDIUM_PAGE_SIZE)
 #define MI_LARGE_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_LARGE_PAGE_SIZE)
 
-#define MI_MEDIUM_SIZE_MAX                (MI_MEDIUM_PAGE_SIZE/8)   // 64kb on 64-bit
-#define MI_LARGE_SIZE_MAX                 (MI_LARGE_PAGE_SIZE/8)    // 512kb on 64-bit
+#define MI_MEDIUM_SIZE_MAX                (MI_MEDIUM_PAGE_SIZE/4)   // 64kb on 64-bit
+#define MI_LARGE_SIZE_MAX                 (MI_LARGE_PAGE_SIZE/4)    // 512kb on 64-bit
 #define MI_LARGE_WSIZE_MAX                (MI_LARGE_SIZE_MAX>>MI_INTPTR_SHIFT)
 
-
-// Maximum number of size classes. (spaced exponentially in 16.7% increments)
-#define MI_BIN_HUGE  (64U)
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
 #define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 
-#if (MI_LARGE_WSIZE_MAX > 131072)
+#define MI_BIN4
+#ifdef MI_BIN4
+// Maximum number of size classes. (spaced exponentially in 25% increments)
+#define MI_BIN_HUGE  (40U)
+
+#if (MI_LARGE_WSIZE_MAX > 524287)
 #error "define more bins"
+#endif
+#else
+// Maximum number of size classes. (spaced exponentially in 12.5% increments)
+#define MI_BIN_HUGE  (70U)
+
+#if (MI_LARGE_WSIZE_MAX > 393216)
+#error "define more bins"
+#endif
 #endif
 
 typedef uintptr_t mi_encoded_t;
@@ -172,10 +182,10 @@ typedef struct mi_page_s {
   bool                  is_reset:1;        // `true` if the page memory was reset
   bool                  is_committed:1;    // `true` if the page virtual memory is committed
 
-  // layout like this to optimize access in `mi_malloc` and `mi_free`  
+  // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed
   uint16_t              reserved;          // number of blocks reserved in memory
-                                           // 16 bits padding 
+                                           // 16 bits padding
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   #if MI_SECURE
   uintptr_t             cookie;            // random cookie to encode the free lists

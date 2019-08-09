@@ -385,7 +385,7 @@ void _mi_page_retire(mi_page_t* page) {
   // is the only page left with free blocks. It is not clear
   // how to check this efficiently though... for now we just check
   // if its neighbours are almost fully used.
-  if (mi_likely(page->block_size <= MI_SMALL_SIZE_MAX)) {
+  if (mi_likely(page->block_size <= MI_MEDIUM_SIZE_MAX)) {
     if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
       _mi_stat_counter_increase(&_mi_stats_main.page_no_retire,1);
       return; // dont't retire after all
@@ -722,10 +722,10 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
 
   // call potential deferred free routines
   _mi_deferred_free(heap, false);
-
+  
   // free delayed frees from other threads
   _mi_heap_delayed_free(heap);
-
+  
   // huge allocation?
   mi_page_t* page;
   if (mi_unlikely(size > MI_LARGE_SIZE_MAX)) {

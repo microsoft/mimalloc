@@ -236,8 +236,8 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
 
 
 // The thread local segment cache is limited to be at most 1/8 of the peak size of segments in use,
-// and no more than 2.
-#define MI_SEGMENT_CACHE_MAX      (2)
+// and no more than 4.
+#define MI_SEGMENT_CACHE_MAX      (4)
 #define MI_SEGMENT_CACHE_FRACTION (8)
 
 // note: returned segment may be partially reset
@@ -708,16 +708,20 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
 /* -----------------------------------------------------------
    Page allocation and free
 ----------------------------------------------------------- */
+static bool mi_is_good_fit(size_t bsize, size_t size) {
+  // good fit if no more than 25% wasted
+  return (bsize > 0 && size > 0 && bsize < size && (size - (size % bsize)) < (size/4));
+}
 
 mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
   mi_page_t* page;
-  if (block_size <= (MI_SMALL_PAGE_SIZE/4)) {
+  if (block_size <= MI_SMALL_SIZE_MAX || mi_is_good_fit(block_size,MI_SMALL_PAGE_SIZE)) {
     page = mi_segment_small_page_alloc(tld,os_tld);
   }
-  else if (block_size <= (MI_MEDIUM_PAGE_SIZE/4)) {
+  else if (block_size <= MI_MEDIUM_SIZE_MAX || mi_is_good_fit(block_size, MI_MEDIUM_PAGE_SIZE)) {
     page = mi_segment_medium_page_alloc(tld, os_tld);
   }
-  else if (block_size < (MI_LARGE_SIZE_MAX - sizeof(mi_segment_t))) {
+  else if (block_size < MI_LARGE_SIZE_MAX || mi_is_good_fit(block_size, MI_LARGE_PAGE_SIZE - sizeof(mi_segment_t))) {
     page = mi_segment_large_page_alloc(tld, os_tld);
   }
   else {

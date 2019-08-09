@@ -97,7 +97,7 @@ uint8_t _mi_bsr(uintptr_t x) {
 // Returns MI_BIN_HUGE if the size is too large.
 // We use `wsize` for the size in "machine word sizes",
 // i.e. byte size == `wsize*sizeof(void*)`.
-inline uint8_t _mi_bin(size_t size) {
+extern inline uint8_t _mi_bin(size_t size) {
   size_t wsize = _mi_wsize_from_size(size);
   uint8_t bin;
   if (wsize <= 1) {
@@ -120,16 +120,21 @@ inline uint8_t _mi_bin(size_t size) {
     bin = MI_BIN_HUGE;
   }
   else {
-    #if defined(MI_ALIGN4W)
+    #if defined(MI_ALIGN4W) 
     if (wsize <= 16) { wsize = (wsize+3)&~3; } // round to 4x word sizes
     #endif
+    #ifdef MI_BIN4
+    uint8_t b = mi_bsr32((uint32_t)wsize);
+    bin = ((b << 1) + (uint8_t)((wsize >> (b - 1)) & 0x01)) + 3;
+    #else
     wsize--;
     // find the highest bit
     uint8_t b = mi_bsr32((uint32_t)wsize);
-    // and use the top 3 bits to determine the bin (~16% worst internal fragmentation).
+    // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin
     bin = ((b << 2) + (uint8_t)((wsize >> (b - 2)) & 0x03)) - 3;
+    #endif
   }
   mi_assert_internal(bin > 0 && bin <= MI_BIN_HUGE);
   return bin;

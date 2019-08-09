@@ -57,6 +57,7 @@ extern inline void* mi_malloc_small(size_t size) mi_attr_noexcept {
   return mi_heap_malloc_small(mi_get_default_heap(), size);
 }
 
+
 // zero initialized small block
 void* mi_zalloc_small(size_t size) mi_attr_noexcept {
   void* p = mi_malloc_small(size);
@@ -71,7 +72,7 @@ extern inline void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcep
   void* p;
   if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
     p = mi_heap_malloc_small(heap, size);
-  }
+  }  
   else {
     p = _mi_malloc_generic(heap, size);
   }
@@ -235,11 +236,11 @@ void mi_free(void* p) mi_attr_noexcept
   // huge page stat is accounted for in `_mi_page_retire`
 #endif
 
-  // adjust if it might be an un-aligned block
   uintptr_t tid = _mi_thread_id();
-  if (mi_likely(tid == page->flags.value)) {  // local, and not full or aligned
+  if (mi_likely(tid == page->flags.value)) {  
+    // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
-    mi_block_set_next(page, block, page->local_free);  // note: moving this write earlier does not matter for performance
+    mi_block_set_next(page, block, page->local_free);  
     page->local_free = block;
     page->used--;
     if (mi_unlikely(mi_page_all_free(page))) { _mi_page_retire(page); }
