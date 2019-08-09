@@ -123,10 +123,6 @@ extern inline uint8_t _mi_bin(size_t size) {
     #if defined(MI_ALIGN4W) 
     if (wsize <= 16) { wsize = (wsize+3)&~3; } // round to 4x word sizes
     #endif
-    #ifdef MI_BIN4
-    uint8_t b = mi_bsr32((uint32_t)wsize);
-    bin = ((b << 1) + (uint8_t)((wsize >> (b - 1)) & 0x01)) + 3;
-    #else
     wsize--;
     // find the highest bit
     uint8_t b = mi_bsr32((uint32_t)wsize);
@@ -134,7 +130,6 @@ extern inline uint8_t _mi_bin(size_t size) {
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin
     bin = ((b << 2) + (uint8_t)((wsize >> (b - 2)) & 0x03)) - 3;
-    #endif
   }
   mi_assert_internal(bin > 0 && bin <= MI_BIN_HUGE);
   return bin;

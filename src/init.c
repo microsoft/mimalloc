@@ -32,17 +32,6 @@ const mi_page_t _mi_page_empty = {
 
 // Empty page queues for every bin
 #define QNULL(sz)  { NULL, NULL, (sz)*sizeof(uintptr_t) }
-#ifdef MI_BIN4
-#define MI_PAGE_QUEUES_EMPTY \
-  { QNULL(1), \
-    QNULL(     1), QNULL(     2), QNULL(     3), QNULL(     4), QNULL(     5), QNULL(     6), QNULL(     7), QNULL(     8), /* 8 */ \
-    QNULL(    11), QNULL(    15), QNULL(    23), QNULL(    31), QNULL(    47), QNULL(    63), QNULL(    95), QNULL(   127), /* 16 */ \
-    QNULL(   191), QNULL(   255), QNULL(   383), QNULL(   511), QNULL(   767), QNULL(  1023), QNULL(  1535), QNULL(  2047), /* 24 */ \
-    QNULL(  3071), QNULL(  4095), QNULL(  6143), QNULL(  8191), QNULL( 12287), QNULL( 16383), QNULL( 24575), QNULL( 32767), /* 32 */ \
-    QNULL( 49151), QNULL( 65535), QNULL( 98303), QNULL(131071), QNULL(196607), QNULL(262143), QNULL(393215), /* 39 */ \
-    QNULL(MI_LARGE_WSIZE_MAX + 1  /* 524287, Huge queue */), \
-    QNULL(MI_LARGE_WSIZE_MAX + 2) /* Full queue */ }
-#else
 #define MI_PAGE_QUEUES_EMPTY \
   { QNULL(1), \
     QNULL(     1), QNULL(     2), QNULL(     3), QNULL(     4), QNULL(     5), QNULL(     6), QNULL(     7), QNULL(     8), /* 8 */ \
@@ -56,7 +45,6 @@ const mi_page_t _mi_page_empty = {
     QNULL(163840), QNULL(196608), QNULL(229376), QNULL(262144), QNULL(327680), /* 69 */ \
     QNULL(MI_LARGE_WSIZE_MAX + 1  /* 393216, Huge queue */), \
     QNULL(MI_LARGE_WSIZE_MAX + 2) /* Full queue */ }
-#endif
 
 #define MI_STAT_COUNT_NULL()  {0,0,0,0}
 

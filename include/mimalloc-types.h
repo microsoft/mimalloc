@@ -100,21 +100,11 @@ terms of the MIT license. A copy of the license can be found in the file
 // due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
 #define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 
-#define MI_BIN4
-#ifdef MI_BIN4
-// Maximum number of size classes. (spaced exponentially in 25% increments)
-#define MI_BIN_HUGE  (40U)
-
-#if (MI_LARGE_WSIZE_MAX > 524287)
-#error "define more bins"
-#endif
-#else
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (70U)
 
 #if (MI_LARGE_WSIZE_MAX > 393216)
 #error "define more bins"
-#endif
 #endif
 
 typedef uintptr_t mi_encoded_t;
