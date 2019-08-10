@@ -71,7 +71,7 @@ void* mi_heap_zalloc_aligned(mi_heap_t* heap, size_t size, size_t alignment) mi_
 
 void* mi_heap_calloc_aligned_at(mi_heap_t* heap, size_t count, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
   size_t total;
-  if (mi_mul_overflow(count, size, &total)) return NULL;
+  if (mi_mul_overflow(size, count, &total)) return NULL;
   return mi_heap_zalloc_aligned_at(heap, total, alignment, offset);
 }
 

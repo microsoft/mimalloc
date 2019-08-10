@@ -322,7 +322,7 @@ void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
 
 extern inline void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
-  if (mi_mul_overflow(count,size,&total)) return NULL;
+  if (mi_mul_overflow(size,count,&total)) return NULL;
   return mi_heap_zalloc(heap,total);
 }
 
@@ -333,7 +333,7 @@ void* mi_calloc(size_t count, size_t size) mi_attr_noexcept {
 // Uninitialized `calloc`
 extern void* mi_heap_mallocn(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
-  if (mi_mul_overflow(count,size,&total)) return NULL;
+  if (mi_mul_overflow(size,count,&total)) return NULL;
   return mi_heap_malloc(heap, total);
 }
 
@@ -374,7 +374,7 @@ void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept
 
 void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
-  if (mi_mul_overflow(count, size, &total)) return NULL;
+  if (mi_mul_overflow(size, count, &total)) return NULL;
   return mi_heap_realloc(heap, p, total);
 }
 
@@ -392,7 +392,7 @@ void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
 
 void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
-  if (mi_mul_overflow(count, size, &total)) return NULL;
+  if (mi_mul_overflow(size, count, &total)) return NULL;
   return _mi_heap_realloc_zero(mi_get_default_heap(),p,total,true);
 }
 
