@@ -58,7 +58,7 @@ static void mi_option_init(mi_option_desc_t* desc);
 long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
   mi_option_desc_t* desc = &options[option];
-  if (desc->init == UNINIT) {
+  if (mi_unlikely(desc->init == UNINIT)) {
     mi_option_init(desc);
     if (option != mi_option_verbose) {
       _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
@@ -183,7 +183,8 @@ static void mi_option_init(mi_option_desc_t* desc) {
   #pragma warning(suppress:4996)
   char* s = getenv(buf);
   if (s == NULL) {
-    for (size_t i = 0; i < strlen(buf); i++) {
+    size_t buf_size = strlen(buf);
+    for (size_t i = 0; i < buf_size; i++) {
       buf[i] = toupper(buf[i]);
     }
     #pragma warning(suppress:4996)
@@ -191,7 +192,8 @@ static void mi_option_init(mi_option_desc_t* desc) {
   }
   if (s != NULL) {
     mi_strlcpy(buf, s, sizeof(buf));
-    for (size_t i = 0; i < strlen(buf); i++) {
+    size_t buf_size = strlen(buf); // TODO: use strnlen?
+    for (size_t i = 0; i < buf_size; i++) {
       buf[i] = toupper(buf[i]);
     }
     if (buf[0]==0 || strstr("1;TRUE;YES;ON", buf) != NULL) {
