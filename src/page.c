@@ -142,7 +142,7 @@ static void mi_page_thread_free_collect(mi_page_t* page)
   mi_thread_free_t tfree;
   mi_thread_free_t tfreex;
   do {
-    tfreex = tfree = page->thread_free;
+    tfree = page->thread_free;
     head = mi_tf_block(tfree);
     tfreex = mi_tf_set_block(tfree,NULL);
   } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
