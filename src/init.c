@@ -388,7 +388,7 @@ bool _mi_preloading() {
 }
 
 // Communicate with the redirection module on Windows
-#if 0
+#if defined(_WIN32) && defined(MI_SHARED_LIB) 
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -475,9 +475,7 @@ static void mi_process_done(void) {
 
 
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
-  // Windows DLL: easy to hook into process_init and thread_done
-  #include <windows.h>
-
+  // Windows DLL: easy to hook into process_init and thread_done  
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     UNUSED(reserved);
     UNUSED(inst);

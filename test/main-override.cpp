@@ -23,11 +23,11 @@ public:
 
 
 int main() {
-  mi_stats_reset();  // ignore earlier allocations
+  //mi_stats_reset();  // ignore earlier allocations
   atexit(free_p);
   void* p1 = malloc(78);
   void* p2 = mi_malloc_aligned(16,24);
-  free(p1);
+  free(p1);  
   p1 = malloc(8);
   char* s = mi_strdup("hello\n");
   mi_free(p2);
@@ -40,6 +40,7 @@ int main() {
   delete t;
   t = new (std::nothrow) Test(42);
   delete t;  
+  mi_stats_print(NULL);
   return 0;
 }
 

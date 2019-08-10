@@ -208,8 +208,25 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
   dest[dest_size - 1] = 0;
 }
 
-static const char* mi_getenv(const char* name) {
-  if (_mi_preloading()) return NULL;  // don't call getenv too early
+#if defined _WIN32
+#include <windows.h>
+static bool mi_getenv(const char* name, char* result, size_t result_size) {
+  result[0] = 0;
+  bool ok = (GetEnvironmentVariableA(name, result, (DWORD)result_size) > 0);
+  if (!ok) {
+    char buf[64+1];
+    size_t len = strlen(name);
+    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+    for (size_t i = 0; i < len; i++) {
+      buf[i] = toupper(name[i]);
+    }
+    buf[len] = 0;
+    ok = (GetEnvironmentVariableA(name, result, (DWORD)result_size) > 0);
+  }
+  return ok;
+}
+#else
+static bool mi_getenv(const char* name, char* result, size_t result_size) {
   #pragma warning(suppress:4996)
   const char* s = getenv(name);
   if (s == NULL) {
@@ -223,17 +240,23 @@ static const char* mi_getenv(const char* name) {
     #pragma warning(suppress:4996)
     s = getenv(buf);
   }
-  return s;
+  if (s != NULL && strlen(s) < result_size) {
+    mi_strlcpy(result,s,result_size);
+    return true;
+  }
+  else {
+    return false;
+  }
 }
-
+#endif
 static void mi_option_init(mi_option_desc_t* desc) {
-  if (!_mi_preloading()) desc->init = DEFAULTED;
+  desc->init = DEFAULTED;
   // Read option value from the environment
   char buf[64+1];
   mi_strlcpy(buf, "mimalloc_", sizeof(buf));
   mi_strlcat(buf, desc->name, sizeof(buf));
-  const char* s = mi_getenv(buf);
-  if (s != NULL) {
+  char s[64+1];
+  if (mi_getenv(buf, s, sizeof(s))) {
     size_t len = strlen(s);
     if (len >= sizeof(buf)) len = sizeof(buf) - 1;
     for (size_t i = 0; i < len; i++) {
