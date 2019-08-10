@@ -248,6 +248,7 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
   #define MAP_ANONYMOUS  MAP_ANON
   #endif
   int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+  int gfd = -1;
   #if defined(MAP_ALIGNED)  // BSD
   if (try_alignment > 0) {
     size_t n = _mi_bsr(try_alignment);
@@ -258,6 +259,12 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
   #endif
   #if defined(PROT_MAX)
   protect_flags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
+  #endif
+  #if defined(VM_MAKE_TAG)
+  // tracking anonymous page with a specific ID
+  // all up to 98 are taken officially but LLVM
+  // sanitizers had taken 99
+  gfd = VM_MAKE_TAG(100);
   #endif
   if (large_os_page_size > 0 && use_large_os_page(size, try_alignment)) {
     int lflags = flags;
@@ -272,7 +279,7 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
     lflags |= MAP_HUGE_2MB;
     #endif
     #ifdef VM_FLAGS_SUPERPAGE_SIZE_2MB
-    fd = VM_FLAGS_SUPERPAGE_SIZE_2MB;
+    fd = VM_FLAGS_SUPERPAGE_SIZE_2MB | gfd;
     #endif
     if (lflags != flags) {
       // try large page allocation
@@ -283,7 +290,7 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
     }
   }
   if (p == NULL) {
-    p = mmap(NULL, size, protect_flags, flags, -1, 0);
+    p = mmap(NULL, size, protect_flags, flags, gfd, 0);
     if (p == MAP_FAILED) p = NULL;
   }
   return p;
