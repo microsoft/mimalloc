@@ -35,10 +35,10 @@ bool       _mi_is_main_thread(void);
 uintptr_t  _mi_ptr_cookie(const void* p);
 uintptr_t  _mi_random_shuffle(uintptr_t x);
 uintptr_t  _mi_random_init(uintptr_t seed /* can be zero */);
+bool       _mi_preloading();  // true while the C runtime is not ready
 
 // os.c
 size_t     _mi_os_page_size(void);
-uintptr_t  _mi_align_up(uintptr_t sz, size_t alignment);
 void       _mi_os_init(void);                                      // called from process init
 void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocate thread local data
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
@@ -162,6 +162,20 @@ static inline bool mi_mul_overflow(size_t size, size_t count, size_t* total) {
   return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
           && size > 0 && (SIZE_MAX / size) < count);
 #endif
+}
+
+// Align upwards
+static inline uintptr_t _mi_is_power_of_two(uintptr_t x) {
+  return ((x & (x - 1)) == 0);
+}
+static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
+  uintptr_t mask = alignment - 1;
+  if ((alignment & mask) == 0) {  // power of two?
+    return ((sz + mask) & ~mask);
+  }
+  else {
+    return (((sz + mask)/alignment)*alignment);
+  }
 }
 
 // Align a byte size to a size in _machine words_,
@@ -293,11 +307,21 @@ static inline bool mi_page_all_used(mi_page_t* page) {
 static inline bool mi_page_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / 8U;
-  return (page->reserved - page->used + page->thread_freed < frac);
+  return (page->reserved - page->used + page->thread_freed <= frac);
 }
 
 static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size) {
   return &((mi_heap_t*)heap)->pages[_mi_bin(size)];
+}
+
+static inline uintptr_t mi_page_thread_id(const mi_page_t* page) {
+  return (page->flags.xthread_id << MI_PAGE_FLAGS_BITS);
+}
+
+static inline void mi_page_init_flags(mi_page_t* page, uintptr_t thread_id) {
+  page->flags.value = 0;
+  page->flags.xthread_id = (thread_id >> MI_PAGE_FLAGS_BITS);
+  mi_assert(page->flags.value == thread_id);
 }
 
 // -------------------------------------------------------------------
@@ -323,12 +347,23 @@ static inline void mi_block_set_nextx(uintptr_t cookie, mi_block_t* block, mi_bl
 }
 
 static inline mi_block_t* mi_block_next(mi_page_t* page, mi_block_t* block) {
+  #if MI_SECURE
   return mi_block_nextx(page->cookie,block);
+  #else
+  UNUSED(page);
+  return mi_block_nextx(0, block);
+  #endif
 }
 
 static inline void mi_block_set_next(mi_page_t* page, mi_block_t* block, mi_block_t* next) {
+  #if MI_SECURE
   mi_block_set_nextx(page->cookie,block,next);
+  #else
+  UNUSED(page);
+  mi_block_set_nextx(0, block, next);
+  #endif
 }
+
 // -------------------------------------------------------------------
 // Getting the thread id should be performant
 // as it is called in the fast path of `_mi_free`,

@@ -7,17 +7,21 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
-#include <string.h>  // memcpy
+#include <string.h>  // memcpy, memset
+#include <stdlib.h>  // atexit
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
-  0, false, false, false, {0},
-  0, 0,
-  NULL, 0, 0,   // free, used, cookie
+  0, false, false, false, 0, 0, 
+  NULL,    // free
+  #if MI_SECURE
+  0,
+  #endif
+  0, {0}, // used, flags
   NULL, 0, 0,
   0, NULL, NULL, NULL
-  #if (MI_INTPTR_SIZE==4)
-  , { NULL }
+  #if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
+  , { NULL } 
   #endif
 };
 
@@ -30,22 +34,23 @@ const mi_page_t _mi_page_empty = {
 #define QNULL(sz)  { NULL, NULL, (sz)*sizeof(uintptr_t) }
 #define MI_PAGE_QUEUES_EMPTY \
   { QNULL(1), \
-    QNULL(1), QNULL(2), QNULL(3), QNULL(4), QNULL(5), QNULL(6), QNULL(7), QNULL(8), \
-    QNULL(10), QNULL(12), QNULL(14), QNULL(16), QNULL(20), QNULL(24), QNULL(28), QNULL(32), \
-    QNULL(40), QNULL(48), QNULL(56), QNULL(64), QNULL(80), QNULL(96), QNULL(112), QNULL(128), \
-    QNULL(160), QNULL(192), QNULL(224), QNULL(256), QNULL(320), QNULL(384), QNULL(448), QNULL(512), \
-    QNULL(640), QNULL(768), QNULL(896), QNULL(1024), QNULL(1280), QNULL(1536), QNULL(1792), QNULL(2048), \
-    QNULL(2560), QNULL(3072), QNULL(3584), QNULL(4096), QNULL(5120), QNULL(6144), QNULL(7168), QNULL(8192), \
-    QNULL(10240), QNULL(12288), QNULL(14336), QNULL(16384), QNULL(20480), QNULL(24576), QNULL(28672), QNULL(32768), \
-    QNULL(40960), QNULL(49152), QNULL(57344), QNULL(65536), QNULL(81920), QNULL(98304), QNULL(114688), \
-    QNULL(MI_LARGE_WSIZE_MAX + 1  /*131072, Huge queue */), \
+    QNULL(     1), QNULL(     2), QNULL(     3), QNULL(     4), QNULL(     5), QNULL(     6), QNULL(     7), QNULL(     8), /* 8 */ \
+    QNULL(    10), QNULL(    12), QNULL(    14), QNULL(    16), QNULL(    20), QNULL(    24), QNULL(    28), QNULL(    32), /* 16 */ \
+    QNULL(    40), QNULL(    48), QNULL(    56), QNULL(    64), QNULL(    80), QNULL(    96), QNULL(   112), QNULL(   128), /* 24 */ \
+    QNULL(   160), QNULL(   192), QNULL(   224), QNULL(   256), QNULL(   320), QNULL(   384), QNULL(   448), QNULL(   512), /* 32 */ \
+    QNULL(   640), QNULL(   768), QNULL(   896), QNULL(  1024), QNULL(  1280), QNULL(  1536), QNULL(  1792), QNULL(  2048), /* 40 */ \
+    QNULL(  2560), QNULL(  3072), QNULL(  3584), QNULL(  4096), QNULL(  5120), QNULL(  6144), QNULL(  7168), QNULL(  8192), /* 48 */ \
+    QNULL( 10240), QNULL( 12288), QNULL( 14336), QNULL( 16384), QNULL( 20480), QNULL( 24576), QNULL( 28672), QNULL( 32768), /* 56 */ \
+    QNULL( 40960), QNULL( 49152), QNULL( 57344), QNULL( 65536), QNULL( 81920), QNULL( 98304), QNULL(114688), QNULL(131072), /* 64 */ \
+    QNULL(163840), QNULL(196608), QNULL(229376), QNULL(262144), QNULL(327680), /* 69 */ \
+    QNULL(MI_LARGE_WSIZE_MAX + 1  /* 393216, Huge queue */), \
     QNULL(MI_LARGE_WSIZE_MAX + 2) /* Full queue */ }
 
 #define MI_STAT_COUNT_NULL()  {0,0,0,0}
 
 // Empty statistics
 #if MI_STAT>1
-#define MI_STAT_COUNT_END_NULL()  , { MI_STAT_COUNT_NULL(), MI_INIT64(MI_STAT_COUNT_NULL) }
+#define MI_STAT_COUNT_END_NULL()  , { MI_STAT_COUNT_NULL(), MI_INIT32(MI_STAT_COUNT_NULL) }
 #else
 #define MI_STAT_COUNT_END_NULL()
 #endif
@@ -58,7 +63,8 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  MI_STAT_COUNT_NULL(), \
+  { 0, 0 }, \
   { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 
@@ -92,8 +98,8 @@ static mi_tld_t tld_main = {
   0,
   &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
-  { 0, NULL, NULL, 0, tld_main_stats },              // os
-  { MI_STATS_NULL }                                  // stats
+  { 0, NULL, NULL, 0, tld_main_stats },          // os
+  { MI_STATS_NULL }                              // stats
 };
 
 mi_heap_t _mi_heap_main = {
@@ -373,6 +379,53 @@ void mi_thread_done(void) mi_attr_noexcept {
 // --------------------------------------------------------
 static void mi_process_done(void);
 
+static bool os_preloading = true;    // true until this module is initialized
+static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
+
+// Returns true if this module has not been initialized; Don't use C runtime routines until it returns false.
+bool _mi_preloading() {
+  return os_preloading;
+}
+
+// Communicate with the redirection module on Windows
+#if 0
+#ifdef __cplusplus
+extern "C" {
+#endif
+mi_decl_export void _mi_redirect_init() {
+  // called on redirection
+  mi_redirected = true;
+}
+__declspec(dllimport) bool mi_allocator_init(const char** message);
+__declspec(dllimport) void mi_allocator_done();
+#ifdef __cplusplus
+}
+#endif
+#else
+static bool mi_allocator_init(const char** message) {
+  if (message != NULL) *message = NULL;
+  return true;
+}
+static void mi_allocator_done() {
+  // nothing to do
+}
+#endif
+
+// Called once by the process loader
+static void mi_process_load(void) {
+  os_preloading = false;
+  atexit(&mi_process_done);
+  mi_process_init();
+  //mi_stats_reset();
+  if (mi_redirected) _mi_verbose_message("malloc is redirected.\n");
+
+  // show message from the redirector (if present)
+  const char* msg = NULL;
+  mi_allocator_init(&msg);
+  if (msg != NULL) _mi_verbose_message(msg);  
+}
+
+// Initialize the process; called by thread_init or the process loader
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   if (_mi_process_is_initialized) return;
@@ -381,7 +434,7 @@ void mi_process_init(void) mi_attr_noexcept {
   // when using dynamic linking with interpose.
   mi_heap_t* h = _mi_heap_default;
   _mi_process_is_initialized = true;
-
+  
   _mi_heap_main.thread_id = _mi_thread_id();
   _mi_verbose_message("process init: 0x%zx\n", _mi_heap_main.thread_id);
   uintptr_t random = _mi_random_init(_mi_heap_main.thread_id)  ^ (uintptr_t)h;
@@ -389,15 +442,16 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_heap_main.cookie = (uintptr_t)&_mi_heap_main ^ random;
   #endif
   _mi_heap_main.random = _mi_random_shuffle(random);
+  mi_process_setup_auto_thread_done();
+  _mi_os_init();  
   #if (MI_DEBUG)
   _mi_verbose_message("debug level : %d\n", MI_DEBUG);
   #endif
-  atexit(&mi_process_done);
-  mi_process_setup_auto_thread_done();
-  mi_stats_reset();
-  _mi_os_init();
+  mi_thread_init();
+  mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
 }
 
+// Called when the process is done (through `at_exit`)
 static void mi_process_done(void) {
   // only shutdown if we were initialized
   if (!_mi_process_is_initialized) return;
@@ -413,7 +467,9 @@ static void mi_process_done(void) {
       mi_option_is_enabled(mi_option_verbose)) {
     mi_stats_print(NULL);
   }
+  mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", _mi_heap_main.thread_id);
+  os_preloading = true; // don't call the C runtime anymore
 }
 
 
@@ -425,8 +481,8 @@ static void mi_process_done(void) {
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     UNUSED(reserved);
     UNUSED(inst);
-    if (reason==DLL_PROCESS_ATTACH) {
-      mi_process_init();
+    if (reason==DLL_PROCESS_ATTACH) {     
+      mi_process_load();
     }
     else if (reason==DLL_THREAD_DETACH) {
       mi_thread_done();
@@ -437,7 +493,7 @@ static void mi_process_done(void) {
 #elif defined(__cplusplus)
   // C++: use static initialization to detect process start
   static bool _mi_process_init(void) {
-    mi_process_init();
+    mi_process_load();
     return (_mi_heap_main.thread_id != 0);
   }
   static bool mi_initialized = _mi_process_init();
@@ -445,14 +501,14 @@ static void mi_process_done(void) {
 #elif defined(__GNUC__) || defined(__clang__)
   // GCC,Clang: use the constructor attribute
   static void __attribute__((constructor)) _mi_process_init(void) {
-    mi_process_init();
+    mi_process_load();
   }
 
 #elif defined(_MSC_VER)
   // MSVC: use data section magic for static libraries
   // See <https://www.codeguru.com/cpp/misc/misc/applicationcontrol/article.php/c6945/Running-Code-Before-and-After-Main.htm>
   static int _mi_process_init(void) {
-    mi_process_init();
+    mi_process_load();
     return 0;
   }
   typedef int(*_crt_cb)(void);
@@ -467,5 +523,5 @@ static void mi_process_done(void) {
   #pragma data_seg()
 
 #else
-#pragma message("define a way to call mi_process_init/done on your platform")
+#pragma message("define a way to call mi_process_load on your platform")
 #endif

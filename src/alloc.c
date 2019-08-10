@@ -8,7 +8,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
 
-#include <string.h>  // memset
+#include <string.h>  // memset, memcpy, strlen
+#include <stdlib.h>  // malloc, exit
 
 #define MI_IN_ALLOC_C
 #include "alloc-override.c"
@@ -56,6 +57,7 @@ extern inline void* mi_malloc_small(size_t size) mi_attr_noexcept {
   return mi_heap_malloc_small(mi_get_default_heap(), size);
 }
 
+
 // zero initialized small block
 void* mi_zalloc_small(size_t size) mi_attr_noexcept {
   void* p = mi_malloc_small(size);
@@ -70,7 +72,7 @@ extern inline void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcep
   void* p;
   if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
     p = mi_heap_malloc_small(heap, size);
-  }
+  }  
   else {
     p = _mi_malloc_generic(heap, size);
   }
@@ -198,28 +200,31 @@ static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, mi_pag
 
 // Free a block
 void mi_free(void* p) mi_attr_noexcept
-{
-  // optimize: merge null check with the segment masking (below)
-  //if (p == NULL) return;
-
+{  
 #if (MI_DEBUG>0)
   if (mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0)) {
     _mi_error_message("trying to free an invalid (unaligned) pointer: %p\n", p);
     return;
   }
 #endif
-
+  
   const mi_segment_t* const segment = _mi_ptr_segment(p);
-  if (segment == NULL) return;  // checks for (p==NULL)
-  bool local = (_mi_thread_id() == segment->thread_id);  // preload, note: putting the thread_id in the page->flags does not improve performance
+  if (segment == NULL) return;  // checks for (p==NULL) 
 
 #if (MI_DEBUG>0)
+  if (mi_unlikely(!mi_is_in_heap_region(p))) {
+    _mi_warning_message("possibly trying to mi_free a pointer that does not point to a valid heap region: 0x%p\n"
+      "(this may still be a valid very large allocation (over 64MiB))\n", p);
+    if (mi_likely(_mi_ptr_cookie(segment) == segment->cookie)) {
+      _mi_warning_message("(yes, the previous pointer 0x%p was valid after all)\n", p);
+    }
+  }
   if (mi_unlikely(_mi_ptr_cookie(segment) != segment->cookie)) {
     _mi_error_message("trying to mi_free a pointer that does not point to a valid heap space: %p\n", p);
     return;
   }
 #endif
-
+  
   mi_page_t* page = _mi_segment_page_of(segment, p);
 
 #if (MI_STAT>1)
@@ -231,24 +236,18 @@ void mi_free(void* p) mi_attr_noexcept
   // huge page stat is accounted for in `_mi_page_retire`
 #endif
 
-  // adjust if it might be an un-aligned block
-  if (mi_likely(page->flags.value==0)) {  // note: merging both tests (local | value) does not matter for performance
+  uintptr_t tid = _mi_thread_id();
+  if (mi_likely(tid == page->flags.value)) {  
+    // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
-    if (mi_likely(local)) {
-      // owning thread can free a block directly
-      mi_block_set_next(page, block, page->local_free);  // note: moving this write earlier does not matter for performance
-      page->local_free = block;
-      page->used--;
-      if (mi_unlikely(mi_page_all_free(page))) { _mi_page_retire(page); }
-    }
-    else {
-      // use atomic operations for a multi-threaded free
-      _mi_free_block_mt(page, block);
-    }
+    mi_block_set_next(page, block, page->local_free);  
+    page->local_free = block;
+    page->used--;
+    if (mi_unlikely(mi_page_all_free(page))) { _mi_page_retire(page); }
   }
   else {
-    // aligned blocks, or a full page; use the more generic path
-    mi_free_generic(segment, page, local, p);
+    // non-local, aligned blocks, or a full page; use the more generic path
+    mi_free_generic(segment, page, tid == mi_page_thread_id(page), p);
   }
 }
 
@@ -393,12 +392,6 @@ void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_realloc(mi_get_default_heap(),p,newsize);
 }
 
-void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
-  size_t total;
-  if (mi_mul_overflow(count, size, &total)) return NULL;
-  return _mi_heap_realloc_zero(mi_get_default_heap(),p,total,true);
-}
-
 void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
   return mi_heap_reallocn(mi_get_default_heap(),p,count,size);
 }
@@ -467,7 +460,7 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
   }
 }
 #else
-#include <unistd.h>
+#include <unistd.h>  // pathconf
 static size_t mi_path_max() {
   static size_t path_max = 0;
   if (path_max <= 0) {
@@ -537,6 +530,7 @@ std_new_handler_t mi_get_new_handler() {
   return _ZSt15get_new_handlerv();
 }
 #else
+// note: on windows we could dynamically link to `?get_new_handler@std@@YAP6AXXZXZ`.
 std_new_handler_t mi_get_new_handler() {
   return NULL;
 }

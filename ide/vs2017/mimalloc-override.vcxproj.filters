@@ -23,6 +23,9 @@
     <ClInclude Include="..\..\include\mimalloc-atomic.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc-override.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\alloc.c">
@@ -46,9 +49,6 @@
     <ClCompile Include="..\..\src\alloc-aligned.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\alloc-override-win.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\heap.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -61,7 +61,13 @@
     <ClCompile Include="..\..\src\memory.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\alloc-override.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\alloc-posix.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\alloc-override-win.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

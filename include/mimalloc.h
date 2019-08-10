@@ -52,8 +52,8 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_alloc_size2(s1,s2)
   #else
   #define mi_attr_alloc_size(s)       __attribute__((alloc_size(s)))
-  #define mi_attr_alloc_size2(s1,s2)  __attribute__((alloc_size(s1,s2)))  
-  #define mi_cdecl                    // leads to warnings... __attribute__((cdecl))  
+  #define mi_attr_alloc_size2(s1,s2)  __attribute__((alloc_size(s1,s2)))
+  #define mi_cdecl                    // leads to warnings... __attribute__((cdecl))
   #endif
 #else
   #define mi_decl_thread              __thread
@@ -62,14 +62,13 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_malloc
   #define mi_attr_alloc_size(s)
   #define mi_attr_alloc_size2(s1,s2)
-  #define mi_cdecl                   
+  #define mi_cdecl
 #endif
 
 // ------------------------------------------------------
 // Includes
 // ------------------------------------------------------
 
-#include <stdlib.h>     // size_t, malloc etc.
 #include <stdbool.h>    // bool
 #include <stdio.h>      // FILE
 
@@ -197,6 +196,7 @@ mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_b
 
 mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
 
+
 // ------------------------------------------------------
 // Convenience
 // ------------------------------------------------------
@@ -245,14 +245,15 @@ mi_decl_export void  mi_option_set(mi_option_t option, long value);
 mi_decl_export void  mi_option_set_default(mi_option_t option, long value);
 
 
-// ----------------------------------------------------------------------------------
-// mi prefixed implementations of various posix, unix, and C++ allocation functions.
-// -----------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------------
+// "mi" prefixed implementations of various posix, Unix, Windows, and C++ allocation functions.
+// (This can be convenient when providing overrides of these functions as done in `mimalloc-override.h`.)
+// -------------------------------------------------------------------------------------------------------
 
-mi_decl_export void*  mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept;
 mi_decl_export size_t mi_malloc_size(const void* p) mi_attr_noexcept;
 mi_decl_export size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept;
 mi_decl_export void   mi_cfree(void* p) mi_attr_noexcept;
+mi_decl_export void*  mi__expand(void* p, size_t newsize) mi_attr_noexcept;
 
 mi_decl_export int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept;
 mi_decl_export int mi__posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept;
@@ -262,6 +263,15 @@ mi_decl_export mi_decl_allocator void* mi_valloc(size_t size) mi_attr_noexcept m
 mi_decl_export mi_decl_allocator void* mi_pvalloc(size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
 mi_decl_export mi_decl_allocator void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_export mi_decl_allocator void* mi_reallocarray(void* p, size_t count, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2,3);
+
+mi_decl_export void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept;
+mi_decl_export void* mi_aligned_recalloc(void* p, size_t size, size_t newcount, size_t alignment) mi_attr_noexcept;
+mi_decl_export void* mi_aligned_offset_recalloc(void* p, size_t size, size_t newcount, size_t alignment, size_t offset) mi_attr_noexcept;
+
+mi_decl_export unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept;
+mi_decl_export unsigned char*  mi_mbsdup(const unsigned char* s)  mi_attr_noexcept;
+mi_decl_export int  mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept;
+mi_decl_export int  mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name) mi_attr_noexcept;
 
 mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
 mi_decl_export void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept;

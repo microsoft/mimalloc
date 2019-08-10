@@ -26,7 +26,6 @@ set(mi_sources
     src/options.c
     src/init.c)
 
-
 # Set default build type
 if (NOT CMAKE_BUILD_TYPE)
   if ("${CMAKE_BINARY_DIR}" MATCHES ".*(D|d)ebug$")
@@ -43,6 +42,11 @@ endif()
 if("${CMAKE_BINARY_DIR}" MATCHES ".*(S|s)ecure$")
   set(MI_SECURE "ON")
 endif()
+
+if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
+  set(MI_USE_CXX "ON")
+endif()
+
 
 # Options
 if(MI_OVERRIDE MATCHES "ON")
@@ -78,7 +82,7 @@ endif()
 if(MI_USE_CXX MATCHES "ON")
   message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-stress.c PROPERTIES LANGUAGE CXX )
 endif()
 
 # Compiler flags
@@ -87,6 +91,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
   if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     list(APPEND mi_cflags -Wno-invalid-memory-model)
     list(APPEND mi_cflags -fvisibility=hidden)
+    list(APPEND mi_cflags -fbranch-target-load-optimize )
   endif()
 endif()
 
@@ -120,14 +125,28 @@ add_library(mimalloc SHARED ${mi_sources})
 set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} NO_SONAME "YES" OUTPUT_NAME ${mi_basename} )
 target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
 target_compile_options(mimalloc PRIVATE ${mi_cflags})
+target_link_libraries(mimalloc PUBLIC ${mi_libraries})
 target_include_directories(mimalloc PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${mi_install_dir}/include>
 )
-target_link_libraries(mimalloc PUBLIC ${mi_libraries})
+if(WIN32)
+  # On windows copy the mimalloc redirection dll too.
+  target_link_libraries(mimalloc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect.lib)
+  add_custom_command(TARGET mimalloc POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect.dll" $<TARGET_FILE_DIR:mimalloc>
+    COMMENT "Copy mimalloc-redirect.dll to output directory")
+endif()
 
 # static library
 add_library(mimalloc-static STATIC ${mi_sources})
+target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
+target_compile_options(mimalloc-static PRIVATE ${mi_cflags})
+target_link_libraries(mimalloc-static PUBLIC ${mi_libraries})
+target_include_directories(mimalloc-static PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${mi_install_dir}/include>
+)
 if(WIN32)
   # When building both static and shared libraries on Windows, a static library should use a
   # different output name to avoid the conflict with the import library of a shared one.
@@ -136,19 +155,12 @@ if(WIN32)
 else()
   set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_basename})
 endif()
-target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
-target_compile_options(mimalloc-static PRIVATE ${mi_cflags})
-
-target_include_directories(mimalloc-static PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:${mi_install_dir}/include>
-)
-target_link_libraries(mimalloc-static PUBLIC ${mi_libraries})
 
 # install static and shared library, and the include files
 install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_dir} LIBRARY NAMELINK_SKIP)
 install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_dir})
 install(FILES include/mimalloc.h DESTINATION ${mi_install_dir}/include)
+install(FILES include/mimalloc-override.h DESTINATION ${mi_install_dir}/include)
 install(FILES cmake/mimalloc-config.cmake DESTINATION ${mi_install_dir}/cmake)
 install(FILES cmake/mimalloc-config-version.cmake DESTINATION ${mi_install_dir}/cmake)
 install(EXPORT mimalloc DESTINATION ${mi_install_dir}/cmake)
