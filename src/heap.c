@@ -506,7 +506,7 @@ typedef struct mi_visit_blocks_args_s {
 
 static bool mi_heap_area_visitor(const mi_heap_t* heap, const mi_heap_area_ex_t* xarea, void* arg) {
   mi_visit_blocks_args_t* args = (mi_visit_blocks_args_t*)arg;
-  if (!args->visitor(heap, &xarea->area, NULL, xarea->area.block_size, arg)) return false;
+  if (!args->visitor(heap, &xarea->area, NULL, xarea->area.block_size, args->arg)) return false;
   if (args->visit_blocks) {
     return mi_heap_area_visit_blocks(xarea, args->visitor, args->arg);
   }
