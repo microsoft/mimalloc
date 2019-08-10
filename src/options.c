@@ -209,6 +209,9 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
 }
 
 #if defined _WIN32
+// On Windows use GetEnvironmentVariable instead of getenv to work
+// reliably even when this is invoked before the C runtime is initialized.
+// i.e. when `_mi_preloading() == true`.
 #include <windows.h>
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
   result[0] = 0;
@@ -241,7 +244,7 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
     s = getenv(buf);
   }
   if (s != NULL && strlen(s) < result_size) {
-    mi_strlcpy(result,s,result_size);
+    mi_strlcpy(result, s, result_size);
     return true;
   }
   else {
