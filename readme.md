@@ -54,6 +54,10 @@ You can read more on the design of _mimalloc_ in the [technical report](https://
 
 Enjoy!  
 
+### Releases
+
+* 2019-08-10, `v1.0.6`: pre-release 6: various performance improvements.
+
 # Building
 
 ## Windows
