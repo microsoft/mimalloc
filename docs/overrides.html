@@ -105,17 +105,22 @@ $(document).ready(function(){initNavTree('overrides.html','');});
 <div class="textblock"><p>Overriding the standard <code>malloc</code> can be done either <em>dynamically</em> or <em>statically</em>.</p>
 <h2>Dynamic override</h2>
 <p>This is the recommended way to override the standard malloc interface.</p>
-<h3>Unix, BSD, macOS</h3>
+<h3>Linux, BSD</h3>
 <p>On these systems we preload the mimalloc shared library so all calls to the standard <code>malloc</code> interface are resolved to the <em>mimalloc</em> library.</p>
 <ul>
-<li><code>env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram</code> (on Linux, BSD, etc.)</li>
-<li><p class="startli"><code>env DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram</code> (On macOS)</p>
-<p class="startli">Note certain security restrictions may apply when doing this from the <a href="https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash">shell</a>.</p>
-</li>
+<li><code>env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram</code></li>
 </ul>
-<p>You can set extra environment variables to check that mimalloc is running, like: </p><div class="fragment"><div class="line">env MIMALLOC_VERBOSE=1 LD_PRELOAD=/usr/lib/libmimalloc.so myprogram</div></div><!-- fragment --><p> or run with the debug version to get detailed statistics: </p><div class="fragment"><div class="line">env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram</div></div><!-- fragment --><h3>Windows</h3>
-<p>On Windows you need to link your program explicitly with the mimalloc DLL, and use the C-runtime library as a DLL (the <code>/MD</code> or <code>/MDd</code> switch). To ensure the mimalloc DLL gets loaded it is easiest to insert some call to the mimalloc API in the <code>main</code> function, like <code>mi_version()</code>.</p>
+<p>You can set extra environment variables to check that mimalloc is running, like: </p><div class="fragment"><div class="line">env MIMALLOC_VERBOSE=1 LD_PRELOAD=/usr/lib/libmimalloc.so myprogram</div></div><!-- fragment --><p> or run with the debug version to get detailed statistics: </p><div class="fragment"><div class="line">env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram</div></div><!-- fragment --><h3>MacOS</h3>
+<p>On macOS we can also preload the mimalloc shared library so all calls to the standard <code>malloc</code> interface are resolved to the <em>mimalloc</em> library.</p>
+<ul>
+<li><code>env DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram</code></li>
+</ul>
+<p>Note that certain security restrictions may apply when doing this from the <a href="https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash">shell</a>.</p>
+<p>Note: unfortunately, at this time, dynamic overriding on macOS seems broken but it is actively worked on to fix this (see issue <a href="https://github.com/microsoft/mimalloc/issues/50"><code>#50</code></a>).</p>
+<h3>Windows</h3>
+<p>On Windows you need to link your program explicitly with the mimalloc DLL, and use the C-runtime library as a DLL (the <code>/MD</code> or <code>/MDd</code> switch). To ensure the mimalloc DLL gets loaded it is easiest to insert some call to the mimalloc API in the <code>main</code> function, like <code>mi_version()</code> (or use the <code>/INCLUDE:mi_version</code> switch on the linker)</p>
 <p>Due to the way mimalloc intercepts the standard malloc at runtime, it is best to link to the mimalloc import library first on the command line so it gets loaded right after the universal C runtime DLL (<code>ucrtbase</code>). See the <code>mimalloc-override-test</code> project for an example.</p>
+<p>Note: the current overriding on Windows works for most programs but some programs still have trouble &ndash; the <code>dev-exp</code> branch contains a newer way of overriding that is more robust; try this out if you experience troubles.</p>
 <h2>Static override</h2>
 <p>On Unix systems, you can also statically link with <em>mimalloc</em> to override the standard malloc interface. The recommended way is to link the final program with the <em>mimalloc</em> single object file (<code>mimalloc-override.o</code>). We use an object file instead of a library file as linkers give preference to that over archives to resolve symbols. To ensure that the standard malloc interface resolves to the <em>mimalloc</em> library, link it as the first object file. For example:</p>
 <div class="fragment"><div class="line">gcc -o myprogram mimalloc-<span class="keyword">override</span>.o  myfile1.c ...</div></div><!-- fragment --><h2>List of Overrides:</h2>

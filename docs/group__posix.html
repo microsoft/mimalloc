@@ -137,11 +137,17 @@ Functions</h2></td></tr>
 <tr class="memitem:ga0d28d5cf61e6bfbb18c63092939fe5c9"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__posix.html#ga0d28d5cf61e6bfbb18c63092939fe5c9">mi_free_aligned</a> (void *p, size_t alignment)</td></tr>
 <tr class="separator:ga0d28d5cf61e6bfbb18c63092939fe5c9"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaad048a9fce3d02c5909cd05c6ec24545"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__posix.html#gaad048a9fce3d02c5909cd05c6ec24545">mi_new</a> (std::size_t n) noexcept(false)</td></tr>
-<tr class="memdesc:gaad048a9fce3d02c5909cd05c6ec24545"><td class="mdescLeft">&#160;</td><td class="mdescRight">Only defined in C++ compilation; raise <code>std::bad_alloc</code> exception on failure.  <a href="#gaad048a9fce3d02c5909cd05c6ec24545">More...</a><br /></td></tr>
+<tr class="memdesc:gaad048a9fce3d02c5909cd05c6ec24545"><td class="mdescLeft">&#160;</td><td class="mdescRight">raise <code>std::bad_alloc</code> exception on failure.  <a href="#gaad048a9fce3d02c5909cd05c6ec24545">More...</a><br /></td></tr>
 <tr class="separator:gaad048a9fce3d02c5909cd05c6ec24545"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaef2c2bdb4f70857902d3c8903ac095f3"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__posix.html#gaef2c2bdb4f70857902d3c8903ac095f3">mi_new_aligned</a> (std::size_t n, std::align_val_t alignment) noexcept(false)</td></tr>
-<tr class="memdesc:gaef2c2bdb4f70857902d3c8903ac095f3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Only defined in C++ compilation; raise <code>std::bad_alloc</code> exception on failure.  <a href="#gaef2c2bdb4f70857902d3c8903ac095f3">More...</a><br /></td></tr>
+<tr class="memdesc:gaef2c2bdb4f70857902d3c8903ac095f3"><td class="mdescLeft">&#160;</td><td class="mdescRight">raise <code>std::bad_alloc</code> exception on failure.  <a href="#gaef2c2bdb4f70857902d3c8903ac095f3">More...</a><br /></td></tr>
 <tr class="separator:gaef2c2bdb4f70857902d3c8903ac095f3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaeaded64eda71ed6b1d569d3e723abc4a"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__posix.html#gaeaded64eda71ed6b1d569d3e723abc4a">mi_new_nothrow</a> (size_t n)</td></tr>
+<tr class="memdesc:gaeaded64eda71ed6b1d569d3e723abc4a"><td class="mdescLeft">&#160;</td><td class="mdescRight">return <code>NULL</code> on failure.  <a href="#gaeaded64eda71ed6b1d569d3e723abc4a">More...</a><br /></td></tr>
+<tr class="separator:gaeaded64eda71ed6b1d569d3e723abc4a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gab5e29558926d934c3f1cae8c815f942c"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__posix.html#gab5e29558926d934c3f1cae8c815f942c">mi_new_aligned_nothrow</a> (size_t n, size_t alignment)</td></tr>
+<tr class="memdesc:gab5e29558926d934c3f1cae8c815f942c"><td class="mdescLeft">&#160;</td><td class="mdescRight">return <code>NULL</code> on failure.  <a href="#gab5e29558926d934c3f1cae8c815f942c">More...</a><br /></td></tr>
+<tr class="separator:gab5e29558926d934c3f1cae8c815f942c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p><code>mi_</code> prefixed implementations of various Posix, Unix, and C++ allocation functions. </p>
@@ -405,7 +411,7 @@ Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Only defined in C++ compilation; raise <code>std::bad_alloc</code> exception on failure. </p>
+<p>raise <code>std::bad_alloc</code> exception on failure. </p>
 
 </div>
 </div>
@@ -443,7 +449,57 @@ Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Only defined in C++ compilation; raise <code>std::bad_alloc</code> exception on failure. </p>
+<p>raise <code>std::bad_alloc</code> exception on failure. </p>
+
+</div>
+</div>
+<a id="gab5e29558926d934c3f1cae8c815f942c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gab5e29558926d934c3f1cae8c815f942c">&#9670;&nbsp;</a></span>mi_new_aligned_nothrow()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void* mi_new_aligned_nothrow </td>
+          <td>(</td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>n</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>alignment</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>return <code>NULL</code> on failure. </p>
+
+</div>
+</div>
+<a id="gaeaded64eda71ed6b1d569d3e723abc4a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaeaded64eda71ed6b1d569d3e723abc4a">&#9670;&nbsp;</a></span>mi_new_nothrow()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void* mi_new_nothrow </td>
+          <td>(</td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>n</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>return <code>NULL</code> on failure. </p>
 
 </div>
 </div>

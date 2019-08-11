@@ -51,6 +51,8 @@ var searchData=
   ['mi_5fmemalign',['mi_memalign',['../group__posix.html#gaab7fa71ea93b96873f5d9883db57d40e',1,'mimalloc-doc.h']]],
   ['mi_5fnew',['mi_new',['../group__posix.html#gaad048a9fce3d02c5909cd05c6ec24545',1,'mimalloc-doc.h']]],
   ['mi_5fnew_5faligned',['mi_new_aligned',['../group__posix.html#gaef2c2bdb4f70857902d3c8903ac095f3',1,'mimalloc-doc.h']]],
+  ['mi_5fnew_5faligned_5fnothrow',['mi_new_aligned_nothrow',['../group__posix.html#gab5e29558926d934c3f1cae8c815f942c',1,'mimalloc-doc.h']]],
+  ['mi_5fnew_5fnothrow',['mi_new_nothrow',['../group__posix.html#gaeaded64eda71ed6b1d569d3e723abc4a',1,'mimalloc-doc.h']]],
   ['mi_5foption_5fenable',['mi_option_enable',['../group__options.html#ga6d45a20a3131f18bc351b69763b38ce4',1,'mimalloc-doc.h']]],
   ['mi_5foption_5fenable_5fdefault',['mi_option_enable_default',['../group__options.html#ga37988264b915a7db92530cc02d5494cb',1,'mimalloc-doc.h']]],
   ['mi_5foption_5fenabled',['mi_option_enabled',['../group__options.html#gacebe3f6d91b4a50b54eb84e2a1da1b30',1,'mimalloc-doc.h']]],
