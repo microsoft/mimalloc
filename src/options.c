@@ -115,31 +115,40 @@ static uintptr_t error_count = 0;  // when MAX_ERROR_COUNT stop emitting errors 
 // inside the C runtime causes another message.
 static mi_decl_thread bool recurse = false;
 
-// Define our own limited `fprintf` that avoids memory allocation.
-// We do this using `snprintf` with a limited buffer.
-static void mi_vfprintf( FILE* out, const char* prefix, const char* fmt, va_list args ) {
-  char buf[256];
-  if (fmt==NULL) return;
+
+void _mi_fputs(FILE* out, const char* prefix, const char* message) {
+  if (out==NULL) out = stdout;
   if (_mi_preloading() || recurse) return;
   recurse = true;
-  if (out==NULL) out = stdout;
-  vsnprintf(buf,sizeof(buf)-1,fmt,args);
   #ifdef _WIN32
   // on windows with redirection, the C runtime cannot handle locale dependent output 
   // after the main thread closes so use direct console output.
   if (out==stderr) {
     if (prefix != NULL) _cputs(prefix);
-    _cputs(buf);
+    _cputs(message);
   }
-  else 
-  #endif
-  {  
-    if (prefix != NULL) fputs(prefix,out);
-    fputs(buf,out);
+  else
+    #endif
+  {
+    if (prefix != NULL) fputs(prefix, out);
+    fputs(message, out);
   }
   recurse = false;
   return;
 }
+
+// Define our own limited `fprintf` that avoids memory allocation.
+// We do this using `snprintf` with a limited buffer.
+static void mi_vfprintf( FILE* out, const char* prefix, const char* fmt, va_list args ) {
+  char buf[512];
+  if (fmt==NULL) return;
+  if (_mi_preloading() || recurse) return;
+  recurse = true;
+  vsnprintf(buf,sizeof(buf)-1,fmt,args);
+  recurse = false;
+  _mi_fputs(out,prefix,buf);
+}
+
 
 void _mi_fprintf( FILE* out, const char* fmt, ... ) {
   va_list args;

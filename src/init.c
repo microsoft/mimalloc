@@ -421,7 +421,9 @@ static void mi_process_load(void) {
   // show message from the redirector (if present)
   const char* msg = NULL;
   mi_allocator_init(&msg);
-  if (msg != NULL) _mi_verbose_message(msg);
+  if (msg != NULL && (mi_option_is_enabled(mi_option_verbose) || mi_option_is_enabled(mi_option_show_errors))) {
+    _mi_fputs(stderr,NULL,msg);
+  }
 }
 
 // Initialize the process; called by thread_init or the process loader
