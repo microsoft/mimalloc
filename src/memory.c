@@ -186,7 +186,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
 
 // Use bit scan forward to quickly find the first zero bit if it is available
 #if defined(_MSC_VER)
-#define MI_HAVE_BSF
+#define MI_HAVE_BITSCAN
 #include <intrin.h>
 static inline size_t mi_bsf(uintptr_t x) {
   if (x==0) return 8*MI_INTPTR_SIZE;
@@ -198,10 +198,23 @@ static inline size_t mi_bsf(uintptr_t x) {
   #endif
   return idx;
 }
+static inline size_t mi_bsr(uintptr_t x) {
+  if (x==0) return 8*MI_INTPTR_SIZE;
+  DWORD idx;
+  #if (MI_INTPTR_SIZE==8)
+  _BitScanReverse64(&idx, x);
+  #else
+  _BitScanReverse(&idx, x);
+  #endif
+  return idx;
+}
 #elif defined(__GNUC__) || defined(__clang__)
-#define MI_HAVE_BSF
+#define MI_HAVE_BITSCAN
 static inline size_t mi_bsf(uintptr_t x) {
-  return (x==0 ? 8*MI_INTPTR_SIZE : __builtin_ctz(x));
+  return (x==0 ? 8*MI_INTPTR_SIZE : __builtin_ctzl(x));
+}
+static inline size_t mi_bsr(uintptr_t x) {
+  return (x==0 ? 8*MI_INTPTR_SIZE : (8*MI_INTPTR_SIZE - 1) - __builtin_clzl(x));
 }
 #endif
 
@@ -218,12 +231,12 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
   const size_t bitidx_max = MI_REGION_MAP_BITS - blocks;
   uintptr_t map = mi_atomic_read(&region->map);
 
-  #ifdef MI_HAVE_BSF
+  #ifdef MI_HAVE_BITSCAN
   size_t bitidx = mi_bsf(~map);    // quickly find the first zero bit if possible
   #else
   size_t bitidx = 0;               // otherwise start at 0
   #endif
-  uintptr_t m = (mask << bitidx);  // invariant: m == mask shifted by bitidx
+  uintptr_t m = (mask << bitidx);     // invariant: m == mask shifted by bitidx
   
   // scan linearly for a free range of zero bits
   while(bitidx <= bitidx_max) {
@@ -233,7 +246,8 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
       mi_assert_internal((newmap^map) >> bitidx == mask);
       if (!mi_atomic_compare_exchange(&region->map, newmap, map)) {
         // no success, another thread claimed concurrently.. keep going
-        map = mi_atomic_read(&region->map);        
+        map = mi_atomic_read(&region->map);   
+        continue;
       }
       else {
         // success, we claimed the bits
@@ -241,9 +255,17 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
         return mi_region_commit_blocks(region, idx, bitidx, blocks, size, commit, p, id, tld);
       }
     }
-    // on to the next bit
-    bitidx++;
-    m <<= 1;
+    else {
+      // on to the next bit range
+      #ifdef MI_HAVE_BITSCAN
+      size_t shift = (blocks == 1 ? 1 : mi_bsr(map & m) - bitidx + 1);
+      mi_assert_internal(shift > 0 && shift <= blocks);
+      #else
+      size_t shift = 1;      
+      #endif
+      bitidx += shift;
+      m <<= shift;    
+    }
   }
   // no error, but also no bits found
   return true;  
