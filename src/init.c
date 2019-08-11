@@ -17,11 +17,11 @@ const mi_page_t _mi_page_empty = {
   #if MI_SECURE
   0,
   #endif
-  0, 0, // used, flags
+  0, 0, // flags, used
   NULL, 0, 0,
   0, NULL, NULL, NULL
   #if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
-  // , { NULL }
+  , { NULL }
   #endif
 };
 
