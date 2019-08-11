@@ -240,12 +240,14 @@ static void* mi_wasm_heap_grow(size_t size, size_t try_alignment) {
 static void* mi_unix_mmapx(size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
   void* p = NULL;
   #if (MI_INTPTR_SIZE >= 8) && !defined(MAP_ALIGNED)
-  // on 64-bit systems, use a special area for 4MiB aligned allocations
+  // on 64-bit systems, use the virtual address area after 4TiB for 4MiB aligned allocations
   static volatile intptr_t aligned_base = ((intptr_t)1 << 42); // starting at 4TiB
-  if (try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE)==0 && (aligned_base%try_alignment)==0) {
+  if (try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE)==0) {
     intptr_t hint = mi_atomic_add(&aligned_base,size) - size;
-    p = mmap((void*)hint,size,protect_flags,flags,fd,0);
-    if (p==MAP_FAILED) p = NULL; // fall back to regular mmap
+    if (hint%try_alignment == 0) {
+      p = mmap((void*)hint,size,protect_flags,flags,fd,0);
+      if (p==MAP_FAILED) p = NULL; // fall back to regular mmap
+    }
   }
   #endif
   if (p==NULL) {
@@ -273,10 +275,10 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
   protect_flags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
   #endif
   #if defined(VM_MAKE_TAG)
-  // darwin: tracking anonymous page with a specific ID all up to 98 are taken officially but LLVM sanitizers had taken 99
+  // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
   fd = VM_MAKE_TAG(100);
   #endif
-  if (large_os_page_size > 0 && use_large_os_page(size, try_alignment)) {
+  if (use_large_os_page(size, try_alignment)) {
     int lflags = flags;
     int lfd = fd;
     #ifdef MAP_ALIGNED_SUPER
@@ -308,7 +310,7 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
 #endif
 
 // Primitive allocation from the OS.
-// Note: the `alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
+// Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
 static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, mi_stats_t* stats) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   if (size == 0) return NULL;
@@ -319,7 +321,7 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, mi_
   if (commit) flags |= MEM_COMMIT;
   p = mi_win_virtual_alloc(NULL, size, try_alignment, flags);
 #elif defined(__wasi__)
-  p = mi_wasm_heap_grow(size, try_alignment);
+  p = mi_wasm_herap_grow(size, try_alignment);
 #else
   int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
   p = mi_unix_mmap(size, try_alignment, protect_flags);
