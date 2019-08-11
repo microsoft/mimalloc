@@ -79,7 +79,6 @@ typedef struct mem_region_s {
 static mem_region_t regions[MI_REGION_MAX];
 
 static volatile size_t regions_count = 0;        // allocated regions
-static volatile uintptr_t region_next_idx = 0;   // good place to start searching
 
 
 /* ----------------------------------------------------------------------------
@@ -180,7 +179,6 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
   }
 
   // and return the allocation
-  mi_atomic_write(&region_next_idx,idx);  // next search from here
   *p  = blocks_start;
   *id = (idx*MI_REGION_MAP_BITS) + bitidx;
   return true;
@@ -267,7 +265,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* 
   // find a range of free blocks
   void* p = NULL;
   size_t count = mi_atomic_read(&regions_count);
-  size_t idx = mi_atomic_read(&region_next_idx);
+  size_t idx = tld->region_idx; // start index is per-thread to reduce contention
   for (size_t visited = 0; visited < count; visited++, idx++) {
     if (idx >= count) idx = 0;  // wrap around
     if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, &p, id, tld)) return NULL; // error
@@ -285,6 +283,9 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* 
   if (p == NULL) {
     // we could not find a place to allocate, fall back to the os directly
     p = _mi_os_alloc_aligned(size, alignment, commit, tld);
+  }
+  else {
+    tld->region_idx = idx;  // next start of search
   }
 
   mi_assert_internal( p == NULL || (uintptr_t)p % alignment == 0);
