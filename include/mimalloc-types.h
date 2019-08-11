@@ -380,12 +380,8 @@ typedef struct mi_segments_tld_s {
 } mi_segments_tld_t;
 
 // OS thread local data
-typedef struct mi_os_tld_s {
-  uintptr_t           mmap_next_probable;  // probable next address start allocated by mmap (to guess which path to take on alignment)
-  void*               mmap_previous;       // previous address returned by mmap
-  uint8_t*            pool;                // pool of segments to reduce mmap calls on some platforms
-  size_t              pool_available;      // bytes available in the pool
-  mi_stats_t*         stats;               // points to tld stats
+typedef struct mi_os_tld_s {  
+  mi_stats_t*         stats;        // points to tld stats
 } mi_os_tld_t;
 
 // Thread local data

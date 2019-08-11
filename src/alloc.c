@@ -237,7 +237,7 @@ void mi_free(void* p) mi_attr_noexcept
 #endif
 
   uintptr_t tid = _mi_thread_id();
-  if (mi_likely(tid == page->flags)) {  
+  if (mi_likely(tid == page->flags)) {  // if equal, the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
     mi_block_set_next(page, block, page->local_free);  
