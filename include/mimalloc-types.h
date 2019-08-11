@@ -167,9 +167,9 @@ typedef struct mi_page_s {
   #if MI_SECURE
   uintptr_t             cookie;            // random cookie to encode the free lists
   #endif
-  size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
   mi_page_flags_t       flags;             // threadid:62 | has_aligned:1 | in_full:1
-
+  size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
+  
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   volatile uintptr_t    thread_freed;      // at least this number of blocks are in `thread_free`
   volatile mi_thread_free_t thread_free;   // list of deferred free blocks freed by other threads
@@ -383,7 +383,8 @@ typedef struct mi_segments_tld_s {
 } mi_segments_tld_t;
 
 // OS thread local data
-typedef struct mi_os_tld_s {  
+typedef struct mi_os_tld_s {
+  size_t              region_idx;   // start point for next allocation
   mi_stats_t*         stats;        // points to tld stats
 } mi_os_tld_t;
 

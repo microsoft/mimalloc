@@ -91,7 +91,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
   if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     list(APPEND mi_cflags -Wno-invalid-memory-model)
     list(APPEND mi_cflags -fvisibility=hidden)
-    list(APPEND mi_cflags -fbranch-target-load-optimize )
+    list(APPEND mi_cflags -fbranch-target-load-optimize)
   endif()
 endif()
 

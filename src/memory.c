@@ -79,7 +79,6 @@ typedef struct mem_region_s {
 static mem_region_t regions[MI_REGION_MAX];
 
 static volatile size_t regions_count = 0;        // allocated regions
-static volatile uintptr_t region_next_idx = 0;   // good place to start searching
 
 
 /* ----------------------------------------------------------------------------
@@ -180,11 +179,44 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
   }
 
   // and return the allocation
-  mi_atomic_write(&region_next_idx,idx);  // next search from here
   *p  = blocks_start;
   *id = (idx*MI_REGION_MAP_BITS) + bitidx;
   return true;
 }
+
+// Use bit scan forward to quickly find the first zero bit if it is available
+#if defined(_MSC_VER)
+#define MI_HAVE_BITSCAN
+#include <intrin.h>
+static inline size_t mi_bsf(uintptr_t x) {
+  if (x==0) return 8*MI_INTPTR_SIZE;
+  DWORD idx;
+  #if (MI_INTPTR_SIZE==8)
+  _BitScanForward64(&idx, x);
+  #else
+  _BitScanForward(&idx, x);
+  #endif
+  return idx;
+}
+static inline size_t mi_bsr(uintptr_t x) {
+  if (x==0) return 8*MI_INTPTR_SIZE;
+  DWORD idx;
+  #if (MI_INTPTR_SIZE==8)
+  _BitScanReverse64(&idx, x);
+  #else
+  _BitScanReverse(&idx, x);
+  #endif
+  return idx;
+}
+#elif defined(__GNUC__) || defined(__clang__)
+#define MI_HAVE_BITSCAN
+static inline size_t mi_bsf(uintptr_t x) {
+  return (x==0 ? 8*MI_INTPTR_SIZE : __builtin_ctzl(x));
+}
+static inline size_t mi_bsr(uintptr_t x) {
+  return (x==0 ? 8*MI_INTPTR_SIZE : (8*MI_INTPTR_SIZE - 1) - __builtin_clzl(x));
+}
+#endif
 
 // Allocate `blocks` in a `region` at `idx` of a given `size`. 
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
@@ -194,27 +226,45 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
 {
   mi_assert_internal(p != NULL && id != NULL);
   mi_assert_internal(blocks < MI_REGION_MAP_BITS);
-
-  const uintptr_t mask = mi_region_block_mask(blocks,0);
+  
+  const uintptr_t mask = mi_region_block_mask(blocks, 0);
   const size_t bitidx_max = MI_REGION_MAP_BITS - blocks;
-
-  // scan linearly for a free range of zero bits
   uintptr_t map = mi_atomic_read(&region->map);
-  uintptr_t m   = mask;    // the mask shifted by bitidx
-  for(size_t bitidx = 0; bitidx <= bitidx_max; bitidx++, m <<= 1) {
+
+  #ifdef MI_HAVE_BITSCAN
+  size_t bitidx = mi_bsf(~map);    // quickly find the first zero bit if possible
+  #else
+  size_t bitidx = 0;               // otherwise start at 0
+  #endif
+  uintptr_t m = (mask << bitidx);     // invariant: m == mask shifted by bitidx
+  
+  // scan linearly for a free range of zero bits
+  while(bitidx <= bitidx_max) {
     if ((map & m) == 0) {  // are the mask bits free at bitidx?
       mi_assert_internal((m >> bitidx) == mask); // no overflow?      
       uintptr_t newmap = map | m;
       mi_assert_internal((newmap^map) >> bitidx == mask);
       if (!mi_atomic_compare_exchange(&region->map, newmap, map)) {
         // no success, another thread claimed concurrently.. keep going
-        map = mi_atomic_read(&region->map);        
+        map = mi_atomic_read(&region->map);   
+        continue;
       }
       else {
         // success, we claimed the bits
         // now commit the block memory -- this can still fail
         return mi_region_commit_blocks(region, idx, bitidx, blocks, size, commit, p, id, tld);
       }
+    }
+    else {
+      // on to the next bit range
+      #ifdef MI_HAVE_BITSCAN
+      size_t shift = (blocks == 1 ? 1 : mi_bsr(map & m) - bitidx + 1);
+      mi_assert_internal(shift > 0 && shift <= blocks);
+      #else
+      size_t shift = 1;      
+      #endif
+      bitidx += shift;
+      m <<= shift;    
     }
   }
   // no error, but also no bits found
@@ -267,7 +317,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* 
   // find a range of free blocks
   void* p = NULL;
   size_t count = mi_atomic_read(&regions_count);
-  size_t idx = mi_atomic_read(&region_next_idx);
+  size_t idx = tld->region_idx; // start index is per-thread to reduce contention
   for (size_t visited = 0; visited < count; visited++, idx++) {
     if (idx >= count) idx = 0;  // wrap around
     if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, &p, id, tld)) return NULL; // error
@@ -285,6 +335,9 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* 
   if (p == NULL) {
     // we could not find a place to allocate, fall back to the os directly
     p = _mi_os_alloc_aligned(size, alignment, commit, tld);
+  }
+  else {
+    tld->region_idx = idx;  // next start of search
   }
 
   mi_assert_internal( p == NULL || (uintptr_t)p % alignment == 0);

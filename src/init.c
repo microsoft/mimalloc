@@ -12,16 +12,16 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
-  0, false, false, false, 0, 0, 
+  0, false, false, false, 0, 0,
   NULL,    // free
   #if MI_SECURE
   0,
   #endif
-  0, {0}, // used, flags
+  0, 0, // flags, used
   NULL, 0, 0,
   0, NULL, NULL, NULL
   #if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
-  , { NULL } 
+  , { NULL }
   #endif
 };
 
@@ -97,7 +97,7 @@ static mi_tld_t tld_main = {
   0,
   &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
-  { tld_main_stats },          // os
+  { 0, tld_main_stats },       // os
   { MI_STATS_NULL }            // stats
 };
 
@@ -421,7 +421,7 @@ static void mi_process_load(void) {
   // show message from the redirector (if present)
   const char* msg = NULL;
   mi_allocator_init(&msg);
-  if (msg != NULL) _mi_verbose_message(msg);  
+  if (msg != NULL) _mi_verbose_message(msg);
 }
 
 // Initialize the process; called by thread_init or the process loader
@@ -433,7 +433,7 @@ void mi_process_init(void) mi_attr_noexcept {
   // when using dynamic linking with interpose.
   mi_heap_t* h = _mi_heap_default;
   _mi_process_is_initialized = true;
-  
+
   _mi_heap_main.thread_id = _mi_thread_id();
   _mi_verbose_message("process init: 0x%zx\n", _mi_heap_main.thread_id);
   uintptr_t random = _mi_random_init(_mi_heap_main.thread_id)  ^ (uintptr_t)h;
@@ -442,7 +442,7 @@ void mi_process_init(void) mi_attr_noexcept {
   #endif
   _mi_heap_main.random = _mi_random_shuffle(random);
   mi_process_setup_auto_thread_done();
-  _mi_os_init();  
+  _mi_os_init();
   #if (MI_DEBUG)
   _mi_verbose_message("debug level : %d\n", MI_DEBUG);
   #endif
@@ -478,7 +478,7 @@ static void mi_process_done(void) {
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     UNUSED(reserved);
     UNUSED(inst);
-    if (reason==DLL_PROCESS_ATTACH) {     
+    if (reason==DLL_PROCESS_ATTACH) {
       mi_process_load();
     }
     else if (reason==DLL_THREAD_DETACH) {
