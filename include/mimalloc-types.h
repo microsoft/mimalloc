@@ -94,16 +94,16 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_MEDIUM_SIZE_MAX                (MI_MEDIUM_PAGE_SIZE/4)   // 128kb on 64-bit
 #define MI_LARGE_SIZE_MAX                 (MI_LARGE_PAGE_SIZE/4)    // 1Mb on 64-bit
 #define MI_LARGE_WSIZE_MAX                (MI_LARGE_SIZE_MAX>>MI_INTPTR_SHIFT)
-
+#define MI_HUGE_SIZE_MAX                  (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)  // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
 #define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
-#define MI_BIN_HUGE  (70U)
+#define MI_BIN_HUGE  (73U)
 
-#if (MI_LARGE_WSIZE_MAX > 393216)
+#if (MI_LARGE_WSIZE_MAX >= 655360)
 #error "define more bins"
 #endif
 
@@ -123,25 +123,12 @@ typedef enum mi_delayed_e {
 } mi_delayed_t;
 
 
-// Use the lowest two bits of a thread id for the `in_full` and `has_aligned` flags
+// Use the bottom 2 bits for the `in_full` and `has_aligned` flags
+// and the rest for the threadid (we assume tid's never use those lower 2 bits).
 // This allows a single test in `mi_free` to check for unlikely cases
 // (namely, non-local free, aligned free, or freeing in a full page)
-#define MI_PAGE_FLAGS_BITS         (2)
-#define MI_PAGE_FLAGS_TID_BITS (MI_INTPTR_SIZE*8 - MI_PAGE_FLAGS_BITS)
-typedef union mi_page_flags_u {
-  uintptr_t value;
-  struct {
-    #ifdef MI_BIG_ENDIAN
-    uintptr_t xthread_id : MI_PAGE_FLAGS_TID_BITS;
-    #endif
-    uintptr_t in_full : 1;
-    uintptr_t has_aligned : 1;
-    #ifndef MI_BIG_ENDIAN
-    uintptr_t xthread_id : MI_PAGE_FLAGS_TID_BITS;
-    #endif
-  };
-} mi_page_flags_t;
-
+#define MI_PAGE_FLAGS_MASK  ((uintptr_t)0x03)
+typedef uintptr_t mi_page_flags_t;
 
 // Thread free list.
 // We use the bottom 2 bits of the pointer for mi_delayed_t flags
@@ -339,10 +326,13 @@ typedef struct mi_stats_s {
   mi_stat_count_t commit_calls;
   mi_stat_count_t threads;
   mi_stat_count_t huge;
+  mi_stat_count_t giant;
   mi_stat_count_t malloc;
   mi_stat_count_t segments_cache;
   mi_stat_counter_t page_no_retire;
   mi_stat_counter_t searches;
+  mi_stat_counter_t huge_count;
+  mi_stat_counter_t giant_count;
 #if MI_STAT>1
   mi_stat_count_t normal[MI_BIN_HUGE+1];
 #endif
@@ -393,12 +383,8 @@ typedef struct mi_segments_tld_s {
 } mi_segments_tld_t;
 
 // OS thread local data
-typedef struct mi_os_tld_s {
-  uintptr_t           mmap_next_probable;  // probable next address start allocated by mmap (to guess which path to take on alignment)
-  void*               mmap_previous;       // previous address returned by mmap
-  uint8_t*            pool;                // pool of segments to reduce mmap calls on some platforms
-  size_t              pool_available;      // bytes available in the pool
-  mi_stats_t*         stats;               // points to tld stats
+typedef struct mi_os_tld_s {  
+  mi_stats_t*         stats;        // points to tld stats
 } mi_os_tld_t;
 
 // Thread local data

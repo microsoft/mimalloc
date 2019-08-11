@@ -42,8 +42,8 @@ const mi_page_t _mi_page_empty = {
     QNULL(  2560), QNULL(  3072), QNULL(  3584), QNULL(  4096), QNULL(  5120), QNULL(  6144), QNULL(  7168), QNULL(  8192), /* 48 */ \
     QNULL( 10240), QNULL( 12288), QNULL( 14336), QNULL( 16384), QNULL( 20480), QNULL( 24576), QNULL( 28672), QNULL( 32768), /* 56 */ \
     QNULL( 40960), QNULL( 49152), QNULL( 57344), QNULL( 65536), QNULL( 81920), QNULL( 98304), QNULL(114688), QNULL(131072), /* 64 */ \
-    QNULL(163840), QNULL(196608), QNULL(229376), QNULL(262144), QNULL(327680), /* 69 */ \
-    QNULL(MI_LARGE_WSIZE_MAX + 1  /* 393216, Huge queue */), \
+    QNULL(163840), QNULL(196608), QNULL(229376), QNULL(262144), QNULL(327680), QNULL(393216), QNULL(458752), QNULL(524288), /* 72 */ \
+    QNULL(MI_LARGE_WSIZE_MAX + 1  /* 655360, Huge queue */), \
     QNULL(MI_LARGE_WSIZE_MAX + 2) /* Full queue */ }
 
 #define MI_STAT_COUNT_NULL()  {0,0,0,0}
@@ -63,9 +63,8 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), \
-  { 0, 0 }, \
-  { 0, 0 } \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 
 // --------------------------------------------------------
@@ -98,8 +97,8 @@ static mi_tld_t tld_main = {
   0,
   &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
-  { 0, NULL, NULL, 0, tld_main_stats },          // os
-  { MI_STATS_NULL }                              // stats
+  { tld_main_stats },          // os
+  { MI_STATS_NULL }            // stats
 };
 
 mi_heap_t _mi_heap_main = {

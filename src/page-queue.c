@@ -177,7 +177,7 @@ static bool mi_heap_contains_queue(const mi_heap_t* heap, const mi_page_queue_t*
 #endif
 
 static mi_page_queue_t* mi_page_queue_of(const mi_page_t* page) {
-  uint8_t bin = (page->flags.in_full ? MI_BIN_FULL : _mi_bin(page->block_size));
+  uint8_t bin = (mi_page_is_in_full(page) ? MI_BIN_FULL : _mi_bin(page->block_size));
   mi_heap_t* heap = page->heap;
   mi_assert_internal(heap != NULL && bin <= MI_BIN_FULL);
   mi_page_queue_t* pq = &heap->pages[bin];
@@ -187,10 +187,10 @@ static mi_page_queue_t* mi_page_queue_of(const mi_page_t* page) {
 }
 
 static mi_page_queue_t* mi_heap_page_queue_of(mi_heap_t* heap, const mi_page_t* page) {
-  uint8_t bin = (page->flags.in_full ? MI_BIN_FULL : _mi_bin(page->block_size));
+  uint8_t bin = (mi_page_is_in_full(page) ? MI_BIN_FULL : _mi_bin(page->block_size));
   mi_assert_internal(bin <= MI_BIN_FULL);
   mi_page_queue_t* pq = &heap->pages[bin];
-  mi_assert_internal(page->flags.in_full || page->block_size == pq->block_size);
+  mi_assert_internal(mi_page_is_in_full(page) || page->block_size == pq->block_size);
   return pq;
 }
 
@@ -245,7 +245,7 @@ static bool mi_page_queue_is_empty(mi_page_queue_t* queue) {
 static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(mi_page_queue_contains(queue, page));
-  mi_assert_internal(page->block_size == queue->block_size || (page->block_size > MI_LARGE_SIZE_MAX && mi_page_queue_is_huge(queue))  || (page->flags.in_full && mi_page_queue_is_full(queue)));
+  mi_assert_internal(page->block_size == queue->block_size || (page->block_size > MI_LARGE_SIZE_MAX && mi_page_queue_is_huge(queue))  || (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
   if (page->prev != NULL) page->prev->next = page->next;
   if (page->next != NULL) page->next->prev = page->prev;
   if (page == queue->last)  queue->last = page->prev;
@@ -260,7 +260,7 @@ static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
   page->next = NULL;
   page->prev = NULL;
   page->heap = NULL;
-  page->flags.in_full = false;
+  mi_page_set_in_full(page,false);
 }
 
 
@@ -269,9 +269,9 @@ static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_
   mi_assert_internal(!mi_page_queue_contains(queue, page));
   mi_assert_internal(page->block_size == queue->block_size ||
                       (page->block_size > MI_LARGE_SIZE_MAX && mi_page_queue_is_huge(queue)) ||
-                        (page->flags.in_full && mi_page_queue_is_full(queue)));
+                        (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
 
-  page->flags.in_full = mi_page_queue_is_full(queue);
+  mi_page_set_in_full(page, mi_page_queue_is_full(queue));
   page->heap = heap;
   page->next = queue->first;
   page->prev = NULL;
@@ -324,7 +324,7 @@ static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* fro
     mi_heap_queue_first_update(page->heap, to);
   }
 
-  page->flags.in_full = mi_page_queue_is_full(to);
+  mi_page_set_in_full(page, mi_page_queue_is_full(to));
 }
 
 size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append) {
