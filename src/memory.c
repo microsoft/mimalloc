@@ -139,7 +139,13 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       start = ALLOCATING;  // try to start allocating
     }
     else if (start == ALLOCATING) {
-      mi_atomic_yield(); // another thead is already allocating.. wait it out
+      // another thead is already allocating.. wait it out
+      // note: the wait here is not great (but should not happen often). Another
+      // strategy might be to just allocate another region in parallel. This tends
+      // to be bad for benchmarks though as these often start many threads at the 
+      // same time leading to the allocation of too many regions. (Still, this might
+      // be the most performant and it's ok on 64-bit virtual memory with over-commit.)
+      mi_atomic_yield(); 
       continue;
     }    
   } while( start == ALLOCATING && !mi_atomic_compare_exchange_ptr(&region->start, ALLOCATING, NULL) );
