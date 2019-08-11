@@ -261,13 +261,14 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* 
   size_t count = mi_atomic_read(&regions_count);
   size_t idx = mi_atomic_read(&region_next_idx);
   for (size_t visited = 0; visited < count; visited++, idx++) {
-    if (!mi_region_try_alloc_blocks(idx%count, blocks, size, commit, &p, id, tld)) return NULL; // error
+    if (idx >= count) idx = 0;  // wrap around
+    if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, &p, id, tld)) return NULL; // error
     if (p != NULL) break;    
   }
 
   if (p == NULL) {
-    // no free range in existing regions -- try to extend beyond the count
-    for (idx = count; idx < MI_REGION_MAX; idx++) {
+    // no free range in existing regions -- try to extend beyond the count.. but at most 4 regions
+    for (idx = count; idx < count + 4 && idx < MI_REGION_MAX; idx++) {
       if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, &p, id, tld)) return NULL; // error
       if (p != NULL) break;
     }
