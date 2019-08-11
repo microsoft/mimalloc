@@ -184,6 +184,27 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
   return true;
 }
 
+// Use bit scan forward to quickly find the first zero bit if it is available
+#if defined(_MSC_VER)
+#define MI_HAVE_BSF
+#include <intrin.h>
+static inline size_t mi_bsf(uintptr_t x) {
+  if (x==0) return 8*MI_INTPTR_SIZE;
+  DWORD idx;
+  #if (MI_INTPTR_SIZE==8)
+  _BitScanForward64(&idx, x);
+  #else
+  _BitScanForward(&idx, x);
+  #endif
+  return idx;
+}
+#elif defined(__GNUC__) || defined(__clang__)
+#define MI_HAVE_BSF
+static inline size_t mi_bsf(uintptr_t x) {
+  return (x==0 ? 8*MI_INTPTR_SIZE : __builtin_ctz(x));
+}
+#endif
+
 // Allocate `blocks` in a `region` at `idx` of a given `size`. 
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/SIZE_MAX before the call. 
@@ -192,14 +213,20 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
 {
   mi_assert_internal(p != NULL && id != NULL);
   mi_assert_internal(blocks < MI_REGION_MAP_BITS);
-
-  const uintptr_t mask = mi_region_block_mask(blocks,0);
+  
+  const uintptr_t mask = mi_region_block_mask(blocks, 0);
   const size_t bitidx_max = MI_REGION_MAP_BITS - blocks;
-
-  // scan linearly for a free range of zero bits
   uintptr_t map = mi_atomic_read(&region->map);
-  uintptr_t m   = mask;    // the mask shifted by bitidx
-  for(size_t bitidx = 0; bitidx <= bitidx_max; bitidx++, m <<= 1) {
+
+  #ifdef MI_HAVE_BSF
+  size_t bitidx = mi_bsf(~map);    // quickly find the first zero bit if possible
+  #else
+  size_t bitidx = 0;               // otherwise start at 0
+  #endif
+  uintptr_t m = (mask << bitidx);  // invariant: m == mask shifted by bitidx
+  
+  // scan linearly for a free range of zero bits
+  while(bitidx <= bitidx_max) {
     if ((map & m) == 0) {  // are the mask bits free at bitidx?
       mi_assert_internal((m >> bitidx) == mask); // no overflow?      
       uintptr_t newmap = map | m;
@@ -214,6 +241,9 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
         return mi_region_commit_blocks(region, idx, bitidx, blocks, size, commit, p, id, tld);
       }
     }
+    // on to the next bit
+    bitidx++;
+    m <<= 1;
   }
   // no error, but also no bits found
   return true;  
