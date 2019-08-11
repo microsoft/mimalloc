@@ -124,7 +124,8 @@ Commit from a region
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/SIZE_MAX before the call. 
 // (not being able to claim is not considered an error so check for `p != NULL` afterwards).
-static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bitidx, size_t blocks, size_t size, bool commit, void** p, size_t* id, mi_os_tld_t* tld) {
+static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bitidx, size_t blocks, size_t size, bool commit, void** p, size_t* id, mi_os_tld_t* tld) 
+{
   size_t mask = mi_region_block_mask(blocks,bitidx);
   mi_assert_internal(mask != 0);
   mi_assert_internal((mask & mi_atomic_read(&region->map)) == mask);
@@ -181,47 +182,35 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/SIZE_MAX before the call. 
 // (not being able to claim is not considered an error so check for `p != NULL` afterwards).
-static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t blocks, size_t size, bool commit, void** p, size_t* id, mi_os_tld_t* tld) {
+static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t blocks, size_t size, bool commit, void** p, size_t* id, mi_os_tld_t* tld) 
+{
   mi_assert_internal(p != NULL && id != NULL);
   mi_assert_internal(blocks < MI_REGION_MAP_BITS);
 
   const uintptr_t mask = mi_region_block_mask(blocks,0);
   const size_t bitidx_max = MI_REGION_MAP_BITS - blocks;
-  size_t bitidx ;
-  uintptr_t map;
-  uintptr_t newmap;
-  do {   // while no atomic claim success and not all bits seen
-    // find the first free range of bits
-    map = mi_atomic_read(&region->map);
-    size_t m = map;
-    bitidx = 0;
-    do {
-      // skip ones
-      while ((m&1) != 0) { bitidx++; m>>=1; }
-      // count zeros
-      mi_assert_internal((m&1)==0);
-      size_t zeros = 1;
-      m >>= 1;
-      while(zeros < blocks && (m&1)==0) { zeros++; m>>=1; }
-      if (zeros == blocks) break; // found a range that fits
-      bitidx += zeros;    
-    }
-    while(bitidx <= bitidx_max);
-    if (bitidx > bitidx_max) {
-      return true;  // no error, but could not find a range either
-    }
 
-    // try to claim it
-    mi_assert_internal( (mask << bitidx) >> bitidx == mask ); // no overflow?
-    mi_assert_internal( (map & (mask << bitidx)) == 0);         // fits in zero range
-    newmap = map | (mask << bitidx);
-    mi_assert_internal((newmap^map) >> bitidx == mask); 
+  // scan linearly for a free range of zero bits
+  uintptr_t map = mi_atomic_read(&region->map);
+  uintptr_t m   = mask;    // the mask shifted by bitidx
+  for(size_t bitidx = 0; bitidx <= bitidx_max; bitidx++, m <<= 1) {
+    if ((map & m) == 0) {  // are the mask bits free at bitidx?
+      mi_assert_internal((m >> bitidx) == mask); // no overflow?      
+      uintptr_t newmap = map | m;
+      mi_assert_internal((newmap^map) >> bitidx == mask);
+      if (!mi_atomic_compare_exchange(&region->map, newmap, map)) {
+        // no success, another thread claimed concurrently.. keep going
+        map = mi_atomic_read(&region->map);        
+      }
+      else {
+        // success, we claimed the bits
+        // now commit the block memory -- this can still fail
+        return mi_region_commit_blocks(region, idx, bitidx, blocks, size, commit, p, id, tld);
+      }
+    }
   }
-  while(!mi_atomic_compare_exchange(&region->map, newmap, map)); 
-
-  // success, we claimed the blocks atomically
-  // now commit the block memory -- this can still fail
-  return mi_region_commit_blocks(region, idx, bitidx, blocks, size, commit, p, id, tld);
+  // no error, but also no bits found
+  return true;  
 }
 
 // Try to allocate `blocks` in a `region` at `idx` of a given `size`. Does a quick check before trying to claim.
