@@ -94,16 +94,16 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_MEDIUM_SIZE_MAX                (MI_MEDIUM_PAGE_SIZE/4)   // 128kb on 64-bit
 #define MI_LARGE_SIZE_MAX                 (MI_LARGE_PAGE_SIZE/4)    // 1Mb on 64-bit
 #define MI_LARGE_WSIZE_MAX                (MI_LARGE_SIZE_MAX>>MI_INTPTR_SHIFT)
-
+#define MI_HUGE_SIZE_MAX                  (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)  // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
 #define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
-#define MI_BIN_HUGE  (70U)
+#define MI_BIN_HUGE  (73U)
 
-#if (MI_LARGE_WSIZE_MAX > 393216)
+#if (MI_LARGE_WSIZE_MAX >= 655360)
 #error "define more bins"
 #endif
 
@@ -326,10 +326,13 @@ typedef struct mi_stats_s {
   mi_stat_count_t commit_calls;
   mi_stat_count_t threads;
   mi_stat_count_t huge;
+  mi_stat_count_t giant;
   mi_stat_count_t malloc;
   mi_stat_count_t segments_cache;
   mi_stat_counter_t page_no_retire;
   mi_stat_counter_t searches;
+  mi_stat_counter_t huge_count;
+  mi_stat_counter_t giant_count;
 #if MI_STAT>1
   mi_stat_count_t normal[MI_BIN_HUGE+1];
 #endif

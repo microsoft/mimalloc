@@ -246,7 +246,12 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
 
   // stats
   if (page->block_size > MI_LARGE_SIZE_MAX) {
-    mi_heap_stat_decrease(heap,huge,page->block_size);
+    if (page->block_size > MI_HUGE_SIZE_MAX) {
+      _mi_stat_decrease(&heap->tld->stats.giant,page->block_size);
+    }
+    else {
+      _mi_stat_decrease(&heap->tld->stats.huge, page->block_size);
+    }
   }
   #if (MI_STAT>1)
   size_t inuse = page->used - page->thread_freed;

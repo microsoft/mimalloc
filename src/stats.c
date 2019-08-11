@@ -106,8 +106,11 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   mi_stat_add(&stats->malloc, &src->malloc, 1);
   mi_stat_add(&stats->segments_cache, &src->segments_cache, 1);
   mi_stat_add(&stats->huge, &src->huge, 1);
+  mi_stat_add(&stats->giant, &src->giant, 1);
   mi_stat_counter_add(&stats->page_no_retire, &src->page_no_retire, 1);
   mi_stat_counter_add(&stats->searches, &src->searches, 1);
+  mi_stat_counter_add(&stats->huge_count, &src->huge_count, 1);
+  mi_stat_counter_add(&stats->giant_count, &src->giant_count, 1);
 #if MI_STAT>1
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
     if (src->normal[i].allocated > 0 || src->normal[i].freed > 0) {
@@ -152,15 +155,24 @@ static void mi_print_count(int64_t n, int64_t unit, FILE* out) {
 }
 
 static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, FILE* out ) {
-  _mi_fprintf(out,"%10s:", msg);
-  mi_print_amount(stat->peak, unit, out);
-  if (unit!=0) {
+  _mi_fprintf(out,"%10s:", msg);  
+  if (unit>0) {
+    mi_print_amount(stat->peak, unit, out);
     mi_print_amount(stat->allocated, unit, out);
     mi_print_amount(stat->freed, unit, out);
-  }
-  if (unit>0) {
-    mi_print_amount(unit, (unit==0 ? 0 : 1), out);
+    mi_print_amount(unit, 1, out);
     mi_print_count(stat->allocated, unit, out);
+    if (stat->allocated > stat->freed)
+      _mi_fprintf(out, "  not all freed!\n");
+    else
+      _mi_fprintf(out, "  ok\n");
+  }
+  else if (unit<0) {
+    mi_print_amount(stat->peak, 1, out);
+    mi_print_amount(stat->allocated, 1, out);
+    mi_print_amount(stat->freed, 1, out);
+    mi_print_amount(-unit, 1, out);
+    mi_print_count((stat->allocated / -unit), 0, out);
     if (stat->allocated > stat->freed)
       _mi_fprintf(out, "  not all freed!\n");
     else
@@ -219,10 +231,12 @@ static void _mi_stats_print(mi_stats_t* stats, double secs, FILE* out) mi_attr_n
   mi_stat_count_t normal = { 0,0,0,0 };
   mi_stats_print_bins(&normal, stats->normal, MI_BIN_HUGE, "normal",out);
   mi_stat_print(&normal, "normal", 1, out);
-  mi_stat_print(&stats->huge, "huge", 1, out);
+  mi_stat_print(&stats->huge, "huge", (stats->huge_count.count == 0 ? 1 : -(stats->huge.allocated / stats->huge_count.count)), out);
+  mi_stat_print(&stats->giant, "giant", (stats->giant_count.count == 0 ? 1 : -(stats->giant.allocated / stats->giant_count.count)), out);
   mi_stat_count_t total = { 0,0,0,0 };
   mi_stat_add(&total, &normal, 1);
   mi_stat_add(&total, &stats->huge, 1);
+  mi_stat_add(&total, &stats->giant, 1);
   mi_stat_print(&total, "total", 1, out);
   _mi_fprintf(out, "malloc requested:     ");
   mi_print_amount(stats->malloc.allocated, 1, out);

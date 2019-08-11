@@ -6,7 +6,6 @@
 #include <mimalloc.h>
 #include <mimalloc-override.h>  // redefines malloc etc.
 
-
 int main() {
   mi_version();
   void* p1 = malloc(78);

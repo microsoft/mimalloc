@@ -353,7 +353,12 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
 
   // account for huge pages here
   if (page->block_size > MI_LARGE_SIZE_MAX) {
-    _mi_stat_decrease(&page->heap->tld->stats.huge, page->block_size);
+    if (page->block_size > MI_HUGE_SIZE_MAX) {
+      _mi_stat_decrease(&page->heap->tld->stats.giant, page->block_size);
+    }
+    else {
+      _mi_stat_decrease(&page->heap->tld->stats.huge, page->block_size);
+    }
   }
 
   // remove from the page list
@@ -702,7 +707,14 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
   if (page != NULL) {
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(page->block_size == block_size);
-    _mi_stat_increase( &heap->tld->stats.huge, block_size);
+    if (page->block_size > MI_HUGE_SIZE_MAX) {
+      _mi_stat_increase(&heap->tld->stats.giant, block_size);
+      _mi_stat_counter_increase(&heap->tld->stats.giant_count, 1);
+    }
+    else {
+      _mi_stat_increase(&heap->tld->stats.huge, block_size);
+      _mi_stat_counter_increase(&heap->tld->stats.huge_count, 1);
+    }
   }
   return page;
 }
