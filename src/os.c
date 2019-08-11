@@ -225,16 +225,16 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
 
 #elif defined(__wasi__)
 static void* mi_wasm_heap_grow(size_t size, size_t try_alignment) {
-  uintptr_t base = __builtin_wasm_memory_size(0) * os_page_size;
+  uintptr_t base = __builtin_wasm_memory_size(0) * _mi_os_page_size();
   uintptr_t aligned_base = _mi_align_up(base, (uintptr_t) try_alignment);
-  size_t alloc_size = aligned_base - base + size;
-  mi_assert(alloc_size >= size);
+  size_t alloc_size = _mi_align_up( aligned_base - base + size, _mi_os_page_size());
+  mi_assert(alloc_size >= size && (alloc_size % _mi_os_page_size()) == 0);
   if (alloc_size < size) return NULL;
-  if (__builtin_wasm_memory_grow(0, alloc_size / os_page_size) == SIZE_MAX) {
+  if (__builtin_wasm_memory_grow(0, alloc_size / _mi_os_page_size()) == SIZE_MAX) {
     errno = ENOMEM;
     return NULL;
   }
-  return (void*) aligned_base;
+  return (void*)aligned_base;
 }
 #else
 static void* mi_unix_mmapx(size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
@@ -321,7 +321,7 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, mi_
   if (commit) flags |= MEM_COMMIT;
   p = mi_win_virtual_alloc(NULL, size, try_alignment, flags);
 #elif defined(__wasi__)
-  p = mi_wasm_herap_grow(size, try_alignment);
+  p = mi_wasm_heap_grow(size, try_alignment);
 #else
   int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
   p = mi_unix_mmap(size, try_alignment, protect_flags);
