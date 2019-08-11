@@ -174,7 +174,7 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
     if (mi_unlikely(mi_page_all_free(page))) {
       _mi_page_retire(page);
     }
-    else if (mi_unlikely(page->flags.in_full)) {
+    else if (mi_unlikely(mi_page_is_in_full(page))) {
       _mi_page_unfull(page);
     }
   }
@@ -194,7 +194,7 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 
 
 static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool local, void* p) {
-  mi_block_t* block = (page->flags.has_aligned ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
+  mi_block_t* block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
   _mi_free_block(page, local, block);
 }
 
@@ -237,7 +237,7 @@ void mi_free(void* p) mi_attr_noexcept
 #endif
 
   uintptr_t tid = _mi_thread_id();
-  if (mi_likely(tid == page->flags.value)) {  
+  if (mi_likely(tid == page->flags)) {  
     // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
     mi_block_set_next(page, block, page->local_free);  
@@ -273,7 +273,7 @@ size_t mi_usable_size(const void* p) mi_attr_noexcept {
   const mi_segment_t* segment = _mi_ptr_segment(p);
   const mi_page_t* page = _mi_segment_page_of(segment,p);
   size_t size = page->block_size;
-  if (mi_unlikely(page->flags.has_aligned)) {
+  if (mi_unlikely(mi_page_has_aligned(page))) {
     ptrdiff_t adjust = (uint8_t*)p - (uint8_t*)_mi_page_ptr_unalign(segment,page,p);
     mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);
     return (size - adjust);

@@ -102,7 +102,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
     mi_assert_internal(!_mi_process_is_initialized || segment->thread_id == page->heap->thread_id);
     mi_page_queue_t* pq = mi_page_queue_of(page);
     mi_assert_internal(mi_page_queue_contains(pq, page));
-    mi_assert_internal(pq->block_size==page->block_size || page->block_size > MI_LARGE_SIZE_MAX || page->flags.in_full);
+    mi_assert_internal(pq->block_size==page->block_size || page->block_size > MI_LARGE_SIZE_MAX || mi_page_is_in_full(page));
     mi_assert_internal(mi_heap_contains_queue(page->heap,pq));
   }
   return true;
@@ -282,26 +282,26 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
 void _mi_page_unfull(mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(_mi_page_is_valid(page));
-  mi_assert_internal(page->flags.in_full);
+  mi_assert_internal(mi_page_is_in_full(page));
 
   _mi_page_use_delayed_free(page, MI_NO_DELAYED_FREE);
-  if (!page->flags.in_full) return;
+  if (!mi_page_is_in_full(page)) return;
 
   mi_heap_t* heap = page->heap;
   mi_page_queue_t* pqfull = &heap->pages[MI_BIN_FULL];
-  page->flags.in_full = false; // to get the right queue
+  mi_page_set_in_full(page, false); // to get the right queue
   mi_page_queue_t* pq = mi_heap_page_queue_of(heap, page);
-  page->flags.in_full = true;
+  mi_page_set_in_full(page, true);
   mi_page_queue_enqueue_from(pq, pqfull, page);
 }
 
 static void mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(pq == mi_page_queue_of(page));
   mi_assert_internal(!mi_page_immediate_available(page));
-  mi_assert_internal(!page->flags.in_full);
+  mi_assert_internal(!mi_page_is_in_full(page));
 
   _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE);
-  if (page->flags.in_full) return;
+  if (mi_page_is_in_full(page)) return;
 
   mi_page_queue_enqueue_from(&page->heap->pages[MI_BIN_FULL], pq, page);
   mi_page_thread_free_collect(page);  // try to collect right away in case another thread freed just before MI_USE_DELAYED_FREE was set
@@ -349,7 +349,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   mi_assert_internal(mi_tf_delayed(free) != MI_DELAYED_FREEING);
   #endif
 
-  page->flags.has_aligned = false;
+  mi_page_set_has_aligned(page, false);
 
   // account for huge pages here
   if (page->block_size > MI_LARGE_SIZE_MAX) {
@@ -377,7 +377,7 @@ void _mi_page_retire(mi_page_t* page) {
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(mi_page_all_free(page));
 
-  page->flags.has_aligned = false;
+  mi_page_set_has_aligned(page, false);
 
   // don't retire too often..
   // (or we end up retiring and re-allocating most of the time)
@@ -560,7 +560,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->thread_freed == 0);
   mi_assert_internal(page->next == NULL);
   mi_assert_internal(page->prev == NULL);
-  mi_assert_internal(page->flags.has_aligned == false);
+  mi_assert_internal(!mi_page_has_aligned(page));
   #if MI_SECURE
   mi_assert_internal(page->cookie != 0);
   #endif
@@ -619,7 +619,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
 
     // 3. If the page is completely full, move it to the `mi_pages_full`
     // queue so we don't visit long-lived pages too often.
-    mi_assert_internal(!page->flags.in_full && !mi_page_immediate_available(page));
+    mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
     mi_page_to_full(page,pq);
 
     page = next;
