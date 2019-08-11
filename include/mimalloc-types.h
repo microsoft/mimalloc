@@ -182,7 +182,7 @@ typedef struct mi_page_s {
 
 // improve page index calculation
 #if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
-  void*                 padding[1];        // 12 words on 64-bit
+  // void*                 padding[1];        // 12 words on 64-bit
 #elif MI_INTPTR_SIZE==4
   // void*                 padding[1];         // 12 words on 32-bit
 #endif
@@ -383,7 +383,7 @@ typedef struct mi_segments_tld_s {
 } mi_segments_tld_t;
 
 // OS thread local data
-typedef struct mi_os_tld_s {  
+typedef struct mi_os_tld_s {
   mi_stats_t*         stats;        // points to tld stats
 } mi_os_tld_t;
 

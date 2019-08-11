@@ -72,7 +72,7 @@ extern inline void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcep
   void* p;
   if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
     p = mi_heap_malloc_small(heap, size);
-  }  
+  }
   else {
     p = _mi_malloc_generic(heap, size);
   }
@@ -200,16 +200,16 @@ static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, mi_pag
 
 // Free a block
 void mi_free(void* p) mi_attr_noexcept
-{  
+{
 #if (MI_DEBUG>0)
   if (mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0)) {
     _mi_error_message("trying to free an invalid (unaligned) pointer: %p\n", p);
     return;
   }
 #endif
-  
+
   const mi_segment_t* const segment = _mi_ptr_segment(p);
-  if (segment == NULL) return;  // checks for (p==NULL) 
+  if (segment == NULL) return;  // checks for (p==NULL)
 
 #if (MI_DEBUG>0)
   if (mi_unlikely(!mi_is_in_heap_region(p))) {
@@ -224,8 +224,8 @@ void mi_free(void* p) mi_attr_noexcept
     return;
   }
 #endif
-  
-  mi_page_t* page = _mi_segment_page_of(segment, p);
+
+  mi_page_t* const page = _mi_segment_page_of(segment, p);
 
 #if (MI_STAT>1)
   mi_heap_t* heap = mi_heap_get_default();
@@ -236,11 +236,11 @@ void mi_free(void* p) mi_attr_noexcept
   // huge page stat is accounted for in `_mi_page_retire`
 #endif
 
-  uintptr_t tid = _mi_thread_id();
+  const uintptr_t tid = _mi_thread_id();
   if (mi_likely(tid == page->flags)) {  // if equal, the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
-    mi_block_set_next(page, block, page->local_free);  
+    mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
     page->used--;
     if (mi_unlikely(mi_page_all_free(page))) { _mi_page_retire(page); }
