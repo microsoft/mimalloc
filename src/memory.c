@@ -119,8 +119,6 @@ bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
 Commit from a region
 -----------------------------------------------------------------------------*/
 
-#define ALLOCATING  ((void*)1)
-
 // Commit the `blocks` in `region` at `idx` and `bitidx` of a given `size`.
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/SIZE_MAX before the call.
@@ -132,31 +130,10 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
   mi_assert_internal((mask & mi_atomic_read(&region->map)) == mask);
 
   // ensure the region is reserved
-  void* start;
-  do {
-    start = mi_atomic_read_ptr(&region->start);
-    if (start == NULL) {
-      start = ALLOCATING;  // try to start allocating
-    }
-    else if (start == ALLOCATING) {
-      // another thead is already allocating.. wait it out
-      // note: the wait here is not great (but should not happen often). Another
-      // strategy might be to just allocate another region in parallel. This tends
-      // to be bad for benchmarks though as these often start many threads at the
-      // same time leading to the allocation of too many regions. (Still, this might
-      // be the most performant and it's ok on 64-bit virtual memory with over-commit.)
-      mi_atomic_yield();
-      continue;
-    }
-  } while( start == ALLOCATING && !mi_atomic_compare_exchange_ptr(&region->start, ALLOCATING, NULL) );
-  mi_assert_internal(start != NULL);
-
-  // allocate the region if needed
-  if (start == ALLOCATING) {
-    start = _mi_os_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, mi_option_is_enabled(mi_option_eager_region_commit), tld);
-    // set the new allocation (or NULL on failure) -- this releases any waiting threads.
-    mi_atomic_write_ptr(&region->start, start);
-
+  void* start = mi_atomic_read_ptr(&region->start);
+  if (start == NULL) 
+  {
+    start = _mi_os_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, mi_option_is_enabled(mi_option_eager_region_commit), tld);    
     if (start == NULL) {
       // failure to allocate from the OS! unclaim the blocks and fail
       size_t map;
@@ -166,11 +143,20 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       return false;
     }
 
-    // update the region count if this is a new max idx.
-    mi_atomic_compare_exchange(&regions_count, idx+1, idx);
+    // set the newly allocated region
+    if (mi_atomic_compare_exchange_ptr(&region->start, start, NULL)) {
+      // update the region count
+      mi_atomic_increment(&regions_count);
+    }
+    else {
+      // failed, another thread allocated just before us, free our allocated memory
+      // TODO: should we keep the allocated memory and assign it to some other region?
+      _mi_os_free(start, MI_REGION_SIZE, tld->stats);
+      start = mi_atomic_read_ptr(&region->start);
+    }
   }
-  mi_assert_internal(start != NULL && start != ALLOCATING);
   mi_assert_internal(start == mi_atomic_read_ptr(&region->start));
+  mi_assert_internal(start != NULL);
 
   // Commit the blocks to memory
   void* blocks_start = (uint8_t*)start + (bitidx * MI_SEGMENT_SIZE);
