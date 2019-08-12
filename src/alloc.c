@@ -306,7 +306,7 @@ void* _mi_externs[] = {
 
 void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   UNUSED_RELEASE(size);
-  mi_assert(size <= mi_usable_size(p));
+  mi_assert(p == NULL || size <= mi_usable_size(p));
   mi_free(p);
 }
 
