@@ -81,8 +81,8 @@ static size_t mi_os_good_alloc_size(size_t size, size_t alignment) {
 #if defined(_WIN32)
 // We use VirtualAlloc2 for aligned allocation, but it is only supported on Windows 10 and Windows Server 2016.
 // So, we need to look it up dynamically to run on older systems. (use __stdcall for 32-bit compatibility)
-// Same for DiscardVirtualMemory
-typedef PVOID(__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MEM_EXTENDED_PARAMETER*, ULONG);
+// Same for DiscardVirtualMemory. (hide MEM_EXTENDED_PARAMETER to compile with older SDK's)
+typedef PVOID(__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, /* MEM_EXTENDED_PARAMETER* */ void*, ULONG);
 typedef DWORD(__stdcall *PDiscardVirtualMemory)(PVOID,SIZE_T);
 static PVirtualAlloc2 pVirtualAlloc2 = NULL;
 static PDiscardVirtualMemory pDiscardVirtualMemory = NULL;
@@ -307,8 +307,8 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
         // try large OS page allocation
         p = mi_unix_mmapx(size, try_alignment, protect_flags, lflags, lfd);
         if (p == MAP_FAILED) {
-          mi_atomic_write(&large_page_try_ok, 10);  // on error, don't try again for the next N allocations          
-          p = NULL; // and fall back to regular mmap 
+          mi_atomic_write(&large_page_try_ok, 10);  // on error, don't try again for the next N allocations
+          p = NULL; // and fall back to regular mmap
         }
       }
     }
@@ -320,7 +320,7 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
     }
     #if defined(MADV_HUGEPAGE)
     // Many Linux systems don't allow MAP_HUGETLB but they support instead
-    // transparent huge pages (TPH). It is not required to call `madvise` with MADV_HUGE 
+    // transparent huge pages (TPH). It is not required to call `madvise` with MADV_HUGE
     // though since properly aligned allocations will already use large pages if available
     // in that case -- in particular for our large regions (in `memory.c`).
     // However, some systems only allow TPH if called with explicit `madvise`, so
