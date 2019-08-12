@@ -20,6 +20,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #elif defined(__wasi__)
 // stdlib.h is all we need, and has already been included in mimalloc.h
 #else
+#if defined(__linux__)
+#include <linux/mman.h>  // mmap linux specific flags
+#endif
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf
 #if defined(__APPLE__)
