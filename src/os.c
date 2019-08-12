@@ -85,10 +85,45 @@ static size_t mi_os_good_alloc_size(size_t size, size_t alignment) {
 }
 
 #if defined(_WIN32)
+// Structures from Windows 10 winnt.h
+typedef struct _MEM_ADDRESS_REQUIREMENTS2 {
+  PVOID  LowestStartingAddress;
+  PVOID  HighestEndingAddress;
+  SIZE_T Alignment;
+} MEM_ADDRESS_REQUIREMENTS2, *PMEM_ADDRESS_REQUIREMENTS2;
+
+#define MEM_EXTENDED_PARAMETER_GRAPHICS     0x00000001
+
+typedef enum MEM_EXTENDED_PARAMETER2_TYPE {
+  MemExtendedParameter2InvalidType = 0,
+  MemExtendedParameter2AddressRequirements,
+  MemExtendedParameter2NumaNode,
+  MemExtendedParameter2PartitionHandle,
+  MemExtendedParameter2Max,
+  MemExtendedParameter2UserPhysicalHandle,
+  MemExtendedParameter2AttributeFlags
+}  *PMEM_EXTENDED_PARAMETER2_TYPE;
+
+#define MEM_EXTENDED_PARAMETER2_TYPE_BITS 8
+
+typedef struct DECLSPEC_ALIGN(8) MEM_EXTENDED_PARAMETER2 {
+  struct {
+    DWORD64 Type : MEM_EXTENDED_PARAMETER2_TYPE_BITS;
+    DWORD64 Reserved : 64 - MEM_EXTENDED_PARAMETER2_TYPE_BITS;
+  } DUMMYSTRUCTNAME;
+  union {
+    DWORD64 ULong64;
+    PVOID   Pointer;
+    SIZE_T  Size;
+    HANDLE  Handle;
+    DWORD   ULong;
+  } DUMMYUNIONNAME;
+} MEM_EXTENDED_PARAMETER2, *PMEM_EXTENDED_PARAMETER2;
+
 // We use VirtualAlloc2 for aligned allocation, but it is only supported on Windows 10 and Windows Server 2016.
 // So, we need to look it up dynamically to run on older systems. (use __stdcall for 32-bit compatibility)
 // Same for DiscardVirtualMemory
-typedef PVOID(__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MEM_EXTENDED_PARAMETER*, ULONG);
+typedef PVOID(__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MEM_EXTENDED_PARAMETER2*, ULONG);
 typedef DWORD(__stdcall *PDiscardVirtualMemory)(PVOID,SIZE_T);
 static PVirtualAlloc2 pVirtualAlloc2 = NULL;
 static PDiscardVirtualMemory pDiscardVirtualMemory = NULL;
@@ -193,10 +228,10 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   if (try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
     // on modern Windows try use VirtualAlloc2 for aligned allocation
-    MEM_ADDRESS_REQUIREMENTS reqs = { 0 };
+    MEM_ADDRESS_REQUIREMENTS2 reqs = { 0 };
     reqs.Alignment = try_alignment;
-    MEM_EXTENDED_PARAMETER param = { 0 };
-    param.Type = MemExtendedParameterAddressRequirements;
+    MEM_EXTENDED_PARAMETER2 param = { 0 };
+    param.Type = MemExtendedParameter2AddressRequirements;
     param.Pointer = &reqs;
     return (*pVirtualAlloc2)(addr, NULL, size, flags, PAGE_READWRITE, &param, 1);
   }
