@@ -279,31 +279,56 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
   fd = VM_MAKE_TAG(100);
   #endif
   if (use_large_os_page(size, try_alignment)) {
-    int lflags = flags;
-    int lfd = fd;
-    #ifdef MAP_ALIGNED_SUPER
-    lflags |= MAP_ALIGNED_SUPER;
-    #endif
-    #ifdef MAP_HUGETLB
-    lflags |= MAP_HUGETLB;
-    #endif
-    #ifdef MAP_HUGE_2MB
-    lflags |= MAP_HUGE_2MB;
-    #endif
-    #ifdef VM_FLAGS_SUPERPAGE_SIZE_2MB
-    lfd |= VM_FLAGS_SUPERPAGE_SIZE_2MB;
-    #endif
-    if (lflags != flags) {
-      // try large page allocation
-      // TODO: if always failing due to permissions or no huge pages, try to avoid repeatedly trying?
-      // Should we check this in _mi_os_init? (as on Windows)
-      p = mi_unix_mmapx(size, try_alignment, protect_flags, lflags, lfd);
-      if (p == MAP_FAILED) p = NULL; // fall back to regular mmap if large is exhausted or no permission
+    static volatile uintptr_t large_page_try_ok = 0;
+    uintptr_t try_ok = mi_atomic_read(&large_page_try_ok);
+    if (try_ok > 0) {
+      // If the OS is not configured for large OS pages, or the user does not have
+      // enough permission, the `mmap` will always fail (but it might also fail for other reasons).
+      // Therefore, once a large page allocation failed, we don't try again for `large_page_try_ok` times
+      // to avoid too many failing calls to mmap.
+      mi_atomic_compare_exchange(&large_page_try_ok, try_ok - 1, try_ok);
+    }
+    else {
+      int lflags = flags;
+      int lfd = fd;
+      #ifdef MAP_ALIGNED_SUPER
+      lflags |= MAP_ALIGNED_SUPER;
+      #endif
+      #ifdef MAP_HUGETLB
+      lflags |= MAP_HUGETLB;
+      #endif
+      #ifdef MAP_HUGE_2MB
+      lflags |= MAP_HUGE_2MB;
+      #endif
+      #ifdef VM_FLAGS_SUPERPAGE_SIZE_2MB
+      lfd |= VM_FLAGS_SUPERPAGE_SIZE_2MB;
+      #endif
+      if (lflags != flags) {
+        // try large OS page allocation
+        p = mi_unix_mmapx(size, try_alignment, protect_flags, lflags, lfd);
+        if (p == MAP_FAILED) {
+          mi_atomic_write(&large_page_try_ok, 10);  // on error, don't try again for the next N allocations          
+          p = NULL; // and fall back to regular mmap 
+        }
+      }
     }
   }
   if (p == NULL) {
     p = mi_unix_mmapx(size, try_alignment, protect_flags, flags, fd);
-    if (p == MAP_FAILED) p = NULL;
+    if (p == MAP_FAILED) {
+      p = NULL;
+    }
+    #if defined(MADV_HUGEPAGE)
+    // Many Linux systems don't allow MAP_HUGETLB but they support instead
+    // transparent huge pages (TPH). It is not required to call `madvise` with MADV_HUGE 
+    // though since properly aligned allocations will already use large pages if available
+    // in that case -- in particular for our large regions (in `memory.c`).
+    // However, some systems only allow TPH if called with explicit `madvise`, so
+    // when large OS pages are enabled for mimalloc, we call `madvice` anyways.
+    else if (use_large_os_page(size, try_alignment)) {
+      madvise(p, size, MADV_HUGEPAGE);
+    }
+    #endif
   }
   return p;
 }
