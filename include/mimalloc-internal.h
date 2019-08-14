@@ -77,7 +77,7 @@ void       _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay);
 size_t     _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append);
 void       _mi_deferred_free(mi_heap_t* heap, bool force);
 
-void       _mi_page_free_collect(mi_page_t* page);
+void       _mi_page_free_collect(mi_page_t* page,bool force);
 void       _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback from segments
 
 size_t     _mi_bin_size(uint8_t bin);           // for stats
