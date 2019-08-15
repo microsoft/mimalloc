@@ -150,7 +150,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // collect regions
   if (collect >= FORCE && _mi_is_main_thread()) {
-    _mi_mem_collect(&heap->tld->stats);
+    // _mi_mem_collect(&heap->tld->stats);
   }
 }
 
@@ -245,9 +245,9 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE);  
 
   // stats
-  if (page->block_size > MI_LARGE_SIZE_MAX) {
-    if (page->block_size > MI_HUGE_SIZE_MAX) {
-      _mi_stat_decrease(&heap->tld->stats.giant,page->block_size);
+  if (page->block_size > MI_MEDIUM_SIZE_MAX) {
+    if (page->block_size <= MI_LARGE_SIZE_MAX) {
+      _mi_stat_decrease(&heap->tld->stats.large,page->block_size);
     }
     else {
       _mi_stat_decrease(&heap->tld->stats.huge, page->block_size);
@@ -255,7 +255,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   }
   #if (MI_STAT>1)
   size_t inuse = page->used - page->thread_freed;
-  if (page->block_size <= MI_LARGE_SIZE_MAX)  {
+  if (page->block_size <= MI_MEDIUM_SIZE_MAX)  {
     mi_heap_stat_decrease(heap,normal[_mi_bin(page->block_size)], inuse);
   }
   mi_heap_stat_decrease(heap,malloc, page->block_size * inuse);  // todo: off for aligned blocks...

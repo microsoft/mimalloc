@@ -74,27 +74,28 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Main tuning parameters for segment and page sizes
 // Sizes for 64-bit, divide by two for 32-bit
-#define MI_SMALL_PAGE_SHIFT               (13 + MI_INTPTR_SHIFT)      // 64kb
-#define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SMALL_PAGE_SHIFT)  // 512kb
-#define MI_LARGE_PAGE_SHIFT               ( 3 + MI_MEDIUM_PAGE_SHIFT) // 4mb
-#define MI_SEGMENT_SHIFT                  ( MI_LARGE_PAGE_SHIFT)      // 4mb
+#define MI_SEGMENT_SLICE_SHIFT            (13 + MI_INTPTR_SHIFT)         // 64kb
+#define MI_SEGMENT_SHIFT                  (10 + MI_SEGMENT_SLICE_SHIFT)  // 64mb
+
+#define MI_SMALL_PAGE_SHIFT               (MI_SEGMENT_SLICE_SHIFT)       // 64kb
+#define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SEGMENT_SLICE_SHIFT)  // 512kb
+
 
 // Derived constants
-#define MI_SEGMENT_SIZE                   (1<<MI_SEGMENT_SHIFT)
-#define MI_SEGMENT_MASK                   ((uintptr_t)MI_SEGMENT_SIZE - 1)
+#define MI_SEGMENT_SIZE                   ((size_t)1<<MI_SEGMENT_SHIFT)
+#define MI_SEGMENT_MASK                   (MI_SEGMENT_SIZE - 1)
+#define MI_SEGMENT_SLICE_SIZE             ((size_t)1 << MI_SEGMENT_SLICE_SHIFT) 
+#define MI_SLICES_PER_SEGMENT             (MI_SEGMENT_SIZE / MI_SEGMENT_SLICE_SIZE) // 1024
 
 #define MI_SMALL_PAGE_SIZE                (1<<MI_SMALL_PAGE_SHIFT)
 #define MI_MEDIUM_PAGE_SIZE               (1<<MI_MEDIUM_PAGE_SHIFT)
-#define MI_LARGE_PAGE_SIZE                (1<<MI_LARGE_PAGE_SHIFT)
 
-#define MI_SMALL_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_SMALL_PAGE_SIZE)
-#define MI_MEDIUM_PAGES_PER_SEGMENT       (MI_SEGMENT_SIZE/MI_MEDIUM_PAGE_SIZE)
-#define MI_LARGE_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_LARGE_PAGE_SIZE)
+#define MI_MEDIUM_SIZE_MAX                (MI_MEDIUM_PAGE_SIZE/8)   // 64kb on 64-bit
+#define MI_MEDIUM_WSIZE_MAX               (MI_MEDIUM_SIZE_MAX/MI_INTPTR_SIZE)   // 64kb on 64-bit
 
-#define MI_MEDIUM_SIZE_MAX                (MI_MEDIUM_PAGE_SIZE/4)   // 128kb on 64-bit
-#define MI_LARGE_SIZE_MAX                 (MI_LARGE_PAGE_SIZE/4)    // 1Mb on 64-bit
-#define MI_LARGE_WSIZE_MAX                (MI_LARGE_SIZE_MAX>>MI_INTPTR_SHIFT)
-#define MI_HUGE_SIZE_MAX                  (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)  // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
+#define MI_LARGE_SIZE_MAX                 (MI_SEGMENT_SIZE/4)       // 16mb on 64-bit
+#define MI_LARGE_WSIZE_MAX                (MI_LARGE_SIZE_MAX/MI_INTPTR_SIZE)
+
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
@@ -103,7 +104,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)
 
-#if (MI_LARGE_WSIZE_MAX >= 655360)
+#if (MI_MEDIUM_WSIZE_MAX >= 655360)
 #error "define more bins"
 #endif
 
@@ -154,20 +155,20 @@ typedef uintptr_t mi_thread_free_t;
 // - using `uint16_t` does not seem to slow things down
 typedef struct mi_page_s {
   // "owned" by the segment
-  uint8_t               segment_idx;       // index in the segment `pages` array, `page == &segment->pages[page->segment_idx]`
-  bool                  segment_in_use:1;  // `true` if the segment allocated this page
-  bool                  is_reset:1;        // `true` if the page memory was reset
-  bool                  is_committed:1;    // `true` if the page virtual memory is committed
+  size_t                slice_count;       // slices in this page (0 if not a page)
+  uint16_t              slice_offset;      // distance from the actual page data slice (0 if a page)
+  bool                  is_reset;          // `true` if the page memory was reset
+  bool                  is_committed;      // `true` if the page virtual memory is committed
 
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed
   uint16_t              reserved;          // number of blocks reserved in memory
-                                           // 16 bits padding
+
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   #if MI_SECURE
   uintptr_t             cookie;            // random cookie to encode the free lists
   #endif
-  mi_page_flags_t       flags;             // threadid:62 | has_aligned:1 | in_full:1
+  mi_page_flags_t       flags;
   size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
   
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
@@ -182,7 +183,7 @@ typedef struct mi_page_s {
 
 // improve page index calculation
 #if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
-  void*                 padding[1];        // 12 words on 64-bit
+  // void*                 padding[1];        // 12 words on 64-bit
 #elif MI_INTPTR_SIZE==4
   // void*                 padding[1];         // 12 words on 32-bit
 #endif
@@ -193,9 +194,16 @@ typedef struct mi_page_s {
 typedef enum mi_page_kind_e {
   MI_PAGE_SMALL,    // small blocks go into 64kb pages inside a segment
   MI_PAGE_MEDIUM,   // medium blocks go into 512kb pages inside a segment
-  MI_PAGE_LARGE,    // larger blocks go into a single page spanning a whole segment
-  MI_PAGE_HUGE      // huge blocks (>512kb) are put into a single page in a segment of the exact size (but still 2mb aligned)
+  MI_PAGE_LARGE,    // larger blocks go into a page of just one block
+  MI_PAGE_HUGE,     // huge blocks (>16mb) are put into a single page in a single segment.
 } mi_page_kind_t;
+
+typedef enum mi_segment_kind_e {
+  MI_SEGMENT_NORMAL, // MI_SEGMENT_SIZE size with pages inside.
+  MI_SEGMENT_HUGE,   // > MI_LARGE_SIZE_MAX segment with just one huge page inside.
+} mi_segment_kind_t;
+
+typedef mi_page_t mi_slice_t;
 
 // Segments are large allocated memory blocks (2mb on 64 bit) from
 // the OS. Inside segments we allocated fixed size _pages_ that
@@ -203,20 +211,20 @@ typedef enum mi_page_kind_e {
 typedef struct mi_segment_s {
   struct mi_segment_s* next;
   struct mi_segment_s* prev;
-  struct mi_segment_s* abandoned_next;
+  struct mi_segment_s* abandoned_next;  // abandoned segment stack: `used == abandoned`
   size_t          abandoned;   // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
-  size_t          used;        // count of pages in use (`used <= capacity`)
-  size_t          capacity;    // count of available pages (`#free + used`)
+  size_t          used;        // count of pages in use 
   size_t          segment_size;// for huge pages this may be different from `MI_SEGMENT_SIZE`
   size_t          segment_info_size;  // space we are using from the first page for segment meta-data and possible guard pages.
   uintptr_t       cookie;      // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
   size_t          memid;       // id for the os-level memory manager
+  bool            all_committed;
 
   // layout like this to optimize access in `mi_free`
-  size_t          page_shift;  // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).
-  volatile uintptr_t thread_id;   // unique id of the thread owning this segment
-  mi_page_kind_t  page_kind;   // kind of pages: small, large, or huge
-  mi_page_t       pages[1];    // up to `MI_SMALL_PAGES_PER_SEGMENT` pages
+  mi_segment_kind_t kind; 
+  uintptr_t         thread_id;
+  size_t            slice_count; // slices in this segment (at most MI_SLICES_PER_SEGMENT)
+  mi_slice_t        slices[MI_SLICES_PER_SEGMENT];
 } mi_segment_t;
 
 
@@ -326,13 +334,13 @@ typedef struct mi_stats_s {
   mi_stat_count_t commit_calls;
   mi_stat_count_t threads;
   mi_stat_count_t huge;
-  mi_stat_count_t giant;
+  mi_stat_count_t large;
   mi_stat_count_t malloc;
   mi_stat_count_t segments_cache;
   mi_stat_counter_t page_no_retire;
   mi_stat_counter_t searches;
   mi_stat_counter_t huge_count;
-  mi_stat_counter_t giant_count;
+  mi_stat_counter_t large_count;
 #if MI_STAT>1
   mi_stat_count_t normal[MI_BIN_HUGE+1];
 #endif
@@ -367,11 +375,11 @@ typedef struct mi_segment_queue_s {
   mi_segment_t* last;
 } mi_segment_queue_t;
 
+#define MI_SEGMENT_BIN_MAX (35)     // 35 == mi_segment_bin(MI_SEGMENT_SIZE)
 
 // Segments thread local data
 typedef struct mi_segments_tld_s {
-  mi_segment_queue_t  small_free;   // queue of segments with free small pages
-  mi_segment_queue_t  medium_free;  // queue of segments with free medium pages
+  mi_page_queue_t     pages[MI_SEGMENT_BIN_MAX+1];  // free pages inside segments
   size_t              count;        // current number of segments;
   size_t              peak_count;   // peak number of segments
   size_t              current_size; // current size of all segments

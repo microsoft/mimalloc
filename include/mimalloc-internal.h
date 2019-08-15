@@ -39,10 +39,20 @@ bool       _mi_preloading();  // true while the C runtime is not ready
 
 // os.c
 size_t     _mi_os_page_size(void);
+size_t     _mi_os_large_page_size();
 void       _mi_os_init(void);                                      // called from process init
 void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocate thread local data
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
 
+bool      _mi_os_protect(void* addr, size_t size);
+bool      _mi_os_unprotect(void* addr, size_t size);
+bool      _mi_os_commit(void* p, size_t size, mi_stats_t* stats);
+bool      _mi_os_decommit(void* p, size_t size, mi_stats_t* stats);
+bool      _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
+bool      _mi_os_unreset(void* p, size_t size, mi_stats_t* stats);
+void*     _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, mi_os_tld_t* tld);
+
+/*
 // memory.c
 void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* id, mi_os_tld_t* tld);
 void*      _mi_mem_alloc(size_t size, bool commit, size_t* id, mi_os_tld_t* tld);
@@ -55,6 +65,7 @@ bool       _mi_mem_protect(void* addr, size_t size);
 bool       _mi_mem_unprotect(void* addr, size_t size);
 
 void        _mi_mem_collect(mi_stats_t* stats);
+*/
 
 // "segment.c"
 mi_page_t* _mi_segment_page_alloc(size_t block_wsize, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
@@ -62,7 +73,7 @@ void       _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t*
 void       _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld);
 bool       _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segments_tld_t* tld);
 void       _mi_segment_thread_collect(mi_segments_tld_t* tld);
-uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size); // page start for any page
+uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size); // page start for any page
 
 // "page.c"
 void*      _mi_malloc_generic(mi_heap_t* heap, size_t size)  mi_attr_noexcept mi_attr_malloc;
@@ -233,27 +244,47 @@ static inline mi_segment_t* _mi_ptr_segment(const void* p) {
   return (mi_segment_t*)((uintptr_t)p & ~MI_SEGMENT_MASK);
 }
 
+static inline mi_page_t* mi_slice_to_page(mi_slice_t* s) {
+  mi_assert_internal(s->slice_offset== 0 && s->slice_count > 0);
+  return (mi_page_t*)(s);
+}
+
+static inline mi_slice_t* mi_page_to_slice(mi_page_t* p) {
+  mi_assert_internal(p->slice_offset== 0 && p->slice_count > 0);
+  return (mi_slice_t*)(p);
+}
+
+static size_t mi_slice_index(const mi_slice_t* slice) {
+  mi_segment_t* segment = _mi_ptr_segment(slice);
+  ptrdiff_t index = slice - segment->slices;
+  mi_assert_internal(index >= 0 && index < (ptrdiff_t)segment->slice_count);
+  return index;
+}
+
 // Segment belonging to a page
 static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
   mi_segment_t* segment = _mi_ptr_segment(page);
-  mi_assert_internal(segment == NULL || page == &segment->pages[page->segment_idx]);
+  mi_assert_internal(segment == NULL || page == mi_slice_to_page(&segment->slices[mi_slice_index(mi_page_to_slice((mi_page_t*)page))]));
   return segment;
 }
 
 // Get the page containing the pointer
 static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const void* p) {
-  // if (segment->page_size > MI_SEGMENT_SIZE) return &segment->pages[0];  // huge pages
   ptrdiff_t diff = (uint8_t*)p - (uint8_t*)segment;
   mi_assert_internal(diff >= 0 && diff < MI_SEGMENT_SIZE);
-  uintptr_t idx = (uintptr_t)diff >> segment->page_shift;
-  mi_assert_internal(idx < segment->capacity);
-  mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM || idx == 0);
-  return &((mi_segment_t*)segment)->pages[idx];
+  uintptr_t idx = (uintptr_t)diff >> MI_SEGMENT_SLICE_SHIFT;
+  mi_assert_internal(idx < segment->slice_count);
+  mi_slice_t* slice0 = (mi_slice_t*)&segment->slices[idx]; 
+  mi_slice_t* slice = slice0 - slice0->slice_offset;  // adjust to the block that holds the page data
+  mi_assert_internal(slice->slice_count > slice0->slice_offset);
+  mi_assert_internal(slice->slice_offset == 0);
+  mi_assert_internal(slice >= segment->slices && slice < segment->slices + segment->slice_count);
+  return mi_slice_to_page(slice);
 }
 
 // Quick page start for initialized pages
 static inline uint8_t* _mi_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size) {
-  return _mi_segment_page_start(segment, page, page->block_size, page_size);
+  return _mi_segment_page_start(segment, page, page_size);
 }
 
 // Get the page containing the pointer

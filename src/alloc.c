@@ -226,7 +226,7 @@ void mi_free(void* p) mi_attr_noexcept
 #endif
 
   mi_page_t* const page = _mi_segment_page_of(segment, p);
-
+  
 #if (MI_STAT>1)
   mi_heap_t* heap = mi_heap_get_default();
   mi_heap_stat_decrease( heap, malloc, mi_usable_size(p));
@@ -235,9 +235,9 @@ void mi_free(void* p) mi_attr_noexcept
   }
   // huge page stat is accounted for in `_mi_page_retire`
 #endif
-
-  const uintptr_t tid = _mi_thread_id();
-  if (mi_likely(tid == page->flags)) {  // if equal, the thread id matches and it is not a full page, nor has aligned blocks
+  
+  uintptr_t tid = _mi_thread_id();
+  if (mi_likely(page->flags == tid)) {  
     // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
     mi_block_set_next(page, block, page->local_free);

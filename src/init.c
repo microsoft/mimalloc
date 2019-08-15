@@ -21,7 +21,7 @@ const mi_page_t _mi_page_empty = {
   NULL, 0, 0,
   0, NULL, NULL, NULL
   #if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
-  , { NULL }
+  // , { NULL }
   #endif
 };
 
@@ -43,8 +43,8 @@ const mi_page_t _mi_page_empty = {
     QNULL( 10240), QNULL( 12288), QNULL( 14336), QNULL( 16384), QNULL( 20480), QNULL( 24576), QNULL( 28672), QNULL( 32768), /* 56 */ \
     QNULL( 40960), QNULL( 49152), QNULL( 57344), QNULL( 65536), QNULL( 81920), QNULL( 98304), QNULL(114688), QNULL(131072), /* 64 */ \
     QNULL(163840), QNULL(196608), QNULL(229376), QNULL(262144), QNULL(327680), QNULL(393216), QNULL(458752), QNULL(524288), /* 72 */ \
-    QNULL(MI_LARGE_WSIZE_MAX + 1  /* 655360, Huge queue */), \
-    QNULL(MI_LARGE_WSIZE_MAX + 2) /* Full queue */ }
+    QNULL(MI_MEDIUM_WSIZE_MAX + 1  /* 655360, Huge queue */), \
+    QNULL(MI_MEDIUM_WSIZE_MAX + 2) /* Full queue */ }
 
 #define MI_STAT_COUNT_NULL()  {0,0,0,0}
 
@@ -91,14 +91,23 @@ const mi_heap_t _mi_heap_empty = {
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 
 
+// Empty page queues for every bin
+#define MI_SEGMENT_PAGE_QUEUES_EMPTY \
+  { QNULL(0), \
+    QNULL(     1), QNULL(     2), QNULL(     3), QNULL(     4), QNULL(     5), QNULL(     6), QNULL(     7), QNULL(     8), /* 8 */ \
+    QNULL(    10), QNULL(    12), QNULL(    14), QNULL(    16), QNULL(    20), QNULL(    24), QNULL(    28), QNULL(    32), /* 16 */ \
+    QNULL(    40), QNULL(    48), QNULL(    56), QNULL(    64), QNULL(    80), QNULL(    96), QNULL(   112), QNULL(   128), /* 24 */ \
+    QNULL(   160), QNULL(   192), QNULL(   224),  /* 27 */ }
+
+
 #define tld_main_stats  ((mi_stats_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,stats)))
 
 static mi_tld_t tld_main = {
   0,
   &_mi_heap_main,
-  { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
-  { 0, tld_main_stats },       // os
-  { MI_STATS_NULL }            // stats
+  { MI_SEGMENT_PAGE_QUEUES_EMPTY, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
+  { 0, tld_main_stats },              // os
+  { MI_STATS_NULL }                   // stats
 };
 
 mi_heap_t _mi_heap_main = {
