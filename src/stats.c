@@ -231,8 +231,8 @@ static void _mi_stats_print(mi_stats_t* stats, double secs, FILE* out) mi_attr_n
   mi_stat_count_t normal = { 0,0,0,0 };
   mi_stats_print_bins(&normal, stats->normal, MI_BIN_HUGE, "normal",out);
   mi_stat_print(&normal, "normal", 1, out);
+  mi_stat_print(&stats->large, "large", (stats->large_count.count == 0 ? 1 : -(stats->large.allocated / stats->large_count.count)), out);
   mi_stat_print(&stats->huge, "huge", (stats->huge_count.count == 0 ? 1 : -(stats->huge.allocated / stats->huge_count.count)), out);
-  mi_stat_print(&stats->large, "giant", (stats->large_count.count == 0 ? 1 : -(stats->large.allocated / stats->large_count.count)), out);
   mi_stat_count_t total = { 0,0,0,0 };
   mi_stat_add(&total, &normal, 1);
   mi_stat_add(&total, &stats->huge, 1);

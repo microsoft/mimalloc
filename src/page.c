@@ -99,7 +99,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
   #endif
   if (page->heap!=NULL) {
     mi_segment_t* segment = _mi_page_segment(page);
-    mi_assert_internal(!_mi_process_is_initialized || segment->thread_id == page->heap->thread_id);
+    mi_assert_internal(!_mi_process_is_initialized || segment->thread_id==0 || segment->thread_id == page->heap->thread_id);
     mi_page_queue_t* pq = mi_page_queue_of(page);
     mi_assert_internal(mi_page_queue_contains(pq, page));
     mi_assert_internal(pq->block_size==page->block_size || page->block_size > MI_MEDIUM_SIZE_MAX || mi_page_is_in_full(page));

@@ -143,7 +143,7 @@ size_t _mi_binx4(size_t bsize) {
 }
 
 size_t _mi_binx8(size_t bsize) {
-  if (bsize==0) return 0;
+  if (bsize<=1) return bsize;
   uint8_t b = mi_bsr32((uint32_t)bsize);
   if (b <= 2) return bsize;
   size_t bin = ((b << 2) | (bsize >> (b - 2))&0x03) - 5;
@@ -152,16 +152,20 @@ size_t _mi_binx8(size_t bsize) {
 
 void mi_bins() {
   //printf("  QNULL(1), /* 0 */ \\\n  ");
-  size_t last_bin = 1;
-  for (size_t bsize = 0; bsize < 8*1024; bsize++) {
+  size_t last_bin = 0;
+  size_t min_bsize = 0;
+  size_t last_bsize = 0;
+  for (size_t bsize = 1; bsize < 2*1024; bsize++) {
     size_t size = bsize * 64 * 1024;
     size_t bin = _mi_binx8(bsize);
     if (bin != last_bin) {      
-      printf("bsize: %6zd, size: %6zd, bin: %6zd\n", bsize, size, bin);
+      printf("min bsize: %6zd, max bsize: %6zd, bin: %6zd\n", min_bsize, last_bsize, last_bin);
       //printf("QNULL(%6zd), ", wsize);
       //if (last_bin%8 == 0) printf("/* %i */ \\\n  ", last_bin);
       last_bin = bin;
+      min_bsize = bsize;
     }
+    last_bsize = bsize;
   }
 }
 
@@ -186,6 +190,7 @@ int main() {
   //free(p1);
   //p2 = malloc(32);
   //mi_free(p2);  
+  mi_collect(true);
   mi_stats_print(NULL);
   return 0;
 }

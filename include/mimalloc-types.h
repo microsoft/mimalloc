@@ -375,7 +375,7 @@ typedef struct mi_segment_queue_s {
   mi_segment_t* last;
 } mi_segment_queue_t;
 
-#define MI_SEGMENT_BIN_MAX (35)     // 35 == mi_segment_bin(MI_SEGMENT_SIZE)
+#define MI_SEGMENT_BIN_MAX (35)     // 35 == mi_segment_bin(MI_SLICES_PER_SEGMENT)
 
 // Segments thread local data
 typedef struct mi_segments_tld_s {
