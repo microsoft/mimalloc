@@ -16,6 +16,14 @@ terms of the MIT license. A copy of the license can be found in the file
 static void mi_segment_map_allocated_at(const mi_segment_t* segment);
 static void mi_segment_map_freed_at(const mi_segment_t* segment);
 
+static size_t mi_slice_index(const mi_slice_t* slice) {
+  mi_segment_t* segment = _mi_ptr_segment(slice);
+  ptrdiff_t index = slice - segment->slices;
+  mi_assert_internal(index >= 0 && index < (ptrdiff_t)segment->slice_count);
+  return index;
+}
+
+
 /* -----------------------------------------------------------
   Segment allocation
   
@@ -346,7 +354,7 @@ static mi_slice_t* mi_segment_last_slice(mi_segment_t* segment) {
 
 static void mi_segment_page_init(mi_segment_t* segment, size_t slice_index, size_t slice_count, mi_segments_tld_t* tld) {
   mi_assert_internal(slice_index < segment->slice_count);
-  mi_page_queue_t* pq = mi_page_queue_for(slice_count,tld);
+  mi_page_queue_t* pq = (slice_count > MI_SLICES_PER_SEGMENT ? NULL : mi_page_queue_for(slice_count,tld));
   if (slice_count==0) slice_count = 1;
   mi_assert_internal(slice_index + slice_count - 1 < segment->slice_count);
 
@@ -360,8 +368,9 @@ static void mi_segment_page_init(mi_segment_t* segment, size_t slice_index, size
     end->slice_offset = (uint16_t)slice_count - 1;
     end->block_size = 0;
   }
-  // and push it on the free page queue
-  mi_page_queue_push( pq, mi_slice_to_page(slice) );
+  // and push it on the free page queue (if it was not a huge page)
+  if (pq != NULL) mi_page_queue_push( pq, mi_slice_to_page(slice) );
+             else slice->block_size = 0; // mark huge page as free anyways
 }
 
 static void mi_segment_page_add_free(mi_page_t* page, mi_segments_tld_t* tld) {
@@ -408,6 +417,7 @@ static mi_page_t* mi_segment_page_find(size_t slice_count, mi_segments_tld_t* tl
 
 static void mi_segment_page_delete(mi_slice_t* slice, mi_segments_tld_t* tld) {
   mi_assert_internal(slice->slice_count > 0 && slice->slice_offset==0 && slice->block_size==0);
+  if (slice->slice_count > MI_SLICES_PER_SEGMENT) return; // huge page
   mi_page_queue_t* pq = mi_page_queue_for(slice->slice_count, tld);
   mi_page_queue_delete(pq, mi_slice_to_page(slice));
 }
@@ -508,7 +518,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
     mi_assert_internal(slice->slice_count > 0);
     mi_assert_internal(slice->slice_offset == 0);
     mi_assert_internal(mi_slice_index(slice)==0 || slice->block_size == 0); // no more used pages ..
-    if (slice->block_size == 0) {
+    if (slice->block_size == 0 && segment->kind != MI_SEGMENT_HUGE) {
       mi_segment_page_delete(slice, tld);
     }
     page_count++;
@@ -581,7 +591,7 @@ static mi_slice_t* mi_segment_page_free_coalesce(mi_page_t* page, mi_segments_tl
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert_internal(segment->used > 0);
   segment->used--;
-
+  
   // free and coalesce the page
   mi_slice_t* slice = mi_page_to_slice(page);
   size_t slice_count = slice->slice_count;
@@ -627,7 +637,7 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
   size_t inuse = page->capacity * page->block_size;
   _mi_stat_decrease(&tld->stats->page_committed, inuse);
   _mi_stat_decrease(&tld->stats->pages, 1);
-
+  
   // reset the page memory to reduce memory pressure?
   if (!page->is_reset && mi_option_is_enabled(mi_option_page_reset)) {
     size_t psize;
@@ -812,9 +822,20 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
   mi_assert_internal(segment->segment_size - segment->segment_info_size >= size);
   segment->used = 1;
   mi_page_t* page = mi_slice_to_page(&segment->slices[0]);
-  page->slice_count = segment->slice_count;
+  mi_assert_internal(page->block_size > 0 && page->slice_count > 0);
+  size_t initial_count = page->slice_count;
+  page = page + initial_count;
+  page->slice_count = segment->slice_count - initial_count;
   page->slice_offset = 0;
   page->block_size = size;  
+  mi_assert_internal(page->slice_count * MI_SEGMENT_SLICE_SIZE >= size);
+  // set back pointers  
+  for (size_t i = 1; i < page->slice_count; i++) {
+    mi_slice_t* slice = (mi_slice_t*)(page + i);
+    slice->slice_offset = (uint16_t)i;
+    slice->block_size = 1;
+    slice->slice_count = 0;    
+  }
   mi_page_init_flags(page,segment->thread_id);
   return page;
 }

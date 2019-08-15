@@ -254,12 +254,7 @@ static inline mi_slice_t* mi_page_to_slice(mi_page_t* p) {
   return (mi_slice_t*)(p);
 }
 
-static size_t mi_slice_index(const mi_slice_t* slice) {
-  mi_segment_t* segment = _mi_ptr_segment(slice);
-  ptrdiff_t index = slice - segment->slices;
-  mi_assert_internal(index >= 0 && index < (ptrdiff_t)segment->slice_count);
-  return index;
-}
+
 
 // Segment belonging to a page
 static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
