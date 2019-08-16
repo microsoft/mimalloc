@@ -78,7 +78,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SEGMENT_SHIFT                  (10 + MI_SEGMENT_SLICE_SHIFT)  // 64mb
 
 #define MI_SMALL_PAGE_SHIFT               (MI_SEGMENT_SLICE_SHIFT)       // 64kb
-#define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SEGMENT_SLICE_SHIFT)  // 512kb
+#define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SEGMENT_SLICE_SHIFT)  // 1024kb
 
 
 // Derived constants
@@ -90,7 +90,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SMALL_PAGE_SIZE                (1<<MI_SMALL_PAGE_SHIFT)
 #define MI_MEDIUM_PAGE_SIZE               (1<<MI_MEDIUM_PAGE_SHIFT)
 
-#define MI_MEDIUM_SIZE_MAX                (MI_MEDIUM_PAGE_SIZE/8)   // 64kb on 64-bit
+#define MI_MEDIUM_SIZE_MAX                (MI_MEDIUM_PAGE_SIZE/4)   // 128kb on 64-bit
 #define MI_MEDIUM_WSIZE_MAX               (MI_MEDIUM_SIZE_MAX/MI_INTPTR_SIZE)   // 64kb on 64-bit
 
 #define MI_LARGE_SIZE_MAX                 (MI_SEGMENT_SIZE/4)       // 16mb on 64-bit
@@ -155,8 +155,8 @@ typedef uintptr_t mi_thread_free_t;
 // - using `uint16_t` does not seem to slow things down
 typedef struct mi_page_s {
   // "owned" by the segment
-  size_t                slice_count;       // slices in this page (0 if not a page)
-  uint16_t              slice_offset;      // distance from the actual page data slice (0 if a page)
+  uint32_t              slice_count;       // slices in this page (0 if not a page)
+  uint32_t              slice_offset;      // distance from the actual page data slice (0 if a page)
   bool                  is_reset;          // `true` if the page memory was reset
   bool                  is_committed;      // `true` if the page virtual memory is committed
 

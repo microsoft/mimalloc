@@ -170,7 +170,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
 
 void _mi_page_free_collect(mi_page_t* page, bool force) {
   mi_assert_internal(page!=NULL);
-
+  
   // collect the thread free list
   if (force || mi_tf_block(page->thread_free) != NULL) {  // quick test to avoid an atomic operation
     _mi_page_thread_free_collect(page);
@@ -703,7 +703,7 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn) mi_attr_noexcept {
   General allocation
 ----------------------------------------------------------- */
 
-// A huge page is allocated directly without being in a queue
+// Large and huge pages are allocated directly without being in a queue
 static mi_page_t* mi_large_page_alloc(mi_heap_t* heap, size_t size) {
   size_t block_size = _mi_wsize_from_size(size) * sizeof(uintptr_t);
   mi_assert_internal(_mi_bin(block_size) == MI_BIN_HUGE);
