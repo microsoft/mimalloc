@@ -22,7 +22,6 @@ static void mi_segment_map_freed_at(const mi_segment_t* segment);
 /* -----------------------------------------------------------
   Segment allocation
 
-
   In any case the memory for a segment is virtual and only
   committed on demand (i.e. we are careful to not touch the memory
   until we actually allocate a block there)
@@ -404,7 +403,7 @@ static void mi_segment_page_split(mi_page_t* page, size_t slice_count, mi_segmen
 }
 
 static mi_page_t* mi_segment_page_find(size_t slice_count, mi_segments_tld_t* tld) {
-  mi_assert_internal(slice_count*MI_SEGMENT_SLICE_SIZE <= MI_LARGE_SIZE_MAX);
+  mi_assert_internal(slice_count*MI_SEGMENT_SLICE_SIZE <= MI_LARGE_OBJ_SIZE_MAX);
   // search from best fit up
   mi_page_queue_t* pq = mi_page_queue_for(slice_count,tld);
   if (slice_count == 0) slice_count = 1;
@@ -557,7 +556,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
 
 static mi_page_t* mi_segment_page_alloc(mi_page_kind_t page_kind, size_t required, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 {
-  mi_assert_internal(required <= MI_LARGE_SIZE_MAX && page_kind <= MI_PAGE_LARGE);
+  mi_assert_internal(required <= MI_LARGE_OBJ_SIZE_MAX && page_kind <= MI_PAGE_LARGE);
 
   // find a free page
   size_t page_size = _mi_align_up(required,(required > MI_MEDIUM_PAGE_SIZE ? MI_MEDIUM_PAGE_SIZE : MI_SEGMENT_SLICE_SIZE));
@@ -873,13 +872,13 @@ static bool mi_is_good_fit(size_t bsize, size_t size) {
 
 mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
   mi_page_t* page;
-  if (block_size <= MI_SMALL_SIZE_MAX) {// || mi_is_good_fit(block_size,MI_SMALL_PAGE_SIZE)) {
+  if (block_size <= MI_SMALL_OBJ_SIZE_MAX) {// || mi_is_good_fit(block_size,MI_SMALL_PAGE_SIZE)) {
     page = mi_segment_page_alloc(MI_PAGE_SMALL,block_size,tld,os_tld);
   }
-  else if (block_size <= MI_MEDIUM_SIZE_MAX) {// || mi_is_good_fit(block_size, MI_MEDIUM_PAGE_SIZE)) {
+  else if (block_size <= MI_MEDIUM_OBJ_SIZE_MAX) {// || mi_is_good_fit(block_size, MI_MEDIUM_PAGE_SIZE)) {
     page = mi_segment_page_alloc(MI_PAGE_MEDIUM,MI_MEDIUM_PAGE_SIZE,tld, os_tld);
   }
-  else if (block_size <= MI_LARGE_SIZE_MAX) {
+  else if (block_size <= MI_LARGE_OBJ_SIZE_MAX) {
     page = mi_segment_page_alloc(MI_PAGE_LARGE,block_size,tld, os_tld);
   }
   else {

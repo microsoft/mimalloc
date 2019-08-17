@@ -245,8 +245,8 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE);  
 
   // stats
-  if (page->block_size > MI_MEDIUM_SIZE_MAX) {
-    if (page->block_size <= MI_LARGE_SIZE_MAX) {
+  if (page->block_size > MI_MEDIUM_OBJ_SIZE_MAX) {
+    if (page->block_size <= MI_LARGE_OBJ_SIZE_MAX) {
       _mi_stat_decrease(&heap->tld->stats.large,page->block_size);
     }
     else {
@@ -255,7 +255,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   }
   #if (MI_STAT>1)
   size_t inuse = page->used - page->thread_freed;
-  if (page->block_size <= MI_LARGE_SIZE_MAX)  {
+  if (page->block_size <= MI_LARGE_OBJ_SIZE_MAX)  {
     mi_heap_stat_decrease(heap,normal[_mi_bin(page->block_size)], inuse);
   }
   mi_heap_stat_decrease(heap,malloc, page->block_size * inuse);  // todo: off for aligned blocks...
