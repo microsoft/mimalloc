@@ -24,7 +24,7 @@ terms of the MIT license. A copy of the license can be found in the file
   - small pages (64kb), 64 in one segment
   - medium pages (512kb), 8 in one segment
   - large pages (4mb), 1 in one segment
-  - huge blocks > MI_LARGE_SIZE_MAX (512kb) are directly allocated by the OS
+  - huge blocks > MI_LARGE_OBJ_SIZE_MAX (512kb) are directly allocated by the OS
 
   In any case the memory for a segment is virtual and only
   committed on demand (i.e. we are careful to not touch the memory
@@ -715,13 +715,13 @@ static bool mi_is_good_fit(size_t bsize, size_t size) {
 
 mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
   mi_page_t* page;
-  if (block_size <= MI_SMALL_SIZE_MAX || mi_is_good_fit(block_size,MI_SMALL_PAGE_SIZE)) {
+  if (block_size <= MI_SMALL_OBJ_SIZE_MAX || mi_is_good_fit(block_size,MI_SMALL_PAGE_SIZE)) {
     page = mi_segment_small_page_alloc(tld,os_tld);
   }
-  else if (block_size <= MI_MEDIUM_SIZE_MAX || mi_is_good_fit(block_size, MI_MEDIUM_PAGE_SIZE)) {
+  else if (block_size <= MI_MEDIUM_OBJ_SIZE_MAX || mi_is_good_fit(block_size, MI_MEDIUM_PAGE_SIZE)) {
     page = mi_segment_medium_page_alloc(tld, os_tld);
   }
-  else if (block_size < MI_LARGE_SIZE_MAX || mi_is_good_fit(block_size, MI_LARGE_PAGE_SIZE - sizeof(mi_segment_t))) {
+  else if (block_size < MI_LARGE_OBJ_SIZE_MAX || mi_is_good_fit(block_size, MI_LARGE_PAGE_SIZE - sizeof(mi_segment_t))) {
     page = mi_segment_large_page_alloc(tld, os_tld);
   }
   else {
