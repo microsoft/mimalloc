@@ -21,7 +21,7 @@ static void mi_segment_map_freed_at(const mi_segment_t* segment);
 
 /* -----------------------------------------------------------
   Segment allocation
-  
+
 
   In any case the memory for a segment is virtual and only
   committed on demand (i.e. we are careful to not touch the memory
@@ -113,7 +113,7 @@ static void mi_page_queue_enqueue(mi_page_queue_t* pq, mi_page_t* page) {
   pq->first = page;
   if (page->next != NULL) page->next->prev = page;
                      else pq->last = page;
-  page->block_size = 0; // free                     
+  page->block_size = 0; // free
 }
 
 static mi_page_queue_t* mi_page_queue_for(size_t slice_count, mi_segments_tld_t* tld) {
@@ -141,7 +141,7 @@ static void mi_page_queue_delete(mi_page_queue_t* pq, mi_page_t* page) {
 ----------------------------------------------------------- */
 
 #if (MI_DEBUG > 1)
-static bool mi_page_queue_contains(mi_page_queue_t* pq, mi_page_t* page) {
+static bool mi_segment_page_queue_contains(mi_page_queue_t* pq, mi_page_t* page) {
   for (mi_page_t* p = pq->first; p != NULL; p = p->next) {
     if (p==page) return true;
   }
@@ -159,7 +159,7 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_page_queue_t* pq;
   while(slice < &segment->slices[segment->slice_count]) {
     mi_assert_internal(slice->slice_count > 0);
-    mi_assert_internal(slice->slice_offset == 0);    
+    mi_assert_internal(slice->slice_offset == 0);
     size_t index = mi_slice_index(slice);
     size_t maxindex = (index + slice->slice_count >= segment->slice_count ? segment->slice_count : index + slice->slice_count) - 1;
     if (slice->block_size > 0) { // a page in use, all slices need their back offset set
@@ -177,9 +177,9 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
       mi_assert_internal(end->block_size == 0);
       if (segment->kind == MI_SEGMENT_NORMAL && segment->thread_id != 0) {
         pq = mi_page_queue_for(slice->slice_count,tld);
-        mi_assert_internal(mi_page_queue_contains(pq,mi_slice_to_page(slice)));
+        mi_assert_internal(mi_segment_page_queue_contains(pq,mi_slice_to_page(slice)));
       }
-    }    
+    }
     slice = &segment->slices[maxindex+1];
   }
   mi_assert_internal(slice == &segment->slices[segment->slice_count]);
@@ -193,7 +193,7 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
 ----------------------------------------------------------- */
 
 // Start of the page available memory; can be used on uninitialized pages
-uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size) 
+uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size)
 {
   mi_slice_t* slice = mi_page_to_slice((mi_page_t*)page);
   ptrdiff_t idx     = slice - segment->slices;
@@ -233,7 +233,7 @@ static size_t mi_segment_size(size_t required, size_t* pre_size, size_t* info_si
   size_t page_size = _mi_os_page_size();
   size_t isize     = _mi_align_up(sizeof(mi_segment_t), page_size);
   size_t guardsize = 0;
-  
+
   if (mi_option_is_enabled(mi_option_secure)) {
     // in secure mode, we set up a protected page in between the segment info
     // and the page data (and one at the end of the segment)
@@ -296,7 +296,7 @@ static mi_segment_t* mi_segment_cache_pop(size_t segment_size, mi_segments_tld_t
 }
 
 static bool mi_segment_cache_full(mi_segments_tld_t* tld) {
-  if (tld->cache_count <  MI_SEGMENT_CACHE_MAX 
+  if (tld->cache_count <  MI_SEGMENT_CACHE_MAX
       && tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))
      ) { // always allow 1 element cache
     return false;
@@ -339,7 +339,7 @@ void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
 
 
 /* -----------------------------------------------------------
-   Slices 
+   Slices
 ----------------------------------------------------------- */
 
 
@@ -399,11 +399,11 @@ static void mi_segment_page_split(mi_page_t* page, size_t slice_count, mi_segmen
   mi_assert_internal(segment->kind != MI_SEGMENT_HUGE);
   size_t next_index = mi_slice_index(mi_page_to_slice(page)) + slice_count;
   size_t next_count = page->slice_count - slice_count;
-  mi_segment_page_init( segment, next_index, next_count, tld );  
+  mi_segment_page_init( segment, next_index, next_count, tld );
   page->slice_count = (uint32_t)slice_count;
 }
 
-static mi_page_t* mi_segment_page_find(size_t slice_count, mi_segments_tld_t* tld) { 
+static mi_page_t* mi_segment_page_find(size_t slice_count, mi_segments_tld_t* tld) {
   mi_assert_internal(slice_count*MI_SEGMENT_SLICE_SIZE <= MI_LARGE_SIZE_MAX);
   // search from best fit up
   mi_page_queue_t* pq = mi_page_queue_for(slice_count,tld);
@@ -422,8 +422,8 @@ static mi_page_t* mi_segment_page_find(size_t slice_count, mi_segments_tld_t* tl
     }
     pq++;
   }
-  // could not find a page.. 
-  return NULL;  
+  // could not find a page..
+  return NULL;
 }
 
 static void mi_segment_page_delete(mi_slice_t* slice, mi_segments_tld_t* tld) {
@@ -452,7 +452,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
   //mi_assert_internal(pre_size % MI_SEGMENT_SLICE_SIZE == 0);
 
   // Try to get it from our thread local cache first
-  bool commit = mi_option_is_enabled(mi_option_eager_commit) || mi_option_is_enabled(mi_option_eager_region_commit) 
+  bool commit = mi_option_is_enabled(mi_option_eager_commit) || mi_option_is_enabled(mi_option_eager_region_commit)
                 || required > 0; // huge page
   mi_segment_t* segment = mi_segment_cache_pop(segment_size, tld);
   if (segment==NULL) {
@@ -482,7 +482,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
     _mi_os_protect((uint8_t*)segment + info_size, (pre_size - info_size));
     size_t os_page_size = _mi_os_page_size();
     // and protect the last page too
-    _mi_os_protect((uint8_t*)segment + segment_size - os_page_size, os_page_size);        
+    _mi_os_protect((uint8_t*)segment + segment_size - os_page_size, os_page_size);
     slice_count--; // don't use the last slice :-(
   }
 
@@ -519,7 +519,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
 
 
 static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
-  mi_assert_internal(segment != NULL);  
+  mi_assert_internal(segment != NULL);
   mi_assert_internal(segment->next == NULL);
   mi_assert_internal(segment->prev == NULL);
   mi_assert_internal(segment->used == 0);
@@ -541,7 +541,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
 
   // stats
   _mi_stat_decrease(&tld->stats->page_committed, segment->segment_info_size);
-  
+
   if (!force && mi_segment_cache_push(segment, tld)) {
     // it is put in our cache
   }
@@ -555,7 +555,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
    Page allocation
 ----------------------------------------------------------- */
 
-static mi_page_t* mi_segment_page_alloc(mi_page_kind_t page_kind, size_t required, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) 
+static mi_page_t* mi_segment_page_alloc(mi_page_kind_t page_kind, size_t required, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 {
   mi_assert_internal(required <= MI_LARGE_SIZE_MAX && page_kind <= MI_PAGE_LARGE);
 
@@ -565,7 +565,7 @@ static mi_page_t* mi_segment_page_alloc(mi_page_kind_t page_kind, size_t require
   mi_page_t* page = mi_segment_page_find(slices_needed,tld); //(required <= MI_SMALL_SIZE_MAX ? 0 : slices_needed), tld);
   if (page==NULL) {
     // no free page, allocate a new segment and try again
-    if (mi_segment_alloc(0, tld, os_tld) == NULL) return NULL;  // OOM    
+    if (mi_segment_alloc(0, tld, os_tld) == NULL) return NULL;  // OOM
     return mi_segment_page_alloc(page_kind, required, tld, os_tld);
   }
   mi_assert_internal(page != NULL && page->slice_count*MI_SEGMENT_SLICE_SIZE == page_size);
@@ -581,11 +581,11 @@ static mi_page_t* mi_segment_page_alloc(mi_page_kind_t page_kind, size_t require
     if (i > 0) slice->slice_count = 0;
     if (!segment->all_committed && !slice->is_committed) {
       slice->is_committed = true;
-      commit = true;    
+      commit = true;
     }
     if (slice->is_reset) {
       slice->is_reset = false;
-      unreset = true;      
+      unreset = true;
     }
   }
   uint8_t* page_start = mi_slice_start(mi_page_to_slice(page));
@@ -593,7 +593,7 @@ static mi_page_t* mi_segment_page_alloc(mi_page_kind_t page_kind, size_t require
   if(unreset){ _mi_os_unreset(page_start, page_size, tld->stats); }
 
   // initialize the page and return
-  mi_assert_internal(segment->thread_id == _mi_thread_id()); 
+  mi_assert_internal(segment->thread_id == _mi_thread_id());
   segment->used++;
   mi_page_init_flags(page, segment->thread_id);
   return page;
@@ -604,7 +604,7 @@ static mi_slice_t* mi_segment_page_free_coalesce(mi_page_t* page, mi_segments_tl
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert_internal(segment->used > 0);
   segment->used--;
-  
+
   // free and coalesce the page
   mi_slice_t* slice = mi_page_to_slice(page);
   size_t slice_count = slice->slice_count;
@@ -617,7 +617,7 @@ static mi_slice_t* mi_segment_page_free_coalesce(mi_page_t* page, mi_segments_tl
     mi_segment_page_delete(next, tld);
   }
   if (slice > segment->slices) {
-    mi_slice_t* prev = mi_slice_first(slice - 1);    
+    mi_slice_t* prev = mi_slice_first(slice - 1);
     mi_assert_internal(prev >= segment->slices);
     if (prev->block_size==0) {
       // free previous slice -- remove it from free and merge
@@ -627,7 +627,7 @@ static mi_slice_t* mi_segment_page_free_coalesce(mi_page_t* page, mi_segments_tl
       slice = prev;
     }
   }
-  
+
   // and add the new free page
   mi_segment_page_init(segment, mi_slice_index(slice), slice_count, tld);
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
@@ -649,7 +649,7 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
   size_t inuse = page->capacity * page->block_size;
   _mi_stat_decrease(&tld->stats->page_committed, inuse);
   _mi_stat_decrease(&tld->stats->pages, 1);
-  
+
   // reset the page memory to reduce memory pressure?
   if (!page->is_reset && mi_option_is_enabled(mi_option_page_reset)) {
     size_t psize;
@@ -696,7 +696,7 @@ void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
   else if (segment->used == segment->abandoned) {
     // only abandoned pages; remove from free list and abandon
     mi_segment_abandon(segment,tld);
-  }  
+  }
 }
 
 
@@ -718,7 +718,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
 
   // remove the free pages from our lists
-  mi_slice_t* slice = &segment->slices[0];  
+  mi_slice_t* slice = &segment->slices[0];
   while (slice <= mi_segment_last_slice(segment)) {
     mi_assert_internal(slice->slice_count > 0);
     mi_assert_internal(slice->slice_offset == 0);
@@ -807,14 +807,14 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
         segment->abandoned--;
         if (mi_page_all_free(page)) {
           // if everything free by now, free the page
-          slice = mi_segment_page_clear(page, tld);   // set slice again due to coalesceing        
+          slice = mi_segment_page_clear(page, tld);   // set slice again due to coalesceing
         }
         else {
           // otherwise reclaim it
           mi_page_init_flags(page, segment->thread_id);
           _mi_page_reclaim(heap, page);
         }
-      }      
+      }
       mi_assert_internal(slice->slice_count>0 && slice->slice_offset==0);
       slice = slice + slice->slice_count;
     }
@@ -824,7 +824,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
       mi_segment_free(segment,false,tld);
     }
     else {
-      reclaimed++;      
+      reclaimed++;
     }
   }
   return (reclaimed>0);
@@ -847,15 +847,15 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
   page = page + initial_count;
   page->slice_count  = (uint32_t)((segment->segment_size - segment->segment_info_size)/MI_SEGMENT_SLICE_SIZE);
   page->slice_offset = 0;
-  page->block_size = size;  
+  page->block_size = size;
   mi_assert_internal(page->slice_count * MI_SEGMENT_SLICE_SIZE >= size);
   mi_assert_internal(page->slice_count >= segment->slice_count - initial_count);
-  // set back pointers  
+  // set back pointers
   for (size_t i = 1; i <segment->slice_count; i++) {
     mi_slice_t* slice = (mi_slice_t*)(page + i);
     slice->slice_offset = (uint32_t)(sizeof(mi_page_t)*i);
     slice->block_size = 1;
-    slice->slice_count = 0;    
+    slice->slice_count = 0;
   }
   mi_page_init_flags(page,segment->thread_id);
   return page;
@@ -899,7 +899,7 @@ mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_
 ----------------------------------------------------------- */
 
 #if (MI_INTPTR_SIZE==8)
-#define MI_MAX_ADDRESS    ((size_t)1 << 44)   // 16TB 
+#define MI_MAX_ADDRESS    ((size_t)1 << 44)   // 16TB
 #else
 #define MI_MAX_ADDRESS    ((size_t)1 << 31)   // 2Gb
 #endif
@@ -911,7 +911,7 @@ mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_
 static volatile uintptr_t mi_segment_map[MI_SEGMENT_MAP_WSIZE];  // 1KiB per TB with 128MiB segments
 
 static size_t mi_segment_map_index_of(const mi_segment_t* segment, size_t* bitidx) {
-  mi_assert_internal(_mi_ptr_segment(segment) == segment); // is it aligned on 128MiB?  
+  mi_assert_internal(_mi_ptr_segment(segment) == segment); // is it aligned on 128MiB?
   uintptr_t segindex = ((uintptr_t)segment % MI_MAX_ADDRESS) / MI_SEGMENT_SIZE;
   *bitidx = segindex % (8*MI_INTPTR_SIZE);
   return (segindex / (8*MI_INTPTR_SIZE));
@@ -953,7 +953,7 @@ static mi_segment_t* _mi_segment_of(const void* p) {
     return segment; // yes, allocated by us
   }
   if (index==0) return NULL;
-  // search downwards for the first segment in case it is an interior pointer 
+  // search downwards for the first segment in case it is an interior pointer
   // could be slow but searches in 256MiB steps trough valid huge objects
   // note: we could maintain a lowest index to speed up the path for invalid pointers?
   size_t lobitidx;
@@ -1006,5 +1006,3 @@ static void* mi_segment_range_of(const void* p, size_t* size) {
   }
 }
 */
-
-
