@@ -53,7 +53,7 @@ static mi_option_desc_t options[_mi_option_last] =
   // the following options are experimental and not all combinations make sense.
   { 1, UNINIT, "eager_commit" },        // note: if eager_region_commit is on, this should be on too.
   #ifdef _WIN32   // and BSD?
-  { 0, UNINIT, "eager_region_commit" }, // don't commit too eagerly on windows (just for looks...)
+  { 1, UNINIT, "eager_region_commit" }, 
   #else
   { 1, UNINIT, "eager_region_commit" },
   #endif

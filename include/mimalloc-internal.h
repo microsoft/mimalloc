@@ -91,6 +91,8 @@ uintptr_t  _mi_heap_random(mi_heap_t* heap);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);
+double     _mi_clock_end(double start);
+double     _mi_clock_start(void);
 
 // "alloc.c"
 void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept;  // called from `_mi_malloc_generic`

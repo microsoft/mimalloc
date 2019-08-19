@@ -276,8 +276,8 @@ static void _mi_stats_print(mi_stats_t* stats, double secs, FILE* out) mi_attr_n
   _mi_fprintf(out,"\n");
 }
 
-static double mi_clock_end(double start);
-static double mi_clock_start(void);
+double _mi_clock_end(double start);
+double _mi_clock_start(void);
 static double mi_time_start = 0.0;
 
 static mi_stats_t* mi_stats_get_default(void) {
@@ -289,7 +289,7 @@ void mi_stats_reset(void) mi_attr_noexcept {
   mi_stats_t* stats = mi_stats_get_default();
   if (stats != &_mi_stats_main) { memset(stats, 0, sizeof(mi_stats_t)); }
   memset(&_mi_stats_main, 0, sizeof(mi_stats_t));
-  mi_time_start = mi_clock_start();
+  mi_time_start = _mi_clock_start();
 }
 
 static void mi_stats_print_ex(mi_stats_t* stats, double secs, FILE* out) {
@@ -301,11 +301,11 @@ static void mi_stats_print_ex(mi_stats_t* stats, double secs, FILE* out) {
 }
 
 void mi_stats_print(FILE* out) mi_attr_noexcept {
-  mi_stats_print_ex(mi_stats_get_default(),mi_clock_end(mi_time_start),out);
+  mi_stats_print_ex(mi_stats_get_default(),_mi_clock_end(mi_time_start),out);
 }
 
 void mi_thread_stats_print(FILE* out) mi_attr_noexcept {
-  _mi_stats_print(mi_stats_get_default(), mi_clock_end(mi_time_start), out);
+  _mi_stats_print(mi_stats_get_default(), _mi_clock_end(mi_time_start), out);
 }
 
 
@@ -350,7 +350,7 @@ static double mi_clock_now(void) {
 
 static double mi_clock_diff = 0.0;
 
-static double mi_clock_start(void) {
+double _mi_clock_start(void) {
   if (mi_clock_diff == 0.0) {
     double t0 = mi_clock_now();
     mi_clock_diff = mi_clock_now() - t0;
@@ -358,7 +358,7 @@ static double mi_clock_start(void) {
   return mi_clock_now();
 }
 
-static double mi_clock_end(double start) {
+double _mi_clock_end(double start) {
   double end = mi_clock_now();
   return (end - start - mi_clock_diff);
 }
