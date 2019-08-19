@@ -58,6 +58,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 1, UNINIT, "eager_region_commit" },
   #endif
   { 0, UNINIT, "large_os_pages" },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
+  { 0, UNINIT, "reserve_huge_os_pages" },
   { 0, UNINIT, "page_reset" },
   { 0, UNINIT, "cache_reset" },
   { 0, UNINIT, "reset_decommits" },     // note: cannot enable this if secure is on

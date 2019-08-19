@@ -108,7 +108,7 @@ void _mi_os_init(void) {
   }
   // Try to see if large OS pages are supported
   unsigned long err = 0;
-  bool ok = mi_option_is_enabled(mi_option_large_os_pages);
+  bool ok = mi_option_is_enabled(mi_option_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages);
   if (ok) {
     // To use large pages on Windows, we first need access permission
     // Set "Lock pages in memory" permission in the group policy editor
@@ -788,6 +788,7 @@ int mi_reserve_huge_os_pages( size_t pages, double max_secs ) mi_attr_noexcept
       if (estimate > 1.5*max_secs) return (-1); // seems like we are going to timeout
     }
   }  
+  _mi_verbose_message("reserved %zu huge pages\n", pages);
   return 0;
 }
 #endif
