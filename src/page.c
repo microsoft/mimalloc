@@ -102,7 +102,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
     mi_assert_internal(!_mi_process_is_initialized || segment->thread_id == page->heap->thread_id);
     mi_page_queue_t* pq = mi_page_queue_of(page);
     mi_assert_internal(mi_page_queue_contains(pq, page));
-    mi_assert_internal(pq->block_size==page->block_size || page->block_size > MI_LARGE_SIZE_MAX || mi_page_is_in_full(page));
+    mi_assert_internal(pq->block_size==page->block_size || page->block_size > MI_LARGE_OBJ_SIZE_MAX || mi_page_is_in_full(page));
     mi_assert_internal(mi_heap_contains_queue(page->heap,pq));
   }
   return true;
@@ -352,8 +352,8 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   mi_page_set_has_aligned(page, false);
 
   // account for huge pages here
-  if (page->block_size > MI_LARGE_SIZE_MAX) {
-    if (page->block_size > MI_HUGE_SIZE_MAX) {
+  if (page->block_size > MI_LARGE_OBJ_SIZE_MAX) {
+    if (page->block_size > MI_HUGE_OBJ_SIZE_MAX) {
       _mi_stat_decrease(&page->heap->tld->stats.giant, page->block_size);
     }
     else {
@@ -390,7 +390,7 @@ void _mi_page_retire(mi_page_t* page) {
   // is the only page left with free blocks. It is not clear
   // how to check this efficiently though... for now we just check
   // if its neighbours are almost fully used.
-  if (mi_likely(page->block_size <= MI_MEDIUM_SIZE_MAX)) {
+  if (mi_likely(page->block_size <= MI_MEDIUM_OBJ_SIZE_MAX)) {
     if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
       _mi_stat_counter_increase(&_mi_stats_main.page_no_retire,1);
       return; // dont't retire after all
@@ -707,7 +707,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
   if (page != NULL) {
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(page->block_size == block_size);
-    if (page->block_size > MI_HUGE_SIZE_MAX) {
+    if (page->block_size > MI_HUGE_OBJ_SIZE_MAX) {
       _mi_stat_increase(&heap->tld->stats.giant, block_size);
       _mi_stat_counter_increase(&heap->tld->stats.giant_count, 1);
     }
@@ -740,7 +740,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   
   // huge allocation?
   mi_page_t* page;
-  if (mi_unlikely(size > MI_LARGE_SIZE_MAX)) {
+  if (mi_unlikely(size > MI_LARGE_OBJ_SIZE_MAX)) {
     if (mi_unlikely(size >= (SIZE_MAX - MI_MAX_ALIGN_SIZE))) {
       page = NULL;
     }
