@@ -38,7 +38,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   block->next = 0;
 #endif
 #if (MI_STAT>1)
-  if(size <= MI_LARGE_SIZE_MAX) {
+  if(size <= MI_LARGE_OBJ_SIZE_MAX) {
     size_t bin = _mi_bin(size);
     mi_heap_stat_increase(heap,normal[bin], 1);
   }
@@ -230,7 +230,7 @@ void mi_free(void* p) mi_attr_noexcept
 #if (MI_STAT>1)
   mi_heap_t* heap = mi_heap_get_default();
   mi_heap_stat_decrease( heap, malloc, mi_usable_size(p));
-  if (page->block_size <= MI_LARGE_SIZE_MAX) {
+  if (page->block_size <= MI_LARGE_OBJ_SIZE_MAX) {
     mi_heap_stat_decrease( heap, normal[_mi_bin(page->block_size)], 1);
   }
   // huge page stat is accounted for in `_mi_page_retire`
