@@ -70,7 +70,7 @@ size_t _mi_os_large_page_size() {
 
 static bool use_large_os_page(size_t size, size_t alignment) {
   // if we have access, check the size and alignment requirements
-  if (large_os_page_size == 0) return false;
+  if (large_os_page_size == 0 || !mi_option_is_enabled(mi_option_large_os_pages)) return false;
   return ((size % large_os_page_size) == 0 && (alignment % large_os_page_size) == 0);
 }
 
