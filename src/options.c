@@ -103,13 +103,22 @@ bool mi_option_is_enabled(mi_option_t option) {
   return (mi_option_get(option) != 0);
 }
 
-void mi_option_enable(mi_option_t option, bool enable) {
+void mi_option_set_enabled(mi_option_t option, bool enable) {
   mi_option_set(option, (enable ? 1 : 0));
 }
 
-void mi_option_enable_default(mi_option_t option, bool enable) {
+void mi_option_set_enabled_default(mi_option_t option, bool enable) {
   mi_option_set_default(option, (enable ? 1 : 0));
 }
+
+void mi_option_enable(mi_option_t option) {
+  mi_option_set_enabled(option,true);
+}
+
+void mi_option_disable(mi_option_t option) {
+  mi_option_set_enabled(option,false);
+}
+
 
 // --------------------------------------------------------
 // Messages
