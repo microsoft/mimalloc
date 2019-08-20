@@ -28,11 +28,14 @@ void _mi_stats_done(mi_stats_t* stats) {
   Statistics operations
 ----------------------------------------------------------- */
 
+static bool mi_is_in_main(void* stat) {
+  return ((uint8_t*)stat >= (uint8_t*)&_mi_stats_main
+         && (uint8_t*)stat < ((uint8_t*)&_mi_stats_main + sizeof(mi_stats_t)));  
+}
+
 static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   if (amount == 0) return;
-  bool in_main = ((uint8_t*)stat >= (uint8_t*)&_mi_stats_main
-                  && (uint8_t*)stat < ((uint8_t*)&_mi_stats_main + sizeof(mi_stats_t)));
-  if (in_main)
+  if (mi_is_in_main(stat))
   {
     // add atomically (for abandoned pages)
     int64_t current = mi_atomic_add(&stat->current,amount);
@@ -58,10 +61,15 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
 }
 
 void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {  
-  mi_atomic_add( &stat->count, 1 );
-  mi_atomic_add( &stat->total, (int64_t)amount );
+  if (mi_is_in_main(stat)) {
+    mi_atomic_add( &stat->count, 1 );
+    mi_atomic_add( &stat->total, (int64_t)amount );
+  }
+  else {
+    stat->count++;
+    stat->total += amount;
+  }
 }
-
 
 void _mi_stat_increase(mi_stat_count_t* stat, size_t amount) {
   mi_stat_update(stat, (int64_t)amount);
