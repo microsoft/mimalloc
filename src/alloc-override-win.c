@@ -666,7 +666,7 @@ static void mi_patches_at_quick_exit(void) {
   mi_patches_enable_term();             // enter termination phase and patch realloc/free with a no-op
 }
 
-__declspec(dllexport) BOOL WINAPI DllEntry(HINSTANCE inst, DWORD reason, LPVOID reserved) {
+BOOL WINAPI DllEntry(HINSTANCE inst, DWORD reason, LPVOID reserved) {
   if (reason == DLL_PROCESS_ATTACH) {
     __security_init_cookie();
   }

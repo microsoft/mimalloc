@@ -198,7 +198,7 @@ static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
-  if ((size % (uintptr_t)1 << 20) == 0 /* 1GiB multiple */
+  if ((size % (uintptr_t)1 << 30) == 0 /* 1GiB multiple */
     && (flags & MEM_LARGE_PAGES) != 0 && (flags & MEM_COMMIT) != 0 
     && (addr != NULL || try_alignment == 0 || try_alignment % _mi_os_page_size() == 0)
     && pNtAllocateVirtualMemoryEx != NULL)
@@ -215,7 +215,10 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     if (err == 0) {
       return base;
     }
-    // else fall back to regular large OS pages
+    else {
+      // else fall back to regular large OS pages
+      _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) page instead (error %lx)\n", err);
+    }
   }
   
   // on modern Windows try use VirtualAlloc2 for aligned allocation
@@ -276,7 +279,7 @@ static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int pr
   void* p = NULL;
   #if (MI_INTPTR_SIZE >= 8) && !defined(MAP_ALIGNED)
   // on 64-bit systems, use the virtual address area after 4TiB for 4MiB aligned allocations
-  static volatile intptr_t aligned_base = ((intptr_t)1 << 42); // starting at 4TiB
+  static volatile intptr_t aligned_base = ((intptr_t)4 << 40); // starting at 4TiB
   if (addr==NULL && try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE)==0) {
     intptr_t hint = mi_atomic_add(&aligned_base,size) - size;
     if (hint%try_alignment == 0) {
@@ -597,9 +600,10 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   #endif
 
 #if defined(_WIN32)
+  // Testing shows that for us (on `malloc-large`) MEM_RESET is 2x faster than DiscardVirtualMemory
   void* p = VirtualAlloc(start, csize, MEM_RESET, PAGE_READWRITE);
   mi_assert_internal(p == start);
-  if (p != start) return false; 
+  if (p != start) return false;
 #else
 #if defined(MADV_FREE)
   static int advice = MADV_FREE;
@@ -772,7 +776,7 @@ int mi_reserve_huge_os_pages( size_t pages, double max_secs ) mi_attr_noexcept
   // Allocate one page at the time but try to place them contiguously
   // We allocate one page at the time to be able to abort if it takes too long
   double start_t = _mi_clock_start();
-  uint8_t* start = (uint8_t*)((uintptr_t)1 << 43); // 8TiB virtual start address
+  uint8_t* start = (uint8_t*)((uintptr_t)8 << 40); // 8TiB virtual start address
   uint8_t* addr = start;  // current top of the allocations
   for (size_t page = 0; page < pages; page++, addr += MI_HUGE_OS_PAGE_SIZE ) {
     // allocate lorgu pages

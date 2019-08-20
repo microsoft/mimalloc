@@ -220,8 +220,8 @@ mi_decl_export int  mi_reserve_huge_os_pages(size_t pages, double max_secs) mi_a
 
 typedef enum mi_option_e {
   // stable options
-  mi_option_show_stats,
   mi_option_show_errors,
+  mi_option_show_stats,
   mi_option_verbose,
   // the following options are experimental
   mi_option_secure,
@@ -232,7 +232,6 @@ typedef enum mi_option_e {
   mi_option_page_reset,
   mi_option_cache_reset,
   mi_option_reset_decommits,
-  mi_option_reset_discards,
   _mi_option_last
 } mi_option_t;
 
