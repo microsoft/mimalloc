@@ -154,8 +154,8 @@ int main(int argc, char** argv) {
     if (n > 0) N = n;
   }
   printf("start with %i threads with a %i%% load-per-thread\n", THREADS, N);  
-  int res = mi_reserve_huge_os_pages(4,1);
-  printf("(reserve huge: %i\n)", res);
+  //int res = mi_reserve_huge_os_pages(4,1);
+  //printf("(reserve huge: %i\n)", res);
 
   //bench_start_program();
   memset((void*)transfer, 0, TRANSFERS*sizeof(void*));
