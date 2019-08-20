@@ -220,8 +220,8 @@ mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
 
 typedef enum mi_option_e {
   // stable options
-  mi_option_show_stats,
   mi_option_show_errors,
+  mi_option_show_stats,
   mi_option_verbose,
   // the following options are experimental
   mi_option_secure,
