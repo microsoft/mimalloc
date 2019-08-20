@@ -64,8 +64,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(page_reset) },
   { 0, UNINIT, MI_OPTION(cache_reset) },
-  { 0, UNINIT, MI_OPTION(reset_decommits) },     // note: cannot enable this if secure is on
-  { 0, UNINIT, MI_OPTION(reset_discards) }       // note: cannot enable this if secure is on
+  { 0, UNINIT, MI_OPTION(reset_decommits) }      // note: cannot enable this if secure is on
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
