@@ -220,8 +220,8 @@ mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
 
 typedef enum mi_option_e {
   // stable options
-  mi_option_show_stats,
   mi_option_show_errors,
+  mi_option_show_stats,
   mi_option_verbose,
   // the following options are experimental
   mi_option_secure,
@@ -231,14 +231,15 @@ typedef enum mi_option_e {
   mi_option_page_reset,
   mi_option_cache_reset,
   mi_option_reset_decommits,
-  mi_option_reset_discards,
   _mi_option_last
 } mi_option_t;
 
 
 mi_decl_export bool  mi_option_is_enabled(mi_option_t option);
-mi_decl_export void  mi_option_enable(mi_option_t option, bool enable);
-mi_decl_export void  mi_option_enable_default(mi_option_t option, bool enable);
+mi_decl_export void  mi_option_enable(mi_option_t option);
+mi_decl_export void  mi_option_disable(mi_option_t option);
+mi_decl_export void  mi_option_set_enabled(mi_option_t option, bool enable);
+mi_decl_export void  mi_option_set_enabled_default(mi_option_t option, bool enable);
 
 mi_decl_export long  mi_option_get(mi_option_t option);
 mi_decl_export void  mi_option_set(mi_option_t option, long value);

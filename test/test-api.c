@@ -66,7 +66,7 @@ bool test_heap2();
 // Main testing
 // ---------------------------------------------------------------------------
 int main() {
-  mi_option_enable(mi_option_verbose,false);
+  mi_option_disable(mi_option_verbose);
 
   // ---------------------------------------------------
   // Malloc

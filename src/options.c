@@ -34,34 +34,37 @@ typedef enum mi_init_e {
 typedef struct mi_option_desc_s {
   long        value;  // the value
   mi_init_t   init;   // is it initialized yet? (from the environment)
+  mi_option_t option; // for debugging: the option index should match the option
   const char* name;   // option name without `mimalloc_` prefix
 } mi_option_desc_t;
+
+#define MI_OPTION(opt)        mi_option_##opt, #opt
+#define MI_OPTION_DESC(opt)   {0, UNINIT, MI_OPTION(opt) }
 
 static mi_option_desc_t options[_mi_option_last] =
 {
   // stable options
-  { 0, UNINIT, "show_stats" },
-  { MI_DEBUG, UNINIT, "show_errors" },
-  { 0, UNINIT, "verbose" },
+  { MI_DEBUG, UNINIT, MI_OPTION(show_errors) },
+  { 0, UNINIT, MI_OPTION(show_stats) },
+  { 0, UNINIT, MI_OPTION(verbose) },
 
   #if MI_SECURE
-  { MI_SECURE, INITIALIZED, "secure" }, // in a secure build the environment setting is ignored
+  { MI_SECURE, INITIALIZED, MI_OPTION(secure) }, // in a secure build the environment setting is ignored
   #else
-  { 0, UNINIT, "secure" },
+  { 0, UNINIT, MI_OPTION(secure) },
   #endif
 
   // the following options are experimental and not all combinations make sense.
-  { 1, UNINIT, "eager_commit" },        // note: if eager_region_commit is on, this should be on too.
+  { 1, UNINIT, MI_OPTION(eager_commit) },        // note: if eager_region_commit is on, this should be on too.
   #ifdef _WIN32   // and BSD?
-  { 0, UNINIT, "eager_region_commit" }, // don't commit too eagerly on windows (just for looks...)
+  { 0, UNINIT, MI_OPTION(eager_region_commit) }, // don't commit too eagerly on windows (just for looks...)
   #else
-  { 1, UNINIT, "eager_region_commit" },
+  { 1, UNINIT, MI_OPTION(eager_region_commit) },
   #endif
-  { 0, UNINIT, "large_os_pages" },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
-  { 0, UNINIT, "page_reset" },
-  { 0, UNINIT, "cache_reset" },
-  { 0, UNINIT, "reset_decommits" },     // note: cannot enable this if secure is on
-  { 0, UNINIT, "reset_discards" }       // note: cannot enable this if secure is on
+  { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
+  { 0, UNINIT, MI_OPTION(page_reset) },
+  { 0, UNINIT, MI_OPTION(cache_reset) },
+  { 0, UNINIT, MI_OPTION(reset_decommits) }      // note: cannot enable this if secure is on
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -69,6 +72,7 @@ static void mi_option_init(mi_option_desc_t* desc);
 long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
   mi_option_desc_t* desc = &options[option];
+  mi_assert(desc->option == option);  // index should match the option
   if (mi_unlikely(desc->init == UNINIT)) {
     mi_option_init(desc);
     if (option != mi_option_verbose) {
@@ -81,6 +85,7 @@ long mi_option_get(mi_option_t option) {
 void mi_option_set(mi_option_t option, long value) {
   mi_assert(option >= 0 && option < _mi_option_last);
   mi_option_desc_t* desc = &options[option];
+  mi_assert(desc->option == option);  // index should match the option
   desc->value = value;
   desc->init = INITIALIZED;
 }
@@ -97,13 +102,22 @@ bool mi_option_is_enabled(mi_option_t option) {
   return (mi_option_get(option) != 0);
 }
 
-void mi_option_enable(mi_option_t option, bool enable) {
+void mi_option_set_enabled(mi_option_t option, bool enable) {
   mi_option_set(option, (enable ? 1 : 0));
 }
 
-void mi_option_enable_default(mi_option_t option, bool enable) {
+void mi_option_set_enabled_default(mi_option_t option, bool enable) {
   mi_option_set_default(option, (enable ? 1 : 0));
 }
+
+void mi_option_enable(mi_option_t option) {
+  mi_option_set_enabled(option,true);
+}
+
+void mi_option_disable(mi_option_t option) {
+  mi_option_set_enabled(option,false);
+}
+
 
 // --------------------------------------------------------
 // Messages
