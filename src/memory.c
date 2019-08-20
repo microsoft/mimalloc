@@ -143,7 +143,6 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       } while (!mi_atomic_compare_exchange(&region->map, map & ~mask, map));
       return false;
     }
-    Sleep(10);
 
     // set the newly allocated region
     if (mi_atomic_compare_exchange_ptr(&region->start, start, NULL)) {
