@@ -236,8 +236,10 @@ typedef enum mi_option_e {
 
 
 mi_decl_export bool  mi_option_is_enabled(mi_option_t option);
-mi_decl_export void  mi_option_enable(mi_option_t option, bool enable);
-mi_decl_export void  mi_option_enable_default(mi_option_t option, bool enable);
+mi_decl_export void  mi_option_enable(mi_option_t option);
+mi_decl_export void  mi_option_disable(mi_option_t option);
+mi_decl_export void  mi_option_set_enabled(mi_option_t option, bool enable);
+mi_decl_export void  mi_option_set_enabled_default(mi_option_t option, bool enable);
 
 mi_decl_export long  mi_option_get(mi_option_t option);
 mi_decl_export void  mi_option_set(mi_option_t option, long value);
