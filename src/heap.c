@@ -303,14 +303,14 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   mi_assert_internal(heap!=NULL);
   if (from==NULL || from->page_count == 0) return;
 
-  // unfull all full pages
-  mi_page_t* page = heap->pages[MI_BIN_FULL].first; 
+  // unfull all full pages in the `from` heap
+  mi_page_t* page = from->pages[MI_BIN_FULL].first; 
   while (page != NULL) {
     mi_page_t* next = page->next;
     _mi_page_unfull(page);
     page = next;
   }
-  mi_assert_internal(heap->pages[MI_BIN_FULL].first == NULL);
+  mi_assert_internal(from->pages[MI_BIN_FULL].first == NULL);
 
   // free outstanding thread delayed free blocks
   _mi_heap_delayed_free(from);

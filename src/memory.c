@@ -128,6 +128,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
   size_t mask = mi_region_block_mask(blocks,bitidx);
   mi_assert_internal(mask != 0);
   mi_assert_internal((mask & mi_atomic_read(&region->map)) == mask);
+  mi_assert_internal(&regions[idx] == region);
 
   // ensure the region is reserved
   void* start = mi_atomic_read_ptr(&region->start);
@@ -142,6 +143,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       } while (!mi_atomic_compare_exchange(&region->map, map & ~mask, map));
       return false;
     }
+    Sleep(10);
 
     // set the newly allocated region
     if (mi_atomic_compare_exchange_ptr(&region->start, start, NULL)) {
@@ -149,9 +151,23 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       mi_atomic_increment(&regions_count);
     }
     else {
-      // failed, another thread allocated just before us, free our allocated memory
-      // TODO: should we keep the allocated memory and assign it to some other region?
-      _mi_os_free(start, MI_REGION_SIZE, tld->stats);
+      // failed, another thread allocated just before us!
+      // we assign it to a later slot instead (up to 4 tries).
+      // note: we don't need to increment the region count, this will happen on another allocation
+      for(size_t i = 1; i <= 4 && idx + i < MI_REGION_MAX; i++) {
+        void* s = mi_atomic_read_ptr(&regions[idx+i].start);
+        if (s == NULL) { // quick test
+          if (mi_atomic_compare_exchange_ptr(&regions[idx+i].start, start, s)) {
+            start = NULL;
+            break;
+          }
+        }
+      }
+      if (start != NULL) {
+        // free it if we didn't succeed to save it to some other region
+        _mi_os_free(start, MI_REGION_SIZE, tld->stats);
+      }
+      // and continue with the memory at our index
       start = mi_atomic_read_ptr(&region->start);
     }
   }

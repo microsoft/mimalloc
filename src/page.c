@@ -745,7 +745,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   // huge allocation?
   mi_page_t* page;
   if (mi_unlikely(size > MI_LARGE_OBJ_SIZE_MAX)) {
-    if (mi_unlikely(size >= (SIZE_MAX - MI_MAX_ALIGN_SIZE))) {
+    if (mi_unlikely(size > PTRDIFF_MAX)) {  // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
       page = NULL;
     }
     else {
