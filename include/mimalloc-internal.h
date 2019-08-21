@@ -17,7 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if (MI_DEBUG>0)
 #define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
 #else
-#define mi_trace_message(...)  
+#define mi_trace_message(...)
 #endif
 
 
@@ -146,8 +146,8 @@ bool        _mi_page_is_valid(mi_page_t* page);
   Inlined definitions
 ----------------------------------------------------------- */
 #define UNUSED(x)     (void)(x)
-#if (MI_DEBUG>0) 
-#define UNUSED_RELEASE(x)  
+#if (MI_DEBUG>0)
+#define UNUSED_RELEASE(x)
 #else
 #define UNUSED_RELEASE(x)  UNUSED(x)
 #endif
@@ -264,7 +264,7 @@ static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
 }
 
 static inline mi_slice_t* mi_slice_first(const mi_slice_t* slice) {
-  mi_slice_t* start = (mi_slice_t*)((uint8_t*)slice - slice->slice_offset);  
+  mi_slice_t* start = (mi_slice_t*)((uint8_t*)slice - slice->slice_offset);
   mi_assert_internal(start >= _mi_ptr_segment(slice)->slices);
   mi_assert_internal(start->slice_offset == 0);
   mi_assert_internal(start + start->slice_count > slice);
@@ -277,8 +277,8 @@ static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const 
   mi_assert_internal(diff >= 0 && diff < (ptrdiff_t)MI_SEGMENT_SIZE);
   uintptr_t idx = (uintptr_t)diff >> MI_SEGMENT_SLICE_SHIFT;
   mi_assert_internal(idx < segment->slice_count);
-  mi_slice_t* slice0 = (mi_slice_t*)&segment->slices[idx]; 
-  mi_slice_t* slice = mi_slice_first(slice0);  // adjust to the block that holds the page data  
+  mi_slice_t* slice0 = (mi_slice_t*)&segment->slices[idx];
+  mi_slice_t* slice = mi_slice_first(slice0);  // adjust to the block that holds the page data
   mi_assert_internal(slice->slice_offset == 0);
   mi_assert_internal(slice >= segment->slices && slice < segment->slices + segment->slice_count);
   return mi_slice_to_page(slice);

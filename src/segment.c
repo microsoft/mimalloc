@@ -140,7 +140,7 @@ static void mi_page_queue_delete(mi_page_queue_t* pq, mi_page_t* page) {
 ----------------------------------------------------------- */
 
 #if (MI_DEBUG > 1)
-static bool mi_page_queue_contains(mi_page_queue_t* pq, mi_page_t* page) {
+static bool mi_segment_page_queue_contains(mi_page_queue_t* pq, mi_page_t* page) {
   for (mi_page_t* p = pq->first; p != NULL; p = p->next) {
     if (p==page) return true;
   }
@@ -176,7 +176,7 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
       mi_assert_internal(end->block_size == 0);
       if (segment->kind == MI_SEGMENT_NORMAL && segment->thread_id != 0) {
         pq = mi_page_queue_for(slice->slice_count,tld);
-        mi_assert_internal(mi_page_queue_contains(pq,mi_slice_to_page(slice)));
+        mi_assert_internal(mi_segment_page_queue_contains(pq,mi_slice_to_page(slice)));
       }
     }
     slice = &segment->slices[maxindex+1];

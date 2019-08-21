@@ -105,7 +105,6 @@ terms of the MIT license. A copy of the license can be found in the file
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)
 
-
 #if (MI_MEDIUM_OBJ_WSIZE_MAX >= 655360)
 #error "define more bins"
 #endif
