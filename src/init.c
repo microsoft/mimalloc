@@ -249,7 +249,7 @@ static bool _mi_heap_done(void) {
   // switch to backing heap and free it
   heap = heap->tld->heap_backing;
   if (!mi_heap_is_initialized(heap)) return false;
-
+  
   // collect if not the main thread
   if (heap != &_mi_heap_main) {
     _mi_heap_collect_abandon(heap);

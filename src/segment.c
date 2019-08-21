@@ -403,7 +403,7 @@ static void mi_segment_page_split(mi_page_t* page, size_t slice_count, mi_segmen
 }
 
 static mi_page_t* mi_segment_page_find(size_t slice_count, mi_segments_tld_t* tld) {
-  mi_assert_internal(slice_count*MI_SEGMENT_SLICE_SIZE <= MI_LARGE_SIZE_MAX);
+  mi_assert_internal(slice_count*MI_SEGMENT_SLICE_SIZE <= MI_LARGE_OBJ_SIZE_MAX);
   // search from best fit up
   mi_page_queue_t* pq = mi_page_queue_for(slice_count,tld);
   if (slice_count == 0) slice_count = 1;
@@ -556,7 +556,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
 
 static mi_page_t* mi_segment_page_alloc(mi_page_kind_t page_kind, size_t required, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 {
-  mi_assert_internal(required <= MI_LARGE_SIZE_MAX && page_kind <= MI_PAGE_LARGE);
+  mi_assert_internal(required <= MI_LARGE_OBJ_SIZE_MAX && page_kind <= MI_PAGE_LARGE);
 
   // find a free page
   size_t page_size = _mi_align_up(required,(required > MI_MEDIUM_PAGE_SIZE ? MI_MEDIUM_PAGE_SIZE : MI_SEGMENT_SLICE_SIZE));
@@ -739,10 +739,11 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
-  mi_assert(page != NULL);
+  mi_assert(page != NULL && mi_page_thread_id(page) != 0);
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
   segment->abandoned++;
+  mi_page_set_thread_id(page, 0);
   _mi_stat_increase(&tld->stats->pages_abandoned, 1);
   mi_assert_internal(segment->abandoned <= segment->used);
   if (segment->used == segment->abandoned) {
@@ -810,8 +811,8 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
         }
         else {
           // otherwise reclaim it
-          mi_page_init_flags(page, segment->thread_id);
-          _mi_page_reclaim(heap, page);
+          mi_page_set_thread_id(page,segment->thread_id);
+          _mi_page_reclaim(heap,page);
         }
       }
       mi_assert_internal(slice->slice_count>0 && slice->slice_offset==0);

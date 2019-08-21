@@ -259,7 +259,7 @@ static inline mi_slice_t* mi_page_to_slice(mi_page_t* p) {
 // Segment belonging to a page
 static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
   mi_segment_t* segment = _mi_ptr_segment(page); 
-  mi_assert_internal(segment == NULL || (mi_slice_t*)page >= segment->slices && (mi_slice_t*)page < segment->slices + segment->slice_count);
+  mi_assert_internal(segment == NULL || ((mi_slice_t*)page >= segment->slices && (mi_slice_t*)page < segment->slices + segment->slice_count));
   return segment;
 }
 
@@ -356,7 +356,13 @@ static inline uintptr_t mi_page_thread_id(const mi_page_t* page) {
 }
 
 static inline void mi_page_init_flags(mi_page_t* page, uintptr_t thread_id) {
-  page->flags = thread_id;  
+  mi_assert_internal((thread_id & MI_PAGE_FLAGS_MASK) == 0);
+  page->flags = thread_id;
+}
+
+static inline void mi_page_set_thread_id(mi_page_t* page, uintptr_t thread_id) {
+  mi_assert_internal((thread_id & MI_PAGE_FLAGS_MASK) == 0);
+  page->flags = thread_id | (page->flags & MI_PAGE_FLAGS_MASK);
 }
 
 static inline bool mi_page_is_in_full(const mi_page_t* page) {
