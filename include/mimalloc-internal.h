@@ -323,7 +323,13 @@ static inline uintptr_t mi_page_thread_id(const mi_page_t* page) {
 }
 
 static inline void mi_page_init_flags(mi_page_t* page, uintptr_t thread_id) {
-  page->flags = thread_id;  
+  mi_assert_internal((thread_id & MI_PAGE_FLAGS_MASK) == 0);
+  page->flags = thread_id;
+}
+
+static inline void mi_page_set_thread_id(mi_page_t* page, uintptr_t thread_id) {
+  mi_assert_internal((thread_id & MI_PAGE_FLAGS_MASK) == 0);
+  page->flags = thread_id | (page->flags & MI_PAGE_FLAGS_MASK);
 }
 
 static inline bool mi_page_is_in_full(const mi_page_t* page) {
