@@ -257,6 +257,9 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
   if (p == NULL) {
     p = mi_win_virtual_allocx(addr, size, try_alignment, flags);
   }
+  if (p == NULL) {
+    _mi_warning_message("unable to alloc mem error: err: %i size: 0x%x \n", GetLastError(), size);
+  }
   return p;
 }
 
