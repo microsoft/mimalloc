@@ -37,6 +37,9 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
 
+static bool  mi_os_is_huge_reserved(void* p);
+static void* mi_os_alloc_from_huge_reserved(size_t size, size_t try_alignment, bool commit);
+
 static void* mi_align_up_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
 }
@@ -84,9 +87,13 @@ static size_t mi_os_good_alloc_size(size_t size, size_t alignment) {
 #if defined(_WIN32)
 // We use VirtualAlloc2 for aligned allocation, but it is only supported on Windows 10 and Windows Server 2016.
 // So, we need to look it up dynamically to run on older systems. (use __stdcall for 32-bit compatibility)
-// (hide MEM_EXTENDED_PARAMETER to compile with older SDK's)
-typedef PVOID(__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, /* MEM_EXTENDED_PARAMETER* */ void*, ULONG);
+// NtAllocateVirtualAllocEx is used for huge OS page allocation (1GiB)
+// We hide MEM_EXTENDED_PARAMETER to compile with older SDK's.
+#include <winternl.h>
+typedef PVOID    (__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, /* MEM_EXTENDED_PARAMETER* */ void*, ULONG);
+typedef NTSTATUS (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*, ULONG, ULONG, /* MEM_EXTENDED_PARAMETER* */ PVOID, ULONG);
 static PVirtualAlloc2 pVirtualAlloc2 = NULL;
+static PNtAllocateVirtualMemoryEx pNtAllocateVirtualMemoryEx = NULL;
 
 void _mi_os_init(void) {
   // get the page size
@@ -103,9 +110,14 @@ void _mi_os_init(void) {
     if (pVirtualAlloc2==NULL) pVirtualAlloc2 = (PVirtualAlloc2)GetProcAddress(hDll, "VirtualAlloc2");
     FreeLibrary(hDll);
   }
+  hDll = LoadLibrary(TEXT("ntdll.dll"));
+  if (hDll != NULL) {    
+    pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
+    FreeLibrary(hDll);
+  }
   // Try to see if large OS pages are supported
   unsigned long err = 0;
-  bool ok = mi_option_is_enabled(mi_option_large_os_pages);
+  bool ok = mi_option_is_enabled(mi_option_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages);
   if (ok) {
     // To use large pages on Windows, we first need access permission
     // Set "Lock pages in memory" permission in the group policy editor
@@ -161,7 +173,7 @@ void _mi_os_init() {
 
 static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 {
-  if (addr == NULL || size == 0) return true;
+  if (addr == NULL || size == 0 || mi_os_is_huge_reserved(addr)) return true;
   bool err = false;
 #if defined(_WIN32)
   err = (VirtualFree(addr, 0, MEM_RELEASE) == 0);
@@ -185,25 +197,49 @@ static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 #ifdef _WIN32
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
+  // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
+  if ((size % (uintptr_t)1 << 30) == 0 /* 1GiB multiple */
+    && (flags & MEM_LARGE_PAGES) != 0 && (flags & MEM_COMMIT) != 0 
+    && (addr != NULL || try_alignment == 0 || try_alignment % _mi_os_page_size() == 0)
+    && pNtAllocateVirtualMemoryEx != NULL)
+  {
+    #ifndef MEM_EXTENDED_PARAMETER_NONPAGED_HUGE
+    #define MEM_EXTENDED_PARAMETER_NONPAGED_HUGE  (0x10)
+    #endif
+    MEM_EXTENDED_PARAMETER param = { 0, 0 };
+    param.Type = 5; // == MemExtendedParameterAttributeFlags;
+    param.ULong64 = MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
+    SIZE_T psize = size;
+    void*  base  = addr;
+    NTSTATUS err = (*pNtAllocateVirtualMemoryEx)(GetCurrentProcess(), &base, &psize, flags | MEM_RESERVE, PAGE_READWRITE, &param, 1);
+    if (err == 0) {
+      return base;
+    }
+    else {
+      // else fall back to regular large OS pages
+      _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) page instead (error %lx)\n", err);
+    }
+  }
+  
+  // on modern Windows try use VirtualAlloc2 for aligned allocation
   if (try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
-    // on modern Windows try use VirtualAlloc2 for aligned allocation
     MEM_ADDRESS_REQUIREMENTS reqs = { 0 };
     reqs.Alignment = try_alignment;
     MEM_EXTENDED_PARAMETER param = { 0 };
     param.Type = MemExtendedParameterAddressRequirements;
     param.Pointer = &reqs;
-    return (*pVirtualAlloc2)(addr, NULL, size, flags, PAGE_READWRITE, &param, 1);
+    return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
   }
 #endif
   return VirtualAlloc(addr, size, flags, PAGE_READWRITE);
 }
 
-static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DWORD flags) {
+static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DWORD flags, bool large_only) {
   static volatile uintptr_t large_page_try_ok = 0;
   void* p = NULL;
-  if (use_large_os_page(size, try_alignment)) {
+  if (large_only || use_large_os_page(size, try_alignment)) {
     uintptr_t try_ok = mi_atomic_read(&large_page_try_ok);
-    if (try_ok > 0) {
+    if (!large_only && try_ok > 0) {
       // if a large page allocation fails, it seems the calls to VirtualAlloc get very expensive.
       // therefore, once a large page allocation failed, we don't try again for `large_page_try_ok` times.
       mi_atomic_compare_exchange(&large_page_try_ok, try_ok - 1, try_ok);
@@ -211,6 +247,7 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
     else {
       // large OS pages must always reserve and commit.
       p = mi_win_virtual_allocx(addr, size, try_alignment, MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE | flags);
+      if (large_only) return p;
       // fall back to non-large page allocation on error (`p == NULL`).
       if (p == NULL) {
         mi_atomic_write(&large_page_try_ok,10);  // on error, don't try again for the next N allocations
@@ -237,12 +274,13 @@ static void* mi_wasm_heap_grow(size_t size, size_t try_alignment) {
   return (void*)aligned_base;
 }
 #else
-static void* mi_unix_mmapx(size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
+#define MI_OS_USE_MMAP
+static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
   void* p = NULL;
   #if (MI_INTPTR_SIZE >= 8) && !defined(MAP_ALIGNED)
   // on 64-bit systems, use the virtual address area after 4TiB for 4MiB aligned allocations
-  static volatile intptr_t aligned_base = ((intptr_t)1 << 42); // starting at 4TiB
-  if (try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE)==0) {
+  static volatile intptr_t aligned_base = ((intptr_t)4 << 40); // starting at 4TiB
+  if (addr==NULL && try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE)==0) {
     intptr_t hint = mi_atomic_add(&aligned_base,size) - size;
     if (hint%try_alignment == 0) {
       p = mmap((void*)hint,size,protect_flags,flags,fd,0);
@@ -251,12 +289,13 @@ static void* mi_unix_mmapx(size_t size, size_t try_alignment, int protect_flags,
   }
   #endif
   if (p==NULL) {
-    p = mmap(NULL,size,protect_flags,flags,fd,0);
+    p = mmap(addr,size,protect_flags,flags,fd,0);
+    if (p==MAP_FAILED) p = NULL;
   }
   return p;
 }
 
-static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) {
+static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int protect_flags, bool large_only) {
   void* p = NULL;
   #if !defined(MAP_ANONYMOUS)
   #define MAP_ANONYMOUS  MAP_ANON
@@ -278,10 +317,10 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
   // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
   fd = VM_MAKE_TAG(100);
   #endif
-  if (use_large_os_page(size, try_alignment)) {
+  if (large_only || use_large_os_page(size, try_alignment)) {
     static volatile uintptr_t large_page_try_ok = 0;
     uintptr_t try_ok = mi_atomic_read(&large_page_try_ok);
-    if (try_ok > 0) {
+    if (!large_only && try_ok > 0) {
       // If the OS is not configured for large OS pages, or the user does not have
       // enough permission, the `mmap` will always fail (but it might also fail for other reasons).
       // Therefore, once a large page allocation failed, we don't try again for `large_page_try_ok` times
@@ -297,27 +336,32 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
       #ifdef MAP_HUGETLB
       lflags |= MAP_HUGETLB;
       #endif
-      #ifdef MAP_HUGE_2MB
-      lflags |= MAP_HUGE_2MB;
+      #ifdef MAP_HUGE_1GB
+      if ((size % (uintptr_t)1 << 20) == 0) {
+        lflags |= MAP_HUGE_1GB;
+      }
+      else
       #endif
+      {
+        #ifdef MAP_HUGE_2MB
+        lflags |= MAP_HUGE_2MB;
+        #endif
+      }
       #ifdef VM_FLAGS_SUPERPAGE_SIZE_2MB
       lfd |= VM_FLAGS_SUPERPAGE_SIZE_2MB;
       #endif
-      if (lflags != flags) {
+      if (large_only || lflags != flags) {
         // try large OS page allocation
-        p = mi_unix_mmapx(size, try_alignment, protect_flags, lflags, lfd);
-        if (p == MAP_FAILED) {
+        p = mi_unix_mmapx(addr, size, try_alignment, protect_flags, lflags, lfd);
+        if (large_only) return p;
+        if (p == NULL) {
           mi_atomic_write(&large_page_try_ok, 10);  // on error, don't try again for the next N allocations
-          p = NULL; // and fall back to regular mmap
         }
       }
     }
   }
   if (p == NULL) {
-    p = mi_unix_mmapx(size, try_alignment, protect_flags, flags, fd);
-    if (p == MAP_FAILED) {
-      p = NULL;
-    }
+    p = mi_unix_mmapx(addr, size, try_alignment, protect_flags, flags, fd);    
     #if defined(MADV_HUGEPAGE)
     // Many Linux systems don't allow MAP_HUGETLB but they support instead
     // transparent huge pages (TPH). It is not required to call `madvise` with MADV_HUGE
@@ -325,7 +369,7 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
     // in that case -- in particular for our large regions (in `memory.c`).
     // However, some systems only allow TPH if called with explicit `madvise`, so
     // when large OS pages are enabled for mimalloc, we call `madvice` anyways.
-    else if (use_large_os_page(size, try_alignment)) {
+    if (use_large_os_page(size, try_alignment)) {
       madvise(p, size, MADV_HUGEPAGE);
     }
     #endif
@@ -340,17 +384,19 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, mi_
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   if (size == 0) return NULL;
 
-  void* p = NULL;
-#if defined(_WIN32)
-  int flags = MEM_RESERVE;
-  if (commit) flags |= MEM_COMMIT;
-  p = mi_win_virtual_alloc(NULL, size, try_alignment, flags);
-#elif defined(__wasi__)
-  p = mi_wasm_heap_grow(size, try_alignment);
-#else
-  int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
-  p = mi_unix_mmap(size, try_alignment, protect_flags);
-#endif
+  void* p = mi_os_alloc_from_huge_reserved(size, try_alignment, commit);
+  if (p != NULL) return p;
+
+  #if defined(_WIN32)
+    int flags = MEM_RESERVE;
+    if (commit) flags |= MEM_COMMIT;
+    p = mi_win_virtual_alloc(NULL, size, try_alignment, flags, false);
+  #elif defined(__wasi__)
+    p = mi_wasm_heap_grow(size, try_alignment);
+  #else
+    int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
+    p = mi_unix_mmap(NULL, size, try_alignment, protect_flags, false);
+  #endif
   _mi_stat_increase(&stats->mmap_calls, 1);
   if (p != NULL) {
     _mi_stat_increase(&stats->reserved, size);
@@ -399,7 +445,7 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
         // otherwise free and allocate at an aligned address in there
         mi_os_mem_free(p, over_size, stats);
         void* aligned_p = mi_align_up_ptr(p, alignment);
-        p = mi_win_virtual_alloc(aligned_p, size, alignment, flags);
+        p = mi_win_virtual_alloc(aligned_p, size, alignment, flags, false);
         if (p == aligned_p) break; // success!
         if (p != NULL) { // should not happen?
           mi_os_mem_free(p, size, stats);
@@ -656,3 +702,127 @@ bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize, mi_stats_t* stats) {
   return mi_os_mem_free(start, size, stats);
 #endif
 }
+
+
+/* ----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------*/
+#define MI_HUGE_OS_PAGE_SIZE ((size_t)1 << 30)  // 1GiB
+
+typedef struct mi_huge_info_s {
+  uint8_t*           start;
+  ptrdiff_t          reserved;
+  volatile ptrdiff_t used;
+} mi_huge_info_t;
+
+static mi_huge_info_t os_huge_reserved = { NULL, 0, 0 };
+
+static bool mi_os_is_huge_reserved(void* p) {
+  return (os_huge_reserved.start != NULL && 
+          (uint8_t*)p >= os_huge_reserved.start && 
+          (uint8_t*)p < os_huge_reserved.start + os_huge_reserved.reserved);
+}
+
+static void* mi_os_alloc_from_huge_reserved(size_t size, size_t try_alignment, bool commit) 
+{
+  // only allow large aligned allocations
+  if (size < MI_SEGMENT_SIZE || (size % MI_SEGMENT_SIZE) != 0) return NULL;
+  if (try_alignment > MI_SEGMENT_SIZE) return NULL;
+  if (!commit) return NULL;
+  if (os_huge_reserved.start==NULL) return NULL;
+  if (mi_atomic_iread(&os_huge_reserved.used) >= os_huge_reserved.reserved) return NULL; // already full
+
+  // always aligned
+  mi_assert_internal( os_huge_reserved.used % MI_SEGMENT_SIZE == 0 );
+  mi_assert_internal( (uintptr_t)os_huge_reserved.start % MI_SEGMENT_SIZE == 0 );
+  
+  // try to reserve space
+  ptrdiff_t next = mi_atomic_add( &os_huge_reserved.used, (ptrdiff_t)size );
+  if (next > os_huge_reserved.reserved) {
+    // "free" our over-allocation
+    mi_atomic_add( &os_huge_reserved.used, -((ptrdiff_t)size) );
+    return NULL;
+  }
+
+  // success!
+  uint8_t* p = os_huge_reserved.start + next - (ptrdiff_t)size;
+  mi_assert_internal( (uintptr_t)p % MI_SEGMENT_SIZE == 0 );
+  return p;
+}
+
+/*
+static void mi_os_free_huge_reserved() {
+  uint8_t* addr = os_huge_reserved.start;
+  size_t total  = os_huge_reserved.reserved;
+  os_huge_reserved.reserved = 0;
+  os_huge_reserved.start = NULL;
+  for( size_t current = 0; current < total; current += MI_HUGE_OS_PAGE_SIZE) {
+    _mi_os_free(addr + current, MI_HUGE_OS_PAGE_SIZE, &_mi_stats_main);
+  }
+}
+*/
+
+#if !(MI_INTPTR_SIZE >= 8 && (defined(_WIN32) || defined(MI_OS_USE_MMAP)))
+int mi_reserve_huge_os_pages(size_t pages, size_t max_secs) {
+  return -2; // cannot allocate
+}
+#else
+int mi_reserve_huge_os_pages( size_t pages, double max_secs ) mi_attr_noexcept
+{
+  if (max_secs==0) return -1; // timeout 
+  if (pages==0) return 0;     // ok
+  if (os_huge_reserved.start != NULL) return -2; // already reserved
+
+  // Allocate one page at the time but try to place them contiguously
+  // We allocate one page at the time to be able to abort if it takes too long
+  double start_t = _mi_clock_start();
+  uint8_t* start = (uint8_t*)((uintptr_t)8 << 40); // 8TiB virtual start address
+  uint8_t* addr = start;  // current top of the allocations
+  for (size_t page = 0; page < pages; page++, addr += MI_HUGE_OS_PAGE_SIZE ) {
+    // allocate lorgu pages
+    void* p = NULL; 
+    #ifdef _WIN32
+    p = mi_win_virtual_alloc(addr, MI_HUGE_OS_PAGE_SIZE, 0, MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE, true);
+    #elif defined(MI_OS_USE_MMAP)
+    p = mi_unix_mmap(addr, MI_HUGE_OS_PAGE_SIZE, 0, PROT_READ | PROT_WRITE, true);
+    #else 
+    // always fail
+    #endif  
+    
+    // Did we succeed at a contiguous address?
+    if (p != addr) {
+      if (p != NULL) {
+        _mi_warning_message("could not allocate contiguous huge page %zu at 0x%p\n", page, addr); 
+        _mi_os_free(p, MI_HUGE_OS_PAGE_SIZE, &_mi_stats_main );
+      }
+      else {
+        #ifdef _WIN32
+        int err = GetLastError();
+        #else
+        int err = errno;
+        #endif
+        _mi_warning_message("could not allocate huge page %zu at 0x%p, error: %i\n", page, addr, err);
+      }
+      return -2;
+    }
+    // success, record it
+    if (page==0) {
+      os_huge_reserved.start = addr;
+    }
+    os_huge_reserved.reserved += MI_HUGE_OS_PAGE_SIZE;
+    _mi_stat_increase(&_mi_stats_main.committed, MI_HUGE_OS_PAGE_SIZE); 
+    _mi_stat_increase(&_mi_stats_main.reserved, MI_HUGE_OS_PAGE_SIZE);
+    
+    // check for timeout
+    double elapsed = _mi_clock_end(start_t);
+    if (elapsed > max_secs) return (-1); // timeout
+    if (page >= 1) {
+      double estimate = ((elapsed / (double)(page+1)) * (double)pages);
+      if (estimate > 1.5*max_secs) return (-1); // seems like we are going to timeout
+    }
+  }  
+  _mi_verbose_message("reserved %zu huge pages\n", pages);
+  return 0;
+}
+#endif
+

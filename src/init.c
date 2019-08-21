@@ -424,6 +424,12 @@ static void mi_process_load(void) {
   if (msg != NULL && (mi_option_is_enabled(mi_option_verbose) || mi_option_is_enabled(mi_option_show_errors))) {
     _mi_fputs(stderr,NULL,msg);
   }
+
+  if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
+    size_t pages     = mi_option_get(mi_option_reserve_huge_os_pages);
+    double max_secs = (double)pages / 5.0; // 0.2s per page
+    mi_reserve_huge_os_pages(pages, max_secs);
+  }
 }
 
 // Initialize the process; called by thread_init or the process loader

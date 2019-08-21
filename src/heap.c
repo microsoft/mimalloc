@@ -85,7 +85,7 @@ static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t
   UNUSED(arg2);
   UNUSED(heap);
   mi_collect_t collect = *((mi_collect_t*)arg_collect);
-  _mi_page_free_collect(page);
+  _mi_page_free_collect(page, collect >= ABANDON);
   if (mi_page_all_free(page)) {
     // no more used blocks, free the page. TODO: should we retire here and be less aggressive?
     _mi_page_free(page, pq, collect != NORMAL);
@@ -428,7 +428,7 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
   mi_assert(page != NULL);
   if (page == NULL) return true;
 
-  _mi_page_free_collect(page);
+  _mi_page_free_collect(page,true);
   mi_assert_internal(page->local_free == NULL);
   if (page->used == 0) return true;
 
