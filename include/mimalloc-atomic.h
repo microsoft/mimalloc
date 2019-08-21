@@ -68,6 +68,9 @@ static inline void* mi_atomic_exchange_ptr(volatile void** p, void* exchange) {
   return (void*)mi_atomic_exchange((volatile uintptr_t*)p, (uintptr_t)exchange);
 }
 
+static inline intptr_t mi_atomic_iread(volatile intptr_t* p) {
+  return (intptr_t)mi_atomic_read( (volatile uintptr_t*)p );
+}
 
 #ifdef _MSC_VER
 #define WIN32_LEAN_AND_MEAN

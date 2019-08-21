@@ -102,6 +102,8 @@ uintptr_t  _mi_heap_random(mi_heap_t* heap);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);
+double     _mi_clock_end(double start);
+double     _mi_clock_start(void);
 
 // "alloc.c"
 void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept;  // called from `_mi_malloc_generic`
@@ -161,15 +163,15 @@ bool        _mi_page_is_valid(mi_page_t* page);
 
 // Overflow detecting multiply
 #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
-static inline bool mi_mul_overflow(size_t size, size_t count, size_t* total) {
+static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
 #if (MI_INTPTR_SIZE == 4)
-  return __builtin_umul_overflow(size, count, total);
+  return __builtin_umul_overflow(count, size, total);
 #else
-  return __builtin_umull_overflow(size, count, total);
+  return __builtin_umull_overflow(count, size, total);
 #endif
 #else /* __builtin_umul_overflow is unavailable */
-  *total = size * count;
+  *total = count * size;
   return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
           && size > 0 && (SIZE_MAX / size) < count);
 #endif

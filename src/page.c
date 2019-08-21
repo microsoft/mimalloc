@@ -71,7 +71,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(page->block_size > 0);
   mi_assert_internal(page->used <= page->capacity);
   mi_assert_internal(page->capacity <= page->reserved);
-  
+
   mi_segment_t* segment = _mi_page_segment(page);
   uint8_t* start = _mi_page_start(segment,page,NULL);
   mi_assert_internal(start == _mi_segment_page_start(segment,page,NULL));
@@ -102,7 +102,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
     mi_assert_internal(!_mi_process_is_initialized || segment->thread_id==0 || segment->thread_id == page->heap->thread_id);
     mi_page_queue_t* pq = mi_page_queue_of(page);
     mi_assert_internal(mi_page_queue_contains(pq, page));
-    mi_assert_internal(pq->block_size==page->block_size || page->block_size > MI_MEDIUM_SIZE_MAX || mi_page_is_in_full(page));
+    mi_assert_internal(pq->block_size==page->block_size || page->block_size > MI_MEDIUM_OBJ_SIZE_MAX || mi_page_is_in_full(page));
     mi_assert_internal(mi_heap_contains_queue(page->heap,pq));
   }
   return true;
@@ -170,7 +170,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
 
 void _mi_page_free_collect(mi_page_t* page, bool force) {
   mi_assert_internal(page!=NULL);
-  
+
   // collect the thread free list
   if (force || mi_tf_block(page->thread_free) != NULL) {  // quick test to avoid an atomic operation
     _mi_page_thread_free_collect(page);
@@ -193,7 +193,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
       mi_block_set_next(page, tail, page->free);
       page->free = page->local_free;
       page->local_free = NULL;
-    }    
+    }
   }
 
   mi_assert_internal(!force || page->local_free == NULL);
@@ -356,8 +356,8 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   mi_page_set_has_aligned(page, false);
 
   // account for huge pages here
-  if (page->block_size > MI_MEDIUM_SIZE_MAX) {
-    if (page->block_size <= MI_LARGE_SIZE_MAX) {
+  if (page->block_size > MI_MEDIUM_OBJ_SIZE_MAX) {
+    if (page->block_size <= MI_LARGE_OBJ_SIZE_MAX) {
       _mi_stat_decrease(&page->heap->tld->stats.large, page->block_size);
     }
     else {
@@ -394,7 +394,7 @@ void _mi_page_retire(mi_page_t* page) {
   // is the only page left with free blocks. It is not clear
   // how to check this efficiently though... for now we just check
   // if its neighbours are almost fully used.
-  if (mi_likely(page->block_size <= MI_MEDIUM_SIZE_MAX)) {
+  if (mi_likely(page->block_size <= MI_SMALL_SIZE_MAX)) {
     if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
       _mi_stat_counter_increase(&_mi_stats_main.page_no_retire,1);
       return; // dont't retire after all
@@ -713,7 +713,7 @@ static mi_page_t* mi_large_page_alloc(mi_heap_t* heap, size_t size) {
   if (page != NULL) {
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(page->block_size == block_size);
-    if (page->block_size <= MI_LARGE_SIZE_MAX) {
+    if (page->block_size <= MI_LARGE_OBJ_SIZE_MAX) {
       _mi_stat_increase(&heap->tld->stats.large, block_size);
       _mi_stat_counter_increase(&heap->tld->stats.large_count, 1);
     }
@@ -740,14 +740,14 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
 
   // call potential deferred free routines
   _mi_deferred_free(heap, false);
-  
+
   // free delayed frees from other threads
   _mi_heap_delayed_free(heap);
-  
+
   // huge allocation?
   mi_page_t* page;
-  if (mi_unlikely(size > MI_MEDIUM_SIZE_MAX)) {
-    if (mi_unlikely(size >= (SIZE_MAX - MI_MAX_ALIGN_SIZE))) {
+  if (mi_unlikely(size > MI_MEDIUM_OBJ_SIZE_MAX)) {
+    if (mi_unlikely(size > PTRDIFF_MAX)) {
       page = NULL;
     }
     else {

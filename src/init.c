@@ -43,8 +43,8 @@ const mi_page_t _mi_page_empty = {
     QNULL( 10240), QNULL( 12288), QNULL( 14336), QNULL( 16384), QNULL( 20480), QNULL( 24576), QNULL( 28672), QNULL( 32768), /* 56 */ \
     QNULL( 40960), QNULL( 49152), QNULL( 57344), QNULL( 65536), QNULL( 81920), QNULL( 98304), QNULL(114688), QNULL(131072), /* 64 */ \
     QNULL(163840), QNULL(196608), QNULL(229376), QNULL(262144), QNULL(327680), QNULL(393216), QNULL(458752), QNULL(524288), /* 72 */ \
-    QNULL(MI_MEDIUM_WSIZE_MAX + 1  /* 655360, Huge queue */), \
-    QNULL(MI_MEDIUM_WSIZE_MAX + 2) /* Full queue */ }
+    QNULL(MI_MEDIUM_OBJ_WSIZE_MAX + 1  /* 655360, Huge queue */), \
+    QNULL(MI_MEDIUM_OBJ_WSIZE_MAX + 2) /* Full queue */ }
 
 #define MI_STAT_COUNT_NULL()  {0,0,0,0}
 
@@ -116,14 +116,14 @@ mi_heap_t _mi_heap_main = {
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
   NULL,
-  0,
-  0,
+  0,      // thread id
 #if MI_INTPTR_SIZE==8   // the cookie of the main heap can be fixed (unlike page cookies that need to be secure!)
   0xCDCDCDCDCDCDCDCDUL,
 #else
   0xCDCDCDCDUL,
 #endif
-  0,
+  0,      // random
+  0,      // page count
   false   // can reclaim
 };
 
@@ -432,6 +432,12 @@ static void mi_process_load(void) {
   const char* msg = NULL;
   mi_allocator_init(&msg);
   if (msg != NULL) _mi_verbose_message(msg);
+
+  if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
+    size_t pages     = mi_option_get(mi_option_reserve_huge_os_pages);
+    double max_secs = (double)pages / 5.0; // 0.2s per page
+    mi_reserve_huge_os_pages(pages, max_secs);
+  }
 }
 
 // Initialize the process; called by thread_init or the process loader

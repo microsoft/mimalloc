@@ -34,15 +34,15 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 static inline bool mi_page_queue_is_huge(const mi_page_queue_t* pq) {
-  return (pq->block_size == (MI_MEDIUM_SIZE_MAX+sizeof(uintptr_t)));
+  return (pq->block_size == (MI_MEDIUM_OBJ_SIZE_MAX+sizeof(uintptr_t)));
 }
 
 static inline bool mi_page_queue_is_full(const mi_page_queue_t* pq) {
-  return (pq->block_size == (MI_MEDIUM_SIZE_MAX+(2*sizeof(uintptr_t))));
+  return (pq->block_size == (MI_MEDIUM_OBJ_SIZE_MAX+(2*sizeof(uintptr_t))));
 }
 
 static inline bool mi_page_queue_is_special(const mi_page_queue_t* pq) {
-  return (pq->block_size > MI_MEDIUM_SIZE_MAX);
+  return (pq->block_size > MI_MEDIUM_OBJ_SIZE_MAX);
 }
 
 /* -----------------------------------------------------------
@@ -116,11 +116,11 @@ extern inline uint8_t _mi_bin(size_t size) {
     bin = (uint8_t)wsize;
   }
   #endif
-  else if (wsize > MI_MEDIUM_WSIZE_MAX) {
+  else if (wsize > MI_MEDIUM_OBJ_WSIZE_MAX) {
     bin = MI_BIN_HUGE;
   }
   else {
-    #if defined(MI_ALIGN4W) 
+    #if defined(MI_ALIGN4W)
     if (wsize <= 16) { wsize = (wsize+3)&~3; } // round to 4x word sizes
     #endif
     wsize--;
@@ -147,7 +147,7 @@ size_t _mi_bin_size(uint8_t bin) {
 
 // Good size for allocation
 size_t mi_good_size(size_t size) mi_attr_noexcept {
-  if (size <= MI_MEDIUM_SIZE_MAX) {
+  if (size <= MI_MEDIUM_OBJ_SIZE_MAX) {
     return _mi_bin_size(_mi_bin(size));
   }
   else {
@@ -245,7 +245,7 @@ static bool mi_page_queue_is_empty(mi_page_queue_t* queue) {
 static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(mi_page_queue_contains(queue, page));
-  mi_assert_internal(page->block_size == queue->block_size || (page->block_size > MI_MEDIUM_SIZE_MAX && mi_page_queue_is_huge(queue))  || (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
+  mi_assert_internal(page->block_size == queue->block_size || (page->block_size > MI_MEDIUM_OBJ_SIZE_MAX && mi_page_queue_is_huge(queue))  || (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
   if (page->prev != NULL) page->prev->next = page->next;
   if (page->next != NULL) page->next->prev = page->prev;
   if (page == queue->last)  queue->last = page->prev;
@@ -268,7 +268,7 @@ static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_
   mi_assert_internal(page->heap == NULL);
   mi_assert_internal(!mi_page_queue_contains(queue, page));
   mi_assert_internal(page->block_size == queue->block_size ||
-                      (page->block_size > MI_MEDIUM_SIZE_MAX && mi_page_queue_is_huge(queue)) ||
+                      (page->block_size > MI_MEDIUM_OBJ_SIZE_MAX && mi_page_queue_is_huge(queue)) ||
                         (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
 
   mi_page_set_in_full(page, mi_page_queue_is_full(queue));
@@ -297,8 +297,8 @@ static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* fro
   mi_assert_internal((page->block_size == to->block_size && page->block_size == from->block_size) ||
                      (page->block_size == to->block_size && mi_page_queue_is_full(from)) ||
                      (page->block_size == from->block_size && mi_page_queue_is_full(to)) ||
-                     (page->block_size > MI_MEDIUM_SIZE_MAX && mi_page_queue_is_huge(to)) ||
-                     (page->block_size > MI_MEDIUM_SIZE_MAX && mi_page_queue_is_full(to)));
+                     (page->block_size > MI_MEDIUM_OBJ_SIZE_MAX && mi_page_queue_is_huge(to)) ||
+                     (page->block_size > MI_MEDIUM_OBJ_SIZE_MAX && mi_page_queue_is_full(to)));
 
   if (page->prev != NULL) page->prev->next = page->next;
   if (page->next != NULL) page->next->prev = page->prev;
