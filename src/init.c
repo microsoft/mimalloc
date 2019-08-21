@@ -231,6 +231,8 @@ static bool _mi_heap_done(void) {
   mi_heap_t* heap = _mi_heap_default;
   if (!mi_heap_is_initialized(heap)) return true;
 
+  void* p = mi_malloc(16);
+
   // reset default heap
   _mi_heap_default = (_mi_is_main_thread() ? &_mi_heap_main : (mi_heap_t*)&_mi_heap_empty);
 
@@ -239,7 +241,7 @@ static bool _mi_heap_done(void) {
   // switch to backing heap and free it
   heap = heap->tld->heap_backing;
   if (!mi_heap_is_initialized(heap)) return false;
-
+  
   // collect if not the main thread
   if (heap != &_mi_heap_main) {
     _mi_heap_collect_abandon(heap);
@@ -258,6 +260,7 @@ static bool _mi_heap_done(void) {
     mi_assert_internal(heap->tld->heap_backing == &_mi_heap_main);
   }
 #endif
+  mi_free(p);
   return false;
 }
 
