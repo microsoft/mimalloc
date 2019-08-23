@@ -549,14 +549,11 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(segment->used > 0);
   mi_assert_internal(segment->abandoned_next == NULL);
   mi_assert_expensive(mi_segment_is_valid(segment));
-#if MI_DEBUG>1
-  for (size_t i = 0; i < segment->capacity; i++) {
-    mi_assert_internal(!segment->pages[i].segment_in_use || mi_page_thread_id(&segment->pages[i]) == 0);
-  }
-#endif
+
   // remove the segment from the free page queue if needed
   mi_segment_remove_from_free_queue(segment,tld);
   mi_assert_internal(segment->next == NULL && segment->prev == NULL);
+
   // all pages in the segment are abandoned; add it to the abandoned list
   _mi_stat_increase(&tld->stats->segments_abandoned, 1);
   mi_segments_track_size(-((long)segment->segment_size), tld);
@@ -570,11 +567,10 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
-  mi_assert(page != NULL && mi_page_thread_id(page) != 0);
+  mi_assert(page != NULL);
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert_expensive(mi_segment_is_valid(segment));
-  segment->abandoned++;
-  mi_page_set_thread_id(page, 0);
+  segment->abandoned++;  
   _mi_stat_increase(&tld->stats->pages_abandoned, 1);
   mi_assert_internal(segment->abandoned <= segment->used);
   if (segment->used == segment->abandoned) {
@@ -626,7 +622,6 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
         }
         else {
           // otherwise reclaim it
-          mi_page_set_thread_id(page,segment->thread_id);
           _mi_page_reclaim(heap,page);
         }
       }
@@ -656,8 +651,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
 static mi_page_t* mi_segment_page_alloc_in(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(mi_segment_has_free(segment));
   mi_page_t* page = mi_segment_find_free(segment, tld->stats);
-  page->segment_in_use = true;
-  mi_page_init_flags(page,segment->thread_id);
+  page->segment_in_use = true;  
   segment->used++;
   mi_assert_internal(segment->used <= segment->capacity);
   if (segment->used == segment->capacity) {
@@ -697,7 +691,6 @@ static mi_page_t* mi_segment_large_page_alloc(mi_segments_tld_t* tld, mi_os_tld_
   segment->used = 1;
   mi_page_t* page = &segment->pages[0];
   page->segment_in_use = true;
-  mi_page_init_flags(page,segment->thread_id);
   return page;
 }
 
@@ -709,7 +702,6 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
   segment->used = 1;
   mi_page_t* page = &segment->pages[0];
   page->segment_in_use = true;
-  mi_page_init_flags(page,segment->thread_id);
   return page;
 }
 

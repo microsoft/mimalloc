@@ -217,7 +217,7 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     }
     else {
       // else fall back to regular large OS pages
-      _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) page instead (error %lx)\n", err);
+      _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (error %lx)\n", err);
     }
   }
 #endif

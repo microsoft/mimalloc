@@ -13,15 +13,16 @@ terms of the MIT license. A copy of the license can be found in the file
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
   0, false, false, false, 0, 0,
+  { 0 },
   NULL,    // free
   #if MI_SECURE
   0,
   #endif
-  0, 0, // flags, used
+  0,       // used
   NULL, 0, 0,
   0, NULL, NULL, NULL
-  #if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
-  , { NULL }
+  #if (MI_INTPTR_SIZE==8 && MI_SECURE>0) || (MI_INTPTR_SIZE==4 && MI_SECURE==0)
+  , { NULL } // padding
   #endif
 };
 
@@ -350,7 +351,7 @@ void mi_thread_init(void) mi_attr_noexcept
     pthread_setspecific(mi_pthread_key, (void*)(_mi_thread_id()|1)); // set to a dummy value so that `mi_pthread_done` is called
   #endif
 
-  #if (MI_DEBUG>0) // not in release mode as that leads to crashes on Windows dynamic override
+  #if (MI_DEBUG>0) && !defined(NDEBUG) // not in release mode as that leads to crashes on Windows dynamic override
   _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
   #endif
 }
