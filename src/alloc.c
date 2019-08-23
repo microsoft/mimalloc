@@ -225,19 +225,19 @@ void mi_free(void* p) mi_attr_noexcept
   }
 #endif
 
+  const uintptr_t tid = _mi_thread_id();
   mi_page_t* const page = _mi_segment_page_of(segment, p);
 
 #if (MI_STAT>1)
   mi_heap_t* heap = mi_heap_get_default();
-  mi_heap_stat_decrease( heap, malloc, mi_usable_size(p));
+  mi_heap_stat_decrease(heap, malloc, mi_usable_size(p));
   if (page->block_size <= MI_LARGE_OBJ_SIZE_MAX) {
-    mi_heap_stat_decrease( heap, normal[_mi_bin(page->block_size)], 1);
+    mi_heap_stat_decrease(heap, normal[_mi_bin(page->block_size)], 1);
   }
   // huge page stat is accounted for in `_mi_page_retire`
 #endif
 
-  const uintptr_t tid = _mi_thread_id();
-  if (mi_likely(tid == page->flags)) {  // if equal, the thread id matches and it is not a full page, nor has aligned blocks
+  if (mi_likely(tid == segment->thread_id && page->flags.value == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
     mi_block_set_next(page, block, page->local_free);
@@ -247,7 +247,7 @@ void mi_free(void* p) mi_attr_noexcept
   }
   else {
     // non-local, aligned blocks, or a full page; use the more generic path
-    mi_free_generic(segment, page, tid == mi_page_thread_id(page), p);
+    mi_free_generic(segment, page, tid == segment->thread_id, p);
   }
 }
 
