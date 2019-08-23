@@ -539,7 +539,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   // page align in the range, commit liberally, decommit conservative
   size_t csize;
   void* start = mi_os_page_align_areax(conservative, addr, size, &csize);
-  if (csize == 0) return true;
+  if (csize == 0 || mi_os_is_huge_reserved(addr)) return true;
   int err = 0;
   if (commit) {
     _mi_stat_increase(&stats->committed, csize);
@@ -591,7 +591,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   // page align conservatively within the range
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
-  if (csize == 0) return true;
+  if (csize == 0 || mi_os_is_huge_reserved(addr)) return true;
   if (reset) _mi_stat_increase(&stats->reset, csize);
         else _mi_stat_decrease(&stats->reset, csize);
   if (!reset) return true; // nothing to do on unreset!
@@ -659,7 +659,9 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   size_t csize = 0;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return false;
-
+  if (mi_os_is_huge_reserved(addr)) {
+	_mi_warning_message("cannot mprotect memory allocated in huge OS pages\n");
+  }
   int err = 0;
 #ifdef _WIN32
   DWORD oldprotect = 0;
