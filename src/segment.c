@@ -558,13 +558,15 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_segment_remove_from_free_queue(segment,tld);
   mi_assert_internal(segment->next == NULL && segment->prev == NULL);
   // all pages in the segment are abandoned; add it to the abandoned list
-  segment->thread_id = 0;
-  do {
-    segment->abandoned_next = (mi_segment_t*)abandoned;
-  } while (!mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, segment, segment->abandoned_next));
-  mi_atomic_increment(&abandoned_count);
-  _mi_stat_increase(&tld->stats->segments_abandoned,1);
+  _mi_stat_increase(&tld->stats->segments_abandoned, 1);
   mi_segments_track_size(-((long)segment->segment_size), tld);
+  segment->thread_id = 0;
+  mi_segment_t* next;
+  do {
+    next = (mi_segment_t*)abandoned;
+    mi_atomic_write_ptr((volatile void**)&segment->abandoned_next, next);
+  } while (!mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, segment, next));
+  mi_atomic_increment(&abandoned_count);
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
@@ -598,7 +600,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
     mi_segment_t* segment;
     do {
       segment = (mi_segment_t*)abandoned;
-    } while(segment != NULL && !mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, segment->abandoned_next, segment));
+    } while(segment != NULL && !mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, (mi_segment_t*)segment->abandoned_next, segment));
     if (segment==NULL) break; // stop early if no more segments available
 
     // got it.

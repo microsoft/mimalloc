@@ -204,7 +204,7 @@ typedef enum mi_page_kind_e {
 typedef struct mi_segment_s {
   struct mi_segment_s* next;
   struct mi_segment_s* prev;
-  struct mi_segment_s* abandoned_next;
+  volatile struct mi_segment_s* abandoned_next;
   size_t          abandoned;   // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
   size_t          used;        // count of pages in use (`used <= capacity`)
   size_t          capacity;    // count of available pages (`#free + used`)
