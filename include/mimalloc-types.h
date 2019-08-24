@@ -78,7 +78,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SEGMENT_SHIFT                  (10 + MI_SEGMENT_SLICE_SHIFT)  // 64mb
 
 #define MI_SMALL_PAGE_SHIFT               (MI_SEGMENT_SLICE_SHIFT)       // 64kb
-#define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SEGMENT_SLICE_SHIFT)  // 1024kb
+#define MI_MEDIUM_PAGE_SHIFT              ( 2 + MI_SEGMENT_SLICE_SHIFT)  // 512kb
 
 
 // Derived constants
@@ -90,12 +90,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SMALL_PAGE_SIZE                (1<<MI_SMALL_PAGE_SHIFT)
 #define MI_MEDIUM_PAGE_SIZE               (1<<MI_MEDIUM_PAGE_SHIFT)
 
-#define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/4)   // 16kb on 64-bit
+#define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/8)   // 8kb on 64-bit
 
-#define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/4)   // 128kb on 64-bit
+#define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/4)  // 128kb on 64-bit
 #define MI_MEDIUM_OBJ_WSIZE_MAX           (MI_MEDIUM_OBJ_SIZE_MAX/MI_INTPTR_SIZE)   // 64kb on 64-bit
 
-#define MI_LARGE_OBJ_SIZE_MAX             (MI_SEGMENT_SIZE/4)       // 16mb on 64-bit
+#define MI_LARGE_OBJ_SIZE_MAX             (MI_SEGMENT_SIZE/4)      // 16mb on 64-bit
 #define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
@@ -186,9 +186,9 @@ typedef struct mi_page_s {
   struct mi_page_s*     prev;              // previous page owned by this thread with the same `block_size`
 
   // improve page index calculation
-  // without padding: 10 words on 64-bit, 11 on 32-bit. Secure adds one word
-  #if (MI_INTPTR_SIZE==8 && MI_SECURE>0) || (MI_INTPTR_SIZE==4 && MI_SECURE==0)
-  void*                 padding[1];        // 12 words on 64-bit in secure mode, 12 words on 32-bit plain
+  // without padding: 11 words on 64-bit, 13 on 32-bit. Secure adds one word
+  #if (MI_SECURE==0)
+  void*                 padding[1];        // 12 words on 64-bit, 14 words on 32-bit 
   #endif
 } mi_page_t;
 
@@ -212,15 +212,14 @@ typedef mi_page_t mi_slice_t;
 // the OS. Inside segments we allocated fixed size _pages_ that
 // contain blocks.
 typedef struct mi_segment_s {
-  struct mi_segment_s* next;
-  struct mi_segment_s* prev;
-  volatile struct mi_segment_s* abandoned_next;
-  size_t          abandoned;   // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
-  size_t          used;        // count of pages in use
-  size_t          segment_size;// for huge pages this may be different from `MI_SEGMENT_SIZE`
+  struct mi_segment_s*          next;            // the list of freed segments in the cache
+  volatile struct mi_segment_s* abandoned_next;  // the list of abandoned segments
+  size_t          abandoned;          // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
+  size_t          used;               // count of pages in use
+  size_t          segment_size;       // for huge pages this may be different from `MI_SEGMENT_SIZE`
   size_t          segment_info_size;  // space we are using from the first page for segment meta-data and possible guard pages.
-  uintptr_t       cookie;      // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
-  size_t          memid;       // id for the os-level memory manager
+  uintptr_t       cookie;             // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
+  size_t          memid;              // id for the os-level memory manager
   bool            all_committed;
 
   // layout like this to optimize access in `mi_free`
