@@ -915,6 +915,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
   if (segment == NULL || page==NULL) return NULL;
   mi_assert_internal(segment->used==1);
   mi_assert_internal(page->block_size >= size);
+  segment->thread_id = 0; // huge segments are immediately abandoned
   return page;
 }
 
