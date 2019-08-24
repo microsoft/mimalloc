@@ -184,6 +184,18 @@ static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 
 #ifdef _WIN32
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
+#if (MI_INTPTR_SIZE >= 8) 
+    // on 64-bit systems, use the virtual address area after 4TiB for 4MiB aligned allocations
+  static volatile intptr_t aligned_base = ((intptr_t)4 << 40); // starting at 4TiB
+  if (addr == NULL && try_alignment > 0 &&
+      try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE) == 0) 
+  {
+    intptr_t hint = mi_atomic_add(&aligned_base, size) - size;
+    if (hint%try_alignment == 0) {
+      return VirtualAlloc((void*)hint, size, flags, PAGE_READWRITE);
+    }
+  }
+#endif
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   if (try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
     // on modern Windows try use VirtualAlloc2 for aligned allocation
