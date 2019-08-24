@@ -21,7 +21,7 @@ const mi_page_t _mi_page_empty = {
   0,       // used
   NULL, 0, 0,
   0, NULL, NULL, NULL
-  #if (MI_INTPTR_SIZE==8 && MI_SECURE>0) || (MI_INTPTR_SIZE==4 && MI_SECURE==0)
+  #if (MI_SECURE==0)
   , { NULL } // padding
   #endif
 };
@@ -68,6 +68,18 @@ const mi_page_t _mi_page_empty = {
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 
+
+// Empty slice span queues for every bin
+#define SQNULL(sz)  { NULL, NULL, sz }
+#define MI_SEGMENT_SPAN_QUEUES_EMPTY \
+  { SQNULL(1), \
+    SQNULL(     1), SQNULL(     2), SQNULL(     3), SQNULL(     4), SQNULL(     5), SQNULL(     6), SQNULL(     7), SQNULL(    10), /*  8 */ \
+    SQNULL(    12), SQNULL(    14), SQNULL(    16), SQNULL(    20), SQNULL(    24), SQNULL(    28), SQNULL(    32), SQNULL(    40), /* 16 */ \
+    SQNULL(    48), SQNULL(    56), SQNULL(    64), SQNULL(    80), SQNULL(    96), SQNULL(   112), SQNULL(   128), SQNULL(   160), /* 24 */ \
+    SQNULL(   192), SQNULL(   224), SQNULL(   256), SQNULL(   320), SQNULL(   384), SQNULL(   448), SQNULL(   512), SQNULL(   640), /* 32 */ \
+    SQNULL(   768), SQNULL(   896), SQNULL(  1024) /* 35 */ }
+
+
 // --------------------------------------------------------
 // Statically allocate an empty heap as the initial
 // thread local value for the default heap,
@@ -89,25 +101,26 @@ const mi_heap_t _mi_heap_empty = {
   false
 };
 
+#define tld_empty_stats  ((mi_stats_t*)((uint8_t*)&tld_empty + offsetof(mi_tld_t,stats)))
+
+static const mi_tld_t tld_empty = {
+  0,
+  NULL,
+  { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, 0, NULL, tld_empty_stats }, // segments
+  { 0, tld_empty_stats },             // os
+  { MI_STATS_NULL }                   // stats
+};
+
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 
 
-// Empty page queues for every bin
-#define SQNULL(sz)  { NULL, NULL, sz }
-#define MI_SEGMENT_PAGE_QUEUES_EMPTY \
-  { SQNULL(1), \
-    SQNULL(     1), SQNULL(     2), SQNULL(     3), SQNULL(     4), SQNULL(     5), SQNULL(     6), SQNULL(     7), SQNULL(    10), /*  8 */ \
-    SQNULL(    12), SQNULL(    14), SQNULL(    16), SQNULL(    20), SQNULL(    24), SQNULL(    28), SQNULL(    32), SQNULL(    40), /* 16 */ \
-    SQNULL(    48), SQNULL(    56), SQNULL(    64), SQNULL(    80), SQNULL(    96), SQNULL(   112), SQNULL(   128), SQNULL(   160), /* 24 */ \
-    SQNULL(   192), SQNULL(   224), SQNULL(   256), SQNULL(   320), SQNULL(   384), SQNULL(   448), SQNULL(   512), SQNULL(   640), /* 32 */ \
-    SQNULL(   768), SQNULL(   896), SQNULL(  1024) /* 35 */ }
 
 #define tld_main_stats  ((mi_stats_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,stats)))
 
 static mi_tld_t tld_main = {
   0,
   &_mi_heap_main,
-  { MI_SEGMENT_PAGE_QUEUES_EMPTY, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
+  { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
   { 0, tld_main_stats },              // os
   { MI_STATS_NULL }                   // stats
 };
@@ -223,12 +236,12 @@ static bool _mi_heap_init(void) {
     }
     mi_tld_t*  tld = &td->tld;
     mi_heap_t* heap = &td->heap;
+    memcpy(tld, &tld_empty, sizeof(*tld));
     memcpy(heap, &_mi_heap_empty, sizeof(*heap));
     heap->thread_id = _mi_thread_id();
     heap->random = _mi_random_init(heap->thread_id);
     heap->cookie = ((uintptr_t)heap ^ _mi_heap_random(heap)) | 1;
-    heap->tld = tld;
-    memset(tld, 0, sizeof(*tld));
+    heap->tld = tld;    
     tld->heap_backing = heap;
     tld->segments.stats = &tld->stats;
     tld->os.stats = &tld->stats;

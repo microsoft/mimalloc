@@ -259,7 +259,7 @@ static inline mi_slice_t* mi_page_to_slice(mi_page_t* p) {
 // Segment belonging to a page
 static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
   mi_segment_t* segment = _mi_ptr_segment(page); 
-  mi_assert_internal(segment == NULL || ((mi_slice_t*)page >= segment->slices && (mi_slice_t*)page < segment->slices + segment->slice_count));
+  mi_assert_internal(segment == NULL || ((mi_slice_t*)page >= segment->slices && (mi_slice_t*)page < segment->slices + segment->slice_entries));
   return segment;
 }
 
@@ -276,11 +276,11 @@ static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const 
   ptrdiff_t diff = (uint8_t*)p - (uint8_t*)segment;
   mi_assert_internal(diff >= 0 && diff < (ptrdiff_t)MI_SEGMENT_SIZE);
   uintptr_t idx = (uintptr_t)diff >> MI_SEGMENT_SLICE_SHIFT;
-  mi_assert_internal(idx < segment->slice_count);
+  mi_assert_internal(idx < segment->slice_entries);
   mi_slice_t* slice0 = (mi_slice_t*)&segment->slices[idx];
   mi_slice_t* slice = mi_slice_first(slice0);  // adjust to the block that holds the page data
   mi_assert_internal(slice->slice_offset == 0);
-  mi_assert_internal(slice >= segment->slices && slice < segment->slices + segment->slice_count);
+  mi_assert_internal(slice >= segment->slices && slice < segment->slices + segment->slice_entries);
   return mi_slice_to_page(slice);
 }
 

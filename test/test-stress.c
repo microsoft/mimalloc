@@ -63,7 +63,11 @@ static bool chance(size_t perc, random_t r) {
 }
 
 static void* alloc_items(size_t items, random_t r) {
-  if (chance(1, r)) items *= 100; // 1% huge objects;
+  if (chance(1, r)) {
+    if (chance(1,r)) items *= 1000;       // 0.01% giant
+    else if (chance(10,r)) items *= 100;  // 0.1% huge
+                      else items *= 10;   // 1% large objects;
+  }
   if (items==40) items++;              // pthreads uses that size for stack increases
   uintptr_t* p = (uintptr_t*)mi_malloc(items*sizeof(uintptr_t));
   for (uintptr_t i = 0; i < items; i++) p[i] = (items - i) ^ cookie;

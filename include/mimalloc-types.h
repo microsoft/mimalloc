@@ -78,7 +78,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SEGMENT_SHIFT                  (10 + MI_SEGMENT_SLICE_SHIFT)  // 64mb
 
 #define MI_SMALL_PAGE_SHIFT               (MI_SEGMENT_SLICE_SHIFT)       // 64kb
-#define MI_MEDIUM_PAGE_SHIFT              ( 2 + MI_SEGMENT_SLICE_SHIFT)  // 512kb
+#define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SMALL_PAGE_SHIFT)     // 512kb
 
 
 // Derived constants
@@ -108,6 +108,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #if (MI_MEDIUM_OBJ_WSIZE_MAX >= 655360)
 #error "define more bins"
 #endif
+
+// Maximum slice offset (7)
+#define MI_MAX_SLICE_OFFSET               ((MI_MEDIUM_PAGE_SIZE / MI_SEGMENT_SLICE_SIZE) - 1)
 
 typedef uintptr_t mi_encoded_t;
 
@@ -206,6 +209,12 @@ typedef enum mi_segment_kind_e {
   MI_SEGMENT_HUGE,   // > MI_LARGE_SIZE_MAX segment with just one huge page inside.
 } mi_segment_kind_t;
 
+#define MI_COMMIT_SIZE      ((size_t)2 << 20)   // OS large page size
+
+#if ((MI_SEGMENT_SIZE / MI_COMMIT_SIZE) > MI_INTPTR_SIZE)
+#error "not enough commit bits to cover the segment size"
+#endif
+
 typedef mi_page_t mi_slice_t;
 
 // Segments are large allocated memory blocks (2mb on 64 bit) from
@@ -214,18 +223,21 @@ typedef mi_page_t mi_slice_t;
 typedef struct mi_segment_s {
   struct mi_segment_s*          next;            // the list of freed segments in the cache
   volatile struct mi_segment_s* abandoned_next;  // the list of abandoned segments
-  size_t          abandoned;          // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
-  size_t          used;               // count of pages in use
-  size_t          segment_size;       // for huge pages this may be different from `MI_SEGMENT_SIZE`
-  size_t          segment_info_size;  // space we are using from the first page for segment meta-data and possible guard pages.
-  uintptr_t       cookie;             // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
-  size_t          memid;              // id for the os-level memory manager
-  bool            all_committed;
+
+  size_t            abandoned;          // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
+  size_t            used;               // count of pages in use
+  uintptr_t         cookie;               // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`  
+
+  size_t            segment_slices;       // for huge segments this may be different from `MI_SLICES_PER_SEGMENT`
+  size_t            segment_info_slices;  // initial slices we are using segment info and possible guard pages.
+
+  bool              allow_decommit;
+  uintptr_t         commit_mask;
 
   // layout like this to optimize access in `mi_free`
   mi_segment_kind_t kind;
   uintptr_t         thread_id;
-  size_t            slice_count; // slices in this segment (at most MI_SLICES_PER_SEGMENT)
+  size_t            slice_entries;       // entries in the `slices` array, at most `MI_SLICES_PER_SEGMENT`
   mi_slice_t        slices[MI_SLICES_PER_SEGMENT];
 } mi_segment_t;
 
@@ -371,17 +383,19 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 // Thread Local data
 // ------------------------------------------------------
 
-// Queue of segments
-typedef struct mi_segment_queue_s {
-  mi_segment_t* first;
-  mi_segment_t* last;
-} mi_segment_queue_t;
+// A "span" is is an available range of slices. The span queues keep
+// track of slice spans of at most the given `slice_count` (but more than the previous size class).
+typedef struct mi_span_queue_s {
+  mi_slice_t* first;
+  mi_slice_t* last;
+  size_t      slice_count;
+} mi_span_queue_t;
 
 #define MI_SEGMENT_BIN_MAX (35)     // 35 == mi_segment_bin(MI_SLICES_PER_SEGMENT)
 
 // Segments thread local data
 typedef struct mi_segments_tld_s {
-  mi_page_queue_t     pages[MI_SEGMENT_BIN_MAX+1];  // free pages inside segments
+  mi_span_queue_t     spans[MI_SEGMENT_BIN_MAX+1];  // free slice spans inside segments
   size_t              count;        // current number of segments;
   size_t              peak_count;   // peak number of segments
   size_t              current_size; // current size of all segments
