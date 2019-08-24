@@ -84,7 +84,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Derived constants
 #define MI_SEGMENT_SIZE                   ((size_t)1<<MI_SEGMENT_SHIFT)
 #define MI_SEGMENT_MASK                   (MI_SEGMENT_SIZE - 1)
-#define MI_SEGMENT_SLICE_SIZE             ((size_t)1 << MI_SEGMENT_SLICE_SHIFT)
+#define MI_SEGMENT_SLICE_SIZE             ((size_t)1<< MI_SEGMENT_SLICE_SHIFT)
 #define MI_SLICES_PER_SEGMENT             (MI_SEGMENT_SIZE / MI_SEGMENT_SLICE_SIZE) // 1024
 
 #define MI_SMALL_PAGE_SIZE                (1<<MI_SMALL_PAGE_SHIFT)
@@ -209,9 +209,9 @@ typedef enum mi_segment_kind_e {
   MI_SEGMENT_HUGE,   // > MI_LARGE_SIZE_MAX segment with just one huge page inside.
 } mi_segment_kind_t;
 
-#define MI_COMMIT_SIZE      ((size_t)2 << 20)   // OS large page size
+#define MI_COMMIT_SIZE      (2UL<<20)   // OS large page size
 
-#if ((MI_SEGMENT_SIZE / MI_COMMIT_SIZE) > MI_INTPTR_SIZE)
+#if ((1 << MI_SEGMENT_SHIFT)/MI_COMMIT_SIZE > 8*MI_INTPTR_SIZE)
 #error "not enough commit bits to cover the segment size"
 #endif
 

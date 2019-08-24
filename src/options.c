@@ -55,12 +55,12 @@ static mi_option_desc_t options[_mi_option_last] =
   #endif
 
   // the following options are experimental and not all combinations make sense.
-  { 1, UNINIT, MI_OPTION(eager_commit) },        // note: if eager_region_commit is on, this should be on too.
   #ifdef _WIN32   // and BSD?
-  { 1, UNINIT, MI_OPTION(eager_region_commit) }, // don't commit too eagerly on windows (just for looks...)
+  { 1, UNINIT, MI_OPTION(lazy_commit) },
   #else
-  { 1, UNINIT, MI_OPTION(eager_region_commit) },
+  { 0, UNINIT, MI_OPTION(lazy_commit) },
   #endif
+  { 0, UNINIT, MI_OPTION(decommit) },
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },
   { 0, UNINIT, MI_OPTION(page_reset) },

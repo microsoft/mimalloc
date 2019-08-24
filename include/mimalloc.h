@@ -225,9 +225,9 @@ typedef enum mi_option_e {
   mi_option_verbose,
   // the following options are experimental
   mi_option_secure,
-  mi_option_eager_commit,
-  mi_option_eager_region_commit,
-  mi_option_large_os_pages,         // implies eager commit
+  mi_option_lazy_commit,
+  mi_option_decommit,
+  mi_option_large_os_pages,         
   mi_option_reserve_huge_os_pages,
   mi_option_page_reset,
   mi_option_cache_reset,

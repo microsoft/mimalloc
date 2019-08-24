@@ -44,10 +44,6 @@ static void* mi_align_up_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
 }
 
-static uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
-  return (sz / alignment) * alignment;
-}
-
 static void* mi_align_down_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_down((uintptr_t)p, alignment);
 }
@@ -195,10 +191,14 @@ static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 }
 
 #ifdef _WIN32
+ 
+#define MEM_COMMIT_RESERVE  (MEM_COMMIT|MEM_RESERVE)
+
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
-  if ((size % (uintptr_t)1 << 30) == 0 /* 1GiB multiple */
+  if ((flags&MEM_COMMIT_RESERVE)==MEM_COMMIT_RESERVE 
+    && (size % (uintptr_t)1 << 30) == 0 /* 1GiB multiple */
     && (flags & MEM_LARGE_PAGES) != 0 && (flags & MEM_COMMIT) != 0 
     && (addr != NULL || try_alignment == 0 || try_alignment % _mi_os_page_size() == 0)
     && pNtAllocateVirtualMemoryEx != NULL)
@@ -250,7 +250,9 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
 static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DWORD flags, bool large_only) {
   static volatile uintptr_t large_page_try_ok = 0;
   void* p = NULL;
-  if (large_only || use_large_os_page(size, try_alignment)) {
+  if ((flags&MEM_COMMIT_RESERVE) == MEM_COMMIT_RESERVE 
+     && (large_only || use_large_os_page(size, try_alignment))) 
+  {
     uintptr_t try_ok = mi_atomic_read(&large_page_try_ok);
     if (!large_only && try_ok > 0) {
       // if a large page allocation fails, it seems the calls to VirtualAlloc get very expensive.

@@ -39,18 +39,13 @@ static const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment) {
   return &segment->slices[segment->slice_entries];
 }
 
-/*
+
 static uint8_t* mi_slice_start(const mi_slice_t* slice) {
   mi_segment_t* segment = _mi_ptr_segment(slice);
   mi_assert_internal(slice >= segment->slices && slice < mi_segment_slices_end(segment));
   return ((uint8_t*)segment + ((slice - segment->slices)*MI_SEGMENT_SLICE_SIZE));
 }
 
-
-static size_t mi_slices_in(size_t size) {
-  return (size + MI_SEGMENT_SLICE_SIZE - 1)/MI_SEGMENT_SLICE_SIZE;
-}
-*/
 
 /* -----------------------------------------------------------
    Bins
@@ -359,6 +354,68 @@ void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
    Span management
 ----------------------------------------------------------- */
 
+static uintptr_t mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uint8_t* p, size_t size, uint8_t** start_p, size_t* full_size) {
+  mi_assert_internal(_mi_ptr_segment(p) == segment);
+  if (size == 0 || size > MI_SEGMENT_SIZE) return 0;
+  if (p >= (uint8_t*)segment + mi_segment_size(segment)) return 0;
+
+  uintptr_t diff = (p - (uint8_t*)segment);
+  uintptr_t start;
+  uintptr_t end;
+  if (conservative) {
+    start = _mi_align_up(diff, MI_COMMIT_SIZE);
+    end   = _mi_align_down(diff + size, MI_COMMIT_SIZE);
+  }
+  else {
+    start = _mi_align_down(diff, MI_COMMIT_SIZE);
+    end   = _mi_align_up(diff + size, MI_COMMIT_SIZE);
+  }
+  mi_assert_internal(start % MI_COMMIT_SIZE==0 && end % MI_COMMIT_SIZE == 0);
+  *start_p   = (uint8_t*)segment + start;
+  *full_size = (end > start ? end - start : 0);
+
+  uintptr_t bitidx = start / MI_COMMIT_SIZE;
+  mi_assert_internal(bitidx < (MI_INTPTR_SIZE*8));
+  
+  uintptr_t bitcount = *full_size / MI_COMMIT_SIZE; // can be 0
+  if (bitidx + bitcount > MI_INTPTR_SIZE*8) {
+    _mi_warning_message("%zu %zu %zu %zu 0x%p %zu\n", bitidx, bitcount, start, end, p, size);
+  }
+  mi_assert_internal((bitidx + bitcount) <= (MI_INTPTR_SIZE*8));
+
+  uintptr_t mask = (((uintptr_t)1 << bitcount) - 1) << bitidx;
+
+  return mask;
+}
+
+static void mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, size_t size, mi_stats_t* stats) {    
+  // commit liberal, but decommit conservative
+  uint8_t* start;
+  size_t   full_size;
+  uintptr_t mask = mi_segment_commit_mask(segment,!commit/*conservative*/,p,size,&start,&full_size);
+  if (mask==0 || full_size==0) return;
+
+  if (commit && (segment->commit_mask & mask) != mask) {
+    _mi_os_commit(start,full_size,stats);
+    segment->commit_mask |= mask; 
+  }
+  else if (!commit && (segment->commit_mask & mask) != 0) {
+    _mi_os_decommit(start, full_size,stats);
+    segment->commit_mask &= ~mask;
+  }
+}
+
+static void mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
+  if (~segment->commit_mask == 0) return; // fully committed
+  mi_segment_commitx(segment,true,p,size,stats);
+}
+
+static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
+  if (!segment->allow_decommit || !mi_option_is_enabled(mi_option_decommit)) return;
+  if (segment->commit_mask == 1) return; // fully decommitted
+  mi_segment_commitx(segment, false, p, size, stats);
+}
+
 static void mi_segment_span_free(mi_segment_t* segment, size_t slice_index, size_t slice_count, mi_segments_tld_t* tld) {
   mi_assert_internal(slice_index < segment->slice_entries);
   mi_span_queue_t* sq = (segment->kind == MI_SEGMENT_HUGE ? NULL : mi_span_queue_for(slice_count,tld));
@@ -376,6 +433,10 @@ static void mi_segment_span_free(mi_segment_t* segment, size_t slice_index, size
     last->slice_offset = (uint32_t)(sizeof(mi_page_t)*(slice_count - 1));
     last->block_size = 0;
   }
+
+  // perhaps decommit
+  mi_segment_perhaps_decommit(segment,mi_slice_start(slice),slice_count*MI_SEGMENT_SLICE_SIZE,tld->stats);
+
   // and push it on the free page queue (if it was not a huge page)
   if (sq != NULL) mi_span_queue_push( sq, slice );
              else slice->block_size = 0; // mark huge page as free anyways
@@ -452,7 +513,7 @@ static void mi_segment_slice_split(mi_segment_t* segment, mi_slice_t* slice, siz
 }
 
 
-static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_index, size_t slice_count) {
+static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_index, size_t slice_count, mi_segments_tld_t* tld) {
   mi_assert_internal(slice_index < segment->slice_entries);
   mi_slice_t* slice = &segment->slices[slice_index];
   mi_assert_internal(slice->block_size==0 || slice->block_size==1);
@@ -481,6 +542,8 @@ static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_i
     last->block_size = 1;
   }
 
+  // ensure the memory is committed
+  mi_segment_ensure_committed(segment, _mi_page_start(segment,page,NULL), slice_count * MI_SEGMENT_SLICE_SIZE, tld->stats);
   segment->used++;
   return page;
 }
@@ -500,7 +563,7 @@ static mi_page_t* mi_segments_page_find_and_allocate(size_t slice_count, mi_segm
           mi_segment_slice_split(segment, slice, slice_count, tld);
         }
         mi_assert_internal(slice != NULL && slice->slice_count == slice_count && slice->block_size > 0);
-        return mi_segment_span_allocate(segment, mi_slice_index(slice), slice->slice_count);
+        return mi_segment_span_allocate(segment, mi_slice_index(slice), slice->slice_count, tld);
       }
     }
     sq++;
@@ -524,49 +587,58 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
   size_t slice_entries = (segment_slices > MI_SLICES_PER_SEGMENT ? MI_SLICES_PER_SEGMENT : segment_slices);
   size_t segment_size = segment_slices * MI_SEGMENT_SLICE_SIZE;
 
-  // Try to get it from our thread local cache first
-  bool commit = mi_option_is_enabled(mi_option_eager_commit) || mi_option_is_enabled(mi_option_eager_region_commit)
-                || required > 0; // huge page
+  // Commit eagerly only if not the first N lazy segments (to reduce impact of many threads that allocate just a little)
+  size_t lazy = (size_t)mi_option_get(mi_option_lazy_commit);
+  bool commit_lazy = (lazy > tld->count) && required == 0; // lazy, and not a huge page
+
+  // Try to get from our cache first
   mi_segment_t* segment = mi_segment_cache_pop(segment_slices, tld);
   if (segment==NULL) {
     // Allocate the segment from the OS
-    segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, commit, /* &memid,*/ os_tld);
+    segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, !commit_lazy, /* &memid,*/ os_tld);
     if (segment == NULL) return NULL;  // failed to allocate
-    if (!commit) {
-      _mi_os_commit(segment, info_slices*MI_SEGMENT_SLICE_SIZE, tld->stats);
+    mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
+    if (commit_lazy) {
+      // at least commit the info slices
+      mi_assert_internal(MI_COMMIT_SIZE > info_slices*MI_SEGMENT_SLICE_SIZE);
+      _mi_os_commit(segment, MI_COMMIT_SIZE, tld->stats);
     }
     mi_segments_track_size((long)(segment_size), tld);
     mi_segment_map_allocated_at(segment);
   }
-  mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
 
   // zero the segment info? -- not needed as it is zero initialized from the OS 
   // memset(segment, 0, info_size);  
 
-  if (mi_option_is_enabled(mi_option_secure)) {
-    // in secure mode, we set up a protected page in between the segment info
-    // and the page data
-    size_t os_page_size = _mi_os_page_size();
-    size_t info_size = (info_slices * MI_SEGMENT_SLICE_SIZE);
-    mi_assert_internal(info_size - os_page_size >= pre_size);
-    _mi_os_protect((uint8_t*)segment + info_size - os_page_size, os_page_size);
-    // and protect the last page too
-    _mi_os_protect((uint8_t*)segment + segment_size - os_page_size, os_page_size);
-    if (slice_entries == segment_slices) slice_entries--; // don't use the last slice :-(
-  }
-
+  
   // initialize segment info
+  memset(segment,0,offsetof(mi_segment_t,slices));  
   segment->segment_slices = segment_slices;
   segment->segment_info_slices = info_slices;
   segment->thread_id = _mi_thread_id();
   segment->cookie = _mi_ptr_cookie(segment);
   segment->slice_entries = slice_entries;
-  
   segment->kind = (required == 0 ? MI_SEGMENT_NORMAL : MI_SEGMENT_HUGE);
+  segment->allow_decommit = commit_lazy;
+  segment->commit_mask = (commit_lazy ? 0x01 : ~((uintptr_t)0)); // on lazy commit, the initial part is always committed
+  memset(segment->slices, 0, sizeof(mi_slice_t)*(info_slices+1));
   _mi_stat_increase(&tld->stats->page_committed, mi_segment_info_size(segment));
 
+  // set up guard pages
+  if (mi_option_is_enabled(mi_option_secure)) {
+    // in secure mode, we set up a protected page in between the segment info
+    // and the page data
+    size_t os_page_size = _mi_os_page_size();    
+    mi_assert_internal(mi_segment_info_size(segment) - os_page_size >= pre_size);
+    _mi_os_protect((uint8_t*)segment + mi_segment_info_size(segment) - os_page_size, os_page_size);
+    uint8_t* end = (uint8_t*)segment + mi_segment_size(segment) - os_page_size;
+    mi_segment_ensure_committed(segment, end, os_page_size, tld->stats);
+    _mi_os_protect(end, os_page_size);
+    if (slice_entries == segment_slices) segment->slice_entries--; // don't use the last slice :-(
+  }
+
   // reserve first slices for segment info
-  mi_segment_span_allocate(segment,0,info_slices);
+  mi_segment_span_allocate(segment, 0, info_slices, tld);
   mi_assert_internal(segment->used == 1);
   segment->used = 0; // don't count our internal slices towards usage
   
@@ -577,7 +649,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
   }
   else {
     mi_assert_internal(huge_page!=NULL);
-    *huge_page = mi_segment_span_allocate(segment, info_slices, segment_slices - info_slices);
+    *huge_page = mi_segment_span_allocate(segment, info_slices, segment_slices - info_slices, tld);
   }
 
   return segment;
@@ -886,7 +958,7 @@ mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_
 #if (MI_INTPTR_SIZE==8)
 #define MI_MAX_ADDRESS    ((size_t)20 << 40)  // 20TB
 #else
-#define MI_MAX_ADDRESS    ((size_t)1 << 31)   // 2Gb
+#define MI_MAX_ADDRESS    ((size_t)2 << 30)   // 2Gb
 #endif
 
 #define MI_SEGMENT_MAP_BITS  (MI_MAX_ADDRESS / MI_SEGMENT_SIZE)

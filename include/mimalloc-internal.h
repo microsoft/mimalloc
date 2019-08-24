@@ -191,6 +191,11 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   }
 }
 
+static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
+  return (sz / alignment) * alignment;
+}
+
+
 // Align a byte size to a size in _machine words_,
 // i.e. byte size == `wsize*sizeof(void*)`.
 static inline size_t _mi_wsize_from_size(size_t size) {
