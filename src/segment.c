@@ -134,7 +134,7 @@ static bool mi_segment_is_valid(mi_segment_t* segment) {
     if (!segment->pages[i].segment_in_use) nfree++;
   }
   mi_assert_internal(nfree + segment->used == segment->capacity);
-  mi_assert_internal(segment->thread_id == _mi_thread_id()); // or 0
+  mi_assert_internal(segment->thread_id == _mi_thread_id() || (segment->thread_id==0)); // or 0
   mi_assert_internal(segment->page_kind == MI_PAGE_HUGE ||
                      (mi_segment_pagesize(segment) * segment->capacity == segment->segment_size));
   return true;
@@ -700,6 +700,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
   if (segment == NULL) return NULL;
   mi_assert_internal(segment->segment_size - segment->segment_info_size >= size);
   segment->used = 1;
+  segment->thread_id = 0; // huge pages are immediately abandoned
   mi_page_t* page = &segment->pages[0];
   page->segment_in_use = true;
   return page;
@@ -721,7 +722,7 @@ mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_
   else if (block_size <= MI_MEDIUM_OBJ_SIZE_MAX || mi_is_good_fit(block_size, MI_MEDIUM_PAGE_SIZE)) {
     page = mi_segment_medium_page_alloc(tld, os_tld);
   }
-  else if (block_size < MI_LARGE_OBJ_SIZE_MAX || mi_is_good_fit(block_size, MI_LARGE_PAGE_SIZE - sizeof(mi_segment_t))) {
+  else if (block_size <= MI_LARGE_OBJ_SIZE_MAX) {
     page = mi_segment_large_page_alloc(tld, os_tld);
   }
   else {
