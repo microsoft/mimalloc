@@ -217,10 +217,23 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     }
     else {
       // else fall back to regular large OS pages
-      _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) page instead (error %lx)\n", err);
+      _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (error %lx)\n", err);
     }
   }
-  
+#endif
+#if (MI_INTPTR_SIZE >= 8) 
+  // on 64-bit systems, use the virtual address area after 4TiB for 4MiB aligned allocations
+  static volatile intptr_t aligned_base = ((intptr_t)4 << 40); // starting at 4TiB
+  if (addr == NULL && try_alignment > 0 && 
+      try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE) == 0) 
+  {
+	  intptr_t hint = mi_atomic_add(&aligned_base, size) - size;
+	  if (hint%try_alignment == 0) {
+		  return VirtualAlloc((void*)hint, size, flags, PAGE_READWRITE);      
+	  }
+  }
+#endif
+#if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)  
   // on modern Windows try use VirtualAlloc2 for aligned allocation
   if (try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
     MEM_ADDRESS_REQUIREMENTS reqs = { 0 };
@@ -539,7 +552,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   // page align in the range, commit liberally, decommit conservative
   size_t csize;
   void* start = mi_os_page_align_areax(conservative, addr, size, &csize);
-  if (csize == 0) return true;
+  if (csize == 0 || mi_os_is_huge_reserved(addr)) return true;
   int err = 0;
   if (commit) {
     _mi_stat_increase(&stats->committed, csize);
@@ -591,7 +604,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   // page align conservatively within the range
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
-  if (csize == 0) return true;
+  if (csize == 0 || mi_os_is_huge_reserved(addr)) return true;
   if (reset) _mi_stat_increase(&stats->reset, csize);
         else _mi_stat_decrease(&stats->reset, csize);
   if (!reset) return true; // nothing to do on unreset!
@@ -659,7 +672,9 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   size_t csize = 0;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return false;
-
+  if (mi_os_is_huge_reserved(addr)) {
+	_mi_warning_message("cannot mprotect memory allocated in huge OS pages\n");
+  }
   int err = 0;
 #ifdef _WIN32
   DWORD oldprotect = 0;
@@ -779,7 +794,7 @@ int mi_reserve_huge_os_pages( size_t pages, double max_secs ) mi_attr_noexcept
   // Allocate one page at the time but try to place them contiguously
   // We allocate one page at the time to be able to abort if it takes too long
   double start_t = _mi_clock_start();
-  uint8_t* start = (uint8_t*)((uintptr_t)8 << 40); // 8TiB virtual start address
+  uint8_t* start = (uint8_t*)((uintptr_t)16 << 40); // 16TiB virtual start address
   uint8_t* addr = start;  // current top of the allocations
   for (size_t page = 0; page < pages; page++, addr += MI_HUGE_OS_PAGE_SIZE ) {
     // allocate lorgu pages

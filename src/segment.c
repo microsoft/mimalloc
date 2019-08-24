@@ -594,7 +594,6 @@ static mi_page_t* mi_segment_page_alloc(mi_page_kind_t page_kind, size_t require
   // initialize the page and return
   mi_assert_internal(segment->thread_id == _mi_thread_id());
   segment->used++;
-  mi_page_init_flags(page, segment->thread_id);
   return page;
 }
 
@@ -729,21 +728,23 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   }
 
   // add it to the abandoned list
-  segment->thread_id = 0;
-  do {
-    segment->abandoned_next = (mi_segment_t*)abandoned;
-  } while (!mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, segment, segment->abandoned_next));
-  mi_atomic_increment(&abandoned_count);
-  _mi_stat_increase(&tld->stats->segments_abandoned,1);
+  _mi_stat_increase(&tld->stats->segments_abandoned, 1);
   mi_segments_track_size(-((long)segment->segment_size), tld);
+
+  segment->thread_id = 0;
+  mi_segment_t* next;
+  do {
+    next = (mi_segment_t*)abandoned;
+    mi_atomic_write_ptr((volatile void**)&segment->abandoned_next, next);
+  } while (!mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, segment, next));
+  mi_atomic_increment(&abandoned_count);
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
-  mi_assert(page != NULL && mi_page_thread_id(page) != 0);
+  mi_assert(page != NULL);
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
-  segment->abandoned++;
-  mi_page_set_thread_id(page, 0);
+  segment->abandoned++;  
   _mi_stat_increase(&tld->stats->pages_abandoned, 1);
   mi_assert_internal(segment->abandoned <= segment->used);
   if (segment->used == segment->abandoned) {
@@ -769,7 +770,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
     mi_segment_t* segment;
     do {
       segment = (mi_segment_t*)abandoned;
-    } while(segment != NULL && !mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, segment->abandoned_next, segment));
+    } while(segment != NULL && !mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, (mi_segment_t*)segment->abandoned_next, segment));
     if (segment==NULL) break; // stop early if no more segments available
 
     // got it.
@@ -811,7 +812,6 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
         }
         else {
           // otherwise reclaim it
-          mi_page_set_thread_id(page,segment->thread_id);
           _mi_page_reclaim(heap,page);
         }
       }
@@ -832,7 +832,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
 
 
 /* -----------------------------------------------------------
-   Small page allocation
+   Huge page allocation
 ----------------------------------------------------------- */
 
 static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
@@ -841,6 +841,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
   if (segment == NULL) return NULL;
   mi_assert_internal(segment->segment_size - segment->segment_info_size >= size);
   segment->used = 1;
+
   mi_page_t* page = mi_slice_to_page(&segment->slices[0]);
   mi_assert_internal(page->block_size > 0 && page->slice_count > 0);
   size_t initial_count = page->slice_count;
@@ -857,7 +858,6 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
     slice->block_size = 1;
     slice->slice_count = 0;
   }
-  mi_page_init_flags(page,segment->thread_id);
   return page;
 }
 

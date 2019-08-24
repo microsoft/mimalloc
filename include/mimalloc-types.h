@@ -125,12 +125,15 @@ typedef enum mi_delayed_e {
 } mi_delayed_t;
 
 
-// Use the bottom 2 bits for the `in_full` and `has_aligned` flags
-// and the rest for the threadid (we assume tid's never use those lower 2 bits).
-// This allows a single test in `mi_free` to check for unlikely cases
-// (namely, non-local free, aligned free, or freeing in a full page)
-#define MI_PAGE_FLAGS_MASK  ((uintptr_t)0x03)
-typedef uintptr_t mi_page_flags_t;
+// The `in_full` and `has_aligned` page flags are put in a union to efficiently 
+// test if both are false (`value == 0`) in the `mi_free` routine.
+typedef union mi_page_flags_u {
+  uint16_t value;
+  struct {
+    bool in_full;
+    bool has_aligned;
+  };
+} mi_page_flags_t;
 
 // Thread free list.
 // We use the bottom 2 bits of the pointer for mi_delayed_t flags
@@ -164,12 +167,12 @@ typedef struct mi_page_s {
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed
   uint16_t              reserved;          // number of blocks reserved in memory
+  mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (16 bits)
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   #if MI_SECURE
   uintptr_t             cookie;            // random cookie to encode the free lists
   #endif
-  mi_page_flags_t       flags;
   size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
 
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
@@ -182,12 +185,11 @@ typedef struct mi_page_s {
   struct mi_page_s*     next;              // next page owned by this thread with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by this thread with the same `block_size`
 
-// improve page index calculation
-#if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
-  // void*                 padding[1];        // 12 words on 64-bit
-#elif MI_INTPTR_SIZE==4
-  // void*                 padding[1];         // 12 words on 32-bit
-#endif
+  // improve page index calculation
+  // without padding: 10 words on 64-bit, 11 on 32-bit. Secure adds one word
+  #if (MI_INTPTR_SIZE==8 && MI_SECURE>0) || (MI_INTPTR_SIZE==4 && MI_SECURE==0)
+  void*                 padding[1];        // 12 words on 64-bit in secure mode, 12 words on 32-bit plain
+  #endif
 } mi_page_t;
 
 
@@ -212,7 +214,7 @@ typedef mi_page_t mi_slice_t;
 typedef struct mi_segment_s {
   struct mi_segment_s* next;
   struct mi_segment_s* prev;
-  struct mi_segment_s* abandoned_next;  // abandoned segment stack: `used == abandoned`
+  volatile struct mi_segment_s* abandoned_next;
   size_t          abandoned;   // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
   size_t          used;        // count of pages in use
   size_t          segment_size;// for huge pages this may be different from `MI_SEGMENT_SIZE`
