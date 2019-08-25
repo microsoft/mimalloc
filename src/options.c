@@ -18,6 +18,9 @@ int mi_version(void) mi_attr_noexcept {
 
 // --------------------------------------------------------
 // Options
+// These can be accessed by multiple threads and may be 
+// concurrently initialized, but an initializing data race
+// is ok since they resolve to the same value.
 // --------------------------------------------------------
 typedef enum mi_init_e {
   UNINIT,       // not yet initialized
@@ -180,7 +183,6 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
 }
 
 static void mi_option_init(mi_option_desc_t* desc) {
-  desc->init = DEFAULTED;
   // Read option value from the environment
   char buf[32];
   mi_strlcpy(buf, "mimalloc_", sizeof(buf));
@@ -218,7 +220,12 @@ static void mi_option_init(mi_option_desc_t* desc) {
       }
       else {
         _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
+        desc->init = DEFAULTED;
       }
     }
   }
+  else {
+    desc->init = DEFAULTED;
+  }
+  mi_assert_internal(desc->init != UNINIT);
 }
