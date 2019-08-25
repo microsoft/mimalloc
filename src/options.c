@@ -24,6 +24,9 @@ int mi_version(void) mi_attr_noexcept {
 
 // --------------------------------------------------------
 // Options
+// These can be accessed by multiple threads and may be 
+// concurrently initialized, but an initializing data race
+// is ok since they resolve to the same value.
 // --------------------------------------------------------
 typedef enum mi_init_e {
   UNINIT,       // not yet initialized
@@ -226,27 +229,18 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
 // On Windows use GetEnvironmentVariable instead of getenv to work
 // reliably even when this is invoked before the C runtime is initialized.
 // i.e. when `_mi_preloading() == true`.
+// Note: on windows, environment names are not case sensitive.
 #include <windows.h>
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
   result[0] = 0;
-  bool ok = (GetEnvironmentVariableA(name, result, (DWORD)result_size) > 0);
-  if (!ok) {
-    char buf[64+1];
-    size_t len = strlen(name);
-    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
-    for (size_t i = 0; i < len; i++) {
-      buf[i] = toupper(name[i]);
-    }
-    buf[len] = 0;
-    ok = (GetEnvironmentVariableA(name, result, (DWORD)result_size) > 0);
-  }
-  return ok;
+  size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
+  return (len > 0 && len < result_size);
 }
 #else
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
-  #pragma warning(suppress:4996)
   const char* s = getenv(name);
   if (s == NULL) {
+    // in unix environments we check the upper case name too.
     char buf[64+1];
     size_t len = strlen(name);
     if (len >= sizeof(buf)) len = sizeof(buf) - 1;
@@ -254,7 +248,6 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
       buf[i] = toupper(name[i]);
     }
     buf[len] = 0;
-    #pragma warning(suppress:4996)
     s = getenv(buf);
   }
   if (s != NULL && strlen(s) < result_size) {
@@ -266,8 +259,7 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
   }
 }
 #endif
-static void mi_option_init(mi_option_desc_t* desc) {
-  desc->init = DEFAULTED;
+static void mi_option_init(mi_option_desc_t* desc) {  
   // Read option value from the environment
   char buf[64+1];
   mi_strlcpy(buf, "mimalloc_", sizeof(buf));
@@ -297,7 +289,12 @@ static void mi_option_init(mi_option_desc_t* desc) {
       }
       else {
         _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
+        desc->init = DEFAULTED;
       }
     }
   }
+  else {
+    desc->init = DEFAULTED;
+  }
+  mi_assert_internal(desc->init != UNINIT);
 }
