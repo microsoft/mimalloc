@@ -396,7 +396,7 @@ void _mi_page_retire(mi_page_t* page) {
   // is the only page left with free blocks. It is not clear
   // how to check this efficiently though... for now we just check
   // if its neighbours are almost fully used.
-  if (mi_likely(page->block_size <= 32*MI_INTPTR_SIZE)) {
+  if (mi_likely(page->block_size <= (MI_SMALL_SIZE_MAX/4))) {
     if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
       _mi_stat_counter_increase(&_mi_stats_main.page_no_retire,1);
       return; // dont't retire after all
@@ -705,7 +705,11 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn) mi_attr_noexcept {
   General allocation
 ----------------------------------------------------------- */
 
-// Large and huge pages are allocated directly 
+// Large and huge page allocation.
+// Huge pages are allocated directly without being in a queue.
+// Because huge pages contain just one block, and the segment contains
+// just that page, we always treat them as abandoned and any thread
+// that frees the block can free the whole page and segment directly.
 static mi_page_t* mi_large_page_alloc(mi_heap_t* heap, size_t size) {
   size_t block_size = _mi_wsize_from_size(size) * sizeof(uintptr_t);
   mi_assert_internal(_mi_bin(block_size) == MI_BIN_HUGE); 

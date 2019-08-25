@@ -289,8 +289,6 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
 
 
 // The thread local segment cache is limited to be at most 1/8 of the peak size of segments in use,
-// and no more than 1.
-#define MI_SEGMENT_CACHE_MAX      (4)
 #define MI_SEGMENT_CACHE_FRACTION (8)
 
 // note: returned segment may be partially reset
@@ -306,15 +304,18 @@ static mi_segment_t* mi_segment_cache_pop(size_t segment_slices, mi_segments_tld
   return segment;
 }
 
-static bool mi_segment_cache_full(mi_segments_tld_t* tld) {
-  if (tld->cache_count <  MI_SEGMENT_CACHE_MAX
-      && tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))
-     ) { // always allow 1 element cache
+static bool mi_segment_cache_full(mi_segments_tld_t* tld) 
+{
+  if (tld->count == 1 && tld->cache_count==0) return false; // always cache at least the final segment of a thread
+  size_t max_cache = mi_option_get(mi_option_segment_cache);
+  if (tld->cache_count < max_cache
+       && tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION)) // at least allow a 1 element cache
+     ) { 
     return false;
   }
   // take the opportunity to reduce the segment cache if it is too large (now)
   // TODO: this never happens as we check against peak usage, should we use current usage instead?
-  while (tld->cache_count > MI_SEGMENT_CACHE_MAX ) { //(1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))) {
+  while (tld->cache_count > max_cache) { //(1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))) {
     mi_segment_t* segment = mi_segment_cache_pop(0,tld);
     mi_assert_internal(segment != NULL);
     if (segment != NULL) mi_segment_os_free(segment, tld);
@@ -922,19 +923,12 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
 /* -----------------------------------------------------------
    Page allocation and free
 ----------------------------------------------------------- */
-/*
-static bool mi_is_good_fit(size_t bsize, size_t size) {
-  // good fit if no more than 25% wasted
-  return (bsize > 0 && size > 0 && bsize < size && (size - (size % bsize)) < (size/4));
-}
-*/
-
 mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
   mi_page_t* page;
-  if (block_size <= MI_SMALL_OBJ_SIZE_MAX) {// || mi_is_good_fit(block_size,MI_SMALL_PAGE_SIZE)) {
+  if (block_size <= MI_SMALL_OBJ_SIZE_MAX) {
     page = mi_segments_page_alloc(MI_PAGE_SMALL,block_size,tld,os_tld);
   }
-  else if (block_size <= MI_MEDIUM_OBJ_SIZE_MAX) {// || mi_is_good_fit(block_size, MI_MEDIUM_PAGE_SIZE)) {
+  else if (block_size <= MI_MEDIUM_OBJ_SIZE_MAX) {
     page = mi_segments_page_alloc(MI_PAGE_MEDIUM,MI_MEDIUM_PAGE_SIZE,tld, os_tld);
   }
   else if (block_size <= MI_LARGE_OBJ_SIZE_MAX) {
