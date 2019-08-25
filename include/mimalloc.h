@@ -228,6 +228,7 @@ typedef enum mi_option_e {
   mi_option_eager_commit,
   mi_option_eager_region_commit,
   mi_option_large_os_pages,      // implies eager commit
+  mi_option_segment_cache,
   mi_option_page_reset,
   mi_option_cache_reset,
   mi_option_reset_decommits,

@@ -236,8 +236,6 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
 
 
 // The thread local segment cache is limited to be at most 1/8 of the peak size of segments in use,
-// and no more than 4.
-#define MI_SEGMENT_CACHE_MAX      (4)
 #define MI_SEGMENT_CACHE_FRACTION (8)
 
 // note: returned segment may be partially reset
@@ -253,15 +251,18 @@ static mi_segment_t* mi_segment_cache_pop(size_t segment_size, mi_segments_tld_t
   return segment;
 }
 
-static bool mi_segment_cache_full(mi_segments_tld_t* tld) {
-  if (tld->cache_count <  MI_SEGMENT_CACHE_MAX 
-      && tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))
-     ) { // always allow 1 element cache
+static bool mi_segment_cache_full(mi_segments_tld_t* tld) 
+{
+  if (tld->count == 1 && tld->cache_count==0) return false; // always cache at least the final segment of a thread
+  size_t max_cache = mi_option_get(mi_option_segment_cache);
+  if (tld->cache_count < max_cache
+       && tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION)) // at least allow a 1 element cache
+     ) { 
     return false;
   }
   // take the opportunity to reduce the segment cache if it is too large (now)
   // TODO: this never happens as we check against peak usage, should we use current usage instead?
-  while (tld->cache_count > MI_SEGMENT_CACHE_MAX ) { //(1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))) {
+  while (tld->cache_count > max_cache) { //(1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))) {
     mi_segment_t* segment = mi_segment_cache_pop(0,tld);
     mi_assert_internal(segment != NULL);
     if (segment != NULL) mi_segment_os_free(segment, segment->segment_size, tld);
