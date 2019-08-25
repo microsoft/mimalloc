@@ -353,7 +353,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
       lflags |= MAP_HUGETLB;
       #endif
       #ifdef MAP_HUGE_1GB
-      if ((size % (uintptr_t)1 << 20) == 0) {
+      if ((size % ((uintptr_t)1 << 30)) == 0) {
         lflags |= MAP_HUGE_1GB;
       }
       else
