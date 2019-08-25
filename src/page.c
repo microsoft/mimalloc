@@ -387,7 +387,7 @@ void _mi_page_retire(mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(mi_page_all_free(page));
-
+  
   mi_page_set_has_aligned(page, false);
 
   // don't retire too often..
@@ -396,13 +396,13 @@ void _mi_page_retire(mi_page_t* page) {
   // is the only page left with free blocks. It is not clear
   // how to check this efficiently though... for now we just check
   // if its neighbours are almost fully used.
-  if (mi_likely(page->block_size <= MI_SMALL_SIZE_MAX)) {
+  if (mi_likely(page->block_size <= 32*MI_INTPTR_SIZE)) {
     if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
       _mi_stat_counter_increase(&_mi_stats_main.page_no_retire,1);
       return; // dont't retire after all
     }
   }
-
+  
   _mi_page_free(page, mi_page_queue_of(page), false);
 }
 
