@@ -700,7 +700,10 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn) mi_attr_noexcept {
   General allocation
 ----------------------------------------------------------- */
 
-// A huge page is allocated directly without being in a queue
+// A huge page is allocated directly without being in a queue.
+// Because huge pages contain just one block, and the segment contains
+// just that page, we always treat them as abandoned and any thread
+// that frees the block can free the whole page and segment directly.
 static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
   size_t block_size = _mi_wsize_from_size(size) * sizeof(uintptr_t);
   mi_assert_internal(_mi_bin(block_size) == MI_BIN_HUGE);  
