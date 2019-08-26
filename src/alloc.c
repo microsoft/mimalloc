@@ -226,7 +226,7 @@ void mi_free(void* p) mi_attr_noexcept
 #endif
 
   const mi_segment_t* const segment = _mi_ptr_segment(p);
-  if (segment == NULL) return;  // checks for (p==NULL)
+  if (mi_unlikely(segment == NULL)) return;  // checks for (p==NULL)
 
 #if (MI_DEBUG>0)
   if (mi_unlikely(!mi_is_in_heap_region(p))) {
