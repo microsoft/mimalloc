@@ -369,6 +369,13 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
       if (large_only || lflags != flags) {
         // try large OS page allocation
         p = mi_unix_mmapx(addr, size, try_alignment, protect_flags, lflags, lfd);
+        #ifdef MAP_HUGE_1GB
+        if (p == NULL && (lflags & MAP_HUGE_1GB) != 0) {
+          _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (error %i)\n", errno);
+          lflags = ((lflags & ~MAP_HUGE_1GB) | MAP_HUGE_2MB);
+          p = mi_unix_mmapx(addr, size, try_alignment, protect_flags, lflags, lfd);
+        }
+        #endif
         if (large_only) return p;
         if (p == NULL) {
           mi_atomic_write(&large_page_try_ok, 10);  // on error, don't try again for the next N allocations
