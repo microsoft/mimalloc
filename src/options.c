@@ -73,6 +73,13 @@ static mi_option_desc_t options[_mi_option_last] =
 
 static void mi_option_init(mi_option_desc_t* desc);
 
+void _mi_options_init(void) {
+  // called on process load
+  for(int i = 0; i < _mi_option_last; i++ ) {
+    mi_option_get((mi_option_t)i); // initialize
+  }
+}
+
 long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
   mi_option_desc_t* desc = &options[option];

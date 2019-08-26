@@ -416,6 +416,7 @@ static void mi_allocator_done() {
 static void mi_process_load(void) {
   os_preloading = false;
   atexit(&mi_process_done);
+  _mi_options_init();
   mi_process_init();
   //mi_stats_reset();
   if (mi_redirected) _mi_verbose_message("malloc is redirected.\n");
