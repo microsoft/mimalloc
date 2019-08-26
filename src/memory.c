@@ -318,7 +318,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* 
   // find a range of free blocks
   void* p = NULL;
   size_t count = mi_atomic_read(&regions_count);
-  size_t idx = tld->region_idx; // start index is per-thread to reduce contention
+  size_t idx = 0; // tld->region_idx; // start index is per-thread to reduce contention
   for (size_t visited = 0; visited < count; visited++, idx++) {
     if (idx >= count) idx = 0;  // wrap around
     if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, &p, id, tld)) return NULL; // error
