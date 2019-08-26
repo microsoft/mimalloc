@@ -19,7 +19,8 @@ const mi_page_t _mi_page_empty = {
   0,
   #endif
   0,       // used
-  NULL, 0, 0,
+  NULL, 
+  ATOMIC_VAR_INIT(0), ATOMIC_VAR_INIT(0),
   0, NULL, NULL, NULL
   #if (MI_INTPTR_SIZE==8 && MI_SECURE>0) || (MI_INTPTR_SIZE==4 && MI_SECURE==0)
   , { NULL } // padding
@@ -81,7 +82,7 @@ const mi_heap_t _mi_heap_empty = {
   NULL,
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
-  NULL,
+  ATOMIC_VAR_INIT(NULL),
   0,
   0,
   0,
