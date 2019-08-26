@@ -127,7 +127,7 @@ void mi_option_disable(mi_option_t option) {
 // Messages
 // --------------------------------------------------------
 #define MAX_ERROR_COUNT (10)
-static uintptr_t error_count = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
+static volatile _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
 
 // When overriding malloc, we may recurse into mi_vfprintf if an allocation
 // inside the C runtime causes another message.

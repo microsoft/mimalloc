@@ -186,11 +186,11 @@ static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
 #if (MI_INTPTR_SIZE >= 8) 
     // on 64-bit systems, use the virtual address area after 4TiB for 4MiB aligned allocations
-  static volatile intptr_t aligned_base = ((intptr_t)4 << 40); // starting at 4TiB
+  static volatile _Atomic(intptr_t) aligned_base = ATOMIC_VAR_INIT((intptr_t)4 << 40); // starting at 4TiB
   if (addr == NULL && try_alignment > 0 &&
       try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE) == 0) 
   {
-    intptr_t hint = mi_atomic_add(&aligned_base, size) - size;
+    intptr_t hint = mi_atomic_add(&aligned_base, size);
     if (hint%try_alignment == 0) {
       return VirtualAlloc((void*)hint, size, flags, PAGE_READWRITE);
     }
@@ -214,11 +214,11 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
   static volatile uintptr_t large_page_try_ok = 0;
   void* p = NULL;
   if (use_large_os_page(size, try_alignment)) {
-    uintptr_t try_ok = mi_atomic_read(&large_page_try_ok);
+    uintptr_t try_ok = mi_atomic_read_relaxed(&large_page_try_ok);
     if (try_ok > 0) {
       // if a large page allocation fails, it seems the calls to VirtualAlloc get very expensive.
       // therefore, once a large page allocation failed, we don't try again for `large_page_try_ok` times.
-      mi_atomic_compare_exchange(&large_page_try_ok, try_ok - 1, try_ok);
+      mi_atomic_cas_weak(&large_page_try_ok, try_ok - 1, try_ok);
     }
     else {
       // large OS pages must always reserve and commit.
@@ -253,9 +253,9 @@ static void* mi_unix_mmapx(size_t size, size_t try_alignment, int protect_flags,
   void* p = NULL;
   #if (MI_INTPTR_SIZE >= 8) && !defined(MAP_ALIGNED)
   // on 64-bit systems, use the virtual address area after 4TiB for 4MiB aligned allocations
-  static volatile intptr_t aligned_base = ((intptr_t)1 << 42); // starting at 4TiB
+  static volatile _Atomic(intptr_t) aligned_base = ATOMIC_VAR_INIT((intptr_t)1 << 42); // starting at 4TiB
   if (try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE)==0) {
-    intptr_t hint = mi_atomic_add(&aligned_base,size) - size;
+    intptr_t hint = mi_atomic_add(&aligned_base,size);
     if (hint%try_alignment == 0) {
       p = mmap((void*)hint,size,protect_flags,flags,fd,0);
       if (p==MAP_FAILED) p = NULL; // fall back to regular mmap
@@ -291,14 +291,14 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
   fd = VM_MAKE_TAG(100);
   #endif
   if (use_large_os_page(size, try_alignment)) {
-    static volatile uintptr_t large_page_try_ok = 0;
-    uintptr_t try_ok = mi_atomic_read(&large_page_try_ok);
+    static volatile _Atomic(uintptr_t) large_page_try_ok = 0;
+    uintptr_t try_ok = mi_atomic_read_relaxed(&large_page_try_ok);
     if (try_ok > 0) {
       // If the OS is not configured for large OS pages, or the user does not have
       // enough permission, the `mmap` will always fail (but it might also fail for other reasons).
       // Therefore, once a large page allocation failed, we don't try again for `large_page_try_ok` times
       // to avoid too many failing calls to mmap.
-      mi_atomic_compare_exchange(&large_page_try_ok, try_ok - 1, try_ok);
+      mi_atomic_cas_weak(&large_page_try_ok, try_ok - 1, try_ok);
     }
     else {
       int lflags = flags;

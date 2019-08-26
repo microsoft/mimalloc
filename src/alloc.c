@@ -144,7 +144,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       mi_block_set_next(page, block, mi_tf_block(tfree));
       tfreex = mi_tf_set_block(tfree,block);
     }
-  } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
+  } while (!mi_atomic_cas_weak(mi_atomic_cast(uintptr_t,&page->thread_free), tfreex, tfree));
 
   if (mi_likely(!use_delayed)) {
     // increment the thread free count and return
@@ -160,7 +160,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       do {
         dfree = (mi_block_t*)heap->thread_delayed_free;
         mi_block_set_nextx(heap->cookie,block,dfree);
-      } while (!mi_atomic_compare_exchange_ptr((volatile void**)&heap->thread_delayed_free, block, dfree));
+      } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), block, dfree));
     }
 
     // and reset the MI_DELAYED_FREEING flag
@@ -168,7 +168,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       tfreex = tfree = page->thread_free;
       mi_assert_internal(mi_tf_delayed(tfree) == MI_NEVER_DELAYED_FREE || mi_tf_delayed(tfree) == MI_DELAYED_FREEING);
       if (mi_tf_delayed(tfree) != MI_NEVER_DELAYED_FREE) tfreex = mi_tf_set_delayed(tfree,MI_NO_DELAYED_FREE);
-    } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
+    } while (!mi_atomic_cas_weak(mi_atomic_cast(uintptr_t,&page->thread_free), tfreex, tfree));
   }
 }
 

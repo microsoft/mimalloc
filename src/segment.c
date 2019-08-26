@@ -542,8 +542,8 @@ void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
 // live blocks (reached through other threads). Such segments
 // are "abandoned" and will be reclaimed by other threads to
 // reuse their pages and/or free them eventually
-static volatile mi_segment_t* abandoned = NULL;
-static volatile uintptr_t     abandoned_count = 0;
+static volatile _Atomic(mi_segment_t*) abandoned; // = NULL;
+static volatile _Atomic(uintptr_t)     abandoned_count; // = 0;
 
 static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(segment->used == segment->abandoned);
@@ -561,9 +561,9 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   segment->thread_id = 0;
   mi_segment_t* next;
   do {
-    next = (mi_segment_t*)abandoned;
-    mi_atomic_write_ptr((volatile void**)&segment->abandoned_next, next);
-  } while (!mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, segment, next));
+    next = (mi_segment_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*,&abandoned));
+    mi_atomic_write_ptr(mi_atomic_cast(void*,&segment->abandoned_next), next);
+  } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&abandoned), segment, next));
   mi_atomic_increment(&abandoned_count);
 }
 
@@ -597,7 +597,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
     mi_segment_t* segment;
     do {
       segment = (mi_segment_t*)abandoned;
-    } while(segment != NULL && !mi_atomic_compare_exchange_ptr((volatile void**)&abandoned, (mi_segment_t*)segment->abandoned_next, segment));
+    } while(segment != NULL && !mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&abandoned), (mi_segment_t*)segment->abandoned_next, segment));
     if (segment==NULL) break; // stop early if no more segments available
 
     // got it.

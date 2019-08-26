@@ -69,8 +69,8 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, mi_os_tld
 // A region owns a chunk of REGION_SIZE (256MiB) (virtual) memory with
 // a bit map with one bit per MI_SEGMENT_SIZE (4MiB) block.
 typedef struct mem_region_s {
-  volatile uintptr_t map;    // in-use bit per MI_SEGMENT_SIZE block
-  volatile void*     start;  // start of virtual memory area
+  volatile _Atomic(uintptr_t) map;    // in-use bit per MI_SEGMENT_SIZE block
+  volatile _Atomic(void*)     start;  // start of virtual memory area
 } mem_region_t;
 
 
@@ -78,7 +78,7 @@ typedef struct mem_region_s {
 // TODO: in the future, maintain a map per NUMA node for numa aware allocation
 static mem_region_t regions[MI_REGION_MAX];
 
-static volatile size_t regions_count = 0;        // allocated regions
+static volatile _Atomic(uintptr_t) regions_count; // = 0;        // allocated regions
 
 
 /* ----------------------------------------------------------------------------
@@ -106,9 +106,9 @@ static size_t mi_good_commit_size(size_t size) {
 // Return if a pointer points into a region reserved by us.
 bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
   if (p==NULL) return false;
-  size_t count = mi_atomic_read(&regions_count);
+  size_t count = mi_atomic_read_relaxed(&regions_count);
   for (size_t i = 0; i < count; i++) {
-    uint8_t* start = (uint8_t*)mi_atomic_read_ptr(&regions[i].start);
+    uint8_t* start = (uint8_t*)mi_atomic_read_ptr_relaxed(&regions[i].start);
     if (start != NULL && (uint8_t*)p >= start && (uint8_t*)p < start + MI_REGION_SIZE) return true;
   }
   return false;
@@ -127,11 +127,11 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
 {
   size_t mask = mi_region_block_mask(blocks,bitidx);
   mi_assert_internal(mask != 0);
-  mi_assert_internal((mask & mi_atomic_read(&region->map)) == mask);
+  mi_assert_internal((mask & mi_atomic_read_relaxed(&region->map)) == mask);
   mi_assert_internal(&regions[idx] == region);
 
   // ensure the region is reserved
-  void* start = mi_atomic_read_ptr(&region->start);
+  void* start = mi_atomic_read_ptr_relaxed(&region->start);
   if (start == NULL) 
   {
     start = _mi_os_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, mi_option_is_enabled(mi_option_eager_region_commit), tld);    
@@ -139,13 +139,13 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       // failure to allocate from the OS! unclaim the blocks and fail
       size_t map;
       do {
-        map = mi_atomic_read(&region->map);
-      } while (!mi_atomic_compare_exchange(&region->map, map & ~mask, map));
+        map = mi_atomic_read_relaxed(&region->map);
+      } while (!mi_atomic_cas_weak(&region->map, map & ~mask, map));
       return false;
     }
 
     // set the newly allocated region
-    if (mi_atomic_compare_exchange_ptr(&region->start, start, NULL)) {
+    if (mi_atomic_cas_ptr_strong(&region->start, start, NULL)) {
       // update the region count
       mi_atomic_increment(&regions_count);
     }
@@ -154,9 +154,9 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       // we assign it to a later slot instead (up to 4 tries).
       // note: we don't need to increment the region count, this will happen on another allocation
       for(size_t i = 1; i <= 4 && idx + i < MI_REGION_MAX; i++) {
-        void* s = mi_atomic_read_ptr(&regions[idx+i].start);
+        void* s = mi_atomic_read_ptr_relaxed(&regions[idx+i].start);
         if (s == NULL) { // quick test
-          if (mi_atomic_compare_exchange_ptr(&regions[idx+i].start, start, s)) {
+          if (mi_atomic_cas_ptr_weak(&regions[idx+i].start, start, s)) {
             start = NULL;
             break;
           }
@@ -167,10 +167,10 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
         _mi_os_free(start, MI_REGION_SIZE, tld->stats);
       }
       // and continue with the memory at our index
-      start = mi_atomic_read_ptr(&region->start);
+      start = mi_atomic_read_ptr_relaxed(&region->start);
     }
   }
-  mi_assert_internal(start == mi_atomic_read_ptr(&region->start));
+  mi_assert_internal(start == mi_atomic_read_ptr_relaxed(&region->start));
   mi_assert_internal(start != NULL);
 
   // Commit the blocks to memory
@@ -230,7 +230,7 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
 
   const uintptr_t mask = mi_region_block_mask(blocks, 0);
   const size_t bitidx_max = MI_REGION_MAP_BITS - blocks;
-  uintptr_t map = mi_atomic_read(&region->map);
+  uintptr_t map = mi_atomic_read_relaxed(&region->map);
 
   #ifdef MI_HAVE_BITSCAN
   size_t bitidx = mi_bsf(~map);    // quickly find the first zero bit if possible
@@ -245,9 +245,9 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
       mi_assert_internal((m >> bitidx) == mask); // no overflow?
       uintptr_t newmap = map | m;
       mi_assert_internal((newmap^map) >> bitidx == mask);
-      if (!mi_atomic_compare_exchange(&region->map, newmap, map)) {
+      if (!mi_atomic_cas_strong(&region->map, newmap, map)) {
         // no success, another thread claimed concurrently.. keep going
-        map = mi_atomic_read(&region->map);
+        map = mi_atomic_read_relaxed(&region->map);
         continue;
       }
       else {
@@ -281,7 +281,7 @@ static bool mi_region_try_alloc_blocks(size_t idx, size_t blocks, size_t size, b
   // check if there are available blocks in the region..
   mi_assert_internal(idx < MI_REGION_MAX);
   mem_region_t* region = &regions[idx];
-  uintptr_t m = mi_atomic_read(&region->map);
+  uintptr_t m = mi_atomic_read_relaxed(&region->map);
   if (m != MI_REGION_MAP_FULL) {  // some bits are zero
     return mi_region_alloc_blocks(region, idx, blocks, size, commit, p, id, tld);
   }
@@ -317,7 +317,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* 
 
   // find a range of free blocks
   void* p = NULL;
-  size_t count = mi_atomic_read(&regions_count);
+  size_t count = mi_atomic_read_relaxed(&regions_count);
   size_t idx = tld->region_idx; // start index is per-thread to reduce contention
   for (size_t visited = 0; visited < count; visited++, idx++) {
     if (idx >= count) idx = 0;  // wrap around
@@ -376,8 +376,8 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
     size_t mask = mi_region_block_mask(blocks, bitidx);
     mi_assert_internal(idx < MI_REGION_MAX); if (idx >= MI_REGION_MAX) return; // or `abort`?
     mem_region_t* region = &regions[idx];
-    mi_assert_internal((mi_atomic_read(&region->map) & mask) == mask ); // claimed?
-    void* start = mi_atomic_read_ptr(&region->start);
+    mi_assert_internal((mi_atomic_read_relaxed(&region->map) & mask) == mask ); // claimed?
+    void* start = mi_atomic_read_ptr_relaxed(&region->start);
     mi_assert_internal(start != NULL);
     void* blocks_start = (uint8_t*)start + (bitidx * MI_SEGMENT_SIZE);
     mi_assert_internal(blocks_start == p); // not a pointer in our area?
@@ -405,9 +405,9 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
     uintptr_t map;
     uintptr_t newmap;
     do {
-      map = mi_atomic_read(&region->map);
+      map = mi_atomic_read_relaxed(&region->map);
       newmap = map & ~mask;
-    } while (!mi_atomic_compare_exchange(&region->map, newmap, map));
+    } while (!mi_atomic_cas_weak(&region->map, newmap, map));
   }
 }
 
@@ -419,17 +419,17 @@ void _mi_mem_collect(mi_stats_t* stats) {
   // free every region that has no segments in use.
   for (size_t i = 0; i < regions_count; i++) {
     mem_region_t* region = &regions[i];
-    if (mi_atomic_read(&region->map) == 0 && region->start != NULL) {
+    if (mi_atomic_read_relaxed(&region->map) == 0 && region->start != NULL) {
       // if no segments used, try to claim the whole region
       uintptr_t m;
       do {
-        m = mi_atomic_read(&region->map);
-      } while(m == 0 && !mi_atomic_compare_exchange(&region->map, ~((uintptr_t)0), 0 ));
+        m = mi_atomic_read_relaxed(&region->map);
+      } while(m == 0 && !mi_atomic_cas_weak(&region->map, ~((uintptr_t)0), 0 ));
       if (m == 0) {
         // on success, free the whole region
         if (region->start != NULL) _mi_os_free((void*)region->start, MI_REGION_SIZE, stats);
         // and release
-        region->start = 0;
+        mi_atomic_write_ptr(&region->start,NULL);
         mi_atomic_write(&region->map,0);
       }
     }
