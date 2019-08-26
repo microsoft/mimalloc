@@ -74,6 +74,13 @@ static mi_option_desc_t options[_mi_option_last] =
 
 static void mi_option_init(mi_option_desc_t* desc);
 
+void _mi_options_init(void) {
+  // called on process load
+  for(int i = 0; i < _mi_option_last; i++ ) {
+    mi_option_get((mi_option_t)i); // initialize
+  }
+}
+
 long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
   mi_option_desc_t* desc = &options[option];
@@ -128,7 +135,7 @@ void mi_option_disable(mi_option_t option) {
 // Messages
 // --------------------------------------------------------
 #define MAX_ERROR_COUNT (10)
-static uintptr_t error_count = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
+static volatile _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
 
 // When overriding malloc, we may recurse into mi_vfprintf if an allocation
 // inside the C runtime causes another message.
@@ -235,7 +242,7 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
 #include <windows.h>
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
   result[0] = 0;
-  size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
+  size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);  
   return (len > 0 && len < result_size);
 }
 #else

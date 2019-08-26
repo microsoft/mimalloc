@@ -19,7 +19,8 @@ const mi_page_t _mi_page_empty = {
   0,
   #endif
   0,       // used
-  NULL, 0, 0,
+  NULL, 
+  ATOMIC_VAR_INIT(0), ATOMIC_VAR_INIT(0),
   0, NULL, NULL, NULL
   #if (MI_SECURE==0)
   , { NULL } // padding
@@ -93,7 +94,7 @@ const mi_heap_t _mi_heap_empty = {
   NULL,
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
-  NULL,
+  ATOMIC_VAR_INIT(NULL),
   0,
   0,
   0,
@@ -438,6 +439,7 @@ static void mi_allocator_done() {
 static void mi_process_load(void) {
   os_preloading = false;
   atexit(&mi_process_done);
+  _mi_options_init();
   mi_process_init();
   //mi_stats_reset();
   if (mi_redirected) _mi_verbose_message("malloc is redirected.\n");
@@ -449,7 +451,7 @@ static void mi_process_load(void) {
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages     = mi_option_get(mi_option_reserve_huge_os_pages);
-    double max_secs = (double)pages / 5.0; // 0.2s per page
+    double max_secs = (double)pages / 2.0; // 0.5s per page (1GiB)
     mi_reserve_huge_os_pages(pages, max_secs);
   }
 }

@@ -27,6 +27,7 @@ void       _mi_error_message(const char* fmt, ...);
 void       _mi_warning_message(const char* fmt, ...);
 void       _mi_verbose_message(const char* fmt, ...);
 void       _mi_trace_message(const char* fmt, ...);
+void       _mi_options_init(void);
 
 // "init.c"
 extern mi_stats_t       _mi_stats_main;
