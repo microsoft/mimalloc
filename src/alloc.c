@@ -118,22 +118,24 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   mi_segment_t* segment = _mi_page_segment(page);
   if (segment->page_kind==MI_PAGE_HUGE) {
     // huge page segments are always abandoned and can be freed immediately
-    mi_assert_internal(segment->thread_id==0);
-    mi_assert_internal(segment->abandoned_next==NULL);
+    mi_assert_internal(mi_atomic_read_relaxed(&segment->thread_id)==0);
+    mi_assert_internal(mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*,&segment->abandoned_next))==NULL);
     // claim it and free
-    mi_block_set_next(page, block, page->free);
-    page->free = block;
-    page->used--;
     mi_heap_t* heap = mi_get_default_heap();
-    segment->thread_id = heap->thread_id;
-    _mi_segment_page_free(page,true,&heap->tld->segments);
+    // paranoia: if this it the last reference, the cas should always succeed
+    if (mi_atomic_cas_strong(&segment->thread_id,heap->thread_id,0)) {
+      mi_block_set_next(page, block, page->free);
+      page->free = block;
+      page->used--;
+      _mi_segment_page_free(page,true,&heap->tld->segments);
+    }
     return;
   }
 
   do {
     tfree = page->thread_free;
     use_delayed = (mi_tf_delayed(tfree) == MI_USE_DELAYED_FREE ||
-                   (mi_tf_delayed(tfree) == MI_NO_DELAYED_FREE && page->used == page->thread_freed+1)
+                   (mi_tf_delayed(tfree) == MI_NO_DELAYED_FREE && page->used == mi_atomic_read_relaxed(&page->thread_freed)+1)  // data-race but ok, just optimizes early release of the page
                   );
     if (mi_unlikely(use_delayed)) {
       // unlikely: this only happens on the first concurrent free in a page that is in the full list

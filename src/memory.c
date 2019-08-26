@@ -131,7 +131,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
   mi_assert_internal(&regions[idx] == region);
 
   // ensure the region is reserved
-  void* start = mi_atomic_read_ptr_relaxed(&region->start);
+  void* start = mi_atomic_read_ptr(&region->start);
   if (start == NULL) 
   {
     start = _mi_os_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, mi_option_is_enabled(mi_option_eager_region_commit), tld);    
@@ -154,9 +154,9 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       // we assign it to a later slot instead (up to 4 tries).
       // note: we don't need to increment the region count, this will happen on another allocation
       for(size_t i = 1; i <= 4 && idx + i < MI_REGION_MAX; i++) {
-        void* s = mi_atomic_read_ptr_relaxed(&regions[idx+i].start);
+        void* s = mi_atomic_read_ptr(&regions[idx+i].start);
         if (s == NULL) { // quick test
-          if (mi_atomic_cas_ptr_weak(&regions[idx+i].start, start, s)) {
+          if (mi_atomic_cas_ptr_strong(&regions[idx+i].start, start, NULL)) {
             start = NULL;
             break;
           }
@@ -167,10 +167,10 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
         _mi_os_free(start, MI_REGION_SIZE, tld->stats);
       }
       // and continue with the memory at our index
-      start = mi_atomic_read_ptr_relaxed(&region->start);
+      start = mi_atomic_read_ptr(&region->start);
     }
   }
-  mi_assert_internal(start == mi_atomic_read_ptr_relaxed(&region->start));
+  mi_assert_internal(start == mi_atomic_read_ptr(&region->start));
   mi_assert_internal(start != NULL);
 
   // Commit the blocks to memory
@@ -230,7 +230,7 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
 
   const uintptr_t mask = mi_region_block_mask(blocks, 0);
   const size_t bitidx_max = MI_REGION_MAP_BITS - blocks;
-  uintptr_t map = mi_atomic_read_relaxed(&region->map);
+  uintptr_t map = mi_atomic_read(&region->map);
 
   #ifdef MI_HAVE_BITSCAN
   size_t bitidx = mi_bsf(~map);    // quickly find the first zero bit if possible
@@ -245,9 +245,9 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
       mi_assert_internal((m >> bitidx) == mask); // no overflow?
       uintptr_t newmap = map | m;
       mi_assert_internal((newmap^map) >> bitidx == mask);
-      if (!mi_atomic_cas_strong(&region->map, newmap, map)) {
+      if (!mi_atomic_cas_weak(&region->map, newmap, map)) {
         // no success, another thread claimed concurrently.. keep going
-        map = mi_atomic_read_relaxed(&region->map);
+        map = mi_atomic_read(&region->map);
         continue;
       }
       else {
@@ -317,7 +317,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* 
 
   // find a range of free blocks
   void* p = NULL;
-  size_t count = mi_atomic_read_relaxed(&regions_count);
+  size_t count = mi_atomic_read(&regions_count);
   size_t idx = tld->region_idx; // start index is per-thread to reduce contention
   for (size_t visited = 0; visited < count; visited++, idx++) {
     if (idx >= count) idx = 0;  // wrap around
@@ -377,7 +377,7 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
     mi_assert_internal(idx < MI_REGION_MAX); if (idx >= MI_REGION_MAX) return; // or `abort`?
     mem_region_t* region = &regions[idx];
     mi_assert_internal((mi_atomic_read_relaxed(&region->map) & mask) == mask ); // claimed?
-    void* start = mi_atomic_read_ptr_relaxed(&region->start);
+    void* start = mi_atomic_read_ptr(&region->start);
     mi_assert_internal(start != NULL);
     void* blocks_start = (uint8_t*)start + (bitidx * MI_SEGMENT_SIZE);
     mi_assert_internal(blocks_start == p); // not a pointer in our area?
