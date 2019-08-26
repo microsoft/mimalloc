@@ -198,7 +198,7 @@ static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
-  if ((size % (uintptr_t)1 << 30) == 0 /* 1GiB multiple */
+  if ((size % ((uintptr_t)1 << 30)) == 0 /* 1GiB multiple */
     && (flags & MEM_LARGE_PAGES) != 0 && (flags & MEM_COMMIT) != 0 
     && (addr != NULL || try_alignment == 0 || try_alignment % _mi_os_page_size() == 0)
     && pNtAllocateVirtualMemoryEx != NULL)
@@ -217,7 +217,7 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     }
     else {
       // else fall back to regular large OS pages
-      _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (error %lx)\n", err);
+      _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (error 0x%lx)\n", err);
     }
   }
 #endif
