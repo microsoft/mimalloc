@@ -211,7 +211,7 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
 }
 
 static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DWORD flags) {
-  static volatile uintptr_t large_page_try_ok = 0;
+  static volatile _Atomic(uintptr_t) large_page_try_ok; // = 0;
   void* p = NULL;
   if (use_large_os_page(size, try_alignment)) {
     uintptr_t try_ok = mi_atomic_read_relaxed(&large_page_try_ok);
@@ -291,7 +291,7 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
   fd = VM_MAKE_TAG(100);
   #endif
   if (use_large_os_page(size, try_alignment)) {
-    static volatile _Atomic(uintptr_t) large_page_try_ok = 0;
+    static volatile _Atomic(uintptr_t) large_page_try_ok; // = 0;
     uintptr_t try_ok = mi_atomic_read_relaxed(&large_page_try_ok);
     if (try_ok > 0) {
       // If the OS is not configured for large OS pages, or the user does not have
