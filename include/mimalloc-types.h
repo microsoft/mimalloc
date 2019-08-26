@@ -10,6 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
+#include <mimalloc-atomic.h>  // _Atomic
 
 // ------------------------------------------------------
 // Variants
@@ -177,8 +178,8 @@ typedef struct mi_page_s {
   size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
   
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
-  volatile uintptr_t    thread_freed;      // at least this number of blocks are in `thread_free`
-  volatile mi_thread_free_t thread_free;   // list of deferred free blocks freed by other threads
+  volatile _Atomic(uintptr_t)        thread_freed;  // at least this number of blocks are in `thread_free`
+  volatile _Atomic(mi_thread_free_t) thread_free;   // list of deferred free blocks freed by other threads
 
   // less accessed info
   size_t                block_size;        // size available in each block (always `>0`)
@@ -208,7 +209,7 @@ typedef enum mi_page_kind_e {
 typedef struct mi_segment_s {
   struct mi_segment_s* next;
   struct mi_segment_s* prev;
-  volatile struct mi_segment_s* abandoned_next;
+  volatile _Atomic(struct mi_segment_s*) abandoned_next;
   size_t          abandoned;   // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
   size_t          used;        // count of pages in use (`used <= capacity`)
   size_t          capacity;    // count of available pages (`#free + used`)
@@ -219,7 +220,7 @@ typedef struct mi_segment_s {
 
   // layout like this to optimize access in `mi_free`
   size_t          page_shift;  // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).
-  volatile uintptr_t thread_id;   // unique id of the thread owning this segment
+  volatile _Atomic(uintptr_t) thread_id;   // unique id of the thread owning this segment
   mi_page_kind_t  page_kind;   // kind of pages: small, large, or huge
   mi_page_t       pages[1];    // up to `MI_SMALL_PAGES_PER_SEGMENT` pages
 } mi_segment_t;
@@ -255,7 +256,7 @@ struct mi_heap_s {
   mi_tld_t*             tld;
   mi_page_t*            pages_free_direct[MI_SMALL_WSIZE_MAX + 2];   // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
   mi_page_queue_t       pages[MI_BIN_FULL + 1];                      // queue of pages for each size class (or "bin")
-  volatile mi_block_t*  thread_delayed_free;
+  volatile _Atomic(mi_block_t*) thread_delayed_free;
   uintptr_t             thread_id;                                   // thread this heap belongs too
   uintptr_t             cookie;
   uintptr_t             random;                                      // random number used for secure allocation

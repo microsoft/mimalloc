@@ -49,11 +49,12 @@ static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
   return count;
 }
 
+/*
 // Start of the page available memory
 static inline uint8_t* mi_page_area(const mi_page_t* page) {
   return _mi_page_start(_mi_page_segment(page), page, NULL);
 }
-
+*/
 
 static bool mi_page_list_is_valid(mi_page_t* page, mi_block_t* p) {
   size_t psize;
@@ -126,7 +127,7 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay  ) {
     }
   }
   while((mi_tf_delayed(tfreex) !=  mi_tf_delayed(tfree)) && // avoid atomic operation if already equal
-        !mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
+        !mi_atomic_cas_weak(mi_atomic_cast(uintptr_t,&page->thread_free), tfreex, tfree));
 }
 
 
@@ -147,7 +148,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
     tfree = page->thread_free;
     head = mi_tf_block(tfree);
     tfreex = mi_tf_set_block(tfree,NULL);
-  } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
+  } while (!mi_atomic_cas_weak(mi_atomic_cast(uintptr_t,&page->thread_free), tfreex, tfree));
 
   // return if the list is empty
   if (head == NULL) return;
@@ -165,7 +166,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   page->local_free = head;
 
   // update counts now
-  mi_atomic_subtract(&page->thread_freed, count);
+  mi_atomic_subu(&page->thread_freed, count);
   page->used -= count;
 }
 
@@ -261,7 +262,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
   mi_block_t* block;
   do {
     block = (mi_block_t*)heap->thread_delayed_free;
-  } while (block != NULL && !mi_atomic_compare_exchange_ptr((volatile void**)&heap->thread_delayed_free, NULL, block));
+  } while (block != NULL && !mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), NULL, block));
 
   // and free them all
   while(block != NULL) {
@@ -274,7 +275,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
       do {
         dfree = (mi_block_t*)heap->thread_delayed_free;
         mi_block_set_nextx(heap->cookie, block, dfree);
-      } while (!mi_atomic_compare_exchange_ptr((volatile void**)&heap->thread_delayed_free, block, dfree));
+      } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), block, dfree));
 
     }
     block = next;
