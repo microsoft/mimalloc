@@ -167,7 +167,7 @@ typedef struct mi_page_s {
   bool                  is_committed:1;    // `true` if the page virtual memory is committed
 
   // layout like this to optimize access in `mi_malloc` and `mi_free`
-  uint16_t              capacity;          // number of blocks committed
+  uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
   uint16_t              reserved;          // number of blocks reserved in memory
   mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (16 bits)
 
@@ -207,7 +207,13 @@ typedef enum mi_page_kind_e {
 // the OS. Inside segments we allocated fixed size _pages_ that
 // contain blocks.
 typedef struct mi_segment_s {
-  struct mi_segment_s* next;
+  // memory fields
+  size_t          memid;            // id for the os-level memory manager
+  bool            mem_is_fixed;     // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)    
+  bool            mem_is_committed; // `true` if the whole segment is eagerly committed
+
+  // segment fields
+  struct mi_segment_s* next;   // must be the first segment field -- see `segment.c:segment_alloc`
   struct mi_segment_s* prev;
   volatile _Atomic(struct mi_segment_s*) abandoned_next;
   size_t          abandoned;   // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
@@ -216,7 +222,6 @@ typedef struct mi_segment_s {
   size_t          segment_size;// for huge pages this may be different from `MI_SEGMENT_SIZE`
   size_t          segment_info_size;  // space we are using from the first page for segment meta-data and possible guard pages.
   uintptr_t       cookie;      // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
-  size_t          memid;       // id for the os-level memory manager
 
   // layout like this to optimize access in `mi_free`
   size_t          page_shift;  // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).

@@ -39,14 +39,14 @@ Possible issues:
 
 // Internal raw OS interface
 size_t  _mi_os_large_page_size();
-bool  _mi_os_protect(void* addr, size_t size);
-bool  _mi_os_unprotect(void* addr, size_t size);
-bool  _mi_os_commit(void* p, size_t size, mi_stats_t* stats);
-bool  _mi_os_decommit(void* p, size_t size, mi_stats_t* stats);
-bool  _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
-bool  _mi_os_unreset(void* p, size_t size, mi_stats_t* stats);
-void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, mi_os_tld_t* tld);
-
+bool    _mi_os_protect(void* addr, size_t size);
+bool    _mi_os_unprotect(void* addr, size_t size);
+bool    _mi_os_commit(void* p, size_t size, mi_stats_t* stats);
+bool    _mi_os_decommit(void* p, size_t size, mi_stats_t* stats);
+bool    _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
+bool    _mi_os_unreset(void* p, size_t size, mi_stats_t* stats);
+void*   _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
+bool    _mi_os_is_huge_reserved(void* p);
 
 // Constants
 #if (MI_INTPTR_SIZE==8)
@@ -66,11 +66,24 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, mi_os_tld
 #define MI_REGION_MAP_FULL        UINTPTR_MAX
 
 
+typedef uintptr_t mi_region_info_t;
+
+static inline mi_region_info_t mi_region_info_create(void* start, bool is_large, bool is_committed) {
+  return ((uintptr_t)start | ((is_large?1:0) << 1) | (is_committed?1:0));
+}
+
+static inline void* mi_region_info_read(mi_region_info_t info, bool* is_large, bool* is_committed) {
+  if (is_large) *is_large = ((info&0x02) != 0);
+  if (is_committed) *is_committed = ((info&0x01) != 0);
+  return (void*)(info & ~0x03);
+}
+
+
 // A region owns a chunk of REGION_SIZE (256MiB) (virtual) memory with
 // a bit map with one bit per MI_SEGMENT_SIZE (4MiB) block.
 typedef struct mem_region_s {
-  volatile _Atomic(uintptr_t) map;    // in-use bit per MI_SEGMENT_SIZE block
-  volatile _Atomic(void*)     start;  // start of virtual memory area
+  volatile _Atomic(uintptr_t)        map;   // in-use bit per MI_SEGMENT_SIZE block
+  volatile _Atomic(mi_region_info_t) info;  // start of virtual memory area, and flags
 } mem_region_t;
 
 
@@ -108,7 +121,7 @@ bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
   if (p==NULL) return false;
   size_t count = mi_atomic_read_relaxed(&regions_count);
   for (size_t i = 0; i < count; i++) {
-    uint8_t* start = (uint8_t*)mi_atomic_read_ptr_relaxed(&regions[i].start);
+    uint8_t* start = (uint8_t*)mi_region_info_read( mi_atomic_read_relaxed(&regions[i].info), NULL, NULL);
     if (start != NULL && (uint8_t*)p >= start && (uint8_t*)p < start + MI_REGION_SIZE) return true;
   }
   return false;
@@ -123,7 +136,7 @@ Commit from a region
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/SIZE_MAX before the call.
 // (not being able to claim is not considered an error so check for `p != NULL` afterwards).
-static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bitidx, size_t blocks, size_t size, bool commit, void** p, size_t* id, mi_os_tld_t* tld)
+static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bitidx, size_t blocks, size_t size, bool commit, bool* large, void** p, size_t* id, mi_os_tld_t* tld)
 {
   size_t mask = mi_region_block_mask(blocks,bitidx);
   mi_assert_internal(mask != 0);
@@ -131,10 +144,14 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
   mi_assert_internal(&regions[idx] == region);
 
   // ensure the region is reserved
-  void* start = mi_atomic_read_ptr(&region->start);
-  if (start == NULL) 
+  mi_region_info_t info = mi_atomic_read(&region->info);
+  if (info == 0) 
   {
-    start = _mi_os_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, mi_option_is_enabled(mi_option_eager_region_commit), tld);    
+    bool region_commit = mi_option_is_enabled(mi_option_eager_region_commit);
+    bool region_large  = region_commit && *large;
+    void* start = _mi_os_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, region_commit, &region_large, tld);
+    *large = region_large;
+
     if (start == NULL) {
       // failure to allocate from the OS! unclaim the blocks and fail
       size_t map;
@@ -145,7 +162,8 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
     }
 
     // set the newly allocated region
-    if (mi_atomic_cas_ptr_strong(&region->start, start, NULL)) {
+    info = mi_region_info_create(start,region_large,region_commit);
+    if (mi_atomic_cas_strong(&region->info, info, 0)) {
       // update the region count
       mi_atomic_increment(&regions_count);
     }
@@ -154,12 +172,9 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       // we assign it to a later slot instead (up to 4 tries).
       // note: we don't need to increment the region count, this will happen on another allocation
       for(size_t i = 1; i <= 4 && idx + i < MI_REGION_MAX; i++) {
-        void* s = mi_atomic_read_ptr(&regions[idx+i].start);
-        if (s == NULL) { // quick test
-          if (mi_atomic_cas_ptr_strong(&regions[idx+i].start, start, NULL)) {
-            start = NULL;
-            break;
-          }
+        if (mi_atomic_cas_strong(&regions[idx+i].info, info, 0)) {
+          start = NULL;
+          break;
         }
       }
       if (start != NULL) {
@@ -167,15 +182,17 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
         _mi_os_free(start, MI_REGION_SIZE, tld->stats);
       }
       // and continue with the memory at our index
-      start = mi_atomic_read_ptr(&region->start);
+      info = mi_atomic_read(&region->info);
     }
   }
-  mi_assert_internal(start == mi_atomic_read_ptr(&region->start));
-  mi_assert_internal(start != NULL);
+  mi_assert_internal(info == mi_atomic_read(&region->info));
+  mi_assert_internal(info != 0);
 
   // Commit the blocks to memory
+  bool region_is_committed = false;
+  void* start = mi_region_info_read(info,large,&region_is_committed);  
   void* blocks_start = (uint8_t*)start + (bitidx * MI_SEGMENT_SIZE);
-  if (commit && !mi_option_is_enabled(mi_option_eager_region_commit)) {
+  if (commit && !region_is_committed) {
     _mi_os_commit(blocks_start, mi_good_commit_size(size), tld->stats);  // only commit needed size (unless using large OS pages)
   }
 
@@ -223,7 +240,7 @@ static inline size_t mi_bsr(uintptr_t x) {
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/SIZE_MAX before the call.
 // (not being able to claim is not considered an error so check for `p != NULL` afterwards).
-static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t blocks, size_t size, bool commit, void** p, size_t* id, mi_os_tld_t* tld)
+static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t blocks, size_t size, bool commit, bool* large, void** p, size_t* id, mi_os_tld_t* tld)
 {
   mi_assert_internal(p != NULL && id != NULL);
   mi_assert_internal(blocks < MI_REGION_MAP_BITS);
@@ -253,7 +270,7 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
       else {
         // success, we claimed the bits
         // now commit the block memory -- this can still fail
-        return mi_region_commit_blocks(region, idx, bitidx, blocks, size, commit, p, id, tld);
+        return mi_region_commit_blocks(region, idx, bitidx, blocks, size, commit, large, p, id, tld);
       }
     }
     else {
@@ -276,14 +293,14 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/0 before the call.
 // (not being able to claim is not considered an error so check for `p != NULL` afterwards).
-static bool mi_region_try_alloc_blocks(size_t idx, size_t blocks, size_t size, bool commit, void** p, size_t* id, mi_os_tld_t* tld)
+static bool mi_region_try_alloc_blocks(size_t idx, size_t blocks, size_t size, bool commit, bool* large, void** p, size_t* id, mi_os_tld_t* tld)
 {
   // check if there are available blocks in the region..
   mi_assert_internal(idx < MI_REGION_MAX);
   mem_region_t* region = &regions[idx];
   uintptr_t m = mi_atomic_read_relaxed(&region->map);
   if (m != MI_REGION_MAP_FULL) {  // some bits are zero
-    return mi_region_alloc_blocks(region, idx, blocks, size, commit, p, id, tld);
+    return mi_region_alloc_blocks(region, idx, blocks, size, commit, large, p, id, tld);
   }
   else {
     return true;  // no error, but no success either
@@ -296,15 +313,17 @@ static bool mi_region_try_alloc_blocks(size_t idx, size_t blocks, size_t size, b
 
 // Allocate `size` memory aligned at `alignment`. Return non NULL on success, with a given memory `id`.
 // (`id` is abstract, but `id = idx*MI_REGION_MAP_BITS + bitidx`)
-void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* id, mi_os_tld_t* tld)
+void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, size_t* id, mi_os_tld_t* tld)
 {
   mi_assert_internal(id != NULL && tld != NULL);
   mi_assert_internal(size > 0);
   *id = SIZE_MAX;
+  bool default_large = false;
+  if (large==NULL) large = &default_large;  // ensure `large != NULL`
 
   // use direct OS allocation for huge blocks or alignment (with `id = SIZE_MAX`)
   if (size > MI_REGION_MAX_ALLOC_SIZE || alignment > MI_SEGMENT_ALIGN) {
-    return _mi_os_alloc_aligned(mi_good_commit_size(size), alignment, true, tld);  // round up size
+    return _mi_os_alloc_aligned(mi_good_commit_size(size), alignment, commit, large, tld);  // round up size
   }
 
   // always round size to OS page size multiple (so commit/decommit go over the entire range)
@@ -318,27 +337,27 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* 
   // find a range of free blocks
   void* p = NULL;
   size_t count = mi_atomic_read(&regions_count);
-  size_t idx = 0; // tld->region_idx; // start index is per-thread to reduce contention
+  size_t idx = 0; // tld->region_idx; // start at 0 to reuse low addresses? Or, use tld->region_idx to reduce contention?
   for (size_t visited = 0; visited < count; visited++, idx++) {
     if (idx >= count) idx = 0;  // wrap around
-    if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, &p, id, tld)) return NULL; // error
+    if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, large, &p, id, tld)) return NULL; // error
     if (p != NULL) break;
   }
 
   if (p == NULL) {
     // no free range in existing regions -- try to extend beyond the count.. but at most 4 regions
     for (idx = count; idx < count + 4 && idx < MI_REGION_MAX; idx++) {
-      if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, &p, id, tld)) return NULL; // error
+      if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, large, &p, id, tld)) return NULL; // error
       if (p != NULL) break;
     }
   }
 
   if (p == NULL) {
     // we could not find a place to allocate, fall back to the os directly
-    p = _mi_os_alloc_aligned(size, alignment, commit, tld);
+    p = _mi_os_alloc_aligned(size, alignment, commit, large, tld);
   }
   else {
-    tld->region_idx = idx;  // next start of search
+    tld->region_idx = idx;  // next start of search?
   }
 
   mi_assert_internal( p == NULL || (uintptr_t)p % alignment == 0);
@@ -347,8 +366,8 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* 
 
 
 // Allocate `size` memory. Return non NULL on success, with a given memory `id`.
-void* _mi_mem_alloc(size_t size, bool commit, size_t* id, mi_os_tld_t* tld) {
-  return _mi_mem_alloc_aligned(size,0,commit,id,tld);
+void* _mi_mem_alloc(size_t size, bool commit, bool* large, size_t* id, mi_os_tld_t* tld) {
+  return _mi_mem_alloc_aligned(size,0,commit,large,id,tld);
 }
 
 /* ----------------------------------------------------------------------------
@@ -377,7 +396,10 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
     mi_assert_internal(idx < MI_REGION_MAX); if (idx >= MI_REGION_MAX) return; // or `abort`?
     mem_region_t* region = &regions[idx];
     mi_assert_internal((mi_atomic_read_relaxed(&region->map) & mask) == mask ); // claimed?
-    void* start = mi_atomic_read_ptr(&region->start);
+    mi_region_info_t info = mi_atomic_read(&region->info);
+    bool is_large;
+    bool is_eager_committed;
+    void* start = mi_region_info_read(info,&is_large,&is_eager_committed);
     mi_assert_internal(start != NULL);
     void* blocks_start = (uint8_t*)start + (bitidx * MI_SEGMENT_SIZE);
     mi_assert_internal(blocks_start == p); // not a pointer in our area?
@@ -388,18 +410,13 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
     // TODO: implement delayed decommit/reset as these calls are too expensive
     // if the memory is reused soon.
     // reset: 10x slowdown on malloc-large, decommit: 17x slowdown on malloc-large
-    if (!mi_option_is_enabled(mi_option_large_os_pages)) {
-      if (mi_option_is_enabled(mi_option_eager_region_commit)) {
-        //_mi_os_reset(p, size, stats);
-      }
-      else {
-        //_mi_os_decommit(p, size, stats);
-      }
-    }
+    if (!is_large) {
+      // _mi_os_reset(p,size,stats);
+      // _mi_os_decommit(p,size,stats); // if !is_committed
+    }    
 
     // TODO: should we free empty regions? currently only done _mi_mem_collect.
-    // this frees up virtual address space which
-    // might be useful on 32-bit systems?
+    // this frees up virtual address space which might be useful on 32-bit systems?
 
     // and unclaim
     uintptr_t map;
@@ -419,17 +436,20 @@ void _mi_mem_collect(mi_stats_t* stats) {
   // free every region that has no segments in use.
   for (size_t i = 0; i < regions_count; i++) {
     mem_region_t* region = &regions[i];
-    if (mi_atomic_read_relaxed(&region->map) == 0 && region->start != NULL) {
+    if (mi_atomic_read_relaxed(&region->map) == 0) {
       // if no segments used, try to claim the whole region
       uintptr_t m;
       do {
         m = mi_atomic_read_relaxed(&region->map);
       } while(m == 0 && !mi_atomic_cas_weak(&region->map, ~((uintptr_t)0), 0 ));
       if (m == 0) {
-        // on success, free the whole region
-        if (region->start != NULL) _mi_os_free((void*)region->start, MI_REGION_SIZE, stats);
+        // on success, free the whole region (unless it was huge reserved)
+        void* start = mi_region_info_read(mi_atomic_read(&region->info), NULL, NULL);
+        if (start != NULL && !_mi_os_is_huge_reserved(start)) {
+          _mi_os_free(start, MI_REGION_SIZE, stats);
+        }
         // and release
-        mi_atomic_write_ptr(&region->start,NULL);
+        mi_atomic_write(&region->info,0);
         mi_atomic_write(&region->map,0);
       }
     }
