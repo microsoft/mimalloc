@@ -123,14 +123,14 @@ void _mi_os_init(void) {
     // Set "Lock pages in memory" permission in the group policy editor
     // <https://devblogs.microsoft.com/oldnewthing/20110128-00/?p=11643>
     HANDLE token = NULL;
-    ok = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token);
+    ok = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token) != 0;
     if (ok) {
       TOKEN_PRIVILEGES tp;
-      ok = LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &tp.Privileges[0].Luid);
+      ok = LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &tp.Privileges[0].Luid) != 0;
       if (ok) {
         tp.PrivilegeCount = 1;
         tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-        ok = AdjustTokenPrivileges(token, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+        ok = AdjustTokenPrivileges(token, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0) != 0;
         if (ok) {
           err = GetLastError();
           ok = (err == ERROR_SUCCESS);
