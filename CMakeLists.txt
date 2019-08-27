@@ -113,6 +113,10 @@ if(WIN32)
   list(APPEND mi_libraries psapi shell32 user32)
 else()
   list(APPEND mi_libraries pthread)
+  find_library(LIBRT rt)
+  if(LIBRT)
+    list(APPEND mi_libraries ${LIBRT})
+  endif()
 endif()
 
 # -----------------------------------------------------------------------------
