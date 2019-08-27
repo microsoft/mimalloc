@@ -69,7 +69,8 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
   { 0, UNINIT, MI_OPTION(page_reset) },
   { 0, UNINIT, MI_OPTION(cache_reset) },
-  { 0, UNINIT, MI_OPTION(reset_decommits) }      // note: cannot enable this if secure is on
+  { 0, UNINIT, MI_OPTION(reset_decommits) },     // note: cannot enable this if secure is on
+  { 100, UNINIT, MI_OPTION(os_tag) }             // only apple specific for now but might serve more or less related purpose
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
