@@ -288,7 +288,9 @@ static void* mi_unix_mmap(size_t size, size_t try_alignment, int protect_flags) 
   #endif
   #if defined(VM_MAKE_TAG)
   // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
-  fd = VM_MAKE_TAG(100);
+  int os_tag = (int)mi_option_get(mi_option_os_tag);
+  if (os_tag < 100 || os_tag > 255) os_tag = 100;
+  fd = VM_MAKE_TAG(os_tag);
   #endif
   if (use_large_os_page(size, try_alignment)) {
     static volatile _Atomic(uintptr_t) large_page_try_ok; // = 0;
