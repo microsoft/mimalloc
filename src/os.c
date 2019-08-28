@@ -261,6 +261,8 @@ static void* mi_unix_mmapx(size_t size, size_t try_alignment, int protect_flags,
       if (p==MAP_FAILED) p = NULL; // fall back to regular mmap
     }
   }
+  #else
+  UNUSED(try_alignment);
   #endif
   if (p==NULL) {
     p = mmap(NULL,size,protect_flags,flags,fd,0);
