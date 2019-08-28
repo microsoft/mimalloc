@@ -47,6 +47,7 @@ bool    _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
 bool    _mi_os_unreset(void* p, size_t size, mi_stats_t* stats);
 void*   _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
 bool    _mi_os_is_huge_reserved(void* p);
+void    _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats);
 
 // Constants
 #if (MI_INTPTR_SIZE==8)
@@ -179,7 +180,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       }
       if (start != NULL) {
         // free it if we didn't succeed to save it to some other region
-        _mi_os_free(start, MI_REGION_SIZE, tld->stats);
+        _mi_os_free_ex(start, MI_REGION_SIZE, region_commit, tld->stats);
       }
       // and continue with the memory at our index
       info = mi_atomic_read(&region->info);
@@ -426,6 +427,10 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
       // _mi_os_reset(p,size,stats);
       // _mi_os_decommit(p,size,stats); // if !is_committed
     }    
+    if (!is_eager_committed) {
+      // adjust commit statistics as we commit again when re-using the same slot
+      _mi_stat_decrease(&stats->committed, mi_good_commit_size(size));
+    }
 
     // TODO: should we free empty regions? currently only done _mi_mem_collect.
     // this frees up virtual address space which might be useful on 32-bit systems?
@@ -456,9 +461,10 @@ void _mi_mem_collect(mi_stats_t* stats) {
       } while(m == 0 && !mi_atomic_cas_weak(&region->map, ~((uintptr_t)0), 0 ));
       if (m == 0) {
         // on success, free the whole region (unless it was huge reserved)
-        void* start = mi_region_info_read(mi_atomic_read(&region->info), NULL, NULL);
+        bool is_eager_committed;
+        void* start = mi_region_info_read(mi_atomic_read(&region->info), NULL, &is_eager_committed);
         if (start != NULL && !_mi_os_is_huge_reserved(start)) {
-          _mi_os_free(start, MI_REGION_SIZE, stats);
+          _mi_os_free_ex(start, MI_REGION_SIZE, is_eager_committed, stats);
         }
         // and release
         mi_atomic_write(&region->info,0);

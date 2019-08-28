@@ -85,6 +85,7 @@ static void mi_stat_add(mi_stat_count_t* stat, const mi_stat_count_t* src, int64
   mi_atomic_add64( &stat->allocated, src->allocated * unit);
   mi_atomic_add64( &stat->current, src->current * unit);
   mi_atomic_add64( &stat->freed, src->freed * unit);
+  // peak scores do not work across threads..
   mi_atomic_add64( &stat->peak, src->peak * unit);
 }
 

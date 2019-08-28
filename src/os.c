@@ -170,7 +170,7 @@ void _mi_os_init() {
   Raw allocation on Windows (VirtualAlloc) and Unix's (mmap).
 ----------------------------------------------------------- */
 
-static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
+static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats_t* stats)
 {
   if (addr == NULL || size == 0 || _mi_os_is_huge_reserved(addr)) return true;
   bool err = false;
@@ -181,7 +181,7 @@ static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
 #else
   err = (munmap(addr, size) == -1);
 #endif
-  _mi_stat_decrease(&stats->committed, size); // TODO: what if never committed?
+  if (was_committed) _mi_stat_decrease(&stats->committed, size); 
   _mi_stat_decrease(&stats->reserved, size);
   if (err) {
 #pragma warning(suppress:4996)
@@ -461,7 +461,7 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
 
   // if not aligned, free it, overallocate, and unmap around it
   if (((uintptr_t)p % alignment != 0)) {
-    mi_os_mem_free(p, size, stats);
+    mi_os_mem_free(p, size, commit, stats);
     if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
     size_t over_size = size + alignment;
 
@@ -484,12 +484,12 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
       }
       else {
         // otherwise free and allocate at an aligned address in there
-        mi_os_mem_free(p, over_size, stats);
+        mi_os_mem_free(p, over_size, commit, stats);
         void* aligned_p = mi_align_up_ptr(p, alignment);
         p = mi_win_virtual_alloc(aligned_p, size, alignment, flags, false, allow_large, is_large);
         if (p == aligned_p) break; // success!
         if (p != NULL) { // should not happen?
-          mi_os_mem_free(p, size, stats);
+          mi_os_mem_free(p, size, commit, stats);
           p = NULL;
         }
       }
@@ -504,8 +504,8 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
     size_t mid_size = _mi_align_up(size, _mi_os_page_size());
     size_t post_size = over_size - pre_size - mid_size;
     mi_assert_internal(pre_size < over_size && post_size < over_size && mid_size >= size);
-    if (pre_size > 0)  mi_os_mem_free(p, pre_size, stats);
-    if (post_size > 0) mi_os_mem_free((uint8_t*)aligned_p + mid_size, post_size, stats);
+    if (pre_size > 0)  mi_os_mem_free(p, pre_size, commit, stats);
+    if (post_size > 0) mi_os_mem_free((uint8_t*)aligned_p + mid_size, post_size, commit, stats);
     // we can return the aligned pointer on `mmap` systems
     p = aligned_p;
 #endif
@@ -526,10 +526,14 @@ void* _mi_os_alloc(size_t size, mi_stats_t* stats) {
   return mi_os_mem_alloc(size, 0, true, false, &is_large, stats);
 }
 
-void  _mi_os_free(void* p, size_t size, mi_stats_t* stats) {
+void  _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats) {
   if (size == 0 || p == NULL) return;
   size = mi_os_good_alloc_size(size, 0);
-  mi_os_mem_free(p, size, stats);
+  mi_os_mem_free(p, size, was_committed, stats);
+}
+
+void  _mi_os_free(void* p, size_t size, mi_stats_t* stats) {
+  _mi_os_free_ex(p, size, true, stats);
 }
 
 void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld)
@@ -650,7 +654,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   // Testing shows that for us (on `malloc-large`) MEM_RESET is 2x faster than DiscardVirtualMemory
   void* p = VirtualAlloc(start, csize, MEM_RESET, PAGE_READWRITE);
   mi_assert_internal(p == start);
-  #if 0
+  #if 1
   if (p == start) {
     VirtualUnlock(start,csize); // VirtualUnlock after MEM_RESET removes the memory from the working set
   }
@@ -753,7 +757,7 @@ bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize, mi_stats_t* stats) {
   // we cannot shrink on windows, but we can decommit
   return _mi_os_decommit(start, size, stats);
 #else
-  return mi_os_mem_free(start, size, stats);
+  return mi_os_mem_free(start, size, true, stats);
 #endif
 }
 
