@@ -262,7 +262,7 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
       mi_assert_internal((m >> bitidx) == mask); // no overflow?
       uintptr_t newmap = map | m;
       mi_assert_internal((newmap^map) >> bitidx == mask);
-      if (!mi_atomic_cas_weak(&region->map, newmap, map)) {
+      if (!mi_atomic_cas_weak(&region->map, newmap, map)) {  // TODO: use strong cas here?
         // no success, another thread claimed concurrently.. keep going
         map = mi_atomic_read(&region->map);
         continue;
@@ -299,12 +299,24 @@ static bool mi_region_try_alloc_blocks(size_t idx, size_t blocks, size_t size, b
   mi_assert_internal(idx < MI_REGION_MAX);
   mem_region_t* region = &regions[idx];
   uintptr_t m = mi_atomic_read_relaxed(&region->map);
-  if (m != MI_REGION_MAP_FULL) {  // some bits are zero
-    return mi_region_alloc_blocks(region, idx, blocks, size, commit, large, p, id, tld);
+  if (m != MI_REGION_MAP_FULL) {  // some bits are zero    
+    bool ok = (commit || *large); // committing or allow-large is always ok
+    if (!ok) {
+      // otherwise skip incompatible regions if possible. 
+      // this is not guaranteed due to multiple threads allocating at the same time but
+      // that's ok. In secure mode, large is never allowed so that works out; otherwise
+      // we might just not be able to reset/decommit individual pages sometimes.
+      mi_region_info_t info = mi_atomic_read_relaxed(&region->info);
+      bool is_large;
+      bool is_committed;
+      void* start = mi_region_info_read(info,&is_large,&is_committed);
+      ok = (start == NULL || (commit || !is_committed) || (*large || !is_large)); // Todo: test with one bitmap operation?
+    }
+    if (ok) {
+      return mi_region_alloc_blocks(region, idx, blocks, size, commit, large, p, id, tld);
+    }
   }
-  else {
-    return true;  // no error, but no success either
-  }
+  return true;  // no error, but no success either
 }
 
 /* ----------------------------------------------------------------------------
