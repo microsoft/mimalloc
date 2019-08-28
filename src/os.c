@@ -35,9 +35,9 @@ terms of the MIT license. A copy of the license can be found in the file
   On windows initializes support for aligned allocation and
   large OS pages (if MIMALLOC_LARGE_OS_PAGES is true).
 ----------------------------------------------------------- */
-bool          _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
-bool          _mi_os_is_huge_reserved(void* p);
-static void*  mi_os_alloc_from_huge_reserved(size_t size, size_t try_alignment, bool commit);
+bool    _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
+bool    _mi_os_is_huge_reserved(void* p);
+void*   _mi_os_try_alloc_from_huge_reserved(size_t size, size_t try_alignment);
 
 static void* mi_align_up_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
@@ -418,8 +418,8 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, boo
   if (!commit) allow_large = false;
 
   void* p = NULL;
-  if (allow_large) {
-    p = mi_os_alloc_from_huge_reserved(size, try_alignment, commit);
+  if (commit && allow_large) {
+    p = _mi_os_try_alloc_from_huge_reserved(size, try_alignment);
     if (p != NULL) {
       *is_large = true;
       return p;
@@ -781,12 +781,11 @@ bool _mi_os_is_huge_reserved(void* p) {
           (uint8_t*)p < (uint8_t*)mi_atomic_read_ptr(&os_huge_reserved.start) + mi_atomic_read(&os_huge_reserved.reserved));
 }
 
-static void* mi_os_alloc_from_huge_reserved(size_t size, size_t try_alignment, bool commit) 
+void* _mi_os_try_alloc_from_huge_reserved(size_t size, size_t try_alignment)
 {
   // only allow large aligned allocations
   if (size < MI_SEGMENT_SIZE || (size % MI_SEGMENT_SIZE) != 0) return NULL;
-  if (try_alignment > MI_SEGMENT_SIZE) return NULL;
-  if (!commit) return NULL;
+  if (try_alignment > MI_SEGMENT_SIZE) return NULL;  
   if (mi_atomic_read_ptr(&os_huge_reserved.start)==NULL) return NULL;
   if (mi_atomic_read(&os_huge_reserved.used) >= mi_atomic_read(&os_huge_reserved.reserved)) return NULL; // already full
 
