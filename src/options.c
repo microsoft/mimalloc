@@ -134,6 +134,32 @@ void mi_option_disable(mi_option_t option) {
 }
 
 
+static void mi_out_stderr(const char* msg) {
+  #ifdef _WIN32
+  // on windows with redirection, the C runtime cannot handle locale dependent output 
+  // after the main thread closes so we use direct console output.
+  _cputs(msg);
+  #else
+  fputs(msg, stderr);
+  #endif
+}
+
+// --------------------------------------------------------
+// Default output handler
+// --------------------------------------------------------
+
+static volatile _Atomic(mi_output_fun*) mi_out_default; // = NULL
+
+static mi_output_fun* mi_out_get_default(void) {
+  mi_output_fun* out = (mi_output_fun*)mi_atomic_read_ptr(mi_atomic_cast(void*, &mi_out_default));
+  return (out == NULL ? &mi_out_stderr : out);
+}
+
+void mi_register_output(mi_output_fun* out) mi_attr_noexcept {
+  mi_atomic_write_ptr(mi_atomic_cast(void*,&mi_out_default),out);
+}
+
+
 // --------------------------------------------------------
 // Messages
 // --------------------------------------------------------
@@ -146,31 +172,20 @@ static mi_decl_thread bool recurse = false;
 
 // Define our own limited `fprintf` that avoids memory allocation.
 // We do this using `snprintf` with a limited buffer.
-static void mi_vfprintf( FILE* out, const char* prefix, const char* fmt, va_list args ) {
+static void mi_vfprintf( mi_output_fun* out, const char* prefix, const char* fmt, va_list args ) {
   char buf[256];
   if (fmt==NULL) return;
   if (_mi_preloading() || recurse) return;
   recurse = true;
-  if (out==NULL) out = stdout;
+  if (out==NULL) out = mi_out_get_default();
   vsnprintf(buf,sizeof(buf)-1,fmt,args);
-  #ifdef _WIN32
-  // on windows with redirection, the C runtime cannot handle locale dependent output 
-  // after the main thread closes so use direct console output.
-  if (out==stderr) {
-    if (prefix != NULL) _cputs(prefix);
-    _cputs(buf);
-  }
-  else 
-  #endif
-  {  
-    if (prefix != NULL) fputs(prefix,out);
-    fputs(buf,out);
-  }
+  if (prefix != NULL) out(prefix);
+  out(buf);
   recurse = false;
   return;
 }
 
-void _mi_fprintf( FILE* out, const char* fmt, ... ) {
+void _mi_fprintf( mi_output_fun* out, const char* fmt, ... ) {
   va_list args;
   va_start(args,fmt);
   mi_vfprintf(out,NULL,fmt,args);
@@ -181,7 +196,7 @@ void _mi_trace_message(const char* fmt, ...) {
   if (mi_option_get(mi_option_verbose) <= 1) return;  // only with verbose level 2 or higher
   va_list args;
   va_start(args, fmt);
-  mi_vfprintf(stderr, "mimalloc: ", fmt, args);
+  mi_vfprintf(NULL, "mimalloc: ", fmt, args);
   va_end(args);
 }
 
@@ -189,7 +204,7 @@ void _mi_verbose_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_verbose)) return;
   va_list args;
   va_start(args,fmt);
-  mi_vfprintf(stderr, "mimalloc: ", fmt, args);
+  mi_vfprintf(NULL, "mimalloc: ", fmt, args);
   va_end(args);
 }
 
@@ -198,7 +213,7 @@ void _mi_error_message(const char* fmt, ...) {
   if (mi_atomic_increment(&error_count) > MAX_ERROR_COUNT) return;
   va_list args;
   va_start(args,fmt);
-  mi_vfprintf(stderr, "mimalloc: error: ", fmt, args);
+  mi_vfprintf(NULL, "mimalloc: error: ", fmt, args);
   va_end(args);
   mi_assert(false);
 }
@@ -208,14 +223,14 @@ void _mi_warning_message(const char* fmt, ...) {
   if (mi_atomic_increment(&error_count) > MAX_ERROR_COUNT) return;
   va_list args;
   va_start(args,fmt);
-  mi_vfprintf(stderr, "mimalloc: warning: ", fmt, args);
+  mi_vfprintf(NULL, "mimalloc: warning: ", fmt, args);
   va_end(args);
 }
 
 
 #if MI_DEBUG
 void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, const char* func ) {
-  _mi_fprintf(stderr,"mimalloc: assertion failed: at \"%s\":%u, %s\n  assertion: \"%s\"\n", fname, line, (func==NULL?"":func), assertion);
+  _mi_fprintf(NULL,"mimalloc: assertion failed: at \"%s\":%u, %s\n  assertion: \"%s\"\n", fname, line, (func==NULL?"":func), assertion);
   abort();
 }
 #endif

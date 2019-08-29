@@ -22,7 +22,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 // "options.c"
-void       _mi_fprintf(FILE* out, const char* fmt, ...);
+void       _mi_fprintf(mi_output_fun* out, const char* fmt, ...);
 void       _mi_error_message(const char* fmt, ...);
 void       _mi_warning_message(const char* fmt, ...);
 void       _mi_verbose_message(const char* fmt, ...);
