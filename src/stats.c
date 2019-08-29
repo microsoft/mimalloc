@@ -12,19 +12,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 /* -----------------------------------------------------------
-  Merge thread statistics with the main one.
------------------------------------------------------------ */
-
-static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src);
-
-void _mi_stats_done(mi_stats_t* stats) {
-  if (stats == &_mi_stats_main) return;
-  mi_stats_add(&_mi_stats_main, stats);
-  memset(stats,0,sizeof(*stats));
-}
-
-
-/* -----------------------------------------------------------
   Statistics operations
 ----------------------------------------------------------- */
 
@@ -294,6 +281,13 @@ static mi_stats_t* mi_stats_get_default(void) {
   return &heap->tld->stats;
 }
 
+static void mi_stats_merge_from(mi_stats_t* stats) {
+  if (stats != &_mi_stats_main) {
+    mi_stats_add(&_mi_stats_main, stats);
+    memset(stats, 0, sizeof(mi_stats_t));
+  }
+}
+
 void mi_stats_reset(void) mi_attr_noexcept {
   mi_stats_t* stats = mi_stats_get_default();
   if (stats != &_mi_stats_main) { memset(stats, 0, sizeof(mi_stats_t)); }
@@ -301,11 +295,17 @@ void mi_stats_reset(void) mi_attr_noexcept {
   mi_time_start = _mi_clock_start();
 }
 
+void mi_stats_merge(void) mi_attr_noexcept {
+  mi_stats_merge_from( mi_stats_get_default() );
+}
+
+void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
+  mi_stats_merge_from(stats);
+}
+
+
 static void mi_stats_print_ex(mi_stats_t* stats, double secs, FILE* out) {
-  if (stats != &_mi_stats_main) {
-    mi_stats_add(&_mi_stats_main,stats);
-    memset(stats,0,sizeof(mi_stats_t));
-  }
+  mi_stats_merge_from(stats);
   _mi_stats_print(&_mi_stats_main, secs, out);
 }
 

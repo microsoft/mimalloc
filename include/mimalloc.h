@@ -110,6 +110,7 @@ mi_decl_export size_t mi_good_size(size_t size)       mi_attr_noexcept;
 mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
 mi_decl_export void mi_stats_print(FILE* out) mi_attr_noexcept;
 mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
+mi_decl_export void mi_stats_merge(void)      mi_attr_noexcept;
 mi_decl_export int  mi_version(void)          mi_attr_noexcept;
 
 mi_decl_export void mi_process_init(void)     mi_attr_noexcept;
