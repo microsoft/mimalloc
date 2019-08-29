@@ -16,6 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <psapi.h>
 
 #include <stdlib.h> // getenv
+#include <stdio.h>  // _setmaxstdio
 #include <string.h> // strstr
 
 

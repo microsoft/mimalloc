@@ -24,6 +24,9 @@ int mi_version(void) mi_attr_noexcept {
 
 // --------------------------------------------------------
 // Options
+// These can be accessed by multiple threads and may be 
+// concurrently initialized, but an initializing data race
+// is ok since they resolve to the same value.
 // --------------------------------------------------------
 typedef enum mi_init_e {
   UNINIT,       // not yet initialized
@@ -55,20 +58,31 @@ static mi_option_desc_t options[_mi_option_last] =
   #endif
 
   // the following options are experimental and not all combinations make sense.
-  { 1, UNINIT, MI_OPTION(eager_commit) },        // note: if eager_region_commit is on, this should be on too.
+  { 1, UNINIT, MI_OPTION(eager_commit) },        // note: needs to be on when eager_region_commit is enabled
   #ifdef _WIN32   // and BSD?
-  { 1, UNINIT, MI_OPTION(eager_region_commit) }, // don't commit too eagerly on windows (just for looks...)
+  { 0, UNINIT, MI_OPTION(eager_region_commit) }, // don't commit too eagerly on windows (just for looks...)
   #else
   { 1, UNINIT, MI_OPTION(eager_region_commit) },
   #endif
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },
+  { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
   { 0, UNINIT, MI_OPTION(page_reset) },
   { 0, UNINIT, MI_OPTION(cache_reset) },
-  { 0, UNINIT, MI_OPTION(reset_decommits) }      // note: cannot enable this if secure is on
+  { 0, UNINIT, MI_OPTION(reset_decommits) },     // note: cannot enable this if secure is on
+  { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
+  { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free
+  { 100, UNINIT, MI_OPTION(os_tag) }             // only apple specific for now but might serve more or less related purpose
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
+
+void _mi_options_init(void) {
+  // called on process load
+  for(int i = 0; i < _mi_option_last; i++ ) {
+    mi_option_get((mi_option_t)i); // initialize
+  }
+}
 
 long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
@@ -120,41 +134,56 @@ void mi_option_disable(mi_option_t option) {
 }
 
 
+static void mi_out_stderr(const char* msg) {
+  #ifdef _WIN32
+  // on windows with redirection, the C runtime cannot handle locale dependent output 
+  // after the main thread closes so we use direct console output.
+  _cputs(msg);
+  #else
+  fputs(msg, stderr);
+  #endif
+}
+
+// --------------------------------------------------------
+// Default output handler
+// --------------------------------------------------------
+
+#pragma warning(suppress:4180)
+static volatile _Atomic(mi_output_fun*) mi_out_default; // = NULL
+
+static mi_output_fun* mi_out_get_default(void) {
+  mi_output_fun* out = (mi_output_fun*)mi_atomic_read_ptr(mi_atomic_cast(void*, &mi_out_default));
+  return (out == NULL ? &mi_out_stderr : out);
+}
+
+void mi_register_output(mi_output_fun* out) mi_attr_noexcept {
+  mi_atomic_write_ptr(mi_atomic_cast(void*,&mi_out_default),out);
+}
+
+
 // --------------------------------------------------------
 // Messages
 // --------------------------------------------------------
 #define MAX_ERROR_COUNT (10)
-static uintptr_t error_count = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
+static volatile _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
 
 // When overriding malloc, we may recurse into mi_vfprintf if an allocation
 // inside the C runtime causes another message.
 static mi_decl_thread bool recurse = false;
 
-
-void _mi_fputs(FILE* out, const char* prefix, const char* message) {
-  if (out==NULL) out = stdout;
+void _mi_fputs(mi_output_fun* out, const char* prefix, const char* message) {
   if (_mi_preloading() || recurse) return;
+  if (out==NULL) out = mi_out_get_default();
   recurse = true;
-  #ifdef _WIN32
-  // on windows with redirection, the C runtime cannot handle locale dependent output 
-  // after the main thread closes so use direct console output.
-  if (out==stderr) {
-    if (prefix != NULL) _cputs(prefix);
-    _cputs(message);
-  }
-  else
-    #endif
-  {
-    if (prefix != NULL) fputs(prefix, out);
-    fputs(message, out);
-  }
+  if (prefix != NULL) out(prefix);
+  out(message);
   recurse = false;
   return;
 }
 
 // Define our own limited `fprintf` that avoids memory allocation.
 // We do this using `snprintf` with a limited buffer.
-static void mi_vfprintf( FILE* out, const char* prefix, const char* fmt, va_list args ) {
+static void mi_vfprintf( mi_output_fun* out, const char* prefix, const char* fmt, va_list args ) {
   char buf[512];
   if (fmt==NULL) return;
   if (_mi_preloading() || recurse) return;
@@ -165,7 +194,7 @@ static void mi_vfprintf( FILE* out, const char* prefix, const char* fmt, va_list
 }
 
 
-void _mi_fprintf( FILE* out, const char* fmt, ... ) {
+void _mi_fprintf( mi_output_fun* out, const char* fmt, ... ) {
   va_list args;
   va_start(args,fmt);
   mi_vfprintf(out,NULL,fmt,args);
@@ -176,7 +205,7 @@ void _mi_trace_message(const char* fmt, ...) {
   if (mi_option_get(mi_option_verbose) <= 1) return;  // only with verbose level 2 or higher
   va_list args;
   va_start(args, fmt);
-  mi_vfprintf(stderr, "mimalloc: ", fmt, args);
+  mi_vfprintf(NULL, "mimalloc: ", fmt, args);
   va_end(args);
 }
 
@@ -184,7 +213,7 @@ void _mi_verbose_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_verbose)) return;
   va_list args;
   va_start(args,fmt);
-  mi_vfprintf(stderr, "mimalloc: ", fmt, args);
+  mi_vfprintf(NULL, "mimalloc: ", fmt, args);
   va_end(args);
 }
 
@@ -193,7 +222,7 @@ void _mi_error_message(const char* fmt, ...) {
   if (mi_atomic_increment(&error_count) > MAX_ERROR_COUNT) return;
   va_list args;
   va_start(args,fmt);
-  mi_vfprintf(stderr, "mimalloc: error: ", fmt, args);
+  mi_vfprintf(NULL, "mimalloc: error: ", fmt, args);
   va_end(args);
   mi_assert(false);
 }
@@ -203,14 +232,14 @@ void _mi_warning_message(const char* fmt, ...) {
   if (mi_atomic_increment(&error_count) > MAX_ERROR_COUNT) return;
   va_list args;
   va_start(args,fmt);
-  mi_vfprintf(stderr, "mimalloc: warning: ", fmt, args);
+  mi_vfprintf(NULL, "mimalloc: warning: ", fmt, args);
   va_end(args);
 }
 
 
 #if MI_DEBUG
 void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, const char* func ) {
-  _mi_fprintf(stderr,"mimalloc: assertion failed: at \"%s\":%u, %s\n  assertion: \"%s\"\n", fname, line, (func==NULL?"":func), assertion);
+  _mi_fprintf(NULL,"mimalloc: assertion failed: at \"%s\":%u, %s\n  assertion: \"%s\"\n", fname, line, (func==NULL?"":func), assertion);
   abort();
 }
 #endif
@@ -236,27 +265,18 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
 // On Windows use GetEnvironmentVariable instead of getenv to work
 // reliably even when this is invoked before the C runtime is initialized.
 // i.e. when `_mi_preloading() == true`.
+// Note: on windows, environment names are not case sensitive.
 #include <windows.h>
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
   result[0] = 0;
-  bool ok = (GetEnvironmentVariableA(name, result, (DWORD)result_size) > 0);
-  if (!ok) {
-    char buf[64+1];
-    size_t len = strlen(name);
-    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
-    for (size_t i = 0; i < len; i++) {
-      buf[i] = toupper(name[i]);
-    }
-    buf[len] = 0;
-    ok = (GetEnvironmentVariableA(name, result, (DWORD)result_size) > 0);
-  }
-  return ok;
+  size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);  
+  return (len > 0 && len < result_size);
 }
 #else
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
-  #pragma warning(suppress:4996)
   const char* s = getenv(name);
   if (s == NULL) {
+    // in unix environments we check the upper case name too.
     char buf[64+1];
     size_t len = strlen(name);
     if (len >= sizeof(buf)) len = sizeof(buf) - 1;
@@ -264,7 +284,6 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
       buf[i] = toupper(name[i]);
     }
     buf[len] = 0;
-    #pragma warning(suppress:4996)
     s = getenv(buf);
   }
   if (s != NULL && strlen(s) < result_size) {
@@ -276,8 +295,7 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
   }
 }
 #endif
-static void mi_option_init(mi_option_desc_t* desc) {
-  desc->init = DEFAULTED;
+static void mi_option_init(mi_option_desc_t* desc) {  
   // Read option value from the environment
   char buf[64+1];
   mi_strlcpy(buf, "mimalloc_", sizeof(buf));
@@ -307,7 +325,12 @@ static void mi_option_init(mi_option_desc_t* desc) {
       }
       else {
         _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
+        desc->init = DEFAULTED;
       }
     }
   }
+  else {
+    desc->init = DEFAULTED;
+  }
+  mi_assert_internal(desc->init != UNINIT);
 }

@@ -10,6 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
+#include <mimalloc-atomic.h>  // _Atomic
 
 // ------------------------------------------------------
 // Variants
@@ -91,11 +92,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_MEDIUM_PAGES_PER_SEGMENT       (MI_SEGMENT_SIZE/MI_MEDIUM_PAGE_SIZE)
 #define MI_LARGE_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_LARGE_PAGE_SIZE)
 
-#define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/4)
-#define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/4)   // 128kb on 64-bit
-#define MI_LARGE_OBJ_SIZE_MAX             (MI_LARGE_PAGE_SIZE/2)    // 2Mb on 64-bit
-#define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX>>MI_INTPTR_SHIFT)
-#define MI_HUGE_OBJ_SIZE_MAX              (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)  // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
+// The max object size are checked to not waste more than 12.5% internally over the page sizes.
+// (Except for large pages since huge objects are allocated in 4MiB chunks)
+#define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/4)   // 16kb
+#define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/4)  // 128kb
+#define MI_LARGE_OBJ_SIZE_MAX             (MI_LARGE_PAGE_SIZE/2)   // 2mb 
+#define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)     
+#define MI_HUGE_OBJ_SIZE_MAX              (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)        // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
@@ -124,12 +127,15 @@ typedef enum mi_delayed_e {
 } mi_delayed_t;
 
 
-// Use the bottom 2 bits for the `in_full` and `has_aligned` flags
-// and the rest for the threadid (we assume tid's never use those lower 2 bits).
-// This allows a single test in `mi_free` to check for unlikely cases
-// (namely, non-local free, aligned free, or freeing in a full page)
-#define MI_PAGE_FLAGS_MASK  ((uintptr_t)0x03)
-typedef uintptr_t mi_page_flags_t;
+// The `in_full` and `has_aligned` page flags are put in a union to efficiently 
+// test if both are false (`value == 0`) in the `mi_free` routine.
+typedef union mi_page_flags_u {
+  uint16_t value;
+  struct {
+    bool in_full;
+    bool has_aligned;
+  };
+} mi_page_flags_t;
 
 // Thread free list.
 // We use the bottom 2 bits of the pointer for mi_delayed_t flags
@@ -161,19 +167,19 @@ typedef struct mi_page_s {
   bool                  is_committed:1;    // `true` if the page virtual memory is committed
 
   // layout like this to optimize access in `mi_malloc` and `mi_free`
-  uint16_t              capacity;          // number of blocks committed
+  uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
   uint16_t              reserved;          // number of blocks reserved in memory
-                                           // 16 bits padding
+  mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (16 bits)
+
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   #if MI_SECURE
   uintptr_t             cookie;            // random cookie to encode the free lists
   #endif
-  mi_page_flags_t       flags;             // threadid:62 | has_aligned:1 | in_full:1
   size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
   
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
-  volatile uintptr_t    thread_freed;      // at least this number of blocks are in `thread_free`
-  volatile mi_thread_free_t thread_free;   // list of deferred free blocks freed by other threads
+  volatile _Atomic(uintptr_t)        thread_freed;  // at least this number of blocks are in `thread_free`
+  volatile _Atomic(mi_thread_free_t) thread_free;   // list of deferred free blocks freed by other threads
 
   // less accessed info
   size_t                block_size;        // size available in each block (always `>0`)
@@ -181,12 +187,11 @@ typedef struct mi_page_s {
   struct mi_page_s*     next;              // next page owned by this thread with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by this thread with the same `block_size`
 
-// improve page index calculation
-#if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
-  void*                 padding[1];        // 12 words on 64-bit
-#elif MI_INTPTR_SIZE==4
-  // void*                 padding[1];         // 12 words on 32-bit
-#endif
+  // improve page index calculation
+  // without padding: 10 words on 64-bit, 11 on 32-bit. Secure adds one word
+  #if (MI_INTPTR_SIZE==8 && MI_SECURE>0) || (MI_INTPTR_SIZE==4 && MI_SECURE==0)
+  void*                 padding[1];        // 12 words on 64-bit in secure mode, 12 words on 32-bit plain
+  #endif
 } mi_page_t;
 
 
@@ -202,20 +207,25 @@ typedef enum mi_page_kind_e {
 // the OS. Inside segments we allocated fixed size _pages_ that
 // contain blocks.
 typedef struct mi_segment_s {
-  struct mi_segment_s* next;
+  // memory fields
+  size_t          memid;            // id for the os-level memory manager
+  bool            mem_is_fixed;     // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)    
+  bool            mem_is_committed; // `true` if the whole segment is eagerly committed
+
+  // segment fields
+  struct mi_segment_s* next;   // must be the first segment field -- see `segment.c:segment_alloc`
   struct mi_segment_s* prev;
-  struct mi_segment_s* abandoned_next;
+  volatile _Atomic(struct mi_segment_s*) abandoned_next;
   size_t          abandoned;   // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
   size_t          used;        // count of pages in use (`used <= capacity`)
   size_t          capacity;    // count of available pages (`#free + used`)
   size_t          segment_size;// for huge pages this may be different from `MI_SEGMENT_SIZE`
   size_t          segment_info_size;  // space we are using from the first page for segment meta-data and possible guard pages.
   uintptr_t       cookie;      // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
-  size_t          memid;       // id for the os-level memory manager
 
   // layout like this to optimize access in `mi_free`
   size_t          page_shift;  // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).
-  volatile uintptr_t thread_id;   // unique id of the thread owning this segment
+  volatile _Atomic(uintptr_t) thread_id;   // unique id of the thread owning this segment
   mi_page_kind_t  page_kind;   // kind of pages: small, large, or huge
   mi_page_t       pages[1];    // up to `MI_SMALL_PAGES_PER_SEGMENT` pages
 } mi_segment_t;
@@ -251,7 +261,7 @@ struct mi_heap_s {
   mi_tld_t*             tld;
   mi_page_t*            pages_free_direct[MI_SMALL_WSIZE_MAX + 2];   // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
   mi_page_queue_t       pages[MI_BIN_FULL + 1];                      // queue of pages for each size class (or "bin")
-  volatile mi_block_t*  thread_delayed_free;
+  volatile _Atomic(mi_block_t*) thread_delayed_free;
   uintptr_t             thread_id;                                   // thread this heap belongs too
   uintptr_t             cookie;
   uintptr_t             random;                                      // random number used for secure allocation

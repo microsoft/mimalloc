@@ -49,11 +49,12 @@ static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
   return count;
 }
 
+/*
 // Start of the page available memory
 static inline uint8_t* mi_page_area(const mi_page_t* page) {
   return _mi_page_start(_mi_page_segment(page), page, NULL);
 }
-
+*/
 
 static bool mi_page_list_is_valid(mi_page_t* page, mi_block_t* p) {
   size_t psize;
@@ -75,7 +76,6 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_segment_t* segment = _mi_page_segment(page);
   uint8_t* start = _mi_page_start(segment,page,NULL);
   mi_assert_internal(start == _mi_segment_page_start(segment,page,page->block_size,NULL));
-  mi_assert_internal(segment->thread_id==0 || segment->thread_id == mi_page_thread_id(page));
   //mi_assert_internal(start + page->capacity*page->block_size == page->top);
 
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
@@ -99,11 +99,13 @@ bool _mi_page_is_valid(mi_page_t* page) {
   #endif
   if (page->heap!=NULL) {
     mi_segment_t* segment = _mi_page_segment(page);
-    mi_assert_internal(!_mi_process_is_initialized || segment->thread_id == page->heap->thread_id);
-    mi_page_queue_t* pq = mi_page_queue_of(page);
-    mi_assert_internal(mi_page_queue_contains(pq, page));
-    mi_assert_internal(pq->block_size==page->block_size || page->block_size > MI_LARGE_OBJ_SIZE_MAX || mi_page_is_in_full(page));
-    mi_assert_internal(mi_heap_contains_queue(page->heap,pq));
+    mi_assert_internal(!_mi_process_is_initialized || segment->thread_id == page->heap->thread_id || segment->thread_id==0);
+    if (segment->page_kind != MI_PAGE_HUGE) {
+      mi_page_queue_t* pq = mi_page_queue_of(page);
+      mi_assert_internal(mi_page_queue_contains(pq, page));
+      mi_assert_internal(pq->block_size==page->block_size || page->block_size > MI_LARGE_OBJ_SIZE_MAX || mi_page_is_in_full(page));
+      mi_assert_internal(mi_heap_contains_queue(page->heap,pq));
+    }
   }
   return true;
 }
@@ -125,7 +127,7 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay  ) {
     }
   }
   while((mi_tf_delayed(tfreex) !=  mi_tf_delayed(tfree)) && // avoid atomic operation if already equal
-        !mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
+        !mi_atomic_cas_weak(mi_atomic_cast(uintptr_t,&page->thread_free), tfreex, tfree));
 }
 
 
@@ -146,7 +148,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
     tfree = page->thread_free;
     head = mi_tf_block(tfree);
     tfreex = mi_tf_set_block(tfree,NULL);
-  } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
+  } while (!mi_atomic_cas_weak(mi_atomic_cast(uintptr_t,&page->thread_free), tfreex, tfree));
 
   // return if the list is empty
   if (head == NULL) return;
@@ -164,7 +166,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   page->local_free = head;
 
   // update counts now
-  mi_atomic_subtract(&page->thread_freed, count);
+  mi_atomic_subu(&page->thread_freed, count);
   page->used -= count;
 }
 
@@ -178,7 +180,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
 
   // and the local free list
   if (page->local_free != NULL) {
-    if (mi_unlikely(page->free == NULL)) {
+    if (mi_likely(page->free == NULL)) {
       // usual case
       page->free = page->local_free;
       page->local_free = NULL;
@@ -209,6 +211,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
 void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
   mi_assert_internal(page->heap == NULL);
+  mi_assert_internal(_mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
   _mi_page_free_collect(page,false);
   mi_page_queue_t* pq = mi_page_queue(heap, page->block_size);
   mi_page_queue_push(heap, pq, page);
@@ -217,12 +220,13 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
 
 // allocate a fresh page from a segment
 static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size_t block_size) {
-  mi_assert_internal(mi_heap_contains_queue(heap, pq));
+  mi_assert_internal(pq==NULL||mi_heap_contains_queue(heap, pq));
   mi_page_t* page = _mi_segment_page_alloc(block_size, &heap->tld->segments, &heap->tld->os);
   if (page == NULL) return NULL;
+  mi_assert_internal(pq==NULL || _mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
   mi_page_init(heap, page, block_size, &heap->tld->stats);
   _mi_stat_increase( &heap->tld->stats.pages, 1);
-  mi_page_queue_push(heap, pq, page);
+  if (pq!=NULL) mi_page_queue_push(heap, pq, page); // huge pages use pq==NULL
   mi_assert_expensive(_mi_page_is_valid(page));
   return page;
 }
@@ -258,7 +262,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
   mi_block_t* block;
   do {
     block = (mi_block_t*)heap->thread_delayed_free;
-  } while (block != NULL && !mi_atomic_compare_exchange_ptr((volatile void**)&heap->thread_delayed_free, NULL, block));
+  } while (block != NULL && !mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), NULL, block));
 
   // and free them all
   while(block != NULL) {
@@ -271,7 +275,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
       do {
         dfree = (mi_block_t*)heap->thread_delayed_free;
         mi_block_set_nextx(heap->cookie, block, dfree);
-      } while (!mi_atomic_compare_exchange_ptr((volatile void**)&heap->thread_delayed_free, block, dfree));
+      } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), block, dfree));
 
     }
     block = next;
@@ -394,7 +398,7 @@ void _mi_page_retire(mi_page_t* page) {
   // is the only page left with free blocks. It is not clear
   // how to check this efficiently though... for now we just check
   // if its neighbours are almost fully used.
-  if (mi_likely(page->block_size <= MI_SMALL_SIZE_MAX)) {
+  if (mi_likely(page->block_size <= (MI_SMALL_SIZE_MAX/4))) {
     if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
       _mi_stat_counter_increase(&_mi_stats_main.page_no_retire,1);
       return; // dont't retire after all
@@ -701,16 +705,21 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn) mi_attr_noexcept {
   General allocation
 ----------------------------------------------------------- */
 
-// A huge page is allocated directly without being in a queue
+// A huge page is allocated directly without being in a queue.
+// Because huge pages contain just one block, and the segment contains
+// just that page, we always treat them as abandoned and any thread
+// that frees the block can free the whole page and segment directly.
 static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
   size_t block_size = _mi_wsize_from_size(size) * sizeof(uintptr_t);
-  mi_assert_internal(_mi_bin(block_size) == MI_BIN_HUGE);
-  mi_page_queue_t* pq = mi_page_queue(heap,block_size);
-  mi_assert_internal(mi_page_queue_is_huge(pq));
-  mi_page_t* page = mi_page_fresh_alloc(heap,pq,block_size);
+  mi_assert_internal(_mi_bin(block_size) == MI_BIN_HUGE);  
+  mi_page_t* page = mi_page_fresh_alloc(heap,NULL,block_size);
   if (page != NULL) {
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(page->block_size == block_size);
+    mi_assert_internal(_mi_page_segment(page)->page_kind==MI_PAGE_HUGE);
+    mi_assert_internal(_mi_page_segment(page)->used==1);
+    mi_assert_internal(_mi_page_segment(page)->thread_id==0); // abandoned, not in the huge queue
+    page->heap = NULL;
     if (page->block_size > MI_HUGE_OBJ_SIZE_MAX) {
       _mi_stat_increase(&heap->tld->stats.giant, block_size);
       _mi_stat_counter_increase(&heap->tld->stats.giant_count, 1);
@@ -719,7 +728,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
       _mi_stat_increase(&heap->tld->stats.huge, block_size);
       _mi_stat_counter_increase(&heap->tld->stats.huge_count, 1);
     }
-  }
+  }  
   return page;
 }
 

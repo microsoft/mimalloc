@@ -53,8 +53,8 @@ terms of the MIT license. A copy of the license can be found in the file
   #else
   #define mi_attr_alloc_size(s)       __attribute__((alloc_size(s)))
   #define mi_attr_alloc_size2(s1,s2)  __attribute__((alloc_size(s1,s2)))
-  #define mi_cdecl                    // leads to warnings... __attribute__((cdecl))
   #endif
+  #define mi_cdecl                    // leads to warnings... __attribute__((cdecl))
 #else
   #define mi_decl_thread              __thread
   #define mi_decl_export
@@ -69,8 +69,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // Includes
 // ------------------------------------------------------
 
+#include <stddef.h>     // size_t
 #include <stdbool.h>    // bool
-#include <stdio.h>      // FILE
 
 #ifdef __cplusplus
 extern "C" {
@@ -107,18 +107,23 @@ mi_decl_export mi_decl_allocator void* mi_reallocf(void* p, size_t newsize)     
 mi_decl_export size_t mi_usable_size(const void* p)   mi_attr_noexcept;
 mi_decl_export size_t mi_good_size(size_t size)       mi_attr_noexcept;
 
+typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat);
+mi_decl_export void mi_register_deferred_free(mi_deferred_free_fun* deferred_free) mi_attr_noexcept;
+
+typedef void (mi_output_fun)(const char* msg);
+mi_decl_export void mi_register_output(mi_output_fun* out) mi_attr_noexcept;
+
 mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
-mi_decl_export void mi_stats_print(FILE* out) mi_attr_noexcept;
-mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
 mi_decl_export int  mi_version(void)          mi_attr_noexcept;
+mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
+mi_decl_export void mi_stats_merge(void)      mi_attr_noexcept;
+mi_decl_export void mi_stats_print(mi_output_fun* out) mi_attr_noexcept;
 
 mi_decl_export void mi_process_init(void)     mi_attr_noexcept;
 mi_decl_export void mi_thread_init(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
-mi_decl_export void mi_thread_stats_print(FILE* out) mi_attr_noexcept;
+mi_decl_export void mi_thread_stats_print(mi_output_fun* out) mi_attr_noexcept;
 
-typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat);
-mi_decl_export void mi_register_deferred_free(mi_deferred_free_fun* deferred_free) mi_attr_noexcept;
 
 // ------------------------------------------------------
 // Aligned allocation
@@ -229,9 +234,13 @@ typedef enum mi_option_e {
   mi_option_eager_region_commit,
   mi_option_large_os_pages,         // implies eager commit
   mi_option_reserve_huge_os_pages,
+  mi_option_segment_cache,
   mi_option_page_reset,
   mi_option_cache_reset,
   mi_option_reset_decommits,
+  mi_option_eager_commit_delay,
+  mi_option_segment_reset,
+  mi_option_os_tag,
   _mi_option_last
 } mi_option_t;
 

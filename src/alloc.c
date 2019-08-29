@@ -115,10 +115,27 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   mi_thread_free_t tfreex;
   bool use_delayed;
 
+  mi_segment_t* segment = _mi_page_segment(page);
+  if (segment->page_kind==MI_PAGE_HUGE) {
+    // huge page segments are always abandoned and can be freed immediately
+    mi_assert_internal(mi_atomic_read_relaxed(&segment->thread_id)==0);
+    mi_assert_internal(mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*,&segment->abandoned_next))==NULL);
+    // claim it and free
+    mi_heap_t* heap = mi_get_default_heap();
+    // paranoia: if this it the last reference, the cas should always succeed
+    if (mi_atomic_cas_strong(&segment->thread_id,heap->thread_id,0)) {
+      mi_block_set_next(page, block, page->free);
+      page->free = block;
+      page->used--;
+      _mi_segment_page_free(page,true,&heap->tld->segments);
+    }
+    return;
+  }
+
   do {
     tfree = page->thread_free;
     use_delayed = (mi_tf_delayed(tfree) == MI_USE_DELAYED_FREE ||
-                   (mi_tf_delayed(tfree) == MI_NO_DELAYED_FREE && page->used == page->thread_freed+1)
+                   (mi_tf_delayed(tfree) == MI_NO_DELAYED_FREE && page->used == mi_atomic_read_relaxed(&page->thread_freed)+1)  // data-race but ok, just optimizes early release of the page
                   );
     if (mi_unlikely(use_delayed)) {
       // unlikely: this only happens on the first concurrent free in a page that is in the full list
@@ -129,7 +146,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       mi_block_set_next(page, block, mi_tf_block(tfree));
       tfreex = mi_tf_set_block(tfree,block);
     }
-  } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
+  } while (!mi_atomic_cas_weak(mi_atomic_cast(uintptr_t,&page->thread_free), tfreex, tfree));
 
   if (mi_likely(!use_delayed)) {
     // increment the thread free count and return
@@ -145,7 +162,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       do {
         dfree = (mi_block_t*)heap->thread_delayed_free;
         mi_block_set_nextx(heap->cookie,block,dfree);
-      } while (!mi_atomic_compare_exchange_ptr((volatile void**)&heap->thread_delayed_free, block, dfree));
+      } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), block, dfree));
     }
 
     // and reset the MI_DELAYED_FREEING flag
@@ -153,7 +170,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       tfreex = tfree = page->thread_free;
       mi_assert_internal(mi_tf_delayed(tfree) == MI_NEVER_DELAYED_FREE || mi_tf_delayed(tfree) == MI_DELAYED_FREEING);
       if (mi_tf_delayed(tfree) != MI_NEVER_DELAYED_FREE) tfreex = mi_tf_set_delayed(tfree,MI_NO_DELAYED_FREE);
-    } while (!mi_atomic_compare_exchange((volatile uintptr_t*)&page->thread_free, tfreex, tfree));
+    } while (!mi_atomic_cas_weak(mi_atomic_cast(uintptr_t,&page->thread_free), tfreex, tfree));
   }
 }
 
@@ -209,7 +226,7 @@ void mi_free(void* p) mi_attr_noexcept
 #endif
 
   const mi_segment_t* const segment = _mi_ptr_segment(p);
-  if (segment == NULL) return;  // checks for (p==NULL)
+  if (mi_unlikely(segment == NULL)) return;  // checks for (p==NULL)
 
 #if (MI_DEBUG>0)
   if (mi_unlikely(!mi_is_in_heap_region(p))) {
@@ -225,19 +242,19 @@ void mi_free(void* p) mi_attr_noexcept
   }
 #endif
 
+  const uintptr_t tid = _mi_thread_id();
   mi_page_t* const page = _mi_segment_page_of(segment, p);
 
 #if (MI_STAT>1)
   mi_heap_t* heap = mi_heap_get_default();
-  mi_heap_stat_decrease( heap, malloc, mi_usable_size(p));
+  mi_heap_stat_decrease(heap, malloc, mi_usable_size(p));
   if (page->block_size <= MI_LARGE_OBJ_SIZE_MAX) {
-    mi_heap_stat_decrease( heap, normal[_mi_bin(page->block_size)], 1);
+    mi_heap_stat_decrease(heap, normal[_mi_bin(page->block_size)], 1);
   }
   // huge page stat is accounted for in `_mi_page_retire`
 #endif
 
-  const uintptr_t tid = _mi_thread_id();
-  if (mi_likely(tid == page->flags)) {  // if equal, the thread id matches and it is not a full page, nor has aligned blocks
+  if (mi_likely(tid == segment->thread_id && page->flags.value == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
     mi_block_set_next(page, block, page->local_free);
@@ -247,7 +264,7 @@ void mi_free(void* p) mi_attr_noexcept
   }
   else {
     // non-local, aligned blocks, or a full page; use the more generic path
-    mi_free_generic(segment, page, tid == mi_page_thread_id(page), p);
+    mi_free_generic(segment, page, tid == segment->thread_id, p);
   }
 }
 

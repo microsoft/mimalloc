@@ -8,20 +8,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
 
+#include <stdio.h>  // fputs, stderr
 #include <string.h> // memset
-
-
-/* -----------------------------------------------------------
-  Merge thread statistics with the main one.
------------------------------------------------------------ */
-
-static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src);
-
-void _mi_stats_done(mi_stats_t* stats) {
-  if (stats == &_mi_stats_main) return;
-  mi_stats_add(&_mi_stats_main, stats);
-  memset(stats,0,sizeof(*stats));
-}
 
 
 /* -----------------------------------------------------------
@@ -38,13 +26,13 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   if (mi_is_in_main(stat))
   {
     // add atomically (for abandoned pages)
-    int64_t current = mi_atomic_add(&stat->current,amount);
-    if (current > stat->peak) stat->peak = stat->current;  // racing.. it's ok
+    mi_atomic_add64(&stat->current,amount);
+    if (stat->current > stat->peak) stat->peak = stat->current;  // racing.. it's ok
     if (amount > 0) {
-      mi_atomic_add(&stat->allocated,amount);
+      mi_atomic_add64(&stat->allocated,amount);
     }
     else {
-      mi_atomic_add(&stat->freed, -amount);
+      mi_atomic_add64(&stat->freed, -amount);
     }
   }
   else {
@@ -62,8 +50,8 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
 
 void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {  
   if (mi_is_in_main(stat)) {
-    mi_atomic_add( &stat->count, 1 );
-    mi_atomic_add( &stat->total, (int64_t)amount );
+    mi_atomic_add64( &stat->count, 1 );
+    mi_atomic_add64( &stat->total, (int64_t)amount );
   }
   else {
     stat->count++;
@@ -82,16 +70,17 @@ void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
 // must be thread safe as it is called from stats_merge
 static void mi_stat_add(mi_stat_count_t* stat, const mi_stat_count_t* src, int64_t unit) {
   if (stat==src) return;
-  mi_atomic_add( &stat->allocated, src->allocated * unit);
-  mi_atomic_add( &stat->current, src->current * unit);
-  mi_atomic_add( &stat->freed, src->freed * unit);
-  mi_atomic_add( &stat->peak, src->peak * unit);
+  mi_atomic_add64( &stat->allocated, src->allocated * unit);
+  mi_atomic_add64( &stat->current, src->current * unit);
+  mi_atomic_add64( &stat->freed, src->freed * unit);
+  // peak scores do not work across threads..
+  mi_atomic_add64( &stat->peak, src->peak * unit);
 }
 
 static void mi_stat_counter_add(mi_stat_counter_t* stat, const mi_stat_counter_t* src, int64_t unit) {
   if (stat==src) return;
-  mi_atomic_add( &stat->total, src->total * unit);
-  mi_atomic_add( &stat->count, src->count * unit);
+  mi_atomic_add64( &stat->total, src->total * unit);
+  mi_atomic_add64( &stat->count, src->count * unit);
 }
 
 // must be thread safe as it is called from stats_merge
@@ -132,7 +121,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   Display statistics
 ----------------------------------------------------------- */
 
-static void mi_printf_amount(int64_t n, int64_t unit, FILE* out, const char* fmt) {
+static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, const char* fmt) {
   char buf[32];
   int  len = 32;
   const char* suffix = (unit <= 0 ? " " : "b");
@@ -153,16 +142,16 @@ static void mi_printf_amount(int64_t n, int64_t unit, FILE* out, const char* fmt
 }
 
 
-static void mi_print_amount(int64_t n, int64_t unit, FILE* out) {
+static void mi_print_amount(int64_t n, int64_t unit, mi_output_fun* out) {
   mi_printf_amount(n,unit,out,NULL);
 }
 
-static void mi_print_count(int64_t n, int64_t unit, FILE* out) {
+static void mi_print_count(int64_t n, int64_t unit, mi_output_fun* out) {
   if (unit==1) _mi_fprintf(out,"%11s"," ");
           else mi_print_amount(n,0,out);
 }
 
-static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, FILE* out ) {
+static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out ) {
   _mi_fprintf(out,"%10s:", msg);  
   if (unit>0) {
     mi_print_amount(stat->peak, unit, out);
@@ -191,24 +180,24 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
   }
 }
 
-static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg, FILE* out ) {
+static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out ) {
   _mi_fprintf(out, "%10s:", msg);
   mi_print_amount(stat->total, -1, out);
   _mi_fprintf(out, "\n");
 }
 
-static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char* msg, FILE* out) {
+static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out) {
   double avg = (stat->count == 0 ? 0.0 : (double)stat->total / (double)stat->count);
   _mi_fprintf(out, "%10s: %7.1f avg\n", msg, avg);
 }
 
 
-static void mi_print_header( FILE* out ) {
+static void mi_print_header(mi_output_fun* out ) {
   _mi_fprintf(out,"%10s: %10s %10s %10s %10s %10s\n", "heap stats", "peak  ", "total  ", "freed  ", "unit  ", "count  ");
 }
 
 #if MI_STAT>1
-static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bins, size_t max, const char* fmt, FILE* out) {
+static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bins, size_t max, const char* fmt, mi_output_fun* out) {
   bool found = false;
   char buf[64];
   for (size_t i = 0; i <= max; i++) {
@@ -232,8 +221,7 @@ static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bin
 
 static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit);
 
-static void _mi_stats_print(mi_stats_t* stats, double secs, FILE* out) mi_attr_noexcept {
-  if (out == NULL) out = stderr;
+static void _mi_stats_print(mi_stats_t* stats, double secs, mi_output_fun* out) mi_attr_noexcept {
   mi_print_header(out);
   #if MI_STAT>1
   mi_stat_count_t normal = { 0,0,0,0 };
@@ -293,6 +281,13 @@ static mi_stats_t* mi_stats_get_default(void) {
   return &heap->tld->stats;
 }
 
+static void mi_stats_merge_from(mi_stats_t* stats) {
+  if (stats != &_mi_stats_main) {
+    mi_stats_add(&_mi_stats_main, stats);
+    memset(stats, 0, sizeof(mi_stats_t));
+  }
+}
+
 void mi_stats_reset(void) mi_attr_noexcept {
   mi_stats_t* stats = mi_stats_get_default();
   if (stats != &_mi_stats_main) { memset(stats, 0, sizeof(mi_stats_t)); }
@@ -300,19 +295,25 @@ void mi_stats_reset(void) mi_attr_noexcept {
   mi_time_start = _mi_clock_start();
 }
 
-static void mi_stats_print_ex(mi_stats_t* stats, double secs, FILE* out) {
-  if (stats != &_mi_stats_main) {
-    mi_stats_add(&_mi_stats_main,stats);
-    memset(stats,0,sizeof(mi_stats_t));
-  }
+void mi_stats_merge(void) mi_attr_noexcept {
+  mi_stats_merge_from( mi_stats_get_default() );
+}
+
+void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
+  mi_stats_merge_from(stats);
+}
+
+
+static void mi_stats_print_ex(mi_stats_t* stats, double secs, mi_output_fun* out) {
+  mi_stats_merge_from(stats);
   _mi_stats_print(&_mi_stats_main, secs, out);
 }
 
-void mi_stats_print(FILE* out) mi_attr_noexcept {
+void mi_stats_print(mi_output_fun* out) mi_attr_noexcept {
   mi_stats_print_ex(mi_stats_get_default(),_mi_clock_end(mi_time_start),out);
 }
 
-void mi_thread_stats_print(FILE* out) mi_attr_noexcept {
+void mi_thread_stats_print(mi_output_fun* out) mi_attr_noexcept {
   _mi_stats_print(mi_stats_get_default(), _mi_clock_end(mi_time_start), out);
 }
 

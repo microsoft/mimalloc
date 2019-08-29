@@ -130,6 +130,7 @@ extern inline uint8_t _mi_bin(size_t size) {
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin
     bin = ((b << 2) + (uint8_t)((wsize >> (b - 2)) & 0x03)) - 3;
+    mi_assert_internal(bin < MI_BIN_HUGE);
   }
   mi_assert_internal(bin > 0 && bin <= MI_BIN_HUGE);
   return bin;
@@ -267,6 +268,7 @@ static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
 static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(page->heap == NULL);
   mi_assert_internal(!mi_page_queue_contains(queue, page));
+  mi_assert_internal(_mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
   mi_assert_internal(page->block_size == queue->block_size ||
                       (page->block_size > MI_LARGE_OBJ_SIZE_MAX && mi_page_queue_is_huge(queue)) ||
                         (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));

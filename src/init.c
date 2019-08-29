@@ -13,15 +13,17 @@ terms of the MIT license. A copy of the license can be found in the file
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
   0, false, false, false, 0, 0,
+  { 0 },
   NULL,    // free
   #if MI_SECURE
   0,
   #endif
-  0, 0, // flags, used
-  NULL, 0, 0,
+  0,       // used
+  NULL, 
+  ATOMIC_VAR_INIT(0), ATOMIC_VAR_INIT(0),
   0, NULL, NULL, NULL
-  #if (MI_INTPTR_SIZE==8 && MI_SECURE==0)
-  , { NULL }
+  #if (MI_INTPTR_SIZE==8 && MI_SECURE>0) || (MI_INTPTR_SIZE==4 && MI_SECURE==0)
+  , { NULL } // padding
   #endif
 };
 
@@ -80,7 +82,7 @@ const mi_heap_t _mi_heap_empty = {
   NULL,
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
-  NULL,
+  ATOMIC_VAR_INIT(NULL),
   0,
   0,
   0,
@@ -350,7 +352,7 @@ void mi_thread_init(void) mi_attr_noexcept
     pthread_setspecific(mi_pthread_key, (void*)(_mi_thread_id()|1)); // set to a dummy value so that `mi_pthread_done` is called
   #endif
 
-  #if (MI_DEBUG>0) // not in release mode as that leads to crashes on Windows dynamic override
+  #if (MI_DEBUG>0) && !defined(NDEBUG) // not in release mode as that leads to crashes on Windows dynamic override
   _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
   #endif
 }
@@ -414,6 +416,7 @@ static void mi_allocator_done() {
 static void mi_process_load(void) {
   os_preloading = false;
   atexit(&mi_process_done);
+  _mi_options_init();
   mi_process_init();
   //mi_stats_reset();
   if (mi_redirected) _mi_verbose_message("malloc is redirected.\n");
@@ -422,12 +425,12 @@ static void mi_process_load(void) {
   const char* msg = NULL;
   mi_allocator_init(&msg);
   if (msg != NULL && (mi_option_is_enabled(mi_option_verbose) || mi_option_is_enabled(mi_option_show_errors))) {
-    _mi_fputs(stderr,NULL,msg);
+    _mi_fputs(NULL,NULL,msg);
   }
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages     = mi_option_get(mi_option_reserve_huge_os_pages);
-    double max_secs = (double)pages / 5.0; // 0.2s per page
+    double max_secs = (double)pages / 2.0; // 0.5s per page (1GiB)
     mi_reserve_huge_os_pages(pages, max_secs);
   }
 }

@@ -22,12 +22,13 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 // "options.c"
-void       _mi_fputs(FILE* out, const char* prefix, const char* message);
-void       _mi_fprintf(FILE* out, const char* fmt, ...);
+void       _mi_fputs(mi_output_fun* out, const char* prefix, const char* message);
+void       _mi_fprintf(mi_output_fun* out, const char* fmt, ...);
 void       _mi_error_message(const char* fmt, ...);
 void       _mi_warning_message(const char* fmt, ...);
 void       _mi_verbose_message(const char* fmt, ...);
 void       _mi_trace_message(const char* fmt, ...);
+void       _mi_options_init(void);
 
 // "init.c"
 extern mi_stats_t       _mi_stats_main;
@@ -45,8 +46,7 @@ void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocat
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
 
 // memory.c
-void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* id, mi_os_tld_t* tld);
-void*      _mi_mem_alloc(size_t size, bool commit, size_t* id, mi_os_tld_t* tld);
+void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, size_t* id, mi_os_tld_t* tld);
 void       _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats);
 
 bool       _mi_mem_reset(void* p, size_t size, mi_stats_t* stats);
@@ -318,39 +318,24 @@ static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size)
 }
 
 
+
 //-----------------------------------------------------------
 // Page flags
 //-----------------------------------------------------------
-static inline uintptr_t mi_page_thread_id(const mi_page_t* page) {
-  return (page->flags & ~MI_PAGE_FLAGS_MASK);
-}
-
-static inline void mi_page_init_flags(mi_page_t* page, uintptr_t thread_id) {
-  mi_assert_internal((thread_id & MI_PAGE_FLAGS_MASK) == 0);
-  page->flags = thread_id;
-}
-
-static inline void mi_page_set_thread_id(mi_page_t* page, uintptr_t thread_id) {
-  mi_assert_internal((thread_id & MI_PAGE_FLAGS_MASK) == 0);
-  page->flags = thread_id | (page->flags & MI_PAGE_FLAGS_MASK);
-}
-
 static inline bool mi_page_is_in_full(const mi_page_t* page) {
-  return ((page->flags & 0x01) != 0);
+  return page->flags.in_full;
 }
 
 static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
-  if (in_full) page->flags |= 0x01;
-          else page->flags &= ~0x01;
+  page->flags.in_full = in_full;
 }
 
 static inline bool mi_page_has_aligned(const mi_page_t* page) {
-  return ((page->flags & 0x02) != 0);
+  return page->flags.has_aligned;
 }
 
 static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
-  if (has_aligned) page->flags |= 0x02;
-              else page->flags &= ~0x02;
+  page->flags.has_aligned = has_aligned;
 }
 
 
