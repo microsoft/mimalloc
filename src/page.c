@@ -180,7 +180,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
 
   // and the local free list
   if (page->local_free != NULL) {
-    if (mi_unlikely(page->free == NULL)) {
+    if (mi_likely(page->free == NULL)) {
       // usual case
       page->free = page->local_free;
       page->local_free = NULL;
