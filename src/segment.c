@@ -326,7 +326,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   size_t page_size = (page_kind == MI_PAGE_HUGE ? segment_size : (size_t)1 << page_shift);
 
   // Try to get it from our thread local cache first
-  bool eager  = mi_option_is_enabled(mi_option_eager_commit) && (tld->count < mi_option_get(mi_option_eager_commit_delay));
+  bool eager  = mi_option_is_enabled(mi_option_eager_commit) && (tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   bool commit = eager || (page_kind > MI_PAGE_MEDIUM);
   bool protection_still_good = false;
   mi_segment_t* segment = mi_segment_cache_pop(segment_size, tld);
