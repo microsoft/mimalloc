@@ -150,6 +150,7 @@ static void mi_out_stderr(const char* msg) {
 // Default output handler
 // --------------------------------------------------------
 
+#pragma warning(suppress:4180)
 static volatile _Atomic(mi_output_fun*) mi_out_default; // = NULL
 
 static mi_output_fun* mi_out_get_default(void) {
@@ -179,7 +180,7 @@ static void mi_vfprintf( mi_output_fun* out, const char* prefix, const char* fmt
   if (fmt==NULL) return;
   if (_mi_preloading() || recurse) return;
   recurse = true;
-  if (out==NULL) out = mi_out_get_default();
+  if (out==NULL || (FILE*)out==stdout || (FILE*)out==stderr) out = mi_out_get_default();
   vsnprintf(buf,sizeof(buf)-1,fmt,args);
   if (prefix != NULL) out(prefix);
   out(buf);
