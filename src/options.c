@@ -80,7 +80,12 @@ static void mi_option_init(mi_option_desc_t* desc);
 void _mi_options_init(void) {
   // called on process load
   for(int i = 0; i < _mi_option_last; i++ ) {
-    mi_option_get((mi_option_t)i); // initialize
+    mi_option_t option = (mi_option_t)i;
+    mi_option_get(option); // initialize
+    if (option != mi_option_verbose) {
+      mi_option_desc_t* desc = &options[option];
+      _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
+    }
   }
 }
 
@@ -89,10 +94,7 @@ long mi_option_get(mi_option_t option) {
   mi_option_desc_t* desc = &options[option];
   mi_assert(desc->option == option);  // index should match the option
   if (mi_unlikely(desc->init == UNINIT)) {
-    mi_option_init(desc);
-    if (option != mi_option_verbose) {
-      _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
-    }
+    mi_option_init(desc);    
   }
   return desc->value;
 }
@@ -173,7 +175,7 @@ static mi_decl_thread bool recurse = false;
 
 void _mi_fputs(mi_output_fun* out, const char* prefix, const char* message) {
   if (_mi_preloading() || recurse) return;
-  if (out==NULL) out = mi_out_get_default();
+  if (out==NULL || (FILE*)out==stdout || (FILE*)out==stderr) out = mi_out_get_default();
   recurse = true;
   if (prefix != NULL) out(prefix);
   out(message);
