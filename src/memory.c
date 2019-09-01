@@ -17,7 +17,7 @@ We need this memory layer between the raw OS calls because of:
    to reuse memory effectively.
 2. It turns out that for large objects, between 1MiB and 32MiB (?), the cost of
    an OS allocation/free is still (much) too expensive relative to the accesses in that
-   object :-( (`mallloc-large` tests this). This means we need a cheaper way to
+   object :-( (`malloc-large` tests this). This means we need a cheaper way to
    reuse memory.
 3. This layer can help with a NUMA aware allocation in the future.
 
