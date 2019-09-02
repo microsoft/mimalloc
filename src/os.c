@@ -585,8 +585,9 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
 // Commit/Decommit memory.
 // Usuelly commit is aligned liberal, while decommit is aligned conservative.
 // (but not for the reset version where we want commit to be conservative as well)
-static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservative, mi_stats_t* stats) {
+static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservative, bool* is_zero, mi_stats_t* stats) {
   // page align in the range, commit liberally, decommit conservative
+  *is_zero = false;
   size_t csize;
   void* start = mi_os_page_align_areax(conservative, addr, size, &csize);
   if (csize == 0 || _mi_os_is_huge_reserved(addr)) return true;
@@ -600,6 +601,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   }
 
   #if defined(_WIN32)
+  *is_zero = true;
   if (commit) {
     void* p = VirtualAlloc(start, csize, MEM_COMMIT, PAGE_READWRITE);
     err = (p == start ? 0 : GetLastError());
@@ -620,16 +622,17 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   return (err == 0);
 }
 
-bool _mi_os_commit(void* addr, size_t size, mi_stats_t* stats) {
-  return mi_os_commitx(addr, size, true, false /* conservative? */, stats);
+bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {
+  return mi_os_commitx(addr, size, true, false /* conservative? */, is_zero, stats);
 }
 
 bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats) {
-  return mi_os_commitx(addr, size, false, true /* conservative? */, stats);
+  bool is_zero;
+  return mi_os_commitx(addr, size, false, true /* conservative? */, &is_zero, stats);
 }
 
-bool _mi_os_commit_unreset(void* addr, size_t size, mi_stats_t* stats) {
-  return mi_os_commitx(addr, size, true, true /* conservative? */, stats);
+bool _mi_os_commit_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {
+  return mi_os_commitx(addr, size, true, true /* conservative? */, is_zero, stats);
 }
 
 
@@ -698,11 +701,12 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
   }
 }
 
-bool _mi_os_unreset(void* addr, size_t size, mi_stats_t* stats) {
+bool _mi_os_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {
   if (mi_option_is_enabled(mi_option_reset_decommits)) {
-    return _mi_os_commit_unreset(addr, size, stats);  // re-commit it (conservatively!)
+    return _mi_os_commit_unreset(addr, size, is_zero, stats);  // re-commit it (conservatively!)
   }
   else {
+    *is_zero = false;
     return mi_os_resetx(addr, size, false, stats);
   }
 }

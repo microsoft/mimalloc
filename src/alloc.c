@@ -33,7 +33,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   page->used++;
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
 #if (MI_DEBUG)
-  memset(block, MI_DEBUG_UNINIT, size);
+  if (!page->flags.is_zero) { memset(block, MI_DEBUG_UNINIT, size); }
 #elif (MI_SECURE)
   block->next = 0;
 #endif
@@ -89,9 +89,32 @@ extern inline void* mi_malloc(size_t size) mi_attr_noexcept {
   return mi_heap_malloc(mi_get_default_heap(), size);
 }
 
+void _mi_block_zero_init(void* p, size_t size) {
+  mi_assert_internal(p != NULL);
+  // already zero initialized memory?
+  if (size > 4*sizeof(void*)) {  // don't bother for small sizes
+    mi_page_t* page = _mi_ptr_page(p);
+    if (page->flags.is_zero) {
+      ((mi_block_t*)p)->next = 0;
+      #if MI_DEBUG>0
+      for (size_t i = 0; i < size; i++) { 
+        if (((uint8_t*)p)[i] != 0) {
+          _mi_assert_fail("page not zero", __FILE__, __LINE__, "_mi_block_zero_init");
+        }
+      }
+      #endif
+      return; // and done
+    }
+  }
+  // otherwise memset
+  memset(p, 0, size);
+}
+
 void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) {
   void* p = mi_heap_malloc(heap,size);
-  if (zero && p != NULL) memset(p,0,size);
+  if (zero && p != NULL) {
+    _mi_block_zero_init(p,size);
+  }
   return p;
 }
 
@@ -127,6 +150,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       mi_block_set_next(page, block, page->free);
       page->free = block;
       page->used--;
+      page->flags.is_zero = false;
       _mi_segment_page_free(page,true,&heap->tld->segments);
     }
     return;
@@ -254,7 +278,7 @@ void mi_free(void* p) mi_attr_noexcept
   // huge page stat is accounted for in `_mi_page_retire`
 #endif
 
-  if (mi_likely(tid == segment->thread_id && page->flags.value == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
+  if (mi_likely(tid == segment->thread_id && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
     mi_block_set_next(page, block, page->local_free);

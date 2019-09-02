@@ -131,9 +131,11 @@ typedef enum mi_delayed_e {
 // test if both are false (`value == 0`) in the `mi_free` routine.
 typedef union mi_page_flags_u {
   uint16_t value;
+  uint8_t  full_aligned;
   struct {
-    bool in_full;
-    bool has_aligned;
+    bool in_full:1;
+    bool has_aligned:1;
+    bool is_zero;       // `true` if the blocks in the free list are zero initialized
   };
 } mi_page_flags_t;
 
@@ -165,7 +167,8 @@ typedef struct mi_page_s {
   bool                  segment_in_use:1;  // `true` if the segment allocated this page
   bool                  is_reset:1;        // `true` if the page memory was reset
   bool                  is_committed:1;    // `true` if the page virtual memory is committed
-
+  bool                  is_zero_init:1;    // `true` if the page was zero initialized
+  
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
   uint16_t              reserved;          // number of blocks reserved in memory

@@ -33,7 +33,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* heap, size_t size, size_t
       void* p = _mi_page_malloc(heap,page,size);
       mi_assert_internal(p != NULL);
       mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
-      if (zero) memset(p,0,size);
+      if (zero) _mi_block_zero_init(p,size);
       return p;
     }
   }

@@ -46,12 +46,12 @@ void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocat
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
 
 // memory.c
-void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, size_t* id, mi_os_tld_t* tld);
+void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* id, mi_os_tld_t* tld);
 void       _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats);
 
 bool       _mi_mem_reset(void* p, size_t size, mi_stats_t* stats);
-bool       _mi_mem_unreset(void* p, size_t size, mi_stats_t* stats);
-bool       _mi_mem_commit(void* p, size_t size, mi_stats_t* stats);
+bool       _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
+bool       _mi_mem_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 bool       _mi_mem_protect(void* addr, size_t size);
 bool       _mi_mem_unprotect(void* addr, size_t size);
 
@@ -101,6 +101,7 @@ void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero);
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero);
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
+void        _mi_block_zero_init(void* p, size_t size);
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
