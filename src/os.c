@@ -822,7 +822,7 @@ static void mi_os_free_huge_reserved() {
 */
 
 #if !(MI_INTPTR_SIZE >= 8 && (defined(_WIN32) || defined(MI_OS_USE_MMAP)))
-int mi_reserve_huge_os_pages(size_t pages, size_t max_secs) {
+int mi_reserve_huge_os_pages(size_t pages, double max_secs) {
   return -2; // cannot allocate
 }
 #else
