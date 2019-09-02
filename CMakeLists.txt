@@ -4,12 +4,13 @@ include("cmake/mimalloc-config-version.cmake")
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-option(MI_OVERRIDE   "Override the standard malloc interface" ON)
-option(MI_INTERPOSE  "Use interpose to override standard malloc on macOS" ON)
-option(MI_SEE_ASM    "Generate assembly files" OFF)
-option(MI_CHECK_FULL "Use full internal invariant checking in DEBUG mode" OFF)
-option(MI_USE_CXX    "Use the C++ compiler to compile the library" OFF)
-option(MI_SECURE     "Use security mitigations (like guard pages and randomization)" OFF)
+option(MI_OVERRIDE    "Override the standard malloc interface" ON)
+option(MI_INTERPOSE   "Use interpose to override standard malloc on macOS" ON)
+option(MI_SEE_ASM     "Generate assembly files" OFF)
+option(MI_CHECK_FULL  "Use full internal invariant checking in DEBUG mode" OFF)
+option(MI_USE_CXX     "Use the C++ compiler to compile the library" OFF)
+option(MI_SECURE      "Use security mitigations (like guard pages and randomization)" OFF)
+option(MI_BUILD_TESTS "Build test executables" ON)
 
 set(mi_install_dir "lib/mimalloc-${mi_version}")
 
@@ -191,21 +192,24 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static
 # -----------------------------------------------------------------------------
 # API surface testing
 # -----------------------------------------------------------------------------
-add_executable(mimalloc-test-api test/test-api.c)
-target_compile_definitions(mimalloc-test-api PRIVATE ${mi_defines})
-target_compile_options(mimalloc-test-api PRIVATE ${mi_cflags})
-target_include_directories(mimalloc-test-api PRIVATE include)
-target_link_libraries(mimalloc-test-api PRIVATE mimalloc-static)
 
-add_executable(mimalloc-test-stress test/test-stress.c)
-target_compile_definitions(mimalloc-test-stress PRIVATE ${mi_defines})
-target_compile_options(mimalloc-test-stress PRIVATE ${mi_cflags})
-target_include_directories(mimalloc-test-stress PRIVATE include)
-target_link_libraries(mimalloc-test-stress PRIVATE mimalloc-static)
+if (MI_BUILD_TESTS MATCHES "ON")
+  add_executable(mimalloc-test-api test/test-api.c)
+  target_compile_definitions(mimalloc-test-api PRIVATE ${mi_defines})
+  target_compile_options(mimalloc-test-api PRIVATE ${mi_cflags})
+  target_include_directories(mimalloc-test-api PRIVATE include)
+  target_link_libraries(mimalloc-test-api PRIVATE mimalloc-static ${mi_libraries})
 
-enable_testing()
-add_test(test_api, mimalloc-test-api)
-add_test(test_stress, mimalloc-test-stress)
+  add_executable(mimalloc-test-stress test/test-stress.c)
+  target_compile_definitions(mimalloc-test-stress PRIVATE ${mi_defines})
+  target_compile_options(mimalloc-test-stress PRIVATE ${mi_cflags})
+  target_include_directories(mimalloc-test-stress PRIVATE include)
+  target_link_libraries(mimalloc-test-stress PRIVATE mimalloc-static ${mi_libraries})
+
+  enable_testing()
+  add_test(test_api, mimalloc-test-api)
+  add_test(test_stress, mimalloc-test-stress)
+endif()
 
 # -----------------------------------------------------------------------------
 # Set override properties
