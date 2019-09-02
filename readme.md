@@ -13,7 +13,7 @@ Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
 
 It is a drop-in replacement for `malloc` and can be used in other programs
-without code changes, for example, on Unix you can use it as:
+without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
 ```
 > LD_PRELOAD=/usr/bin/libmimalloc.so  myprogram
 ```
@@ -117,7 +117,7 @@ Notes:
 The preferred usage is including `<mimalloc.h>`, linking with
 the shared- or static library, and using the `mi_malloc` API exclusively for allocation. For example,
 ```
-gcc -o myprogram -lmimalloc myfile.c
+> gcc -o myprogram -lmimalloc myfile.c
 ```
 
 mimalloc uses only safe OS calls (`mmap` and `VirtualAlloc`) and can co-exist
@@ -207,20 +207,21 @@ This is the recommended way to override the standard malloc interface.
 
 ### Linux, BSD
 
-On these systems we preload the mimalloc shared
+On these ELF-based systems we preload the mimalloc shared
 library so all calls to the standard `malloc` interface are
 resolved to the _mimalloc_ library.
-
-- `env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram` 
+```
+> env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram
+```
 
 You can set extra environment variables to check that mimalloc is running,
 like:
 ```
-env MIMALLOC_VERBOSE=1 LD_PRELOAD=/usr/lib/libmimalloc.so myprogram
+> env MIMALLOC_VERBOSE=1 LD_PRELOAD=/usr/lib/libmimalloc.so myprogram
 ```
 or run with the debug version to get detailed statistics:
 ```
-env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram
+> env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram
 ```
 
 ### MacOS
@@ -228,8 +229,9 @@ env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram
 On macOS we can also preload the mimalloc shared
 library so all calls to the standard `malloc` interface are
 resolved to the _mimalloc_ library.
-
-- `env DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram`
+```
+> env DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram
+```
 
 Note that certain security restrictions may apply when doing this from
 the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
@@ -257,16 +259,15 @@ robust; try this out if you experience troubles.
 
 ## Static override
 
-On Unix systems, you can also statically link with _mimalloc_ to override the standard
+On Unix-like systems, you can also statically link with _mimalloc_ to override the standard
 malloc interface. The recommended way is to link the final program with the
 _mimalloc_ single object file (`mimalloc-override.o`). We use
 an object file instead of a library file as linkers give preference to
 that over archives to resolve symbols. To ensure that the standard
 malloc interface resolves to the _mimalloc_ library, link it as the first
 object file. For example:
-
 ```
-gcc -o myprogram mimalloc-override.o  myfile1.c ...
+> gcc -o myprogram mimalloc-override.o  myfile1.c ...
 ```
 
 
