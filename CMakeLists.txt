@@ -96,7 +96,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
   endif()
 endif()
 
-if(NOT(CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo"))
+if(NOT(CMAKE_BUILD_TYPE MATCHES "Release|release|RelWithDebInfo|relwithdebinfo"))
   string(TOLOWER "${CMAKE_BUILD_TYPE}" build_type)
   set(mi_basename "mimalloc-${build_type}")
 else()
