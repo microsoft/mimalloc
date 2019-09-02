@@ -81,13 +81,17 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
   mi_assert_internal(mi_page_list_is_valid(page,page->local_free));
 
+  #if 0
   if (page->flags.is_zero) {
     for(mi_block_t* block = page->free; block != NULL; mi_block_next(page,block)) {
-      for (size_t i = sizeof(mi_block_t); i < page->block_size; i++) {
-        mi_assert_internal(0 == *((uint8_t*)block + i));
+      for (size_t i = 1; i < (page->block_size/sizeof(uintptr_t)); i++) {
+        if (((uintptr_t*)block)[i] != 0) {
+          return false;
+        }
       }
     }
   }
+  #endif
 
   mi_block_t* tfree = mi_tf_block(page->thread_free);
   mi_assert_internal(mi_page_list_is_valid(page, tfree));
@@ -558,7 +562,9 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
   _mi_stat_increase(&stats->page_committed, extend * page->block_size);
 
   // extension into zero initialized memory preserves the zero'd free list
-  if (!page->is_zero_init) page->flags.is_zero = false;
+  if (!page->is_zero_init) {
+    page->flags.is_zero = false;
+  }
   mi_assert_expensive(mi_page_is_valid_init(page));
 }
 
@@ -577,7 +583,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   #if MI_SECURE
   page->cookie = _mi_heap_random(heap) | 1;
   #endif
-  page->flags.is_zero =  page->is_zero_init;
+  page->flags.is_zero = page->is_zero_init;
 
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);

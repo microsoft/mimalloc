@@ -97,8 +97,8 @@ void _mi_block_zero_init(void* p, size_t size) {
     if (page->flags.is_zero) {
       ((mi_block_t*)p)->next = 0;
       #if MI_DEBUG>0
-      for (size_t i = 0; i < size; i++) { 
-        if (((uint8_t*)p)[i] != 0) {
+      for (size_t i = 0; i < (page->block_size/sizeof(uintptr_t)); i++) { 
+        if (((uintptr_t*)p)[i] != 0) {
           _mi_assert_fail("page not zero", __FILE__, __LINE__, "_mi_block_zero_init");
         }
       }

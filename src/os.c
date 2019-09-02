@@ -601,8 +601,9 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   }
 
   #if defined(_WIN32)
-  *is_zero = true;
   if (commit) {
+    // if the memory was already committed, the call succeeds but it is not zero'd
+    // *is_zero = true;
     void* p = VirtualAlloc(start, csize, MEM_COMMIT, PAGE_READWRITE);
     err = (p == start ? 0 : GetLastError());
   }
