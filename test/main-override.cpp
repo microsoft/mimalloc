@@ -30,11 +30,18 @@ int main() {
   free(p1);  
   p1 = malloc(8);
   char* s = mi_strdup("hello\n");
+  /*
+  char* s = _strdup("hello\n");
+  char* buf = NULL;
+  size_t len;
+  _dupenv_s(&buf,&len,"MIMALLOC_VERBOSE"); 
+  mi_free(buf);
+  */
   mi_free(p2);
   p2 = malloc(16);
   p1 = realloc(p1, 32);
   free(p1);
-  free(p2);
+  mi_free(p2);
   mi_free(s);
   Test* t = new Test(42);
   delete t;
