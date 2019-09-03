@@ -426,6 +426,17 @@ void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcep
   return newp;
 }
 
+void* mi_heap_rezalloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+  return _mi_heap_realloc_zero(heap, p, newsize, true);
+}
+
+void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
+  size_t total;
+  if (mi_mul_overflow(count, size, &total)) return NULL;
+  return mi_heap_rezalloc(heap, p, total);
+}
+
+
 void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_realloc(mi_get_default_heap(),p,newsize);
 }
@@ -438,6 +449,16 @@ void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
 void* mi_reallocf(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_reallocf(mi_get_default_heap(),p,newsize);
 }
+
+void* mi_rezalloc(void* p, size_t newsize) mi_attr_noexcept {
+  return mi_heap_rezalloc(mi_get_default_heap(), p, newsize);
+}
+
+void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
+  return mi_heap_recalloc(mi_get_default_heap(), p, count, size);
+}
+
+
 
 // ------------------------------------------------------
 // strdup, strndup, and realpath
