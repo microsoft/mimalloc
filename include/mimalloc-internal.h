@@ -20,7 +20,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_trace_message(...)  
 #endif
 
-
 // "options.c"
 void       _mi_fputs(mi_output_fun* out, const char* prefix, const char* message);
 void       _mi_fprintf(mi_output_fun* out, const char* fmt, ...);
@@ -101,7 +100,7 @@ void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero);
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero);
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
-void        _mi_block_zero_init(void* p, size_t size);
+void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
@@ -182,12 +181,25 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   }
 }
 
+// Is memory zero initialized?
+static inline bool mi_mem_is_zero(void* p, size_t size) {
+  for (size_t i = 0; i < size; i++) {
+    if (((uint8_t*)p)[i] != 0) return false;
+  }
+  return true;
+}
+
 // Align a byte size to a size in _machine words_,
 // i.e. byte size == `wsize*sizeof(void*)`.
 static inline size_t _mi_wsize_from_size(size_t size) {
   mi_assert_internal(size <= SIZE_MAX - sizeof(uintptr_t));
   return (size + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
 }
+
+
+/* -----------------------------------------------------------
+  The thread local default heap
+----------------------------------------------------------- */
 
 extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
 extern mi_heap_t _mi_heap_main;         // statically allocated main backing heap
@@ -220,6 +232,10 @@ static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
   return (heap != &_mi_heap_empty);
 }
 
+/* -----------------------------------------------------------
+  Pages
+----------------------------------------------------------- */
+
 static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t size) {
   mi_assert_internal(size <= MI_SMALL_SIZE_MAX);
   return heap->pages_free_direct[_mi_wsize_from_size(size)];
@@ -229,7 +245,6 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
 static inline mi_page_t* _mi_get_free_small_page(size_t size) {
   return _mi_heap_get_free_small_page(mi_get_default_heap(), size);
 }
-
 
 // Segment that contains the pointer
 static inline mi_segment_t* _mi_ptr_segment(const void* p) {

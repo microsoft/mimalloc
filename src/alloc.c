@@ -89,31 +89,28 @@ extern inline void* mi_malloc(size_t size) mi_attr_noexcept {
   return mi_heap_malloc(mi_get_default_heap(), size);
 }
 
-void _mi_block_zero_init(void* p, size_t size) {
+void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
+  // note: we need to initialize the whole block to zero, not just size
+  // or the recalloc/rezalloc functions cannot safely expand in place (see issue #63)
+  UNUSED(size);
   mi_assert_internal(p != NULL);
-  // already zero initialized memory?
-  if (size > 4*sizeof(void*)) {  // don't bother for small sizes
-    mi_page_t* page = _mi_ptr_page(p);
-    if (page->flags.is_zero) {
-      ((mi_block_t*)p)->next = 0;
-      #if MI_DEBUG>0
-      for (size_t i = 0; i < (page->block_size/sizeof(uintptr_t)); i++) { 
-        if (((uintptr_t*)p)[i] != 0) {
-          _mi_assert_fail("page not zero", __FILE__, __LINE__, "_mi_block_zero_init");
-        }
-      }
-      #endif
-      return; // and done
-    }
+  mi_assert_internal(size > 0 && page->block_size >= size);
+  mi_assert_internal(_mi_ptr_page(p)==page);
+  if (page->flags.is_zero) {
+    // already zero initialized memory?
+    ((mi_block_t*)p)->next = 0;  // clear the free list pointer
+    mi_assert_expensive(mi_mem_is_zero(p,page->block_size));
   }
-  // otherwise memset
-  memset(p, 0, size);
+  else {
+    // otherwise memset
+    memset(p, 0, page->block_size);
+  }
 }
 
 void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) {
   void* p = mi_heap_malloc(heap,size);
   if (zero && p != NULL) {
-    _mi_block_zero_init(p,size);
+    _mi_block_zero_init(_mi_ptr_page(p),p,size);  // todo: can we avoid getting the page again?
   }
   return p;
 }

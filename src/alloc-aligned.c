@@ -33,7 +33,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* heap, size_t size, size_t
       void* p = _mi_page_malloc(heap,page,size);
       mi_assert_internal(p != NULL);
       mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
-      if (zero) _mi_block_zero_init(p,size);
+      if (zero) _mi_block_zero_init(page,p,size);
       return p;
     }
   }
@@ -117,9 +117,16 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
     void* newp = mi_heap_malloc_aligned_at(heap,newsize,alignment,offset);
     if (newp != NULL) {
       if (zero && newsize > size) {
-        // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
-        size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
-        memset((uint8_t*)newp + start, 0, newsize - start);
+        const mi_page_t* page = _mi_ptr_page(newp);
+        if (page->flags.is_zero) {
+          // already zero initialized
+          mi_assert_expensive(mi_mem_is_zero(newp,newsize));
+        }
+        else {
+          // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
+          size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
+          memset((uint8_t*)newp + start, 0, newsize - start);
+        }
       }
       memcpy(newp, p, (newsize > size ? size : newsize));
       mi_free(p); // only free if successful

@@ -81,14 +81,10 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
   mi_assert_internal(mi_page_list_is_valid(page,page->local_free));
 
-  #if 0
+  #if MI_DEBUG>3 // generally too expensive to check this
   if (page->flags.is_zero) {
     for(mi_block_t* block = page->free; block != NULL; mi_block_next(page,block)) {
-      for (size_t i = 1; i < (page->block_size/sizeof(uintptr_t)); i++) {
-        if (((uintptr_t*)block)[i] != 0) {
-          return false;
-        }
-      }
+      mi_assert_expensive(mi_mem_is_zero(block + 1, page->block_size - sizeof(mi_block_t)));
     }
   }
   #endif
