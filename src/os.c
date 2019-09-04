@@ -788,14 +788,17 @@ static void mi_os_free_huge_reserved() {
 */
 
 #if !(MI_INTPTR_SIZE >= 8 && (defined(_WIN32) || defined(MI_OS_USE_MMAP)))
-int mi_reserve_huge_os_pages(size_t pages, size_t max_secs) {
-  return -2; // cannot allocate
+int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept {
+  UNUSED(pages); UNUSED(max_secs);
+  if (pages_reserved != NULL) *pages_reserved = 0;
+  return ENOMEM; // cannot allocate
 }
 #else
-int mi_reserve_huge_os_pages( size_t pages, double max_secs ) mi_attr_noexcept
+int mi_reserve_huge_os_pages( size_t pages, double max_secs, size_t* pages_reserved ) mi_attr_noexcept
 {
-  if (max_secs==0) return -1; // timeout 
-  if (pages==0) return 0;     // ok
+  if (pages_reserved != NULL) *pages_reserved = 0;
+  if (max_secs==0) return ETIMEDOUT; // timeout 
+  if (pages==0) return 0;            // ok
   if (!mi_atomic_cas_ptr_strong(&os_huge_reserved.start,(void*)1,NULL)) return -2; // already reserved
 
   // Allocate one page at the time but try to place them contiguously
@@ -804,7 +807,7 @@ int mi_reserve_huge_os_pages( size_t pages, double max_secs ) mi_attr_noexcept
   uint8_t* start = (uint8_t*)((uintptr_t)16 << 40); // 16TiB virtual start address
   uint8_t* addr = start;  // current top of the allocations
   for (size_t page = 0; page < pages; page++, addr += MI_HUGE_OS_PAGE_SIZE ) {
-    // allocate lorgu pages
+    // allocate a page
     void* p = NULL; 
     #ifdef _WIN32
     p = mi_win_virtual_alloc(addr, MI_HUGE_OS_PAGE_SIZE, 0, MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE, true);
@@ -816,6 +819,7 @@ int mi_reserve_huge_os_pages( size_t pages, double max_secs ) mi_attr_noexcept
     
     // Did we succeed at a contiguous address?
     if (p != addr) {
+      // no success, issue a warning and return with an error 
       if (p != NULL) {
         _mi_warning_message("could not allocate contiguous huge page %zu at 0x%p\n", page, addr); 
         _mi_os_free(p, MI_HUGE_OS_PAGE_SIZE, &_mi_stats_main );
@@ -828,7 +832,7 @@ int mi_reserve_huge_os_pages( size_t pages, double max_secs ) mi_attr_noexcept
         #endif
         _mi_warning_message("could not allocate huge page %zu at 0x%p, error: %i\n", page, addr, err);
       }
-      return -2;
+      return ENOMEM;  
     }
     // success, record it
     if (page==0) {
@@ -840,7 +844,8 @@ int mi_reserve_huge_os_pages( size_t pages, double max_secs ) mi_attr_noexcept
     }
     _mi_stat_increase(&_mi_stats_main.committed, MI_HUGE_OS_PAGE_SIZE); 
     _mi_stat_increase(&_mi_stats_main.reserved, MI_HUGE_OS_PAGE_SIZE);
-    
+    if (pages_reserved != NULL) { *pages_reserved = page + 1; };
+
     // check for timeout
     double elapsed = _mi_clock_end(start_t);
     if (elapsed > max_secs) return (-1); // timeout
