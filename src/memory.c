@@ -398,7 +398,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* l
 
   if (p == NULL) {
     // no free range in existing regions -- try to extend beyond the count.. but at most 8 regions
-    for (idx = count; idx < count + 8 && idx < MI_REGION_MAX; idx++) {
+    for (idx = count; idx < mi_atomic_read_relaxed(&regions_count) + 8 && idx < MI_REGION_MAX; idx++) {
       if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, large, is_zero, &p, id, tld)) return NULL; // error
       if (p != NULL) break;
     }
