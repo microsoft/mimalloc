@@ -388,14 +388,26 @@ bool _mi_preloading() {
   return os_preloading;
 }
 
+bool mi_is_redirected() mi_attr_noexcept {
+  return mi_redirected;
+}
+
 // Communicate with the redirection module on Windows
 #if defined(_WIN32) && defined(MI_SHARED_LIB) 
 #ifdef __cplusplus
 extern "C" {
 #endif
-mi_decl_export void _mi_redirect_init() {
-  // called on redirection
-  mi_redirected = true;
+mi_decl_export void _mi_redirect_entry(DWORD reason) {
+  // called on redirection; careful as this may be called before DllMain
+  if (reason == DLL_PROCESS_ATTACH) {
+    mi_redirected = true;
+  }
+  else if (reason == DLL_PROCESS_DETACH) {
+    mi_redirected = false;
+  }
+  else if (reason == DLL_THREAD_DETACH) {
+    mi_thread_done();
+  }
 }
 __declspec(dllimport) bool mi_allocator_init(const char** message);
 __declspec(dllimport) void mi_allocator_done();
@@ -493,7 +505,7 @@ static void mi_process_done(void) {
       mi_process_load();
     }
     else if (reason==DLL_THREAD_DETACH) {
-      mi_thread_done();
+      if (!mi_is_redirected()) mi_thread_done();
     }
     return TRUE;
   }
