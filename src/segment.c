@@ -151,19 +151,19 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
   size_t   psize = (segment->page_kind == MI_PAGE_HUGE ? segment->segment_size : (size_t)1 << segment->page_shift);
   uint8_t* p     = (uint8_t*)segment + page->segment_idx*psize;
 
- if (page->segment_idx == 0) {
-   // the first page starts after the segment info (and possible guard page)
-   p     += segment->segment_info_size;
-   psize -= segment->segment_info_size;
-   // for small and medium objects, ensure the page start is aligned with the block size (PR#66 by kickunderscore)
-   if (block_size > 0 && segment->page_kind <= MI_PAGE_MEDIUM) {
-     size_t adjust = block_size - ((uintptr_t)p % block_size);
-     if (adjust < block_size) {
-       p     += adjust;
-       psize -= adjust;
-     }
-     mi_assert_internal((uintptr_t)p % block_size == 0);
-   }
+  if (page->segment_idx == 0) {
+    // the first page starts after the segment info (and possible guard page)
+    p     += segment->segment_info_size;
+    psize -= segment->segment_info_size;
+    // for small and medium objects, ensure the page start is aligned with the block size (PR#66 by kickunderscore)
+    if (block_size > 0 && segment->page_kind <= MI_PAGE_MEDIUM) {
+      size_t adjust = block_size - ((uintptr_t)p % block_size);
+      if (adjust < block_size) {
+        p     += adjust;
+        psize -= adjust;
+      }
+      mi_assert_internal((uintptr_t)p % block_size == 0);
+    }
   }
   long secure = mi_option_get(mi_option_secure);
   if (secure > 1 || (secure == 1 && page->segment_idx == segment->capacity - 1)) {
@@ -186,18 +186,18 @@ static size_t mi_segment_size(size_t capacity, size_t required, size_t* pre_size
     capacity = MI_SMALL_PAGES_PER_SEGMENT;
   }
   */
-  size_t minsize   = sizeof(mi_segment_t) + ((capacity - 1) * sizeof(mi_page_t)) + 16 /* padding */;
+  const size_t minsize   = sizeof(mi_segment_t) + ((capacity - 1) * sizeof(mi_page_t)) + 16 /* padding */;
   size_t guardsize = 0;
   size_t isize     = 0;
 
   if (!mi_option_is_enabled(mi_option_secure)) {
     // normally no guard pages
-    isize = _mi_align_up(minsize, (16 > MI_MAX_ALIGN_SIZE ? 16 : MI_MAX_ALIGN_SIZE));
+    isize = _mi_align_up(minsize, 16 * MI_MAX_ALIGN_SIZE);
   }
   else {
     // in secure mode, we set up a protected page in between the segment info
     // and the page data (and one at the end of the segment)
-    size_t page_size = _mi_os_page_size();
+    const size_t page_size = _mi_os_page_size();
     isize = _mi_align_up(minsize, page_size);
     guardsize = page_size;
     required = _mi_align_up(required, page_size);
