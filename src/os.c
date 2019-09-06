@@ -193,6 +193,8 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
   }
 }
 
+static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size);
+
 #ifdef _WIN32
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
@@ -221,19 +223,10 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
   }
 #endif
 #if (MI_INTPTR_SIZE >= 8) 
-  // on 64-bit systems, use the virtual address area after 4TiB for 4MiB aligned allocations
-  #define MI_HINT_START ((intptr_t)4 << 40)
-  static volatile _Atomic(intptr_t) aligned_base = ATOMIC_VAR_INIT(MI_HINT_START); // starting at 4TiB
-  if (addr == NULL && try_alignment > 0 &&
-      try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE) == 0) 
-  {
-    intptr_t hint = mi_atomic_add(&aligned_base, size);
-    if (hint > ((intptr_t)30<<40)) { // try to wrap around after 30TiB (area after 32TiB is used for huge OS pages)
-      mi_atomic_cas_strong(mi_atomic_cast(uintptr_t,&aligned_base),MI_HINT_START,hint + size); 
-    }
-    if (hint%try_alignment == 0) {
-      return VirtualAlloc((void*)hint, size, flags, PAGE_READWRITE);
-    }
+  // on 64-bit systems, try to use the virtual address area after 4TiB for 4MiB aligned allocations
+  void* hint;
+  if (addr == NULL && (hint = mi_os_get_aligned_hint(try_alignment,size)) != NULL) {
+    return VirtualAlloc(hint, size, flags, PAGE_READWRITE);
   }
 #endif
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)  
@@ -302,17 +295,10 @@ static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int pr
   void* p = NULL;
   #if (MI_INTPTR_SIZE >= 8) && !defined(MAP_ALIGNED)
   // on 64-bit systems, use the virtual address area after 4TiB for 4MiB aligned allocations
-  #define MI_HINT_START ((intptr_t)4 << 40)
-  static volatile _Atomic(intptr_t) aligned_base = ATOMIC_VAR_INIT(MI_HINT_START); // starting at 4TiB
-  if (addr==NULL && try_alignment <= MI_SEGMENT_SIZE && (size%MI_SEGMENT_SIZE)==0) {
-    intptr_t hint = mi_atomic_add(&aligned_base,size);
-    if (hint > ((intptr_t)30<<40)) { // try to wrap around after 30TiB (area after 32TiB is used for huge OS pages)
-      mi_atomic_cas_strong(mi_atomic_cast(uintptr_t,&aligned_base), MI_HINT_START, hint + size);
-    }
-    if (hint%try_alignment == 0) {
-      p = mmap((void*)hint,size,protect_flags,flags,fd,0);
-      if (p==MAP_FAILED) p = NULL; // fall back to regular mmap
-    }
+  void* hint;
+  if (addr == NULL && (hint = mi_os_get_aligned_hint(try_alignment, size)) != NULL) {
+    p = mmap(hint,size,protect_flags,flags,fd,0);
+    if (p==MAP_FAILED) p = NULL; // fall back to regular mmap
   }
   #else
   UNUSED(try_alignment);
@@ -419,6 +405,36 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   return p;
 }
 #endif
+
+// On 64-bit systems, we can do efficient aligned allocation by using 
+// the 4TiB to 30TiB area to allocate them.
+#if (MI_INTPTR_SIZE >= 8) && (defined(_WIN32) || (defined(MI_OS_USE_MMAP) && !defined(MAP_ALIGNED)))
+static volatile _Atomic(intptr_t) aligned_base;
+
+// Return a 4MiB aligned address that is probably available
+static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
+  if (try_alignment == 0 || try_alignment > MI_SEGMENT_SIZE) return NULL;
+  if ((size%MI_SEGMENT_SIZE) != 0) return NULL;
+  intptr_t hint = mi_atomic_add(&aligned_base, size);
+  if (hint == 0 || hint > ((intptr_t)30<<40)) { // try to wrap around after 30TiB (area after 32TiB is used for huge OS pages)
+    intptr_t init = ((intptr_t)4 << 40); // start at 4TiB area
+    #if (MI_SECURE>0 || MI_DEBUG==0)     // security: randomize start of aligned allocations unless in debug mode
+    uintptr_t r = _mi_random_init((uintptr_t)&mi_os_get_aligned_hint ^ hint);
+    init = init + (MI_SEGMENT_SIZE * ((r>>17) & 0xFFFF));  // (randomly 0-64k)*4MiB == 0 to 256GiB
+    #endif
+    mi_atomic_cas_strong(mi_atomic_cast(uintptr_t, &aligned_base), init, hint + size);
+    hint = mi_atomic_add(&aligned_base, size); // this may still give 0 or > 30TiB but that is ok, it is a hint after all
+  }
+  if (hint%try_alignment != 0) return NULL;
+  return (void*)hint;
+}
+#else
+static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
+  UNUSED(try_alignment); UNUSED(size);
+  return NULL;
+}
+#endif
+
 
 // Primitive allocation from the OS.
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
@@ -850,10 +866,16 @@ int mi_reserve_huge_os_pages( size_t pages, double max_secs, size_t* pages_reser
   if (pages==0) return 0;            // ok
   if (!mi_atomic_cas_ptr_strong(&os_huge_reserved.start,(void*)1,NULL)) return ETIMEDOUT; // already reserved
 
+  // Set the start address after the 32TiB area
+  uint8_t* start = (uint8_t*)((uintptr_t)32 << 40); // 32TiB virtual start address
+  #if (MI_SECURE>0 || MI_DEBUG==0)     // security: randomize start of huge pages unless in debug mode
+  uintptr_t r = _mi_random_init((uintptr_t)&mi_reserve_huge_os_pages);
+  start = start + ((uintptr_t)MI_SEGMENT_SIZE * ((r>>17) & 0xFFFF));  // (randomly 0-64k)*4MiB == 0 to 256GiB
+  #endif
+
   // Allocate one page at the time but try to place them contiguously
   // We allocate one page at the time to be able to abort if it takes too long
   double start_t = _mi_clock_start();
-  uint8_t* start = (uint8_t*)((uintptr_t)32 << 40); // 32TiB virtual start address
   uint8_t* addr = start;  // current top of the allocations
   for (size_t page = 0; page < pages; page++, addr += MI_HUGE_OS_PAGE_SIZE ) {
     // allocate a page
@@ -886,7 +908,7 @@ int mi_reserve_huge_os_pages( size_t pages, double max_secs, size_t* pages_reser
     }
     // success, record it
     if (page==0) {
-      mi_atomic_write_ptr(&os_huge_reserved.start, addr);
+      mi_atomic_write_ptr(&os_huge_reserved.start, addr);  // don't switch the order of these writes
       mi_atomic_write(&os_huge_reserved.reserved, MI_HUGE_OS_PAGE_SIZE);
     }
     else {
