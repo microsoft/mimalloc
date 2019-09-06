@@ -150,16 +150,18 @@ static void mi_out_stderr(const char* msg) {
 // Default output handler
 // --------------------------------------------------------
 
+// Should be atomic but gives errors on many platforms as generally we cannot cast a function pointer to a uintptr_t.
+// For now, don't register output from multiple threads.
 #pragma warning(suppress:4180)
-static volatile _Atomic(mi_output_fun*) mi_out_default; // = NULL
+static volatile mi_output_fun* mi_out_default; // = NULL
 
 static mi_output_fun* mi_out_get_default(void) {
-  mi_output_fun* out = (mi_output_fun*)mi_atomic_read_ptr(mi_atomic_cast(void*, &mi_out_default));
+  mi_output_fun* out = mi_out_default;
   return (out == NULL ? &mi_out_stderr : out);
 }
 
 void mi_register_output(mi_output_fun* out) mi_attr_noexcept {
-  mi_atomic_write_ptr(mi_atomic_cast(void*,&mi_out_default),out);
+  mi_out_default = out;
 }
 
 
