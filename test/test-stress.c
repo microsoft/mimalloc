@@ -18,7 +18,7 @@ terms of the MIT license.
 
 // argument defaults
 static int THREADS = 32;    // more repeatable if THREADS <= #processors
-static int N       = 10;    // scaling factor
+static int N       = 20;    // scaling factor
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int N       = 100;  // scaling factor
@@ -163,8 +163,10 @@ int main(int argc, char** argv) {
   for (int i = 0; i < TRANSFERS; i++) {
     free_items((void*)transfer[i]);
   }
+  #ifndef NDEBUG
   mi_collect(false);
   mi_collect(true);
+  #endif
   mi_stats_print(NULL);
   //bench_end_program();
   return 0;

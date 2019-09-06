@@ -410,7 +410,7 @@ void _mi_page_retire(mi_page_t* page) {
   // if its neighbours are almost fully used.
   if (mi_likely(page->block_size <= (MI_SMALL_SIZE_MAX/4))) {
     if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
-      _mi_stat_counter_increase(&_mi_stats_main.page_no_retire,1);
+      mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
       return; // dont't retire after all
     }
   }
@@ -482,7 +482,7 @@ static void mi_page_free_list_extend_secure(mi_heap_t* heap, mi_page_t* page, si
   heap->random = _mi_random_shuffle(rnd);
 }
 
-static void mi_page_free_list_extend( mi_page_t* page, size_t extend, mi_stats_t* stats)
+static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* page, size_t extend, mi_stats_t* stats)
 {
   UNUSED(stats);
   mi_assert_internal(page->free == NULL);
@@ -491,15 +491,15 @@ static void mi_page_free_list_extend( mi_page_t* page, size_t extend, mi_stats_t
   void* page_area = _mi_page_start(_mi_page_segment(page), page, NULL );
   size_t bsize = page->block_size;
   mi_block_t* start = mi_page_block_at(page, page_area, page->capacity);
-
+  
   // initialize a sequential free list
-  mi_block_t* last = mi_page_block_at(page, page_area, page->capacity + extend - 1);
+  mi_block_t* last = mi_page_block_at(page, page_area, page->capacity + extend - 1);  
   mi_block_t* block = start;
   while(block <= last) {
     mi_block_t* next = (mi_block_t*)((uint8_t*)block + bsize);
     mi_block_set_next(page,block,next);
     block = next;
-  }
+  }  
   mi_block_set_next(page, last, NULL);
   page->free = start;
 }
@@ -530,11 +530,11 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
 
   size_t page_size;
   _mi_page_start(_mi_page_segment(page), page, &page_size);
-  _mi_stat_increase(&stats->pages_extended, 1);
+  mi_stat_increase(stats->pages_extended, 1);
 
   // calculate the extend count
   size_t extend = page->reserved - page->capacity;
-  size_t max_extend = MI_MAX_EXTEND_SIZE/page->block_size;
+  size_t max_extend = (page->block_size >= MI_MAX_EXTEND_SIZE ? MI_MIN_EXTEND : MI_MAX_EXTEND_SIZE/(uint32_t)page->block_size);
   if (max_extend < MI_MIN_EXTEND) max_extend = MI_MIN_EXTEND;
 
   if (extend > max_extend) {
@@ -547,7 +547,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
   mi_assert_internal(extend < (1UL<<16));
 
   // and append the extend the free list
-  if (extend < MI_MIN_SLICES || !mi_option_is_enabled(mi_option_secure)) {
+  if (extend < MI_MIN_SLICES || MI_SECURE==0) { //!mi_option_is_enabled(mi_option_secure)) {
     mi_page_free_list_extend(page, extend, stats );
   }
   else {
@@ -555,7 +555,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;
-  _mi_stat_increase(&stats->page_committed, extend * page->block_size);
+  mi_stat_increase(stats->page_committed, extend * page->block_size);
 
   // extension into zero initialized memory preserves the zero'd free list
   if (!page->is_zero_init) {
@@ -653,7 +653,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
     page = next;
   } // for each page
 
-  _mi_stat_counter_increase(&heap->tld->stats.searches,count);
+  mi_stat_counter_increase(heap->tld->stats.searches,count);
 
   if (page == NULL) {
     page = rpage;
