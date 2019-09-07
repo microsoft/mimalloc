@@ -153,7 +153,7 @@ static void mi_out_stderr(const char* msg) {
 // Should be atomic but gives errors on many platforms as generally we cannot cast a function pointer to a uintptr_t.
 // For now, don't register output from multiple threads.
 #pragma warning(suppress:4180)
-static volatile mi_output_fun* mi_out_default; // = NULL
+static mi_output_fun* volatile mi_out_default; // = NULL
 
 static mi_output_fun* mi_out_get_default(void) {
   mi_output_fun* out = mi_out_default;
