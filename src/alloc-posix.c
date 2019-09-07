@@ -71,6 +71,7 @@ void* mi_pvalloc(size_t size) mi_attr_noexcept {
 }
 
 void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept {
+  if (alignment != 0 && (size%alignment) != 0) return NULL; // C11 required; <https://en.cppreference.com/w/c/memory/aligned_alloc>
   return mi_malloc_aligned(size, alignment);
 }
 
