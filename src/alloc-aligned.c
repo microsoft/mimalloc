@@ -19,7 +19,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* heap, size_t size, size_t
   // the address at offset is aligned regardless of the allocated size.
   mi_assert(alignment > 0 && alignment % sizeof(uintptr_t) == 0);
   if (alignment <= sizeof(uintptr_t)) return _mi_heap_malloc_zero(heap,size,zero);
-  if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
+  if (mi_unlikely(size > PTRDIFF_MAX)) return NULL; // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
 
   // try if there is a current small block with just the right alignment
   if (size <= MI_SMALL_SIZE_MAX) {
