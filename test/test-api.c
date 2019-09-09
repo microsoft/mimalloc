@@ -124,13 +124,13 @@ int main() {
     void* p = mi_malloc_aligned(32,24); result = (p != NULL && (uintptr_t)(p) % 24 == 0); mi_free(p);
   });
   CHECK_BODY("malloc-aligned2", {
-    void* p = mi_malloc_aligned(8,24); result = (p != NULL && (uintptr_t)(p) % 24 == 0); mi_free(p);
+    void* p = mi_malloc_aligned(48,24); result = (p != NULL && (uintptr_t)(p) % 24 == 0); mi_free(p);
   });
   CHECK_BODY("malloc-aligned-at1", {
-    void* p = mi_malloc_aligned_at(8,24,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 24 == 0); mi_free(p);
+    void* p = mi_malloc_aligned_at(48,24,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 24 == 0); mi_free(p);
   });
   CHECK_BODY("malloc-aligned-at2", {
-    void* p = mi_malloc_aligned_at(5,24,8); result = (p != NULL && ((uintptr_t)(p) + 8) % 24 == 0); mi_free(p);
+    void* p = mi_malloc_aligned_at(50,24,8); result = (p != NULL && ((uintptr_t)(p) + 8) % 24 == 0); mi_free(p);
   });
 
   // ---------------------------------------------------
