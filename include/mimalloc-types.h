@@ -405,6 +405,7 @@ typedef struct mi_os_tld_s {
 // Thread local data
 struct mi_tld_s {
   unsigned long long  heartbeat;     // monotonic heartbeat count
+  bool                recurse;       // true if deferred was called; used to prevent infinite recursion.
   mi_heap_t*          heap_backing;  // backing heap of this thread (cannot be deleted)
   mi_segments_tld_t   segments;      // segment tld
   mi_os_tld_t         os;            // os tld

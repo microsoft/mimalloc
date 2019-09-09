@@ -702,12 +702,14 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
   a certain number of allocations.
 ----------------------------------------------------------- */
 
-static mi_deferred_free_fun* deferred_free = NULL;
+static volatile mi_deferred_free_fun* deferred_free = NULL;
 
 void _mi_deferred_free(mi_heap_t* heap, bool force) {
   heap->tld->heartbeat++;
-  if (deferred_free != NULL) {
+  if (deferred_free != NULL && !heap->tld->recurse) {
+    heap->tld->recurse = true;
     deferred_free(force, heap->tld->heartbeat);
+    heap->tld->recurse = false;
   }
 }
 

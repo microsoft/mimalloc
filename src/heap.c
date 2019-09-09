@@ -110,7 +110,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 {
   if (!mi_heap_is_initialized(heap)) return;
   _mi_deferred_free(heap, collect > NORMAL);
-
+  
   // collect (some) abandoned pages
   if (collect >= NORMAL && !heap->no_reclaim) {
     if (collect == NORMAL) {
