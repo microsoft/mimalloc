@@ -167,10 +167,12 @@ static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #endif
 }
 
-// Align upwards
-static inline uintptr_t _mi_is_power_of_two(uintptr_t x) {
+// Is `x` a power of two? 
+static inline bool _mi_is_power_of_two(uintptr_t x) {
   return ((x & (x - 1)) == 0);
 }
+
+// Align upwards
 static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   uintptr_t mask = alignment - 1;
   if ((alignment & mask) == 0) {  // power of two?
