@@ -68,6 +68,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define MI_INTPTR_SIZE  (1<<MI_INTPTR_SHIFT)
 
+#define KiB     ((size_t)1024)
+#define MiB     (KiB*KiB)
+#define GiB     (MiB*KiB)
 
 // ------------------------------------------------------
 // Main internal data-structures

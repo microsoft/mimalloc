@@ -76,11 +76,16 @@ static bool use_large_os_page(size_t size, size_t alignment) {
   return ((size % large_os_page_size) == 0 && (alignment % large_os_page_size) == 0);
 }
 
-// round to a good allocation size
-static size_t mi_os_good_alloc_size(size_t size, size_t alignment) {
-  UNUSED(alignment);
-  if (size >= (SIZE_MAX - os_alloc_granularity)) return size; // possible overflow?
-  return _mi_align_up(size, os_alloc_granularity);
+// round to a good OS allocation size (bounded by max 12.5% waste)
+size_t _mi_os_good_alloc_size(size_t size) {
+  size_t align_size;
+  if (size < 512*KiB) align_size = _mi_os_page_size();
+  else if (size < 2*MiB) align_size = 64*KiB;
+  else if (size < 8*MiB) align_size = 256*KiB;
+  else if (size < 32*MiB) align_size = 1*MiB;
+  else align_size = 4*MiB;
+  if (size >= (SIZE_MAX - align_size)) return size; // possible overflow?
+  return _mi_align_up(size, align_size);
 }
 
 #if defined(_WIN32)
@@ -547,14 +552,14 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
 
 void* _mi_os_alloc(size_t size, mi_stats_t* stats) {
   if (size == 0) return NULL;
-  size = mi_os_good_alloc_size(size, 0);
+  size = _mi_os_good_alloc_size(size);
   bool is_large = false;
   return mi_os_mem_alloc(size, 0, true, false, &is_large, stats);
 }
 
 void  _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats) {
   if (size == 0 || p == NULL) return;
-  size = mi_os_good_alloc_size(size, 0);
+  size = _mi_os_good_alloc_size(size);
   mi_os_mem_free(p, size, was_committed, stats);
 }
 
@@ -565,7 +570,7 @@ void  _mi_os_free(void* p, size_t size, mi_stats_t* stats) {
 void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld)
 {
   if (size == 0) return NULL;
-  size = mi_os_good_alloc_size(size, alignment);
+  size = _mi_os_good_alloc_size(size);
   alignment = _mi_align_up(alignment, _mi_os_page_size());
   bool allow_large = false;
   if (large != NULL) {
