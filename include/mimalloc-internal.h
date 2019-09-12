@@ -168,7 +168,7 @@ static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #endif
 }
 
-// Is `x` a power of two? 
+// Is `x` a power of two? (0 is considered a power of two)
 static inline bool _mi_is_power_of_two(uintptr_t x) {
   return ((x & (x - 1)) == 0);
 }
