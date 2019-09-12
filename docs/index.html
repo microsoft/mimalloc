@@ -110,14 +110,15 @@ $(document).ready(function(){initNavTree('index.html','');});
 <li><b>eager page reset</b>: when a "page" becomes empty (with increased chance due to free list sharding) the memory is marked to the OS as unused ("reset" or "purged") reducing (real) memory pressure and fragmentation, especially in long running programs.</li>
 <li><b>secure</b>: <em>mimalloc</em> can be build in secure mode, adding guard pages, randomized allocation, encrypted free lists, etc. to protect against various heap vulnerabilities. The performance penalty is only around 3% on average over our benchmarks.</li>
 <li><b>first-class heaps</b>: efficiently create and use multiple heaps to allocate across different regions. A heap can be destroyed at once instead of deallocating each object separately.</li>
-<li><b>bounded</b>: it does not suffer from <em>blowup</em> [1], has bounded worst-case allocation times (<em>wcat</em>), bounded space overhead (~0.2% meta-data, with at most 16.7% waste in allocation sizes), and has no internal points of contention using only atomic operations.</li>
+<li><b>bounded</b>: it does not suffer from <em>blowup</em> [1], has bounded worst-case allocation times (<em>wcat</em>), bounded space overhead (~0.2% meta-data, with at most 12.5% waste in allocation sizes), and has no internal points of contention using only atomic operations.</li>
 <li><b>fast</b>: In our benchmarks (see <a href="#performance">below</a>), <em>mimalloc</em> always outperforms all other leading allocators (<em>jemalloc</em>, <em>tcmalloc</em>, <em>Hoard</em>, etc), and usually uses less memory (up to 25% more in the worst case). A nice property is that it does consistently well over a wide range of benchmarks.</li>
 </ul>
-<p>You can read more on the design of <em>mimalloc</em> in the upcoming technical report which also has detailed benchmark results.</p>
+<p>You can read more on the design of <em>mimalloc</em> in the <a href="https://www.microsoft.com/en-us/research/publication/mimalloc-free-list-sharding-in-action">technical report</a> which also has detailed benchmark results.</p>
 <p>Further information:</p>
 <ul>
 <li><a class="el" href="build.html">Building</a></li>
 <li><a class="el" href="using.html">Using the library</a></li>
+<li><a class="el" href="environment.html">Environment Options</a></li>
 <li><a class="el" href="overrides.html">Overriding Malloc</a></li>
 <li><a class="el" href="bench.html">Performance</a></li>
 <li><a class="el" href="group__malloc.html">Basic Allocation</a></li>

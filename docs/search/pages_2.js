@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['performance',['Performance',['../bench.html',1,'']]]
+  ['overriding_20malloc',['Overriding Malloc',['../overrides.html',1,'']]]
 ];

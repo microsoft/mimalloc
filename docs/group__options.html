@@ -115,16 +115,20 @@ Enumerations</h2></td></tr>
 &#160;&#160;<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca0957ef73b2550764b4840edf48422fda">mi_option_show_stats</a>, 
 <a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cafbf4822e5c00732c5984b32a032837f0">mi_option_show_errors</a>, 
 <a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca7c8b7bf5281c581bad64f5daa6442777">mi_option_verbose</a>, 
-<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca083ee20765063fc6d727e11d33cf378f">mi_option_secure</a>, 
+<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca1e8de72c93da7ff22d91e1e27b52ac2b">mi_option_eager_commit</a>, 
 <br />
-&#160;&#160;<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca1e8de72c93da7ff22d91e1e27b52ac2b">mi_option_eager_commit</a>, 
-<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca32ce97ece29f69e82579679cf8a307ad">mi_option_eager_region_commit</a>, 
+&#160;&#160;<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca32ce97ece29f69e82579679cf8a307ad">mi_option_eager_region_commit</a>, 
 <a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca4192d491200d0055df0554d4cf65054e">mi_option_large_os_pages</a>, 
-<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cada854dd272c66342f18a93ee254a2968">mi_option_page_reset</a>, 
+<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884caca7ed041be3b0b9d0b82432c7bf41af2">mi_option_reserve_huge_os_pages</a>, 
+<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca2ecbe7ef32f5c84de3739aa4f0b805a1">mi_option_segment_cache</a>, 
 <br />
-&#160;&#160;<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cac2157a0cb79cd996c1db7d9f6a090c07">mi_option_cache_reset</a>, 
+&#160;&#160;<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cada854dd272c66342f18a93ee254a2968">mi_option_page_reset</a>, 
+<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cac2157a0cb79cd996c1db7d9f6a090c07">mi_option_cache_reset</a>, 
 <a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cac81ee965b130fa81238913a3c239d536">mi_option_reset_decommits</a>, 
-<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cab3a837b5ceee250e14e051dbee2a441b">mi_option_reset_discards</a>, 
+<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca17a190c25be381142d87e0468c4c068c">mi_option_eager_commit_delay</a>, 
+<br />
+&#160;&#160;<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cafb121d30d87591850d5410ccc3a95c6d">mi_option_segment_reset</a>, 
+<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca4b74ae2a69e445de6c2361b73c1d14bf">mi_option_os_tag</a>, 
 <a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca5b4357b74be0d87568036c32eb1a2e4a">_mi_option_last</a>
 <br />
  }</td></tr>
@@ -169,13 +173,15 @@ Functions</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca7c8b7bf5281c581bad64f5daa6442777"></a>mi_option_verbose&#160;</td><td class="fielddoc"><p>Print verbose messages to <code>stderr</code>. </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca083ee20765063fc6d727e11d33cf378f"></a>mi_option_secure&#160;</td><td class="fielddoc"><p>Experimental. </p>
-</td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca1e8de72c93da7ff22d91e1e27b52ac2b"></a>mi_option_eager_commit&#160;</td><td class="fielddoc"><p>Eagerly commit segments (4MiB) (enabled by default). </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca32ce97ece29f69e82579679cf8a307ad"></a>mi_option_eager_region_commit&#160;</td><td class="fielddoc"><p>Eagerly commit large (256MiB) memory regions (enabled by default except on Windows) </p>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca32ce97ece29f69e82579679cf8a307ad"></a>mi_option_eager_region_commit&#160;</td><td class="fielddoc"><p>Eagerly commit large (256MiB) memory regions (enabled by default, except on Windows) </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca4192d491200d0055df0554d4cf65054e"></a>mi_option_large_os_pages&#160;</td><td class="fielddoc"><p>Use large OS pages if possible. </p>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca4192d491200d0055df0554d4cf65054e"></a>mi_option_large_os_pages&#160;</td><td class="fielddoc"><p>Use large OS pages (2MiB in size) if possible. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884caca7ed041be3b0b9d0b82432c7bf41af2"></a>mi_option_reserve_huge_os_pages&#160;</td><td class="fielddoc"><p>The number of huge OS pages (1GiB in size) to reserve at the start of the program. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca2ecbe7ef32f5c84de3739aa4f0b805a1"></a>mi_option_segment_cache&#160;</td><td class="fielddoc"><p>The number of segments per thread to keep cached. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884cada854dd272c66342f18a93ee254a2968"></a>mi_option_page_reset&#160;</td><td class="fielddoc"><p>Reset page memory when it becomes free. </p>
 </td></tr>
@@ -183,7 +189,11 @@ Functions</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884cac81ee965b130fa81238913a3c239d536"></a>mi_option_reset_decommits&#160;</td><td class="fielddoc"><p>Experimental. </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884cab3a837b5ceee250e14e051dbee2a441b"></a>mi_option_reset_discards&#160;</td><td class="fielddoc"><p>Experimental. </p>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca17a190c25be381142d87e0468c4c068c"></a>mi_option_eager_commit_delay&#160;</td><td class="fielddoc"><p>Experimental. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884cafb121d30d87591850d5410ccc3a95c6d"></a>mi_option_segment_reset&#160;</td><td class="fielddoc"><p>Experimental. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca4b74ae2a69e445de6c2361b73c1d14bf"></a>mi_option_os_tag&#160;</td><td class="fielddoc"><p>OS tag to assign to mimalloc'd memory. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca5b4357b74be0d87568036c32eb1a2e4a"></a>_mi_option_last&#160;</td><td class="fielddoc"></td></tr>
 </table>
