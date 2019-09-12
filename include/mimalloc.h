@@ -181,8 +181,8 @@ mi_decl_export mi_decl_allocator void* mi_heap_realloc_aligned_at(mi_heap_t* hea
 
 
 // --------------------------------------------------------------------------------
-// Zero initialized re-allocation. 
-// Only valid on memory that was originally allocated with zero initialization too. 
+// Zero initialized re-allocation.
+// Only valid on memory that was originally allocated with zero initialization too.
 // e.g. `mi_calloc`, `mi_zalloc`, `mi_zalloc_aligned` etc.
 // see <https://github.com/microsoft/mimalloc/issues/63#issuecomment-508272992>
 // --------------------------------------------------------------------------------
@@ -246,8 +246,8 @@ mi_decl_export bool mi_is_redirected() mi_attr_noexcept;
 #define mi_heap_zalloc_tp(hp,tp)        ((tp*)mi_heap_zalloc(hp,sizeof(tp)))
 #define mi_heap_calloc_tp(hp,tp,n)      ((tp*)mi_heap_calloc(hp,n,sizeof(tp)))
 #define mi_heap_mallocn_tp(hp,tp,n)     ((tp*)mi_heap_mallocn(hp,n,sizeof(tp)))
-#define mi_heap_reallocn_tp(hp,tp,n)    ((tp*)mi_heap_reallocn(hp,n,sizeof(tp)))
-#define mi_heap_recalloc_tp(hp,tp,n)    ((tp*)mi_heap_recalloc(hp,n,sizeof(tp)))
+#define mi_heap_reallocn_tp(hp,p,tp,n)  ((tp*)mi_heap_reallocn(hp,p,n,sizeof(tp)))
+#define mi_heap_recalloc_tp(hp,p,tp,n)  ((tp*)mi_heap_recalloc(hp,p,n,sizeof(tp)))
 
 
 // ------------------------------------------------------
