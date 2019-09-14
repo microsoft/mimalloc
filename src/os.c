@@ -99,6 +99,41 @@ typedef NTSTATUS (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*
 static PVirtualAlloc2 pVirtualAlloc2 = NULL;
 static PNtAllocateVirtualMemoryEx pNtAllocateVirtualMemoryEx = NULL;
 
+static bool mi_win_enable_large_os_pages() 
+{
+  if (large_os_page_size > 0) return true;
+
+  // Try to see if large OS pages are supported
+  // To use large pages on Windows, we first need access permission
+  // Set "Lock pages in memory" permission in the group policy editor
+  // <https://devblogs.microsoft.com/oldnewthing/20110128-00/?p=11643>
+  unsigned long err = 0;
+  HANDLE token = NULL;
+  BOOL ok = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token);
+  if (ok) {
+    TOKEN_PRIVILEGES tp;
+    ok = LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &tp.Privileges[0].Luid);
+    if (ok) {
+      tp.PrivilegeCount = 1;
+      tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+      ok = AdjustTokenPrivileges(token, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+      if (ok) {
+        err = GetLastError();
+        ok = (err == ERROR_SUCCESS);
+        if (ok) {
+          large_os_page_size = GetLargePageMinimum();
+        }
+      }
+    }
+    CloseHandle(token);
+  }
+  if (!ok) {
+    if (err == 0) err = GetLastError();
+    _mi_warning_message("cannot enable large OS page support, error %lu\n", err);
+  }
+  return (ok!=0);
+}
+
 void _mi_os_init(void) {
   // get the page size
   SYSTEM_INFO si;
@@ -118,37 +153,9 @@ void _mi_os_init(void) {
   if (hDll != NULL) {    
     pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
     FreeLibrary(hDll);
-  }
-  // Try to see if large OS pages are supported
-  unsigned long err = 0;
-  bool ok = mi_option_is_enabled(mi_option_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages);
-  if (ok) {
-    // To use large pages on Windows, we first need access permission
-    // Set "Lock pages in memory" permission in the group policy editor
-    // <https://devblogs.microsoft.com/oldnewthing/20110128-00/?p=11643>
-    HANDLE token = NULL;
-    ok = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token);
-    if (ok) {
-      TOKEN_PRIVILEGES tp;
-      ok = LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &tp.Privileges[0].Luid);
-      if (ok) {
-        tp.PrivilegeCount = 1;
-        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-        ok = AdjustTokenPrivileges(token, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
-        if (ok) {
-          err = GetLastError();
-          ok = (err == ERROR_SUCCESS);
-          if (ok) {
-            large_os_page_size = GetLargePageMinimum();
-          }
-        }
-      }
-      CloseHandle(token);
-    }
-    if (!ok) {
-      if (err == 0) err = GetLastError();
-      _mi_warning_message("cannot enable large OS page support, error %lu\n", err);
-    }
+  }  
+  if (mi_option_is_enabled(mi_option_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
+    mi_win_enable_large_os_pages();
   }
 }
 #elif defined(__wasi__)
@@ -887,6 +894,7 @@ int mi_reserve_huge_os_pages( size_t pages, double max_secs, size_t* pages_reser
     void* p = NULL; 
     bool is_large = true;
     #ifdef _WIN32
+    if (page==0) { mi_win_enable_large_os_pages(); }
     p = mi_win_virtual_alloc(addr, MI_HUGE_OS_PAGE_SIZE, 0, MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE, true, true, &is_large);
     #elif defined(MI_OS_USE_MMAP)
     p = mi_unix_mmap(addr, MI_HUGE_OS_PAGE_SIZE, 0, PROT_READ | PROT_WRITE, true, true, &is_large);
