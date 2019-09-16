@@ -172,6 +172,7 @@ install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_dir} LIBRARY N
 install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_dir})
 install(FILES include/mimalloc.h DESTINATION ${mi_install_dir}/include)
 install(FILES include/mimalloc-override.h DESTINATION ${mi_install_dir}/include)
+install(FILES include/mimalloc-new-delete.h DESTINATION ${mi_install_dir}/include)
 install(FILES cmake/mimalloc-config.cmake DESTINATION ${mi_install_dir}/cmake)
 install(FILES cmake/mimalloc-config-version.cmake DESTINATION ${mi_install_dir}/cmake)
 install(EXPORT mimalloc DESTINATION ${mi_install_dir}/cmake)

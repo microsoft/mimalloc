@@ -212,6 +212,7 @@
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc-internal.h" />
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc.h" />
     <ClInclude Include="..\..\include\mimalloc-atomic.h" />
+    <ClInclude Include="..\..\include\mimalloc-new-delete.h" />
     <ClInclude Include="..\..\include\mimalloc-override.h" />
     <ClInclude Include="..\..\include\mimalloc-types.h" />
   </ItemGroup>

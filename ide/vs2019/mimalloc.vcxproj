@@ -238,6 +238,7 @@
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc-atomic.h" />
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc-override.h" />
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc-types.h" />
+    <ClInclude Include="..\..\include\mimalloc-new-delete.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

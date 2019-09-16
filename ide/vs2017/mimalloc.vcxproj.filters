@@ -70,5 +70,8 @@
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc-types.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc-new-delete.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
