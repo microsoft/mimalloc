@@ -133,7 +133,7 @@ endif()
 
 # shared library
 add_library(mimalloc SHARED ${mi_sources})
-set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} NO_SONAME "YES" OUTPUT_NAME ${mi_basename} )
+set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} OUTPUT_NAME ${mi_basename} )
 target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
 target_compile_options(mimalloc PRIVATE ${mi_cflags})
 target_link_libraries(mimalloc PUBLIC ${mi_libraries})
@@ -168,7 +168,7 @@ else()
 endif()
 
 # install static and shared library, and the include files
-install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_dir} LIBRARY NAMELINK_SKIP)
+install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_dir} LIBRARY)
 install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_dir})
 install(FILES include/mimalloc.h DESTINATION ${mi_install_dir}/include)
 install(FILES include/mimalloc-override.h DESTINATION ${mi_install_dir}/include)
@@ -176,7 +176,14 @@ install(FILES include/mimalloc-new-delete.h DESTINATION ${mi_install_dir}/includ
 install(FILES cmake/mimalloc-config.cmake DESTINATION ${mi_install_dir}/cmake)
 install(FILES cmake/mimalloc-config-version.cmake DESTINATION ${mi_install_dir}/cmake)
 install(EXPORT mimalloc DESTINATION ${mi_install_dir}/cmake)
-install(FILES "$<TARGET_FILE:mimalloc>" DESTINATION lib)  # duplicate the .so in the lib directory (unversioned)
+
+if(NOT WIN32)
+  # install a symlink in the /usr/local/lib to the versioned library
+  set(mi_symlink "${CMAKE_SHARED_MODULE_PREFIX}${mi_basename}${CMAKE_SHARED_LIBRARY_SUFFIX}")
+  set(mi_soname "mimalloc-${mi_version}/${mi_symlink}.${mi_version}")
+  install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${mi_soname} ${mi_symlink} WORKING_DIRECTORY ${CMAKE_INSTALL_PREFIX}/${mi_install_dir}/..)")
+  install(CODE "MESSAGE(\"-- Symbolic link: ${CMAKE_INSTALL_PREFIX}/lib/${mi_symlink} -> ${mi_soname}\")")
+endif()
 
 # single object file for more predictable static overriding
 add_library(mimalloc-obj OBJECT src/static.c)
