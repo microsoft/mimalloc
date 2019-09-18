@@ -26,6 +26,9 @@
     <ClInclude Include="..\..\include\mimalloc-override.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc-new-delete.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\alloc.c">
@@ -65,9 +68,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\alloc-posix.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\alloc-override-win.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

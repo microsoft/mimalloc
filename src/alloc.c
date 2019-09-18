@@ -33,7 +33,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   page->used++;
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
 #if (MI_DEBUG)
-  memset(block, MI_DEBUG_UNINIT, size);
+  if (!page->flags.is_zero) { memset(block, MI_DEBUG_UNINIT, size); }
 #elif (MI_SECURE)
   block->next = 0;
 #endif
@@ -89,9 +89,29 @@ extern inline void* mi_malloc(size_t size) mi_attr_noexcept {
   return mi_heap_malloc(mi_get_default_heap(), size);
 }
 
+void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
+  // note: we need to initialize the whole block to zero, not just size
+  // or the recalloc/rezalloc functions cannot safely expand in place (see issue #63)
+  UNUSED(size);
+  mi_assert_internal(p != NULL);
+  mi_assert_internal(size > 0 && page->block_size >= size);
+  mi_assert_internal(_mi_ptr_page(p)==page);
+  if (page->flags.is_zero) {
+    // already zero initialized memory?
+    ((mi_block_t*)p)->next = 0;  // clear the free list pointer
+    mi_assert_expensive(mi_mem_is_zero(p,page->block_size));
+  }
+  else {
+    // otherwise memset
+    memset(p, 0, page->block_size);
+  }
+}
+
 void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) {
   void* p = mi_heap_malloc(heap,size);
-  if (zero && p != NULL) memset(p,0,size);
+  if (zero && p != NULL) {
+    _mi_block_zero_init(_mi_ptr_page(p),p,size);  // todo: can we avoid getting the page again?
+  }
   return p;
 }
 
@@ -127,6 +147,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       mi_block_set_next(page, block, page->free);
       page->free = block;
       page->used--;
+      page->flags.is_zero = false;
       _mi_segment_page_free(page,true,&heap->tld->segments);
     }
     return;
@@ -254,7 +275,7 @@ void mi_free(void* p) mi_attr_noexcept
   // huge page stat is accounted for in `_mi_page_retire`
 #endif
 
-  if (mi_likely(tid == segment->thread_id && page->flags.value == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
+  if (mi_likely(tid == segment->thread_id && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
     mi_block_set_next(page, block, page->local_free);
@@ -405,6 +426,17 @@ void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcep
   return newp;
 }
 
+void* mi_heap_rezalloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+  return _mi_heap_realloc_zero(heap, p, newsize, true);
+}
+
+void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
+  size_t total;
+  if (mi_mul_overflow(count, size, &total)) return NULL;
+  return mi_heap_rezalloc(heap, p, total);
+}
+
+
 void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_realloc(mi_get_default_heap(),p,newsize);
 }
@@ -417,6 +449,16 @@ void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
 void* mi_reallocf(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_reallocf(mi_get_default_heap(),p,newsize);
 }
+
+void* mi_rezalloc(void* p, size_t newsize) mi_attr_noexcept {
+  return mi_heap_rezalloc(mi_get_default_heap(), p, newsize);
+}
+
+void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
+  return mi_heap_recalloc(mi_get_default_heap(), p, count, size);
+}
+
+
 
 // ------------------------------------------------------
 // strdup, strndup, and realpath

@@ -13,14 +13,9 @@ This header can be used to statically redirect malloc/free and new/delete
 to the mimalloc variants. This can be useful if one can include this file on
 each source file in a project (but be careful when using external code to
 not accidentally mix pointers from different allocators).
-
-On windows it can still be good to always try to include this header even
-when dynamically overriding since this will give better performance especially
-for new/delete. On Unix dynamic overriding already includes all variants so
-including this header is not necessary.
 -----------------------------------------------------------------------------*/
 
-#include "mimalloc.h"
+#include <mimalloc.h>
 
 // Standard C allocation
 #define malloc(n)               mi_malloc(n)
@@ -67,44 +62,5 @@ including this header is not necessary.
 #define _aligned_offset_malloc(n,a,o)         mi_malloc_aligned_at(n,a,o)
 #define _aligned_offset_realloc(p,n,a,o)      mi_realloc_aligned_at(p,n,a,o)
 #define _aligned_offset_recalloc(p,s,n,a,o)   mi_recalloc_aligned_at(p,s,n,a,o)
-
-
-// -----------------------------------------------------------------
-// With a C++ compiler we can override all the new/delete operators
-// by defining 'MIMALLOC_DEFINE_NEW_DELETE' in some source file and
-// then including this header file. This is not needed when linking 
-// statically with the mimalloc library, but it can be more performant 
-// on Windows when using dynamic overiding as well.
-// see <https://en.cppreference.com/w/cpp/memory/new/operator_new>
-// -----------------------------------------------------------------
-#if defined(__cplusplus) && defined(MIMALLOC_DEFINE_NEW_DELETE)
-  #include <new>
-
-  void operator delete(void* p) noexcept              { mi_free(p); };
-  void operator delete[](void* p) noexcept            { mi_free(p); };
-
-  void* operator new(std::size_t n) noexcept(false)   { return mi_new(n); }
-  void* operator new[](std::size_t n) noexcept(false) { return mi_new(n); }
-
-  void* operator new  (std::size_t n, const std::nothrow_t& tag) noexcept { (void)(tag); return mi_new_nothrow(n); }
-  void* operator new[](std::size_t n, const std::nothrow_t& tag) noexcept { (void)(tag); return mi_new_nothrow(n); }
-
-  #if (__cplusplus >= 201402L || _MSC_VER >= 1916)
-  void operator delete  (void* p, std::size_t n) { mi_free_size(p,n); };
-  void operator delete[](void* p, std::size_t n) { mi_free_size(p,n); };
-  #endif
-
-  #if (__cplusplus > 201402L || defined(__cpp_aligned_new))
-  void operator delete  (void* p, std::align_val_t al) noexcept { mi_free_aligned(p, static_cast<size_t>(al)); }
-  void operator delete[](void* p, std::align_val_t al) noexcept { mi_free_aligned(p, static_cast<size_t>(al)); }
-  void operator delete  (void* p, std::size_t n, std::align_val_t al) noexcept { mi_free_size_aligned(p, n, static_cast<size_t>(al)); };
-  void operator delete[](void* p, std::size_t n, std::align_val_t al) noexcept { mi_free_size_aligned(p, n, static_cast<size_t>(al)); };
-
-  void* operator new( std::size_t n, std::align_val_t al)   noexcept(false) { return mi_new_aligned(n, static_cast<size_t>(al)); }
-  void* operator new[]( std::size_t n, std::align_val_t al) noexcept(false) { return mi_new_aligned(n, static_cast<size_t>(al)); }
-  void* operator new  (std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_new_aligned_nothrow(n, static_cast<size_t>(al)); }
-  void* operator new[](std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_new_aligned_nothrow(n, static_cast<size_t>(al)); }
-  #endif
-#endif
 
 #endif // MIMALLOC_OVERRIDE_H

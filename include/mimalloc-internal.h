@@ -10,7 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc-types.h"
 
-#if defined(MI_MALLOC_OVERRIDE) && defined(__APPLE__)
+#if defined(MI_MALLOC_OVERRIDE) && (defined(__APPLE__) || defined(__OpenBSD__))
 #define MI_TLS_RECURSE_GUARD
 #endif
 
@@ -20,9 +20,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_trace_message(...)  
 #endif
 
-
 // "options.c"
-void       _mi_fprintf(FILE* out, const char* fmt, ...);
+void       _mi_fputs(mi_output_fun* out, const char* prefix, const char* message);
+void       _mi_fprintf(mi_output_fun* out, const char* fmt, ...);
 void       _mi_error_message(const char* fmt, ...);
 void       _mi_warning_message(const char* fmt, ...);
 void       _mi_verbose_message(const char* fmt, ...);
@@ -43,15 +43,15 @@ size_t     _mi_os_page_size(void);
 void       _mi_os_init(void);                                      // called from process init
 void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocate thread local data
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
+size_t     _mi_os_good_alloc_size(size_t size);
 
 // memory.c
-void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool commit, size_t* id, mi_os_tld_t* tld);
-void*      _mi_mem_alloc(size_t size, bool commit, size_t* id, mi_os_tld_t* tld);
+void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* id, mi_os_tld_t* tld);
 void       _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats);
 
 bool       _mi_mem_reset(void* p, size_t size, mi_stats_t* stats);
-bool       _mi_mem_unreset(void* p, size_t size, mi_stats_t* stats);
-bool       _mi_mem_commit(void* p, size_t size, mi_stats_t* stats);
+bool       _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
+bool       _mi_mem_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 bool       _mi_mem_protect(void* addr, size_t size);
 bool       _mi_mem_unprotect(void* addr, size_t size);
 
@@ -101,6 +101,7 @@ void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero);
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero);
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
+void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
@@ -167,10 +168,12 @@ static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #endif
 }
 
-// Align upwards
-static inline uintptr_t _mi_is_power_of_two(uintptr_t x) {
+// Is `x` a power of two? (0 is considered a power of two)
+static inline bool _mi_is_power_of_two(uintptr_t x) {
   return ((x & (x - 1)) == 0);
 }
+
+// Align upwards
 static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   uintptr_t mask = alignment - 1;
   if ((alignment & mask) == 0) {  // power of two?
@@ -181,12 +184,25 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   }
 }
 
+// Is memory zero initialized?
+static inline bool mi_mem_is_zero(void* p, size_t size) {
+  for (size_t i = 0; i < size; i++) {
+    if (((uint8_t*)p)[i] != 0) return false;
+  }
+  return true;
+}
+
 // Align a byte size to a size in _machine words_,
 // i.e. byte size == `wsize*sizeof(void*)`.
 static inline size_t _mi_wsize_from_size(size_t size) {
   mi_assert_internal(size <= SIZE_MAX - sizeof(uintptr_t));
   return (size + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
 }
+
+
+/* -----------------------------------------------------------
+  The thread local default heap
+----------------------------------------------------------- */
 
 extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
 extern mi_heap_t _mi_heap_main;         // statically allocated main backing heap
@@ -219,6 +235,10 @@ static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
   return (heap != &_mi_heap_empty);
 }
 
+/* -----------------------------------------------------------
+  Pages
+----------------------------------------------------------- */
+
 static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t size) {
   mi_assert_internal(size <= MI_SMALL_SIZE_MAX);
   return heap->pages_free_direct[_mi_wsize_from_size(size)];
@@ -228,7 +248,6 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
 static inline mi_page_t* _mi_get_free_small_page(size_t size) {
   return _mi_heap_get_free_small_page(mi_get_default_heap(), size);
 }
-
 
 // Segment that contains the pointer
 static inline mi_segment_t* _mi_ptr_segment(const void* p) {

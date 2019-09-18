@@ -135,9 +135,15 @@ Functions</h2></td></tr>
 <tr class="memitem:ga5d03fbe062ffcf38f0f417fd968357fc"><td class="memItemLeft" align="right" valign="top"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__heap.html#ga5d03fbe062ffcf38f0f417fd968357fc">mi_heap_get_backing</a> ()</td></tr>
 <tr class="memdesc:ga5d03fbe062ffcf38f0f417fd968357fc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get the backing heap.  <a href="#ga5d03fbe062ffcf38f0f417fd968357fc">More...</a><br /></td></tr>
 <tr class="separator:ga5d03fbe062ffcf38f0f417fd968357fc"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga7922f7495cde30b1984d0e6072419298"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__heap.html#ga7922f7495cde30b1984d0e6072419298">mi_heap_collect</a> (<a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap, bool force)</td></tr>
+<tr class="memdesc:ga7922f7495cde30b1984d0e6072419298"><td class="mdescLeft">&#160;</td><td class="mdescRight">Release outstanding resources in a specific heap.  <a href="#ga7922f7495cde30b1984d0e6072419298">More...</a><br /></td></tr>
+<tr class="separator:ga7922f7495cde30b1984d0e6072419298"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga9cbed01e42c0647907295de92c3fa296"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__heap.html#ga9cbed01e42c0647907295de92c3fa296">mi_heap_malloc</a> (<a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap, size_t size)</td></tr>
 <tr class="memdesc:ga9cbed01e42c0647907295de92c3fa296"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate in a specific heap.  <a href="#ga9cbed01e42c0647907295de92c3fa296">More...</a><br /></td></tr>
 <tr class="separator:ga9cbed01e42c0647907295de92c3fa296"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaa1a1c7a1f4da6826b5a25b70ef878368"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__heap.html#gaa1a1c7a1f4da6826b5a25b70ef878368">mi_heap_malloc_small</a> (<a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap, size_t size)</td></tr>
+<tr class="memdesc:gaa1a1c7a1f4da6826b5a25b70ef878368"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate a small object in a specific heap.  <a href="#gaa1a1c7a1f4da6826b5a25b70ef878368">More...</a><br /></td></tr>
+<tr class="separator:gaa1a1c7a1f4da6826b5a25b70ef878368"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga903104592c8ed53417a3762da6241133"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__heap.html#ga903104592c8ed53417a3762da6241133">mi_heap_zalloc</a> (<a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap, size_t size)</td></tr>
 <tr class="memdesc:ga903104592c8ed53417a3762da6241133"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate zero-initialized in a specific heap.  <a href="#ga903104592c8ed53417a3762da6241133">More...</a><br /></td></tr>
 <tr class="separator:ga903104592c8ed53417a3762da6241133"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -320,6 +326,36 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+
+</div>
+</div>
+<a id="ga7922f7495cde30b1984d0e6072419298"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga7922f7495cde30b1984d0e6072419298">&#9670;&nbsp;</a></span>mi_heap_collect()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_heap_collect </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *&#160;</td>
+          <td class="paramname"><em>heap</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool&#160;</td>
+          <td class="paramname"><em>force</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Release outstanding resources in a specific heap. </p>
 
 </div>
 </div>
@@ -509,6 +545,37 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+
+</div>
+</div>
+<a id="gaa1a1c7a1f4da6826b5a25b70ef878368"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaa1a1c7a1f4da6826b5a25b70ef878368">&#9670;&nbsp;</a></span>mi_heap_malloc_small()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void* mi_heap_malloc_small </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *&#160;</td>
+          <td class="paramname"><em>heap</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>size</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Allocate a small object in a specific heap. </p>
+<p><em>size</em> must be smaller or equal to <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small and mi_zalloc_small (usually 128*sizeof...">MI_SMALL_SIZE_MAX()</a>. </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="group__malloc.html#ga3406e8b168bc74c8637b11571a6da83a" title="Allocate size bytes.">mi_malloc()</a> </dd></dl>
 
 </div>
 </div>

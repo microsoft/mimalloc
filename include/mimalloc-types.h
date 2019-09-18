@@ -68,6 +68,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define MI_INTPTR_SIZE  (1<<MI_INTPTR_SHIFT)
 
+#define KiB     ((size_t)1024)
+#define MiB     (KiB*KiB)
+#define GiB     (MiB*KiB)
 
 // ------------------------------------------------------
 // Main internal data-structures
@@ -131,9 +134,11 @@ typedef enum mi_delayed_e {
 // test if both are false (`value == 0`) in the `mi_free` routine.
 typedef union mi_page_flags_u {
   uint16_t value;
+  uint8_t  full_aligned;
   struct {
-    bool in_full;
-    bool has_aligned;
+    bool in_full:1;
+    bool has_aligned:1;
+    bool is_zero;       // `true` if the blocks in the free list are zero initialized
   };
 } mi_page_flags_t;
 
@@ -165,9 +170,10 @@ typedef struct mi_page_s {
   bool                  segment_in_use:1;  // `true` if the segment allocated this page
   bool                  is_reset:1;        // `true` if the page memory was reset
   bool                  is_committed:1;    // `true` if the page virtual memory is committed
-
+  bool                  is_zero_init:1;    // `true` if the page was zero initialized
+  
   // layout like this to optimize access in `mi_malloc` and `mi_free`
-  uint16_t              capacity;          // number of blocks committed
+  uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
   uint16_t              reserved;          // number of blocks reserved in memory
   mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (16 bits)
 
@@ -207,7 +213,13 @@ typedef enum mi_page_kind_e {
 // the OS. Inside segments we allocated fixed size _pages_ that
 // contain blocks.
 typedef struct mi_segment_s {
-  struct mi_segment_s* next;
+  // memory fields
+  size_t          memid;            // id for the os-level memory manager
+  bool            mem_is_fixed;     // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)    
+  bool            mem_is_committed; // `true` if the whole segment is eagerly committed
+
+  // segment fields
+  struct mi_segment_s* next;   // must be the first segment field -- see `segment.c:segment_alloc`
   struct mi_segment_s* prev;
   volatile _Atomic(struct mi_segment_s*) abandoned_next;
   size_t          abandoned;   // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
@@ -216,7 +228,6 @@ typedef struct mi_segment_s {
   size_t          segment_size;// for huge pages this may be different from `MI_SEGMENT_SIZE`
   size_t          segment_info_size;  // space we are using from the first page for segment meta-data and possible guard pages.
   uintptr_t       cookie;      // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
-  size_t          memid;       // id for the os-level memory manager
 
   // layout like this to optimize access in `mi_free`
   size_t          page_shift;  // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).
@@ -397,6 +408,7 @@ typedef struct mi_os_tld_s {
 // Thread local data
 struct mi_tld_s {
   unsigned long long  heartbeat;     // monotonic heartbeat count
+  bool                recurse;       // true if deferred was called; used to prevent infinite recursion.
   mi_heap_t*          heap_backing;  // backing heap of this thread (cannot be deleted)
   mi_segments_tld_t   segments;      // segment tld
   mi_os_tld_t         os;            // os tld

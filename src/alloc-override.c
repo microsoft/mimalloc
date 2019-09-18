@@ -10,7 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #if defined(MI_MALLOC_OVERRIDE) && defined(_WIN32) && !(defined(MI_SHARED_LIB) && defined(_DLL))
-#error "It is only possible to override "malloc" on Windows when building as a 64-bit DLL (and linking the C runtime as a DLL)"
+#error "It is only possible to override "malloc" on Windows when building as a DLL (and linking the C runtime as a DLL)"
 #endif
 
 #if defined(MI_MALLOC_OVERRIDE) && !defined(_WIN32)
