@@ -651,6 +651,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   // WebAssembly guests can't control memory protection
   #else
   err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
+  if (err != 0) { err = errno; }
   #endif
   if (err != 0) {
     _mi_warning_message("commit/decommit error: start: 0x%p, csize: 0x%x, err: %i\n", start, csize, err);
@@ -687,7 +688,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   if (!reset) return true; // nothing to do on unreset!
 
   #if (MI_DEBUG>1)
-  if (!mi_option_is_enabled(mi_option_secure)) {
+  if (MI_SECURE==0) {
     memset(start, 0, csize); // pretend it is eagerly reset
   }
   #endif
@@ -767,6 +768,7 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   err = 0;
 #else
   err = mprotect(start, csize, protect ? PROT_NONE : (PROT_READ | PROT_WRITE));
+  if (err != 0) { err = errno; }
 #endif
   if (err != 0) {
     _mi_warning_message("mprotect error: start: 0x%p, csize: 0x%x, err: %i\n", start, csize, err);
