@@ -181,7 +181,6 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
     else {
       // failed, another thread allocated just before us!
       // we assign it to a later slot instead (up to 4 tries).
-      // note: we don't need to increment the region count, this will happen on another allocation
       for(size_t i = 1; i <= 4 && idx + i < MI_REGION_MAX; i++) {
         if (mi_atomic_cas_strong(&regions[idx+i].info, info, 0)) {
           mi_atomic_increment(&regions_count);
