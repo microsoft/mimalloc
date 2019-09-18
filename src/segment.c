@@ -165,8 +165,8 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
       mi_assert_internal((uintptr_t)p % block_size == 0);
     }
   }
-  long secure = mi_option_get(mi_option_secure);
-  if (secure > 1 || (secure == 1 && page->segment_idx == segment->capacity - 1)) {
+  
+  if (MI_SECURE > 1 || (MI_SECURE == 1 && page->segment_idx == segment->capacity - 1)) {
     // secure == 1: the last page has an os guard page at the end
     // secure >  1: every page has an os guard page
     psize -= _mi_os_page_size();
@@ -190,7 +190,7 @@ static size_t mi_segment_size(size_t capacity, size_t required, size_t* pre_size
   size_t guardsize = 0;
   size_t isize     = 0;
 
-  if (!mi_option_is_enabled(mi_option_secure)) {
+  if (MI_SECURE == 0) {
     // normally no guard pages
     isize = _mi_align_up(minsize, 16 * MI_MAX_ALIGN_SIZE);
   }
@@ -228,7 +228,7 @@ static void mi_segments_track_size(long segment_size, mi_segments_tld_t* tld) {
 static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_segments_tld_t* tld) {
   segment->thread_id = 0;
   mi_segments_track_size(-((long)segment_size),tld);
-  if (mi_option_is_enabled(mi_option_secure)) {
+  if (MI_SECURE != 0) {
     mi_assert_internal(!segment->mem_is_fixed);
     _mi_mem_unprotect(segment, segment->segment_size); // ensure no more guard pages are set
   }
@@ -333,7 +333,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   bool is_zero = false;
   mi_segment_t* segment = mi_segment_cache_pop(segment_size, tld);
   if (segment != NULL) {
-    if (mi_option_is_enabled(mi_option_secure)) {
+    if (MI_SECURE!=0) {
       mi_assert_internal(!segment->mem_is_fixed);
       if (segment->page_kind != page_kind) {
         _mi_mem_unprotect(segment, segment->segment_size); // reset protection if the page kind differs
@@ -357,7 +357,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   else {
     // Allocate the segment from the OS
     size_t memid;
-    bool   mem_large = (!eager_delay && !mi_option_is_enabled(mi_option_secure)); // only allow large OS pages once we are no longer lazy    
+    bool   mem_large = (!eager_delay && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy    
     segment = (mi_segment_t*)_mi_mem_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_zero, &memid, os_tld);
     if (segment == NULL) return NULL;  // failed to allocate
     if (!commit) {
@@ -378,13 +378,13 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   memset((uint8_t*)segment + ofs, 0, info_size - ofs);    
 
   // guard pages
-  if (mi_option_is_enabled(mi_option_secure) && !protection_still_good) {
+  if ((MI_SECURE != 0) && !protection_still_good) {
     // in secure mode, we set up a protected page in between the segment info
     // and the page data
     mi_assert_internal( info_size == pre_size - _mi_os_page_size() && info_size % _mi_os_page_size() == 0);
     _mi_mem_protect( (uint8_t*)segment + info_size, (pre_size - info_size) );
     size_t os_page_size = _mi_os_page_size();
-    if (mi_option_get(mi_option_secure) <= 1) {
+    if (MI_SECURE <= 1) {
       // and protect the last page too
       _mi_mem_protect( (uint8_t*)segment + segment_size - os_page_size, os_page_size );
     }

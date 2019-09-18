@@ -679,7 +679,7 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
   mi_page_queue_t* pq = mi_page_queue(heap,size);
   mi_page_t* page = pq->first;
   if (page != NULL) {
-    if (mi_option_get(mi_option_secure) >= 3 && page->capacity < page->reserved && ((_mi_heap_random(heap) & 1) == 1)) {
+    if ((MI_SECURE >= 3) && page->capacity < page->reserved && ((_mi_heap_random(heap) & 1) == 1)) {
       // in secure mode, we extend half the time to increase randomness
       mi_page_extend_free(heap, page, &heap->tld->stats);
       mi_assert_internal(mi_page_immediate_available(page));

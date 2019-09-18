@@ -260,7 +260,6 @@ typedef enum mi_option_e {
   mi_option_show_stats,
   mi_option_verbose,
   // the following options are experimental
-  mi_option_secure,
   mi_option_eager_commit,
   mi_option_eager_region_commit,
   mi_option_large_os_pages,         // implies eager commit

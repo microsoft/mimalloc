@@ -51,12 +51,6 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(show_stats) },
   { 0, UNINIT, MI_OPTION(verbose) },
 
-  #if MI_SECURE
-  { MI_SECURE, INITIALIZED, MI_OPTION(secure) }, // in a secure build the environment setting is ignored
-  #else
-  { 0, UNINIT, MI_OPTION(secure) },
-  #endif
-
   // the following options are experimental and not all combinations make sense.
   { 1, UNINIT, MI_OPTION(eager_commit) },        // note: needs to be on when eager_region_commit is enabled
   #ifdef _WIN32   // and BSD?
