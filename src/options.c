@@ -140,6 +140,46 @@ static void mi_out_stderr(const char* msg) {
   #endif
 }
 
+// Since an output function can be registered earliest in the `main`
+// function we also buffer output that happens earlier. When
+// an output function is registered it is called immediately with
+// the output up to that point.
+#define MAX_OUT_BUF (8*1024)
+static char out_buf[MAX_OUT_BUF+1];
+static _Atomic(uintptr_t) out_len;
+
+static void mi_out_buf(const char* msg) {
+  if (msg==NULL) return;
+  size_t n = strlen(msg);
+  if (n==0) return;
+  // claim
+  if (mi_atomic_read_relaxed(&out_len)>=MAX_OUT_BUF) return;
+  uintptr_t start = mi_atomic_addu(&out_len, n);
+  if (start >= MAX_OUT_BUF) return;
+  // check bound
+  if (start+n >= MAX_OUT_BUF) {
+    n = MAX_OUT_BUF-start-1;
+  }
+  memcpy(&out_buf[start], msg, n);
+}
+
+static void mi_out_buf_contents(mi_output_fun* out) {
+  if (out==NULL) return;
+  // claim all 
+  size_t count = mi_atomic_addu(&out_len, MAX_OUT_BUF);
+  // and output it
+  if (count>MAX_OUT_BUF) count = MAX_OUT_BUF;
+  out_buf[count] = 0;
+  out(out_buf);
+}
+
+// The initial default output outputs to stderr and the delayed buffer.
+static void mi_out_buf_stderr(const char* msg) {
+  mi_out_stderr(msg);
+  mi_out_buf(msg);
+}
+
+
 // --------------------------------------------------------
 // Default output handler
 // --------------------------------------------------------
@@ -151,11 +191,12 @@ static mi_output_fun* volatile mi_out_default; // = NULL
 
 static mi_output_fun* mi_out_get_default(void) {
   mi_output_fun* out = mi_out_default;
-  return (out == NULL ? &mi_out_stderr : out);
+  return (out == NULL ? &mi_out_buf_stderr : out);
 }
 
 void mi_register_output(mi_output_fun* out) mi_attr_noexcept {
-  mi_out_default = out;
+  mi_out_default = (out == NULL ? &mi_out_stderr : out);
+  if (out!=NULL) mi_out_buf_contents(out);
 }
 
 
