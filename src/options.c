@@ -150,10 +150,10 @@ static _Atomic(uintptr_t) out_len;
 
 static void mi_out_buf(const char* msg) {
   if (msg==NULL) return;
+  if (mi_atomic_read_relaxed(&out_len)>=MAX_OUT_BUF) return;
   size_t n = strlen(msg);
   if (n==0) return;
-  // claim
-  if (mi_atomic_read_relaxed(&out_len)>=MAX_OUT_BUF) return;
+  // claim space
   uintptr_t start = mi_atomic_addu(&out_len, n);
   if (start >= MAX_OUT_BUF) return;
   // check bound
@@ -163,17 +163,17 @@ static void mi_out_buf(const char* msg) {
   memcpy(&out_buf[start], msg, n);
 }
 
-static void mi_out_buf_contents(mi_output_fun* out) {
+static void mi_out_buf_flush(mi_output_fun* out) {
   if (out==NULL) return;
-  // claim all 
+  // claim all (no more output will be added after this point)
   size_t count = mi_atomic_addu(&out_len, MAX_OUT_BUF);
-  // and output it
+  // and output the current contents
   if (count>MAX_OUT_BUF) count = MAX_OUT_BUF;
   out_buf[count] = 0;
   out(out_buf);
 }
 
-// The initial default output outputs to stderr and the delayed buffer.
+// The initial default output, outputs to stderr and the delayed output buffer.
 static void mi_out_buf_stderr(const char* msg) {
   mi_out_stderr(msg);
   mi_out_buf(msg);
@@ -195,13 +195,13 @@ static mi_output_fun* mi_out_get_default(void) {
 }
 
 void mi_register_output(mi_output_fun* out) mi_attr_noexcept {
-  mi_out_default = (out == NULL ? &mi_out_stderr : out);
-  if (out!=NULL) mi_out_buf_contents(out);
+  mi_out_default = (out == NULL ? &mi_out_stderr : out); // stop using the delayed output buffer
+  if (out!=NULL) mi_out_buf_flush(out);  // output the delayed output now
 }
 
 
 // --------------------------------------------------------
-// Messages
+// Messages, all end up calling `_mi_fputs`.
 // --------------------------------------------------------
 #define MAX_ERROR_COUNT (10)
 static volatile _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
