@@ -20,7 +20,7 @@ without code changes, for example, on dynamically linked ELF-based systems (Linu
 
 Notable aspects of the design include:
 
-- __small and consistent__: the library is less than 3500 LOC using simple and
+- __small and consistent__: the library is about 6k LOC using simple and
   consistent data structures. This makes it very suitable
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for
@@ -42,7 +42,7 @@ Notable aspects of the design include:
 - __first-class heaps__: efficiently create and use multiple heaps to allocate across different regions.
   A heap can be destroyed at once instead of deallocating each object separately.  
 - __bounded__: it does not suffer from _blowup_ \[1\], has bounded worst-case allocation
-  times (_wcat_), bounded space overhead (~0.2% meta-data, with at most 16.7% waste in allocation sizes),
+  times (_wcat_), bounded space overhead (~0.2% meta-data, with at most 12.5% waste in allocation sizes),
   and has no internal points of contention using only atomic operations.
 - __fast__: In our benchmarks (see [below](#performance)),
   _mimalloc_ always outperforms all other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
@@ -56,8 +56,9 @@ Enjoy!
 
 ### Releases
 
-* 2019-08-10, `v1.0.6`: pre-release 6: various performance improvements.
+* 2019-10-07, `v1.1.0`: stable release 1.1.
 * 2019-09-01, `v1.0.8`: pre-release 8: more robust windows dynamic overriding, initial huge page support.
+* 2019-08-10, `v1.0.6`: pre-release 6: various performance improvements.
 
 # Building
 
