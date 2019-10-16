@@ -135,10 +135,11 @@ typedef enum mi_delayed_e {
 typedef union mi_page_flags_u {
   uint16_t value;
   uint8_t  full_aligned;
-  struct {
+  struct { // force alignment
     unsigned in_full:1;
     unsigned has_aligned:1;
     bool is_zero;       // `true` if the blocks in the free list are zero initialized
+#pragma warning(suppress:4201)
   };
 } mi_page_flags_t;
 
