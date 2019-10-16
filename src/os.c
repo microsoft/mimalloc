@@ -145,13 +145,13 @@ void _mi_os_init(void) {
   hDll = LoadLibrary(TEXT("kernelbase.dll"));
   if (hDll != NULL) {
     // use VirtualAlloc2FromApp if possible as it is available to Windows store apps
-    pVirtualAlloc2 = (PVirtualAlloc2)GetProcAddress(hDll, "VirtualAlloc2FromApp");
-    if (pVirtualAlloc2==NULL) pVirtualAlloc2 = (PVirtualAlloc2)GetProcAddress(hDll, "VirtualAlloc2");
+    pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2FromApp");
+    if (pVirtualAlloc2==NULL) pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2");
     FreeLibrary(hDll);
   }
   hDll = LoadLibrary(TEXT("ntdll.dll"));
   if (hDll != NULL) {    
-    pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
+    pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)(void (*)(void))GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
     FreeLibrary(hDll);
   }  
   if (mi_option_is_enabled(mi_option_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
