@@ -71,7 +71,7 @@ bool    _mi_os_is_huge_reserved(void* p);
 typedef uintptr_t mi_region_info_t;
 
 static inline mi_region_info_t mi_region_info_create(void* start, bool is_large, bool is_committed) {
-  return ((uintptr_t)start | ((is_large?1:0) << 1) | (is_committed?1:0));
+  return ((uintptr_t)start | ((uintptr_t)(is_large?1:0) << 1) | (is_committed?1:0));
 }
 
 static inline void* mi_region_info_read(mi_region_info_t info, bool* is_large, bool* is_committed) {

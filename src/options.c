@@ -346,7 +346,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
     size_t len = strlen(s);
     if (len >= sizeof(buf)) len = sizeof(buf) - 1;
     for (size_t i = 0; i < len; i++) {
-      buf[i] = toupper(s[i]);
+      buf[i] = (char)toupper(s[i]);
     }
     buf[len] = 0;
     if (buf[0]==0 || strstr("1;TRUE;YES;ON", buf) != NULL) {

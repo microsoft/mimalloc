@@ -700,7 +700,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   void* p = VirtualAlloc(start, csize, MEM_RESET, PAGE_READWRITE);
   mi_assert_internal(p == start);
   #if 1
-  if (p == start) {
+  if (p == start && start != NULL) {
     VirtualUnlock(start,csize); // VirtualUnlock after MEM_RESET removes the memory from the working set
   }
   #endif
