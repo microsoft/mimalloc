@@ -47,26 +47,26 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 }
 
 // allocate a small block
-extern inline void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   mi_assert(size <= MI_SMALL_SIZE_MAX);
   mi_page_t* page = _mi_heap_get_free_small_page(heap,size);
   return _mi_page_malloc(heap, page, size);
 }
 
-extern inline void* mi_malloc_small(size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_malloc_small(size_t size) mi_attr_noexcept {
   return mi_heap_malloc_small(mi_get_default_heap(), size);
 }
 
 
 // zero initialized small block
-void* mi_zalloc_small(size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_zalloc_small(size_t size) mi_attr_noexcept {
   void* p = mi_malloc_small(size);
   if (p != NULL) { memset(p, 0, size); }
   return p;
 }
 
 // The main allocation function
-extern inline void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   mi_assert(heap!=NULL);
   mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
   void* p;
@@ -85,7 +85,7 @@ extern inline void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcep
   return p;
 }
 
-extern inline void* mi_malloc(size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_malloc(size_t size) mi_attr_noexcept {
   return mi_heap_malloc(mi_get_default_heap(), size);
 }
 
@@ -115,11 +115,11 @@ void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) {
   return p;
 }
 
-extern inline void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   return _mi_heap_malloc_zero(heap, size, true);
 }
 
-void* mi_zalloc(size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_zalloc(size_t size) mi_attr_noexcept {
   return mi_heap_zalloc(mi_get_default_heap(),size);
 }
 
@@ -360,29 +360,29 @@ void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
   mi_free(p);
 }
 
-extern inline void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_mul_overflow(count,size,&total)) return NULL;
   return mi_heap_zalloc(heap,total);
 }
 
-void* mi_calloc(size_t count, size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_calloc(size_t count, size_t size) mi_attr_noexcept {
   return mi_heap_calloc(mi_get_default_heap(),count,size);
 }
 
 // Uninitialized `calloc`
-extern void* mi_heap_mallocn(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
+extern mi_decl_allocator void* mi_heap_mallocn(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_mul_overflow(count,size,&total)) return NULL;
   return mi_heap_malloc(heap, total);
 }
 
-void* mi_mallocn(size_t count, size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_mallocn(size_t count, size_t size) mi_attr_noexcept {
   return mi_heap_mallocn(mi_get_default_heap(),count,size);
 }
 
 // Expand in place or fail
-void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
   if (p == NULL) return NULL;
   size_t size = mi_usable_size(p);
   if (newsize > size) return NULL;
@@ -408,11 +408,11 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
   return newp;
 }
 
-void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
   return _mi_heap_realloc_zero(heap, p, newsize, false);
 }
 
-void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_mul_overflow(count, size, &total)) return NULL;
   return mi_heap_realloc(heap, p, total);
@@ -420,41 +420,41 @@ void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_a
 
 
 // Reallocate but free `p` on errors
-void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
   void* newp = mi_heap_realloc(heap, p, newsize);
   if (newp==NULL && p!=NULL) mi_free(p);
   return newp;
 }
 
-void* mi_heap_rezalloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_heap_rezalloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
   return _mi_heap_realloc_zero(heap, p, newsize, true);
 }
 
-void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_mul_overflow(count, size, &total)) return NULL;
   return mi_heap_rezalloc(heap, p, total);
 }
 
 
-void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_realloc(mi_get_default_heap(),p,newsize);
 }
 
-void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
   return mi_heap_reallocn(mi_get_default_heap(),p,count,size);
 }
 
 // Reallocate but free `p` on errors
-void* mi_reallocf(void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_reallocf(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_reallocf(mi_get_default_heap(),p,newsize);
 }
 
-void* mi_rezalloc(void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_rezalloc(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_rezalloc(mi_get_default_heap(), p, newsize);
 }
 
-void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
   return mi_heap_recalloc(mi_get_default_heap(), p, count, size);
 }
 
