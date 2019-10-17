@@ -886,7 +886,7 @@ int mi_reserve_huge_os_pages( size_t pages, double max_secs, size_t* pages_reser
   uint8_t* start = (uint8_t*)((uintptr_t)32 << 40); // 32TiB virtual start address
   #if (MI_SECURE>0 || MI_DEBUG==0)     // security: randomize start of huge pages unless in debug mode
   uintptr_t r = _mi_random_init((uintptr_t)&mi_reserve_huge_os_pages);
-  start = start + ((uintptr_t)MI_SEGMENT_SIZE * ((r>>17) & 0xFFFF));  // (randomly 0-64k)*4MiB == 0 to 256GiB
+  start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x3FF));  // (randomly 0-1024)*1GiB == 0 to 1TiB
   #endif
 
   // Allocate one page at the time but try to place them contiguously
