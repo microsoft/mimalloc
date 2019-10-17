@@ -132,15 +132,16 @@ typedef enum mi_delayed_e {
 
 // The `in_full` and `has_aligned` page flags are put in a union to efficiently 
 // test if both are false (`value == 0`) in the `mi_free` routine.
-typedef union mi_page_flags_u {
-  uint16_t value;
-  uint8_t  full_aligned;
-  struct { // force alignment
-    unsigned in_full:1;
-    unsigned has_aligned:1;
-    bool is_zero;       // `true` if the blocks in the free list are zero initialized
-#pragma warning(suppress:4201)
+typedef struct mi_page_flags_s {
+  #pragma warning(suppress:4201)
+  union {
+    uint8_t  full_aligned;
+    struct {
+      uint8_t in_full : 1;
+      uint8_t has_aligned : 1;
+    };
   };
+  bool is_zero;       // `true` if the blocks in the free list are zero initialized
 } mi_page_flags_t;
 
 // Thread free list.
@@ -168,10 +169,10 @@ typedef uintptr_t mi_thread_free_t;
 typedef struct mi_page_s {
   // "owned" by the segment
   uint8_t               segment_idx;       // index in the segment `pages` array, `page == &segment->pages[page->segment_idx]`
-  unsigned              segment_in_use:1;  // `true` if the segment allocated this page
-  unsigned              is_reset:1;        // `true` if the page memory was reset
-  unsigned              is_committed:1;    // `true` if the page virtual memory is committed
-  unsigned              is_zero_init:1;    // `true` if the page was zero initialized
+  uint8_t               segment_in_use:1;  // `true` if the segment allocated this page
+  uint8_t               is_reset:1;        // `true` if the page memory was reset
+  uint8_t               is_committed:1;    // `true` if the page virtual memory is committed
+  uint8_t               is_zero_init:1;    // `true` if the page was zero initialized
   
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
