@@ -33,7 +33,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   page->used++;
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
 #if (MI_DEBUG)
-  if (!page->flags.is_zero) { memset(block, MI_DEBUG_UNINIT, size); }
+  if (!page->is_zero) { memset(block, MI_DEBUG_UNINIT, size); }
 #elif (MI_SECURE)
   block->next = 0;
 #endif
@@ -96,7 +96,7 @@ void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
   mi_assert_internal(p != NULL);
   mi_assert_internal(size > 0 && page->block_size >= size);
   mi_assert_internal(_mi_ptr_page(p)==page);
-  if (page->flags.is_zero) {
+  if (page->is_zero) {
     // already zero initialized memory?
     ((mi_block_t*)p)->next = 0;  // clear the free list pointer
     mi_assert_expensive(mi_mem_is_zero(p,page->block_size));
@@ -147,7 +147,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       mi_block_set_next(page, block, page->free);
       page->free = block;
       page->used--;
-      page->flags.is_zero = false;
+      page->is_zero = false;
       _mi_segment_page_free(page,true,&heap->tld->segments);
     }
     return;

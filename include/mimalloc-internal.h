@@ -345,19 +345,19 @@ static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size)
 // Page flags
 //-----------------------------------------------------------
 static inline bool mi_page_is_in_full(const mi_page_t* page) {
-  return page->flags.in_full;
+  return page->flags.x.in_full;
 }
 
 static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
-  page->flags.in_full = in_full;
+  page->flags.x.in_full = in_full;
 }
 
 static inline bool mi_page_has_aligned(const mi_page_t* page) {
-  return page->flags.has_aligned;
+  return page->flags.x.has_aligned;
 }
 
 static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
-  page->flags.has_aligned = has_aligned;
+  page->flags.x.has_aligned = has_aligned;
 }
 
 

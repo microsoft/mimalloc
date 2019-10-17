@@ -131,17 +131,13 @@ typedef enum mi_delayed_e {
 
 
 // The `in_full` and `has_aligned` page flags are put in a union to efficiently 
-// test if both are false (`value == 0`) in the `mi_free` routine.
-typedef struct mi_page_flags_s {
-  #pragma warning(suppress:4201)
-  union {
-    uint8_t  full_aligned;
-    struct {
-      uint8_t in_full : 1;
-      uint8_t has_aligned : 1;
-    };
-  };
-  bool is_zero;       // `true` if the blocks in the free list are zero initialized
+// test if both are false (`full_aligned == 0`) in the `mi_free` routine.
+typedef union mi_page_flags_s {
+  uint8_t full_aligned;
+  struct {
+    uint8_t in_full : 1;
+    uint8_t has_aligned : 1;
+  } x; 
 } mi_page_flags_t;
 
 // Thread free list.
@@ -177,7 +173,8 @@ typedef struct mi_page_s {
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
   uint16_t              reserved;          // number of blocks reserved in memory
-  mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (16 bits)
+  mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (8 bits)
+  bool                  is_zero;           // `true` if the blocks in the free list are zero initialized
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   #if MI_SECURE
