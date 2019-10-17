@@ -144,21 +144,23 @@ static void mi_out_stderr(const char* msg) {
 // function we also buffer output that happens earlier. When
 // an output function is registered it is called immediately with
 // the output up to that point.
-#define MAX_OUT_BUF (8*1024)
-static char out_buf[MAX_OUT_BUF+1];
+#ifndef MI_MAX_DELAY_OUTPUT
+#define MI_MAX_DELAY_OUTPUT (32*1024)
+#endif
+static char out_buf[MI_MAX_DELAY_OUTPUT+1];
 static _Atomic(uintptr_t) out_len;
 
 static void mi_out_buf(const char* msg) {
   if (msg==NULL) return;
-  if (mi_atomic_read_relaxed(&out_len)>=MAX_OUT_BUF) return;
+  if (mi_atomic_read_relaxed(&out_len)>=MI_MAX_DELAY_OUTPUT) return;
   size_t n = strlen(msg);
   if (n==0) return;
   // claim space
   uintptr_t start = mi_atomic_addu(&out_len, n);
-  if (start >= MAX_OUT_BUF) return;
+  if (start >= MI_MAX_DELAY_OUTPUT) return;
   // check bound
-  if (start+n >= MAX_OUT_BUF) {
-    n = MAX_OUT_BUF-start-1;
+  if (start+n >= MI_MAX_DELAY_OUTPUT) {
+    n = MI_MAX_DELAY_OUTPUT-start-1;
   }
   memcpy(&out_buf[start], msg, n);
 }
@@ -166,9 +168,9 @@ static void mi_out_buf(const char* msg) {
 static void mi_out_buf_flush(mi_output_fun* out) {
   if (out==NULL) return;
   // claim all (no more output will be added after this point)
-  size_t count = mi_atomic_addu(&out_len, MAX_OUT_BUF);
+  size_t count = mi_atomic_addu(&out_len, MI_MAX_DELAY_OUTPUT);
   // and output the current contents
-  if (count>MAX_OUT_BUF) count = MAX_OUT_BUF;
+  if (count>MI_MAX_DELAY_OUTPUT) count = MI_MAX_DELAY_OUTPUT;
   out_buf[count] = 0;
   out(out_buf);
 }
