@@ -456,6 +456,7 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, boo
   if (!commit) allow_large = false;
 
   void* p = NULL;
+  /*
   if (commit && allow_large) {
     p = _mi_os_try_alloc_from_huge_reserved(size, try_alignment);
     if (p != NULL) {
@@ -463,6 +464,7 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, boo
       return p;
     }
   }
+  */
 
   #if defined(_WIN32)
     int flags = MEM_RESERVE;
