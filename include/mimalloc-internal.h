@@ -156,10 +156,13 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
-#if (MI_INTPTR_SIZE == 4)
+#include <limits.h>   // INT_MAX, LONG_MAX
+#if (INTPTR_MAX == INT_MAX)
   return __builtin_umul_overflow(count, size, total);
-#else
+#elif (INTPTR_MAX == LONG_MAX)
   return __builtin_umull_overflow(count, size, total);
+#else
+  return __builtin_umulll_overflow(count, size, total);
 #endif
 #else /* __builtin_umul_overflow is unavailable */
   *total = count * size;
