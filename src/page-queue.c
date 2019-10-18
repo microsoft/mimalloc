@@ -57,7 +57,7 @@ static inline uint8_t mi_bsr32(uint32_t x);
 static inline uint8_t mi_bsr32(uint32_t x) {
   uint32_t idx;
   _BitScanReverse((DWORD*)&idx, x);
-  return idx;
+  return (uint8_t)idx;
 }
 #elif defined(__GNUC__) || defined(__clang__)
 static inline uint8_t mi_bsr32(uint32_t x) {

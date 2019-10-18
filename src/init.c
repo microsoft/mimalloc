@@ -12,8 +12,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
-  0, false, false, false, 0, 0,
-  { 0 },
+  0, false, false, false, false, 0, 0,
+  { 0 }, false,
   NULL,    // free
   #if MI_SECURE
   0,
@@ -106,6 +106,7 @@ const mi_heap_t _mi_heap_empty = {
 
 static const mi_tld_t tld_empty = {
   0,
+  false,
   NULL,
   { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, 0, NULL, tld_empty_stats }, // segments
   { 0, tld_empty_stats },             // os
@@ -119,7 +120,7 @@ mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 #define tld_main_stats  ((mi_stats_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,stats)))
 
 static mi_tld_t tld_main = {
-  0,
+  0, false,
   &_mi_heap_main,
   { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
   { 0, tld_main_stats },              // os
@@ -375,9 +376,7 @@ void mi_thread_init(void) mi_attr_noexcept
     pthread_setspecific(mi_pthread_key, (void*)(_mi_thread_id()|1)); // set to a dummy value so that `mi_pthread_done` is called
   #endif
 
-  #if (MI_DEBUG>0) && !defined(NDEBUG) // not in release mode as that leads to crashes on Windows dynamic override
-  _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
-  #endif
+  //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
 void mi_thread_done(void) mi_attr_noexcept {
@@ -390,11 +389,9 @@ void mi_thread_done(void) mi_attr_noexcept {
   // abandon the thread local heap
   if (_mi_heap_done()) return; // returns true if already ran
 
-  #if (MI_DEBUG>0)
-  if (!_mi_is_main_thread()) {
-    _mi_verbose_message("thread done: 0x%zx\n", _mi_thread_id());
-  }
-  #endif
+  //if (!_mi_is_main_thread()) {
+  //  _mi_verbose_message("thread done: 0x%zx\n", _mi_thread_id());
+  //}
 }
 
 
@@ -411,14 +408,26 @@ bool _mi_preloading() {
   return os_preloading;
 }
 
+bool mi_is_redirected() mi_attr_noexcept {
+  return mi_redirected;
+}
+
 // Communicate with the redirection module on Windows
-#if 0
+#if defined(_WIN32) && defined(MI_SHARED_LIB) 
 #ifdef __cplusplus
 extern "C" {
 #endif
-mi_decl_export void _mi_redirect_init() {
-  // called on redirection
-  mi_redirected = true;
+mi_decl_export void _mi_redirect_entry(DWORD reason) {
+  // called on redirection; careful as this may be called before DllMain
+  if (reason == DLL_PROCESS_ATTACH) {
+    mi_redirected = true;
+  }
+  else if (reason == DLL_PROCESS_DETACH) {
+    mi_redirected = false;
+  }
+  else if (reason == DLL_THREAD_DETACH) {
+    mi_thread_done();
+  }
 }
 __declspec(dllimport) bool mi_allocator_init(const char** message);
 __declspec(dllimport) void mi_allocator_done();
@@ -447,12 +456,14 @@ static void mi_process_load(void) {
   // show message from the redirector (if present)
   const char* msg = NULL;
   mi_allocator_init(&msg);
-  if (msg != NULL) _mi_verbose_message(msg);
+  if (msg != NULL && (mi_option_is_enabled(mi_option_verbose) || mi_option_is_enabled(mi_option_show_errors))) {
+    _mi_fputs(NULL,NULL,msg);
+  }
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages     = mi_option_get(mi_option_reserve_huge_os_pages);
     double max_secs = (double)pages / 2.0; // 0.5s per page (1GiB)
-    mi_reserve_huge_os_pages(pages, max_secs);
+    mi_reserve_huge_os_pages(pages, max_secs, NULL);
   }
 }
 
@@ -506,9 +517,7 @@ static void mi_process_done(void) {
 
 
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
-  // Windows DLL: easy to hook into process_init and thread_done
-  #include <windows.h>
-
+  // Windows DLL: easy to hook into process_init and thread_done  
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     UNUSED(reserved);
     UNUSED(inst);
@@ -516,7 +525,7 @@ static void mi_process_done(void) {
       mi_process_load();
     }
     else if (reason==DLL_THREAD_DETACH) {
-      mi_thread_done();
+      if (!mi_is_redirected()) mi_thread_done();
     }
     return TRUE;
   }

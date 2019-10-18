@@ -227,8 +227,7 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
   }
   */
 
-  long secure = mi_option_get(mi_option_secure);
-  if (secure > 1 || (secure == 1 && slice == &segment->slices[segment->slice_entries - 1])) {
+  if (MI_SECURE > 1 || (MI_SECURE == 1 && slice == &segment->slices[segment->slice_entries - 1])) {
     // secure == 1: the last page has an os guard page at the end
     // secure >  1: every page has an os guard page
     psize -= _mi_os_page_size();
@@ -245,13 +244,13 @@ static size_t mi_segment_calculate_slices(size_t required, size_t* pre_size, siz
   size_t isize     = _mi_align_up(sizeof(mi_segment_t), page_size);
   size_t guardsize = 0;
 
-  if (mi_option_is_enabled(mi_option_secure)) {
+  if (MI_SECURE>0) {
     // in secure mode, we set up a protected page in between the segment info
     // and the page data (and one at the end of the segment)
     guardsize =  page_size;
     required  = _mi_align_up(required, page_size);
   }
-;
+
   if (pre_size != NULL) *pre_size = isize;
   isize = _mi_align_up(isize + guardsize, MI_SEGMENT_SLICE_SIZE);
   if (info_slices != NULL) *info_slices = isize / MI_SEGMENT_SLICE_SIZE;
@@ -281,7 +280,7 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   segment->thread_id = 0;
   mi_segment_map_freed_at(segment);
   mi_segments_track_size(-((long)mi_segment_size(segment)),tld);
-  if (mi_option_is_enabled(mi_option_secure)) {
+  if (MI_SECURE>0) {
     _mi_os_unprotect(segment, mi_segment_size(segment)); // ensure no more guard pages are set
   }
   _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
@@ -328,8 +327,9 @@ static bool mi_segment_cache_push(mi_segment_t* segment, mi_segments_tld_t* tld)
   if (segment->segment_slices != MI_SLICES_PER_SEGMENT || mi_segment_cache_full(tld)) {
     return false;
   }
+
   mi_assert_internal(segment->segment_slices == MI_SLICES_PER_SEGMENT);
-  if (mi_option_is_enabled(mi_option_cache_reset)) {
+  if (!segment->mem_is_fixed && mi_option_is_enabled(mi_option_cache_reset)) {
     _mi_os_reset((uint8_t*)segment + mi_segment_info_size(segment), mi_segment_size(segment) - mi_segment_info_size(segment), tld->stats);
   }
   segment->next = tld->cache;
@@ -371,6 +371,7 @@ static uintptr_t mi_segment_commit_mask(mi_segment_t* segment, bool conservative
     start = _mi_align_down(diff, MI_COMMIT_SIZE);
     end   = _mi_align_up(diff + size, MI_COMMIT_SIZE);
   }
+
   mi_assert_internal(start % MI_COMMIT_SIZE==0 && end % MI_COMMIT_SIZE == 0);
   *start_p   = (uint8_t*)segment + start;
   *full_size = (end > start ? end - start : 0);
@@ -397,7 +398,8 @@ static void mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
   if (mask==0 || full_size==0) return;
 
   if (commit && (segment->commit_mask & mask) != mask) {
-    _mi_os_commit(start,full_size,stats);
+    bool is_zero = false;
+    _mi_os_commit(start,full_size,&is_zero,stats);
     segment->commit_mask |= mask; 
   }
   else if (!commit && (segment->commit_mask & mask) != 0) {
@@ -412,7 +414,7 @@ static void mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_
 }
 
 static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
-  if (!segment->allow_decommit || !mi_option_is_enabled(mi_option_decommit)) return;
+  if (!segment->allow_decommit) return; // TODO: check option_decommit?
   if (segment->commit_mask == 1) return; // fully decommitted
   mi_segment_commitx(segment, false, p, size, stats);
 }
@@ -589,28 +591,32 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
   size_t segment_size = segment_slices * MI_SEGMENT_SLICE_SIZE;
 
   // Commit eagerly only if not the first N lazy segments (to reduce impact of many threads that allocate just a little)
-  size_t lazy = (size_t)mi_option_get(mi_option_lazy_commit);
-  bool commit_lazy = (lazy > tld->count) && required == 0; // lazy, and not a huge page
-
+  bool eager_delay = (tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
+  bool eager = !eager_delay && mi_option_is_enabled(mi_option_eager_commit);
+  bool commit = eager || (required > 0); 
+  
   // Try to get from our cache first
   mi_segment_t* segment = mi_segment_cache_pop(segment_slices, tld);
   if (segment==NULL) {
     // Allocate the segment from the OS
-    segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, !commit_lazy, /* &memid,*/ os_tld);
+    bool mem_large = (!eager_delay && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy    
+    segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, commit, &mem_large, os_tld);
     if (segment == NULL) return NULL;  // failed to allocate
     mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
-    if (commit_lazy) {
+    if (!commit) {
       // at least commit the info slices
       mi_assert_internal(MI_COMMIT_SIZE > info_slices*MI_SEGMENT_SLICE_SIZE);
-      _mi_os_commit(segment, MI_COMMIT_SIZE, tld->stats);
+      bool is_zero = false;
+      _mi_os_commit(segment, MI_COMMIT_SIZE, &is_zero, tld->stats);
     }
+    segment->mem_is_fixed = mem_large;
+    segment->mem_is_committed = commit;
     mi_segments_track_size((long)(segment_size), tld);
     mi_segment_map_allocated_at(segment);
   }
 
   // zero the segment info? -- not needed as it is zero initialized from the OS 
   // memset(segment, 0, info_size);  
-
   
   // initialize segment info
   memset(segment,0,offsetof(mi_segment_t,slices));  
@@ -620,13 +626,13 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
   segment->cookie = _mi_ptr_cookie(segment);
   segment->slice_entries = slice_entries;
   segment->kind = (required == 0 ? MI_SEGMENT_NORMAL : MI_SEGMENT_HUGE);
-  segment->allow_decommit = commit_lazy;
-  segment->commit_mask = (commit_lazy ? 0x01 : ~((uintptr_t)0)); // on lazy commit, the initial part is always committed
+  segment->allow_decommit = !commit;
+  segment->commit_mask = (!commit ? 0x01 : ~((uintptr_t)0)); // on lazy commit, the initial part is always committed
   memset(segment->slices, 0, sizeof(mi_slice_t)*(info_slices+1));
   _mi_stat_increase(&tld->stats->page_committed, mi_segment_info_size(segment));
 
   // set up guard pages
-  if (mi_option_is_enabled(mi_option_secure)) {
+  if (MI_SECURE>0) {
     // in secure mode, we set up a protected page in between the segment info
     // and the page data
     size_t os_page_size = _mi_os_page_size();    
@@ -694,6 +700,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
    Page allocation
 ----------------------------------------------------------- */
 
+
 static mi_page_t* mi_segments_page_alloc(mi_page_kind_t page_kind, size_t required, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 {
   mi_assert_internal(required <= MI_LARGE_OBJ_SIZE_MAX && page_kind <= MI_PAGE_LARGE);
@@ -730,21 +737,18 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
   _mi_stat_decrease(&tld->stats->pages, 1);
 
   // reset the page memory to reduce memory pressure?
-  if (!page->is_reset && mi_option_is_enabled(mi_option_page_reset)) {
+  if (!segment->mem_is_fixed && !page->is_reset && mi_option_is_enabled(mi_option_page_reset)) {
     size_t psize;
     uint8_t* start = _mi_page_start(segment, page, &psize);
     page->is_reset = true;
     _mi_os_reset(start, psize, tld->stats);
   }
 
-  // zero the page data
-  uint32_t slice_count = page->slice_count; // don't clear the slice_count
-  bool is_reset = page->is_reset;         // don't clear the reset flag
-  bool is_committed = page->is_committed; // don't clear the commit flag
-  memset(page, 0, sizeof(*page));
-  page->slice_count = slice_count;
-  page->is_reset = is_reset;
-  page->is_committed = is_committed;
+
+  // zero the page data, but not the segment fields
+  page->is_zero_init = false;
+  ptrdiff_t ofs = offsetof(mi_page_t, capacity);
+  memset((uint8_t*)page + ofs, 0, sizeof(*page) - ofs);
   page->block_size = 1;
 
   // and free it

@@ -26,6 +26,7 @@ var NAVTREE =
   [ "mi-malloc", "index.html", [
     [ "Building", "build.html", null ],
     [ "Using the library", "using.html", null ],
+    [ "Environment Options", "environment.html", null ],
     [ "Overriding Malloc", "overrides.html", null ],
     [ "Performance", "bench.html", null ],
     [ "Modules", "modules.html", "modules" ],

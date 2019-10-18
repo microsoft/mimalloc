@@ -33,7 +33,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   page->used++;
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
 #if (MI_DEBUG)
-  memset(block, MI_DEBUG_UNINIT, size);
+  if (!page->is_zero) { memset(block, MI_DEBUG_UNINIT, size); }
 #elif (MI_SECURE)
   block->next = 0;
 #endif
@@ -47,26 +47,26 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 }
 
 // allocate a small block
-extern inline void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   mi_assert(size <= MI_SMALL_SIZE_MAX);
   mi_page_t* page = _mi_heap_get_free_small_page(heap,size);
   return _mi_page_malloc(heap, page, size);
 }
 
-extern inline void* mi_malloc_small(size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_malloc_small(size_t size) mi_attr_noexcept {
   return mi_heap_malloc_small(mi_get_default_heap(), size);
 }
 
 
 // zero initialized small block
-void* mi_zalloc_small(size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_zalloc_small(size_t size) mi_attr_noexcept {
   void* p = mi_malloc_small(size);
   if (p != NULL) { memset(p, 0, size); }
   return p;
 }
 
 // The main allocation function
-extern inline void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   mi_assert(heap!=NULL);
   mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
   void* p;
@@ -85,21 +85,41 @@ extern inline void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcep
   return p;
 }
 
-extern inline void* mi_malloc(size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_malloc(size_t size) mi_attr_noexcept {
   return mi_heap_malloc(mi_get_default_heap(), size);
+}
+
+void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
+  // note: we need to initialize the whole block to zero, not just size
+  // or the recalloc/rezalloc functions cannot safely expand in place (see issue #63)
+  UNUSED(size);
+  mi_assert_internal(p != NULL);
+  mi_assert_internal(size > 0 && page->block_size >= size);
+  mi_assert_internal(_mi_ptr_page(p)==page);
+  if (page->is_zero) {
+    // already zero initialized memory?
+    ((mi_block_t*)p)->next = 0;  // clear the free list pointer
+    mi_assert_expensive(mi_mem_is_zero(p,page->block_size));
+  }
+  else {
+    // otherwise memset
+    memset(p, 0, page->block_size);
+  }
 }
 
 void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) {
   void* p = mi_heap_malloc(heap,size);
-  if (zero && p != NULL) memset(p,0,size);
+  if (zero && p != NULL) {
+    _mi_block_zero_init(_mi_ptr_page(p),p,size);  // todo: can we avoid getting the page again?
+  }
   return p;
 }
 
-extern inline void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   return _mi_heap_malloc_zero(heap, size, true);
 }
 
-void* mi_zalloc(size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_zalloc(size_t size) mi_attr_noexcept {
   return mi_heap_zalloc(mi_get_default_heap(),size);
 }
 
@@ -127,6 +147,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       mi_block_set_next(page, block, page->free);
       page->free = block;
       page->used--;
+      page->is_zero = false;
       _mi_segment_page_free(page,true,&heap->tld->segments);
     }
     return;
@@ -254,7 +275,7 @@ void mi_free(void* p) mi_attr_noexcept
   // huge page stat is accounted for in `_mi_page_retire`
 #endif
 
-  if (mi_likely(tid == segment->thread_id && page->flags.value == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
+  if (mi_likely(tid == segment->thread_id && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
     mi_block_set_next(page, block, page->local_free);
@@ -339,29 +360,29 @@ void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
   mi_free(p);
 }
 
-extern inline void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
+extern inline mi_decl_allocator void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_mul_overflow(count,size,&total)) return NULL;
   return mi_heap_zalloc(heap,total);
 }
 
-void* mi_calloc(size_t count, size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_calloc(size_t count, size_t size) mi_attr_noexcept {
   return mi_heap_calloc(mi_get_default_heap(),count,size);
 }
 
 // Uninitialized `calloc`
-extern void* mi_heap_mallocn(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
+extern mi_decl_allocator void* mi_heap_mallocn(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_mul_overflow(count,size,&total)) return NULL;
   return mi_heap_malloc(heap, total);
 }
 
-void* mi_mallocn(size_t count, size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_mallocn(size_t count, size_t size) mi_attr_noexcept {
   return mi_heap_mallocn(mi_get_default_heap(),count,size);
 }
 
 // Expand in place or fail
-void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
   if (p == NULL) return NULL;
   size_t size = mi_usable_size(p);
   if (newsize > size) return NULL;
@@ -387,11 +408,11 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
   return newp;
 }
 
-void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
   return _mi_heap_realloc_zero(heap, p, newsize, false);
 }
 
-void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_mul_overflow(count, size, &total)) return NULL;
   return mi_heap_realloc(heap, p, total);
@@ -399,24 +420,45 @@ void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_a
 
 
 // Reallocate but free `p` on errors
-void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
   void* newp = mi_heap_realloc(heap, p, newsize);
   if (newp==NULL && p!=NULL) mi_free(p);
   return newp;
 }
 
-void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_heap_rezalloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+  return _mi_heap_realloc_zero(heap, p, newsize, true);
+}
+
+mi_decl_allocator void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
+  size_t total;
+  if (mi_mul_overflow(count, size, &total)) return NULL;
+  return mi_heap_rezalloc(heap, p, total);
+}
+
+
+mi_decl_allocator void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_realloc(mi_get_default_heap(),p,newsize);
 }
 
-void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
+mi_decl_allocator void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
   return mi_heap_reallocn(mi_get_default_heap(),p,count,size);
 }
 
 // Reallocate but free `p` on errors
-void* mi_reallocf(void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_allocator void* mi_reallocf(void* p, size_t newsize) mi_attr_noexcept {
   return mi_heap_reallocf(mi_get_default_heap(),p,newsize);
 }
+
+mi_decl_allocator void* mi_rezalloc(void* p, size_t newsize) mi_attr_noexcept {
+  return mi_heap_rezalloc(mi_get_default_heap(), p, newsize);
+}
+
+mi_decl_allocator void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
+  return mi_heap_recalloc(mi_get_default_heap(), p, count, size);
+}
+
+
 
 // ------------------------------------------------------
 // strdup, strndup, and realpath

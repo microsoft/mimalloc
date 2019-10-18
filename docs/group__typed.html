@@ -140,6 +140,9 @@ Macros</h2></td></tr>
 <tr class="memitem:gaf213d5422ec35e7f6caad827c79bc948"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__typed.html#gaf213d5422ec35e7f6caad827c79bc948">mi_heap_reallocn_tp</a>(hp,  p,  tp,  count)</td></tr>
 <tr class="memdesc:gaf213d5422ec35e7f6caad827c79bc948"><td class="mdescLeft">&#160;</td><td class="mdescRight">Re-allocate to <em>count</em> blocks of type <em>tp</em> in a heap <em>hp</em>.  <a href="#gaf213d5422ec35e7f6caad827c79bc948">More...</a><br /></td></tr>
 <tr class="separator:gaf213d5422ec35e7f6caad827c79bc948"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga3e50a1600958fcaf1a7f3560c9174f9e"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__typed.html#ga3e50a1600958fcaf1a7f3560c9174f9e">mi_heap_recalloc_tp</a>(hp,  p,  tp,  count)</td></tr>
+<tr class="memdesc:ga3e50a1600958fcaf1a7f3560c9174f9e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Re-allocate to <em>count</em> zero initialized blocks of type <em>tp</em> in a heap <em>hp</em>.  <a href="#ga3e50a1600958fcaf1a7f3560c9174f9e">More...</a><br /></td></tr>
+<tr class="separator:ga3e50a1600958fcaf1a7f3560c9174f9e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>Typed allocation macros. </p>
@@ -315,6 +318,48 @@ Macros</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Re-allocate to <em>count</em> blocks of type <em>tp</em> in a heap <em>hp</em>. </p>
+
+</div>
+</div>
+<a id="ga3e50a1600958fcaf1a7f3560c9174f9e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga3e50a1600958fcaf1a7f3560c9174f9e">&#9670;&nbsp;</a></span>mi_heap_recalloc_tp</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">#define mi_heap_recalloc_tp</td>
+          <td>(</td>
+          <td class="paramtype">&#160;</td>
+          <td class="paramname">hp, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">&#160;</td>
+          <td class="paramname">p, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">&#160;</td>
+          <td class="paramname">tp, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">&#160;</td>
+          <td class="paramname">count&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Re-allocate to <em>count</em> zero initialized blocks of type <em>tp</em> in a heap <em>hp</em>. </p>
 
 </div>
 </div>

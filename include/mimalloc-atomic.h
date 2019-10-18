@@ -130,7 +130,7 @@ static inline intptr_t mi_atomic_add(volatile _Atomic(intptr_t)* p, intptr_t add
   return (intptr_t)RC64(_InterlockedExchangeAdd)((volatile msc_intptr_t*)p, (msc_intptr_t)add);
 }
 static inline bool mi_atomic_cas_strong(volatile _Atomic(uintptr_t)* p, uintptr_t desired, uintptr_t expected) {
-  return (expected == RC64(_InterlockedCompareExchange)((volatile msc_intptr_t*)p, (msc_intptr_t)desired, (msc_intptr_t)expected));
+  return (expected == (uintptr_t)RC64(_InterlockedCompareExchange)((volatile msc_intptr_t*)p, (msc_intptr_t)desired, (msc_intptr_t)expected));
 }
 static inline bool mi_atomic_cas_weak(volatile _Atomic(uintptr_t)* p, uintptr_t desired, uintptr_t expected) {
   return mi_atomic_cas_strong(p,desired,expected);

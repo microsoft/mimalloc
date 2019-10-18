@@ -13,14 +13,14 @@ Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
 
 It is a drop-in replacement for `malloc` and can be used in other programs
-without code changes, for example, on Unix you can use it as:
+without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
 ```
 > LD_PRELOAD=/usr/bin/libmimalloc.so  myprogram
 ```
 
 Notable aspects of the design include:
 
-- __small and consistent__: the library is less than 3500 LOC using simple and
+- __small and consistent__: the library is about 6k LOC using simple and
   consistent data structures. This makes it very suitable
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for
@@ -42,7 +42,7 @@ Notable aspects of the design include:
 - __first-class heaps__: efficiently create and use multiple heaps to allocate across different regions.
   A heap can be destroyed at once instead of deallocating each object separately.  
 - __bounded__: it does not suffer from _blowup_ \[1\], has bounded worst-case allocation
-  times (_wcat_), bounded space overhead (~0.2% meta-data, with at most 16.7% waste in allocation sizes),
+  times (_wcat_), bounded space overhead (~0.2% meta-data, with at most 12.5% waste in allocation sizes),
   and has no internal points of contention using only atomic operations.
 - __fast__: In our benchmarks (see [below](#performance)),
   _mimalloc_ always outperforms all other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
@@ -56,6 +56,8 @@ Enjoy!
 
 ### Releases
 
+* 2019-10-07, `v1.1.0`: stable release 1.1.
+* 2019-09-01, `v1.0.8`: pre-release 8: more robust windows dynamic overriding, initial huge page support.
 * 2019-08-10, `v1.0.6`: pre-release 6: various performance improvements.
 
 # Building
@@ -117,7 +119,7 @@ Notes:
 The preferred usage is including `<mimalloc.h>`, linking with
 the shared- or static library, and using the `mi_malloc` API exclusively for allocation. For example,
 ```
-gcc -o myprogram -lmimalloc myfile.c
+> gcc -o myprogram -lmimalloc myfile.c
 ```
 
 mimalloc uses only safe OS calls (`mmap` and `VirtualAlloc`) and can co-exist
@@ -188,11 +190,17 @@ or via environment variables.
 - `MIMALLOC_SHOW_ERRORS=1`: show error and warning messages.
 - `MIMALLOC_LARGE_OS_PAGES=1`: use large OS pages when available; for some workloads this can significantly 
    improve performance. Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
-   to explicitly allow large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]).
+   to explicitly allow large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
+   the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
+   can have fragmented memory.
 - `MIMALLOC_EAGER_REGION_COMMIT=1`: on Windows, commit large (256MiB) regions eagerly. On Windows, these regions
    show in the working set even though usually just a small part is committed to physical memory. This is why it 
    turned off by default on Windows as it looks not good in the task manager. However, in reality it is always better 
    to turn it on as it improves performance and has no other drawbacks.
+- `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where N is the number of 1GiB huge OS pages. This reserves the huge pages at
+   startup and can give quite a performance improvement on long running workloads. Usually it is better to not use 
+   `MIMALLOC_LARGE_OS_PAGES` in combination with this setting. Just like large OS pages, use with care as reserving 
+   contiguous physical memory can take a long time when memory is fragmented. Still experimental.
 
 [linux-huge]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/tuning_and_optimizing_red_hat_enterprise_linux_for_oracle_9i_and_10g_databases/sect-oracle_9i_and_10g_tuning_guide-large_memory_optimization_big_pages_and_huge_pages-configuring_huge_pages_in_red_hat_enterprise_linux_4_or_5
 [windows-huge]: https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/enable-the-lock-pages-in-memory-option-windows?view=sql-server-2017
@@ -207,20 +215,21 @@ This is the recommended way to override the standard malloc interface.
 
 ### Linux, BSD
 
-On these systems we preload the mimalloc shared
+On these ELF-based systems we preload the mimalloc shared
 library so all calls to the standard `malloc` interface are
 resolved to the _mimalloc_ library.
-
-- `env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram` 
+```
+> env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram
+```
 
 You can set extra environment variables to check that mimalloc is running,
 like:
 ```
-env MIMALLOC_VERBOSE=1 LD_PRELOAD=/usr/lib/libmimalloc.so myprogram
+> env MIMALLOC_VERBOSE=1 LD_PRELOAD=/usr/lib/libmimalloc.so myprogram
 ```
 or run with the debug version to get detailed statistics:
 ```
-env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram
+> env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram
 ```
 
 ### MacOS
@@ -228,8 +237,9 @@ env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram
 On macOS we can also preload the mimalloc shared
 library so all calls to the standard `malloc` interface are
 resolved to the _mimalloc_ library.
-
-- `env DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram`
+```
+> env DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram
+```
 
 Note that certain security restrictions may apply when doing this from
 the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
@@ -240,33 +250,36 @@ Note: unfortunately, at this time, dynamic overriding on macOS seems broken but 
 ### Windows
 
 On Windows you need to link your program explicitly with the mimalloc
-DLL, and use the C-runtime library as a DLL (the `/MD` or `/MDd` switch).
-To ensure the mimalloc DLL gets loaded it is easiest to insert some
+DLL and use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch). 
+Moreover, you need to ensure the `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) is available 
+in the same folder as the mimalloc DLL at runtime (as it as referred to by the mimalloc DLL). 
+The redirection DLL's ensure all calls to the C runtime malloc API get redirected to mimalloc. 
+
+To ensure the mimalloc DLL is loaded at run-time it is easiest to insert some
 call to the mimalloc API in the `main` function, like `mi_version()` 
-(or use the `/INCLUDE:mi_version` switch on the linker)
+(or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
+for an example on how to use this.
 
-Due to the way mimalloc intercepts the standard malloc at runtime, it is best
-to link to the mimalloc import library first on the command line so it gets
-loaded right after the universal C runtime DLL (`ucrtbase`). See
-the `mimalloc-override-test` project for an example.
+The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
+overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc successfully redirected.
 
-Note: the current overriding on Windows works for most programs but some programs still have
-trouble -- the `dev-exp` branch contains a newer way of overriding that is more
-robust; try this out if you experience troubles.
+(Note: in principle, it should be possible to patch existing executables 
+that are linked with the dynamic C runtime (`ucrtbase.dll`) by just putting the mimalloc DLL into
+the import table (and putting `mimalloc-redirect.dll` in the same folder) 
+Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388)). 
 
 
 ## Static override
 
-On Unix systems, you can also statically link with _mimalloc_ to override the standard
+On Unix-like systems, you can also statically link with _mimalloc_ to override the standard
 malloc interface. The recommended way is to link the final program with the
 _mimalloc_ single object file (`mimalloc-override.o`). We use
 an object file instead of a library file as linkers give preference to
 that over archives to resolve symbols. To ensure that the standard
 malloc interface resolves to the _mimalloc_ library, link it as the first
 object file. For example:
-
 ```
-gcc -o myprogram mimalloc-override.o  myfile1.c ...
+> gcc -o myprogram mimalloc-override.o  myfile1.c ...
 ```
 
 
