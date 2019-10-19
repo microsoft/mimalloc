@@ -46,7 +46,6 @@ void       _mi_fatal_error(const char* fmt, ...) mi_attr_noreturn;
 extern mi_stats_t       _mi_stats_main;
 extern const mi_page_t  _mi_page_empty;
 bool       _mi_is_main_thread(void);
-uintptr_t  _mi_ptr_cookie(const void* p);
 uintptr_t  _mi_random_shuffle(uintptr_t x);
 uintptr_t  _mi_random_init(uintptr_t seed /* can be zero */);
 bool       _mi_preloading();  // true while the C runtime is not ready
@@ -242,6 +241,10 @@ static inline bool mi_heap_is_backing(const mi_heap_t* heap) {
 static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
   mi_assert_internal(heap != NULL);
   return (heap != &_mi_heap_empty);
+}
+
+static inline uintptr_t _mi_ptr_cookie(const void* p) {
+  return ((uintptr_t)p ^ _mi_heap_main.cookie);
 }
 
 /* -----------------------------------------------------------

@@ -184,10 +184,6 @@ uintptr_t _mi_random_init(uintptr_t seed /* can be zero */) {
   return x;
 }
 
-uintptr_t _mi_ptr_cookie(const void* p) {
-  return ((uintptr_t)p ^ _mi_heap_main.cookie);
-}
-
 /* -----------------------------------------------------------
   Initialization and freeing of the thread local heaps
 ----------------------------------------------------------- */
