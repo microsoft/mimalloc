@@ -2,9 +2,12 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <stdint.h>
 
 #include <mimalloc.h>
 #include <new>
+
+static void double_free();
 
 static void* p = malloc(8);
 
@@ -24,6 +27,7 @@ public:
 
 int main() {
   //mi_stats_reset();  // ignore earlier allocations
+  double_free();
   atexit(free_p);
   void* p1 = malloc(78);
   void* p2 = mi_malloc_aligned(16,24);
@@ -66,3 +70,5 @@ public:
 };
 
 static Static s = Static();
+
+

@@ -22,8 +22,11 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
 // #define MI_STAT 1
 
-// Define MI_SECURE as 1 to encode free lists
-// #define MI_SECURE 1
+// Define MI_SECURE to enable security mitigations
+// #define MI_SECURE 1  // guard page around metadata
+// #define MI_SECURE 2  // guard page around each mimalloc page
+// #define MI_SECURE 3  // encode free lists
+// #define MI_SECURE 4  // all security enabled (checks for double free, corrupted free list and invalid pointer free)
 
 #if !defined(MI_SECURE)
 #define MI_SECURE 0

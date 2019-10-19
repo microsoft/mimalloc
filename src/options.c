@@ -285,6 +285,14 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, co
 }
 #endif
 
+mi_attr_noreturn void _mi_fatal_error(const char* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  mi_vfprintf(NULL, "mimalloc: fatal: ", fmt, args);
+  va_end(args);
+  exit(99);
+}
+
 // --------------------------------------------------------
 // Initialize options by checking the environment
 // --------------------------------------------------------
