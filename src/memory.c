@@ -247,23 +247,10 @@ static inline size_t mi_bsf(uintptr_t x) {
   #endif
   return idx;
 }
-static inline size_t mi_bsr(uintptr_t x) {
-  if (x==0) return 8*MI_INTPTR_SIZE;
-  DWORD idx;
-  #if (MI_INTPTR_SIZE==8)
-  _BitScanReverse64(&idx, x);
-  #else
-  _BitScanReverse(&idx, x);
-  #endif
-  return idx;
-}
 #elif defined(__GNUC__) || defined(__clang__)
 #define MI_HAVE_BITSCAN
 static inline size_t mi_bsf(uintptr_t x) {
   return (x==0 ? 8*MI_INTPTR_SIZE : __builtin_ctzl(x));
-}
-static inline size_t mi_bsr(uintptr_t x) {
-  return (x==0 ? 8*MI_INTPTR_SIZE : (8*MI_INTPTR_SIZE - 1) - __builtin_clzl(x));
 }
 #endif
 
@@ -310,7 +297,7 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
     else {
       // on to the next bit range
       #ifdef MI_HAVE_BITSCAN
-      size_t shift = (blocks == 1 ? 1 : mi_bsr(map & m) - bitidx + 1);
+      size_t shift = (blocks == 1 ? 1 : _mi_bsr(map & m) - bitidx + 1);
       mi_assert_internal(shift > 0 && shift <= blocks);
       #else
       size_t shift = 1;

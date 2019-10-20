@@ -59,9 +59,19 @@ static inline uint8_t mi_bsr32(uint32_t x) {
   _BitScanReverse((DWORD*)&idx, x);
   return (uint8_t)idx;
 }
+#define HAVE_MI_BSR64
+static inline size_t mi_bsr64(uint64_t x) {
+  uint64_t idx;
+  _BitScanReverse64((DWORD*)&idx, x);
+  return (uint8_t)idx;
+}
 #elif defined(__GNUC__) || defined(__clang__)
 static inline uint8_t mi_bsr32(uint32_t x) {
   return (31 - __builtin_clz(x));
+}
+#define HAVE_MI_BSR64
+static inline size_t mi_bsr64(uint64_t x) {
+  return (63 - __builtin_clzl(x));
 }
 #else
 static inline uint8_t mi_bsr32(uint32_t x) {
@@ -84,8 +94,12 @@ static inline uint8_t mi_bsr32(uint32_t x) {
 uint8_t _mi_bsr(uintptr_t x) {
   if (x == 0) return 0;
 #if MI_INTPTR_SIZE==8
+  #ifdef HAVE_MI_BSR64
+  return mi_bsr64(x);
+  #else
   uint32_t hi = (x >> 32);
   return (hi == 0 ? mi_bsr32((uint32_t)x) : 32 + mi_bsr32(hi));
+  #endif
 #elif MI_INTPTR_SIZE==4
   return mi_bsr32(x);
 #else
