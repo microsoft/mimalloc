@@ -223,14 +223,13 @@ static bool _mi_heap_init(void) {
     tld->heap_backing = heap;
     tld->segments.stats = &tld->stats;
     tld->os.stats = &tld->stats;
-    _mi_heap_default = heap;
+    mi_heap_set_default(heap);
   }
   return false;
 }
 
 // Free the thread local default heap (called from `mi_thread_done`)
-static bool _mi_heap_done(void) {
-  mi_heap_t* heap = _mi_heap_default;
+static bool _mi_heap_done(mi_heap_t* heap) {
   if (!mi_heap_is_initialized(heap)) return true;
 
   // reset default heap
@@ -287,6 +286,8 @@ static bool _mi_heap_done(void) {
 #define MI_USE_PTHREADS
 #endif
 
+static void _mi_thread_done(mi_heap_t* heap) mi_attr_noexcept;
+
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
   // nothing to do as it is done in DllMain
 #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
@@ -295,20 +296,39 @@ static bool _mi_heap_done(void) {
   #include <fibersapi.h>
   static DWORD mi_fls_key;
   static void NTAPI mi_fls_done(PVOID value) {
-    if (value!=NULL) mi_thread_done();
+    if (value!=NULL) _mi_thread_done((mi_heap_t*)value);
   }
 #elif defined(MI_USE_PTHREADS)
   // use pthread locol storage keys to detect thread ending
   #include <pthread.h>
   static pthread_key_t mi_pthread_key;
   static void mi_pthread_done(void* value) {
-    if (value!=NULL) mi_thread_done();
+    if (value!=NULL) _mi_thread_done((mi_heap_t*)value);
   }
 #elif defined(__wasi__)
 // no pthreads in the WebAssembly Standard Interface
 #else
   #pragma message("define a way to call mi_thread_done when a thread is done")
 #endif
+
+mi_heap_t* mi_heap_set_default(mi_heap_t* heap) {
+  mi_assert(mi_heap_is_initialized(heap));
+  if (!mi_heap_is_initialized(heap)) return NULL;
+  mi_assert_expensive(mi_heap_is_valid(heap));
+  mi_heap_t* old   = _mi_heap_default;
+  _mi_heap_default = heap;
+
+  // set hooks so our _mi_thread_done() will be called with the default heap.
+  #if defined(_WIN32) && defined(MI_SHARED_LIB)
+    // nothing to do as it is done in DllMain
+  #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
+    FlsSetValue(mi_fls_key, heap);
+  #elif defined(MI_USE_PTHREADS)
+    pthread_setspecific(mi_pthread_key, heap);
+  #endif
+
+  return old;
+}
 
 // Set up handlers so `mi_thread_done` is called automatically
 static void mi_process_setup_auto_thread_done(void) {
@@ -343,27 +363,21 @@ void mi_thread_init(void) mi_attr_noexcept
 
   _mi_stat_increase(&mi_get_default_heap()->tld->stats.threads, 1);
 
-  // set hooks so our mi_thread_done() will be called
-  #if defined(_WIN32) && defined(MI_SHARED_LIB)
-    // nothing to do as it is done in DllMain
-  #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
-    FlsSetValue(mi_fls_key, (void*)(_mi_thread_id()|1)); // set to a dummy value so that `mi_fls_done` is called
-  #elif defined(MI_USE_PTHREADS)
-    pthread_setspecific(mi_pthread_key, (void*)(_mi_thread_id()|1)); // set to a dummy value so that `mi_pthread_done` is called
-  #endif
-
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
-void mi_thread_done(void) mi_attr_noexcept {
+void mi_thread_done() mi_attr_noexcept {
+  _mi_thread_done(_mi_heap_default);
+}
+
+static void _mi_thread_done(mi_heap_t* heap) mi_attr_noexcept {
   // stats
-  mi_heap_t* heap = mi_get_default_heap();
   if (!_mi_is_main_thread() && mi_heap_is_initialized(heap))  {
     _mi_stat_decrease(&heap->tld->stats.threads, 1);
   }
 
   // abandon the thread local heap
-  if (_mi_heap_done()) return; // returns true if already ran
+  if (_mi_heap_done(heap)) return; // returns true if already ran
 
   //if (!_mi_is_main_thread()) {
   //  _mi_verbose_message("thread done: 0x%zx\n", _mi_thread_id());
