@@ -314,7 +314,7 @@ static void _mi_thread_done(mi_heap_t* heap) mi_attr_noexcept;
 mi_heap_t* mi_heap_set_default(mi_heap_t* heap) {
   mi_assert(mi_heap_is_initialized(heap));
   if (!mi_heap_is_initialized(heap)) return NULL;
-  mi_assert_expensive(mi_heap_is_valid(heap));
+  mi_assert_expensive(_mi_heap_is_valid(heap));
   mi_heap_t* old   = _mi_heap_default;
   _mi_heap_default = heap;
 

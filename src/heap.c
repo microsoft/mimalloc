@@ -57,7 +57,7 @@ static bool _mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page
   return true;
 }
 
-static bool mi_heap_is_valid(mi_heap_t* heap) {
+bool _mi_heap_is_valid(mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL);
   mi_heap_visit_pages(heap, &_mi_heap_page_is_valid, NULL, NULL);
   return true;
@@ -278,7 +278,7 @@ void _mi_heap_destroy_pages(mi_heap_t* heap) {
 void mi_heap_destroy(mi_heap_t* heap) {
   mi_assert(mi_heap_is_initialized(heap));
   mi_assert(heap->no_reclaim);
-  mi_assert_expensive(mi_heap_is_valid(heap));
+  mi_assert_expensive(_mi_heap_is_valid(heap));
   if (!mi_heap_is_initialized(heap)) return;
   if (!heap->no_reclaim) {
     // don't free in case it may contain reclaimed pages
@@ -335,7 +335,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
 void mi_heap_delete(mi_heap_t* heap)
 {
   mi_assert(mi_heap_is_initialized(heap));
-  mi_assert_expensive(mi_heap_is_valid(heap));
+  mi_assert_expensive(_mi_heap_is_valid(heap));
   if (!mi_heap_is_initialized(heap)) return;
 
   if (!mi_heap_is_backing(heap)) {

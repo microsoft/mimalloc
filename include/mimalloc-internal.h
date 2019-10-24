@@ -105,6 +105,7 @@ void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
+bool        _mi_heap_is_valid(mi_heap_t* heap);
 #endif
 
 
