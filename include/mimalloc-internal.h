@@ -20,6 +20,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_trace_message(...)
 #endif
 
+#if defined(_MSC_VER)
+#define mi_decl_noinline   __declspec(noinline)
+#define mi_attr_noreturn 
+#elif defined(__GNUC__) || defined(__clang__)
+#define mi_decl_noinline   __attribute__((noinline))
+#define mi_attr_noreturn   __attribute__((noreturn))
+#else
+#define mi_decl_noinline
+#define mi_attr_noreturn   
+#endif
+
+
 // "options.c"
 void       _mi_fputs(mi_output_fun* out, const char* prefix, const char* message);
 void       _mi_fprintf(mi_output_fun* out, const char* fmt, ...);
@@ -28,12 +40,12 @@ void       _mi_warning_message(const char* fmt, ...);
 void       _mi_verbose_message(const char* fmt, ...);
 void       _mi_trace_message(const char* fmt, ...);
 void       _mi_options_init(void);
+void       _mi_fatal_error(const char* fmt, ...) mi_attr_noreturn;
 
 // "init.c"
 extern mi_stats_t       _mi_stats_main;
 extern const mi_page_t  _mi_page_empty;
 bool       _mi_is_main_thread(void);
-uintptr_t  _mi_ptr_cookie(const void* p);
 uintptr_t  _mi_random_shuffle(uintptr_t x);
 uintptr_t  _mi_random_init(uintptr_t seed /* can be zero */);
 bool       _mi_preloading();  // true while the C runtime is not ready
@@ -135,13 +147,6 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #define __has_builtin(x)  0
 #endif
 
-#if defined(_MSC_VER)
-#define mi_decl_noinline   __declspec(noinline)
-#elif defined(__GNUC__) || defined(__clang__)
-#define mi_decl_noinline   __attribute__((noinline))
-#else
-#define mi_decl_noinline
-#endif
 
 
 /* -----------------------------------------------------------
@@ -252,6 +257,10 @@ static inline bool mi_heap_is_backing(const mi_heap_t* heap) {
 static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
   mi_assert_internal(heap != NULL);
   return (heap != &_mi_heap_empty);
+}
+
+static inline uintptr_t _mi_ptr_cookie(const void* p) {
+  return ((uintptr_t)p ^ _mi_heap_main.cookie);
 }
 
 /* -----------------------------------------------------------
@@ -401,8 +410,12 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
 // Encoding/Decoding the free list next pointers
 // -------------------------------------------------------------------
 
-static inline mi_block_t* mi_block_nextx( uintptr_t cookie, mi_block_t* block ) {
-  #if MI_SECURE
+static inline bool mi_is_in_same_segment(const void* p, const void* q) {
+  return (_mi_ptr_segment(p) == _mi_ptr_segment(q));
+}
+
+static inline mi_block_t* mi_block_nextx( uintptr_t cookie, const mi_block_t* block ) {
+  #if MI_SECURE 
   return (mi_block_t*)(block->next ^ cookie);
   #else
   UNUSED(cookie);
@@ -410,7 +423,7 @@ static inline mi_block_t* mi_block_nextx( uintptr_t cookie, mi_block_t* block ) 
   #endif
 }
 
-static inline void mi_block_set_nextx(uintptr_t cookie, mi_block_t* block, mi_block_t* next) {
+static inline void mi_block_set_nextx(uintptr_t cookie, mi_block_t* block, const mi_block_t* next) {  
   #if MI_SECURE
   block->next = (mi_encoded_t)next ^ cookie;
   #else
@@ -419,16 +432,25 @@ static inline void mi_block_set_nextx(uintptr_t cookie, mi_block_t* block, mi_bl
   #endif
 }
 
-static inline mi_block_t* mi_block_next(mi_page_t* page, mi_block_t* block) {
+static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t* block) {
   #if MI_SECURE
-  return mi_block_nextx(page->cookie,block);
+  mi_block_t* next = mi_block_nextx(page->cookie,block);
+    #if MI_SECURE >= 4
+    // check if next is at least in our segment range
+    // TODO: it is better to check if it is actually inside our page but that is more expensive 
+    // to calculate. Perhaps with a relative free list this becomes feasible?
+    if (next!=NULL && !mi_is_in_same_segment(block, next)) {
+      _mi_fatal_error("corrupted free list entry at %p: %zx\n", block, (uintptr_t)next);
+    }
+    #endif
+  return next;
   #else
   UNUSED(page);
   return mi_block_nextx(0, block);
   #endif
 }
 
-static inline void mi_block_set_next(mi_page_t* page, mi_block_t* block, mi_block_t* next) {
+static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, const mi_block_t* next) {
   #if MI_SECURE
   mi_block_set_nextx(page->cookie,block,next);
   #else

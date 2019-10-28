@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <stdint.h>
 
 #include <mimalloc.h>
 #include <mimalloc-override.h>  // redefines malloc etc.
@@ -172,6 +173,7 @@ void mi_bins() {
 int main() {
   mi_version();
   mi_bins();
+
   void* p1 = malloc(78);
   void* p2 = malloc(24);
   free(p1);
@@ -194,3 +196,4 @@ int main() {
   mi_stats_print(NULL);
   return 0;
 }
+

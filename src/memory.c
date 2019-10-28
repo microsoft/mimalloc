@@ -139,7 +139,7 @@ Commit from a region
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/SIZE_MAX before the call.
 // (not being able to claim is not considered an error so check for `p != NULL` afterwards).
-static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bitidx, size_t blocks, 
+static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bitidx, size_t blocks,
                                     size_t size, bool* commit, bool* allow_large, bool* is_zero, void** p, size_t* id, mi_os_tld_t* tld)
 {
   size_t mask = mi_region_block_mask(blocks,bitidx);
@@ -149,7 +149,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
 
   // ensure the region is reserved
   mi_region_info_t info = mi_atomic_read(&region->info);
-  if (info == 0) 
+  if (info == 0)
   {
     bool region_commit = mi_option_is_enabled(mi_option_eager_region_commit);
     bool region_large  = *allow_large;
@@ -202,7 +202,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
   // Commit the blocks to memory
   bool region_is_committed = false;
   bool region_is_large = false;
-  void* start = mi_region_info_read(info,&region_is_large,&region_is_committed);  
+  void* start = mi_region_info_read(info,&region_is_large,&region_is_committed);
   mi_assert_internal(!(region_is_large && !*allow_large));
   mi_assert_internal(start!=NULL);
 
@@ -215,7 +215,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
 
   void* blocks_start = (uint8_t*)start + (bitidx * MI_SEGMENT_SIZE);
   if (*commit && !region_is_committed) {
-    // ensure commit 
+    // ensure commit
     bool commit_zero = false;
     _mi_os_commit(blocks_start, mi_good_commit_size(size), &commit_zero, tld->stats);  // only commit needed size (unless using large OS pages)
     if (commit_zero) *is_zero = true;
@@ -225,7 +225,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
     *commit = true;
   }
 
-  // and return the allocation  
+  // and return the allocation
   mi_assert_internal(blocks_start != NULL);
   *allow_large = region_is_large;
   *p  = blocks_start;
@@ -271,7 +271,7 @@ static inline size_t mi_bsr(uintptr_t x) {
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/SIZE_MAX before the call.
 // (not being able to claim is not considered an error so check for `p != NULL` afterwards).
-static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t blocks, size_t size, 
+static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t blocks, size_t size,
                                    bool* commit, bool* allow_large, bool* is_zero, void** p, size_t* id, mi_os_tld_t* tld)
 {
   mi_assert_internal(p != NULL && id != NULL);
@@ -303,7 +303,7 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
       else {
         // success, we claimed the bits
         // now commit the block memory -- this can still fail
-        return mi_region_commit_blocks(region, idx, bitidx, blocks, 
+        return mi_region_commit_blocks(region, idx, bitidx, blocks,
                                        size, commit, allow_large, is_zero, p, id, tld);
       }
     }
@@ -327,20 +327,20 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/0 before the call.
 // (not being able to claim is not considered an error so check for `p != NULL` afterwards).
-static bool mi_region_try_alloc_blocks(size_t idx, size_t blocks, size_t size, 
-                                       bool* commit, bool* allow_large, bool* is_zero, 
+static bool mi_region_try_alloc_blocks(size_t idx, size_t blocks, size_t size,
+                                       bool* commit, bool* allow_large, bool* is_zero,
                                        void** p, size_t* id, mi_os_tld_t* tld)
 {
   // check if there are available blocks in the region..
   mi_assert_internal(idx < MI_REGION_MAX);
   mem_region_t* region = &regions[idx];
   uintptr_t m = mi_atomic_read_relaxed(&region->map);
-  if (m != MI_REGION_MAP_FULL) {  // some bits are zero    
+  if (m != MI_REGION_MAP_FULL) {  // some bits are zero
     bool ok = (*commit || *allow_large); // committing or allow-large is always ok
     if (!ok) {
-      // otherwise skip incompatible regions if possible. 
+      // otherwise skip incompatible regions if possible.
       // this is not guaranteed due to multiple threads allocating at the same time but
-      // that's ok. In secure mode, large is never allowed for any thread, so that works out; 
+      // that's ok. In secure mode, large is never allowed for any thread, so that works out;
       // otherwise we might just not be able to reset/decommit individual pages sometimes.
       mi_region_info_t info = mi_atomic_read_relaxed(&region->info);
       bool is_large;
@@ -361,7 +361,7 @@ static bool mi_region_try_alloc_blocks(size_t idx, size_t blocks, size_t size,
 
 // Allocate `size` memory aligned at `alignment`. Return non NULL on success, with a given memory `id`.
 // (`id` is abstract, but `id = idx*MI_REGION_MAP_BITS + bitidx`)
-void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, 
+void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero,
                             size_t* id, mi_os_tld_t* tld)
 {
   mi_assert_internal(id != NULL && tld != NULL);
@@ -369,7 +369,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* l
   *id = SIZE_MAX;
   *is_zero = false;
   bool default_large = false;
-  if (large==NULL) large = &default_large;  // ensure `large != NULL`  
+  if (large==NULL) large = &default_large;  // ensure `large != NULL`
 
   // use direct OS allocation for huge blocks or alignment (with `id = SIZE_MAX`)
   if (size > MI_REGION_MAX_ALLOC_SIZE || alignment > MI_SEGMENT_ALIGN) {
@@ -465,7 +465,7 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
         // _mi_os_decommit(p,size,stats); // if !is_eager_committed (and clear dirty bits)
       }
       // else { _mi_os_reset(p,size,stats); }
-    }    
+    }
     if (!is_eager_committed) {
       // adjust commit statistics as we commit again when re-using the same slot
       _mi_stat_decrease(&stats->committed, mi_good_commit_size(size));

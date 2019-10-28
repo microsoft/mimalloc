@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <stdint.h>
 
 #include <mimalloc.h>
 #include <new>
@@ -66,3 +67,5 @@ public:
 };
 
 static Static s = Static();
+
+
