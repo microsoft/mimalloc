@@ -7,8 +7,6 @@
 #include <mimalloc.h>
 #include <new>
 
-static void double_free();
-
 static void* p = malloc(8);
 
 void free_p() {

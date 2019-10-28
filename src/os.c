@@ -283,7 +283,7 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
     p = mi_win_virtual_allocx(addr, size, try_alignment, flags);
   }
   if (p == NULL) {
-    _mi_warning_message("unable to alloc mem error: err: %i size: 0x%x \n", GetLastError(), size);
+    _mi_warning_message("unable to allocate memory: error code: %i, addr: %p, size: 0x%x, large only: %d, allow_large: %d\n", GetLastError(), addr, size, large_only, allow_large);
   }
   return p;
 }
