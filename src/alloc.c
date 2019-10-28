@@ -192,7 +192,15 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       page->free = block;
       page->used--;
       page->is_zero = false;
-      _mi_segment_page_free(page,true,&heap->tld->segments);
+      mi_assert(page->used == 0);
+      mi_tld_t* tld = heap->tld;
+      if (page->block_size > MI_HUGE_OBJ_SIZE_MAX) {
+        _mi_stat_decrease(&tld->stats.giant, page->block_size);
+      }
+      else {
+        _mi_stat_decrease(&tld->stats.huge, page->block_size);
+      }
+      _mi_segment_page_free(page,true,&tld->segments);
     }
     return;
   }

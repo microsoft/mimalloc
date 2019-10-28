@@ -370,6 +370,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   mi_page_set_has_aligned(page, false);
 
   // account for huge pages here
+  // (note: no longer necessary as huge pages are always abandoned)
   if (page->block_size > MI_LARGE_OBJ_SIZE_MAX) {
     if (page->block_size > MI_HUGE_OBJ_SIZE_MAX) {
       _mi_stat_decrease(&page->heap->tld->stats.giant, page->block_size);
@@ -378,7 +379,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
       _mi_stat_decrease(&page->heap->tld->stats.huge, page->block_size);
     }
   }
-
+  
   // remove from the page list
   // (no need to do _mi_heap_delayed_free first as all blocks are already free)
   mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
@@ -406,16 +407,18 @@ void _mi_page_retire(mi_page_t* page) {
   // (or we end up retiring and re-allocating most of the time)
   // NOTE: refine this more: we should not retire if this
   // is the only page left with free blocks. It is not clear
-  // how to check this efficiently though... for now we just check
-  // if its neighbours are almost fully used.
+  // how to check this efficiently though... 
+  // for now, we don't retire if it is the only page left of this size class.
+  mi_page_queue_t* pq = mi_page_queue_of(page);
   if (mi_likely(page->block_size <= (MI_SMALL_SIZE_MAX/4))) {
-    if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
+    // if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
+    if (pq->last==page && pq->first==page) {
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
       return; // dont't retire after all
     }
   }
 
-  _mi_page_free(page, mi_page_queue_of(page), false);
+  _mi_page_free(page, pq, false);
 }
 
 
@@ -530,7 +533,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
 
   size_t page_size;
   _mi_page_start(_mi_page_segment(page), page, &page_size);
-  mi_stat_increase(stats->pages_extended, 1);
+  mi_stat_counter_increase(stats->pages_extended, 1);
 
   // calculate the extend count
   size_t extend = page->reserved - page->capacity;
