@@ -370,6 +370,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   mi_page_set_has_aligned(page, false);
 
   // account for huge pages here
+  // (note: no longer necessary as huge pages are always abandoned)
   if (page->block_size > MI_LARGE_OBJ_SIZE_MAX) {
     if (page->block_size > MI_HUGE_OBJ_SIZE_MAX) {
       _mi_stat_decrease(&page->heap->tld->stats.giant, page->block_size);
@@ -378,7 +379,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
       _mi_stat_decrease(&page->heap->tld->stats.huge, page->block_size);
     }
   }
-
+  
   // remove from the page list
   // (no need to do _mi_heap_delayed_free first as all blocks are already free)
   mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
