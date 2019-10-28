@@ -290,7 +290,9 @@ mi_attr_noreturn void _mi_fatal_error(const char* fmt, ...) {
   va_start(args, fmt);
   mi_vfprintf(NULL, "mimalloc: fatal: ", fmt, args);
   va_end(args);
-  exit(99);
+  #if (MI_SECURE>=0)
+  abort();
+  #endif
 }
 
 // --------------------------------------------------------

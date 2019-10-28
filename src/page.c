@@ -512,7 +512,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* page, size_t e
 ----------------------------------------------------------- */
 
 #define MI_MAX_EXTEND_SIZE    (4*1024)      // heuristic, one OS page seems to work well.
-#if MI_SECURE
+#if (MI_SECURE>0)
 #define MI_MIN_EXTEND         (8*MI_SECURE) // extend at least by this many
 #else
 #define MI_MIN_EXTEND         (1)
@@ -579,7 +579,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   page->block_size = block_size;
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
-  #if MI_SECURE
+  #ifdef MI_ENCODE_FREELIST
   page->cookie = _mi_heap_random(heap) | 1;
   #endif
   page->is_zero = page->is_zero_init;
@@ -592,7 +592,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->next == NULL);
   mi_assert_internal(page->prev == NULL);
   mi_assert_internal(!mi_page_has_aligned(page));
-  #if MI_SECURE
+  #if (MI_ENCODE_FREELIST)
   mi_assert_internal(page->cookie != 0);
   #endif
   mi_assert_expensive(mi_page_is_valid_init(page));

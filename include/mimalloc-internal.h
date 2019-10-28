@@ -379,7 +379,7 @@ static inline bool mi_is_in_same_segment(const void* p, const void* q) {
 }
 
 static inline mi_block_t* mi_block_nextx( uintptr_t cookie, const mi_block_t* block ) {
-  #if MI_SECURE 
+  #ifdef MI_ENCODE_FREELIST
   return (mi_block_t*)(block->next ^ cookie);
   #else
   UNUSED(cookie);
@@ -388,7 +388,7 @@ static inline mi_block_t* mi_block_nextx( uintptr_t cookie, const mi_block_t* bl
 }
 
 static inline void mi_block_set_nextx(uintptr_t cookie, mi_block_t* block, const mi_block_t* next) {  
-  #if MI_SECURE
+  #ifdef MI_ENCODE_FREELIST
   block->next = (mi_encoded_t)next ^ cookie;
   #else
   UNUSED(cookie);
@@ -397,16 +397,15 @@ static inline void mi_block_set_nextx(uintptr_t cookie, mi_block_t* block, const
 }
 
 static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t* block) {
-  #if MI_SECURE
+  #ifdef MI_ENCODE_FREELIST
   mi_block_t* next = mi_block_nextx(page->cookie,block);
-    #if MI_SECURE >= 4
-    // check if next is at least in our segment range
-    // TODO: it is better to check if it is actually inside our page but that is more expensive 
-    // to calculate. Perhaps with a relative free list this becomes feasible?
-    if (next!=NULL && !mi_is_in_same_segment(block, next)) {
-      _mi_fatal_error("corrupted free list entry at %p: %zx\n", block, (uintptr_t)next);
-    }
-    #endif
+  // check for free list corruption: is `next` at least in our segment range?
+  // TODO: it is better to check if it is actually inside our page but that is more expensive 
+  // to calculate. Perhaps with a relative free list this becomes feasible?
+  if (next!=NULL && !mi_is_in_same_segment(block, next)) {
+    _mi_fatal_error("corrupted free list entry of size %zub at %p: value 0x%zx\n", page->block_size, block, (uintptr_t)next);
+    next = NULL;
+  }   
   return next;
   #else
   UNUSED(page);
@@ -415,7 +414,7 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
 }
 
 static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, const mi_block_t* next) {
-  #if MI_SECURE
+  #ifdef MI_ENCODE_FREELIST
   mi_block_set_nextx(page->cookie,block,next);
   #else
   UNUSED(page);

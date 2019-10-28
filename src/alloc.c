@@ -32,10 +32,10 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   page->free = mi_block_next(page,block);
   page->used++;
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
-#if (MI_DEBUG)
+#if (MI_DEBUG!=0)
   if (!page->is_zero) { memset(block, MI_DEBUG_UNINIT, size); }
-#elif (MI_SECURE)
-  block->next = 0;
+#elif (MI_SECURE!=0)
+  block->next = 0;  // don't leak internal data
 #endif
 #if (MI_STAT>1)
   if(size <= MI_LARGE_OBJ_SIZE_MAX) {
@@ -125,10 +125,12 @@ mi_decl_allocator void* mi_zalloc(size_t size) mi_attr_noexcept {
 
 
 // ------------------------------------------------------
-// Check for double free in secure mode
+// Check for double free in secure and debug mode 
+// This is somewhat expensive so only enabled for secure mode 4
 // ------------------------------------------------------
 
-#if MI_SECURE>=4
+#if (MI_ENCODE_FREELIST && (MI_SECURE>=4 || MI_DEBUG!=0))
+// linear check if the free list contains a specific element
 static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, const mi_block_t* elem) {
   while (list != NULL) {
     if (elem==list) return true;
@@ -137,15 +139,15 @@ static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, cons
   return false;
 }
 
-static mi_decl_noinline bool mi_check_double_freex(const mi_page_t* page, const mi_block_t* block, const mi_block_t* n) {
+static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, const mi_block_t* block, const mi_block_t* n) {
   size_t psize;
   uint8_t* pstart = _mi_page_start(_mi_page_segment(page), page, &psize);
   if (n == NULL || ((uint8_t*)n >= pstart && (uint8_t*)n < (pstart + psize))) {
     // Suspicious: the decoded value is in the same page (or NULL).
-    // Walk the free lists to see if it is already freed
+    // Walk the free lists to verify positively if it is already freed
     if (mi_list_contains(page, page->free, block) ||
-      mi_list_contains(page, page->local_free, block) ||
-      mi_list_contains(page, (const mi_block_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*,&page->thread_free)), block)) 
+        mi_list_contains(page, page->local_free, block) ||
+        mi_list_contains(page, (const mi_block_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*,&page->thread_free)), block)) 
     {
       _mi_fatal_error("double free detected of block %p with size %zu\n", block, page->block_size);
       return true;
@@ -154,14 +156,21 @@ static mi_decl_noinline bool mi_check_double_freex(const mi_page_t* page, const 
   return false;
 }
 
-static inline bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block) {
-  mi_block_t* n = (mi_block_t*)(block->next ^ page->cookie);
-  if (((uintptr_t)n & (MI_INTPTR_SIZE-1))==0 &&       // quick check 
-      (n==NULL || mi_is_in_same_segment(block, n))) 
+static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
+  mi_block_t* n = mi_block_nextx(page->cookie, block); // pretend it is freed, and get the decoded first field
+  if (((uintptr_t)n & (MI_INTPTR_SIZE-1))==0 &&        // quick check: aligned pointer?
+      (n==NULL || mi_is_in_same_segment(block, n)))    // quick check: in same segment or NULL?
   { 
     // Suspicous: decoded value in block is in the same segment (or NULL) -- maybe a double free?
-    return mi_check_double_freex(page, block, n);
+    // (continue in separate function to improve code generation)
+    return mi_check_is_double_freex(page, block, n);
   }  
+  return false;
+}
+#else
+static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
+  UNUSED(page);
+  UNUSED(block);
   return false;
 }
 #endif
@@ -170,7 +179,6 @@ static inline bool mi_check_double_free(const mi_page_t* page, const mi_block_t*
 // ------------------------------------------------------
 // Free
 // ------------------------------------------------------
-
 
 // multi-threaded free
 static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* block)
@@ -258,6 +266,7 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
   // and push it on the free list
   if (mi_likely(local)) {
     // owning thread can free a block directly
+    if (mi_check_is_double_free(page, block)) return;
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
     page->used--;
@@ -301,7 +310,7 @@ void mi_free(void* p) mi_attr_noexcept
   const mi_segment_t* const segment = _mi_ptr_segment(p);
   if (mi_unlikely(segment == NULL)) return;  // checks for (p==NULL)
 
-#if (MI_DEBUG>0)
+#if (MI_DEBUG!=0)
   if (mi_unlikely(!mi_is_in_heap_region(p))) {
     _mi_warning_message("possibly trying to free a pointer that does not point to a valid heap region: 0x%p\n"
       "(this may still be a valid very large allocation (over 64MiB))\n", p);
@@ -310,7 +319,7 @@ void mi_free(void* p) mi_attr_noexcept
     }
   }
 #endif
-#if (MI_DEBUG>0 || MI_SECURE>=4)
+#if (MI_DEBUG!=0 || MI_SECURE>=4)
   if (mi_unlikely(_mi_ptr_cookie(segment) != segment->cookie)) {
     _mi_error_message("trying to free a pointer that does not point to a valid heap space: %p\n", p);
     return;
@@ -332,9 +341,7 @@ void mi_free(void* p) mi_attr_noexcept
   if (mi_likely(tid == segment->thread_id && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
-    #if MI_SECURE>=4 
-    if (mi_check_double_free(page,block)) return;
-    #endif
+    if (mi_check_is_double_free(page,block)) return;    
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
     page->used--;
