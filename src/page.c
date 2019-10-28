@@ -407,16 +407,18 @@ void _mi_page_retire(mi_page_t* page) {
   // (or we end up retiring and re-allocating most of the time)
   // NOTE: refine this more: we should not retire if this
   // is the only page left with free blocks. It is not clear
-  // how to check this efficiently though... for now we just check
-  // if its neighbours are almost fully used.
+  // how to check this efficiently though... 
+  // for now, we don't retire if it is the only page left of this size class.
+  mi_page_queue_t* pq = mi_page_queue_of(page);
   if (mi_likely(page->block_size <= (MI_SMALL_SIZE_MAX/4))) {
-    if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
+    // if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
+    if (pq->last==page && pq->first==page) {
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
       return; // dont't retire after all
     }
   }
 
-  _mi_page_free(page, mi_page_queue_of(page), false);
+  _mi_page_free(page, pq, false);
 }
 
 
