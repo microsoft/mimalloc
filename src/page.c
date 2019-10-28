@@ -531,7 +531,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
 
   size_t page_size;
   _mi_page_start(_mi_page_segment(page), page, &page_size);
-  mi_stat_increase(stats->pages_extended, 1);
+  mi_stat_counter_increase(stats->pages_extended, 1);
 
   // calculate the extend count
   size_t extend = page->reserved - page->capacity;

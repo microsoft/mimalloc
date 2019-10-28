@@ -340,14 +340,14 @@ typedef struct mi_stats_s {
   mi_stat_count_t page_committed;
   mi_stat_count_t segments_abandoned;
   mi_stat_count_t pages_abandoned;
-  mi_stat_count_t pages_extended;
-  mi_stat_count_t mmap_calls;
-  mi_stat_count_t commit_calls;
   mi_stat_count_t threads;
   mi_stat_count_t huge;
   mi_stat_count_t giant;
   mi_stat_count_t malloc;
   mi_stat_count_t segments_cache;
+  mi_stat_counter_t pages_extended;
+  mi_stat_counter_t mmap_calls;
+  mi_stat_counter_t commit_calls;
   mi_stat_counter_t page_no_retire;
   mi_stat_counter_t searches;
   mi_stat_counter_t huge_count;
