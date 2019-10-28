@@ -68,7 +68,7 @@ endif()
 
 if(MI_SECURE MATCHES "ON")
   message(STATUS "Set secure build (MI_SECURE=ON)")
-  list(APPEND mi_defines MI_SECURE=2)
+  list(APPEND mi_defines MI_SECURE=3)
 endif()
 
 if(MI_SEE_ASM MATCHES "ON")

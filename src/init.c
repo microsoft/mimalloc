@@ -13,7 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
   0, false, false, false, false, 0, 0,
-  { 0 },
+  { 0 }, false,
   NULL,    // free
   #if MI_SECURE
   0,
@@ -182,10 +182,6 @@ uintptr_t _mi_random_init(uintptr_t seed /* can be zero */) {
   }
 #endif
   return x;
-}
-
-uintptr_t _mi_ptr_cookie(const void* p) {
-  return ((uintptr_t)p ^ _mi_heap_main.cookie);
 }
 
 /* -----------------------------------------------------------

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <stdint.h>
 
 #include <mimalloc.h>
 #include <new>
@@ -41,7 +42,7 @@ int main() {
   p2 = malloc(16);
   p1 = realloc(p1, 32);
   free(p1);
-  mi_free(p2);
+  free(p2);
   mi_free(s);
   Test* t = new Test(42);
   delete t;
@@ -66,3 +67,5 @@ public:
 };
 
 static Static s = Static();
+
+

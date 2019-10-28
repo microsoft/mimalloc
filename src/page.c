@@ -192,7 +192,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
       // usual case
       page->free = page->local_free;
       page->local_free = NULL;
-      page->flags.is_zero = false;
+      page->is_zero = false;
     }
     else if (force) {
       // append -- only on shutdown (force) as this is a linear operation
@@ -204,7 +204,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
       mi_block_set_next(page, tail, page->free);
       page->free = page->local_free;
       page->local_free = NULL;
-      page->flags.is_zero = false;
+      page->is_zero = false;
     }
   }
 
@@ -559,7 +559,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
 
   // extension into zero initialized memory preserves the zero'd free list
   if (!page->is_zero_init) {
-    page->flags.is_zero = false;
+    page->is_zero = false;
   }
   mi_assert_expensive(mi_page_is_valid_init(page));
 }
@@ -579,7 +579,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   #if MI_SECURE
   page->cookie = _mi_heap_random(heap) | 1;
   #endif
-  page->flags.is_zero = page->is_zero_init;
+  page->is_zero = page->is_zero_init;
 
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);
