@@ -226,12 +226,13 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
     mi_assert_internal((uintptr_t)p % _mi_os_page_size() == 0);
   }
   */
-
+  /* TODO: guard pages between every slice span
   if (MI_SECURE > 1 || (MI_SECURE == 1 && slice == &segment->slices[segment->slice_entries - 1])) {
     // secure == 1: the last page has an os guard page at the end
     // secure >  1: every page has an os guard page
     psize -= _mi_os_page_size();
   }
+  */
 
   if (page_size != NULL) *page_size = psize;
   mi_assert_internal(_mi_ptr_page(p) == page);
@@ -708,6 +709,7 @@ static mi_page_t* mi_segments_page_alloc(mi_page_kind_t page_kind, size_t requir
   // find a free page
   size_t page_size = _mi_align_up(required,(required > MI_MEDIUM_PAGE_SIZE ? MI_MEDIUM_PAGE_SIZE : MI_SEGMENT_SLICE_SIZE));
   size_t slices_needed = page_size / MI_SEGMENT_SLICE_SIZE;
+  mi_assert_internal(slices_needed * MI_SEGMENT_SLICE_SIZE == page_size);
   mi_page_t* page = mi_segments_page_find_and_allocate(slices_needed,tld); //(required <= MI_SMALL_SIZE_MAX ? 0 : slices_needed), tld);
   if (page==NULL) {
     // no free page, allocate a new segment and try again

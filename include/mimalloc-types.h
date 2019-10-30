@@ -29,7 +29,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_SECURE 4  // experimental, may be more expensive: checks for double free.
 
 #if !defined(MI_SECURE)
-#define MI_SECURE 4
+#define MI_SECURE 0
 #endif
 
 // Define MI_DEBUG for debug mode
