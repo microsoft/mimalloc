@@ -161,14 +161,21 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   // return if the list is empty
   if (head == NULL) return;
 
-  // find the tail
+  // find the tail -- also to get a proper count (without data races)
+  uintptr_t max_count = page->capacity; // cannot collect more than capacity
   uintptr_t count = 1;
   mi_block_t* tail = head;
   mi_block_t* next;
-  while ((next = mi_block_next(page,tail)) != NULL) {
+  while ((next = mi_block_next(page,tail)) != NULL && count <= max_count) {
     count++;
     tail = next;
   }
+  // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
+  if (count > max_count) {
+    _mi_fatal_error("corrupted thread-free list\n");
+    return; // the thread-free items cannot be freed
+  }
+
   // and append the current local free list
   mi_block_set_next(page,tail, page->local_free);
   page->local_free = head;
