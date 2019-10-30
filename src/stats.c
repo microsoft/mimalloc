@@ -95,15 +95,17 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
 
   mi_stat_add(&stats->pages_abandoned, &src->pages_abandoned, 1);
   mi_stat_add(&stats->segments_abandoned, &src->segments_abandoned, 1);
-  mi_stat_add(&stats->mmap_calls, &src->mmap_calls, 1);
-  mi_stat_add(&stats->commit_calls, &src->commit_calls, 1);
   mi_stat_add(&stats->threads, &src->threads, 1);
-  mi_stat_add(&stats->pages_extended, &src->pages_extended, 1);
 
   mi_stat_add(&stats->malloc, &src->malloc, 1);
   mi_stat_add(&stats->segments_cache, &src->segments_cache, 1);
   mi_stat_add(&stats->huge, &src->huge, 1);
   mi_stat_add(&stats->large, &src->large, 1);
+
+  mi_stat_counter_add(&stats->pages_extended, &src->pages_extended, 1);
+  mi_stat_counter_add(&stats->mmap_calls, &src->mmap_calls, 1);
+  mi_stat_counter_add(&stats->commit_calls, &src->commit_calls, 1);
+
   mi_stat_counter_add(&stats->page_no_retire, &src->page_no_retire, 1);
   mi_stat_counter_add(&stats->searches, &src->searches, 1);
   mi_stat_counter_add(&stats->huge_count, &src->huge_count, 1);
@@ -121,6 +123,9 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   Display statistics
 ----------------------------------------------------------- */
 
+// unit > 0 : size in binary bytes 
+// unit == 0: count as decimal
+// unit < 0 : count in binary
 static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, const char* fmt) {
   char buf[32];
   int  len = 32;
@@ -165,17 +170,24 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
       _mi_fprintf(out, "  ok\n");
   }
   else if (unit<0) {
-    mi_print_amount(stat->peak, 1, out);
-    mi_print_amount(stat->allocated, 1, out);
-    mi_print_amount(stat->freed, 1, out);
-    mi_print_amount(-unit, 1, out);
-    mi_print_count((stat->allocated / -unit), 0, out);
+    mi_print_amount(stat->peak, -1, out);
+    mi_print_amount(stat->allocated, -1, out);
+    mi_print_amount(stat->freed, -1, out);
+    if (unit==-1) {
+      _mi_fprintf(out, "%22s", "");
+    }
+    else {
+      mi_print_amount(-unit, 1, out);
+      mi_print_count((stat->allocated / -unit), 0, out);
+    }
     if (stat->allocated > stat->freed)
       _mi_fprintf(out, "  not all freed!\n");
     else
       _mi_fprintf(out, "  ok\n");
   }
   else {
+    mi_print_amount(stat->peak, 1, out);
+    mi_print_amount(stat->allocated, 1, out);
     _mi_fprintf(out, "\n");
   }
 }
@@ -247,11 +259,11 @@ static void _mi_stats_print(mi_stats_t* stats, double secs, mi_output_fun* out) 
   mi_stat_print(&stats->segments_cache, "-cached", -1, out);
   mi_stat_print(&stats->pages, "pages", -1, out);
   mi_stat_print(&stats->pages_abandoned, "-abandoned", -1, out);
-  mi_stat_print(&stats->pages_extended, "-extended", 0, out);
+  mi_stat_counter_print(&stats->pages_extended, "-extended", out);
   mi_stat_counter_print(&stats->page_no_retire, "-noretire", out);
-  mi_stat_print(&stats->mmap_calls, "mmaps", 0, out);
-  mi_stat_print(&stats->commit_calls, "commits", 0, out);
-  mi_stat_print(&stats->threads, "threads", 0, out);
+  mi_stat_counter_print(&stats->mmap_calls, "mmaps", out);
+  mi_stat_counter_print(&stats->commit_calls, "commits", out);
+  mi_stat_print(&stats->threads, "threads", -1, out);
   mi_stat_counter_print_avg(&stats->searches, "searches", out);
 
   if (secs >= 0.0) _mi_fprintf(out, "%10s: %9.3f s\n", "elapsed", secs);

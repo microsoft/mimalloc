@@ -160,14 +160,21 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   // return if the list is empty
   if (head == NULL) return;
 
-  // find the tail
+  // find the tail -- also to get a proper count (without data races)
+  uintptr_t max_count = page->capacity; // cannot collect more than capacity
   uintptr_t count = 1;
   mi_block_t* tail = head;
   mi_block_t* next;
-  while ((next = mi_block_next(page,tail)) != NULL) {
+  while ((next = mi_block_next(page,tail)) != NULL && count <= max_count) {
     count++;
     tail = next;
   }
+  // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
+  if (count > max_count) {
+    _mi_fatal_error("corrupted thread-free list\n");
+    return; // the thread-free items cannot be freed
+  }
+
   // and append the current local free list
   mi_block_set_next(page,tail, page->local_free);
   page->local_free = head;
@@ -377,7 +384,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
       _mi_stat_decrease(&page->heap->tld->stats.huge, page->block_size);
     }
   }
-
+  
   // remove from the page list
   // (no need to do _mi_heap_delayed_free first as all blocks are already free)
   mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
@@ -405,16 +412,17 @@ void _mi_page_retire(mi_page_t* page) {
   // (or we end up retiring and re-allocating most of the time)
   // NOTE: refine this more: we should not retire if this
   // is the only page left with free blocks. It is not clear
-  // how to check this efficiently though... for now we just check
-  // if its neighbours are almost fully used.
+  // how to check this efficiently though... 
+  // for now, we don't retire if it is the only page left of this size class.
+  mi_page_queue_t* pq = mi_page_queue_of(page);
   if (mi_likely(page->block_size <= (MI_SMALL_SIZE_MAX/4))) {
-    if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
+    // if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
+    if (pq->last==page && pq->first==page) {
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
       return; // dont't retire after all
     }
   }
-  
-  _mi_page_free(page, mi_page_queue_of(page), false);
+  _mi_page_free(page, pq, false);
 }
 
 
@@ -508,7 +516,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* page, size_t e
 ----------------------------------------------------------- */
 
 #define MI_MAX_EXTEND_SIZE    (4*1024)      // heuristic, one OS page seems to work well.
-#if MI_SECURE
+#if (MI_SECURE>0)
 #define MI_MIN_EXTEND         (8*MI_SECURE) // extend at least by this many
 #else
 #define MI_MIN_EXTEND         (1)
@@ -529,7 +537,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
 
   size_t page_size;
   _mi_page_start(_mi_page_segment(page), page, &page_size);
-  mi_stat_increase(stats->pages_extended, 1);
+  mi_stat_counter_increase(stats->pages_extended, 1);
 
   // calculate the extend count
   size_t extend = page->reserved - page->capacity;
@@ -577,7 +585,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page_size <= page->slice_count*MI_SEGMENT_SLICE_SIZE);
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
-  #if MI_SECURE
+  #ifdef MI_ENCODE_FREELIST
   page->cookie = _mi_heap_random(heap) | 1;
   #endif
   page->is_zero = page->is_zero_init;
@@ -590,7 +598,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->next == NULL);
   mi_assert_internal(page->prev == NULL);
   mi_assert_internal(!mi_page_has_aligned(page));
-  #if MI_SECURE
+  #if (MI_ENCODE_FREELIST)
   mi_assert_internal(page->cookie != 0);
   #endif
   mi_assert_expensive(mi_page_is_valid_init(page));

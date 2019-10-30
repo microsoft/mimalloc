@@ -15,14 +15,14 @@ const mi_page_t _mi_page_empty = {
   0, false, false, false, false, 0, 0,
   { 0 }, false,
   NULL,    // free
-  #if MI_SECURE
+  #if MI_ENCODE_FREELIST
   0,
   #endif
   0,       // used
   NULL, 
   ATOMIC_VAR_INIT(0), ATOMIC_VAR_INIT(0),
   0, NULL, NULL, NULL
-  #if (MI_SECURE==0)
+  #ifndef MI_ENCODE_FREELIST
   , { NULL } // padding
   #endif
 };
@@ -64,8 +64,8 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  MI_STAT_COUNT_NULL(), \
+  { 0, 0 }, { 0, 0 }, { 0, 0 },  \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 

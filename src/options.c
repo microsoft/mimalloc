@@ -65,7 +65,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(cache_reset) },
   { 0, UNINIT, MI_OPTION(reset_decommits) },     // note: cannot enable this if secure is on
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
-  { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free
+  { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
   { 100, UNINIT, MI_OPTION(os_tag) }             // only apple specific for now but might serve more or less related purpose
 };
 
@@ -290,7 +290,9 @@ mi_attr_noreturn void _mi_fatal_error(const char* fmt, ...) {
   va_start(args, fmt);
   mi_vfprintf(NULL, "mimalloc: fatal: ", fmt, args);
   va_end(args);
-  exit(99);
+  #if (MI_SECURE>=0)
+  abort();
+  #endif
 }
 
 // --------------------------------------------------------

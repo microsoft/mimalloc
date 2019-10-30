@@ -476,7 +476,7 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, boo
     int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
     p = mi_unix_mmap(NULL, size, try_alignment, protect_flags, false, allow_large, is_large);
   #endif
-  _mi_stat_increase(&stats->mmap_calls, 1);
+  mi_stat_counter_increase(stats->mmap_calls, 1);
   if (p != NULL) {
     _mi_stat_increase(&stats->reserved, size);
     if (commit) { _mi_stat_increase(&stats->committed, size); }
@@ -631,7 +631,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   int err = 0;
   if (commit) {
     _mi_stat_increase(&stats->committed, csize);
-    _mi_stat_increase(&stats->commit_calls, 1);
+    _mi_stat_counter_increase(&stats->commit_calls, 1);
   }
   else {
     _mi_stat_decrease(&stats->committed, csize);

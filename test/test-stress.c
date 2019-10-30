@@ -17,7 +17,7 @@ terms of the MIT license.
 #include <mimalloc.h>
 
 // argument defaults
-static int THREADS = 32;    // more repeatable if THREADS <= #processors
+static int THREADS = 1;    // more repeatable if THREADS <= #processors
 static int N       = 20;    // scaling factor
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
@@ -162,6 +162,7 @@ int main(int argc, char** argv) {
   //printf("(reserve huge: %i\n)", res);
 
   //bench_start_program();
+  mi_stats_reset();
   memset((void*)transfer, 0, TRANSFERS*sizeof(void*));
   run_os_threads(THREADS);
   for (int i = 0; i < TRANSFERS; i++) {
@@ -169,7 +170,6 @@ int main(int argc, char** argv) {
   }
   #ifndef NDEBUG
   mi_collect(false);
-  mi_collect(true);
   #endif
   mi_stats_print(NULL);
   //bench_end_program();
@@ -195,6 +195,11 @@ static void run_os_threads(size_t nthreads) {
   for (size_t i = 0; i < nthreads; i++) {
     WaitForSingleObject(thandles[i], INFINITE);
   }
+  for (size_t i = 0; i < nthreads; i++) {
+    CloseHandle(thandles[i]);
+  }
+  free(tids);
+  free(thandles);
 }
 
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
