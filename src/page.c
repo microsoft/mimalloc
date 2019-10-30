@@ -441,8 +441,10 @@ void _mi_page_retire(mi_page_t* page) {
 
 static void mi_page_free_list_extend_secure(mi_heap_t* heap, mi_page_t* page, size_t extend, mi_stats_t* stats) {
   UNUSED(stats);
+  #if (MI_SECURE<=2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
+  #endif
   mi_assert_internal(page->capacity + extend <= page->reserved);
   void* page_area = _mi_page_start(_mi_page_segment(page), page, NULL);
   size_t bsize = page->block_size;
@@ -532,10 +534,12 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* page, size_t e
 // extra test in malloc? or cache effects?)
 static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* stats) {
   UNUSED(stats);
+  mi_assert_expensive(mi_page_is_valid_init(page));
+  #if (MI_SECURE<=2)
   mi_assert(page->free == NULL);
   mi_assert(page->local_free == NULL);
-  mi_assert_expensive(mi_page_is_valid_init(page));
   if (page->free != NULL) return;
+  #endif
   if (page->capacity >= page->reserved) return;
 
   size_t page_size;
