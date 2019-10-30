@@ -25,24 +25,30 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define MI_SECURE to enable security mitigations
 // #define MI_SECURE 1  // guard page around metadata
 // #define MI_SECURE 2  // guard page around each mimalloc page
-// #define MI_SECURE 3  // encode free lists
-// #define MI_SECURE 4  // all security enabled (checks for double free, corrupted free list and invalid pointer free)
+// #define MI_SECURE 3  // encode free lists (detect corrupted free list (buffer overflow), and invalid pointer free)
+// #define MI_SECURE 4  // experimental, may be more expensive: checks for double free.
 
 #if !defined(MI_SECURE)
 #define MI_SECURE 0
 #endif
 
-// Define MI_DEBUG as 1 for basic assert checks and statistics
-// set it to 2 to do internal asserts,
-// and to 3 to do extensive invariant checking.
+// Define MI_DEBUG for debug mode
+// #define MI_DEBUG 1  // basic assertion checks and statistics, check double free, corrupted free list, and invalid pointer free.
+// #define MI_DEBUG 2  // + internal assertion checks
+// #define MI_DEBUG 3  // + extensive internal invariant checking
 #if !defined(MI_DEBUG)
 #if !defined(NDEBUG) || defined(_DEBUG)
-#define MI_DEBUG 1
+#define MI_DEBUG 2
 #else
 #define MI_DEBUG 0
 #endif
 #endif
 
+// Encoded free lists allow detection of corrupted free lists
+// and can detect buffer overflows and double `free`s.
+#if (MI_SECURE>=3 || MI_DEBUG>=1) 
+#define MI_ENCODE_FREELIST  1
+#endif
 
 // ------------------------------------------------------
 // Platform specific values
@@ -117,6 +123,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "define more bins"
 #endif
 
+// The free lists use encoded next fields
+// (Only actually encodes when MI_ENCODED_FREELIST is defined.)
 typedef uintptr_t mi_encoded_t;
 
 // free lists contain blocks
@@ -125,6 +133,7 @@ typedef struct mi_block_s {
 } mi_block_t;
 
 
+// The delayed flags are used for efficient multi-threaded free-ing
 typedef enum mi_delayed_e {
   MI_NO_DELAYED_FREE = 0,
   MI_USE_DELAYED_FREE = 1,
@@ -180,7 +189,7 @@ typedef struct mi_page_s {
   bool                  is_zero;           // `true` if the blocks in the free list are zero initialized
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
-  #if MI_SECURE
+  #ifdef MI_ENCODE_FREELIST
   uintptr_t             cookie;            // random cookie to encode the free lists
   #endif
   size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
@@ -197,8 +206,8 @@ typedef struct mi_page_s {
 
   // improve page index calculation
   // without padding: 10 words on 64-bit, 11 on 32-bit. Secure adds one word
-  #if (MI_INTPTR_SIZE==8 && MI_SECURE>0) || (MI_INTPTR_SIZE==4 && MI_SECURE==0)
-  void*                 padding[1];        // 12 words on 64-bit in secure mode, 12 words on 32-bit plain
+  #if (MI_INTPTR_SIZE==8 && defined(MI_ENCODE_FREELIST)) || (MI_INTPTR_SIZE==4 && !defined(MI_ENCODE_FREELIST))
+  void*                 padding[1];        // 12 words on 64-bit with cookie, 12 words on 32-bit plain
   #endif
 } mi_page_t;
 

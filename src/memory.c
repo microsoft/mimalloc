@@ -461,11 +461,15 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
     // reset: 10x slowdown on malloc-large, decommit: 17x slowdown on malloc-large
     if (!is_large) {
       if (mi_option_is_enabled(mi_option_segment_reset)) {
-        _mi_os_reset(p, size, stats);  //
-        // _mi_os_decommit(p,size,stats); // if !is_eager_committed (and clear dirty bits)
+        if (!is_eager_committed &&  // cannot reset large pages
+          (mi_option_is_enabled(mi_option_eager_commit) ||  // cannot reset halfway committed segments, use `option_page_reset` instead
+            mi_option_is_enabled(mi_option_reset_decommits))) // but we can decommit halfway committed segments
+        {
+          _mi_os_reset(p, size, stats);
+          //_mi_os_decommit(p, size, stats);  // todo: and clear dirty bits?
+        }
       }
-      // else { _mi_os_reset(p,size,stats); }
-    }
+    }    
     if (!is_eager_committed) {
       // adjust commit statistics as we commit again when re-using the same slot
       _mi_stat_decrease(&stats->committed, mi_good_commit_size(size));
