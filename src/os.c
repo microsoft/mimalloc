@@ -869,13 +869,13 @@ static void mi_os_free_huge_reserved() {
 */
 
 #if !(MI_INTPTR_SIZE >= 8 && (defined(_WIN32) || defined(MI_OS_USE_MMAP)))
-int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept {
+int _mi_os_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept {
   UNUSED(pages); UNUSED(max_secs);
   if (pages_reserved != NULL) *pages_reserved = 0;
   return ENOMEM; 
 }
 #else
-int mi_reserve_huge_os_pages( size_t pages, double max_secs, size_t* pages_reserved ) mi_attr_noexcept
+int _mi_os_reserve_huge_os_pages( size_t pages, double max_secs, size_t* pages_reserved ) mi_attr_noexcept
 {
   if (pages_reserved != NULL) *pages_reserved = 0;
   if (max_secs==0) return ETIMEDOUT; // timeout 
