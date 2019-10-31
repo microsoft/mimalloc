@@ -13,7 +13,7 @@ option(MI_SECURE            "Use security mitigations (like guard pages and rand
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
 option(MI_BUILD_TESTS       "Build test executables" ON)
 
-set(mi_install_dir "lib/mimalloc-${mi_version}")
+set(mi_install_dir "${CMAKE_INSTALL_PREFIX}/lib/mimalloc-${mi_version}")
 
 set(mi_sources
     src/stats.c
