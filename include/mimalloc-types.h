@@ -239,11 +239,13 @@ typedef mi_page_t mi_slice_t;
 // the OS. Inside segments we allocated fixed size _pages_ that
 // contain blocks.
 typedef struct mi_segment_s {
-  struct mi_segment_s*          next;   // the list of freed segments in the cache
-  volatile _Atomic(struct mi_segment_s*) abandoned_next;
-
+  size_t            memid;              // memory id for arena allocation
   bool              mem_is_fixed;       // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)    
   bool              mem_is_committed;   // `true` if the whole segment is eagerly committed
+
+  // from here is zero initialized
+  struct mi_segment_s*          next;   // the list of freed segments in the cache
+  volatile _Atomic(struct mi_segment_s*) abandoned_next;
 
   size_t            abandoned;          // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
   size_t            used;               // count of pages in use

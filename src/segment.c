@@ -284,7 +284,8 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   if (MI_SECURE>0) {
     _mi_os_unprotect(segment, mi_segment_size(segment)); // ensure no more guard pages are set
   }
-  _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
+  // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
+  _mi_arena_free(segment, mi_segment_size(segment), segment->memid, tld->stats);
 }
 
 
@@ -598,29 +599,35 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
   
   // Try to get from our cache first
   mi_segment_t* segment = mi_segment_cache_pop(segment_slices, tld);
+  bool is_zero = false;
   if (segment==NULL) {
     // Allocate the segment from the OS
     bool mem_large = (!eager_delay && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy    
-    segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, commit, &mem_large, os_tld);
+    size_t memid = 0;
+    // segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, commit, &mem_large, os_tld);
+    segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_zero, &memid, os_tld);
     if (segment == NULL) return NULL;  // failed to allocate
     mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
     if (!commit) {
       // at least commit the info slices
       mi_assert_internal(MI_COMMIT_SIZE > info_slices*MI_SEGMENT_SLICE_SIZE);
-      bool is_zero = false;
       _mi_os_commit(segment, MI_COMMIT_SIZE, &is_zero, tld->stats);
     }
+    segment->memid = memid;
     segment->mem_is_fixed = mem_large;
     segment->mem_is_committed = commit;
     mi_segments_track_size((long)(segment_size), tld);
     mi_segment_map_allocated_at(segment);
   }
 
-  // zero the segment info? -- not needed as it is zero initialized from the OS 
-  // memset(segment, 0, info_size);  
+  // zero the segment info? -- not always needed as it is zero initialized from the OS 
+  if (!is_zero) {
+    ptrdiff_t ofs = offsetof(mi_segment_t, next);
+    size_t    prefix = offsetof(mi_segment_t, slices) - ofs;
+    memset((uint8_t*)segment+ofs, 0, prefix + sizeof(mi_slice_t)*segment_slices);
+  }
   
   // initialize segment info
-  memset(segment,0,offsetof(mi_segment_t,slices));  
   segment->segment_slices = segment_slices;
   segment->segment_info_slices = info_slices;
   segment->thread_id = _mi_thread_id();
@@ -629,7 +636,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
   segment->kind = (required == 0 ? MI_SEGMENT_NORMAL : MI_SEGMENT_HUGE);
   segment->allow_decommit = !commit;
   segment->commit_mask = (!commit ? 0x01 : ~((uintptr_t)0)); // on lazy commit, the initial part is always committed
-  memset(segment->slices, 0, sizeof(mi_slice_t)*(info_slices+1));
+  // memset(segment->slices, 0, sizeof(mi_slice_t)*(info_slices+1));
   _mi_stat_increase(&tld->stats->page_committed, mi_segment_info_size(segment));
 
   // set up guard pages

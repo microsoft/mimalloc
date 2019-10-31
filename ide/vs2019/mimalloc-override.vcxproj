@@ -231,6 +231,7 @@
     </ClCompile>
     <ClCompile Include="..\..\src\alloc-posix.c" />
     <ClCompile Include="..\..\src\alloc.c" />
+    <ClCompile Include="..\..\src\arena.c" />
     <ClCompile Include="..\..\src\heap.c" />
     <ClCompile Include="..\..\src\init.c" />
     <ClCompile Include="..\..\src\options.c" />

@@ -65,6 +65,12 @@ bool      _mi_os_decommit(void* p, size_t size, mi_stats_t* stats);
 bool      _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
 bool      _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 void*     _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
+int       _mi_os_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
+
+// arena.c
+void*     _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
+void*     _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
+void      _mi_arena_free(void* p, size_t size, size_t memid, mi_stats_t* stats);
 
 /*
 // memory.c
