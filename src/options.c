@@ -53,11 +53,6 @@ static mi_option_desc_t options[_mi_option_last] =
 
   // the following options are experimental and not all combinations make sense.
   { 1, UNINIT, MI_OPTION(eager_commit) },        // note: needs to be on when eager_region_commit is enabled
-  #ifdef _WIN32   // and BSD?
-  { 0, UNINIT, MI_OPTION(eager_region_commit) }, // don't commit too eagerly on windows (just for looks...)
-  #else
-  { 1, UNINIT, MI_OPTION(eager_region_commit) }, 
-  #endif
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },
   { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
@@ -65,6 +60,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(cache_reset) },
   { 0, UNINIT, MI_OPTION(reset_decommits) },     // note: cannot enable this if secure is on
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
+  { 0, UNINIT, MI_OPTION(allow_decommit) },      // decommit pages when not eager committed
   { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
   { 100, UNINIT, MI_OPTION(os_tag) }             // only apple specific for now but might serve more or less related purpose
 };

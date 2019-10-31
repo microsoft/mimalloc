@@ -261,7 +261,6 @@ typedef enum mi_option_e {
   mi_option_verbose,
   // the following options are experimental
   mi_option_eager_commit,
-  mi_option_eager_region_commit,
   mi_option_large_os_pages,         // implies eager commit
   mi_option_reserve_huge_os_pages,
   mi_option_segment_cache,
@@ -269,6 +268,7 @@ typedef enum mi_option_e {
   mi_option_cache_reset,
   mi_option_reset_decommits,
   mi_option_eager_commit_delay,
+  mi_option_allow_decommit,
   mi_option_segment_reset,
   mi_option_os_tag,
   _mi_option_last

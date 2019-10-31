@@ -634,7 +634,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
   segment->cookie = _mi_ptr_cookie(segment);
   segment->slice_entries = slice_entries;
   segment->kind = (required == 0 ? MI_SEGMENT_NORMAL : MI_SEGMENT_HUGE);
-  segment->allow_decommit = !commit;
+  segment->allow_decommit = !commit && mi_option_is_enabled(mi_option_allow_decommit);
   segment->commit_mask = (!commit ? 0x01 : ~((uintptr_t)0)); // on lazy commit, the initial part is always committed
   // memset(segment->slices, 0, sizeof(mi_slice_t)*(info_slices+1));
   _mi_stat_increase(&tld->stats->page_committed, mi_segment_info_size(segment));
