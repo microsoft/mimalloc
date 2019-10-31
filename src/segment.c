@@ -383,12 +383,11 @@ static uintptr_t mi_segment_commit_mask(mi_segment_t* segment, bool conservative
   
   uintptr_t bitcount = *full_size / MI_COMMIT_SIZE; // can be 0
   if (bitidx + bitcount > MI_INTPTR_SIZE*8) {
-    _mi_warning_message("%zu %zu %zu %zu 0x%p %zu\n", bitidx, bitcount, start, end, p, size);
+    _mi_warning_message("commit mask overflow: %zu %zu %zu %zu 0x%p %zu\n", bitidx, bitcount, start, end, p, size);
   }
   mi_assert_internal((bitidx + bitcount) <= (MI_INTPTR_SIZE*8));
 
   uintptr_t mask = (((uintptr_t)1 << bitcount) - 1) << bitidx;
-
   return mask;
 }
 
