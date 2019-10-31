@@ -232,21 +232,23 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool*
     for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
       mi_arena_t* arena = (mi_arena_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*, &mi_arenas[i]));
       if (arena==NULL) break;
-      size_t block_index = SIZE_MAX;
-      void* p = mi_arena_alloc(arena, bcount, is_zero, &block_index);
-      if (p != NULL) {
-        mi_assert_internal(block_index != SIZE_MAX);
-        #if MI_DEBUG>=1
-        _Atomic(mi_block_info_t)* block = &arena->blocks[block_index];
-        mi_block_info_t binfo = mi_atomic_read(block);
-        mi_assert_internal(mi_block_is_in_use(binfo));
-        mi_assert_internal(mi_block_count(binfo)*MI_ARENA_BLOCK_SIZE >= size);
-        #endif 
-        *memid = mi_memid_create(i, block_index);
-        *commit = true;           // TODO: support commit on demand?
-        *large = arena->is_large;
-        mi_assert_internal((uintptr_t)p % alignment == 0);
-        return p;
+      if (*large || !arena->is_large) { // large OS pages allowed, or arena is not large OS pages
+        size_t block_index = SIZE_MAX;
+        void* p = mi_arena_alloc(arena, bcount, is_zero, &block_index);
+        if (p != NULL) {
+          mi_assert_internal(block_index != SIZE_MAX);
+          #if MI_DEBUG>=1
+            _Atomic(mi_block_info_t)* block = &arena->blocks[block_index];
+            mi_block_info_t binfo = mi_atomic_read(block);
+            mi_assert_internal(mi_block_is_in_use(binfo));
+            mi_assert_internal(mi_block_count(binfo)*MI_ARENA_BLOCK_SIZE >= size);
+          #endif 
+          * memid = mi_memid_create(i, block_index);
+          *commit = true;           // TODO: support commit on demand?
+          *large  = arena->is_large;
+          mi_assert_internal((uintptr_t)p % alignment == 0);
+          return p;
+        }
       }
     }
   }
