@@ -14,6 +14,12 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <string.h>  // memset
 
+// os.c
+void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
+void* _mi_os_try_alloc_from_huge_reserved(size_t size, size_t try_alignment);
+int   _mi_os_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
+
+
 /* -----------------------------------------------------------
   Arena allocation
 ----------------------------------------------------------- */
@@ -47,17 +53,16 @@ static _Atomic(uintptr_t)   mi_arena_count; // = 0
   the arena index +1, and the upper bits the block index.
 ----------------------------------------------------------- */
 
-// Use `SIZE_MAX` as a special id for direct OS allocated memory.
-#define MI_MEMID_OS   (SIZE_MAX)
+// Use `0` as a special id for direct OS allocated memory.
+#define MI_MEMID_OS   0
 
 static size_t mi_memid_create(size_t arena_index, size_t block_index) {
-  mi_assert_internal(arena_index < 0xFE);
+  mi_assert_internal(arena_index < 0xFF);
   return ((block_index << 8) | ((arena_index+1) & 0xFF));
 }
 
 static void mi_memid_indices(size_t memid, size_t* arena_index, size_t* block_index) {
   mi_assert_internal(memid != MI_MEMID_OS);
-  mi_assert_internal(memid != 0);
   *arena_index = (memid & 0xFF) - 1;
   *block_index = (memid >> 8);
 }
@@ -173,7 +178,7 @@ static void* mi_arena_allocx(mi_arena_t* arena, size_t start_idx, size_t end_idx
           continue;
         }
         else {
-          // got it, now split off the needed part          
+          // got it, now split off the needed part
           if (needed_bcount < bcount) {
             mi_atomic_write(block + needed_bcount, mi_block_info_create(bcount - needed_bcount, false));
             mi_atomic_write(block, mi_block_info_create(needed_bcount, true));
@@ -243,7 +248,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool*
             mi_assert_internal(mi_block_is_in_use(binfo));
             mi_assert_internal(mi_block_count(binfo)*MI_ARENA_BLOCK_SIZE >= size);
           #endif 
-          * memid = mi_memid_create(i, block_index);
+          *memid  = mi_memid_create(i, block_index);
           *commit = true;           // TODO: support commit on demand?
           *large  = arena->is_large;
           mi_assert_internal((uintptr_t)p % alignment == 0);
@@ -277,7 +282,6 @@ void _mi_arena_free(void* p, size_t size, size_t memid, mi_stats_t* stats) {
     _mi_os_free(p, size, stats);
   }
   else {
-    mi_assert_internal(memid != 0);
     // allocated in an arena
     size_t arena_idx;
     size_t block_idx;
@@ -322,7 +326,7 @@ static bool mi_arena_add(mi_arena_t* arena) {
   mi_assert_internal((uintptr_t)arena->start % MI_SEGMENT_ALIGN == 0);
   mi_assert_internal(arena->block_count > 0);
   mi_assert_internal(mi_mem_is_zero(arena->blocks,arena->block_count*sizeof(mi_block_info_t)));
-  
+
   uintptr_t i = mi_atomic_addu(&mi_arena_count,1);
   if (i >= MI_MAX_ARENAS) {
     mi_atomic_subu(&mi_arena_count, 1);
@@ -340,8 +344,6 @@ static bool mi_arena_add(mi_arena_t* arena) {
 ----------------------------------------------------------- */
 
 #include <errno.h>
-
-void* _mi_os_try_alloc_from_huge_reserved(size_t size, size_t try_alignment);
 
 int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept {
   size_t pages_reserved_default = 0;

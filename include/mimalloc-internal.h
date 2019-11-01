@@ -72,20 +72,6 @@ void*     _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, b
 void*     _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
 void      _mi_arena_free(void* p, size_t size, size_t memid, mi_stats_t* stats);
 
-/*
-// memory.c
-void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* id, mi_os_tld_t* tld);
-void       _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats);
-
-bool       _mi_mem_reset(void* p, size_t size, mi_stats_t* stats);
-bool       _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
-bool       _mi_mem_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
-bool       _mi_mem_protect(void* addr, size_t size);
-bool       _mi_mem_unprotect(void* addr, size_t size);
-
-void        _mi_mem_collect(mi_stats_t* stats);
-*/
-
 // "segment.c"
 mi_page_t* _mi_segment_page_alloc(size_t block_wsize, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
 void       _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld);
