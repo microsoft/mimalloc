@@ -6,7 +6,16 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 /* ----------------------------------------------------------------------------
+"Arenas" are fixed area's of OS memory from which we can allocate
+large blocks (>= MI_ARENA_BLOCK_SIZE, 16MiB). Currently only used to
+allocate in one arena consisting of huge OS pages -- otherwise it 
+delegates to direct allocation from the OS.
 
+In the future, we can expose an API to manually add more arenas which
+is sometimes needed for embedded devices or shared memory for example.
+
+The arena allocation needs to be thread safe and we use a lock-free scan
+with on-demand coalescing.
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
@@ -16,8 +25,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // os.c
 void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
-void* _mi_os_try_alloc_from_huge_reserved(size_t size, size_t try_alignment);
-int   _mi_os_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
+int   _mi_os_alloc_huge_os_pages(size_t pages, double max_secs, void** pstart, size_t* pages_reserved, size_t* psize) mi_attr_noexcept;
+void  _mi_os_free(void* p, size_t size, mi_stats_t* stats);
 
 /* -----------------------------------------------------------
   Arena allocation
@@ -338,25 +347,27 @@ static bool mi_arena_add(mi_arena_t* arena) {
 
 /* -----------------------------------------------------------
   Reserve a huge page arena.
-  TODO: improve OS api to just reserve and claim a huge
-  page area at once, (and return the total size).
 ----------------------------------------------------------- */
-
-#include <errno.h>
+#include <errno.h> // ENOMEM
 
 int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept {
   size_t pages_reserved_default = 0;
   if (pages_reserved==NULL) pages_reserved = &pages_reserved_default;
-  int err = _mi_os_reserve_huge_os_pages(pages, max_secs, pages_reserved);
-  if (*pages_reserved==0) return err;
-  size_t hsize = (*pages_reserved) * GiB;
-  void* p = _mi_os_try_alloc_from_huge_reserved(hsize, MI_SEGMENT_ALIGN);
-  mi_assert_internal(p != NULL);
-  if (p == NULL) return ENOMEM;
+  size_t hsize = 0;
+  void* p = NULL;
+  int err = _mi_os_alloc_huge_os_pages(pages, max_secs, &p, pages_reserved, &hsize);
+  _mi_verbose_message("reserved %zu huge pages\n", *pages_reserved);
+  if (p==NULL) return err;
+  // err might be != 0 but that is fine, we just got less pages.
+  mi_assert_internal(*pages_reserved > 0 && hsize > 0 && *pages_reserved <= pages);
   size_t bcount = hsize / MI_ARENA_BLOCK_SIZE;
   size_t asize = sizeof(mi_arena_t) + (bcount*sizeof(mi_block_info_t)); // one too much
-  mi_arena_t* arena = (mi_arena_t*)_mi_os_alloc(asize, &_mi_heap_default->tld->stats);
-  if (arena == NULL) return ENOMEM;
+  mi_arena_t* arena = (mi_arena_t*)_mi_os_alloc(asize, &_mi_stats_main);
+  if (arena == NULL) {
+    *pages_reserved = 0;
+    _mi_os_free(p, hsize, &_mi_stats_main);
+    return ENOMEM;
+  }
   arena->block_count = bcount;
   arena->start = (uint8_t*)p;
   arena->block_bottom = 0;
