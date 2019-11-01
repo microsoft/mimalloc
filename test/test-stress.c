@@ -18,7 +18,7 @@ terms of the MIT license.
 
 // argument defaults
 static int THREADS = 32;    // more repeatable if THREADS <= #processors
-static int N       = 40;    // scaling factor
+static int N       = 20;    // scaling factor
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int N       = 100;  // scaling factor
