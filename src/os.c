@@ -36,8 +36,6 @@ terms of the MIT license. A copy of the license can be found in the file
   large OS pages (if MIMALLOC_LARGE_OS_PAGES is true).
 ----------------------------------------------------------- */
 bool    _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
-bool    _mi_os_is_huge_reserved(void* p);
-void*   _mi_os_try_alloc_from_huge_reserved(size_t size, size_t try_alignment);
 
 static void* mi_align_up_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
@@ -180,7 +178,7 @@ void _mi_os_init() {
 
 static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats_t* stats)
 {
-  if (addr == NULL || size == 0 || _mi_os_is_huge_reserved(addr)) return true;
+  if (addr == NULL || size == 0) return true; // || _mi_os_is_huge_reserved(addr)
   bool err = false;
 #if defined(_WIN32)
   err = (VirtualFree(addr, 0, MEM_RELEASE) == 0);
@@ -627,7 +625,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   *is_zero = false;
   size_t csize;
   void* start = mi_os_page_align_areax(conservative, addr, size, &csize);
-  if (csize == 0 || _mi_os_is_huge_reserved(addr)) return true;
+  if (csize == 0) return true;  // || _mi_os_is_huge_reserved(addr))
   int err = 0;
   if (commit) {
     _mi_stat_increase(&stats->committed, csize);
@@ -683,7 +681,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   // page align conservatively within the range
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
-  if (csize == 0 || _mi_os_is_huge_reserved(addr)) return true;
+  if (csize == 0) return true;  // || _mi_os_is_huge_reserved(addr)
   if (reset) _mi_stat_increase(&stats->reset, csize);
         else _mi_stat_decrease(&stats->reset, csize);
   if (!reset) return true; // nothing to do on unreset!
@@ -757,9 +755,11 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   size_t csize = 0;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return false;
+  /*
   if (_mi_os_is_huge_reserved(addr)) {
 	  _mi_warning_message("cannot mprotect memory allocated in huge OS pages\n");
   }
+  */
   int err = 0;
 #ifdef _WIN32
   DWORD oldprotect = 0;
@@ -815,79 +815,41 @@ will be reused.
 -----------------------------------------------------------------------------*/
 #define MI_HUGE_OS_PAGE_SIZE ((size_t)1 << 30)  // 1GiB
 
-typedef struct mi_huge_info_s {
-  volatile _Atomic(void*)  start;     // start of huge page area (32TiB)
-  volatile _Atomic(size_t) reserved;  // total reserved size
-  volatile _Atomic(size_t) used;      // currently allocated
-} mi_huge_info_t;
-
-static mi_huge_info_t os_huge_reserved = { NULL, 0, ATOMIC_VAR_INIT(0) };
-
-bool _mi_os_is_huge_reserved(void* p) {
-  return (mi_atomic_read_ptr(&os_huge_reserved.start) != NULL &&
-          p >= mi_atomic_read_ptr(&os_huge_reserved.start) &&
-          (uint8_t*)p < (uint8_t*)mi_atomic_read_ptr(&os_huge_reserved.start) + mi_atomic_read(&os_huge_reserved.reserved));
-}
-
-void* _mi_os_try_alloc_from_huge_reserved(size_t size, size_t try_alignment)
-{
-  // only allow large aligned allocations (e.g. regions)
-  if (size < MI_SEGMENT_SIZE || (size % MI_SEGMENT_SIZE) != 0) return NULL;
-  if (try_alignment > MI_SEGMENT_SIZE) return NULL;
-  if (mi_atomic_read_ptr(&os_huge_reserved.start)==NULL) return NULL;
-  if (mi_atomic_read(&os_huge_reserved.used) >= mi_atomic_read(&os_huge_reserved.reserved)) return NULL; // already full
-
-  // always aligned
-  mi_assert_internal(mi_atomic_read(&os_huge_reserved.used) % MI_SEGMENT_SIZE == 0 );
-  mi_assert_internal( (uintptr_t)mi_atomic_read_ptr(&os_huge_reserved.start) % MI_SEGMENT_SIZE == 0 );
-
-  // try to reserve space
-  size_t base = mi_atomic_addu( &os_huge_reserved.used, size );
-  if ((base + size) > os_huge_reserved.reserved) {
-    // "free" our over-allocation
-    mi_atomic_subu( &os_huge_reserved.used, size);
-    return NULL;
-  }
-
-  // success!
-  uint8_t* p = (uint8_t*)mi_atomic_read_ptr(&os_huge_reserved.start) + base;
-  mi_assert_internal( (uintptr_t)p % MI_SEGMENT_SIZE == 0 );
-  return p;
-}
-
-/*
-static void mi_os_free_huge_reserved() {
-  uint8_t* addr = os_huge_reserved.start;
-  size_t total  = os_huge_reserved.reserved;
-  os_huge_reserved.reserved = 0;
-  os_huge_reserved.start = NULL;
-  for( size_t current = 0; current < total; current += MI_HUGE_OS_PAGE_SIZE) {
-    _mi_os_free(addr + current, MI_HUGE_OS_PAGE_SIZE, &_mi_stats_main);
-  }
-}
-*/
-
 #if !(MI_INTPTR_SIZE >= 8 && (defined(_WIN32) || defined(MI_OS_USE_MMAP)))
-int _mi_os_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept {
+int _mi_os_alloc_huge_os_pages(size_t pages, double max_secs, void** start, size_t* pages_reserved, size_t* size) mi_attr_noexcept {
   UNUSED(pages); UNUSED(max_secs);
+  if (start != NULL) *start = NULL;
   if (pages_reserved != NULL) *pages_reserved = 0;
-  return ENOMEM;
+  if (size != NULL) *size = 0;
+  return ENOMEM; 
 }
 #else
-int _mi_os_reserve_huge_os_pages( size_t pages, double max_secs, size_t* pages_reserved ) mi_attr_noexcept
+static _Atomic(uintptr_t) huge_top; // = 0
+
+int _mi_os_alloc_huge_os_pages(size_t pages, double max_secs, void** pstart, size_t* pages_reserved, size_t* psize) mi_attr_noexcept 
 {
-  if (pages_reserved != NULL) *pages_reserved = 0;
-  if (max_secs==0) return ETIMEDOUT; // timeout
+  *pstart = NULL;
+  *pages_reserved = 0;
+  *psize = 0;
+  if (max_secs==0) return ETIMEDOUT; // timeout 
   if (pages==0) return 0;            // ok
-  if (!mi_atomic_cas_ptr_strong(&os_huge_reserved.start,(void*)1,NULL)) return ETIMEDOUT; // already reserved
 
-  // Set the start address after the 32TiB area
-  uint8_t* start = (uint8_t*)((uintptr_t)32 << 40); // 32TiB virtual start address
-  #if (MI_SECURE>0 || MI_DEBUG==0)     // security: randomize start of huge pages unless in debug mode
-  uintptr_t r = _mi_random_init((uintptr_t)&mi_reserve_huge_os_pages);
-  start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x3FF));  // (randomly 0-1024)*1GiB == 0 to 1TiB
-  #endif
+  // Atomically claim a huge address range
+  size_t size = pages * MI_HUGE_OS_PAGE_SIZE;
+  uint8_t* start;
+  do {
+    start = (uint8_t*)mi_atomic_addu(&huge_top, size);  
+    if (start == NULL) {
+      uintptr_t top = ((uintptr_t)32 << 40);  // 32TiB virtual start address
+      #if (MI_SECURE>0 || MI_DEBUG==0)        // security: randomize start of huge pages unless in debug mode
+      uintptr_t r = _mi_random_init((uintptr_t)&_mi_os_alloc_huge_os_pages);
+      top += ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x3FF));  // (randomly 0-1024)*1GiB == 0 to 1TiB
+      #endif    
+      mi_atomic_cas_strong(&huge_top, top, 0);
+    }
+  } while (start == NULL);
 
+  
   // Allocate one page at the time but try to place them contiguously
   // We allocate one page at the time to be able to abort if it takes too long
   double start_t = _mi_clock_start();
@@ -924,16 +886,13 @@ int _mi_os_reserve_huge_os_pages( size_t pages, double max_secs, size_t* pages_r
     }
     // success, record it
     if (page==0) {
-      mi_atomic_write_ptr(&os_huge_reserved.start, addr);  // don't switch the order of these writes
-      mi_atomic_write(&os_huge_reserved.reserved, MI_HUGE_OS_PAGE_SIZE);
+      *pstart = addr;
     }
-    else {
-      mi_atomic_addu(&os_huge_reserved.reserved,MI_HUGE_OS_PAGE_SIZE);
-    }
+    *psize += MI_HUGE_OS_PAGE_SIZE; 
+    *pages_reserved += 1;
     _mi_stat_increase(&_mi_stats_main.committed, MI_HUGE_OS_PAGE_SIZE);
     _mi_stat_increase(&_mi_stats_main.reserved, MI_HUGE_OS_PAGE_SIZE);
-    if (pages_reserved != NULL) { *pages_reserved = page + 1; }
-
+    
     // check for timeout
     double elapsed = _mi_clock_end(start_t);
     if (elapsed > max_secs) return ETIMEDOUT;
@@ -941,8 +900,8 @@ int _mi_os_reserve_huge_os_pages( size_t pages, double max_secs, size_t* pages_r
       double estimate = ((elapsed / (double)(page+1)) * (double)pages);
       if (estimate > 1.5*max_secs) return ETIMEDOUT; // seems like we are going to timeout
     }
-  }
-  _mi_verbose_message("reserved %zu huge pages\n", pages);
+  }  
+  mi_assert_internal(*psize == size);
   return 0;
 }
 #endif
