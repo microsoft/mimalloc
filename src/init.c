@@ -99,8 +99,8 @@ static mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
-  { 0, -1, tld_main_stats },   // os
-  { MI_STATS_NULL }            // stats
+  { 0, tld_main_stats },   // os
+  { MI_STATS_NULL }        // stats
 };
 
 mi_heap_t _mi_heap_main = {
@@ -218,7 +218,6 @@ static bool _mi_heap_init(void) {
     memset(tld, 0, sizeof(*tld));
     tld->heap_backing = heap;
     tld->segments.stats = &tld->stats;
-    tld->os.numa_node = -1;
     tld->os.stats = &tld->stats;
     _mi_heap_default = heap;
   }
