@@ -211,7 +211,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
     if (mi_atomic_cas_strong(&region->info, info, 0)) {
       // update the region count
       region->arena_memid = arena_memid;
-      mi_atomic_write(&region->numa_node, _mi_os_numa_node() + 1);
+      mi_atomic_write(&region->numa_node, _mi_os_numa_node(tld) + 1);
       mi_atomic_increment(&regions_count);
     }
     else {
@@ -220,7 +220,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       for(size_t i = 1; i <= 4 && idx + i < MI_REGION_MAX; i++) {
         if (mi_atomic_cas_strong(&regions[idx+i].info, info, 0)) {
           regions[idx+i].arena_memid = arena_memid;
-          mi_atomic_write(&regions[idx+i].numa_node, _mi_os_numa_node() + 1);
+          mi_atomic_write(&regions[idx+i].numa_node, _mi_os_numa_node(tld) + 1);
           mi_atomic_increment(&regions_count);
           start = NULL;
           break;
@@ -430,7 +430,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* l
   mi_assert_internal(blocks > 0 && blocks <= 8*MI_INTPTR_SIZE);
 
   // find a range of free blocks
-  int numa_node = _mi_os_numa_node();
+  int numa_node = _mi_os_numa_node(tld);
   void* p = NULL;
   size_t count = mi_atomic_read(&regions_count);
   size_t idx = tld->region_idx; // start at 0 to reuse low addresses? Or, use tld->region_idx to reduce contention?
