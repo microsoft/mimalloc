@@ -902,29 +902,21 @@ static int mi_os_numa_node_countx(void) {
   GetNumaHighestNodeNumber(&numa_max);
   return (int)(numa_max + 1);
 }
-#elif MI_HAS_NUMA
+#elif defined(__linux__)
 #include <dirent.h>
 #include <stdlib.h>
-#include <numaif.h>
+#include <sys/syscall.h>
+
 static int mi_os_numa_nodex(void) {
-  #define MI_NUMA_NODE_SLOW  // too slow, so cache it
-  // TODO: perhaps use RDTSCP instruction on x64? 
-  // see <https://stackoverflow.com/questions/16862620/numa-get-current-node-core>
-  #define MI_MAX_MASK (4)          // support at most 256 nodes
-  unsigned long mask[MI_MAX_MASK];
-  memset(mask,0,MI_MAX_MASK*sizeof(long));
-  int mode = 0;
-  long err = get_mempolicy(&mode, mask, MI_MAX_MASK*sizeof(long)*8, NULL, 0 /* thread policy */);
+#ifdef SYS_getcpu
+  unsigned node = 0;
+  unsigned ncpu = 0;
+  int err = syscall(SYS_getcpu, &ncpu, &node, NULL);
   if (err != 0) return 0;
-  // find the lowest bit that is set
-  for(int i = 0; i < MI_MAX_MASK; i++) {
-    for(int j = 0; j < (int)(sizeof(long)*8); j++) {
-      if ((mask[i] & (1UL << j)) != 0) {
-        return (i*sizeof(long)*8 + j);
-      }
-    }
-  }
-	return 0;
+  return (int)node;
+#else
+  return 0;
+#endif
 }
 
 static int mi_os_numa_node_countx(void) {
@@ -967,21 +959,8 @@ int _mi_os_numa_node_count(void) {
 }
 
 int _mi_os_numa_node(mi_os_tld_t* tld) {
-  int numa_node;
-#ifndef MI_NUMA_NODE_SLOW
   UNUSED(tld);
-  numa_node = mi_os_numa_nodex();
-#else
-  if (mi_unlikely(tld->numa_node < 0)) {
-    // Cache the NUMA node of the thread if the call is slow.
-    // This may not be correct as threads can migrate to another cpu on
-    // another node -- however, for memory allocation this just means we keep
-    // using the same 'node id' for its allocations; new OS allocations
-    // naturally come from the actual node so in practice this may be fine.
-    tld->numa_node = mi_os_numa_nodex(); 
-  }
-  numa_node = tld->numa_node;
-#endif
+  int numa_node = mi_os_numa_nodex();
   // never more than the node count and >= 0
   int numa_count = _mi_os_numa_node_count();
   if (numa_node >= numa_count) { numa_node = numa_node % numa_count; }
