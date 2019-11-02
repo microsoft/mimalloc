@@ -980,7 +980,7 @@ int _mi_os_numa_node(mi_os_tld_t* tld) {
     // naturally come from the actual node so in practice this may be fine.
     tld->numa_node = mi_os_numa_nodex(); 
   }
-  numa_node = tld->numa_node
+  numa_node = tld->numa_node;
 #endif
   // never more than the node count and >= 0
   int numa_count = _mi_os_numa_node_count();
