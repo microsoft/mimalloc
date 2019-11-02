@@ -435,7 +435,7 @@ static void mi_process_load(void) {
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages     = mi_option_get(mi_option_reserve_huge_os_pages);
     double max_secs = (double)pages / 2.0; // 0.5s per page (1GiB)
-    mi_reserve_huge_os_pages(pages, max_secs, NULL);
+    mi_reserve_huge_os_pages_interleave(pages);
   }
 }
 

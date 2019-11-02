@@ -56,6 +56,7 @@ void       _mi_os_init(void);                                      // called fro
 void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocate thread local data
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
 size_t     _mi_os_good_alloc_size(size_t size);
+int        _mi_os_numa_node(void);
 
 
 // memory.c

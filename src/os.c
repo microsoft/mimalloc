@@ -170,7 +170,7 @@ void _mi_os_init() {
     os_alloc_granularity = os_page_size;
   }
   if (mi_option_is_enabled(mi_option_large_os_pages)) {
-    large_os_page_size = (1UL << 21); // 2MiB
+    large_os_page_size = 2*MiB;
   }
 }
 #endif
@@ -207,31 +207,6 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 
 #ifdef _WIN32
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
-#if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
-  // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
-  if ((size % ((uintptr_t)1 << 30)) == 0 /* 1GiB multiple */
-    && (flags & MEM_LARGE_PAGES) != 0 && (flags & MEM_COMMIT) != 0 && (flags & MEM_RESERVE) != 0
-    && (addr != NULL || try_alignment == 0 || try_alignment % _mi_os_page_size() == 0)
-    && pNtAllocateVirtualMemoryEx != NULL)
-  {
-    #ifndef MEM_EXTENDED_PARAMETER_NONPAGED_HUGE
-    #define MEM_EXTENDED_PARAMETER_NONPAGED_HUGE  (0x10)
-    #endif
-    MEM_EXTENDED_PARAMETER param = { 0, 0 };
-    param.Type = 5; // == MemExtendedParameterAttributeFlags;
-    param.ULong64 = MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
-    SIZE_T psize = size;
-    void*  base  = addr;
-    NTSTATUS err = (*pNtAllocateVirtualMemoryEx)(GetCurrentProcess(), &base, &psize, flags, PAGE_READWRITE, &param, 1);
-    if (err == 0) {
-      return base;
-    }
-    else {
-      // else fall back to regular large OS pages
-      _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (error 0x%lx)\n", err);
-    }
-  }
-#endif
 #if (MI_INTPTR_SIZE >= 8) 
   // on 64-bit systems, try to use the virtual address area after 4TiB for 4MiB aligned allocations
   void* hint;
@@ -364,7 +339,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
       lflags |= MAP_HUGETLB;
       #endif
       #ifdef MAP_HUGE_1GB
-      if ((size % ((uintptr_t)1 << 30)) == 0) {
+      if ((size % GiB) == 0) {
         lflags |= MAP_HUGE_1GB;
       }
       else
@@ -400,10 +375,10 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
     p = mi_unix_mmapx(addr, size, try_alignment, protect_flags, flags, fd);    
     #if defined(MADV_HUGEPAGE)
     // Many Linux systems don't allow MAP_HUGETLB but they support instead
-    // transparent huge pages (TPH). It is not required to call `madvise` with MADV_HUGE
+    // transparent huge pages (THP). It is not required to call `madvise` with MADV_HUGE
     // though since properly aligned allocations will already use large pages if available
     // in that case -- in particular for our large regions (in `memory.c`).
-    // However, some systems only allow TPH if called with explicit `madvise`, so
+    // However, some systems only allow THP if called with explicit `madvise`, so
     // when large OS pages are enabled for mimalloc, we call `madvice` anyways.
     if (allow_large && use_large_os_page(size, try_alignment)) {
       if (madvise(p, size, MADV_HUGEPAGE) == 0) {
@@ -810,101 +785,146 @@ bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize, mi_stats_t* stats) {
 
 
 /* ----------------------------------------------------------------------------
-Support for huge OS pages (1Gib) that are reserved up-front and never
-released. Only regions are allocated in here (see `memory.c`) so the memory
-will be reused.
+Support for allocating huge OS pages (1Gib) that are reserved up-front 
+and possibly associated with a specific NUMA node. (use `numa_node>=0`)
 -----------------------------------------------------------------------------*/
-#define MI_HUGE_OS_PAGE_SIZE ((size_t)1 << 30)  // 1GiB
+#define MI_HUGE_OS_PAGE_SIZE  (GiB)  
 
+#if defined(WIN32) && (MI_INTPTR_SIZE >= 8)
+static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) 
+{  
+  mi_assert_internal(size%GiB == 0);
 
-#if !(MI_INTPTR_SIZE >= 8 && (defined(_WIN32) || defined(MI_OS_USE_MMAP)))
-int _mi_os_alloc_huge_os_pages(size_t pages, double max_secs, void** start, size_t* pages_reserved, size_t* size) mi_attr_noexcept {
-  UNUSED(pages); UNUSED(max_secs);
-  if (start != NULL) *start = NULL;
-  if (pages_reserved != NULL) *pages_reserved = 0;
-  if (size != NULL) *size = 0;
-  return ENOMEM; 
-}
-#else
-static _Atomic(uintptr_t) huge_top; // = 0
-
-int _mi_os_alloc_huge_os_pages(size_t pages, double max_secs, void** pstart, size_t* pages_reserved, size_t* psize) mi_attr_noexcept 
-{
-  *pstart = NULL;
-  *pages_reserved = 0;
-  *psize = 0;
-  if (max_secs==0) return ETIMEDOUT; // timeout 
-  if (pages==0) return 0;            // ok
-
-  // Atomically claim a huge address range
-  size_t size = pages * MI_HUGE_OS_PAGE_SIZE;
-  uint8_t* start;
-  do {
-    start = (uint8_t*)mi_atomic_addu(&huge_top, size);  
-    if (start == NULL) {
-      uintptr_t top = ((uintptr_t)32 << 40);  // 32TiB virtual start address
-      #if (MI_SECURE>0 || MI_DEBUG==0)        // security: randomize start of huge pages unless in debug mode
-      uintptr_t r = _mi_random_init((uintptr_t)&_mi_os_alloc_huge_os_pages);
-      top += ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x3FF));  // (randomly 0-1024)*1GiB == 0 to 1TiB
-      #endif    
-      mi_atomic_cas_strong(&huge_top, top, 0);
-    }
-  } while (start == NULL);
-
+  #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
+  DWORD flags = MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE;
+  MEM_EXTENDED_PARAMETER params[4] = { {0,0},{0,0},{0,0},{0,0} };
+  MEM_ADDRESS_REQUIREMENTS reqs = {0,0,0};
+  reqs.HighestEndingAddress = NULL;
+  reqs.LowestStartingAddress = NULL;
+  reqs.Alignment = MI_SEGMENT_SIZE;
   
-  // Allocate one page at the time but try to place them contiguously
-  // We allocate one page at the time to be able to abort if it takes too long
-  double start_t = _mi_clock_start();
-  uint8_t* addr = start;  // current top of the allocations
-  for (size_t page = 0; page < pages; page++, addr += MI_HUGE_OS_PAGE_SIZE ) {
-    // allocate a page
-    void* p = NULL; 
-    bool is_large = true;
-    #ifdef _WIN32
-    if (page==0) { mi_win_enable_large_os_pages(); }
-    p = mi_win_virtual_alloc(addr, MI_HUGE_OS_PAGE_SIZE, 0, MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE, true, true, &is_large);
-    #elif defined(MI_OS_USE_MMAP)
-    p = mi_unix_mmap(addr, MI_HUGE_OS_PAGE_SIZE, 0, PROT_READ | PROT_WRITE, true, true, &is_large);
-    #else 
-    // always fail
-    #endif  
-    
-    // Did we succeed at a contiguous address?
-    if (p != addr) {
-      // no success, issue a warning and return with an error 
-      if (p != NULL) {
-        _mi_warning_message("could not allocate contiguous huge page %zu at 0x%p\n", page, addr); 
-        _mi_os_free(p, MI_HUGE_OS_PAGE_SIZE, &_mi_stats_main );
-      }
-      else {
-        #ifdef _WIN32
-        int err = GetLastError();
-        #else
-        int err = errno;
-        #endif
-        _mi_warning_message("could not allocate huge page %zu at 0x%p, error: %i\n", page, addr, err);
-      }
-      return ENOMEM;  
+  // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages  
+  if (pNtAllocateVirtualMemoryEx != NULL) {
+    #ifndef MEM_EXTENDED_PARAMETER_NONPAGED_HUGE
+    #define MEM_EXTENDED_PARAMETER_NONPAGED_HUGE  (0x10)
+    #endif
+    params[0].Type = MemExtendedParameterAddressRequirements;
+    params[0].Pointer = &reqs;
+    params[1].Type = 5; // == MemExtendedParameterAttributeFlags;
+    params[1].ULong64 = MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
+    size_t param_count = 2;
+    if (numa_node >= 0) {
+      param_count++;
+      params[2].Type = MemExtendedParameterNumaNode;
+      params[2].ULong = (unsigned)numa_node;
     }
-    // success, record it
-    if (page==0) {
-      *pstart = addr;
+    SIZE_T psize = size;
+    void* base = NULL;
+    NTSTATUS err = (*pNtAllocateVirtualMemoryEx)(GetCurrentProcess(), &base, &psize, flags, PAGE_READWRITE, params, param_count);
+    if (err == 0) {
+      return base;
     }
-    *psize += MI_HUGE_OS_PAGE_SIZE; 
-    *pages_reserved += 1;
-    _mi_stat_increase(&_mi_stats_main.committed, MI_HUGE_OS_PAGE_SIZE);
-    _mi_stat_increase(&_mi_stats_main.reserved, MI_HUGE_OS_PAGE_SIZE);
-    
-    // check for timeout
-    double elapsed = _mi_clock_end(start_t);
-    if (elapsed > max_secs) return ETIMEDOUT; 
-    if (page >= 1) {
-      double estimate = ((elapsed / (double)(page+1)) * (double)pages);
-      if (estimate > 1.5*max_secs) return ETIMEDOUT; // seems like we are going to timeout
+    else {
+      // fall back to regular huge pages    
+      _mi_warning_message("unable to allocate using huge (1GiB) pages, trying large (2MiB) pages instead (error 0x%lx)\n", err);
     }
   }  
-  mi_assert_internal(*psize == size);
-  return 0;
+  // on modern Windows try use VirtualAlloc2 for aligned large OS page allocation
+  if (pVirtualAlloc2 != NULL) {
+    params[0].Type = MemExtendedParameterAddressRequirements;
+    params[0].Pointer = &reqs;
+    size_t param_count = 1;
+    if (numa_node >= 0) {
+      param_count++;
+      params[1].Type = MemExtendedParameterNumaNode;
+      params[1].ULong = (unsigned)numa_node;
+    }
+    return (*pVirtualAlloc2)(GetCurrentProcess(), NULL, size, flags, PAGE_READWRITE, params, param_count);
+  }
+  #endif
+  return NULL; // give up on older Windows.. 
+}
+#elif defined(MI_OS_USE_MMAP) && (MI_INTPTR_SIZE >= 8)
+#ifdef MI_HAS_NUMA
+#include <numaif.h> // mbind, and use -lnuma
+#endif
+static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) {
+  mi_assert_internal(size%GiB == 0);
+  bool is_large = true;
+  void* p = mi_unix_mmap(NULL, MI_HUGE_OS_PAGE_SIZE, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
+  if (p == NULL) return NULL;
+  #ifdef MI_HAS_NUMA  
+  if (numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) {
+    uintptr_t numa_mask = (1UL << numa_node);
+    long err = mbind(p, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
+    if (err != 0) {
+      _mi_warning_message("failed to bind huge (1GiB) pages to NUMA node %d: %s\n", numa_node, strerror(errno));
+    }
+  }
+  #endif
+  return p;
+}
+#else 
+static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) {
+  return NULL;
 }
 #endif
 
+void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, size_t* psize) {
+  if (psize != NULL) *psize = 0;
+  size_t size = pages * MI_HUGE_OS_PAGE_SIZE;
+  void* p = mi_os_alloc_huge_os_pagesx(size, numa_node);
+  if (p==NULL) return NULL;
+  if (psize != NULL) *psize = size;
+  _mi_stat_increase(&_mi_stats_main.committed, size);
+  _mi_stat_increase(&_mi_stats_main.reserved, size);
+  return p;
+}
+
+#ifdef WIN32
+static int mi_os_numa_nodex(void) {
+  PROCESSOR_NUMBER pnum;
+  USHORT numa_node = 0;
+  GetCurrentProcessorNumberEx(&pnum);
+  GetNumaProcessorNodeEx(&pnum,&numa_node);
+  return (int)numa_node; 
+}
+
+static int mi_os_numa_node_countx(void) {
+  ULONG numa_max = 0;
+  GetNumaHighestNodeNumber(&numa_max);
+  return (int)(numa_max + 1);
+}
+#elif MI_HAS_NUMA
+#include <numa.h>
+static int mi_os_numa_nodex(void) {
+  return numa_preferred();
+}
+static int mi_os_numa_node_countx(void) {
+  return (numa_max_node() + 1);
+}
+#else
+static int mi_os_numa_nodex(void) {
+  return 0;
+}
+static int mi_os_numa_node_countx(void) {
+  return 1;
+}
+#endif
+
+int _mi_os_numa_node_count(void) {
+  long ncount = mi_os_numa_node_countx();
+  // never more than max numa node and at least 1
+  long nmax  = 1 + mi_option_get(mi_option_max_numa_node);
+  if (ncount > nmax) ncount = nmax;
+  if (ncount <= 0) ncount = 1;
+  return ncount;
+}
+
+int _mi_os_numa_node(void) {
+  int nnode = mi_os_numa_nodex();
+  // never more than the node count
+  int ncount = _mi_os_numa_node_count();
+  if (nnode >= ncount) { nnode = nnode % ncount; }  
+  return nnode;
+}
