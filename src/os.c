@@ -794,6 +794,7 @@ and possibly associated with a specific NUMA node. (use `numa_node>=0`)
 static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node)
 {
   mi_assert_internal(size%GiB == 0);
+  mi_win_enable_large_os_pages();
 
   #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   DWORD flags = MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE;
@@ -812,7 +813,7 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node)
     params[0].Pointer = &reqs;
     params[1].Type = 5; // == MemExtendedParameterAttributeFlags;
     params[1].ULong64 = MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
-    size_t param_count = 2;
+    ULONG param_count = 2;
     if (numa_node >= 0) {
       param_count++;
       params[2].Type = MemExtendedParameterNumaNode;
@@ -833,7 +834,7 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node)
   if (pVirtualAlloc2 != NULL) {
     params[0].Type = MemExtendedParameterAddressRequirements;
     params[0].Pointer = &reqs;
-    size_t param_count = 1;
+    ULONG param_count = 1;
     if (numa_node >= 0) {
       param_count++;
       params[1].Type = MemExtendedParameterNumaNode;
