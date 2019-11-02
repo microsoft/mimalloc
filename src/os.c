@@ -853,8 +853,11 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) {
   void* p = mi_unix_mmap(NULL, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
   if (p == NULL) return NULL;
   #ifdef MI_HAS_NUMA
-  if (numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) {
+  if (numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) { // at most 64 nodes
     uintptr_t numa_mask = (1UL << numa_node);
+    // TODO: does `mbind` work correctly for huge OS pages? should we 
+    // use `set_mempolicy` before calling mmap instead?
+    // see: <https://lkml.org/lkml/2017/2/9/875>
     long err = mbind(p, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
     if (err != 0) {
       _mi_warning_message("failed to bind huge (1GiB) pages to NUMA node %d: %s\n", numa_node, strerror(errno));
@@ -882,6 +885,9 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, size_t* psize) {
   return p;
 }
 
+/* ----------------------------------------------------------------------------
+Support NUMA aware allocation 
+-----------------------------------------------------------------------------*/
 #ifdef WIN32
 static int mi_os_numa_nodex() {
   PROCESSOR_NUMBER pnum;
@@ -901,6 +907,9 @@ static int mi_os_numa_node_countx(void) {
 #include <stdlib.h>
 #include <numaif.h>
 static int mi_os_numa_nodex(void) {
+  #define MI_NUMA_NODE_SLOW  // too slow, so cache it
+  // TODO: perhaps use RDTSCP instruction on x64? 
+  // see <https://stackoverflow.com/questions/16862620/numa-get-current-node-core>
   #define MI_MAX_MASK (4)          // support at most 256 nodes
   unsigned long mask[MI_MAX_MASK];
   memset(mask,0,MI_MAX_MASK*sizeof(long));
@@ -944,7 +953,7 @@ static int mi_os_numa_node_countx(void) {
 #endif
 
 int _mi_os_numa_node_count(void) {
-  static int numa_node_count = 0;
+  static int numa_node_count = 0;   // cache the node count 
   if (mi_unlikely(numa_node_count <= 0)) {
     int ncount = mi_os_numa_node_countx();
     // never more than max numa node and at least 1
@@ -958,15 +967,25 @@ int _mi_os_numa_node_count(void) {
 }
 
 int _mi_os_numa_node(mi_os_tld_t* tld) {
+  int numa_node;
+#ifndef MI_NUMA_NODE_SLOW
+  UNUSED(tld);
+  numa_node = mi_os_numa_nodex();
+#else
   if (mi_unlikely(tld->numa_node < 0)) {
-    int nnode = mi_os_numa_nodex();
-    // never more than the node count
-    int ncount = _mi_os_numa_node_count();
-    if (nnode >= ncount) { nnode = nnode % ncount; }
-    if (nnode < 0) nnode = 0;
-    tld->numa_node = nnode;
+    // Cache the NUMA node of the thread if the call is slow.
+    // This may not be correct as threads can migrate to another cpu on
+    // another node -- however, for memory allocation this just means we keep
+    // using the same 'node id' for its allocations; new OS allocations
+    // naturally come from the actual node so in practice this may be fine.
+    tld->numa_node = mi_os_numa_nodex(); 
   }
-  mi_assert_internal(tld->numa_node >= 0 && tld->numa_node < _mi_os_numa_node_count());
-  return tld->numa_node;
+  numa_node = tld->numa_node
+#endif
+  // never more than the node count and >= 0
+  int numa_count = _mi_os_numa_node_count();
+  if (numa_node >= numa_count) { numa_node = numa_node % numa_count; }
+  if (numa_node < 0) numa_node = 0;  
+  return numa_node;
 }
 
