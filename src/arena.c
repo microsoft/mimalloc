@@ -382,7 +382,7 @@ static bool mi_arena_add(mi_arena_t* arena) {
 #include <errno.h> // ENOMEM
 
 // reserve at a specific numa node
-static int mi_reserve_huge_os_pages_at(size_t pages, int numa_node) mi_attr_noexcept {
+int mi_reserve_huge_os_pages_at(size_t pages, int numa_node) mi_attr_noexcept {
   size_t hsize = 0;
   void* p = _mi_os_alloc_huge_os_pages(pages, numa_node, &hsize);
   if (p==NULL) return ENOMEM;
@@ -433,6 +433,7 @@ int mi_reserve_huge_os_pages_interleave(size_t pages) mi_attr_noexcept {
 }
 
 int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept {
+  UNUSED(max_secs);
   _mi_verbose_message("mi_reserve_huge_os_pages is deprecated: use mi_reserve_huge_os_pages_interleave/at instead\n");
   if (pages_reserved != NULL) *pages_reserved = 0;
   int err = mi_reserve_huge_os_pages_interleave(pages);  

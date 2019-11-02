@@ -850,7 +850,7 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node)
 static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) {
   mi_assert_internal(size%GiB == 0);
   bool is_large = true;
-  void* p = mi_unix_mmap(NULL, MI_HUGE_OS_PAGE_SIZE, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
+  void* p = mi_unix_mmap(NULL, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
   if (p == NULL) return NULL;
   #ifdef MI_HAS_NUMA  
   if (numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) {
@@ -860,6 +860,8 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) {
       _mi_warning_message("failed to bind huge (1GiB) pages to NUMA node %d: %s\n", numa_node, strerror(errno));
     }
   }
+  #else
+  UNUSED(numa_node);
   #endif
   return p;
 }
