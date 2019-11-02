@@ -109,7 +109,7 @@ static const mi_tld_t tld_empty = {
   false,
   NULL,
   { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, 0, NULL, tld_empty_stats }, // segments
-  { 0, tld_empty_stats },             // os
+  { 0, -1, tld_empty_stats },         // os
   { MI_STATS_NULL }                   // stats
 };
 
@@ -123,8 +123,8 @@ static mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main,
   { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
-  { 0, tld_main_stats },              // os
-  { MI_STATS_NULL }                   // stats
+  { 0, -1, tld_main_stats },   // os
+  { MI_STATS_NULL }            // stats
 };
 
 mi_heap_t _mi_heap_main = {
@@ -242,6 +242,7 @@ static bool _mi_heap_init(void) {
     heap->tld = tld;    
     tld->heap_backing = heap;
     tld->segments.stats = &tld->stats;
+    tld->os.numa_node = -1;
     tld->os.stats = &tld->stats;
     _mi_heap_default = heap;
   }

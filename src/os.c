@@ -144,7 +144,7 @@ void _mi_os_init(void) {
     FreeLibrary(hDll);
   }
   hDll = LoadLibrary(TEXT("ntdll.dll"));
-  if (hDll != NULL) {    
+  if (hDll != NULL) {
     pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)(void (*)(void))GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
     FreeLibrary(hDll);
   }
@@ -206,7 +206,7 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 #define MEM_COMMIT_RESERVE  (MEM_COMMIT|MEM_RESERVE)
 
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
-#if (MI_INTPTR_SIZE >= 8) 
+#if (MI_INTPTR_SIZE >= 8)
   // on 64-bit systems, try to use the virtual address area after 4TiB for 4MiB aligned allocations
   void* hint;
   if (addr == NULL && (hint = mi_os_get_aligned_hint(try_alignment,size)) != NULL) {
@@ -784,14 +784,14 @@ bool _mi_os_shrink(void* p, size_t oldsize, size_t newsize, mi_stats_t* stats) {
 
 
 /* ----------------------------------------------------------------------------
-Support for allocating huge OS pages (1Gib) that are reserved up-front 
+Support for allocating huge OS pages (1Gib) that are reserved up-front
 and possibly associated with a specific NUMA node. (use `numa_node>=0`)
 -----------------------------------------------------------------------------*/
-#define MI_HUGE_OS_PAGE_SIZE  (GiB)  
+#define MI_HUGE_OS_PAGE_SIZE  (GiB)
 
 #if defined(WIN32) && (MI_INTPTR_SIZE >= 8)
-static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) 
-{  
+static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node)
+{
   mi_assert_internal(size%GiB == 0);
 
   #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
@@ -801,8 +801,8 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node)
   reqs.HighestEndingAddress = NULL;
   reqs.LowestStartingAddress = NULL;
   reqs.Alignment = MI_SEGMENT_SIZE;
-  
-  // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages  
+
+  // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
   if (pNtAllocateVirtualMemoryEx != NULL) {
     #ifndef MEM_EXTENDED_PARAMETER_NONPAGED_HUGE
     #define MEM_EXTENDED_PARAMETER_NONPAGED_HUGE  (0x10)
@@ -811,7 +811,7 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node)
     params[0].Pointer = &reqs;
     params[1].Type = 5; // == MemExtendedParameterAttributeFlags;
     params[1].ULong64 = MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
-    size_t param_count = 2;
+    ULONG param_count = 2;
     if (numa_node >= 0) {
       param_count++;
       params[2].Type = MemExtendedParameterNumaNode;
@@ -824,15 +824,15 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node)
       return base;
     }
     else {
-      // fall back to regular huge pages    
+      // fall back to regular huge pages
       _mi_warning_message("unable to allocate using huge (1GiB) pages, trying large (2MiB) pages instead (error 0x%lx)\n", err);
     }
-  }  
+  }
   // on modern Windows try use VirtualAlloc2 for aligned large OS page allocation
   if (pVirtualAlloc2 != NULL) {
     params[0].Type = MemExtendedParameterAddressRequirements;
     params[0].Pointer = &reqs;
-    size_t param_count = 1;
+    ULONG param_count = 1;
     if (numa_node >= 0) {
       param_count++;
       params[1].Type = MemExtendedParameterNumaNode;
@@ -841,7 +841,7 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node)
     return (*pVirtualAlloc2)(GetCurrentProcess(), NULL, size, flags, PAGE_READWRITE, params, param_count);
   }
   #endif
-  return NULL; // give up on older Windows.. 
+  return NULL; // give up on older Windows..
 }
 #elif defined(MI_OS_USE_MMAP) && (MI_INTPTR_SIZE >= 8)
 #ifdef MI_HAS_NUMA
@@ -852,7 +852,7 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) {
   bool is_large = true;
   void* p = mi_unix_mmap(NULL, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
   if (p == NULL) return NULL;
-  #ifdef MI_HAS_NUMA  
+  #ifdef MI_HAS_NUMA
   if (numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) {
     uintptr_t numa_mask = (1UL << numa_node);
     long err = mbind(p, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
@@ -865,7 +865,7 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) {
   #endif
   return p;
 }
-#else 
+#else
 static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) {
   return NULL;
 }
@@ -883,12 +883,12 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, size_t* psize) {
 }
 
 #ifdef WIN32
-static int mi_os_numa_nodex(void) {
+static int mi_os_numa_nodex() {
   PROCESSOR_NUMBER pnum;
   USHORT numa_node = 0;
   GetCurrentProcessorNumberEx(&pnum);
   GetNumaProcessorNodeEx(&pnum,&numa_node);
-  return (int)numa_node; 
+  return (int)numa_node;
 }
 
 static int mi_os_numa_node_countx(void) {
@@ -897,12 +897,42 @@ static int mi_os_numa_node_countx(void) {
   return (int)(numa_max + 1);
 }
 #elif MI_HAS_NUMA
-#include <numa.h>
+#include <dirent.h>
+#include <stdlib.h>
+#include <numaif.h>
 static int mi_os_numa_nodex(void) {
-  return numa_preferred();
+  #define MI_MAX_MASK (4)          // support at most 256 nodes
+  unsigned long mask[MI_MAX_MASK];
+  memset(mask,0,MI_MAX_MASK*sizeof(long));
+  int mode = 0;
+  long err = get_mempolicy(&mode, mask, MI_MAX_MASK*sizeof(long)*8, NULL, 0 /* thread policy */);
+  if (err != 0) return 0;
+  // find the lowest bit that is set
+  for(int i = 0; i < MI_MAX_MASK; i++) {
+    for(int j = 0; j < (int)(sizeof(long)*8); j++) {
+      if ((mask[i] & (1UL << j)) != 0) {
+        return (i*sizeof(long)*8 + j);
+      }
+    }
+  }
+	return 0;
 }
+
 static int mi_os_numa_node_countx(void) {
-  return (numa_max_node() + 1);
+  DIR* d = opendir("/sys/devices/system/node");
+  if (d==NULL) return 1;
+  
+  struct dirent* de;
+  int max_node_num = 0;
+  while ((de = readdir(d)) != NULL) {
+  	int node_num;
+  	if (strncmp(de->d_name, "node", 4) == 0) {
+		  node_num = (int)strtol(de->d_name+4, NULL, 0);
+			if (max_node_num < node_num) max_node_num = node_num;
+    }
+  }
+  closedir(d);
+  return (max_node_num + 1);
 }
 #else
 static int mi_os_numa_nodex(void) {
@@ -914,19 +944,29 @@ static int mi_os_numa_node_countx(void) {
 #endif
 
 int _mi_os_numa_node_count(void) {
-  long ncount = mi_os_numa_node_countx();
-  // never more than max numa node and at least 1
-  long nmax  = 1 + mi_option_get(mi_option_max_numa_node);
-  if (ncount > nmax) ncount = nmax;
-  if (ncount <= 0) ncount = 1;
-  return ncount;
+  static int numa_node_count = 0;
+  if (mi_unlikely(numa_node_count <= 0)) {
+    int ncount = mi_os_numa_node_countx();
+    // never more than max numa node and at least 1
+    int nmax = 1 + (int)mi_option_get(mi_option_max_numa_node);
+    if (ncount > nmax) ncount = nmax;
+    if (ncount <= 0)   ncount = 1;
+    numa_node_count = ncount;
+  }
+  mi_assert_internal(numa_node_count >= 1);
+  return numa_node_count;
 }
 
-int _mi_os_numa_node(void) {
-  int nnode = mi_os_numa_nodex();
-  // never more than the node count
-  int ncount = _mi_os_numa_node_count();
-  if (nnode >= ncount) { nnode = nnode % ncount; }  
-  return nnode;
+int _mi_os_numa_node(mi_os_tld_t* tld) {
+  if (mi_unlikely(tld->numa_node < 0)) {
+    int nnode = mi_os_numa_nodex();
+    // never more than the node count
+    int ncount = _mi_os_numa_node_count();
+    if (nnode >= ncount) { nnode = nnode % ncount; }
+    if (nnode < 0) nnode = 0;
+    tld->numa_node = nnode;
+  }
+  mi_assert_internal(tld->numa_node >= 0 && tld->numa_node < _mi_os_numa_node_count());
+  return tld->numa_node;
 }
 

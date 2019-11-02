@@ -432,6 +432,7 @@ typedef struct mi_segments_tld_s {
 // OS thread local data
 typedef struct mi_os_tld_s {
   size_t              region_idx;   // start point for next allocation
+  int                 numa_node;    // numa node associated with this thread
   mi_stats_t*         stats;        // points to tld stats
 } mi_os_tld_t;
 

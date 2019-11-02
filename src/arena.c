@@ -268,7 +268,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
   {
     size_t asize = _mi_align_up(size, MI_ARENA_BLOCK_SIZE);
     size_t bcount = asize / MI_ARENA_BLOCK_SIZE;
-    int numa_node = _mi_os_numa_node(); // current numa node
+    int numa_node = _mi_os_numa_node(tld); // current numa node
 
     mi_assert_internal(size <= bcount*MI_ARENA_BLOCK_SIZE);
     // try numa affine allocation
