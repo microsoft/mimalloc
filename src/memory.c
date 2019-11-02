@@ -45,10 +45,8 @@ bool    _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 bool    _mi_os_decommit(void* p, size_t size, mi_stats_t* stats);
 bool    _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
 bool    _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
-void*   _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
-void    _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats);
-void*   _mi_os_try_alloc_from_huge_reserved(size_t size, size_t try_alignment);
-bool    _mi_os_is_huge_reserved(void* p);
+//void*   _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
+//void    _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats);
 
 // arena.c
 void    _mi_arena_free(void* p, size_t size, size_t memid, mi_stats_t* stats);
@@ -93,7 +91,8 @@ typedef struct mem_region_s {
   volatile _Atomic(uintptr_t)        map;   // in-use bit per MI_SEGMENT_SIZE block
   volatile _Atomic(mi_region_info_t) info;  // start of virtual memory area, and flags
   volatile _Atomic(uintptr_t)        dirty_mask; // bit per block if the contents are not zero'd
-  size_t   arena_memid; 
+  volatile _Atomic(uintptr_t)        numa_node;  // associated numa node + 1 (so 0 is no association)
+  size_t   arena_memid;  // if allocated from a (huge page) arena
 } mem_region_t;
 
 
@@ -212,6 +211,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
     if (mi_atomic_cas_strong(&region->info, info, 0)) {
       // update the region count
       region->arena_memid = arena_memid;
+      mi_atomic_write(&region->numa_node, _mi_os_numa_node() + 1);
       mi_atomic_increment(&regions_count);
     }
     else {
@@ -220,6 +220,7 @@ static bool mi_region_commit_blocks(mem_region_t* region, size_t idx, size_t bit
       for(size_t i = 1; i <= 4 && idx + i < MI_REGION_MAX; i++) {
         if (mi_atomic_cas_strong(&regions[idx+i].info, info, 0)) {
           regions[idx+i].arena_memid = arena_memid;
+          mi_atomic_write(&regions[idx+i].numa_node, _mi_os_numa_node() + 1);
           mi_atomic_increment(&regions_count);
           start = NULL;
           break;
@@ -365,15 +366,18 @@ static bool mi_region_alloc_blocks(mem_region_t* region, size_t idx, size_t bloc
 // Returns `false` on an error (OOM); `true` otherwise. `p` and `id` are only written
 // if the blocks were successfully claimed so ensure they are initialized to NULL/0 before the call.
 // (not being able to claim is not considered an error so check for `p != NULL` afterwards).
-static bool mi_region_try_alloc_blocks(size_t idx, size_t blocks, size_t size, 
-                                       bool* commit, bool* allow_large, bool* is_zero, 
-                                       void** p, size_t* id, mi_os_tld_t* tld)
+static bool mi_region_try_alloc_blocks(int numa_node, size_t idx, size_t blocks, size_t size,
+  bool* commit, bool* allow_large, bool* is_zero,
+  void** p, size_t* id, mi_os_tld_t* tld)
 {
   // check if there are available blocks in the region..
   mi_assert_internal(idx < MI_REGION_MAX);
   mem_region_t* region = &regions[idx];
   uintptr_t m = mi_atomic_read_relaxed(&region->map);
-  if (m != MI_REGION_MAP_FULL) {  // some bits are zero    
+  int rnode = ((int)mi_atomic_read_relaxed(&region->numa_node)) - 1;
+  if ((rnode < 0 || rnode == numa_node) &&  // fits current numa node
+      (m != MI_REGION_MAP_FULL))            // and some bits are zero    
+  {
     bool ok = (*commit || *allow_large); // committing or allow-large is always ok
     if (!ok) {
       // otherwise skip incompatible regions if possible. 
@@ -426,19 +430,20 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* l
   mi_assert_internal(blocks > 0 && blocks <= 8*MI_INTPTR_SIZE);
 
   // find a range of free blocks
+  int numa_node = _mi_os_numa_node();
   void* p = NULL;
   size_t count = mi_atomic_read(&regions_count);
   size_t idx = tld->region_idx; // start at 0 to reuse low addresses? Or, use tld->region_idx to reduce contention?
   for (size_t visited = 0; visited < count; visited++, idx++) {
     if (idx >= count) idx = 0;  // wrap around
-    if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, large, is_zero, &p, id, tld)) return NULL; // error
+    if (!mi_region_try_alloc_blocks(numa_node, idx, blocks, size, commit, large, is_zero, &p, id, tld)) return NULL; // error
     if (p != NULL) break;
   }
 
   if (p == NULL) {
     // no free range in existing regions -- try to extend beyond the count.. but at most 8 regions
     for (idx = count; idx < mi_atomic_read_relaxed(&regions_count) + 8 && idx < MI_REGION_MAX; idx++) {
-      if (!mi_region_try_alloc_blocks(idx, blocks, size, commit, large, is_zero, &p, id, tld)) return NULL; // error
+      if (!mi_region_try_alloc_blocks(numa_node, idx, blocks, size, commit, large, is_zero, &p, id, tld)) return NULL; // error
       if (p != NULL) break;
     }
   }
