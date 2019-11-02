@@ -383,6 +383,8 @@ static bool mi_arena_add(mi_arena_t* arena) {
 // reserve at a specific numa node
 int mi_reserve_huge_os_pages_at(size_t pages, int numa_node) mi_attr_noexcept {
   size_t hsize = 0;
+  if (numa_node < -1) numa_node = -1;
+  if (numa_node >= 0) numa_node = numa_node % _mi_os_numa_node_count();
   void* p = _mi_os_alloc_huge_os_pages(pages, numa_node, &hsize);
   if (p==NULL) return ENOMEM;
   _mi_verbose_message("reserved %zu huge (1GiB) pages\n", pages);
