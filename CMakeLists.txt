@@ -18,6 +18,7 @@ set(mi_install_dir "lib/mimalloc-${mi_version}")
 set(mi_sources
     src/stats.c
     src/os.c
+    src/arena.c
     src/memory.c
     src/segment.c
     src/page.c
