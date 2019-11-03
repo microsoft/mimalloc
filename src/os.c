@@ -790,67 +790,68 @@ and possibly associated with a specific NUMA node. (use `numa_node>=0`)
 #define MI_HUGE_OS_PAGE_SIZE  (GiB)
 
 #if defined(WIN32) && (MI_INTPTR_SIZE >= 8)
-static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node)
+static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
 {
   mi_assert_internal(size%GiB == 0);
+  mi_assert_internal(addr != NULL);
+  const DWORD flags = MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE;
 
+  mi_win_enable_large_os_pages();
+  
+  void* p = NULL;
   #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
-  DWORD flags = MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE;
-  MEM_EXTENDED_PARAMETER params[4] = { {0,0},{0,0},{0,0},{0,0} };
-  MEM_ADDRESS_REQUIREMENTS reqs = {0,0,0};
-  reqs.HighestEndingAddress = NULL;
-  reqs.LowestStartingAddress = NULL;
-  reqs.Alignment = MI_SEGMENT_SIZE;
-
+  MEM_EXTENDED_PARAMETER params[3] = { {0,0},{0,0},{0,0} };  
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
   if (pNtAllocateVirtualMemoryEx != NULL) {
     #ifndef MEM_EXTENDED_PARAMETER_NONPAGED_HUGE
     #define MEM_EXTENDED_PARAMETER_NONPAGED_HUGE  (0x10)
     #endif
-    params[0].Type = MemExtendedParameterAddressRequirements;
-    params[0].Pointer = &reqs;
-    params[1].Type = 5; // == MemExtendedParameterAttributeFlags;
-    params[1].ULong64 = MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
-    ULONG param_count = 2;
-    if (numa_node >= 0) {
-      param_count++;
-      params[2].Type = MemExtendedParameterNumaNode;
-      params[2].ULong = (unsigned)numa_node;
-    }
-    SIZE_T psize = size;
-    void* base = NULL;
-    NTSTATUS err = (*pNtAllocateVirtualMemoryEx)(GetCurrentProcess(), &base, &psize, flags, PAGE_READWRITE, params, param_count);
-    if (err == 0) {
-      return base;
-    }
-    else {
-      // fall back to regular huge pages
-      _mi_warning_message("unable to allocate using huge (1GiB) pages, trying large (2MiB) pages instead (error 0x%lx)\n", err);
-    }
-  }
-  // on modern Windows try use VirtualAlloc2 for aligned large OS page allocation
-  if (pVirtualAlloc2 != NULL) {
-    params[0].Type = MemExtendedParameterAddressRequirements;
-    params[0].Pointer = &reqs;
+    params[0].Type = 5; // == MemExtendedParameterAttributeFlags;
+    params[0].ULong64 = MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
     ULONG param_count = 1;
     if (numa_node >= 0) {
       param_count++;
       params[1].Type = MemExtendedParameterNumaNode;
       params[1].ULong = (unsigned)numa_node;
     }
-    return (*pVirtualAlloc2)(GetCurrentProcess(), NULL, size, flags, PAGE_READWRITE, params, param_count);
+    SIZE_T psize = size;
+    void* base = addr;
+    NTSTATUS err = (*pNtAllocateVirtualMemoryEx)(GetCurrentProcess(), &base, &psize, flags, PAGE_READWRITE, params, param_count);
+    if (err == 0 && base != NULL) {
+      return base;
+    }
+    else {
+      // fall back to regular huge pages
+      _mi_warning_message("unable to allocate using huge (1GiB) pages, trying large (2MiB) pages instead (status 0x%lx)\n", err);
+    }
   }
+  // on modern Windows try use VirtualAlloc2 for numa aware large OS page allocation
+  if (pVirtualAlloc2 != NULL && numa_node >= 0) {
+    params[0].Type = MemExtendedParameterNumaNode;
+    params[0].ULong = (unsigned)numa_node;    
+    p = (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, params, 1);
+  }
+  else 
   #endif
-  return NULL; // give up on older Windows..
+  // use regular virtual alloc on older windows
+  {
+    p = VirtualAlloc(addr, size, flags, PAGE_READWRITE);
+  }
+
+  if (p == NULL) {
+    _mi_warning_message("failed to allocate huge OS pages (size %zu) (error %d)\n", size, GetLastError());
+  }
+  return p;
 }
+
 #elif defined(MI_OS_USE_MMAP) && (MI_INTPTR_SIZE >= 8)
 #ifdef MI_HAS_NUMA
 #include <numaif.h> // mbind, and use -lnuma
 #endif
-static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) {
+static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) {
   mi_assert_internal(size%GiB == 0);
   bool is_large = true;
-  void* p = mi_unix_mmap(NULL, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
+  void* p = mi_unix_mmap(addr, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
   if (p == NULL) return NULL;
   #ifdef MI_HAS_NUMA
   if (numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) { // at most 64 nodes
@@ -869,19 +870,51 @@ static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) {
   return p;
 }
 #else
-static void* mi_os_alloc_huge_os_pagesx(size_t size, int numa_node) {
+static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) {
   return NULL;
 }
 #endif
 
+// To ensure proper alignment, use our own area for huge OS pages
+static _Atomic(uintptr_t)  mi_huge_start; // = 0
+
+// Allocate MI_SEGMENT_SIZE aligned huge pages
 void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, size_t* psize) {
   if (psize != NULL) *psize = 0;
-  size_t size = pages * MI_HUGE_OS_PAGE_SIZE;
-  void* p = mi_os_alloc_huge_os_pagesx(size, numa_node);
-  if (p==NULL) return NULL;
-  if (psize != NULL) *psize = size;
+  const size_t size = pages * MI_HUGE_OS_PAGE_SIZE;
+
+  // Find a new aligned address for the huge pages
+  uintptr_t start = 0;
+  uintptr_t end = 0;
+  uintptr_t expected;
+  do {
+    start = expected = mi_atomic_read_relaxed(&mi_huge_start);    
+    if (start == 0) {
+      // Initialize the start address after the 32TiB area
+      start = ((uintptr_t)32 << 40);    // 32TiB virtual start address
+      #if (MI_SECURE>0 || MI_DEBUG==0)  // security: randomize start of huge pages unless in debug mode
+      uintptr_t r = _mi_random_init((uintptr_t)&_mi_os_alloc_huge_os_pages);
+      start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x3FF));  // (randomly 0-1024)*1GiB == 0 to 1TiB
+      #endif
+    }
+    end = start + size;
+    mi_assert_internal(end % MI_SEGMENT_SIZE == 0);
+  } while (!mi_atomic_cas_strong(&mi_huge_start, end, expected));
+
+  // And allocate
+  void* p = mi_os_alloc_huge_os_pagesx((void*)start, size, numa_node);
+  if (p == NULL) {
+    return NULL;
+  }
   _mi_stat_increase(&_mi_stats_main.committed, size);
   _mi_stat_increase(&_mi_stats_main.reserved, size);
+  if ((uintptr_t)p % MI_SEGMENT_SIZE != 0) { // must be aligned
+    _mi_warning_message("huge page area was not aligned\n");
+    _mi_os_free(p,size,&_mi_stats_main);
+    return NULL;
+  }
+  
+  if (psize != NULL) *psize = size;
   return p;
 }
 
