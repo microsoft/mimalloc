@@ -38,7 +38,7 @@ static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_sta
 static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t size, mi_stats_t* stats);
 
 
-#if (MI_DEBUG>1)
+#if (MI_DEBUG>=3)
 static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
   size_t count = 0;
   while (head != NULL) {

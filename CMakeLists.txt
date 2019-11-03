@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
 project(libmimalloc C CXX)
-include("cmake/mimalloc-config-version.cmake")
-include("CheckIncludeFile")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -14,6 +12,9 @@ option(MI_USE_CXX           "Use the C++ compiler to compile the library" OFF)
 option(MI_SECURE            "Use security mitigations (like guard pages and randomization)" OFF)
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
 option(MI_BUILD_TESTS       "Build test executables" ON)
+
+include("cmake/mimalloc-config-version.cmake")
+include("CheckIncludeFile")
 
 set(mi_install_dir "lib/mimalloc-${mi_version}")
 

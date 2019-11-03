@@ -39,7 +39,6 @@ static const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment) {
   return &segment->slices[segment->slice_entries];
 }
 
-
 static uint8_t* mi_slice_start(const mi_slice_t* slice) {
   mi_segment_t* segment = _mi_ptr_segment(slice);
   mi_assert_internal(slice >= segment->slices && slice < mi_segment_slices_end(segment));
@@ -136,7 +135,7 @@ static void mi_span_queue_delete(mi_span_queue_t* sq, mi_slice_t* slice) {
  Invariant checking
 ----------------------------------------------------------- */
 
-#if (MI_DEBUG > 1)
+#if (MI_DEBUG>=3)
 static bool mi_span_queue_contains(mi_span_queue_t* sq, mi_slice_t* slice) {
   for (mi_slice_t* s = sq->first; s != NULL; s = s->next) {
     if (s==slice) return true;

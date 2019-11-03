@@ -27,7 +27,10 @@ with on-demand coalescing.
 void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
 //int   _mi_os_alloc_huge_os_pages(size_t pages, double max_secs, void** pstart, size_t* pages_reserved, size_t* psize) mi_attr_noexcept;
 void  _mi_os_free(void* p, size_t size, mi_stats_t* stats);
-void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, size_t* psize);
+
+void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, double max_secs, size_t* pages_reserved, size_t* psize);
+void  _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats);
+
 int   _mi_os_numa_node_count(void);
 
 
@@ -235,12 +238,12 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   void* p = mi_arena_alloc(arena, needed_bcount, is_zero, &block_index);
   if (p != NULL) {
     mi_assert_internal(block_index != SIZE_MAX);
-#if MI_DEBUG>=1
+    #if MI_DEBUG>=1
     _Atomic(mi_block_info_t)* block = &arena->blocks[block_index];
     mi_block_info_t binfo = mi_atomic_read(block);
     mi_assert_internal(mi_block_is_in_use(binfo));
     mi_assert_internal(mi_block_count(binfo) >= needed_bcount);
-#endif
+    #endif
     *memid = mi_memid_create(arena_index, block_index);
     *commit = true;           // TODO: support commit on demand?
     *large = arena->is_large;
@@ -383,18 +386,23 @@ static bool mi_arena_add(mi_arena_t* arena) {
 
 // reserve at a specific numa node
 int mi_reserve_huge_os_pages_at(size_t pages, int numa_node) mi_attr_noexcept {
-  size_t hsize = 0;
+  if (pages==0) return 0;
   if (numa_node < -1) numa_node = -1;
   if (numa_node >= 0) numa_node = numa_node % _mi_os_numa_node_count();
-  void* p = _mi_os_alloc_huge_os_pages(pages, numa_node, &hsize);
-  if (p==NULL) return ENOMEM;
-  _mi_verbose_message("reserved %zu huge (1GiB) pages\n", pages);
+  size_t hsize = 0;
+  size_t pages_reserved = 0;
+  void* p = _mi_os_alloc_huge_os_pages(pages, numa_node, (double)pages / 2.0, &pages_reserved, &hsize);
+  if (p==NULL || pages_reserved==0) {
+    _mi_warning_message("failed to reserve %zu gb huge pages\n", pages);
+    return ENOMEM;
+  }
+  _mi_verbose_message("reserved %zu gb huge pages\n", pages_reserved);
   
   size_t bcount = hsize / MI_ARENA_BLOCK_SIZE;
   size_t asize = sizeof(mi_arena_t) + (bcount*sizeof(mi_block_info_t));  // one too much
   mi_arena_t* arena = (mi_arena_t*)_mi_os_alloc(asize, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
   if (arena == NULL) {
-    _mi_os_free(p, hsize, &_mi_stats_main);
+    _mi_os_free_huge_pages(p, hsize, &_mi_stats_main);
     return ENOMEM;
   }
   arena->block_count = bcount;
@@ -416,18 +424,20 @@ int mi_reserve_huge_os_pages_interleave(size_t pages) mi_attr_noexcept {
   // pages per numa node
   int numa_count = _mi_os_numa_node_count();
   if (numa_count <= 0) numa_count = 1;
-  size_t pages_per = pages / numa_count;
-  if (pages_per == 0) pages_per = 1;
+  const size_t pages_per = pages / numa_count;
+  const size_t pages_mod = pages % numa_count;
   
   // reserve evenly among numa nodes
   for (int numa_node = 0; numa_node < numa_count && pages > 0; numa_node++) {
-    int err = mi_reserve_huge_os_pages_at((pages_per > pages ? pages : pages_per), numa_node);
+    size_t node_pages = pages_per;  // can be 0
+    if ((size_t)numa_node < pages_mod) node_pages++;
+    int err = mi_reserve_huge_os_pages_at(node_pages, numa_node);
     if (err) return err;
-    if (pages < pages_per) {
+    if (pages < node_pages) {
       pages = 0;
     }
     else {
-      pages -= pages_per;
+      pages -= node_pages;
     }
   }
 
