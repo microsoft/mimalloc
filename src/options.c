@@ -14,6 +14,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <ctype.h>  // toupper
 #include <stdarg.h>
 
+static void mi_add_stderr_output();
+
 int mi_version(void) mi_attr_noexcept {
   return MI_MALLOC_VERSION;
 }
@@ -69,7 +71,9 @@ static mi_option_desc_t options[_mi_option_last] =
 static void mi_option_init(mi_option_desc_t* desc);
 
 void _mi_options_init(void) {
-  // called on process load
+  // called on process load; should not be called before the CRT is initialized!
+  // (e.g. do not call this from process_init as that may run before CRT initialization)
+  mi_add_stderr_output(); // now it safe to use stderr for output
   for(int i = 0; i < _mi_option_last; i++ ) {
     mi_option_t option = (mi_option_t)i;
     mi_option_get(option); // initialize
@@ -131,7 +135,7 @@ static void mi_out_stderr(const char* msg) {
   #ifdef _WIN32
   // on windows with redirection, the C runtime cannot handle locale dependent output 
   // after the main thread closes so we use direct console output.
-  _cputs(msg);
+  if (!_mi_preloading()) { _cputs(msg); }
   #else
   fputs(msg, stderr);
   #endif
@@ -162,21 +166,27 @@ static void mi_out_buf(const char* msg) {
   memcpy(&out_buf[start], msg, n);
 }
 
-static void mi_out_buf_flush(mi_output_fun* out) {
+static void mi_out_buf_flush(mi_output_fun* out, bool no_more_buf) {
   if (out==NULL) return;
-  // claim all (no more output will be added after this point)
-  size_t count = mi_atomic_addu(&out_len, MI_MAX_DELAY_OUTPUT);
+  // claim (if `no_more_buf == true`, no more output will be added after this point)
+  size_t count = mi_atomic_addu(&out_len, (no_more_buf ? MI_MAX_DELAY_OUTPUT : 1));
   // and output the current contents
   if (count>MI_MAX_DELAY_OUTPUT) count = MI_MAX_DELAY_OUTPUT;
   out_buf[count] = 0;
   out(out_buf);
+  if (!no_more_buf) {
+    out_buf[count] = '\n'; // if continue with the buffer, insert a newline    
+  }
 }
 
-// The initial default output, outputs to stderr and the delayed output buffer.
+
+// Once this module is loaded, switch to this routine
+// which outputs to stderr and the delayed output buffer.
 static void mi_out_buf_stderr(const char* msg) {
   mi_out_stderr(msg);
   mi_out_buf(msg);
 }
+
 
 
 // --------------------------------------------------------
@@ -190,14 +200,19 @@ static mi_output_fun* volatile mi_out_default; // = NULL
 
 static mi_output_fun* mi_out_get_default(void) {
   mi_output_fun* out = mi_out_default;
-  return (out == NULL ? &mi_out_buf_stderr : out);
+  return (out == NULL ? &mi_out_buf : out);
 }
 
 void mi_register_output(mi_output_fun* out) mi_attr_noexcept {
   mi_out_default = (out == NULL ? &mi_out_stderr : out); // stop using the delayed output buffer
-  if (out!=NULL) mi_out_buf_flush(out);  // output the delayed output now
+  if (out!=NULL) mi_out_buf_flush(out,true);             // output all the delayed output now
 }
 
+// add stderr to the delayed output after the module is loaded
+static void mi_add_stderr_output() {
+  mi_out_buf_flush(&mi_out_stderr, false); // flush current contents to stderr
+  mi_out_default = &mi_out_buf_stderr;     // and add stderr to the delayed output
+}
 
 // --------------------------------------------------------
 // Messages, all end up calling `_mi_fputs`.
@@ -210,7 +225,7 @@ static volatile _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT
 static mi_decl_thread bool recurse = false;
 
 void _mi_fputs(mi_output_fun* out, const char* prefix, const char* message) {
-  if (_mi_preloading() || recurse) return;
+  if (recurse) return;
   if (out==NULL || (FILE*)out==stdout || (FILE*)out==stderr) out = mi_out_get_default();
   recurse = true;
   if (prefix != NULL) out(prefix);
@@ -224,7 +239,7 @@ void _mi_fputs(mi_output_fun* out, const char* prefix, const char* message) {
 static void mi_vfprintf( mi_output_fun* out, const char* prefix, const char* fmt, va_list args ) {
   char buf[512];
   if (fmt==NULL) return;
-  if (_mi_preloading() || recurse) return;
+  if (recurse) return;
   recurse = true;
   vsnprintf(buf,sizeof(buf)-1,fmt,args);
   recurse = false;
