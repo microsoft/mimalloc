@@ -435,7 +435,7 @@ int mi_reserve_huge_os_pages_interleave(size_t pages) mi_attr_noexcept {
 
 int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept {
   UNUSED(max_secs);
-  _mi_verbose_message("mi_reserve_huge_os_pages is deprecated: use mi_reserve_huge_os_pages_interleave/at instead\n");
+  _mi_warning_message("mi_reserve_huge_os_pages is deprecated: use mi_reserve_huge_os_pages_interleave/at instead\n");
   if (pages_reserved != NULL) *pages_reserved = 0;
   int err = mi_reserve_huge_os_pages_interleave(pages);  
   if (err==0 && pages_reserved!=NULL) *pages_reserved = pages;
