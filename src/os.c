@@ -840,7 +840,8 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
   }
 
   if (p == NULL) {
-    _mi_warning_message("failed to allocate huge OS pages (size %zu) (error %d)\n", size, GetLastError());
+    DWORD winerr = GetLastError();
+    _mi_warning_message("failed to allocate huge OS pages (size %zu) (windows error %d%s)\n", size, winerr, (winerr==1450 ? " (insufficient resources)" : ""));
   }
   return p;
 }
@@ -981,12 +982,14 @@ static int mi_os_numa_node_countx(void) {
 int _mi_os_numa_node_count(void) {
   static int numa_node_count = 0;   // cache the node count 
   if (mi_unlikely(numa_node_count <= 0)) {
-    int ncount = mi_os_numa_node_countx();
+    int ncount = mi_os_numa_node_countx();    
+    int ncount0 = ncount;
     // never more than max numa node and at least 1
     int nmax = 1 + (int)mi_option_get(mi_option_max_numa_node);
     if (ncount > nmax) ncount = nmax;
     if (ncount <= 0)   ncount = 1;
     numa_node_count = ncount;
+    _mi_verbose_message("using %i numa regions (%i nodes detected)\n", numa_node_count, ncount0);
   }
   mi_assert_internal(numa_node_count >= 1);
   return numa_node_count;

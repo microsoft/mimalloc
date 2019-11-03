@@ -265,7 +265,7 @@ static void _mi_stats_print(mi_stats_t* stats, double secs, mi_output_fun* out) 
   mi_stat_counter_print(&stats->commit_calls, "commits", out);
   mi_stat_print(&stats->threads, "threads", -1, out);
   mi_stat_counter_print_avg(&stats->searches, "searches", out);
-
+  _mi_fprintf(out, "%10s: %7i\n", "numa nodes", _mi_os_numa_node_count());
   if (secs >= 0.0) _mi_fprintf(out, "%10s: %9.3f s\n", "elapsed", secs);
 
   double user_time;
