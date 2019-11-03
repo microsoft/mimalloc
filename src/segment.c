@@ -41,7 +41,7 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 
-#if (MI_DEBUG>1)
+#if (MI_DEBUG>=3)
 static bool mi_segment_queue_contains(const mi_segment_queue_t* queue, mi_segment_t* segment) {
   mi_assert_internal(segment != NULL);
   mi_segment_t* list = queue->first;
@@ -111,7 +111,7 @@ static void mi_segment_insert_in_free_queue(mi_segment_t* segment, mi_segments_t
  Invariant checking
 ----------------------------------------------------------- */
 
-#if (MI_DEBUG > 1)
+#if (MI_DEBUG>=2)
 static bool mi_segment_is_in_free_queue(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_segment_queue_t* queue = mi_segment_free_queue(segment, tld);
   bool in_queue = (queue!=NULL && (segment->next != NULL || segment->prev != NULL || queue->first == segment));
@@ -120,7 +120,9 @@ static bool mi_segment_is_in_free_queue(mi_segment_t* segment, mi_segments_tld_t
   }
   return in_queue;
 }
+#endif
 
+#if (MI_DEBUG>=3)
 static size_t mi_segment_pagesize(mi_segment_t* segment) {
   return ((size_t)1 << segment->page_shift);
 }

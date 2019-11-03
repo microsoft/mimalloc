@@ -914,7 +914,6 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, double max_secs, s
   size_t page;
   for (page = 0; page < pages; page++) {
     // allocate a page
-    bool  is_large = true;
     void* addr = start + (page * MI_HUGE_OS_PAGE_SIZE);
     void* p = mi_os_alloc_huge_os_pagesx(addr, MI_HUGE_OS_PAGE_SIZE, numa_node);
 

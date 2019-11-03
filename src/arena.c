@@ -429,7 +429,7 @@ int mi_reserve_huge_os_pages_interleave(size_t pages) mi_attr_noexcept {
   // reserve evenly among numa nodes
   for (int numa_node = 0; numa_node < numa_count && pages > 0; numa_node++) {
     size_t node_pages = pages_per;  // can be 0
-    if (numa_node < pages_mod) node_pages++;
+    if ((size_t)numa_node < pages_mod) node_pages++;
     int err = mi_reserve_huge_os_pages_at(node_pages, numa_node);
     if (err) return err;
     if (pages < node_pages) {
