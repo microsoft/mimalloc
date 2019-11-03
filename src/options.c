@@ -14,6 +14,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <ctype.h>  // toupper
 #include <stdarg.h>
 
+static uintptr_t mi_max_error_count = 16;  // stop outputting errors after this
+
 static void mi_add_stderr_output();
 
 int mi_version(void) mi_attr_noexcept {
@@ -68,7 +70,8 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(reset_decommits) },     // note: cannot enable this if secure is on
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
   { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
-  { 100, UNINIT, MI_OPTION(os_tag) }             // only apple specific for now but might serve more or less related purpose
+  { 100, UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
+  { 16, UNINIT, MI_OPTION(max_errors) }          // maximum errors that are output
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -85,6 +88,7 @@ void _mi_options_init(void) {
       _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
     }
   }
+  mi_max_error_count = mi_option_get(mi_option_max_errors);
 }
 
 long mi_option_get(mi_option_t option) {
@@ -275,7 +279,7 @@ void _mi_verbose_message(const char* fmt, ...) {
 
 void _mi_error_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
-  if (mi_atomic_increment(&error_count) > MAX_ERROR_COUNT) return;
+  if (mi_atomic_increment(&error_count) > mi_max_error_count) return;
   va_list args;
   va_start(args,fmt);
   mi_vfprintf(NULL, "mimalloc: error: ", fmt, args);
@@ -285,7 +289,7 @@ void _mi_error_message(const char* fmt, ...) {
 
 void _mi_warning_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
-  if (mi_atomic_increment(&error_count) > MAX_ERROR_COUNT) return;
+  if (mi_atomic_increment(&error_count) > mi_max_error_count) return;
   va_list args;
   va_start(args,fmt);
   mi_vfprintf(NULL, "mimalloc: warning: ", fmt, args);
