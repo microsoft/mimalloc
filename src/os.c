@@ -339,7 +339,8 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
       lflags |= MAP_HUGETLB;
       #endif
       #ifdef MAP_HUGE_1GB
-      if ((size % GiB) == 0) {
+      static bool mi_huge_pages_available = true;
+      if ((size % GiB) == 0 && mi_huge_pages_available) {
         lflags |= MAP_HUGE_1GB;
       }
       else
@@ -358,6 +359,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
         p = mi_unix_mmapx(addr, size, try_alignment, protect_flags, lflags, lfd);
         #ifdef MAP_HUGE_1GB
         if (p == NULL && (lflags & MAP_HUGE_1GB) != 0) {
+          mi_huge_pages_available = false; // don't try huge 1GiB pages again
           _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (error %i)\n", errno);
           lflags = ((lflags & ~MAP_HUGE_1GB) | MAP_HUGE_2MB);
           p = mi_unix_mmapx(addr, size, try_alignment, protect_flags, lflags, lfd);
@@ -799,11 +801,11 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
 
   mi_win_enable_large_os_pages();
   
-  void* p = NULL;
   #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   MEM_EXTENDED_PARAMETER params[3] = { {0,0},{0,0},{0,0} };  
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
-  if (pNtAllocateVirtualMemoryEx != NULL) {
+  static bool mi_huge_pages_available = true;
+  if (pNtAllocateVirtualMemoryEx != NULL && mi_huge_pages_available) {
     #ifndef MEM_EXTENDED_PARAMETER_NONPAGED_HUGE
     #define MEM_EXTENDED_PARAMETER_NONPAGED_HUGE  (0x10)
     #endif
@@ -822,7 +824,8 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
       return base;
     }
     else {
-      // fall back to regular huge pages
+      // fall back to regular large pages
+      mi_huge_pages_available = false; // don't try further huge pages
       _mi_warning_message("unable to allocate using huge (1GiB) pages, trying large (2MiB) pages instead (status 0x%lx)\n", err);
     }
   }
@@ -830,20 +833,11 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
   if (pVirtualAlloc2 != NULL && numa_node >= 0) {
     params[0].Type = MemExtendedParameterNumaNode;
     params[0].ULong = (unsigned)numa_node;    
-    p = (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, params, 1);
+    return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, params, 1);
   }
-  else 
   #endif
-  // use regular virtual alloc on older windows
-  {
-    p = VirtualAlloc(addr, size, flags, PAGE_READWRITE);
-  }
-
-  if (p == NULL) {
-    DWORD winerr = GetLastError();
-    _mi_warning_message("failed to allocate huge OS pages (size %zu) (windows error %d%s)\n", size, winerr, (winerr==1450 ? " (insufficient resources)" : ""));
-  }
-  return p;
+  // otherwise use regular virtual alloc on older windows
+  return VirtualAlloc(addr, size, flags, PAGE_READWRITE);
 }
 
 #elif defined(MI_OS_USE_MMAP) && (MI_INTPTR_SIZE >= 8)
@@ -880,44 +874,92 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) 
 // To ensure proper alignment, use our own area for huge OS pages
 static _Atomic(uintptr_t)  mi_huge_start; // = 0
 
-// Allocate MI_SEGMENT_SIZE aligned huge pages
-void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, size_t* psize) {
-  if (psize != NULL) *psize = 0;
+// Claim an aligned address range for huge pages
+static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
+  if (total_size != NULL) *total_size = 0;
   const size_t size = pages * MI_HUGE_OS_PAGE_SIZE;
 
-  // Find a new aligned address for the huge pages
   uintptr_t start = 0;
   uintptr_t end = 0;
   uintptr_t expected;
   do {
-    start = expected = mi_atomic_read_relaxed(&mi_huge_start);    
+    start = expected = mi_atomic_read_relaxed(&mi_huge_start);
     if (start == 0) {
       // Initialize the start address after the 32TiB area
-      start = ((uintptr_t)32 << 40);    // 32TiB virtual start address
-      #if (MI_SECURE>0 || MI_DEBUG==0)  // security: randomize start of huge pages unless in debug mode
-      uintptr_t r = _mi_random_init((uintptr_t)&_mi_os_alloc_huge_os_pages);
+      start = ((uintptr_t)32 << 40);  // 32TiB virtual start address
+#if (MI_SECURE>0 || MI_DEBUG==0)      // security: randomize start of huge pages unless in debug mode
+      uintptr_t r = _mi_random_init((uintptr_t)&mi_os_claim_huge_pages);
       start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x3FF));  // (randomly 0-1024)*1GiB == 0 to 1TiB
-      #endif
+#endif
     }
     end = start + size;
     mi_assert_internal(end % MI_SEGMENT_SIZE == 0);
   } while (!mi_atomic_cas_strong(&mi_huge_start, end, expected));
 
-  // And allocate
-  void* p = mi_os_alloc_huge_os_pagesx((void*)start, size, numa_node);
-  if (p == NULL) {
-    return NULL;
-  }
-  _mi_stat_increase(&_mi_stats_main.committed, size);
-  _mi_stat_increase(&_mi_stats_main.reserved, size);
-  if ((uintptr_t)p % MI_SEGMENT_SIZE != 0) { // must be aligned
-    _mi_warning_message("huge page area was not aligned\n");
-    _mi_os_free(p,size,&_mi_stats_main);
-    return NULL;
-  }
+  if (total_size != NULL) *total_size = size;
+  return (uint8_t*)start;
+}
+
+// Allocate MI_SEGMENT_SIZE aligned huge pages
+void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, double max_secs, size_t* pages_reserved, size_t* psize) {
+  if (psize != NULL) *psize = 0;
+  if (pages_reserved != NULL) *pages_reserved = 0;
+  size_t size = 0;
+  uint8_t* start = mi_os_claim_huge_pages(pages, &size);
   
-  if (psize != NULL) *psize = size;
-  return p;
+  // Allocate one page at the time but try to place them contiguously
+  // We allocate one page at the time to be able to abort if it takes too long
+  // or to at least allocate as many as available on the system.
+  double start_t = _mi_clock_start();
+  size_t page;
+  for (page = 0; page < pages; page++) {
+    // allocate a page
+    bool  is_large = true;
+    void* addr = start + (page * MI_HUGE_OS_PAGE_SIZE);
+    void* p = mi_os_alloc_huge_os_pagesx(addr, MI_HUGE_OS_PAGE_SIZE, numa_node);
+
+    // Did we succeed at a contiguous address?
+    if (p != addr) {
+      // no success, issue a warning and break
+      if (p != NULL) {
+        _mi_warning_message("could not allocate contiguous huge page %zu at 0x%p\n", page, addr);
+        _mi_os_free(p, MI_HUGE_OS_PAGE_SIZE, &_mi_stats_main);
+      }
+      break;
+    }
+    
+    // success, record it
+    _mi_stat_increase(&_mi_stats_main.committed, MI_HUGE_OS_PAGE_SIZE);
+    _mi_stat_increase(&_mi_stats_main.reserved, MI_HUGE_OS_PAGE_SIZE);
+    
+    // check for timeout
+    double elapsed = _mi_clock_end(start_t);
+    if (page >= 1) {
+      double estimate = ((elapsed / (double)(page+1)) * (double)pages);
+      if (estimate > 1.5*max_secs) { // seems like we are going to timeout, break
+        elapsed = max_secs + 1.0; 
+      }
+    }
+    if (elapsed > max_secs) {
+      _mi_warning_message("huge page allocation timed out\n");
+      break;
+    }
+  }
+  mi_assert_internal(page*MI_HUGE_OS_PAGE_SIZE <= size);
+  if (pages_reserved != NULL) *pages_reserved = page;
+  if (psize != NULL) *psize = page * MI_HUGE_OS_PAGE_SIZE;
+  return (page == 0 ? NULL : start);
+}
+
+// free every huge page in a range individually (as we allocated per page)
+// note: needed with VirtualAlloc but could potentially be done in one go on mmap'd systems.
+void _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats) {
+  if (p==NULL || size==0) return;
+  uint8_t* base = (uint8_t*)p;
+  while (size >= MI_HUGE_OS_PAGE_SIZE) {
+    _mi_os_free(base, MI_HUGE_OS_PAGE_SIZE, stats);
+    size -= MI_HUGE_OS_PAGE_SIZE;
+  }
 }
 
 /* ----------------------------------------------------------------------------

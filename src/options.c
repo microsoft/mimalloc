@@ -221,7 +221,6 @@ static void mi_add_stderr_output() {
 // --------------------------------------------------------
 // Messages, all end up calling `_mi_fputs`.
 // --------------------------------------------------------
-#define MAX_ERROR_COUNT (10)
 static volatile _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
 
 // When overriding malloc, we may recurse into mi_vfprintf if an allocation
