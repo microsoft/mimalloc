@@ -385,6 +385,7 @@ static bool mi_arena_add(mi_arena_t* arena) {
 
 // reserve at a specific numa node
 int mi_reserve_huge_os_pages_at(size_t pages, int numa_node) mi_attr_noexcept {
+  if (pages==0) return 0;
   if (numa_node < -1) numa_node = -1;
   if (numa_node >= 0) numa_node = numa_node % _mi_os_numa_node_count();
   size_t hsize = 0;
@@ -422,18 +423,20 @@ int mi_reserve_huge_os_pages_interleave(size_t pages) mi_attr_noexcept {
   // pages per numa node
   int numa_count = _mi_os_numa_node_count();
   if (numa_count <= 0) numa_count = 1;
-  size_t pages_per = pages / numa_count;
-  if (pages_per == 0) pages_per = 1;
+  const size_t pages_per = pages / numa_count;
+  const size_t pages_mod = pages % numa_count;
   
   // reserve evenly among numa nodes
   for (int numa_node = 0; numa_node < numa_count && pages > 0; numa_node++) {
-    int err = mi_reserve_huge_os_pages_at((pages_per > pages ? pages : pages_per), numa_node);
+    size_t node_pages = pages_per;  // can be 0
+    if (numa_node < pages_mod) node_pages++;
+    int err = mi_reserve_huge_os_pages_at(node_pages, numa_node);
     if (err) return err;
-    if (pages < pages_per) {
+    if (pages < node_pages) {
       pages = 0;
     }
     else {
-      pages -= pages_per;
+      pages -= node_pages;
     }
   }
 
