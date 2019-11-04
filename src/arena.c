@@ -25,7 +25,6 @@ with on-demand coalescing.
 
 // os.c
 void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
-//int   _mi_os_alloc_huge_os_pages(size_t pages, double max_secs, void** pstart, size_t* pages_reserved, size_t* psize) mi_attr_noexcept;
 void  _mi_os_free(void* p, size_t size, mi_stats_t* stats);
 
 void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize);
