@@ -870,6 +870,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) 
 }
 #endif
 
+#if (MI_INTPTR_SIZE >= 8) 
 // To ensure proper alignment, use our own area for huge OS pages
 static _Atomic(uintptr_t)  mi_huge_start; // = 0
 
@@ -898,18 +899,25 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
   if (total_size != NULL) *total_size = size;
   return (uint8_t*)start;
 }
+#else
+static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
+  if (total_size != NULL) *total_size = 0;
+  return NULL;
+}
+#endif
 
 // Allocate MI_SEGMENT_SIZE aligned huge pages
-void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, double max_secs, size_t* pages_reserved, size_t* psize) {
+void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_msecs, size_t* pages_reserved, size_t* psize) {
   if (psize != NULL) *psize = 0;
   if (pages_reserved != NULL) *pages_reserved = 0;
   size_t size = 0;
   uint8_t* start = mi_os_claim_huge_pages(pages, &size);
+  if (start == NULL) return NULL; // or 32-bit systems
   
   // Allocate one page at the time but try to place them contiguously
   // We allocate one page at the time to be able to abort if it takes too long
   // or to at least allocate as many as available on the system.
-  double start_t = _mi_clock_start();
+  mi_msecs_t start_t = _mi_clock_start();
   size_t page;
   for (page = 0; page < pages; page++) {
     // allocate a page
@@ -931,14 +939,14 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, double max_secs, s
     _mi_stat_increase(&_mi_stats_main.reserved, MI_HUGE_OS_PAGE_SIZE);
     
     // check for timeout
-    double elapsed = _mi_clock_end(start_t);
+    mi_msecs_t elapsed = _mi_clock_end(start_t);
     if (page >= 1) {
-      double estimate = ((elapsed / (double)(page+1)) * (double)pages);
-      if (estimate > 1.5*max_secs) { // seems like we are going to timeout, break
-        elapsed = max_secs + 1.0; 
+      mi_msecs_t estimate = ((elapsed / (page+1)) * pages);
+      if (estimate > 2*max_msecs) { // seems like we are going to timeout, break
+        elapsed = max_msecs + 1; 
       }
     }
-    if (elapsed > max_secs) {
+    if (elapsed > max_msecs) {
       _mi_warning_message("huge page allocation timed out\n");
       break;
     }

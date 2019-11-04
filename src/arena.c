@@ -28,7 +28,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* lar
 //int   _mi_os_alloc_huge_os_pages(size_t pages, double max_secs, void** pstart, size_t* pages_reserved, size_t* psize) mi_attr_noexcept;
 void  _mi_os_free(void* p, size_t size, mi_stats_t* stats);
 
-void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, double max_secs, size_t* pages_reserved, size_t* psize);
+void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize);
 void  _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats);
 
 int   _mi_os_numa_node_count(void);
@@ -391,7 +391,7 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node) mi_attr_noexcept {
   if (numa_node >= 0) numa_node = numa_node % _mi_os_numa_node_count();
   size_t hsize = 0;
   size_t pages_reserved = 0;
-  void* p = _mi_os_alloc_huge_os_pages(pages, numa_node, (double)pages / 2.0, &pages_reserved, &hsize);
+  void* p = _mi_os_alloc_huge_os_pages(pages, numa_node, pages*500, &pages_reserved, &hsize);
   if (p==NULL || pages_reserved==0) {
     _mi_warning_message("failed to reserve %zu gb huge pages\n", pages);
     return ENOMEM;
