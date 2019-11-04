@@ -231,9 +231,9 @@ static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bin
 #endif
 
 
-static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit);
+static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit);
 
-static void _mi_stats_print(mi_stats_t* stats, double secs, mi_output_fun* out) mi_attr_noexcept {
+static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun* out) mi_attr_noexcept {
   mi_print_header(out);
   #if MI_STAT>1
   mi_stat_count_t normal = { 0,0,0,0 };
@@ -266,16 +266,16 @@ static void _mi_stats_print(mi_stats_t* stats, double secs, mi_output_fun* out) 
   mi_stat_print(&stats->threads, "threads", -1, out);
   mi_stat_counter_print_avg(&stats->searches, "searches", out);
   _mi_fprintf(out, "%10s: %7i\n", "numa nodes", _mi_os_numa_node_count());
-  if (secs >= 0.0) _mi_fprintf(out, "%10s: %9.3f s\n", "elapsed", secs);
+  if (elapsed > 0) _mi_fprintf(out, "%10s: %7ld.%03ld s\n", "elapsed", elapsed/1000, elapsed%1000);
 
-  double user_time;
-  double sys_time;
+  mi_msecs_t user_time;
+  mi_msecs_t sys_time;
   size_t peak_rss;
   size_t page_faults;
   size_t page_reclaim;
   size_t peak_commit;
   mi_process_info(&user_time, &sys_time, &peak_rss, &page_faults, &page_reclaim, &peak_commit);
-  _mi_fprintf(out,"%10s: user: %.3f s, system: %.3f s, faults: %lu, reclaims: %lu, rss: ", "process", user_time, sys_time, (unsigned long)page_faults, (unsigned long)page_reclaim );
+  _mi_fprintf(out,"%10s: user: %ld.%03ld s, system: %ld.%03ld s, faults: %lu, reclaims: %lu, rss: ", "process", user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, (unsigned long)page_faults, (unsigned long)page_reclaim );
   mi_printf_amount((int64_t)peak_rss, 1, out, "%s");
   if (peak_commit > 0) {
     _mi_fprintf(out,", commit charge: ");
@@ -284,9 +284,7 @@ static void _mi_stats_print(mi_stats_t* stats, double secs, mi_output_fun* out) 
   _mi_fprintf(out,"\n");
 }
 
-double _mi_clock_end(double start);
-double _mi_clock_start(void);
-static double mi_time_start = 0.0;
+static mi_msecs_t mi_time_start; // = 0
 
 static mi_stats_t* mi_stats_get_default(void) {
   mi_heap_t* heap = mi_heap_get_default();
@@ -316,71 +314,72 @@ void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
 }
 
 
-static void mi_stats_print_ex(mi_stats_t* stats, double secs, mi_output_fun* out) {
+static void mi_stats_print_ex(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun* out) {
   mi_stats_merge_from(stats);
-  _mi_stats_print(&_mi_stats_main, secs, out);
+  _mi_stats_print(&_mi_stats_main, elapsed, out);
 }
 
 void mi_stats_print(mi_output_fun* out) mi_attr_noexcept {
-  mi_stats_print_ex(mi_stats_get_default(),_mi_clock_end(mi_time_start),out);
+  mi_msecs_t elapsed = _mi_clock_end(mi_time_start);
+  mi_stats_print_ex(mi_stats_get_default(),elapsed,out);
 }
 
 void mi_thread_stats_print(mi_output_fun* out) mi_attr_noexcept {
-  _mi_stats_print(mi_stats_get_default(), _mi_clock_end(mi_time_start), out);
+  mi_msecs_t elapsed = _mi_clock_end(mi_time_start);
+  _mi_stats_print(mi_stats_get_default(), elapsed, out);
 }
 
 
-
-// --------------------------------------------------------
-// Basic timer for convenience
-// --------------------------------------------------------
-
+// ----------------------------------------------------------------
+// Basic timer for convenience; use milli-seconds to avoid doubles
+// ----------------------------------------------------------------
 #ifdef _WIN32
 #include <windows.h>
-static double mi_to_seconds(LARGE_INTEGER t) {
-  static double freq = 0.0;
-  if (freq <= 0.0) {
+static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
+  static LARGE_INTEGER mfreq; // = 0
+  if (mfreq.QuadPart == 0LL) {
     LARGE_INTEGER f;
     QueryPerformanceFrequency(&f);
-    freq = (double)(f.QuadPart);
+    mfreq.QuadPart = f.QuadPart/1000LL;
+    if (mfreq.QuadPart == 0) mfreq.QuadPart = 1;
   }
-  return ((double)(t.QuadPart) / freq);
+  return (mi_msecs_t)(t.QuadPart / mfreq.QuadPart);  
 }
 
-static double mi_clock_now(void) {
+mi_msecs_t _mi_clock_now(void) {
   LARGE_INTEGER t;
   QueryPerformanceCounter(&t);
-  return mi_to_seconds(t);
+  return mi_to_msecs(t);
 }
 #else
 #include <time.h>
 #ifdef CLOCK_REALTIME
-static double mi_clock_now(void) {
+mi_msecs_t _mi_clock_now(void) {
   struct timespec t;
   clock_gettime(CLOCK_REALTIME, &t);
-  return (double)t.tv_sec + (1.0e-9 * (double)t.tv_nsec);
+  return ((mi_msecs_t)t.tv_sec * 1000) + ((mi_msecs_t)t.tv_nsec / 1000000);
 }
 #else
 // low resolution timer
-static double mi_clock_now(void) {
-  return ((double)clock() / (double)CLOCKS_PER_SEC);
+mi_msecs_t _mi_clock_now(void) {
+  return ((mi_msecs_t)clock() / ((mi_msecs_t)CLOCKS_PER_SEC / 1000));
 }
 #endif
 #endif
 
 
-static double mi_clock_diff = 0.0;
+static mi_msecs_t mi_clock_diff;
 
-double _mi_clock_start(void) {
+mi_msecs_t _mi_clock_start(void) {
   if (mi_clock_diff == 0.0) {
-    double t0 = mi_clock_now();
-    mi_clock_diff = mi_clock_now() - t0;
+    mi_msecs_t t0 = _mi_clock_now();
+    mi_clock_diff = _mi_clock_now() - t0;
   }
-  return mi_clock_now();
+  return _mi_clock_now();
 }
 
-double _mi_clock_end(double start) {
-  double end = mi_clock_now();
+mi_msecs_t _mi_clock_end(mi_msecs_t start) {
+  mi_msecs_t end = _mi_clock_now();
   return (end - start - mi_clock_diff);
 }
 
@@ -394,21 +393,21 @@ double _mi_clock_end(double start) {
 #include <psapi.h>
 #pragma comment(lib,"psapi.lib")
 
-static double filetime_secs(const FILETIME* ftime) {
+static mi_msecs_t filetime_msecs(const FILETIME* ftime) {
   ULARGE_INTEGER i;
   i.LowPart = ftime->dwLowDateTime;
   i.HighPart = ftime->dwHighDateTime;
-  double secs = (double)(i.QuadPart) * 1.0e-7; // FILETIME is in 100 nano seconds
-  return secs;
+  mi_msecs_t msecs = (i.QuadPart / 10000); // FILETIME is in 100 nano seconds
+  return msecs;
 }
-static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
+static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
   FILETIME ct;
   FILETIME ut;
   FILETIME st;
   FILETIME et;
   GetProcessTimes(GetCurrentProcess(), &ct, &et, &st, &ut);
-  *utime = filetime_secs(&ut);
-  *stime = filetime_secs(&st);
+  *utime = filetime_msecs(&ut);
+  *stime = filetime_msecs(&st);
 
   PROCESS_MEMORY_COUNTERS info;
   GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
@@ -427,11 +426,11 @@ static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size
 #include <mach/mach.h>
 #endif
 
-static double timeval_secs(const struct timeval* tv) {
-  return (double)tv->tv_sec + ((double)tv->tv_usec * 1.0e-6);
+static mi_msecs_t timeval_secs(const struct timeval* tv) {
+  return ((mi_msecs_t)tv->tv_sec * 1000L) + ((mi_msecs_t)tv->tv_usec / 1000L);
 }
 
-static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
+static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
   struct rusage rusage;
   getrusage(RUSAGE_SELF, &rusage);
 #if defined(__APPLE__) && defined(__MACH__)
@@ -452,12 +451,12 @@ static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size
 #pragma message("define a way to get process info")
 #endif
 
-static void mi_process_info(double* utime, double* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
+static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
   *peak_rss = 0;
   *page_faults = 0;
   *page_reclaim = 0;
   *peak_commit = 0;
-  *utime = 0.0;
-  *stime = 0.0;
+  *utime = 0;
+  *stime = 0;
 }
 #endif
