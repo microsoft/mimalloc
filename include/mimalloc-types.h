@@ -386,6 +386,19 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 
 
 // ------------------------------------------------------
+// Delay slots (to avoid expensive OS calls)
+// ------------------------------------------------------
+typedef int64_t mi_msecs_t;
+
+typedef struct mi_delay_slot_s {
+  mi_msecs_t expire;
+  uint8_t*   addr;
+  size_t     size;
+} mi_delay_slot_t;
+
+#define MI_RESET_DELAY_SLOTS (128)
+
+// ------------------------------------------------------
 // Thread Local data
 // ------------------------------------------------------
 
@@ -395,6 +408,12 @@ typedef struct mi_segment_queue_s {
   mi_segment_t* last;
 } mi_segment_queue_t;
 
+// OS thread local data
+typedef struct mi_os_tld_s {
+  size_t              region_idx;   // start point for next allocation
+  mi_stats_t* stats;        // points to tld stats
+  mi_delay_slot_t     reset_delay[MI_RESET_DELAY_SLOTS];
+} mi_os_tld_t;
 
 // Segments thread local data
 typedef struct mi_segments_tld_s {
@@ -408,13 +427,8 @@ typedef struct mi_segments_tld_s {
   size_t              cache_size;   // total size of all segments in the cache
   mi_segment_t*       cache;        // (small) cache of segments
   mi_stats_t*         stats;        // points to tld stats
+  mi_os_tld_t*        os;           // points to os stats
 } mi_segments_tld_t;
-
-// OS thread local data
-typedef struct mi_os_tld_s {
-  size_t              region_idx;   // start point for next allocation
-  mi_stats_t*         stats;        // points to tld stats
-} mi_os_tld_t;
 
 // Thread local data
 struct mi_tld_s {

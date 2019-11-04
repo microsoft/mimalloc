@@ -53,6 +53,9 @@ void    _mi_arena_free(void* p, size_t size, size_t memid, mi_stats_t* stats);
 void*   _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
 void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
 
+// local
+static bool mi_delay_remove(mi_delay_slot_t* slots, size_t count, void* p, size_t size);
+
 
 // Constants
 #if (MI_INTPTR_SIZE==8)
@@ -470,16 +473,19 @@ Free
 -----------------------------------------------------------------------------*/
 
 // Free previously allocated memory with a given id.
-void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
-  mi_assert_internal(size > 0 && stats != NULL);
+void _mi_mem_free(void* p, size_t size, size_t id, mi_os_tld_t* tld) {
+  mi_assert_internal(size > 0 && tld != NULL);
   if (p==NULL) return;
   if (size==0) return;
+
+  mi_delay_remove(tld->reset_delay, MI_RESET_DELAY_SLOTS, p, size);
+
   size_t arena_memid = 0;
   size_t idx = 0;
   size_t bitidx = 0;
   if (mi_memid_indices(id,&idx,&bitidx,&arena_memid)) {
    // was a direct arena allocation, pass through
-    _mi_arena_free(p, size, arena_memid, stats);
+    _mi_arena_free(p, size, arena_memid, tld->stats);
   }
   else {
     // allocated in a region
@@ -512,14 +518,14 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
           (mi_option_is_enabled(mi_option_eager_commit) ||  // cannot reset halfway committed segments, use `option_page_reset` instead
             mi_option_is_enabled(mi_option_reset_decommits))) // but we can decommit halfway committed segments
         {
-          _mi_os_reset(p, size, stats);
+          _mi_os_reset(p, size, tld->stats);  // cannot use delay reset! (due to concurrent allocation in the same region)
           //_mi_os_decommit(p, size, stats);  // todo: and clear dirty bits?
         }
       }
     }    
     if (!is_eager_committed) {
       // adjust commit statistics as we commit again when re-using the same slot
-      _mi_stat_decrease(&stats->committed, mi_good_commit_size(size));
+      _mi_stat_decrease(&tld->stats->committed, mi_good_commit_size(size));
     }
 
     // TODO: should we free empty regions? currently only done _mi_mem_collect.
@@ -539,7 +545,7 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
 /* ----------------------------------------------------------------------------
   collection
 -----------------------------------------------------------------------------*/
-void _mi_mem_collect(mi_stats_t* stats) {
+void _mi_mem_collect(mi_os_tld_t* tld) {
   // free every region that has no segments in use.
   for (size_t i = 0; i < regions_count; i++) {
     mem_region_t* region = &regions[i];
@@ -554,7 +560,8 @@ void _mi_mem_collect(mi_stats_t* stats) {
         bool is_eager_committed;
         void* start = mi_region_info_read(mi_atomic_read(&region->info), NULL, &is_eager_committed);
         if (start != NULL) { // && !_mi_os_is_huge_reserved(start)) {
-          _mi_arena_free(start, MI_REGION_SIZE, region->arena_memid, stats);
+          mi_delay_remove(tld->reset_delay, MI_RESET_DELAY_SLOTS, start, MI_REGION_SIZE);
+          _mi_arena_free(start, MI_REGION_SIZE, region->arena_memid, tld->stats);
         }
         // and release
         mi_atomic_write(&region->info,0);
@@ -564,25 +571,123 @@ void _mi_mem_collect(mi_stats_t* stats) {
   }
 }
 
+/* ----------------------------------------------------------------------------
+  Delay slots
+-----------------------------------------------------------------------------*/
+
+typedef void (mi_delay_resolve_fun)(void* addr, size_t size, void* arg);
+
+static void mi_delay_insert(mi_delay_slot_t* slots, size_t count,
+  mi_msecs_t delay, uint8_t* addr, size_t size,
+  mi_delay_resolve_fun* resolve, void* arg)
+{
+  if (delay==0) {
+    resolve(addr, size, arg);
+    return;
+  }
+
+  mi_msecs_t now = _mi_clock_now();
+  mi_delay_slot_t* oldest = slots;
+  // walk through all slots, resolving expired ones.
+  // remember the oldest slot to insert the new entry in.
+  for (size_t i = 0; i < count; i++) {
+    mi_delay_slot_t* slot = &slots[i];
+    
+    if (slot->expire == 0) {
+      // empty slot
+      oldest = slot;
+    }
+    // TODO: should we handle overlapping areas too?
+    else if (slot->addr <= addr && slot->addr + slot->size >= addr + size) {
+      // earlier slot encompasses new area, increase expiration
+      slot->expire = now + delay;
+      delay = 0; 
+    }
+    else if (addr <= slot->addr && addr + size >= slot->addr + slot->size) {
+      // new one encompasses old slot, overwrite
+      slot->expire = now + delay;
+      slot->addr = addr;
+      slot->size = size;
+      delay = 0;
+    }
+    else if (slot->expire < now) {
+      // expired slot, resolve now
+      slot->expire = 0;
+      resolve(slot->addr, slot->size, arg);
+    }
+    else if (oldest->expire > slot->expire) {  
+      oldest = slot;
+    }
+  }
+  if (delay>0) {
+    // not yet registered, use the oldest slot
+    if (oldest->expire > 0) { 
+      resolve(oldest->addr, oldest->size, arg);  // evict if not empty
+    }
+    oldest->expire = now + delay;
+    oldest->addr = addr;
+    oldest->size = size;
+  }
+}
+
+static bool mi_delay_remove(mi_delay_slot_t* slots, size_t count, void* p, size_t size)
+{
+  uint8_t* addr = (uint8_t*)p;
+  bool done = false;
+  // walk through all slots
+  for (size_t i = 0; i < count; i++) {
+    mi_delay_slot_t* slot = &slots[i];
+    if (slot->addr <= addr && slot->addr + slot->size >= addr + size) {
+      // earlier slot encompasses the area; remove it
+      slot->expire = 0;
+      done = true;
+    }
+    else if (addr <= slot->addr && addr + size >= slot->addr + slot->size) {
+      // new one encompasses old slot, remove it
+      slot->expire = 0;
+    }
+    else if ((addr <= slot->addr && addr + size > slot->addr) ||
+             (addr < slot->addr + slot->size && addr + size >= slot->addr + slot->size)) {
+      // partial overlap, remove slot
+      mi_assert_internal(false); 
+      slot->expire = 0;
+    }
+  }
+  return done;
+}
+
+static void mi_resolve_reset(void* p, size_t size, void* vtld) {
+  mi_os_tld_t* tld = (mi_os_tld_t*)vtld;
+  _mi_os_reset(p, size, tld->stats);
+}
+
+bool _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld) {
+  mi_delay_insert(tld->reset_delay, MI_RESET_DELAY_SLOTS, mi_option_get(mi_option_reset_delay),
+    (uint8_t*)p, size, &mi_resolve_reset, tld);
+  return true;
+}
+
+bool _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld) {
+  if (!mi_delay_remove(tld->reset_delay, MI_RESET_DELAY_SLOTS, (uint8_t*)p, size)) {
+    return _mi_os_unreset(p, size, is_zero, tld->stats);
+  }
+  return true;
+}
+
+
 
 /* ----------------------------------------------------------------------------
   Other
 -----------------------------------------------------------------------------*/
 
-bool _mi_mem_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats) {
-  return _mi_os_commit(p, size, is_zero, stats);
+bool _mi_mem_commit(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld) {
+  mi_delay_remove(tld->reset_delay, MI_RESET_DELAY_SLOTS, p, size);
+  return _mi_os_commit(p, size, is_zero, tld->stats);
 }
 
-bool _mi_mem_decommit(void* p, size_t size, mi_stats_t* stats) {
-  return _mi_os_decommit(p, size, stats);
-}
-
-bool _mi_mem_reset(void* p, size_t size, mi_stats_t* stats) {
-  return _mi_os_reset(p, size, stats);
-}
-
-bool _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats) {
-  return _mi_os_unreset(p, size, is_zero, stats);
+bool _mi_mem_decommit(void* p, size_t size, mi_os_tld_t* tld) {
+  mi_delay_remove(tld->reset_delay, MI_RESET_DELAY_SLOTS, p, size);
+  return _mi_os_decommit(p, size, tld->stats);
 }
 
 bool _mi_mem_protect(void* p, size_t size) {

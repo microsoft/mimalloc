@@ -149,7 +149,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // collect regions
   if (collect >= FORCE && _mi_is_main_thread()) {
-    _mi_mem_collect(&heap->tld->stats);
+    _mi_mem_collect(&heap->tld->os);
   }
 }
 
