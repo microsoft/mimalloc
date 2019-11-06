@@ -1046,9 +1046,10 @@ int _mi_os_numa_node_count(void) {
 
 int _mi_os_numa_node(mi_os_tld_t* tld) {
   UNUSED(tld);
-  int numa_node = mi_os_numa_nodex();
-  // never more than the node count and >= 0
   int numa_count = _mi_os_numa_node_count();
+  if (numa_count<=1) return 0; // optimize on single numa node systems: always node 0
+  // never more than the node count and >= 0
+  int numa_node = mi_os_numa_nodex();
   if (numa_node >= numa_count) { numa_node = numa_node % numa_count; }
   if (numa_node < 0) numa_node = 0;  
   return numa_node;
