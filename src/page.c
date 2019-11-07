@@ -455,8 +455,8 @@ static void mi_page_free_list_extend_secure(mi_heap_t* heap, mi_page_t* page, si
   while ((extend >> shift) == 0) {
     shift--;
   }
-  size_t slice_count = (size_t)1U << shift;
-  size_t slice_extend = extend / slice_count;
+  const size_t slice_count = (size_t)1U << shift;
+  const size_t slice_extend = extend / slice_count;
   mi_assert_internal(slice_extend >= 1);
   mi_block_t* blocks[MI_MAX_SLICES];   // current start of the slice
   size_t      counts[MI_MAX_SLICES];   // available objects in the slice
@@ -470,7 +470,7 @@ static void mi_page_free_list_extend_secure(mi_heap_t* heap, mi_page_t* page, si
   // set up first element
   size_t current = _mi_heap_random(heap) % slice_count;
   counts[current]--;
-  page->free = blocks[current];
+  mi_block_t* const free_start = blocks[current];
   // and iterate through the rest
   uintptr_t rnd = heap->random;
   for (size_t i = 1; i < extend; i++) {
@@ -490,7 +490,9 @@ static void mi_page_free_list_extend_secure(mi_heap_t* heap, mi_page_t* page, si
     mi_block_set_next(page, block, blocks[next]);   // and set next; note: we may have `current == next`
     current = next;
   }
-  mi_block_set_next(page, blocks[current], NULL);             // end of the list
+  // prepend to the free list (usually NULL)
+  mi_block_set_next(page, blocks[current], page->free);  // end of the list
+  page->free = free_start;
   heap->random = _mi_random_shuffle(rnd);
 }
 
