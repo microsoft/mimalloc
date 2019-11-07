@@ -135,13 +135,15 @@ static inline bool mi_bitmap_try_claim(mi_bitmap_t bitmap, size_t bitmap_fields,
 }
 
 // Set `count` bits at `bitmap_idx` to 0 atomically
-static inline void mi_bitmap_unclaim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx) {
+// Returns `true` if all `count` bits were 1 previously
+static inline bool mi_bitmap_unclaim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx) {
   const size_t idx = mi_bitmap_index_field(bitmap_idx);
   const size_t bitidx = mi_bitmap_index_bit_in_field(bitmap_idx);
   const uintptr_t mask = mi_bitmap_mask_(count, bitidx);
   mi_assert_internal(bitmap_fields > idx); UNUSED(bitmap_fields);
   mi_assert_internal((bitmap[idx] & mask) == mask);
-  mi_atomic_and(&bitmap[idx], ~mask);
+  uintptr_t prev = mi_atomic_and(&bitmap[idx], ~mask);
+  return ((prev & mask) == mask);
 }
 
 
