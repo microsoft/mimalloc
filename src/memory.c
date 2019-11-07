@@ -16,10 +16,10 @@ We need this memory layer between the raw OS calls because of:
 1. on `sbrk` like systems (like WebAssembly) we need our own memory maps in order
    to reuse memory effectively.
 2. It turns out that for large objects, between 1MiB and 32MiB (?), the cost of
-   an OS allocation/free is still (much) too expensive relative to the accesses in that
-   object :-( (`malloc-large` tests this). This means we need a cheaper way to
-   reuse memory.
-3. This layer can help with a NUMA aware allocation in the future.
+   an OS allocation/free is still (much) too expensive relative to the accesses 
+   in that object :-( (`malloc-large` tests this). This means we need a cheaper 
+   way to reuse memory.
+3. This layer allows for NUMA aware allocation.
 
 Possible issues:
 - (2) can potentially be addressed too with a small cache per thread which is much
@@ -47,8 +47,6 @@ bool    _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 bool    _mi_os_decommit(void* p, size_t size, mi_stats_t* stats);
 bool    _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
 bool    _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
-//void*   _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
-//void    _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats);
 
 // arena.c
 void    _mi_arena_free(void* p, size_t size, size_t memid, mi_stats_t* stats);
@@ -58,18 +56,18 @@ void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, boo
 
 // Constants
 #if (MI_INTPTR_SIZE==8)
-#define MI_HEAP_REGION_MAX_SIZE    (256 * GiB)  // 16KiB for the region map
+#define MI_HEAP_REGION_MAX_SIZE    (256 * GiB)  // 40KiB for the region map 
 #elif (MI_INTPTR_SIZE==4)
-#define MI_HEAP_REGION_MAX_SIZE    (3 * GiB)    // 196 bytes for the region map
+#define MI_HEAP_REGION_MAX_SIZE    (3 * GiB)    // ~ KiB for the region map
 #else
 #error "define the maximum heap space allowed for regions on this platform"
 #endif
 
 #define MI_SEGMENT_ALIGN          MI_SEGMENT_SIZE
 
-#define MI_REGION_SIZE            (MI_SEGMENT_SIZE * MI_BITMAP_FIELD_BITS)    // 256MiB
+#define MI_REGION_SIZE            (MI_SEGMENT_SIZE * MI_BITMAP_FIELD_BITS)    // 256MiB  (64MiB on 32 bits)
 #define MI_REGION_MAX_ALLOC_SIZE  (MI_REGION_SIZE/4)                          // 64MiB
-#define MI_REGION_MAX             (MI_HEAP_REGION_MAX_SIZE / MI_REGION_SIZE)  
+#define MI_REGION_MAX             (MI_HEAP_REGION_MAX_SIZE / MI_REGION_SIZE)  // 1024  (48 on 32 bits)
 
 
 // Region info is a pointer to the memory region and two bits for 
@@ -95,7 +93,7 @@ typedef struct mem_region_s {
   size_t   arena_memid;                          // if allocated from a (huge page) arena
 } mem_region_t;
 
-// The region map; 16KiB for a 256GiB HEAP_REGION_MAX
+// The region map
 static mem_region_t regions[MI_REGION_MAX];
 
 // A bit mask per region for its claimed MI_SEGMENT_SIZE blocks.
@@ -173,7 +171,7 @@ static bool mi_region_ensure_allocated(size_t idx, bool allow_large, mi_region_i
     bool region_large = allow_large;
     bool is_zero = false;
     size_t arena_memid = 0;
-    void* start = _mi_arena_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, &region_commit, &region_large, &is_zero, &arena_memid, tld);
+    void* const start = _mi_arena_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, &region_commit, &region_large, &is_zero, &arena_memid, tld);
     mi_assert_internal(!(region_large && !allow_large));
 
     if (start == NULL) {
@@ -183,35 +181,31 @@ static bool mi_region_ensure_allocated(size_t idx, bool allow_large, mi_region_i
     }
 
     // set the newly allocated region
+    // try to initialize any region up to 4 beyond the current one in
+    // care multiple threads are doing this concurrently (common at startup)    
     info = mi_region_info_create(start, region_large, region_commit);
-    if (mi_atomic_cas_strong(&regions[idx].info, info, 0)) {
-      // update the region count
-      regions[idx].arena_memid = arena_memid;
-      mi_atomic_write(&regions[idx].numa_node, _mi_os_numa_node(tld) + 1);
-      mi_atomic_write(&regions_dirty[idx], is_zero ? 0 : ~((uintptr_t)0));
-      mi_atomic_increment(&regions_count);
-    }
-    else {
-      // failed, another thread allocated just before us!
-      // we assign it to a later slot instead (up to 4 tries).
-      for (size_t i = 1; i <= 4 && idx + i < MI_REGION_MAX; i++) {
-        if (mi_atomic_cas_strong(&regions[idx+i].info, info, 0)) {
-          regions[idx+i].arena_memid = arena_memid;
-          mi_atomic_write(&regions[idx+i].numa_node, _mi_os_numa_node(tld) + 1);
-          mi_atomic_write(&regions_dirty[idx], is_zero ? 0 : ~((uintptr_t)0));
-          mi_atomic_increment(&regions_count);
-          start = NULL;
-          break;
-        }
+    bool claimed = false;
+    for (size_t i = 0; i <= 4 && idx + i < MI_REGION_MAX && !claimed; i++) {
+      if (!is_zero) {
+        // set dirty bits before CAS; this might race with a zero block but that is ok. 
+        // (but writing before cas prevents a concurrent allocation to assume it is not dirty)
+        mi_atomic_write(&regions_dirty[idx+i], MI_BITMAP_FIELD_FULL);
       }
-      if (start != NULL) {
-        // free it if we didn't succeed to save it to some other region
-        _mi_arena_free(start, MI_REGION_SIZE, arena_memid, tld->stats);
-        // _mi_os_free_ex(start, MI_REGION_SIZE, region_commit, tld->stats);
+      if (mi_atomic_cas_strong(&regions[idx+i].info, info, 0)) {
+        // claimed!
+        regions[idx+i].arena_memid = arena_memid;
+        mi_atomic_write(&regions[idx+i].numa_node, _mi_os_numa_node(tld) + 1);
+        mi_atomic_increment(&regions_count);
+        claimed = true;
       }
-      // and continue with the memory at our index
-      info = mi_atomic_read(&regions[idx].info);
     }
+    if (!claimed) {
+      // free our OS allocation if we didn't succeed to store it in some region
+      _mi_arena_free(start, MI_REGION_SIZE, arena_memid, tld->stats);      
+    }
+    // continue with the actual info at our index in case another thread was quicker with the allocation
+    info = mi_atomic_read(&regions[idx].info);
+    mi_assert_internal(info != 0);
   }
   mi_assert_internal(info == mi_atomic_read(&regions[idx].info));
   mi_assert_internal(info != 0);
@@ -290,19 +284,21 @@ static bool mi_region_is_suitable(int numa_node, size_t idx, bool commit, bool a
     int rnode = ((int)mi_atomic_read_relaxed(&regions->numa_node)) - 1;
     if (rnode != numa_node) return false;
   }
-  if (mi_unlikely(!(commit || allow_large))) {
-    // otherwise skip incompatible regions if possible. 
-    // this is not guaranteed due to multiple threads allocating at the same time but
-    // that's ok. In secure mode, large is never allowed for any thread, so that works out; 
-    // otherwise we might just not be able to reset/decommit individual pages sometimes.
-    mi_region_info_t info = mi_atomic_read_relaxed(&regions->info);
-    bool is_large;
-    bool is_committed;
-    void* start = mi_region_info_read(info, &is_large, &is_committed);
-    bool ok = (start == NULL || (commit || !is_committed) || (allow_large || !is_large)); // Todo: test with one bitmap operation?
-    if (!ok) return false;
-  }
-  return true;
+  if (commit && allow_large) return true;  // always ok
+
+  // otherwise skip incompatible regions if possible. 
+  // this is not guaranteed due to multiple threads allocating at the same time but
+  // that's ok. In secure mode, large is never allowed for any thread, so that works out; 
+  // otherwise we might just not be able to reset/decommit individual pages sometimes.
+  mi_region_info_t info = mi_atomic_read_relaxed(&regions->info);
+  bool is_large;
+  bool is_committed;
+  void* start = mi_region_info_read(info, &is_large, &is_committed);
+  // note: we also skip if commit is false and the region is committed,
+  // that is a bit strong but prevents allocation of eager delayed segments in 
+  // committed memory
+  bool ok = (start == NULL || (commit || !is_committed) || (allow_large || !is_large)); // Todo: test with one bitmap operation?
+  return ok;
 }
 
 // Try to allocate `blocks` in a `region` at `idx` of a given `size`. Does a quick check before trying to claim.

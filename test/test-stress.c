@@ -66,7 +66,9 @@ static void* alloc_items(size_t items, random_t r) {
   if (chance(1, r)) items *= 100; // 1% huge objects;
   if (items==40) items++;              // pthreads uses that size for stack increases
   uintptr_t* p = (uintptr_t*)mi_malloc(items*sizeof(uintptr_t));
-  for (uintptr_t i = 0; i < items; i++) p[i] = (items - i) ^ cookie;
+  if (p != NULL) {
+    for (uintptr_t i = 0; i < items; i++) p[i] = (items - i) ^ cookie;
+  }
   return p;
 }
 

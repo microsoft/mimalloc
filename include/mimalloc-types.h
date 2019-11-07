@@ -29,7 +29,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_SECURE 4  // experimental, may be more expensive: checks for double free.
 
 #if !defined(MI_SECURE)
-#define MI_SECURE 0
+#define MI_SECURE 4
 #endif
 
 // Define MI_DEBUG for debug mode
@@ -93,12 +93,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SEGMENT_SHIFT                  ( MI_LARGE_PAGE_SHIFT)      // 4mb
 
 // Derived constants
-#define MI_SEGMENT_SIZE                   (1<<MI_SEGMENT_SHIFT)
+#define MI_SEGMENT_SIZE                   (1UL<<MI_SEGMENT_SHIFT)
 #define MI_SEGMENT_MASK                   ((uintptr_t)MI_SEGMENT_SIZE - 1)
 
-#define MI_SMALL_PAGE_SIZE                (1<<MI_SMALL_PAGE_SHIFT)
-#define MI_MEDIUM_PAGE_SIZE               (1<<MI_MEDIUM_PAGE_SHIFT)
-#define MI_LARGE_PAGE_SIZE                (1<<MI_LARGE_PAGE_SHIFT)
+#define MI_SMALL_PAGE_SIZE                (1UL<<MI_SMALL_PAGE_SHIFT)
+#define MI_MEDIUM_PAGE_SIZE               (1UL<<MI_MEDIUM_PAGE_SHIFT)
+#define MI_LARGE_PAGE_SIZE                (1UL<<MI_LARGE_PAGE_SHIFT)
 
 #define MI_SMALL_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_SMALL_PAGE_SIZE)
 #define MI_MEDIUM_PAGES_PER_SEGMENT       (MI_SEGMENT_SIZE/MI_MEDIUM_PAGE_SIZE)

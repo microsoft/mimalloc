@@ -497,8 +497,10 @@ static void mi_page_free_list_extend_secure(mi_heap_t* heap, mi_page_t* page, si
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* page, size_t extend, mi_stats_t* stats)
 {
   UNUSED(stats);
+  #if (MI_SECURE <= 2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
+  #endif
   mi_assert_internal(page->capacity + extend <= page->reserved);
   void* page_area = _mi_page_start(_mi_page_segment(page), page, NULL );
   size_t bsize = page->block_size;

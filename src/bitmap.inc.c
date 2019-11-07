@@ -1,41 +1,30 @@
+/* ----------------------------------------------------------------------------
+Copyright (c) 2019, Microsoft Research, Daan Leijen
+This is free software; you can redistribute it and/or modify it under the
+terms of the MIT license. A copy of the license can be found in the file
+"LICENSE" at the root of this distribution.
+-----------------------------------------------------------------------------*/
+
+/* ----------------------------------------------------------------------------
+This file is meant to be included in other files for efficiency.
+It implements a bitmap that can set/reset sequences of bits atomically
+and is used to concurrently claim memory ranges. 
+
+A bitmap is an array of fields where each field is a machine word (`uintptr_t`)
+
+A current limitation is that the bit sequences cannot cross fields 
+and that the sequence must be smaller or equal to the bits in a field.
+---------------------------------------------------------------------------- */
 #pragma once
-#ifndef MI_BITMAP_H
-#define MI_BITMAP_H
+#ifndef MI_BITMAP_C
+#define MI_BITMAP_C
 
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
-// Use bit scan forward to quickly find the first zero bit if it is available
-#if defined(_MSC_VER)
-#define MI_HAVE_BITSCAN
-#include <intrin.h>
-static inline size_t mi_bsf(uintptr_t x) {
-  if (x==0) return 8*MI_INTPTR_SIZE;
-  DWORD idx;
-  MI_64(_BitScanForward)(&idx, x);
-  return idx;
-}
-static inline size_t mi_bsr(uintptr_t x) {
-  if (x==0) return 8*MI_INTPTR_SIZE;
-  DWORD idx;
-  MI_64(_BitScanReverse)(&idx, x);
-  return idx;
-}
-#elif defined(__GNUC__) || defined(__clang__)
-#define MI_HAVE_BITSCAN
-#if (INTPTR_MAX == LONG_MAX)
-# define MI_L(x)  x##l
-#else
-# define MI_L(x)  x##ll
-#endif
-static inline size_t mi_bsf(uintptr_t x) {
-  return (x==0 ? 8*MI_INTPTR_SIZE : MI_L(__builtin_ctz)(x));
-}
-static inline size_t mi_bsr(uintptr_t x) {
-  return (x==0 ? 8*MI_INTPTR_SIZE : (8*MI_INTPTR_SIZE - 1) - MI_L(__builtin_clz)(x));
-}
-#endif
-
+/* -----------------------------------------------------------
+  Bitmap definition
+----------------------------------------------------------- */
 
 #define MI_BITMAP_FIELD_BITS   (8*MI_INTPTR_SIZE)
 #define MI_BITMAP_FIELD_FULL   (~((uintptr_t)0))   // all bits set
@@ -63,14 +52,59 @@ static inline size_t mi_bitmap_index_bit_in_field(mi_bitmap_index_t bitmap_idx) 
   return (bitmap_idx % MI_BITMAP_FIELD_BITS);
 }
 
+// Get the full bit index
+static inline size_t mi_bitmap_index_bit(mi_bitmap_index_t bitmap_idx) {
+  return bitmap_idx;
+}
+
+
 // The bit mask for a given number of blocks at a specified bit index.
 static uintptr_t mi_bitmap_mask_(size_t count, size_t bitidx) {
   mi_assert_internal(count + bitidx <= MI_BITMAP_FIELD_BITS);
   return ((((uintptr_t)1 << count) - 1) << bitidx);
 }
 
-// Try to atomically claim a sequence of `count` bits in a single field at `idx` in `bitmap`.
-// Returns `true` on success.
+
+/* -----------------------------------------------------------
+  Use bit scan forward/reverse to quickly find the first zero bit if it is available
+----------------------------------------------------------- */
+#if defined(_MSC_VER)
+#define MI_HAVE_BITSCAN
+#include <intrin.h>
+static inline size_t mi_bsf(uintptr_t x) {
+  if (x==0) return 8*MI_INTPTR_SIZE;
+  DWORD idx;
+  MI_64(_BitScanForward)(&idx, x);
+  return idx;
+}
+static inline size_t mi_bsr(uintptr_t x) {
+  if (x==0) return 8*MI_INTPTR_SIZE;
+  DWORD idx;
+  MI_64(_BitScanReverse)(&idx, x);
+  return idx;
+}
+#elif defined(__GNUC__) || defined(__clang__)
+#include <limits.h> // LONG_MAX
+#define MI_HAVE_BITSCAN
+#if (INTPTR_MAX == LONG_MAX)
+# define MI_L(x)  x##l
+#else
+# define MI_L(x)  x##ll
+#endif
+static inline size_t mi_bsf(uintptr_t x) {
+  return (x==0 ? 8*MI_INTPTR_SIZE : MI_L(__builtin_ctz)(x));
+}
+static inline size_t mi_bsr(uintptr_t x) {
+  return (x==0 ? 8*MI_INTPTR_SIZE : (8*MI_INTPTR_SIZE - 1) - MI_L(__builtin_clz)(x));
+}
+#endif
+
+/* -----------------------------------------------------------
+  Claim a bit sequence atomically
+----------------------------------------------------------- */
+
+// Try to atomically claim a sequence of `count` bits in a single 
+// field at `idx` in `bitmap`. Returns `true` on success.
 static inline bool mi_bitmap_try_claim_field(mi_bitmap_t bitmap, size_t idx, const size_t count, mi_bitmap_index_t* bitmap_idx) 
 {  
   mi_assert_internal(bitmap_idx != NULL);
@@ -93,7 +127,7 @@ static inline bool mi_bitmap_try_claim_field(mi_bitmap_t bitmap, size_t idx, con
   while (bitidx <= bitidx_max) {
     if ((map & m) == 0) {  // are the mask bits free at bitidx?
       mi_assert_internal((m >> bitidx) == mask); // no overflow?
-      uintptr_t newmap = map | m;
+      const uintptr_t newmap = map | m;
       mi_assert_internal((newmap^map) >> bitidx == mask);
       if (!mi_atomic_cas_weak(field, newmap, map)) {  // TODO: use strong cas here?
         // no success, another thread claimed concurrently.. keep going
@@ -109,10 +143,10 @@ static inline bool mi_bitmap_try_claim_field(mi_bitmap_t bitmap, size_t idx, con
     else {
       // on to the next bit range
 #ifdef MI_HAVE_BITSCAN
-      size_t shift = (count == 1 ? 1 : mi_bsr(map & m) - bitidx + 1);
+      const size_t shift = (count == 1 ? 1 : mi_bsr(map & m) - bitidx + 1);
       mi_assert_internal(shift > 0 && shift <= count);
 #else
-      size_t shift = 1;
+      const size_t shift = 1;
 #endif
       bitidx += shift;
       m <<= shift;

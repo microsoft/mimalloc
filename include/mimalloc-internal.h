@@ -163,7 +163,6 @@ bool        _mi_page_is_valid(mi_page_t* page);
 
 
 // Overflow detecting multiply
-#define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
 #include <limits.h>   // UINT_MAX, ULONG_MAX
@@ -175,6 +174,7 @@ static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
   return __builtin_umulll_overflow(count, size, total);
 #endif
 #else /* __builtin_umul_overflow is unavailable */
+  #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
   *total = count * size;
   return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
           && size > 0 && (SIZE_MAX / size) < count);
@@ -188,6 +188,7 @@ static inline bool _mi_is_power_of_two(uintptr_t x) {
 
 // Align upwards
 static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
+  mi_assert_internal(alignment != 0);
   uintptr_t mask = alignment - 1;
   if ((alignment & mask) == 0) {  // power of two?
     return ((sz + mask) & ~mask);
@@ -195,6 +196,12 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   else {
     return (((sz + mask)/alignment)*alignment);
   }
+}
+
+// Divide upwards: `s <= _mi_divide_up(s,d)*d < s+d`.
+static inline uintptr_t _mi_divide_up(uintptr_t size, size_t divider) {
+  mi_assert_internal(divider != 0);
+  return (divider == 0 ? size : ((size + divider - 1) / divider));
 }
 
 // Is memory zero initialized?
@@ -283,7 +290,7 @@ static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
 static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const void* p) {
   // if (segment->page_size > MI_SEGMENT_SIZE) return &segment->pages[0];  // huge pages
   ptrdiff_t diff = (uint8_t*)p - (uint8_t*)segment;
-  mi_assert_internal(diff >= 0 && diff < MI_SEGMENT_SIZE);
+  mi_assert_internal(diff >= 0 && (size_t)diff < MI_SEGMENT_SIZE);
   uintptr_t idx = (uintptr_t)diff >> segment->page_shift;
   mi_assert_internal(idx < segment->capacity);
   mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM || idx == 0);
