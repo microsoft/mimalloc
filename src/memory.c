@@ -282,7 +282,7 @@ static bool mi_region_is_suitable(int numa_node, size_t idx, bool commit, bool a
   if (m == MI_BITMAP_FIELD_FULL) return false;
   if (numa_node >= 0) {  // use negative numa node to always succeed
     int rnode = ((int)mi_atomic_read_relaxed(&regions->numa_node)) - 1;
-    if (rnode != numa_node) return false;
+    if (rnode >= 0 && rnode != numa_node) return false;
   }
   if (commit && allow_large) return true;  // always ok
 
