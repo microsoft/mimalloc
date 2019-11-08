@@ -281,8 +281,8 @@ static bool mi_region_is_suitable(int numa_node, size_t idx, bool commit, bool a
   uintptr_t m = mi_atomic_read_relaxed(&regions_map[idx]);
   if (m == MI_BITMAP_FIELD_FULL) return false;
   if (numa_node >= 0) {  // use negative numa node to always succeed
-    int rnode = ((int)mi_atomic_read_relaxed(&regions->numa_node)) - 1;
-    if (rnode != numa_node) return false;
+    int rnode = ((int)mi_atomic_read_relaxed(&regions[idx].numa_node)) - 1;
+    if (rnode >= 0 && rnode != numa_node) return false;
   }
   if (commit && allow_large) return true;  // always ok
 
@@ -290,7 +290,7 @@ static bool mi_region_is_suitable(int numa_node, size_t idx, bool commit, bool a
   // this is not guaranteed due to multiple threads allocating at the same time but
   // that's ok. In secure mode, large is never allowed for any thread, so that works out; 
   // otherwise we might just not be able to reset/decommit individual pages sometimes.
-  mi_region_info_t info = mi_atomic_read_relaxed(&regions->info);
+  mi_region_info_t info = mi_atomic_read_relaxed(&regions[idx].info);
   bool is_large;
   bool is_committed;
   void* start = mi_region_info_read(info, &is_large, &is_committed);
