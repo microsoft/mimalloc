@@ -284,7 +284,7 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
     _mi_os_unprotect(segment, mi_segment_size(segment)); // ensure no more guard pages are set
   }
   // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
-  _mi_arena_free(segment, mi_segment_size(segment), segment->memid, tld->stats);
+  _mi_arena_free(segment, mi_segment_size(segment), segment->memid, segment->mem_is_committed || (~segment->commit_mask == 0), segment->mem_is_fixed, tld->stats);
 }
 
 

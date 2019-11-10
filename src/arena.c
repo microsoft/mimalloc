@@ -52,9 +52,9 @@ int   _mi_os_numa_node_count(void);
 // size in count of arena blocks.
 typedef uintptr_t mi_block_info_t;
 #define MI_SEGMENT_ALIGN      MI_SEGMENT_SIZE
-#define MI_ARENA_BLOCK_SIZE   (MI_SEGMENT_SIZE/2)      // 32MiB
-#define MI_ARENA_MAX_OBJ_SIZE (MI_BITMAP_FIELD_BITS * MI_ARENA_BLOCK_SIZE)  // 2GiB
-#define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 16MiB
+#define MI_ARENA_BLOCK_SIZE   MI_SEGMENT_ALIGN         // 64MiB
+#define MI_ARENA_MAX_OBJ_SIZE (MI_BITMAP_FIELD_BITS * MI_ARENA_BLOCK_SIZE)  // 4GiB
+#define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 32MiB
 #define MI_MAX_ARENAS         (64)                     // not more than 256 (since we use 8 bits in the memid)
 
 // A memory arena descriptor
@@ -119,6 +119,98 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
 
 
 /* -----------------------------------------------------------
+  Arena cache
+----------------------------------------------------------- */
+#define MI_CACHE_MAX (8)
+#define MI_MAX_NUMA  (64)
+
+#define MI_SLOT_IN_USE ((void*)1)
+
+typedef struct mi_cache_slot_s {
+  volatile _Atomic(void*) p;
+  volatile size_t memid;
+  volatile bool   is_committed;
+  volatile bool   is_large;
+} mi_cache_slot_t;
+
+static mi_cache_slot_t cache[MI_MAX_NUMA][MI_CACHE_MAX];
+
+static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld) {
+  // only segment blocks
+  if (size != MI_SEGMENT_SIZE || alignment > MI_SEGMENT_ALIGN) return NULL;
+
+  // set numa range 
+  int numa_min = numa_node;
+  int numa_max = numa_min;
+  if (numa_node < 0) {
+    numa_min = 0;
+    numa_max = _mi_os_numa_node_count() % MI_MAX_NUMA;
+  }
+  else {
+    if (numa_node >= MI_MAX_NUMA) numa_node %= MI_MAX_NUMA;
+    numa_min = numa_max = numa_node;
+  }
+
+  // find a free slot
+  mi_cache_slot_t* slot;
+  for (int n = numa_min; n <= numa_max; n++) {
+    for (int i = 0; i < MI_CACHE_MAX; i++) {
+      slot = &cache[n][i];
+      void* p = mi_atomic_read_ptr_relaxed(&slot->p);
+      if (p > MI_SLOT_IN_USE) { // not NULL or 1
+        if (mi_atomic_cas_ptr_weak(&slot->p, MI_SLOT_IN_USE, p)) {
+          // claimed
+          if (!*large && slot->is_large) {
+            // back out again
+            mi_atomic_write_ptr(&slot->p, p); // make it available again
+          }
+          else {
+            // keep it
+            *memid = slot->memid;
+            *large = slot->is_large;
+            *is_zero = false;
+            bool committed = slot->is_committed;
+            mi_atomic_write_ptr(&slot->p, NULL); // set it free
+            if (*commit && !committed) {
+              bool commit_zero;
+              _mi_os_commit(p, MI_SEGMENT_SIZE, &commit_zero, tld->stats);
+            }            
+            *commit = committed;
+            return p;
+          }
+        }
+      }
+    }
+  }
+  return NULL;
+}
+
+static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_committed, bool is_large) {
+  // only for segment blocks
+  if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
+  
+  // try to add it to the cache
+  int numa_node = _mi_os_numa_node(NULL);
+  if (numa_node > MI_MAX_NUMA) numa_node %= MI_MAX_NUMA;
+  mi_cache_slot_t* slot;
+  for (int i = 0; i < MI_CACHE_MAX; i++) {
+    slot = &cache[numa_node][i];
+    void* p = mi_atomic_read_ptr_relaxed(&slot->p);
+    if (p == NULL) { // free slot
+      if (mi_atomic_cas_ptr_weak(&slot->p, MI_SLOT_IN_USE, NULL)) {
+        // claimed!
+        slot->memid = memid;
+        slot->is_committed = is_committed;
+        slot->is_large = is_large;
+        mi_atomic_write_ptr(&slot->p, start); // and make it available;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/* -----------------------------------------------------------
   Arena Allocation
 ----------------------------------------------------------- */
 
@@ -148,6 +240,8 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
   bool default_large = false;
   if (large==NULL) large = &default_large;  // ensure `large != NULL`
 
+  const int numa_node = _mi_os_numa_node(tld); // current numa node
+
   // try to allocate in an arena if the alignment is small enough
   // and the object is not too large or too small.
   if (alignment <= MI_SEGMENT_ALIGN && 
@@ -155,8 +249,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
       size >= MI_ARENA_MIN_OBJ_SIZE)
   {
     const size_t bcount = mi_block_count_of_size(size);
-    const int numa_node = _mi_os_numa_node(tld); // current numa node
-
+    
     mi_assert_internal(size <= bcount*MI_ARENA_BLOCK_SIZE);
     // try numa affine allocation
     for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
@@ -184,6 +277,11 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
     }
   }
 
+  // try to get from the cache 
+  void* p = mi_cache_pop(numa_node, size, alignment, commit, large, is_zero, memid, tld);
+  if (p != NULL) return p;
+
+
   // finally, fall back to the OS
   *is_zero = true;
   *memid   = MI_MEMID_OS;
@@ -202,13 +300,16 @@ void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_zero, siz
   Arena free
 ----------------------------------------------------------- */
 
-void _mi_arena_free(void* p, size_t size, size_t memid, mi_stats_t* stats) {
+void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, bool is_large, mi_stats_t* stats) {
   mi_assert_internal(size > 0 && stats != NULL);
   if (p==NULL) return;
   if (size==0) return;
+
   if (memid == MI_MEMID_OS) {
     // was a direct OS allocation, pass through
-    _mi_os_free(p, size, stats);
+    if (!mi_cache_push(p, size, memid, is_committed, is_large)) {
+      _mi_os_free(p, size, stats);
+    }
   }
   else {
     // allocated in an arena
