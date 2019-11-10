@@ -123,7 +123,7 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   mi_bitmap_index_t bitmap_index;
   if (mi_arena_alloc(arena, needed_bcount, &bitmap_index)) {
     // claimed it! set the dirty bits (todo: no need for an atomic op here?)
-    *is_zero = mi_bitmap_claim(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index);
+    *is_zero = mi_bitmap_claim(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
     *memid   = mi_memid_create(arena_index, bitmap_index);
     *commit  = true;           // TODO: support commit on demand?
     *large   = arena->is_large;
@@ -181,7 +181,10 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
 
   // finally, fall back to the OS
   *is_zero = true;
-  *memid = MI_MEMID_OS;
+  *memid   = MI_MEMID_OS;
+  if (*large) {
+    *large = mi_option_is_enabled(mi_option_large_os_pages); // try large OS pages only if enabled and allowed
+  }
   return _mi_os_alloc_aligned(size, alignment, *commit, large, tld);
 }
 
@@ -288,7 +291,7 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
   if (post > 0) {
     // don't use leftover bits at the end
     mi_bitmap_index_t postidx = mi_bitmap_index_create(fields - 1, MI_BITMAP_FIELD_BITS - post);
-    mi_bitmap_claim(arena->blocks_map, fields, post, postidx); 
+    mi_bitmap_claim(arena->blocks_map, fields, post, postidx, NULL); 
   }
   
   mi_arena_add(arena);
