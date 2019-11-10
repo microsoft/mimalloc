@@ -130,19 +130,23 @@ static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, const 
   char buf[32];
   int  len = 32;
   const char* suffix = (unit <= 0 ? " " : "b");
-  double base = (unit == 0 ? 1000.0 : 1024.0);
+  const int64_t base = (unit == 0 ? 1000 : 1024);
   if (unit>0) n *= unit;
 
-  double pos = (double)(n < 0 ? -n : n);
-  if (pos < base)
-    snprintf(buf,len, "%d %s ", (int)n, suffix);
-  else if (pos < base*base)
-    snprintf(buf, len, "%.1f k%s", (double)n / base, suffix);
-  else if (pos < base*base*base)
-    snprintf(buf, len, "%.1f m%s", (double)n / (base*base), suffix);
-  else
-    snprintf(buf, len, "%.1f g%s", (double)n / (base*base*base), suffix);
-
+  const int64_t pos = (n < 0 ? -n : n);
+  if (pos < base) {
+    snprintf(buf, len, "%d %s ", (int)n, suffix);
+  }
+  else {
+    int64_t divider = base;
+    const char* magnitude = "k";
+    if (pos >= divider*base) { divider *= base; magnitude = "m"; }
+    if (pos >= divider*base) { divider *= base; magnitude = "g"; }
+    const int64_t tens = (n / (divider/10));
+    const long whole = (long)(tens/10);
+    const long frac1 = (long)(tens%10);
+    snprintf(buf, len, "%ld.%ld %s%s", whole, frac1, magnitude, suffix);
+  }
   _mi_fprintf(out, (fmt==NULL ? "%11s" : fmt), buf);
 }
 
@@ -199,8 +203,10 @@ static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg
 }
 
 static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out) {
-  double avg = (stat->count == 0 ? 0.0 : (double)stat->total / (double)stat->count);
-  _mi_fprintf(out, "%10s: %7.1f avg\n", msg, avg);
+  const int64_t avg_tens = (stat->count == 0 ? 0 : (stat->total*10 / stat->count)); 
+  const long avg_whole = (long)(avg_tens/10);
+  const long avg_frac1 = (long)(avg_tens%10);
+  _mi_fprintf(out, "%10s: %5ld.%ld avg\n", msg, avg_whole, avg_frac1);
 }
 
 
