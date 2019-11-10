@@ -17,8 +17,8 @@ terms of the MIT license.
 #include <mimalloc.h>
 
 // argument defaults
-static int THREADS = 32;    // more repeatable if THREADS <= #processors
-static int N       = 20;    // scaling factor
+static int THREADS = 8;    // more repeatable if THREADS <= #processors
+static int N       = 200;    // scaling factor
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int N       = 100;  // scaling factor
@@ -63,10 +63,16 @@ static bool chance(size_t perc, random_t r) {
 }
 
 static void* alloc_items(size_t items, random_t r) {
-  if (chance(1, r)) items *= 100; // 1% huge objects;
+  if (chance(1, r)) {
+    if (chance(1, r)) items *= 1000;       // 0.01% giant
+    else if (chance(10, r)) items *= 100;  // 0.1% huge
+    else items *= 10;                      // 1% large objects;
+  }
   if (items==40) items++;              // pthreads uses that size for stack increases
   uintptr_t* p = (uintptr_t*)mi_malloc(items*sizeof(uintptr_t));
-  for (uintptr_t i = 0; i < items; i++) p[i] = (items - i) ^ cookie;
+  if (p != NULL) {
+    for (uintptr_t i = 0; i < items; i++) p[i] = (items - i) ^ cookie;
+  }
   return p;
 }
 

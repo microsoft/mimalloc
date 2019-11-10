@@ -940,16 +940,18 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
     _mi_stat_increase(&_mi_stats_main.reserved, MI_HUGE_OS_PAGE_SIZE);
     
     // check for timeout
-    mi_msecs_t elapsed = _mi_clock_end(start_t);
-    if (page >= 1) {
-      mi_msecs_t estimate = ((elapsed / (page+1)) * pages);
-      if (estimate > 2*max_msecs) { // seems like we are going to timeout, break
-        elapsed = max_msecs + 1; 
+    if (max_msecs > 0) {
+      mi_msecs_t elapsed = _mi_clock_end(start_t);
+      if (page >= 1) {
+        mi_msecs_t estimate = ((elapsed / (page+1)) * pages);
+        if (estimate > 2*max_msecs) { // seems like we are going to timeout, break
+          elapsed = max_msecs + 1;
+        }
       }
-    }
-    if (elapsed > max_msecs) {
-      _mi_warning_message("huge page allocation timed out\n");
-      break;
+      if (elapsed > max_msecs) {
+        _mi_warning_message("huge page allocation timed out\n");
+        break;
+      }
     }
   }
   mi_assert_internal(page*MI_HUGE_OS_PAGE_SIZE <= size);
@@ -1046,9 +1048,10 @@ int _mi_os_numa_node_count(void) {
 
 int _mi_os_numa_node(mi_os_tld_t* tld) {
   UNUSED(tld);
-  int numa_node = mi_os_numa_nodex();
-  // never more than the node count and >= 0
   int numa_count = _mi_os_numa_node_count();
+  if (numa_count<=1) return 0; // optimize on single numa node systems: always node 0
+  // never more than the node count and >= 0
+  int numa_node = mi_os_numa_nodex();
   if (numa_node >= numa_count) { numa_node = numa_node % numa_count; }
   if (numa_node < 0) numa_node = 0;  
   return numa_node;

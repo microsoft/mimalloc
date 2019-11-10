@@ -26,7 +26,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_SECURE 1  // guard page around metadata
 // #define MI_SECURE 2  // guard page around each mimalloc page
 // #define MI_SECURE 3  // encode free lists (detect corrupted free list (buffer overflow), and invalid pointer free)
-// #define MI_SECURE 4  // experimental, may be more expensive: checks for double free.
+// #define MI_SECURE 4  // experimental, may be more expensive: checks for double free. (cmake -DMI_SECURE_FULL=ON)
 
 #if !defined(MI_SECURE)
 #define MI_SECURE 0
@@ -35,7 +35,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define MI_DEBUG for debug mode
 // #define MI_DEBUG 1  // basic assertion checks and statistics, check double free, corrupted free list, and invalid pointer free.
 // #define MI_DEBUG 2  // + internal assertion checks
-// #define MI_DEBUG 3  // + extensive internal invariant checking
+// #define MI_DEBUG 3  // + extensive internal invariant checking (cmake -DMI_CHECK_FULL=ON)
 #if !defined(MI_DEBUG)
 #if !defined(NDEBUG) || defined(_DEBUG)
 #define MI_DEBUG 2
@@ -93,12 +93,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SEGMENT_SHIFT                  ( MI_LARGE_PAGE_SHIFT)      // 4mb
 
 // Derived constants
-#define MI_SEGMENT_SIZE                   (1<<MI_SEGMENT_SHIFT)
+#define MI_SEGMENT_SIZE                   (1UL<<MI_SEGMENT_SHIFT)
 #define MI_SEGMENT_MASK                   ((uintptr_t)MI_SEGMENT_SIZE - 1)
 
-#define MI_SMALL_PAGE_SIZE                (1<<MI_SMALL_PAGE_SHIFT)
-#define MI_MEDIUM_PAGE_SIZE               (1<<MI_MEDIUM_PAGE_SHIFT)
-#define MI_LARGE_PAGE_SIZE                (1<<MI_LARGE_PAGE_SHIFT)
+#define MI_SMALL_PAGE_SIZE                (1UL<<MI_SMALL_PAGE_SHIFT)
+#define MI_MEDIUM_PAGE_SIZE               (1UL<<MI_MEDIUM_PAGE_SHIFT)
+#define MI_LARGE_PAGE_SIZE                (1UL<<MI_LARGE_PAGE_SHIFT)
 
 #define MI_SMALL_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_SMALL_PAGE_SIZE)
 #define MI_MEDIUM_PAGES_PER_SEGMENT       (MI_SEGMENT_SIZE/MI_MEDIUM_PAGE_SIZE)

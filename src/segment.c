@@ -370,7 +370,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
     }
     segment->memid = memid;
     segment->mem_is_fixed = mem_large;
-    segment->mem_is_committed = commit;
+    segment->mem_is_committed = commit;    
     mi_segments_track_size((long)segment_size, tld);
   }
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
