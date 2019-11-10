@@ -100,8 +100,8 @@ static mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats, tld_main_os }, // segments
-  { 0, tld_main_stats },   // os
-  { MI_STATS_NULL }        // stats
+  { 0, tld_main_stats, {{0,NULL,0}} },   // os
+  { MI_STATS_NULL }                      // stats
 };
 
 mi_heap_t _mi_heap_main = {
