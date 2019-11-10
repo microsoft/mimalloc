@@ -68,7 +68,7 @@ bool      _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats)
 // arena.c
 void*     _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
 void*     _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
-void      _mi_arena_free(void* p, size_t size, size_t memid, mi_stats_t* stats);
+void      _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, bool is_large, mi_stats_t* stats);
 
 
 // "segment.c"
@@ -163,7 +163,6 @@ bool        _mi_page_is_valid(mi_page_t* page);
 
 
 // Overflow detecting multiply
-#define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
 #include <limits.h>   // UINT_MAX, ULONG_MAX
@@ -175,6 +174,7 @@ static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
   return __builtin_umulll_overflow(count, size, total);
 #endif
 #else /* __builtin_umul_overflow is unavailable */
+  #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
   *total = count * size;
   return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
           && size > 0 && (SIZE_MAX / size) < count);
@@ -188,6 +188,7 @@ static inline bool _mi_is_power_of_two(uintptr_t x) {
 
 // Align upwards
 static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
+  mi_assert_internal(alignment != 0);
   uintptr_t mask = alignment - 1;
   if ((alignment & mask) == 0) {  // power of two?
     return ((sz + mask) & ~mask);
@@ -199,6 +200,12 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
 
 static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
   return (sz / alignment) * alignment;
+}
+
+// Divide upwards: `s <= _mi_divide_up(s,d)*d < s+d`.
+static inline uintptr_t _mi_divide_up(uintptr_t size, size_t divider) {
+  mi_assert_internal(divider != 0);
+  return (divider == 0 ? size : ((size + divider - 1) / divider));
 }
 
 // Is memory zero initialized?

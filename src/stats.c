@@ -206,7 +206,7 @@ static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char*
   const int64_t avg_tens = (stat->count == 0 ? 0 : (stat->total*10 / stat->count)); 
   const long avg_whole = (long)(avg_tens/10);
   const long avg_frac1 = (long)(avg_tens%10);
-  _mi_fprintf(out, "%10s: %5ld.%ld avg %ld %ld\n", msg, avg_whole, avg_frac1);
+  _mi_fprintf(out, "%10s: %5ld.%ld avg\n", msg, avg_whole, avg_frac1);
 }
 
 
