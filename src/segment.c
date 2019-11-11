@@ -280,9 +280,6 @@ static bool mi_segment_cache_push(mi_segment_t* segment, mi_segments_tld_t* tld)
     return false;
   }
   mi_assert_internal(segment->segment_size == MI_SEGMENT_SIZE);
-  if (!segment->mem_is_fixed && mi_option_is_enabled(mi_option_cache_reset)) {
-    _mi_mem_reset((uint8_t*)segment + segment->segment_info_size, segment->segment_size - segment->segment_info_size, tld->os);
-  }
   segment->next = tld->cache;
   tld->cache = segment;
   tld->cache_count++;
@@ -327,12 +324,14 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   mi_assert_internal(segment_size >= required);
   size_t page_size = (page_kind == MI_PAGE_HUGE ? segment_size : (size_t)1 << page_shift);
 
-  // Try to get it from our thread local cache first
-  bool eager_delay = (tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
-  bool eager  = !eager_delay && mi_option_is_enabled(mi_option_eager_commit);
-  bool commit = eager || (page_kind > MI_PAGE_MEDIUM);
+  // Initialize parameters
+  bool eager_delayed = (page_kind <= MI_PAGE_MEDIUM && tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
+  bool eager  = !eager_delayed && mi_option_is_enabled(mi_option_eager_commit);
+  bool commit = eager || (page_kind >= MI_PAGE_LARGE);
   bool protection_still_good = false;
   bool is_zero = false;
+  
+  // Try to get it from our thread local cache first
   mi_segment_t* segment = mi_segment_cache_pop(segment_size, tld);
   if (segment != NULL) {
     if (MI_SECURE!=0) {
@@ -349,8 +348,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
       _mi_mem_commit(segment, segment->segment_size, &is_zero, tld->os);
       segment->mem_is_committed = true;
     }
-    if (!segment->mem_is_fixed &&
-        (mi_option_is_enabled(mi_option_cache_reset) || mi_option_is_enabled(mi_option_page_reset))) {
+    if (!segment->mem_is_fixed && mi_option_is_enabled(mi_option_page_reset)) {
       bool reset_zero = false;
       _mi_mem_unreset(segment, segment->segment_size, &reset_zero, tld->os);
       if (reset_zero) is_zero = true;
@@ -359,7 +357,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   else {
     // Allocate the segment from the OS
     size_t memid;
-    bool   mem_large = (!eager_delay && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy    
+    bool   mem_large = (!eager_delayed && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy    
     segment = (mi_segment_t*)_mi_mem_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_zero, &memid, os_tld);
     if (segment == NULL) return NULL;  // failed to allocate
     if (!commit) {
