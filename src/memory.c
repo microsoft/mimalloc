@@ -350,12 +350,12 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
     mi_assert_internal(size <= MI_REGION_MAX_OBJ_SIZE); if (size > MI_REGION_MAX_OBJ_SIZE) return;
     // we can align the size up to page size (as we allocate that way too)
     // this ensures we fully commit/decommit/reset
-    size = _mi_align_up(size, _mi_os_page_size());    
-    const size_t blocks = mi_region_block_count(size);    
+    size = _mi_align_up(size, _mi_os_page_size());
+    const size_t blocks = mi_region_block_count(size);
     mi_region_info_t info = mi_atomic_read(&region->info);
     bool is_large;
-    bool is_eager_committed;
-    void* start = mi_region_info_read(info,&is_large,&is_eager_committed);
+    bool is_committed;
+    void* start = mi_region_info_read(info, &is_large, &is_committed);
     mi_assert_internal(start != NULL);
     void* blocks_start = (uint8_t*)start + (bit_idx * MI_SEGMENT_SIZE);
     mi_assert_internal(blocks_start == p); // not a pointer in our area?
@@ -366,18 +366,14 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
     // TODO: implement delayed decommit/reset as these calls are too expensive
     // if the memory is reused soon.
     // reset: 10x slowdown on malloc-large, decommit: 17x slowdown on malloc-large
-    if (!is_large) {
-      if (mi_option_is_enabled(mi_option_segment_reset)) {
-        if (!is_eager_committed &&  // cannot reset large pages
-          (mi_option_is_enabled(mi_option_eager_commit) ||  // cannot reset halfway committed segments, use `option_page_reset` instead
-            mi_option_is_enabled(mi_option_reset_decommits))) // but we can decommit halfway committed segments
-        {
-          _mi_os_reset(p, size, stats);
-          //_mi_os_decommit(p, size, stats);  // todo: and clear dirty bits?
-        }
-      }
-    }    
-    if (!is_eager_committed) {
+    if (!is_large &&
+        mi_option_is_enabled(mi_option_segment_reset) &&
+        mi_option_is_enabled(mi_option_eager_commit))  // cannot reset halfway committed segments, use `option_page_reset` instead            
+    {
+      _mi_os_reset(p, size, stats);
+      //_mi_os_decommit(p, size, stats);  // todo: and clear dirty bits?
+    }
+    if (!is_committed) {
       // adjust commit statistics as we commit again when re-using the same slot
       _mi_stat_decrease(&stats->committed, mi_good_commit_size(size));
     }
