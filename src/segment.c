@@ -280,9 +280,6 @@ static bool mi_segment_cache_push(mi_segment_t* segment, mi_segments_tld_t* tld)
     return false;
   }
   mi_assert_internal(segment->segment_size == MI_SEGMENT_SIZE);
-  if (!segment->mem_is_fixed && mi_option_is_enabled(mi_option_cache_reset)) {
-    _mi_mem_reset((uint8_t*)segment + segment->segment_info_size, segment->segment_size - segment->segment_info_size, tld->stats);
-  }
   segment->next = tld->cache;
   tld->cache = segment;
   tld->cache_count++;
@@ -351,8 +348,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
       _mi_mem_commit(segment, segment->segment_size, &is_zero, tld->stats);
       segment->mem_is_committed = true;
     }
-    if (!segment->mem_is_fixed &&
-        (mi_option_is_enabled(mi_option_cache_reset) || mi_option_is_enabled(mi_option_page_reset))) {
+    if (!segment->mem_is_fixed && mi_option_is_enabled(mi_option_page_reset)) {
       bool reset_zero = false;
       _mi_mem_unreset(segment, segment->segment_size, &reset_zero, tld->stats);
       if (reset_zero) is_zero = true;

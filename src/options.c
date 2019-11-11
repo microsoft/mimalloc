@@ -66,7 +66,6 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },
   { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
   { 0, UNINIT, MI_OPTION(page_reset) },          // reset pages on free
-  { 0, UNINIT, MI_OPTION(cache_reset) },         // reset segment cache on free
   { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
   { 100, UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
