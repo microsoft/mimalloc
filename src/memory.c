@@ -210,14 +210,12 @@ static bool mi_region_is_suitable(const mem_region_t* region, int numa_node, boo
     if (rnode >= 0 && rnode != numa_node) return false;
   }
 
-  // note: we also skip if commit is false and the region is committed,
-  // that is a bit strong but prevents allocation of eager-delayed segments in an eagerly committed region
+  // check allow-large
   bool is_large;
   bool is_committed;
   mi_region_info_read(info, &is_large, &is_committed);  
-  
-  if (!commit && is_committed) return false;
   if (!allow_large && is_large) return false;
+
   return true;
 }
 
