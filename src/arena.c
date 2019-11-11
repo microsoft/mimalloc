@@ -33,6 +33,7 @@ of 256MiB in practice.
 
 #include "bitmap.inc.c"  // atomic bitmap
 
+
 // os.c
 void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
 void  _mi_os_free(void* p, size_t size, mi_stats_t* stats);
@@ -40,6 +41,7 @@ void  _mi_os_free(void* p, size_t size, mi_stats_t* stats);
 void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize);
 void  _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats);
 
+bool  _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats); 
 int   _mi_os_numa_node_count(void);
 
 /* -----------------------------------------------------------
@@ -56,13 +58,15 @@ int   _mi_os_numa_node_count(void);
 typedef struct mi_arena_s {
   uint8_t* start;                         // the start of the memory area
   size_t   block_count;                   // size of the area in arena blocks (of `MI_ARENA_BLOCK_SIZE`)
-  size_t   field_count;                   // number of bitmap fields
+  size_t   field_count;                   // number of bitmap fields (where `field_count * MI_BITMAP_FIELD_BITS >= block_count`)
   int      numa_node;                     // associated NUMA node
   bool     is_zero_init;                  // is the arena zero initialized?
+  bool     is_committed;                  // is the memory committed
   bool     is_large;                      // large OS page allocated
   volatile _Atomic(uintptr_t) search_idx; // optimization to start the search for free blocks
   mi_bitmap_field_t* blocks_dirty;        // are the blocks potentially non-zero?
-  mi_bitmap_field_t  blocks_map[1];       // bitmap of in-use blocks 
+  mi_bitmap_field_t* blocks_committed;    // if `!is_committed`, are the blocks committed?
+  mi_bitmap_field_t  blocks_inuse[1];       // in-place bitmap of in-use blocks (of size `field_count`)
 } mi_arena_t;
 
 
@@ -104,7 +108,7 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
   size_t idx = mi_atomic_read(&arena->search_idx);  // start from last search
   for (size_t visited = 0; visited < fcount; visited++, idx++) {
     if (idx >= fcount) idx = 0;  // wrap around
-    if (mi_bitmap_try_claim_field(arena->blocks_map, idx, blocks, bitmap_idx)) {
+    if (mi_bitmap_try_claim_field(arena->blocks_inuse, idx, blocks, bitmap_idx)) {
       mi_atomic_write(&arena->search_idx, idx);  // start search from here next time
       return true;
     }
@@ -118,31 +122,46 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
 ----------------------------------------------------------- */
 
 static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t needed_bcount, 
-                                 bool* commit, bool* large, bool* is_zero, size_t* memid) 
+                                 bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld) 
 {
   mi_bitmap_index_t bitmap_index;
-  if (mi_arena_alloc(arena, needed_bcount, &bitmap_index)) {
-    // claimed it! set the dirty bits (todo: no need for an atomic op here?)
-    *is_zero = mi_bitmap_claim(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
-    *memid   = mi_memid_create(arena_index, bitmap_index);
-    *commit  = true;           // TODO: support commit on demand?
-    *large   = arena->is_large;
-    return (arena->start + (mi_bitmap_index_bit(bitmap_index)*MI_ARENA_BLOCK_SIZE));
+  if (!mi_arena_alloc(arena, needed_bcount, &bitmap_index)) return NULL;
+
+  // claimed it! set the dirty bits (todo: no need for an atomic op here?)
+  void* p  = arena->start + (mi_bitmap_index_bit(bitmap_index)*MI_ARENA_BLOCK_SIZE);
+  *memid   = mi_memid_create(arena_index, bitmap_index);
+  *is_zero = mi_bitmap_claim(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
+  *large   = arena->is_large;
+  if (arena->is_committed) {
+    // always committed
+    *commit = true;
   }
-  return NULL;
+  else if (commit) {
+    // ensure commit now
+    bool any_zero;
+    mi_bitmap_claim(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_zero);
+    if (any_zero) {
+      bool commit_zero;
+      _mi_os_commit(p, needed_bcount * MI_ARENA_BLOCK_SIZE, &commit_zero, tld->stats);
+      if (commit_zero) *is_zero = true;
+    }
+  }
+  else {
+    // no need to commit, but check if already fully committed
+    *commit = mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
+  }
+  return p;
 }
 
 void* _mi_arena_alloc_aligned(size_t size, size_t alignment, 
                               bool* commit, bool* large, bool* is_zero, 
                               size_t* memid, mi_os_tld_t* tld) 
 {
-  mi_assert_internal(memid != NULL && tld != NULL);
+  mi_assert_internal(commit != NULL && large != NULL && is_zero != NULL && memid != NULL && tld != NULL);
   mi_assert_internal(size > 0);
   *memid   = MI_MEMID_OS;
   *is_zero = false;
-  bool default_large = false;
-  if (large==NULL) large = &default_large;  // ensure `large != NULL`
-
+  
   // try to allocate in an arena if the alignment is small enough
   // and the object is not too large or too small.
   if (alignment <= MI_SEGMENT_ALIGN && 
@@ -160,7 +179,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
       if ((arena->numa_node<0 || arena->numa_node==numa_node) && // numa local?
           (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
       { 
-        void* p = mi_arena_alloc_from(arena, i, bcount, commit, large, is_zero, memid);
+        void* p = mi_arena_alloc_from(arena, i, bcount, commit, large, is_zero, memid, tld);
         mi_assert_internal((uintptr_t)p % alignment == 0);
         if (p != NULL) return p;
       }
@@ -172,7 +191,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
       if ((arena->numa_node>=0 && arena->numa_node!=numa_node) && // not numa local!
           (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
       {
-        void* p = mi_arena_alloc_from(arena, i, bcount, commit, large, is_zero, memid);
+        void* p = mi_arena_alloc_from(arena, i, bcount, commit, large, is_zero, memid, tld);
         mi_assert_internal((uintptr_t)p % alignment == 0);
         if (p != NULL) return p;
       }
@@ -182,9 +201,6 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
   // finally, fall back to the OS
   *is_zero = true;
   *memid   = MI_MEMID_OS;
-  if (*large) {
-    *large = mi_option_is_enabled(mi_option_large_os_pages); // try large OS pages only if enabled and allowed
-  }
   return _mi_os_alloc_aligned(size, alignment, *commit, large, tld);
 }
 
@@ -223,7 +239,7 @@ void _mi_arena_free(void* p, size_t size, size_t memid, mi_stats_t* stats) {
       return;
     }
     const size_t blocks = mi_block_count_of_size(size);
-    bool ones = mi_bitmap_unclaim(arena->blocks_map, arena->field_count, blocks, bitmap_idx);
+    bool ones = mi_bitmap_unclaim(arena->blocks_inuse, arena->field_count, blocks, bitmap_idx);
     if (!ones) {
       _mi_fatal_error("trying to free an already freed block: %p, size %zu\n", p, size);
       return;
@@ -283,15 +299,17 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
   arena->numa_node = numa_node; // TODO: or get the current numa node if -1? (now it allows anyone to allocate on -1)
   arena->is_large = true;
   arena->is_zero_init = true;
+  arena->is_committed = true;
   arena->search_idx = 0;
-  arena->blocks_dirty = &arena->blocks_map[bcount];
+  arena->blocks_dirty = &arena->blocks_inuse[bcount];
+  arena->blocks_committed = NULL;
   // the bitmaps are already zero initialized due to os_alloc
   // just claim leftover blocks if needed
   size_t post = (fields * MI_BITMAP_FIELD_BITS) - bcount;
   if (post > 0) {
     // don't use leftover bits at the end
     mi_bitmap_index_t postidx = mi_bitmap_index_create(fields - 1, MI_BITMAP_FIELD_BITS - post);
-    mi_bitmap_claim(arena->blocks_map, fields, post, postidx, NULL); 
+    mi_bitmap_claim(arena->blocks_inuse, fields, post, postidx, NULL); 
   }
   
   mi_arena_add(arena);
