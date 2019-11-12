@@ -15,7 +15,6 @@ option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanis
 option(MI_BUILD_TESTS       "Build test executables" ON)
 
 include("cmake/mimalloc-config-version.cmake")
-include("CheckIncludeFile")
 
 set(mi_install_dir "lib/mimalloc-${mi_version}")
 
@@ -96,16 +95,6 @@ if(MI_USE_CXX MATCHES "ON")
   message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
   set_source_files_properties(src/static.c test/test-api.c PROPERTIES LANGUAGE CXX )
-endif()
-
-CHECK_INCLUDE_FILE("numaif.h" MI_HAVE_NUMA_H)
-if(MI_HAVE_NUMA_H)
-  list(APPEND mi_defines MI_HAS_NUMA)
-  list(APPEND mi_libraries numa)
-else()
-  if (NOT(WIN32))
-    message(WARNING "Compiling without using NUMA optimized allocation (on Linux, install libnuma-dev?)")
-  endif()
 endif()
 
 # Compiler flags

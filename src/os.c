@@ -827,28 +827,35 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
 }
 
 #elif defined(MI_OS_USE_MMAP) && (MI_INTPTR_SIZE >= 8)
-#ifdef MI_HAS_NUMA
-#include <numaif.h> // mbind, and use -lnuma
+#include <sys/syscall.h>
+#ifndef MPOL_PREFERRED
+#define MPOL_PREFERRED 1
+#endif
+#if defined(SYS_mbind)
+static long mi_os_mbind(void* start, unsigned long len, unsigned long mode, const unsigned long* nmask, unsigned long maxnode, unsigned flags) {
+  return syscall(SYS_mbind, start, len, mode, nmask, maxnode, flags);
+}
+#else
+static long mi_os_mbind(void* start, unsigned long len, unsigned long mode, const unsigned long* nmask, unsigned long maxnode, unsigned flags) {
+  UNUSED(start); UNUSED(len); UNUSED(mode); UNUSED(nmask); UNUSED(maxnode); UNUSED(flags);
+  return 0;
+}
 #endif
 static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) {
   mi_assert_internal(size%GiB == 0);
   bool is_large = true;
   void* p = mi_unix_mmap(addr, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
   if (p == NULL) return NULL;
-  #ifdef MI_HAS_NUMA
   if (numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) { // at most 64 nodes
     uintptr_t numa_mask = (1UL << numa_node);
     // TODO: does `mbind` work correctly for huge OS pages? should we
     // use `set_mempolicy` before calling mmap instead?
     // see: <https://lkml.org/lkml/2017/2/9/875>
-    long err = mbind(p, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
+    long err = mi_os_mbind(p, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
     if (err != 0) {
       _mi_warning_message("failed to bind huge (1GiB) pages to NUMA node %d: %s\n", numa_node, strerror(errno));
     }
   }
-  #else
-  UNUSED(numa_node);
-  #endif
   return p;
 }
 #else
