@@ -17,18 +17,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #if (MI_DEBUG>0)
 #define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
 #else
-#define mi_trace_message(...)  
+#define mi_trace_message(...)
 #endif
 
 #if defined(_MSC_VER)
 #define mi_decl_noinline   __declspec(noinline)
-#define mi_attr_noreturn 
+#define mi_attr_noreturn
 #elif defined(__GNUC__) || defined(__clang__)
 #define mi_decl_noinline   __attribute__((noinline))
 #define mi_attr_noreturn   __attribute__((noreturn))
 #else
 #define mi_decl_noinline
-#define mi_attr_noreturn   
+#define mi_attr_noreturn
 #endif
 
 
@@ -56,8 +56,6 @@ void       _mi_os_init(void);                                      // called fro
 void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocate thread local data
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
 size_t     _mi_os_good_alloc_size(size_t size);
-int        _mi_os_numa_node(mi_os_tld_t* tld);
-int        _mi_os_numa_node_count(void);
 
 // memory.c
 void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* id, mi_os_tld_t* tld);
@@ -146,8 +144,8 @@ bool        _mi_page_is_valid(mi_page_t* page);
   Inlined definitions
 ----------------------------------------------------------- */
 #define UNUSED(x)     (void)(x)
-#if (MI_DEBUG>0) 
-#define UNUSED_RELEASE(x)  
+#if (MI_DEBUG>0)
+#define UNUSED_RELEASE(x)
 #else
 #define UNUSED_RELEASE(x)  UNUSED(x)
 #endif
@@ -398,7 +396,7 @@ static inline mi_block_t* mi_block_nextx( uintptr_t cookie, const mi_block_t* bl
   #endif
 }
 
-static inline void mi_block_set_nextx(uintptr_t cookie, mi_block_t* block, const mi_block_t* next) {  
+static inline void mi_block_set_nextx(uintptr_t cookie, mi_block_t* block, const mi_block_t* next) {
   #ifdef MI_ENCODE_FREELIST
   block->next = (mi_encoded_t)next ^ cookie;
   #else
@@ -411,12 +409,12 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   #ifdef MI_ENCODE_FREELIST
   mi_block_t* next = mi_block_nextx(page->cookie,block);
   // check for free list corruption: is `next` at least in our segment range?
-  // TODO: it is better to check if it is actually inside our page but that is more expensive 
+  // TODO: it is better to check if it is actually inside our page but that is more expensive
   // to calculate. Perhaps with a relative free list this becomes feasible?
   if (next!=NULL && !mi_is_in_same_segment(block, next)) {
     _mi_fatal_error("corrupted free list entry of size %zub at %p: value 0x%zx\n", page->block_size, block, (uintptr_t)next);
     next = NULL;
-  }   
+  }
   return next;
   #else
   UNUSED(page);
@@ -432,6 +430,25 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
   mi_block_set_nextx(0, block, next);
   #endif
 }
+
+
+// -------------------------------------------------------------------
+// Optimize numa node access for the common case (= one node)
+// -------------------------------------------------------------------
+
+int _mi_os_numa_node_get(mi_os_tld_t* tld);
+int _mi_os_numa_node_count_get(void);
+
+extern int _mi_numa_node_count;
+static inline int _mi_os_numa_node(mi_os_tld_t* tld) {
+  if (mi_likely(_mi_numa_node_count == 1)) return 0;
+  else return _mi_os_numa_node_get(tld);
+}
+static inline int _mi_os_numa_node_count(void) {
+  if (mi_likely(_mi_numa_node_count>0)) return _mi_numa_node_count;
+  else return _mi_os_numa_node_count_get();
+}
+
 
 // -------------------------------------------------------------------
 // Getting the thread id should be performant
