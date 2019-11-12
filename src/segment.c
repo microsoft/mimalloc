@@ -504,7 +504,9 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_seg
   _mi_stat_decrease(&tld->stats->pages, 1);
   
   // reset the page memory to reduce memory pressure?
-  if (!segment->mem_is_fixed && !page->is_reset && mi_option_is_enabled(mi_option_page_reset)) {
+  if (!segment->mem_is_fixed && !page->is_reset && mi_option_is_enabled(mi_option_page_reset)) 
+       // && segment->page_kind <= MI_PAGE_MEDIUM) // to prevent partial overlapping resets
+  {
     size_t psize;
     uint8_t* start = _mi_page_start(segment, page, &psize);
     page->is_reset = true;
