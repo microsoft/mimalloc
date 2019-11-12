@@ -19,7 +19,7 @@ const mi_page_t _mi_page_empty = {
   0,
   #endif
   0,       // used
-  NULL, 
+  NULL,
   ATOMIC_VAR_INIT(0), ATOMIC_VAR_INIT(0),
   0, NULL, NULL, NULL
   #if (MI_INTPTR_SIZE==8 && defined(MI_ENCODE_FREELIST)) || (MI_INTPTR_SIZE==4 && !defined(MI_ENCODE_FREELIST))
@@ -246,7 +246,7 @@ static bool _mi_heap_done(void) {
   // switch to backing heap and free it
   heap = heap->tld->heap_backing;
   if (!mi_heap_is_initialized(heap)) return false;
-  
+
   // collect if not the main thread
   if (heap != &_mi_heap_main) {
     _mi_heap_collect_abandon(heap);
@@ -394,7 +394,7 @@ bool mi_is_redirected() mi_attr_noexcept {
 }
 
 // Communicate with the redirection module on Windows
-#if defined(_WIN32) && defined(MI_SHARED_LIB) 
+#if defined(_WIN32) && defined(MI_SHARED_LIB)
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -440,11 +440,6 @@ static void mi_process_load(void) {
   if (msg != NULL && (mi_option_is_enabled(mi_option_verbose) || mi_option_is_enabled(mi_option_show_errors))) {
     _mi_fputs(NULL,NULL,msg);
   }
-
-  if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
-    size_t pages = mi_option_get(mi_option_reserve_huge_os_pages);    
-    mi_reserve_huge_os_pages_interleave(pages, pages*500);
-  }
 }
 
 // Initialize the process; called by thread_init or the process loader
@@ -471,6 +466,11 @@ void mi_process_init(void) mi_attr_noexcept {
   #endif
   mi_thread_init();
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
+  
+  if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
+    size_t pages = mi_option_get(mi_option_reserve_huge_os_pages);
+    mi_reserve_huge_os_pages_interleave(pages, pages*500);
+  }
 }
 
 // Called when the process is done (through `at_exit`)
@@ -497,7 +497,7 @@ static void mi_process_done(void) {
 
 
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
-  // Windows DLL: easy to hook into process_init and thread_done  
+  // Windows DLL: easy to hook into process_init and thread_done
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     UNUSED(reserved);
     UNUSED(inst);
