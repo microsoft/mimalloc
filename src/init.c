@@ -96,11 +96,13 @@ mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 #define tld_main_stats  ((mi_stats_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,stats)))
 #define tld_main_os     ((mi_os_tld_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,os)))
 
+static mi_delay_slots_t tld_reset_delay_main = { MI_RESET_DELAY_SLOTS, 0, { {0,NULL,0} } };
+
 static mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats, tld_main_os }, // segments
-  { 0, NULL, tld_main_stats },  // os
+  { 0, &tld_reset_delay_main, tld_main_stats },  // os
   { MI_STATS_NULL }             // stats
 };
 
