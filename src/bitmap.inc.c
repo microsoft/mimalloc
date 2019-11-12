@@ -8,11 +8,11 @@ terms of the MIT license. A copy of the license can be found in the file
 /* ----------------------------------------------------------------------------
 This file is meant to be included in other files for efficiency.
 It implements a bitmap that can set/reset sequences of bits atomically
-and is used to concurrently claim memory ranges. 
+and is used to concurrently claim memory ranges.
 
 A bitmap is an array of fields where each field is a machine word (`uintptr_t`)
 
-A current limitation is that the bit sequences cannot cross fields 
+A current limitation is that the bit sequences cannot cross fields
 and that the sequence must be smaller or equal to the bits in a field.
 ---------------------------------------------------------------------------- */
 #pragma once
@@ -59,7 +59,7 @@ static inline size_t mi_bitmap_index_bit(mi_bitmap_index_t bitmap_idx) {
 
 
 // The bit mask for a given number of blocks at a specified bit index.
-static uintptr_t mi_bitmap_mask_(size_t count, size_t bitidx) {
+static inline uintptr_t mi_bitmap_mask_(size_t count, size_t bitidx) {
   mi_assert_internal(count + bitidx <= MI_BITMAP_FIELD_BITS);
   if (count == MI_BITMAP_FIELD_BITS) return MI_BITMAP_FIELD_FULL;
   return ((((uintptr_t)1 << count) - 1) << bitidx);
@@ -104,10 +104,10 @@ static inline size_t mi_bsr(uintptr_t x) {
   Claim a bit sequence atomically
 ----------------------------------------------------------- */
 
-// Try to atomically claim a sequence of `count` bits in a single 
+// Try to atomically claim a sequence of `count` bits in a single
 // field at `idx` in `bitmap`. Returns `true` on success.
-static inline bool mi_bitmap_try_claim_field(mi_bitmap_t bitmap, size_t idx, const size_t count, mi_bitmap_index_t* bitmap_idx) 
-{  
+static inline bool mi_bitmap_try_claim_field(mi_bitmap_t bitmap, size_t idx, const size_t count, mi_bitmap_index_t* bitmap_idx)
+{
   mi_assert_internal(bitmap_idx != NULL);
   volatile _Atomic(uintptr_t)* field = &bitmap[idx];
   uintptr_t map  = mi_atomic_read(field);
@@ -136,7 +136,7 @@ static inline bool mi_bitmap_try_claim_field(mi_bitmap_t bitmap, size_t idx, con
         continue;
       }
       else {
-        // success, we claimed the bits!        
+        // success, we claimed the bits!
         *bitmap_idx = mi_bitmap_index_create(idx, bitidx);
         return true;
       }
