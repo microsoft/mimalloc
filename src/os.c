@@ -998,9 +998,10 @@ static int mi_os_numa_nodex(void) {
 }
 static int mi_os_numa_node_countx(void) {
   char buf[128];
-  int max_node = mi_option_get(mi_option_max_numa_node);
+  int max_nodes = mi_option_get(mi_option_max_numa_nodes); // set to 0 to disable detection (and NUMA awareness)
   int node = 0;
-  for(node = 0; node < max_node; node++) {
+  for(node = 0; node < max_nodes; node++) {
+    // enumerate node entries -- todo: it there a more efficient way to do this? (but ensure there is no allocation)
     snprintf(buf, 127, "/sys/devices/system/node/node%i", node + 1);
     if (access(buf,R_OK) != 0) break;
   }
@@ -1022,7 +1023,7 @@ int _mi_os_numa_node_count_get(void) {
     int ncount = mi_os_numa_node_countx();
     int ncount0 = ncount;
     // never more than max numa node and at least 1
-    int nmax = 1 + (int)mi_option_get(mi_option_max_numa_node);
+    int nmax = (int)mi_option_get(mi_option_max_numa_nodes);
     if (ncount > nmax) ncount = nmax;
     if (ncount <= 0)   ncount = 1;
     _mi_numa_node_count = ncount;
