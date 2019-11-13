@@ -968,66 +968,61 @@ void _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats) {
 Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
 #ifdef WIN32
-static int mi_os_numa_nodex() {
+static size_t mi_os_numa_nodex() {
   PROCESSOR_NUMBER pnum;
   USHORT numa_node = 0;
   GetCurrentProcessorNumberEx(&pnum);
   GetNumaProcessorNodeEx(&pnum,&numa_node);
-  return (int)numa_node;
+  return numa_node;
 }
 
-static int mi_os_numa_node_countx(void) {
+static size_t mi_os_numa_node_countx(void) {
   ULONG numa_max = 0;
   GetNumaHighestNodeNumber(&numa_max);
-  return (int)(numa_max + 1);
+  return (numa_max + 1);
 }
 #elif defined(__linux__)
 #include <sys/syscall.h>  // getcpu
 #include <stdio.h>        // access
 
-static int mi_os_numa_nodex(void) {
+static size_t mi_os_numa_nodex(void) {
 #ifdef SYS_getcpu
-  unsigned node = 0;
-  unsigned ncpu = 0;
-  int err = syscall(SYS_getcpu, &ncpu, &node, NULL);
+  unsigned long node = 0;
+  unsigned long ncpu = 0;
+  long err = syscall(SYS_getcpu, &ncpu, &node, NULL);
   if (err != 0) return 0;
-  return (int)node;
+  return node;
 #else
   return 0;
 #endif
 }
-static int mi_os_numa_node_countx(void) {
+static size_t mi_os_numa_node_countx(void) {
   char buf[128];
-  int max_nodes = mi_option_get(mi_option_max_numa_nodes); // set to 0 to disable detection (and NUMA awareness)
-  int node = 0;
-  for(node = 0; node < max_nodes; node++) {
+  unsigned node = 0;
+  for(node = 0; node < 256; node++) {
     // enumerate node entries -- todo: it there a more efficient way to do this? (but ensure there is no allocation)
-    snprintf(buf, 127, "/sys/devices/system/node/node%i", node + 1);
+    snprintf(buf, 127, "/sys/devices/system/node/node%u", node + 1);
     if (access(buf,R_OK) != 0) break;
   }
   return (node+1);
 }
 #else
-static int mi_os_numa_nodex(void) {
+static size_t mi_os_numa_nodex(void) {
   return 0;
 }
-static int mi_os_numa_node_countx(void) {
+static size_t mi_os_numa_node_countx(void) {
   return 1;
 }
 #endif
 
-int _mi_numa_node_count = 0;   // cache the node count
+size_t _mi_numa_node_count = 0;   // cache the node count
 
-int _mi_os_numa_node_count_get(void) {
+size_t _mi_os_numa_node_count_get(void) {
   if (mi_unlikely(_mi_numa_node_count <= 0)) {
-    int ncount = mi_os_numa_node_countx();
-    int ncount0 = ncount;
-    // never more than max numa node and at least 1
-    int nmax = (int)mi_option_get(mi_option_max_numa_nodes);
-    if (ncount > nmax) ncount = nmax;
-    if (ncount <= 0)   ncount = 1;
-    _mi_numa_node_count = ncount;
-    _mi_verbose_message("using %i numa regions (%i nodes detected)\n", _mi_numa_node_count, ncount0);
+    long ncount = mi_option_get(mi_option_use_numa_nodes); // given explicitly?
+    if (ncount <= 0) ncount = (long)mi_os_numa_node_countx();        // or detect dynamically
+    _mi_numa_node_count = (size_t)(ncount <= 0 ? 1 : ncount);
+    _mi_verbose_message("using %zd numa regions\n", _mi_numa_node_count);
   }
   mi_assert_internal(_mi_numa_node_count >= 1);
   return _mi_numa_node_count;
@@ -1035,11 +1030,10 @@ int _mi_os_numa_node_count_get(void) {
 
 int _mi_os_numa_node_get(mi_os_tld_t* tld) {
   UNUSED(tld);
-  int numa_count = _mi_os_numa_node_count();
+  size_t numa_count = _mi_os_numa_node_count();
   if (numa_count<=1) return 0; // optimize on single numa node systems: always node 0
   // never more than the node count and >= 0
-  int numa_node = mi_os_numa_nodex();
+  size_t numa_node = mi_os_numa_nodex();
   if (numa_node >= numa_count) { numa_node = numa_node % numa_count; }
-  if (numa_node < 0) numa_node = 0;
-  return numa_node;
+  return (int)numa_node;
 }

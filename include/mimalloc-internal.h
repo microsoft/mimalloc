@@ -436,15 +436,15 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
 // Optimize numa node access for the common case (= one node)
 // -------------------------------------------------------------------
 
-int _mi_os_numa_node_get(mi_os_tld_t* tld);
-int _mi_os_numa_node_count_get(void);
+int    _mi_os_numa_node_get(mi_os_tld_t* tld);
+size_t _mi_os_numa_node_count_get(void);
 
-extern int _mi_numa_node_count;
+extern size_t _mi_numa_node_count;
 static inline int _mi_os_numa_node(mi_os_tld_t* tld) {
   if (mi_likely(_mi_numa_node_count == 1)) return 0;
   else return _mi_os_numa_node_get(tld);
 }
-static inline int _mi_os_numa_node_count(void) {
+static inline size_t _mi_os_numa_node_count(void) {
   if (mi_likely(_mi_numa_node_count>0)) return _mi_numa_node_count;
   else return _mi_os_numa_node_count_get();
 }

@@ -42,7 +42,6 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_sec
 void  _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats);
 
 bool  _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats); 
-int   _mi_os_numa_node_count(void);
 
 /* -----------------------------------------------------------
   Arena allocation
@@ -317,22 +316,22 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
 }
 
 
-// reserve huge pages evenly among all numa nodes. 
-int mi_reserve_huge_os_pages_interleave(size_t pages, size_t timeout_msecs) mi_attr_noexcept {
+// reserve huge pages evenly among the given number of numa nodes (or use the available ones as detected)
+int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t timeout_msecs) mi_attr_noexcept {
   if (pages == 0) return 0;
 
   // pages per numa node
-  int numa_count = _mi_os_numa_node_count();
+  size_t numa_count = (numa_nodes > 0 ? numa_nodes : _mi_os_numa_node_count());
   if (numa_count <= 0) numa_count = 1;
   const size_t pages_per = pages / numa_count;
   const size_t pages_mod = pages % numa_count;
   const size_t timeout_per = (timeout_msecs / numa_count) + 50;
   
   // reserve evenly among numa nodes
-  for (int numa_node = 0; numa_node < numa_count && pages > 0; numa_node++) {
+  for (size_t numa_node = 0; numa_node < numa_count && pages > 0; numa_node++) {
     size_t node_pages = pages_per;  // can be 0
-    if ((size_t)numa_node < pages_mod) node_pages++;
-    int err = mi_reserve_huge_os_pages_at(node_pages, numa_node, timeout_per);
+    if (numa_node < pages_mod) node_pages++;
+    int err = mi_reserve_huge_os_pages_at(node_pages, (int)numa_node, timeout_per);
     if (err) return err;
     if (pages < node_pages) {
       pages = 0;
@@ -349,7 +348,7 @@ int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserv
   UNUSED(max_secs);
   _mi_warning_message("mi_reserve_huge_os_pages is deprecated: use mi_reserve_huge_os_pages_interleave/at instead\n");
   if (pages_reserved != NULL) *pages_reserved = 0;
-  int err = mi_reserve_huge_os_pages_interleave(pages, (size_t)(max_secs * 1000.0));  
+  int err = mi_reserve_huge_os_pages_interleave(pages, 0, (size_t)(max_secs * 1000.0));  
   if (err==0 && pages_reserved!=NULL) *pages_reserved = pages;
   return err;
 }

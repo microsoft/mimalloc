@@ -469,7 +469,7 @@ void mi_process_init(void) mi_attr_noexcept {
   
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages = mi_option_get(mi_option_reserve_huge_os_pages);
-    mi_reserve_huge_os_pages_interleave(pages, pages*500);
+    mi_reserve_huge_os_pages_interleave(pages, 0, pages*500);
   }
 }
 
