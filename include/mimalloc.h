@@ -114,6 +114,11 @@ mi_decl_export void mi_register_deferred_free(mi_deferred_free_fun* deferred_fre
 typedef void (mi_output_fun)(const char* msg);
 mi_decl_export void mi_register_output(mi_output_fun* out) mi_attr_noexcept;
 
+#if MI_USER_CLEANUP
+typedef void (mi_cleanup_fun)(void* user_data, void* p, size_t size);
+mi_decl_export void mi_register_user_cleanup(mi_cleanup_fun* out, void* user_data) mi_attr_noexcept;
+#endif
+
 mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
 mi_decl_export int  mi_version(void)          mi_attr_noexcept;
 mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;

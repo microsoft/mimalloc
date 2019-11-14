@@ -29,6 +29,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SECURE 0
 #endif
 
+#if !defined(MI_USER_CLEANUP)
+#define MI_USER_CLEANUP 0
+#endif
+
 // Define MI_DEBUG as 1 for basic assert checks and statistics
 // set it to 2 to do internal asserts,
 // and to 3 to do extensive invariant checking.

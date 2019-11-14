@@ -12,6 +12,7 @@ option(MI_USE_CXX           "Use the C++ compiler to compile the library" OFF)
 option(MI_SECURE            "Use security mitigations (like guard pages and randomization)" OFF)
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
 option(MI_BUILD_TESTS       "Build test executables" ON)
+option(MI_USER_CLEANUP      "Enable mi_register_user_cleanup functionality" OFF)
 
 set(mi_install_dir "lib/mimalloc-${mi_version}")
 
@@ -69,6 +70,11 @@ endif()
 if(MI_SECURE MATCHES "ON")
   message(STATUS "Set secure build (MI_SECURE=ON)")
   list(APPEND mi_defines MI_SECURE=2)
+endif()
+
+if(MI_USER_CLEANUP MATCHES "ON")
+  message(STATUS "Enable mi_register_user_cleanup functionality (MI_USER_CLEANUP=ON)")
+  list(APPEND mi_defines MI_USER_CLEANUP=1)
 endif()
 
 if(MI_SEE_ASM MATCHES "ON")
