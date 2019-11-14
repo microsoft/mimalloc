@@ -241,7 +241,7 @@ static inline void mi_atomic_write(volatile _Atomic(uintptr_t)* p, uintptr_t x) 
 #endif
 #elif defined(__wasi__)
   #include <sched.h>
-  static inline void mi_atomic_yield() {
+  static inline void mi_atomic_yield(void) {
     sched_yield();
   }
 #else

@@ -16,7 +16,7 @@ option(MI_BUILD_TESTS       "Build test executables" ON)
 
 include("cmake/mimalloc-config-version.cmake")
 
-set(mi_install_dir "lib/mimalloc-${mi_version}")
+set(mi_install_dir "${CMAKE_INSTALL_PREFIX}/lib/mimalloc-${mi_version}")
 
 set(mi_sources
     src/stats.c
