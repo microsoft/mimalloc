@@ -441,7 +441,8 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   return (void*)hint;
 }
 #else
-static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
+// Disabled at the moment, not used anywhere by oses not supporting map aligned flag
+static void* __attribute__((unused)) mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   UNUSED(try_alignment); UNUSED(size);
   return NULL;
 }
