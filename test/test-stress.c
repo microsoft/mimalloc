@@ -248,7 +248,7 @@ static void* thread_entry(void* param) {
 
 static void run_os_threads(size_t nthreads) {
   pthread_t* threads = (pthread_t*)custom_malloc(nthreads*sizeof(pthread_t));
-  memset(threads, 0, sizeof(pthread_t)*nthreads);
+  mi_mem_clear(threads, sizeof(pthread_t)*nthreads);
   //pthread_setconcurrency(nthreads);
   for (uintptr_t i = 0; i < nthreads; i++) {
     pthread_create(&threads[i], NULL, &thread_entry, (void*)i);

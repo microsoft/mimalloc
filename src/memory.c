@@ -130,6 +130,17 @@ bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
   return false;
 }
 
+// In secure mode, volatile function pointer is used
+// to discard eventual compiler optimization
+void mi_mem_clear(void *p, size_t len) {
+  if (MI_SECURE>=1) {
+    void *(*volatile mem_clear)(void *, int, size_t) = memset;
+    (void)mem_clear(p, 0, len);
+  } else {
+    (void)memset(p, 0, len);
+  }
+}
+
 
 /* ----------------------------------------------------------------------------
 Commit from a region
