@@ -201,7 +201,7 @@ static void _mi_call_user_cleanup(void* p, size_t size)
 }
 #endif
 
-void mi_register_user_cleanup(mi_cleanup_fun* cleanup, void* user_data)
+void mi_register_user_cleanup(mi_cleanup_fun* cleanup, void* user_data) mi_attr_noexcept
 {
   (void)cleanup;
   (void)user_data;
