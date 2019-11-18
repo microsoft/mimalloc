@@ -186,7 +186,7 @@ static void _mi_call_user_cleanup(void* p, size_t size)
     user_cleanup(cleanup_udata, p, size);
 #if (MI_DEBUG>1)
   else
-    memset(start, 0, csize);
+    memset(p, 0, size);
 #endif
 }
 #else
@@ -196,7 +196,7 @@ static void _mi_call_user_cleanup(void* p, size_t size)
   (void)size;
 #if (MI_DEBUG>1)
   if (MI_SECURE==0)
-    memset(start, 0, csize); // pretend it is eagerly reset
+    memset(p, 0, size); // pretend it is eagerly reset
 #endif
 }
 #endif
