@@ -59,7 +59,7 @@ size_t     _mi_os_good_alloc_size(size_t size);
 
 // memory.c
 void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* id, mi_os_tld_t* tld);
-void       _mi_mem_free(void* p, size_t size, size_t id, mi_os_tld_t* tld);
+void       _mi_mem_free(void* p, size_t size, size_t id, bool fully_committed, bool any_reset, mi_os_tld_t* tld);
 
 bool       _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld);
 bool       _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld);
@@ -75,7 +75,7 @@ void       _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t*
 void       _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld);
 bool       _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segments_tld_t* tld);
 void       _mi_segment_thread_collect(mi_segments_tld_t* tld);
-uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size); // page start for any page
+uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size, size_t* pre_size); // page start for any page
 
 // "page.c"
 void*      _mi_malloc_generic(mi_heap_t* heap, size_t size)  mi_attr_noexcept mi_attr_malloc;
@@ -297,7 +297,9 @@ static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const 
 
 // Quick page start for initialized pages
 static inline uint8_t* _mi_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size) {
-  return _mi_segment_page_start(segment, page, page->block_size, page_size);
+  const size_t bsize = page->block_size;
+  mi_assert_internal(bsize > 0 && (bsize%sizeof(void*)) == 0);
+  return _mi_segment_page_start(segment, page, bsize, page_size, NULL);
 }
 
 // Get the page containing the pointer

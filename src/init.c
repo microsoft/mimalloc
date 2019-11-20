@@ -97,13 +97,11 @@ mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 #define tld_main_stats  ((mi_stats_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,stats)))
 #define tld_main_os     ((mi_os_tld_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,os)))
 
-static mi_delay_slots_t tld_reset_delay_main = { MI_RESET_DELAY_SLOTS, 0, { {0,NULL,0} } };
-
 static mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats, tld_main_os }, // segments
-  { 0, &tld_reset_delay_main, tld_main_stats },  // os
+  { 0, tld_main_stats },  // os
   { MI_STATS_NULL }             // stats
 };
 
@@ -194,8 +192,7 @@ uintptr_t _mi_random_init(uintptr_t seed /* can be zero */) {
 
 typedef struct mi_thread_data_s {
   mi_heap_t  heap;  // must come first due to cast in `_mi_heap_done`
-  mi_tld_t   tld;
-  mi_delay_slots_t reset_delay;
+  mi_tld_t   tld;  
 } mi_thread_data_t;
 
 // Initialize the thread local default heap, called from `mi_thread_init`
@@ -215,7 +212,6 @@ static bool _mi_heap_init(void) {
     }
     mi_tld_t*  tld = &td->tld;
     mi_heap_t* heap = &td->heap;
-    mi_delay_slots_t* reset_delay = &td->reset_delay;
     memcpy(heap, &_mi_heap_empty, sizeof(*heap));
     heap->thread_id = _mi_thread_id();
     heap->random = _mi_random_init(heap->thread_id);
@@ -226,9 +222,6 @@ static bool _mi_heap_init(void) {
     tld->segments.stats = &tld->stats;
     tld->segments.os = &tld->os;
     tld->os.stats = &tld->stats;
-    tld->os.reset_delay = reset_delay;
-    memset(reset_delay, 0, sizeof(*reset_delay));
-    reset_delay->capacity = MI_RESET_DELAY_SLOTS;
     _mi_heap_set_default_direct(heap);
   }
   return false;

@@ -107,7 +107,7 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
   size_t idx = mi_atomic_read(&arena->search_idx);  // start from last search
   for (size_t visited = 0; visited < fcount; visited++, idx++) {
     if (idx >= fcount) idx = 0;  // wrap around
-    if (mi_bitmap_try_claim_field(arena->blocks_inuse, idx, blocks, bitmap_idx)) {
+    if (mi_bitmap_try_find_claim_field(arena->blocks_inuse, idx, blocks, bitmap_idx)) {
       mi_atomic_write(&arena->search_idx, idx);  // start search from here next time
       return true;
     }
@@ -137,9 +137,9 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   }
   else if (commit) {
     // ensure commit now
-    bool any_zero;
-    mi_bitmap_claim(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_zero);
-    if (any_zero) {
+    bool any_uncommitted;
+    mi_bitmap_claim(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted);
+    if (any_uncommitted) {
       bool commit_zero;
       _mi_os_commit(p, needed_bcount * MI_ARENA_BLOCK_SIZE, &commit_zero, tld->stats);
       if (commit_zero) *is_zero = true;

@@ -384,30 +384,11 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 #define mi_heap_stat_increase(heap,stat,amount)  mi_stat_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_decrease(heap,stat,amount)  mi_stat_decrease( (heap)->tld->stats.stat, amount)
 
-
-// ------------------------------------------------------
-// Delay slots (to avoid expensive OS calls)
-// ------------------------------------------------------
-typedef int64_t mi_msecs_t;
-
-#define MI_RESET_DELAY_SLOTS (256)
-
-typedef struct mi_delay_slot_s {
-  mi_msecs_t expire;
-  uint8_t*   addr;
-  size_t     size;
-} mi_delay_slot_t;
-
-typedef struct mi_delay_slots_s {
-  size_t     capacity; // always `MI_RESET_DELAY_SLOTS`
-  size_t     count;    // current slots used (`<= capacity`)
-  mi_delay_slot_t slots[MI_RESET_DELAY_SLOTS];
-} mi_delay_slots_t;
-
-
 // ------------------------------------------------------
 // Thread Local data
 // ------------------------------------------------------
+
+typedef int64_t  mi_msecs_t;
 
 // Queue of segments
 typedef struct mi_segment_queue_s {
@@ -417,9 +398,8 @@ typedef struct mi_segment_queue_s {
 
 // OS thread local data
 typedef struct mi_os_tld_s {
-  size_t              region_idx;   // start point for next allocation
-  mi_delay_slots_t*   reset_delay;  // delay slots for OS reset operations
-  mi_stats_t*         stats;        // points to tld stats
+  size_t                region_idx;   // start point for next allocation
+  mi_stats_t*           stats;        // points to tld stats
 } mi_os_tld_t;
 
 // Segments thread local data

@@ -54,6 +54,7 @@ void*   _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_zero, s
 void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
 
 
+
 // Constants
 #if (MI_INTPTR_SIZE==8)
 #define MI_HEAP_REGION_MAX_SIZE    (256 * GiB)  // 48KiB for the region map 
@@ -73,28 +74,26 @@ void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, boo
 
 // Region info is a pointer to the memory region and two bits for 
 // its flags: is_large, and is_committed.
-typedef uintptr_t mi_region_info_t;
-
-static inline mi_region_info_t mi_region_info_create(void* start, bool is_large, bool is_committed) {
-  return ((uintptr_t)start | ((uintptr_t)(is_large?1:0) << 1) | (is_committed?1:0));
-}
-
-static inline void* mi_region_info_read(mi_region_info_t info, bool* is_large, bool* is_committed) {
-  if (is_large) *is_large = ((info&0x02) != 0);
-  if (is_committed) *is_committed = ((info&0x01) != 0);
-  return (void*)(info & ~0x03);
-}
+typedef union mi_region_info_u {
+  uintptr_t value;
+  struct {
+    bool  valid;
+    bool  is_large;
+    int   numa_node;
+  };
+} mi_region_info_t;
 
 
 // A region owns a chunk of REGION_SIZE (256MiB) (virtual) memory with
 // a bit map with one bit per MI_SEGMENT_SIZE (4MiB) block.
 typedef struct mem_region_s {
-  volatile _Atomic(mi_region_info_t) info;        // start of the memory area (and flags)
-  volatile _Atomic(uintptr_t)        numa_node;   // associated numa node + 1 (so 0 is no association)
+  volatile _Atomic(uintptr_t)        info;        // is_large, and associated numa node + 1 (so 0 is no association)
+  volatile _Atomic(void*)            start;       // start of the memory area (and flags)
   mi_bitmap_field_t                  in_use;      // bit per in-use block
   mi_bitmap_field_t                  dirty;       // track if non-zero per block
   mi_bitmap_field_t                  commit;      // track if committed per block (if `!info.is_committed))
-  size_t                             arena_memid; // if allocated from a (huge page) arena
+  mi_bitmap_field_t                  reset;       // track reset per block
+  volatile _Atomic(uintptr_t)        arena_memid; // if allocated from a (huge page) arena-
 } mem_region_t;
 
 // The region map
@@ -113,23 +112,31 @@ static size_t mi_region_block_count(size_t size) {
   return _mi_divide_up(size, MI_SEGMENT_SIZE);
 }
 
+/*
 // Return a rounded commit/reset size such that we don't fragment large OS pages into small ones.
 static size_t mi_good_commit_size(size_t size) {
   if (size > (SIZE_MAX - _mi_os_large_page_size())) return size;
   return _mi_align_up(size, _mi_os_large_page_size());
 }
+*/
 
 // Return if a pointer points into a region reserved by us.
 bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
   if (p==NULL) return false;
   size_t count = mi_atomic_read_relaxed(&regions_count);
   for (size_t i = 0; i < count; i++) {
-    uint8_t* start = (uint8_t*)mi_region_info_read( mi_atomic_read_relaxed(&regions[i].info), NULL, NULL);
+    uint8_t* start = (uint8_t*)mi_atomic_read_ptr_relaxed(&regions[i].start);
     if (start != NULL && (uint8_t*)p >= start && (uint8_t*)p < start + MI_REGION_SIZE) return true;
   }
   return false;
 }
 
+
+static void* mi_region_blocks_start(const mem_region_t* region, mi_bitmap_index_t bit_idx) {
+  void* start = mi_atomic_read_ptr(&region->start);
+  mi_assert_internal(start != NULL);
+  return ((uint8_t*)start + (bit_idx * MI_SEGMENT_SIZE));  
+}
 
 static size_t mi_memid_create(mem_region_t* region, mi_bitmap_index_t bit_idx) {
   mi_assert_internal(bit_idx < MI_BITMAP_FIELD_BITS);
@@ -142,13 +149,10 @@ static size_t mi_memid_create_from_arena(size_t arena_memid) {
   return (arena_memid << 1) | 1;
 }
 
-static bool mi_memid_is_arena(size_t id) {
-  return ((id&1)==1);
-}
 
-static bool mi_memid_indices(size_t id, mem_region_t** region, mi_bitmap_index_t* bit_idx, size_t* arena_memid) {
-  if (mi_memid_is_arena(id)) {
-    *arena_memid = (id>>1);
+static bool mi_memid_is_arena(size_t id, mem_region_t** region, mi_bitmap_index_t* bit_idx, size_t* arena_memid) {
+  if ((id&1)==1) {
+    if (arena_memid != NULL) *arena_memid = (id>>1);
     return true;
   }
   else {
@@ -158,6 +162,7 @@ static bool mi_memid_indices(size_t id, mem_region_t** region, mi_bitmap_index_t
     return false;
   }
 }
+
 
 /* ----------------------------------------------------------------------------
   Allocate a region is allocated from the OS (or an arena)
@@ -187,16 +192,21 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
 
   // allocated, initialize and claim the initial blocks
   mem_region_t* r = &regions[idx];
-  r->numa_node = _mi_os_numa_node(tld) + 1;
-  r->arena_memid = arena_memid;
+  r->arena_memid  = arena_memid;
   mi_atomic_write(&r->in_use, 0);
   mi_atomic_write(&r->dirty, (is_zero ? 0 : ~0UL));
   mi_atomic_write(&r->commit, (region_commit ? ~0UL : 0));
+  mi_atomic_write(&r->reset, 0);
   *bit_idx = 0;
   mi_bitmap_claim(&r->in_use, 1, blocks, *bit_idx, NULL);
+  mi_atomic_write_ptr(&r->start, start);
 
   // and share it 
-  mi_atomic_write(&r->info, mi_region_info_create(start, region_large, region_commit)); // now make it available to others
+  mi_region_info_t info;
+  info.valid = true;
+  info.is_large = region_large;
+  info.numa_node = _mi_os_numa_node(tld);
+  mi_atomic_write(&r->info, info.value); // now make it available to others
   *region = r;
   return true;
 }
@@ -207,36 +217,33 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
 
 static bool mi_region_is_suitable(const mem_region_t* region, int numa_node, bool allow_large ) {
   // initialized at all?
-  mi_region_info_t info = mi_atomic_read_relaxed(&region->info);
-  if (info==0) return false;
+  mi_region_info_t info;
+  info.value = mi_atomic_read_relaxed(&region->info);
+  if (info.value==0) return false;
 
   // numa correct
   if (numa_node >= 0) {  // use negative numa node to always succeed
-    int rnode = ((int)mi_atomic_read_relaxed(&region->numa_node)) - 1;
+    int rnode = info.numa_node;
     if (rnode >= 0 && rnode != numa_node) return false;
   }
 
   // check allow-large
-  bool is_large;
-  bool is_committed;
-  mi_region_info_read(info, &is_large, &is_committed);  
-  if (!allow_large && is_large) return false;
+  if (!allow_large && info.is_large) return false;
 
   return true;
 }
 
 
-static bool mi_region_try_claim(size_t blocks, bool allow_large, mem_region_t** region, mi_bitmap_index_t* bit_idx, mi_os_tld_t* tld)
+static bool mi_region_try_claim(int numa_node, size_t blocks, bool allow_large, mem_region_t** region, mi_bitmap_index_t* bit_idx, mi_os_tld_t* tld)
 {
-  // try all regions for a free slot
-  const int numa_node = (_mi_os_numa_node_count() <= 1 ? -1 : _mi_os_numa_node(tld));
+  // try all regions for a free slot  
   const size_t count = mi_atomic_read(&regions_count);
   size_t idx = tld->region_idx; // Or start at 0 to reuse low addresses? 
   for (size_t visited = 0; visited < count; visited++, idx++) {
     if (idx >= count) idx = 0;  // wrap around
     mem_region_t* r = &regions[idx];
     if (mi_region_is_suitable(r, numa_node, allow_large)) {
-      if (mi_bitmap_try_claim_field(&r->in_use, 0, blocks, bit_idx)) {
+      if (mi_bitmap_try_find_claim_field(&r->in_use, 0, blocks, bit_idx)) {
         tld->region_idx = idx;    // remember the last found position
         *region = r;
         return true;
@@ -252,8 +259,9 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
   mi_assert_internal(blocks <= MI_BITMAP_FIELD_BITS);
   mem_region_t* region;
   mi_bitmap_index_t bit_idx;
-  // first try to claim in existing regions
-  if (!mi_region_try_claim(blocks, *is_large, &region, &bit_idx, tld)) {
+  const int numa_node = (_mi_os_numa_node_count() <= 1 ? -1 : _mi_os_numa_node(tld));
+  // try to claim in existing regions
+  if (!mi_region_try_claim(numa_node, blocks, *is_large, &region, &bit_idx, tld)) {
     // otherwise try to allocate a fresh region
     if (!mi_region_try_alloc_os(blocks, *commit, *is_large, &region, &bit_idx, tld)) {
       // out of regions or memory
@@ -261,30 +269,28 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
     }
   }
   
+  
   // found a region and claimed `blocks` at `bit_idx`
   mi_assert_internal(region != NULL);
   mi_assert_internal(mi_bitmap_is_claimed(&region->in_use, 1, blocks, bit_idx));
 
-  mi_region_info_t info = mi_atomic_read(&region->info);
-  bool region_is_committed = false;
-  bool region_is_large = false;
-  void* start = mi_region_info_read(info, &region_is_large, &region_is_committed);
-  mi_assert_internal(!(region_is_large && !*is_large));
+  mi_region_info_t info;
+  info.value = mi_atomic_read(&region->info);
+  void* start = mi_atomic_read_ptr(&region->start);
+  mi_assert_internal(!(info.is_large && !*is_large));
   mi_assert_internal(start != NULL);
 
-  *is_zero = mi_bitmap_claim(&region->dirty, 1, blocks, bit_idx, NULL);  
-  *is_large = region_is_large;
+  *is_zero = mi_bitmap_unclaim(&region->dirty, 1, blocks, bit_idx);  
+  *is_large = info.is_large;
   *memid = mi_memid_create(region, bit_idx);
   void* p = (uint8_t*)start + (mi_bitmap_index_bit_in_field(bit_idx) * MI_SEGMENT_SIZE);
-  if (region_is_committed) {
-    // always committed
-    *commit = true;
-  }
-  else if (*commit) {
+
+  // commit
+  if (*commit) {
     // ensure commit
-    bool any_zero;
-    mi_bitmap_claim(&region->commit, 1, blocks, bit_idx, &any_zero);
-    if (any_zero) {
+    bool any_uncommitted;
+    mi_bitmap_claim(&region->commit, 1, blocks, bit_idx, &any_uncommitted);
+    if (any_uncommitted) {
       bool commit_zero;
       _mi_mem_commit(p, blocks * MI_SEGMENT_SIZE, &commit_zero, tld);
       if (commit_zero) *is_zero = true;
@@ -294,6 +300,21 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
     // no need to commit, but check if already fully committed
     *commit = mi_bitmap_is_claimed(&region->commit, 1, blocks, bit_idx);
   }  
+  mi_assert_internal(mi_bitmap_is_claimed(&region->commit, 1, blocks, bit_idx));
+
+  // unreset reset blocks
+  if (mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx)) {
+    mi_assert_internal(!mi_option_is_enabled(mi_option_eager_commit) || *commit); 
+    mi_bitmap_unclaim(&region->reset, 1, blocks, bit_idx);
+    bool reset_zero;
+    _mi_mem_unreset(p, blocks * MI_SEGMENT_SIZE, &reset_zero, tld);
+    if (reset_zero) *is_zero = true;
+  }
+  mi_assert_internal(!mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx));
+
+  #if (MI_DEBUG>=2)
+  if (*commit) { ((uint8_t*)p)[0] = 0; }
+  #endif
   
   // and return the allocation  
   mi_assert_internal(p != NULL);  
@@ -325,7 +346,9 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* l
     void* p = mi_region_try_alloc(blocks, commit, large, is_zero, memid, tld);
     mi_assert_internal(p == NULL || (uintptr_t)p % alignment == 0);    
     if (p != NULL) {
+      #if (MI_DEBUG>=2)
       if (*commit) { ((uint8_t*)p)[0] = 0; }
+      #endif
       return p;
     }
     _mi_warning_message("unable to allocate from region: size %zu\n", size);
@@ -346,56 +369,56 @@ Free
 -----------------------------------------------------------------------------*/
 
 // Free previously allocated memory with a given id.
-void _mi_mem_free(void* p, size_t size, size_t id, mi_os_tld_t* tld) {
+void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_reset, mi_os_tld_t* tld) {
   mi_assert_internal(size > 0 && tld != NULL);
   if (p==NULL) return;
   if (size==0) return;
-
+  size = _mi_align_up(size, _mi_os_page_size());
+  
   size_t arena_memid = 0;
   mi_bitmap_index_t bit_idx;
   mem_region_t* region;
-  if (mi_memid_indices(id,&region,&bit_idx,&arena_memid)) {
+  if (mi_memid_is_arena(id,&region,&bit_idx,&arena_memid)) {
    // was a direct arena allocation, pass through
     _mi_arena_free(p, size, arena_memid, tld->stats);
   }
   else {
     // allocated in a region
     mi_assert_internal(size <= MI_REGION_MAX_OBJ_SIZE); if (size > MI_REGION_MAX_OBJ_SIZE) return;
-    // we can align the size up to page size (as we allocate that way too)
-    // this ensures we fully commit/decommit/reset
-    size = _mi_align_up(size, _mi_os_page_size());
     const size_t blocks = mi_region_block_count(size);
-    mi_region_info_t info = mi_atomic_read(&region->info);
-    bool is_large;
-    bool is_committed;
-    void* start = mi_region_info_read(info, &is_large, &is_committed);
-    mi_assert_internal(start != NULL);
-    void* blocks_start = (uint8_t*)start + (bit_idx * MI_SEGMENT_SIZE);
+    mi_assert_internal(blocks + bit_idx <= MI_BITMAP_FIELD_BITS);
+    mi_region_info_t info;
+    info.value = mi_atomic_read(&region->info);
+    mi_assert_internal(info.value != 0);
+    void* blocks_start = mi_region_blocks_start(region, bit_idx);
     mi_assert_internal(blocks_start == p); // not a pointer in our area?
     mi_assert_internal(bit_idx + blocks <= MI_BITMAP_FIELD_BITS);
     if (blocks_start != p || bit_idx + blocks > MI_BITMAP_FIELD_BITS) return; // or `abort`?
 
-    // decommit (or reset) the blocks to reduce the working set.
-    // TODO: implement delayed decommit/reset as these calls are too expensive
-    // if the memory is reused soon.
-    // reset: 10x slowdown on malloc-large, decommit: 17x slowdown on malloc-large
-    if (!is_large &&
-        mi_option_is_enabled(mi_option_segment_reset) &&
-        mi_option_is_enabled(mi_option_eager_commit))  // cannot reset halfway committed segments, use `option_page_reset` instead            
-    {
-      // note: don't use `_mi_mem_reset` as it is shared with other threads!
-      _mi_os_reset(p, size, tld->stats);    // TODO: maintain reset bits to unreset  
-    }
-    if (!is_committed) {
-      // adjust commit statistics as we commit again when re-using the same slot
-      _mi_stat_decrease(&tld->stats->committed, mi_good_commit_size(size));
+    // committed?
+    if (full_commit && (size % MI_SEGMENT_SIZE) == 0) {
+      mi_bitmap_claim(&region->commit, 1, blocks, bit_idx, NULL);
     }
 
-    // TODO: should we free empty regions? currently only done _mi_mem_collect.
-    // this frees up virtual address space which might be useful on 32-bit systems?
+    if (any_reset) {
+      // set the is_reset bits if any pages were reset
+      mi_bitmap_claim(&region->reset, 1, blocks, bit_idx, NULL);
+    }
+
+    // reset the blocks to reduce the working set.
+    if (!info.is_large && mi_option_is_enabled(mi_option_segment_reset) &&
+        mi_option_is_enabled(mi_option_eager_commit))  // cannot reset halfway committed segments, use only `option_page_reset` instead            
+    {
+      bool any_unreset;
+      mi_bitmap_claim(&region->reset, 1, blocks, bit_idx, &any_unreset);
+      if (any_unreset) {
+        _mi_mem_reset(p, blocks * MI_SEGMENT_SIZE, tld);
+      }
+    }    
 
     // and unclaim
-    mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
+    bool all_unclaimed = mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
+    mi_assert_internal(all_unclaimed); UNUSED(all_unclaimed);
   }
 }
 
@@ -416,13 +439,14 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
       } while(m == 0 && !mi_atomic_cas_weak(&region->in_use, MI_BITMAP_FIELD_FULL, 0 ));
       if (m == 0) {
         // on success, free the whole region
-        bool is_eager_committed;
-        void* start = mi_region_info_read(mi_atomic_read(&regions[i].info), NULL, &is_eager_committed);
-        if (start != NULL) { // && !_mi_os_is_huge_reserved(start)) {
-          _mi_arena_free(start, MI_REGION_SIZE, region->arena_memid, tld->stats);
+        void* start = mi_atomic_read_ptr(&regions[i].start);
+        size_t arena_memid = mi_atomic_read_relaxed(&regions[i].arena_memid);
+        memset(&regions[i], 0, sizeof(mem_region_t));
+        // and release the whole region
+        mi_atomic_write(&region->info, 0);
+        if (start != NULL) { // && !_mi_os_is_huge_reserved(start)) {          
+          _mi_arena_free(start, MI_REGION_SIZE, arena_memid, tld->stats);
         }
-        // and release
-        mi_atomic_write(&region->info,0);
       }
     }
   }
@@ -432,6 +456,7 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
 /* ----------------------------------------------------------------------------
   Other
 -----------------------------------------------------------------------------*/
+
 bool _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld) {
   return _mi_os_reset(p, size, tld->stats);
 }

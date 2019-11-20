@@ -75,7 +75,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
 
   mi_segment_t* segment = _mi_page_segment(page);
   uint8_t* start = _mi_page_start(segment,page,NULL);
-  mi_assert_internal(start == _mi_segment_page_start(segment,page,page->block_size,NULL));
+  mi_assert_internal(start == _mi_segment_page_start(segment,page,page->block_size,NULL,NULL));
   //mi_assert_internal(start + page->capacity*page->block_size == page->top);
 
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
@@ -229,6 +229,7 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
   mi_assert_internal(page->heap == NULL);
   mi_assert_internal(_mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
+  mi_assert_internal(!page->is_reset);  
   _mi_page_free_collect(page,false);
   mi_page_queue_t* pq = mi_page_queue(heap, page->block_size);
   mi_page_queue_push(heap, pq, page);
@@ -342,7 +343,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(pq == mi_page_queue_of(page));
   mi_assert_internal(page->heap != NULL);
-
+  
 #if MI_DEBUG > 1
   mi_heap_t* pheap = (mi_heap_t*)mi_atomic_read_ptr(mi_atomic_cast(void*, &page->heap));
 #endif
@@ -597,7 +598,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(block_size > 0);
   // set fields
   size_t page_size;
-  _mi_segment_page_start(segment, page, block_size, &page_size);
+  _mi_segment_page_start(segment, page, block_size, &page_size, NULL);
   page->block_size = block_size;
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
