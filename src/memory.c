@@ -181,6 +181,7 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   void* const start = _mi_arena_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, &region_commit, &region_large, &is_zero, &arena_memid, tld);
   if (start == NULL) return false;
   mi_assert_internal(!(region_large && !allow_large));
+  mi_assert_internal(!region_large || region_commit);
 
   // claim a fresh slot
   const uintptr_t idx = mi_atomic_increment(&regions_count);
@@ -194,8 +195,8 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   mem_region_t* r = &regions[idx];
   r->arena_memid  = arena_memid;
   mi_atomic_write(&r->in_use, 0);
-  mi_atomic_write(&r->dirty, (is_zero ? 0 : ~0UL));
-  mi_atomic_write(&r->commit, (region_commit ? ~0UL : 0));
+  mi_atomic_write(&r->dirty, (is_zero ? 0 : MI_BITMAP_FIELD_FULL));
+  mi_atomic_write(&r->commit, (region_commit ? MI_BITMAP_FIELD_FULL : 0));
   mi_atomic_write(&r->reset, 0);
   *bit_idx = 0;
   mi_bitmap_claim(&r->in_use, 1, blocks, *bit_idx, NULL);
@@ -291,6 +292,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
     bool any_uncommitted;
     mi_bitmap_claim(&region->commit, 1, blocks, bit_idx, &any_uncommitted);
     if (any_uncommitted) {
+      mi_assert_internal(!info.is_large);
       bool commit_zero;
       _mi_mem_commit(p, blocks * MI_SEGMENT_SIZE, &commit_zero, tld);
       if (commit_zero) *is_zero = true;
@@ -304,6 +306,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
 
   // unreset reset blocks
   if (mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx)) {
+    mi_assert_internal(!info.is_large);
     mi_assert_internal(!mi_option_is_enabled(mi_option_eager_commit) || *commit); 
     mi_bitmap_unclaim(&region->reset, 1, blocks, bit_idx);
     bool reset_zero;
