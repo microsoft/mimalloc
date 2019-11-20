@@ -343,17 +343,23 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(pq == mi_page_queue_of(page));
   mi_assert_internal(page->heap != NULL);
 
-  _mi_page_use_delayed_free(page,MI_NEVER_DELAYED_FREE);
+#if MI_DEBUG > 1
+  mi_heap_t* pheap = (mi_heap_t*)mi_atomic_read_ptr(mi_atomic_cast(void*, &page->heap));
+#endif
+
+  // remove from our page list
+  mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
+  mi_page_queue_remove(pq, page);
+
+  // page is no longer associated with our heap
+  mi_atomic_write_ptr(mi_atomic_cast(void*, &page->heap), NULL);
+
 #if MI_DEBUG>1
   // check there are no references left..
-  for (mi_block_t* block = (mi_block_t*)page->heap->thread_delayed_free; block != NULL; block = mi_block_nextx(page->heap->cookie,block)) {
+  for (mi_block_t* block = (mi_block_t*)pheap->thread_delayed_free; block != NULL; block = mi_block_nextx(pheap->cookie, block)) {
     mi_assert_internal(_mi_ptr_page(block) != page);
   }
 #endif
-
-  // and then remove from our page list
-  mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
-  mi_page_queue_remove(pq, page);
 
   // and abandon it
   mi_assert_internal(page->heap == NULL);
@@ -755,7 +761,8 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
     mi_assert_internal(_mi_page_segment(page)->page_kind==MI_PAGE_HUGE);
     mi_assert_internal(_mi_page_segment(page)->used==1);
     mi_assert_internal(_mi_page_segment(page)->thread_id==0); // abandoned, not in the huge queue
-    page->heap = NULL;
+    mi_atomic_write_ptr(mi_atomic_cast(void*, &page->heap), NULL);
+
     if (page->block_size > MI_HUGE_OBJ_SIZE_MAX) {
       _mi_stat_increase(&heap->tld->stats.giant, block_size);
       _mi_stat_counter_increase(&heap->tld->stats.giant_count, 1);
