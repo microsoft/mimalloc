@@ -283,7 +283,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
 
   // and free them all
   while(block != NULL) {
-    mi_block_t* next = mi_block_nextx(heap->cookie,block);
+    mi_block_t* next = mi_block_nextx(heap,block, heap->cookie);
     // use internal free instead of regular one to keep stats etc correct
     if (!_mi_free_delayed_block(block)) {
       // we might already start delayed freeing while another thread has not yet
@@ -291,7 +291,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
       mi_block_t* dfree;
       do {
         dfree = (mi_block_t*)heap->thread_delayed_free;
-        mi_block_set_nextx(heap->cookie, block, dfree);
+        mi_block_set_nextx(heap, block, dfree, heap->cookie);
       } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), block, dfree));
 
     }
@@ -343,17 +343,23 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(pq == mi_page_queue_of(page));
   mi_assert_internal(page->heap != NULL);
 
-  _mi_page_use_delayed_free(page,MI_NEVER_DELAYED_FREE);
+#if MI_DEBUG > 1
+  mi_heap_t* pheap = (mi_heap_t*)mi_atomic_read_ptr(mi_atomic_cast(void*, &page->heap));
+#endif
+
+  // remove from our page list
+  mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
+  mi_page_queue_remove(pq, page);
+
+  // page is no longer associated with our heap
+  mi_atomic_write_ptr(mi_atomic_cast(void*, &page->heap), NULL);
+
 #if MI_DEBUG>1
   // check there are no references left..
-  for (mi_block_t* block = (mi_block_t*)page->heap->thread_delayed_free; block != NULL; block = mi_block_nextx(page->heap->cookie,block)) {
+  for (mi_block_t* block = (mi_block_t*)pheap->thread_delayed_free; block != NULL; block = mi_block_nextx(pheap, block, pheap->cookie)) {
     mi_assert_internal(_mi_ptr_page(block) != page);
   }
 #endif
-
-  // and then remove from our page list
-  mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
-  mi_page_queue_remove(pq, page);
 
   // and abandon it
   mi_assert_internal(page->heap == NULL);
@@ -439,13 +445,15 @@ void _mi_page_retire(mi_page_t* page) {
 #define MI_MAX_SLICES       (1UL << MI_MAX_SLICE_SHIFT)
 #define MI_MIN_SLICES       (2)
 
-static void mi_page_free_list_extend_secure(mi_heap_t* heap, mi_page_t* page, size_t extend, mi_stats_t* stats) {
+static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* const page, const size_t extend, mi_stats_t* const stats) {
   UNUSED(stats);
+  #if (MI_SECURE<=2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
+  #endif
   mi_assert_internal(page->capacity + extend <= page->reserved);
-  void* page_area = _mi_page_start(_mi_page_segment(page), page, NULL);
-  size_t bsize = page->block_size;
+  void* const page_area = _mi_page_start(_mi_page_segment(page), page, NULL);
+  const size_t bsize = page->block_size;
 
   // initialize a randomized free list
   // set up `slice_count` slices to alternate between
@@ -453,8 +461,8 @@ static void mi_page_free_list_extend_secure(mi_heap_t* heap, mi_page_t* page, si
   while ((extend >> shift) == 0) {
     shift--;
   }
-  size_t slice_count = (size_t)1U << shift;
-  size_t slice_extend = extend / slice_count;
+  const size_t slice_count = (size_t)1U << shift;
+  const size_t slice_extend = extend / slice_count;
   mi_assert_internal(slice_extend >= 1);
   mi_block_t* blocks[MI_MAX_SLICES];   // current start of the slice
   size_t      counts[MI_MAX_SLICES];   // available objects in the slice
@@ -468,12 +476,12 @@ static void mi_page_free_list_extend_secure(mi_heap_t* heap, mi_page_t* page, si
   // set up first element
   size_t current = _mi_heap_random(heap) % slice_count;
   counts[current]--;
-  page->free = blocks[current];
+  mi_block_t* const free_start = blocks[current];
   // and iterate through the rest
   uintptr_t rnd = heap->random;
   for (size_t i = 1; i < extend; i++) {
     // call random_shuffle only every INTPTR_SIZE rounds
-    size_t round = i%MI_INTPTR_SIZE;
+    const size_t round = i%MI_INTPTR_SIZE;
     if (round == 0) rnd = _mi_random_shuffle(rnd);
     // select a random next slice index
     size_t next = ((rnd >> 8*round) & (slice_count-1));
@@ -483,34 +491,39 @@ static void mi_page_free_list_extend_secure(mi_heap_t* heap, mi_page_t* page, si
     }
     // and link the current block to it
     counts[next]--;
-    mi_block_t* block = blocks[current];
+    mi_block_t* const block = blocks[current];
     blocks[current] = (mi_block_t*)((uint8_t*)block + bsize);  // bump to the following block
     mi_block_set_next(page, block, blocks[next]);   // and set next; note: we may have `current == next`
     current = next;
   }
-  mi_block_set_next(page, blocks[current], NULL);             // end of the list
+  // prepend to the free list (usually NULL)
+  mi_block_set_next(page, blocks[current], page->free);  // end of the list
+  page->free = free_start;
   heap->random = _mi_random_shuffle(rnd);
 }
 
-static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* page, size_t extend, mi_stats_t* stats)
+static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t extend, mi_stats_t* const stats)
 {
   UNUSED(stats);
+  #if (MI_SECURE <= 2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
+  #endif
   mi_assert_internal(page->capacity + extend <= page->reserved);
-  void* page_area = _mi_page_start(_mi_page_segment(page), page, NULL );
-  size_t bsize = page->block_size;
-  mi_block_t* start = mi_page_block_at(page, page_area, page->capacity);
+  void* const page_area = _mi_page_start(_mi_page_segment(page), page, NULL );
+  const size_t bsize = page->block_size;
+  mi_block_t* const start = mi_page_block_at(page, page_area, page->capacity);
   
   // initialize a sequential free list
-  mi_block_t* last = mi_page_block_at(page, page_area, page->capacity + extend - 1);  
+  mi_block_t* const last = mi_page_block_at(page, page_area, page->capacity + extend - 1);  
   mi_block_t* block = start;
   while(block <= last) {
     mi_block_t* next = (mi_block_t*)((uint8_t*)block + bsize);
     mi_block_set_next(page,block,next);
     block = next;
   }  
-  mi_block_set_next(page, last, NULL);
+  // prepend to free list (usually `NULL`)
+  mi_block_set_next(page, last, page->free);
   page->free = start;
 }
 
@@ -532,10 +545,12 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* page, size_t e
 // extra test in malloc? or cache effects?)
 static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* stats) {
   UNUSED(stats);
+  mi_assert_expensive(mi_page_is_valid_init(page));
+  #if (MI_SECURE<=2)
   mi_assert(page->free == NULL);
   mi_assert(page->local_free == NULL);
-  mi_assert_expensive(mi_page_is_valid_init(page));
   if (page->free != NULL) return;
+  #endif
   if (page->capacity >= page->reserved) return;
 
   size_t page_size;
@@ -746,7 +761,8 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
     mi_assert_internal(_mi_page_segment(page)->page_kind==MI_PAGE_HUGE);
     mi_assert_internal(_mi_page_segment(page)->used==1);
     mi_assert_internal(_mi_page_segment(page)->thread_id==0); // abandoned, not in the huge queue
-    page->heap = NULL;
+    mi_atomic_write_ptr(mi_atomic_cast(void*, &page->heap), NULL);
+
     if (page->block_size > MI_HUGE_OBJ_SIZE_MAX) {
       _mi_stat_increase(&heap->tld->stats.giant, block_size);
       _mi_stat_counter_increase(&heap->tld->stats.giant_count, 1);
