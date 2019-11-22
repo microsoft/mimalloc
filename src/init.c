@@ -19,7 +19,7 @@ const mi_page_t _mi_page_empty = {
   0,
   #endif
   0,       // used
-  NULL, 
+  NULL,
   ATOMIC_VAR_INIT(0), ATOMIC_VAR_INIT(0),
   0, NULL, NULL, NULL
   #if (MI_INTPTR_SIZE==8 && defined(MI_ENCODE_FREELIST)) || (MI_INTPTR_SIZE==4 && !defined(MI_ENCODE_FREELIST))
@@ -95,13 +95,14 @@ mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 
 
 #define tld_main_stats  ((mi_stats_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,stats)))
+#define tld_main_os     ((mi_os_tld_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,os)))
 
 static mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main,
-  { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
-  { 0, tld_main_stats },       // os
-  { MI_STATS_NULL }            // stats
+  { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats, tld_main_os }, // segments
+  { 0, tld_main_stats },  // os
+  { MI_STATS_NULL }             // stats
 };
 
 mi_heap_t _mi_heap_main = {
@@ -191,7 +192,7 @@ uintptr_t _mi_random_init(uintptr_t seed /* can be zero */) {
 
 typedef struct mi_thread_data_s {
   mi_heap_t  heap;  // must come first due to cast in `_mi_heap_done`
-  mi_tld_t   tld;
+  mi_tld_t   tld;  
 } mi_thread_data_t;
 
 // Initialize the thread local default heap, called from `mi_thread_init`
@@ -219,6 +220,7 @@ static bool _mi_heap_init(void) {
     memset(tld, 0, sizeof(*tld));
     tld->heap_backing = heap;
     tld->segments.stats = &tld->stats;
+    tld->segments.os = &tld->os;
     tld->os.stats = &tld->stats;
     _mi_heap_set_default_direct(heap);
   }
@@ -237,7 +239,7 @@ static bool _mi_heap_done(mi_heap_t* heap) {
   // switch to backing heap and free it
   heap = heap->tld->heap_backing;
   if (!mi_heap_is_initialized(heap)) return false;
-  
+
   // collect if not the main thread
   if (heap != &_mi_heap_main) {
     _mi_heap_collect_abandon(heap);
@@ -334,7 +336,7 @@ void mi_thread_init(void) mi_attr_noexcept
   mi_process_init();
 
   // initialize the thread local default heap
-  // (this will call `_mi_heap_set_default_direct` and thus set the 
+  // (this will call `_mi_heap_set_default_direct` and thus set the
   //  fiber/pthread key to a non-zero value, ensuring `_mi_thread_done` is called)
   if (_mi_heap_init()) return;  // returns true if already initialized
 
@@ -368,9 +370,9 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   #if defined(_WIN32) && defined(MI_SHARED_LIB)
     // nothing to do as it is done in DllMain
   #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
-    FlsSetValue(mi_fls_key, heap); 
+    FlsSetValue(mi_fls_key, heap);
   #elif defined(MI_USE_PTHREADS)
-    pthread_setspecific(mi_pthread_key, heap); 
+    pthread_setspecific(mi_pthread_key, heap);
   #endif
 }
 
@@ -394,7 +396,7 @@ bool mi_is_redirected() mi_attr_noexcept {
 }
 
 // Communicate with the redirection module on Windows
-#if defined(_WIN32) && defined(MI_SHARED_LIB) 
+#if defined(_WIN32) && defined(MI_SHARED_LIB)
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -440,12 +442,6 @@ static void mi_process_load(void) {
   if (msg != NULL && (mi_option_is_enabled(mi_option_verbose) || mi_option_is_enabled(mi_option_show_errors))) {
     _mi_fputs(NULL,NULL,msg);
   }
-
-  if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
-    size_t pages     = mi_option_get(mi_option_reserve_huge_os_pages);
-    double max_secs = (double)pages / 2.0; // 0.5s per page (1GiB)
-    mi_reserve_huge_os_pages(pages, max_secs, NULL);
-  }
 }
 
 // Initialize the process; called by thread_init or the process loader
@@ -473,6 +469,11 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_verbose_message("secure level: %d\n", MI_SECURE);
   mi_thread_init();
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
+
+  if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
+    size_t pages = mi_option_get(mi_option_reserve_huge_os_pages);
+    mi_reserve_huge_os_pages_interleave(pages, 0, pages*500);
+  }
 }
 
 // Called when the process is done (through `at_exit`)
@@ -499,7 +500,7 @@ static void mi_process_done(void) {
 
 
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
-  // Windows DLL: easy to hook into process_init and thread_done  
+  // Windows DLL: easy to hook into process_init and thread_done
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     UNUSED(reserved);
     UNUSED(inst);

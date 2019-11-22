@@ -93,12 +93,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SEGMENT_SHIFT                  ( MI_LARGE_PAGE_SHIFT)      // 4mb
 
 // Derived constants
-#define MI_SEGMENT_SIZE                   (1<<MI_SEGMENT_SHIFT)
+#define MI_SEGMENT_SIZE                   (1UL<<MI_SEGMENT_SHIFT)
 #define MI_SEGMENT_MASK                   ((uintptr_t)MI_SEGMENT_SIZE - 1)
 
-#define MI_SMALL_PAGE_SIZE                (1<<MI_SMALL_PAGE_SHIFT)
-#define MI_MEDIUM_PAGE_SIZE               (1<<MI_MEDIUM_PAGE_SHIFT)
-#define MI_LARGE_PAGE_SIZE                (1<<MI_LARGE_PAGE_SHIFT)
+#define MI_SMALL_PAGE_SIZE                (1UL<<MI_SMALL_PAGE_SHIFT)
+#define MI_MEDIUM_PAGE_SIZE               (1UL<<MI_MEDIUM_PAGE_SHIFT)
+#define MI_LARGE_PAGE_SIZE                (1UL<<MI_LARGE_PAGE_SHIFT)
 
 #define MI_SMALL_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_SMALL_PAGE_SIZE)
 #define MI_MEDIUM_PAGES_PER_SEGMENT       (MI_SEGMENT_SIZE/MI_MEDIUM_PAGE_SIZE)
@@ -384,10 +384,11 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 #define mi_heap_stat_increase(heap,stat,amount)  mi_stat_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_decrease(heap,stat,amount)  mi_stat_decrease( (heap)->tld->stats.stat, amount)
 
-
 // ------------------------------------------------------
 // Thread Local data
 // ------------------------------------------------------
+
+typedef int64_t  mi_msecs_t;
 
 // Queue of segments
 typedef struct mi_segment_queue_s {
@@ -395,6 +396,11 @@ typedef struct mi_segment_queue_s {
   mi_segment_t* last;
 } mi_segment_queue_t;
 
+// OS thread local data
+typedef struct mi_os_tld_s {
+  size_t                region_idx;   // start point for next allocation
+  mi_stats_t*           stats;        // points to tld stats
+} mi_os_tld_t;
 
 // Segments thread local data
 typedef struct mi_segments_tld_s {
@@ -408,13 +414,8 @@ typedef struct mi_segments_tld_s {
   size_t              cache_size;   // total size of all segments in the cache
   mi_segment_t*       cache;        // (small) cache of segments
   mi_stats_t*         stats;        // points to tld stats
+  mi_os_tld_t*        os;           // points to os stats
 } mi_segments_tld_t;
-
-// OS thread local data
-typedef struct mi_os_tld_s {
-  size_t              region_idx;   // start point for next allocation
-  mi_stats_t*         stats;        // points to tld stats
-} mi_os_tld_t;
 
 // Thread local data
 struct mi_tld_s {

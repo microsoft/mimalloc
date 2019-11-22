@@ -123,7 +123,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>../../include</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>MI_SHARED_LIB;MI_SHARED_LIB_EXPORT;MI_MALLOC_OVERRIDE;%(PreprocessorDefinitions);</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MI_DEBUG=3;MI_SHARED_LIB;MI_SHARED_LIB_EXPORT;MI_MALLOC_OVERRIDE;%(PreprocessorDefinitions);</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <SupportJustMyCode>false</SupportJustMyCode>
       <CompileAs>Default</CompileAs>
@@ -231,6 +231,10 @@
     </ClCompile>
     <ClCompile Include="..\..\src\alloc-posix.c" />
     <ClCompile Include="..\..\src\alloc.c" />
+    <ClCompile Include="..\..\src\arena.c" />
+    <ClCompile Include="..\..\src\bitmap.inc.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\src\heap.c" />
     <ClCompile Include="..\..\src\init.c" />
     <ClCompile Include="..\..\src\memory.c" />
