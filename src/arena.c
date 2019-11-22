@@ -188,7 +188,7 @@ static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool* co
   return NULL;
 }
 
-static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_committed, bool is_large) {
+static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_committed, bool is_large, mi_os_tld_t* tld) {
   // only for segment blocks
   if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
   
@@ -202,8 +202,9 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_commit
     if (p == NULL) { // free slot
       if (mi_atomic_cas_ptr_weak(&slot->p, MI_SLOT_IN_USE, NULL)) {
         // claimed!
-        slot->memid = memid;
+        // _mi_os_decommit(start, size, tld->stats);
         slot->is_committed = is_committed;
+        slot->memid = memid;
         slot->is_large = is_large;
         mi_atomic_write_ptr(&slot->p, start); // and make it available;
         return true;
@@ -317,15 +318,15 @@ void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_zero, siz
   Arena free
 ----------------------------------------------------------- */
 
-void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, bool is_large, mi_stats_t* stats) {
-  mi_assert_internal(size > 0 && stats != NULL);
+void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, bool is_large, mi_os_tld_t* tld) {
+  mi_assert_internal(size > 0 && tld->stats != NULL);
   if (p==NULL) return;
   if (size==0) return;
 
   if (memid == MI_MEMID_OS) {
     // was a direct OS allocation, pass through
-    if (!mi_cache_push(p, size, memid, is_committed, is_large)) {
-      _mi_os_free(p, size, stats);
+    if (!mi_cache_push(p, size, memid, is_committed, is_large, tld)) {
+      _mi_os_free(p, size, tld->stats);
     }
   }
   else {

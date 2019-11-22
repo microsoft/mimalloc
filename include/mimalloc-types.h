@@ -235,6 +235,9 @@ typedef enum mi_segment_kind_e {
 
 typedef mi_page_t mi_slice_t;
 
+typedef int64_t  mi_msecs_t;
+
+
 // Segments are large allocated memory blocks (2mb on 64 bit) from
 // the OS. Inside segments we allocated fixed size _pages_ that
 // contain blocks.
@@ -242,6 +245,11 @@ typedef struct mi_segment_s {
   size_t            memid;              // memory id for arena allocation
   bool              mem_is_fixed;       // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)    
   bool              mem_is_committed;   // `true` if the whole segment is eagerly committed
+
+  bool              allow_decommit;
+  mi_msecs_t        decommit_expire;
+  uintptr_t         decommit_mask;
+  uintptr_t         commit_mask;
 
   // from here is zero initialized
   struct mi_segment_s*          next;   // the list of freed segments in the cache
@@ -253,9 +261,6 @@ typedef struct mi_segment_s {
 
   size_t            segment_slices;      // for huge segments this may be different from `MI_SLICES_PER_SEGMENT`
   size_t            segment_info_slices; // initial slices we are using segment info and possible guard pages.
-
-  bool              allow_decommit;
-  uintptr_t         commit_mask;
 
   // layout like this to optimize access in `mi_free`
   mi_segment_kind_t kind;
@@ -414,9 +419,6 @@ typedef struct mi_span_queue_s {
 } mi_span_queue_t;
 
 #define MI_SEGMENT_BIN_MAX (35)     // 35 == mi_segment_bin(MI_SLICES_PER_SEGMENT)
-
-typedef int64_t  mi_msecs_t;
-
 
 // OS thread local data
 typedef struct mi_os_tld_s {
