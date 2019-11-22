@@ -466,6 +466,7 @@ void mi_process_init(void) mi_attr_noexcept {
   #if (MI_DEBUG)
   _mi_verbose_message("debug level : %d\n", MI_DEBUG);
   #endif
+  _mi_verbose_message("secure level: %d\n", MI_SECURE);
   mi_thread_init();
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
 

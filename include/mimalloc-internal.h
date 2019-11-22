@@ -284,14 +284,20 @@ static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
   return segment;
 }
 
-// Get the page containing the pointer
-static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const void* p) {
+// used internally
+static inline uintptr_t _mi_segment_page_idx_of(const mi_segment_t* segment, const void* p) {
   // if (segment->page_size > MI_SEGMENT_SIZE) return &segment->pages[0];  // huge pages
   ptrdiff_t diff = (uint8_t*)p - (uint8_t*)segment;
   mi_assert_internal(diff >= 0 && (size_t)diff < MI_SEGMENT_SIZE);
   uintptr_t idx = (uintptr_t)diff >> segment->page_shift;
   mi_assert_internal(idx < segment->capacity);
   mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM || idx == 0);
+  return idx;
+}
+
+// Get the page containing the pointer
+static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const void* p) {
+  uintptr_t idx = _mi_segment_page_idx_of(segment, p);  
   return &((mi_segment_t*)segment)->pages[idx];
 }
 
@@ -384,53 +390,67 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
 
 // -------------------------------------------------------------------
 // Encoding/Decoding the free list next pointers
+// Note: we pass a `null` value to be used as the `NULL` value for the 
+// end of a free list. This is to prevent the cookie itself to ever 
+// be present among user blocks (as `cookie^0==cookie`).
 // -------------------------------------------------------------------
 
 static inline bool mi_is_in_same_segment(const void* p, const void* q) {
   return (_mi_ptr_segment(p) == _mi_ptr_segment(q));
 }
 
-static inline mi_block_t* mi_block_nextx( uintptr_t cookie, const mi_block_t* block ) {
+static inline bool mi_is_in_same_page(const void* p, const void* q) {
+  mi_segment_t* segmentp = _mi_ptr_segment(p);
+  mi_segment_t* segmentq = _mi_ptr_segment(q);
+  if (segmentp != segmentq) return false;
+  uintptr_t idxp = _mi_segment_page_idx_of(segmentp, p);
+  uintptr_t idxq = _mi_segment_page_idx_of(segmentq, q);
+  return (idxp == idxq);
+}
+
+static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, uintptr_t cookie ) {
   #ifdef MI_ENCODE_FREELIST
-  return (mi_block_t*)(block->next ^ cookie);
+  mi_block_t* b = (mi_block_t*)(block->next ^ cookie);
+  if (mi_unlikely((void*)b==null)) { b = NULL; }
+  return b;
   #else
-  UNUSED(cookie);
+  UNUSED(cookie); UNUSED(null);
   return (mi_block_t*)block->next;
   #endif
 }
 
-static inline void mi_block_set_nextx(uintptr_t cookie, mi_block_t* block, const mi_block_t* next) {
+static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, uintptr_t cookie) {
   #ifdef MI_ENCODE_FREELIST
+  if (mi_unlikely(next==NULL)) { next = (mi_block_t*)null; }
   block->next = (mi_encoded_t)next ^ cookie;
   #else
-  UNUSED(cookie);
+  UNUSED(cookie); UNUSED(null);
   block->next = (mi_encoded_t)next;
   #endif
 }
 
 static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t* block) {
   #ifdef MI_ENCODE_FREELIST
-  mi_block_t* next = mi_block_nextx(page->cookie,block);
+  mi_block_t* next = mi_block_nextx(page,block,page->cookie);
   // check for free list corruption: is `next` at least in our segment range?
-  // TODO: it is better to check if it is actually inside our page but that is more expensive
-  // to calculate. Perhaps with a relative free list this becomes feasible?
-  if (next!=NULL && !mi_is_in_same_segment(block, next)) {
+  // TODO: check if `next` is `page->block_size` aligned?
+  if (next!=NULL && !mi_is_in_same_page(block, next)) {
     _mi_fatal_error("corrupted free list entry of size %zub at %p: value 0x%zx\n", page->block_size, block, (uintptr_t)next);
     next = NULL;
   }
   return next;
   #else
   UNUSED(page);
-  return mi_block_nextx(0, block);
+  return mi_block_nextx(page,block,0);
   #endif
 }
 
 static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, const mi_block_t* next) {
   #ifdef MI_ENCODE_FREELIST
-  mi_block_set_nextx(page->cookie,block,next);
+  mi_block_set_nextx(page,block,next, page->cookie);
   #else
   UNUSED(page);
-  mi_block_set_nextx(0, block, next);
+  mi_block_set_nextx(page,block, next,0);
   #endif
 }
 
