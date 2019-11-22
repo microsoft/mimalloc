@@ -124,16 +124,17 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
 /* -----------------------------------------------------------
   Arena cache
 ----------------------------------------------------------- */
-#define MI_CACHE_MAX (64)
+#define MI_CACHE_MAX (64)  // ~4GiB
 #define MI_MAX_NUMA  (16)
 
 #define MI_SLOT_IN_USE ((void*)1)
 
 typedef struct mi_cache_slot_s {
   volatile _Atomic(void*) p;
-  volatile size_t memid;
-  volatile bool   is_committed;
-  volatile bool   is_large;
+  volatile size_t     memid;
+  volatile mi_msecs_t expire;
+  volatile bool       is_committed;
+  volatile bool       is_large;
 } mi_cache_slot_t;
 
 static mi_cache_slot_t cache[MI_MAX_NUMA][MI_CACHE_MAX];
@@ -188,7 +189,43 @@ static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool* co
   return NULL;
 }
 
-static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_committed, bool is_large, mi_os_tld_t* tld) {
+static void mi_cache_purge(mi_os_tld_t* tld) {
+  // TODO: for each numa node instead?
+  // if (mi_option_get(mi_option_arena_reset_delay) == 0) return;
+
+  mi_msecs_t now = _mi_clock_now();
+  int numa_node = _mi_os_numa_node(NULL);
+  if (numa_node > MI_MAX_NUMA) numa_node %= MI_MAX_NUMA;
+  mi_cache_slot_t* slot;
+  int purged = 0;
+  for (int i = 0; i < MI_CACHE_MAX; i++) {
+    slot = &cache[numa_node][i];
+    void* p = mi_atomic_read_ptr_relaxed(&slot->p);
+    if (p > MI_SLOT_IN_USE && !slot->is_committed && !slot->is_large) {
+      mi_msecs_t expire = slot->expire;
+      if (now >= expire) {
+        // expired, try to claim it
+        if (mi_atomic_cas_ptr_weak(&slot->p, MI_SLOT_IN_USE, p)) {
+          // claimed! test again
+          if (!slot->is_committed && !slot->is_large && now >= slot->expire) {
+            _mi_os_decommit(p, MI_SEGMENT_SIZE, tld->stats);
+            slot->is_committed = false;
+          }
+          // and unclaim again
+          mi_atomic_write_ptr(&slot->p, p);
+          purged++;
+          if (purged >= 4) break; // limit to at most 4 decommits per push
+        }
+      }
+    }
+  }
+}
+
+
+static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_committed, bool is_large, mi_os_tld_t* tld) 
+{
+  mi_cache_purge(tld);
+  
   // only for segment blocks
   if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
   
@@ -202,7 +239,12 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_commit
     if (p == NULL) { // free slot
       if (mi_atomic_cas_ptr_weak(&slot->p, MI_SLOT_IN_USE, NULL)) {
         // claimed!
-        // _mi_os_decommit(start, size, tld->stats);
+        long delay = mi_option_get(mi_option_arena_reset_delay);
+        if (delay == 0 && !is_large) {
+          _mi_os_decommit(start, size, tld->stats);
+          is_committed = false;
+        }
+        slot->expire = (is_committed ? 0 : _mi_clock_now() + delay);
         slot->is_committed = is_committed;
         slot->memid = memid;
         slot->is_large = is_large;
@@ -213,6 +255,7 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_commit
   }
   return false;
 }
+
 
 /* -----------------------------------------------------------
   Arena Allocation

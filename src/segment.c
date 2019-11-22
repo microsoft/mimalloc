@@ -286,8 +286,8 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
     _mi_os_unprotect(segment, mi_segment_size(segment)); // ensure no more guard pages are set
   }
 
-  // purge delayed decommits now
-  mi_segment_delayed_decommit(segment,true,tld->stats);
+  // purge delayed decommits now? (no, leave it to the cache)
+  // mi_segment_delayed_decommit(segment,true,tld->stats);
   
   // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
   _mi_arena_free(segment, mi_segment_size(segment), segment->memid, 
@@ -335,8 +335,7 @@ static bool mi_segment_cache_push(mi_segment_t* segment, mi_segments_tld_t* tld)
   if (segment->segment_slices != MI_SLICES_PER_SEGMENT || mi_segment_cache_full(tld)) {
     return false;
   }
-  // mi_segment_delayed_decommit(segment, true, tld->stats);
-  // segment->decommit_mask = 0;
+  // mi_segment_delayed_decommit(segment, true, tld->stats);  
   mi_assert_internal(segment->segment_slices == MI_SLICES_PER_SEGMENT);
   mi_assert_internal(segment->next == NULL);  
   segment->next = tld->cache;
@@ -876,9 +875,8 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
     slice = slice + slice->slice_count;
   }
 
-  // force delayed decommits
-  mi_segment_delayed_decommit(segment, true, tld->stats);
-  //segment->decommit_mask = 0;
+  // force delayed decommits instead?
+  mi_segment_delayed_decommit(segment, false, tld->stats);    
   
   // add it to the abandoned list
   _mi_stat_increase(&tld->stats->segments_abandoned, 1);
