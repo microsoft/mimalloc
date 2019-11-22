@@ -60,15 +60,15 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },
   { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
-  { 0, UNINIT, MI_OPTION(page_reset) },
-  { 0, UNINIT, MI_OPTION(cache_reset) },
-  { 0, UNINIT, MI_OPTION(reset_decommits) },     // note: cannot enable this if secure is on
-  { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
-  { 1, UNINIT, MI_OPTION(allow_decommit) },      // decommit pages when not eager committed
+  { 0, UNINIT, MI_OPTION(page_reset) },          // reset pages on free
   { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
+  { 1, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
+  { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
+  { 0, UNINIT, MI_OPTION(allow_decommit) },      // decommit pages when not eager committed
+  { 500,UNINIT, MI_OPTION(reset_delay) },        // reset delay in milli-seconds
+  { 0,   UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes. 
   { 100, UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
-  { 256, UNINIT, MI_OPTION(max_numa_node) },     // maximum allowed numa node
-  { 16, UNINIT, MI_OPTION(max_errors) }          // maximum errors that are output
+  { 16,  UNINIT, MI_OPTION(max_errors) }         // maximum errors that are output
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -84,7 +84,7 @@ void _mi_options_init(void) {
       mi_option_desc_t* desc = &options[option];
       _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
     }
-  }
+  }  
   mi_max_error_count = mi_option_get(mi_option_max_errors);
 }
 

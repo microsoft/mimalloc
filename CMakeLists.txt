@@ -6,18 +6,15 @@ set(CMAKE_CXX_STANDARD 17)
 
 option(MI_OVERRIDE          "Override the standard malloc interface" ON)
 option(MI_INTERPOSE         "Use interpose to override standard malloc on macOS" ON)
-option(MI_SEE_ASM           "Generate assembly files" OFF)
-option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode" OFF)
+option(MI_DEBUG_FULL        "Use full internal heap invariant checking in DEBUG mode" OFF)
+option(MI_SECURE            "Use full security mitigations (like guard pages, allocation randomization, double-free mitigation, and free-list corruption detection)" OFF)
 option(MI_USE_CXX           "Use the C++ compiler to compile the library" OFF)
-option(MI_SECURE            "Use security mitigations (like guard pages and randomization)" OFF)
-option(MI_SECURE_FULL       "Use full security mitigations, may be more expensive (includes double-free mitigation)" OFF)
+option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
 option(MI_BUILD_TESTS       "Build test executables" ON)
+option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 
 include("cmake/mimalloc-config-version.cmake")
-include("CheckIncludeFile")
-
-set(mi_install_dir "lib/mimalloc-${mi_version}")
 
 set(mi_sources
     src/stats.c
@@ -32,29 +29,33 @@ set(mi_sources
     src/options.c
     src/init.c)
 
-# Set default build type
+# -----------------------------------------------------------------------------
+# Converience: set default build type depending on the build directory
+# -----------------------------------------------------------------------------
+
 if (NOT CMAKE_BUILD_TYPE)
-  if ("${CMAKE_BINARY_DIR}" MATCHES ".*(D|d)ebug$")
-    message(STATUS "No build type selected, default to *** Debug ***")
+  if ("${CMAKE_BINARY_DIR}" MATCHES ".*(D|d)ebug$" OR  MI_DEBUG_FULL MATCHES "ON")
+    message(STATUS "No build type selected, default to: Debug")
     set(CMAKE_BUILD_TYPE "Debug")
   else()
-    message(STATUS "No build type selected, default to *** Release ***")
+    message(STATUS "No build type selected, default to: Release")
     set(CMAKE_BUILD_TYPE "Release")
   endif()
-else()
-  message(STATUS "Build type specified as *** ${CMAKE_BUILD_TYPE} ***")
 endif()
 
 if("${CMAKE_BINARY_DIR}" MATCHES ".*(S|s)ecure$")
+  message(STATUS "Default to secure build")
   set(MI_SECURE "ON")
 endif()
+
+# -----------------------------------------------------------------------------
+# Process options
+# -----------------------------------------------------------------------------
 
 if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
   set(MI_USE_CXX "ON")
 endif()
 
-
-# Options
 if(MI_OVERRIDE MATCHES "ON")
   message(STATUS "Override standard malloc (MI_OVERRIDE=ON)")
   if(APPLE)
@@ -70,15 +71,9 @@ if(MI_OVERRIDE MATCHES "ON")
   endif()
 endif()
 
-if(MI_SECURE_FULL MATCHES "ON")
-  message(STATUS "Set full secure build (may be more expensive) (MI_SECURE_FULL=ON)")
+if(MI_SECURE MATCHES "ON")
+  message(STATUS "Set full secure build (MI_SECURE=ON)")
   list(APPEND mi_defines MI_SECURE=4)
-  set(MI_SECURE "ON")
-else()
-  if(MI_SECURE MATCHES "ON")
-    message(STATUS "Set secure build (MI_SECURE=ON)")
-    list(APPEND mi_defines MI_SECURE=3)
-  endif()
 endif()
 
 if(MI_SEE_ASM MATCHES "ON")
@@ -87,7 +82,12 @@ if(MI_SEE_ASM MATCHES "ON")
 endif()
 
 if(MI_CHECK_FULL MATCHES "ON")
-  message(STATUS "Set debug level to full invariant checking (MI_CHECK_FULL=ON)")
+  message(STATUS "The MI_CHECK_FULL option is deprecated, use MI_DEBUG_FULL instead")
+  set(MI_DEBUG_FULL "ON")
+endif()
+
+if(MI_DEBUG_FULL MATCHES "ON")
+  message(STATUS "Set debug level to full internal invariant checking (MI_DEBUG_FULL=ON)")
   list(APPEND mi_defines MI_DEBUG=3)   # full invariant checking
 endif()
 
@@ -95,16 +95,6 @@ if(MI_USE_CXX MATCHES "ON")
   message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
   set_source_files_properties(src/static.c test/test-api.c PROPERTIES LANGUAGE CXX )
-endif()
-
-CHECK_INCLUDE_FILE("numaif.h" MI_HAVE_NUMA_H)
-if(MI_HAVE_NUMA_H)
-  list(APPEND mi_defines MI_HAS_NUMA)
-  list(APPEND mi_libraries numa)
-else()
-  if (NOT(WIN32))
-    message(WARNING "Compiling without using NUMA optimized allocation (on Linux, install libnuma-dev?)")
-  endif()
 endif()
 
 # Compiler flags
@@ -122,19 +112,6 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
   endif()
 endif()
 
-if(NOT(CMAKE_BUILD_TYPE MATCHES "Release|release|RelWithDebInfo|relwithdebinfo"))
-  string(TOLOWER "${CMAKE_BUILD_TYPE}" build_type)
-  set(mi_basename "mimalloc-${build_type}")
-else()
-  if(MI_SECURE MATCHES "ON")
-    set(mi_basename "mimalloc-secure")
-  else()
-    set(mi_basename "mimalloc")
-  endif()
-endif()
-message(STATUS "Output library name   : ${mi_basename}")
-message(STATUS "Installation directory: ${mi_install_dir}")
-
 # extra needed libraries
 if(WIN32)
   list(APPEND mi_libraries psapi shell32 user32)
@@ -147,9 +124,28 @@ else()
 endif()
 
 # -----------------------------------------------------------------------------
-# Main targets
+# Install and output names
 # -----------------------------------------------------------------------------
 
+set(mi_install_dir "${CMAKE_INSTALL_PREFIX}/lib/mimalloc-${mi_version}")
+if(MI_SECURE MATCHES "ON")
+  set(mi_basename "mimalloc-secure")
+else()
+  set(mi_basename "mimalloc")
+endif()
+string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
+if(NOT(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel)$"))
+  set(mi_basename "${mi_basename}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
+endif()
+message(STATUS "")
+message(STATUS "Library base name: ${mi_basename}")
+message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
+message(STATUS "Install directory: ${mi_install_dir}")
+message(STATUS "")
+
+# -----------------------------------------------------------------------------
+# Main targets
+# -----------------------------------------------------------------------------
 
 # shared library
 add_library(mimalloc SHARED ${mi_sources})
@@ -251,7 +247,7 @@ endif()
 if (MI_OVERRIDE MATCHES "ON")
   target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)
   if(NOT WIN32)
-    # It is only possible to override malloc on Windows when building as a DLL. (src/alloc-override.c)
+    # It is only possible to override malloc on Windows when building as a DLL.
     target_compile_definitions(mimalloc-static PRIVATE MI_MALLOC_OVERRIDE)
     target_compile_definitions(mimalloc-obj PRIVATE MI_MALLOC_OVERRIDE)
   endif()

@@ -181,9 +181,9 @@ int main() {
   // mi_bins();
 
   // detect double frees and heap corruption
-  //double_free1();
-  //double_free2();
-  //corrupt_free();
+  // double_free1();
+  // double_free2();
+  // corrupt_free();
 
   void* p1 = malloc(78);
   void* p2 = malloc(24);

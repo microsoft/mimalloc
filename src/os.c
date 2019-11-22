@@ -299,7 +299,10 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   #if !defined(MAP_ANONYMOUS)
   #define MAP_ANONYMOUS  MAP_ANON
   #endif
-  int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+  #if !defined(MAP_NORESERVE)
+  #define MAP_NORESERVE  0
+  #endif
+  int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
   int fd = -1;
   #if defined(MAP_ALIGNED)  // BSD
   if (try_alignment > 0) {
@@ -625,30 +628,40 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   }
   #elif defined(__wasi__)
   // WebAssembly guests can't control memory protection
+  #elif defined(MAP_FIXED)
+  if (!commit) {
+    // use mmap with MAP_FIXED to discard the existing memory (and reduce commit charge)
+    void* p = mmap(start, size, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), -1, 0);
+    if (p != start) { err = errno; }
+  }
+  else {
+    // for commit, just change the protection
+    err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
+    if (err != 0) { err = errno; }
+  }
   #else
   err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
   if (err != 0) { err = errno; }
   #endif
   if (err != 0) {
-    _mi_warning_message("commit/decommit error: start: 0x%p, csize: 0x%x, err: %i\n", start, csize, err);
+    _mi_warning_message("%s error: start: 0x%p, csize: 0x%x, err: %i\n", commit ? "commit" : "decommit", start, csize, err);
   }
   mi_assert_internal(err == 0);
   return (err == 0);
 }
 
 bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {
-  return mi_os_commitx(addr, size, true, false /* conservative? */, is_zero, stats);
+  return mi_os_commitx(addr, size, true, false /* liberal */, is_zero, stats);
 }
 
 bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats) {
   bool is_zero;
-  return mi_os_commitx(addr, size, false, true /* conservative? */, &is_zero, stats);
+  return mi_os_commitx(addr, size, false, true /* conservative */, &is_zero, stats);
 }
 
 bool _mi_os_commit_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {
-  return mi_os_commitx(addr, size, true, true /* conservative? */, is_zero, stats);
+  return mi_os_commitx(addr, size, true, true /* conservative */, is_zero, stats);
 }
-
 
 // Signal to the OS that the address range is no longer in use
 // but may be used later again. This will release physical memory
@@ -708,7 +721,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
 // We page align to a conservative area inside the range to reset.
 bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
   if (mi_option_is_enabled(mi_option_reset_decommits)) {
-    return _mi_os_decommit(addr,size,stats);
+    return _mi_os_decommit(addr, size, stats);
   }
   else {
     return mi_os_resetx(addr, size, true, stats);
@@ -799,9 +812,9 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
   const DWORD flags = MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE;
 
   mi_win_enable_large_os_pages();
-  
+
   #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
-  MEM_EXTENDED_PARAMETER params[3] = { {0,0},{0,0},{0,0} };  
+  MEM_EXTENDED_PARAMETER params[3] = { {0,0},{0,0},{0,0} };
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
   static bool mi_huge_pages_available = true;
   if (pNtAllocateVirtualMemoryEx != NULL && mi_huge_pages_available) {
@@ -831,7 +844,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
   // on modern Windows try use VirtualAlloc2 for numa aware large OS page allocation
   if (pVirtualAlloc2 != NULL && numa_node >= 0) {
     params[0].Type = MemExtendedParameterNumaNode;
-    params[0].ULong = (unsigned)numa_node;    
+    params[0].ULong = (unsigned)numa_node;
     return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, params, 1);
   }
   #endif
@@ -840,28 +853,35 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
 }
 
 #elif defined(MI_OS_USE_MMAP) && (MI_INTPTR_SIZE >= 8)
-#ifdef MI_HAS_NUMA
-#include <numaif.h> // mbind, and use -lnuma
+#include <sys/syscall.h>
+#ifndef MPOL_PREFERRED
+#define MPOL_PREFERRED 1
+#endif
+#if defined(SYS_mbind)
+static long mi_os_mbind(void* start, unsigned long len, unsigned long mode, const unsigned long* nmask, unsigned long maxnode, unsigned flags) {
+  return syscall(SYS_mbind, start, len, mode, nmask, maxnode, flags);
+}
+#else
+static long mi_os_mbind(void* start, unsigned long len, unsigned long mode, const unsigned long* nmask, unsigned long maxnode, unsigned flags) {
+  UNUSED(start); UNUSED(len); UNUSED(mode); UNUSED(nmask); UNUSED(maxnode); UNUSED(flags);
+  return 0;
+}
 #endif
 static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) {
   mi_assert_internal(size%GiB == 0);
   bool is_large = true;
   void* p = mi_unix_mmap(addr, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
   if (p == NULL) return NULL;
-  #ifdef MI_HAS_NUMA
   if (numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) { // at most 64 nodes
     uintptr_t numa_mask = (1UL << numa_node);
-    // TODO: does `mbind` work correctly for huge OS pages? should we 
+    // TODO: does `mbind` work correctly for huge OS pages? should we
     // use `set_mempolicy` before calling mmap instead?
     // see: <https://lkml.org/lkml/2017/2/9/875>
-    long err = mbind(p, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
+    long err = mi_os_mbind(p, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
     if (err != 0) {
       _mi_warning_message("failed to bind huge (1GiB) pages to NUMA node %d: %s\n", numa_node, strerror(errno));
     }
   }
-  #else
-  UNUSED(numa_node);
-  #endif
   return p;
 }
 #else
@@ -870,7 +890,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) 
 }
 #endif
 
-#if (MI_INTPTR_SIZE >= 8) 
+#if (MI_INTPTR_SIZE >= 8)
 // To ensure proper alignment, use our own area for huge OS pages
 static _Atomic(uintptr_t)  mi_huge_start; // = 0
 
@@ -913,7 +933,7 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
   size_t size = 0;
   uint8_t* start = mi_os_claim_huge_pages(pages, &size);
   if (start == NULL) return NULL; // or 32-bit systems
-  
+
   // Allocate one page at the time but try to place them contiguously
   // We allocate one page at the time to be able to abort if it takes too long
   // or to at least allocate as many as available on the system.
@@ -933,11 +953,11 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
       }
       break;
     }
-    
+
     // success, record it
     _mi_stat_increase(&_mi_stats_main.committed, MI_HUGE_OS_PAGE_SIZE);
     _mi_stat_increase(&_mi_stats_main.reserved, MI_HUGE_OS_PAGE_SIZE);
-    
+
     // check for timeout
     if (max_msecs > 0) {
       mi_msecs_t elapsed = _mi_clock_end(start_t);
@@ -971,88 +991,76 @@ void _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats) {
 }
 
 /* ----------------------------------------------------------------------------
-Support NUMA aware allocation 
+Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
 #ifdef WIN32
-static int mi_os_numa_nodex() {
+static size_t mi_os_numa_nodex() {
   PROCESSOR_NUMBER pnum;
   USHORT numa_node = 0;
   GetCurrentProcessorNumberEx(&pnum);
   GetNumaProcessorNodeEx(&pnum,&numa_node);
-  return (int)numa_node;
+  return numa_node;
 }
 
-static int mi_os_numa_node_countx(void) {
+static size_t mi_os_numa_node_countx(void) {
   ULONG numa_max = 0;
   GetNumaHighestNodeNumber(&numa_max);
-  return (int)(numa_max + 1);
+  return (numa_max + 1);
 }
 #elif defined(__linux__)
-#include <dirent.h>
-#include <stdlib.h>
-#include <sys/syscall.h>
+#include <sys/syscall.h>  // getcpu
+#include <stdio.h>        // access
 
-static int mi_os_numa_nodex(void) {
+static size_t mi_os_numa_nodex(void) {
 #ifdef SYS_getcpu
-  unsigned node = 0;
-  unsigned ncpu = 0;
-  int err = syscall(SYS_getcpu, &ncpu, &node, NULL);
+  unsigned long node = 0;
+  unsigned long ncpu = 0;
+  long err = syscall(SYS_getcpu, &ncpu, &node, NULL);
   if (err != 0) return 0;
-  return (int)node;
+  return node;
 #else
   return 0;
 #endif
 }
-
-static int mi_os_numa_node_countx(void) {
-  DIR* d = opendir("/sys/devices/system/node");
-  if (d==NULL) return 1;
-  
-  struct dirent* de;
-  int max_node_num = 0;
-  while ((de = readdir(d)) != NULL) {
-  	int node_num;
-  	if (strncmp(de->d_name, "node", 4) == 0) {
-		  node_num = (int)strtol(de->d_name+4, NULL, 0);
-			if (max_node_num < node_num) max_node_num = node_num;
-    }
+static size_t mi_os_numa_node_countx(void) {
+  char buf[128];
+  unsigned node = 0;
+  for(node = 0; node < 256; node++) {
+    // enumerate node entries -- todo: it there a more efficient way to do this? (but ensure there is no allocation)
+    snprintf(buf, 127, "/sys/devices/system/node/node%u", node + 1);
+    if (access(buf,R_OK) != 0) break;
   }
-  closedir(d);
-  return (max_node_num + 1);
+  return (node+1);
 }
 #else
-static int mi_os_numa_nodex(void) {
+static size_t mi_os_numa_nodex(void) {
   return 0;
 }
-static int mi_os_numa_node_countx(void) {
+static size_t mi_os_numa_node_countx(void) {
   return 1;
 }
 #endif
 
-int _mi_os_numa_node_count(void) {
-  static int numa_node_count = 0;   // cache the node count 
-  if (mi_unlikely(numa_node_count <= 0)) {
-    int ncount = mi_os_numa_node_countx();    
-    int ncount0 = ncount;
-    // never more than max numa node and at least 1
-    int nmax = 1 + (int)mi_option_get(mi_option_max_numa_node);
-    if (ncount > nmax) ncount = nmax;
-    if (ncount <= 0)   ncount = 1;
-    numa_node_count = ncount;
-    _mi_verbose_message("using %i numa regions (%i nodes detected)\n", numa_node_count, ncount0);
+size_t _mi_numa_node_count = 0;   // cache the node count
+
+size_t _mi_os_numa_node_count_get(void) {
+  if (mi_unlikely(_mi_numa_node_count <= 0)) {
+    long ncount = mi_option_get(mi_option_use_numa_nodes); // given explicitly?
+    if (ncount <= 0) ncount = (long)mi_os_numa_node_countx();        // or detect dynamically
+    _mi_numa_node_count = (size_t)(ncount <= 0 ? 1 : ncount);
+    _mi_verbose_message("using %zd numa regions\n", _mi_numa_node_count);
   }
-  mi_assert_internal(numa_node_count >= 1);
-  return numa_node_count;
+  mi_assert_internal(_mi_numa_node_count >= 1);
+  return _mi_numa_node_count;
 }
 
-int _mi_os_numa_node(mi_os_tld_t* tld) {
+int _mi_os_numa_node_get(mi_os_tld_t* tld) {
   UNUSED(tld);
-  int numa_count = _mi_os_numa_node_count();
+  size_t numa_count = _mi_os_numa_node_count();
   if (numa_count<=1) return 0; // optimize on single numa node systems: always node 0
   // never more than the node count and >= 0
-  int numa_node = mi_os_numa_nodex();
+  size_t numa_node = mi_os_numa_nodex();
   if (numa_node >= numa_count) { numa_node = numa_node % numa_count; }
-  if (numa_node < 0) numa_node = 0;  
-  return numa_node;
+  return (int)numa_node;
 }
 

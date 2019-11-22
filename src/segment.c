@@ -17,8 +17,6 @@ static void mi_segment_map_allocated_at(const mi_segment_t* segment);
 static void mi_segment_map_freed_at(const mi_segment_t* segment);
 
 
-
-
 /* -----------------------------------------------------------
   Segment allocation
 
@@ -191,9 +189,11 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
 }
 #endif
 
+
 /* -----------------------------------------------------------
  Segment size calculations
 ----------------------------------------------------------- */
+
 
 static size_t mi_segment_size(mi_segment_t* segment) {
   return segment->segment_slices * MI_SEGMENT_SLICE_SIZE;
@@ -212,8 +212,9 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
   /*
   if (idx == 0) {
     // the first page starts after the segment info (and possible guard page)
-    p     += segment->segment_info_size;
+    p += segment->segment_info_size;
     psize -= segment->segment_info_size;
+
     // for small and medium objects, ensure the page start is aligned with the block size (PR#66 by kickunderscore)
     // to ensure this, we over-estimate and align with the OS page size
     const size_t asize = _mi_os_page_size();
@@ -234,10 +235,11 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
   */
 
   if (page_size != NULL) *page_size = psize;
-  mi_assert_internal(_mi_ptr_page(p) == page);
+  mi_assert_internal(page->block_size == 0 || _mi_ptr_page(p) == page);
   mi_assert_internal(_mi_ptr_segment(p) == segment);
   return p;
 }
+
 
 static size_t mi_segment_calculate_slices(size_t required, size_t* pre_size, size_t* info_slices) {
   size_t page_size = _mi_os_page_size();
@@ -283,6 +285,7 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   if (MI_SECURE>0) {
     _mi_os_unprotect(segment, mi_segment_size(segment)); // ensure no more guard pages are set
   }
+
   // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
   _mi_arena_free(segment, mi_segment_size(segment), segment->memid, segment->mem_is_committed || (~segment->commit_mask == 0), segment->mem_is_fixed, tld->stats);
 }
@@ -330,9 +333,7 @@ static bool mi_segment_cache_push(mi_segment_t* segment, mi_segments_tld_t* tld)
   }
 
   mi_assert_internal(segment->segment_slices == MI_SLICES_PER_SEGMENT);
-  if (!segment->mem_is_fixed && mi_option_is_enabled(mi_option_cache_reset)) {
-    _mi_os_reset((uint8_t*)segment + mi_segment_info_size(segment), mi_segment_size(segment) - mi_segment_info_size(segment), tld->stats);
-  }
+  mi_assert_internal(segment->next == NULL);  
   segment->next = tld->cache;
   tld->cache = segment;
   tld->cache_count++;
@@ -706,7 +707,6 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
    Page allocation
 ----------------------------------------------------------- */
 
-
 static mi_page_t* mi_segments_page_alloc(mi_page_kind_t page_kind, size_t required, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 {
   mi_assert_internal(required <= MI_LARGE_OBJ_SIZE_MAX && page_kind <= MI_PAGE_LARGE);
@@ -896,7 +896,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
           slice = mi_segment_page_clear(page, tld);   // set slice again due to coalesceing
         }
         else {
-          // otherwise reclaim it
+          // otherwise reclaim it          
           _mi_page_reclaim(heap,page);
         }
       }

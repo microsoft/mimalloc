@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 110   // major + 2 digits minor
+#define MI_MALLOC_VERSION 120   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -230,7 +230,7 @@ mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_b
 mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
 mi_decl_export bool mi_is_redirected() mi_attr_noexcept;
 
-mi_decl_export int mi_reserve_huge_os_pages_interleave(size_t pages, size_t timeout_msecs) mi_attr_noexcept;
+mi_decl_export int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t timeout_msecs) mi_attr_noexcept;
 mi_decl_export int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msecs) mi_attr_noexcept;
 
 // deprecated
@@ -270,13 +270,13 @@ typedef enum mi_option_e {
   mi_option_reserve_huge_os_pages,
   mi_option_segment_cache,
   mi_option_page_reset,
-  mi_option_cache_reset,
+  mi_option_segment_reset,
   mi_option_reset_decommits,
   mi_option_eager_commit_delay,
   mi_option_allow_decommit,
-  mi_option_segment_reset,
+  mi_option_reset_delay,
+  mi_option_use_numa_nodes,
   mi_option_os_tag,
-  mi_option_max_numa_node,
   mi_option_max_errors,
   _mi_option_last
 } mi_option_t;

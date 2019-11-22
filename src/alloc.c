@@ -157,7 +157,7 @@ static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, con
 }
 
 static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
-  mi_block_t* n = mi_block_nextx(page->cookie, block); // pretend it is freed, and get the decoded first field
+  mi_block_t* n = mi_block_nextx(page, block, page->cookie); // pretend it is freed, and get the decoded first field
   if (((uintptr_t)n & (MI_INTPTR_SIZE-1))==0 &&        // quick check: aligned pointer?
       (n==NULL || mi_is_in_same_segment(block, n)))    // quick check: in same segment or NULL?
   { 
@@ -230,14 +230,14 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   }
   else {
     // racy read on `heap`, but ok because MI_DELAYED_FREEING is set (see `mi_heap_delete` and `mi_heap_collect_abandon`)
-    mi_heap_t* heap = page->heap;
+    mi_heap_t* heap = (mi_heap_t*)mi_atomic_read_ptr(mi_atomic_cast(void*, &page->heap));
     mi_assert_internal(heap != NULL);
     if (heap != NULL) {
       // add to the delayed free list of this heap. (do this atomically as the lock only protects heap memory validity)
       mi_block_t* dfree;
       do {
         dfree = (mi_block_t*)heap->thread_delayed_free;
-        mi_block_set_nextx(heap->cookie,block,dfree);
+        mi_block_set_nextx(heap,block,dfree, heap->cookie);
       } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), block, dfree));
     }
 

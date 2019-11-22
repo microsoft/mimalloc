@@ -75,6 +75,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
 
   mi_segment_t* segment = _mi_page_segment(page);
   uint8_t* start = _mi_page_start(segment,page,NULL);
+
   mi_assert_internal(start == _mi_segment_page_start(segment,page,NULL));
   
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
@@ -227,7 +228,10 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
 void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
   mi_assert_internal(page->heap == NULL);
+
   mi_assert_internal(_mi_page_segment(page)->kind != MI_SEGMENT_HUGE);
+  mi_assert_internal(!page->is_reset);  
+
   _mi_page_free_collect(page,false);
   mi_page_queue_t* pq = mi_page_queue(heap, page->block_size);
   mi_page_queue_push(heap, pq, page);
@@ -282,7 +286,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
 
   // and free them all
   while(block != NULL) {
-    mi_block_t* next = mi_block_nextx(heap->cookie,block);
+    mi_block_t* next = mi_block_nextx(heap,block, heap->cookie);
     // use internal free instead of regular one to keep stats etc correct
     if (!_mi_free_delayed_block(block)) {
       // we might already start delayed freeing while another thread has not yet
@@ -290,7 +294,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
       mi_block_t* dfree;
       do {
         dfree = (mi_block_t*)heap->thread_delayed_free;
-        mi_block_set_nextx(heap->cookie, block, dfree);
+        mi_block_set_nextx(heap, block, dfree, heap->cookie);
       } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), block, dfree));
 
     }
@@ -341,18 +345,24 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(pq == mi_page_queue_of(page));
   mi_assert_internal(page->heap != NULL);
+  
+#if MI_DEBUG > 1
+  mi_heap_t* pheap = (mi_heap_t*)mi_atomic_read_ptr(mi_atomic_cast(void*, &page->heap));
+#endif
 
-  _mi_page_use_delayed_free(page,MI_NEVER_DELAYED_FREE);
+  // remove from our page list
+  mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
+  mi_page_queue_remove(pq, page);
+
+  // page is no longer associated with our heap
+  mi_atomic_write_ptr(mi_atomic_cast(void*, &page->heap), NULL);
+
 #if MI_DEBUG>1
   // check there are no references left..
-  for (mi_block_t* block = (mi_block_t*)page->heap->thread_delayed_free; block != NULL; block = mi_block_nextx(page->heap->cookie,block)) {
+  for (mi_block_t* block = (mi_block_t*)pheap->thread_delayed_free; block != NULL; block = mi_block_nextx(pheap, block, pheap->cookie)) {
     mi_assert_internal(_mi_ptr_page(block) != page);
   }
 #endif
-
-  // and then remove from our page list
-  mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
-  mi_page_queue_remove(pq, page);
 
   // and abandon it
   mi_assert_internal(page->heap == NULL);
@@ -588,7 +598,9 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(block_size > 0);
   // set fields
   size_t page_size;
+
   _mi_segment_page_start(segment, page, &page_size);
+
   page->block_size = block_size;
   mi_assert_internal(page->block_size <= page_size);
   mi_assert_internal(page_size <= page->slice_count*MI_SEGMENT_SLICE_SIZE);
@@ -755,6 +767,7 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
   if (page != NULL) {
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(page->block_size == block_size);
+
     if (pq == NULL) {
       // huge pages are directly abandoned
       mi_assert_internal(_mi_page_segment(page)->kind == MI_SEGMENT_HUGE);
