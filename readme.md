@@ -1,7 +1,7 @@
 
 <img align="left" width="100" height="100" src="doc/mimalloc-logo.png"/>
 
-[<img align="right" src="https://dev.azure.com/Daan0324/mimalloc/_apis/build/status/microsoft.mimalloc?branchName=master"/>](https://dev.azure.com/Daan0324/mimalloc/_build?definitionId=1&_a=summary)
+[<img align="right" src="https://dev.azure.com/Daan0324/mimalloc/_apis/build/status/microsoft.mimalloc?branchName=dev"/>](https://dev.azure.com/Daan0324/mimalloc/_build?definitionId=1&_a=summary)
 
 # mimalloc
 
