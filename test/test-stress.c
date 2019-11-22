@@ -5,9 +5,14 @@ terms of the MIT license.
 -----------------------------------------------------------------------------*/
 
 /* This is a stress test for the allocator, using multiple threads and
-   transferring objects between threads. This is not a typical workload
-   but uses a random linear size distribution. Timing can also depend on
-   (random) thread scheduling. Do not use this test as a benchmark!
+   transferring objects between threads. It tries to reflect real-world workloads:
+   - allocation size is distributed linearly in powers of two
+   - with some fraction extra large (and some extra extra large)
+   - the allocations are initialized and read again at free
+   - pointers transfer between threads
+   - threads are terminated and recreated with some objects surviving in between
+   - uses deterministic "randomness", but execution can still depend on
+     (random) thread scheduling. Do not use this test as a benchmark!
 */
 
 #include <stdio.h>
@@ -22,13 +27,13 @@ terms of the MIT license.
 // argument defaults
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 50;      // scaling factor
-static int ITER    = 10;      // N full iterations re-creating all threads
+static int ITER    = 10;      // N full iterations destructing and re-creating all threads
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int SCALE   = 100;  // scaling factor
 
 static bool   allow_large_objects = true;    // allow very large objects?
-static size_t use_one_size = 0;              // use single object size of N uintptr_t?
+static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
 
 
 #ifdef USE_STD_MALLOC
@@ -185,7 +190,7 @@ int main(int argc, char** argv) {
     long n = (strtol(argv[3], &end, 10));
     if (n > 0) ITER = n;
   }
-  printf("start with %d threads with a %d%% load-per-thread and %d iterations\n", THREADS, SCALE, ITER);
+  printf("Using %d threads with a %d%% load-per-thread and %d iterations\n", THREADS, SCALE, ITER);
   //int res = mi_reserve_huge_os_pages(4,1);
   //printf("(reserve huge: %i\n)", res);
 
@@ -204,7 +209,7 @@ int main(int argc, char** argv) {
     }
     mi_collect(false);
 #ifndef NDEBUG
-    if ((n + 1) % 10 == 0) { printf("- iterations: %3d\n", n + 1); }
+    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - n + 1); }
 #endif
   }
 
