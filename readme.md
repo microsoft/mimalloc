@@ -56,7 +56,7 @@ Enjoy!
 
 ### Releases
 
-* 2019-11-22, `v1.2.0`: stable release 1.2: bug fixes, improved secure mode.
+* 2019-11-22, `v1.2.0`: stable release 1.2: bug fixes, improved secure mode (free list corruption checks, double free mitigation).
 * 2019-10-07, `v1.1.0`: stable release 1.1.
 * 2019-09-01, `v1.0.8`: pre-release 8: more robust windows dynamic overriding, initial huge page support.
 * 2019-08-10, `v1.0.6`: pre-release 6: various performance improvements.
