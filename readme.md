@@ -37,7 +37,7 @@ Notable aspects of the design include:
   programs.
 - __secure__: _mimalloc_ can be built in secure mode, adding guard pages,
   randomized allocation, encrypted free lists, etc. to protect against various
-  heap vulnerabilities. The performance penalty is only around 3% on average
+  heap vulnerabilities. The performance penalty is usually around 10% on average
   over our benchmarks.
 - __first-class heaps__: efficiently create and use multiple heaps to allocate across different regions.
   A heap can be destroyed at once instead of deallocating each object separately.  
@@ -65,7 +65,7 @@ Enjoy!
 
 ## Windows
 
-Open `ide/vs2017/mimalloc.sln` in Visual Studio 2017 and build.
+Open `ide/vs2019/mimalloc.sln` in Visual Studio 2019 and build (or `ide/vs2017/mimalloc.sln`).
 The `mimalloc` project builds a static library (in `out/msvc-x64`), while the
 `mimalloc-override` project builds a DLL for overriding malloc
 in the entire program.
@@ -98,7 +98,7 @@ maintains detailed statistics as:
 This will name the shared library as `libmimalloc-debug.so`.
 
 Finally, you can build a _secure_ version that uses guard pages, encrypted
-free lists, etc, as:
+free lists, etc., as:
 ```
 > mkdir -p out/secure
 > cd out/secure
@@ -141,8 +141,7 @@ to link with the static library. See `test\CMakeLists.txt` for an example.
 
 For best performance in C++ programs, it is also recommended to override the
 global `new` and `delete` operators. For convience, mimalloc provides
-[mimalloc-new-delete.h](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in 
-a single(!) source file in your project.
+[mimalloc-new-delete.h](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
 
 You can pass environment variables to print verbose messages (`MIMALLOC_VERBOSE=1`)
 and statistics (`MIMALLOC_SHOW_STATS=1`) (in the debug version):
@@ -264,7 +263,9 @@ mimalloc (in `mimalloc-override.dll`).
 To ensure the mimalloc DLL is loaded at run-time it is easiest to insert some
 call to the mimalloc API in the `main` function, like `mi_version()`
 (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
-for an example on how to use this.
+for an example on how to use this. For best performance on Windows with C++, it
+is highly recommended to also override the `new`/`delete` operations (as described
+in the introduction).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
 overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully redirected.
