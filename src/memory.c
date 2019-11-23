@@ -302,14 +302,14 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
     // no need to commit, but check if already fully committed
     *commit = mi_bitmap_is_claimed(&region->commit, 1, blocks, bit_idx);
   }  
-  mi_assert_internal(mi_bitmap_is_claimed(&region->commit, 1, blocks, bit_idx));
+  mi_assert_internal(!*commit || mi_bitmap_is_claimed(&region->commit, 1, blocks, bit_idx));
 
   // unreset reset blocks
   if (mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx)) {
     mi_assert_internal(!info.is_large);
     mi_assert_internal(!mi_option_is_enabled(mi_option_eager_commit) || *commit); 
     mi_bitmap_unclaim(&region->reset, 1, blocks, bit_idx);
-    bool reset_zero;
+    bool reset_zero = false;
     _mi_mem_unreset(p, blocks * MI_SEGMENT_SIZE, &reset_zero, tld);
     if (reset_zero) *is_zero = true;
   }
