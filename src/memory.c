@@ -306,15 +306,18 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
 
   // unreset reset blocks
   if (mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx)) {
+    // some blocks are still reset
     mi_assert_internal(!info.is_large);
     mi_assert_internal(!mi_option_is_enabled(mi_option_eager_commit) || *commit); 
     mi_bitmap_unclaim(&region->reset, 1, blocks, bit_idx);
-    bool reset_zero = false;
-    _mi_mem_unreset(p, blocks * MI_SEGMENT_SIZE, &reset_zero, tld);
-    if (reset_zero) *is_zero = true;
+    if (*commit || !mi_option_is_enabled(mi_option_reset_decommits)) { // only if needed
+      bool reset_zero = false;
+      _mi_mem_unreset(p, blocks * MI_SEGMENT_SIZE, &reset_zero, tld);
+      if (reset_zero) *is_zero = true;
+    }
   }
   mi_assert_internal(!mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx));
-
+  
   #if (MI_DEBUG>=2)
   if (*commit) { ((uint8_t*)p)[0] = 0; }
   #endif
@@ -409,8 +412,9 @@ void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_re
     }
 
     // reset the blocks to reduce the working set.
-    if (!info.is_large && mi_option_is_enabled(mi_option_segment_reset) &&
-        mi_option_is_enabled(mi_option_eager_commit))  // cannot reset halfway committed segments, use only `option_page_reset` instead            
+    if (!info.is_large && mi_option_is_enabled(mi_option_segment_reset) 
+       && (mi_option_is_enabled(mi_option_eager_commit) ||
+           mi_option_is_enabled(mi_option_reset_decommits))) // cannot reset halfway committed segments, use only `option_page_reset` instead            
     {
       bool any_unreset;
       mi_bitmap_claim(&region->reset, 1, blocks, bit_idx, &any_unreset);
