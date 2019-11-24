@@ -348,7 +348,7 @@ static mi_segment_t* mi_segment_cache_pop(size_t segment_size, mi_segments_tld_t
 
 static bool mi_segment_cache_full(mi_segments_tld_t* tld) 
 {
-  if (tld->count == 1 && tld->cache_count==0) return false; // always cache at least the final segment of a thread
+  // if (tld->count == 1 && tld->cache_count==0) return false; // always cache at least the final segment of a thread
   size_t max_cache = mi_option_get(mi_option_segment_cache);
   if (tld->cache_count < max_cache
        && tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION)) // at least allow a 1 element cache
@@ -424,7 +424,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   bool is_zero = false;
   
   // Try to get it from our thread local cache first
-  mi_segment_t* segment = NULL; // mi_segment_cache_pop(segment_size, tld);
+  mi_segment_t* segment = mi_segment_cache_pop(segment_size, tld);
   if (segment != NULL) {
     if (page_kind <= MI_PAGE_MEDIUM && segment->page_kind == page_kind && segment->segment_size == segment_size) {
       pages_still_good = true;
@@ -447,6 +447,12 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
             mi_page_unreset(segment, page, 0, tld);  // todo: only unreset the part that was reset? (instead of the full page)
           }
         }
+      }
+      // ensure the initial info is committed
+      if (segment->capacity < capacity) {
+        bool commit_zero = false;
+        _mi_mem_commit(segment, pre_size, &commit_zero, tld->os);
+        if (commit_zero) is_zero = true;
       }
     }    
   }
