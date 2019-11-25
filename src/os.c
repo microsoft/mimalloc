@@ -602,7 +602,7 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
 // (but not for the reset version where we want commit to be conservative as well)
 static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservative, bool* is_zero, mi_stats_t* stats) {
   // page align in the range, commit liberally, decommit conservative
-  *is_zero = false;
+  if (is_zero != NULL) { *is_zero = false; }
   size_t csize;
   void* start = mi_os_page_align_areax(conservative, addr, size, &csize);
   if (csize == 0) return true;  // || _mi_os_is_huge_reserved(addr))
@@ -631,7 +631,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   #elif defined(MAP_FIXED)
   if (!commit) {
     // use mmap with MAP_FIXED to discard the existing memory (and reduce commit charge)
-    void* p = mmap(start, size, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), -1, 0);
+    void* p = mmap(start, csize, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), -1, 0);
     if (p != start) { err = errno; }
   }
   else {

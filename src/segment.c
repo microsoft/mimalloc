@@ -189,7 +189,6 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
 }
 #endif
 
-
 /* -----------------------------------------------------------
  Segment size calculations
 ----------------------------------------------------------- */
