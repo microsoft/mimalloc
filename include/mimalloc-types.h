@@ -76,6 +76,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #define MI_INTPTR_SIZE  (1<<MI_INTPTR_SHIFT)
+#define MI_INTPTR_BITS  (8*MI_INTPTR_SIZE)
 
 #define KiB     ((size_t)1024)
 #define MiB     (KiB*KiB)
@@ -95,13 +96,13 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 // Derived constants
-#define MI_SEGMENT_SIZE                   ((size_t)1<<MI_SEGMENT_SHIFT)
+#define MI_SEGMENT_SIZE                   (1ULL<<MI_SEGMENT_SHIFT)
 #define MI_SEGMENT_MASK                   (MI_SEGMENT_SIZE - 1)
-#define MI_SEGMENT_SLICE_SIZE             ((size_t)1<< MI_SEGMENT_SLICE_SHIFT)
+#define MI_SEGMENT_SLICE_SIZE             (1ULL<< MI_SEGMENT_SLICE_SHIFT)
 #define MI_SLICES_PER_SEGMENT             (MI_SEGMENT_SIZE / MI_SEGMENT_SLICE_SIZE) // 1024
 
-#define MI_SMALL_PAGE_SIZE                (1<<MI_SMALL_PAGE_SHIFT)
-#define MI_MEDIUM_PAGE_SIZE               (1<<MI_MEDIUM_PAGE_SHIFT)
+#define MI_SMALL_PAGE_SIZE                (1ULL<<MI_SMALL_PAGE_SHIFT)
+#define MI_MEDIUM_PAGE_SIZE               (1ULL<<MI_MEDIUM_PAGE_SHIFT)
 
 #define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/8)   // 8kb on 64-bit
 
@@ -227,9 +228,9 @@ typedef enum mi_segment_kind_e {
   MI_SEGMENT_HUGE,   // > MI_LARGE_SIZE_MAX segment with just one huge page inside.
 } mi_segment_kind_t;
 
-#define MI_COMMIT_SIZE      (1UL<<20)   // OS large page size
+#define MI_COMMIT_SIZE    (MI_SEGMENT_SIZE/MI_INTPTR_BITS)
 
-#if ((1 << MI_SEGMENT_SHIFT)/MI_COMMIT_SIZE > 8*MI_INTPTR_SIZE)
+#if (((1 << MI_SEGMENT_SHIFT)/MI_COMMIT_SIZE) > 8*MI_INTPTR_SIZE)
 #error "not enough commit bits to cover the segment size"
 #endif
 
