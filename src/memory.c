@@ -71,7 +71,7 @@ bool    _mi_os_is_huge_reserved(void* p);
 typedef uintptr_t mi_region_info_t;
 
 static inline mi_region_info_t mi_region_info_create(void* start, bool is_large, bool is_committed) {
-  return ((uintptr_t)start | ((is_large?1:0) << 1) | (is_committed?1:0));
+  return ((uintptr_t)start | ((uintptr_t)(is_large?1:0) << 1) | (is_committed?1:0));
 }
 
 static inline void* mi_region_info_read(mi_region_info_t info, bool* is_large, bool* is_committed) {
@@ -461,10 +461,14 @@ void _mi_mem_free(void* p, size_t size, size_t id, mi_stats_t* stats) {
     // reset: 10x slowdown on malloc-large, decommit: 17x slowdown on malloc-large
     if (!is_large) {
       if (mi_option_is_enabled(mi_option_segment_reset)) {
-        _mi_os_reset(p, size, stats);  //
-        // _mi_os_decommit(p,size,stats); // if !is_eager_committed (and clear dirty bits)
+        if (!is_eager_committed &&  // cannot reset large pages
+          (mi_option_is_enabled(mi_option_eager_commit) ||  // cannot reset halfway committed segments, use `option_page_reset` instead
+            mi_option_is_enabled(mi_option_reset_decommits))) // but we can decommit halfway committed segments
+        {
+          _mi_os_reset(p, size, stats);
+          //_mi_os_decommit(p, size, stats);  // todo: and clear dirty bits?
+        }
       }
-      // else { _mi_os_reset(p,size,stats); }
     }    
     if (!is_eager_committed) {
       // adjust commit statistics as we commit again when re-using the same slot

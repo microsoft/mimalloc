@@ -223,7 +223,7 @@ static void mi_heap_free(mi_heap_t* heap) {
   
   // reset default
   if (mi_heap_is_default(heap)) {
-    _mi_heap_default = heap->tld->heap_backing;
+    _mi_heap_set_default_direct(heap->tld->heap_backing);
   }
   // and free the used memory
   mi_free(heap);
@@ -354,8 +354,8 @@ mi_heap_t* mi_heap_set_default(mi_heap_t* heap) {
   mi_assert(mi_heap_is_initialized(heap));
   if (!mi_heap_is_initialized(heap)) return NULL;
   mi_assert_expensive(mi_heap_is_valid(heap));
-  mi_heap_t* old   = _mi_heap_default;
-  _mi_heap_default = heap;
+  mi_heap_t* old = mi_get_default_heap(); 
+  _mi_heap_set_default_direct(heap);
   return old;
 }
 

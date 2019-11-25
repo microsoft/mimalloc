@@ -57,7 +57,7 @@ static inline uint8_t mi_bsr32(uint32_t x);
 static inline uint8_t mi_bsr32(uint32_t x) {
   uint32_t idx;
   _BitScanReverse((DWORD*)&idx, x);
-  return idx;
+  return (uint8_t)idx;
 }
 #elif defined(__GNUC__) || defined(__clang__)
 static inline uint8_t mi_bsr32(uint32_t x) {
@@ -260,7 +260,7 @@ static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
   page->heap->page_count--;
   page->next = NULL;
   page->prev = NULL;
-  page->heap = NULL;
+  mi_atomic_write_ptr(mi_atomic_cast(void*, &page->heap), NULL);
   mi_page_set_in_full(page,false);
 }
 
@@ -274,7 +274,7 @@ static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_
                         (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
 
   mi_page_set_in_full(page, mi_page_queue_is_full(queue));
-  page->heap = heap;
+  mi_atomic_write_ptr(mi_atomic_cast(void*, &page->heap), heap);
   page->next = queue->first;
   page->prev = NULL;
   if (queue->first != NULL) {
@@ -338,7 +338,7 @@ size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue
   // set append pages to new heap and count
   size_t count = 0;
   for (mi_page_t* page = append->first; page != NULL; page = page->next) {
-    page->heap = heap;
+    mi_atomic_write_ptr(mi_atomic_cast(void*, &page->heap), heap);
     count++;
   }
 
