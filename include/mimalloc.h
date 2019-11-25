@@ -267,19 +267,19 @@ typedef enum mi_option_e {
   // the following options are experimental
   mi_option_eager_commit,
   mi_option_eager_region_commit,
-  mi_option_eager_page_commit,
+  mi_option_reset_decommits,
   mi_option_large_os_pages,         // implies eager commit
   mi_option_reserve_huge_os_pages,
   mi_option_segment_cache,
   mi_option_page_reset,
   mi_option_segment_reset,
-  mi_option_reset_decommits,
   mi_option_eager_commit_delay,
   mi_option_reset_delay,
   mi_option_use_numa_nodes,
   mi_option_os_tag,
   mi_option_max_errors,
-  _mi_option_last
+  _mi_option_last,
+  mi_option_eager_page_commit = mi_option_eager_commit
 } mi_option_t;
 
 

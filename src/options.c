@@ -56,21 +56,21 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(verbose) },
 
   // the following options are experimental and not all combinations make sense.
-  { 0, UNINIT, MI_OPTION(eager_commit) },        // note: needs to be on when eager_region_commit is enabled
-  #ifdef _WIN32   // and BSD?
-  { 0, UNINIT, MI_OPTION(eager_region_commit) }, // don't commit too eagerly on windows (just for looks...)
+  { 1, UNINIT, MI_OPTION(eager_commit) },        // commit on demand
+  #if defined(_WIN32) || (MI_INTPTR_SIZE <= 4)   // and other OS's without overcommit?
+  { 0, UNINIT, MI_OPTION(eager_region_commit) },
+  { 1, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
   #else
-  { 1, UNINIT, MI_OPTION(eager_region_commit) },
+  { 1, UNINIT, MI_OPTION(eager_region_commit) }, 
+  { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset uses MADV_FREE/MADV_DONTNEED
   #endif
-  { 1, UNINIT, MI_OPTION(eager_page_commit) },   
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },
   { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
   { 0, UNINIT, MI_OPTION(page_reset) },          // reset pages on free
   { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
-  { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
-  { 500, UNINIT, MI_OPTION(reset_delay) },        // reset delay in milli-seconds
+  { 500, UNINIT, MI_OPTION(reset_delay) },       // reset delay in milli-seconds
   { 0,   UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes. 
   { 100, UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
   { 16,  UNINIT, MI_OPTION(max_errors) }         // maximum errors that are output

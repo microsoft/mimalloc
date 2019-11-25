@@ -165,7 +165,7 @@ static void mi_segment_protect_range(void* p, size_t size, bool protect) {
   }
 }
 
-static void mi_segment_protect(mi_segment_t* segment, bool protect) {
+static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t* tld) {
   // add/remove guard pages
   if (MI_SECURE != 0) {
     // in secure mode, we set up a protected page in between the segment info and the page data
@@ -175,7 +175,13 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect) {
     mi_segment_protect_range((uint8_t*)segment + segment->segment_info_size - os_page_size, os_page_size, protect);
     if (MI_SECURE <= 1 || segment->capacity == 1) {
       // and protect the last (or only) page too
-      mi_segment_protect_range((uint8_t*)segment + segment->segment_size - os_page_size, os_page_size, protect);
+      mi_assert_internal(segment->page_kind >= MI_PAGE_LARGE);
+      uint8_t* start = (uint8_t*)segment + segment->segment_size - os_page_size;
+      if (protect && !mi_option_is_enabled(mi_option_eager_page_commit)) {
+        // ensure secure page is committed
+        _mi_mem_commit(start, os_page_size, NULL, tld);
+      }
+      mi_segment_protect_range(start, os_page_size, protect);
     }
     else {
       // or protect every page 
@@ -323,19 +329,23 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   mi_segments_track_size(-((long)segment_size),tld);
   if (MI_SECURE != 0) {
     mi_assert_internal(!segment->mem_is_fixed);
-    mi_segment_protect(segment, false); // ensure no more guard pages are set
+    mi_segment_protect(segment, false, tld->os); // ensure no more guard pages are set
   }
   
-  bool fully_committed = true;
   bool any_reset = false;
+  bool fully_committed = true;
   for (size_t i = 0; i < segment->capacity; i++) {
     mi_page_t* page = &segment->pages[i];    
     if (!page->is_committed) { fully_committed = false; }
-    if (page->is_reset) {
-      any_reset = true;
-      if (mi_option_is_enabled(mi_option_reset_decommits)) { fully_committed = false;}
-    }
+    if (page->is_reset)      { any_reset = true; }
   }
+  if (any_reset && mi_option_is_enabled(mi_option_reset_decommits)) { 
+    fully_committed = false; 
+  }
+  if (segment->page_kind >= MI_PAGE_LARGE && !mi_option_is_enabled(mi_option_eager_page_commit)) {
+    fully_committed = false;
+  }
+
   _mi_mem_free(segment, segment_size, segment->memid, fully_committed, any_reset, tld->os);
 }
 
@@ -442,7 +452,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
     {
       if (MI_SECURE!=0) {
         mi_assert_internal(!segment->mem_is_fixed);
-        mi_segment_protect(segment, false); // reset protection if the page kind differs
+        mi_segment_protect(segment, false, tld->os); // reset protection if the page kind differs
       }
       // different page kinds; unreset any reset pages, and unprotect
       // TODO: optimize cache pop to return fitting pages if possible?
@@ -514,7 +524,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   // _mi_stat_increase(&tld->stats->page_committed, segment->segment_info_size);
 
   // set protection
-  mi_segment_protect(segment, true);
+  mi_segment_protect(segment, true, tld->os);
   
   //fprintf(stderr,"mimalloc: alloc segment at %p\n", (void*)segment);
   return segment;
@@ -563,8 +573,8 @@ static mi_page_t* mi_segment_find_free(mi_segment_t* segment, mi_segments_tld_t*
       if (!page->is_committed) {
         mi_assert_internal(!segment->mem_is_fixed);
         mi_assert_internal(!page->is_reset);
+        page->is_committed = true;
         if (segment->page_kind < MI_PAGE_LARGE || mi_option_is_enabled(mi_option_eager_page_commit)) {
-          page->is_committed = true;
           size_t psize;
           uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
           bool is_zero = false;
@@ -594,7 +604,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld);
 static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_segments_tld_t* tld) {
   mi_assert_internal(page->segment_in_use);
   mi_assert_internal(mi_page_all_free(page));
-  mi_assert_internal(segment->page_kind >= MI_PAGE_LARGE || page->is_committed);
+  mi_assert_internal(page->is_committed);
   size_t inuse = page->capacity * page->block_size;
   _mi_stat_decrease(&tld->stats->page_committed, inuse);
   _mi_stat_decrease(&tld->stats->pages, 1);
@@ -725,7 +735,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
       mi_page_t* page = &segment->pages[i];
       if (page->segment_in_use) {
         mi_assert_internal(!page->is_reset);
-        mi_assert_internal(segment->page_kind >= MI_PAGE_LARGE || page->is_committed);
+        mi_assert_internal(page->is_committed);
         segment->abandoned--;
         mi_assert(page->next == NULL);
         _mi_stat_decrease(&tld->stats->pages_abandoned, 1);
