@@ -35,7 +35,7 @@ static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_sta
   return (mi_block_t*)((uint8_t*)page_start + (i * page->block_size));
 }
 
-static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t size, mi_stats_t* stats);
+static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t size, mi_tld_t* tld);
 
 
 #if (MI_DEBUG>=3)
@@ -242,7 +242,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   mi_page_t* page = _mi_segment_page_alloc(block_size, &heap->tld->segments, &heap->tld->os);
   if (page == NULL) return NULL;
   mi_assert_internal(pq==NULL || _mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
-  mi_page_init(heap, page, block_size, &heap->tld->stats);
+  mi_page_init(heap, page, block_size, heap->tld);
   _mi_stat_increase( &heap->tld->stats.pages, 1);
   if (pq!=NULL) mi_page_queue_push(heap, pq, page); // huge pages use pq==NULL
   mi_assert_expensive(_mi_page_is_valid(page));
@@ -544,8 +544,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 // Note: we also experimented with "bump" allocation on the first
 // allocations but this did not speed up any benchmark (due to an
 // extra test in malloc? or cache effects?)
-static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* stats) {
-  UNUSED(stats);
+static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld) {
   mi_assert_expensive(mi_page_is_valid_init(page));
   #if (MI_SECURE<=2)
   mi_assert(page->free == NULL);
@@ -555,8 +554,8 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
   if (page->capacity >= page->reserved) return;
 
   size_t page_size;
-  _mi_page_start(_mi_page_segment(page), page, &page_size);
-  mi_stat_counter_increase(stats->pages_extended, 1);
+  uint8_t* page_start = _mi_page_start(_mi_page_segment(page), page, &page_size);
+  mi_stat_counter_increase(tld->stats.pages_extended, 1);
 
   // calculate the extend count
   size_t extend = page->reserved - page->capacity;
@@ -572,16 +571,22 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
   mi_assert_internal(extend > 0 && extend + page->capacity <= page->reserved);
   mi_assert_internal(extend < (1UL<<16));
 
+  // commit on-demand for large and huge pages?
+  if (_mi_page_segment(page)->page_kind >= MI_PAGE_LARGE && !mi_option_is_enabled(mi_option_eager_page_commit)) {
+    uint8_t* start = page_start + (page->capacity * page->block_size);
+    _mi_mem_commit(start, extend * page->block_size, NULL, &tld->os);
+  }
+
   // and append the extend the free list
   if (extend < MI_MIN_SLICES || MI_SECURE==0) { //!mi_option_is_enabled(mi_option_secure)) {
-    mi_page_free_list_extend(page, extend, stats );
+    mi_page_free_list_extend(page, extend, &tld->stats );
   }
   else {
-    mi_page_free_list_extend_secure(heap, page, extend, stats);
+    mi_page_free_list_extend_secure(heap, page, extend, &tld->stats);
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;
-  mi_stat_increase(stats->page_committed, extend * page->block_size);
+  mi_stat_increase(tld->stats.page_committed, extend * page->block_size);
 
   // extension into zero initialized memory preserves the zero'd free list
   if (!page->is_zero_init) {
@@ -591,7 +596,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_stats_t* st
 }
 
 // Initialize a fresh page
-static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi_stats_t* stats) {
+static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi_tld_t* tld) {
   mi_assert(page != NULL);
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert(segment != NULL);
@@ -621,7 +626,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_expensive(mi_page_is_valid_init(page));
 
   // initialize an initial free list
-  mi_page_extend_free(heap,page,stats);
+  mi_page_extend_free(heap,page,tld);
   mi_assert(mi_page_immediate_available(page));
 }
 
@@ -666,7 +671,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
 
     // 2. Try to extend
     if (page->capacity < page->reserved) {
-      mi_page_extend_free(heap, page, &heap->tld->stats);
+      mi_page_extend_free(heap, page, heap->tld);
       mi_assert_internal(mi_page_immediate_available(page));
       break;
     }
@@ -707,7 +712,7 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
   if (page != NULL) {
     if ((MI_SECURE >= 3) && page->capacity < page->reserved && ((_mi_heap_random(heap) & 1) == 1)) {
       // in secure mode, we extend half the time to increase randomness
-      mi_page_extend_free(heap, page, &heap->tld->stats);
+      mi_page_extend_free(heap, page, heap->tld);
       mi_assert_internal(mi_page_immediate_available(page));
     }
     else {

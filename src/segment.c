@@ -200,7 +200,12 @@ static void mi_page_reset(mi_segment_t* segment, mi_page_t* page, size_t size, m
   void* start = mi_segment_raw_page_start(segment, page, &psize);
   page->is_reset = true;
   mi_assert_internal(size <= psize);
-  _mi_mem_reset(start, ((size == 0 || size > psize) ? psize : size), tld->os);
+  size_t reset_size = (size == 0 || size > psize ? psize : size);
+  if (size == 0 && segment->page_kind >= MI_PAGE_LARGE && !mi_option_is_enabled(mi_option_eager_page_commit)) {
+    mi_assert_internal(page->block_size > 0);
+    reset_size = page->capacity * page->block_size;
+  }
+  _mi_mem_reset(start, reset_size, tld->os);
 }
 
 static void mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size, mi_segments_tld_t* tld)
@@ -210,8 +215,13 @@ static void mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size,
   page->is_reset = false;
   size_t psize;
   uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
+  size_t unreset_size = (size == 0 || size > psize ? psize : size);
+  if (size == 0 && segment->page_kind >= MI_PAGE_LARGE && !mi_option_is_enabled(mi_option_eager_page_commit)) {
+    mi_assert_internal(page->block_size > 0);
+    unreset_size = page->capacity * page->block_size;
+  }
   bool is_zero = false;
-  _mi_mem_unreset(start, ((size == 0 || size > psize) ? psize : size), &is_zero, tld->os);
+  _mi_mem_unreset(start, unreset_size, &is_zero, tld->os);
   if (is_zero) page->is_zero_init = true;
 }
 
@@ -414,8 +424,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   size_t pre_size;
   size_t segment_size = mi_segment_size(capacity, required, &pre_size, &info_size);
   mi_assert_internal(segment_size >= required);
-  size_t page_size = (page_kind == MI_PAGE_HUGE ? segment_size : (size_t)1 << page_shift);
-
+  
   // Initialize parameters
   bool eager_delayed = (page_kind <= MI_PAGE_MEDIUM && tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   bool eager  = !eager_delayed && mi_option_is_enabled(mi_option_eager_commit);
@@ -554,14 +563,16 @@ static mi_page_t* mi_segment_find_free(mi_segment_t* segment, mi_segments_tld_t*
       if (!page->is_committed) {
         mi_assert_internal(!segment->mem_is_fixed);
         mi_assert_internal(!page->is_reset);
-        size_t psize;
-        uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
-        page->is_committed = true;
-        bool is_zero = false;
-        const size_t gsize = (MI_SECURE >= 2 ? _mi_os_page_size() : 0);
-        _mi_mem_commit(start,psize + gsize,&is_zero,tld->os);
-        if (gsize > 0) { mi_segment_protect_range(start + psize, gsize, true); }
-        if (is_zero) { page->is_zero_init = true; }
+        if (segment->page_kind < MI_PAGE_LARGE || mi_option_is_enabled(mi_option_eager_page_commit)) {
+          page->is_committed = true;
+          size_t psize;
+          uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
+          bool is_zero = false;
+          const size_t gsize = (MI_SECURE >= 2 ? _mi_os_page_size() : 0);
+          _mi_mem_commit(start, psize + gsize, &is_zero, tld->os);
+          if (gsize > 0) { mi_segment_protect_range(start + psize, gsize, true); }
+          if (is_zero) { page->is_zero_init = true; }
+        }
       }
       if (page->is_reset) {
         mi_page_unreset(segment, page, 0, tld); // todo: only unreset the part that was reset?
@@ -583,26 +594,27 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld);
 static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_segments_tld_t* tld) {
   mi_assert_internal(page->segment_in_use);
   mi_assert_internal(mi_page_all_free(page));
-  mi_assert_internal(page->is_committed);
+  mi_assert_internal(segment->page_kind >= MI_PAGE_LARGE || page->is_committed);
   size_t inuse = page->capacity * page->block_size;
   _mi_stat_decrease(&tld->stats->page_committed, inuse);
   _mi_stat_decrease(&tld->stats->pages, 1);
   
   // calculate the used size from the raw (non-aligned) start of the page
-  size_t pre_size;
-  _mi_segment_page_start(segment, page, page->block_size, NULL, &pre_size);
-  size_t used_size = pre_size + (page->capacity * page->block_size);
+  //size_t pre_size;
+  //_mi_segment_page_start(segment, page, page->block_size, NULL, &pre_size);
+  //size_t used_size = pre_size + (page->capacity * page->block_size);
 
-  // zero the page data, but not the segment fields  
   page->is_zero_init = false;
-  ptrdiff_t ofs = offsetof(mi_page_t,capacity);
-  memset((uint8_t*)page + ofs, 0, sizeof(*page) - ofs);
   page->segment_in_use = false;
-  segment->used--;
 
   // reset the page memory to reduce memory pressure?
-  // note: must come after setting `segment_in_use` to false
+  // note: must come after setting `segment_in_use` to false but before block_size becomes 0
   mi_page_reset(segment, page, 0 /*used_size*/, tld);
+
+  // zero the page data, but not the segment fields  
+  ptrdiff_t ofs = offsetof(mi_page_t,capacity);
+  memset((uint8_t*)page + ofs, 0, sizeof(*page) - ofs);
+  segment->used--;
 }
 
 void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
@@ -713,7 +725,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
       mi_page_t* page = &segment->pages[i];
       if (page->segment_in_use) {
         mi_assert_internal(!page->is_reset);
-        mi_assert_internal(page->is_committed);
+        mi_assert_internal(segment->page_kind >= MI_PAGE_LARGE || page->is_committed);
         segment->abandoned--;
         mi_assert(page->next == NULL);
         _mi_stat_decrease(&tld->stats->pages_abandoned, 1);

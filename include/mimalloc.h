@@ -267,6 +267,7 @@ typedef enum mi_option_e {
   // the following options are experimental
   mi_option_eager_commit,
   mi_option_eager_region_commit,
+  mi_option_eager_page_commit,
   mi_option_large_os_pages,         // implies eager commit
   mi_option_reserve_huge_os_pages,
   mi_option_segment_cache,

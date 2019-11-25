@@ -56,18 +56,19 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(verbose) },
 
   // the following options are experimental and not all combinations make sense.
-  { 1, UNINIT, MI_OPTION(eager_commit) },        // note: needs to be on when eager_region_commit is enabled
+  { 0, UNINIT, MI_OPTION(eager_commit) },        // note: needs to be on when eager_region_commit is enabled
   #ifdef _WIN32   // and BSD?
   { 0, UNINIT, MI_OPTION(eager_region_commit) }, // don't commit too eagerly on windows (just for looks...)
   #else
   { 1, UNINIT, MI_OPTION(eager_region_commit) },
   #endif
+  { 1, UNINIT, MI_OPTION(eager_page_commit) },   
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },
   { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
   { 0, UNINIT, MI_OPTION(page_reset) },          // reset pages on free
   { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
-  { 1, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
+  { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
   { 500, UNINIT, MI_OPTION(reset_delay) },        // reset delay in milli-seconds
   { 0,   UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes. 
