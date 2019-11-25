@@ -227,7 +227,7 @@ typedef enum mi_segment_kind_e {
   MI_SEGMENT_HUGE,   // > MI_LARGE_SIZE_MAX segment with just one huge page inside.
 } mi_segment_kind_t;
 
-#define MI_COMMIT_SIZE      (2UL<<20)   // OS large page size
+#define MI_COMMIT_SIZE      (1UL<<20)   // OS large page size
 
 #if ((1 << MI_SEGMENT_SHIFT)/MI_COMMIT_SIZE > 8*MI_INTPTR_SIZE)
 #error "not enough commit bits to cover the segment size"

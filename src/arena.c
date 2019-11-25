@@ -203,7 +203,7 @@ static void mi_cache_purge(mi_os_tld_t* tld) {
     void* p = mi_atomic_read_ptr_relaxed(&slot->p);
     if (p > MI_SLOT_IN_USE && !slot->is_committed && !slot->is_large) {
       mi_msecs_t expire = slot->expire;
-      if (now >= expire) {
+      if (expire != 0 && now >= expire) {
         // expired, try to claim it
         if (mi_atomic_cas_ptr_weak(&slot->p, MI_SLOT_IN_USE, p)) {
           // claimed! test again

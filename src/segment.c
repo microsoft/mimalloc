@@ -381,6 +381,7 @@ static uintptr_t mi_segment_commit_mask(mi_segment_t* segment, bool conservative
   mi_assert_internal(start % MI_COMMIT_SIZE==0 && end % MI_COMMIT_SIZE == 0);
   *start_p   = (uint8_t*)segment + start;
   *full_size = (end > start ? end - start : 0);
+  if (*full_size == 0) return 0;
 
   uintptr_t bitidx = start / MI_COMMIT_SIZE;
   mi_assert_internal(bitidx < (MI_INTPTR_SIZE*8));
@@ -931,8 +932,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
     mi_segments_track_size((long)mi_segment_size(segment),tld);
     mi_assert_internal(segment->next == NULL);
     _mi_stat_decrease(&tld->stats->segments_abandoned,1);
-    mi_assert_internal(segment->decommit_mask == 0);
-
+    //mi_assert_internal(segment->decommit_mask == 0);
 
     mi_slice_t* slice = &segment->slices[0];
     const mi_slice_t* end = mi_segment_slices_end(segment);
