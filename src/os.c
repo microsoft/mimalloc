@@ -632,7 +632,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   #elif defined(MAP_FIXED)
   if (!commit) {
     // use mmap with MAP_FIXED to discard the existing memory (and reduce commit charge)
-    void* p = mmap(start, size, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), -1, 0);
+    void* p = mmap(start, csize, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), -1, 0);
     if (p != start) { err = errno; }
   }
   else {
