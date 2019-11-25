@@ -313,7 +313,7 @@ static mi_segment_t* mi_segment_cache_pop(size_t segment_slices, mi_segments_tld
 
 static bool mi_segment_cache_full(mi_segments_tld_t* tld) 
 {
-  if (tld->count == 1 && tld->cache_count==0) return false; // always cache at least the final segment of a thread
+  // if (tld->count == 1 && tld->cache_count==0) return false; // always cache at least the final segment of a thread
   size_t max_cache = mi_option_get(mi_option_segment_cache);
   if (tld->cache_count < max_cache
        && tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION)) // at least allow a 1 element cache
@@ -1027,6 +1027,7 @@ mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_
   We maintain a bitmap of all memory with 1 bit per MI_SEGMENT_SIZE (64MiB)
   set to 1 if it contains the segment meta data.
 ----------------------------------------------------------- */
+
 
 #if (MI_INTPTR_SIZE==8)
 #define MI_MAX_ADDRESS    ((size_t)20 << 40)  // 20TB

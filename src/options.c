@@ -64,7 +64,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
   { 1, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
-  { 1, UNINIT, MI_OPTION(allow_decommit) },      // decommit pages when not eager committed
+  { 0, UNINIT, MI_OPTION(allow_decommit) },      // decommit pages when not eager committed
   { 1000, UNINIT, MI_OPTION(reset_delay) },       // reset delay in milli-seconds
   { 1000, UNINIT, MI_OPTION(arena_reset_delay) }, // reset delay in milli-seconds
   { 0,    UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes. 
