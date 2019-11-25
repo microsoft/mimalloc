@@ -10,7 +10,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc-types.h"
 
-#if defined(MI_MALLOC_OVERRIDE) && (defined(__APPLE__) || defined(__OpenBSD__))
+#if defined(MI_MALLOC_OVERRIDE) && \
+	(defined(__APPLE__) || defined(__OpenBSD__) || defined(__DragonFly__))
 #define MI_TLS_RECURSE_GUARD
 #endif
 
@@ -230,7 +231,7 @@ extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate 
 
 static inline mi_heap_t* mi_get_default_heap(void) {
 #ifdef MI_TLS_RECURSE_GUARD
-  // on some platforms, like macOS, the dynamic loader calls `malloc`
+  // on some BSD platforms, like macOS, the dynamic loader calls `malloc`
   // to initialize thread local data. To avoid recursion, we need to avoid
   // accessing the thread local `_mi_default_heap` until our module is loaded
   // and use the statically allocated main heap until that time.
