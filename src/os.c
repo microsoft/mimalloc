@@ -723,7 +723,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
         else _mi_stat_decrease(&stats->reset, csize);
   if (!reset) return true; // nothing to do on unreset!
 
-  _mi_call_user_cleanup(start, size);
+  _mi_call_user_cleanup(start, csize);
 
 #if defined(_WIN32)
   // Testing shows that for us (on `malloc-large`) MEM_RESET is 2x faster than DiscardVirtualMemory
