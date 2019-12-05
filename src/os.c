@@ -219,7 +219,8 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
 {
   if (addr == NULL || size == 0 || _mi_os_is_huge_reserved(addr)) return true;
   bool err = false;
-  _mi_call_user_cleanup(addr, size);
+  if(was_committed)
+    _mi_call_user_cleanup(addr, size);
 #if defined(_WIN32)
   err = (VirtualFree(addr, 0, MEM_RELEASE) == 0);
 #elif defined(__wasi__)
