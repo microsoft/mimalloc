@@ -12,7 +12,7 @@ option(MI_USE_CXX           "Use the C++ compiler to compile the library" OFF)
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
 option(MI_BUILD_TESTS       "Build test executables" ON)
-option(MI_USER_CLEANUP      "Enable mi_register_user_cleanup functionality" OFF)
+option(MI_USER_CLEANUP      "Enable user defined functionality for custom memory clean function" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 
 set(mi_sources
