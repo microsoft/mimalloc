@@ -79,7 +79,7 @@ typedef union mi_region_info_u {
   struct {
     bool  valid;
     bool  is_large;
-    int   numa_node;
+    short numa_node;
   };
 } mi_region_info_t;
 
