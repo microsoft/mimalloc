@@ -409,8 +409,8 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   if (hint == 0 || hint > ((intptr_t)30<<40)) { // try to wrap around after 30TiB (area after 32TiB is used for huge OS pages)
     intptr_t init = ((intptr_t)4 << 40); // start at 4TiB area
     #if (MI_SECURE>0 || MI_DEBUG==0)     // security: randomize start of aligned allocations unless in debug mode
-    uintptr_t r = _mi_random_init((uintptr_t)&mi_os_get_aligned_hint ^ hint);
-    init = init + (MI_SEGMENT_SIZE * ((r>>17) & 0xFFFF));  // (randomly 0-64k)*4MiB == 0 to 256GiB
+    uintptr_t r = _mi_heap_random_next(mi_get_default_heap());
+    init = init + (MI_SEGMENT_SIZE * ((r>>17) & 0xFFFFF));  // (randomly 20 bits)*4MiB == 0 to 4TiB
     #endif
     mi_atomic_cas_strong(mi_atomic_cast(uintptr_t, &aligned_base), init, hint + size);
     hint = mi_atomic_add(&aligned_base, size); // this may still give 0 or > 30TiB but that is ok, it is a hint after all
@@ -909,8 +909,8 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
       // Initialize the start address after the 32TiB area
       start = ((uintptr_t)32 << 40);  // 32TiB virtual start address
 #if (MI_SECURE>0 || MI_DEBUG==0)      // security: randomize start of huge pages unless in debug mode
-      uintptr_t r = _mi_random_init((uintptr_t)&mi_os_claim_huge_pages);
-      start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x3FF));  // (randomly 0-1024)*1GiB == 0 to 1TiB
+      uintptr_t r = _mi_heap_random_next(mi_get_default_heap());
+      start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x0FFF));  // (randomly 12bits)*1GiB == between 0 to 4TiB
 #endif
     }
     end = start + size;

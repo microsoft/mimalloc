@@ -475,11 +475,12 @@ static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* co
 
   // and initialize the free list by randomly threading through them
   // set up first element
-  size_t current = _mi_heap_random(heap) % slice_count;
+  const uintptr_t r = _mi_heap_random_next(heap);
+  size_t current = r % slice_count;
   counts[current]--;
   mi_block_t* const free_start = blocks[current];
-  // and iterate through the rest
-  uintptr_t rnd = heap->random;
+  // and iterate through the rest; use `random_shuffle` for performance
+  uintptr_t rnd = _mi_random_shuffle(r);
   for (size_t i = 1; i < extend; i++) {
     // call random_shuffle only every INTPTR_SIZE rounds
     const size_t round = i%MI_INTPTR_SIZE;
@@ -499,8 +500,7 @@ static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* co
   }
   // prepend to the free list (usually NULL)
   mi_block_set_next(page, blocks[current], page->free);  // end of the list
-  page->free = free_start;
-  heap->random = _mi_random_shuffle(rnd);
+  page->free = free_start;  
 }
 
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t extend, mi_stats_t* const stats)
@@ -608,7 +608,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
   #ifdef MI_ENCODE_FREELIST
-  page->cookie = _mi_heap_random(heap) | 1;
+  page->cookie = _mi_heap_random_next(heap) | 1;
   #endif
   page->is_zero = page->is_zero_init;
 
@@ -710,7 +710,7 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
   mi_page_queue_t* pq = mi_page_queue(heap,size);
   mi_page_t* page = pq->first;
   if (page != NULL) {
-    if ((MI_SECURE >= 3) && page->capacity < page->reserved && ((_mi_heap_random(heap) & 1) == 1)) {
+    if ((MI_SECURE >= 3) && page->capacity < page->reserved && ((_mi_heap_random_next(heap) & 1) == 1)) {
       // in secure mode, we extend half the time to increase randomness
       mi_page_extend_free(heap, page, heap->tld);
       mi_assert_internal(mi_page_immediate_available(page));

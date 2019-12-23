@@ -76,6 +76,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #define MI_INTPTR_SIZE  (1<<MI_INTPTR_SHIFT)
+#define MI_INTPTR_BITS  (MI_INTPTR_SIZE*8)
 
 #define KiB     ((size_t)1024)
 #define MiB     (KiB*KiB)
@@ -273,6 +274,14 @@ typedef struct mi_page_queue_s {
 
 #define MI_BIN_FULL  (MI_BIN_HUGE+1)
 
+// Random context
+typedef struct mi_random_cxt_s {
+  uint32_t input[16];
+  uint32_t output[16];
+  int      output_available;
+} mi_random_ctx_t;
+
+
 // A heap owns a set of pages.
 struct mi_heap_s {
   mi_tld_t*             tld;
@@ -281,7 +290,7 @@ struct mi_heap_s {
   volatile _Atomic(mi_block_t*) thread_delayed_free;
   uintptr_t             thread_id;                                   // thread this heap belongs too
   uintptr_t             cookie;
-  uintptr_t             random;                                      // random number used for secure allocation
+  mi_random_ctx_t       random;                                      // random number used for secure allocation
   size_t                page_count;                                  // total number of pages in the `pages` queues.
   bool                  no_reclaim;                                  // `true` if this heap should not reclaim abandoned pages
 };

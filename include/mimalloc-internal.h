@@ -42,12 +42,17 @@ void       _mi_trace_message(const char* fmt, ...);
 void       _mi_options_init(void);
 void       _mi_fatal_error(const char* fmt, ...) mi_attr_noreturn;
 
-// "init.c"
+// random.c
+void       _mi_random_init(mi_random_ctx_t* ctx);
+void       _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* new_ctx);
+uintptr_t  _mi_random_next(mi_random_ctx_t* ctx);
+uintptr_t  _mi_heap_random_next(mi_heap_t* heap);
+static inline uintptr_t _mi_random_shuffle(uintptr_t x);
+
+// init.c
 extern mi_stats_t       _mi_stats_main;
 extern const mi_page_t  _mi_page_empty;
 bool       _mi_is_main_thread(void);
-uintptr_t  _mi_random_shuffle(uintptr_t x);
-uintptr_t  _mi_random_init(uintptr_t seed /* can be zero */);
 bool       _mi_preloading();  // true while the C runtime is not ready
 
 // os.c
@@ -100,7 +105,6 @@ uint8_t    _mi_bsr(uintptr_t x);                // bit-scan-right, used on BSD i
 // "heap.c"
 void       _mi_heap_destroy_pages(mi_heap_t* heap);
 void       _mi_heap_collect_abandon(mi_heap_t* heap);
-uintptr_t  _mi_heap_random(mi_heap_t* heap);
 void       _mi_heap_set_default_direct(mi_heap_t* heap);
 
 // "stats.c"
@@ -454,6 +458,29 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
   #endif
 }
 
+// -------------------------------------------------------------------
+// Fast "random" shuffle
+// -------------------------------------------------------------------
+
+static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
+  mi_assert_internal(x!=0);
+#if (MI_INTPTR_SIZE==8)
+  // by Sebastiano Vigna, see: <http://xoshiro.di.unimi.it/splitmix64.c>
+  x ^= x >> 30;
+  x *= 0xbf58476d1ce4e5b9UL;
+  x ^= x >> 27;
+  x *= 0x94d049bb133111ebUL;
+  x ^= x >> 31;
+#elif (MI_INTPTR_SIZE==4)
+  // by Chris Wellons, see: <https://nullprogram.com/blog/2018/07/31/>
+  x ^= x >> 16;
+  x *= 0x7feb352dUL;
+  x ^= x >> 15;
+  x *= 0x846ca68bUL;
+  x ^= x >> 16;
+#endif
+  return x;
+}
 
 // -------------------------------------------------------------------
 // Optimize numa node access for the common case (= one node)
