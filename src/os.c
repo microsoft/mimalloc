@@ -171,9 +171,7 @@ void _mi_os_init() {
     os_page_size = (size_t)result;
     os_alloc_granularity = os_page_size;
   }
-  if (mi_option_is_enabled(mi_option_large_os_pages)) {
-    large_os_page_size = (1UL << 21); // 2MiB
-  }
+  large_os_page_size = 2*MiB; // TODO: can we query the OS for this?
 }
 #endif
 
