@@ -44,12 +44,12 @@ static inline void qround(uint32_t x[16], size_t a, size_t b, size_t c, size_t d
   x[c] += x[d]; x[b] = rotl(x[b] ^ x[c], 7);
 }
 
-static void chacha_block(mi_random_ctx_t* r) 
+static void chacha_block(mi_random_ctx_t* ctx) 
 {  
   // scramble into `x`
   uint32_t x[16];
   for (size_t i = 0; i < 16; i++) {
-    x[i] = r->input[i];
+    x[i] = ctx->input[i];
   }
   for (size_t i = 0; i < MI_CHACHA_ROUNDS; i += 2) {
     qround(x, 0, 4,  8, 12);
@@ -64,28 +64,28 @@ static void chacha_block(mi_random_ctx_t* r)
 
   // add scrambled data to the initial state
   for (size_t i = 0; i < 16; i++) {
-    r->output[i] = x[i] + r->input[i];
+    ctx->output[i] = x[i] + ctx->input[i];
   }
-  r->output_available = 16;
+  ctx->output_available = 16;
 
   // increment the counter for the next round
-  r->input[12] += 1;
-  if (r->input[12] == 0) {
-    r->input[13] += 1;
-    if (r->input[13] == 0) {  // and keep increasing into the nonce 
-      r->input[14] += 1;  
+  ctx->input[12] += 1;
+  if (ctx->input[12] == 0) {
+    ctx->input[13] += 1;
+    if (ctx->input[13] == 0) {  // and keep increasing into the nonce 
+      ctx->input[14] += 1;  
     }
   }
 }
 
-static uint32_t chacha_next32(mi_random_ctx_t* r) {
-  if (r->output_available <= 0) {
-    chacha_block(r);
-    r->output_available = 16; // (assign again to suppress static analysis warning)
+static uint32_t chacha_next32(mi_random_ctx_t* ctx) {
+  if (ctx->output_available <= 0) {
+    chacha_block(ctx);
+    ctx->output_available = 16; // (assign again to suppress static analysis warning)
   }
-  r->output_available--;
-  const uint32_t x = r->output[r->output_available];  
-  r->output[r->output_available] = 0; // reset once the data is handed out
+  const uint32_t x = ctx->output[16 - ctx->output_available];  
+  ctx->output[16 - ctx->output_available] = 0; // reset once the data is handed out
+  ctx->output_available--;
   return x;
 }
 
@@ -94,34 +94,34 @@ static inline uint32_t read32(const uint8_t* p, size_t idx32) {
   return ((uint32_t)p[i+0] | (uint32_t)p[i+1] << 8 | (uint32_t)p[i+2] << 16 | (uint32_t)p[i+3] << 24);
 }
 
-static void chacha_init(mi_random_ctx_t* r, const uint8_t key[32], uint64_t nonce) 
+static void chacha_init(mi_random_ctx_t* ctx, const uint8_t key[32], uint64_t nonce) 
 {
   // since we only use chacha for randomness (and not encryption) we 
   // do not _need_ to read 32-bit values as little endian but we do anyways
   // just for being compatible :-)
-  memset(r, 0, sizeof(*r));
+  memset(ctx, 0, sizeof(*ctx));
   for (size_t i = 0; i < 4; i++) {
     const uint8_t* sigma = (uint8_t*)"expand 32-byte k";
-    r->input[i] = read32(sigma,i);
+    ctx->input[i] = read32(sigma,i);
   }
   for (size_t i = 0; i < 8; i++) {
-    r->input[i + 4] = read32(key,i);
+    ctx->input[i + 4] = read32(key,i);
   }
-  r->input[12] = 0;
-  r->input[13] = 0;
-  r->input[14] = (uint32_t)nonce;
-  r->input[15] = (uint32_t)(nonce >> 32);  
+  ctx->input[12] = 0;
+  ctx->input[13] = 0;
+  ctx->input[14] = (uint32_t)nonce;
+  ctx->input[15] = (uint32_t)(nonce >> 32);  
 }
 
-static void chacha_split(mi_random_ctx_t* r, uint64_t nonce, mi_random_ctx_t* init) {
-  memset(init, 0, sizeof(*init));
-  memcpy(init->input, r->input, sizeof(init->input));
-  init->input[12] = 0;
-  init->input[13] = 0;
-  init->input[14] = (uint32_t)nonce;
-  init->input[15] = (uint32_t)(nonce >> 32);
-  mi_assert_internal(r->input[14] != init->input[14] || r->input[15] != init->input[15]); // do not reuse nonces!
-  chacha_block(init);
+static void chacha_split(mi_random_ctx_t* ctx, uint64_t nonce, mi_random_ctx_t* ctx_new) {
+  memset(ctx_new, 0, sizeof(*ctx_new));
+  memcpy(ctx_new->input, ctx->input, sizeof(ctx_new->input));
+  ctx_new->input[12] = 0;
+  ctx_new->input[13] = 0;
+  ctx_new->input[14] = (uint32_t)nonce;
+  ctx_new->input[15] = (uint32_t)(nonce >> 32);
+  mi_assert_internal(ctx->input[14] != ctx_new->input[14] || ctx->input[15] != ctx_new->input[15]); // do not reuse nonces!
+  chacha_block(ctx_new);
 }
 
 
@@ -135,10 +135,10 @@ static bool mi_random_is_initialized(mi_random_ctx_t* ctx) {
 }
 #endif
 
-void _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* new_ctx) {
+void _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* ctx_new) {
   mi_assert_internal(mi_random_is_initialized(ctx));
-  mi_assert_internal(ctx != new_ctx);
-  chacha_split(ctx, (uintptr_t)new_ctx /*nonce*/, new_ctx);
+  mi_assert_internal(ctx != ctx_new);
+  chacha_split(ctx, (uintptr_t)ctx_new /*nonce*/, ctx_new);
 }
 
 uintptr_t _mi_random_next(mi_random_ctx_t* ctx) {
