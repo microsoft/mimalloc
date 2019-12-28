@@ -16,13 +16,13 @@ const mi_page_t _mi_page_empty = {
   { 0 }, false,
   NULL,    // free
   #if MI_ENCODE_FREELIST
-  0,
+  { 0, 0 },
   #endif
   0,       // used
   NULL,
   ATOMIC_VAR_INIT(0), ATOMIC_VAR_INIT(0),
   0, NULL, NULL, NULL
-  #if (MI_INTPTR_SIZE==8 && defined(MI_ENCODE_FREELIST)) || (MI_INTPTR_SIZE==4 && !defined(MI_ENCODE_FREELIST))
+  #if (MI_INTPTR_SIZE==4)
   , { NULL } // padding
   #endif
 };
@@ -83,8 +83,9 @@ const mi_heap_t _mi_heap_empty = {
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
   ATOMIC_VAR_INIT(NULL),
-  0,
-  0,
+  0,    // tid
+  0,    // cookie
+  { 0, 0 }, // keys
   { {0}, {0}, 0 },
   0,
   false
@@ -105,18 +106,21 @@ static mi_tld_t tld_main = {
   { MI_STATS_NULL }             // stats
 };
 
+#if MI_INTPTR_SIZE==8   
+#define MI_INIT_COOKIE  (0xCDCDCDCDCDCDCDCDUL)
+#else
+#define MI_INIT_COOKIE  (0xCDCDCDCDUL)
+#endif
+
 mi_heap_t _mi_heap_main = {
   &tld_main,
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
   NULL,
-  0,      // thread id
-#if MI_INTPTR_SIZE==8   // the cookie of the main heap can be fixed (unlike page cookies that need to be secure!)
-  0xCDCDCDCDCDCDCDCDUL,
-#else
-  0xCDCDCDCDUL,
-#endif
-  { {0}, {0}, 0 }, // random
+  0,                // thread id
+  MI_INIT_COOKIE,   // initial cookie
+  { MI_INIT_COOKIE, MI_INIT_COOKIE }, // the key of the main heap can be fixed (unlike page keys that need to be secure!)
+  { {0}, {0}, 0 },  // random
   0,      // page count
   false   // can reclaim
 };
@@ -156,6 +160,8 @@ static bool _mi_heap_init(void) {
     heap->thread_id = _mi_thread_id();
     _mi_random_init(&heap->random);    
     heap->cookie = _mi_heap_random_next(heap) | 1;
+    heap->key[0] = _mi_heap_random_next(heap);
+    heap->key[1] = _mi_heap_random_next(heap);
     heap->tld = tld;
     memset(tld, 0, sizeof(*tld));
     tld->heap_backing = heap;
@@ -399,6 +405,8 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_random_init(&_mi_heap_main.random);  
   #ifndef __APPLE__  // TODO: fix this? cannot update cookie if allocation already happened..
   _mi_heap_main.cookie = _mi_heap_random_next(&_mi_heap_main);
+  _mi_heap_main.key[0] = _mi_heap_random_next(&_mi_heap_main);
+  _mi_heap_main.key[1] = _mi_heap_random_next(&_mi_heap_main);
   #endif
   mi_process_setup_auto_thread_done();
   _mi_os_init();

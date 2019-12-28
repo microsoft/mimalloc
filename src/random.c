@@ -231,9 +231,9 @@ void _mi_random_init(mi_random_ctx_t* ctx) {
   if (!os_random_buf(key, sizeof(key))) {
     // if we fail to get random data from the OS, we fall back to a 
     // weak random source based on the current time
+    _mi_warning_message("unable to use secure randomness\n");
     uintptr_t x = os_random_weak(0);
     for (size_t i = 0; i < 8; i++) {  // key is eight 32-bit words.
-      _mi_warning_message("unable to use secure randomness\n");
       x = _mi_random_shuffle(x);
       ((uint32_t*)key)[i] = (uint32_t)x;
     }

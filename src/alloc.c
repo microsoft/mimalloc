@@ -157,7 +157,7 @@ static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, con
 }
 
 static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
-  mi_block_t* n = mi_block_nextx(page, block, page->cookie); // pretend it is freed, and get the decoded first field
+  mi_block_t* n = mi_block_nextx(page, block, page->key[0], page->key[1]); // pretend it is freed, and get the decoded first field
   if (((uintptr_t)n & (MI_INTPTR_SIZE-1))==0 &&        // quick check: aligned pointer?
       (n==NULL || mi_is_in_same_segment(block, n)))    // quick check: in same segment or NULL?
   { 
@@ -242,7 +242,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       mi_block_t* dfree;
       do {
         dfree = (mi_block_t*)heap->thread_delayed_free;
-        mi_block_set_nextx(heap,block,dfree, heap->cookie);
+        mi_block_set_nextx(heap,block,dfree, heap->key[0], heap->key[1]);
       } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), block, dfree));
     }
 
@@ -266,7 +266,7 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
   // and push it on the free list
   if (mi_likely(local)) {
     // owning thread can free a block directly
-    if (mi_check_is_double_free(page, block)) return;
+    if (mi_unlikely(mi_check_is_double_free(page, block))) return;
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
     page->used--;
@@ -341,7 +341,7 @@ void mi_free(void* p) mi_attr_noexcept
   if (mi_likely(tid == segment->thread_id && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     mi_block_t* block = (mi_block_t*)p;
-    if (mi_check_is_double_free(page,block)) return;    
+    if (mi_unlikely(mi_check_is_double_free(page,block))) return;    
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
     page->used--;
