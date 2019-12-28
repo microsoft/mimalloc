@@ -397,23 +397,25 @@ Encoding/Decoding the free list next pointers
 
 This is to protect against buffer overflow exploits where the 
 free list is mutated. Many hardened allocators xor the next pointer `p` 
-with a secret key `k1`, as `p^k1`, but if the attacker can guess 
+with a secret key `k1`, as `p^k1`. This prevents overwriting with known
+values but might be still too weak: if the attacker can guess 
 the pointer `p` this  can reveal `k1` (since `p^k1^p == k1`). 
-Moreover, if multiple blocks can be read, the attacker can
+Moreover, if multiple blocks can be read as well, the attacker can
 xor both as `(p1^k1) ^ (p2^k1) == p1^p2` which may reveal a lot
 about the pointers (and subsequently `k1`).
 
-Instead mimalloc uses an extra key `k2` and encode as `rotl(p+k2,13)^k1`.
+Instead mimalloc uses an extra key `k2` and encodes as `((p^k2)<<<k1)+k1`.
 Since these operations are not associative, the above approaches do not
-work so well any more even if the `p` can be guesstimated. (We include 
-the rotation since xor and addition are otherwise linear in the lowest bit)
-Both keys are unique per page.
+work so well any more even if the `p` can be guesstimated. For example,
+for the read case we can subtract two entries to discard the `+k1` term, 
+but that leads to `((p1^k2)<<<k1) - ((p2^k2)<<<k1)` at best.
+We include the left-rotation since xor and addition are otherwise linear 
+in the lowest bit. Finally, both keys are unique per page which reduces
+the re-use of keys by a large factor.
 
 We also pass a separate `null` value to be used as `NULL` or otherwise
-`rotl(k2,13)^k1` would appear (too) often as a sentinel value.
+`(k2<<<k1)+k1` would appear (too) often as a sentinel value.
 ------------------------------------------------------------------- */
-
-#define MI_ENCODE_ROTATE_BITS (13)
 
 static inline bool mi_is_in_same_segment(const void* p, const void* q) {
   return (_mi_ptr_segment(p) == _mi_ptr_segment(q));
@@ -429,14 +431,17 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
 }
 
 static inline uintptr_t mi_rotl(uintptr_t x, uintptr_t shift) {
+  shift %= MI_INTPTR_BITS;
   return ((x << shift) | (x >> (MI_INTPTR_BITS - shift)));
 }
 static inline uintptr_t mi_rotr(uintptr_t x, uintptr_t shift) {
+  shift %= MI_INTPTR_BITS;
   return ((x >> shift) | (x << (MI_INTPTR_BITS - shift)));
 }
+
 static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, uintptr_t key1, uintptr_t key2 ) {
   #ifdef MI_ENCODE_FREELIST
-  mi_block_t* b = (mi_block_t*)(mi_rotr(block->next ^ key1, MI_ENCODE_ROTATE_BITS) - key2);
+  mi_block_t* b = (mi_block_t*)(mi_rotr(block->next - key1, key1) ^ key2);
   if (mi_unlikely((void*)b==null)) { b = NULL; }
   return b;
   #else
@@ -448,7 +453,7 @@ static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* bl
 static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, uintptr_t key1, uintptr_t key2) {
   #ifdef MI_ENCODE_FREELIST
   if (mi_unlikely(next==NULL)) { next = (mi_block_t*)null; }
-  block->next = mi_rotl((mi_encoded_t)next + key2, MI_ENCODE_ROTATE_BITS) ^ key1;
+  block->next = mi_rotl((uintptr_t)next ^ key2, key1) + key1;
   #else
   UNUSED(key1); UNUSED(key2); UNUSED(null);
   block->next = (mi_encoded_t)next;
@@ -485,7 +490,7 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
 // -------------------------------------------------------------------
 
 static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
-  mi_assert_internal(x!=0);
+  if (x==0) { x = 17; }   // ensure we don't get stuck in generating zeros
 #if (MI_INTPTR_SIZE==8)
   // by Sebastiano Vigna, see: <http://xoshiro.di.unimi.it/splitmix64.c>
   x ^= x >> 30;

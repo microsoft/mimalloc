@@ -479,7 +479,7 @@ static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* co
   counts[current]--;
   mi_block_t* const free_start = blocks[current];
   // and iterate through the rest; use `random_shuffle` for performance
-  uintptr_t rnd = _mi_random_shuffle(r);
+  uintptr_t rnd = _mi_random_shuffle(r|1); // ensure not 0
   for (size_t i = 1; i < extend; i++) {
     // call random_shuffle only every INTPTR_SIZE rounds
     const size_t round = i%MI_INTPTR_SIZE;
