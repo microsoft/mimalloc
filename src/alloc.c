@@ -140,28 +140,24 @@ static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, cons
 }
 
 static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, const mi_block_t* block, const mi_block_t* n) {
-  size_t psize;
-  uint8_t* pstart = _mi_page_start(_mi_page_segment(page), page, &psize);
-  if (n == NULL || ((uint8_t*)n >= pstart && (uint8_t*)n < (pstart + psize))) {
-    // Suspicious: the decoded value is in the same page (or NULL).
-    // Walk the free lists to verify positively if it is already freed
-    if (mi_list_contains(page, page->free, block) ||
-        mi_list_contains(page, page->local_free, block) ||
-        mi_list_contains(page, (const mi_block_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*,&page->thread_free)), block)) 
-    {
-      _mi_fatal_error("double free detected of block %p with size %zu\n", block, page->block_size);
-      return true;
-    }
+  // The decoded value is in the same page (or NULL).
+  // Walk the free lists to verify positively if it is already freed
+  if (mi_list_contains(page, page->free, block) ||
+      mi_list_contains(page, page->local_free, block) ||
+      mi_list_contains(page, (const mi_block_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*,&page->thread_free)), block)) 
+  {
+    _mi_fatal_error("double free detected of block %p with size %zu\n", block, page->block_size);
+    return true;
   }
   return false;
 }
 
 static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
   mi_block_t* n = mi_block_nextx(page, block, page->key[0], page->key[1]); // pretend it is freed, and get the decoded first field
-  if (((uintptr_t)n & (MI_INTPTR_SIZE-1))==0 &&        // quick check: aligned pointer?
-      (n==NULL || mi_is_in_same_segment(block, n)))    // quick check: in same segment or NULL?
+  if (((uintptr_t)n & (MI_INTPTR_SIZE-1))==0 &&  // quick check: aligned pointer?
+      (n==NULL || mi_is_in_same_page(block, n))) // quick check: in same page or NULL?
   { 
-    // Suspicous: decoded value in block is in the same segment (or NULL) -- maybe a double free?
+    // Suspicous: decoded value a in block is in the same page (or NULL) -- maybe a double free?
     // (continue in separate function to improve code generation)
     return mi_check_is_double_freex(page, block, n);
   }  
