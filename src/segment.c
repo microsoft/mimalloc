@@ -520,7 +520,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   segment->segment_size = segment_size;
   segment->segment_info_size = pre_size;
   segment->thread_id  = _mi_thread_id();
-  segment->cookie = _mi_ptr_cookie(segment);
+  segment->cookie = _mi_ptr_cookie(segment);  
   // _mi_stat_increase(&tld->stats->page_committed, segment->segment_info_size);
 
   // set protection

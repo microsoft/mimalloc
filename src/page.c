@@ -103,7 +103,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
 bool _mi_page_is_valid(mi_page_t* page) {
   mi_assert_internal(mi_page_is_valid_init(page));
   #if MI_SECURE
-  mi_assert_internal(page->cookie != 0);
+  mi_assert_internal(page->key != 0);
   #endif
   if (page->heap!=NULL) {
     mi_segment_t* segment = _mi_page_segment(page);
@@ -284,7 +284,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
 
   // and free them all
   while(block != NULL) {
-    mi_block_t* next = mi_block_nextx(heap,block, heap->cookie);
+    mi_block_t* next = mi_block_nextx(heap,block, heap->key[0], heap->key[1]);
     // use internal free instead of regular one to keep stats etc correct
     if (!_mi_free_delayed_block(block)) {
       // we might already start delayed freeing while another thread has not yet
@@ -292,9 +292,8 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
       mi_block_t* dfree;
       do {
         dfree = (mi_block_t*)heap->thread_delayed_free;
-        mi_block_set_nextx(heap, block, dfree, heap->cookie);
+        mi_block_set_nextx(heap, block, dfree, heap->key[0], heap->key[1]);
       } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), block, dfree));
-
     }
     block = next;
   }
@@ -357,7 +356,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
 
 #if MI_DEBUG>1
   // check there are no references left..
-  for (mi_block_t* block = (mi_block_t*)pheap->thread_delayed_free; block != NULL; block = mi_block_nextx(pheap, block, pheap->cookie)) {
+  for (mi_block_t* block = (mi_block_t*)pheap->thread_delayed_free; block != NULL; block = mi_block_nextx(pheap, block, pheap->key[0], pheap->key[1])) {
     mi_assert_internal(_mi_ptr_page(block) != page);
   }
 #endif
@@ -475,11 +474,12 @@ static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* co
 
   // and initialize the free list by randomly threading through them
   // set up first element
-  size_t current = _mi_heap_random(heap) % slice_count;
+  const uintptr_t r = _mi_heap_random_next(heap);
+  size_t current = r % slice_count;
   counts[current]--;
   mi_block_t* const free_start = blocks[current];
-  // and iterate through the rest
-  uintptr_t rnd = heap->random;
+  // and iterate through the rest; use `random_shuffle` for performance
+  uintptr_t rnd = _mi_random_shuffle(r|1); // ensure not 0
   for (size_t i = 1; i < extend; i++) {
     // call random_shuffle only every INTPTR_SIZE rounds
     const size_t round = i%MI_INTPTR_SIZE;
@@ -499,8 +499,7 @@ static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* co
   }
   // prepend to the free list (usually NULL)
   mi_block_set_next(page, blocks[current], page->free);  // end of the list
-  page->free = free_start;
-  heap->random = _mi_random_shuffle(rnd);
+  page->free = free_start;  
 }
 
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t extend, mi_stats_t* const stats)
@@ -608,7 +607,8 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
   #ifdef MI_ENCODE_FREELIST
-  page->cookie = _mi_heap_random(heap) | 1;
+  page->key[0] = _mi_heap_random_next(heap);
+  page->key[1] = _mi_heap_random_next(heap);
   #endif
   page->is_zero = page->is_zero_init;
 
@@ -621,7 +621,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->prev == NULL);
   mi_assert_internal(!mi_page_has_aligned(page));
   #if (MI_ENCODE_FREELIST)
-  mi_assert_internal(page->cookie != 0);
+  mi_assert_internal(page->key != 0);
   #endif
   mi_assert_expensive(mi_page_is_valid_init(page));
 
@@ -710,7 +710,7 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
   mi_page_queue_t* pq = mi_page_queue(heap,size);
   mi_page_t* page = pq->first;
   if (page != NULL) {
-    if ((MI_SECURE >= 3) && page->capacity < page->reserved && ((_mi_heap_random(heap) & 1) == 1)) {
+    if ((MI_SECURE >= 3) && page->capacity < page->reserved && ((_mi_heap_random_next(heap) & 1) == 1)) {
       // in secure mode, we extend half the time to increase randomness
       mi_page_extend_free(heap, page, heap->tld);
       mi_assert_internal(mi_page_immediate_available(page));

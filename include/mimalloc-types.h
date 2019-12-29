@@ -29,7 +29,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_SECURE 4  // checks for double free. (may be more expensive)
 
 #if !defined(MI_SECURE)
-#define MI_SECURE 0
+#define MI_SECURE 4
 #endif
 
 // Define MI_DEBUG for debug mode
@@ -76,6 +76,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #define MI_INTPTR_SIZE  (1<<MI_INTPTR_SHIFT)
+#define MI_INTPTR_BITS  (MI_INTPTR_SIZE*8)
 
 #define KiB     ((size_t)1024)
 #define MiB     (KiB*KiB)
@@ -190,7 +191,7 @@ typedef struct mi_page_s {
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   #ifdef MI_ENCODE_FREELIST
-  uintptr_t             cookie;            // random cookie to encode the free lists
+  uintptr_t             key[2];            // two random keys to encode the free lists (see `_mi_block_next`)
   #endif
   size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
   
@@ -205,9 +206,9 @@ typedef struct mi_page_s {
   struct mi_page_s*     prev;              // previous page owned by this thread with the same `block_size`
 
   // improve page index calculation
-  // without padding: 10 words on 64-bit, 11 on 32-bit. Secure adds one word
-  #if (MI_INTPTR_SIZE==8 && defined(MI_ENCODE_FREELIST)) || (MI_INTPTR_SIZE==4 && !defined(MI_ENCODE_FREELIST))
-  void*                 padding[1];        // 12 words on 64-bit with cookie, 12 words on 32-bit plain
+  // without padding: 10 words on 64-bit, 11 on 32-bit. Secure adds two words
+  #if (MI_INTPTR_SIZE==4)
+  void*                 padding[1];        // 12/14 words on 32-bit plain
   #endif
 } mi_page_t;
 
@@ -238,8 +239,8 @@ typedef struct mi_segment_s {
   size_t          capacity;    // count of available pages (`#free + used`)
   size_t          segment_size;// for huge pages this may be different from `MI_SEGMENT_SIZE`
   size_t          segment_info_size;  // space we are using from the first page for segment meta-data and possible guard pages.
-  uintptr_t       cookie;      // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
-
+  uintptr_t       cookie;      // verify addresses in secure mode: `_mi_ptr_cookie(segment) == segment->cookie`
+ 
   // layout like this to optimize access in `mi_free`
   size_t          page_shift;  // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).
   volatile _Atomic(uintptr_t) thread_id;   // unique id of the thread owning this segment
@@ -273,6 +274,14 @@ typedef struct mi_page_queue_s {
 
 #define MI_BIN_FULL  (MI_BIN_HUGE+1)
 
+// Random context
+typedef struct mi_random_cxt_s {
+  uint32_t input[16];
+  uint32_t output[16];
+  int      output_available;
+} mi_random_ctx_t;
+
+
 // A heap owns a set of pages.
 struct mi_heap_s {
   mi_tld_t*             tld;
@@ -280,8 +289,9 @@ struct mi_heap_s {
   mi_page_queue_t       pages[MI_BIN_FULL + 1];                      // queue of pages for each size class (or "bin")
   volatile _Atomic(mi_block_t*) thread_delayed_free;
   uintptr_t             thread_id;                                   // thread this heap belongs too
-  uintptr_t             cookie;
-  uintptr_t             random;                                      // random number used for secure allocation
+  uintptr_t             cookie;                                      // random cookie to verify pointers (see `_mi_ptr_cookie`)
+  uintptr_t             key[2];                                      // twb random keys used to encode the `thread_delayed_free` list
+  mi_random_ctx_t       random;                                      // random number context used for secure allocation
   size_t                page_count;                                  // total number of pages in the `pages` queues.
   bool                  no_reclaim;                                  // `true` if this heap should not reclaim abandoned pages
 };

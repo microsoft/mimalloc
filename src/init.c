@@ -16,13 +16,13 @@ const mi_page_t _mi_page_empty = {
   { 0 }, false,
   NULL,    // free
   #if MI_ENCODE_FREELIST
-  0,
+  { 0, 0 },
   #endif
   0,       // used
   NULL,
   ATOMIC_VAR_INIT(0), ATOMIC_VAR_INIT(0),
   0, NULL, NULL, NULL
-  #if (MI_INTPTR_SIZE==8 && defined(MI_ENCODE_FREELIST)) || (MI_INTPTR_SIZE==4 && !defined(MI_ENCODE_FREELIST))
+  #if (MI_INTPTR_SIZE==4)
   , { NULL } // padding
   #endif
 };
@@ -83,9 +83,10 @@ const mi_heap_t _mi_heap_empty = {
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
   ATOMIC_VAR_INIT(NULL),
-  0,
-  0,
-  0,
+  0,    // tid
+  0,    // cookie
+  { 0, 0 }, // keys
+  { {0}, {0}, 0 },
   0,
   false
 };
@@ -105,18 +106,21 @@ static mi_tld_t tld_main = {
   { MI_STATS_NULL }             // stats
 };
 
+#if MI_INTPTR_SIZE==8   
+#define MI_INIT_COOKIE  (0xCDCDCDCDCDCDCDCDUL)
+#else
+#define MI_INIT_COOKIE  (0xCDCDCDCDUL)
+#endif
+
 mi_heap_t _mi_heap_main = {
   &tld_main,
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
   NULL,
-  0,      // thread id
-#if MI_INTPTR_SIZE==8   // the cookie of the main heap can be fixed (unlike page cookies that need to be secure!)
-  0xCDCDCDCDCDCDCDCDUL,
-#else
-  0xCDCDCDCDUL,
-#endif
-  0,      // random
+  0,                // thread id
+  MI_INIT_COOKIE,   // initial cookie
+  { MI_INIT_COOKIE, MI_INIT_COOKIE }, // the key of the main heap can be fixed (unlike page keys that need to be secure!)
+  { {0}, {0}, 0 },  // random
   0,      // page count
   false   // can reclaim
 };
@@ -125,66 +129,6 @@ bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
 mi_stats_t _mi_stats_main = { MI_STATS_NULL };
 
-/* -----------------------------------------------------------
-  Initialization of random numbers
------------------------------------------------------------ */
-
-#if defined(_WIN32)
-#include <windows.h>
-#elif defined(__APPLE__)
-#include <mach/mach_time.h>
-#else
-#include <time.h>
-#endif
-
-uintptr_t _mi_random_shuffle(uintptr_t x) {
-  #if (MI_INTPTR_SIZE==8)
-    // by Sebastiano Vigna, see: <http://xoshiro.di.unimi.it/splitmix64.c>
-  x ^= x >> 30;
-  x *= 0xbf58476d1ce4e5b9UL;
-  x ^= x >> 27;
-  x *= 0x94d049bb133111ebUL;
-  x ^= x >> 31;
-  #elif (MI_INTPTR_SIZE==4)
-    // by Chris Wellons, see: <https://nullprogram.com/blog/2018/07/31/>
-  x ^= x >> 16;
-  x *= 0x7feb352dUL;
-  x ^= x >> 15;
-  x *= 0x846ca68bUL;
-  x ^= x >> 16;
-  #endif
-  return x;
-}
-
-uintptr_t _mi_random_init(uintptr_t seed /* can be zero */) {
-#ifdef __wasi__ // no ASLR when using WebAssembly, and time granularity may be coarse
-  uintptr_t x;
-  arc4random_buf(&x, sizeof x);
-#else
-   // Hopefully, ASLR makes our function address random
-  uintptr_t x = (uintptr_t)((void*)&_mi_random_init);
-  x ^= seed;
-  // xor with high res time
-#if defined(_WIN32)
-  LARGE_INTEGER pcount;
-  QueryPerformanceCounter(&pcount);
-  x ^= (uintptr_t)(pcount.QuadPart);
-#elif defined(__APPLE__)
-  x ^= (uintptr_t)mach_absolute_time();
-#else
-  struct timespec time;
-  clock_gettime(CLOCK_MONOTONIC, &time);
-  x ^= (uintptr_t)time.tv_sec;
-  x ^= (uintptr_t)time.tv_nsec;
-#endif
-  // and do a few randomization steps
-  uintptr_t max = ((x ^ (x >> 17)) & 0x0F) + 1;
-  for (uintptr_t i = 0; i < max; i++) {
-    x = _mi_random_shuffle(x);
-  }
-#endif
-  return x;
-}
 
 /* -----------------------------------------------------------
   Initialization and freeing of the thread local heaps
@@ -214,8 +158,10 @@ static bool _mi_heap_init(void) {
     mi_heap_t* heap = &td->heap;
     memcpy(heap, &_mi_heap_empty, sizeof(*heap));
     heap->thread_id = _mi_thread_id();
-    heap->random = _mi_random_init(heap->thread_id);
-    heap->cookie = ((uintptr_t)heap ^ _mi_heap_random(heap)) | 1;
+    _mi_random_init(&heap->random);    
+    heap->cookie = _mi_heap_random_next(heap) | 1;
+    heap->key[0] = _mi_heap_random_next(heap);
+    heap->key[1] = _mi_heap_random_next(heap);
     heap->tld = tld;
     memset(tld, 0, sizeof(*tld));
     tld->heap_backing = heap;
@@ -451,16 +397,17 @@ void mi_process_init(void) mi_attr_noexcept {
   // access _mi_heap_default before setting _mi_process_is_initialized to ensure
   // that the TLS slot is allocated without getting into recursion on macOS
   // when using dynamic linking with interpose.
-  mi_heap_t* h = mi_get_default_heap();
+  mi_get_default_heap();
   _mi_process_is_initialized = true;
 
   _mi_heap_main.thread_id = _mi_thread_id();
   _mi_verbose_message("process init: 0x%zx\n", _mi_heap_main.thread_id);
-  uintptr_t random = _mi_random_init(_mi_heap_main.thread_id)  ^ (uintptr_t)h;
-  #ifndef __APPLE__
-  _mi_heap_main.cookie = (uintptr_t)&_mi_heap_main ^ random;
+  _mi_random_init(&_mi_heap_main.random);  
+  #ifndef __APPLE__  // TODO: fix this? cannot update cookie if allocation already happened..
+  _mi_heap_main.cookie = _mi_heap_random_next(&_mi_heap_main);
+  _mi_heap_main.key[0] = _mi_heap_random_next(&_mi_heap_main);
+  _mi_heap_main.key[1] = _mi_heap_random_next(&_mi_heap_main);
   #endif
-  _mi_heap_main.random = _mi_random_shuffle(random);
   mi_process_setup_auto_thread_done();
   _mi_os_init();
   #if (MI_DEBUG)
