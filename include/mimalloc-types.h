@@ -29,7 +29,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_SECURE 4  // checks for double free. (may be more expensive)
 
 #if !defined(MI_SECURE)
-#define MI_SECURE 4
+#define MI_SECURE 0
 #endif
 
 // Define MI_DEBUG for debug mode
@@ -46,7 +46,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows and double `free`s.
-#if (MI_SECURE>=3 || MI_DEBUG>=1) 
+#if (MI_SECURE>=3 || MI_DEBUG>=1)
 #define MI_ENCODE_FREELIST  1
 #endif
 
@@ -109,8 +109,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // (Except for large pages since huge objects are allocated in 4MiB chunks)
 #define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/4)   // 16kb
 #define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/4)  // 128kb
-#define MI_LARGE_OBJ_SIZE_MAX             (MI_LARGE_PAGE_SIZE/2)   // 2mb 
-#define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)     
+#define MI_LARGE_OBJ_SIZE_MAX             (MI_LARGE_PAGE_SIZE/2)   // 2mb
+#define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)
 #define MI_HUGE_OBJ_SIZE_MAX              (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)        // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
@@ -143,14 +143,14 @@ typedef enum mi_delayed_e {
 } mi_delayed_t;
 
 
-// The `in_full` and `has_aligned` page flags are put in a union to efficiently 
+// The `in_full` and `has_aligned` page flags are put in a union to efficiently
 // test if both are false (`full_aligned == 0`) in the `mi_free` routine.
 typedef union mi_page_flags_s {
   uint8_t full_aligned;
   struct {
     uint8_t in_full : 1;
     uint8_t has_aligned : 1;
-  } x; 
+  } x;
 } mi_page_flags_t;
 
 // Thread free list.
@@ -182,7 +182,7 @@ typedef struct mi_page_s {
   uint8_t               is_reset:1;        // `true` if the page memory was reset
   uint8_t               is_committed:1;    // `true` if the page virtual memory is committed
   uint8_t               is_zero_init:1;    // `true` if the page was zero initialized
-  
+
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
   uint16_t              reserved;          // number of blocks reserved in memory
@@ -194,7 +194,7 @@ typedef struct mi_page_s {
   uintptr_t             key[2];            // two random keys to encode the free lists (see `_mi_block_next`)
   #endif
   size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
-  
+
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   volatile _Atomic(uintptr_t)        thread_freed;  // at least this number of blocks are in `thread_free`
   volatile _Atomic(mi_thread_free_t) thread_free;   // list of deferred free blocks freed by other threads
@@ -227,7 +227,7 @@ typedef enum mi_page_kind_e {
 typedef struct mi_segment_s {
   // memory fields
   size_t          memid;            // id for the os-level memory manager
-  bool            mem_is_fixed;     // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)    
+  bool            mem_is_fixed;     // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)
   bool            mem_is_committed; // `true` if the whole segment is eagerly committed
 
   // segment fields
@@ -240,7 +240,7 @@ typedef struct mi_segment_s {
   size_t          segment_size;// for huge pages this may be different from `MI_SEGMENT_SIZE`
   size_t          segment_info_size;  // space we are using from the first page for segment meta-data and possible guard pages.
   uintptr_t       cookie;      // verify addresses in secure mode: `_mi_ptr_cookie(segment) == segment->cookie`
- 
+
   // layout like this to optimize access in `mi_free`
   size_t          page_shift;  // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).
   volatile _Atomic(uintptr_t) thread_id;   // unique id of the thread owning this segment
