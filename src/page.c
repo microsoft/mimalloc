@@ -660,9 +660,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
 static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq)
 {
   // search through the pages in "next fit" order
-  mi_page_t* rpage = NULL;
   size_t count = 0;
-  size_t page_free_count = 0;
   mi_page_t* page = pq->first;
   while( page != NULL)
   {
@@ -674,20 +672,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
 
     // 1. if the page contains free blocks, we are done
     if (mi_page_immediate_available(page)) {
-      // If all blocks are free, we might retire this page instead.
-      // do this at most 8 times to bound allocation time.
-      // (note: this can happen if a page was earlier not retired due
-      //  to having neighbours that were mostly full or due to concurrent frees)
-      if (page_free_count < 8 && mi_page_all_free(page)) {
-        page_free_count++;
-        if (rpage != NULL) _mi_page_free(rpage,pq,false);
-        rpage = page;
-        page = next;
-        continue;     // and keep looking
-      }
-      else {
-        break;  // pick this one
-      }
+      break;  // pick this one
     }
 
     // 2. Try to extend
@@ -706,14 +691,6 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   } // for each page
 
   mi_stat_counter_increase(heap->tld->stats.searches,count);
-
-  if (page == NULL) {
-    page = rpage;
-    rpage = NULL;
-  }
-  if (rpage != NULL) {
-    _mi_page_free(rpage,pq,false);
-  }
 
   if (page == NULL) {
     page = mi_page_fresh(heap, pq);
