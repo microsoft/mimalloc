@@ -187,7 +187,8 @@ typedef struct mi_page_s {
   uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
   uint16_t              reserved;          // number of blocks reserved in memory
   mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (8 bits)
-  bool                  is_zero;           // `true` if the blocks in the free list are zero initialized
+  uint8_t               is_zero:1;         // `true` if the blocks in the free list are zero initialized
+  uint8_t               retire_expire:7;   // expiration count for retired blocks
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   #ifdef MI_ENCODE_FREELIST

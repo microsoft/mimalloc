@@ -229,7 +229,7 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
   mi_assert_internal(page->heap == NULL);
   mi_assert_internal(_mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
-  mi_assert_internal(!page->is_reset);  
+  mi_assert_internal(!page->is_reset);
   _mi_page_free_collect(page,false);
   mi_page_queue_t* pq = mi_page_queue(heap, page->block_size);
   mi_page_queue_push(heap, pq, page);
@@ -342,7 +342,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(pq == mi_page_queue_of(page));
   mi_assert_internal(page->heap != NULL);
-  
+
 #if MI_DEBUG > 1
   mi_heap_t* pheap = (mi_heap_t*)mi_atomic_read_ptr(mi_atomic_cast(void*, &page->heap));
 #endif
@@ -392,7 +392,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
       _mi_stat_decrease(&page->heap->tld->stats.huge, page->block_size);
     }
   }
-  
+
   // remove from the page list
   // (no need to do _mi_heap_delayed_free first as all blocks are already free)
   mi_segments_tld_t* segments_tld = &page->heap->tld->segments;
@@ -420,18 +420,38 @@ void _mi_page_retire(mi_page_t* page) {
   // (or we end up retiring and re-allocating most of the time)
   // NOTE: refine this more: we should not retire if this
   // is the only page left with free blocks. It is not clear
-  // how to check this efficiently though... 
+  // how to check this efficiently though...
   // for now, we don't retire if it is the only page left of this size class.
   mi_page_queue_t* pq = mi_page_queue_of(page);
-  if (mi_likely(page->block_size <= (MI_SMALL_SIZE_MAX/4))) {
-    // if (mi_page_mostly_used(page->prev) && mi_page_mostly_used(page->next)) {
-    if (pq->last==page && pq->first==page) {
+  if (mi_likely(page->block_size <= MI_SMALL_SIZE_MAX)) {
+    if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
-      return; // dont't retire after all
+      page->retire_expire = 2;
+      mi_assert_internal(mi_page_all_free(page));
+      return; // dont't free after all
     }
   }
 
   _mi_page_free(page, pq, false);
+}
+
+// free retired pages: we don't need to look at the entire queues
+// since we only retire pages that are the last one in a queue.
+static void mi_page_retired_collect(mi_heap_t* heap) {
+  for(mi_page_queue_t* pq = heap->pages; pq->block_size <= MI_SMALL_SIZE_MAX; pq++) {
+    mi_page_t* page = pq->first;
+    if (page != NULL && page->retire_expire != 0) {
+      if (mi_page_all_free(page)) {
+        page->retire_expire--;
+        if (page->retire_expire == 0) {
+          _mi_page_free(pq->first, pq, false);
+        }
+      }
+      else {
+        page->retire_expire = 0;
+      }
+    }
+  }
 }
 
 
@@ -499,7 +519,7 @@ static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* co
   }
   // prepend to the free list (usually NULL)
   mi_block_set_next(page, blocks[current], page->free);  // end of the list
-  page->free = free_start;  
+  page->free = free_start;
 }
 
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t extend, mi_stats_t* const stats)
@@ -513,15 +533,15 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
   void* const page_area = _mi_page_start(_mi_page_segment(page), page, NULL );
   const size_t bsize = page->block_size;
   mi_block_t* const start = mi_page_block_at(page, page_area, page->capacity);
-  
+
   // initialize a sequential free list
-  mi_block_t* const last = mi_page_block_at(page, page_area, page->capacity + extend - 1);  
+  mi_block_t* const last = mi_page_block_at(page, page_area, page->capacity + extend - 1);
   mi_block_t* block = start;
   while(block <= last) {
     mi_block_t* next = (mi_block_t*)((uint8_t*)block + bsize);
     mi_block_set_next(page,block,next);
     block = next;
-  }  
+  }
   // prepend to free list (usually `NULL`)
   mi_block_set_next(page, last, page->free);
   page->free = start;
@@ -619,6 +639,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->thread_freed == 0);
   mi_assert_internal(page->next == NULL);
   mi_assert_internal(page->prev == NULL);
+  mi_assert_internal(page->retire_expire == 0);
   mi_assert_internal(!mi_page_has_aligned(page));
   #if (MI_ENCODE_FREELIST)
   mi_assert_internal(page->key != 0);
@@ -699,8 +720,12 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   }
   else {
     mi_assert(pq->first == page);
+    page->retire_expire = 0;
   }
   mi_assert_internal(page == NULL || mi_page_immediate_available(page));
+
+  // finally collect retired pages
+  mi_page_retired_collect(heap);
   return page;
 }
 
@@ -719,6 +744,7 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
       _mi_page_free_collect(page,false);
     }
     if (mi_page_immediate_available(page)) {
+      page->retire_expire = 0;
       return page; // fast path
     }
   }
@@ -759,7 +785,7 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn) mi_attr_noexcept {
 // that frees the block can free the whole page and segment directly.
 static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
   size_t block_size = _mi_os_good_alloc_size(size);
-  mi_assert_internal(_mi_bin(block_size) == MI_BIN_HUGE);  
+  mi_assert_internal(_mi_bin(block_size) == MI_BIN_HUGE);
   mi_page_t* page = mi_page_fresh_alloc(heap,NULL,block_size);
   if (page != NULL) {
     mi_assert_internal(mi_page_immediate_available(page));
@@ -777,7 +803,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
       _mi_stat_increase(&heap->tld->stats.huge, block_size);
       _mi_stat_counter_increase(&heap->tld->stats.huge_count, 1);
     }
-  }  
+  }
   return page;
 }
 
