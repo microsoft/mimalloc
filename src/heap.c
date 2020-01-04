@@ -46,7 +46,7 @@ static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void
 
 
 #if MI_DEBUG>=3
-static bool _mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
+static bool mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
   UNUSED(arg1);
   UNUSED(arg2);
   UNUSED(pq);
@@ -59,7 +59,7 @@ static bool _mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page
 
 static bool mi_heap_is_valid(mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL);
-  mi_heap_visit_pages(heap, &_mi_heap_page_is_valid, NULL, NULL);
+  mi_heap_visit_pages(heap, &mi_heap_page_is_valid, NULL, NULL);
   return true;
 }
 #endif
@@ -84,6 +84,7 @@ typedef enum mi_collect_e {
 static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg_collect, void* arg2 ) {
   UNUSED(arg2);
   UNUSED(heap);
+  mi_assert_internal(mi_heap_page_is_valid(heap, pq, page, NULL, NULL));
   mi_collect_t collect = *((mi_collect_t*)arg_collect);
   _mi_page_free_collect(page, collect >= ABANDON);
   if (mi_page_all_free(page)) {

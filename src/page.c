@@ -426,7 +426,7 @@ void _mi_page_retire(mi_page_t* page) {
   if (mi_likely(page->block_size <= MI_SMALL_SIZE_MAX)) {
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
-      page->retire_expire = 2;
+      page->retire_expire = 4;
       mi_assert_internal(mi_page_all_free(page));
       return; // dont't free after all
     }
@@ -437,14 +437,14 @@ void _mi_page_retire(mi_page_t* page) {
 
 // free retired pages: we don't need to look at the entire queues
 // since we only retire pages that are the last one in a queue.
-static void mi_page_retired_collect(mi_heap_t* heap) {
+void _mi_heap_collect_retired(mi_heap_t* heap, bool force) {
   for(mi_page_queue_t* pq = heap->pages; pq->block_size <= MI_SMALL_SIZE_MAX; pq++) {
     mi_page_t* page = pq->first;
     if (page != NULL && page->retire_expire != 0) {
       if (mi_page_all_free(page)) {
         page->retire_expire--;
-        if (page->retire_expire == 0) {
-          _mi_page_free(pq->first, pq, false);
+        if (force || page->retire_expire == 0) {
+          _mi_page_free(pq->first, pq, force);
         }
       }
       else {
@@ -725,7 +725,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   mi_assert_internal(page == NULL || mi_page_immediate_available(page));
 
   // finally collect retired pages
-  mi_page_retired_collect(heap);
+  _mi_heap_collect_retired(heap,false);
   return page;
 }
 
