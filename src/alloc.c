@@ -142,9 +142,10 @@ static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, cons
 static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, const mi_block_t* block) {
   // The decoded value is in the same page (or NULL).
   // Walk the free lists to verify positively if it is already freed
+  mi_thread_free_t tf = (mi_thread_free_t)mi_atomic_read_relaxed(mi_atomic_cast(uintptr_t, &page->thread_free));
   if (mi_list_contains(page, page->free, block) ||
       mi_list_contains(page, page->local_free, block) ||
-      mi_list_contains(page, (const mi_block_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*,&page->thread_free)), block))
+      mi_list_contains(page, mi_tf_block(tf), block))
   {
     _mi_fatal_error("double free detected of block %p with size %zu\n", block, page->block_size);
     return true;
