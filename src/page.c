@@ -119,23 +119,22 @@ bool _mi_page_is_valid(mi_page_t* page) {
 }
 #endif
 
-
-void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay  ) {
+void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay) {
   mi_thread_free_t tfree;
   mi_thread_free_t tfreex;
-
+  mi_delayed_t     old_delay;
   do {
-    tfreex = tfree = page->thread_free;
-    if (mi_unlikely(mi_tf_delayed(tfree) < MI_DELAYED_FREEING)) {
-      tfreex = mi_tf_set_delayed(tfree,delay);
-    }
-    else if (mi_unlikely(mi_tf_delayed(tfree) == MI_DELAYED_FREEING)) {
+    tfree = mi_atomic_read_relaxed(&page->thread_free);
+    tfreex = mi_tf_set_delayed(tfree, delay);
+    old_delay = mi_tf_delayed(tfree);
+    if (mi_unlikely(old_delay == MI_DELAYED_FREEING)) {
       mi_atomic_yield(); // delay until outstanding MI_DELAYED_FREEING are done.
-      continue;          // and try again
     }
-  }
-  while((mi_tf_delayed(tfreex) !=  mi_tf_delayed(tfree)) && // avoid atomic operation if already equal
-        !mi_atomic_cas_weak(mi_atomic_cast(uintptr_t,&page->thread_free), tfreex, tfree));
+    else if (delay == old_delay) {
+      break; // avoid atomic operation if already equal
+    }
+  } while ((old_delay == MI_DELAYED_FREEING) ||
+    !mi_atomic_cas_weak(mi_atomic_cast(uintptr_t, &page->thread_free), tfreex, tfree));
 }
 
 
