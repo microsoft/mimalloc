@@ -331,7 +331,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
       mi_atomic_cas_weak(&large_page_try_ok, try_ok - 1, try_ok);
     }
     else {
-      int lflags = flags;
+      int lflags = flags & ~MAP_NORESERVE;  // using NORESERVE on huge pages seems to fail on Linux
       int lfd = fd;
       #ifdef MAP_ALIGNED_SUPER
       lflags |= MAP_ALIGNED_SUPER;
