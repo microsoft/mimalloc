@@ -25,8 +25,10 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include <stdbool.h>
 #include <stdint.h>
 #include <errno.h>
+#include <vector>
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
+#include "mimalloc-stl-allocator.h"
 
 // ---------------------------------------------------------------------------
 // Test macros: CHECK(name,predicate) and CHECK_BODY(name,body)
@@ -61,6 +63,8 @@ static int failed = 0;
 // ---------------------------------------------------------------------------
 bool test_heap1();
 bool test_heap2();
+bool test_stl_allocator1();
+bool test_stl_allocator2();
 
 // ---------------------------------------------------------------------------
 // Main testing
@@ -150,6 +154,9 @@ int main() {
     mi_free(s);
   });
 
+  CHECK("stl_allocator1", test_stl_allocator1());
+  CHECK("stl_allocator2", test_stl_allocator2());
+
   // ---------------------------------------------------
   // Done
   // ---------------------------------------------------[]
@@ -181,4 +188,28 @@ bool test_heap2() {
   mi_free(p1);
   mi_free(p2);
   return true;
+}
+
+bool test_stl_allocator1() {
+#ifdef __cplusplus
+  std::vector<int, mi_stl_allocator<int>> vec;
+  vec.push_back(1);
+  vec.pop_back();
+  return vec.size() == 0;
+#else
+  return true;
+#endif
+}
+
+bool test_stl_allocator2() {
+#ifdef __cplusplus
+  struct some_struct  { int i; int j; double z; };
+
+  std::vector<some_struct, mi_stl_allocator<some_struct>> vec;
+  vec.push_back(some_struct());
+  vec.pop_back();
+  return vec.size() == 0;
+#else
+  return true;
+#endif
 }
