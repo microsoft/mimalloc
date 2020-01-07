@@ -325,7 +325,7 @@ int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t 
   if (numa_count <= 0) numa_count = 1;
   const size_t pages_per = pages / numa_count;
   const size_t pages_mod = pages % numa_count;
-  const size_t timeout_per = (timeout_msecs / numa_count) + 50;
+  const size_t timeout_per = (timeout_msecs==0 ? 0 : (timeout_msecs / numa_count) + 50);
 
   // reserve evenly among numa nodes
   for (size_t numa_node = 0; numa_node < numa_count && pages > 0; numa_node++) {
