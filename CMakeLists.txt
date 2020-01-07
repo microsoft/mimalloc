@@ -234,7 +234,7 @@ if (MI_BUILD_TESTS MATCHES "ON")
   target_compile_options(mimalloc-test-stress PRIVATE ${mi_cflags})
   target_include_directories(mimalloc-test-stress PRIVATE include)
   target_link_libraries(mimalloc-test-stress PRIVATE mimalloc-static ${mi_libraries})
-  
+
   enable_testing()
   add_test(test_api, mimalloc-test-api)
   add_test(test_stress, mimalloc-test-stress)
