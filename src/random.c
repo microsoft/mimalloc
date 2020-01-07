@@ -155,9 +155,9 @@ uintptr_t _mi_random_next(mi_random_ctx_t* ctx) {
 
 /* ----------------------------------------------------------------------------
 To initialize a fresh random context we rely on the OS:
-- windows: BCryptGenRandom
-- bsd,wasi: arc4random_buf
-- linux: getrandom
+- Windows     : BCryptGenRandom
+- osX,bsd,wasi: arc4random_buf
+- Linux       : getrandom,/dev/urandom
 If we cannot get good randomness, we fall back to weak randomness based on a timer and ASLR.
 -----------------------------------------------------------------------------*/
 
@@ -185,9 +185,47 @@ static bool os_random_buf(void* buf, size_t buf_len) {
   return true;
 }
 #elif defined(__linux__) 
-#include <sys/random.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 static bool os_random_buf(void* buf, size_t buf_len) {
-  return (getrandom(buf, buf_len, GRND_NONBLOCK) == (ssize_t)buf_len);
+  // Modern Linux provides `getrandom` but different distributions either use `sys/random.h` or `linux/random.h`
+  // and for the latter the actual `getrandom` call is not always defined.
+  // (see <https://stackoverflow.com/questions/45237324/why-doesnt-getrandom-compile>)
+  // We therefore use a syscall directly and fall back dynamically to /dev/urandom when needed.
+#ifdef SYS_getrandom
+  #ifndef GRND_NONBLOCK
+  #define GRND_NONBLOCK (1)
+  #endif
+  static volatile _Atomic(uintptr_t) no_getrandom; // = 0
+  if (mi_atomic_read(&no_getrandom)==0) {
+    ssize_t ret = syscall(SYS_getrandom, buf, buf_len, GRND_NONBLOCK);
+    if (ret >= 0) return (buf_len == (size_t)ret);
+    if (ret != ENOSYS) return false;
+    mi_atomic_write(&no_getrandom,1); // don't call again, and fall back to /dev/urandom
+  }
+#endif
+  int flags = O_RDONLY;
+  #if defined(O_CLOEXEC)
+  flags |= O_CLOEXEC;
+  #endif
+  int fd = open("/dev/urandom", flags, 0);
+  if (fd < 0) return false;
+  size_t count = 0;
+  while(count < buf_len) {
+    ssize_t ret = read(fd, (char*)buf + count, buf_len - count);
+    if (ret<=0) {
+      if (errno!=EAGAIN && errno!=EINTR) break;
+    }
+    else {
+      count += ret;
+    }
+  }
+  close(fd);
+  return (count==buf_len);
 }
 #else
 static bool os_random_buf(void* buf, size_t buf_len) {
