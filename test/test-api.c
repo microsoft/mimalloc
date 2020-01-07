@@ -25,7 +25,11 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include <stdbool.h>
 #include <stdint.h>
 #include <errno.h>
+
+#ifdef __cplusplus
 #include <vector>
+#endif
+
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 #include "mimalloc-stl-allocator.h"
