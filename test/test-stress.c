@@ -26,8 +26,8 @@ terms of the MIT license.
 //
 // argument defaults
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
-static int SCALE   = 50;      // scaling factor
-static int ITER    = 10;      // N full iterations destructing and re-creating all threads
+static int SCALE   = 10;      // scaling factor
+static int ITER    = 50;      // N full iterations destructing and re-creating all threads
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int SCALE   = 100;  // scaling factor
@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
     }
     mi_collect(false);
 #ifndef NDEBUG
-    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - n + 1); }
+    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
 #endif
   }
 
