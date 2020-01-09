@@ -135,9 +135,9 @@ static void stress(intptr_t tid) {
       allocs--;
       if (data_top >= data_size) {
         data_size += 100000;
-        data = (void**)custom_realloc(data, data_size * sizeof(void*));
+        data = (void**)custom_realloc(data, data_size * sizeof(void*));        
       }
-      data[data_top++] = alloc_items( 1ULL << (pick(&r) % max_item_shift), &r);
+      data[data_top++] = alloc_items(1ULL << (pick(&r) % max_item_shift), &r);
     }
     else {
       // 25% retain
@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
     }
     mi_collect(false);
 #ifndef NDEBUG
-    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
+    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - n + 1); }
 #endif
   }
 
