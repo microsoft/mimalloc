@@ -13,16 +13,24 @@ jobs:
   pool:
     vmImage:
      windows-2019
+  strategy:
+    matrix:
+      Debug:
+        BuildType: debug
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+      Release:
+        BuildType: release
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
   steps:
   - task: CMake@1
     inputs:
-      workingDirectory: 'build'
-      cmakeArgs: ..
+      workingDirectory: $(BuildType)
+      cmakeArgs: .. $(cmakeExtraArgs)
   - task: MSBuild@1
     inputs:
-      solution: build/libmimalloc.sln
-  - upload: $(Build.SourcesDirectory)/build
-    artifact: windows
+      solution: $(BuildType)/libmimalloc.sln
+  - upload: $(Build.SourcesDirectory)/$(BuildType)
+    artifact: mimalloc-windows-$(BuildType)
 
 - job:
   displayName: Linux
@@ -75,7 +83,7 @@ jobs:
     displayName: Ctest
 
   - upload: $(Build.SourcesDirectory)/$(BuildType)
-    artifact: ubuntu-$(BuildType)
+    artifact: mimalloc-ubuntu-$(BuildType)
 
 - job:
   displayName: macOS
@@ -89,4 +97,4 @@ jobs:
       cmakeArgs: ..
   - script: make -j$(sysctl -n hw.ncpu) -C build
   - upload: $(Build.SourcesDirectory)/build
-    artifact: macos
+    artifact: mimalloc-macos
