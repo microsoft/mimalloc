@@ -29,6 +29,7 @@ jobs:
   - task: MSBuild@1
     inputs:
       solution: $(BuildType)/libmimalloc.sln
+  - task: CTest@1
   - upload: $(Build.SourcesDirectory)/$(BuildType)
     artifact: mimalloc-windows-$(BuildType)
 
