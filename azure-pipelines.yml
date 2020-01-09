@@ -21,6 +21,9 @@ jobs:
       Release:
         BuildType: release
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
+      Secure:
+        BuildType: secure
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
   steps:
   - task: CMake@1
     inputs:
@@ -32,7 +35,7 @@ jobs:
   - script: |
       cd $(BuildType)
       ctest
-    displayName: CTest      
+    displayName: CTest
   - upload: $(Build.SourcesDirectory)/$(BuildType)
     artifact: mimalloc-windows-$(BuildType)
 
@@ -73,19 +76,15 @@ jobs:
         CXX: clang++
         BuildType: secure-clang
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
-
   steps:
   - task: CMake@1
     inputs:
       workingDirectory: $(BuildType)
       cmakeArgs: .. $(cmakeExtraArgs)
-
   - script: make -j$(nproc) -C $(BuildType)
     displayName: Make
-
   - script: make test -C $(BuildType)
-    displayName: Ctest
-
+    displayName: CTest
   - upload: $(Build.SourcesDirectory)/$(BuildType)
     artifact: mimalloc-ubuntu-$(BuildType)
 
@@ -94,11 +93,25 @@ jobs:
   pool:
     vmImage:
      macOS-10.14
+  strategy:
+    matrix:
+      Debug:
+        BuildType: debug
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+      Release:
+        BuildType: release
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
+      Secure:
+        BuildType: secure
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
   steps:
   - task: CMake@1
     inputs:
-      workingDirectory: 'build'
-      cmakeArgs: ..
-  - script: make -j$(sysctl -n hw.ncpu) -C build
-  - upload: $(Build.SourcesDirectory)/build
-    artifact: mimalloc-macos
+      workingDirectory: $(BuildType)
+      cmakeArgs: .. $(cmakeExtraArgs)
+  - script: make -j$(sysctl -n hw.ncpu) -C $(BuildType)
+    displayName: Make
+  - script: make test -C $(BuildType)
+    displayName: CTest
+  - upload: $(Build.SourcesDirectory)/$(BuildType)
+    artifact: mimalloc-macos-$(BuildType)
