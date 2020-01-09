@@ -45,7 +45,7 @@ static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void
 }
 
 
-#if MI_DEBUG>=3
+#if MI_DEBUG>=2
 static bool mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
   UNUSED(arg1);
   UNUSED(arg2);
