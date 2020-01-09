@@ -119,7 +119,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
 }
 #endif
 
-void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay) {
+void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never) {
   mi_thread_free_t tfree;
   mi_thread_free_t tfreex;
   mi_delayed_t     old_delay;
@@ -133,10 +133,12 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay) {
     else if (delay == old_delay) {
       break; // avoid atomic operation if already equal
     }
+    else if (!override_never && old_delay == MI_NEVER_DELAYED_FREE) {
+      break; // leave never set
+    }
   } while ((old_delay == MI_DELAYED_FREEING) ||
     !mi_atomic_cas_weak(mi_atomic_cast(uintptr_t, &page->thread_free), tfreex, tfree));
 }
-
 
 /* -----------------------------------------------------------
   Page collect the `local_free` and `thread_free` lists
@@ -229,9 +231,12 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_internal(page->heap == NULL);
   mi_assert_internal(_mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
   mi_assert_internal(!page->is_reset);
+  mi_assert_internal(mi_tf_delayed(page->thread_free) == MI_NEVER_DELAYED_FREE);
   _mi_page_free_collect(page,false);
   mi_page_queue_t* pq = mi_page_queue(heap, page->block_size);
   mi_page_queue_push(heap, pq, page);
+  mi_assert_internal(page->heap != NULL);
+  _mi_page_use_delayed_free(page, MI_NO_DELAYED_FREE, true); // override never (after push so heap is set)
   mi_assert_expensive(_mi_page_is_valid(page));
 }
 
@@ -308,7 +313,7 @@ void _mi_page_unfull(mi_page_t* page) {
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(mi_page_is_in_full(page));
 
-  _mi_page_use_delayed_free(page, MI_NO_DELAYED_FREE);
+  _mi_page_use_delayed_free(page, MI_NO_DELAYED_FREE, false);
   if (!mi_page_is_in_full(page)) return;
 
   mi_heap_t* heap = page->heap;
@@ -324,7 +329,7 @@ static void mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(!mi_page_immediate_available(page));
   mi_assert_internal(!mi_page_is_in_full(page));
 
-  _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE);
+  _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, false);
   if (mi_page_is_in_full(page)) return;
 
   mi_page_queue_enqueue_from(&page->heap->pages[MI_BIN_FULL], pq, page);
