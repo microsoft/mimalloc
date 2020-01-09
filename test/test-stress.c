@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
     }
     mi_collect(false);
 #ifndef NDEBUG
-    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - n + 1); }
+    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
 #endif
   }
 
