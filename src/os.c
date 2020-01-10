@@ -596,6 +596,18 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
   return mi_os_page_align_areax(true, addr, size, newsize);
 }
 
+static void mi_mprotect_hint(int err) {
+#if defined(MI_OS_USE_MMAP) && (MI_SECURE>=2) // guard page around every mimalloc page
+  if (err == ENOMEM) {
+    _mi_warning_message("the previous warning may have been caused by a low memory map limit.\n"
+                        "  On Linux this is controlled by the vm.max_map_count. For example:\n"
+                        "  > sudo sysctl -w vm.max_map_count=262144\n");
+  }
+#else
+  UNUSED(err);
+#endif
+}
+
 // Commit/Decommit memory.
 // Usuelly commit is aligned liberal, while decommit is aligned conservative.
 // (but not for the reset version where we want commit to be conservative as well)
@@ -644,6 +656,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   #endif
   if (err != 0) {
     _mi_warning_message("%s error: start: 0x%p, csize: 0x%x, err: %i\n", commit ? "commit" : "decommit", start, csize, err);
+    mi_mprotect_hint(err);
   }
   mi_assert_internal(err == 0);
   return (err == 0);
@@ -762,6 +775,7 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
 #endif
   if (err != 0) {
     _mi_warning_message("mprotect error: start: 0x%p, csize: 0x%x, err: %i\n", start, csize, err);
+    mi_mprotect_hint(err);
   }
   return (err == 0);
 }
