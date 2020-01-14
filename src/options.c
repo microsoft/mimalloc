@@ -56,7 +56,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(verbose) },
 
   // the following options are experimental and not all combinations make sense.
-  { 1, UNINIT, MI_OPTION(eager_commit) },        // commit on demand
+  { 0, UNINIT, MI_OPTION(eager_commit) },        // commit on demand
   #if defined(_WIN32) || (MI_INTPTR_SIZE <= 4)   // and other OS's without overcommit?
   { 0, UNINIT, MI_OPTION(eager_region_commit) },
   { 1, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
