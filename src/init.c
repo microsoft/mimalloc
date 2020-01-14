@@ -26,7 +26,7 @@ const mi_page_t _mi_page_empty = {
   NULL,
   ATOMIC_VAR_INIT(0), ATOMIC_VAR_INIT(0),
   0, NULL, NULL, NULL
-  #if (MI_INTPTR_SIZE==4)
+  #if (MI_INTPTR_SIZE==8)
   , { NULL } // padding
   #endif
 };

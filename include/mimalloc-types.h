@@ -211,9 +211,9 @@ typedef struct mi_page_s {
   struct mi_page_s*     prev;              // previous page owned by this thread with the same `block_size`
 
   // improve page index calculation
-  // without padding: 10 words on 64-bit, 11 on 32-bit. Secure adds two words
-  #if (MI_INTPTR_SIZE==4)
-  void*                 padding[1];        // 12/14 words on 32-bit plain
+  // without padding: 11 words on 64-bit, 14 on 32-bit. Secure adds two words
+  #if (MI_INTPTR_SIZE==8)
+  void*                 padding[1];        // 12/14 words on 64-bit
   #endif
 } mi_page_t;
 
