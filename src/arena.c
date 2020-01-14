@@ -7,13 +7,13 @@ terms of the MIT license. A copy of the license can be found in the file
 
 /* ----------------------------------------------------------------------------
 "Arenas" are fixed area's of OS memory from which we can allocate
-large blocks (>= MI_ARENA_BLOCK_SIZE, 32MiB). 
-In contrast to the rest of mimalloc, the arenas are shared between 
+large blocks (>= MI_ARENA_BLOCK_SIZE, 32MiB).
+In contrast to the rest of mimalloc, the arenas are shared between
 threads and need to be accessed using atomic operations.
 
 Currently arenas are only used to for huge OS page (1GiB) reservations,
 otherwise it delegates to direct allocation from the OS.
-In the future, we can expose an API to manually add more kinds of arenas 
+In the future, we can expose an API to manually add more kinds of arenas
 which is sometimes needed for embedded devices or shared memory for example.
 (We can also employ this with WASI or `sbrk` systems to reserve large arenas
  on demand and be able to reuse them efficiently).
@@ -41,7 +41,7 @@ void  _mi_os_free(void* p, size_t size, mi_stats_t* stats);
 void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize);
 void  _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats);
 
-bool  _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats); 
+bool  _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 
 
 /* -----------------------------------------------------------
@@ -87,13 +87,13 @@ static _Atomic(uintptr_t)   mi_arena_count; // = 0
 // Use `0` as a special id for direct OS allocated memory.
 #define MI_MEMID_OS   0
 
-static size_t mi_memid_create(size_t arena_index, mi_bitmap_index_t bitmap_index) {
+static size_t mi_arena_id_create(size_t arena_index, mi_bitmap_index_t bitmap_index) {
   mi_assert_internal(arena_index < 0xFE);
   mi_assert_internal(((bitmap_index << 8) >> 8) == bitmap_index); // no overflow?
   return ((bitmap_index << 8) | ((arena_index+1) & 0xFF));
 }
 
-static void mi_memid_indices(size_t memid, size_t* arena_index, mi_bitmap_index_t* bitmap_index) {
+static void mi_arena_id_indices(size_t memid, size_t* arena_index, mi_bitmap_index_t* bitmap_index) {
   mi_assert_internal(memid != MI_MEMID_OS);
   *arena_index = (memid & 0xFF) - 1;
   *bitmap_index = (memid >> 8);
@@ -106,7 +106,7 @@ static size_t mi_block_count_of_size(size_t size) {
 /* -----------------------------------------------------------
   Thread safe allocation in an arena
 ----------------------------------------------------------- */
-static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* bitmap_idx) 
+static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* bitmap_idx)
 {
   const size_t fcount = arena->field_count;
   size_t idx = mi_atomic_read(&arena->search_idx);  // start from last search
@@ -261,15 +261,15 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_commit
   Arena Allocation
 ----------------------------------------------------------- */
 
-static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t needed_bcount, 
-                                 bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld) 
+static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t needed_bcount,
+                                 bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
 {
   mi_bitmap_index_t bitmap_index;
   if (!mi_arena_alloc(arena, needed_bcount, &bitmap_index)) return NULL;
 
   // claimed it! set the dirty bits (todo: no need for an atomic op here?)
   void* p  = arena->start + (mi_bitmap_index_bit(bitmap_index)*MI_ARENA_BLOCK_SIZE);
-  *memid   = mi_memid_create(arena_index, bitmap_index);
+  *memid   = mi_arena_id_create(arena_index, bitmap_index);
   *is_zero = mi_bitmap_claim(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
   *large   = arena->is_large;
   if (arena->is_committed) {
@@ -293,23 +293,23 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   return p;
 }
 
-void* _mi_arena_alloc_aligned(size_t size, size_t alignment, 
-                              bool* commit, bool* large, bool* is_zero, 
-                              size_t* memid, mi_os_tld_t* tld) 
+void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
+                              bool* commit, bool* large, bool* is_zero,
+                              size_t* memid, mi_os_tld_t* tld)
 {
   mi_assert_internal(commit != NULL && large != NULL && is_zero != NULL && memid != NULL && tld != NULL);
   mi_assert_internal(size > 0);
   *memid   = MI_MEMID_OS;
   *is_zero = false;
+
   bool default_large = false;
   if (large==NULL) large = &default_large;  // ensure `large != NULL`
-
   const int numa_node = _mi_os_numa_node(tld); // current numa node
 
   // try to allocate in an arena if the alignment is small enough
   // and the object is not too large or too small.
-  if (alignment <= MI_SEGMENT_ALIGN && 
-      size <= MI_ARENA_MAX_OBJ_SIZE && 
+  if (alignment <= MI_SEGMENT_ALIGN &&
+      size <= MI_ARENA_MAX_OBJ_SIZE &&
       size >= MI_ARENA_MIN_OBJ_SIZE)
   {
     const size_t bcount = mi_block_count_of_size(size);
@@ -321,7 +321,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
       if (arena==NULL) break; // end reached
       if ((arena->numa_node<0 || arena->numa_node==numa_node) && // numa local?
           (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
-      { 
+      {
         void* p = mi_arena_alloc_from(arena, i, bcount, commit, large, is_zero, memid, tld);
         mi_assert_internal((uintptr_t)p % alignment == 0);
         if (p != NULL) return p;
@@ -376,7 +376,7 @@ void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, bool 
     // allocated in an arena
     size_t arena_idx;
     size_t bitmap_idx;
-    mi_memid_indices(memid, &arena_idx, &bitmap_idx);
+    mi_arena_id_indices(memid, &arena_idx, &bitmap_idx);
     mi_assert_internal(arena_idx < MI_MAX_ARENAS);
     mi_arena_t* arena = (mi_arena_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*, &mi_arenas[arena_idx]));
     mi_assert_internal(arena != NULL);
@@ -406,7 +406,7 @@ static bool mi_arena_add(mi_arena_t* arena) {
   mi_assert_internal(arena != NULL);
   mi_assert_internal((uintptr_t)arena->start % MI_SEGMENT_ALIGN == 0);
   mi_assert_internal(arena->block_count > 0);
-  
+
   uintptr_t i = mi_atomic_addu(&mi_arena_count,1);
   if (i >= MI_MAX_ARENAS) {
     mi_atomic_subu(&mi_arena_count, 1);
@@ -434,11 +434,11 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
     _mi_warning_message("failed to reserve %zu gb huge pages\n", pages);
     return ENOMEM;
   }
-  _mi_verbose_message("reserved %zu gb huge pages\n", pages_reserved);
-  
+  _mi_verbose_message("reserved %zu gb huge pages (of the %zu gb requested)\n", pages_reserved, pages);
+
   size_t bcount = mi_block_count_of_size(hsize);
-  size_t fields = (bcount + MI_BITMAP_FIELD_BITS - 1) / MI_BITMAP_FIELD_BITS;
-  size_t asize = sizeof(mi_arena_t) + (2*fields*sizeof(mi_bitmap_field_t));  
+  size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);
+  size_t asize = sizeof(mi_arena_t) + (2*fields*sizeof(mi_bitmap_field_t));
   mi_arena_t* arena = (mi_arena_t*)_mi_os_alloc(asize, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
   if (arena == NULL) {
     _mi_os_free_huge_pages(p, hsize, &_mi_stats_main);
@@ -446,23 +446,24 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
   }
   arena->block_count = bcount;
   arena->field_count = fields;
-  arena->start = (uint8_t*)p;  
+  arena->start = (uint8_t*)p;
   arena->numa_node = numa_node; // TODO: or get the current numa node if -1? (now it allows anyone to allocate on -1)
   arena->is_large = true;
   arena->is_zero_init = true;
   arena->is_committed = true;
   arena->search_idx = 0;
-  arena->blocks_dirty = &arena->blocks_inuse[bcount];
+  arena->blocks_dirty = &arena->blocks_inuse[fields]; // just after inuse bitmap
   arena->blocks_committed = NULL;
   // the bitmaps are already zero initialized due to os_alloc
   // just claim leftover blocks if needed
-  size_t post = (fields * MI_BITMAP_FIELD_BITS) - bcount;
+  ptrdiff_t post = (fields * MI_BITMAP_FIELD_BITS) - bcount;
+  mi_assert_internal(post >= 0);
   if (post > 0) {
     // don't use leftover bits at the end
     mi_bitmap_index_t postidx = mi_bitmap_index_create(fields - 1, MI_BITMAP_FIELD_BITS - post);
-    mi_bitmap_claim(arena->blocks_inuse, fields, post, postidx, NULL); 
+    mi_bitmap_claim(arena->blocks_inuse, fields, post, postidx, NULL);
   }
-  
+
   mi_arena_add(arena);
   return 0;
 }
@@ -477,8 +478,8 @@ int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t 
   if (numa_count <= 0) numa_count = 1;
   const size_t pages_per = pages / numa_count;
   const size_t pages_mod = pages % numa_count;
-  const size_t timeout_per = (timeout_msecs / numa_count) + 50;
-  
+  const size_t timeout_per = (timeout_msecs==0 ? 0 : (timeout_msecs / numa_count) + 50);
+
   // reserve evenly among numa nodes
   for (size_t numa_node = 0; numa_node < numa_count && pages > 0; numa_node++) {
     size_t node_pages = pages_per;  // can be 0
@@ -500,7 +501,7 @@ int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserv
   UNUSED(max_secs);
   _mi_warning_message("mi_reserve_huge_os_pages is deprecated: use mi_reserve_huge_os_pages_interleave/at instead\n");
   if (pages_reserved != NULL) *pages_reserved = 0;
-  int err = mi_reserve_huge_os_pages_interleave(pages, 0, (size_t)(max_secs * 1000.0));  
+  int err = mi_reserve_huge_os_pages_interleave(pages, 0, (size_t)(max_secs * 1000.0));
   if (err==0 && pages_reserved!=NULL) *pages_reserved = pages;
   return err;
 }

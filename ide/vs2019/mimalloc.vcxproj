@@ -231,6 +231,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\..\src\page.c" />
+    <ClCompile Include="..\..\src\random.c" />
     <ClCompile Include="..\..\src\segment.c" />
     <ClCompile Include="..\..\src\os.c" />
     <ClCompile Include="..\..\src\stats.c" />

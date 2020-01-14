@@ -45,8 +45,8 @@ static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void
 }
 
 
-#if MI_DEBUG>=3
-static bool _mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
+#if MI_DEBUG>=2
+static bool mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
   UNUSED(arg1);
   UNUSED(arg2);
   UNUSED(pq);
@@ -59,7 +59,7 @@ static bool _mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page
 
 static bool mi_heap_is_valid(mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL);
-  mi_heap_visit_pages(heap, &_mi_heap_page_is_valid, NULL, NULL);
+  mi_heap_visit_pages(heap, &mi_heap_page_is_valid, NULL, NULL);
   return true;
 }
 #endif
@@ -84,6 +84,7 @@ typedef enum mi_collect_e {
 static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg_collect, void* arg2 ) {
   UNUSED(arg2);
   UNUSED(heap);
+  mi_assert_internal(mi_heap_page_is_valid(heap, pq, page, NULL, NULL));
   mi_collect_t collect = *((mi_collect_t*)arg_collect);
   _mi_page_free_collect(page, collect >= ABANDON);
   if (mi_page_all_free(page)) {
@@ -102,7 +103,7 @@ static bool mi_heap_page_never_delayed_free(mi_heap_t* heap, mi_page_queue_t* pq
   UNUSED(arg2);
   UNUSED(heap);
   UNUSED(pq);
-  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE);
+  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);
   return true; // don't break
 }
 
@@ -184,12 +185,6 @@ mi_heap_t* mi_heap_get_backing(void) {
   return bheap;
 }
 
-uintptr_t _mi_heap_random(mi_heap_t* heap) {
-  uintptr_t r = heap->random;
-  heap->random = _mi_random_shuffle(r);
-  return r;
-}
-
 mi_heap_t* mi_heap_new(void) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);
@@ -197,10 +192,16 @@ mi_heap_t* mi_heap_new(void) {
   memcpy(heap, &_mi_heap_empty, sizeof(mi_heap_t));
   heap->tld = bheap->tld;
   heap->thread_id = _mi_thread_id();
-  heap->cookie = ((uintptr_t)heap ^ _mi_heap_random(bheap)) | 1;
-  heap->random = _mi_heap_random(bheap);
+  _mi_random_split(&bheap->random, &heap->random);
+  heap->cookie = _mi_heap_random_next(heap) | 1;  
+  heap->key[0] = _mi_heap_random_next(heap);
+  heap->key[1] = _mi_heap_random_next(heap);
   heap->no_reclaim = true;  // don't reclaim abandoned pages or otherwise destroy is unsafe
   return heap;
+}
+
+uintptr_t _mi_heap_random_next(mi_heap_t* heap) {
+  return _mi_random_next(&heap->random);
 }
 
 // zero out the page queues
@@ -241,7 +242,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   UNUSED(pq);
 
   // ensure no more thread_delayed_free will be added
-  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE);
+  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);  
 
   // stats
   if (page->block_size > MI_MEDIUM_OBJ_SIZE_MAX) {

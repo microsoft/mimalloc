@@ -28,7 +28,7 @@ int mi_version(void) mi_attr_noexcept {
 
 // --------------------------------------------------------
 // Options
-// These can be accessed by multiple threads and may be 
+// These can be accessed by multiple threads and may be
 // concurrently initialized, but an initializing data race
 // is ok since they resolve to the same value.
 // --------------------------------------------------------
@@ -61,7 +61,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(eager_region_commit) },
   { 1, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
   #else
-  { 1, UNINIT, MI_OPTION(eager_region_commit) }, 
+  { 1, UNINIT, MI_OPTION(eager_region_commit) },
   { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset uses MADV_FREE/MADV_DONTNEED
   #endif
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
@@ -91,7 +91,7 @@ void _mi_options_init(void) {
       mi_option_desc_t* desc = &options[option];
       _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
     }
-  }  
+  }
   mi_max_error_count = mi_option_get(mi_option_max_errors);
 }
 
@@ -100,7 +100,7 @@ long mi_option_get(mi_option_t option) {
   mi_option_desc_t* desc = &options[option];
   mi_assert(desc->option == option);  // index should match the option
   if (mi_unlikely(desc->init == UNINIT)) {
-    mi_option_init(desc);    
+    mi_option_init(desc);
   }
   return desc->value;
 }
@@ -144,7 +144,7 @@ void mi_option_disable(mi_option_t option) {
 
 static void mi_out_stderr(const char* msg) {
   #ifdef _WIN32
-  // on windows with redirection, the C runtime cannot handle locale dependent output 
+  // on windows with redirection, the C runtime cannot handle locale dependent output
   // after the main thread closes so we use direct console output.
   if (!_mi_preloading()) { _cputs(msg); }
   #else
@@ -186,7 +186,7 @@ static void mi_out_buf_flush(mi_output_fun* out, bool no_more_buf) {
   out_buf[count] = 0;
   out(out_buf);
   if (!no_more_buf) {
-    out_buf[count] = '\n'; // if continue with the buffer, insert a newline    
+    out_buf[count] = '\n'; // if continue with the buffer, insert a newline
   }
 }
 
@@ -342,7 +342,7 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
 #include <windows.h>
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
   result[0] = 0;
-  size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);  
+  size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
   return (len > 0 && len < result_size);
 }
 #else
@@ -368,7 +368,11 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
   }
 }
 #endif
-static void mi_option_init(mi_option_desc_t* desc) {  
+static void mi_option_init(mi_option_desc_t* desc) {
+  #ifndef _WIN32
+  // cannot call getenv() when still initializing the C runtime.
+  if (_mi_preloading()) return;
+  #endif
   // Read option value from the environment
   char buf[64+1];
   mi_strlcpy(buf, "mimalloc_", sizeof(buf));

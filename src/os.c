@@ -165,9 +165,7 @@ void _mi_os_init() {
     os_page_size = (size_t)result;
     os_alloc_granularity = os_page_size;
   }
-  if (mi_option_is_enabled(mi_option_large_os_pages)) {
-    large_os_page_size = 2*MiB;
-  }
+  large_os_page_size = 2*MiB; // TODO: can we query the OS for this?
 }
 #endif
 
@@ -332,7 +330,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
       mi_atomic_cas_weak(&large_page_try_ok, try_ok - 1, try_ok);
     }
     else {
-      int lflags = flags;
+      int lflags = flags & ~MAP_NORESERVE;  // using NORESERVE on huge pages seems to fail on Linux
       int lfd = fd;
       #ifdef MAP_ALIGNED_SUPER
       lflags |= MAP_ALIGNED_SUPER;
@@ -408,8 +406,8 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   if (hint == 0 || hint > ((intptr_t)30<<40)) { // try to wrap around after 30TiB (area after 32TiB is used for huge OS pages)
     intptr_t init = ((intptr_t)4 << 40); // start at 4TiB area
     #if (MI_SECURE>0 || MI_DEBUG==0)     // security: randomize start of aligned allocations unless in debug mode
-    uintptr_t r = _mi_random_init((uintptr_t)&mi_os_get_aligned_hint ^ hint);
-    init = init + (MI_SEGMENT_SIZE * ((r>>17) & 0xFFFF));  // (randomly 0-64k)*4MiB == 0 to 256GiB
+    uintptr_t r = _mi_heap_random_next(mi_get_default_heap());
+    init = init + (MI_SEGMENT_SIZE * ((r>>17) & 0xFFFFF));  // (randomly 20 bits)*4MiB == 0 to 4TiB
     #endif
     mi_atomic_cas_strong(mi_atomic_cast(uintptr_t, &aligned_base), init, hint + size);
     hint = mi_atomic_add(&aligned_base, size); // this may still give 0 or > 30TiB but that is ok, it is a hint after all
@@ -597,6 +595,18 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
   return mi_os_page_align_areax(true, addr, size, newsize);
 }
 
+static void mi_mprotect_hint(int err) {
+#if defined(MI_OS_USE_MMAP) && (MI_SECURE>=2) // guard page around every mimalloc page
+  if (err == ENOMEM) {
+    _mi_warning_message("the previous warning may have been caused by a low memory map limit.\n"
+                        "  On Linux this is controlled by the vm.max_map_count. For example:\n"
+                        "  > sudo sysctl -w vm.max_map_count=262144\n");
+  }
+#else
+  UNUSED(err);
+#endif
+}
+
 // Commit/Decommit memory.
 // Usuelly commit is aligned liberal, while decommit is aligned conservative.
 // (but not for the reset version where we want commit to be conservative as well)
@@ -645,6 +655,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   #endif
   if (err != 0) {
     _mi_warning_message("%s error: start: 0x%p, csize: 0x%x, err: %i\n", commit ? "commit" : "decommit", start, csize, err);
+    mi_mprotect_hint(err);
   }
   mi_assert_internal(err == 0);
   return (err == 0);
@@ -763,6 +774,7 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
 #endif
   if (err != 0) {
     _mi_warning_message("mprotect error: start: 0x%p, csize: 0x%x, err: %i\n", start, csize, err);
+    mi_mprotect_hint(err);
   }
   return (err == 0);
 }
@@ -908,8 +920,8 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
       // Initialize the start address after the 32TiB area
       start = ((uintptr_t)32 << 40);  // 32TiB virtual start address
 #if (MI_SECURE>0 || MI_DEBUG==0)      // security: randomize start of huge pages unless in debug mode
-      uintptr_t r = _mi_random_init((uintptr_t)&mi_os_claim_huge_pages);
-      start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x3FF));  // (randomly 0-1024)*1GiB == 0 to 1TiB
+      uintptr_t r = _mi_heap_random_next(mi_get_default_heap());
+      start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x0FFF));  // (randomly 12bits)*1GiB == between 0 to 4TiB
 #endif
     }
     end = start + size;

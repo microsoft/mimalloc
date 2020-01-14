@@ -79,7 +79,7 @@ typedef union mi_region_info_u {
   struct {
     bool  valid;
     bool  is_large;
-    int   numa_node;
+    short numa_node;
   };
 } mi_region_info_t;
 
@@ -308,7 +308,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
   if (mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx)) {
     // some blocks are still reset
     mi_assert_internal(!info.is_large);
-    mi_assert_internal(!mi_option_is_enabled(mi_option_eager_commit) || *commit); 
+    mi_assert_internal(!mi_option_is_enabled(mi_option_eager_commit) || *commit || mi_option_get(mi_option_eager_commit_delay) > 0); 
     mi_bitmap_unclaim(&region->reset, 1, blocks, bit_idx);
     if (*commit || !mi_option_is_enabled(mi_option_reset_decommits)) { // only if needed
       bool reset_zero = false;

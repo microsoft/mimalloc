@@ -18,6 +18,7 @@ include("cmake/mimalloc-config-version.cmake")
 
 set(mi_sources
     src/stats.c
+    src/random.c
     src/os.c
     src/arena.c
     src/segment.c
@@ -114,7 +115,7 @@ endif()
 
 # extra needed libraries
 if(WIN32)
-  list(APPEND mi_libraries psapi shell32 user32)
+  list(APPEND mi_libraries psapi shell32 user32 bcrypt)
 else()
   list(APPEND mi_libraries pthread)
   find_library(LIBRT rt)

@@ -310,13 +310,13 @@ static mi_segment_t* mi_segment_cache_pop(size_t segment_slices, mi_segments_tld
   return segment;
 }
 
-static bool mi_segment_cache_full(mi_segments_tld_t* tld) 
+static bool mi_segment_cache_full(mi_segments_tld_t* tld)
 {
   // if (tld->count == 1 && tld->cache_count==0) return false; // always cache at least the final segment of a thread
   size_t max_cache = mi_option_get(mi_option_segment_cache);
   if (tld->cache_count < max_cache
        && tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION)) // at least allow a 1 element cache
-     ) { 
+     ) {
     return false;
   }
   // take the opportunity to reduce the segment cache if it is too large (now)
@@ -660,6 +660,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
     size_t memid = 0;
     // segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, commit, &mem_large, os_tld);
     segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_zero, &memid, os_tld);
+
     if (segment == NULL) return NULL;  // failed to allocate
     mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
     if (!commit) {
@@ -669,6 +670,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_segments_tld_t* tld, m
     }
     segment->memid = memid;
     segment->mem_is_fixed = mem_large;
+
     segment->mem_is_committed = mi_option_is_enabled(mi_option_eager_commit); // commit;
     mi_segments_track_size((long)(segment_size), tld);
     mi_segment_map_allocated_at(segment);
@@ -813,7 +815,6 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
     _mi_os_reset(start, psize, tld->stats);
   }
 
-
   // zero the page data, but not the segment fields
   page->is_zero_init = false;
   ptrdiff_t ofs = offsetof(mi_page_t, capacity);
@@ -854,7 +855,28 @@ void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
 // are "abandoned" and will be reclaimed by other threads to
 // reuse their pages and/or free them eventually
 static volatile _Atomic(mi_segment_t*) abandoned; // = NULL;
-static volatile _Atomic(uintptr_t)     abandoned_count; // = 0;
+static volatile _Atomic(uintptr_t)     abandoned_count; // = 0; approximate count of abandoned segments
+
+// prepend a list of abandoned segments atomically to the global abandoned list; O(n)
+static void mi_segments_prepend_abandoned(mi_segment_t* first) {
+  if (first == NULL) return;
+
+  // first try if the abandoned list happens to be NULL
+  if (mi_atomic_cas_ptr_weak(mi_atomic_cast(void*, &abandoned), first, NULL)) return;
+
+  // if not, find the end of the list
+  mi_segment_t* last = first;
+  while (last->abandoned_next != NULL) {
+    last = last->abandoned_next;
+  }
+
+  // and atomically prepend
+  mi_segment_t* next;
+  do {
+    next = (mi_segment_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*, &abandoned));
+    last->abandoned_next = next;
+  } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*, &abandoned), first, next));
+}
 
 static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(segment->used == segment->abandoned);
@@ -878,16 +900,13 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   // force delayed decommits instead?
   mi_segment_delayed_decommit(segment, false, tld->stats);    
   
-  // add it to the abandoned list
+  // all pages in the segment are abandoned; add it to the abandoned list
   _mi_stat_increase(&tld->stats->segments_abandoned, 1);
   mi_segments_track_size(-((long)mi_segment_size(segment)), tld);
   segment->thread_id = 0;
-  mi_segment_t* next;
-  do {
-    next = (mi_segment_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*,&abandoned));
-    mi_atomic_write_ptr(mi_atomic_cast(void*,&segment->abandoned_next), next);
-  } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&abandoned), segment, next));
-  mi_atomic_increment(&abandoned_count);
+  segment->abandoned_next = NULL;
+  mi_segments_prepend_abandoned(segment); // prepend one-element list
+  mi_atomic_increment(&abandoned_count);  // keep approximate count
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
@@ -904,24 +923,35 @@ void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
 }
 
 bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segments_tld_t* tld) {
-  uintptr_t reclaimed = 0;
-  uintptr_t atmost;
-  if (try_all) {
-    atmost = abandoned_count+16;   // close enough
-  }
-  else {
-    atmost = abandoned_count/8;    // at most 1/8th of all outstanding (estimated)
-    if (atmost < 2) atmost = 2;    // but at least 2
+  // To avoid the A-B-A problem, grab the entire list atomically
+  mi_segment_t* segment = (mi_segment_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*, &abandoned));  // pre-read to avoid expensive atomic operations
+  if (segment == NULL) return false;
+  segment = (mi_segment_t*)mi_atomic_exchange_ptr(mi_atomic_cast(void*, &abandoned), NULL);
+  if (segment == NULL) return false;
+
+  // we got a non-empty list
+  if (!try_all) {
+    // take at most 1/8th of the list and append the rest back to the abandoned list again
+    // this is O(n) but simplifies the code a lot (as we don't have an A-B-A problem)
+    // and probably ok since the length will tend to be not too large.
+    uintptr_t atmost = mi_atomic_read(&abandoned_count)/8;  // at most 1/8th of all outstanding (estimated)
+    if (atmost < 8) atmost = 8;    // but at least 8
+
+    // find the split point
+    mi_segment_t* last = segment;
+    while (last->abandoned_next != NULL && atmost > 0) {
+      last = last->abandoned_next;  
+      atmost--;
+    }
+    // split the list and push back the remaining segments
+    mi_segment_t* next = last->abandoned_next;
+    last->abandoned_next = NULL;
+    mi_segments_prepend_abandoned(next);
   }
 
-  // for `atmost` `reclaimed` abandoned segments...
-  while(atmost > reclaimed) {
-    // try to claim the head of the abandoned segments
-    mi_segment_t* segment;
-    do {
-      segment = (mi_segment_t*)abandoned;
-    } while(segment != NULL && !mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&abandoned), (mi_segment_t*)segment->abandoned_next, segment));
-    if (segment==NULL) break; // stop early if no more segments available
+  // reclaim all segments that we kept
+  while(segment != NULL) {
+    mi_segment_t* const next = segment->abandoned_next; // save the next segment
 
     // got it.
     mi_atomic_decrement(&abandoned_count);
@@ -962,7 +992,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
           slice = mi_segment_page_clear(page, tld);   // set slice again due to coalesceing
         }
         else {
-          // otherwise reclaim it          
+          // otherwise reclaim it
           _mi_page_reclaim(heap,page);
         }
       }
@@ -974,11 +1004,12 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
     if (segment->used == 0) {  // due to page_clear
       mi_segment_free(segment,false,tld);
     }
-    else {
-      reclaimed++;
-    }
+    
+    // go on
+    segment = next; 
   }
-  return (reclaimed>0);
+
+  return true;
 }
 
 

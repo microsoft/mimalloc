@@ -10,7 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc-types.h"
 
-#if defined(MI_MALLOC_OVERRIDE) && (defined(__APPLE__) || defined(__OpenBSD__))
+#if defined(MI_MALLOC_OVERRIDE) && (defined(__APPLE__) || defined(__OpenBSD__) || defined(__DragonFly__))
 #define MI_TLS_RECURSE_GUARD
 #endif
 
@@ -42,12 +42,17 @@ void       _mi_trace_message(const char* fmt, ...);
 void       _mi_options_init(void);
 void       _mi_fatal_error(const char* fmt, ...) mi_attr_noreturn;
 
-// "init.c"
+// random.c
+void       _mi_random_init(mi_random_ctx_t* ctx);
+void       _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* new_ctx);
+uintptr_t  _mi_random_next(mi_random_ctx_t* ctx);
+uintptr_t  _mi_heap_random_next(mi_heap_t* heap);
+static inline uintptr_t _mi_random_shuffle(uintptr_t x);
+
+// init.c
 extern mi_stats_t       _mi_stats_main;
 extern const mi_page_t  _mi_page_empty;
 bool       _mi_is_main_thread(void);
-uintptr_t  _mi_random_shuffle(uintptr_t x);
-uintptr_t  _mi_random_init(uintptr_t seed /* can be zero */);
 bool       _mi_preloading();  // true while the C runtime is not ready
 
 // os.c
@@ -86,8 +91,9 @@ void       _mi_page_unfull(mi_page_t* page);
 void       _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force);   // free the page
 void       _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);            // abandon the page, to be picked up by another thread...
 void       _mi_heap_delayed_free(mi_heap_t* heap);
+void       _mi_heap_collect_retired(mi_heap_t* heap, bool force);
 
-void       _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay);
+void       _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never);
 size_t     _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append);
 void       _mi_deferred_free(mi_heap_t* heap, bool force);
 
@@ -101,7 +107,6 @@ uint8_t    _mi_bsr(uintptr_t x);                // bit-scan-right, used on BSD i
 // "heap.c"
 void       _mi_heap_destroy_pages(mi_heap_t* heap);
 void       _mi_heap_collect_abandon(mi_heap_t* heap);
-uintptr_t  _mi_heap_random(mi_heap_t* heap);
 void       _mi_heap_set_default_direct(mi_heap_t* heap);
 
 // "stats.c"
@@ -236,7 +241,7 @@ extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate 
 
 static inline mi_heap_t* mi_get_default_heap(void) {
 #ifdef MI_TLS_RECURSE_GUARD
-  // on some platforms, like macOS, the dynamic loader calls `malloc`
+  // on some BSD platforms, like macOS, the dynamic loader calls `malloc`
   // to initialize thread local data. To avoid recursion, we need to avoid
   // accessing the thread local `_mi_default_heap` until our module is loaded
   // and use the statically allocated main heap until that time.
@@ -406,12 +411,30 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
 }
 
 
-// -------------------------------------------------------------------
-// Encoding/Decoding the free list next pointers
-// Note: we pass a `null` value to be used as the `NULL` value for the 
-// end of a free list. This is to prevent the cookie itself to ever 
-// be present among user blocks (as `cookie^0==cookie`).
-// -------------------------------------------------------------------
+/* -------------------------------------------------------------------
+Encoding/Decoding the free list next pointers
+
+This is to protect against buffer overflow exploits where the 
+free list is mutated. Many hardened allocators xor the next pointer `p` 
+with a secret key `k1`, as `p^k1`. This prevents overwriting with known
+values but might be still too weak: if the attacker can guess 
+the pointer `p` this  can reveal `k1` (since `p^k1^p == k1`). 
+Moreover, if multiple blocks can be read as well, the attacker can
+xor both as `(p1^k1) ^ (p2^k1) == p1^p2` which may reveal a lot
+about the pointers (and subsequently `k1`).
+
+Instead mimalloc uses an extra key `k2` and encodes as `((p^k2)<<<k1)+k1`.
+Since these operations are not associative, the above approaches do not
+work so well any more even if the `p` can be guesstimated. For example,
+for the read case we can subtract two entries to discard the `+k1` term, 
+but that leads to `((p1^k2)<<<k1) - ((p2^k2)<<<k1)` at best.
+We include the left-rotation since xor and addition are otherwise linear 
+in the lowest bit. Finally, both keys are unique per page which reduces
+the re-use of keys by a large factor.
+
+We also pass a separate `null` value to be used as `NULL` or otherwise
+`(k2<<<k1)+k1` would appear (too) often as a sentinel value.
+------------------------------------------------------------------- */
 
 static inline bool mi_is_in_same_segment(const void* p, const void* q) {
   return (_mi_ptr_segment(p) == _mi_ptr_segment(q));
@@ -423,52 +446,84 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
   return (_mi_segment_page_of(segment, p) == _mi_segment_page_of(segment, q));
 }
 
-static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, uintptr_t cookie ) {
+static inline uintptr_t mi_rotl(uintptr_t x, uintptr_t shift) {
+  shift %= MI_INTPTR_BITS;
+  return ((x << shift) | (x >> (MI_INTPTR_BITS - shift)));
+}
+static inline uintptr_t mi_rotr(uintptr_t x, uintptr_t shift) {
+  shift %= MI_INTPTR_BITS;
+  return ((x >> shift) | (x << (MI_INTPTR_BITS - shift)));
+}
+
+static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, uintptr_t key1, uintptr_t key2 ) {
   #ifdef MI_ENCODE_FREELIST
-  mi_block_t* b = (mi_block_t*)(block->next ^ cookie);
+  mi_block_t* b = (mi_block_t*)(mi_rotr(block->next - key1, key1) ^ key2);
   if (mi_unlikely((void*)b==null)) { b = NULL; }
   return b;
   #else
-  UNUSED(cookie); UNUSED(null);
+  UNUSED(key1); UNUSED(key2); UNUSED(null);
   return (mi_block_t*)block->next;
   #endif
 }
 
-static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, uintptr_t cookie) {
+static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, uintptr_t key1, uintptr_t key2) {
   #ifdef MI_ENCODE_FREELIST
   if (mi_unlikely(next==NULL)) { next = (mi_block_t*)null; }
-  block->next = (mi_encoded_t)next ^ cookie;
+  block->next = mi_rotl((uintptr_t)next ^ key2, key1) + key1;
   #else
-  UNUSED(cookie); UNUSED(null);
+  UNUSED(key1); UNUSED(key2); UNUSED(null);
   block->next = (mi_encoded_t)next;
   #endif
 }
 
 static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t* block) {
   #ifdef MI_ENCODE_FREELIST
-  mi_block_t* next = mi_block_nextx(page,block,page->cookie);
-  // check for free list corruption: is `next` at least in our segment range?
+  mi_block_t* next = mi_block_nextx(page,block,page->key[0],page->key[1]);
+  // check for free list corruption: is `next` at least in the same page?
   // TODO: check if `next` is `page->block_size` aligned?
-  if (next!=NULL && !mi_is_in_same_page(block, next)) {
+  if (mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next))) {
     _mi_fatal_error("corrupted free list entry of size %zub at %p: value 0x%zx\n", page->block_size, block, (uintptr_t)next);
     next = NULL;
   }
   return next;
   #else
   UNUSED(page);
-  return mi_block_nextx(page,block,0);
+  return mi_block_nextx(page,block,0,0);
   #endif
 }
 
 static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, const mi_block_t* next) {
   #ifdef MI_ENCODE_FREELIST
-  mi_block_set_nextx(page,block,next, page->cookie);
+  mi_block_set_nextx(page,block,next, page->key[0], page->key[1]);
   #else
   UNUSED(page);
-  mi_block_set_nextx(page,block, next,0);
+  mi_block_set_nextx(page,block, next,0,0);
   #endif
 }
 
+// -------------------------------------------------------------------
+// Fast "random" shuffle
+// -------------------------------------------------------------------
+
+static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
+  if (x==0) { x = 17; }   // ensure we don't get stuck in generating zeros
+#if (MI_INTPTR_SIZE==8)
+  // by Sebastiano Vigna, see: <http://xoshiro.di.unimi.it/splitmix64.c>
+  x ^= x >> 30;
+  x *= 0xbf58476d1ce4e5b9UL;
+  x ^= x >> 27;
+  x *= 0x94d049bb133111ebUL;
+  x ^= x >> 31;
+#elif (MI_INTPTR_SIZE==4)
+  // by Chris Wellons, see: <https://nullprogram.com/blog/2018/07/31/>
+  x ^= x >> 16;
+  x *= 0x7feb352dUL;
+  x ^= x >> 15;
+  x *= 0x846ca68bUL;
+  x ^= x >> 16;
+#endif
+  return x;
+}
 
 // -------------------------------------------------------------------
 // Optimize numa node access for the common case (= one node)

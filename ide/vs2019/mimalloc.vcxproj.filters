@@ -46,6 +46,9 @@
     <ClCompile Include="..\..\src\bitmap.inc.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\random.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc.h">
