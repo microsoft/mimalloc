@@ -602,6 +602,7 @@ static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_i
 
   // ensure the memory is committed
   mi_segment_ensure_committed(segment, _mi_page_start(segment,page,NULL), slice_count * MI_SEGMENT_SLICE_SIZE, tld->stats);
+  page->is_reset = false;
   segment->used++;
   return page;
 }
