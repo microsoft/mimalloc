@@ -282,10 +282,10 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
     _mi_warning_message("failed to reserve %zu gb huge pages\n", pages);
     return ENOMEM;
   }
-  _mi_verbose_message("reserved %zu gb huge pages\n", pages_reserved);
+  _mi_verbose_message("reserved %zu gb huge pages (of the %zu gb requested)\n", pages_reserved, pages);
 
   size_t bcount = mi_block_count_of_size(hsize);
-  size_t fields = (bcount + MI_BITMAP_FIELD_BITS - 1) / MI_BITMAP_FIELD_BITS;
+  size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);
   size_t asize = sizeof(mi_arena_t) + (2*fields*sizeof(mi_bitmap_field_t));
   mi_arena_t* arena = (mi_arena_t*)_mi_os_alloc(asize, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
   if (arena == NULL) {
@@ -300,11 +300,12 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
   arena->is_zero_init = true;
   arena->is_committed = true;
   arena->search_idx = 0;
-  arena->blocks_dirty = &arena->blocks_inuse[bcount];
+  arena->blocks_dirty = &arena->blocks_inuse[fields]; // just after inuse bitmap
   arena->blocks_committed = NULL;
   // the bitmaps are already zero initialized due to os_alloc
   // just claim leftover blocks if needed
-  size_t post = (fields * MI_BITMAP_FIELD_BITS) - bcount;
+  ptrdiff_t post = (fields * MI_BITMAP_FIELD_BITS) - bcount;
+  mi_assert_internal(post >= 0);
   if (post > 0) {
     // don't use leftover bits at the end
     mi_bitmap_index_t postidx = mi_bitmap_index_create(fields - 1, MI_BITMAP_FIELD_BITS - post);
