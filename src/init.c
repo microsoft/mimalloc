@@ -390,7 +390,7 @@ static void mi_process_load(void) {
   const char* msg = NULL;
   mi_allocator_init(&msg);
   if (msg != NULL && (mi_option_is_enabled(mi_option_verbose) || mi_option_is_enabled(mi_option_show_errors))) {
-    _mi_fputs(NULL,NULL,msg);
+    _mi_fputs(NULL,NULL,NULL,msg);
   }
 }
 

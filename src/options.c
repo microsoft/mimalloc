@@ -238,10 +238,11 @@ static volatile _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT
 // inside the C runtime causes another message.
 static mi_decl_thread bool recurse = false;
 
-void _mi_fputs(mi_output_fun* out, const char* prefix, const char* message) {
+void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message) {
   if (recurse) return;
-  void* arg = NULL;
-  if (out==NULL || (FILE*)out==stdout || (FILE*)out==stderr) out = mi_out_get_default(&arg);
+  if (out==NULL || (FILE*)out==stdout || (FILE*)out==stderr) { // TODO: use mi_out_stderr for stderr?
+    out = mi_out_get_default(&arg);
+  }
   recurse = true;
   if (prefix != NULL) out(prefix,arg);
   out(message,arg);
@@ -251,21 +252,21 @@ void _mi_fputs(mi_output_fun* out, const char* prefix, const char* message) {
 
 // Define our own limited `fprintf` that avoids memory allocation.
 // We do this using `snprintf` with a limited buffer.
-static void mi_vfprintf( mi_output_fun* out, const char* prefix, const char* fmt, va_list args ) {
+static void mi_vfprintf( mi_output_fun* out, void* arg, const char* prefix, const char* fmt, va_list args ) {
   char buf[512];
   if (fmt==NULL) return;
   if (recurse) return;
   recurse = true;
   vsnprintf(buf,sizeof(buf)-1,fmt,args);
   recurse = false;
-  _mi_fputs(out,prefix,buf);
+  _mi_fputs(out,arg,prefix,buf);
 }
 
 
-void _mi_fprintf( mi_output_fun* out, const char* fmt, ... ) {
+void _mi_fprintf( mi_output_fun* out, void* arg, const char* fmt, ... ) {
   va_list args;
   va_start(args,fmt);
-  mi_vfprintf(out,NULL,fmt,args);
+  mi_vfprintf(out,arg,NULL,fmt,args);
   va_end(args);
 }
 
@@ -273,7 +274,7 @@ void _mi_trace_message(const char* fmt, ...) {
   if (mi_option_get(mi_option_verbose) <= 1) return;  // only with verbose level 2 or higher
   va_list args;
   va_start(args, fmt);
-  mi_vfprintf(NULL, "mimalloc: ", fmt, args);
+  mi_vfprintf(NULL, NULL, "mimalloc: ", fmt, args);
   va_end(args);
 }
 
@@ -281,7 +282,7 @@ void _mi_verbose_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_verbose)) return;
   va_list args;
   va_start(args,fmt);
-  mi_vfprintf(NULL, "mimalloc: ", fmt, args);
+  mi_vfprintf(NULL, NULL, "mimalloc: ", fmt, args);
   va_end(args);
 }
 
@@ -290,7 +291,7 @@ void _mi_error_message(const char* fmt, ...) {
   if (mi_atomic_increment(&error_count) > mi_max_error_count) return;
   va_list args;
   va_start(args,fmt);
-  mi_vfprintf(NULL, "mimalloc: error: ", fmt, args);
+  mi_vfprintf(NULL, NULL, "mimalloc: error: ", fmt, args);
   va_end(args);
   mi_assert(false);
 }
@@ -300,14 +301,14 @@ void _mi_warning_message(const char* fmt, ...) {
   if (mi_atomic_increment(&error_count) > mi_max_error_count) return;
   va_list args;
   va_start(args,fmt);
-  mi_vfprintf(NULL, "mimalloc: warning: ", fmt, args);
+  mi_vfprintf(NULL, NULL, "mimalloc: warning: ", fmt, args);
   va_end(args);
 }
 
 
 #if MI_DEBUG
 void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, const char* func ) {
-  _mi_fprintf(NULL,"mimalloc: assertion failed: at \"%s\":%u, %s\n  assertion: \"%s\"\n", fname, line, (func==NULL?"":func), assertion);
+  _mi_fprintf(NULL, NULL, "mimalloc: assertion failed: at \"%s\":%u, %s\n  assertion: \"%s\"\n", fname, line, (func==NULL?"":func), assertion);
   abort();
 }
 #endif
@@ -315,7 +316,7 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, co
 mi_attr_noreturn void _mi_fatal_error(const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  mi_vfprintf(NULL, "mimalloc: fatal: ", fmt, args);
+  mi_vfprintf(NULL, NULL, "mimalloc: fatal: ", fmt, args);
   va_end(args);
   #if (MI_SECURE>=0)
   abort();
