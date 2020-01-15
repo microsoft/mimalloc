@@ -111,8 +111,8 @@ mi_decl_export size_t mi_good_size(size_t size)       mi_attr_noexcept;
 typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat);
 mi_decl_export void mi_register_deferred_free(mi_deferred_free_fun* deferred_free) mi_attr_noexcept;
 
-typedef void (mi_output_fun)(const char* msg);
-mi_decl_export void mi_register_output(mi_output_fun* out) mi_attr_noexcept;
+typedef void (mi_output_fun)(const char* msg, void* arg);
+mi_decl_export void mi_register_output(mi_output_fun* out, void* arg) mi_attr_noexcept;
 
 mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
 mi_decl_export int  mi_version(void)          mi_attr_noexcept;

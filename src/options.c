@@ -140,7 +140,8 @@ void mi_option_disable(mi_option_t option) {
 }
 
 
-static void mi_out_stderr(const char* msg) {
+static void mi_out_stderr(const char* msg, void* arg) {
+  UNUSED(arg);
   #ifdef _WIN32
   // on windows with redirection, the C runtime cannot handle locale dependent output
   // after the main thread closes so we use direct console output.
@@ -160,7 +161,8 @@ static void mi_out_stderr(const char* msg) {
 static char out_buf[MI_MAX_DELAY_OUTPUT+1];
 static _Atomic(uintptr_t) out_len;
 
-static void mi_out_buf(const char* msg) {
+static void mi_out_buf(const char* msg, void* arg) {
+  UNUSED(arg);
   if (msg==NULL) return;
   if (mi_atomic_read_relaxed(&out_len)>=MI_MAX_DELAY_OUTPUT) return;
   size_t n = strlen(msg);
@@ -175,14 +177,14 @@ static void mi_out_buf(const char* msg) {
   memcpy(&out_buf[start], msg, n);
 }
 
-static void mi_out_buf_flush(mi_output_fun* out, bool no_more_buf) {
+static void mi_out_buf_flush(mi_output_fun* out, bool no_more_buf, void* arg) {
   if (out==NULL) return;
   // claim (if `no_more_buf == true`, no more output will be added after this point)
   size_t count = mi_atomic_addu(&out_len, (no_more_buf ? MI_MAX_DELAY_OUTPUT : 1));
   // and output the current contents
   if (count>MI_MAX_DELAY_OUTPUT) count = MI_MAX_DELAY_OUTPUT;
   out_buf[count] = 0;
-  out(out_buf);
+  out(out_buf,arg);
   if (!no_more_buf) {
     out_buf[count] = '\n'; // if continue with the buffer, insert a newline
   }
@@ -191,9 +193,9 @@ static void mi_out_buf_flush(mi_output_fun* out, bool no_more_buf) {
 
 // Once this module is loaded, switch to this routine
 // which outputs to stderr and the delayed output buffer.
-static void mi_out_buf_stderr(const char* msg) {
-  mi_out_stderr(msg);
-  mi_out_buf(msg);
+static void mi_out_buf_stderr(const char* msg, void* arg) {
+  mi_out_stderr(msg,arg);
+  mi_out_buf(msg,arg);
 }
 
 
@@ -206,21 +208,25 @@ static void mi_out_buf_stderr(const char* msg) {
 // For now, don't register output from multiple threads.
 #pragma warning(suppress:4180)
 static mi_output_fun* volatile mi_out_default; // = NULL
+static volatile _Atomic(void*) mi_out_arg; // = NULL
 
-static mi_output_fun* mi_out_get_default(void) {
+static mi_output_fun* mi_out_get_default(void** parg) {
+  if (parg != NULL) { *parg = mi_atomic_read_ptr(&mi_out_arg); }
   mi_output_fun* out = mi_out_default;
   return (out == NULL ? &mi_out_buf : out);
 }
 
-void mi_register_output(mi_output_fun* out) mi_attr_noexcept {
+void mi_register_output(mi_output_fun* out, void* arg) mi_attr_noexcept {
   mi_out_default = (out == NULL ? &mi_out_stderr : out); // stop using the delayed output buffer
-  if (out!=NULL) mi_out_buf_flush(out,true);             // output all the delayed output now
+  mi_atomic_write_ptr(&mi_out_arg, arg);
+  if (out!=NULL) mi_out_buf_flush(out,true,arg);         // output all the delayed output now
 }
 
 // add stderr to the delayed output after the module is loaded
 static void mi_add_stderr_output() {
-  mi_out_buf_flush(&mi_out_stderr, false); // flush current contents to stderr
-  mi_out_default = &mi_out_buf_stderr;     // and add stderr to the delayed output
+  mi_assert_internal(mi_out_default == NULL);
+  mi_out_buf_flush(&mi_out_stderr, false, NULL); // flush current contents to stderr
+  mi_out_default = &mi_out_buf_stderr;           // and add stderr to the delayed output
 }
 
 // --------------------------------------------------------
@@ -234,10 +240,11 @@ static mi_decl_thread bool recurse = false;
 
 void _mi_fputs(mi_output_fun* out, const char* prefix, const char* message) {
   if (recurse) return;
-  if (out==NULL || (FILE*)out==stdout || (FILE*)out==stderr) out = mi_out_get_default();
+  void* arg = NULL;
+  if (out==NULL || (FILE*)out==stdout || (FILE*)out==stderr) out = mi_out_get_default(&arg);
   recurse = true;
-  if (prefix != NULL) out(prefix);
-  out(message);
+  if (prefix != NULL) out(prefix,arg);
+  out(message,arg);
   recurse = false;
   return;
 }
