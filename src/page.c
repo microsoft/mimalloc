@@ -764,18 +764,20 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
 ----------------------------------------------------------- */
 
 static mi_deferred_free_fun* volatile deferred_free = NULL;
+static volatile _Atomic(void*) deferred_arg; // = NULL
 
 void _mi_deferred_free(mi_heap_t* heap, bool force) {
   heap->tld->heartbeat++;
   if (deferred_free != NULL && !heap->tld->recurse) {
     heap->tld->recurse = true;
-    deferred_free(force, heap->tld->heartbeat);
+    deferred_free(force, heap->tld->heartbeat, mi_atomic_read_ptr_relaxed(&deferred_arg));
     heap->tld->recurse = false;
   }
 }
 
-void mi_register_deferred_free(mi_deferred_free_fun* fn) mi_attr_noexcept {
+void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noexcept {
   deferred_free = fn;
+  mi_atomic_write_ptr(&deferred_arg, arg);
 }
 
 
