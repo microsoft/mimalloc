@@ -417,6 +417,8 @@ typedef struct mi_os_tld_s {
 typedef struct mi_segments_tld_s {
   mi_segment_queue_t  small_free;   // queue of segments with free small pages
   mi_segment_queue_t  medium_free;  // queue of segments with free medium pages
+  mi_page_queue_t     small_pages_free;   // page queue of free small pages 
+  mi_page_queue_t     medium_pages_free;  // page queue of free medium pages 
   size_t              count;        // current number of segments;
   size_t              peak_count;   // peak number of segments
   size_t              current_size; // current size of all segments

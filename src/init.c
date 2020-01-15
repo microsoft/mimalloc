@@ -105,9 +105,12 @@ mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 static mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main,
-  { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats, tld_main_os }, // segments
+  { { NULL, NULL }, {NULL ,NULL}, {NULL ,NULL, 0}, {NULL ,NULL, 0}, 
+    0, 0, 0, 0, 0, 0, NULL, 
+    tld_main_stats, tld_main_os 
+  }, // segments
   { 0, tld_main_stats },  // os
-  { MI_STATS_NULL }             // stats
+  { MI_STATS_NULL }       // stats
 };
 
 #if MI_INTPTR_SIZE==8
