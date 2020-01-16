@@ -15,10 +15,10 @@ terms of the MIT license. A copy of the license can be found in the file
 // ------------------------------------------------------
 
 #ifdef __cplusplus
-  #if (__GNUC__ <= 5) || (_MSC_VER <= 1900)
-    #define mi_attr_noexcept   throw()
-  #else
+  #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
     #define mi_attr_noexcept   noexcept
+  #else
+    #define mi_attr_noexcept   throw()
   #endif
 #else
   #define mi_attr_noexcept
