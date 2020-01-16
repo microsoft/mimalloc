@@ -7,7 +7,6 @@
 This header can be used to hook mimalloc into STL containers in place of 
 std::allocator.
 -----------------------------------------------------------------------------*/
-#include <mimalloc.h>
 #include <type_traits> // true_type
 
 #pragma warning(disable: 4100)

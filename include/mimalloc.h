@@ -73,6 +73,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdbool.h>    // bool
 
 #ifdef __cplusplus
+#include <mimalloc-stl-allocator.h>
+
 extern "C" {
 #endif
 
