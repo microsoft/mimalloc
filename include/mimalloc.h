@@ -73,7 +73,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdbool.h>    // bool
 
 #ifdef __cplusplus
-#include <mimalloc-stl-allocator.h>
+#include <type_traits> // true_type
 
 extern "C" {
 #endif
@@ -328,5 +328,41 @@ mi_decl_export void* mi_new_aligned_nothrow(size_t n, size_t alignment) mi_attr_
 }
 #endif
 
+#ifdef __cplusplus
+
+// ------------------------------------------------------
+// STL allocator - an extension to hook mimalloc into STL 
+// containers in place of std::allocator.
+// ------------------------------------------------------
+
+#pragma warning(disable: 4100)
+template <class T>
+struct mi_stl_allocator {
+  typedef T value_type;
+  
+  using propagate_on_container_copy_assignment = std::true_type;
+  using propagate_on_container_move_assignment = std::true_type;
+  using propagate_on_container_swap = std::true_type;
+  using is_always_equal = std::true_type;
+
+  mi_stl_allocator() noexcept {}
+  mi_stl_allocator(const mi_stl_allocator& other) noexcept {}
+  template <class U>
+  mi_stl_allocator(const mi_stl_allocator<U>& other) noexcept {}
+
+  T* allocate(size_t n, const void* hint = 0) {
+    return (T*)mi_mallocn(n, sizeof(T));
+  }
+
+  void deallocate(T* p, size_t n) {
+    mi_free(p);
+  }
+};
+
+template <class T1, class T2>
+bool operator==(const mi_stl_allocator<T1>& lhs, const mi_stl_allocator<T2>& rhs) noexcept { return true; }
+template <class T1, class T2>
+bool operator!=(const mi_stl_allocator<T1>& lhs, const mi_stl_allocator<T2>& rhs) noexcept { return false; }
+#endif
 
 #endif
