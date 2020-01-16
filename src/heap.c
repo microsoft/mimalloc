@@ -34,7 +34,7 @@ static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void
     mi_page_t* page = pq->first;
     while(page != NULL) {
       mi_page_t* next = page->next; // save next in case the page gets removed from the queue
-      mi_assert_internal(page->heap == heap);
+      mi_assert_internal(mi_page_heap(page) == heap);
       count++;
       if (!fn(heap, pq, page, arg1, arg2)) return false;
       page = next; // and continue
@@ -50,7 +50,7 @@ static bool mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   UNUSED(arg1);
   UNUSED(arg2);
   UNUSED(pq);
-  mi_assert_internal(page->heap == heap);
+  mi_assert_internal(mi_page_heap(page) == heap);
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert_internal(segment->thread_id == heap->thread_id);
   mi_assert_expensive(_mi_page_is_valid(page));
@@ -118,13 +118,18 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
       // this may free some segments (but also take ownership of abandoned pages)
       _mi_segment_try_reclaim_abandoned(heap, false, &heap->tld->segments);
     }
-    #if MI_DEBUG
-    else if (collect == ABANDON && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
+    else if (
+              #ifdef NDEBUG
+              collect == FORCE
+              #else
+              collect >= FORCE
+              #endif 
+              && _mi_is_main_thread() && mi_heap_is_backing(heap)) 
+    {
       // the main thread is abandoned, try to free all abandoned segments.
       // if all memory is freed by now, all segments should be freed.
       _mi_segment_try_reclaim_abandoned(heap, true, &heap->tld->segments);
     }
-    #endif
   }
 
   // if abandoning, mark all pages to no longer add to delayed_free
@@ -245,25 +250,27 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);  
 
   // stats
-  if (page->block_size > MI_LARGE_OBJ_SIZE_MAX) {
-    if (page->block_size > MI_HUGE_OBJ_SIZE_MAX) {
-      _mi_stat_decrease(&heap->tld->stats.giant,page->block_size);
+  const size_t bsize = mi_page_block_size(page);
+  if (bsize > MI_LARGE_OBJ_SIZE_MAX) {
+    if (bsize > MI_HUGE_OBJ_SIZE_MAX) {
+      _mi_stat_decrease(&heap->tld->stats.giant, bsize);
     }
     else {
-      _mi_stat_decrease(&heap->tld->stats.huge, page->block_size);
+      _mi_stat_decrease(&heap->tld->stats.huge, bsize);
     }
   }
-  #if (MI_STAT>1)
-  size_t inuse = page->used - page->thread_freed;
-  if (page->block_size <= MI_LARGE_OBJ_SIZE_MAX)  {
-    mi_heap_stat_decrease(heap,normal[_mi_bin(page->block_size)], inuse);
+#if (MI_STAT>1)
+  _mi_page_free_collect(page, false);  // update used count
+  const size_t inuse = page->used;
+  if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+    mi_heap_stat_decrease(heap, normal[_mi_bin(bsize)], inuse);
   }
-  mi_heap_stat_decrease(heap,malloc, page->block_size * inuse);  // todo: off for aligned blocks...
-  #endif
+  mi_heap_stat_decrease(heap, malloc, bsize * inuse);  // todo: off for aligned blocks...
+#endif
 
-  // pretend it is all free now
-  mi_assert_internal(page->thread_freed<=0xFFFF);
-  page->used = (uint16_t)page->thread_freed;
+  /// pretend it is all free now
+  mi_assert_internal(mi_page_thread_free(page) == NULL);
+  page->used = 0;
 
   // and free the page
   _mi_segment_page_free(page,false /* no force? */, &heap->tld->segments);
@@ -374,7 +381,7 @@ static mi_heap_t* mi_heap_of_block(const void* p) {
   bool valid = (_mi_ptr_cookie(segment) == segment->cookie);
   mi_assert_internal(valid);
   if (mi_unlikely(!valid)) return NULL;
-  return _mi_segment_page_of(segment,p)->heap;
+  return mi_page_heap(_mi_segment_page_of(segment,p));
 }
 
 bool mi_heap_contains_block(mi_heap_t* heap, const void* p) {
@@ -390,7 +397,7 @@ static bool mi_heap_page_check_owned(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
   bool* found = (bool*)vfound;
   mi_segment_t* segment = _mi_page_segment(page);
   void* start = _mi_page_start(segment, page, NULL);
-  void* end   = (uint8_t*)start + (page->capacity * page->block_size);
+  void* end   = (uint8_t*)start + (page->capacity * mi_page_block_size(page));
   *found = (p >= start && p < end);
   return (!*found); // continue if not found
 }
@@ -432,13 +439,14 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
   mi_assert_internal(page->local_free == NULL);
   if (page->used == 0) return true;
 
+  const size_t bsize = mi_page_block_size(page);
   size_t   psize;
   uint8_t* pstart = _mi_page_start(_mi_page_segment(page), page, &psize);
 
   if (page->capacity == 1) {
     // optimize page with one block
     mi_assert_internal(page->used == 1 && page->free == NULL);
-    return visitor(page->heap, area, pstart, page->block_size, arg);
+    return visitor(mi_page_heap(page), area, pstart, bsize, arg);
   }
 
   // create a bitmap of free blocks.
@@ -451,8 +459,8 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
     free_count++;
     mi_assert_internal((uint8_t*)block >= pstart && (uint8_t*)block < (pstart + psize));
     size_t offset = (uint8_t*)block - pstart;
-    mi_assert_internal(offset % page->block_size == 0);
-    size_t blockidx = offset / page->block_size;  // Todo: avoid division?
+    mi_assert_internal(offset % bsize == 0);
+    size_t blockidx = offset / bsize;  // Todo: avoid division?
     mi_assert_internal( blockidx < MI_MAX_BLOCKS);
     size_t bitidx = (blockidx / sizeof(uintptr_t));
     size_t bit = blockidx - (bitidx * sizeof(uintptr_t));
@@ -471,8 +479,8 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
     }
     else if ((m & ((uintptr_t)1 << bit)) == 0) {
       used_count++;
-      uint8_t* block = pstart + (i * page->block_size);
-      if (!visitor(page->heap, area, block, page->block_size, arg)) return false;
+      uint8_t* block = pstart + (i * bsize);
+      if (!visitor(mi_page_heap(page), area, block, bsize, arg)) return false;
     }
   }
   mi_assert_internal(page->used == used_count);
@@ -487,12 +495,13 @@ static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
   UNUSED(pq);
   mi_heap_area_visit_fun* fun = (mi_heap_area_visit_fun*)vfun;
   mi_heap_area_ex_t xarea;
+  const size_t bsize = mi_page_block_size(page);
   xarea.page = page;
-  xarea.area.reserved = page->reserved * page->block_size;
-  xarea.area.committed = page->capacity * page->block_size;
+  xarea.area.reserved = page->reserved * bsize;
+  xarea.area.committed = page->capacity * bsize;
   xarea.area.blocks = _mi_page_start(_mi_page_segment(page), page, NULL);
-  xarea.area.used  = page->used - page->thread_freed; // race is ok
-  xarea.area.block_size = page->block_size;
+  xarea.area.used = page->used;
+  xarea.area.block_size = bsize;
   return fun(heap, &xarea, arg);
 }
 

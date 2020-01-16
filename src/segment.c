@@ -236,8 +236,8 @@ static void mi_page_reset(mi_segment_t* segment, mi_page_t* page, size_t size, m
   mi_assert_internal(size <= psize);
   size_t reset_size = (size == 0 || size > psize ? psize : size);
   if (size == 0 && segment->page_kind >= MI_PAGE_LARGE && !mi_option_is_enabled(mi_option_eager_page_commit)) {
-    mi_assert_internal(page->block_size > 0);
-    reset_size = page->capacity * page->block_size;
+    mi_assert_internal(page->xblock_size > 0);
+    reset_size = page->capacity * mi_page_block_size(page);
   }
   _mi_mem_reset(start, reset_size, tld->os);
 }
@@ -251,8 +251,8 @@ static void mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size,
   uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
   size_t unreset_size = (size == 0 || size > psize ? psize : size);
   if (size == 0 && segment->page_kind >= MI_PAGE_LARGE && !mi_option_is_enabled(mi_option_eager_page_commit)) {
-    mi_assert_internal(page->block_size > 0);
-    unreset_size = page->capacity * page->block_size;
+    mi_assert_internal(page->xblock_size > 0);
+    unreset_size = page->capacity * mi_page_block_size(page);
   }
   bool is_zero = false;
   _mi_mem_unreset(start, unreset_size, &is_zero, tld->os);
@@ -264,18 +264,18 @@ static void mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size,
   The free page queue
 ----------------------------------------------------------- */
 
-// we re-use the heap field for the expiration counter. Since this is a
-// pointer, it can be 32-bit while the clock is always 64-bit. To guard
+// we re-use the `used` field for the expiration counter. Since this is a
+// a 32-bit field while the clock is always 64-bit we need to guard
 // against overflow, we use substraction to check for expiry which work
 // as long as the reset delay is under (2^30 - 1) milliseconds (~12 days)
 static void mi_page_reset_set_expire(mi_page_t* page) {
-  intptr_t expire = (intptr_t)(_mi_clock_now() + mi_option_get(mi_option_reset_delay));
-  page->heap = (mi_heap_t*)expire;
+  uint32_t expire = (uint32_t)_mi_clock_now() + mi_option_get(mi_option_reset_delay);
+  page->used = expire;
 }
 
 static bool mi_page_reset_is_expired(mi_page_t* page, mi_msecs_t now) {
-  intptr_t expire = (intptr_t)(page->heap);
-  return (((intptr_t)now - expire) >= 0);
+  int32_t expire = (int32_t)(page->used);
+  return (((int32_t)now - expire) >= 0);
 }
 
 static void mi_pages_reset_add(mi_segment_t* segment, mi_page_t* page, mi_segments_tld_t* tld) {
@@ -320,7 +320,7 @@ static void mi_pages_reset_remove(mi_page_t* page, mi_segments_tld_t* tld) {
   if (page == pq->last)  pq->last = page->prev;
   if (page == pq->first) pq->first = page->next;
   page->next = page->prev = NULL;
-  page->heap = NULL;
+  page->used = 0;
 }
 
 static void mi_pages_reset_remove_all_in_segment(mi_segment_t* segment, mi_segments_tld_t* tld) {
@@ -345,7 +345,7 @@ static void mi_reset_delayed(mi_segments_tld_t* tld) {
   while (page != NULL && mi_page_reset_is_expired(page,now)) {
     mi_page_t* const prev = page->prev; // save previous field
     mi_page_reset(_mi_page_segment(page), page, 0, tld);
-    page->heap = NULL;
+    page->used = 0;
     page->prev = page->next = NULL;
     page = prev;
   }
@@ -386,7 +386,7 @@ static uint8_t* mi_segment_raw_page_start(const mi_segment_t* segment, const mi_
   }
 
   if (page_size != NULL) *page_size = psize;
-  mi_assert_internal(page->block_size == 0 || _mi_ptr_page(p) == page);
+  mi_assert_internal(page->xblock_size == 0 || _mi_ptr_page(p) == page);
   mi_assert_internal(_mi_ptr_segment(p) == segment);
   return p;
 }
@@ -409,7 +409,7 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
   }
 
   if (page_size != NULL) *page_size = psize;
-  mi_assert_internal(page->block_size==0 || _mi_ptr_page(p) == page);
+  mi_assert_internal(page->xblock_size==0 || _mi_ptr_page(p) == page);
   mi_assert_internal(_mi_ptr_segment(p) == segment);
   return p;
 }
@@ -740,7 +740,8 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_seg
   mi_assert_internal(mi_page_all_free(page));
   mi_assert_internal(page->is_committed);
   mi_assert_internal(mi_page_not_in_queue(page, tld));
-  size_t inuse = page->capacity * page->block_size;
+
+  size_t inuse = page->capacity * mi_page_block_size(page);
   _mi_stat_decrease(&tld->stats->page_committed, inuse);
   _mi_stat_decrease(&tld->stats->pages, 1);
 
@@ -757,10 +758,10 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_seg
   //mi_page_reset(segment, page, 0 /*used_size*/, tld);
 
   // zero the page data, but not the segment fields and block_size (for page size calculations)
-  size_t block_size = page->block_size;
+  uint32_t block_size = page->xblock_size;
   ptrdiff_t ofs = offsetof(mi_page_t,capacity);
   memset((uint8_t*)page + ofs, 0, sizeof(*page) - ofs);
-  page->block_size = block_size;
+  page->xblock_size = block_size;
   segment->used--;
 
   // add to the free page list for reuse/reset
@@ -852,6 +853,8 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
   mi_assert(page != NULL);
+  mi_assert_internal(mi_page_thread_free_flag(page)==MI_NEVER_DELAYED_FREE);
+  mi_assert_internal(mi_page_heap(page) == NULL);
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert_expensive(!mi_pages_reset_contains(page, tld));
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
@@ -912,15 +915,21 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
         mi_assert_internal(!page->is_reset);
         mi_assert_internal(page->is_committed);
         mi_assert_internal(mi_page_not_in_queue(page, tld));
+        mi_assert_internal(mi_page_thread_free_flag(page)==MI_NEVER_DELAYED_FREE);
+        mi_assert_internal(mi_page_heap(page) == NULL);
         segment->abandoned--;
         mi_assert(page->next == NULL);
         _mi_stat_decrease(&tld->stats->pages_abandoned, 1);
+        // set the heap again and allow delayed free again
+        mi_page_set_heap(page, heap);
+        _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, true); // override never (after heap is set)
+        _mi_page_free_collect(page, false); // ensure used count is up to date
         if (mi_page_all_free(page)) {
-          // if everything free by now, free the page
+          // if everything free already, clear the page directly
           mi_segment_page_clear(segment,page,tld);
         }
         else {
-          // otherwise reclaim it
+          // otherwise reclaim it into the heap
           _mi_page_reclaim(heap,page);
         }
       }

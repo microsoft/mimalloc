@@ -33,8 +33,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 // "options.c"
-void       _mi_fputs(mi_output_fun* out, const char* prefix, const char* message);
-void       _mi_fprintf(mi_output_fun* out, const char* fmt, ...);
+void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
+void       _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
 void       _mi_error_message(const char* fmt, ...);
 void       _mi_warning_message(const char* fmt, ...);
 void       _mi_verbose_message(const char* fmt, ...);
@@ -308,7 +308,7 @@ static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const 
 
 // Quick page start for initialized pages
 static inline uint8_t* _mi_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size) {
-  const size_t bsize = page->block_size;
+  const size_t bsize = page->xblock_size;
   mi_assert_internal(bsize > 0 && (bsize%sizeof(void*)) == 0);
   return _mi_segment_page_start(segment, page, bsize, page_size, NULL);
 }
@@ -318,7 +318,40 @@ static inline mi_page_t* _mi_ptr_page(void* p) {
   return _mi_segment_page_of(_mi_ptr_segment(p), p);
 }
 
+// Get the block size of a page (special cased for huge objects)
+static inline size_t mi_page_block_size(const mi_page_t* page) {
+  const size_t bsize = page->xblock_size;
+  mi_assert_internal(bsize > 0);
+  if (mi_likely(bsize < MI_HUGE_BLOCK_SIZE)) {
+    return bsize;
+  }
+  else {
+    size_t psize;
+    _mi_segment_page_start(_mi_page_segment(page), page, bsize, &psize, NULL);
+    return psize;
+  }
+}
+
 // Thread free access
+static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
+  return (mi_block_t*)(mi_atomic_read_relaxed(&page->xthread_free) & ~3);
+}
+
+static inline mi_delayed_t mi_page_thread_free_flag(const mi_page_t* page) {
+  return (mi_delayed_t)(mi_atomic_read_relaxed(&page->xthread_free) & 3);
+}
+
+// Heap access
+static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
+  return (mi_heap_t*)(mi_atomic_read_relaxed(&page->xheap));
+}
+
+static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
+  mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
+  mi_atomic_write(&page->xheap,(uintptr_t)heap);
+}
+
+// Thread free flag helpers
 static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
   return (mi_block_t*)(tf & ~0x03);
 }
@@ -338,7 +371,7 @@ static inline mi_thread_free_t mi_tf_set_block(mi_thread_free_t tf, mi_block_t* 
 // are all blocks in a page freed?
 static inline bool mi_page_all_free(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  return (page->used - page->thread_freed == 0);
+  return (page->used == 0);
 }
 
 // are there immediately available blocks
@@ -349,8 +382,8 @@ static inline bool mi_page_immediate_available(const mi_page_t* page) {
 // are there free blocks in this page?
 static inline bool mi_page_has_free(mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  bool hasfree = (mi_page_immediate_available(page) || page->local_free != NULL || (mi_tf_block(page->thread_free) != NULL));
-  mi_assert_internal(hasfree || page->used - page->thread_freed == page->capacity);
+  bool hasfree = (mi_page_immediate_available(page) || page->local_free != NULL || (mi_page_thread_free(page) != NULL));
+  mi_assert_internal(hasfree || page->used == page->capacity);
   return hasfree;
 }
 
@@ -364,7 +397,7 @@ static inline bool mi_page_all_used(mi_page_t* page) {
 static inline bool mi_page_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / 8U;
-  return (page->reserved - page->used + page->thread_freed <= frac);
+  return (page->reserved - page->used <= frac);
 }
 
 static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size) {
@@ -467,7 +500,7 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   // check for free list corruption: is `next` at least in the same page?
   // TODO: check if `next` is `page->block_size` aligned?
   if (mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next))) {
-    _mi_fatal_error("corrupted free list entry of size %zub at %p: value 0x%zx\n", page->block_size, block, (uintptr_t)next);
+    _mi_fatal_error("corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (uintptr_t)next);
     next = NULL;
   }
   return next;

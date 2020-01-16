@@ -124,6 +124,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "define more bins"
 #endif
 
+// Used as a special value to encode block sizes in 32 bits.
+#define MI_HUGE_BLOCK_SIZE   ((uint32_t)MI_HUGE_OBJ_SIZE_MAX)
+
 // The free lists use encoded next fields
 // (Only actually encodes when MI_ENCODED_FREELIST is defined.)
 typedef uintptr_t mi_encoded_t;
@@ -136,10 +139,10 @@ typedef struct mi_block_s {
 
 // The delayed flags are used for efficient multi-threaded free-ing
 typedef enum mi_delayed_e {
-  MI_NO_DELAYED_FREE = 0,
-  MI_USE_DELAYED_FREE = 1,
-  MI_DELAYED_FREEING = 2,
-  MI_NEVER_DELAYED_FREE = 3
+  MI_USE_DELAYED_FREE   = 0, // push on the owning heap thread delayed list
+  MI_DELAYED_FREEING    = 1, // temporary: another thread is accessing the owning heap
+  MI_NO_DELAYED_FREE    = 2, // optimize: push on page local thread free queue if another block is already in the heap thread delayed free list
+  MI_NEVER_DELAYED_FREE = 3  // sticky, only resets on page reclaim
 } mi_delayed_t;
 
 
@@ -167,14 +170,28 @@ typedef uintptr_t mi_thread_free_t;
 // implement a monotonic heartbeat. The `thread_free` list is needed for
 // avoiding atomic operations in the common case.
 //
-// `used - thread_freed` == actual blocks that are in use (alive)
-// `used - thread_freed + |free| + |local_free| == capacity`
 //
-// note: we don't count `freed` (as |free|) instead of `used` to reduce
-//       the number of memory accesses in the `mi_page_all_free` function(s).
-// note: the funny layout here is due to:
-// - access is optimized for `mi_free` and `mi_page_alloc`
-// - using `uint16_t` does not seem to slow things down
+// `used - |thread_free|` == actual blocks that are in use (alive)
+// `used - |thread_free| + |free| + |local_free| == capacity`
+//
+// We don't count `freed` (as |free|) but use `used` to reduce
+// the number of memory accesses in the `mi_page_all_free` function(s).
+//
+// Notes: 
+// - Access is optimized for `mi_free` and `mi_page_alloc` (in `alloc.c`)
+// - Using `uint16_t` does not seem to slow things down
+// - The size is 8 words on 64-bit which helps the page index calculations
+//   (and 10 words on 32-bit, and encoded free lists add 2 words. Sizes 10 
+//    and 12 are still good for address calculation)
+// - To limit the structure size, the `xblock_size` is 32-bits only; for 
+//   blocks > MI_HUGE_BLOCK_SIZE the size is determined from the segment page size
+// - `thread_free` uses the bottom bits as a delayed-free flags to optimize
+//   concurrent frees where only the first concurrent free adds to the owning
+//   heap `thread_delayed_free` list (see `alloc.c:mi_free_block_mt`).
+//   The invariant is that no-delayed-free is only set if there is
+//   at least one block that will be added, or as already been added, to 
+//   the owning heap `thread_delayed_free` list. This guarantees that pages
+//   will be freed correctly even if only other threads free blocks.
 typedef struct mi_page_s {
   // "owned" by the segment
   uint8_t               segment_idx;       // index in the segment `pages` array, `page == &segment->pages[page->segment_idx]`
@@ -194,23 +211,15 @@ typedef struct mi_page_s {
   #ifdef MI_ENCODE_FREELIST
   uintptr_t             key[2];            // two random keys to encode the free lists (see `_mi_block_next`)
   #endif
-  size_t                used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
+  uint32_t              used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
+  uint32_t              xblock_size;       // size available in each block (always `>0`) 
 
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
-  volatile _Atomic(uintptr_t)        thread_freed;  // at least this number of blocks are in `thread_free`
-  volatile _Atomic(mi_thread_free_t) thread_free;   // list of deferred free blocks freed by other threads
-
-  // less accessed info
-  size_t                block_size;        // size available in each block (always `>0`)
-  mi_heap_t*            heap;              // the owning heap
+  volatile _Atomic(mi_thread_free_t) xthread_free;   // list of deferred free blocks freed by other threads
+  volatile _Atomic(uintptr_t)        xheap;
+  
   struct mi_page_s*     next;              // next page owned by this thread with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by this thread with the same `block_size`
-
-  // improve page index calculation
-  // without padding: 10 words on 64-bit, 11 on 32-bit. Secure adds two words
-  #if (MI_INTPTR_SIZE==4)
-  void*                 padding[1];        // 12/14 words on 32-bit plain
-  #endif
 } mi_page_t;
 
 

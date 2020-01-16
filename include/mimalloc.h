@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 130   // major + 2 digits minor
+#define MI_MALLOC_VERSION 140   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -108,22 +108,23 @@ mi_decl_export mi_decl_allocator void* mi_reallocf(void* p, size_t newsize)     
 mi_decl_export size_t mi_usable_size(const void* p)   mi_attr_noexcept;
 mi_decl_export size_t mi_good_size(size_t size)       mi_attr_noexcept;
 
-typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat);
-mi_decl_export void mi_register_deferred_free(mi_deferred_free_fun* deferred_free) mi_attr_noexcept;
+typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat, void* arg);
+mi_decl_export void mi_register_deferred_free(mi_deferred_free_fun* deferred_free, void* arg) mi_attr_noexcept;
 
-typedef void (mi_output_fun)(const char* msg);
-mi_decl_export void mi_register_output(mi_output_fun* out) mi_attr_noexcept;
+typedef void (mi_output_fun)(const char* msg, void* arg);
+mi_decl_export void mi_register_output(mi_output_fun* out, void* arg) mi_attr_noexcept;
 
 mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
 mi_decl_export int  mi_version(void)          mi_attr_noexcept;
 mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
 mi_decl_export void mi_stats_merge(void)      mi_attr_noexcept;
-mi_decl_export void mi_stats_print(mi_output_fun* out) mi_attr_noexcept;
+mi_decl_export void mi_stats_print(void* out) mi_attr_noexcept;  // backward compatibility: `out` is ignored and should be NULL
+mi_decl_export void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
 
 mi_decl_export void mi_process_init(void)     mi_attr_noexcept;
 mi_decl_export void mi_thread_init(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
-mi_decl_export void mi_thread_stats_print(mi_output_fun* out) mi_attr_noexcept;
+mi_decl_export void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
 
 
 // -------------------------------------------------------------------------------------
