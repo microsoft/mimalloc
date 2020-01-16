@@ -326,12 +326,15 @@ static void mi_pages_reset_remove(mi_page_t* page, mi_segments_tld_t* tld) {
   page->used = 0;
 }
 
-static void mi_pages_reset_remove_all_in_segment(mi_segment_t* segment, mi_segments_tld_t* tld) {
-  if (segment->mem_is_fixed) return;
+static void mi_pages_reset_remove_all_in_segment(mi_segment_t* segment, bool force_reset, mi_segments_tld_t* tld) {
+  if (segment->mem_is_fixed) return; // never reset in huge OS pages
   for (size_t i = 0; i < segment->capacity; i++) {
     mi_page_t* page = &segment->pages[i];
     if (!page->segment_in_use && !page->is_reset) {
       mi_pages_reset_remove(page, tld);
+      if (force_reset) {
+        mi_page_reset(segment, page, 0, tld); 
+      }
     }
     else {
       mi_assert_internal(mi_page_not_in_queue(page,tld));
@@ -668,9 +671,11 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
 
 
 static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
-  UNUSED(force);  
-  mi_assert(segment != NULL);
-  mi_pages_reset_remove_all_in_segment(segment, tld);
+  UNUSED(force);
+  mi_assert(segment != NULL);  
+  // note: don't reset pages even on abandon as the whole segment is freed? (and ready for reuse)
+  bool force_reset = (force && mi_option_is_enabled(mi_option_abandoned_page_reset));
+  mi_pages_reset_remove_all_in_segment(segment, force_reset, tld);
   mi_segment_remove_from_free_queue(segment,tld);
 
   mi_assert_expensive(!mi_segment_queue_contains(&tld->small_free, segment));
@@ -840,8 +845,8 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
 
   // remove the segment from the free page queue if needed
-  mi_reset_delayed(tld);
-  mi_pages_reset_remove_all_in_segment(segment, tld); // do not force reset on free pages in an abandoned segment, as it is already done in segment_thread_collect
+  mi_reset_delayed(tld); 
+  mi_pages_reset_remove_all_in_segment(segment, mi_option_is_enabled(mi_option_abandoned_page_reset), tld); 
   mi_segment_remove_from_free_queue(segment, tld);
   mi_assert_internal(segment->next == NULL && segment->prev == NULL);
 

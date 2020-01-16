@@ -273,6 +273,7 @@ typedef enum mi_option_e {
   mi_option_reserve_huge_os_pages,
   mi_option_segment_cache,
   mi_option_page_reset,
+  mi_option_abandoned_page_reset,
   mi_option_segment_reset,
   mi_option_eager_commit_delay,
   mi_option_reset_delay,
