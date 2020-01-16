@@ -135,7 +135,7 @@ static size_t mi_segment_page_size(const mi_segment_t* segment) {
 }
 
 
-#if (MI_DEBUG>=3)
+#if (MI_DEBUG>=2)
 static bool mi_pages_reset_contains(const mi_page_t* page, mi_segments_tld_t* tld) {
   mi_page_t* p = tld->pages_reset.first;
   while (p != NULL) {
@@ -144,7 +144,9 @@ static bool mi_pages_reset_contains(const mi_page_t* page, mi_segments_tld_t* tl
   }
   return false;
 }
+#endif
 
+#if (MI_DEBUG>=3)
 static bool mi_segment_is_valid(const mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(segment != NULL);
   mi_assert_internal(_mi_ptr_cookie(segment) == segment->cookie);
@@ -169,6 +171,7 @@ static bool mi_segment_is_valid(const mi_segment_t* segment, mi_segments_tld_t* 
 #endif
 
 static bool mi_page_not_in_queue(const mi_page_t* page, mi_segments_tld_t* tld) {
+  mi_assert_internal(page != NULL);
   if (page->next != NULL || page->prev != NULL) {
     mi_assert_internal(mi_pages_reset_contains(page, tld));
     return false;
@@ -1052,6 +1055,6 @@ mi_page_t* _mi_segment_page_alloc(size_t block_size, mi_segments_tld_t* tld, mi_
   mi_assert_expensive(page == NULL || mi_segment_is_valid(_mi_page_segment(page),tld));
   mi_assert_internal(page == NULL || (mi_segment_page_size(_mi_page_segment(page)) - (MI_SECURE == 0 ? 0 : _mi_os_page_size())) >= block_size);
   mi_reset_delayed(tld);
-  mi_assert_internal(mi_page_not_in_queue(page, tld));
+  mi_assert_internal(page == NULL || mi_page_not_in_queue(page, tld));
   return page;
 }
