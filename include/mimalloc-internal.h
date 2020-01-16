@@ -167,6 +167,11 @@ bool        _mi_page_is_valid(mi_page_t* page);
 
 // Overflow detecting multiply
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
+  // quick check for the case where count is one (common for C++ allocators)
+  if (count==1) {
+    *total = size;
+    return false;
+  }
 #if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
 #include <limits.h>   // UINT_MAX, ULONG_MAX
 #if (SIZE_MAX == UINT_MAX)

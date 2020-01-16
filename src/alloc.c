@@ -443,12 +443,7 @@ mi_decl_allocator void* mi_calloc(size_t count, size_t size) mi_attr_noexcept {
 // Uninitialized `calloc`
 extern mi_decl_allocator void* mi_heap_mallocn(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
-  if (count==1) {
-    total = size;
-  }
-  else if (mi_mul_overflow(count, size, &total)) {
-    return NULL;
-  }
+  if (mi_mul_overflow(count, size, &total)) return NULL;
   return mi_heap_malloc(heap, total);
 }
 
