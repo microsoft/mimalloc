@@ -229,16 +229,12 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
 // called from segments when reclaiming abandoned pages
 void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
-  mi_assert_internal(mi_page_heap(page) == NULL);
+  mi_assert_internal(mi_page_heap(page) == heap);
+  mi_assert_internal(mi_page_thread_free_flag(page) != MI_NEVER_DELAYED_FREE);
   mi_assert_internal(_mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
   mi_assert_internal(!page->is_reset);
-  mi_assert_internal(mi_page_thread_free_flag(page) == MI_NEVER_DELAYED_FREE);
-  mi_page_set_heap(page, heap);
   mi_page_queue_t* pq = mi_page_queue(heap, mi_page_block_size(page));
-  mi_page_queue_push(heap, pq, page);
-  _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, true); // override never (after heap is set)
-  // _mi_page_free_collect(page,false); // no need, as it is just done before reclaim
-  mi_assert_internal(mi_page_heap(page)!= NULL);  
+  mi_page_queue_push(heap, pq, page);    
   mi_assert_expensive(_mi_page_is_valid(page));
 }
 

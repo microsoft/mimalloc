@@ -772,13 +772,16 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
         segment->abandoned--;
         mi_assert(page->next == NULL);
         _mi_stat_decrease(&tld->stats->pages_abandoned, 1);
+        // set the heap again and allow delayed free again
+        mi_page_set_heap(page, heap);
+        _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, true); // override never (after heap is set)
         _mi_page_free_collect(page, false); // ensure used count is up to date
         if (mi_page_all_free(page)) {
-          // if everything free by now, free the page
+          // if everything free already, clear the page directly
           mi_segment_page_clear(segment,page,tld);
         }
         else {
-          // otherwise reclaim it
+          // otherwise reclaim it into the heap
           _mi_page_reclaim(heap,page);
         }
       }
