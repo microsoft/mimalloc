@@ -24,7 +24,7 @@ public:
 
 
 int main() {
-  //mi_stats_reset();  // ignore earlier allocations
+  mi_stats_reset();  // ignore earlier allocations
   atexit(free_p);
   void* p1 = malloc(78);
   void* p2 = mi_malloc_aligned(16,24);

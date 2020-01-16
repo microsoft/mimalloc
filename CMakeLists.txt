@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 project(libmimalloc C CXX)
-include("cmake/mimalloc-config-version.cmake")
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
@@ -14,9 +14,13 @@ option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanis
 option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 
+include("cmake/mimalloc-config-version.cmake")
+
 set(mi_sources
     src/stats.c
+    src/random.c
     src/os.c
+    src/arena.c
     src/memory.c
     src/segment.c
     src/page.c
@@ -112,7 +116,7 @@ endif()
 
 # extra needed libraries
 if(WIN32)
-  list(APPEND mi_libraries psapi shell32 user32)
+  list(APPEND mi_libraries psapi shell32 user32 bcrypt)
 else()
   list(APPEND mi_libraries pthread)
   find_library(LIBRT rt)

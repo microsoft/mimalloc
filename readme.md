@@ -56,6 +56,8 @@ Enjoy!
 
 ### Releases
 
+* 2020-01-15, `v1.3.0`: stable release 1.3: bug fixes, improved randomness and stronger
+free list encoding in secure mode.
 * 2019-12-22, `v1.2.2`: stable release 1.2: minor updates.
 * 2019-11-22, `v1.2.0`: stable release 1.2: bug fixes, improved secure mode (free list corruption checks, double free mitigation). Improved dynamic overriding on Windows.
 * 2019-10-07, `v1.1.0`: stable release 1.1.
