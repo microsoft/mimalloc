@@ -122,7 +122,7 @@ mi_heap_t _mi_heap_main = {
   &tld_main,
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
-  NULL,
+  ATOMIC_VAR_INIT(NULL),
   0,                // thread id
   MI_INIT_COOKIE,   // initial cookie
   { MI_INIT_COOKIE, MI_INIT_COOKIE }, // the key of the main heap can be fixed (unlike page keys that need to be secure!)
