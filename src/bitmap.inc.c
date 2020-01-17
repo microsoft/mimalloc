@@ -113,7 +113,7 @@ static inline bool mi_bitmap_try_claim_field(mi_bitmap_t bitmap, size_t bitmap_f
   mi_assert_internal(bitmap_fields > idx); UNUSED(bitmap_fields);
   mi_assert_internal(bitidx + count <= MI_BITMAP_FIELD_BITS);
 
-  mi_bitmap_field_t field = mi_atomic_read_relaxed(&bitmap[idx]);
+  uintptr_t field = mi_atomic_read_relaxed(&bitmap[idx]);
   if ((field & mask) == 0) { // free?
     if (mi_atomic_cas_strong(&bitmap[idx], (field|mask), field)) {
       // claimed!
@@ -221,7 +221,7 @@ static inline bool mi_bitmap_is_claimedx(mi_bitmap_t bitmap, size_t bitmap_field
   const size_t bitidx = mi_bitmap_index_bit_in_field(bitmap_idx);
   const uintptr_t mask = mi_bitmap_mask_(count, bitidx);
   mi_assert_internal(bitmap_fields > idx); UNUSED(bitmap_fields);
-  mi_bitmap_field_t field = mi_atomic_read_relaxed(&bitmap[idx]);
+  uintptr_t field = mi_atomic_read_relaxed(&bitmap[idx]);
   if (any_ones != NULL) *any_ones = ((field & mask) != 0);
   return ((field & mask) == mask);
 }
