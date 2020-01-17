@@ -61,6 +61,11 @@ jobs:
         CXX: g++
         BuildType: secure
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+      Debug++:
+        CC: gcc
+        CXX: g++
+        BuildType: debug
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
       Debug Clang:
         CC: clang
         CXX: clang++
