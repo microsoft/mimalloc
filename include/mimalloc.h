@@ -326,10 +326,11 @@ mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
 mi_decl_export void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept;
 mi_decl_export void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept;
 
-mi_decl_export void* mi_new(size_t n) mi_attr_malloc mi_attr_alloc_size(1);
-mi_decl_export void* mi_new_aligned(size_t n, size_t alignment) mi_attr_malloc mi_attr_alloc_size(1);
-mi_decl_export void* mi_new_nothrow(size_t n) mi_attr_malloc mi_attr_alloc_size(1);
-mi_decl_export void* mi_new_aligned_nothrow(size_t n, size_t alignment) mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_export void* mi_new(size_t size) mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_export void* mi_new_n(size_t count, size_t size) mi_attr_malloc mi_attr_alloc_size2(1,2);
+mi_decl_export void* mi_new_aligned(size_t size, size_t alignment) mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_export void* mi_new_nothrow(size_t size) mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_export void* mi_new_aligned_nothrow(size_t size, size_t alignment) mi_attr_malloc mi_attr_alloc_size(1);
 
 #ifdef __cplusplus
 }
@@ -347,21 +348,25 @@ mi_decl_export void* mi_new_aligned_nothrow(size_t n, size_t alignment) mi_attr_
 
 template<class T> struct mi_stl_allocator {
   typedef T value_type;
-#if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
+  #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
   using propagate_on_container_copy_assignment = std::true_type;
   using propagate_on_container_move_assignment = std::true_type;
   using propagate_on_container_swap = std::true_type;
   using is_always_equal = std::true_type;
-#endif
-  mi_stl_allocator() mi_attr_noexcept {}
-  mi_stl_allocator(const mi_stl_allocator& other) mi_attr_noexcept { (void)other; }
-  template<class U> mi_stl_allocator(const mi_stl_allocator<U>& other) mi_attr_noexcept { (void)other; }
-  T* allocate(size_t n, const void* hint = 0) { (void)hint; return (T*)mi_mallocn(n, sizeof(T)); }
-  void deallocate(T* p, size_t n)             { mi_free_size(p,n); }
+  #endif
+  mi_stl_allocator()                                              mi_attr_noexcept { }
+  mi_stl_allocator(const mi_stl_allocator& )                      mi_attr_noexcept { }
+  template<class U> mi_stl_allocator(const mi_stl_allocator<U>& ) mi_attr_noexcept { }
+  void deallocate(T* p, size_t size) { mi_free_size(p, size); }
+  #if (__cplusplus >= 201703L)  // C++17
+  T* allocate(size_t count) { return (T*)mi_new_n(count, sizeof(T)); }
+  #else
+  T* allocate(size_t count, const void* hint = 0) { (void)hint; return (T*)mi_new_n(count, sizeof(T)); }
+  #endif
 };
 
-template<class T1,class T2> bool operator==(const mi_stl_allocator<T1>& lhs, const mi_stl_allocator<T2>& rhs) mi_attr_noexcept { (void)lhs; (void)rhs; return true; }
-template<class T1,class T2> bool operator!=(const mi_stl_allocator<T1>& lhs, const mi_stl_allocator<T2>& rhs) mi_attr_noexcept { (void)lhs; (void)rhs; return false; }
+template<class T1,class T2> bool operator==(const mi_stl_allocator<T1>& , const mi_stl_allocator<T2>& ) mi_attr_noexcept { return true; }
+template<class T1,class T2> bool operator!=(const mi_stl_allocator<T1>& , const mi_stl_allocator<T2>& ) mi_attr_noexcept { return false; }
 #endif // __cplusplus
 
 #endif

@@ -678,36 +678,51 @@ static bool mi_try_new_handler(bool nothrow) {
 }
 #endif
 
-static mi_decl_noinline void* mi_try_new(size_t n, bool nothrow ) {
+static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow ) {
   void* p = NULL;
   while(p == NULL && mi_try_new_handler(nothrow)) {
-    p = mi_malloc(n);
+    p = mi_malloc(size);
   }
   return p;
 }
 
-void* mi_new(size_t n) {
-  void* p = mi_malloc(n);
-  if (mi_unlikely(p == NULL)) return mi_try_new(n,false);
+void* mi_new(size_t size) {
+  void* p = mi_malloc(size);
+  if (mi_unlikely(p == NULL)) return mi_try_new(size,false);
   return p;
 }
 
-void* mi_new_aligned(size_t n, size_t alignment) {
+void* mi_new_nothrow(size_t size) {
+  void* p = mi_malloc(size);
+  if (mi_unlikely(p == NULL)) return mi_try_new(size, true);
+  return p;
+}
+
+void* mi_new_aligned(size_t size, size_t alignment) {
   void* p;
-  do { p = mi_malloc_aligned(n, alignment); }
+  do { 
+    p = mi_malloc_aligned(size, alignment); 
+  }
   while(p == NULL && mi_try_new_handler(false));
   return p;
 }
 
-void* mi_new_nothrow(size_t n) {
-  void* p = mi_malloc(n);
-  if (mi_unlikely(p == NULL)) return mi_try_new(n,true);
+void* mi_new_aligned_nothrow(size_t size, size_t alignment) {
+  void* p;
+  do { 
+    p = mi_malloc_aligned(size, alignment); 
+  }
+  while(p == NULL && mi_try_new_handler(true));
   return p;
 }
 
-void* mi_new_aligned_nothrow(size_t n, size_t alignment) {
-  void* p;
-  do { p = mi_malloc_aligned(n, alignment); }
-  while (p == NULL && mi_try_new_handler(true));
-  return p;
+void* mi_new_n(size_t count, size_t size) {
+  size_t total;
+  if (mi_unlikely(mi_mul_overflow(count, size, &total))) {
+    mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
+    return NULL;
+  }
+  else {
+    return mi_new(total);
+  }
 }
