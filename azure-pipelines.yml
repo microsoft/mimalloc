@@ -64,7 +64,7 @@ jobs:
       Debug++:
         CC: gcc
         CXX: g++
-        BuildType: debug
+        BuildType: debug-cxx
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
       Debug Clang:
         CC: clang
@@ -84,7 +84,7 @@ jobs:
       Debug++ Clang:
         CC: clang
         CXX: clang++
-        BuildType: debug-clang
+        BuildType: debug-clang-cxx
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
   steps:
   - task: CMake@1
