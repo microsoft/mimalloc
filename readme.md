@@ -56,8 +56,10 @@ Enjoy!
 
 ### Releases
 
-* 2020-01-15, `v1.3.0`: stable release 1.3: bug fixes, improved randomness and stronger
-free list encoding in secure mode.
+* 2020-01-XX, `v1.4.0`: stable release 1.4: delayed OS page reset for (much) better performance
+  with page reset enabled, more eager concurrent free, addition of STL allocator.
+* 2020-01-15, `v1.3.0`: stable release 1.3: bug fixes, improved randomness and [stronger
+free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396) in secure mode.
 * 2019-12-22, `v1.2.2`: stable release 1.2: minor updates.
 * 2019-11-22, `v1.2.0`: stable release 1.2: bug fixes, improved secure mode (free list corruption checks, double free mitigation). Improved dynamic overriding on Windows.
 * 2019-10-07, `v1.1.0`: stable release 1.1.
@@ -130,7 +132,7 @@ mimalloc uses only safe OS calls (`mmap` and `VirtualAlloc`) and can co-exist
 with other allocators linked to the same program.
 If you use `cmake`, you can simply use:
 ```
-find_package(mimalloc 1.0 REQUIRED)
+find_package(mimalloc 1.4 REQUIRED)
 ```
 in your `CMakeLists.txt` to find a locally installed mimalloc. Then use either:
 ```
@@ -144,7 +146,9 @@ to link with the static library. See `test\CMakeLists.txt` for an example.
 
 For best performance in C++ programs, it is also recommended to override the
 global `new` and `delete` operators. For convience, mimalloc provides
-[mimalloc-new-delete.h](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
+[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
+In C++, mimalloc also provides the `mi_stl_allocator` struct which implements the `std::allocator`
+interface.
 
 You can pass environment variables to print verbose messages (`MIMALLOC_VERBOSE=1`)
 and statistics (`MIMALLOC_SHOW_STATS=1`) (in the debug version):
@@ -195,11 +199,15 @@ or via environment variables.
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
 - `MIMALLOC_VERBOSE=1`: show verbose messages.
 - `MIMALLOC_SHOW_ERRORS=1`: show error and warning messages.
+- `MIMALLOC_PAGE_RESET=1`: reset (or purge) OS pages when not in use. This can reduce
+   memory fragmentation in long running (server) programs. If performance is impacted,
+   `MIMALLOC_RESET_DELAY=`<msecs> can be set higher (100ms by default) to make the page
+   reset occur less frequently.
 - `MIMALLOC_LARGE_OS_PAGES=1`: use large OS pages when available; for some workloads this can significantly
    improve performance. Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
    to explicitly allow large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
    the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
-   can have fragmented memory.
+   can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead when possible).
 - `MIMALLOC_EAGER_REGION_COMMIT=1`: on Windows, commit large (256MiB) regions eagerly. On Windows, these regions
    show in the working set even though usually just a small part is committed to physical memory. This is why it
    turned off by default on Windows as it looks not good in the task manager. However, in reality it is always better
@@ -207,10 +215,15 @@ or via environment variables.
 - `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where N is the number of 1GiB huge OS pages. This reserves the huge pages at
    startup and can give quite a performance improvement on long running workloads. Usually it is better to not use
    `MIMALLOC_LARGE_OS_PAGES` in combination with this setting. Just like large OS pages, use with care as reserving
-   contiguous physical memory can take a long time when memory is fragmented. Still experimental.
+   contiguous physical memory can take a long time when memory is fragmented.
+   Note that we usually need to explicitly enable huge OS pages (as on [Windows][windows-huge] and [Linux][linux-huge])). With huge OS pages, it may be beneficial to set the setting
+   `MIMALLOC_EAGER_COMMIT_DELAY=N` (with usually `N` as 1) to delay the initial `N` segments
+   of a thread to not allocate in the huge OS pages; this prevents threads that are short lived
+   and allocate just a little to take up space in the huge OS page area (which cannot be reset).
 
 [linux-huge]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/tuning_and_optimizing_red_hat_enterprise_linux_for_oracle_9i_and_10g_databases/sect-oracle_9i_and_10g_tuning_guide-large_memory_optimization_big_pages_and_huge_pages-configuring_huge_pages_in_red_hat_enterprise_linux_4_or_5
 [windows-huge]: https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/enable-the-lock-pages-in-memory-option-windows?view=sql-server-2017
+
 
 # Overriding Malloc
 
@@ -251,13 +264,13 @@ resolved to the _mimalloc_ library.
 Note that certain security restrictions may apply when doing this from
 the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
 
-Note: unfortunately, at this time, dynamic overriding on macOS seems broken but it is actively worked on to fix this
-(see issue [`#50`](https://github.com/microsoft/mimalloc/issues/50)).
+Note: unfortunately, at this time, dynamic overriding on macOS seems broken but it is
+actively worked on to fix this (see issue [`#50`](https://github.com/microsoft/mimalloc/issues/50)).
 
 ### Windows
 
-On Windows you need to link your program explicitly with the mimalloc
-DLL and use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
+Overriding on Windows is robust but requires that you link your program explicitly with
+the mimalloc DLL and use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
 Moreover, you need to ensure the `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) is available
 in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency).
 The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
@@ -267,8 +280,8 @@ To ensure the mimalloc DLL is loaded at run-time it is easiest to insert some
 call to the mimalloc API in the `main` function, like `mi_version()`
 (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
 for an example on how to use this. For best performance on Windows with C++, it
-is highly recommended to also override the `new`/`delete` operations (as described
-in the introduction).
+is highly recommended to also override the `new`/`delete` operations (by including
+[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
 overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully redirected.
