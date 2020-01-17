@@ -37,7 +37,7 @@
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">mi-malloc
-   &#160;<span id="projectnumber">1.0</span>
+   &#160;<span id="projectnumber">1.4</span>
    </div>
   </td>
    <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -118,12 +118,12 @@ Macros</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="typedef-members"></a>
 Typedefs</h2></td></tr>
-<tr class="memitem:ga22213691c3ce5ab4d91b24aff1023529"><td class="memItemLeft" align="right" valign="top">typedef void()&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga22213691c3ce5ab4d91b24aff1023529">mi_deferred_free_fun</a>(bool force, unsigned long long heartbeat)</td></tr>
-<tr class="memdesc:ga22213691c3ce5ab4d91b24aff1023529"><td class="mdescLeft">&#160;</td><td class="mdescRight">Type of deferred free functions.  <a href="#ga22213691c3ce5ab4d91b24aff1023529">More...</a><br /></td></tr>
-<tr class="separator:ga22213691c3ce5ab4d91b24aff1023529"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga2bed6d40b74591a67f81daea4b4a246f"><td class="memItemLeft" align="right" valign="top">typedef void()&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga2bed6d40b74591a67f81daea4b4a246f">mi_output_fun</a>(const char *msg)</td></tr>
-<tr class="memdesc:ga2bed6d40b74591a67f81daea4b4a246f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Type of output functions.  <a href="#ga2bed6d40b74591a67f81daea4b4a246f">More...</a><br /></td></tr>
-<tr class="separator:ga2bed6d40b74591a67f81daea4b4a246f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga299dae78d25ce112e384a98b7309c5be"><td class="memItemLeft" align="right" valign="top">typedef void()&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga299dae78d25ce112e384a98b7309c5be">mi_deferred_free_fun</a>(bool force, unsigned long long heartbeat, void *arg)</td></tr>
+<tr class="memdesc:ga299dae78d25ce112e384a98b7309c5be"><td class="mdescLeft">&#160;</td><td class="mdescRight">Type of deferred free functions.  <a href="#ga299dae78d25ce112e384a98b7309c5be">More...</a><br /></td></tr>
+<tr class="separator:ga299dae78d25ce112e384a98b7309c5be"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gad823d23444a4b77a40f66bf075a98a0c"><td class="memItemLeft" align="right" valign="top">typedef void()&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#gad823d23444a4b77a40f66bf075a98a0c">mi_output_fun</a>(const char *msg, void *arg)</td></tr>
+<tr class="memdesc:gad823d23444a4b77a40f66bf075a98a0c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Type of output functions.  <a href="#gad823d23444a4b77a40f66bf075a98a0c">More...</a><br /></td></tr>
+<tr class="separator:gad823d23444a4b77a40f66bf075a98a0c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="func-members"></a>
 Functions</h2></td></tr>
@@ -142,9 +142,12 @@ Functions</h2></td></tr>
 <tr class="memitem:ga421430e2226d7d468529cec457396756"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga421430e2226d7d468529cec457396756">mi_collect</a> (bool force)</td></tr>
 <tr class="memdesc:ga421430e2226d7d468529cec457396756"><td class="mdescLeft">&#160;</td><td class="mdescRight">Eagerly free memory.  <a href="#ga421430e2226d7d468529cec457396756">More...</a><br /></td></tr>
 <tr class="separator:ga421430e2226d7d468529cec457396756"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga8ca07ccff283956d71f48272f4fd5c01"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga8ca07ccff283956d71f48272f4fd5c01">mi_stats_print</a> (<a class="el" href="group__extended.html#ga2bed6d40b74591a67f81daea4b4a246f">mi_output_fun</a> *out)</td></tr>
-<tr class="memdesc:ga8ca07ccff283956d71f48272f4fd5c01"><td class="mdescLeft">&#160;</td><td class="mdescRight">Print the main statistics.  <a href="#ga8ca07ccff283956d71f48272f4fd5c01">More...</a><br /></td></tr>
-<tr class="separator:ga8ca07ccff283956d71f48272f4fd5c01"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga2d126e5c62d3badc35445e5d84166df2"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga2d126e5c62d3badc35445e5d84166df2">mi_stats_print</a> (void *out)</td></tr>
+<tr class="memdesc:ga2d126e5c62d3badc35445e5d84166df2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Print the main statistics.  <a href="#ga2d126e5c62d3badc35445e5d84166df2">More...</a><br /></td></tr>
+<tr class="separator:ga2d126e5c62d3badc35445e5d84166df2"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga256cc6f13a142deabbadd954a217e228"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga256cc6f13a142deabbadd954a217e228">mi_stats_print</a> (<a class="el" href="group__extended.html#gad823d23444a4b77a40f66bf075a98a0c">mi_output_fun</a> *out, void *arg)</td></tr>
+<tr class="memdesc:ga256cc6f13a142deabbadd954a217e228"><td class="mdescLeft">&#160;</td><td class="mdescRight">Print the main statistics.  <a href="#ga256cc6f13a142deabbadd954a217e228">More...</a><br /></td></tr>
+<tr class="separator:ga256cc6f13a142deabbadd954a217e228"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga3bb8468b8cfcc6e2a61d98aee85c5f99"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga3bb8468b8cfcc6e2a61d98aee85c5f99">mi_stats_reset</a> (void)</td></tr>
 <tr class="memdesc:ga3bb8468b8cfcc6e2a61d98aee85c5f99"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reset statistics.  <a href="#ga3bb8468b8cfcc6e2a61d98aee85c5f99">More...</a><br /></td></tr>
 <tr class="separator:ga3bb8468b8cfcc6e2a61d98aee85c5f99"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -157,21 +160,24 @@ Functions</h2></td></tr>
 <tr class="memitem:ga0ae4581e85453456a0d658b2b98bf7bf"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga0ae4581e85453456a0d658b2b98bf7bf">mi_thread_done</a> (void)</td></tr>
 <tr class="memdesc:ga0ae4581e85453456a0d658b2b98bf7bf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Uninitialize mimalloc on a thread.  <a href="#ga0ae4581e85453456a0d658b2b98bf7bf">More...</a><br /></td></tr>
 <tr class="separator:ga0ae4581e85453456a0d658b2b98bf7bf"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga489670a15d1a257ab4639e645ee4612a"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga489670a15d1a257ab4639e645ee4612a">mi_thread_stats_print</a> (<a class="el" href="group__extended.html#ga2bed6d40b74591a67f81daea4b4a246f">mi_output_fun</a> *out)</td></tr>
-<tr class="memdesc:ga489670a15d1a257ab4639e645ee4612a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Print out heap statistics for this thread.  <a href="#ga489670a15d1a257ab4639e645ee4612a">More...</a><br /></td></tr>
-<tr class="separator:ga489670a15d1a257ab4639e645ee4612a"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga24dc9cc6fca8daa2aa30aa8025467ce2"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga24dc9cc6fca8daa2aa30aa8025467ce2">mi_register_deferred_free</a> (<a class="el" href="group__extended.html#ga22213691c3ce5ab4d91b24aff1023529">mi_deferred_free_fun</a> *deferred_free)</td></tr>
-<tr class="memdesc:ga24dc9cc6fca8daa2aa30aa8025467ce2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Register a deferred free function.  <a href="#ga24dc9cc6fca8daa2aa30aa8025467ce2">More...</a><br /></td></tr>
-<tr class="separator:ga24dc9cc6fca8daa2aa30aa8025467ce2"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga84a0c8b401e42eb5b1bce156852f44c5"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga84a0c8b401e42eb5b1bce156852f44c5">mi_register_output</a> (<a class="el" href="group__extended.html#ga2bed6d40b74591a67f81daea4b4a246f">mi_output_fun</a> *out) mi_attr_noexcept</td></tr>
-<tr class="memdesc:ga84a0c8b401e42eb5b1bce156852f44c5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Register an output function.  <a href="#ga84a0c8b401e42eb5b1bce156852f44c5">More...</a><br /></td></tr>
-<tr class="separator:ga84a0c8b401e42eb5b1bce156852f44c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gab1dac8476c46cb9eecab767eb40c1525"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#gab1dac8476c46cb9eecab767eb40c1525">mi_thread_stats_print_out</a> (<a class="el" href="group__extended.html#gad823d23444a4b77a40f66bf075a98a0c">mi_output_fun</a> *out, void *arg)</td></tr>
+<tr class="memdesc:gab1dac8476c46cb9eecab767eb40c1525"><td class="mdescLeft">&#160;</td><td class="mdescRight">Print out heap statistics for this thread.  <a href="#gab1dac8476c46cb9eecab767eb40c1525">More...</a><br /></td></tr>
+<tr class="separator:gab1dac8476c46cb9eecab767eb40c1525"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga3460a6ca91af97be4058f523d3cb8ece"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga3460a6ca91af97be4058f523d3cb8ece">mi_register_deferred_free</a> (<a class="el" href="group__extended.html#ga299dae78d25ce112e384a98b7309c5be">mi_deferred_free_fun</a> *deferred_free, void *arg)</td></tr>
+<tr class="memdesc:ga3460a6ca91af97be4058f523d3cb8ece"><td class="mdescLeft">&#160;</td><td class="mdescRight">Register a deferred free function.  <a href="#ga3460a6ca91af97be4058f523d3cb8ece">More...</a><br /></td></tr>
+<tr class="separator:ga3460a6ca91af97be4058f523d3cb8ece"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gae5b17ff027cd2150b43a33040250cf3f"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#gae5b17ff027cd2150b43a33040250cf3f">mi_register_output</a> (<a class="el" href="group__extended.html#gad823d23444a4b77a40f66bf075a98a0c">mi_output_fun</a> *out, void *arg)</td></tr>
+<tr class="memdesc:gae5b17ff027cd2150b43a33040250cf3f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Register an output function.  <a href="#gae5b17ff027cd2150b43a33040250cf3f">More...</a><br /></td></tr>
+<tr class="separator:gae5b17ff027cd2150b43a33040250cf3f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga5f071b10d4df1c3658e04e7fd67a94e6"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga5f071b10d4df1c3658e04e7fd67a94e6">mi_is_in_heap_region</a> (const void *p)</td></tr>
 <tr class="memdesc:ga5f071b10d4df1c3658e04e7fd67a94e6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Is a pointer part of our heap?  <a href="#ga5f071b10d4df1c3658e04e7fd67a94e6">More...</a><br /></td></tr>
 <tr class="separator:ga5f071b10d4df1c3658e04e7fd67a94e6"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga2664f36a2dd557741c429cb799f04641"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga2664f36a2dd557741c429cb799f04641">mi_reserve_huge_os_pages</a> (size_t pages, double max_secs, size_t *pages_reserved)</td></tr>
-<tr class="memdesc:ga2664f36a2dd557741c429cb799f04641"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reserve <em>pages</em> of huge OS pages (1GiB) but stops after at most <code>max_secs</code> seconds.  <a href="#ga2664f36a2dd557741c429cb799f04641">More...</a><br /></td></tr>
-<tr class="separator:ga2664f36a2dd557741c429cb799f04641"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga3132f521fb756fc0e8ec0b74fb58df50"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga3132f521fb756fc0e8ec0b74fb58df50">mi_reserve_huge_os_pages_interleave</a> (size_t pages, size_t numa_nodes, size_t timeout_msecs)</td></tr>
+<tr class="memdesc:ga3132f521fb756fc0e8ec0b74fb58df50"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reserve <em>pages</em> of huge OS pages (1GiB) evenly divided over <em>numa_nodes</em> nodes, but stops after at most <code>timeout_msecs</code> seconds.  <a href="#ga3132f521fb756fc0e8ec0b74fb58df50">More...</a><br /></td></tr>
+<tr class="separator:ga3132f521fb756fc0e8ec0b74fb58df50"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga7795a13d20087447281858d2c771cca1"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga7795a13d20087447281858d2c771cca1">mi_reserve_huge_os_pages_at</a> (size_t pages, int numa_node, size_t timeout_msecs)</td></tr>
+<tr class="memdesc:ga7795a13d20087447281858d2c771cca1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reserve <em>pages</em> of huge OS pages (1GiB) at a specific <em>numa_node</em>, but stops after at most <code>timeout_msecs</code> seconds.  <a href="#ga7795a13d20087447281858d2c771cca1">More...</a><br /></td></tr>
+<tr class="separator:ga7795a13d20087447281858d2c771cca1"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaad25050b19f30cd79397b227e0157a3f"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#gaad25050b19f30cd79397b227e0157a3f">mi_is_redirected</a> ()</td></tr>
 <tr class="memdesc:gaad25050b19f30cd79397b227e0157a3f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Is the C runtime <em>malloc</em> API redirected?  <a href="#gaad25050b19f30cd79397b227e0157a3f">More...</a><br /></td></tr>
 <tr class="separator:gaad25050b19f30cd79397b227e0157a3f"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -196,14 +202,14 @@ Functions</h2></td></tr>
 </div>
 </div>
 <h2 class="groupheader">Typedef Documentation</h2>
-<a id="ga22213691c3ce5ab4d91b24aff1023529"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga22213691c3ce5ab4d91b24aff1023529">&#9670;&nbsp;</a></span>mi_deferred_free_fun</h2>
+<a id="ga299dae78d25ce112e384a98b7309c5be"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga299dae78d25ce112e384a98b7309c5be">&#9670;&nbsp;</a></span>mi_deferred_free_fun</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">typedef void() mi_deferred_free_fun(bool force, unsigned long long heartbeat)</td>
+          <td class="memname">typedef void() mi_deferred_free_fun(bool force, unsigned long long heartbeat, void *arg)</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -212,22 +218,23 @@ Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">force</td><td>If <em>true</em> all outstanding items should be freed. </td></tr>
-    <tr><td class="paramname">heartbeat</td><td>A monotonically increasing count.</td></tr>
+    <tr><td class="paramname">heartbeat</td><td>A monotonically increasing count. </td></tr>
+    <tr><td class="paramname">arg</td><td>Argument that was passed at registration to hold extra state.</td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#ga24dc9cc6fca8daa2aa30aa8025467ce2" title="Register a deferred free function.">mi_register_deferred_free</a> </dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#ga3460a6ca91af97be4058f523d3cb8ece" title="Register a deferred free function.">mi_register_deferred_free</a> </dd></dl>
 
 </div>
 </div>
-<a id="ga2bed6d40b74591a67f81daea4b4a246f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga2bed6d40b74591a67f81daea4b4a246f">&#9670;&nbsp;</a></span>mi_output_fun</h2>
+<a id="gad823d23444a4b77a40f66bf075a98a0c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gad823d23444a4b77a40f66bf075a98a0c">&#9670;&nbsp;</a></span>mi_output_fun</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">typedef void() mi_output_fun(const char *msg)</td>
+          <td class="memname">typedef void() mi_output_fun(const char *msg, void *arg)</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -235,11 +242,12 @@ Functions</h2></td></tr>
 <p>Type of output functions. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">msg</td><td>Message to output.</td></tr>
+    <tr><td class="paramname">msg</td><td>Message to output. </td></tr>
+    <tr><td class="paramname">arg</td><td>Argument that was passed at registration to hold extra state.</td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#ga84a0c8b401e42eb5b1bce156852f44c5" title="Register an output function.">mi_register_output()</a> </dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#gae5b17ff027cd2150b43a33040250cf3f" title="Register an output function.">mi_register_output()</a> </dd></dl>
 
 </div>
 </div>
@@ -375,8 +383,8 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a id="ga24dc9cc6fca8daa2aa30aa8025467ce2"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga24dc9cc6fca8daa2aa30aa8025467ce2">&#9670;&nbsp;</a></span>mi_register_deferred_free()</h2>
+<a id="ga3460a6ca91af97be4058f523d3cb8ece"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga3460a6ca91af97be4058f523d3cb8ece">&#9670;&nbsp;</a></span>mi_register_deferred_free()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -384,74 +392,14 @@ Functions</h2></td></tr>
         <tr>
           <td class="memname">void mi_register_deferred_free </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="group__extended.html#ga22213691c3ce5ab4d91b24aff1023529">mi_deferred_free_fun</a> *&#160;</td>
-          <td class="paramname"><em>deferred_free</em></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>Register a deferred free function. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">deferred_free</td><td>Address of a deferred free-ing function or <em>NULL</em> to unregister.</td></tr>
-  </table>
-  </dd>
-</dl>
-<p>Some runtime systems use deferred free-ing, for example when using reference counting to limit the worst case free time. Such systems can register (re-entrant) deferred free function to free more memory on demand. When the <em>force</em> parameter is <em>true</em> all possible memory should be freed. The per-thread <em>heartbeat</em> parameter is monotonically increasing and guaranteed to be deterministic if the program allocates deterministically. The <em>deferred_free</em> function is guaranteed to be called deterministically after some number of allocations (regardless of freeing or available free memory). At most one <em>deferred_free</em> function can be active. </p>
-
-</div>
-</div>
-<a id="ga84a0c8b401e42eb5b1bce156852f44c5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga84a0c8b401e42eb5b1bce156852f44c5">&#9670;&nbsp;</a></span>mi_register_output()</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">void mi_register_output </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="group__extended.html#ga2bed6d40b74591a67f81daea4b4a246f">mi_output_fun</a> *&#160;</td>
-          <td class="paramname"><em>out</em></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>Register an output function. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">out</td><td>The output function, use <code>NULL</code> to output to stdout.</td></tr>
-  </table>
-  </dd>
-</dl>
-<p>The <code>out</code> function is called to output any information from mimalloc, like verbose or warning messages. </p>
-
-</div>
-</div>
-<a id="ga2664f36a2dd557741c429cb799f04641"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga2664f36a2dd557741c429cb799f04641">&#9670;&nbsp;</a></span>mi_reserve_huge_os_pages()</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">int mi_reserve_huge_os_pages </td>
-          <td>(</td>
-          <td class="paramtype">size_t&#160;</td>
-          <td class="paramname"><em>pages</em>, </td>
+          <td class="paramtype"><a class="el" href="group__extended.html#ga299dae78d25ce112e384a98b7309c5be">mi_deferred_free_fun</a> *&#160;</td>
+          <td class="paramname"><em>deferred_free</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">double&#160;</td>
-          <td class="paramname"><em>max_secs</em>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">size_t *&#160;</td>
-          <td class="paramname"><em>pages_reserved</em>&#160;</td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>arg</em>&#160;</td>
         </tr>
         <tr>
           <td></td>
@@ -461,17 +409,145 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Reserve <em>pages</em> of huge OS pages (1GiB) but stops after at most <code>max_secs</code> seconds. </p>
+<p>Register a deferred free function. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">deferred_free</td><td>Address of a deferred free-ing function or <em>NULL</em> to unregister. </td></tr>
+    <tr><td class="paramname">arg</td><td>Argument that will be passed on to the deferred free function.</td></tr>
+  </table>
+  </dd>
+</dl>
+<p>Some runtime systems use deferred free-ing, for example when using reference counting to limit the worst case free time. Such systems can register (re-entrant) deferred free function to free more memory on demand. When the <em>force</em> parameter is <em>true</em> all possible memory should be freed. The per-thread <em>heartbeat</em> parameter is monotonically increasing and guaranteed to be deterministic if the program allocates deterministically. The <em>deferred_free</em> function is guaranteed to be called deterministically after some number of allocations (regardless of freeing or available free memory). At most one <em>deferred_free</em> function can be active. </p>
+
+</div>
+</div>
+<a id="gae5b17ff027cd2150b43a33040250cf3f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gae5b17ff027cd2150b43a33040250cf3f">&#9670;&nbsp;</a></span>mi_register_output()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_register_output </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__extended.html#gad823d23444a4b77a40f66bf075a98a0c">mi_output_fun</a> *&#160;</td>
+          <td class="paramname"><em>out</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>arg</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Register an output function. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">out</td><td>The output function, use <code>NULL</code> to output to stderr. </td></tr>
+    <tr><td class="paramname">arg</td><td>Argument that will be passed on to the output function.</td></tr>
+  </table>
+  </dd>
+</dl>
+<p>The <code>out</code> function is called to output any information from mimalloc, like verbose or warning messages. </p>
+
+</div>
+</div>
+<a id="ga7795a13d20087447281858d2c771cca1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga7795a13d20087447281858d2c771cca1">&#9670;&nbsp;</a></span>mi_reserve_huge_os_pages_at()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int mi_reserve_huge_os_pages_at </td>
+          <td>(</td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>pages</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname"><em>numa_node</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>timeout_msecs</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Reserve <em>pages</em> of huge OS pages (1GiB) at a specific <em>numa_node</em>, but stops after at most <code>timeout_msecs</code> seconds. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">pages</td><td>The number of 1GiB pages to reserve. </td></tr>
-    <tr><td class="paramname">max_secs</td><td>Maximum number of seconds to try reserving. </td></tr>
-    <tr><td class="paramname">pages_reserved</td><td>If not <em>NULL</em>, it is set to the actual number of pages that were reserved. </td></tr>
+    <tr><td class="paramname">numa_node</td><td>The NUMA node where the memory is reserved (start at 0). </td></tr>
+    <tr><td class="paramname">timeout_msecs</td><td>Maximum number of milli-seconds to try reserving, or 0 for no timeout. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>0 if successfull, <em>ENOMEM</em> if running out of memory, or <em>ETIMEDOUT</em> if timed out.</dd></dl>
-<p>The reserved memory is used by mimalloc to satisfy allocations. May quit before <em>max_secs</em> are expired if it estimates it will take more than 1.5 times <em>max_secs</em>. The time limit is needed because on some operating systems it can take a long time to reserve contiguous memory if the physical memory is fragmented. </p>
+<p>The reserved memory is used by mimalloc to satisfy allocations. May quit before <em>timeout_msecs</em> are expired if it estimates it will take more than 1.5 times <em>timeout_msecs</em>. The time limit is needed because on some operating systems it can take a long time to reserve contiguous memory if the physical memory is fragmented. </p>
+
+</div>
+</div>
+<a id="ga3132f521fb756fc0e8ec0b74fb58df50"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga3132f521fb756fc0e8ec0b74fb58df50">&#9670;&nbsp;</a></span>mi_reserve_huge_os_pages_interleave()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int mi_reserve_huge_os_pages_interleave </td>
+          <td>(</td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>pages</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>numa_nodes</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>timeout_msecs</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Reserve <em>pages</em> of huge OS pages (1GiB) evenly divided over <em>numa_nodes</em> nodes, but stops after at most <code>timeout_msecs</code> seconds. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">pages</td><td>The number of 1GiB pages to reserve. </td></tr>
+    <tr><td class="paramname">numa_nodes</td><td>The number of nodes do evenly divide the pages over, or 0 for using the actual number of NUMA nodes. </td></tr>
+    <tr><td class="paramname">timeout_msecs</td><td>Maximum number of milli-seconds to try reserving, or 0 for no timeout. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>0 if successfull, <em>ENOMEM</em> if running out of memory, or <em>ETIMEDOUT</em> if timed out.</dd></dl>
+<p>The reserved memory is used by mimalloc to satisfy allocations. May quit before <em>timeout_msecs</em> are expired if it estimates it will take more than 1.5 times <em>timeout_msecs</em>. The time limit is needed because on some operating systems it can take a long time to reserve contiguous memory if the physical memory is fragmented. </p>
 
 </div>
 </div>
@@ -495,8 +571,8 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a id="ga8ca07ccff283956d71f48272f4fd5c01"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga8ca07ccff283956d71f48272f4fd5c01">&#9670;&nbsp;</a></span>mi_stats_print()</h2>
+<a id="ga2d126e5c62d3badc35445e5d84166df2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga2d126e5c62d3badc35445e5d84166df2">&#9670;&nbsp;</a></span>mi_stats_print() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -504,7 +580,7 @@ Functions</h2></td></tr>
         <tr>
           <td class="memname">void mi_stats_print </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="group__extended.html#ga2bed6d40b74591a67f81daea4b4a246f">mi_output_fun</a> *&#160;</td>
+          <td class="paramtype">void *&#160;</td>
           <td class="paramname"><em>out</em></td><td>)</td>
           <td></td>
         </tr>
@@ -514,7 +590,45 @@ Functions</h2></td></tr>
 <p>Print the main statistics. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">out</td><td>Output function. Use <em>NULL</em> for outputting to <em>stderr</em>.</td></tr>
+    <tr><td class="paramname">out</td><td>Ignored, outputs to the registered output function or stderr by default.</td></tr>
+  </table>
+  </dd>
+</dl>
+<p>Most detailed when using a debug build. </p>
+
+</div>
+</div>
+<a id="ga256cc6f13a142deabbadd954a217e228"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga256cc6f13a142deabbadd954a217e228">&#9670;&nbsp;</a></span>mi_stats_print() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_stats_print </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__extended.html#gad823d23444a4b77a40f66bf075a98a0c">mi_output_fun</a> *&#160;</td>
+          <td class="paramname"><em>out</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>arg</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Print the main statistics. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">out</td><td>An output function or <em>NULL</em> for the default. </td></tr>
+    <tr><td class="paramname">arg</td><td>Optional argument passed to <em>out</em> (if not <em>NULL</em>)</td></tr>
   </table>
   </dd>
 </dl>
@@ -584,18 +698,28 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a id="ga489670a15d1a257ab4639e645ee4612a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga489670a15d1a257ab4639e645ee4612a">&#9670;&nbsp;</a></span>mi_thread_stats_print()</h2>
+<a id="gab1dac8476c46cb9eecab767eb40c1525"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gab1dac8476c46cb9eecab767eb40c1525">&#9670;&nbsp;</a></span>mi_thread_stats_print_out()</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">void mi_thread_stats_print </td>
+          <td class="memname">void mi_thread_stats_print_out </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="group__extended.html#ga2bed6d40b74591a67f81daea4b4a246f">mi_output_fun</a> *&#160;</td>
-          <td class="paramname"><em>out</em></td><td>)</td>
+          <td class="paramtype"><a class="el" href="group__extended.html#gad823d23444a4b77a40f66bf075a98a0c">mi_output_fun</a> *&#160;</td>
+          <td class="paramname"><em>out</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>arg</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -603,7 +727,8 @@ Functions</h2></td></tr>
 <p>Print out heap statistics for this thread. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">out</td><td>Output function. Use <em>NULL</em> for outputting to <em>stderr</em>.</td></tr>
+    <tr><td class="paramname">out</td><td>An output function or <em>NULL</em> for the default. </td></tr>
+    <tr><td class="paramname">arg</td><td>Optional argument passed to <em>out</em> (if not <em>NULL</em>)</td></tr>
   </table>
   </dd>
 </dl>
