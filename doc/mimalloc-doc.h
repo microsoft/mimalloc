@@ -784,6 +784,9 @@ void mi_free_aligned(void* p, size_t alignment);
 /// raise `std::bad_alloc` exception on failure.
 void* mi_new(std::size_t n) noexcept(false);
 
+/// raise `std::bad_alloc` exception on failure or overflow.
+void* mi_new_n(size_t count, size_t size) noexcept(false);
+
 /// raise `std::bad_alloc` exception on failure.
 void* mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false);
 
