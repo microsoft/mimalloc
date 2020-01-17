@@ -96,7 +96,10 @@ endif()
 if(MI_USE_CXX MATCHES "ON")
   message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-stress.c PROPERTIES LANGUAGE CXX )
+  if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang|Clang")
+    list(APPEND mi_cflags -Wno-deprecated)
+  endif()
 endif()
 
 # Compiler flags
