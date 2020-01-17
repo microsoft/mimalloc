@@ -644,6 +644,11 @@ static bool mi_try_new_handler(bool nothrow) {
     return true;
   }
 }
+void* mi_new_n(size_t count, size_t size) {
+  size_t total;
+  if (mi_mul_overflow(count, size, &total)) throw std::bad_alloc();
+  return mi_new(total);
+}
 #else
 #include <errno.h>
 #ifndef ENOMEM
