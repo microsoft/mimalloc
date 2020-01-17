@@ -21,6 +21,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #if defined(_MSC_VER)
+#pragma warning(disable:4127)   // constant conditional due to MI_SECURE paths
 #define mi_decl_noinline   __declspec(noinline)
 #define mi_attr_noreturn
 #elif defined(__GNUC__) || defined(__clang__)
