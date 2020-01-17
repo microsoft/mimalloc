@@ -357,7 +357,7 @@ template<class T> struct mi_stl_allocator {
   mi_stl_allocator()                                              mi_attr_noexcept { }
   mi_stl_allocator(const mi_stl_allocator& )                      mi_attr_noexcept { }
   template<class U> mi_stl_allocator(const mi_stl_allocator<U>& ) mi_attr_noexcept { }
-  void deallocate(T* p, size_t size) { mi_free_size(p, size); }
+  void deallocate(T* p, size_t /* count */) { mi_free(p); }
   #if (__cplusplus >= 201703L)  // C++17
   T* allocate(size_t count) { return (T*)mi_new_n(count, sizeof(T)); }
   #else
