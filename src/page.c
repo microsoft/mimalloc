@@ -626,8 +626,8 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->retire_expire == 0);
   mi_assert_internal(!mi_page_has_aligned(page));
   #if (MI_ENCODE_FREELIST)
+  mi_assert_internal(page->key[0] != 0);
   mi_assert_internal(page->key[1] != 0);
-  mi_assert_internal(page->key[2] != 0);
   #endif
   mi_assert_expensive(mi_page_is_valid_init(page));
 
