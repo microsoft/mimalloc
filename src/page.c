@@ -175,7 +175,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   }
   // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
   if (count > max_count) {
-    _mi_fatal_error("corrupted thread-free list\n");
+    _mi_error_message(EFAULT, "corrupted thread-free list\n");
     return; // the thread-free items cannot be freed
   }
 
@@ -796,7 +796,8 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   mi_page_t* page;
   if (mi_unlikely(size > MI_LARGE_OBJ_SIZE_MAX)) {
     if (mi_unlikely(size > PTRDIFF_MAX)) {  // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
-      page = NULL;
+      _mi_error_message(EOVERFLOW, "allocation request is too large (%zu b requested)\n", size);
+      return NULL;
     }
     else {
       page = mi_huge_page_alloc(heap,size);
@@ -806,7 +807,10 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
     // otherwise find a page with free blocks in our size segregated queues
     page = mi_find_free_page(heap,size);
   }
-  if (page == NULL) return NULL; // out of memory
+  if (mi_unlikely(page == NULL)) { // out of memory
+    _mi_error_message(ENOMEM, "cannot allocate memory (%zu bytes requested)\n", size);
+    return NULL;
+  }
 
   mi_assert_internal(mi_page_immediate_available(page));
   mi_assert_internal(mi_page_block_size(page) >= size);

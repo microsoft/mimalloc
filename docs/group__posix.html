@@ -140,6 +140,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gaad048a9fce3d02c5909cd05c6ec24545"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__posix.html#gaad048a9fce3d02c5909cd05c6ec24545">mi_new</a> (std::size_t n) noexcept(false)</td></tr>
 <tr class="memdesc:gaad048a9fce3d02c5909cd05c6ec24545"><td class="mdescLeft">&#160;</td><td class="mdescRight">raise <code>std::bad_alloc</code> exception on failure.  <a href="#gaad048a9fce3d02c5909cd05c6ec24545">More...</a><br /></td></tr>
 <tr class="separator:gaad048a9fce3d02c5909cd05c6ec24545"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gae7bc4f56cd57ed3359060ff4f38bda81"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__posix.html#gae7bc4f56cd57ed3359060ff4f38bda81">mi_new_n</a> (size_t count, size_t size) noexcept(false)</td></tr>
+<tr class="memdesc:gae7bc4f56cd57ed3359060ff4f38bda81"><td class="mdescLeft">&#160;</td><td class="mdescRight">raise <code>std::bad_alloc</code> exception on failure or overflow.  <a href="#gae7bc4f56cd57ed3359060ff4f38bda81">More...</a><br /></td></tr>
+<tr class="separator:gae7bc4f56cd57ed3359060ff4f38bda81"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaef2c2bdb4f70857902d3c8903ac095f3"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__posix.html#gaef2c2bdb4f70857902d3c8903ac095f3">mi_new_aligned</a> (std::size_t n, std::align_val_t alignment) noexcept(false)</td></tr>
 <tr class="memdesc:gaef2c2bdb4f70857902d3c8903ac095f3"><td class="mdescLeft">&#160;</td><td class="mdescRight">raise <code>std::bad_alloc</code> exception on failure.  <a href="#gaef2c2bdb4f70857902d3c8903ac095f3">More...</a><br /></td></tr>
 <tr class="separator:gaef2c2bdb4f70857902d3c8903ac095f3"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -483,6 +486,44 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>return <code>NULL</code> on failure. </p>
+
+</div>
+</div>
+<a id="gae7bc4f56cd57ed3359060ff4f38bda81"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gae7bc4f56cd57ed3359060ff4f38bda81">&#9670;&nbsp;</a></span>mi_new_n()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void* mi_new_n </td>
+          <td>(</td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>count</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>size</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>raise <code>std::bad_alloc</code> exception on failure or overflow. </p>
 
 </div>
 </div>

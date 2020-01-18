@@ -287,14 +287,10 @@ void _mi_verbose_message(const char* fmt, ...) {
   va_end(args);
 }
 
-void _mi_error_message(const char* fmt, ...) {
+static void mi_show_error_message(const char* fmt, va_list args) {
   if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
   if (mi_atomic_increment(&error_count) > mi_max_error_count) return;
-  va_list args;
-  va_start(args,fmt);
-  mi_vfprintf(NULL, NULL, "mimalloc: error: ", fmt, args);
-  va_end(args);
-  mi_assert(false);
+  mi_vfprintf(NULL, NULL, "mimalloc: error: ", fmt, args);  
 }
 
 void _mi_warning_message(const char* fmt, ...) {
@@ -314,14 +310,40 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, co
 }
 #endif
 
-mi_attr_noreturn void _mi_fatal_error(const char* fmt, ...) {
+// --------------------------------------------------------
+// Errors
+// --------------------------------------------------------
+
+static mi_error_fun* volatile  mi_error_handler; // = NULL
+static volatile _Atomic(void*) mi_error_arg;     // = NULL
+
+static void mi_error_default(int err) {
+  UNUSED(err);
+#if (MI_SECURE>0)
+  if (err==EFAULT) {  // abort on serious errors in secure mode (corrupted meta-data)
+    abort();
+  }
+#endif
+}
+
+void mi_register_error(mi_error_fun* fun, void* arg) {
+  mi_error_handler = fun;  // can be NULL
+  mi_atomic_write_ptr(&mi_error_arg, arg);
+}
+
+void _mi_error_message(int err, const char* fmt, ...) {
+  // show detailed error message
   va_list args;
   va_start(args, fmt);
-  mi_vfprintf(NULL, NULL, "mimalloc: fatal: ", fmt, args);
+  mi_show_error_message(fmt, args);
   va_end(args);
-  #if (MI_SECURE>=0)
-  abort();
-  #endif
+  // and call the error handler which may abort (or return normally)
+  if (mi_error_handler != NULL) {
+    mi_error_handler(err, mi_atomic_read_ptr(&mi_error_arg));
+  }
+  else {
+    mi_error_default(err);
+  }
 }
 
 // --------------------------------------------------------

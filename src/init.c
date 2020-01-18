@@ -157,7 +157,7 @@ static bool _mi_heap_init(void) {
     // use `_mi_os_alloc` to allocate directly from the OS
     mi_thread_data_t* td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t),&_mi_stats_main); // Todo: more efficient allocation?
     if (td == NULL) {
-      _mi_error_message("failed to allocate thread local heap memory\n");
+      _mi_error_message(ENOMEM, "failed to allocate thread local heap memory\n");
       return false;
     }
     mi_tld_t*  tld = &td->tld;

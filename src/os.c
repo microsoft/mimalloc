@@ -13,7 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-atomic.h"
 
 #include <string.h>  // strerror
-#include <errno.h>
+
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -655,7 +655,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   if (err != 0) { err = errno; }
   #endif
   if (err != 0) {
-    _mi_warning_message("%s error: start: 0x%p, csize: 0x%x, err: %i\n", commit ? "commit" : "decommit", start, csize, err);
+    _mi_warning_message("%s error: start: %p, csize: 0x%x, err: %i\n", commit ? "commit" : "decommit", start, csize, err);
     mi_mprotect_hint(err);
   }
   mi_assert_internal(err == 0);
@@ -719,7 +719,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   int err = madvise(start, csize, MADV_DONTNEED);
 #endif
   if (err != 0) {
-    _mi_warning_message("madvise reset error: start: 0x%p, csize: 0x%x, errno: %i\n", start, csize, errno);
+    _mi_warning_message("madvise reset error: start: %p, csize: 0x%x, errno: %i\n", start, csize, errno);
   }
   //mi_assert(err == 0);
   if (err != 0) return false;
@@ -774,7 +774,7 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   if (err != 0) { err = errno; }
 #endif
   if (err != 0) {
-    _mi_warning_message("mprotect error: start: 0x%p, csize: 0x%x, err: %i\n", start, csize, err);
+    _mi_warning_message("mprotect error: start: %p, csize: 0x%x, err: %i\n", start, csize, err);
     mi_mprotect_hint(err);
   }
   return (err == 0);
@@ -961,7 +961,7 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
     if (p != addr) {
       // no success, issue a warning and break
       if (p != NULL) {
-        _mi_warning_message("could not allocate contiguous huge page %zu at 0x%p\n", page, addr);
+        _mi_warning_message("could not allocate contiguous huge page %zu at %p\n", page, addr);
         _mi_os_free(p, MI_HUGE_OS_PAGE_SIZE, &_mi_stats_main);
       }
       break;

@@ -373,6 +373,30 @@ typedef void (mi_output_fun)(const char* msg, void* arg);
 /// like verbose or warning messages.
 void mi_register_output(mi_output_fun* out, void* arg);
 
+/// Type of error callback functions.
+/// @param err Error code (see mi_register_error() for a complete list).
+/// @param arg Argument that was passed at registration to hold extra state.
+///
+/// @see mi_register_error()
+typedef void (mi_error_fun)(int err, void* arg);
+
+/// Register an error callback function.
+/// @param errfun The error function that is called on an error (use \a NULL for default)
+/// @param arg Extra argument that will be passed on to the error function.
+///
+/// The \a errfun function is called on an error in mimalloc after emitting
+/// an error message (through the output function). It as always legal to just
+/// return from the \a errfun function in which case allocation functions generally
+/// return \a NULL or ignore the condition. The default function only calls abort()
+/// when compiled in secure mode with an \a EFAULT error. The possible error
+/// codes are:
+/// * \a EAGAIN: Double free was detected (only in debug and secure mode).
+/// * \a EFAULT: Corrupted free list or meta-data was detected (only in debug and secure mode).
+/// * \a ENOMEM: Not enough memory available to satisfy the request.
+/// * \a EOVERFLOW: Too large a request, for example in mi_calloc(), the \a count and \a size parameters are too large.
+/// * \a EINVAL: Trying to free or re-allocate an invalid pointer.
+void mi_register_error(mi_error_fun* errfun, void* arg);
+
 /// Is a pointer part of our heap?
 /// @param p The pointer to check.
 /// @returns \a true if this is a pointer into our heap.

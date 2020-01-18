@@ -2,6 +2,7 @@ var group__extended =
 [
     [ "MI_SMALL_SIZE_MAX", "group__extended.html#ga1ea64283508718d9d645c38efc2f4305", null ],
     [ "mi_deferred_free_fun", "group__extended.html#ga299dae78d25ce112e384a98b7309c5be", null ],
+    [ "mi_error_fun", "group__extended.html#ga251d369cda3f1c2a955c555486ed90e5", null ],
     [ "mi_output_fun", "group__extended.html#gad823d23444a4b77a40f66bf075a98a0c", null ],
     [ "mi_collect", "group__extended.html#ga421430e2226d7d468529cec457396756", null ],
     [ "mi_good_size", "group__extended.html#gac057927cd06c854b45fe7847e921bd47", null ],
@@ -9,6 +10,7 @@ var group__extended =
     [ "mi_is_redirected", "group__extended.html#gaad25050b19f30cd79397b227e0157a3f", null ],
     [ "mi_malloc_small", "group__extended.html#ga7136c2e55cb22c98ecf95d08d6debb99", null ],
     [ "mi_register_deferred_free", "group__extended.html#ga3460a6ca91af97be4058f523d3cb8ece", null ],
+    [ "mi_register_error", "group__extended.html#gaa1d55e0e894be240827e5d87ec3a1f45", null ],
     [ "mi_register_output", "group__extended.html#gae5b17ff027cd2150b43a33040250cf3f", null ],
     [ "mi_reserve_huge_os_pages_at", "group__extended.html#ga7795a13d20087447281858d2c771cca1", null ],
     [ "mi_reserve_huge_os_pages_interleave", "group__extended.html#ga3132f521fb756fc0e8ec0b74fb58df50", null ],

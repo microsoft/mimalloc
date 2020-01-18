@@ -124,6 +124,9 @@ Typedefs</h2></td></tr>
 <tr class="memitem:gad823d23444a4b77a40f66bf075a98a0c"><td class="memItemLeft" align="right" valign="top">typedef void()&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#gad823d23444a4b77a40f66bf075a98a0c">mi_output_fun</a>(const char *msg, void *arg)</td></tr>
 <tr class="memdesc:gad823d23444a4b77a40f66bf075a98a0c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Type of output functions.  <a href="#gad823d23444a4b77a40f66bf075a98a0c">More...</a><br /></td></tr>
 <tr class="separator:gad823d23444a4b77a40f66bf075a98a0c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga251d369cda3f1c2a955c555486ed90e5"><td class="memItemLeft" align="right" valign="top">typedef void()&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga251d369cda3f1c2a955c555486ed90e5">mi_error_fun</a>(int err, void *arg)</td></tr>
+<tr class="memdesc:ga251d369cda3f1c2a955c555486ed90e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Type of error callback functions.  <a href="#ga251d369cda3f1c2a955c555486ed90e5">More...</a><br /></td></tr>
+<tr class="separator:ga251d369cda3f1c2a955c555486ed90e5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="func-members"></a>
 Functions</h2></td></tr>
@@ -169,6 +172,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gae5b17ff027cd2150b43a33040250cf3f"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#gae5b17ff027cd2150b43a33040250cf3f">mi_register_output</a> (<a class="el" href="group__extended.html#gad823d23444a4b77a40f66bf075a98a0c">mi_output_fun</a> *out, void *arg)</td></tr>
 <tr class="memdesc:gae5b17ff027cd2150b43a33040250cf3f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Register an output function.  <a href="#gae5b17ff027cd2150b43a33040250cf3f">More...</a><br /></td></tr>
 <tr class="separator:gae5b17ff027cd2150b43a33040250cf3f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaa1d55e0e894be240827e5d87ec3a1f45"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#gaa1d55e0e894be240827e5d87ec3a1f45">mi_register_error</a> (<a class="el" href="group__extended.html#ga251d369cda3f1c2a955c555486ed90e5">mi_error_fun</a> *errfun, void *arg)</td></tr>
+<tr class="memdesc:gaa1d55e0e894be240827e5d87ec3a1f45"><td class="mdescLeft">&#160;</td><td class="mdescRight">Register an error callback function.  <a href="#gaa1d55e0e894be240827e5d87ec3a1f45">More...</a><br /></td></tr>
+<tr class="separator:gaa1d55e0e894be240827e5d87ec3a1f45"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga5f071b10d4df1c3658e04e7fd67a94e6"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga5f071b10d4df1c3658e04e7fd67a94e6">mi_is_in_heap_region</a> (const void *p)</td></tr>
 <tr class="memdesc:ga5f071b10d4df1c3658e04e7fd67a94e6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Is a pointer part of our heap?  <a href="#ga5f071b10d4df1c3658e04e7fd67a94e6">More...</a><br /></td></tr>
 <tr class="separator:ga5f071b10d4df1c3658e04e7fd67a94e6"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -224,6 +230,30 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#ga3460a6ca91af97be4058f523d3cb8ece" title="Register a deferred free function.">mi_register_deferred_free</a> </dd></dl>
+
+</div>
+</div>
+<a id="ga251d369cda3f1c2a955c555486ed90e5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga251d369cda3f1c2a955c555486ed90e5">&#9670;&nbsp;</a></span>mi_error_fun</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef void() mi_error_fun(int err, void *arg)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Type of error callback functions. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">err</td><td>Error code (see <a class="el" href="group__extended.html#gaa1d55e0e894be240827e5d87ec3a1f45" title="Register an error callback function.">mi_register_error()</a> for a complete list). </td></tr>
+    <tr><td class="paramname">arg</td><td>Argument that was passed at registration to hold extra state.</td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#gaa1d55e0e894be240827e5d87ec3a1f45" title="Register an error callback function.">mi_register_error()</a> </dd></dl>
 
 </div>
 </div>
@@ -418,6 +448,50 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <p>Some runtime systems use deferred free-ing, for example when using reference counting to limit the worst case free time. Such systems can register (re-entrant) deferred free function to free more memory on demand. When the <em>force</em> parameter is <em>true</em> all possible memory should be freed. The per-thread <em>heartbeat</em> parameter is monotonically increasing and guaranteed to be deterministic if the program allocates deterministically. The <em>deferred_free</em> function is guaranteed to be called deterministically after some number of allocations (regardless of freeing or available free memory). At most one <em>deferred_free</em> function can be active. </p>
+
+</div>
+</div>
+<a id="gaa1d55e0e894be240827e5d87ec3a1f45"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaa1d55e0e894be240827e5d87ec3a1f45">&#9670;&nbsp;</a></span>mi_register_error()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_register_error </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__extended.html#ga251d369cda3f1c2a955c555486ed90e5">mi_error_fun</a> *&#160;</td>
+          <td class="paramname"><em>errfun</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>arg</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Register an error callback function. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">errfun</td><td>The error function that is called on an error (use <em>NULL</em> for default) </td></tr>
+    <tr><td class="paramname">arg</td><td>Extra argument that will be passed on to the error function.</td></tr>
+  </table>
+  </dd>
+</dl>
+<p>The <em>errfun</em> function is called on an error in mimalloc after emitting an error message (through the output function). It as always legal to just return from the <em>errfun</em> function in which case allocation functions generally return <em>NULL</em> or ignore the condition. The default function only calls abort() when compiled in secure mode with an <em>EFAULT</em> error. The possible error codes are:</p><ul>
+<li><em>EAGAIN:</em> Double free was detected (only in debug and secure mode).</li>
+<li><em>EFAULT:</em> Corrupted free list or meta-data was detected (only in debug and secure mode).</li>
+<li><em>ENOMEM:</em> Not enough memory available to satisfy the request.</li>
+<li><em>EOVERFLOW:</em> Too large a request, for example in <a class="el" href="group__malloc.html#ga97fedb4f7107c592fd7f0f0a8949a57d" title="Allocate zero-initialized count elements of size bytes.">mi_calloc()</a>, the <em>count</em> and <em>size</em> parameters are too large.</li>
+<li><em>EINVAL:</em> Trying to free or re-allocate an invalid pointer. </li>
+</ul>
 
 </div>
 </div>

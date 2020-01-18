@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 Testing allocators is difficult as bugs may only surface after particular
 allocation patterns. The main approach to testing _mimalloc_ is therefore
 to have extensive internal invariant checking (see `page_is_valid` in `page.c`
-for example), which is enabled in debug mode with `-DMI_CHECK_FULL=ON`.
+for example), which is enabled in debug mode with `-DMI_DEBUG_FULL=ON`.
 The main testing is then to run `mimalloc-bench` [1] using full invariant checking
 to catch any potential problems over a wide range of intensive allocation bench
 marks.
@@ -87,6 +87,10 @@ int main() {
   });
   CHECK_BODY("malloc-null",{
     mi_free(NULL);
+  });
+  CHECK_BODY("calloc-overflow",{
+    // use (size_t)&mi_calloc to get some number without triggering compiler warnings
+    result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);
   });
 
   // ---------------------------------------------------

@@ -146,7 +146,7 @@ static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, con
       mi_list_contains(page, page->local_free, block) ||
       mi_list_contains(page, mi_page_thread_free(page), block))
   {
-    _mi_fatal_error("double free detected of block %p with size %zu\n", block, mi_page_block_size(page));
+    _mi_error_message(EAGAIN, "double free detected of block %p with size %zu\n", block, mi_page_block_size(page));
     return true;
   }
   return false;
@@ -300,7 +300,7 @@ void mi_free(void* p) mi_attr_noexcept
 {
 #if (MI_DEBUG>0)
   if (mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0)) {
-    _mi_error_message("trying to free an invalid (unaligned) pointer: %p\n", p);
+    _mi_error_message(EINVAL, "trying to free an invalid (unaligned) pointer: %p\n", p);
     return;
   }
 #endif
@@ -310,16 +310,16 @@ void mi_free(void* p) mi_attr_noexcept
 
 #if (MI_DEBUG!=0)
   if (mi_unlikely(!mi_is_in_heap_region(p))) {
-    _mi_warning_message("possibly trying to free a pointer that does not point to a valid heap region: 0x%p\n"
+    _mi_warning_message("possibly trying to free a pointer that does not point to a valid heap region: %p\n"
       "(this may still be a valid very large allocation (over 64MiB))\n", p);
     if (mi_likely(_mi_ptr_cookie(segment) == segment->cookie)) {
-      _mi_warning_message("(yes, the previous pointer 0x%p was valid after all)\n", p);
+      _mi_warning_message("(yes, the previous pointer %p was valid after all)\n", p);
     }
   }
 #endif
 #if (MI_DEBUG!=0 || MI_SECURE>=4)
   if (mi_unlikely(_mi_ptr_cookie(segment) != segment->cookie)) {
-    _mi_error_message("trying to free a pointer that does not point to a valid heap space: %p\n", p);
+    _mi_error_message(EINVAL, "trying to free a pointer that does not point to a valid heap space: %p\n", p);
     return;
   }
 #endif
@@ -432,7 +432,7 @@ void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
 
 extern inline mi_decl_allocator void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
-  if (mi_mul_overflow(count,size,&total)) return NULL;
+  if (mi_count_size_overflow(count,size,&total)) return NULL;
   return mi_heap_zalloc(heap,total);
 }
 
@@ -443,7 +443,7 @@ mi_decl_allocator void* mi_calloc(size_t count, size_t size) mi_attr_noexcept {
 // Uninitialized `calloc`
 extern mi_decl_allocator void* mi_heap_mallocn(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
-  if (mi_mul_overflow(count, size, &total)) return NULL;
+  if (mi_count_size_overflow(count, size, &total)) return NULL;
   return mi_heap_malloc(heap, total);
 }
 
@@ -484,7 +484,7 @@ mi_decl_allocator void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize
 
 mi_decl_allocator void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
-  if (mi_mul_overflow(count, size, &total)) return NULL;
+  if (mi_count_size_overflow(count, size, &total)) return NULL;
   return mi_heap_realloc(heap, p, total);
 }
 
@@ -502,7 +502,7 @@ mi_decl_allocator void* mi_heap_rezalloc(mi_heap_t* heap, void* p, size_t newsiz
 
 mi_decl_allocator void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
-  if (mi_mul_overflow(count, size, &total)) return NULL;
+  if (mi_count_size_overflow(count, size, &total)) return NULL;
   return mi_heap_rezalloc(heap, p, total);
 }
 
@@ -570,7 +570,6 @@ char* mi_strndup(const char* s, size_t n) mi_attr_noexcept {
 #define PATH_MAX MAX_PATH
 #endif
 #include <windows.h>
-#include <errno.h>
 char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
   // todo: use GetFullPathNameW to allow longer file names
   char buf[PATH_MAX];
@@ -645,10 +644,6 @@ static bool mi_try_new_handler(bool nothrow) {
   }
 }
 #else
-#include <errno.h>
-#ifndef ENOMEM
-#define ENOMEM 12
-#endif
 typedef void (*std_new_handler_t)();
 
 #if (defined(__GNUC__) || defined(__clang__))
@@ -668,7 +663,7 @@ std_new_handler_t mi_get_new_handler() {
 static bool mi_try_new_handler(bool nothrow) {
   std_new_handler_t h = mi_get_new_handler();
   if (h==NULL) {
-    if (!nothrow) exit(ENOMEM);
+    if (!nothrow) exit(ENOMEM);  // cannot throw in plain C, use exit as we are out of memory anyway.
     return false;
   }
   else {
@@ -718,7 +713,7 @@ void* mi_new_aligned_nothrow(size_t size, size_t alignment) {
 
 void* mi_new_n(size_t count, size_t size) {
   size_t total;
-  if (mi_unlikely(mi_mul_overflow(count, size, &total))) {
+  if (mi_unlikely(mi_count_size_overflow(count, size, &total))) {
     mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
     return NULL;
   }
