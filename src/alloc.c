@@ -92,9 +92,9 @@ extern inline mi_decl_allocator void* mi_malloc(size_t size) mi_attr_noexcept {
 void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
   // note: we need to initialize the whole block to zero, not just size
   // or the recalloc/rezalloc functions cannot safely expand in place (see issue #63)
-  UNUSED(size);
+  UNUSED_RELEASE(size);
   mi_assert_internal(p != NULL);
-  mi_assert_internal(size > 0 && mi_page_block_size(page) >= size);
+  mi_assert_internal(size >= 0 && mi_page_block_size(page) >= size);
   mi_assert_internal(_mi_ptr_page(p)==page);
   if (page->is_zero) {
     // already zero initialized memory?

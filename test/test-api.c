@@ -92,6 +92,9 @@ int main() {
     // use (size_t)&mi_calloc to get some number without triggering compiler warnings
     result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);
   });
+  CHECK_BODY("calloc0",{
+    result = (mi_usable_size(mi_calloc(0,1000)) >= 0);
+  });
 
   // ---------------------------------------------------
   // Extended
