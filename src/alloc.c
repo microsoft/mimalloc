@@ -94,7 +94,7 @@ void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
   // or the recalloc/rezalloc functions cannot safely expand in place (see issue #63)
   UNUSED_RELEASE(size);
   mi_assert_internal(p != NULL);
-  mi_assert_internal(size >= 0 && mi_page_block_size(page) >= size);
+  mi_assert_internal(mi_page_block_size(page) >= size); // size can be zero
   mi_assert_internal(_mi_ptr_page(p)==page);
   if (page->is_zero) {
     // already zero initialized memory?
@@ -141,7 +141,7 @@ static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, cons
 
 static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, const mi_block_t* block) {
   // The decoded value is in the same page (or NULL).
-  // Walk the free lists to verify positively if it is already freed  
+  // Walk the free lists to verify positively if it is already freed
   if (mi_list_contains(page, page->free, block) ||
       mi_list_contains(page, page->local_free, block) ||
       mi_list_contains(page, mi_page_thread_free(page), block))
@@ -343,8 +343,8 @@ void mi_free(void* p) mi_attr_noexcept
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
     page->used--;
-    if (mi_unlikely(mi_page_all_free(page))) { 
-      _mi_page_retire(page); 
+    if (mi_unlikely(mi_page_all_free(page))) {
+      _mi_page_retire(page);
     }
   }
   else {
@@ -695,8 +695,8 @@ void* mi_new_nothrow(size_t size) {
 
 void* mi_new_aligned(size_t size, size_t alignment) {
   void* p;
-  do { 
-    p = mi_malloc_aligned(size, alignment); 
+  do {
+    p = mi_malloc_aligned(size, alignment);
   }
   while(p == NULL && mi_try_new_handler(false));
   return p;
@@ -704,8 +704,8 @@ void* mi_new_aligned(size_t size, size_t alignment) {
 
 void* mi_new_aligned_nothrow(size_t size, size_t alignment) {
   void* p;
-  do { 
-    p = mi_malloc_aligned(size, alignment); 
+  do {
+    p = mi_malloc_aligned(size, alignment);
   }
   while(p == NULL && mi_try_new_handler(true));
   return p;

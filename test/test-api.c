@@ -93,7 +93,7 @@ int main() {
     result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);
   });
   CHECK_BODY("calloc0",{
-    result = (mi_usable_size(mi_calloc(0,1000)) >= 0);
+    result = (mi_usable_size(mi_calloc(0,1000)) <= 16);
   });
 
   // ---------------------------------------------------
