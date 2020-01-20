@@ -351,6 +351,7 @@ mi_decl_export void* mi_new_aligned_nothrow(size_t size, size_t alignment) mi_at
 
 #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
 #include <type_traits> // true_type
+#include <cstdint>     // PTRDIFF_MAX
 #endif
 
 template<class T> struct mi_stl_allocator {
@@ -360,6 +361,7 @@ template<class T> struct mi_stl_allocator {
   using propagate_on_container_move_assignment = std::true_type;
   using propagate_on_container_swap = std::true_type;
   using is_always_equal = std::true_type;
+  size_t max_size() const noexcept { return (PTRDIFF_MAX / sizeof(value_type)); }
   #endif
   mi_stl_allocator()                                              mi_attr_noexcept { }
   mi_stl_allocator(const mi_stl_allocator& )                      mi_attr_noexcept { }
