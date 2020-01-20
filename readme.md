@@ -114,6 +114,19 @@ Notes:
 1. Install CMake: `sudo apt-get install cmake`
 2. Install CCMake: `sudo apt-get install cmake-curses-gui`
 
+## Building Mimalloc - Using vcpkg
+
+You can download and install Mimalloc using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
+
+```
+> git clone https://github.com/Microsoft/vcpkg.git
+> cd vcpkg
+> ./bootstrap-vcpkg.sh
+> ./vcpkg integrate install
+> vcpkg install mimalloc
+```
+
+The Mimalloc port in vcpkg is kept up to date by Microsoft team members and community contributors. If the version is out of date, please [create an issue or pull request](https://github.com/Microsoft/vcpkg) on the vcpkg repository.
 
 
 # Using the library
