@@ -255,7 +255,6 @@ static void* atomic_exchange_ptr(volatile void** p, void* newval) {
 #else
 
 #include <pthread.h>
-#include <stdatomic.h>
 
 static void* thread_entry(void* param) {
   stress((uintptr_t)param);
@@ -275,8 +274,16 @@ static void run_os_threads(size_t nthreads) {
   custom_free(threads);
 }
 
+#ifdef __cplusplus
+#include <atomic>
+static void* atomic_exchange_ptr(volatile void** p, void* newval) {
+  return std::atomic_exchange_explicit((volatile std::atomic<void*>*)p, newval, std::memory_order_acquire);
+}
+#else
+#include <stdatomic.h>
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
   return atomic_exchange_explicit((volatile _Atomic(void*)*)p, newval, memory_order_acquire);
 }
+#endif
 
 #endif

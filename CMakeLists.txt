@@ -54,7 +54,7 @@ endif()
 # Process options
 # -----------------------------------------------------------------------------
 
-if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
+if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
 endif()
 
@@ -96,24 +96,33 @@ endif()
 if(MI_USE_CXX MATCHES "ON")
   message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-stress PROPERTIES LANGUAGE CXX )
   if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang|Clang")
     list(APPEND mi_cflags -Wno-deprecated)
+  endif()
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Intel")
+    list(APPEND mi_cflags -Kc++)
   endif()
 endif()
 
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
   list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas)
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+    list(APPEND mi_cflags -Wno-invalid-memory-model)
+    list(APPEND mi_cflags -fvisibility=hidden)
+  endif()
+endif()
+
+if(CMAKE_C_COMPILER_ID MATCHES "Intel")
+  list(APPEND mi_cflags -Wall -fvisibility=hidden)
+endif()
+
+if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel")
   if(MI_LOCAL_DYNAMIC_TLS MATCHES "ON")
     list(APPEND mi_cflags -ftls-model=local-dynamic)
   else()
     list(APPEND mi_cflags -ftls-model=initial-exec)
-  endif()
-  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
-    list(APPEND mi_cflags -Wno-invalid-memory-model)
-    list(APPEND mi_cflags -fvisibility=hidden)
-    list(APPEND mi_cflags -fbranch-target-load-optimize)
   endif()
 endif()
 
