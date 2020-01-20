@@ -341,11 +341,15 @@ mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
 mi_decl_export void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept;
 mi_decl_export void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept;
 
+// The `mi_new` wrappers implement C++ semantics on out-of-memory instead of directly returning `NULL`.
+// (and call `std::get_new_handler` and potentially raise a `std::bad_alloc` exception).
 mi_decl_export void* mi_new(size_t size) mi_attr_malloc mi_attr_alloc_size(1);
-mi_decl_export void* mi_new_n(size_t count, size_t size) mi_attr_malloc mi_attr_alloc_size2(1,2);
 mi_decl_export void* mi_new_aligned(size_t size, size_t alignment) mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
 mi_decl_export void* mi_new_nothrow(size_t size) mi_attr_malloc mi_attr_alloc_size(1);
 mi_decl_export void* mi_new_aligned_nothrow(size_t size, size_t alignment) mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
+mi_decl_export void* mi_new_n(size_t count, size_t size) mi_attr_malloc mi_attr_alloc_size2(1, 2);
+mi_decl_export void* mi_new_realloc(void* p, size_t newsize) mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_export void* mi_new_reallocn(void* p, size_t newcount, size_t size) mi_attr_malloc mi_attr_alloc_size2(2, 3);
 
 #ifdef __cplusplus
 }

@@ -721,3 +721,22 @@ void* mi_new_n(size_t count, size_t size) {
     return mi_new(total);
   }
 }
+
+void* mi_new_realloc(void* p, size_t newsize) {
+  void* q;
+  do {
+    q = mi_realloc(p, newsize);
+  } while (q == NULL && mi_try_new_handler(false));
+  return q;
+}
+
+void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
+  size_t total;
+  if (mi_unlikely(mi_count_size_overflow(newcount, size, &total))) {
+    mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
+    return NULL;
+  }
+  else {
+    return mi_new_realloc(p, total);
+  }
+}
