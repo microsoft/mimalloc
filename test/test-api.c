@@ -202,7 +202,7 @@ bool test_heap2() {
 
 bool test_stl_allocator1() {
 #ifdef __cplusplus
-  std::vector<int, mi_stl_allocator<int>> vec;
+  std::vector<int, mi_stl_allocator<int> > vec;
   vec.push_back(1);
   vec.pop_back();
   return vec.size() == 0;
@@ -211,11 +211,11 @@ bool test_stl_allocator1() {
 #endif
 }
 
+struct some_struct  { int i; int j; double z; };
+
 bool test_stl_allocator2() {
 #ifdef __cplusplus
-  struct some_struct  { int i; int j; double z; };
-
-  std::vector<some_struct, mi_stl_allocator<some_struct>> vec;
+  std::vector<some_struct, mi_stl_allocator<some_struct> > vec;
   vec.push_back(some_struct());
   vec.pop_back();
   return vec.size() == 0;

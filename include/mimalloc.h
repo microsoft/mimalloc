@@ -357,29 +357,50 @@ mi_decl_export void* mi_new_aligned_nothrow(size_t size, size_t alignment) mi_at
 // ---------------------------------------------------------------------------------------------
 #ifdef __cplusplus
 
+#include <limits>      // std::numeric_limits<ptrdiff_t>
 #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
-#include <type_traits> // true_type
-#include <cstdint>     // PTRDIFF_MAX
+#include <type_traits> // std::true_type
+#include <utility>     // std::forward
 #endif
 
 template<class T> struct mi_stl_allocator {
-  typedef T value_type;
-  #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
+  typedef T                 value_type;  
+  typedef std::size_t       size_type;
+  typedef std::ptrdiff_t    difference_type;    
+  typedef value_type&       reference;
+  typedef value_type const& const_reference;
+  typedef value_type*       pointer;
+  typedef value_type const* const_pointer;
+  template <class U> struct rebind { typedef mi_stl_allocator<U> other; };
+
+  mi_stl_allocator()                                             mi_attr_noexcept { }
+  mi_stl_allocator(const mi_stl_allocator&)                      mi_attr_noexcept { }
+  template<class U> mi_stl_allocator(const mi_stl_allocator<U>&) mi_attr_noexcept { }
+  mi_stl_allocator  select_on_container_copy_construction() const { return *this; }
+  void              deallocate(T* p, size_type) { mi_free(p); }
+
+  #if (__cplusplus >= 201703L)  // C++17 
+  T* allocate(size_type count) { return static_cast<T*>(mi_new_n(count, sizeof(T))); }
+  T* allocate(size_type count, const void*) { return allocate(count); }  
+  #else  
+  pointer allocate(size_type count, const void* = 0) { return static_cast<pointer>(mi_new_n(count, sizeof(value_type))); }
+  #endif  
+  
+  #if ((__cplusplus >= 201103L) || (_MSC_VER > 1900))  // C++11
   using propagate_on_container_copy_assignment = std::true_type;
   using propagate_on_container_move_assignment = std::true_type;
-  using propagate_on_container_swap = std::true_type;
-  using is_always_equal = std::true_type;
-  size_t max_size() const noexcept { return (PTRDIFF_MAX / sizeof(value_type)); }
-  #endif
-  mi_stl_allocator()                                              mi_attr_noexcept { }
-  mi_stl_allocator(const mi_stl_allocator& )                      mi_attr_noexcept { }
-  template<class U> mi_stl_allocator(const mi_stl_allocator<U>& ) mi_attr_noexcept { }
-  void deallocate(T* p, size_t /* count */) { mi_free(p); }
-  #if (__cplusplus >= 201703L)  // C++17
-  T* allocate(size_t count) { return (T*)mi_new_n(count, sizeof(T)); }
+  using propagate_on_container_swap            = std::true_type;
+  using is_always_equal                        = std::true_type;
+  template <class U, class ...Args> void construct(U* p, Args&& ...args) { ::new(p) U(std::forward<Args>(args)...); }
+  template <class U> void destroy(U* p) mi_attr_noexcept { p->~U(); } 
   #else
-  T* allocate(size_t count, const void* hint = 0) { (void)hint; return (T*)mi_new_n(count, sizeof(T)); }
+  void construct(pointer p, value_type const& val) { ::new(p) value_type(val); }
+  void destroy(pointer p) { p->~value_type(); } 
   #endif
+
+  size_type     max_size() const mi_attr_noexcept { return (std::numeric_limits<difference_type>::max() / sizeof(value_type)); }
+  pointer       address(reference x) const        { return &x; }
+  const_pointer address(const_reference x) const  { return &x; }
 };
 
 template<class T1,class T2> bool operator==(const mi_stl_allocator<T1>& , const mi_stl_allocator<T2>& ) mi_attr_noexcept { return true; }
