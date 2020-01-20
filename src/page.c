@@ -234,7 +234,7 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_internal(_mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
   mi_assert_internal(!page->is_reset);
   mi_page_queue_t* pq = mi_page_queue(heap, mi_page_block_size(page));
-  mi_page_queue_push(heap, pq, page);    
+  mi_page_queue_push(heap, pq, page);
   mi_assert_expensive(_mi_page_is_valid(page));
 }
 
@@ -408,7 +408,7 @@ void _mi_page_retire(mi_page_t* page) {
   if (mi_likely(page->xblock_size <= MI_SMALL_SIZE_MAX && !mi_page_is_in_full(page))) {
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
-      page->retire_expire = 4;
+      page->retire_expire = 16;
       mi_assert_internal(mi_page_all_free(page));
       return; // dont't free after all
     }
@@ -514,7 +514,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
   mi_assert_internal(page->capacity + extend <= page->reserved);
   mi_assert_internal(bsize == mi_page_block_size(page));
   void* const page_area = _mi_page_start(_mi_page_segment(page), page, NULL );
-  
+
   mi_block_t* const start = mi_page_block_at(page, page_area, bsize, page->capacity);
 
   // initialize a sequential free list
@@ -678,6 +678,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   mi_stat_counter_increase(heap->tld->stats.searches, count);
 
   if (page == NULL) {
+    _mi_heap_collect_retired(heap, false); // perhaps make a page available
     page = mi_page_fresh(heap, pq);
   }
   else {
@@ -686,8 +687,6 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   }
   mi_assert_internal(page == NULL || mi_page_immediate_available(page));
 
-  // finally collect retired pages
-  _mi_heap_collect_retired(heap, false);
   return page;
 }
 
