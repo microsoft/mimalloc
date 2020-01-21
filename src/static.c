@@ -16,12 +16,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "stats.c"
 #include "random.c"
 #include "os.c"
-<<<<<<< HEAD
 //#include "memory.c"
-=======
 #include "arena.c"
-#include "memory.c"
->>>>>>> dev
 #include "segment.c"
 #include "page.c"
 #include "heap.c"

@@ -378,9 +378,22 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   // no more aligned blocks in here
   mi_page_set_has_aligned(page, false);
 
+  mi_heap_t* heap = mi_page_heap(page);
+  const size_t bsize = mi_page_block_size(page);
+  if (bsize > MI_MEDIUM_OBJ_SIZE_MAX) {
+    if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {      
+      _mi_stat_decrease(&heap->tld->stats.large, bsize);
+    }
+    else {
+      // not strictly necessary as we never get here for a huge page
+      mi_assert_internal(false);
+      _mi_stat_decrease(&heap->tld->stats.huge, bsize);      
+    }
+  }
+
   // remove from the page list
   // (no need to do _mi_heap_delayed_free first as all blocks are already free)
-  mi_segments_tld_t* segments_tld = &mi_page_heap(page)->tld->segments;
+  mi_segments_tld_t* segments_tld = &heap->tld->segments;
   mi_page_queue_remove(pq, page);
 
   // and free it
@@ -769,11 +782,11 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
       mi_assert_internal(_mi_page_segment(page)->kind != MI_SEGMENT_HUGE);
     }
     if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
-      _mi_stat_increase(&heap->tld->stats.large, block_size);
+      _mi_stat_increase(&heap->tld->stats.large, bsize);
       _mi_stat_counter_increase(&heap->tld->stats.large_count, 1);
     }
     else {
-      _mi_stat_increase(&heap->tld->stats.huge, block_size);
+      _mi_stat_increase(&heap->tld->stats.huge, bsize);
       _mi_stat_counter_increase(&heap->tld->stats.huge_count, 1);
     }
   }

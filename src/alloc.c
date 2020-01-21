@@ -195,6 +195,7 @@ static mi_decl_noinline void mi_free_huge_block_mt(mi_segment_t* segment, mi_pag
     mi_tld_t* tld = heap->tld;
     const size_t bsize = mi_page_block_size(page);
     if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+      mi_assert_internal(false);
       _mi_stat_decrease(&tld->stats.large, bsize);
     }
     else {

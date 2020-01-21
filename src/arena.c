@@ -1,3 +1,4 @@
+
 /* ----------------------------------------------------------------------------
 Copyright (c) 2019, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
@@ -36,7 +37,8 @@ of 256MiB in practice.
 
 // os.c
 void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld);
-void  _mi_os_free(void* p, size_t size, mi_stats_t* stats);
+// void  _mi_os_free(void* p, size_t size, mi_stats_t* stats);
+void  _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats);
 
 void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize);
 void  _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats);
@@ -178,8 +180,11 @@ static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool* co
             if (*commit && !committed) {
               bool commit_zero;
               _mi_os_commit(p, MI_SEGMENT_SIZE, &commit_zero, tld->stats);
+              *commit = true;
             }            
-            *commit = committed;
+            else {
+              *commit = committed;
+            }
             return p;
           }
         }
@@ -207,7 +212,7 @@ static void mi_cache_purge(mi_os_tld_t* tld) {
         // expired, try to claim it
         if (mi_atomic_cas_ptr_weak(&slot->p, MI_SLOT_IN_USE, p)) {
           // claimed! test again
-          if (!slot->is_committed && !slot->is_large && now >= slot->expire) {
+          if (slot->is_committed && !slot->is_large && now >= slot->expire) {
             _mi_os_decommit(p, MI_SEGMENT_SIZE, tld->stats);
             slot->is_committed = false;
           }
@@ -239,15 +244,20 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_commit
     if (p == NULL) { // free slot
       if (mi_atomic_cas_ptr_weak(&slot->p, MI_SLOT_IN_USE, NULL)) {
         // claimed!
-        long delay = mi_option_get(mi_option_arena_reset_delay);
-        if (delay == 0 && !is_large) {
-          _mi_os_decommit(start, size, tld->stats);
-          is_committed = false;
-        }
-        slot->expire = (is_committed ? 0 : _mi_clock_now() + delay);
+        slot->expire = 0;
         slot->is_committed = is_committed;
         slot->memid = memid;
         slot->is_large = is_large;
+        if (is_committed) {
+          long delay = mi_option_get(mi_option_arena_reset_delay);
+          if (delay == 0 && !is_large) {
+            _mi_os_decommit(start, size, tld->stats);
+            slot->is_committed = false;
+          }
+          else {
+            slot->expire = _mi_clock_now() + delay;
+          }
+        }
         mi_atomic_write_ptr(&slot->p, start); // and make it available;
         return true;
       }
@@ -369,7 +379,7 @@ void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, bool 
   if (memid == MI_MEMID_OS) {
     // was a direct OS allocation, pass through
     if (!mi_cache_push(p, size, memid, is_committed, is_large, tld)) {
-      _mi_os_free(p, size, tld->stats);
+      _mi_os_free_ex(p, size, is_committed, tld->stats);
     }
   }
   else {

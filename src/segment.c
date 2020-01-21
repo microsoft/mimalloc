@@ -7,6 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
+#include "bitmap.inc.c"  // mi_bsr
 
 #include <string.h>  // memset
 #include <stdio.h>
@@ -49,23 +50,7 @@ static uint8_t* mi_slice_start(const mi_slice_t* slice) {
    Bins
 ----------------------------------------------------------- */
 // Use bit scan forward to quickly find the first zero bit if it is available
-#if defined(_MSC_VER)
-#include <intrin.h>
-static inline size_t mi_bsr(uintptr_t x) {
-  if (x==0) return 8*MI_INTPTR_SIZE;
-  DWORD idx;
-  #if (MI_INTPTR_SIZE==8)
-  _BitScanReverse64(&idx, x);
-  #else
-  _BitScanReverse(&idx, x);
-  #endif
-  return idx;
-}
-#elif defined(__GNUC__) || defined(__clang__)
-static inline size_t mi_bsr(uintptr_t x) {
-  return (x==0 ? 8*MI_INTPTR_SIZE : (8*MI_INTPTR_SIZE - 1) - __builtin_clzl(x));
-}
-#else
+#if !defined(MI_HAVE_BITSCAN)
 #error "define bsr for your platform"
 #endif
 
@@ -410,7 +395,7 @@ static void mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
   }
   else if (!commit && (segment->commit_mask & mask) != 0) {
     mi_assert_internal((void*)start != (void*)segment);
-    _mi_os_decommit(start, full_size,stats);
+    _mi_os_decommit(start, full_size, stats);
     segment->commit_mask &= ~mask;
   }
   // increase expiration of reusing part of the delayed decommit
@@ -902,8 +887,8 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
     slice = slice + slice->slice_count;
   }
 
-  // force delayed decommits instead?
-  mi_segment_delayed_decommit(segment, false, tld->stats);    
+  // perform delayed decommits instead
+  mi_segment_delayed_decommit(segment, mi_option_is_enabled(mi_option_abandoned_page_reset), tld->stats);    
   
   // all pages in the segment are abandoned; add it to the abandoned list
   _mi_stat_increase(&tld->stats->segments_abandoned, 1);
@@ -1018,7 +1003,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
     if (segment->used == 0) {  // due to page_clear
       mi_segment_free(segment,false,tld);
     }
-    
+
     // go on
     segment = next; 
   }
@@ -1185,6 +1170,5 @@ static void* mi_segment_range_of(const void* p, size_t* size) {
   mi_reset_delayed(tld);
   mi_assert_internal(page == NULL || mi_page_not_in_queue(page, tld));
   return page;
->>>>>>> dev
 }
 */
