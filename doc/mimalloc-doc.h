@@ -74,6 +74,8 @@ Further information:
 - \ref typed
 - \ref analysis
 - \ref options
+- \ref posix
+- \ref cpp
 
 */
 
@@ -622,7 +624,10 @@ void* mi_heap_recalloc_aligned_at(mi_heap_t* heap, void* p, size_t newcount, siz
 
 /// \defgroup typed Typed Macros
 ///
-/// Typed allocation macros
+/// Typed allocation macros. For example:
+/// ```
+/// int* p = mi_malloc_tp(int)
+/// ```
 ///
 /// \{
 
@@ -805,20 +810,50 @@ void mi_free_size(void* p, size_t size);
 void mi_free_size_aligned(void* p, size_t size, size_t alignment);
 void mi_free_aligned(void* p, size_t alignment);
 
-/// raise `std::bad_alloc` exception on failure.
+/// \}
+
+/// \defgroup cpp C++ wrappers
+///
+///  `mi_` prefixed implementations of various allocation functions
+///  that use C++ semantics on out-of-memory, generally calling
+///  `std::get_new_handler` and raising a `std::bad_alloc` exception on failure.
+///
+///  Note: use the `mimalloc-new-delete.h` header to override the \a new
+///        and \a delete operators globally. The wrappers here are mostly
+///        for convience for library writers that need to interface with
+///        mimalloc from C++.
+///
+/// \{
+
+/// like mi_malloc(), but when out of memory, use `std::get_new_handler` and raise `std::bad_alloc` exception on failure.
 void* mi_new(std::size_t n) noexcept(false);
 
-/// raise `std::bad_alloc` exception on failure or overflow.
+/// like mi_mallocn(), but when out of memory, use `std::get_new_handler` and raise `std::bad_alloc` exception on failure.
 void* mi_new_n(size_t count, size_t size) noexcept(false);
 
-/// raise `std::bad_alloc` exception on failure.
+/// like mi_malloc_aligned(), but when out of memory, use `std::get_new_handler` and raise `std::bad_alloc` exception on failure.
 void* mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false);
 
-/// return `NULL` on failure.
+/// like `mi_malloc`, but when out of memory, use `std::get_new_handler` but return \a NULL on failure.
 void* mi_new_nothrow(size_t n);
-``
-/// return `NULL` on failure.
+
+/// like `mi_malloc_aligned`, but when out of memory, use `std::get_new_handler` but return \a NULL on failure.
 void* mi_new_aligned_nothrow(size_t n, size_t alignment);
+
+/// like mi_realloc(), but when out of memory, use `std::get_new_handler` and raise `std::bad_alloc` exception on failure.
+void* mi_new_realloc(void* p, size_t newsize);
+
+/// like mi_reallocn(), but when out of memory, use `std::get_new_handler` and raise `std::bad_alloc` exception on failure.
+void* mi_new_reallocn(void* p, size_t newcount, size_t size);
+
+/// \a std::allocator implementation for mimalloc for use in STL containers.
+/// For example:
+/// ```
+/// std::vector<int, mi_stl_allocator<int> > vec;
+/// vec.push_back(1);
+/// vec.pop_back();
+/// ```
+template<class T> struct mi_stl_allocator { }
 
 /// \}
 
