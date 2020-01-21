@@ -119,7 +119,7 @@ static void free_items(void* p) {
 static void stress(intptr_t tid) {
   //bench_start_thread();
   uintptr_t r = tid * 43;
-  const size_t max_item_shift = 5; // 128  
+  const size_t max_item_shift = 5; // 128
   const size_t max_item_retained_shift = max_item_shift + 2;
   size_t allocs = 100 * ((size_t)SCALE) * (tid % 8 + 1); // some threads do more
   size_t retain = allocs / 2;
@@ -135,7 +135,7 @@ static void stress(intptr_t tid) {
       allocs--;
       if (data_top >= data_size) {
         data_size += 100000;
-        data = (void**)custom_realloc(data, data_size * sizeof(void*));        
+        data = (void**)custom_realloc(data, data_size * sizeof(void*));
       }
       data[data_top++] = alloc_items(1ULL << (pick(&r) % max_item_shift), &r);
     }
@@ -255,7 +255,6 @@ static void* atomic_exchange_ptr(volatile void** p, void* newval) {
 #else
 
 #include <pthread.h>
-#include <stdatomic.h>
 
 static void* thread_entry(void* param) {
   stress((uintptr_t)param);
@@ -275,8 +274,16 @@ static void run_os_threads(size_t nthreads) {
   custom_free(threads);
 }
 
+#ifdef __cplusplus
+#include <atomic>
+static void* atomic_exchange_ptr(volatile void** p, void* newval) {
+  return std::atomic_exchange_explicit((volatile std::atomic<void*>*)p, newval, std::memory_order_acquire);
+}
+#else
+#include <stdatomic.h>
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
   return atomic_exchange_explicit((volatile _Atomic(void*)*)p, newval, memory_order_acquire);
 }
+#endif
 
 #endif

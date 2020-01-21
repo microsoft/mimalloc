@@ -381,18 +381,18 @@ void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, bool 
     mi_arena_t* arena = (mi_arena_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*, &mi_arenas[arena_idx]));
     mi_assert_internal(arena != NULL);
     if (arena == NULL) {
-      _mi_fatal_error("trying to free from non-existent arena: %p, size %zu, memid: 0x%zx\n", p, size, memid);
+      _mi_error_message(EINVAL, "trying to free from non-existent arena: %p, size %zu, memid: 0x%zx\n", p, size, memid);
       return;
     }
     mi_assert_internal(arena->field_count > mi_bitmap_index_field(bitmap_idx));
     if (arena->field_count <= mi_bitmap_index_field(bitmap_idx)) {
-      _mi_fatal_error("trying to free from non-existent arena block: %p, size %zu, memid: 0x%zx\n", p, size, memid);
+      _mi_error_message(EINVAL, "trying to free from non-existent arena block: %p, size %zu, memid: 0x%zx\n", p, size, memid);
       return;
     }
     const size_t blocks = mi_block_count_of_size(size);
     bool ones = mi_bitmap_unclaim(arena->blocks_inuse, arena->field_count, blocks, bitmap_idx);
     if (!ones) {
-      _mi_fatal_error("trying to free an already freed block: %p, size %zu\n", p, size);
+      _mi_error_message(EAGAIN, "trying to free an already freed block: %p, size %zu\n", p, size);
       return;
     };
   }

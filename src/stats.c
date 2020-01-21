@@ -126,7 +126,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
 // unit > 0 : size in binary bytes 
 // unit == 0: count as decimal
 // unit < 0 : count in binary
-static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, const char* fmt) {
+static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* arg, const char* fmt) {
   char buf[32];
   int  len = 32;
   const char* suffix = (unit <= 0 ? " " : "b");
@@ -147,75 +147,75 @@ static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, const 
     const long frac1 = (long)(tens%10);
     snprintf(buf, len, "%ld.%ld %s%s", whole, frac1, magnitude, suffix);
   }
-  _mi_fprintf(out, (fmt==NULL ? "%11s" : fmt), buf);
+  _mi_fprintf(out, arg, (fmt==NULL ? "%11s" : fmt), buf);
 }
 
 
-static void mi_print_amount(int64_t n, int64_t unit, mi_output_fun* out) {
-  mi_printf_amount(n,unit,out,NULL);
+static void mi_print_amount(int64_t n, int64_t unit, mi_output_fun* out, void* arg) {
+  mi_printf_amount(n,unit,out,arg,NULL);
 }
 
-static void mi_print_count(int64_t n, int64_t unit, mi_output_fun* out) {
-  if (unit==1) _mi_fprintf(out,"%11s"," ");
-          else mi_print_amount(n,0,out);
+static void mi_print_count(int64_t n, int64_t unit, mi_output_fun* out, void* arg) {
+  if (unit==1) _mi_fprintf(out, arg, "%11s"," ");
+          else mi_print_amount(n,0,out,arg);
 }
 
-static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out ) {
-  _mi_fprintf(out,"%10s:", msg);  
+static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg ) {
+  _mi_fprintf(out, arg,"%10s:", msg);
   if (unit>0) {
-    mi_print_amount(stat->peak, unit, out);
-    mi_print_amount(stat->allocated, unit, out);
-    mi_print_amount(stat->freed, unit, out);
-    mi_print_amount(unit, 1, out);
-    mi_print_count(stat->allocated, unit, out);
+    mi_print_amount(stat->peak, unit, out, arg);
+    mi_print_amount(stat->allocated, unit, out, arg);
+    mi_print_amount(stat->freed, unit, out, arg);
+    mi_print_amount(unit, 1, out, arg);
+    mi_print_count(stat->allocated, unit, out, arg);
     if (stat->allocated > stat->freed)
-      _mi_fprintf(out, "  not all freed!\n");
+      _mi_fprintf(out, arg, "  not all freed!\n");
     else
-      _mi_fprintf(out, "  ok\n");
+      _mi_fprintf(out, arg, "  ok\n");
   }
   else if (unit<0) {
-    mi_print_amount(stat->peak, -1, out);
-    mi_print_amount(stat->allocated, -1, out);
-    mi_print_amount(stat->freed, -1, out);
+    mi_print_amount(stat->peak, -1, out, arg);
+    mi_print_amount(stat->allocated, -1, out, arg);
+    mi_print_amount(stat->freed, -1, out, arg);
     if (unit==-1) {
-      _mi_fprintf(out, "%22s", "");
+      _mi_fprintf(out, arg, "%22s", "");
     }
     else {
-      mi_print_amount(-unit, 1, out);
-      mi_print_count((stat->allocated / -unit), 0, out);
+      mi_print_amount(-unit, 1, out, arg);
+      mi_print_count((stat->allocated / -unit), 0, out, arg);
     }
     if (stat->allocated > stat->freed)
-      _mi_fprintf(out, "  not all freed!\n");
+      _mi_fprintf(out, arg, "  not all freed!\n");
     else
-      _mi_fprintf(out, "  ok\n");
+      _mi_fprintf(out, arg, "  ok\n");
   }
   else {
-    mi_print_amount(stat->peak, 1, out);
-    mi_print_amount(stat->allocated, 1, out);
-    _mi_fprintf(out, "\n");
+    mi_print_amount(stat->peak, 1, out, arg);
+    mi_print_amount(stat->allocated, 1, out, arg);
+    _mi_fprintf(out, arg, "\n");
   }
 }
 
-static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out ) {
-  _mi_fprintf(out, "%10s:", msg);
-  mi_print_amount(stat->total, -1, out);
-  _mi_fprintf(out, "\n");
+static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg ) {
+  _mi_fprintf(out, arg, "%10s:", msg);
+  mi_print_amount(stat->total, -1, out, arg);
+  _mi_fprintf(out, arg, "\n");
 }
 
-static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out) {
+static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg) {
   const int64_t avg_tens = (stat->count == 0 ? 0 : (stat->total*10 / stat->count)); 
   const long avg_whole = (long)(avg_tens/10);
   const long avg_frac1 = (long)(avg_tens%10);
-  _mi_fprintf(out, "%10s: %5ld.%ld avg\n", msg, avg_whole, avg_frac1);
+  _mi_fprintf(out, arg, "%10s: %5ld.%ld avg\n", msg, avg_whole, avg_frac1);
 }
 
 
-static void mi_print_header(mi_output_fun* out ) {
-  _mi_fprintf(out,"%10s: %10s %10s %10s %10s %10s\n", "heap stats", "peak  ", "total  ", "freed  ", "unit  ", "count  ");
+static void mi_print_header(mi_output_fun* out, void* arg ) {
+  _mi_fprintf(out, arg, "%10s: %10s %10s %10s %10s %10s\n", "heap stats", "peak  ", "total  ", "freed  ", "unit  ", "count  ");
 }
 
 #if MI_STAT>1
-static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bins, size_t max, const char* fmt, mi_output_fun* out) {
+static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bins, size_t max, const char* fmt, mi_output_fun* out, void* arg) {
   bool found = false;
   char buf[64];
   for (size_t i = 0; i <= max; i++) {
@@ -224,14 +224,14 @@ static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bin
       int64_t unit = _mi_bin_size((uint8_t)i);
       snprintf(buf, 64, "%s %3zu", fmt, i);
       mi_stat_add(all, &bins[i], unit);
-      mi_stat_print(&bins[i], buf, unit, out);
+      mi_stat_print(&bins[i], buf, unit, out, arg);
     }
   }
   //snprintf(buf, 64, "%s all", fmt);
   //mi_stat_print(all, buf, 1);
   if (found) {
-    _mi_fprintf(out, "\n");
-    mi_print_header(out);
+    _mi_fprintf(out, arg, "\n");
+    mi_print_header(out, arg);
   }
 }
 #endif
@@ -239,40 +239,40 @@ static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bin
 
 static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit);
 
-static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun* out) mi_attr_noexcept {
-  mi_print_header(out);
+static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun* out, void* arg) mi_attr_noexcept {
+  mi_print_header(out,arg);
   #if MI_STAT>1
   mi_stat_count_t normal = { 0,0,0,0 };
-  mi_stats_print_bins(&normal, stats->normal, MI_BIN_HUGE, "normal",out);
-  mi_stat_print(&normal, "normal", 1, out);
-  mi_stat_print(&stats->large, "large", (stats->large_count.count == 0 ? 1 : -(stats->large.allocated / stats->large_count.count)), out);
-  mi_stat_print(&stats->huge, "huge", (stats->huge_count.count == 0 ? 1 : -(stats->huge.allocated / stats->huge_count.count)), out);
+  mi_stats_print_bins(&normal, stats->normal, MI_BIN_HUGE, "normal",out,arg);
+  mi_stat_print(&normal, "normal", 1, out, arg);
+  mi_stat_print(&stats->large, "large", (stats->large_count.count == 0 ? 1 : -(stats->large.allocated / stats->large_count.count)), out, arg);
+  mi_stat_print(&stats->huge, "huge", (stats->huge_count.count == 0 ? 1 : -(stats->huge.allocated / stats->huge_count.count)), out, arg);
   mi_stat_count_t total = { 0,0,0,0 };
   mi_stat_add(&total, &normal, 1);
-  mi_stat_add(&total, &stats->huge, 1);
   mi_stat_add(&total, &stats->large, 1);
-  mi_stat_print(&total, "total", 1, out);
-  _mi_fprintf(out, "malloc requested:     ");
-  mi_print_amount(stats->malloc.allocated, 1, out);
-  _mi_fprintf(out, "\n\n");
+  mi_stat_add(&total, &stats->huge, 1);
+  mi_stat_print(&total, "total", 1, out, arg);
+  _mi_fprintf(out, arg, "malloc requested:     ");
+  mi_print_amount(stats->malloc.allocated, 1, out, arg);
+  _mi_fprintf(out, arg, "\n\n");
   #endif
-  mi_stat_print(&stats->reserved, "reserved", 1, out);
-  mi_stat_print(&stats->committed, "committed", 1, out);
-  mi_stat_print(&stats->reset, "reset", 1, out);
-  mi_stat_print(&stats->page_committed, "touched", 1, out);
-  mi_stat_print(&stats->segments, "segments", -1, out);
-  mi_stat_print(&stats->segments_abandoned, "-abandoned", -1, out);
-  mi_stat_print(&stats->segments_cache, "-cached", -1, out);
-  mi_stat_print(&stats->pages, "pages", -1, out);
-  mi_stat_print(&stats->pages_abandoned, "-abandoned", -1, out);
-  mi_stat_counter_print(&stats->pages_extended, "-extended", out);
-  mi_stat_counter_print(&stats->page_no_retire, "-noretire", out);
-  mi_stat_counter_print(&stats->mmap_calls, "mmaps", out);
-  mi_stat_counter_print(&stats->commit_calls, "commits", out);
-  mi_stat_print(&stats->threads, "threads", -1, out);
-  mi_stat_counter_print_avg(&stats->searches, "searches", out);
-  _mi_fprintf(out, "%10s: %7i\n", "numa nodes", _mi_os_numa_node_count());
-  if (elapsed > 0) _mi_fprintf(out, "%10s: %7ld.%03ld s\n", "elapsed", elapsed/1000, elapsed%1000);
+  mi_stat_print(&stats->reserved, "reserved", 1, out, arg);
+  mi_stat_print(&stats->committed, "committed", 1, out, arg);
+  mi_stat_print(&stats->reset, "reset", 1, out, arg);
+  mi_stat_print(&stats->page_committed, "touched", 1, out, arg);
+  mi_stat_print(&stats->segments, "segments", -1, out, arg);
+  mi_stat_print(&stats->segments_abandoned, "-abandoned", -1, out, arg);
+  mi_stat_print(&stats->segments_cache, "-cached", -1, out, arg);
+  mi_stat_print(&stats->pages, "pages", -1, out, arg);
+  mi_stat_print(&stats->pages_abandoned, "-abandoned", -1, out, arg);
+  mi_stat_counter_print(&stats->pages_extended, "-extended", out, arg);
+  mi_stat_counter_print(&stats->page_no_retire, "-noretire", out, arg);
+  mi_stat_counter_print(&stats->mmap_calls, "mmaps", out, arg);
+  mi_stat_counter_print(&stats->commit_calls, "commits", out, arg);
+  mi_stat_print(&stats->threads, "threads", -1, out, arg);
+  mi_stat_counter_print_avg(&stats->searches, "searches", out, arg);
+  _mi_fprintf(out, arg, "%10s: %7i\n", "numa nodes", _mi_os_numa_node_count());
+  if (elapsed > 0) _mi_fprintf(out, arg, "%10s: %7ld.%03ld s\n", "elapsed", elapsed/1000, elapsed%1000);
 
   mi_msecs_t user_time;
   mi_msecs_t sys_time;
@@ -281,13 +281,13 @@ static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun
   size_t page_reclaim;
   size_t peak_commit;
   mi_process_info(&user_time, &sys_time, &peak_rss, &page_faults, &page_reclaim, &peak_commit);
-  _mi_fprintf(out,"%10s: user: %ld.%03ld s, system: %ld.%03ld s, faults: %lu, reclaims: %lu, rss: ", "process", user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, (unsigned long)page_faults, (unsigned long)page_reclaim );
-  mi_printf_amount((int64_t)peak_rss, 1, out, "%s");
+  _mi_fprintf(out, arg, "%10s: user: %ld.%03ld s, system: %ld.%03ld s, faults: %lu, reclaims: %lu, rss: ", "process", user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, (unsigned long)page_faults, (unsigned long)page_reclaim );
+  mi_printf_amount((int64_t)peak_rss, 1, out, arg, "%s");
   if (peak_commit > 0) {
-    _mi_fprintf(out,", commit charge: ");
-    mi_printf_amount((int64_t)peak_commit, 1, out, "%s");
+    _mi_fprintf(out, arg, ", commit charge: ");
+    mi_printf_amount((int64_t)peak_commit, 1, out, arg, "%s");
   }
-  _mi_fprintf(out,"\n");
+  _mi_fprintf(out, arg, "\n");
 }
 
 static mi_msecs_t mi_time_start; // = 0
@@ -319,20 +319,20 @@ void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
   mi_stats_merge_from(stats);
 }
 
-
-static void mi_stats_print_ex(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun* out) {
-  mi_stats_merge_from(stats);
-  _mi_stats_print(&_mi_stats_main, elapsed, out);
+void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
+  mi_msecs_t elapsed = _mi_clock_end(mi_time_start);
+  mi_stats_merge_from(mi_stats_get_default());
+  _mi_stats_print(&_mi_stats_main, elapsed, out, arg);
 }
 
-void mi_stats_print(mi_output_fun* out) mi_attr_noexcept {
-  mi_msecs_t elapsed = _mi_clock_end(mi_time_start);
-  mi_stats_print_ex(mi_stats_get_default(),elapsed,out);
+void mi_stats_print(void* out) mi_attr_noexcept {
+  // for compatibility there is an `out` parameter (which can be `stdout` or `stderr`)
+  mi_stats_print_out((mi_output_fun*)out, NULL);
 }
 
-void mi_thread_stats_print(mi_output_fun* out) mi_attr_noexcept {
+void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
   mi_msecs_t elapsed = _mi_clock_end(mi_time_start);
-  _mi_stats_print(mi_stats_get_default(), elapsed, out);
+  _mi_stats_print(mi_stats_get_default(), elapsed, out, arg);
 }
 
 

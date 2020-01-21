@@ -21,26 +21,23 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #if defined(_MSC_VER)
+#pragma warning(disable:4127)   // constant conditional due to MI_SECURE paths
 #define mi_decl_noinline   __declspec(noinline)
-#define mi_attr_noreturn
 #elif defined(__GNUC__) || defined(__clang__)
 #define mi_decl_noinline   __attribute__((noinline))
-#define mi_attr_noreturn   __attribute__((noreturn))
 #else
 #define mi_decl_noinline
-#define mi_attr_noreturn
 #endif
 
 
 // "options.c"
-void       _mi_fputs(mi_output_fun* out, const char* prefix, const char* message);
-void       _mi_fprintf(mi_output_fun* out, const char* fmt, ...);
-void       _mi_error_message(const char* fmt, ...);
+void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
+void       _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
 void       _mi_warning_message(const char* fmt, ...);
 void       _mi_verbose_message(const char* fmt, ...);
 void       _mi_trace_message(const char* fmt, ...);
 void       _mi_options_init(void);
-void       _mi_fatal_error(const char* fmt, ...) mi_attr_noreturn;
+void       _mi_error_message(int err, const char* fmt, ...);
 
 // random.c
 void       _mi_random_init(mi_random_ctx_t* ctx);
@@ -146,6 +143,29 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #endif
 
 
+/* -----------------------------------------------------------
+  Error codes passed to `_mi_fatal_error`
+  All are recoverable but EFAULT is a serious error and aborts by default in secure mode.
+  For portability define undefined error codes using common Unix codes:
+  <https://www-numi.fnal.gov/offline_software/srt_public_context/WebDocs/Errors/unix_system_errors.html>
+----------------------------------------------------------- */
+#include <errno.h>
+#ifndef EAGAIN         // double free
+#define EAGAIN (11)
+#endif
+#ifndef ENOMEM         // out of memory
+#define ENOMEM (12)
+#endif
+#ifndef EFAULT         // corrupted free-list or meta-data
+#define EFAULT (14)
+#endif
+#ifndef EINVAL         // trying to free an invalid pointer
+#define EINVAL (22)
+#endif
+#ifndef EOVERFLOW      // count*size overflow
+#define EOVERFLOW (75)
+#endif
+
 
 /* -----------------------------------------------------------
   Inlined definitions
@@ -165,25 +185,6 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #define MI_INIT128(x) MI_INIT64(x),MI_INIT64(x)
 #define MI_INIT256(x) MI_INIT128(x),MI_INIT128(x)
 
-
-// Overflow detecting multiply
-static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
-#if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
-#include <limits.h>   // UINT_MAX, ULONG_MAX
-#if (SIZE_MAX == UINT_MAX)
-  return __builtin_umul_overflow(count, size, total);
-#elif (SIZE_MAX == ULONG_MAX)
-  return __builtin_umull_overflow(count, size, total);
-#else
-  return __builtin_umulll_overflow(count, size, total);
-#endif
-#else /* __builtin_umul_overflow is unavailable */
-  #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
-  *total = count * size;
-  return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
-          && size > 0 && (SIZE_MAX / size) < count);
-#endif
-}
 
 // Is `x` a power of two? (0 is considered a power of two)
 static inline bool _mi_is_power_of_two(uintptr_t x) {
@@ -226,6 +227,40 @@ static inline bool mi_mem_is_zero(void* p, size_t size) {
 static inline size_t _mi_wsize_from_size(size_t size) {
   mi_assert_internal(size <= SIZE_MAX - sizeof(uintptr_t));
   return (size + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
+}
+
+
+// Overflow detecting multiply
+static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {  
+#if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
+#include <limits.h>   // UINT_MAX, ULONG_MAX
+#if (SIZE_MAX == UINT_MAX)
+  return __builtin_umul_overflow(count, size, total);
+#elif (SIZE_MAX == ULONG_MAX)
+  return __builtin_umull_overflow(count, size, total);
+#else
+  return __builtin_umulll_overflow(count, size, total);
+#endif
+#else /* __builtin_umul_overflow is unavailable */
+  #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
+  *total = count * size;
+  return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
+          && size > 0 && (SIZE_MAX / size) < count);
+#endif
+}
+
+// Safe multiply `count*size` into `total`; return `true` on overflow.
+static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* total) {
+  if (count==1) {  // quick check for the case where count is one (common for C++ allocators)
+    *total = size;
+    return false;
+  }
+  else if (mi_unlikely(mi_mul_overflow(count, size, total))) {
+    _mi_error_message(EOVERFLOW, "allocation request too large (%zu * %zu bytes)\n", count, size);
+    *total = SIZE_MAX;
+    return true;
+  }
+  else return false;
 }
 
 
@@ -336,7 +371,40 @@ static inline mi_page_t* _mi_ptr_page(void* p) {
   return _mi_segment_page_of(_mi_ptr_segment(p), p);
 }
 
+// Get the block size of a page (special cased for huge objects)
+static inline size_t mi_page_block_size(const mi_page_t* page) {
+  const size_t bsize = page->xblock_size;
+  mi_assert_internal(bsize > 0);
+  if (mi_likely(bsize < MI_HUGE_BLOCK_SIZE)) {
+    return bsize;
+  }
+  else {
+    size_t psize;
+    _mi_segment_page_start(_mi_page_segment(page), page, &psize);
+    return psize;
+  }
+}
+
 // Thread free access
+static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
+  return (mi_block_t*)(mi_atomic_read_relaxed(&page->xthread_free) & ~3);
+}
+
+static inline mi_delayed_t mi_page_thread_free_flag(const mi_page_t* page) {
+  return (mi_delayed_t)(mi_atomic_read_relaxed(&page->xthread_free) & 3);
+}
+
+// Heap access
+static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
+  return (mi_heap_t*)(mi_atomic_read_relaxed(&page->xheap));
+}
+
+static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
+  mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
+  mi_atomic_write(&page->xheap,(uintptr_t)heap);
+}
+
+// Thread free flag helpers
 static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
   return (mi_block_t*)(tf & ~0x03);
 }
@@ -356,7 +424,7 @@ static inline mi_thread_free_t mi_tf_set_block(mi_thread_free_t tf, mi_block_t* 
 // are all blocks in a page freed?
 static inline bool mi_page_all_free(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  return (page->used - page->thread_freed == 0);
+  return (page->used == 0);
 }
 
 // are there immediately available blocks
@@ -367,8 +435,8 @@ static inline bool mi_page_immediate_available(const mi_page_t* page) {
 // are there free blocks in this page?
 static inline bool mi_page_has_free(mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  bool hasfree = (mi_page_immediate_available(page) || page->local_free != NULL || (mi_tf_block(page->thread_free) != NULL));
-  mi_assert_internal(hasfree || page->used - page->thread_freed == page->capacity);
+  bool hasfree = (mi_page_immediate_available(page) || page->local_free != NULL || (mi_page_thread_free(page) != NULL));
+  mi_assert_internal(hasfree || page->used == page->capacity);
   return hasfree;
 }
 
@@ -382,7 +450,7 @@ static inline bool mi_page_all_used(mi_page_t* page) {
 static inline bool mi_page_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / 8U;
-  return (page->reserved - page->used + page->thread_freed <= frac);
+  return (page->reserved - page->used <= frac);
 }
 
 static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size) {
@@ -482,7 +550,7 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   // check for free list corruption: is `next` at least in the same page?
   // TODO: check if `next` is `page->block_size` aligned?
   if (mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next))) {
-    _mi_fatal_error("corrupted free list entry of size %zub at %p: value 0x%zx\n", page->block_size, block, (uintptr_t)next);
+    _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (uintptr_t)next);
     next = NULL;
   }
   return next;

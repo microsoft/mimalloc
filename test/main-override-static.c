@@ -178,7 +178,6 @@ static void corrupt_free();
 
 int main() {
   mi_version();
-  // mi_bins();
 
   // detect double frees and heap corruption
   // double_free1();
@@ -274,4 +273,3 @@ static void corrupt_free() {
     malloc(SZ);
   }
 }
-

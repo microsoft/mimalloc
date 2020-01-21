@@ -80,7 +80,7 @@ typedef union mi_region_info_u {
     bool  valid;
     bool  is_large;
     short numa_node;
-  };
+  } x;
 } mi_region_info_t;
 
 
@@ -204,9 +204,9 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
 
   // and share it 
   mi_region_info_t info;
-  info.valid = true;
-  info.is_large = region_large;
-  info.numa_node = _mi_os_numa_node(tld);
+  info.x.valid = true;
+  info.x.is_large = region_large;
+  info.x.numa_node = (short)_mi_os_numa_node(tld);
   mi_atomic_write(&r->info, info.value); // now make it available to others
   *region = r;
   return true;
@@ -224,12 +224,12 @@ static bool mi_region_is_suitable(const mem_region_t* region, int numa_node, boo
 
   // numa correct
   if (numa_node >= 0) {  // use negative numa node to always succeed
-    int rnode = info.numa_node;
+    int rnode = info.x.numa_node;
     if (rnode >= 0 && rnode != numa_node) return false;
   }
 
   // check allow-large
-  if (!allow_large && info.is_large) return false;
+  if (!allow_large && info.x.is_large) return false;
 
   return true;
 }
@@ -278,11 +278,11 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
   mi_region_info_t info;
   info.value = mi_atomic_read(&region->info);
   void* start = mi_atomic_read_ptr(&region->start);
-  mi_assert_internal(!(info.is_large && !*is_large));
+  mi_assert_internal(!(info.x.is_large && !*is_large));
   mi_assert_internal(start != NULL);
 
   *is_zero = mi_bitmap_unclaim(&region->dirty, 1, blocks, bit_idx);  
-  *is_large = info.is_large;
+  *is_large = info.x.is_large;
   *memid = mi_memid_create(region, bit_idx);
   void* p = (uint8_t*)start + (mi_bitmap_index_bit_in_field(bit_idx) * MI_SEGMENT_SIZE);
 
@@ -292,7 +292,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
     bool any_uncommitted;
     mi_bitmap_claim(&region->commit, 1, blocks, bit_idx, &any_uncommitted);
     if (any_uncommitted) {
-      mi_assert_internal(!info.is_large);
+      mi_assert_internal(!info.x.is_large);
       bool commit_zero;
       _mi_mem_commit(p, blocks * MI_SEGMENT_SIZE, &commit_zero, tld);
       if (commit_zero) *is_zero = true;
@@ -307,7 +307,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
   // unreset reset blocks
   if (mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx)) {
     // some blocks are still reset
-    mi_assert_internal(!info.is_large);
+    mi_assert_internal(!info.x.is_large);
     mi_assert_internal(!mi_option_is_enabled(mi_option_eager_commit) || *commit || mi_option_get(mi_option_eager_commit_delay) > 0); 
     mi_bitmap_unclaim(&region->reset, 1, blocks, bit_idx);
     if (*commit || !mi_option_is_enabled(mi_option_reset_decommits)) { // only if needed
@@ -412,7 +412,7 @@ void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_re
     }
 
     // reset the blocks to reduce the working set.
-    if (!info.is_large && mi_option_is_enabled(mi_option_segment_reset) 
+    if (!info.x.is_large && mi_option_is_enabled(mi_option_segment_reset) 
        && (mi_option_is_enabled(mi_option_eager_commit) ||
            mi_option_is_enabled(mi_option_reset_decommits))) // cannot reset halfway committed segments, use only `option_page_reset` instead            
     {

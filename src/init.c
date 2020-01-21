@@ -23,12 +23,11 @@ const mi_page_t _mi_page_empty = {
   { 0, 0 },
   #endif
   0,       // used
-  NULL,
-  ATOMIC_VAR_INIT(0), ATOMIC_VAR_INIT(0),
-  0, NULL, NULL, NULL
-  #if (MI_INTPTR_SIZE==8)
-  , { NULL } // padding
-  #endif
+  0,       // xblock_size
+  NULL,    // local_free
+  ATOMIC_VAR_INIT(0), // xthread_free
+  ATOMIC_VAR_INIT(0), // xheap
+  NULL, NULL
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
@@ -132,7 +131,7 @@ static mi_tld_t tld_main = {
   &_mi_heap_main,
   { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats, tld_main_os }, // segments
   { 0, tld_main_stats },  // os
-  { MI_STATS_NULL }             // stats
+  { MI_STATS_NULL }       // stats
 };
 
 #if MI_INTPTR_SIZE==8
@@ -145,7 +144,7 @@ mi_heap_t _mi_heap_main = {
   &tld_main,
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
-  NULL,
+  ATOMIC_VAR_INIT(NULL),
   0,                // thread id
   MI_INIT_COOKIE,   // initial cookie
   { MI_INIT_COOKIE, MI_INIT_COOKIE }, // the key of the main heap can be fixed (unlike page keys that need to be secure!)
@@ -180,7 +179,7 @@ static bool _mi_heap_init(void) {
     // use `_mi_os_alloc` to allocate directly from the OS
     mi_thread_data_t* td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t),&_mi_stats_main); // Todo: more efficient allocation?
     if (td == NULL) {
-      _mi_error_message("failed to allocate thread local heap memory\n");
+      _mi_error_message(ENOMEM, "failed to allocate thread local heap memory\n");
       return false;
     }
     mi_tld_t*  tld = &td->tld;
@@ -415,7 +414,7 @@ static void mi_process_load(void) {
   const char* msg = NULL;
   mi_allocator_init(&msg);
   if (msg != NULL && (mi_option_is_enabled(mi_option_verbose) || mi_option_is_enabled(mi_option_show_errors))) {
-    _mi_fputs(NULL,NULL,msg);
+    _mi_fputs(NULL,NULL,NULL,msg);
   }
 }
 

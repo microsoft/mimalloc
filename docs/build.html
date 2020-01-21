@@ -37,7 +37,7 @@
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">mi-malloc
-   &#160;<span id="projectnumber">1.0</span>
+   &#160;<span id="projectnumber">1.4</span>
    </div>
   </td>
    <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -103,7 +103,7 @@ $(document).ready(function(){initNavTree('build.html','');});
 </div><!--header-->
 <div class="contents">
 <div class="textblock"><p>Checkout the sources from Github: </p><div class="fragment"><div class="line">git clone https:<span class="comment">//github.com/microsoft/mimalloc</span></div></div><!-- fragment --><h2>Windows</h2>
-<p>Open <code>ide/vs2017/mimalloc.sln</code> in Visual Studio 2017 and build. The <code>mimalloc</code> project builds a static library (in <code>out/msvc-x64</code>), while the <code>mimalloc-override</code> project builds a DLL for overriding malloc in the entire program.</p>
+<p>Open <code>ide/vs2019/mimalloc.sln</code> in Visual Studio 2019 and build (or <code>ide/vs2017/mimalloc.sln</code>). The <code>mimalloc</code> project builds a static library (in <code>out/msvc-x64</code>), while the <code>mimalloc-override</code> project builds a DLL for overriding malloc in the entire program.</p>
 <h2>macOS, Linux, BSD, etc.</h2>
 <p>We use <a href="https://cmake.org"><code>cmake</code></a><sup>1</sup> as the build system:</p>
 <div class="fragment"><div class="line">&gt; mkdir -p out/release</div><div class="line">&gt; cd out/release</div><div class="line">&gt; cmake ../..</div><div class="line">&gt; make</div></div><!-- fragment --><p> This builds the library as a shared (dynamic) library (<code>.so</code> or <code>.dylib</code>), a static library (<code>.a</code>), and as a single object file (<code>.o</code>).</p>

@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MIMALLOC_ATOMIC_H
 
 // ------------------------------------------------------
-// Atomics 
+// Atomics
 // We need to be portable between C, C++, and MSVC.
 // ------------------------------------------------------
 
@@ -29,7 +29,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Atomic operations specialized for mimalloc
 // ------------------------------------------------------
 
-// Atomically add a 64-bit value; returns the previous value. 
+// Atomically add a 64-bit value; returns the previous value.
 // Note: not using _Atomic(int64_t) as it is only used for statistics.
 static inline void mi_atomic_add64(volatile int64_t* p, int64_t add);
 
@@ -43,7 +43,7 @@ static inline uintptr_t mi_atomic_and(volatile _Atomic(uintptr_t)* p, uintptr_t 
 static inline uintptr_t mi_atomic_or(volatile _Atomic(uintptr_t)* p, uintptr_t x);
 
 
-// Atomically compare and exchange a value; returns `true` if successful. 
+// Atomically compare and exchange a value; returns `true` if successful.
 // May fail spuriously. Memory ordering as release on success, and relaxed on failure.
 // (Note: expected and desired are in opposite order from atomic_compare_exchange)
 static inline bool mi_atomic_cas_weak(volatile _Atomic(uintptr_t)* p, uintptr_t desired, uintptr_t expected);
