@@ -358,8 +358,8 @@ the memory compacting [_Mesh_](https://github.com/plasma-umass/Mesh) (git:51222e
 Bobby Powers _et al_ \[8],
 and finally the default system allocator (glibc, 2.7.0) (based on _PtMalloc2_).
 
-![bench-c5-18xlarge-a](doc/bench-c5-18xlarge-2020-01-20-a.svq)
-![bench-c5-18xlarge-b](doc/bench-c5-18xlarge-2020-01-20-b.svq)
+![bench-c5-18xlarge-a](doc/bench-c5-18xlarge-2020-01-20-a.svg)
+![bench-c5-18xlarge-b](doc/bench-c5-18xlarge-2020-01-20-b.svg)
 
 Any benchmarks ending in `N` run on all processors in parallel.
 Results are averaged over 10 runs and reported relative
@@ -450,8 +450,8 @@ having a 48 processor AMD Epyc 7000 at 2.5GHz with 384GiB of memory.
 The results are similar to the Intel results but it is interesting to
 see the differences in the _larsonN_, _mstressN_, and _xmalloc-testN_ benchmarks.
 
-![bench-r5a-12xlarge-a](doc/bench-r5a-12xlarge-2020-01-16-a.svq)
-![bench-r5a-12xlarge-b](doc/bench-r5a-12xlarge-2020-01-16-b.svq)
+![bench-r5a-12xlarge-a](doc/bench-r5a-12xlarge-2020-01-16-a.svg)
+![bench-r5a-12xlarge-b](doc/bench-r5a-12xlarge-2020-01-16-b.svg)
 
 
 ## Peak Working Set
@@ -459,8 +459,8 @@ see the differences in the _larsonN_, _mstressN_, and _xmalloc-testN_ benchmarks
 The following figure shows the peak working set (rss) of the allocators
 on the benchmarks (on the c5.18xlarge instance).
 
-![bench-c5-18xlarge-rss-a](doc/bench-c5-18xlarge-2020-01-20-rss-a.svq)
-![bench-c5-18xlarge-rss-b](doc/bench-c5-18xlarge-2020-01-20-rss-b.svq)
+![bench-c5-18xlarge-rss-a](doc/bench-c5-18xlarge-2020-01-20-rss-a.svg)
+![bench-c5-18xlarge-rss-b](doc/bench-c5-18xlarge-2020-01-20-rss-b.svg)
 
 Note that the _xmalloc-testN_ memory usage should be disregarded as it
 allocates more the faster the program runs. Similarly, memory usage of
