@@ -458,6 +458,7 @@ static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_st
     mask >>= 1;
     idx++;
   }
+  mi_assert_internal(segment->decommit_mask == 0);
 }
 
 static void mi_segment_span_free(mi_segment_t* segment, size_t slice_index, size_t slice_count, mi_segments_tld_t* tld) {

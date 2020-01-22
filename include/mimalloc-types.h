@@ -89,7 +89,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Main tuning parameters for segment and page sizes
 // Sizes for 64-bit, divide by two for 32-bit
 #define MI_SEGMENT_SLICE_SHIFT            (13 + MI_INTPTR_SHIFT)         // 64kb
-#define MI_SEGMENT_SHIFT                  ( 8 + MI_SEGMENT_SLICE_SHIFT)  // 64mb
+#define MI_SEGMENT_SHIFT                  ( 9 + MI_SEGMENT_SLICE_SHIFT)  // 64mb
 
 #define MI_SMALL_PAGE_SHIFT               (MI_SEGMENT_SLICE_SHIFT)       // 64kb
 #define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SMALL_PAGE_SHIFT)     // 512kb
@@ -104,7 +104,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SMALL_PAGE_SIZE                (1ULL<<MI_SMALL_PAGE_SHIFT)
 #define MI_MEDIUM_PAGE_SIZE               (1ULL<<MI_MEDIUM_PAGE_SHIFT)
 
-#define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/8)   // 8kb on 64-bit
+#define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/4)   // 8kb on 64-bit
 
 #define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/4)  // 128kb on 64-bit
 #define MI_MEDIUM_OBJ_WSIZE_MAX           (MI_MEDIUM_OBJ_SIZE_MAX/MI_INTPTR_SIZE)   // 64kb on 64-bit
@@ -201,31 +201,35 @@ typedef struct mi_page_s {
   // "owned" by the segment
   uint32_t              slice_count;       // slices in this page (0 if not a page)
   uint32_t              slice_offset;      // distance from the actual page data slice (0 if a page)
-  uint8_t               is_reset:1;        // `true` if the page memory was reset
-  uint8_t               is_committed:1;    // `true` if the page virtual memory is committed
-  uint8_t               is_zero_init:1;    // `true` if the page was zero initialized
+  uint8_t               is_reset : 1;        // `true` if the page memory was reset
+  uint8_t               is_committed : 1;    // `true` if the page virtual memory is committed
+  uint8_t               is_zero_init : 1;    // `true` if the page was zero initialized
 
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
   uint16_t              reserved;          // number of blocks reserved in memory
   mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (8 bits)
-  uint8_t               is_zero:1;         // `true` if the blocks in the free list are zero initialized
-  uint8_t               retire_expire:7;   // expiration count for retired blocks
+  uint8_t               is_zero : 1;         // `true` if the blocks in the free list are zero initialized
+  uint8_t               retire_expire : 7;   // expiration count for retired blocks
 
-  mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
-  #ifdef MI_ENCODE_FREELIST
+  mi_block_t* free;              // list of available free blocks (`malloc` allocates from this list)
+#ifdef MI_ENCODE_FREELIST
   uintptr_t             key[2];            // two random keys to encode the free lists (see `_mi_block_next`)
-  #endif
+#endif
   uint32_t              used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
   uint32_t              xblock_size;       // size available in each block (always `>0`) 
 
-  mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
+  mi_block_t* local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   volatile _Atomic(mi_thread_free_t) xthread_free;   // list of deferred free blocks freed by other threads
   volatile _Atomic(uintptr_t)        xheap;
-  
-  struct mi_page_s*     next;              // next page owned by this thread with the same `block_size`
-  struct mi_page_s*     prev;              // previous page owned by this thread with the same `block_size`
 
+  struct mi_page_s* next;              // next page owned by this thread with the same `block_size`
+  struct mi_page_s* prev;              // previous page owned by this thread with the same `block_size`
+
+  // 64-bit 9 words, 32-bit 12 words, (+2 for secure)
+  #if MI_INTPTR_SIZE==8
+  uintptr_t padding[1];
+  #endif
 } mi_page_t;
 
 

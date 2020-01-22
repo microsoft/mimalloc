@@ -28,6 +28,9 @@ const mi_page_t _mi_page_empty = {
   ATOMIC_VAR_INIT(0), // xthread_free
   ATOMIC_VAR_INIT(0), // xheap
   NULL, NULL
+  #if MI_INTPTR_SIZE==8
+  , { 0 }  // padding
+  #endif
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
