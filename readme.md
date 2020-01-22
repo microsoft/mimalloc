@@ -56,8 +56,8 @@ Enjoy!
 
 ### Releases
 
-* 2020-01-XX, `v1.4.0`: stable release 1.4: delayed OS page reset for (much) better performance
-  with page reset enabled, more eager concurrent free, addition of STL allocator.
+* 2020-01-22, `v1.4.0`: stable release 1.4: delayed OS page reset with (much) better performance
+  (when page reset is enabled), more eager concurrent free, addition of STL allocator, fixed potential memory leak.
 * 2020-01-15, `v1.3.0`: stable release 1.3: bug fixes, improved randomness and [stronger
 free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396) in secure mode.
 * 2019-12-22, `v1.2.2`: stable release 1.2: minor updates.
@@ -208,14 +208,17 @@ or via environment variables.
    to explicitly allow large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
    the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
    can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead when possible).
-- `MIMALLOC_EAGER_REGION_COMMIT=1`: on Windows, commit large (256MiB) regions eagerly. On Windows, these regions
+   <!--
+   - `MIMALLOC_EAGER_REGION_COMMIT=1`: on Windows, commit large (256MiB) regions eagerly. On Windows, these regions
    show in the working set even though usually just a small part is committed to physical memory. This is why it
-   turned off by default on Windows as it looks not good in the task manager. However, in reality it is always better
-   to turn it on as it improves performance and has no other drawbacks.
+   turned off by default on Windows as it looks not good in the task manager. However, turning it on has no 
+   real drawbacks and may improve performance by a little.
+   -->
 - `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where N is the number of 1GiB huge OS pages. This reserves the huge pages at
    startup and can give quite a performance improvement on long running workloads. Usually it is better to not use
    `MIMALLOC_LARGE_OS_PAGES` in combination with this setting. Just like large OS pages, use with care as reserving
-   contiguous physical memory can take a long time when memory is fragmented.
+   contiguous physical memory can take a long time when memory is fragmented (but reserving the huge pages is done at 
+   startup only once).
    Note that we usually need to explicitly enable huge OS pages (as on [Windows][windows-huge] and [Linux][linux-huge])). With huge OS pages, it may be beneficial to set the setting
    `MIMALLOC_EAGER_COMMIT_DELAY=N` (with usually `N` as 1) to delay the initial `N` segments
    of a thread to not allocate in the huge OS pages; this prevents threads that are short lived
@@ -358,8 +361,8 @@ the memory compacting [_Mesh_](https://github.com/plasma-umass/Mesh) (git:51222e
 Bobby Powers _et al_ \[8],
 and finally the default system allocator (glibc, 2.7.0) (based on _PtMalloc2_).
 
-![bench-c5-18xlarge-a](doc/bench-c5-18xlarge-2020-01-20-a.svg)
-![bench-c5-18xlarge-b](doc/bench-c5-18xlarge-2020-01-20-b.svg)
+<img width="90%" src="doc/bench-c5-18xlarge-2020-01-20-a.svg"/>
+<img width="90%" src="doc/bench-c5-18xlarge-2020-01-20-b.svg"/>
 
 Any benchmarks ending in `N` run on all processors in parallel.
 Results are averaged over 10 runs and reported relative
@@ -450,8 +453,8 @@ having a 48 processor AMD Epyc 7000 at 2.5GHz with 384GiB of memory.
 The results are similar to the Intel results but it is interesting to
 see the differences in the _larsonN_, _mstressN_, and _xmalloc-testN_ benchmarks.
 
-![bench-r5a-12xlarge-a](doc/bench-r5a-12xlarge-2020-01-16-a.svg)
-![bench-r5a-12xlarge-b](doc/bench-r5a-12xlarge-2020-01-16-b.svg)
+<img width="90%" src="doc/bench-r5a-12xlarge-2020-01-16-a.svg"/>
+<img width="90%" src="doc/bench-r5a-12xlarge-2020-01-16-b.svg"/>
 
 
 ## Peak Working Set
@@ -459,8 +462,8 @@ see the differences in the _larsonN_, _mstressN_, and _xmalloc-testN_ benchmarks
 The following figure shows the peak working set (rss) of the allocators
 on the benchmarks (on the c5.18xlarge instance).
 
-![bench-c5-18xlarge-rss-a](doc/bench-c5-18xlarge-2020-01-20-rss-a.svg)
-![bench-c5-18xlarge-rss-b](doc/bench-c5-18xlarge-2020-01-20-rss-b.svg)
+<img width="90%" src="doc/bench-c5-18xlarge-2020-01-20-rss-a.svg"/>
+<img width="90%" src="doc/bench-c5-18xlarge-2020-01-20-rss-b.svg"/>
 
 Note that the _xmalloc-testN_ memory usage should be disregarded as it
 allocates more the faster the program runs. Similarly, memory usage of
