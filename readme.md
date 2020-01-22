@@ -350,7 +350,7 @@ Testing on a big Amazon EC2 compute instance
 ([c5.18xlarge](https://aws.amazon.com/ec2/instance-types/#Compute_Optimized))
 consisting of a 72 processor Intel Xeon at 3GHz
 with 144GiB ECC memory, running	Ubuntu 18.04.1 with LibC 2.27 and GCC 7.4.0.
-The measured allocators are _mimalloc_ (mi, tag:v1.4.0, page reset enabled)
+The measured allocators are _mimalloc_ (xmi, tag:v1.4.0, page reset enabled)
 and its secure build as _smi_,
 Google's [_tcmalloc_](https://github.com/gperftools/gperftools) (tc, tag:gperftools-2.7) used in Chrome,
 Facebook's [_jemalloc_](https://github.com/jemalloc/jemalloc) (je, tag:5.2.1) by Jason Evans used in Firefox and FreeBSD,
