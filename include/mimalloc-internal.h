@@ -21,12 +21,15 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #if defined(_MSC_VER)
-#pragma warning(disable:4127)   // constant conditional due to MI_SECURE paths
-#define mi_decl_noinline   __declspec(noinline)
+#pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
+#define mi_decl_noinline        __declspec(noinline)
+#define mi_decl_thread          __declspec(thread)
 #elif (defined(__GNUC__) && (__GNUC__>=3))  // includes clang and icc
-#define mi_decl_noinline   __attribute__((noinline))
+#define mi_decl_noinline        __attribute__((noinline))
+#define mi_decl_thread          __thread
 #else
 #define mi_decl_noinline
+#define mi_decl_thread          __thread        // hope for the best :-)
 #endif
 
 
