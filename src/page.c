@@ -130,7 +130,7 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool overrid
     tfreex = mi_tf_set_delayed(tfree, delay);
     old_delay = mi_tf_delayed(tfree);
     if (mi_unlikely(old_delay == MI_DELAYED_FREEING)) {
-      // mi_atomic_yield(); // delay until outstanding MI_DELAYED_FREEING are done.
+      mi_atomic_yield(); // delay until outstanding MI_DELAYED_FREEING are done.
       tfree = mi_tf_set_delayed(tfree, MI_NO_DELAYED_FREE); // will cause CAS to busy fail
     }
     else if (delay == old_delay) {
