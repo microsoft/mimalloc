@@ -114,25 +114,20 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   if (!mi_heap_is_initialized(heap)) return;
   _mi_deferred_free(heap, collect >= MI_FORCE);
 
-  // collect (some) abandoned pages
-  if (collect >= MI_NORMAL && !heap->no_reclaim) {
-    if (collect == MI_NORMAL) {
-      // this may free some segments (but also take ownership of abandoned pages)
-      _mi_segment_try_reclaim_abandoned(heap, false, &heap->tld->segments);
-    }
-    else if (
-              #ifdef NDEBUG
-              collect == MI_FORCE
-              #else
-              collect >= MI_FORCE
-              #endif
-              && _mi_is_main_thread() && mi_heap_is_backing(heap))
-    {
-      // the main thread is abandoned (end-of-program), try to reclaim all abandoned segments.
-      // if all memory is freed by now, all segments should be freed.
-      _mi_segment_try_reclaim_abandoned(heap, true, &heap->tld->segments);
-    }
+  // note: never reclaim on collect but leave it to threads that need storage to reclaim 
+  if (
+  #ifdef NDEBUG
+      collect == MI_FORCE
+  #else
+      collect >= MI_FORCE
+  #endif
+    && _mi_is_main_thread() && mi_heap_is_backing(heap) && !heap->no_reclaim)
+  {
+    // the main thread is abandoned (end-of-program), try to reclaim all abandoned segments.
+    // if all memory is freed by now, all segments should be freed.
+    _mi_segment_try_reclaim_abandoned(heap, true, &heap->tld->segments);
   }
+  
 
   // if abandoning, mark all pages to no longer add to delayed_free
   if (collect == MI_ABANDON) {
