@@ -274,6 +274,9 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   page->used = 0;
 
   // and free the page
+  // mi_page_free(page,false);
+  page->next = NULL;
+  page->prev = NULL;
   _mi_segment_page_free(page,false /* no force? */, &heap->tld->segments);
 
   return true; // keep going
