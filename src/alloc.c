@@ -21,7 +21,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Fast allocation in a page: just pop from the free list.
 // Fall back to generic allocation only if the list is empty.
-extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept {
+extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept { 
   mi_assert_internal(page->xblock_size==0||mi_page_block_size(page) >= size);
   mi_block_t* block = page->free;
   if (mi_unlikely(block == NULL)) {
@@ -290,7 +290,8 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 }
 
 
-static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool local, void* p) {
+static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool local, void* p) {
+  mi_page_t* page = _mi_segment_page_of(segment, p);
   mi_block_t* block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
   _mi_free_block(page, local, block);
 }
@@ -338,7 +339,7 @@ void mi_free(void* p) mi_attr_noexcept
 
   if (mi_likely(tid == segment->thread_id && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
-    mi_block_t* block = (mi_block_t*)p;
+    mi_block_t* const block = (mi_block_t*)p;
     if (mi_unlikely(mi_check_is_double_free(page,block))) return;
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
@@ -349,7 +350,8 @@ void mi_free(void* p) mi_attr_noexcept
   }
   else {
     // non-local, aligned blocks, or a full page; use the more generic path
-    mi_free_generic(segment, page, tid == segment->thread_id, p);
+    // note: recalc page in generic to improve code generation
+    mi_free_generic(segment, tid == segment->thread_id, p);
   }
 }
 
