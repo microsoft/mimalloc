@@ -10,15 +10,15 @@
 mimalloc (pronounced "me-malloc")
 is a general purpose allocator with excellent [performance](#performance) characteristics.
 Initially developed by Daan Leijen for the run-time systems of the
-[Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
+[Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages. 
+Latest release:`v1.4.0` (2020-01-22).
 
 It is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
 ```
 > LD_PRELOAD=/usr/bin/libmimalloc.so  myprogram
 ```
-
-Notable aspects of the design include:
+It also has an easy way to override the allocator in [Windows](#override_on_windows). Notable aspects of the design include:
 
 - __small and consistent__: the library is about 6k LOC using simple and
   consistent data structures. This makes it very suitable
@@ -45,9 +45,10 @@ Notable aspects of the design include:
   times (_wcat_), bounded space overhead (~0.2% meta-data, with at most 12.5% waste in allocation sizes),
   and has no internal points of contention using only atomic operations.
 - __fast__: In our benchmarks (see [below](#performance)),
-  _mimalloc_ always outperforms all other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
+  _mimalloc_ outperforms other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
   and usually uses less memory (up to 25% more in the worst case). A nice property
-  is that it does consistently well over a wide range of benchmarks.
+  is that it does consistently well over a wide range of benchmarks. There is also good huge OS page 
+  support for larger server programs.
 
 The [documentation](https://microsoft.github.io/mimalloc) gives a full overview of the API.
 You can read more on the design of _mimalloc_ in the [technical report](https://www.microsoft.com/en-us/research/publication/mimalloc-free-list-sharding-in-action) which also has detailed benchmark results.   
@@ -56,8 +57,8 @@ Enjoy!
 
 ### Releases
 
-* 2020-01-22, `v1.4.0`: stable release 1.4: delayed OS page reset with (much) better performance
-  (when page reset is enabled), more eager concurrent free, addition of STL allocator, fixed potential memory leak.
+* 2020-01-22, `v1.4.0`: stable release 1.4: improved performance for delayed OS page reset, 
+more eager concurrent free, addition of STL allocator, fixed potential memory leak.
 * 2020-01-15, `v1.3.0`: stable release 1.3: bug fixes, improved randomness and [stronger
 free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396) in secure mode.
 * 2019-12-22, `v1.2.2`: stable release 1.2: minor updates.
@@ -189,7 +190,7 @@ malloc requested:         32.8 mb
 The above model of using the `mi_` prefixed API is not always possible
 though in existing programs that already use the standard malloc interface,
 and another option is to override the standard malloc interface
-completely and redirect all calls to the _mimalloc_ library instead.
+completely and redirect all calls to the _mimalloc_ library instead .
 
 ## Environment Options
 
@@ -215,7 +216,7 @@ or via environment variables.
    real drawbacks and may improve performance by a little.
    -->
 - `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where N is the number of 1GiB huge OS pages. This reserves the huge pages at
-   startup and can give quite a performance improvement on long running workloads. Usually it is better to not use
+   startup and can give quite a (latency) performance improvement on long running workloads. Usually it is better to not use
    `MIMALLOC_LARGE_OS_PAGES` in combination with this setting. Just like large OS pages, use with care as reserving
    contiguous physical memory can take a long time when memory is fragmented (but reserving the huge pages is done at 
    startup only once).
@@ -236,7 +237,7 @@ Overriding the standard `malloc` can be done either _dynamically_ or _statically
 
 This is the recommended way to override the standard malloc interface.
 
-### Linux, BSD
+### Override on Linux, BSD
 
 On these ELF-based systems we preload the mimalloc shared
 library so all calls to the standard `malloc` interface are
@@ -255,7 +256,7 @@ or run with the debug version to get detailed statistics:
 > env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram
 ```
 
-### MacOS
+### Override on MacOS
 
 On macOS we can also preload the mimalloc shared
 library so all calls to the standard `malloc` interface are
@@ -270,9 +271,9 @@ the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-i
 Note: unfortunately, at this time, dynamic overriding on macOS seems broken but it is
 actively worked on to fix this (see issue [`#50`](https://github.com/microsoft/mimalloc/issues/50)).
 
-### Windows
+### Override on Windows
 
-Overriding on Windows is robust but requires that you link your program explicitly with
+<span id="override_on_windows">Overriding on Windows</span> is robust but requires that you link your program explicitly with
 the mimalloc DLL and use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
 Moreover, you need to ensure the `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) is available
 in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency).
@@ -283,7 +284,7 @@ To ensure the mimalloc DLL is loaded at run-time it is easiest to insert some
 call to the mimalloc API in the `main` function, like `mi_version()`
 (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
 for an example on how to use this. For best performance on Windows with C++, it
-is highly recommended to also override the `new`/`delete` operations (by including
+is also recommended to also override the `new`/`delete` operations (by including
 [`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
