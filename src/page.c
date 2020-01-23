@@ -278,11 +278,11 @@ static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
    (put there by other threads if they deallocated in a full page)
 ----------------------------------------------------------- */
 void _mi_heap_delayed_free(mi_heap_t* heap) {
-  // take over the list
+  // take over the list (note: no atomic exchange is it is often NULL)
   mi_block_t* block;
   do {
-    block = (mi_block_t*)heap->thread_delayed_free;
-  } while (block != NULL && !mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), NULL, block));
+    block = mi_atomic_read_ptr_relaxed(mi_block_t,&heap->thread_delayed_free);
+  } while (block != NULL && !mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, NULL, block));
 
   // and free them all
   while(block != NULL) {
@@ -293,9 +293,9 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
       // reset the delayed_freeing flag; in that case delay it further by reinserting.
       mi_block_t* dfree;
       do {
-        dfree = (mi_block_t*)heap->thread_delayed_free;
+        dfree = mi_atomic_read_ptr_relaxed(mi_block_t,&heap->thread_delayed_free);
         mi_block_set_nextx(heap, block, dfree, heap->key[0], heap->key[1]);
-      } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), block, dfree));
+      } while (!mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, block, dfree));
     }
     block = next;
   }
@@ -728,14 +728,14 @@ void _mi_deferred_free(mi_heap_t* heap, bool force) {
   heap->tld->heartbeat++;
   if (deferred_free != NULL && !heap->tld->recurse) {
     heap->tld->recurse = true;
-    deferred_free(force, heap->tld->heartbeat, mi_atomic_read_ptr_relaxed(&deferred_arg));
+    deferred_free(force, heap->tld->heartbeat, mi_atomic_read_ptr_relaxed(void,&deferred_arg));
     heap->tld->recurse = false;
   }
 }
 
 void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noexcept {
   deferred_free = fn;
-  mi_atomic_write_ptr(&deferred_arg, arg);
+  mi_atomic_write_ptr(void,&deferred_arg, arg);
 }
 
 

@@ -822,7 +822,7 @@ static void mi_segments_prepend_abandoned(mi_segment_t* first) {
   if (first == NULL) return;
 
   // first try if the abandoned list happens to be NULL
-  if (mi_atomic_cas_ptr_weak(mi_atomic_cast(void*, &abandoned), first, NULL)) return;
+  if (mi_atomic_cas_ptr_weak(mi_segment_t, &abandoned, first, NULL)) return;
 
   // if not, find the end of the list
   mi_segment_t* last = first;
@@ -833,9 +833,9 @@ static void mi_segments_prepend_abandoned(mi_segment_t* first) {
   // and atomically prepend
   mi_segment_t* next;
   do {
-    next = (mi_segment_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*, &abandoned));
+    next = mi_atomic_read_ptr_relaxed(mi_segment_t,&abandoned);
     last->abandoned_next = next;
-  } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*, &abandoned), first, next));
+  } while (!mi_atomic_cas_ptr_weak(mi_segment_t, &abandoned, first, next));
 }
 
 static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
@@ -877,9 +877,9 @@ void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
 
 bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segments_tld_t* tld) {
   // To avoid the A-B-A problem, grab the entire list atomically
-  mi_segment_t* segment = (mi_segment_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*, &abandoned));  // pre-read to avoid expensive atomic operations
+  mi_segment_t* segment = mi_atomic_read_ptr_relaxed(mi_segment_t,&abandoned);  // pre-read to avoid expensive atomic operations
   if (segment == NULL) return false;
-  segment = (mi_segment_t*)mi_atomic_exchange_ptr(mi_atomic_cast(void*, &abandoned), NULL);
+  segment = mi_atomic_exchange_ptr(mi_segment_t, &abandoned, NULL);
   if (segment == NULL) return false;
 
   // we got a non-empty list

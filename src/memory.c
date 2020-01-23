@@ -125,7 +125,7 @@ bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
   if (p==NULL) return false;
   size_t count = mi_atomic_read_relaxed(&regions_count);
   for (size_t i = 0; i < count; i++) {
-    uint8_t* start = (uint8_t*)mi_atomic_read_ptr_relaxed(&regions[i].start);
+    uint8_t* start = mi_atomic_read_ptr_relaxed(uint8_t,&regions[i].start);
     if (start != NULL && (uint8_t*)p >= start && (uint8_t*)p < start + MI_REGION_SIZE) return true;
   }
   return false;
@@ -133,9 +133,9 @@ bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
 
 
 static void* mi_region_blocks_start(const mem_region_t* region, mi_bitmap_index_t bit_idx) {
-  void* start = mi_atomic_read_ptr(&region->start);
+  uint8_t* start = mi_atomic_read_ptr(uint8_t,&region->start);
   mi_assert_internal(start != NULL);
-  return ((uint8_t*)start + (bit_idx * MI_SEGMENT_SIZE));  
+  return (start + (bit_idx * MI_SEGMENT_SIZE));  
 }
 
 static size_t mi_memid_create(mem_region_t* region, mi_bitmap_index_t bit_idx) {
@@ -200,7 +200,7 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   mi_atomic_write(&r->reset, 0);
   *bit_idx = 0;
   mi_bitmap_claim(&r->in_use, 1, blocks, *bit_idx, NULL);
-  mi_atomic_write_ptr(&r->start, start);
+  mi_atomic_write_ptr(uint8_t*,&r->start, start);
 
   // and share it 
   mi_region_info_t info;
@@ -277,14 +277,14 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
 
   mi_region_info_t info;
   info.value = mi_atomic_read(&region->info);
-  void* start = mi_atomic_read_ptr(&region->start);
+  uint8_t* start = mi_atomic_read_ptr(uint8_t,&region->start);
   mi_assert_internal(!(info.x.is_large && !*is_large));
   mi_assert_internal(start != NULL);
 
   *is_zero = mi_bitmap_unclaim(&region->dirty, 1, blocks, bit_idx);  
   *is_large = info.x.is_large;
   *memid = mi_memid_create(region, bit_idx);
-  void* p = (uint8_t*)start + (mi_bitmap_index_bit_in_field(bit_idx) * MI_SEGMENT_SIZE);
+  void* p = start + (mi_bitmap_index_bit_in_field(bit_idx) * MI_SEGMENT_SIZE);
 
   // commit
   if (*commit) {
@@ -446,7 +446,7 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
       } while(m == 0 && !mi_atomic_cas_weak(&region->in_use, MI_BITMAP_FIELD_FULL, 0 ));
       if (m == 0) {
         // on success, free the whole region
-        void* start = mi_atomic_read_ptr(&regions[i].start);
+        uint8_t* start = mi_atomic_read_ptr(uint8_t,&regions[i].start);
         size_t arena_memid = mi_atomic_read_relaxed(&regions[i].arena_memid);
         memset(&regions[i], 0, sizeof(mem_region_t));
         // and release the whole region

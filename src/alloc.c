@@ -239,9 +239,9 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       // add to the delayed free list of this heap. (do this atomically as the lock only protects heap memory validity)
       mi_block_t* dfree;
       do {
-        dfree = (mi_block_t*)heap->thread_delayed_free;
+        dfree = mi_atomic_read_ptr_relaxed(mi_block_t,&heap->thread_delayed_free);
         mi_block_set_nextx(heap,block,dfree, heap->key[0], heap->key[1]);
-      } while (!mi_atomic_cas_ptr_weak(mi_atomic_cast(void*,&heap->thread_delayed_free), block, dfree));
+      } while (!mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, block, dfree));
     }
 
     // and reset the MI_DELAYED_FREEING flag
