@@ -76,9 +76,9 @@ static bool mi_heap_is_valid(mi_heap_t* heap) {
 ----------------------------------------------------------- */
 
 typedef enum mi_collect_e {
-  NORMAL,
-  FORCE,
-  ABANDON
+  MI_NORMAL,
+  MI_FORCE,
+  MI_ABANDON
 } mi_collect_t;
 
 
@@ -87,12 +87,13 @@ static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t
   UNUSED(heap);
   mi_assert_internal(mi_heap_page_is_valid(heap, pq, page, NULL, NULL));
   mi_collect_t collect = *((mi_collect_t*)arg_collect);
-  _mi_page_free_collect(page, collect >= ABANDON);
+  _mi_page_free_collect(page, collect >= MI_FORCE);
   if (mi_page_all_free(page)) {
-    // no more used blocks, free the page. TODO: should we retire here and be less aggressive?
-    _mi_page_free(page, pq, collect != NORMAL);
+    // no more used blocks, free the page. 
+    // note: this will free retired pages as well.
+    _mi_page_free(page, pq, collect >= MI_FORCE);
   }
-  else if (collect == ABANDON) {
+  else if (collect == MI_ABANDON) {
     // still used blocks but the thread is done; abandon the page
     _mi_page_abandon(page, pq);
   }
@@ -111,61 +112,60 @@ static bool mi_heap_page_never_delayed_free(mi_heap_t* heap, mi_page_queue_t* pq
 static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 {
   if (!mi_heap_is_initialized(heap)) return;
-  _mi_deferred_free(heap, collect > NORMAL);
+  _mi_deferred_free(heap, collect >= MI_FORCE);
 
   // collect (some) abandoned pages
-  if (collect >= NORMAL && !heap->no_reclaim) {
-    if (collect == NORMAL) {
+  if (collect >= MI_NORMAL && !heap->no_reclaim) {
+    if (collect == MI_NORMAL) {
       // this may free some segments (but also take ownership of abandoned pages)
       _mi_segment_try_reclaim_abandoned(heap, false, &heap->tld->segments);
     }
     else if (
               #ifdef NDEBUG
-              collect == FORCE
+              collect == MI_FORCE
               #else
-              collect >= FORCE
+              collect >= MI_FORCE
               #endif
               && _mi_is_main_thread() && mi_heap_is_backing(heap))
     {
-      // the main thread is abandoned, try to free all abandoned segments.
+      // the main thread is abandoned (end-of-program), try to reclaim all abandoned segments.
       // if all memory is freed by now, all segments should be freed.
       _mi_segment_try_reclaim_abandoned(heap, true, &heap->tld->segments);
     }
   }
 
   // if abandoning, mark all pages to no longer add to delayed_free
-  if (collect == ABANDON) {
-    //for (mi_page_t* page = heap->pages[MI_BIN_FULL].first; page != NULL; page = page->next) {
-    //  _mi_page_use_delayed_free(page, false);  // set thread_free.delayed to MI_NO_DELAYED_FREE
-    //}
+  if (collect == MI_ABANDON) {
     mi_heap_visit_pages(heap, &mi_heap_page_never_delayed_free, NULL, NULL);
   }
 
   // free thread delayed blocks.
-  // (if abandoning, after this there are no more local references into the pages.)
+  // (if abandoning, after this there are no more thread-delayed references into the pages.)
   _mi_heap_delayed_free(heap);
 
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
-  mi_assert_internal( collect != ABANDON || mi_atomic_read_ptr(mi_block_t,&heap->thread_delayed_free) == NULL );
+  mi_assert_internal( collect != MI_ABANDON || mi_atomic_read_ptr(mi_block_t,&heap->thread_delayed_free) == NULL );
 
   // collect segment caches
-  if (collect >= FORCE) {
+  if (collect >= MI_FORCE) {
     _mi_segment_thread_collect(&heap->tld->segments);
   }
 
+  #ifndef NDEBUG
   // collect regions
-  if (collect >= FORCE && _mi_is_main_thread()) {
+  if (collect >= MI_FORCE && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
     _mi_mem_collect(&heap->tld->os);
   }
+  #endif
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
-  mi_heap_collect_ex(heap, ABANDON);
+  mi_heap_collect_ex(heap, MI_ABANDON);
 }
 
 void mi_heap_collect(mi_heap_t* heap, bool force) mi_attr_noexcept {
-  mi_heap_collect_ex(heap, (force ? FORCE : NORMAL));
+  mi_heap_collect_ex(heap, (force ? MI_FORCE : MI_NORMAL));
 }
 
 void mi_collect(bool force) mi_attr_noexcept {

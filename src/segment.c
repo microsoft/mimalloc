@@ -824,18 +824,18 @@ static void mi_segments_prepend_abandoned(mi_segment_t* first) {
   // first try if the abandoned list happens to be NULL
   if (mi_atomic_cas_ptr_weak(mi_segment_t, &abandoned, first, NULL)) return;
 
-  // if not, find the end of the list
+  // if not, find the end of the argument list
   mi_segment_t* last = first;
   while (last->abandoned_next != NULL) {
     last = last->abandoned_next;
   }
 
   // and atomically prepend
-  mi_segment_t* next;
+  mi_segment_t* anext;
   do {
-    next = mi_atomic_read_ptr_relaxed(mi_segment_t,&abandoned);
-    last->abandoned_next = next;
-  } while (!mi_atomic_cas_ptr_weak(mi_segment_t, &abandoned, first, next));
+    anext = mi_atomic_read_ptr_relaxed(mi_segment_t,&abandoned);
+    last->abandoned_next = anext;
+  } while (!mi_atomic_cas_ptr_weak(mi_segment_t, &abandoned, first, anext));
 }
 
 static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
@@ -897,14 +897,14 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
       atmost--;
     }
     // split the list and push back the remaining segments
-    mi_segment_t* next = last->abandoned_next;
+    mi_segment_t* anext = last->abandoned_next;
     last->abandoned_next = NULL;
-    mi_segments_prepend_abandoned(next);
+    mi_segments_prepend_abandoned(anext);
   }
 
   // reclaim all segments that we kept
   while(segment != NULL) {
-    mi_segment_t* const next = segment->abandoned_next; // save the next segment
+    mi_segment_t* const anext = segment->abandoned_next; // save the next segment
 
     // got it.
     mi_atomic_decrement(&abandoned_count);
@@ -943,7 +943,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
       }
     }
     mi_assert(segment->abandoned == 0);
-    if (segment->used == 0) {  // due to page_clear
+    if (segment->used == 0) {  // due to page_clear's
       mi_segment_free(segment,false,tld);
     }
     else {
@@ -954,7 +954,7 @@ bool _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segmen
     }
 
     // go on
-    segment = next; 
+    segment = anext; 
   }
 
   return true;

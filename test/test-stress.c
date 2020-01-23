@@ -277,12 +277,12 @@ static void run_os_threads(size_t nthreads) {
 #ifdef __cplusplus
 #include <atomic>
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
-  return std::atomic_exchange_explicit((volatile std::atomic<void*>*)p, newval, std::memory_order_acquire);
+  return std::atomic_exchange((volatile std::atomic<void*>*)p, newval);
 }
 #else
 #include <stdatomic.h>
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
-  return atomic_exchange_explicit((volatile _Atomic(void*)*)p, newval, memory_order_acquire);
+  return atomic_exchange((volatile _Atomic(void*)*)p, newval);
 }
 #endif
 
