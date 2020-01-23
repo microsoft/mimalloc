@@ -282,7 +282,7 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
     _mi_warning_message("failed to reserve %zu gb huge pages\n", pages);
     return ENOMEM;
   }
-  _mi_verbose_message("reserved %zu gb huge pages (of the %zu gb requested)\n", pages_reserved, pages);
+  _mi_verbose_message("reserved %zu gb huge pages on numa node %i (of the %zu gb requested)\n", pages_reserved, numa_node, pages);
 
   size_t bcount = mi_block_count_of_size(hsize);
   size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);
