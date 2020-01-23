@@ -126,7 +126,7 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
 /* -----------------------------------------------------------
   Arena cache
 ----------------------------------------------------------- */
-#define MI_CACHE_MAX (64)  // ~4GiB
+#define MI_CACHE_MAX (128)  // ~4GiB
 #define MI_MAX_NUMA  (16)
 
 #define MI_SLOT_IN_USE ((void*)1)
@@ -162,13 +162,13 @@ static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool* co
   for (int n = numa_min; n <= numa_max; n++) {
     for (int i = 0; i < MI_CACHE_MAX; i++) {
       slot = &cache[n][i];
-      void* p = mi_atomic_read_ptr_relaxed(&slot->p);
+      void* p = mi_atomic_read_ptr_relaxed(mi_cache_slot_t,&slot->p);
       if (p > MI_SLOT_IN_USE) { // not NULL or 1
-        if (mi_atomic_cas_ptr_weak(&slot->p, MI_SLOT_IN_USE, p)) {
+        if (mi_atomic_cas_ptr_weak(mi_cache_slot_t, &slot->p, MI_SLOT_IN_USE, p)) {
           // claimed
           if (!*large && slot->is_large) {
             // back out again
-            mi_atomic_write_ptr(&slot->p, p); // make it available again
+            mi_atomic_write_ptr(mi_cache_slot_t, &slot->p, p); // make it available again
           }
           else {
             // keep it
@@ -176,7 +176,7 @@ static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool* co
             *large = slot->is_large;
             *is_zero = false;
             bool committed = slot->is_committed;
-            mi_atomic_write_ptr(&slot->p, NULL); // set it free
+            mi_atomic_write_ptr(mi_cache_slot_t, &slot->p, NULL); // set it free
             if (*commit && !committed) {
               bool commit_zero;
               _mi_os_commit(p, MI_SEGMENT_SIZE, &commit_zero, tld->stats);
@@ -205,19 +205,19 @@ static void mi_cache_purge(mi_os_tld_t* tld) {
   int purged = 0;
   for (int i = 0; i < MI_CACHE_MAX; i++) {
     slot = &cache[numa_node][i];
-    void* p = mi_atomic_read_ptr_relaxed(&slot->p);
+    void* p = mi_atomic_read_ptr_relaxed(mi_cache_slot_t, &slot->p);
     if (p > MI_SLOT_IN_USE && !slot->is_committed && !slot->is_large) {
       mi_msecs_t expire = slot->expire;
       if (expire != 0 && now >= expire) {
         // expired, try to claim it
-        if (mi_atomic_cas_ptr_weak(&slot->p, MI_SLOT_IN_USE, p)) {
+        if (mi_atomic_cas_ptr_weak(mi_cache_slot_t, &slot->p, MI_SLOT_IN_USE, p)) {
           // claimed! test again
           if (slot->is_committed && !slot->is_large && now >= slot->expire) {
             _mi_os_decommit(p, MI_SEGMENT_SIZE, tld->stats);
             slot->is_committed = false;
           }
           // and unclaim again
-          mi_atomic_write_ptr(&slot->p, p);
+          mi_atomic_write_ptr(mi_cache_slot_t, &slot->p, p);
           purged++;
           if (purged >= 4) break; // limit to at most 4 decommits per push
         }
@@ -240,9 +240,9 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_commit
   mi_cache_slot_t* slot;
   for (int i = 0; i < MI_CACHE_MAX; i++) {
     slot = &cache[numa_node][i];
-    void* p = mi_atomic_read_ptr_relaxed(&slot->p);
+    void* p = mi_atomic_read_ptr_relaxed(mi_cache_slot_t, &slot->p);
     if (p == NULL) { // free slot
-      if (mi_atomic_cas_ptr_weak(&slot->p, MI_SLOT_IN_USE, NULL)) {
+      if (mi_atomic_cas_ptr_weak(mi_cache_slot_t, &slot->p, MI_SLOT_IN_USE, NULL)) {
         // claimed!
         slot->expire = 0;
         slot->is_committed = is_committed;
@@ -258,7 +258,7 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_commit
             slot->expire = _mi_clock_now() + delay;
           }
         }
-        mi_atomic_write_ptr(&slot->p, start); // and make it available;
+        mi_atomic_write_ptr(mi_cache_slot_t, &slot->p, start); // and make it available;
         return true;
       }
     }

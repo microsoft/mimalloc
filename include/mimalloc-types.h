@@ -89,7 +89,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Main tuning parameters for segment and page sizes
 // Sizes for 64-bit, divide by two for 32-bit
 #define MI_SEGMENT_SLICE_SHIFT            (13 + MI_INTPTR_SHIFT)         // 64kb
-#define MI_SEGMENT_SHIFT                  ( 9 + MI_SEGMENT_SLICE_SHIFT)  // 64mb
+#define MI_SEGMENT_SHIFT                  ( 8 + MI_SEGMENT_SLICE_SHIFT)  // 16mb
 
 #define MI_SMALL_PAGE_SHIFT               (MI_SEGMENT_SLICE_SHIFT)       // 64kb
 #define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SMALL_PAGE_SHIFT)     // 512kb
