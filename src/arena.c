@@ -62,7 +62,7 @@ typedef uintptr_t mi_block_info_t;
 
 // A memory arena descriptor
 typedef struct mi_arena_s {
-  uint8_t* start;                         // the start of the memory area
+  _Atomic(uint8_t*) start;                // the start of the memory area
   size_t   block_count;                   // size of the area in arena blocks (of `MI_ARENA_BLOCK_SIZE`)
   size_t   field_count;                   // number of bitmap fields (where `field_count * MI_BITMAP_FIELD_BITS >= block_count`)
   int      numa_node;                     // associated NUMA node
@@ -327,7 +327,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
     mi_assert_internal(size <= bcount*MI_ARENA_BLOCK_SIZE);
     // try numa affine allocation
     for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-      mi_arena_t* arena = (mi_arena_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*, &mi_arenas[i]));
+      mi_arena_t* arena = mi_atomic_read_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
       if (arena==NULL) break; // end reached
       if ((arena->numa_node<0 || arena->numa_node==numa_node) && // numa local?
           (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
@@ -339,7 +339,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
     }
     // try from another numa node instead..
     for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-      mi_arena_t* arena = (mi_arena_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*, &mi_arenas[i]));
+      mi_arena_t* arena = mi_atomic_read_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
       if (arena==NULL) break; // end reached
       if ((arena->numa_node>=0 && arena->numa_node!=numa_node) && // not numa local!
           (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
@@ -388,7 +388,7 @@ void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, bool 
     size_t bitmap_idx;
     mi_arena_id_indices(memid, &arena_idx, &bitmap_idx);
     mi_assert_internal(arena_idx < MI_MAX_ARENAS);
-    mi_arena_t* arena = (mi_arena_t*)mi_atomic_read_ptr_relaxed(mi_atomic_cast(void*, &mi_arenas[arena_idx]));
+    mi_arena_t* arena = mi_atomic_read_ptr_relaxed(mi_arena_t,&mi_arenas[arena_idx]);
     mi_assert_internal(arena != NULL);
     if (arena == NULL) {
       _mi_error_message(EINVAL, "trying to free from non-existent arena: %p, size %zu, memid: 0x%zx\n", p, size, memid);
@@ -414,15 +414,15 @@ void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, bool 
 
 static bool mi_arena_add(mi_arena_t* arena) {
   mi_assert_internal(arena != NULL);
-  mi_assert_internal((uintptr_t)arena->start % MI_SEGMENT_ALIGN == 0);
+  mi_assert_internal((uintptr_t)mi_atomic_read_ptr_relaxed(uint8_t,&arena->start) % MI_SEGMENT_ALIGN == 0);
   mi_assert_internal(arena->block_count > 0);
 
-  uintptr_t i = mi_atomic_addu(&mi_arena_count,1);
+  uintptr_t i = mi_atomic_increment(&mi_arena_count);
   if (i >= MI_MAX_ARENAS) {
-    mi_atomic_subu(&mi_arena_count, 1);
+    mi_atomic_decrement(&mi_arena_count);
     return false;
   }
-  mi_atomic_write_ptr(mi_atomic_cast(void*,&mi_arenas[i]), arena);
+  mi_atomic_write_ptr(mi_arena_t,&mi_arenas[i], arena);
   return true;
 }
 
@@ -444,7 +444,7 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
     _mi_warning_message("failed to reserve %zu gb huge pages\n", pages);
     return ENOMEM;
   }
-  _mi_verbose_message("reserved %zu gb huge pages (of the %zu gb requested)\n", pages_reserved, pages);
+  _mi_verbose_message("reserved %zu gb huge pages on numa node %i (of the %zu gb requested)\n", pages_reserved, numa_node, pages);
 
   size_t bcount = mi_block_count_of_size(hsize);
   size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);

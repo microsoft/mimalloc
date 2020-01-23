@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 140   // major + 2 digits minor
+#define MI_MALLOC_VERSION 150   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -369,9 +369,9 @@ mi_decl_export void* mi_new_reallocn(void* p, size_t newcount, size_t size) mi_a
 #endif
 
 template<class T> struct mi_stl_allocator {
-  typedef T                 value_type;  
+  typedef T                 value_type;
   typedef std::size_t       size_type;
-  typedef std::ptrdiff_t    difference_type;    
+  typedef std::ptrdiff_t    difference_type;
   typedef value_type&       reference;
   typedef value_type const& const_reference;
   typedef value_type*       pointer;
@@ -384,23 +384,23 @@ template<class T> struct mi_stl_allocator {
   mi_stl_allocator  select_on_container_copy_construction() const { return *this; }
   void              deallocate(T* p, size_type) { mi_free(p); }
 
-  #if (__cplusplus >= 201703L)  // C++17 
+  #if (__cplusplus >= 201703L)  // C++17
   T* allocate(size_type count) { return static_cast<T*>(mi_new_n(count, sizeof(T))); }
-  T* allocate(size_type count, const void*) { return allocate(count); }  
-  #else  
+  T* allocate(size_type count, const void*) { return allocate(count); }
+  #else
   pointer allocate(size_type count, const void* = 0) { return static_cast<pointer>(mi_new_n(count, sizeof(value_type))); }
-  #endif  
-  
+  #endif
+
   #if ((__cplusplus >= 201103L) || (_MSC_VER > 1900))  // C++11
   using propagate_on_container_copy_assignment = std::true_type;
   using propagate_on_container_move_assignment = std::true_type;
   using propagate_on_container_swap            = std::true_type;
   using is_always_equal                        = std::true_type;
   template <class U, class ...Args> void construct(U* p, Args&& ...args) { ::new(p) U(std::forward<Args>(args)...); }
-  template <class U> void destroy(U* p) mi_attr_noexcept { p->~U(); } 
+  template <class U> void destroy(U* p) mi_attr_noexcept { p->~U(); }
   #else
   void construct(pointer p, value_type const& val) { ::new(p) value_type(val); }
-  void destroy(pointer p) { p->~value_type(); } 
+  void destroy(pointer p) { p->~value_type(); }
   #endif
 
   size_type     max_size() const mi_attr_noexcept { return (std::numeric_limits<difference_type>::max() / sizeof(value_type)); }

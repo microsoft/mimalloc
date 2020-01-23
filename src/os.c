@@ -396,20 +396,20 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
 // On 64-bit systems, we can do efficient aligned allocation by using
 // the 4TiB to 30TiB area to allocate them.
 #if (MI_INTPTR_SIZE >= 8) && (defined(_WIN32) || (defined(MI_OS_USE_MMAP) && !defined(MAP_ALIGNED)))
-static volatile _Atomic(intptr_t) aligned_base;
+static volatile _Atomic(uintptr_t) aligned_base;
 
 // Return a 4MiB aligned address that is probably available
 static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   if (try_alignment == 0 || try_alignment > MI_SEGMENT_SIZE) return NULL;
   if ((size%MI_SEGMENT_SIZE) != 0) return NULL;
-  intptr_t hint = mi_atomic_add(&aligned_base, size);
+  uintptr_t hint = mi_atomic_add(&aligned_base, size);
   if (hint == 0 || hint > ((intptr_t)30<<40)) { // try to wrap around after 30TiB (area after 32TiB is used for huge OS pages)
-    intptr_t init = ((intptr_t)4 << 40); // start at 4TiB area
+    uintptr_t init = ((uintptr_t)4 << 40); // start at 4TiB area
     #if (MI_SECURE>0 || MI_DEBUG==0)     // security: randomize start of aligned allocations unless in debug mode
     uintptr_t r = _mi_heap_random_next(mi_get_default_heap());
     init = init + (MI_SEGMENT_SIZE * ((r>>17) & 0xFFFFF));  // (randomly 20 bits)*4MiB == 0 to 4TiB
     #endif
-    mi_atomic_cas_strong(mi_atomic_cast(uintptr_t, &aligned_base), init, hint + size);
+    mi_atomic_cas_strong(&aligned_base, init, hint + size);
     hint = mi_atomic_add(&aligned_base, size); // this may still give 0 or > 30TiB but that is ok, it is a hint after all
   }
   if (hint%try_alignment != 0) return NULL;

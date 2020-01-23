@@ -147,7 +147,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
-  mi_assert_internal( collect != ABANDON || heap->thread_delayed_free == NULL );
+  mi_assert_internal( collect != ABANDON || mi_atomic_read_ptr(mi_block_t,&heap->thread_delayed_free) == NULL );
 
   // collect segment caches
   if (collect >= FORCE) {
