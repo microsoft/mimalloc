@@ -335,7 +335,7 @@ static void* atomic_exchange_ptr(volatile void** p, void* newval) {
 uintptr_t ticks(void) {
   struct timespec t;
   clock_gettime(CLOCK_REALTIME, &t);
-  return (uintptr_t)t.tv_sec * 1000) + ((uintptr_t)t.tv_nsec / 1000000);
+  return ((uintptr_t)t.tv_sec * 1000) + ((uintptr_t)t.tv_nsec / 1000000);
 }
 #else
 // low resolution timer
