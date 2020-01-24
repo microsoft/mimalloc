@@ -20,8 +20,14 @@ terms of the MIT license. A copy of the license can be found in the file
   #else
     #define mi_attr_noexcept   throw()
   #endif
+  #if __cplusplus > 201703L //C++20
+    #define mi_attr_nodiscard_if_cpp20 [[nodiscard]]
+  #else
+    #define mi_attr_nodiscard_if_cpp20
+  #endif
 #else
   #define mi_attr_noexcept
+  #define mi_attr_nodiscard_if_cpp20
 #endif
 
 #ifdef _MSC_VER
@@ -381,8 +387,8 @@ template<class T> struct mi_stl_allocator {
   void              deallocate(T* p, size_type) { mi_free(p); }
 
   #if (__cplusplus >= 201703L)  // C++17
-  T* allocate(size_type count) { return static_cast<T*>(mi_new_n(count, sizeof(T))); }
-  T* allocate(size_type count, const void*) { return allocate(count); }
+  mi_attr_nodiscard_if_cpp20 T* allocate(size_type count) { return static_cast<T*>(mi_new_n(count, sizeof(T))); }
+  mi_attr_nodiscard_if_cpp20 T* allocate(size_type count, const void*) { return allocate(count); }
   #else
   pointer allocate(size_type count, const void* = 0) { return static_cast<pointer>(mi_new_n(count, sizeof(value_type))); }
   #endif
