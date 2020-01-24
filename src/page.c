@@ -37,7 +37,7 @@ static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_sta
 }
 
 static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t size, mi_tld_t* tld);
-
+static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld);
 
 #if (MI_DEBUG>=3)
 static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
@@ -242,32 +242,37 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
 // allocate a fresh page from a segment
 static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size_t block_size) {
   mi_assert_internal(pq==NULL||mi_heap_contains_queue(heap, pq));
-  mi_page_t* page = _mi_segment_page_alloc(block_size, &heap->tld->segments, &heap->tld->os);
-  if (page == NULL) return NULL;
-  mi_assert_internal(pq==NULL || _mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
-  mi_page_init(heap, page, block_size, heap->tld);
-  _mi_stat_increase( &heap->tld->stats.pages, 1);
-  if (pq!=NULL) mi_page_queue_push(heap, pq, page); // huge pages use pq==NULL
-  mi_assert_expensive(_mi_page_is_valid(page));
-  return page;
+  mi_assert_internal(pq==NULL||block_size == pq->block_size);
+  mi_page_t* page = _mi_segment_page_alloc(heap, block_size, &heap->tld->segments, &heap->tld->os);
+  if (page == NULL) {
+    // this may be out-of-memory, or a page was reclaimed
+    if (pq!=NULL && (page = pq->first) != NULL) {
+      mi_assert_expensive(_mi_page_is_valid(page));
+      if (!mi_page_immediate_available(page)) {
+        mi_page_extend_free(heap, page, heap->tld);
+      }
+      mi_assert_internal(mi_page_immediate_available(page));
+      if (mi_page_immediate_available(page)) {
+        return page; // reclaimed page
+      }
+    }
+    return NULL; // out-of-memory
+  }
+  else {
+    // a fresh page was allocated, initialize it
+    mi_assert_internal(pq==NULL || _mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
+    mi_page_init(heap, page, block_size, heap->tld);
+    _mi_stat_increase(&heap->tld->stats.pages, 1);
+    if (pq!=NULL) mi_page_queue_push(heap, pq, page); // huge pages use pq==NULL
+    mi_assert_expensive(_mi_page_is_valid(page));
+    return page;
+  }
 }
 
 // Get a fresh page to use
 static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
   mi_assert_internal(mi_heap_contains_queue(heap, pq));
-
-  // try to reclaim an abandoned page first
-  mi_page_t* page = pq->first;
-  if (!heap->no_reclaim &&
-      _mi_segment_try_reclaim_abandoned(heap, false, &heap->tld->segments) &&
-      page != pq->first)
-  {
-    // we reclaimed, and we got lucky with a reclaimed page in our queue
-    page = pq->first;
-    if (page->free != NULL) return page;
-  }
-  // otherwise allocate the page
-  page = mi_page_fresh_alloc(heap, pq, pq->block_size);
+  mi_page_t* page = mi_page_fresh_alloc(heap, pq, pq->block_size);
   if (page==NULL) return NULL;
   mi_assert_internal(pq->block_size==mi_page_block_size(page));
   mi_assert_internal(pq==mi_page_queue(heap, mi_page_block_size(page)));

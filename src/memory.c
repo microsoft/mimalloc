@@ -419,6 +419,7 @@ void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_re
       bool any_unreset;
       mi_bitmap_claim(&region->reset, 1, blocks, bit_idx, &any_unreset);
       if (any_unreset) {
+        _mi_abandoned_await_readers(); // ensure no more pending write (in case reset = decommit)
         _mi_mem_reset(p, blocks * MI_SEGMENT_SIZE, tld);
       }
     }    
@@ -451,7 +452,8 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
         memset(&regions[i], 0, sizeof(mem_region_t));
         // and release the whole region
         mi_atomic_write(&region->info, 0);
-        if (start != NULL) { // && !_mi_os_is_huge_reserved(start)) {          
+        if (start != NULL) { // && !_mi_os_is_huge_reserved(start)) {         
+          _mi_abandoned_await_readers(); // ensure no pending reads
           _mi_arena_free(start, MI_REGION_SIZE, arena_memid, tld->stats);
         }
       }

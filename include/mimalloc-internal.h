@@ -75,12 +75,13 @@ bool       _mi_mem_unprotect(void* addr, size_t size);
 void        _mi_mem_collect(mi_os_tld_t* tld);
 
 // "segment.c"
-mi_page_t* _mi_segment_page_alloc(size_t block_wsize, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
+mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_wsize, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
 void       _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld);
 void       _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld);
-bool       _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segments_tld_t* tld);
-void       _mi_segment_thread_collect(mi_segments_tld_t* tld);
 uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size, size_t* pre_size); // page start for any page
+void       _mi_segment_thread_collect(mi_segments_tld_t* tld);
+void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
+void       _mi_abandoned_await_readers(void);
 
 // "page.c"
 void*      _mi_malloc_generic(mi_heap_t* heap, size_t size)  mi_attr_noexcept mi_attr_malloc;

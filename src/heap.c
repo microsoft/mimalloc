@@ -125,7 +125,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   {
     // the main thread is abandoned (end-of-program), try to reclaim all abandoned segments.
     // if all memory is freed by now, all segments should be freed.
-    _mi_segment_try_reclaim_abandoned(heap, true, &heap->tld->segments);
+    _mi_abandoned_reclaim_all(heap, &heap->tld->segments);
   }
   
 
