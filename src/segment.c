@@ -231,6 +231,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
 ----------------------------------------------------------- */
 
 static void mi_page_reset(mi_segment_t* segment, mi_page_t* page, size_t size, mi_segments_tld_t* tld) {
+  mi_assert_internal(page->is_committed);
   if (!mi_option_is_enabled(mi_option_page_reset)) return;
   if (segment->mem_is_fixed || page->segment_in_use || page->is_reset) return;
   size_t psize;
@@ -330,7 +331,7 @@ static void mi_pages_reset_remove_all_in_segment(mi_segment_t* segment, bool for
   if (segment->mem_is_fixed) return; // never reset in huge OS pages
   for (size_t i = 0; i < segment->capacity; i++) {
     mi_page_t* page = &segment->pages[i];
-    if (!page->segment_in_use && !page->is_reset) {
+    if (!page->segment_in_use && page->is_committed && !page->is_reset) {
       mi_pages_reset_remove(page, tld);
       if (force_reset) {
         mi_page_reset(segment, page, 0, tld); 
@@ -544,8 +545,12 @@ void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
   }
   mi_assert_internal(tld->cache_count == 0);
   mi_assert_internal(tld->cache == NULL);
-  mi_assert_internal(tld->pages_reset.first == NULL);  
-  mi_assert_internal(tld->pages_reset.last == NULL);
+#if MI_DEBUG>=2
+  if (!_mi_is_main_thread()) {
+    mi_assert_internal(tld->pages_reset.first == NULL);
+    mi_assert_internal(tld->pages_reset.last == NULL);
+  }
+#endif
 }
 
 
