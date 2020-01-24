@@ -37,11 +37,11 @@ static size_t use_one_size = 0;              // use single object size of `N * s
 
 
 #ifdef USE_STD_MALLOC
-#define custom_malloc(s)      malloc(s)
+#define custom_calloc(n,s)    calloc(n,s)
 #define custom_realloc(p,s)   realloc(p,s)
 #define custom_free(p)        free(p)
 #else
-#define custom_malloc(s)      mi_malloc(s)
+#define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
 #endif
@@ -94,9 +94,12 @@ static void* alloc_items(size_t items, random_t r) {
   }
   if (items == 40) items++;              // pthreads uses that size for stack increases
   if (use_one_size > 0) items = (use_one_size / sizeof(uintptr_t));
-  uintptr_t* p = (uintptr_t*)custom_malloc(items * sizeof(uintptr_t));
+  if (items==0) items = 1;
+  uintptr_t* p = (uintptr_t*)custom_calloc(items,sizeof(uintptr_t));
   if (p != NULL) {
-    for (uintptr_t i = 0; i < items; i++) p[i] = (items - i) ^ cookie;
+    for (uintptr_t i = 0; i < items; i++) {
+      p[i] = (items - i) ^ cookie;
+    }
   }
   return p;
 }
@@ -126,7 +129,7 @@ static void stress(intptr_t tid) {
   void** data = NULL;
   size_t data_size = 0;
   size_t data_top = 0;
-  void** retained = (void**)custom_malloc(retain * sizeof(void*));
+  void** retained = (void**)custom_calloc(retain,sizeof(void*));
   size_t retain_top = 0;
 
   while (allocs > 0 || retain > 0) {
@@ -171,7 +174,45 @@ static void stress(intptr_t tid) {
   //bench_end_thread();
 }
 
-static void run_os_threads(size_t nthreads);
+static void run_os_threads(size_t nthreads, void (*entry)(intptr_t tid));
+
+static void test_stress(void) {
+  uintptr_t r = 43 * 43;
+  for (int n = 0; n < ITER; n++) {
+    run_os_threads(THREADS, &stress);
+    for (int i = 0; i < TRANSFERS; i++) {
+      if (chance(50, &r) || n + 1 == ITER) { // free all on last run, otherwise free half of the transfers
+        void* p = atomic_exchange_ptr(&transfer[i], NULL);
+        free_items(p);
+      }
+    }
+    mi_collect(false);
+#ifndef NDEBUG
+    if ((n + 1) % 10 == 0)  { printf("- iterations left: %3d\n", ITER - (n + 1)); }
+#endif
+  }
+}
+
+static void leak(intptr_t tid) {
+  uintptr_t r = 43*tid;
+  void* p = alloc_items(pick(&r)%128, &r);
+  if (chance(10, &r)) {
+    intptr_t i = (pick(&r) % TRANSFERS);
+    void* q = atomic_exchange_ptr(&transfer[i], p);
+    free_items(q);
+  }
+}
+
+static void test_leak(void) {
+  for (int n = 0; n < ITER; n++) {
+    run_os_threads(THREADS, &leak);
+    mi_collect(false);
+#ifndef NDEBUG
+    //if ((n + 1) % 10 == 0) 
+    { printf("- iterations left: %3d\n", ITER - (n + 1)); }
+#endif
+  }
+}
 
 int main(int argc, char** argv) {
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
@@ -198,19 +239,11 @@ int main(int argc, char** argv) {
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
   mi_stats_reset();
-  uintptr_t r = 43 * 43;
-  for (int n = 0; n < ITER; n++) {
-    run_os_threads(THREADS);
-    for (int i = 0; i < TRANSFERS; i++) {
-      if (chance(50, &r) || n + 1 == ITER) { // free all on last run, otherwise free half of the transfers
-        void* p = atomic_exchange_ptr(&transfer[i], NULL);
-        free_items(p);
-      }
-    }
-    mi_collect(false);
-#ifndef NDEBUG
-    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
-#endif
+  if (true) {
+    test_stress();
+  }
+  else {
+    test_leak();
   }
 
   mi_collect(true);
@@ -220,18 +253,21 @@ int main(int argc, char** argv) {
 }
 
 
+static void (*thread_entry_fun)(intptr_t) = &stress;
+
 #ifdef _WIN32
 
 #include <windows.h>
 
 static DWORD WINAPI thread_entry(LPVOID param) {
-  stress((intptr_t)param);
+  thread_entry_fun((intptr_t)param);
   return 0;
 }
 
-static void run_os_threads(size_t nthreads) {
-  DWORD* tids = (DWORD*)custom_malloc(nthreads * sizeof(DWORD));
-  HANDLE* thandles = (HANDLE*)custom_malloc(nthreads * sizeof(HANDLE));
+static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
+  thread_entry_fun = fun;
+  DWORD* tids = (DWORD*)custom_calloc(nthreads,sizeof(DWORD));
+  HANDLE* thandles = (HANDLE*)custom_calloc(nthreads,sizeof(HANDLE));
   for (uintptr_t i = 0; i < nthreads; i++) {
     thandles[i] = CreateThread(0, 4096, &thread_entry, (void*)(i), 0, &tids[i]);
   }
@@ -246,7 +282,7 @@ static void run_os_threads(size_t nthreads) {
 }
 
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
-#if (INTPTR_MAX == UINT32_MAX)
+#if (INTPTR_MAX == INT32_MAX)
   return (void*)InterlockedExchange((volatile LONG*)p, (LONG)newval);
 #else
   return (void*)InterlockedExchange64((volatile LONG64*)p, (LONG64)newval);
@@ -257,12 +293,13 @@ static void* atomic_exchange_ptr(volatile void** p, void* newval) {
 #include <pthread.h>
 
 static void* thread_entry(void* param) {
-  stress((uintptr_t)param);
+  thread_entry_fun((uintptr_t)param);
   return NULL;
 }
 
-static void run_os_threads(size_t nthreads) {
-  pthread_t* threads = (pthread_t*)custom_malloc(nthreads * sizeof(pthread_t));
+static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
+  thread_entry_fun = fun;
+  pthread_t* threads = (pthread_t*)custom_calloc(nthreads,sizeof(pthread_t));
   memset(threads, 0, sizeof(pthread_t) * nthreads);
   //pthread_setconcurrency(nthreads);
   for (uintptr_t i = 0; i < nthreads; i++) {
