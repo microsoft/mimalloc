@@ -57,6 +57,7 @@ const uintptr_t cookie = 0xbf58476d1ce4e5b9UL;
 const uintptr_t cookie = 0x1ce4e5b9UL;
 #endif
 
+static uintptr_t ticks(void);
 static void* atomic_exchange_ptr(volatile void** p, void* newval);
 
 typedef uintptr_t* random_t;
@@ -121,7 +122,7 @@ static void free_items(void* p) {
 
 static void stress(intptr_t tid) {
   //bench_start_thread();
-  uintptr_t r = tid * 43;
+  uintptr_t r = (tid * 43)^ticks();
   const size_t max_item_shift = 5; // 128
   const size_t max_item_retained_shift = max_item_shift + 2;
   size_t allocs = 100 * ((size_t)SCALE) * (tid % 8 + 1); // some threads do more
@@ -194,9 +195,9 @@ static void test_stress(void) {
 }
 
 static void leak(intptr_t tid) {
-  uintptr_t r = 43*tid;
+  uintptr_t r = (43*tid)^ticks();
   void* p = alloc_items(pick(&r)%128, &r);
-  if (chance(10, &r)) {
+  if (chance(50, &r)) {
     intptr_t i = (pick(&r) % TRANSFERS);
     void* q = atomic_exchange_ptr(&transfer[i], p);
     free_items(q);
@@ -259,7 +260,13 @@ static void (*thread_entry_fun)(intptr_t) = &stress;
 
 #include <windows.h>
 
-static DWORD WINAPI thread_entry(LPVOID param) {
+static uintptr_t ticks(void) {
+  LARGE_INTEGER t;
+  QueryPerformanceCounter(&t);
+  return (uintptr_t)t.QuadPart;
+}
+
+static DWORD WINAPI thread_entry(LPVOID param) {  
   thread_entry_fun((intptr_t)param);
   return 0;
 }
@@ -320,6 +327,20 @@ static void* atomic_exchange_ptr(volatile void** p, void* newval) {
 #include <stdatomic.h>
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
   return atomic_exchange((volatile _Atomic(void*)*)p, newval);
+}
+#endif
+
+#include <time.h>
+#ifdef CLOCK_REALTIME
+uintptr_t ticks(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_REALTIME, &t);
+  return (uintptr_t)t.tv_sec * 1000) + ((uintptr_t)t.tv_nsec / 1000000);
+}
+#else
+// low resolution timer
+uintptr_t _mi_clock_now(void) {
+  return ((uintptr_t)clock() / ((uintptr_t)CLOCKS_PER_SEC / 1000));
 }
 #endif
 
