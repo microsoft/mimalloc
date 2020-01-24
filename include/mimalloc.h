@@ -20,7 +20,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #else
     #define mi_attr_noexcept   throw()
   #endif
-  #if __cplusplus > 201703L //C++20
+  #if (__cplusplus > 201703L) //C++20
     #define mi_attr_nodiscard_if_cpp20 [[nodiscard]]
   #else
     #define mi_attr_nodiscard_if_cpp20
@@ -368,6 +368,7 @@ mi_decl_export void* mi_new_reallocn(void* p, size_t newcount, size_t size) mi_a
 #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
 #include <type_traits> // std::true_type
 #include <utility>     // std::forward
+#include <memory> // std::addressof
 #endif
 
 template<class T> struct mi_stl_allocator {
@@ -406,8 +407,15 @@ template<class T> struct mi_stl_allocator {
   #endif
 
   size_type     max_size() const mi_attr_noexcept { return (std::numeric_limits<difference_type>::max() / sizeof(value_type)); }
-  pointer       address(reference x) const        { return &x; }
-  const_pointer address(const_reference x) const  { return &x; }
+  #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)) // C++11
+  pointer       address(reference x) const mi_attr_noexcept        { return std::addressof(x); }
+  const_pointer address(const_reference x) const mi_attr_noexcept  { return std::addressof(x); }
+  #else
+  // Oversimplified implementation as presented here: <https://en.cppreference.com/w/cpp/memory/addressof>
+  // This is also used as a fallback by libcxx, and as the sole implementation by libstdcxx, so should be good enough for us
+  pointer       address(reference x) const mi_attr_noexcept        { return reinterpret_cast<pointer>(&const_cast<char&>(reinterpret_cast<const volatile char&>(x))); }
+  const_pointer address(const_reference x) const mi_attr_noexcept  { return reinterpret_cast<const_pointer>(&const_cast<char&>(reinterpret_cast<const volatile char&>(x))); }
+  #endif
 };
 
 template<class T1,class T2> bool operator==(const mi_stl_allocator<T1>& , const mi_stl_allocator<T2>& ) mi_attr_noexcept { return true; }
