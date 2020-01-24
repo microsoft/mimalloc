@@ -122,7 +122,7 @@ static void free_items(void* p) {
 
 static void stress(intptr_t tid) {
   //bench_start_thread();
-  uintptr_t r = (tid * 43)^ticks();
+  uintptr_t r = (tid * 43); // ^ ticks();
   const size_t max_item_shift = 5; // 128
   const size_t max_item_retained_shift = max_item_shift + 2;
   size_t allocs = 100 * ((size_t)SCALE) * (tid % 8 + 1); // some threads do more
