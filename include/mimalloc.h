@@ -368,7 +368,7 @@ mi_decl_export void* mi_new_reallocn(void* p, size_t newcount, size_t size) mi_a
 #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
 #include <type_traits> // std::true_type
 #include <utility>     // std::forward
-#include <memory> // std::addressof
+#include <memory>      // std::addressof
 #endif
 
 template<class T> struct mi_stl_allocator {
@@ -412,7 +412,7 @@ template<class T> struct mi_stl_allocator {
   const_pointer address(const_reference x) const mi_attr_noexcept  { return std::addressof(x); }
   #else
   // Oversimplified implementation as presented here: <https://en.cppreference.com/w/cpp/memory/addressof>
-  // This is also used as a fallback by libcxx, and as the sole implementation by libstdcxx, so should be good enough for us
+  // This is also used as a fallback by libcxx, and as the sole implementation by libstdc++, so should be good enough for us
   pointer       address(reference x) const mi_attr_noexcept        { return reinterpret_cast<pointer>(&const_cast<char&>(reinterpret_cast<const volatile char&>(x))); }
   const_pointer address(const_reference x) const mi_attr_noexcept  { return reinterpret_cast<const_pointer>(&const_cast<char&>(reinterpret_cast<const volatile char&>(x))); }
   #endif
