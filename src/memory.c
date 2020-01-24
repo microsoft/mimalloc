@@ -92,7 +92,8 @@ typedef struct mem_region_s {
   mi_bitmap_field_t                  dirty;       // track if non-zero per block
   mi_bitmap_field_t                  commit;      // track if committed per block
   mi_bitmap_field_t                  reset;       // track if reset per block
-  volatile _Atomic(uintptr_t)        arena_memid; // if allocated from a (huge page) arena-
+  volatile _Atomic(uintptr_t)        arena_memid; // if allocated from a (huge page) arena
+  uintptr_t                          padding;     // round to 8 fields
 } mem_region_t;
 
 // The region map
@@ -187,6 +188,7 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   if (idx >= MI_REGION_MAX) {
     mi_atomic_decrement(&regions_count);
     _mi_arena_free(start, MI_REGION_SIZE, arena_memid, tld->stats);
+    _mi_warning_message("maximum regions used: %zu GiB (perhaps recompile with a larger setting for MI_HEAP_REGION_MAX_SIZE)", _mi_divide_up(MI_HEAP_REGION_MAX_SIZE, GiB));
     return false;
   }
 
