@@ -407,7 +407,7 @@ template<class T> struct mi_stl_allocator {
   #endif
 
   size_type     max_size() const mi_attr_noexcept { return (std::numeric_limits<difference_type>::max() / sizeof(value_type)); }
-  #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)) // C++11
+  #if ((__cplusplus >= 201103L) || (_MSC_VER > 1900)) // C++11
   pointer       address(reference x) const mi_attr_noexcept        { return std::addressof(x); }
   const_pointer address(const_reference x) const mi_attr_noexcept  { return std::addressof(x); }
   #else
