@@ -203,6 +203,7 @@ static bool _mi_heap_done(mi_heap_t* heap) {
 
   // free if not the main thread
   if (heap != &_mi_heap_main) {
+    mi_assert_internal(heap->tld->segments.count == 0);
     _mi_os_free(heap, sizeof(mi_thread_data_t), &_mi_stats_main);
   }
 #if (MI_DEBUG > 0)
