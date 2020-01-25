@@ -1019,26 +1019,18 @@ void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
 ----------------------------------------------------------- */
 
 // Possibly clear pages and check if free space is available
-static bool mi_segment_pages_collect(mi_segment_t* segment, size_t block_size, mi_segments_tld_t* tld) 
+static bool mi_segment_check_free(mi_segment_t* segment, size_t block_size) 
 {
   mi_assert_internal(block_size < MI_HUGE_BLOCK_SIZE);
   bool has_page = false;
   for (size_t i = 0; i < segment->capacity; i++) {
     mi_page_t* page = &segment->pages[i];
-    if (page->segment_in_use) {
-      mi_assert_internal(!page->is_reset);
-      mi_assert_internal(page->is_committed);
-      mi_assert_internal(mi_page_not_in_queue(page, tld));
-      mi_assert_internal(mi_page_thread_free_flag(page)==MI_NEVER_DELAYED_FREE);
-      mi_assert_internal(mi_page_heap(page) == NULL);
-      mi_assert_internal(page->next == NULL);      
+    if (page->segment_in_use) {      
       // ensure used count is up to date and collect potential concurrent frees
       _mi_page_free_collect(page, false); 
       if (mi_page_all_free(page)) {
-        // if everything free already, clear the page directly        
-        segment->abandoned--;
-        _mi_stat_decrease(&tld->stats->pages_abandoned, 1);
-        mi_segment_page_clear(segment, page, false, tld); // no (delayed) reset allowed (as the segment is still abandoned)
+        // if everything free already, page can be reused for some block size
+        // note: don't clear yet as we can only reset it once it is reclaimed
         has_page = true;
       }
       else if (page->xblock_size == block_size && page->used < page->reserved) {  
@@ -1047,6 +1039,7 @@ static bool mi_segment_pages_collect(mi_segment_t* segment, size_t block_size, m
       }
     }
     else {
+      // whole empty page
       has_page = true;
     }
   }  
@@ -1081,7 +1074,6 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       // set the heap again and allow delayed free again
       mi_page_set_heap(page, heap);
       _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, true); // override never (after heap is set)
-      mi_assert_internal(!mi_page_all_free(page));
       // TODO: should we not collect again given that we just collected?
       _mi_page_free_collect(page, false); // ensure used count is up to date
       if (mi_page_all_free(page)) {
@@ -1097,7 +1089,8 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       }
     }   
     else if (page->is_committed && !page->is_reset) {  // not in-use, and not reset yet
-      mi_pages_reset_add(segment, page, tld);
+      // note: no not reset as this includes pages that were not touched before
+      // mi_pages_reset_add(segment, page, tld);
     }
   }
   mi_assert_internal(segment->abandoned == 0);
@@ -1146,7 +1139,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
   int max_tries = 8;     // limit the work to bound allocation times
   while ((max_tries-- > 0) && ((segment = mi_abandoned_pop()) != NULL)) {
     segment->abandoned_visits++;
-    bool has_page = mi_segment_pages_collect(segment,block_size,tld); // try to free up pages (due to concurrent frees)
+    bool has_page = mi_segment_check_free(segment,block_size); // try to free up pages (due to concurrent frees)
     if (has_page && segment->page_kind == page_kind) {
       // found a free page of the right kind, or page of the right block_size with free space 
       return mi_segment_reclaim(segment, heap, block_size, tld);
