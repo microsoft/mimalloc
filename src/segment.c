@@ -231,7 +231,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
 static void mi_page_reset(mi_segment_t* segment, mi_page_t* page, size_t size, mi_segments_tld_t* tld) {
   mi_assert_internal(page->is_committed);
   if (!mi_option_is_enabled(mi_option_page_reset)) return;
-  if (segment->mem_is_fixed || page->segment_in_use || page->is_reset) return;
+  if (segment->mem_is_fixed || page->segment_in_use || !page->is_committed || page->is_reset) return;
   size_t psize;
   void* start = mi_segment_raw_page_start(segment, page, &psize);
   page->is_reset = true;
@@ -281,12 +281,12 @@ static bool mi_page_reset_is_expired(mi_page_t* page, mi_msecs_t now) {
 }
 
 static void mi_pages_reset_add(mi_segment_t* segment, mi_page_t* page, mi_segments_tld_t* tld) {
-  mi_assert_internal(!page->segment_in_use);
+  mi_assert_internal(!page->segment_in_use || !page->is_committed);
   mi_assert_internal(mi_page_not_in_queue(page,tld));
   mi_assert_expensive(!mi_pages_reset_contains(page, tld));
   mi_assert_internal(_mi_page_segment(page)==segment);
   if (!mi_option_is_enabled(mi_option_page_reset)) return;
-  if (segment->mem_is_fixed || page->segment_in_use || page->is_reset) return;
+  if (segment->mem_is_fixed || page->segment_in_use || !page->is_committed || page->is_reset) return;  
 
   if (mi_option_get(mi_option_reset_delay) == 0) {
     // reset immediately?
@@ -782,7 +782,7 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, bool a
   segment->used--;
 
   // add to the free page list for reuse/reset
-  if (allow_reset && segment->page_kind <= MI_PAGE_MEDIUM) {
+  if (allow_reset) {  
     mi_pages_reset_add(segment, page, tld);
   }
 }
@@ -1095,7 +1095,10 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
           right_page_reclaimed = true;
         }
       }
-    }    
+    }   
+    else if (page->is_committed && !page->is_reset) {  // not in-use, and not reset yet
+      mi_pages_reset_add(segment, page, tld);
+    }
   }
   mi_assert_internal(segment->abandoned == 0);
   if (right_page_reclaimed) {
