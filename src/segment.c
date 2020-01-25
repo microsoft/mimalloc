@@ -1123,7 +1123,10 @@ static void mi_segment_reclaim_force(mi_segment_t* segment, mi_heap_t* heap, mi_
   mi_assert_internal(res != MI_RECLAIMED); // due to block_size == 0
   if (res!=MI_RECLAIMED && res != NULL) {
     mi_assert_internal(res == segment);
-    if (res->page_kind <= MI_PAGE_MEDIUM && mi_segment_has_free(res)) {
+    if (res->used == 0) {
+      mi_segment_free(segment, false, tld);
+    }
+    else if (res->page_kind <= MI_PAGE_MEDIUM && mi_segment_has_free(res)) {
       mi_segment_insert_in_free_queue(res, tld);
     }
   }
