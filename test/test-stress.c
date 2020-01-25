@@ -59,7 +59,6 @@ const uintptr_t cookie = 0xbf58476d1ce4e5b9UL;
 const uintptr_t cookie = 0x1ce4e5b9UL;
 #endif
 
-static uintptr_t ticks(void);
 static void* atomic_exchange_ptr(volatile void** p, void* newval);
 
 typedef uintptr_t* random_t;
@@ -180,7 +179,6 @@ static void stress(intptr_t tid) {
 static void run_os_threads(size_t nthreads, void (*entry)(intptr_t tid));
 
 static void test_stress(void) {
-  srand(0x7feb352d);
   uintptr_t r = rand();
   for (int n = 0; n < ITER; n++) {
     run_os_threads(THREADS, &stress);
@@ -197,8 +195,9 @@ static void test_stress(void) {
   }
 }
 
+#ifndef STRESS
 static void leak(intptr_t tid) {
-  uintptr_t r = (43*tid)^ticks();
+  uintptr_t r = rand();
   void* p = alloc_items(1 /*pick(&r)%128*/, &r);
   if (chance(50, &r)) {
     intptr_t i = (pick(&r) % TRANSFERS);
@@ -207,7 +206,7 @@ static void leak(intptr_t tid) {
   }
 }
 
-static void test_leak(void) {
+static void test_leak(void) {  
   for (int n = 0; n < ITER; n++) {
     run_os_threads(THREADS, &leak);
     mi_collect(false);
@@ -216,6 +215,7 @@ static void test_leak(void) {
 #endif
   }
 }
+#endif
 
 int main(int argc, char** argv) {
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
@@ -241,6 +241,7 @@ int main(int argc, char** argv) {
   //bench_start_program();
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
+  srand(0x7feb352d);
   mi_stats_reset();
 #ifdef STRESS
     test_stress();
@@ -260,12 +261,6 @@ static void (*thread_entry_fun)(intptr_t) = &stress;
 #ifdef _WIN32
 
 #include <windows.h>
-
-static uintptr_t ticks(void) {
-  LARGE_INTEGER t;
-  QueryPerformanceCounter(&t);
-  return (uintptr_t)t.QuadPart;
-}
 
 static DWORD WINAPI thread_entry(LPVOID param) {  
   thread_entry_fun((intptr_t)param);
@@ -328,20 +323,6 @@ static void* atomic_exchange_ptr(volatile void** p, void* newval) {
 #include <stdatomic.h>
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
   return atomic_exchange((volatile _Atomic(void*)*)p, newval);
-}
-#endif
-
-#include <time.h>
-#ifdef CLOCK_REALTIME
-uintptr_t ticks(void) {
-  struct timespec t;
-  clock_gettime(CLOCK_REALTIME, &t);
-  return ((uintptr_t)t.tv_sec * 1000) + ((uintptr_t)t.tv_nsec / 1000000);
-}
-#else
-// low resolution timer
-uintptr_t _mi_clock_now(void) {
-  return ((uintptr_t)clock() / ((uintptr_t)CLOCKS_PER_SEC / 1000));
 }
 #endif
 
