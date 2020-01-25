@@ -831,6 +831,14 @@ We use tagged pointers to avoid accidentially identifying
 reused segments, much like stamped references in Java.
 Secondly, we maintain a reader counter to avoid resetting
 or decommitting segments that have a pending read operation.
+
+Note: the current implementation is one possible design;
+another way might be to keep track of abandoned segments
+in the regions. This would have the advantage of keeping
+all concurrent code in one place and not needing to deal
+with ABA issues. The drawback is that it is unclear how to 
+scan abandoned segments efficiently in that case as they 
+would be spread among all other segments in the regions.
 ----------------------------------------------------------- */
 
 // Use the bottom 20-bits (on 64-bit) of the aligned segment pointers 
@@ -986,6 +994,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_segments_track_size(-((long)segment->segment_size), tld);
   segment->thread_id = 0;
   segment->abandoned_next = NULL;
+  segment->abandoned_visits = 0;
   mi_abandoned_push(segment);
 }
 
@@ -1009,6 +1018,7 @@ void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
   Reclaim abandoned pages
 ----------------------------------------------------------- */
 
+// Possibly clear pages and check if free space is available
 static bool mi_segment_pages_collect(mi_segment_t* segment, size_t block_size, mi_segments_tld_t* tld) 
 {
   mi_assert_internal(block_size < MI_HUGE_BLOCK_SIZE);
@@ -1045,13 +1055,13 @@ static bool mi_segment_pages_collect(mi_segment_t* segment, size_t block_size, m
 
 #define MI_RECLAIMED ((mi_segment_t*)1)
 
-static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, mi_segments_tld_t* tld) {
-  UNUSED_RELEASE(page_kind);
-  mi_assert_internal(page_kind == segment->page_kind);
+// Reclaim a segment
+static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, size_t block_size, mi_segments_tld_t* tld) {
   mi_assert_internal(segment->abandoned_next == NULL);
   bool right_page_reclaimed = false;
 
   segment->thread_id = _mi_thread_id();
+  segment->abandoned_visits = 0;
   mi_segments_track_size((long)segment->segment_size, tld);
   mi_assert_internal(segment->next == NULL && segment->prev == NULL);
   mi_assert_expensive(mi_segment_is_valid(segment, tld));
@@ -1104,19 +1114,44 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
   }
 }
 
+// Reclaim a segment without returning it
+static void mi_segment_reclaim_force(mi_segment_t* segment, mi_heap_t* heap, mi_segments_tld_t* tld) {
+  mi_segment_t* res = mi_segment_reclaim(segment, heap, 0, tld);
+  mi_assert_internal(res != MI_RECLAIMED); // due to block_size == 0
+  if (res!=MI_RECLAIMED && res != NULL) {
+    mi_assert_internal(res == segment);
+    if (res->page_kind <= MI_PAGE_MEDIUM && mi_segment_has_free(res)) {
+      mi_segment_insert_in_free_queue(res, tld);
+    }
+  }
+}
+
+void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
+  mi_segment_t* segment;
+  while ((segment = mi_abandoned_pop()) != NULL) {
+    mi_segment_reclaim_force(segment, heap, tld);
+  }
+}
+
+
 static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, mi_segments_tld_t* tld)
 {
   mi_segment_t* segment;
   int max_tries = 8;     // limit the work to bound allocation times
   while ((max_tries-- > 0) && ((segment = mi_abandoned_pop()) != NULL)) {
+    segment->abandoned_visits++;
     bool has_page = mi_segment_pages_collect(segment,block_size,tld); // try to free up pages (due to concurrent frees)
     if (has_page && segment->page_kind == page_kind) {
       // found a free page of the right kind, or page of the right block_size with free space 
-      return mi_segment_reclaim(segment, heap, block_size, page_kind, tld);
+      return mi_segment_reclaim(segment, heap, block_size, tld);
     }
     else if (segment->used==0) {
       // free the segment to make it available to other threads
       mi_segment_os_free(segment, segment->segment_size, tld);
+    }
+    else if (segment->abandoned_visits >= 3) {  
+      // always reclaim on 3rd visit to limit the list length
+      mi_segment_reclaim_force(segment, heap, tld);
     }
     else {
       // push on the visited list so it gets not looked at too quickly again
@@ -1124,20 +1159,6 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
     }
   }
   return NULL;
-}
-
-void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
-  mi_segment_t* segment;
-  while ((segment = mi_abandoned_pop()) != NULL) {
-    mi_segment_t* res = mi_segment_reclaim(segment, heap, 0, segment->page_kind, tld);
-    mi_assert_internal(res != NULL);
-    if (res != MI_RECLAIMED && res != NULL) {
-      mi_assert_internal(res == segment);
-      if (segment->page_kind <= MI_PAGE_MEDIUM && mi_segment_has_free(segment)) {
-        mi_segment_insert_in_free_queue(segment, tld);
-      }
-    }
-  }
 }
 
 

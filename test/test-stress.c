@@ -32,7 +32,7 @@ static int ITER    = 50;      // N full iterations destructing and re-creating a
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int SCALE   = 100;  // scaling factor
 
-// #define STRESS   // undefine for leak test
+#define STRESS   // undefine for leak test
 
 static bool   allow_large_objects = true;    // allow very large objects?
 static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
@@ -124,7 +124,7 @@ static void free_items(void* p) {
 
 static void stress(intptr_t tid) {
   //bench_start_thread();
-  uintptr_t r = (tid * 43); // ^ ticks();
+  uintptr_t r = (tid * 43); // rand();
   const size_t max_item_shift = 5; // 128
   const size_t max_item_retained_shift = max_item_shift + 2;
   size_t allocs = 100 * ((size_t)SCALE) * (tid % 8 + 1); // some threads do more
@@ -180,7 +180,8 @@ static void stress(intptr_t tid) {
 static void run_os_threads(size_t nthreads, void (*entry)(intptr_t tid));
 
 static void test_stress(void) {
-  uintptr_t r = 43 * 43;
+  srand(0x7feb352d);
+  uintptr_t r = rand();
   for (int n = 0; n < ITER; n++) {
     run_os_threads(THREADS, &stress);
     for (int i = 0; i < TRANSFERS; i++) {
