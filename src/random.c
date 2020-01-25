@@ -176,7 +176,7 @@ static bool os_random_buf(void* buf, size_t buf_len) {
   return true;
 }
 */
-#elif defined(ANDROID) || defined(XP_DARWIN) || defined(__DragonFly__) || \
+#elif defined(ANDROID) || defined(XP_DARWIN) || defined(__APPLE__) || defined(__DragonFly__) || \
       defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
       defined(__wasi__)
 #include <stdlib.h>
