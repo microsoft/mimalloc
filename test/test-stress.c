@@ -32,10 +32,10 @@ static int ITER    = 50;      // N full iterations destructing and re-creating a
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int SCALE   = 100;  // scaling factor
 
-#define STRESS   // undefine for leak test
+// #define STRESS   // undefine for leak test
 
 static bool   allow_large_objects = true;    // allow very large objects?
-static size_t use_one_size = 1;              // use single object size of `N * sizeof(uintptr_t)`?
+static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
 
 
 #ifdef USE_STD_MALLOC
@@ -198,7 +198,7 @@ static void test_stress(void) {
 
 static void leak(intptr_t tid) {
   uintptr_t r = (43*tid)^ticks();
-  void* p = alloc_items(pick(&r)%128, &r);
+  void* p = alloc_items(1 /*pick(&r)%128*/, &r);
   if (chance(50, &r)) {
     intptr_t i = (pick(&r) % TRANSFERS);
     void* q = atomic_exchange_ptr(&transfer[i], p);

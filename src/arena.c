@@ -54,7 +54,7 @@ bool  _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 #define MI_MAX_ARENAS         (64)                     // not more than 256 (since we use 8 bits in the memid)
 
 // A memory arena descriptor
-typedef struct mi_arena_s {
+typedef mi_decl_cache_align struct mi_arena_s {
   _Atomic(uint8_t*) start;                // the start of the memory area
   size_t   block_count;                   // size of the area in arena blocks (of `MI_ARENA_BLOCK_SIZE`)
   size_t   field_count;                   // number of bitmap fields (where `field_count * MI_BITMAP_FIELD_BITS >= block_count`)
@@ -70,8 +70,8 @@ typedef struct mi_arena_s {
 
 
 // The available arenas
-static _Atomic(mi_arena_t*) mi_arenas[MI_MAX_ARENAS];
-static _Atomic(uintptr_t)   mi_arena_count; // = 0
+static mi_decl_cache_align _Atomic(mi_arena_t*) mi_arenas[MI_MAX_ARENAS];
+static mi_decl_cache_align _Atomic(uintptr_t)   mi_arena_count; // = 0
 
 
 /* -----------------------------------------------------------

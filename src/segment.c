@@ -365,9 +365,6 @@ static void mi_reset_delayed(mi_segments_tld_t* tld) {
 }
 
 
-
-
-
 /* -----------------------------------------------------------
  Segment size calculations
 ----------------------------------------------------------- */
@@ -829,13 +826,15 @@ reuse their pages and/or free them eventually
 We maintain a global list of abandoned segments that are
 reclaimed on demand. Since this is shared among threads
 the implementation needs to avoid the A-B-A problem on
-popping abandoned segments which is why tagged pointers are 
-used.
+popping abandoned segments: <https://en.wikipedia.org/wiki/ABA_problem>
+We use tagged pointers to avoid accidentially identifying
+reused segments, much like stamped references in Java.
+Secondly, we maintain a reader counter to avoid resetting
+or decommitting segments that have a pending read operation.
 ----------------------------------------------------------- */
 
-// Use the bottom 20-bits (on 64-bit) of the aligned segment
-// pointers to put in a tag that increments on update to avoid
-// the A-B-A problem.
+// Use the bottom 20-bits (on 64-bit) of the aligned segment pointers 
+// to put in a tag that increments on update to avoid the A-B-A problem.
 #define MI_TAGGED_MASK   MI_SEGMENT_MASK
 typedef uintptr_t        mi_tagged_segment_t;
 
@@ -850,16 +849,17 @@ static mi_tagged_segment_t mi_tagged_segment(mi_segment_t* segment, mi_tagged_se
 }
 
 // This is a list of visited abandoned pages that were full at the time.
-// this list migrates to `abandoned` when that becomes NULL.
-static volatile _Atomic(mi_segment_t*)       abandoned_visited; // = NULL
+// this list migrates to `abandoned` when that becomes NULL. The use of 
+// this list reduces contention and the rate at which segments are visited.
+static mi_decl_cache_align volatile _Atomic(mi_segment_t*)       abandoned_visited; // = NULL
 
-// The abandoned page list.
-static volatile _Atomic(mi_tagged_segment_t) abandoned;         // = NULL
+// The abandoned page list (tagged as it supports pop)
+static mi_decl_cache_align volatile _Atomic(mi_tagged_segment_t) abandoned;         // = NULL
 
 // We also maintain a count of current readers of the abandoned list
 // in order to prevent resetting/decommitting segment memory if it might
 // still be read.
-static volatile _Atomic(uintptr_t)           abandoned_readers; // = 0
+static mi_decl_cache_align volatile _Atomic(uintptr_t)           abandoned_readers; // = 0
 
 // Push on the visited list
 static void mi_abandoned_visited_push(mi_segment_t* segment) {

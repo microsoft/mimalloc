@@ -20,16 +20,20 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_trace_message(...)
 #endif
 
+#define MI_CACHE_LINE          64
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
+#define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
 #elif (defined(__GNUC__) && (__GNUC__>=3))  // includes clang and icc
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
+#define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
+#define mi_decl_cache_align     
 #endif
 
 
