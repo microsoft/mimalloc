@@ -15,27 +15,25 @@ terms of the MIT license. A copy of the license can be found in the file
 
 static uint8_t* mi_segment_raw_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size);
 
-/* -----------------------------------------------------------
+/* --------------------------------------------------------------------------------
   Segment allocation
-  We allocate pages inside big OS allocated "segments"
-  (4mb on 64-bit). This is to avoid splitting VMA's on Linux
-  and reduce fragmentation on other OS's. Each thread
-  owns its own segments.
+  We allocate pages inside bigger "segments" (4mb on 64-bit). This is to avoid 
+  splitting VMA's on Linux and reduce fragmentation on other OS's. 
+  Each thread owns its own segments. 
 
   Currently we have:
   - small pages (64kb), 64 in one segment
   - medium pages (512kb), 8 in one segment
   - large pages (4mb), 1 in one segment
-  - huge blocks > MI_LARGE_OBJ_SIZE_MAX (512kb) are directly allocated by the OS
+  - huge blocks > MI_LARGE_OBJ_SIZE_MAX become large segment with 1 page
 
-  In any case the memory for a segment is virtual and only
-  committed on demand (i.e. we are careful to not touch the memory
-  until we actually allocate a block there)
+  In any case the memory for a segment is virtual and usually committed on demand.
+  (i.e. we are careful to not touch the memory until we actually allocate a block there)
 
   If a  thread ends, it "abandons" pages with used blocks
   and there is an abandoned segment list whose segments can
   be reclaimed by still running threads, much like work-stealing.
------------------------------------------------------------ */
+-------------------------------------------------------------------------------- */
 
 
 /* -----------------------------------------------------------
@@ -559,8 +557,11 @@ void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
 ----------------------------------------------------------- */
 
 // Allocate a segment from the OS aligned to `MI_SEGMENT_SIZE` .
-static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind, size_t page_shift, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
+static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_page_kind_t page_kind, size_t page_shift, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 {
+  // the segment parameter is non-null if it came from our cache
+  mi_assert_internal(segment==NULL || (required==0 && page_kind <= MI_PAGE_LARGE));
+
   // calculate needed sizes first
   size_t capacity;
   if (page_kind == MI_PAGE_HUGE) {
@@ -587,8 +588,9 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   bool is_zero = false;
 
   // Try to get it from our thread local cache first
-  mi_segment_t* segment = mi_segment_cache_pop(segment_size, tld);
   if (segment != NULL) {
+    // came from cache
+    mi_assert_internal(segment->segment_size == segment_size);
     if (page_kind <= MI_PAGE_MEDIUM && segment->page_kind == page_kind && segment->segment_size == segment_size) {
       pages_still_good = true;
     }
@@ -674,6 +676,9 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   return segment;
 }
 
+static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind, size_t page_shift, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
+  return mi_segment_init(NULL, required, page_kind, page_shift, tld, os_tld);
+}
 
 static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
   UNUSED(force);
@@ -814,15 +819,23 @@ void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
 
 
 /* -----------------------------------------------------------
-   Abandonment
+Abandonment
+
+When threads terminate, they can leave segments with
+live blocks (reached through other threads). Such segments
+are "abandoned" and will be reclaimed by other threads to
+reuse their pages and/or free them eventually
+
+We maintain a global list of abandoned segments that are
+reclaimed on demand. Since this is shared among threads
+the implementation needs to avoid the A-B-A problem on
+popping abandoned segments which is why tagged pointers are 
+used.
 ----------------------------------------------------------- */
 
-// When threads terminate, they can leave segments with
-// live blocks (reached through other threads). Such segments
-// are "abandoned" and will be reclaimed by other threads to
-// reuse their pages and/or free them eventually
-
-
+// Use the bottom 20-bits (on 64-bit) of the aligned segment
+// pointers to put in a tag that increments on update to avoid
+// the A-B-A problem.
 #define MI_TAGGED_MASK   MI_SEGMENT_MASK
 typedef uintptr_t        mi_tagged_segment_t;
 
@@ -832,15 +845,23 @@ static mi_segment_t* mi_tagged_segment_ptr(mi_tagged_segment_t ts) {
 
 static mi_tagged_segment_t mi_tagged_segment(mi_segment_t* segment, mi_tagged_segment_t ts) {
   mi_assert_internal(((uintptr_t)segment & MI_TAGGED_MASK) == 0);
-  if (segment==NULL) return 0; // no need to tag NULL
   uintptr_t tag = ((ts & MI_TAGGED_MASK) + 1) & MI_TAGGED_MASK;
   return ((uintptr_t)segment | tag);
 }
 
+// This is a list of visited abandoned pages that were full at the time.
+// this list migrates to `abandoned` when that becomes NULL.
 static volatile _Atomic(mi_segment_t*)       abandoned_visited; // = NULL
+
+// The abandoned page list.
 static volatile _Atomic(mi_tagged_segment_t) abandoned;         // = NULL
+
+// We also maintain a count of current readers of the abandoned list
+// in order to prevent resetting/decommitting segment memory if it might
+// still be read.
 static volatile _Atomic(uintptr_t)           abandoned_readers; // = 0
 
+// Push on the visited list
 static void mi_abandoned_visited_push(mi_segment_t* segment) {
   mi_assert_internal(segment->thread_id == 0);
   mi_assert_internal(segment->abandoned_next == NULL);
@@ -853,14 +874,23 @@ static void mi_abandoned_visited_push(mi_segment_t* segment) {
   } while (!mi_atomic_cas_ptr_weak(mi_segment_t, &abandoned_visited, segment, anext));
 }
 
-static bool mi_abandoned_visited_revisit(void) {
+// Move the visited list to the abandoned list.
+static bool mi_abandoned_visited_revisit(void) 
+{
+  // quick check if the visited list is empty
+  if (mi_atomic_read_ptr_relaxed(mi_segment_t,&abandoned_visited)==NULL) return false;
+
   // grab the whole visited list
   mi_segment_t* first = mi_atomic_exchange_ptr(mi_segment_t, &abandoned_visited, NULL);
   if (first == NULL) return false;
 
   // first try to swap directly if the abandoned list happens to be NULL
-  mi_tagged_segment_t afirst = mi_tagged_segment(first,0);
-  if (mi_atomic_cas_weak(&abandoned, afirst, 0)) return true;
+  const mi_tagged_segment_t ts = mi_atomic_read_relaxed(&abandoned);
+  mi_tagged_segment_t afirst;
+  if (mi_tagged_segment_ptr(ts)==NULL) {
+    afirst = mi_tagged_segment(first, ts);
+    if (mi_atomic_cas_strong(&abandoned, afirst, ts)) return true;
+  }
 
   // find the last element of the visited list: O(n)
   mi_segment_t* last = first;
@@ -879,6 +909,7 @@ static bool mi_abandoned_visited_revisit(void) {
   return true;
 }
 
+// Push on the abandoned list.
 static void mi_abandoned_push(mi_segment_t* segment) {
   mi_assert_internal(segment->thread_id == 0);
   mi_assert_internal(segment->abandoned_next == NULL);
@@ -893,6 +924,7 @@ static void mi_abandoned_push(mi_segment_t* segment) {
   } while (!mi_atomic_cas_weak(&abandoned, next, ts));
 }
 
+// Wait until there are no more pending reads on segments that used to be in the abandoned list
 void _mi_abandoned_await_readers(void) {
   uintptr_t n;
   do {
@@ -901,23 +933,28 @@ void _mi_abandoned_await_readers(void) {
   } while (n != 0);
 }
 
+// Pop from the abandoned list
 static mi_segment_t* mi_abandoned_pop(void) {
   mi_segment_t* segment;
+  // Check efficiently if it is empty (or if the visited list needs to be moved)
   mi_tagged_segment_t ts = mi_atomic_read_relaxed(&abandoned);
   segment = mi_tagged_segment_ptr(ts);
-  if (segment == NULL) {
-    if (!mi_abandoned_visited_revisit()) return NULL;  // try to swap in the visited list on NULL
+  if (mi_likely(segment == NULL)) {
+    if (mi_likely(!mi_abandoned_visited_revisit())) { // try to swap in the visited list on NULL
+      return NULL;  
+    }
   }
-  // Do a pop. We use a reader lock to prevent
-  // a segment to be decommitted while a read is still pending, and a tagged
-  // pointer to prevent A-B-A link corruption.
+
+  // Do a pop. We use a reader count to prevent
+  // a segment to be decommitted while a read is still pending, 
+  // and a tagged pointer to prevent A-B-A link corruption.
   mi_atomic_increment(&abandoned_readers);  // ensure no segment gets decommitted
   mi_tagged_segment_t next = 0;
   do {
     ts = mi_atomic_read_relaxed(&abandoned);
     segment = mi_tagged_segment_ptr(ts);
     if (segment != NULL) {
-      next = mi_tagged_segment(segment->abandoned_next, ts); // note: reads segment so should not be decommitted
+      next = mi_tagged_segment(segment->abandoned_next, ts); // note: reads the segment's `abandoned_next` field so should not be decommitted
     }
   } while (segment != NULL && !mi_atomic_cas_weak(&abandoned, next, ts));
   mi_atomic_decrement(&abandoned_readers);  // release reader lock
@@ -927,6 +964,9 @@ static mi_segment_t* mi_abandoned_pop(void) {
   return segment;
 }
 
+/* -----------------------------------------------------------
+   Abandon segment/page
+----------------------------------------------------------- */
 
 static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(segment->used == segment->abandoned);
@@ -945,7 +985,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_segments_track_size(-((long)segment->segment_size), tld);
   segment->thread_id = 0;
   segment->abandoned_next = NULL;
-  mi_abandoned_push(segment); 
+  mi_abandoned_push(segment);
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
@@ -964,6 +1004,9 @@ void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
   }
 }
 
+/* -----------------------------------------------------------
+  Reclaim abandoned pages
+----------------------------------------------------------- */
 
 static bool mi_segment_pages_collect(mi_segment_t* segment, size_t block_size, mi_segments_tld_t* tld) 
 {
@@ -1082,22 +1125,6 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
   return NULL;
 }
 
-static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, size_t page_shift, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) 
-{
-  mi_assert_internal(page_kind <= MI_PAGE_LARGE);  
-  mi_assert_internal(block_size < MI_HUGE_BLOCK_SIZE);
-  mi_segment_t* segment = mi_segment_try_reclaim(heap, block_size, page_kind, tld);
-  if (segment == MI_RECLAIMED) {
-    return NULL; // pretend out-of-memory as the page will be in the page queue
-  }
-  else if (segment == NULL) {
-    return mi_segment_alloc(0, page_kind, page_shift, tld, os_tld);
-  }
-  else {
-    return segment;
-  }
-}
-
 void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
   mi_segment_t* segment;
   while ((segment = mi_abandoned_pop()) != NULL) {
@@ -1111,6 +1138,34 @@ void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
     }
   }
 }
+
+
+/* -----------------------------------------------------------
+   Reclaim or allocate  
+----------------------------------------------------------- */
+
+static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, size_t page_shift, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) 
+{
+  mi_assert_internal(page_kind <= MI_PAGE_LARGE);  
+  mi_assert_internal(block_size < MI_HUGE_BLOCK_SIZE);
+  // 1. try to get a segment from our cache
+  mi_segment_t* segment = mi_segment_cache_pop(MI_SEGMENT_SIZE, tld);
+  if (segment != NULL) {
+    mi_segment_init(segment, 0, page_kind, page_shift, tld, os_tld);
+    return segment;
+  }
+  // 2. try to reclaim an abandoned segment
+  segment = mi_segment_try_reclaim(heap, block_size, page_kind, tld);
+  if (segment == MI_RECLAIMED) {    
+    return NULL;    // pretend out-of-memory as the page will be in the page queue of the heap
+  }
+  else if (segment != NULL) {
+    return segment; // reclaimed a segment with empty pages in it
+  }
+  // 3. otherwise allocate a fresh segment
+  return mi_segment_alloc(0, page_kind, page_shift, tld, os_tld);  
+}
+
 
 /* -----------------------------------------------------------
    Small page allocation
@@ -1192,7 +1247,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
 }
 
 /* -----------------------------------------------------------
-   Page allocation and free
+   Page allocation 
 ----------------------------------------------------------- */
 
 mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {

@@ -32,8 +32,10 @@ static int ITER    = 50;      // N full iterations destructing and re-creating a
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int SCALE   = 100;  // scaling factor
 
+#define STRESS   // undefine for leak test
+
 static bool   allow_large_objects = true;    // allow very large objects?
-static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
+static size_t use_one_size = 1;              // use single object size of `N * sizeof(uintptr_t)`?
 
 
 #ifdef USE_STD_MALLOC
@@ -189,7 +191,7 @@ static void test_stress(void) {
     }
     mi_collect(false);
 #ifndef NDEBUG
-    if ((n + 1) % 10 == 0)  { printf("- iterations left: %3d\n", ITER - (n + 1)); }
+    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
 #endif
   }
 }
@@ -209,8 +211,7 @@ static void test_leak(void) {
     run_os_threads(THREADS, &leak);
     mi_collect(false);
 #ifndef NDEBUG
-    //if ((n + 1) % 10 == 0) 
-    { printf("- iterations left: %3d\n", ITER - (n + 1)); }
+    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
 #endif
   }
 }
@@ -240,12 +241,11 @@ int main(int argc, char** argv) {
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
   mi_stats_reset();
-  if (true) {
+#ifdef STRESS
     test_stress();
-  }
-  else {
+#else
     test_leak();
-  }
+#endif  
 
   mi_collect(true);
   mi_stats_print(NULL);
