@@ -948,6 +948,7 @@ static mi_segment_t* mi_abandoned_pop(void) {
   // Do a pop. We use a reader count to prevent
   // a segment to be decommitted while a read is still pending, 
   // and a tagged pointer to prevent A-B-A link corruption.
+  // (this is called from `memory.c:_mi_mem_free` for example)
   mi_atomic_increment(&abandoned_readers);  // ensure no segment gets decommitted
   mi_tagged_segment_t next = 0;
   do {
