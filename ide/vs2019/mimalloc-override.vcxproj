@@ -237,7 +237,7 @@
     </ClCompile>
     <ClCompile Include="..\..\src\heap.c" />
     <ClCompile Include="..\..\src\init.c" />
-    <ClCompile Include="..\..\src\memory.c" />
+    <ClCompile Include="..\..\src\region.c" />
     <ClCompile Include="..\..\src\options.c" />
     <ClCompile Include="..\..\src\os.c" />
     <ClCompile Include="..\..\src\page-queue.c">

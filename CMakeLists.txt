@@ -21,7 +21,7 @@ set(mi_sources
     src/random.c
     src/os.c
     src/arena.c
-    src/memory.c
+    src/region.c
     src/segment.c
     src/page.c
     src/alloc.c
