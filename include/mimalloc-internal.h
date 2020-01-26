@@ -411,29 +411,23 @@ static inline mi_thread_free_t mi_tf_set_block(mi_thread_free_t tf, mi_block_t* 
   return mi_tf_make(block, mi_tf_delayed(tf));
 }
 
-// are all blocks in a page freed?
+// are all blocks in a page freed? 
+// note: needs up-to-date used count, (as the `xthread_free` list may not be empty). see `_mi_page_collect_free`.
 static inline bool mi_page_all_free(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
   return (page->used == 0);
 }
 
-// are there immediately available blocks
+// are there any available blocks? 
+static inline bool mi_page_has_any_available(const mi_page_t* page) {
+  mi_assert_internal(page != NULL && page->reserved > 0);
+  return (page->used < page->reserved || (mi_page_thread_free(page) != NULL));
+}
+
+// are there immediately available blocks, i.e. blocks available on the free list.
 static inline bool mi_page_immediate_available(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
   return (page->free != NULL);
-}
-// are there free blocks in this page?
-static inline bool mi_page_has_free(mi_page_t* page) {
-  mi_assert_internal(page != NULL);
-  bool hasfree = (mi_page_immediate_available(page) || page->local_free != NULL || (mi_page_thread_free(page) != NULL));
-  mi_assert_internal(hasfree || page->used == page->capacity);
-  return hasfree;
-}
-
-// are all blocks in use?
-static inline bool mi_page_all_used(mi_page_t* page) {
-  mi_assert_internal(page != NULL);
-  return !mi_page_has_free(page);
 }
 
 // is more than 7/8th of a page in use?

@@ -234,6 +234,7 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_internal(mi_page_thread_free_flag(page) != MI_NEVER_DELAYED_FREE);
   mi_assert_internal(_mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
   mi_assert_internal(!page->is_reset);
+  // TODO: push on full queue immediately if it is full?
   mi_page_queue_t* pq = mi_page_queue(heap, mi_page_block_size(page));
   mi_page_queue_push(heap, pq, page);
   mi_assert_expensive(_mi_page_is_valid(page));
@@ -245,28 +246,16 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   mi_assert_internal(pq==NULL||block_size == pq->block_size);
   mi_page_t* page = _mi_segment_page_alloc(heap, block_size, &heap->tld->segments, &heap->tld->os);
   if (page == NULL) {
-    // this may be out-of-memory, or a page was reclaimed
-    if (pq!=NULL && (page = pq->first) != NULL) {
-      mi_assert_expensive(_mi_page_is_valid(page));
-      if (!mi_page_immediate_available(page)) {
-        mi_page_extend_free(heap, page, heap->tld);
-      }
-      mi_assert_internal(mi_page_immediate_available(page));
-      if (mi_page_immediate_available(page)) {
-        return page; // reclaimed page
-      }
-    }
-    return NULL; // out-of-memory
+    // this may be out-of-memory, or an abandoned page was reclaimed (and in our queue)
+    return NULL;
   }
-  else {
-    // a fresh page was allocated, initialize it
-    mi_assert_internal(pq==NULL || _mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
-    mi_page_init(heap, page, block_size, heap->tld);
-    _mi_stat_increase(&heap->tld->stats.pages, 1);
-    if (pq!=NULL) mi_page_queue_push(heap, pq, page); // huge pages use pq==NULL
-    mi_assert_expensive(_mi_page_is_valid(page));
-    return page;
-  }
+  // a fresh page was found, initialize it
+  mi_assert_internal(pq==NULL || _mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
+  mi_page_init(heap, page, block_size, heap->tld);
+  _mi_stat_increase(&heap->tld->stats.pages, 1);
+  if (pq!=NULL) mi_page_queue_push(heap, pq, page); // huge pages use pq==NULL
+  mi_assert_expensive(_mi_page_is_valid(page));
+  return page;
 }
 
 // Get a fresh page to use
@@ -648,7 +637,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
 -------------------------------------------------------------*/
 
 // Find a page with free blocks of `page->block_size`.
-static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq)
+static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try)
 {
   // search through the pages in "next fit" order
   size_t count = 0;
@@ -686,13 +675,16 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   if (page == NULL) {
     _mi_heap_collect_retired(heap, false); // perhaps make a page available
     page = mi_page_fresh(heap, pq);
+    if (page == NULL && first_try) {
+      // out-of-memory _or_ an abandoned page with free blocks was reclaimed, try once again
+      page = mi_page_queue_find_free_ex(heap, pq, false);      
+    }
   }
   else {
     mi_assert(pq->first == page);
     page->retire_expire = 0;
   }
   mi_assert_internal(page == NULL || mi_page_immediate_available(page));
-
   return page;
 }
 
@@ -716,7 +708,7 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
       return page; // fast path
     }
   }
-  return mi_page_queue_find_free_ex(heap, pq);
+  return mi_page_queue_find_free_ex(heap, pq, true);
 }
 
 
