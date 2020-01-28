@@ -21,10 +21,6 @@ set(mi_sources
     src/random.c
     src/os.c
     src/arena.c
-<<<<<<< HEAD
-=======
-    src/region.c
->>>>>>> dev-exp
     src/segment.c
     src/page.c
     src/alloc.c
