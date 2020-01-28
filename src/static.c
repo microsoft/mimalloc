@@ -18,6 +18,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "os.c"
 //#include "memory.c"
 #include "arena.c"
+<<<<<<< HEAD
+=======
+#include "region.c"
+>>>>>>> dev-exp
 #include "segment.c"
 #include "page.c"
 #include "heap.c"

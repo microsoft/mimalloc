@@ -20,13 +20,20 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_trace_message(...)
 #endif
 
+#define MI_CACHE_LINE          64
 #if defined(_MSC_VER)
-#pragma warning(disable:4127)   // constant conditional due to MI_SECURE paths
-#define mi_decl_noinline   __declspec(noinline)
-#elif defined(__GNUC__) || defined(__clang__)
-#define mi_decl_noinline   __attribute__((noinline))
+#pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
+#define mi_decl_noinline        __declspec(noinline)
+#define mi_decl_thread          __declspec(thread)
+#define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
+#elif (defined(__GNUC__) && (__GNUC__>=3))  // includes clang and icc
+#define mi_decl_noinline        __attribute__((noinline))
+#define mi_decl_thread          __thread
+#define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
 #else
 #define mi_decl_noinline
+#define mi_decl_thread          __thread        // hope for the best :-)
+#define mi_decl_cache_align     
 #endif
 
 
@@ -72,13 +79,15 @@ void      _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, 
 
 
 // "segment.c"
-mi_page_t* _mi_segment_page_alloc(size_t block_wsize, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
+mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_wsize, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
 void       _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld);
 void       _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld);
 bool       _mi_segment_try_reclaim_abandoned( mi_heap_t* heap, bool try_all, mi_segments_tld_t* tld);
 void       _mi_segment_thread_collect(mi_segments_tld_t* tld);
 
 uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size); // page start for any page
+void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
+void       _mi_abandoned_await_readers(void);
 
 // "page.c"
 void*      _mi_malloc_generic(mi_heap_t* heap, size_t size)  mi_attr_noexcept mi_attr_malloc;
@@ -421,29 +430,23 @@ static inline mi_thread_free_t mi_tf_set_block(mi_thread_free_t tf, mi_block_t* 
   return mi_tf_make(block, mi_tf_delayed(tf));
 }
 
-// are all blocks in a page freed?
+// are all blocks in a page freed? 
+// note: needs up-to-date used count, (as the `xthread_free` list may not be empty). see `_mi_page_collect_free`.
 static inline bool mi_page_all_free(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
   return (page->used == 0);
 }
 
-// are there immediately available blocks
+// are there any available blocks? 
+static inline bool mi_page_has_any_available(const mi_page_t* page) {
+  mi_assert_internal(page != NULL && page->reserved > 0);
+  return (page->used < page->reserved || (mi_page_thread_free(page) != NULL));
+}
+
+// are there immediately available blocks, i.e. blocks available on the free list.
 static inline bool mi_page_immediate_available(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
   return (page->free != NULL);
-}
-// are there free blocks in this page?
-static inline bool mi_page_has_free(mi_page_t* page) {
-  mi_assert_internal(page != NULL);
-  bool hasfree = (mi_page_immediate_available(page) || page->local_free != NULL || (mi_page_thread_free(page) != NULL));
-  mi_assert_internal(hasfree || page->used == page->capacity);
-  return hasfree;
-}
-
-// are all blocks in use?
-static inline bool mi_page_all_used(mi_page_t* page) {
-  mi_assert_internal(page != NULL);
-  return !mi_page_has_free(page);
 }
 
 // is more than 7/8th of a page in use?

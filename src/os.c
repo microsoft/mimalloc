@@ -396,7 +396,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
 // On 64-bit systems, we can do efficient aligned allocation by using
 // the 4TiB to 30TiB area to allocate them.
 #if (MI_INTPTR_SIZE >= 8) && (defined(_WIN32) || (defined(MI_OS_USE_MMAP) && !defined(MAP_ALIGNED)))
-static volatile _Atomic(uintptr_t) aligned_base;
+static volatile mi_decl_cache_align _Atomic(uintptr_t) aligned_base;
 
 // Return a 4MiB aligned address that is probably available
 static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
@@ -904,7 +904,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) 
 
 #if (MI_INTPTR_SIZE >= 8)
 // To ensure proper alignment, use our own area for huge OS pages
-static _Atomic(uintptr_t)  mi_huge_start; // = 0
+static mi_decl_cache_align _Atomic(uintptr_t)  mi_huge_start; // = 0
 
 // Claim an aligned address range for huge pages
 static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {

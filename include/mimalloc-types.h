@@ -275,6 +275,7 @@ typedef struct mi_segment_s {
   struct mi_segment_s* abandoned_next;
 
   size_t            abandoned;          // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
+  size_t            abandoned_visits;   // count how often this segment is visited in the abandoned list (to force reclaim it it is too long)
   size_t            used;               // count of pages in use
   uintptr_t         cookie;             // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`  
 

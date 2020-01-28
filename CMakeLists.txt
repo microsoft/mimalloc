@@ -21,6 +21,10 @@ set(mi_sources
     src/random.c
     src/os.c
     src/arena.c
+<<<<<<< HEAD
+=======
+    src/region.c
+>>>>>>> dev-exp
     src/segment.c
     src/page.c
     src/alloc.c
@@ -106,10 +110,9 @@ endif()
 
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
-  list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas)
+  list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas -fvisibility=hidden)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     list(APPEND mi_cflags -Wno-invalid-memory-model)
-    list(APPEND mi_cflags -fvisibility=hidden)
   endif()
 endif()
 

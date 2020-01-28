@@ -77,8 +77,8 @@ typedef struct mi_arena_s {
 
 
 // The available arenas
-static _Atomic(mi_arena_t*) mi_arenas[MI_MAX_ARENAS];
-static _Atomic(uintptr_t)   mi_arena_count; // = 0
+static mi_decl_cache_align _Atomic(mi_arena_t*) mi_arenas[MI_MAX_ARENAS];
+static mi_decl_cache_align _Atomic(uintptr_t)   mi_arena_count; // = 0
 
 
 /* -----------------------------------------------------------
@@ -114,6 +114,7 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
   size_t idx = mi_atomic_read(&arena->search_idx);  // start from last search
   for (size_t visited = 0; visited < fcount; visited++, idx++) {
     if (idx >= fcount) idx = 0;  // wrap around
+    // try to atomically claim a range of bits
     if (mi_bitmap_try_find_claim_field(arena->blocks_inuse, idx, blocks, bitmap_idx)) {
       mi_atomic_write(&arena->search_idx, idx);  // start search from here next time
       return true;
@@ -213,6 +214,7 @@ static void mi_cache_purge(mi_os_tld_t* tld) {
         if (mi_atomic_cas_ptr_weak(mi_cache_slot_t, &slot->p, MI_SLOT_IN_USE, p)) {
           // claimed! test again
           if (slot->is_committed && !slot->is_large && now >= slot->expire) {
+            _mi_abandoned_await_readers();  // wait until safe to decommit
             _mi_os_decommit(p, MI_SEGMENT_SIZE, tld->stats);
             slot->is_committed = false;
           }
@@ -251,6 +253,7 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_commit
         if (is_committed) {
           long delay = mi_option_get(mi_option_arena_reset_delay);
           if (delay == 0 && !is_large) {
+            _mi_abandoned_await_readers(); // wait until safe to decommit
             _mi_os_decommit(start, size, tld->stats);
             slot->is_committed = false;
           }
@@ -286,8 +289,8 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
     // always committed
     *commit = true;
   }
-  else if (commit) {
-    // ensure commit now
+  else if (*commit) {
+    // arena not committed as a whole, but commit requested: ensure commit now
     bool any_uncommitted;
     mi_bitmap_claim(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted);
     if (any_uncommitted) {
@@ -379,6 +382,7 @@ void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, bool 
   if (memid == MI_MEMID_OS) {
     // was a direct OS allocation, pass through
     if (!mi_cache_push(p, size, memid, is_committed, is_large, tld)) {
+      _mi_abandoned_await_readers(); // wait unti safe to free
       _mi_os_free_ex(p, size, is_committed, tld->stats);
     }
   }

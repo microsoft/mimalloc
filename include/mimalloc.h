@@ -38,14 +38,12 @@ terms of the MIT license. A copy of the license can be found in the file
     #define mi_decl_allocator         __declspec(restrict)
   #endif
   #define mi_cdecl                    __cdecl
-  #define mi_decl_thread              __declspec(thread)
   #define mi_attr_malloc
   #define mi_attr_alloc_size(s)
   #define mi_attr_alloc_size2(s1,s2)
   #define mi_attr_alloc_align(p)
-#elif defined(__GNUC__) || defined(__clang__)
+#elif defined(__GNUC__)               // includes clang and icc
   #define mi_cdecl                    // leads to warnings... __attribute__((cdecl))
-  #define mi_decl_thread              __thread
   #define mi_decl_export              __attribute__((visibility("default")))
   #define mi_decl_allocator
   #define mi_attr_malloc              __attribute__((malloc))
@@ -64,7 +62,6 @@ terms of the MIT license. A copy of the license can be found in the file
   #endif
 #else
   #define mi_cdecl
-  #define mi_decl_thread              __thread
   #define mi_decl_export
   #define mi_decl_allocator
   #define mi_attr_malloc

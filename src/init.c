@@ -165,6 +165,7 @@ mi_stats_t _mi_stats_main = { MI_STATS_NULL };
   Initialization and freeing of the thread local heaps
 ----------------------------------------------------------- */
 
+// note: in x64 in release build `sizeof(mi_thread_data_t)` is under 4KiB (= OS page size).
 typedef struct mi_thread_data_s {
   mi_heap_t  heap;  // must come first due to cast in `_mi_heap_done`
   mi_tld_t   tld;
@@ -179,12 +180,13 @@ static bool _mi_heap_init(void) {
     mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_get_default_heap());
   }
   else {
-    // use `_mi_os_alloc` to allocate directly from the OS
+    // use `_mi_os_alloc` to allocate directly from the OS    
     mi_thread_data_t* td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t),&_mi_stats_main); // Todo: more efficient allocation?
     if (td == NULL) {
       _mi_error_message(ENOMEM, "failed to allocate thread local heap memory\n");
       return false;
     }
+    // OS allocated so already zero initialized
     mi_tld_t*  tld = &td->tld;
     mi_heap_t* heap = &td->heap;
     memcpy(tld, &tld_empty, sizeof(*tld));
@@ -227,6 +229,7 @@ static bool _mi_heap_done(mi_heap_t* heap) {
 
   // free if not the main thread
   if (heap != &_mi_heap_main) {
+    mi_assert_internal(heap->tld->segments.count == 0);
     _mi_os_free(heap, sizeof(mi_thread_data_t), &_mi_stats_main);
   }
 #if (MI_DEBUG > 0)
