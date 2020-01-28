@@ -284,7 +284,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
   mi_assert_internal(!(info.x.is_large && !*is_large));
   mi_assert_internal(start != NULL);
 
-  *is_zero = mi_bitmap_unclaim(&region->dirty, 1, blocks, bit_idx);  
+  *is_zero = mi_bitmap_claim(&region->dirty, 1, blocks, bit_idx, NULL);  
   *is_large = info.x.is_large;
   *memid = mi_memid_create(region, bit_idx);
   void* p = start + (mi_bitmap_index_bit_in_field(bit_idx) * MI_SEGMENT_SIZE);
