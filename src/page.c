@@ -386,6 +386,8 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   _mi_segment_page_free(page, force, segments_tld);
 }
 
+#define MI_MAX_RETIRE_SIZE    (4*MI_SMALL_SIZE_MAX)
+
 // Retire a page with no more used blocks
 // Important to not retire too quickly though as new
 // allocations might coming.
@@ -406,7 +408,7 @@ void _mi_page_retire(mi_page_t* page) {
   // how to check this efficiently though...
   // for now, we don't retire if it is the only page left of this size class.
   mi_page_queue_t* pq = mi_page_queue_of(page);
-  if (mi_likely(page->xblock_size <= MI_SMALL_SIZE_MAX && !mi_page_is_in_full(page))) {
+  if (mi_likely(page->xblock_size <= MI_MAX_RETIRE_SIZE && !mi_page_is_in_full(page))) {
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
       page->retire_expire = 16;
@@ -421,7 +423,7 @@ void _mi_page_retire(mi_page_t* page) {
 // free retired pages: we don't need to look at the entire queues
 // since we only retire pages that are the last one in a queue.
 void _mi_heap_collect_retired(mi_heap_t* heap, bool force) {
-  for(mi_page_queue_t* pq = heap->pages; pq->block_size <= MI_SMALL_SIZE_MAX; pq++) {
+  for(mi_page_queue_t* pq = heap->pages; pq->block_size <= MI_MAX_RETIRE_SIZE; pq++) {
     mi_page_t* page = pq->first;
     if (page != NULL && page->retire_expire != 0) {
       if (mi_page_all_free(page)) {
