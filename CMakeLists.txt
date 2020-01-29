@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 project(libmimalloc C CXX)
-include("cmake/mimalloc-config-version.cmake")
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
@@ -14,10 +14,14 @@ option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanis
 option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 
+include("cmake/mimalloc-config-version.cmake")
+
 set(mi_sources
     src/stats.c
+    src/random.c
     src/os.c
-    src/memory.c
+    src/arena.c
+    src/region.c
     src/segment.c
     src/page.c
     src/alloc.c
@@ -50,7 +54,7 @@ endif()
 # Process options
 # -----------------------------------------------------------------------------
 
-if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
+if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
 endif()
 
@@ -92,27 +96,38 @@ endif()
 if(MI_USE_CXX MATCHES "ON")
   message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-stress PROPERTIES LANGUAGE CXX )
+  if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang|Clang")
+    list(APPEND mi_cflags -Wno-deprecated)
+  endif()
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Intel")
+    list(APPEND mi_cflags -Kc++)
+  endif()
 endif()
 
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
-  list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas)
+  list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas -fvisibility=hidden)
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+    list(APPEND mi_cflags -Wno-invalid-memory-model)
+  endif()
+endif()
+
+if(CMAKE_C_COMPILER_ID MATCHES "Intel")
+  list(APPEND mi_cflags -Wall -fvisibility=hidden)
+endif()
+
+if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel")
   if(MI_LOCAL_DYNAMIC_TLS MATCHES "ON")
     list(APPEND mi_cflags -ftls-model=local-dynamic)
   else()
     list(APPEND mi_cflags -ftls-model=initial-exec)
   endif()
-  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
-    list(APPEND mi_cflags -Wno-invalid-memory-model)
-    list(APPEND mi_cflags -fvisibility=hidden)
-    list(APPEND mi_cflags -fbranch-target-load-optimize)
-  endif()
 endif()
 
 # extra needed libraries
 if(WIN32)
-  list(APPEND mi_libraries psapi shell32 user32)
+  list(APPEND mi_libraries psapi shell32 user32 bcrypt)
 else()
   list(APPEND mi_libraries pthread)
   find_library(LIBRT rt)

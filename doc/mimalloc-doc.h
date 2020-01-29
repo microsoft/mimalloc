@@ -26,7 +26,7 @@ without code changes, for example, on Unix you can use it as:
 
 Notable aspects of the design include:
 
-- __small and consistent__: the library is less than 3500 LOC using simple and
+- __small and consistent__: the library is less than 6k LOC using simple and
   consistent data structures. This makes it very suitable
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for
@@ -74,6 +74,8 @@ Further information:
 - \ref typed
 - \ref analysis
 - \ref options
+- \ref posix
+- \ref cpp
 
 */
 
@@ -297,10 +299,17 @@ size_t mi_good_size(size_t size);
 void   mi_collect(bool force);
 
 /// Print the main statistics.
-/// @param out Output function. Use \a NULL for outputting to \a stderr.
+/// @param out Ignored, outputs to the registered output function or stderr by default.
 ///
 /// Most detailed when using a debug build.
-void mi_stats_print(mi_output_fun* out);
+void mi_stats_print(void* out);
+
+/// Print the main statistics.
+/// @param out An output function or \a NULL for the default.
+/// @param arg Optional argument passed to \a out (if not \a NULL)
+///
+/// Most detailed when using a debug build.
+void mi_stats_print(mi_output_fun* out, void* arg);
 
 /// Reset statistics.
 void mi_stats_reset(void);
@@ -320,20 +329,23 @@ void mi_thread_init(void);
 void mi_thread_done(void);
 
 /// Print out heap statistics for this thread.
-/// @param out Output function. Use \a NULL for outputting to \a stderr.
+/// @param out An output function or \a NULL for the default.
+/// @param arg Optional argument passed to \a out (if not \a NULL)
 ///
 /// Most detailed when using a debug build.
-void mi_thread_stats_print(mi_output_fun* out);
+void mi_thread_stats_print_out(mi_output_fun* out, void* arg);
 
 /// Type of deferred free functions.
 /// @param force If \a true all outstanding items should be freed.
 /// @param heartbeat A monotonically increasing count.
+/// @param arg Argument that was passed at registration to hold extra state.
 ///
 /// @see mi_register_deferred_free
-typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat);
+typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat, void* arg);
 
 /// Register a deferred free function.
 /// @param deferred_free Address of a deferred free-ing function or \a NULL to unregister.
+/// @param arg Argument that will be passed on to the deferred free function.
 ///
 /// Some runtime systems use deferred free-ing, for example when using
 /// reference counting to limit the worst case free time.
@@ -346,20 +358,46 @@ typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat);
 /// to be called deterministically after some number of allocations
 /// (regardless of freeing or available free memory).
 /// At most one \a deferred_free function can be active.
-void   mi_register_deferred_free(mi_deferred_free_fun* deferred_free);
+void   mi_register_deferred_free(mi_deferred_free_fun* deferred_free, void* arg);
 
 /// Type of output functions.
 /// @param msg Message to output.
+/// @param arg Argument that was passed at registration to hold extra state.
 ///
 /// @see mi_register_output()
-typedef void (mi_output_fun)(const char* msg);
+typedef void (mi_output_fun)(const char* msg, void* arg);
 
 /// Register an output function.
-/// @param out The output function, use `NULL` to output to stdout.
+/// @param out The output function, use `NULL` to output to stderr.
+/// @param arg Argument that will be passed on to the output function.
 ///
 /// The `out` function is called to output any information from mimalloc,
 /// like verbose or warning messages.
-void mi_register_output(mi_output_fun* out) mi_attr_noexcept;
+void mi_register_output(mi_output_fun* out, void* arg);
+
+/// Type of error callback functions.
+/// @param err Error code (see mi_register_error() for a complete list).
+/// @param arg Argument that was passed at registration to hold extra state.
+///
+/// @see mi_register_error()
+typedef void (mi_error_fun)(int err, void* arg);
+
+/// Register an error callback function.
+/// @param errfun The error function that is called on an error (use \a NULL for default)
+/// @param arg Extra argument that will be passed on to the error function.
+///
+/// The \a errfun function is called on an error in mimalloc after emitting
+/// an error message (through the output function). It as always legal to just
+/// return from the \a errfun function in which case allocation functions generally
+/// return \a NULL or ignore the condition. The default function only calls abort()
+/// when compiled in secure mode with an \a EFAULT error. The possible error
+/// codes are:
+/// * \a EAGAIN: Double free was detected (only in debug and secure mode).
+/// * \a EFAULT: Corrupted free list or meta-data was detected (only in debug and secure mode).
+/// * \a ENOMEM: Not enough memory available to satisfy the request.
+/// * \a EOVERFLOW: Too large a request, for example in mi_calloc(), the \a count and \a size parameters are too large.
+/// * \a EINVAL: Trying to free or re-allocate an invalid pointer.
+void mi_register_error(mi_error_fun* errfun, void* arg);
 
 /// Is a pointer part of our heap?
 /// @param p The pointer to check.
@@ -367,18 +405,35 @@ void mi_register_output(mi_output_fun* out) mi_attr_noexcept;
 /// This function is relatively fast.
 bool mi_is_in_heap_region(const void* p);
 
-/// Reserve \a pages of huge OS pages (1GiB) but stops after at most `max_secs` seconds.
+
+/// Reserve \a pages of huge OS pages (1GiB) evenly divided over \a numa_nodes nodes,
+/// but stops after at most `timeout_msecs` seconds.
 /// @param pages The number of 1GiB pages to reserve.
-/// @param max_secs Maximum number of seconds to try reserving.
-/// @param pages_reserved If not \a NULL, it is set to the actual number of pages that were reserved.
+/// @param numa_nodes The number of nodes do evenly divide the pages over, or 0 for using the actual number of NUMA nodes.
+/// @param timeout_msecs Maximum number of milli-seconds to try reserving, or 0 for no timeout.
 /// @returns 0 if successfull, \a ENOMEM if running out of memory, or \a ETIMEDOUT if timed out.
 ///
 /// The reserved memory is used by mimalloc to satisfy allocations.
-/// May quit before \a max_secs are expired if it estimates it will take more than
-/// 1.5 times \a max_secs. The time limit is needed because on some operating systems
+/// May quit before \a timeout_msecs are expired if it estimates it will take more than
+/// 1.5 times \a timeout_msecs. The time limit is needed because on some operating systems
 /// it can take a long time to reserve contiguous memory if the physical memory is
 /// fragmented.
-int  mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved);
+int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t timeout_msecs);
+
+/// Reserve \a pages of huge OS pages (1GiB) at a specific \a numa_node,
+/// but stops after at most `timeout_msecs` seconds.
+/// @param pages The number of 1GiB pages to reserve.
+/// @param numa_node The NUMA node where the memory is reserved (start at 0).
+/// @param timeout_msecs Maximum number of milli-seconds to try reserving, or 0 for no timeout.
+/// @returns 0 if successfull, \a ENOMEM if running out of memory, or \a ETIMEDOUT if timed out.
+///
+/// The reserved memory is used by mimalloc to satisfy allocations.
+/// May quit before \a timeout_msecs are expired if it estimates it will take more than
+/// 1.5 times \a timeout_msecs. The time limit is needed because on some operating systems
+/// it can take a long time to reserve contiguous memory if the physical memory is
+/// fragmented.
+int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msecs);
+
 
 /// Is the C runtime \a malloc API redirected?
 /// @returns \a true if all malloc API calls are redirected to mimalloc.
@@ -569,7 +624,10 @@ void* mi_heap_recalloc_aligned_at(mi_heap_t* heap, void* p, size_t newcount, siz
 
 /// \defgroup typed Typed Macros
 ///
-/// Typed allocation macros
+/// Typed allocation macros. For example:
+/// ```
+/// int* p = mi_malloc_tp(int)
+/// ```
 ///
 /// \{
 
@@ -702,13 +760,14 @@ typedef enum mi_option_e {
   mi_option_eager_region_commit, ///< Eagerly commit large (256MiB) memory regions (enabled by default, except on Windows)
   mi_option_large_os_pages,      ///< Use large OS pages (2MiB in size) if possible
   mi_option_reserve_huge_os_pages, ///< The number of huge OS pages (1GiB in size) to reserve at the start of the program.
-  mi_option_segment_cache, ///< The number of segments per thread to keep cached.
-  mi_option_page_reset,   ///< Reset page memory when it becomes free.
-  mi_option_cache_reset,  ///< Reset segment memory when a segment is cached.
+  mi_option_segment_cache,   ///< The number of segments per thread to keep cached.
+  mi_option_page_reset,      ///< Reset page memory after \a mi_option_reset_delay milliseconds when it becomes free.
+  mi_option_segment_reset,   ///< Experimental
+  mi_option_reset_delay,     ///< Delay in milli-seconds before resetting a page (100ms by default)
+  mi_option_use_numa_nodes,  ///< Pretend there are at most N NUMA nodes
   mi_option_reset_decommits, ///< Experimental
   mi_option_eager_commit_delay,  ///< Experimental
-  mi_option_segment_reset,   ///< Experimental
-  mi_option_os_tag,       ///< OS tag to assign to mimalloc'd memory
+  mi_option_os_tag,          ///< OS tag to assign to mimalloc'd memory
   _mi_option_last
 } mi_option_t;
 
@@ -751,17 +810,50 @@ void mi_free_size(void* p, size_t size);
 void mi_free_size_aligned(void* p, size_t size, size_t alignment);
 void mi_free_aligned(void* p, size_t alignment);
 
-/// raise `std::bad_alloc` exception on failure.
+/// \}
+
+/// \defgroup cpp C++ wrappers
+///
+///  `mi_` prefixed implementations of various allocation functions
+///  that use C++ semantics on out-of-memory, generally calling
+///  `std::get_new_handler` and raising a `std::bad_alloc` exception on failure.
+///
+///  Note: use the `mimalloc-new-delete.h` header to override the \a new
+///        and \a delete operators globally. The wrappers here are mostly
+///        for convience for library writers that need to interface with
+///        mimalloc from C++.
+///
+/// \{
+
+/// like mi_malloc(), but when out of memory, use `std::get_new_handler` and raise `std::bad_alloc` exception on failure.
 void* mi_new(std::size_t n) noexcept(false);
 
-/// raise `std::bad_alloc` exception on failure.
+/// like mi_mallocn(), but when out of memory, use `std::get_new_handler` and raise `std::bad_alloc` exception on failure.
+void* mi_new_n(size_t count, size_t size) noexcept(false);
+
+/// like mi_malloc_aligned(), but when out of memory, use `std::get_new_handler` and raise `std::bad_alloc` exception on failure.
 void* mi_new_aligned(std::size_t n, std::align_val_t alignment) noexcept(false);
 
-/// return `NULL` on failure.
+/// like `mi_malloc`, but when out of memory, use `std::get_new_handler` but return \a NULL on failure.
 void* mi_new_nothrow(size_t n);
-``
-/// return `NULL` on failure.
+
+/// like `mi_malloc_aligned`, but when out of memory, use `std::get_new_handler` but return \a NULL on failure.
 void* mi_new_aligned_nothrow(size_t n, size_t alignment);
+
+/// like mi_realloc(), but when out of memory, use `std::get_new_handler` and raise `std::bad_alloc` exception on failure.
+void* mi_new_realloc(void* p, size_t newsize);
+
+/// like mi_reallocn(), but when out of memory, use `std::get_new_handler` and raise `std::bad_alloc` exception on failure.
+void* mi_new_reallocn(void* p, size_t newcount, size_t size);
+
+/// \a std::allocator implementation for mimalloc for use in STL containers.
+/// For example:
+/// ```
+/// std::vector<int, mi_stl_allocator<int> > vec;
+/// vec.push_back(1);
+/// vec.pop_back();
+/// ```
+template<class T> struct mi_stl_allocator { }
 
 /// \}
 
@@ -774,7 +866,7 @@ git clone https://github.com/microsoft/mimalloc
 
 ## Windows
 
-Open `ide/vs2017/mimalloc.sln` in Visual Studio 2017 and build.
+Open `ide/vs2019/mimalloc.sln` in Visual Studio 2019 and build (or `ide/vs2017/mimalloc.sln`).
 The `mimalloc` project builds a static library (in `out/msvc-x64`), while the
 `mimalloc-override` project builds a DLL for overriding malloc
 in the entire program.
@@ -826,6 +918,7 @@ Notes:
 
 /*! \page using Using the library
 
+### Build
 
 The preferred usage is including `<mimalloc.h>`, linking with
 the shared- or static library, and using the `mi_malloc` API exclusively for allocation. For example,
@@ -849,6 +942,19 @@ target_link_libraries(myapp PUBLIC mimalloc-static)
 ```
 to link with the static library. See `test\CMakeLists.txt` for an example.
 
+### C++
+For best performance in C++ programs, it is also recommended to override the
+global `new` and `delete` operators. For convience, mimalloc provides
+[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
+
+In C++, mimalloc also provides the `mi_stl_allocator` struct which implements the `std::allocator`
+interface. For example:
+```
+std::vector<some_struct, mi_stl_allocator<some_struct>> vec;
+vec.push_back(some_struct());
+```
+
+### Statistics
 
 You can pass environment variables to print verbose messages (`MIMALLOC_VERBOSE=1`)
 and statistics (`MIMALLOC_SHOW_STATS=1`) (in the debug version):
@@ -897,20 +1003,33 @@ See \ref overrides for more info.
 
 /*! \page environment Environment Options
 
-You can set further options either programmatically
-(using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)),
+You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)),
 or via environment variables.
 
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
 - `MIMALLOC_VERBOSE=1`: show verbose messages.
 - `MIMALLOC_SHOW_ERRORS=1`: show error and warning messages.
+- `MIMALLOC_PAGE_RESET=1`: reset (or purge) OS pages when not in use. This can reduce
+   memory fragmentation in long running (server) programs. If performance is impacted,
+   `MIMALLOC_RESET_DELAY=`_msecs_ can be set higher (100ms by default) to make the page
+   reset occur less frequently.
 - `MIMALLOC_LARGE_OS_PAGES=1`: use large OS pages when available; for some workloads this can significantly
    improve performance. Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
-   to explicitly allow large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]).
+   to explicitly allow large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
+   the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
+   can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead when possible).
 - `MIMALLOC_EAGER_REGION_COMMIT=1`: on Windows, commit large (256MiB) regions eagerly. On Windows, these regions
    show in the working set even though usually just a small part is committed to physical memory. This is why it
    turned off by default on Windows as it looks not good in the task manager. However, in reality it is always better
    to turn it on as it improves performance and has no other drawbacks.
+- `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where N is the number of 1GiB huge OS pages. This reserves the huge pages at
+   startup and can give quite a performance improvement on long running workloads. Usually it is better to not use
+   `MIMALLOC_LARGE_OS_PAGES` in combination with this setting. Just like large OS pages, use with care as reserving
+   contiguous physical memory can take a long time when memory is fragmented.
+   Note that we usually need to explicitly enable huge OS pages (as on [Windows][windows-huge] and [Linux][linux-huge])). With huge OS pages, it may be beneficial to set the setting
+   `MIMALLOC_EAGER_COMMIT_DELAY=N` (with usually `N` as 1) to delay the initial `N` segments
+   of a thread to not allocate in the huge OS pages; this prevents threads that are short lived
+   and allocate just a little to take up space in the huge OS page area (which cannot be reset).
 
 [linux-huge]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/tuning_and_optimizing_red_hat_enterprise_linux_for_oracle_9i_and_10g_databases/sect-oracle_9i_and_10g_tuning_guide-large_memory_optimization_big_pages_and_huge_pages-configuring_huge_pages_in_red_hat_enterprise_linux_4_or_5
 [windows-huge]: https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/enable-the-lock-pages-in-memory-option-windows?view=sql-server-2017
@@ -960,24 +1079,27 @@ Note: unfortunately, at this time, dynamic overriding on macOS seems broken but 
 
 ### Windows
 
-On Windows you need to link your program explicitly with the mimalloc
-DLL and use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
+Overriding on Windows is robust but requires that you link your program explicitly with
+the mimalloc DLL and use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
 Moreover, you need to ensure the `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) is available
-in the same folder as the mimalloc DLL at runtime (as it as referred to by the mimalloc DLL).
-The redirection DLL's ensure all calls to the C runtime malloc API get redirected to mimalloc.
+in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency).
+The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
+mimalloc (in `mimalloc-override.dll`).
 
 To ensure the mimalloc DLL is loaded at run-time it is easiest to insert some
 call to the mimalloc API in the `main` function, like `mi_version()`
 (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
-for an example on how to use this.
+for an example on how to use this. For best performance on Windows with C++, it
+is highly recommended to also override the `new`/`delete` operations (by including
+[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
-overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc successfully redirected.
+overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully redirected.
 
-(Note: in principle, it should be possible to patch existing executables
-that are linked with the dynamic C runtime (`ucrtbase.dll`) by just putting the mimalloc DLL into
-the import table (and putting `mimalloc-redirect.dll` in the same folder)
+(Note: in principle, it is possible to patch existing executables
+that are linked with the dynamic C runtime (`ucrtbase.dll`) by just putting the `mimalloc-override.dll` into the import table (and putting `mimalloc-redirect.dll` in the same folder)
 Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388)).
+
 
 ## Static override
 

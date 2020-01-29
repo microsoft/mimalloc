@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['heap_20introspection',['Heap Introspection',['../group__analysis.html',1,'']]],
-  ['heap_20allocation',['Heap Allocation',['../group__heap.html',1,'']]]
+  ['extended_20functions',['Extended Functions',['../group__extended.html',1,'']]]
 ];

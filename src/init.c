@@ -12,19 +12,22 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
-  0, false, false, false, false, 0, 0,
-  { 0 }, false,
+  0, false, false, false, false,
+  0,       // capacity
+  0,       // reserved capacity
+  { 0 },   // flags
+  false,   // is_zero
+  0,       // retire_expire
   NULL,    // free
   #if MI_ENCODE_FREELIST
-  0,
+  { 0, 0 },
   #endif
   0,       // used
-  NULL, 
-  ATOMIC_VAR_INIT(0), ATOMIC_VAR_INIT(0),
-  0, NULL, NULL, NULL
-  #if (MI_INTPTR_SIZE==8 && defined(MI_ENCODE_FREELIST)) || (MI_INTPTR_SIZE==4 && !defined(MI_ENCODE_FREELIST))
-  , { NULL } // padding
-  #endif
+  0,       // xblock_size
+  NULL,    // local_free
+  ATOMIC_VAR_INIT(0), // xthread_free
+  ATOMIC_VAR_INIT(0), // xheap
+  NULL, NULL
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
@@ -83,10 +86,11 @@ const mi_heap_t _mi_heap_empty = {
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
   ATOMIC_VAR_INIT(NULL),
-  0,
-  0,
-  0,
-  0,
+  0,                // tid
+  0,                // cookie
+  { 0, 0 },         // keys
+  { {0}, {0}, 0 },
+  0,                // page count
   false
 };
 
@@ -95,100 +99,48 @@ mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 
 
 #define tld_main_stats  ((mi_stats_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,stats)))
+#define tld_main_os     ((mi_os_tld_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,os)))
 
 static mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main,
-  { { NULL, NULL }, {NULL ,NULL}, 0, 0, 0, 0, 0, 0, NULL, tld_main_stats }, // segments
-  { 0, tld_main_stats },       // os
-  { MI_STATS_NULL }            // stats
+  { { NULL, NULL }, {NULL ,NULL}, {NULL ,NULL, 0}, 
+    0, 0, 0, 0, 0, 0, NULL, 
+    tld_main_stats, tld_main_os 
+  }, // segments
+  { 0, tld_main_stats },  // os
+  { MI_STATS_NULL }       // stats
 };
+
+#if MI_INTPTR_SIZE==8
+#define MI_INIT_COOKIE  (0xCDCDCDCDCDCDCDCDUL)
+#else
+#define MI_INIT_COOKIE  (0xCDCDCDCDUL)
+#endif
 
 mi_heap_t _mi_heap_main = {
   &tld_main,
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
-  NULL,
-  0,      // thread id
-#if MI_INTPTR_SIZE==8   // the cookie of the main heap can be fixed (unlike page cookies that need to be secure!)
-  0xCDCDCDCDCDCDCDCDUL,
-#else
-  0xCDCDCDCDUL,
-#endif
-  0,      // random
-  0,      // page count
-  false   // can reclaim
+  ATOMIC_VAR_INIT(NULL),
+  0,                // thread id
+  MI_INIT_COOKIE,   // initial cookie
+  { MI_INIT_COOKIE, MI_INIT_COOKIE }, // the key of the main heap can be fixed (unlike page keys that need to be secure!)
+  { {0}, {0}, 0 },  // random
+  0,                // page count
+  false             // can reclaim
 };
 
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
 mi_stats_t _mi_stats_main = { MI_STATS_NULL };
 
-/* -----------------------------------------------------------
-  Initialization of random numbers
------------------------------------------------------------ */
-
-#if defined(_WIN32)
-#include <windows.h>
-#elif defined(__APPLE__)
-#include <mach/mach_time.h>
-#else
-#include <time.h>
-#endif
-
-uintptr_t _mi_random_shuffle(uintptr_t x) {
-  #if (MI_INTPTR_SIZE==8)
-    // by Sebastiano Vigna, see: <http://xoshiro.di.unimi.it/splitmix64.c>
-  x ^= x >> 30;
-  x *= 0xbf58476d1ce4e5b9UL;
-  x ^= x >> 27;
-  x *= 0x94d049bb133111ebUL;
-  x ^= x >> 31;
-  #elif (MI_INTPTR_SIZE==4)
-    // by Chris Wellons, see: <https://nullprogram.com/blog/2018/07/31/>
-  x ^= x >> 16;
-  x *= 0x7feb352dUL;
-  x ^= x >> 15;
-  x *= 0x846ca68bUL;
-  x ^= x >> 16;
-  #endif
-  return x;
-}
-
-uintptr_t _mi_random_init(uintptr_t seed /* can be zero */) {
-#ifdef __wasi__ // no ASLR when using WebAssembly, and time granularity may be coarse
-  uintptr_t x;
-  arc4random_buf(&x, sizeof x);
-#else
-   // Hopefully, ASLR makes our function address random
-  uintptr_t x = (uintptr_t)((void*)&_mi_random_init);
-  x ^= seed;
-  // xor with high res time
-#if defined(_WIN32)
-  LARGE_INTEGER pcount;
-  QueryPerformanceCounter(&pcount);
-  x ^= (uintptr_t)(pcount.QuadPart);
-#elif defined(__APPLE__)
-  x ^= (uintptr_t)mach_absolute_time();
-#else
-  struct timespec time;
-  clock_gettime(CLOCK_MONOTONIC, &time);
-  x ^= (uintptr_t)time.tv_sec;
-  x ^= (uintptr_t)time.tv_nsec;
-#endif
-  // and do a few randomization steps
-  uintptr_t max = ((x ^ (x >> 17)) & 0x0F) + 1;
-  for (uintptr_t i = 0; i < max; i++) {
-    x = _mi_random_shuffle(x);
-  }
-#endif
-  return x;
-}
 
 /* -----------------------------------------------------------
   Initialization and freeing of the thread local heaps
 ----------------------------------------------------------- */
 
+// note: in x64 in release build `sizeof(mi_thread_data_t)` is under 4KiB (= OS page size).
 typedef struct mi_thread_data_s {
   mi_heap_t  heap;  // must come first due to cast in `_mi_heap_done`
   mi_tld_t   tld;
@@ -203,22 +155,25 @@ static bool _mi_heap_init(void) {
     mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_get_default_heap());
   }
   else {
-    // use `_mi_os_alloc` to allocate directly from the OS
+    // use `_mi_os_alloc` to allocate directly from the OS    
     mi_thread_data_t* td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t),&_mi_stats_main); // Todo: more efficient allocation?
     if (td == NULL) {
-      _mi_error_message("failed to allocate thread local heap memory\n");
+      _mi_error_message(ENOMEM, "failed to allocate thread local heap memory\n");
       return false;
     }
+    // OS allocated so already zero initialized
     mi_tld_t*  tld = &td->tld;
     mi_heap_t* heap = &td->heap;
     memcpy(heap, &_mi_heap_empty, sizeof(*heap));
     heap->thread_id = _mi_thread_id();
-    heap->random = _mi_random_init(heap->thread_id);
-    heap->cookie = ((uintptr_t)heap ^ _mi_heap_random(heap)) | 1;
-    heap->tld = tld;
-    memset(tld, 0, sizeof(*tld));
+    _mi_random_init(&heap->random);
+    heap->cookie = _mi_heap_random_next(heap) | 1;
+    heap->key[0] = _mi_heap_random_next(heap);
+    heap->key[1] = _mi_heap_random_next(heap);
+    heap->tld = tld;    
     tld->heap_backing = heap;
     tld->segments.stats = &tld->stats;
+    tld->segments.os = &tld->os;
     tld->os.stats = &tld->stats;
     _mi_heap_set_default_direct(heap);
   }
@@ -237,7 +192,7 @@ static bool _mi_heap_done(mi_heap_t* heap) {
   // switch to backing heap and free it
   heap = heap->tld->heap_backing;
   if (!mi_heap_is_initialized(heap)) return false;
-  
+
   // collect if not the main thread
   if (heap != &_mi_heap_main) {
     _mi_heap_collect_abandon(heap);
@@ -248,6 +203,7 @@ static bool _mi_heap_done(mi_heap_t* heap) {
 
   // free if not the main thread
   if (heap != &_mi_heap_main) {
+    mi_assert_internal(heap->tld->segments.count == 0);
     _mi_os_free(heap, sizeof(mi_thread_data_t), &_mi_stats_main);
   }
 #if (MI_DEBUG > 0)
@@ -334,7 +290,7 @@ void mi_thread_init(void) mi_attr_noexcept
   mi_process_init();
 
   // initialize the thread local default heap
-  // (this will call `_mi_heap_set_default_direct` and thus set the 
+  // (this will call `_mi_heap_set_default_direct` and thus set the
   //  fiber/pthread key to a non-zero value, ensuring `_mi_thread_done` is called)
   if (_mi_heap_init()) return;  // returns true if already initialized
 
@@ -368,9 +324,9 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   #if defined(_WIN32) && defined(MI_SHARED_LIB)
     // nothing to do as it is done in DllMain
   #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
-    FlsSetValue(mi_fls_key, heap); 
+    FlsSetValue(mi_fls_key, heap);
   #elif defined(MI_USE_PTHREADS)
-    pthread_setspecific(mi_pthread_key, heap); 
+    pthread_setspecific(mi_pthread_key, heap);
   #endif
 }
 
@@ -394,7 +350,7 @@ bool mi_is_redirected() mi_attr_noexcept {
 }
 
 // Communicate with the redirection module on Windows
-#if defined(_WIN32) && defined(MI_SHARED_LIB) 
+#if defined(_WIN32) && defined(MI_SHARED_LIB)
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -438,13 +394,7 @@ static void mi_process_load(void) {
   const char* msg = NULL;
   mi_allocator_init(&msg);
   if (msg != NULL && (mi_option_is_enabled(mi_option_verbose) || mi_option_is_enabled(mi_option_show_errors))) {
-    _mi_fputs(NULL,NULL,msg);
-  }
-
-  if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
-    size_t pages     = mi_option_get(mi_option_reserve_huge_os_pages);
-    double max_secs = (double)pages / 2.0; // 0.5s per page (1GiB)
-    mi_reserve_huge_os_pages(pages, max_secs, NULL);
+    _mi_fputs(NULL,NULL,NULL,msg);
   }
 }
 
@@ -455,16 +405,17 @@ void mi_process_init(void) mi_attr_noexcept {
   // access _mi_heap_default before setting _mi_process_is_initialized to ensure
   // that the TLS slot is allocated without getting into recursion on macOS
   // when using dynamic linking with interpose.
-  mi_heap_t* h = mi_get_default_heap();
+  mi_get_default_heap();
   _mi_process_is_initialized = true;
 
   _mi_heap_main.thread_id = _mi_thread_id();
   _mi_verbose_message("process init: 0x%zx\n", _mi_heap_main.thread_id);
-  uintptr_t random = _mi_random_init(_mi_heap_main.thread_id)  ^ (uintptr_t)h;
-  #ifndef __APPLE__
-  _mi_heap_main.cookie = (uintptr_t)&_mi_heap_main ^ random;
+  _mi_random_init(&_mi_heap_main.random);
+  #ifndef __APPLE__  // TODO: fix this? cannot update cookie if allocation already happened..
+  _mi_heap_main.cookie = _mi_heap_random_next(&_mi_heap_main);
+  _mi_heap_main.key[0] = _mi_heap_random_next(&_mi_heap_main);
+  _mi_heap_main.key[1] = _mi_heap_random_next(&_mi_heap_main);
   #endif
-  _mi_heap_main.random = _mi_random_shuffle(random);
   mi_process_setup_auto_thread_done();
   _mi_os_init();
   #if (MI_DEBUG)
@@ -473,6 +424,11 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_verbose_message("secure level: %d\n", MI_SECURE);
   mi_thread_init();
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
+
+  if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
+    size_t pages = mi_option_get(mi_option_reserve_huge_os_pages);
+    mi_reserve_huge_os_pages_interleave(pages, 0, pages*500);
+  }
 }
 
 // Called when the process is done (through `at_exit`)
@@ -499,7 +455,7 @@ static void mi_process_done(void) {
 
 
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
-  // Windows DLL: easy to hook into process_init and thread_done  
+  // Windows DLL: easy to hook into process_init and thread_done
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     UNUSED(reserved);
     UNUSED(inst);

@@ -5,9 +5,14 @@ terms of the MIT license.
 -----------------------------------------------------------------------------*/
 
 /* This is a stress test for the allocator, using multiple threads and
-   transferring objects between threads. This is not a typical workload
-   but uses a random linear size distribution. Timing can also depend on
-   (random) thread scheduling. Do not use this test as a benchmark!
+   transferring objects between threads. It tries to reflect real-world workloads:
+   - allocation size is distributed linearly in powers of two
+   - with some fraction extra large (and some extra extra large)
+   - the allocations are initialized and read again at free
+   - pointers transfer between threads
+   - threads are terminated and recreated with some objects surviving in between
+   - uses deterministic "randomness", but execution can still depend on
+     (random) thread scheduling. Do not use this test as a benchmark!
 */
 
 #include <stdio.h>
@@ -21,22 +26,24 @@ terms of the MIT license.
 //
 // argument defaults
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
-static int SCALE   = 50;      // scaling factor
-static int ITER    = 10;      // N full iterations re-creating all threads
+static int SCALE   = 10;      // scaling factor
+static int ITER    = 50;      // N full iterations destructing and re-creating all threads
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int SCALE   = 100;  // scaling factor
 
+#define STRESS   // undefine for leak test
+
 static bool   allow_large_objects = true;    // allow very large objects?
-static size_t use_one_size = 0;              // use single object size of N uintptr_t?
+static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
 
 
 #ifdef USE_STD_MALLOC
-#define custom_malloc(s)      malloc(s)
+#define custom_calloc(n,s)    calloc(n,s)
 #define custom_realloc(p,s)   realloc(p,s)
 #define custom_free(p)        free(p)
 #else
-#define custom_malloc(s)      mi_malloc(s)
+#define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
 #endif
@@ -89,9 +96,12 @@ static void* alloc_items(size_t items, random_t r) {
   }
   if (items == 40) items++;              // pthreads uses that size for stack increases
   if (use_one_size > 0) items = (use_one_size / sizeof(uintptr_t));
-  uintptr_t* p = (uintptr_t*)custom_malloc(items * sizeof(uintptr_t));
+  if (items==0) items = 1;
+  uintptr_t* p = (uintptr_t*)custom_calloc(items,sizeof(uintptr_t));
   if (p != NULL) {
-    for (uintptr_t i = 0; i < items; i++) p[i] = (items - i) ^ cookie;
+    for (uintptr_t i = 0; i < items; i++) {
+      p[i] = (items - i) ^ cookie;
+    }
   }
   return p;
 }
@@ -113,15 +123,15 @@ static void free_items(void* p) {
 
 static void stress(intptr_t tid) {
   //bench_start_thread();
-  uintptr_t r = tid * 43;
-  const size_t max_item_shift = 5; // 128  
+  uintptr_t r = (tid * 43); // rand();
+  const size_t max_item_shift = 5; // 128
   const size_t max_item_retained_shift = max_item_shift + 2;
   size_t allocs = 100 * ((size_t)SCALE) * (tid % 8 + 1); // some threads do more
   size_t retain = allocs / 2;
   void** data = NULL;
   size_t data_size = 0;
   size_t data_top = 0;
-  void** retained = (void**)custom_malloc(retain * sizeof(void*));
+  void** retained = (void**)custom_calloc(retain,sizeof(void*));
   size_t retain_top = 0;
 
   while (allocs > 0 || retain > 0) {
@@ -132,7 +142,7 @@ static void stress(intptr_t tid) {
         data_size += 100000;
         data = (void**)custom_realloc(data, data_size * sizeof(void*));
       }
-      data[data_top++] = alloc_items( 1ULL << (pick(&r) % max_item_shift), &r);
+      data[data_top++] = alloc_items(1ULL << (pick(&r) % max_item_shift), &r);
     }
     else {
       // 25% retain
@@ -166,7 +176,46 @@ static void stress(intptr_t tid) {
   //bench_end_thread();
 }
 
-static void run_os_threads(size_t nthreads);
+static void run_os_threads(size_t nthreads, void (*entry)(intptr_t tid));
+
+static void test_stress(void) {
+  uintptr_t r = rand();
+  for (int n = 0; n < ITER; n++) {
+    run_os_threads(THREADS, &stress);
+    for (int i = 0; i < TRANSFERS; i++) {
+      if (chance(50, &r) || n + 1 == ITER) { // free all on last run, otherwise free half of the transfers
+        void* p = atomic_exchange_ptr(&transfer[i], NULL);
+        free_items(p);
+      }
+    }
+    mi_collect(false);
+#ifndef NDEBUG
+    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
+#endif
+  }
+}
+
+#ifndef STRESS
+static void leak(intptr_t tid) {
+  uintptr_t r = rand();
+  void* p = alloc_items(1 /*pick(&r)%128*/, &r);
+  if (chance(50, &r)) {
+    intptr_t i = (pick(&r) % TRANSFERS);
+    void* q = atomic_exchange_ptr(&transfer[i], p);
+    free_items(q);
+  }
+}
+
+static void test_leak(void) {  
+  for (int n = 0; n < ITER; n++) {
+    run_os_threads(THREADS, &leak);
+    mi_collect(false);
+#ifndef NDEBUG
+    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
+#endif
+  }
+}
+#endif
 
 int main(int argc, char** argv) {
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
@@ -185,28 +234,20 @@ int main(int argc, char** argv) {
     long n = (strtol(argv[3], &end, 10));
     if (n > 0) ITER = n;
   }
-  printf("start with %d threads with a %d%% load-per-thread and %d iterations\n", THREADS, SCALE, ITER);
+  printf("Using %d threads with a %d%% load-per-thread and %d iterations\n", THREADS, SCALE, ITER);
   //int res = mi_reserve_huge_os_pages(4,1);
   //printf("(reserve huge: %i\n)", res);
 
   //bench_start_program();
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
+  srand(0x7feb352d);
   mi_stats_reset();
-  uintptr_t r = 43 * 43;
-  for (int n = 0; n < ITER; n++) {
-    run_os_threads(THREADS);
-    for (int i = 0; i < TRANSFERS; i++) {
-      if (chance(50, &r) || n + 1 == ITER) { // free all on last run, otherwise free half of the transfers
-        void* p = atomic_exchange_ptr(&transfer[i], NULL);
-        free_items(p);
-      }
-    }
-    mi_collect(false);
-#ifndef NDEBUG
-    if ((n + 1) % 10 == 0) { printf("- iterations: %3d\n", n + 1); }
-#endif
-  }
+#ifdef STRESS
+    test_stress();
+#else
+    test_leak();
+#endif  
 
   mi_collect(true);
   mi_stats_print(NULL);
@@ -215,18 +256,21 @@ int main(int argc, char** argv) {
 }
 
 
+static void (*thread_entry_fun)(intptr_t) = &stress;
+
 #ifdef _WIN32
 
 #include <windows.h>
 
-static DWORD WINAPI thread_entry(LPVOID param) {
-  stress((intptr_t)param);
+static DWORD WINAPI thread_entry(LPVOID param) {  
+  thread_entry_fun((intptr_t)param);
   return 0;
 }
 
-static void run_os_threads(size_t nthreads) {
-  DWORD* tids = (DWORD*)custom_malloc(nthreads * sizeof(DWORD));
-  HANDLE* thandles = (HANDLE*)custom_malloc(nthreads * sizeof(HANDLE));
+static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
+  thread_entry_fun = fun;
+  DWORD* tids = (DWORD*)custom_calloc(nthreads,sizeof(DWORD));
+  HANDLE* thandles = (HANDLE*)custom_calloc(nthreads,sizeof(HANDLE));
   for (uintptr_t i = 0; i < nthreads; i++) {
     thandles[i] = CreateThread(0, 4096, &thread_entry, (void*)(i), 0, &tids[i]);
   }
@@ -241,7 +285,7 @@ static void run_os_threads(size_t nthreads) {
 }
 
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
-#if (INTPTR_MAX == UINT32_MAX)
+#if (INTPTR_MAX == INT32_MAX)
   return (void*)InterlockedExchange((volatile LONG*)p, (LONG)newval);
 #else
   return (void*)InterlockedExchange64((volatile LONG64*)p, (LONG64)newval);
@@ -250,15 +294,15 @@ static void* atomic_exchange_ptr(volatile void** p, void* newval) {
 #else
 
 #include <pthread.h>
-#include <stdatomic.h>
 
 static void* thread_entry(void* param) {
-  stress((uintptr_t)param);
+  thread_entry_fun((uintptr_t)param);
   return NULL;
 }
 
-static void run_os_threads(size_t nthreads) {
-  pthread_t* threads = (pthread_t*)custom_malloc(nthreads * sizeof(pthread_t));
+static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
+  thread_entry_fun = fun;
+  pthread_t* threads = (pthread_t*)custom_calloc(nthreads,sizeof(pthread_t));
   memset(threads, 0, sizeof(pthread_t) * nthreads);
   //pthread_setconcurrency(nthreads);
   for (uintptr_t i = 0; i < nthreads; i++) {
@@ -270,8 +314,16 @@ static void run_os_threads(size_t nthreads) {
   custom_free(threads);
 }
 
+#ifdef __cplusplus
+#include <atomic>
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
-  return atomic_exchange_explicit((volatile _Atomic(void*)*)p, newval, memory_order_acquire);
+  return std::atomic_exchange((volatile std::atomic<void*>*)p, newval);
 }
+#else
+#include <stdatomic.h>
+static void* atomic_exchange_ptr(volatile void** p, void* newval) {
+  return atomic_exchange((volatile _Atomic(void*)*)p, newval);
+}
+#endif
 
 #endif

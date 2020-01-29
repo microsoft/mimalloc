@@ -10,10 +10,11 @@ var group__options =
       [ "mi_option_reserve_huge_os_pages", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884caca7ed041be3b0b9d0b82432c7bf41af2", null ],
       [ "mi_option_segment_cache", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca2ecbe7ef32f5c84de3739aa4f0b805a1", null ],
       [ "mi_option_page_reset", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cada854dd272c66342f18a93ee254a2968", null ],
-      [ "mi_option_cache_reset", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cac2157a0cb79cd996c1db7d9f6a090c07", null ],
+      [ "mi_option_segment_reset", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cafb121d30d87591850d5410ccc3a95c6d", null ],
+      [ "mi_option_reset_delay", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca154fe170131d5212cff57e22b99523c5", null ],
+      [ "mi_option_use_numa_nodes", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca0ac33a18f6b659fcfaf44efb0bab1b74", null ],
       [ "mi_option_reset_decommits", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cac81ee965b130fa81238913a3c239d536", null ],
       [ "mi_option_eager_commit_delay", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca17a190c25be381142d87e0468c4c068c", null ],
-      [ "mi_option_segment_reset", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cafb121d30d87591850d5410ccc3a95c6d", null ],
       [ "mi_option_os_tag", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca4b74ae2a69e445de6c2361b73c1d14bf", null ],
       [ "_mi_option_last", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca5b4357b74be0d87568036c32eb1a2e4a", null ]
     ] ],
