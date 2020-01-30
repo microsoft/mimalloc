@@ -104,9 +104,9 @@ mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 static mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main,
-  { { NULL, NULL }, {NULL ,NULL}, {NULL ,NULL, 0}, 
-    0, 0, 0, 0, 0, 0, NULL, 
-    tld_main_stats, tld_main_os 
+  { { NULL, NULL }, {NULL ,NULL}, {NULL ,NULL, 0},
+    0, 0, 0, 0, 0, 0, NULL,
+    tld_main_stats, tld_main_os
   }, // segments
   { 0, tld_main_stats },  // os
   { MI_STATS_NULL }       // stats
@@ -124,9 +124,9 @@ mi_heap_t _mi_heap_main = {
   MI_PAGE_QUEUES_EMPTY,
   ATOMIC_VAR_INIT(NULL),
   0,                // thread id
-  MI_INIT_COOKIE,   // initial cookie
-  { MI_INIT_COOKIE, MI_INIT_COOKIE }, // the key of the main heap can be fixed (unlike page keys that need to be secure!)
-  { {0}, {0}, 0 },  // random
+  0,                // initial cookie
+  { 0, 0 },         // the key of the main heap can be fixed (unlike page keys that need to be secure!)
+  { {0x846ca68b}, {0}, 0 },  // random
   0,                // page count
   false             // can reclaim
 };
@@ -148,14 +148,15 @@ typedef struct mi_thread_data_s {
 
 // Initialize the thread local default heap, called from `mi_thread_init`
 static bool _mi_heap_init(void) {
-  if (mi_heap_is_initialized(_mi_heap_default)) return true;
+  if (mi_heap_is_initialized(mi_get_default_heap())) return true;
   if (_mi_is_main_thread()) {
+    mi_assert_internal(_mi_heap_main.thread_id != 0);
     // the main heap is statically allocated
     _mi_heap_set_default_direct(&_mi_heap_main);
-    mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_get_default_heap());
+    //mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_get_default_heap());
   }
   else {
-    // use `_mi_os_alloc` to allocate directly from the OS    
+    // use `_mi_os_alloc` to allocate directly from the OS
     mi_thread_data_t* td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t),&_mi_stats_main); // Todo: more efficient allocation?
     if (td == NULL) {
       _mi_error_message(ENOMEM, "failed to allocate thread local heap memory\n");
@@ -170,7 +171,7 @@ static bool _mi_heap_init(void) {
     heap->cookie = _mi_heap_random_next(heap) | 1;
     heap->key[0] = _mi_heap_random_next(heap);
     heap->key[1] = _mi_heap_random_next(heap);
-    heap->tld = tld;    
+    heap->tld = tld;
     tld->heap_backing = heap;
     tld->segments.stats = &tld->stats;
     tld->segments.os = &tld->os;
@@ -265,8 +266,9 @@ static void _mi_thread_done(mi_heap_t* default_heap);
 #endif
 
 // Set up handlers so `mi_thread_done` is called automatically
+static bool tls_initialized = false; // fine if it races
+
 static void mi_process_setup_auto_thread_done(void) {
-  static bool tls_initialized = false; // fine if it races
   if (tls_initialized) return;
   tls_initialized = true;
   #if defined(_WIN32) && defined(MI_SHARED_LIB)
@@ -317,7 +319,9 @@ static void _mi_thread_done(mi_heap_t* heap) {
 
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   mi_assert_internal(heap != NULL);
+  #ifndef MI_TLS_RECURSE_GUARD
   _mi_heap_default = heap;
+  #endif
 
   // ensure the default heap is passed to `_mi_thread_done`
   // setting to a non-NULL value also ensures `mi_thread_done` is called.
@@ -330,7 +334,11 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   #endif
 }
 
-
+mi_heap_t* _mi_get_default_heap_tls_safe(void) {
+  if (mi_unlikely(mi_pthread_key==0)) return (mi_heap_t*)&_mi_heap_empty;
+  mi_heap_t* heap = pthread_getspecific(mi_pthread_key);
+  return (mi_likely(heap!=NULL) ? heap : (mi_heap_t*)&_mi_heap_empty);
+}
 
 // --------------------------------------------------------
 // Run functions on process init/done, and thread init/done
@@ -339,6 +347,7 @@ static void mi_process_done(void);
 
 static bool os_preloading = true;    // true until this module is initialized
 static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
+bool _mi_tls_initialized = false;
 
 // Returns true if this module has not been initialized; Don't use C runtime routines until it returns false.
 bool _mi_preloading() {
@@ -383,7 +392,10 @@ static void mi_allocator_done() {
 
 // Called once by the process loader
 static void mi_process_load(void) {
+  volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
+  UNUSED(dummy);
   os_preloading = false;
+  _mi_tls_initialized = true;
   atexit(&mi_process_done);
   _mi_options_init();
   mi_process_init();
@@ -398,26 +410,26 @@ static void mi_process_load(void) {
   }
 }
 
+void _mi_heap_main_init(void) {
+  if (_mi_heap_main.cookie == 0) {
+    _mi_heap_main.thread_id = _mi_thread_id();
+    _mi_heap_main.cookie = _os_random_weak((uintptr_t)&_mi_heap_main_init);
+    _mi_random_init(&_mi_heap_main.random);
+    _mi_heap_main.key[0] = _mi_heap_random_next(&_mi_heap_main);
+    _mi_heap_main.key[1] = _mi_heap_random_next(&_mi_heap_main);
+  }
+}
+
 // Initialize the process; called by thread_init or the process loader
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   if (_mi_process_is_initialized) return;
-  // access _mi_heap_default before setting _mi_process_is_initialized to ensure
-  // that the TLS slot is allocated without getting into recursion on macOS
-  // when using dynamic linking with interpose.
-  mi_get_default_heap();
   _mi_process_is_initialized = true;
-
-  _mi_heap_main.thread_id = _mi_thread_id();
-  _mi_verbose_message("process init: 0x%zx\n", _mi_heap_main.thread_id);
-  _mi_random_init(&_mi_heap_main.random);
-  #ifndef __APPLE__  // TODO: fix this? cannot update cookie if allocation already happened..
-  _mi_heap_main.cookie = _mi_heap_random_next(&_mi_heap_main);
-  _mi_heap_main.key[0] = _mi_heap_random_next(&_mi_heap_main);
-  _mi_heap_main.key[1] = _mi_heap_random_next(&_mi_heap_main);
-  #endif
   mi_process_setup_auto_thread_done();
+
+  _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
   _mi_os_init();
+  _mi_heap_main_init();
   #if (MI_DEBUG)
   _mi_verbose_message("debug level : %d\n", MI_DEBUG);
   #endif

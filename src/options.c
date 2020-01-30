@@ -53,7 +53,7 @@ static mi_option_desc_t options[_mi_option_last] =
   // stable options
   { MI_DEBUG, UNINIT, MI_OPTION(show_errors) },
   { 0, UNINIT, MI_OPTION(show_stats) },
-  { 0, UNINIT, MI_OPTION(verbose) },
+  { 1, UNINIT, MI_OPTION(verbose) },
 
   // the following options are experimental and not all combinations make sense.
   { 1, UNINIT, MI_OPTION(eager_commit) },        // commit on demand
@@ -239,16 +239,30 @@ static volatile _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT
 // inside the C runtime causes another message.
 static mi_decl_thread bool recurse = false;
 
+static bool mi_recurse_enter(void) {
+  #ifdef MI_TLS_RECURSE_GUARD
+  if (_mi_preloading()) return true;
+  #endif
+  if (recurse) return false;
+  recurse = true;
+  return true;
+}
+
+static void mi_recurse_exit(void) {
+  #ifdef MI_TLS_RECURSE_GUARD
+  if (_mi_preloading()) return;
+  #endif
+  recurse = false;
+}
+
 void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message) {
-  if (recurse) return;
+  if (!mi_recurse_enter()) return;
   if (out==NULL || (FILE*)out==stdout || (FILE*)out==stderr) { // TODO: use mi_out_stderr for stderr?
     out = mi_out_get_default(&arg);
   }
-  recurse = true;
   if (prefix != NULL) out(prefix,arg);
   out(message,arg);
-  recurse = false;
-  return;
+  mi_recurse_exit();
 }
 
 // Define our own limited `fprintf` that avoids memory allocation.
@@ -256,13 +270,11 @@ void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* me
 static void mi_vfprintf( mi_output_fun* out, void* arg, const char* prefix, const char* fmt, va_list args ) {
   char buf[512];
   if (fmt==NULL) return;
-  if (recurse) return;
-  recurse = true;
+  if (!mi_recurse_enter()) return;
   vsnprintf(buf,sizeof(buf)-1,fmt,args);
-  recurse = false;
+  mi_recurse_exit();
   _mi_fputs(out,arg,prefix,buf);
 }
-
 
 void _mi_fprintf( mi_output_fun* out, void* arg, const char* fmt, ... ) {
   va_list args;
@@ -290,7 +302,7 @@ void _mi_verbose_message(const char* fmt, ...) {
 static void mi_show_error_message(const char* fmt, va_list args) {
   if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
   if (mi_atomic_increment(&error_count) > mi_max_error_count) return;
-  mi_vfprintf(NULL, NULL, "mimalloc: error: ", fmt, args);  
+  mi_vfprintf(NULL, NULL, "mimalloc: error: ", fmt, args);
 }
 
 void _mi_warning_message(const char* fmt, ...) {

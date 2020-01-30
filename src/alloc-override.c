@@ -41,6 +41,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #if defined(__APPLE__) && defined(MI_SHARED_LIB_EXPORT) && defined(MI_INTERPOSE)
+  static void mi_free_tls_safe(void* p) {
+    if (mi_unlikely(_mi_preloading())) return;
+    mi_free(p);
+  }
   // use interposing so `DYLD_INSERT_LIBRARIES` works without `DYLD_FORCE_FLAT_NAMESPACE=1`
   // See: <https://books.google.com/books?id=K8vUkpOXhN4C&pg=PA73>
   struct mi_interpose_s {
@@ -54,7 +58,7 @@ terms of the MIT license. A copy of the license can be found in the file
     MI_INTERPOSE_MI(malloc),
     MI_INTERPOSE_MI(calloc),
     MI_INTERPOSE_MI(realloc),
-    MI_INTERPOSE_MI(free),
+    MI_INTERPOSEX(free,mi_free_tls_safe),
     MI_INTERPOSE_MI(strdup),
     MI_INTERPOSE_MI(strndup)
   };
@@ -194,4 +198,3 @@ int posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_me
 #endif
 
 #endif // MI_MALLOC_OVERRIDE && !_WIN32
-

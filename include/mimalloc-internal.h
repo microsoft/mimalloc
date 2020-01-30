@@ -33,7 +33,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
-#define mi_decl_cache_align     
+#define mi_decl_cache_align
 #endif
 
 
@@ -51,6 +51,7 @@ void       _mi_random_init(mi_random_ctx_t* ctx);
 void       _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* new_ctx);
 uintptr_t  _mi_random_next(mi_random_ctx_t* ctx);
 uintptr_t  _mi_heap_random_next(mi_heap_t* heap);
+uintptr_t  _os_random_weak(uintptr_t extra_seed);
 static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 
 // init.c
@@ -233,7 +234,7 @@ static inline size_t _mi_wsize_from_size(size_t size) {
 
 
 // Overflow detecting multiply
-static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {  
+static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
 #include <limits.h>   // UINT_MAX, ULONG_MAX
 #if (SIZE_MAX == UINT_MAX)
@@ -274,18 +275,24 @@ extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value o
 extern mi_heap_t _mi_heap_main;         // statically allocated main backing heap
 extern bool _mi_process_is_initialized;
 
-extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
 
-static inline mi_heap_t* mi_get_default_heap(void) {
 #ifdef MI_TLS_RECURSE_GUARD
+extern mi_heap_t* _mi_get_default_heap_tls_safe(void);
+static inline mi_heap_t* mi_get_default_heap(void) {
   // on some BSD platforms, like macOS, the dynamic loader calls `malloc`
   // to initialize thread local data. To avoid recursion, we need to avoid
   // accessing the thread local `_mi_default_heap` until our module is loaded
   // and use the statically allocated main heap until that time.
   // TODO: patch ourselves dynamically to avoid this check every time?
-  if (!_mi_process_is_initialized) return &_mi_heap_main;
-#endif
+  return _mi_get_default_heap_tls_safe();
+#else
+
+extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
+
+static inline mi_heap_t* mi_get_default_heap(void) {
   return _mi_heap_default;
+
+#endif
 }
 
 static inline bool mi_heap_is_default(const mi_heap_t* heap) {
@@ -302,6 +309,7 @@ static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
 }
 
 static inline uintptr_t _mi_ptr_cookie(const void* p) {
+  mi_assert_internal(_mi_heap_main.cookie != 0);
   return ((uintptr_t)p ^ _mi_heap_main.cookie);
 }
 
@@ -345,7 +353,7 @@ static inline uintptr_t _mi_segment_page_idx_of(const mi_segment_t* segment, con
 
 // Get the page containing the pointer
 static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const void* p) {
-  uintptr_t idx = _mi_segment_page_idx_of(segment, p);  
+  uintptr_t idx = _mi_segment_page_idx_of(segment, p);
   return &((mi_segment_t*)segment)->pages[idx];
 }
 
@@ -411,14 +419,14 @@ static inline mi_thread_free_t mi_tf_set_block(mi_thread_free_t tf, mi_block_t* 
   return mi_tf_make(block, mi_tf_delayed(tf));
 }
 
-// are all blocks in a page freed? 
+// are all blocks in a page freed?
 // note: needs up-to-date used count, (as the `xthread_free` list may not be empty). see `_mi_page_collect_free`.
 static inline bool mi_page_all_free(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
   return (page->used == 0);
 }
 
-// are there any available blocks? 
+// are there any available blocks?
 static inline bool mi_page_has_any_available(const mi_page_t* page) {
   mi_assert_internal(page != NULL && page->reserved > 0);
   return (page->used < page->reserved || (mi_page_thread_free(page) != NULL));
@@ -466,11 +474,11 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
 /* -------------------------------------------------------------------
 Encoding/Decoding the free list next pointers
 
-This is to protect against buffer overflow exploits where the 
-free list is mutated. Many hardened allocators xor the next pointer `p` 
+This is to protect against buffer overflow exploits where the
+free list is mutated. Many hardened allocators xor the next pointer `p`
 with a secret key `k1`, as `p^k1`. This prevents overwriting with known
-values but might be still too weak: if the attacker can guess 
-the pointer `p` this  can reveal `k1` (since `p^k1^p == k1`). 
+values but might be still too weak: if the attacker can guess
+the pointer `p` this  can reveal `k1` (since `p^k1^p == k1`).
 Moreover, if multiple blocks can be read as well, the attacker can
 xor both as `(p1^k1) ^ (p2^k1) == p1^p2` which may reveal a lot
 about the pointers (and subsequently `k1`).
@@ -478,9 +486,9 @@ about the pointers (and subsequently `k1`).
 Instead mimalloc uses an extra key `k2` and encodes as `((p^k2)<<<k1)+k1`.
 Since these operations are not associative, the above approaches do not
 work so well any more even if the `p` can be guesstimated. For example,
-for the read case we can subtract two entries to discard the `+k1` term, 
+for the read case we can subtract two entries to discard the `+k1` term,
 but that leads to `((p1^k2)<<<k1) - ((p2^k2)<<<k1)` at best.
-We include the left-rotation since xor and addition are otherwise linear 
+We include the left-rotation since xor and addition are otherwise linear
 in the lowest bit. Finally, both keys are unique per page which reduces
 the re-use of keys by a large factor.
 
