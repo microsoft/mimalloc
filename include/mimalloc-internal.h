@@ -275,24 +275,27 @@ extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value o
 extern mi_heap_t _mi_heap_main;         // statically allocated main backing heap
 extern bool _mi_process_is_initialized;
 
+extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
 
 #ifdef MI_TLS_RECURSE_GUARD
 extern mi_heap_t* _mi_get_default_heap_tls_safe(void);
+extern size_t _mi_tls_recurse;
+#endif
+
 static inline mi_heap_t* mi_get_default_heap(void) {
+  #ifdef MI_TLS_RECURSE_GUARD
+  if (_mi_tls_recurse++>100) {
   // on some BSD platforms, like macOS, the dynamic loader calls `malloc`
   // to initialize thread local data. To avoid recursion, we need to avoid
   // accessing the thread local `_mi_default_heap` until our module is loaded
   // and use the statically allocated main heap until that time.
   // TODO: patch ourselves dynamically to avoid this check every time?
-  return _mi_get_default_heap_tls_safe();
-#else
-
-extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
-
-static inline mi_heap_t* mi_get_default_heap(void) {
+    mi_heap_t* heap = _mi_get_default_heap_tls_safe();
+    _mi_tls_recurse = 0;
+    return heap;
+  }
+  #endif
   return _mi_heap_default;
-
-#endif
 }
 
 static inline bool mi_heap_is_default(const mi_heap_t* heap) {

@@ -266,9 +266,8 @@ static void _mi_thread_done(mi_heap_t* default_heap);
 #endif
 
 // Set up handlers so `mi_thread_done` is called automatically
-static bool tls_initialized = false; // fine if it races
-
 static void mi_process_setup_auto_thread_done(void) {
+  static bool tls_initialized = false; // fine if it races
   if (tls_initialized) return;
   tls_initialized = true;
   #if defined(_WIN32) && defined(MI_SHARED_LIB)
@@ -319,9 +318,6 @@ static void _mi_thread_done(mi_heap_t* heap) {
 
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   mi_assert_internal(heap != NULL);
-  #ifndef MI_TLS_RECURSE_GUARD
-  _mi_heap_default = heap;
-  #endif
 
   // ensure the default heap is passed to `_mi_thread_done`
   // setting to a non-NULL value also ensures `mi_thread_done` is called.
@@ -332,7 +328,17 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   #elif defined(MI_USE_PTHREADS)
     pthread_setspecific(mi_pthread_key, heap);
   #endif
+  if (_mi_tls_recurse < 100) {
+    _mi_heap_default = heap;
+  }
 }
+
+#ifdef MI_TLS_RECURSE_GUARD
+// initialize high so the first call uses safe TLS
+size_t _mi_tls_recurse = 10000;
+#else
+size_t _mi_tls_recurse = 0;
+#endif
 
 mi_heap_t* _mi_get_default_heap_tls_safe(void) {
   if (mi_unlikely(mi_pthread_key==0)) return (mi_heap_t*)&_mi_heap_empty;
@@ -347,7 +353,6 @@ static void mi_process_done(void);
 
 static bool os_preloading = true;    // true until this module is initialized
 static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
-bool _mi_tls_initialized = false;
 
 // Returns true if this module has not been initialized; Don't use C runtime routines until it returns false.
 bool _mi_preloading() {
@@ -395,7 +400,7 @@ static void mi_process_load(void) {
   volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
   UNUSED(dummy);
   os_preloading = false;
-  _mi_tls_initialized = true;
+  _mi_heap_set_default_direct(&_mi_heap_main);
   atexit(&mi_process_done);
   _mi_options_init();
   mi_process_init();
@@ -414,7 +419,9 @@ void _mi_heap_main_init(void) {
   if (_mi_heap_main.cookie == 0) {
     _mi_heap_main.thread_id = _mi_thread_id();
     _mi_heap_main.cookie = _os_random_weak((uintptr_t)&_mi_heap_main_init);
-    _mi_random_init(&_mi_heap_main.random);
+  }
+  if (_mi_tls_recurse < 100) {
+     _mi_random_init(&_mi_heap_main.random);
     _mi_heap_main.key[0] = _mi_heap_random_next(&_mi_heap_main);
     _mi_heap_main.key[1] = _mi_heap_random_next(&_mi_heap_main);
   }
