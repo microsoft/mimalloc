@@ -176,33 +176,6 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 // Free
 // ------------------------------------------------------
 
-// free huge block from another thread
-static mi_decl_noinline void mi_free_huge_block_mt(mi_segment_t* segment, mi_page_t* page, mi_block_t* block) {
-  // huge page segments are always abandoned and can be freed immediately
-  mi_assert_internal(segment->page_kind==MI_PAGE_HUGE);
-  mi_assert_internal(segment == _mi_page_segment(page));
-  mi_assert_internal(mi_atomic_read_relaxed(&segment->thread_id)==0);
-
-  // claim it and free
-  mi_heap_t* heap = mi_get_default_heap();
-  // paranoia: if this it the last reference, the cas should always succeed
-  if (mi_atomic_cas_strong(&segment->thread_id, heap->thread_id, 0)) {
-    mi_block_set_next(page, block, page->free);
-    page->free = block;
-    page->used--;
-    page->is_zero = false;
-    mi_assert(page->used == 0);
-    mi_tld_t* tld = heap->tld;
-    const size_t bsize = mi_page_block_size(page);
-    if (bsize > MI_HUGE_OBJ_SIZE_MAX) {
-      _mi_stat_decrease(&tld->stats.giant, bsize);
-    }
-    else {
-      _mi_stat_decrease(&tld->stats.huge, bsize);
-    }
-    _mi_segment_page_free(page, true, &tld->segments);
-  }
-}
 
 // multi-threaded free
 static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* block)
@@ -210,7 +183,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   // huge page segments are always abandoned and can be freed immediately
   mi_segment_t* segment = _mi_page_segment(page);
   if (segment->page_kind==MI_PAGE_HUGE) {
-    mi_free_huge_block_mt(segment, page, block);
+    _mi_segment_huge_page_free(segment, page, block);
     return;
   }
 
