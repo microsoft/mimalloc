@@ -187,7 +187,7 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
   mi_block_t* const padding = (mi_block_t*)((uint8_t*)block + page->xblock_size - MI_PADDING);
   mi_block_t* const decoded = mi_block_nextx(page, padding, page->key[0], page->key[1]);
   if (decoded != block) {
-    _mi_error_message(EINVAL, "buffer overflow in heap block %p: write after %zu bytes\n", block, page->xblock_size);
+    _mi_error_message(EFAULT, "buffer overflow in heap block %p: write after %zu bytes\n", block, page->xblock_size);
   }
 }
 #else 
