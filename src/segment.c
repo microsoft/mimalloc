@@ -456,7 +456,6 @@ static void mi_segments_track_size(long segment_size, mi_segments_tld_t* tld) {
   if (tld->current_size > tld->peak_size) tld->peak_size = tld->current_size;
 }
 
-
 static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_segments_tld_t* tld) {
   segment->thread_id = 0;
   mi_segments_track_size(-((long)segment_size),tld);
@@ -1269,9 +1268,39 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
   if (segment == NULL) return NULL;
   mi_assert_internal(mi_segment_page_size(segment) - segment->segment_info_size - (2*(MI_SECURE == 0 ? 0 : _mi_os_page_size())) >= size);
   segment->thread_id = 0; // huge pages are immediately abandoned
+  mi_segments_track_size(-(long)segment->segment_size, tld);
   mi_page_t* page = mi_segment_find_free(segment, tld);
   mi_assert_internal(page != NULL);
   return page;
+}
+
+// free huge block from another thread
+void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block_t* block) {
+  // huge page segments are always abandoned and can be freed immediately by any thread
+  mi_assert_internal(segment->page_kind==MI_PAGE_HUGE);
+  mi_assert_internal(segment == _mi_page_segment(page));
+  mi_assert_internal(mi_atomic_read_relaxed(&segment->thread_id)==0);
+
+  // claim it and free
+  mi_heap_t* heap = mi_get_default_heap();
+  // paranoia: if this it the last reference, the cas should always succeed
+  if (mi_atomic_cas_strong(&segment->thread_id, heap->thread_id, 0)) {
+    mi_block_set_next(page, block, page->free);
+    page->free = block;
+    page->used--;
+    page->is_zero = false;
+    mi_assert(page->used == 0);
+    mi_segments_tld_t* tld = &heap->tld->segments;
+    const size_t bsize = mi_page_block_size(page);
+    if (bsize > MI_HUGE_OBJ_SIZE_MAX) {
+      _mi_stat_decrease(&tld->stats->giant, bsize); 
+    }
+    else {
+      _mi_stat_decrease(&tld->stats->huge, bsize);
+    }
+    mi_segments_track_size((long)segment->segment_size, tld);
+    _mi_segment_page_free(page, true, tld);
+  }
 }
 
 /* -----------------------------------------------------------

@@ -138,6 +138,9 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   // (if abandoning, after this there are no more thread-delayed references into the pages.)
   _mi_heap_delayed_free(heap);
 
+  // collect retired pages
+  _mi_heap_collect_retired(heap, collect >= MI_FORCE);
+
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_read_ptr(mi_block_t,&heap->thread_delayed_free) == NULL );
