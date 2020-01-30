@@ -43,6 +43,11 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
     mi_heap_stat_increase(heap,normal[bin], 1);
   }
 #endif
+#if (MI_PADDING>0) && defined(MI_ENCODE_FREELIST)
+  mi_assert_internal((MI_PADDING % sizeof(mi_block_t*)) == 0);
+  mi_block_t* const padding = (mi_block_t*)((uint8_t*)block + page->xblock_size - MI_PADDING);
+  mi_block_set_nextx(page, padding, block, page->key[0], page->key[1]);
+#endif
   return block;
 }
 
@@ -54,6 +59,9 @@ extern inline mi_decl_allocator void* mi_heap_malloc_small(mi_heap_t* heap, size
 }
 
 extern inline mi_decl_allocator void* mi_malloc_small(size_t size) mi_attr_noexcept {
+#if (MI_PADDING>0)
+  size += MI_PADDING;
+#endif
   return mi_heap_malloc_small(mi_get_default_heap(), size);
 }
 
@@ -69,6 +77,9 @@ mi_decl_allocator void* mi_zalloc_small(size_t size) mi_attr_noexcept {
 extern inline mi_decl_allocator void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   mi_assert(heap!=NULL);
   mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
+#if (MI_PADDING>0)
+  size += MI_PADDING;
+#endif
   void* p;
   if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
     p = mi_heap_malloc_small(heap, size);
@@ -99,11 +110,11 @@ void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
   if (page->is_zero) {
     // already zero initialized memory?
     ((mi_block_t*)p)->next = 0;  // clear the free list pointer
-    mi_assert_expensive(mi_mem_is_zero(p, mi_page_block_size(page)));
+    mi_assert_expensive(mi_mem_is_zero(p, mi_page_block_size(page) - MI_PADDING));
   }
   else {
     // otherwise memset
-    memset(p, 0, mi_page_block_size(page));
+    memset(p, 0, mi_page_block_size(page) - MI_PADDING);
   }
 }
 
@@ -171,6 +182,20 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 }
 #endif
 
+#if (MI_PADDING>0) && defined(MI_ENCODE_FREELIST)
+static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
+  mi_block_t* const padding = (mi_block_t*)((uint8_t*)block + page->xblock_size - MI_PADDING);
+  mi_block_t* const decoded = mi_block_nextx(page, padding, page->key[0], page->key[1]);
+  if (decoded != block) {
+    _mi_error_message(EINVAL, "buffer overflow in heap block %p: write after %zu bytes\n", block, page->xblock_size);
+  }
+}
+#else 
+static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
+  UNUSED(page);
+  UNUSED(block);
+}
+#endif
 
 // ------------------------------------------------------
 // Free
@@ -213,6 +238,8 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
     mi_free_huge_block_mt(segment, page, block);
     return;
   }
+
+  mi_check_padding(page, block);
 
   mi_thread_free_t tfree;
   mi_thread_free_t tfreex;
@@ -258,13 +285,14 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
 static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block)
 {
   #if (MI_DEBUG)
-  memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
+  memset(block, MI_DEBUG_FREED, mi_page_block_size(page) - MI_PADDING);
   #endif
 
   // and push it on the free list
   if (mi_likely(local)) {
     // owning thread can free a block directly
     if (mi_unlikely(mi_check_is_double_free(page, block))) return;
+    mi_check_padding(page, block);
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
     page->used--;
@@ -341,6 +369,7 @@ void mi_free(void* p) mi_attr_noexcept
     // local, and not full or aligned
     mi_block_t* const block = (mi_block_t*)p;
     if (mi_unlikely(mi_check_is_double_free(page,block))) return;
+    mi_check_padding(page, block);
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
     page->used--;
@@ -381,8 +410,11 @@ bool _mi_free_delayed_block(mi_block_t* block) {
 size_t mi_usable_size(const void* p) mi_attr_noexcept {
   if (p==NULL) return 0;
   const mi_segment_t* segment = _mi_ptr_segment(p);
-  const mi_page_t* page = _mi_segment_page_of(segment,p);
+  const mi_page_t* page = _mi_segment_page_of(segment, p);
   size_t size = mi_page_block_size(page);
+#if defined(MI_PADDING)
+  size -= MI_PADDING;
+#endif
   if (mi_unlikely(mi_page_has_aligned(page))) {
     ptrdiff_t adjust = (uint8_t*)p - (uint8_t*)_mi_page_ptr_unalign(segment,page,p);
     mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);

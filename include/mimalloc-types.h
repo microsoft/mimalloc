@@ -12,6 +12,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdint.h>   // uintptr_t, uint16_t, etc
 #include <mimalloc-atomic.h>  // _Atomic
 
+// Minimal alignment necessary. On most platforms 16 bytes are needed
+// due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
+#define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
+
 // ------------------------------------------------------
 // Variants
 // ------------------------------------------------------
@@ -48,6 +52,16 @@ terms of the MIT license. A copy of the license can be found in the file
 // and can detect buffer overflows and double `free`s.
 #if (MI_SECURE>=3 || MI_DEBUG>=1)
 #define MI_ENCODE_FREELIST  1
+#endif
+
+// Reserve extra padding at the end of each block; must be a multiple of `sizeof(intptr_t)`!
+// If free lists are encoded, the padding is checked if it was modified on free.
+#if (!defined(MI_PADDING)) 
+#if (MI_SECURE>=3 || MI_DEBUG>=1)
+#define MI_PADDING  MI_MAX_ALIGN_SIZE
+#else
+#define MI_PADDING  0
+#endif
 #endif
 
 // ------------------------------------------------------
@@ -112,10 +126,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_LARGE_OBJ_SIZE_MAX             (MI_LARGE_PAGE_SIZE/2)   // 2mb
 #define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)
 #define MI_HUGE_OBJ_SIZE_MAX              (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)        // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
-
-// Minimal alignment necessary. On most platforms 16 bytes are needed
-// due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
-#define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)
