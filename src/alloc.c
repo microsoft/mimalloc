@@ -43,9 +43,9 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
     mi_heap_stat_increase(heap,normal[bin], 1);
   }
 #endif
-#if (MI_PADDING>0) && defined(MI_ENCODE_FREELIST)
-  mi_assert_internal((MI_PADDING % sizeof(mi_block_t*)) == 0);
-  mi_block_t* const padding = (mi_block_t*)((uint8_t*)block + page->xblock_size - MI_PADDING);
+#if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
+  mi_assert_internal((MI_PADDING_SIZE % sizeof(mi_block_t*)) == 0);
+  mi_block_t* const padding = (mi_block_t*)((uint8_t*)block + page->xblock_size - MI_PADDING_SIZE);
   mi_block_set_nextx(page, padding, block, page->key[0], page->key[1]);
 #endif
   return block;
@@ -53,39 +53,27 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 
 // allocate a small block
 extern inline mi_decl_allocator void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  mi_assert(size <= MI_SMALL_SIZE_MAX);
-  mi_page_t* page = _mi_heap_get_free_small_page(heap,size);
-  return _mi_page_malloc(heap, page, size);
+  mi_assert(size <= (MI_SMALL_SIZE_MAX - MI_PADDING_SIZE));
+  mi_page_t* page = _mi_heap_get_free_small_page(heap,size + MI_PADDING_SIZE);
+  void* p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE);
+  mi_assert_internal(p==NULL || mi_page_block_size(_mi_ptr_page(p)) >= (size + MI_PADDING_SIZE));
+  return p;
 }
 
 extern inline mi_decl_allocator void* mi_malloc_small(size_t size) mi_attr_noexcept {
-#if (MI_PADDING>0)
-  size += MI_PADDING;
-#endif
   return mi_heap_malloc_small(mi_get_default_heap(), size);
-}
-
-
-// zero initialized small block
-mi_decl_allocator void* mi_zalloc_small(size_t size) mi_attr_noexcept {
-  void* p = mi_malloc_small(size);
-  if (p != NULL) { memset(p, 0, size); }
-  return p;
 }
 
 // The main allocation function
 extern inline mi_decl_allocator void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   mi_assert(heap!=NULL);
   mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
-#if (MI_PADDING>0)
-  size += MI_PADDING;
-#endif
   void* p;
-  if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
+  if (mi_likely(size <= (MI_SMALL_SIZE_MAX - MI_PADDING_SIZE))) {
     p = mi_heap_malloc_small(heap, size);
   }
   else {
-    p = _mi_malloc_generic(heap, size);
+    p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE);
   }
   #if MI_STAT>1
   if (p != NULL) {
@@ -93,6 +81,7 @@ extern inline mi_decl_allocator void* mi_heap_malloc(mi_heap_t* heap, size_t siz
     mi_heap_stat_increase( heap, malloc, mi_good_size(size) );  // overestimate for aligned sizes
   }
   #endif
+  mi_assert_internal(p == NULL || mi_page_block_size(_mi_ptr_page(p)) >= (size + MI_PADDING_SIZE));
   return p;
 }
 
@@ -100,22 +89,32 @@ extern inline mi_decl_allocator void* mi_malloc(size_t size) mi_attr_noexcept {
   return mi_heap_malloc(mi_get_default_heap(), size);
 }
 
+
 void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
   // note: we need to initialize the whole block to zero, not just size
   // or the recalloc/rezalloc functions cannot safely expand in place (see issue #63)
   UNUSED_RELEASE(size);
   mi_assert_internal(p != NULL);
-  mi_assert_internal(mi_page_block_size(page) >= size); // size can be zero
+  mi_assert_internal(mi_page_block_size(page) >= (size + MI_PADDING_SIZE)); // size can be zero
   mi_assert_internal(_mi_ptr_page(p)==page);
   if (page->is_zero) {
     // already zero initialized memory?
     ((mi_block_t*)p)->next = 0;  // clear the free list pointer
-    mi_assert_expensive(mi_mem_is_zero(p, mi_page_block_size(page) - MI_PADDING));
+    mi_assert_expensive(mi_mem_is_zero(p, mi_page_block_size(page) - MI_PADDING_SIZE));
   }
   else {
     // otherwise memset
-    memset(p, 0, mi_page_block_size(page) - MI_PADDING);
+    memset(p, 0, mi_page_block_size(page) - MI_PADDING_SIZE);
   }
+}
+
+// zero initialized small block
+mi_decl_allocator void* mi_zalloc_small(size_t size) mi_attr_noexcept {
+  void* p = mi_malloc_small(size);
+  if (p != NULL) {
+    _mi_block_zero_init(_mi_ptr_page(p), p, size);  // todo: can we avoid getting the page again?
+  }
+  return p;
 }
 
 void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) {
@@ -182,9 +181,9 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 }
 #endif
 
-#if (MI_PADDING>0) && defined(MI_ENCODE_FREELIST)
+#if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
 static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
-  mi_block_t* const padding = (mi_block_t*)((uint8_t*)block + page->xblock_size - MI_PADDING);
+  mi_block_t* const padding = (mi_block_t*)((uint8_t*)block + page->xblock_size - MI_PADDING_SIZE);
   mi_block_t* const decoded = mi_block_nextx(page, padding, page->key[0], page->key[1]);
   if (decoded != block) {
     _mi_error_message(EFAULT, "buffer overflow in heap block %p: write after %zu bytes\n", block, page->xblock_size);
@@ -285,7 +284,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
 static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block)
 {
   #if (MI_DEBUG)
-  memset(block, MI_DEBUG_FREED, mi_page_block_size(page) - MI_PADDING);
+  memset(block, MI_DEBUG_FREED, mi_page_block_size(page) - MI_PADDING_SIZE);
   #endif
 
   // and push it on the free list
@@ -411,10 +410,7 @@ size_t mi_usable_size(const void* p) mi_attr_noexcept {
   if (p==NULL) return 0;
   const mi_segment_t* segment = _mi_ptr_segment(p);
   const mi_page_t* page = _mi_segment_page_of(segment, p);
-  size_t size = mi_page_block_size(page);
-#if defined(MI_PADDING)
-  size -= MI_PADDING;
-#endif
+  size_t size = mi_page_block_size(page) - MI_PADDING_SIZE;  
   if (mi_unlikely(mi_page_has_aligned(page))) {
     ptrdiff_t adjust = (uint8_t*)p - (uint8_t*)_mi_page_ptr_unalign(segment,page,p);
     mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);

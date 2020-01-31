@@ -54,15 +54,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ENCODE_FREELIST  1
 #endif
 
-// Reserve extra padding at the end of each block; must be a multiple of `sizeof(intptr_t)`!
+// Reserve extra padding at the end of each block; must be a multiple of `2*sizeof(intptr_t)`!
 // If free lists are encoded, the padding is checked if it was modified on free.
-#if (!defined(MI_PADDING)) 
-#if (MI_SECURE>=3 || MI_DEBUG>=1)
-#define MI_PADDING  MI_MAX_ALIGN_SIZE
+#if (!defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1))
+#define MI_PADDING    
+#endif
+
+#if defined(MI_PADDING)
+#define MI_PADDING_SIZE  (2*sizeof(intptr_t))
 #else
-#define MI_PADDING  0
+#define MI_PADDING_SIZE  0
 #endif
-#endif
+
 
 // ------------------------------------------------------
 // Platform specific values
