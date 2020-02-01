@@ -173,9 +173,9 @@ static bool _mi_heap_init(void) {
     memcpy(heap, &_mi_heap_empty, sizeof(*heap));
     heap->thread_id = _mi_thread_id();
     _mi_random_init(&heap->random);
-    heap->cookie = _mi_heap_random_next(heap) | 1;
-    heap->key[0] = _mi_heap_random_next(heap);
-    heap->key[1] = _mi_heap_random_next(heap);
+    heap->cookie  = _mi_heap_random_next(heap) | 1;
+    heap->keys[0] = _mi_heap_random_next(heap);
+    heap->keys[1] = _mi_heap_random_next(heap);
     heap->tld = tld;    
     tld->heap_backing = heap;
     tld->segments.stats = &tld->stats;
@@ -418,9 +418,9 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_verbose_message("process init: 0x%zx\n", _mi_heap_main.thread_id);
   _mi_random_init(&_mi_heap_main.random);
   #ifndef __APPLE__  // TODO: fix this? cannot update cookie if allocation already happened..
-  _mi_heap_main.cookie = _mi_heap_random_next(&_mi_heap_main);
-  _mi_heap_main.key[0] = _mi_heap_random_next(&_mi_heap_main);
-  _mi_heap_main.key[1] = _mi_heap_random_next(&_mi_heap_main);
+  _mi_heap_main.cookie  = _mi_heap_random_next(&_mi_heap_main);
+  _mi_heap_main.keys[0] = _mi_heap_random_next(&_mi_heap_main);
+  _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
   #endif
   mi_process_setup_auto_thread_done();
   _mi_os_init();

@@ -48,10 +48,11 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
   ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
   mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
-  padding->block = (uint32_t)(((uintptr_t)block >> MI_INTPTR_SHIFT) ^ page->key[0]);
-  padding->delta = (uint32_t)(delta ^ page->key[1]);
+  padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
+  padding->delta  = (uint32_t)(delta);
   uint8_t* fill = (uint8_t*)padding - delta;
-  for (ptrdiff_t i = 0; i < delta; i++) { fill[i] = MI_DEBUG_PADDING; }
+  const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
+  for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
 #endif
   return block;
 }
@@ -175,7 +176,7 @@ static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, con
 }
 
 static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
-  mi_block_t* n = mi_block_nextx(page, block, page->key[0], page->key[1]); // pretend it is freed, and get the decoded first field
+  mi_block_t* n = mi_block_nextx(page, block, page->keys); // pretend it is freed, and get the decoded first field
   if (((uintptr_t)n & (MI_INTPTR_SIZE-1))==0 &&  // quick check: aligned pointer?
       (n==NULL || mi_is_in_same_page(block, n))) // quick check: in same page or NULL?
   {
@@ -198,33 +199,35 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 // ---------------------------------------------------------------------------
 
 #if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
-static mi_padding_t mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* bsize) {
+static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
   *bsize = mi_page_usable_block_size(page);
   const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + *bsize);
-  mi_padding_t pad;
-  pad.block = padding->block ^ (uint32_t)page->key[0];
-  pad.delta = padding->delta ^ (uint32_t)page->key[1];
-  return pad;
+  *delta = padding->delta;
+  return ((uint32_t)mi_ptr_encode(page,block,page->keys) == padding->canary && *delta <= *bsize);
 }
 
 // Return the exact usable size of a block.
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block) {
   size_t bsize;
-  mi_padding_t pad = mi_page_decode_padding(page, block, &bsize);
-  return bsize - pad.delta;
+  size_t delta;
+  bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
+  mi_assert_internal(ok); mi_assert_internal(delta <= bsize);
+  return (ok ? bsize - delta : 0); 
 }
 
 static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, size_t* size, size_t* wrong) {
   size_t bsize;
-  const mi_padding_t pad = mi_page_decode_padding(page, block, &bsize);
+  size_t delta;
+  bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
   *size = *wrong = bsize;
-  if ((uint32_t)((uintptr_t)block >> MI_INTPTR_SHIFT) != pad.block) return false;
-  if (pad.delta > bsize) return false;  // can be equal for zero-sized allocation!
-  *size = bsize - pad.delta;
-  uint8_t* fill = (uint8_t*)block + bsize - pad.delta;
-  for (uint32_t i = 0; i < pad.delta; i++) {
+  if (!ok) return false;
+  mi_assert_internal(bsize >= delta);
+  *size = bsize - delta;
+  uint8_t* fill = (uint8_t*)block + bsize - delta;
+  const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // check at most the first N padding bytes
+  for (size_t i = 0; i < maxpad; i++) {
     if (fill[i] != MI_DEBUG_PADDING) {
-      *wrong = bsize - pad.delta + i;
+      *wrong = bsize - delta + i;
       return false;
     }
   }
@@ -245,13 +248,16 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
 // so it will later not trigger an overflow error in `mi_free_block`.
 static void mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
   size_t bsize;
-  mi_padding_t pad = mi_page_decode_padding(page, block, &bsize);
-  if ((bsize - pad.delta) >= min_size) return;
+  size_t delta;
+  bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
+  mi_assert_internal(ok);
+  if (!ok || (bsize - delta) >= min_size) return;  // usually already enough space
   mi_assert_internal(bsize >= min_size);
-  ptrdiff_t delta = (bsize - min_size);
-  mi_assert_internal(delta >= 0 && delta < (ptrdiff_t)bsize);
+  if (bsize < min_size) return;  // should never happen
+  size_t new_delta = (bsize - min_size);
+  mi_assert_internal(new_delta < bsize);
   mi_padding_t* padding = (mi_padding_t*)((uint8_t*)block + bsize);
-  padding->delta = (uint32_t)(delta ^ page->key[1]);
+  padding->delta = (uint32_t)new_delta;
 }
 #else 
 static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
@@ -348,7 +354,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       mi_block_t* dfree;
       do {
         dfree = mi_atomic_read_ptr_relaxed(mi_block_t,&heap->thread_delayed_free);
-        mi_block_set_nextx(heap,block,dfree, heap->key[0], heap->key[1]);
+        mi_block_set_nextx(heap,block,dfree, heap->keys);
       } while (!mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, block, dfree));
     }
 

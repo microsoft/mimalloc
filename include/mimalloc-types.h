@@ -48,24 +48,23 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
+// Reserve extra padding at the end of each block to be more resilient against heap block overflows.
+// The padding can detect byte-precise buffer overflow on free.
+#if !defined(MI_PADDING) && (MI_DEBUG>=1)
+#define MI_PADDING  1
+#endif
+
+
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
-#if (MI_SECURE>=3 || MI_DEBUG>=1)
+#if (MI_SECURE>=3 || MI_DEBUG>=1 || defined(MI_PADDING))
 #define MI_ENCODE_FREELIST  1
 #endif
-
-// Reserve extra padding at the end of each block to be more resilient against heap block overflows.
-// If free lists are encoded, the padding can detect byte-precise buffer overflow on free.
-#if (!defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1))
-#define MI_PADDING     
-#endif
-
 
 
 // ------------------------------------------------------
 // Platform specific values
 // ------------------------------------------------------
-
 
 // ------------------------------------------------------
 // Size of a pointer.
@@ -218,7 +217,7 @@ typedef struct mi_page_s {
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   #ifdef MI_ENCODE_FREELIST
-  uintptr_t             key[2];            // two random keys to encode the free lists (see `_mi_block_next`)
+  uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`)
   #endif
   uint32_t              used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
   uint32_t              xblock_size;       // size available in each block (always `>0`) 
@@ -306,8 +305,8 @@ typedef struct mi_random_cxt_s {
 // In debug mode there is a padding stucture at the end of the blocks to check for buffer overflows
 #if defined(MI_PADDING)
 typedef struct mi_padding_s {
-  uint32_t block;  // (encoded) lower 32 bits of the block address. (to check validity of the block)
-  uint32_t delta;  // (encoded) padding bytes before the block. (mi_usable_size(p) - decode(delta) == exact allocated bytes)
+  uint32_t canary; // encoded block value to check validity of the padding (in case of overflow)
+  uint32_t delta;  // padding bytes before the block. (mi_usable_size(p) - delta == exact allocated bytes)
 } mi_padding_t;
 #define MI_PADDING_SIZE   (sizeof(mi_padding_t))
 #define MI_PADDING_WSIZE  ((MI_PADDING_SIZE + MI_INTPTR_SIZE - 1) / MI_INTPTR_SIZE)
@@ -327,7 +326,7 @@ struct mi_heap_s {
   volatile _Atomic(mi_block_t*) thread_delayed_free;
   uintptr_t             thread_id;                           // thread this heap belongs too
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
-  uintptr_t             key[2];                              // two random keys used to encode the `thread_delayed_free` list
+  uintptr_t             keys[2];                             // two random keys used to encode the `thread_delayed_free` list
   mi_random_ctx_t       random;                              // random number context used for secure allocation
   size_t                page_count;                          // total number of pages in the `pages` queues.
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages

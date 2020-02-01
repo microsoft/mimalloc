@@ -281,7 +281,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
 
   // and free them all
   while(block != NULL) {
-    mi_block_t* next = mi_block_nextx(heap,block, heap->key[0], heap->key[1]);
+    mi_block_t* next = mi_block_nextx(heap,block, heap->keys);
     // use internal free instead of regular one to keep stats etc correct
     if (!_mi_free_delayed_block(block)) {
       // we might already start delayed freeing while another thread has not yet
@@ -289,7 +289,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
       mi_block_t* dfree;
       do {
         dfree = mi_atomic_read_ptr_relaxed(mi_block_t,&heap->thread_delayed_free);
-        mi_block_set_nextx(heap, block, dfree, heap->key[0], heap->key[1]);
+        mi_block_set_nextx(heap, block, dfree, heap->keys);
       } while (!mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, block, dfree));
     }
     block = next;
@@ -348,7 +348,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
 
 #if MI_DEBUG>1
   // check there are no references left..
-  for (mi_block_t* block = (mi_block_t*)pheap->thread_delayed_free; block != NULL; block = mi_block_nextx(pheap, block, pheap->key[0], pheap->key[1])) {
+  for (mi_block_t* block = (mi_block_t*)pheap->thread_delayed_free; block != NULL; block = mi_block_nextx(pheap, block, pheap->keys)) {
     mi_assert_internal(_mi_ptr_page(block) != page);
   }
 #endif
@@ -609,8 +609,8 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
   #ifdef MI_ENCODE_FREELIST
-  page->key[0] = _mi_heap_random_next(heap);
-  page->key[1] = _mi_heap_random_next(heap);
+  page->keys[0] = _mi_heap_random_next(heap);
+  page->keys[1] = _mi_heap_random_next(heap);
   #endif
   page->is_zero = page->is_zero_init;
 
@@ -623,8 +623,8 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->retire_expire == 0);
   mi_assert_internal(!mi_page_has_aligned(page));
   #if (MI_ENCODE_FREELIST)
-  mi_assert_internal(page->key[0] != 0);
-  mi_assert_internal(page->key[1] != 0);
+  mi_assert_internal(page->keys[0] != 0);
+  mi_assert_internal(page->keys[1] != 0);
   #endif
   mi_assert_expensive(mi_page_is_valid_init(page));
 
