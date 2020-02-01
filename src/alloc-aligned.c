@@ -25,7 +25,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
   const uintptr_t align_mask = alignment-1;  // for any x, `(x & align_mask) == (x % alignment)`
   
   // try if there is a small block available with just the right alignment
-  if (mi_likely(size <= (MI_SMALL_SIZE_MAX - MI_PADDING_SIZE))) {
+  if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
     mi_page_t* page = _mi_heap_get_free_small_page(heap,size + MI_PADDING_SIZE);
     const bool is_aligned = (((uintptr_t)page->free+offset) & align_mask)==0;
     if (mi_likely(page->free != NULL && is_aligned))

@@ -752,7 +752,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
   mi_assert_internal(_mi_bin(block_size) == MI_BIN_HUGE);
   mi_page_t* page = mi_page_fresh_alloc(heap,NULL,block_size);
   if (page != NULL) {
-    const size_t bsize = mi_page_block_size(page);
+    const size_t bsize = mi_page_usable_block_size(page);
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(bsize >= size);
     mi_assert_internal(_mi_page_segment(page)->page_kind==MI_PAGE_HUGE);
@@ -761,11 +761,11 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
     mi_page_set_heap(page, NULL);
 
     if (bsize > MI_HUGE_OBJ_SIZE_MAX) {
-      _mi_stat_increase(&heap->tld->stats.giant, block_size);
+      _mi_stat_increase(&heap->tld->stats.giant, bsize);
       _mi_stat_counter_increase(&heap->tld->stats.giant_count, 1);
     }
     else {
-      _mi_stat_increase(&heap->tld->stats.huge, block_size);
+      _mi_stat_increase(&heap->tld->stats.huge, bsize);
       _mi_stat_counter_increase(&heap->tld->stats.huge_count, 1);
     }
   }

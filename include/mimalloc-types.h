@@ -54,16 +54,17 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ENCODE_FREELIST  1
 #endif
 
-// Reserve extra padding at the end of each block; must be a multiple of `2*sizeof(intptr_t)`!
+// Reserve extra padding at the end of each block to be more resilient against heap block overflows.
 // If free lists are encoded, the padding is checked if it was modified on free.
 #if (!defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1))
-#define MI_PADDING    
+#define MI_PADDING     
 #endif
 
+// The padding size must be at least `sizeof(intptr_t)`!
 #if defined(MI_PADDING)
-#define MI_PADDING_SIZE  (2*sizeof(intptr_t))
+#define MI_PADDING_WSIZE  1
 #else
-#define MI_PADDING_SIZE  0
+#define MI_PADDING_WSIZE  0
 #endif
 
 
@@ -94,10 +95,12 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define MI_INTPTR_SIZE  (1<<MI_INTPTR_SHIFT)
 #define MI_INTPTR_BITS  (MI_INTPTR_SIZE*8)
+#define MI_PADDING_SIZE (MI_PADDING_WSIZE * MI_INTPTR_SIZE)
 
 #define KiB     ((size_t)1024)
 #define MiB     (KiB*KiB)
 #define GiB     (MiB*KiB)
+
 
 // ------------------------------------------------------
 // Main internal data-structures
@@ -306,19 +309,20 @@ typedef struct mi_random_cxt_s {
   int      output_available;
 } mi_random_ctx_t;
 
+#define MI_PAGES_DIRECT  (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1)
 
 // A heap owns a set of pages.
 struct mi_heap_s {
   mi_tld_t*             tld;
-  mi_page_t*            pages_free_direct[MI_SMALL_WSIZE_MAX + 2];   // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
-  mi_page_queue_t       pages[MI_BIN_FULL + 1];                      // queue of pages for each size class (or "bin")
+  mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
+  mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
   volatile _Atomic(mi_block_t*) thread_delayed_free;
-  uintptr_t             thread_id;                                   // thread this heap belongs too
-  uintptr_t             cookie;                                      // random cookie to verify pointers (see `_mi_ptr_cookie`)
-  uintptr_t             key[2];                                      // twb random keys used to encode the `thread_delayed_free` list
-  mi_random_ctx_t       random;                                      // random number context used for secure allocation
-  size_t                page_count;                                  // total number of pages in the `pages` queues.
-  bool                  no_reclaim;                                  // `true` if this heap should not reclaim abandoned pages
+  uintptr_t             thread_id;                           // thread this heap belongs too
+  uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
+  uintptr_t             key[2];                              // two random keys used to encode the `thread_delayed_free` list
+  mi_random_ctx_t       random;                              // random number context used for secure allocation
+  size_t                page_count;                          // total number of pages in the `pages` queues.
+  bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
 };
 
 

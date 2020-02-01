@@ -310,8 +310,10 @@ static inline uintptr_t _mi_ptr_cookie(const void* p) {
 ----------------------------------------------------------- */
 
 static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t size) {
-  mi_assert_internal(size <= MI_SMALL_SIZE_MAX);
-  return heap->pages_free_direct[_mi_wsize_from_size(size)];
+  mi_assert_internal(size <= (MI_SMALL_SIZE_MAX + MI_PADDING_SIZE));
+  const size_t idx = _mi_wsize_from_size(size);
+  mi_assert_internal(idx < MI_PAGES_DIRECT);
+  return heap->pages_free_direct[idx];
 }
 
 // Get the page belonging to a certain size class
@@ -374,6 +376,12 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
     return psize;
   }
 }
+
+// Get the client usable block size of a page (without padding etc)
+static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
+  return mi_page_block_size(page) - MI_PADDING_SIZE;
+}
+
 
 // Thread free access
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
