@@ -314,8 +314,10 @@ static inline uintptr_t _mi_ptr_cookie(const void* p) {
 ----------------------------------------------------------- */
 
 static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t size) {
-  mi_assert_internal(size <= MI_SMALL_SIZE_MAX);
-  return heap->pages_free_direct[_mi_wsize_from_size(size)];
+  mi_assert_internal(size <= (MI_SMALL_SIZE_MAX + MI_PADDING_SIZE));
+  const size_t idx = _mi_wsize_from_size(size);
+  mi_assert_internal(idx < MI_PAGES_DIRECT);
+  return heap->pages_free_direct[idx];
 }
 
 // Get the page belonging to a certain size class
@@ -378,6 +380,13 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
     return psize;
   }
 }
+
+// Get the usable block size of a page without fixed padding.
+// This may still include internal padding due to alignment and rounding up size classes.
+static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
+  return mi_page_block_size(page) - MI_PADDING_SIZE;
+}
+
 
 // Thread free access
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
@@ -514,30 +523,37 @@ static inline uintptr_t mi_rotr(uintptr_t x, uintptr_t shift) {
   return ((x >> shift) | (x << (MI_INTPTR_BITS - shift)));
 }
 
-static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, uintptr_t key1, uintptr_t key2 ) {
+static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
+  void* p = (void*)(mi_rotr(x - keys[0], keys[0]) ^ keys[1]);
+  return (mi_unlikely(p==null) ? NULL : p);
+}
+
+static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const uintptr_t* keys) {
+  uintptr_t x = (uintptr_t)(mi_unlikely(p==NULL) ? null : p);
+  return mi_rotl(x ^ keys[1], keys[0]) + keys[0];
+}
+
+static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, const uintptr_t* keys ) {
   #ifdef MI_ENCODE_FREELIST
-  mi_block_t* b = (mi_block_t*)(mi_rotr(block->next - key1, key1) ^ key2);
-  if (mi_unlikely((void*)b==null)) { b = NULL; }
-  return b;
+  return (mi_block_t*)mi_ptr_decode(null, block->next, keys);
   #else
-  UNUSED(key1); UNUSED(key2); UNUSED(null);
+  UNUSED(keys); UNUSED(null);
   return (mi_block_t*)block->next;
   #endif
 }
 
-static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, uintptr_t key1, uintptr_t key2) {
+static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, const uintptr_t* keys) {
   #ifdef MI_ENCODE_FREELIST
-  if (mi_unlikely(next==NULL)) { next = (mi_block_t*)null; }
-  block->next = mi_rotl((uintptr_t)next ^ key2, key1) + key1;
+  block->next = mi_ptr_encode(null, next, keys);
   #else
-  UNUSED(key1); UNUSED(key2); UNUSED(null);
+  UNUSED(keys); UNUSED(null);
   block->next = (mi_encoded_t)next;
   #endif
 }
 
 static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t* block) {
   #ifdef MI_ENCODE_FREELIST
-  mi_block_t* next = mi_block_nextx(page,block,page->key[0],page->key[1]);
+  mi_block_t* next = mi_block_nextx(page,block,page->keys);
   // check for free list corruption: is `next` at least in the same page?
   // TODO: check if `next` is `page->block_size` aligned?
   if (mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next))) {
@@ -547,16 +563,16 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   return next;
   #else
   UNUSED(page);
-  return mi_block_nextx(page,block,0,0);
+  return mi_block_nextx(page,block,NULL);
   #endif
 }
 
 static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, const mi_block_t* next) {
   #ifdef MI_ENCODE_FREELIST
-  mi_block_set_nextx(page,block,next, page->key[0], page->key[1]);
+  mi_block_set_nextx(page,block,next, page->keys);
   #else
   UNUSED(page);
-  mi_block_set_nextx(page,block, next,0,0);
+  mi_block_set_nextx(page,block,next,NULL);
   #endif
 }
 

@@ -247,6 +247,7 @@ static void mi_page_reset(mi_segment_t* segment, mi_page_t* page, size_t size, m
 static void mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size, mi_segments_tld_t* tld)
 {
   mi_assert_internal(page->is_reset);
+  mi_assert_internal(page->is_committed);
   mi_assert_internal(!segment->mem_is_fixed);
   page->is_reset = false;
   size_t psize;
@@ -778,10 +779,14 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, bool a
   // note: must come after setting `segment_in_use` to false but before block_size becomes 0
   //mi_page_reset(segment, page, 0 /*used_size*/, tld);
 
-  // zero the page data, but not the segment fields and block_size (for page size calculations)
+  // zero the page data, but not the segment fields and capacity, and block_size (for page size calculations)
   uint32_t block_size = page->xblock_size;
+  uint16_t capacity = page->capacity;
+  uint16_t reserved = page->reserved;
   ptrdiff_t ofs = offsetof(mi_page_t,capacity);
   memset((uint8_t*)page + ofs, 0, sizeof(*page) - ofs);
+  page->capacity = capacity;
+  page->reserved = reserved;
   page->xblock_size = block_size;
   segment->used--;
 
@@ -789,6 +794,9 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, bool a
   if (allow_reset) {  
     mi_pages_reset_add(segment, page, tld);
   }
+
+  page->capacity = 0;  // after reset there can be zero'd now
+  page->reserved = 0;
 }
 
 void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
@@ -1291,7 +1299,7 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
     page->is_zero = false;
     mi_assert(page->used == 0);
     mi_segments_tld_t* tld = &heap->tld->segments;
-    const size_t bsize = mi_page_block_size(page);
+    const size_t bsize = mi_page_usable_block_size(page);
     if (bsize > MI_HUGE_OBJ_SIZE_MAX) {
       _mi_stat_decrease(&tld->stats->giant, bsize); 
     }

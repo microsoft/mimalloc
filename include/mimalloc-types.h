@@ -12,6 +12,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdint.h>   // uintptr_t, uint16_t, etc
 #include <mimalloc-atomic.h>  // _Atomic
 
+// Minimal alignment necessary. On most platforms 16 bytes are needed
+// due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
+#define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
+
 // ------------------------------------------------------
 // Variants
 // ------------------------------------------------------
@@ -44,16 +48,23 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
+// Reserve extra padding at the end of each block to be more resilient against heap block overflows.
+// The padding can detect byte-precise buffer overflow on free.
+#if !defined(MI_PADDING) && (MI_DEBUG>=1)
+#define MI_PADDING  1
+#endif
+
+
 // Encoded free lists allow detection of corrupted free lists
-// and can detect buffer overflows and double `free`s.
-#if (MI_SECURE>=3 || MI_DEBUG>=1)
+// and can detect buffer overflows, modify after free, and double `free`s.
+#if (MI_SECURE>=3 || MI_DEBUG>=1 || defined(MI_PADDING))
 #define MI_ENCODE_FREELIST  1
 #endif
+
 
 // ------------------------------------------------------
 // Platform specific values
 // ------------------------------------------------------
-
 
 // ------------------------------------------------------
 // Size of a pointer.
@@ -81,6 +92,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define KiB     ((size_t)1024)
 #define MiB     (KiB*KiB)
 #define GiB     (MiB*KiB)
+
 
 // ------------------------------------------------------
 // Main internal data-structures
@@ -112,10 +124,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_LARGE_OBJ_SIZE_MAX             (MI_LARGE_PAGE_SIZE/2)   // 2mb
 #define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)
 #define MI_HUGE_OBJ_SIZE_MAX              (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)        // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
-
-// Minimal alignment necessary. On most platforms 16 bytes are needed
-// due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
-#define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)
@@ -209,7 +217,7 @@ typedef struct mi_page_s {
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   #ifdef MI_ENCODE_FREELIST
-  uintptr_t             key[2];            // two random keys to encode the free lists (see `_mi_block_next`)
+  uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`)
   #endif
   uint32_t              used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
   uint32_t              xblock_size;       // size available in each block (always `>0`) 
@@ -294,18 +302,34 @@ typedef struct mi_random_cxt_s {
 } mi_random_ctx_t;
 
 
+// In debug mode there is a padding stucture at the end of the blocks to check for buffer overflows
+#if defined(MI_PADDING)
+typedef struct mi_padding_s {
+  uint32_t canary; // encoded block value to check validity of the padding (in case of overflow)
+  uint32_t delta;  // padding bytes before the block. (mi_usable_size(p) - delta == exact allocated bytes)
+} mi_padding_t;
+#define MI_PADDING_SIZE   (sizeof(mi_padding_t))
+#define MI_PADDING_WSIZE  ((MI_PADDING_SIZE + MI_INTPTR_SIZE - 1) / MI_INTPTR_SIZE)
+#else
+#define MI_PADDING_SIZE   0
+#define MI_PADDING_WSIZE  0
+#endif
+
+#define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1)
+
+
 // A heap owns a set of pages.
 struct mi_heap_s {
   mi_tld_t*             tld;
-  mi_page_t*            pages_free_direct[MI_SMALL_WSIZE_MAX + 2];   // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
-  mi_page_queue_t       pages[MI_BIN_FULL + 1];                      // queue of pages for each size class (or "bin")
+  mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
+  mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
   volatile _Atomic(mi_block_t*) thread_delayed_free;
-  uintptr_t             thread_id;                                   // thread this heap belongs too
-  uintptr_t             cookie;                                      // random cookie to verify pointers (see `_mi_ptr_cookie`)
-  uintptr_t             key[2];                                      // twb random keys used to encode the `thread_delayed_free` list
-  mi_random_ctx_t       random;                                      // random number context used for secure allocation
-  size_t                page_count;                                  // total number of pages in the `pages` queues.
-  bool                  no_reclaim;                                  // `true` if this heap should not reclaim abandoned pages
+  uintptr_t             thread_id;                           // thread this heap belongs too
+  uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
+  uintptr_t             keys[2];                             // two random keys used to encode the `thread_delayed_free` list
+  mi_random_ctx_t       random;                              // random number context used for secure allocation
+  size_t                page_count;                          // total number of pages in the `pages` queues.
+  bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
 };
 
 
@@ -316,7 +340,7 @@ struct mi_heap_s {
 
 #define MI_DEBUG_UNINIT     (0xD0)
 #define MI_DEBUG_FREED      (0xDF)
-
+#define MI_DEBUG_PADDING    (0xDE)
 
 #if (MI_DEBUG)
 // use our own assertion to print without memory allocation
