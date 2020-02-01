@@ -110,8 +110,8 @@ void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
   mi_assert_internal(p != NULL);
   mi_assert_internal(mi_usable_size(p) >= size); // size can be zero
   mi_assert_internal(_mi_ptr_page(p)==page);
-  if (page->is_zero) {
-    // already zero initialized memory?
+  if (page->is_zero && size > sizeof(mi_block_t)) {
+    // already zero initialized memory
     ((mi_block_t*)p)->next = 0;  // clear the free list pointer
     mi_assert_expensive(mi_mem_is_zero(p, mi_usable_size(p)));
   }
