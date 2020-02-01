@@ -49,23 +49,17 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Encoded free lists allow detection of corrupted free lists
-// and can detect buffer overflows and double `free`s.
+// and can detect buffer overflows, modify after free, and double `free`s.
 #if (MI_SECURE>=3 || MI_DEBUG>=1)
 #define MI_ENCODE_FREELIST  1
 #endif
 
 // Reserve extra padding at the end of each block to be more resilient against heap block overflows.
-// If free lists are encoded, the padding is checked if it was modified on free.
+// If free lists are encoded, the padding can detect byte-precise buffer overflow on free.
 #if (!defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1))
 #define MI_PADDING     
 #endif
 
-// The padding size must be at least `sizeof(intptr_t)`!
-#if defined(MI_PADDING)
-#define MI_PADDING_WSIZE  1
-#else
-#define MI_PADDING_WSIZE  0
-#endif
 
 
 // ------------------------------------------------------
@@ -95,7 +89,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define MI_INTPTR_SIZE  (1<<MI_INTPTR_SHIFT)
 #define MI_INTPTR_BITS  (MI_INTPTR_SIZE*8)
-#define MI_PADDING_SIZE (MI_PADDING_WSIZE * MI_INTPTR_SIZE)
 
 #define KiB     ((size_t)1024)
 #define MiB     (KiB*KiB)
@@ -309,7 +302,22 @@ typedef struct mi_random_cxt_s {
   int      output_available;
 } mi_random_ctx_t;
 
-#define MI_PAGES_DIRECT  (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1)
+
+// In debug mode there is a padding stucture at the end of the blocks to check for buffer overflows
+#if defined(MI_PADDING)
+typedef struct mi_padding_s {
+  uint32_t block;  // (encoded) lower 32 bits of the block address. (to check validity of the block)
+  uint32_t delta;  // (encoded) padding bytes before the block. (mi_usable_size(p) - decode(delta) == exact allocated bytes)
+} mi_padding_t;
+#define MI_PADDING_SIZE   (sizeof(mi_padding_t))
+#define MI_PADDING_WSIZE  ((MI_PADDING_SIZE + MI_INTPTR_SIZE - 1) / MI_INTPTR_SIZE)
+#else
+#define MI_PADDING_SIZE   0
+#define MI_PADDING_WSIZE  0
+#endif
+
+#define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1)
+
 
 // A heap owns a set of pages.
 struct mi_heap_s {
@@ -333,7 +341,7 @@ struct mi_heap_s {
 
 #define MI_DEBUG_UNINIT     (0xD0)
 #define MI_DEBUG_FREED      (0xDF)
-
+#define MI_DEBUG_PADDING    (0xDE)
 
 #if (MI_DEBUG)
 // use our own assertion to print without memory allocation

@@ -19,7 +19,7 @@ int main() {
   // double_free1();
   // double_free2();
   // corrupt_free();
-  //block_overflow1();
+  // block_overflow1();
 
   void* p1 = malloc(78);
   void* p2 = malloc(24);
@@ -44,8 +44,8 @@ int main() {
 }
 
 static void block_overflow1() {
-  void* p = mi_malloc(16);
-  memset(p, 0, 17);
+  uint8_t* p = (uint8_t*)mi_malloc(17);
+  p[18] = 0;
   free(p);
 }
 

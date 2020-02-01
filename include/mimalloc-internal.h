@@ -377,7 +377,8 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
   }
 }
 
-// Get the client usable block size of a page (without padding etc)
+// Get the usable block size of a page without fixed padding.
+// This may still include internal padding due to alignment and rounding up size classes.
 static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
   return mi_page_block_size(page) - MI_PADDING_SIZE;
 }
