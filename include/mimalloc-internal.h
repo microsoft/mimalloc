@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-types.h"
 
 #if defined(MI_MALLOC_OVERRIDE) 
-#if defined(__APPLE__) || defined(__linux__)
+#if defined(__APPLE__)
 #include <pthread.h>
 #define MI_TLS_PTHREADS
 #elif (defined(__OpenBSD__) || defined(__DragonFly__))
