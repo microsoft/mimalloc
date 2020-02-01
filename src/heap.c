@@ -138,6 +138,9 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   // (if abandoning, after this there are no more thread-delayed references into the pages.)
   _mi_heap_delayed_free(heap);
 
+  // collect retired pages
+  _mi_heap_collect_retired(heap, collect >= MI_FORCE);
+
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_read_ptr(mi_block_t,&heap->thread_delayed_free) == NULL );
@@ -194,9 +197,9 @@ mi_heap_t* mi_heap_new(void) {
   heap->tld = bheap->tld;
   heap->thread_id = _mi_thread_id();
   _mi_random_split(&bheap->random, &heap->random);
-  heap->cookie = _mi_heap_random_next(heap) | 1;
-  heap->key[0] = _mi_heap_random_next(heap);
-  heap->key[1] = _mi_heap_random_next(heap);
+  heap->cookie  = _mi_heap_random_next(heap) | 1;
+  heap->keys[0] = _mi_heap_random_next(heap);
+  heap->keys[1] = _mi_heap_random_next(heap);
   heap->no_reclaim = true;  // don't reclaim abandoned pages or otherwise destroy is unsafe
   return heap;
 }

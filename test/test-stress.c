@@ -20,14 +20,14 @@ terms of the MIT license.
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-// #include <mimalloc.h>
+#include <mimalloc.h>
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
 // argument defaults
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 10;      // scaling factor
-static int ITER    = 50;      // N full iterations destructing and re-creating all threads
+static int ITER    =  5;      // N full iterations destructing and re-creating all threads
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int SCALE   = 100;  // scaling factor
@@ -38,7 +38,7 @@ static bool   allow_large_objects = true;    // allow very large objects?
 static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
 
 
-#ifndef USE_STD_MALLOC
+#ifdef USE_STD_MALLOC
 #define custom_calloc(n,s)    calloc(n,s)
 #define custom_realloc(p,s)   realloc(p,s)
 #define custom_free(p)        free(p)

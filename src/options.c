@@ -53,7 +53,7 @@ static mi_option_desc_t options[_mi_option_last] =
   // stable options
   { MI_DEBUG, UNINIT, MI_OPTION(show_errors) },
   { 0, UNINIT, MI_OPTION(show_stats) },
-  { 1, UNINIT, MI_OPTION(verbose) },
+  { 0, UNINIT, MI_OPTION(verbose) },
 
   // the following options are experimental and not all combinations make sense.
   { 1, UNINIT, MI_OPTION(eager_commit) },        // commit on demand
@@ -331,6 +331,14 @@ static volatile _Atomic(void*) mi_error_arg;     // = NULL
 
 static void mi_error_default(int err) {
   UNUSED(err);
+#if (MI_DEBUG>0) 
+  if (err==EFAULT) {
+    #ifdef _MSC_VER
+    __debugbreak();
+    #endif
+    abort();
+  }
+#endif
 #if (MI_SECURE>0)
   if (err==EFAULT) {  // abort on serious errors in secure mode (corrupted meta-data)
     abort();

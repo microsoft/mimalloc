@@ -47,16 +47,19 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
   // Note: The spec dictates we should not modify `*p` on an error. (issue#27)
   // <http://man7.org/linux/man-pages/man3/posix_memalign.3.html>
   if (p == NULL) return EINVAL;
-  if (alignment % sizeof(void*) != 0) return EINVAL;      // natural alignment
+  if (alignment % sizeof(void*) != 0) return EINVAL;   // natural alignment
   if (!_mi_is_power_of_two(alignment)) return EINVAL;  // not a power of 2
-  void* q = mi_malloc_aligned(size, alignment);
+  void* q = (alignment <= MI_MAX_ALIGN_SIZE ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
   if (q==NULL && size != 0) return ENOMEM;
+  mi_assert_internal(((uintptr_t)q % alignment) == 0);
   *p = q;
   return 0;
 }
 
 void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept {
-  return mi_malloc_aligned(size, alignment);
+  void* p = (alignment <= MI_MAX_ALIGN_SIZE ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
+  mi_assert_internal(((uintptr_t)p % alignment) == 0);
+  return p;
 }
 
 void* mi_valloc(size_t size) mi_attr_noexcept {
@@ -73,7 +76,9 @@ void* mi_pvalloc(size_t size) mi_attr_noexcept {
 void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept {
   if (alignment==0 || !_mi_is_power_of_two(alignment)) return NULL; 
   if ((size&(alignment-1)) != 0) return NULL; // C11 requires integral multiple, see <https://en.cppreference.com/w/c/memory/aligned_alloc>
-  return mi_malloc_aligned(size, alignment);
+  void* p = (alignment <= MI_MAX_ALIGN_SIZE ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
+  mi_assert_internal(((uintptr_t)p % alignment) == 0);
+  return p;
 }
 
 void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  // BSD
