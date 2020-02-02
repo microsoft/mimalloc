@@ -107,6 +107,8 @@ mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 #define tld_main_stats  ((mi_stats_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,stats)))
 #define tld_main_os     ((mi_os_tld_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,os)))
 
+extern mi_heap_t _mi_heap_main;
+
 static mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main,
@@ -144,6 +146,11 @@ static void mi_heap_main_init(void) {
     _mi_heap_main.keys[0] = _mi_heap_random_next(&_mi_heap_main);
     _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
   }
+}
+
+mi_heap_t* _mi_heap_main_get(void) {
+  mi_heap_main_init();
+  return &_mi_heap_main;
 }
 
 
@@ -333,9 +340,11 @@ static void _mi_thread_done(mi_heap_t* heap) {
 
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   mi_assert_internal(heap != NULL);
-  #if defined(MI_TLS_OSX_FAST)
-  mi_tls_osx_fast_set(heap);
-  #elif defined(MI_TLS_PTHREADS)
+  #if defined(MI_TLS_SLOT)
+  mi_tls_slot_set(MI_TLS_SLOT,heap);
+  #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
+  *mi_tls_pthread_heap_slot() = heap;
+  #elif defined(MI_TLS_PTHREAD)
   // we use _mi_heap_default_key
   #else
   _mi_heap_default = heap;
@@ -406,13 +415,16 @@ static void mi_allocator_done() {
 
 // Called once by the process loader
 static void mi_process_load(void) {
+  mi_heap_main_init();
+  #if defined(MI_TLS_RECURSE_GUARD)
   volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
   UNUSED(dummy);
+  #endif
   os_preloading = false;  
   atexit(&mi_process_done);
   _mi_options_init();  
   mi_process_init();
-  //mi_stats_reset();
+  //mi_stats_reset();-
   if (mi_redirected) _mi_verbose_message("malloc is redirected.\n");
 
   // show message from the redirector (if present)
