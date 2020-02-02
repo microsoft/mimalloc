@@ -192,7 +192,7 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
   if (was_committed) _mi_stat_decrease(&stats->committed, size);
   _mi_stat_decrease(&stats->reserved, size);
   if (err) {
-#pragma warning(suppress:4996)
+    #pragma warning(suppress:4996)
     _mi_warning_message("munmap failed: %s, addr 0x%8li, size %lu\n", strerror(errno), (size_t)addr, size);
     return false;
   }
@@ -215,9 +215,9 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   // on modern Windows try use VirtualAlloc2 for aligned allocation
   if (try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
-    MEM_ADDRESS_REQUIREMENTS reqs = { 0 };
+    MEM_ADDRESS_REQUIREMENTS reqs = { 0, 0, 0 };
     reqs.Alignment = try_alignment;
-    MEM_EXTENDED_PARAMETER param = { 0 };
+    MEM_EXTENDED_PARAMETER param = { {0, 0}, {0} };
     param.Type = MemExtendedParameterAddressRequirements;
     param.Pointer = &reqs;
     return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
@@ -285,6 +285,7 @@ static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int pr
   }
   #else
   UNUSED(try_alignment);
+  UNUSED(mi_os_get_aligned_hint);
   #endif
   if (p==NULL) {
     p = mmap(addr,size,protect_flags,flags,fd,0);
@@ -827,7 +828,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
   mi_win_enable_large_os_pages();
 
   #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
-  MEM_EXTENDED_PARAMETER params[3] = { {0,0},{0,0},{0,0} };
+  MEM_EXTENDED_PARAMETER params[3] = { {{0,0},{0}},{{0,0},{0}},{{0,0},{0}} };
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
   static bool mi_huge_pages_available = true;
   if (pNtAllocateVirtualMemoryEx != NULL && mi_huge_pages_available) {

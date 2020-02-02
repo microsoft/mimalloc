@@ -9,7 +9,6 @@ terms of the MIT license. A copy of the license can be found in the file
 // mi prefixed publi definitions of various Posix, Unix, and C++ functions
 // for convenience and used when overriding these functions.
 // ------------------------------------------------------------------------
-
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
