@@ -25,11 +25,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #if (__cplusplus >= 201703)
-#define mi_decl_nodiscard   [[nodiscard]]
-#elif (__GNUC__ >= 4)       // includes clang and icc
-#define mi_decl_nodiscard   __attribute__((warn_unused_result))
+#define mi_decl_nodiscard      [[nodiscard]]
+#elif (__GNUC__ >= 4)         
+#define mi_decl_nodiscard      __attribute__((warn_unused_result))
 #elif (_MSC_VER >= 1700)
-#define mi_decl_nodiscard   _Check_return_
+#define mi_decl_nodiscard      _Check_return_
 #else 
 #define mi_decl_nodiscard 
 #endif 
@@ -325,10 +325,10 @@ mi_decl_export void  mi_option_set_default(mi_option_t option, long value);
 
 mi_decl_nodiscard mi_decl_export size_t mi_malloc_size(const void* p) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept;
-mi_decl_export void   mi_cfree(void* p) mi_attr_noexcept;
-mi_decl_export void*  mi__expand(void* p, size_t newsize) mi_attr_noexcept;
+mi_decl_export void  mi_cfree(void* p) mi_attr_noexcept;
+mi_decl_export void* mi__expand(void* p, size_t newsize) mi_attr_noexcept;
 
-mi_decl_export int   mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept;
+mi_decl_export int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2) mi_attr_alloc_align(1);
 mi_decl_nodiscard mi_decl_export void* mi_valloc(size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
 
@@ -341,8 +341,8 @@ mi_decl_nodiscard mi_decl_export void* mi_aligned_offset_recalloc(void* p, size_
 
 mi_decl_nodiscard mi_decl_export unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export unsigned char*  mi_mbsdup(const unsigned char* s)  mi_attr_noexcept;
-mi_decl_export int  mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept;
-mi_decl_export int  mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name) mi_attr_noexcept;
+mi_decl_export int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept;
+mi_decl_export int mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name) mi_attr_noexcept;
 
 mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
 mi_decl_export void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept;
@@ -384,8 +384,8 @@ template<class T> struct mi_stl_allocator {
   typedef value_type const* const_pointer;
   template <class U> struct rebind { typedef mi_stl_allocator<U> other; };
 
-  mi_stl_allocator()                                             mi_attr_noexcept { }
-  mi_stl_allocator(const mi_stl_allocator&)                      mi_attr_noexcept { }
+  mi_stl_allocator()                                             mi_attr_noexcept = default;
+  mi_stl_allocator(const mi_stl_allocator&)                      mi_attr_noexcept = default;
   template<class U> mi_stl_allocator(const mi_stl_allocator<U>&) mi_attr_noexcept { }
   mi_stl_allocator  select_on_container_copy_construction() const { return *this; }
   void              deallocate(T* p, size_type) { mi_free(p); }
