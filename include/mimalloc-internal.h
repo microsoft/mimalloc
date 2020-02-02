@@ -292,11 +292,13 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 #if defined(MI_TLS_SLOT)
 static inline void* mi_tls_slot(size_t slot);   // forward declaration
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS) 
+#include <pthread.h>
 static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
   pthread_t self = pthread_self();
   return (mi_heap_t**)((uint8_t*)self + MI_TLS_PTHREAD_SLOT_OFS);
 }
 #elif defined(MI_TLS_PTHREAD)
+#include <pthread.h>
 extern pthread_key_t _mi_heap_default_key;
 #else
 extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
@@ -308,7 +310,7 @@ static inline mi_heap_t* mi_get_default_heap(void) {
   mi_heap_t* heap = (mi_heap_t*)mi_tls_slot(MI_TLS_SLOT);
   return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
-  mi_heap_t* heap = mi_tls_pthread_heap_slot();
+  mi_heap_t* heap = *mi_tls_pthread_heap_slot();
   return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
 #elif defined(MI_TLS_PTHREAD)
   mi_heap_t* heap = (mi_unlikely(_mi_heap_default_key == (pthread_key_t)(-1)) ? _mi_heap_main_get() : (mi_heap_t*)pthread_getspecific(_mi_heap_default_key));

@@ -168,7 +168,7 @@ typedef struct mi_thread_data_s {
 static bool _mi_heap_init(void) {
   if (mi_heap_is_initialized(mi_get_default_heap())) return true;
   if (_mi_is_main_thread()) {
-    mi_assert_internal(_mi_heap_main.thread_id != 0);
+    // mi_assert_internal(_mi_heap_main.thread_id != 0);  // can happen on freeBSD where alloc is called before any initialization
     // the main heap is statically allocated
     mi_heap_main_init();
     _mi_heap_set_default_direct(&_mi_heap_main);
@@ -358,8 +358,9 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
     mi_assert_internal(mi_fls_key != 0);
     FlsSetValue(mi_fls_key, heap);
   #elif defined(MI_USE_PTHREADS)
-    mi_assert_internal(_mi_heap_default_key != (pthread_key_t)(-1)); 
+  if (_mi_heap_default_key != (pthread_key_t)(-1)) {  // can happen during recursive invocation on freeBSD
     pthread_setspecific(_mi_heap_default_key, heap);
+  }
   #endif
 }
 
