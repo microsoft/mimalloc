@@ -285,6 +285,7 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 #elif defined(__OpenBSD__) 
 #define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 1*sizeof(void*))  // offset `retval` <https://github.com/openbsd/src/blob/master/lib/libc/include/thread_private.h#L371>
 #elif defined(__DragonFly__)
+#warning "mimalloc is not working correctly on DragonFly yet."
 #define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
 #endif
 #endif
@@ -295,6 +296,12 @@ static inline void* mi_tls_slot(size_t slot);   // forward declaration
 #include <pthread.h>
 static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
   pthread_t self = pthread_self();
+  #if defined(__DragonFly__)
+  if (self==NULL) {
+    static mi_heap_t* pheap_main = _mi_heap_main_get();
+    return &pheap_main;
+  }
+  #endif  
   return (mi_heap_t**)((uint8_t*)self + MI_TLS_PTHREAD_SLOT_OFS);
 }
 #elif defined(MI_TLS_PTHREAD)
