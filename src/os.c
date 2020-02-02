@@ -285,6 +285,7 @@ static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int pr
   }
   #else
   UNUSED(try_alignment);
+  UNUSED(mi_os_get_aligned_hint);
   #endif
   if (p==NULL) {
     p = mmap(addr,size,protect_flags,flags,fd,0);
