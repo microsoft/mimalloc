@@ -24,7 +24,7 @@ int main() {
   void* p1 = malloc(78);
   void* p2 = malloc(24);
   free(p1);
-  p1 = malloc(8);
+  p1 = mi_malloc(8);
   //char* s = strdup("hello\n");
   free(p2);
   p2 = malloc(16);
