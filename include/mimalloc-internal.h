@@ -11,7 +11,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-types.h"
 
 #if defined(MI_MALLOC_OVERRIDE) 
-#if defined(__APPLE__)
+#if defined(__APPLE__) && (defined(__i386__) || defined(__x86_64__))
+#define MI_TLS_OSX_FAST
+#define MI_TLS_OSX_SLOT     94   // seems unused, except in Webkit? See: <https://github.com/WebKit/webkit/blob/master/Source/WTF/wtf/FastTLS.h>
+#elif defined(__APPLE__)
 #include <pthread.h>
 #define MI_TLS_PTHREADS
 #elif (defined(__OpenBSD__) || defined(__DragonFly__))
@@ -284,14 +287,31 @@ extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value o
 extern mi_heap_t _mi_heap_main;         // statically allocated main backing heap
 extern bool _mi_process_is_initialized;
 
-#if defined(MI_TLS_PTHREADS)
+#if defined(MI_TLS_OSX_FAST)
+#define MI_TLS_OSX_OFFSET  (MI_TLS_OSX_SLOT*sizeof(void*))
+static inline void* mi_tls_osx_fast_get(void) {
+  void* ret;
+  __asm__("mov %%gs:%1, %0" : "=r" (ret) : "m" (*(void**)(MI_TLS_OSX_OFFSET)));
+  return ret;
+}
+static inline void mi_tls_osx_fast_set(void* value) {
+  __asm__("movq %1,%%gs:%0" : "=m" (*(void**)(MI_TLS_OSX_OFFSET)) : "rn" (value));
+}
+#elif defined(MI_TLS_PTHREADS)
 extern pthread_key_t  _mi_heap_default_key;
 #else
 extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
 #endif
 
 static inline mi_heap_t* mi_get_default_heap(void) {
-#if defined(MI_TLS_PTHREADS)
+#if defined(MI_TLS_OSX_FAST) 
+  // Use a fixed slot in the TSD on MacOSX to avoid recursion (since the loader calls malloc).
+  // We use slot 94 (__PTK_FRAMEWORK_JAVASCRIPTCORE_KEY4) <https://github.com/apportable/Foundation/blob/master/System/System/src/pthread_machdep.h>
+  // which seems unused except for the more recent Webkit <https://github.com/WebKit/webkit/blob/master/Source/WTF/wtf/FastTLS.h>
+  // Use with care.
+  mi_heap_t* heap = (mi_heap_t*)mi_tls_osx_fast_get();
+  return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
+#elif defined(MI_TLS_PTHREADS)
   // Use pthreads for TLS; this is used on macOSX with interpose as the loader calls `malloc` 
   // to allocate TLS storage leading to recursive calls if __thread declared variables are accessed.
   // Using pthreads allows us to initialize without recursive calls. (performance seems still quite good).
@@ -300,9 +320,9 @@ static inline mi_heap_t* mi_get_default_heap(void) {
 #else
   #if defined(MI_TLS_RECURSE_GUARD)
   // On some BSD platforms, like openBSD, the dynamic loader calls `malloc`
-  // to initialize thread local data. To avoid recursion, we need to avoid
-  // accessing the thread local `_mi_default_heap` until our module is loaded
-  // and use the statically allocated main heap until that time.
+  // to initialize thread local data (before our module is loaded). 
+  // To avoid recursion, we need to avoid accessing the thread local `_mi_default_heap` 
+  // until our module is loaded and use the statically allocated main heap until that time.
   // TODO: patch ourselves dynamically to avoid this check every time?
   if (mi_unlikely(!_mi_process_is_initialized)) return &_mi_heap_main;
   #endif

@@ -260,14 +260,15 @@ static void _mi_thread_done(mi_heap_t* default_heap);
   // use thread local storage keys to detect thread ending
   #include <windows.h>
   #include <fibersapi.h>
-  static DWORD mi_fls_key;
+  static DWORD mi_fls_key = (DWORD)(-1);
   static void NTAPI mi_fls_done(PVOID value) {
     if (value!=NULL) _mi_thread_done((mi_heap_t*)value);
   }
 #elif defined(MI_USE_PTHREADS)
-  // use pthread locol storage keys to detect thread ending
+  // use pthread local storage keys to detect thread ending
+  // (and used with MI_TLS_PTHREADS for the default heap)
   #include <pthread.h>
-  pthread_key_t _mi_heap_default_key;
+  pthread_key_t _mi_heap_default_key = (pthread_key_t)(-1);
   static void mi_pthread_done(void* value) {
     if (value!=NULL) _mi_thread_done((mi_heap_t*)value);
   }
@@ -287,6 +288,7 @@ static void mi_process_setup_auto_thread_done(void) {
   #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
     mi_fls_key = FlsAlloc(&mi_fls_done);
   #elif defined(MI_USE_PTHREADS)
+    mi_assert_internal(_mi_heap_default_key == (pthread_key_t)(-1));
     pthread_key_create(&_mi_heap_default_key, &mi_pthread_done);
   #endif
   _mi_heap_set_default_direct(&_mi_heap_main);
@@ -331,9 +333,14 @@ static void _mi_thread_done(mi_heap_t* heap) {
 
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   mi_assert_internal(heap != NULL);
-  #if !defined(MI_TLS_PTHREADS)
+  #if defined(MI_TLS_OSX_FAST)
+  mi_tls_osx_fast_set(heap);
+  #elif defined(MI_TLS_PTHREADS)
+  // we use _mi_heap_default_key
+  #else
   _mi_heap_default = heap;
-  #endif  
+  #endif
+
   // ensure the default heap is passed to `_mi_thread_done`
   // setting to a non-NULL value also ensures `mi_thread_done` is called.
   #if defined(_WIN32) && defined(MI_SHARED_LIB)
@@ -342,7 +349,7 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
     mi_assert_internal(mi_fls_key != 0);
     FlsSetValue(mi_fls_key, heap);
   #elif defined(MI_USE_PTHREADS)
-    // mi_assert_internal(_mi_heap_default_key != 0); // often 0 is also the allocated key
+    mi_assert_internal(_mi_heap_default_key != (pthread_key_t)(-1)); 
     pthread_setspecific(_mi_heap_default_key, heap);
   #endif
 }
