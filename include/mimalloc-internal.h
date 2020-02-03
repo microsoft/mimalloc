@@ -267,18 +267,25 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
 }
 
 
-/* -----------------------------------------------------------
-  The thread local default heap
------------------------------------------------------------ */
+/* ----------------------------------------------------------------------------------------
+The thread local default heap: `_mi_get_default_heap` return the thread local heap.
+On most platforms (Windows, Linux, FreeBSD, NetBSD, etc), this just returns a 
+__thread local variable (`_mi_heap_default`). With the initial-exec TLS model this ensures
+that the storage will always be available (allocated on the thread stacks). 
+On some platforms though we cannot use that when overriding `malloc` since the underlying 
+TLS implementation (or the loader) will call itself `malloc` on a first access and recurse. 
+We try to circumvent this in an efficient way:
+- macOSX : we use an unused TLS slot from the OS allocated slots (MI_TLS_SLOT). On OSX, the
+           loader itself calls `malloc` even before the modules are initialized.
+- OpenBSD: we use an unused slot from the pthread block (MI_TLS_PTHREAD_SLOT_OFS).
+- DragonFly: not yet working.
+------------------------------------------------------------------------------------------- */
 
 extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
 extern bool _mi_process_is_initialized;
 mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing heap
 
 #if defined(MI_MALLOC_OVERRIDE) 
-// On some systems, MacOSX, OpenBSD, and DragonFly, accessing a thread local variable leads to recursion
-// as the access invokes malloc. We avoid this by stealing a TLS slot from the OS internal slots so no
-// allocation is involved. On OSX we use the direct TLS slots, while on the BSD's we use space in the `pthread_t` structure.
 #if defined(__MACH__) // OSX
 #define MI_TLS_SLOT               89  // seems unused? (__PTK_FRAMEWORK_OLDGC_KEY9) see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
                                       // possible unused ones are 9, 29, __PTK_FRAMEWORK_JAVASCRIPTCORE_KEY4 (94), __PTK_FRAMEWORK_GC_KEY9 (112) and __PTK_FRAMEWORK_OLDGC_KEY9 (89)
@@ -313,7 +320,6 @@ extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate 
 
 static inline mi_heap_t* mi_get_default_heap(void) {
 #if defined(MI_TLS_SLOT) 
-  // Use steal a fixed slot in the TLS on MacOSX to avoid recursion (since the loader calls malloc).
   mi_heap_t* heap = (mi_heap_t*)mi_tls_slot(MI_TLS_SLOT);
   return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
@@ -323,10 +329,7 @@ static inline mi_heap_t* mi_get_default_heap(void) {
   mi_heap_t* heap = (mi_unlikely(_mi_heap_default_key == (pthread_key_t)(-1)) ? _mi_heap_main_get() : (mi_heap_t*)pthread_getspecific(_mi_heap_default_key));
   return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
 #else
-  #if defined(MI_TLS_RECURSE_GUARD)
-  // To avoid recursion, we need to avoid accessing the thread local `_mi_default_heap` 
-  // until our module is loaded and use the statically allocated main heap until that time.
-  // TODO: patch ourselves dynamically to avoid this check every time?
+  #if defined(MI_TLS_RECURSE_GUARD)  
   if (mi_unlikely(!_mi_process_is_initialized)) return _mi_heap_main_get();
   #endif
   return _mi_heap_default;
@@ -662,9 +665,8 @@ static inline size_t _mi_os_numa_node_count(void) {
 
 
 // -------------------------------------------------------------------
-// Getting the thread id should be performant
-// as it is called in the fast path of `_mi_free`,
-// so we specialize for various platforms.
+// Getting the thread id should be performant as it is called in the 
+// fast path of `_mi_free` and we specialize for various platforms.
 // -------------------------------------------------------------------
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -699,6 +701,7 @@ static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
   return res;
 }
 
+// setting is only used on macOSX for now
 static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
   const size_t ofs = (slot*sizeof(void*));
 #if defined(__i386__)
@@ -719,7 +722,7 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
 }
 
 static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
-  // normally, slot 0 is the pointer to the thread control block
+  // in all our targets, slot 0 is the pointer to the thread control block
   return (uintptr_t)mi_tls_slot(0);
 }
 #else
