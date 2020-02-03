@@ -41,26 +41,27 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #if defined(__APPLE__) && defined(MI_SHARED_LIB_EXPORT) && defined(MI_INTERPOSE)
-  static void mi_free_tls_safe(void* p) {
-    if (mi_unlikely(_mi_preloading())) return;
-    mi_free(p);
-  }
   // use interposing so `DYLD_INSERT_LIBRARIES` works without `DYLD_FORCE_FLAT_NAMESPACE=1`
   // See: <https://books.google.com/books?id=K8vUkpOXhN4C&pg=PA73>
   struct mi_interpose_s {
     const void* replacement;
     const void* target;
   };
-  #define MI_INTERPOSEX(oldfun,newfun)  { (const void*)&newfun, (const void*)&oldfun }
-  #define MI_INTERPOSE_MI(fun)         MI_INTERPOSEX(fun,mi_##fun)
+  #define MI_INTERPOSE_FUN(oldfun,newfun) { (const void*)&newfun, (const void*)&oldfun }
+  #define MI_INTERPOSE_MI(fun)            MI_INTERPOSE_FUN(fun,mi_##fun)
   __attribute__((used)) static struct mi_interpose_s _mi_interposes[]  __attribute__((section("__DATA, __interpose"))) =
   {
     MI_INTERPOSE_MI(malloc),
     MI_INTERPOSE_MI(calloc),
     MI_INTERPOSE_MI(realloc),
-    MI_INTERPOSEX(free,mi_free_tls_safe),
     MI_INTERPOSE_MI(strdup),
-    MI_INTERPOSE_MI(strndup)
+    MI_INTERPOSE_MI(strndup),
+    MI_INTERPOSE_MI(realpath),
+    MI_INTERPOSE_MI(posix_memalign),
+    MI_INTERPOSE_MI(reallocf),
+    MI_INTERPOSE_MI(valloc),
+    // some code allocates from a zone but deallocates using plain free :-( (like NxHashResizeToCapacity <https://github.com/nneonneo/osx-10.9-opensource/blob/master/objc4-551.1/runtime/hashtable2.mm>)
+    MI_INTERPOSE_FUN(free,mi_cfree), // use safe free that checks if pointers are from us
   };
 #elif defined(_MSC_VER)
   // cannot override malloc unless using a dll.

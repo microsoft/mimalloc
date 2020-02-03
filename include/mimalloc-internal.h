@@ -269,11 +269,11 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
 
 /* ----------------------------------------------------------------------------------------
 The thread local default heap: `_mi_get_default_heap` return the thread local heap.
-On most platforms (Windows, Linux, FreeBSD, NetBSD, etc), this just returns a 
+On most platforms (Windows, Linux, FreeBSD, NetBSD, etc), this just returns a
 __thread local variable (`_mi_heap_default`). With the initial-exec TLS model this ensures
-that the storage will always be available (allocated on the thread stacks). 
-On some platforms though we cannot use that when overriding `malloc` since the underlying 
-TLS implementation (or the loader) will call itself `malloc` on a first access and recurse. 
+that the storage will always be available (allocated on the thread stacks).
+On some platforms though we cannot use that when overriding `malloc` since the underlying
+TLS implementation (or the loader) will call itself `malloc` on a first access and recurse.
 We try to circumvent this in an efficient way:
 - macOSX : we use an unused TLS slot from the OS allocated slots (MI_TLS_SLOT). On OSX, the
            loader itself calls `malloc` even before the modules are initialized.
@@ -285,11 +285,11 @@ extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value o
 extern bool _mi_process_is_initialized;
 mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing heap
 
-#if defined(MI_MALLOC_OVERRIDE) 
+#if defined(MI_MALLOC_OVERRIDE)
 #if defined(__MACH__) // OSX
-#define MI_TLS_SLOT               89  // seems unused? (__PTK_FRAMEWORK_OLDGC_KEY9) see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
+#define MI_TLS_SLOT               84  // seems unused? (__PTK_FRAMEWORK_OLDGC_KEY9) see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
                                       // possible unused ones are 9, 29, __PTK_FRAMEWORK_JAVASCRIPTCORE_KEY4 (94), __PTK_FRAMEWORK_GC_KEY9 (112) and __PTK_FRAMEWORK_OLDGC_KEY9 (89)
-#elif defined(__OpenBSD__) 
+#elif defined(__OpenBSD__)
 #define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 1*sizeof(void*))  // offset `retval` <https://github.com/openbsd/src/blob/master/lib/libc/include/thread_private.h#L371>
 #elif defined(__DragonFly__)
 #warning "mimalloc is not working correctly on DragonFly yet."
@@ -299,7 +299,7 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 
 #if defined(MI_TLS_SLOT)
 static inline void* mi_tls_slot(size_t slot);   // forward declaration
-#elif defined(MI_TLS_PTHREAD_SLOT_OFS) 
+#elif defined(MI_TLS_PTHREAD_SLOT_OFS)
 #include <pthread.h>
 static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
   pthread_t self = pthread_self();
@@ -308,7 +308,7 @@ static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
     static mi_heap_t* pheap_main = _mi_heap_main_get();
     return &pheap_main;
   }
-  #endif  
+  #endif
   return (mi_heap_t**)((uint8_t*)self + MI_TLS_PTHREAD_SLOT_OFS);
 }
 #elif defined(MI_TLS_PTHREAD)
@@ -319,7 +319,7 @@ extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate 
 #endif
 
 static inline mi_heap_t* mi_get_default_heap(void) {
-#if defined(MI_TLS_SLOT) 
+#if defined(MI_TLS_SLOT)
   mi_heap_t* heap = (mi_heap_t*)mi_tls_slot(MI_TLS_SLOT);
   return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
@@ -329,7 +329,7 @@ static inline mi_heap_t* mi_get_default_heap(void) {
   mi_heap_t* heap = (mi_unlikely(_mi_heap_default_key == (pthread_key_t)(-1)) ? _mi_heap_main_get() : (mi_heap_t*)pthread_getspecific(_mi_heap_default_key));
   return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
 #else
-  #if defined(MI_TLS_RECURSE_GUARD)  
+  #if defined(MI_TLS_RECURSE_GUARD)
   if (mi_unlikely(!_mi_process_is_initialized)) return _mi_heap_main_get();
   #endif
   return _mi_heap_default;
@@ -665,7 +665,7 @@ static inline size_t _mi_os_numa_node_count(void) {
 
 
 // -------------------------------------------------------------------
-// Getting the thread id should be performant as it is called in the 
+// Getting the thread id should be performant as it is called in the
 // fast path of `_mi_free` and we specialize for various platforms.
 // -------------------------------------------------------------------
 #if defined(_WIN32)
