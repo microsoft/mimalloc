@@ -287,10 +287,13 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 
 #if defined(MI_MALLOC_OVERRIDE)
 #if defined(__MACH__) // OSX
-#define MI_TLS_SLOT               89  // seems unused? (__PTK_FRAMEWORK_OLDGC_KEY9) see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
-                                      // possible unused ones are 9, 29, __PTK_FRAMEWORK_JAVASCRIPTCORE_KEY4 (94), __PTK_FRAMEWORK_GC_KEY9 (112) and __PTK_FRAMEWORK_OLDGC_KEY9 (89)
+#define MI_TLS_SLOT               89  // seems unused? 
+// other possible unused ones are 9, 29, __PTK_FRAMEWORK_JAVASCRIPTCORE_KEY4 (94), __PTK_FRAMEWORK_GC_KEY9 (112) and __PTK_FRAMEWORK_OLDGC_KEY9 (89)
+// see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
 #elif defined(__OpenBSD__)
-#define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 1*sizeof(void*))  // offset `retval` <https://github.com/openbsd/src/blob/master/lib/libc/include/thread_private.h#L371>
+// use end bytes of a name; goes wrong if anyone uses names > 23 characters (ptrhread specifies 16) 
+// see <https://github.com/openbsd/src/blob/master/lib/libc/include/thread_private.h#L371>
+#define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 4*sizeof(void*) + 24)  
 #elif defined(__DragonFly__)
 #warning "mimalloc is not working correctly on DragonFly yet."
 #define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
