@@ -268,7 +268,7 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
 
 
 /* ----------------------------------------------------------------------------------------
-The thread local default heap: `_mi_get_default_heap` return the thread local heap.
+The thread local default heap: `_mi_get_default_heap` returns the thread local heap.
 On most platforms (Windows, Linux, FreeBSD, NetBSD, etc), this just returns a
 __thread local variable (`_mi_heap_default`). With the initial-exec TLS model this ensures
 that the storage will always be available (allocated on the thread stacks).
@@ -287,7 +287,7 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 
 #if defined(MI_MALLOC_OVERRIDE)
 #if defined(__MACH__) // OSX
-#define MI_TLS_SLOT               84  // seems unused? (__PTK_FRAMEWORK_OLDGC_KEY9) see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
+#define MI_TLS_SLOT               89  // seems unused? (__PTK_FRAMEWORK_OLDGC_KEY9) see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
                                       // possible unused ones are 9, 29, __PTK_FRAMEWORK_JAVASCRIPTCORE_KEY4 (94), __PTK_FRAMEWORK_GC_KEY9 (112) and __PTK_FRAMEWORK_OLDGC_KEY9 (89)
 #elif defined(__OpenBSD__)
 #define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 1*sizeof(void*))  // offset `retval` <https://github.com/openbsd/src/blob/master/lib/libc/include/thread_private.h#L371>
