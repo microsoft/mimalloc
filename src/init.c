@@ -34,7 +34,7 @@ const mi_page_t _mi_page_empty = {
 
 #if defined(MI_PADDING) && (MI_INTPTR_SIZE >= 8)
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY(), MI_PAGE_EMPTY() }
-#elif defined(MI_PADDING) 
+#elif defined(MI_PADDING)
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY(), MI_PAGE_EMPTY(), MI_PAGE_EMPTY() }
 #else
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY() }
@@ -190,7 +190,7 @@ static bool _mi_heap_init(void) {
     heap->cookie  = _mi_heap_random_next(heap) | 1;
     heap->keys[0] = _mi_heap_random_next(heap);
     heap->keys[1] = _mi_heap_random_next(heap);
-    heap->tld = tld;    
+    heap->tld = tld;
     tld->heap_backing = heap;
     tld->segments.stats = &tld->stats;
     tld->segments.os = &tld->os;
@@ -421,9 +421,9 @@ static void mi_process_load(void) {
   volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
   UNUSED(dummy);
   #endif
-  os_preloading = false;  
+  os_preloading = false;
   atexit(&mi_process_done);
-  _mi_options_init();  
+  _mi_options_init();
   mi_process_init();
   //mi_stats_reset();-
   if (mi_redirected) _mi_verbose_message("malloc is redirected.\n");

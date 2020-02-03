@@ -298,7 +298,7 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 #endif
 
 #if defined(MI_TLS_SLOT)
-static inline void* mi_tls_slot(size_t slot);   // forward declaration
+static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept;   // forward declaration
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
 #include <pthread.h>
 static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {

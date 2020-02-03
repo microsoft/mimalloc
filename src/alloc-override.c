@@ -13,7 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "It is only possible to override "malloc" on Windows when building as a DLL (and linking the C runtime as a DLL)"
 #endif
 
-#if defined(MI_MALLOC_OVERRIDE) && !defined(_WIN32)
+#if defined(MI_MALLOC_OVERRIDE) && !(defined(_WIN32) || (defined(__MACH__) && !defined(MI_INTERPOSE)))
 
 // ------------------------------------------------------
 // Override system malloc
@@ -68,10 +68,10 @@ terms of the MIT license. A copy of the license can be found in the file
   // we just override new/delete which does work in a static library.
 #else
   // On all other systems forward to our API
-  void* malloc(size_t size)              mi_attr_noexcept  MI_FORWARD1(mi_malloc, size);
-  void* calloc(size_t size, size_t n)    mi_attr_noexcept  MI_FORWARD2(mi_calloc, size, n);
-  void* realloc(void* p, size_t newsize) mi_attr_noexcept  MI_FORWARD2(mi_realloc, p, newsize);
-  void  free(void* p)                    mi_attr_noexcept  MI_FORWARD0(mi_free, p);
+  void* malloc(size_t size)              MI_FORWARD1(mi_malloc, size);
+  void* calloc(size_t size, size_t n)    MI_FORWARD2(mi_calloc, size, n);
+  void* realloc(void* p, size_t newsize) MI_FORWARD2(mi_realloc, p, newsize);
+  void  free(void* p)                    MI_FORWARD0(mi_free, p);
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
@@ -99,8 +99,8 @@ terms of the MIT license. A copy of the license can be found in the file
   void* operator new[](std::size_t n, const std::nothrow_t& tag) noexcept { UNUSED(tag); return mi_new_nothrow(n); }
 
   #if (__cplusplus >= 201402L || _MSC_VER >= 1916)
-  void operator delete  (void* p, std::size_t n) MI_FORWARD02(mi_free_size,p,n);
-  void operator delete[](void* p, std::size_t n) MI_FORWARD02(mi_free_size,p,n);
+  void operator delete  (void* p, std::size_t n) noexcept MI_FORWARD02(mi_free_size,p,n);
+  void operator delete[](void* p, std::size_t n) noexcept MI_FORWARD02(mi_free_size,p,n);
   #endif
 
   #if (__cplusplus > 201402L || defined(__cpp_aligned_new)) && (!defined(__GNUC__) || (__GNUC__ > 5))
