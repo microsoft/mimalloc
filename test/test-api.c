@@ -140,6 +140,13 @@ int main() {
   CHECK_BODY("malloc-aligned2", {
     void* p = mi_malloc_aligned(48,32); result = (p != NULL && (uintptr_t)(p) % 32 == 0); mi_free(p);
   });
+  CHECK_BODY("malloc-aligned3", {
+    void* p1 = mi_malloc_aligned(48,32); bool result1 = (p1 != NULL && (uintptr_t)(p1) % 32 == 0); 
+    void* p2 = mi_malloc_aligned(48,32); bool result2 = (p2 != NULL && (uintptr_t)(p2) % 32 == 0);
+    mi_free(p2);
+    mi_free(p1);
+    result = (result1&&result2);
+  });
   CHECK_BODY("malloc-aligned-at1", {
     void* p = mi_malloc_aligned_at(48,32,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 32 == 0); mi_free(p);
   });
