@@ -19,21 +19,22 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
   // the address at offset is aligned regardless of the allocated size.
   mi_assert(alignment > 0 && alignment % sizeof(void*) == 0);
 
-  if (alignment <= MI_MAX_ALIGN_SIZE && offset==0) return _mi_heap_malloc_zero(heap, size, zero);
   if (mi_unlikely(size > PTRDIFF_MAX)) return NULL;   // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
   if (mi_unlikely(alignment==0 || !_mi_is_power_of_two(alignment))) return NULL; // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
+  if (alignment <= MI_MAX_ALIGN_SIZE && offset==0) return _mi_heap_malloc_zero(heap, size, zero);
   const uintptr_t align_mask = alignment-1;  // for any x, `(x & align_mask) == (x % alignment)`
   
   // try if there is a small block available with just the right alignment
-  if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
-    mi_page_t* page = _mi_heap_get_free_small_page(heap,size + MI_PADDING_SIZE);
+  const size_t padsize = size + MI_PADDING_SIZE;
+  if (mi_likely(padsize <= MI_SMALL_SIZE_MAX)) {
+    mi_page_t* page = _mi_heap_get_free_small_page(heap,padsize);
     const bool is_aligned = (((uintptr_t)page->free+offset) & align_mask)==0;
     if (mi_likely(page->free != NULL && is_aligned))
     {
       #if MI_STAT>1
       mi_heap_stat_increase( heap, malloc, size);
       #endif
-      void* p = _mi_page_malloc(heap,page,size + MI_PADDING_SIZE); // TODO: inline _mi_page_malloc
+      void* p = _mi_page_malloc(heap,page,padsize); // TODO: inline _mi_page_malloc
       mi_assert_internal(p != NULL);
       mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
       if (zero) _mi_block_zero_init(page,p,size);
@@ -42,7 +43,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
   }
 
   // use regular allocation if it is guaranteed to fit the alignment constraints
-  if (offset==0 && alignment<=size && size<=MI_MEDIUM_OBJ_SIZE_MAX && (size&align_mask)==0) {
+  if (offset==0 && alignment<=padsize && padsize<=MI_MEDIUM_OBJ_SIZE_MAX && (padsize&align_mask)==0) {
     void* p = _mi_heap_malloc_zero(heap, size, zero);
     mi_assert_internal(p == NULL || ((uintptr_t)p % alignment) == 0);
     return p;
