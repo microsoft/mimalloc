@@ -6,6 +6,7 @@
 
 #include <mimalloc.h>
 #include <new>
+#include <vector>
 
 static void* p = malloc(8);
 
@@ -24,7 +25,7 @@ public:
 
 
 int main() {
-  //mi_stats_reset();  // ignore earlier allocations
+  mi_stats_reset();  // ignore earlier allocations
   atexit(free_p);
   void* p1 = malloc(78);
   void* p2 = mi_malloc_aligned(16,24);
@@ -69,3 +70,18 @@ public:
 static Static s = Static();
 
 
+bool test_stl_allocator1() {
+  std::vector<int, mi_stl_allocator<int> > vec;
+  vec.push_back(1);
+  vec.pop_back();
+  return vec.size() == 0;
+}
+
+struct some_struct { int i; int j; double z; };
+
+bool test_stl_allocator2() {  
+  std::vector<some_struct, mi_stl_allocator<some_struct> > vec;
+  vec.push_back(some_struct());
+  vec.pop_back();
+  return vec.size() == 0;
+}

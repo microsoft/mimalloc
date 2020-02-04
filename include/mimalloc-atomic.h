@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MIMALLOC_ATOMIC_H
 
 // ------------------------------------------------------
-// Atomics 
+// Atomics
 // We need to be portable between C, C++, and MSVC.
 // ------------------------------------------------------
 
@@ -29,14 +29,21 @@ terms of the MIT license. A copy of the license can be found in the file
 // Atomic operations specialized for mimalloc
 // ------------------------------------------------------
 
-// Atomically add a 64-bit value; returns the previous value. 
+// Atomically add a 64-bit value; returns the previous value.
 // Note: not using _Atomic(int64_t) as it is only used for statistics.
 static inline void mi_atomic_add64(volatile int64_t* p, int64_t add);
 
 // Atomically add a value; returns the previous value. Memory ordering is relaxed.
 static inline intptr_t mi_atomic_add(volatile _Atomic(intptr_t)* p, intptr_t add);
 
-// Atomically compare and exchange a value; returns `true` if successful. 
+// Atomically "and" a value; returns the previous value. Memory ordering is relaxed.
+static inline uintptr_t mi_atomic_and(volatile _Atomic(uintptr_t)* p, uintptr_t x);
+
+// Atomically "or" a value; returns the previous value. Memory ordering is relaxed.
+static inline uintptr_t mi_atomic_or(volatile _Atomic(uintptr_t)* p, uintptr_t x);
+
+
+// Atomically compare and exchange a value; returns `true` if successful.
 // May fail spuriously. Memory ordering as release on success, and relaxed on failure.
 // (Note: expected and desired are in opposite order from atomic_compare_exchange)
 static inline bool mi_atomic_cas_weak(volatile _Atomic(uintptr_t)* p, uintptr_t desired, uintptr_t expected);
@@ -121,22 +128,28 @@ static inline void* mi_atomic_exchange_ptr(volatile _Atomic(void*)* p, void* exc
 #include <intrin.h>
 #ifdef _WIN64
 typedef LONG64   msc_intptr_t;
-#define RC64(f)  f##64
+#define MI_64(f) f##64
 #else
 typedef LONG     msc_intptr_t;
-#define RC64(f)  f
+#define MI_64(f) f
 #endif
 static inline intptr_t mi_atomic_add(volatile _Atomic(intptr_t)* p, intptr_t add) {
-  return (intptr_t)RC64(_InterlockedExchangeAdd)((volatile msc_intptr_t*)p, (msc_intptr_t)add);
+  return (intptr_t)MI_64(_InterlockedExchangeAdd)((volatile msc_intptr_t*)p, (msc_intptr_t)add);
+}
+static inline uintptr_t mi_atomic_and(volatile _Atomic(uintptr_t)* p, uintptr_t x) {
+  return (uintptr_t)MI_64(_InterlockedAnd)((volatile msc_intptr_t*)p, (msc_intptr_t)x);
+}
+static inline uintptr_t mi_atomic_or(volatile _Atomic(uintptr_t)* p, uintptr_t x) {
+  return (uintptr_t)MI_64(_InterlockedOr)((volatile msc_intptr_t*)p, (msc_intptr_t)x);
 }
 static inline bool mi_atomic_cas_strong(volatile _Atomic(uintptr_t)* p, uintptr_t desired, uintptr_t expected) {
-  return (expected == (uintptr_t)RC64(_InterlockedCompareExchange)((volatile msc_intptr_t*)p, (msc_intptr_t)desired, (msc_intptr_t)expected));
+  return (expected == (uintptr_t)MI_64(_InterlockedCompareExchange)((volatile msc_intptr_t*)p, (msc_intptr_t)desired, (msc_intptr_t)expected));
 }
 static inline bool mi_atomic_cas_weak(volatile _Atomic(uintptr_t)* p, uintptr_t desired, uintptr_t expected) {
   return mi_atomic_cas_strong(p,desired,expected);
 }
 static inline uintptr_t mi_atomic_exchange(volatile _Atomic(uintptr_t)* p, uintptr_t exchange) {
-  return (uintptr_t)RC64(_InterlockedExchange)((volatile msc_intptr_t*)p, (msc_intptr_t)exchange);
+  return (uintptr_t)MI_64(_InterlockedExchange)((volatile msc_intptr_t*)p, (msc_intptr_t)exchange);
 }
 static inline uintptr_t mi_atomic_read(volatile _Atomic(uintptr_t) const* p) {
   return *p;
@@ -176,6 +189,14 @@ static inline void mi_atomic_add64(volatile int64_t* p, int64_t add) {
 static inline intptr_t mi_atomic_add(volatile _Atomic(intptr_t)* p, intptr_t add) {
   MI_USING_STD
   return atomic_fetch_add_explicit(p, add, memory_order_relaxed);
+}
+static inline uintptr_t mi_atomic_and(volatile _Atomic(uintptr_t)* p, uintptr_t x) {
+  MI_USING_STD
+  return atomic_fetch_and_explicit(p, x, memory_order_relaxed);
+}
+static inline uintptr_t mi_atomic_or(volatile _Atomic(uintptr_t)* p, uintptr_t x) {
+  MI_USING_STD
+  return atomic_fetch_or_explicit(p, x, memory_order_relaxed);
 }
 static inline bool mi_atomic_cas_weak(volatile _Atomic(uintptr_t)* p, uintptr_t desired, uintptr_t expected) {
   MI_USING_STD

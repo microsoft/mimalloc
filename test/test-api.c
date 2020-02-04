@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 Testing allocators is difficult as bugs may only surface after particular
 allocation patterns. The main approach to testing _mimalloc_ is therefore
 to have extensive internal invariant checking (see `page_is_valid` in `page.c`
-for example), which is enabled in debug mode with `-DMI_CHECK_FULL=ON`.
+for example), which is enabled in debug mode with `-DMI_DEBUG_FULL=ON`.
 The main testing is then to run `mimalloc-bench` [1] using full invariant checking
 to catch any potential problems over a wide range of intensive allocation bench
 marks.
@@ -25,6 +25,11 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include <stdbool.h>
 #include <stdint.h>
 #include <errno.h>
+
+#ifdef __cplusplus
+#include <vector>
+#endif
+
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
@@ -61,6 +66,8 @@ static int failed = 0;
 // ---------------------------------------------------------------------------
 bool test_heap1();
 bool test_heap2();
+bool test_stl_allocator1();
+bool test_stl_allocator2();
 
 // ---------------------------------------------------------------------------
 // Main testing
@@ -80,6 +87,13 @@ int main() {
   });
   CHECK_BODY("malloc-null",{
     mi_free(NULL);
+  });
+  CHECK_BODY("calloc-overflow",{
+    // use (size_t)&mi_calloc to get some number without triggering compiler warnings
+    result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);
+  });
+  CHECK_BODY("calloc0",{
+    result = (mi_usable_size(mi_calloc(0,1000)) <= 16);
   });
 
   // ---------------------------------------------------
@@ -150,6 +164,9 @@ int main() {
     mi_free(s);
   });
 
+  CHECK("stl_allocator1", test_stl_allocator1());
+  CHECK("stl_allocator2", test_stl_allocator2());
+
   // ---------------------------------------------------
   // Done
   // ---------------------------------------------------[]
@@ -181,4 +198,28 @@ bool test_heap2() {
   mi_free(p1);
   mi_free(p2);
   return true;
+}
+
+bool test_stl_allocator1() {
+#ifdef __cplusplus
+  std::vector<int, mi_stl_allocator<int> > vec;
+  vec.push_back(1);
+  vec.pop_back();
+  return vec.size() == 0;
+#else
+  return true;
+#endif
+}
+
+struct some_struct  { int i; int j; double z; };
+
+bool test_stl_allocator2() {
+#ifdef __cplusplus
+  std::vector<some_struct, mi_stl_allocator<some_struct> > vec;
+  vec.push_back(some_struct());
+  vec.pop_back();
+  return vec.size() == 0;
+#else
+  return true;
+#endif
 }

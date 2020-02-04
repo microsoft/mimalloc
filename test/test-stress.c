@@ -5,9 +5,14 @@ terms of the MIT license.
 -----------------------------------------------------------------------------*/
 
 /* This is a stress test for the allocator, using multiple threads and
-   transferring objects between threads. This is not a typical workload
-   but uses a random linear size distribution. Timing can also depend on
-   (random) thread scheduling. Do not use this test as a benchmark!
+   transferring objects between threads. It tries to reflect real-world workloads:
+   - allocation size is distributed linearly in powers of two
+   - with some fraction extra large (and some extra extra large)
+   - the allocations are initialized and read again at free
+   - pointers transfer between threads
+   - threads are terminated and recreated with some objects surviving in between
+   - uses deterministic "randomness", but execution can still depend on
+     (random) thread scheduling. Do not use this test as a benchmark!
 */
 
 #include <stdio.h>
@@ -21,14 +26,14 @@ terms of the MIT license.
 //
 // argument defaults
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
-static int SCALE   = 50;      // scaling factor
-static int ITER    = 10;      // N full iterations re-creating all threads
+static int SCALE   = 10;      // scaling factor
+static int ITER    = 50;      // N full iterations destructing and re-creating all threads
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int SCALE   = 100;  // scaling factor
 
 static bool   allow_large_objects = true;    // allow very large objects?
-static size_t use_one_size = 0;              // use single object size of N uintptr_t?
+static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
 
 
 #ifdef USE_STD_MALLOC
@@ -114,7 +119,7 @@ static void free_items(void* p) {
 static void stress(intptr_t tid) {
   //bench_start_thread();
   uintptr_t r = tid * 43;
-  const size_t max_item_shift = 5; // 128  
+  const size_t max_item_shift = 5; // 128
   const size_t max_item_retained_shift = max_item_shift + 2;
   size_t allocs = 100 * ((size_t)SCALE) * (tid % 8 + 1); // some threads do more
   size_t retain = allocs / 2;
@@ -132,7 +137,7 @@ static void stress(intptr_t tid) {
         data_size += 100000;
         data = (void**)custom_realloc(data, data_size * sizeof(void*));
       }
-      data[data_top++] = alloc_items( 1ULL << (pick(&r) % max_item_shift), &r);
+      data[data_top++] = alloc_items(1ULL << (pick(&r) % max_item_shift), &r);
     }
     else {
       // 25% retain
@@ -185,7 +190,7 @@ int main(int argc, char** argv) {
     long n = (strtol(argv[3], &end, 10));
     if (n > 0) ITER = n;
   }
-  printf("start with %d threads with a %d%% load-per-thread and %d iterations\n", THREADS, SCALE, ITER);
+  printf("Using %d threads with a %d%% load-per-thread and %d iterations\n", THREADS, SCALE, ITER);
   //int res = mi_reserve_huge_os_pages(4,1);
   //printf("(reserve huge: %i\n)", res);
 
@@ -204,7 +209,7 @@ int main(int argc, char** argv) {
     }
     mi_collect(false);
 #ifndef NDEBUG
-    if ((n + 1) % 10 == 0) { printf("- iterations: %3d\n", n + 1); }
+    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
 #endif
   }
 
@@ -250,7 +255,6 @@ static void* atomic_exchange_ptr(volatile void** p, void* newval) {
 #else
 
 #include <pthread.h>
-#include <stdatomic.h>
 
 static void* thread_entry(void* param) {
   stress((uintptr_t)param);
@@ -270,8 +274,16 @@ static void run_os_threads(size_t nthreads) {
   custom_free(threads);
 }
 
+#ifdef __cplusplus
+#include <atomic>
+static void* atomic_exchange_ptr(volatile void** p, void* newval) {
+  return std::atomic_exchange_explicit((volatile std::atomic<void*>*)p, newval, std::memory_order_acquire);
+}
+#else
+#include <stdatomic.h>
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
   return atomic_exchange_explicit((volatile _Atomic(void*)*)p, newval, memory_order_acquire);
 }
+#endif
 
 #endif
