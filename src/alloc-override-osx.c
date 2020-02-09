@@ -14,7 +14,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "this file should only be included on macOS"
 #endif
 
-#warning "malloc zones do not seem to work for now; use MI_INTERPOSE instead"
 /* ------------------------------------------------------
    Override system malloc on macOS
    This is done through the malloc zone interface.
@@ -182,8 +181,10 @@ static malloc_zone_t* mi_get_default_zone()
   }
 }
 
+#if 0
 // directly overwrite the default zone as per:
 // <https://lists.apple.com/archives/darwin-dev/2005/Apr/msg00050.html>
+#include <mach/mach.h>
 
 static void __attribute__((constructor)) _mi_macos_override_malloc_direct()
 {
@@ -199,13 +200,18 @@ static void __attribute__((constructor)) _mi_macos_override_malloc_direct()
   intro.force_unlock = &intro_force_unlock;
 
   static malloc_zone_t oldzone;
-  static malloc_zone_t* zone = malloc_default_zone(); // get the `malloc` backing default zone
+  static malloc_zone_t* zone;
+  zone = mi_get_default_zone(); // get the `malloc` backing default zone
   if (zone == NULL) return;
 
   // save the default zone in oldzone
   memset(&oldzone, 0, sizeof(oldzone));
   if (zone->version >= 9) memcpy(&oldzone, zone, sizeof(oldzone));
 
+  if (zone->version >= 8) {
+    vm_protect(mach_task_self(), (uintptr_t)zone, sizeof(*zone), 0,
+               VM_PROT_READ|VM_PROT_WRITE);
+  }
   // overwrite default zone functions in-place
   zone->zone_name = "mimalloc";
   zone->size = &zone_size;
@@ -237,6 +243,11 @@ static void __attribute__((constructor)) _mi_macos_override_malloc_direct()
   }
   */
 #endif
+  if (zone->version >= 8) {
+    vm_protect(mach_task_self(), (uintptr_t)zone, sizeof(*zone), 0,
+               VM_PROT_READ);
+  }
+
   /*
   // Unregister, and re-register the purgeable_zone to avoid bugs if it occurs
   // earlier than the default zone.
@@ -247,7 +258,8 @@ static void __attribute__((constructor)) _mi_macos_override_malloc_direct()
   */
 }
 
-/*
+#else
+
 static void __attribute__((constructor)) _mi_macos_override_malloc()
 {
   static malloc_introspection_t intro;
@@ -314,6 +326,6 @@ static void __attribute__((constructor)) _mi_macos_override_malloc()
   }
 
 }
-*/
+#endif
 
 #endif // MI_MALLOC_OVERRIDE
