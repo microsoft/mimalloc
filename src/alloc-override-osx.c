@@ -17,6 +17,12 @@ terms of the MIT license. A copy of the license can be found in the file
 /* ------------------------------------------------------
    Override system malloc on macOS
    This is done through the malloc zone interface.
+   It seems we also need to interpose (see `alloc-override.c`)
+   or otherwise we get zone errors as there are usually 
+   already allocations done by the time we take over the 
+   zone. Unfortunately, that means we need to replace
+   the `free` with a checked free (`cfree`) impacting 
+   performance.
 ------------------------------------------------------ */
 
 #include <AvailabilityMacros.h>
@@ -181,85 +187,6 @@ static malloc_zone_t* mi_get_default_zone()
   }
 }
 
-#if 0
-// directly overwrite the default zone as per:
-// <https://lists.apple.com/archives/darwin-dev/2005/Apr/msg00050.html>
-#include <mach/mach.h>
-
-static void __attribute__((constructor)) _mi_macos_override_malloc_direct()
-{
-  static malloc_introspection_t intro;
-  memset(&intro, 0, sizeof(intro));
-
-  intro.enumerator = &intro_enumerator;
-  intro.good_size = &intro_good_size;
-  intro.check = &intro_check;
-  intro.print = &intro_print;
-  intro.log = &intro_log;
-  intro.force_lock = &intro_force_lock;
-  intro.force_unlock = &intro_force_unlock;
-
-  static malloc_zone_t oldzone;
-  static malloc_zone_t* zone;
-  zone = mi_get_default_zone(); // get the `malloc` backing default zone
-  if (zone == NULL) return;
-
-  // save the default zone in oldzone
-  memset(&oldzone, 0, sizeof(oldzone));
-  if (zone->version >= 9) memcpy(&oldzone, zone, sizeof(oldzone));
-
-  if (zone->version >= 8) {
-    vm_protect(mach_task_self(), (uintptr_t)zone, sizeof(*zone), 0,
-               VM_PROT_READ|VM_PROT_WRITE);
-  }
-  // overwrite default zone functions in-place
-  zone->zone_name = "mimalloc";
-  zone->size = &zone_size;
-  zone->introspect = &intro;
-  zone->malloc = &zone_malloc;
-  zone->calloc = &zone_calloc;
-  zone->valloc = &zone_valloc;
-  zone->free = &zone_free;
-  zone->realloc = &zone_realloc;
-  zone->destroy = &zone_destroy;
-  zone->batch_malloc = &zone_batch_malloc;
-  zone->batch_free = &zone_batch_free;
-
-  malloc_zone_t* purgeable_zone = NULL;
-
-#if defined(MAC_OS_X_VERSION_10_6) && \
-    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
-  // switch to version 9 on OSX 10.6 to support memalign.
-  // zone->version = 9;
-  zone->memalign = &zone_memalign;
-  zone->free_definite_size = &zone_free_definite_size;
-  zone->pressure_relief = &zone_pressure_relief;
-  intro.zone_locked = &intro_zone_locked;
-  intro.statistics = &intro_statistics;
-  /*
-  // force the purgeable zone to exist to avoid strange bugs
-  if (malloc_default_purgeable_zone) {
-    purgeable_zone = malloc_default_purgeable_zone();
-  }
-  */
-#endif
-  if (zone->version >= 8) {
-    vm_protect(mach_task_self(), (uintptr_t)zone, sizeof(*zone), 0,
-               VM_PROT_READ);
-  }
-
-  /*
-  // Unregister, and re-register the purgeable_zone to avoid bugs if it occurs
-  // earlier than the default zone.
-  if (purgeable_zone != NULL) {
-    malloc_zone_unregister(purgeable_zone);
-    malloc_zone_register(purgeable_zone);
-  }
-  */
-}
-
-#else
-
 static void __attribute__((constructor)) _mi_macos_override_malloc()
 {
   static malloc_introspection_t intro;
@@ -326,6 +253,5 @@ static void __attribute__((constructor)) _mi_macos_override_malloc()
   }
 
 }
-#endif
 
 #endif // MI_MALLOC_OVERRIDE
