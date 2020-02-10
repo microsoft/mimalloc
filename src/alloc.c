@@ -212,7 +212,7 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
   size_t delta;
   bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
   mi_assert_internal(ok); mi_assert_internal(delta <= bsize);
-  return (ok ? bsize - delta : 0); 
+  return (ok ? bsize - delta : 0);
 }
 
 static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, size_t* size, size_t* wrong) {
@@ -259,7 +259,7 @@ static void mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, co
   mi_padding_t* padding = (mi_padding_t*)((uint8_t*)block + bsize);
   padding->delta = (uint32_t)new_delta;
 }
-#else 
+#else
 static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
   UNUSED(page);
   UNUSED(block);
@@ -359,7 +359,7 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
     }
     else if (mi_unlikely(mi_page_is_in_full(page))) {
       _mi_page_unfull(page);
-    }    
+    }
   }
   else {
     _mi_free_block_mt(page,block);
@@ -401,7 +401,7 @@ void mi_free(void* p) mi_attr_noexcept
       "(this may still be a valid very large allocation (over 64MiB))\n", p);
     if (mi_likely(_mi_ptr_cookie(segment) == segment->cookie)) {
       _mi_warning_message("(yes, the previous pointer %p was valid after all)\n", p);
-    }
+    } 
   }
 #endif
 #if (MI_DEBUG!=0 || MI_SECURE>=4)
@@ -421,11 +421,11 @@ void mi_free(void* p) mi_attr_noexcept
   mi_heap_stat_decrease(heap, malloc, bsize);
   if (bsize <= MI_LARGE_OBJ_SIZE_MAX) { // huge page stats are accounted for in `_mi_page_retire`
     mi_heap_stat_decrease(heap, normal[_mi_bin(bsize)], 1);
-  }  
+  }
 #endif
 
   if (mi_likely(tid == segment->thread_id && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
-    // local, and not full or aligned    
+    // local, and not full or aligned
     if (mi_unlikely(mi_check_is_double_free(page,block))) return;
     mi_check_padding(page, block);
     #if (MI_DEBUG!=0)
@@ -436,7 +436,7 @@ void mi_free(void* p) mi_attr_noexcept
     page->used--;
     if (mi_unlikely(mi_page_all_free(page))) {
       _mi_page_retire(page);
-    }    
+    }
   }
   else {
     // non-local, aligned blocks, or a full page; use the more generic path
@@ -473,7 +473,7 @@ size_t mi_usable_size(const void* p) mi_attr_noexcept {
   const mi_segment_t* const segment = _mi_ptr_segment(p);
   const mi_page_t* const page = _mi_segment_page_of(segment, p);
   const mi_block_t* const block = (const mi_block_t*)p;
-  const size_t size = mi_page_usable_size_of(page, block);  
+  const size_t size = mi_page_usable_size_of(page, block);
   if (mi_unlikely(mi_page_has_aligned(page))) {
     ptrdiff_t const adjust = (uint8_t*)p - (uint8_t*)_mi_page_ptr_unalign(segment,page,p);
     mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);

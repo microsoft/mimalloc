@@ -10,10 +10,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc-types.h"
 
-#if defined(MI_MALLOC_OVERRIDE) && (defined(__APPLE__) || defined(__OpenBSD__) || defined(__DragonFly__))
-#define MI_TLS_RECURSE_GUARD
-#endif
-
 #if (MI_DEBUG>0)
 #define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
 #else
@@ -33,7 +29,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
-#define mi_decl_cache_align     
+#define mi_decl_cache_align
 #endif
 
 
@@ -51,6 +47,7 @@ void       _mi_random_init(mi_random_ctx_t* ctx);
 void       _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* new_ctx);
 uintptr_t  _mi_random_next(mi_random_ctx_t* ctx);
 uintptr_t  _mi_heap_random_next(mi_heap_t* heap);
+uintptr_t  _os_random_weak(uintptr_t extra_seed);
 static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 
 // init.c
@@ -237,7 +234,7 @@ static inline size_t _mi_wsize_from_size(size_t size) {
 
 
 // Overflow detecting multiply
-static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {  
+static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
 #include <limits.h>   // UINT_MAX, ULONG_MAX
 #if (SIZE_MAX == UINT_MAX)
@@ -270,26 +267,76 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
 }
 
 
-/* -----------------------------------------------------------
-  The thread local default heap
------------------------------------------------------------ */
+/* ----------------------------------------------------------------------------------------
+The thread local default heap: `_mi_get_default_heap` returns the thread local heap.
+On most platforms (Windows, Linux, FreeBSD, NetBSD, etc), this just returns a
+__thread local variable (`_mi_heap_default`). With the initial-exec TLS model this ensures
+that the storage will always be available (allocated on the thread stacks).
+On some platforms though we cannot use that when overriding `malloc` since the underlying
+TLS implementation (or the loader) will call itself `malloc` on a first access and recurse.
+We try to circumvent this in an efficient way:
+- macOSX : we use an unused TLS slot from the OS allocated slots (MI_TLS_SLOT). On OSX, the
+           loader itself calls `malloc` even before the modules are initialized.
+- OpenBSD: we use an unused slot from the pthread block (MI_TLS_PTHREAD_SLOT_OFS).
+- DragonFly: not yet working.
+------------------------------------------------------------------------------------------- */
 
 extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
-extern mi_heap_t _mi_heap_main;         // statically allocated main backing heap
 extern bool _mi_process_is_initialized;
+mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing heap
 
+#if defined(MI_MALLOC_OVERRIDE)
+#if defined(__MACH__) // OSX
+#define MI_TLS_SLOT               89  // seems unused? 
+// other possible unused ones are 9, 29, __PTK_FRAMEWORK_JAVASCRIPTCORE_KEY4 (94), __PTK_FRAMEWORK_GC_KEY9 (112) and __PTK_FRAMEWORK_OLDGC_KEY9 (89)
+// see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
+#elif defined(__OpenBSD__)
+// use end bytes of a name; goes wrong if anyone uses names > 23 characters (ptrhread specifies 16) 
+// see <https://github.com/openbsd/src/blob/master/lib/libc/include/thread_private.h#L371>
+#define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 4*sizeof(void*) + 24)  
+#elif defined(__DragonFly__)
+#warning "mimalloc is not working correctly on DragonFly yet."
+#define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
+#endif
+#endif
+
+#if defined(MI_TLS_SLOT)
+static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept;   // forward declaration
+#elif defined(MI_TLS_PTHREAD_SLOT_OFS)
+#include <pthread.h>
+static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
+  pthread_t self = pthread_self();
+  #if defined(__DragonFly__)
+  if (self==NULL) {
+    static mi_heap_t* pheap_main = _mi_heap_main_get();
+    return &pheap_main;
+  }
+  #endif
+  return (mi_heap_t**)((uint8_t*)self + MI_TLS_PTHREAD_SLOT_OFS);
+}
+#elif defined(MI_TLS_PTHREAD)
+#include <pthread.h>
+extern pthread_key_t _mi_heap_default_key;
+#else
 extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
+#endif
 
 static inline mi_heap_t* mi_get_default_heap(void) {
-#ifdef MI_TLS_RECURSE_GUARD
-  // on some BSD platforms, like macOS, the dynamic loader calls `malloc`
-  // to initialize thread local data. To avoid recursion, we need to avoid
-  // accessing the thread local `_mi_default_heap` until our module is loaded
-  // and use the statically allocated main heap until that time.
-  // TODO: patch ourselves dynamically to avoid this check every time?
-  if (!_mi_process_is_initialized) return &_mi_heap_main;
-#endif
+#if defined(MI_TLS_SLOT)
+  mi_heap_t* heap = (mi_heap_t*)mi_tls_slot(MI_TLS_SLOT);
+  return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
+#elif defined(MI_TLS_PTHREAD_SLOT_OFS)
+  mi_heap_t* heap = *mi_tls_pthread_heap_slot();
+  return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
+#elif defined(MI_TLS_PTHREAD)
+  mi_heap_t* heap = (mi_unlikely(_mi_heap_default_key == (pthread_key_t)(-1)) ? _mi_heap_main_get() : (mi_heap_t*)pthread_getspecific(_mi_heap_default_key));
+  return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
+#else
+  #if defined(MI_TLS_RECURSE_GUARD)
+  if (mi_unlikely(!_mi_process_is_initialized)) return _mi_heap_main_get();
+  #endif
   return _mi_heap_default;
+#endif
 }
 
 static inline bool mi_heap_is_default(const mi_heap_t* heap) {
@@ -306,6 +353,8 @@ static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
 }
 
 static inline uintptr_t _mi_ptr_cookie(const void* p) {
+  extern mi_heap_t _mi_heap_main;
+  mi_assert_internal(_mi_heap_main.cookie != 0);
   return ((uintptr_t)p ^ _mi_heap_main.cookie);
 }
 
@@ -351,7 +400,7 @@ static inline uintptr_t _mi_segment_page_idx_of(const mi_segment_t* segment, con
 
 // Get the page containing the pointer
 static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const void* p) {
-  uintptr_t idx = _mi_segment_page_idx_of(segment, p);  
+  uintptr_t idx = _mi_segment_page_idx_of(segment, p);
   return &((mi_segment_t*)segment)->pages[idx];
 }
 
@@ -424,14 +473,14 @@ static inline mi_thread_free_t mi_tf_set_block(mi_thread_free_t tf, mi_block_t* 
   return mi_tf_make(block, mi_tf_delayed(tf));
 }
 
-// are all blocks in a page freed? 
+// are all blocks in a page freed?
 // note: needs up-to-date used count, (as the `xthread_free` list may not be empty). see `_mi_page_collect_free`.
 static inline bool mi_page_all_free(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
   return (page->used == 0);
 }
 
-// are there any available blocks? 
+// are there any available blocks?
 static inline bool mi_page_has_any_available(const mi_page_t* page) {
   mi_assert_internal(page != NULL && page->reserved > 0);
   return (page->used < page->reserved || (mi_page_thread_free(page) != NULL));
@@ -479,11 +528,11 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
 /* -------------------------------------------------------------------
 Encoding/Decoding the free list next pointers
 
-This is to protect against buffer overflow exploits where the 
-free list is mutated. Many hardened allocators xor the next pointer `p` 
+This is to protect against buffer overflow exploits where the
+free list is mutated. Many hardened allocators xor the next pointer `p`
 with a secret key `k1`, as `p^k1`. This prevents overwriting with known
-values but might be still too weak: if the attacker can guess 
-the pointer `p` this  can reveal `k1` (since `p^k1^p == k1`). 
+values but might be still too weak: if the attacker can guess
+the pointer `p` this  can reveal `k1` (since `p^k1^p == k1`).
 Moreover, if multiple blocks can be read as well, the attacker can
 xor both as `(p1^k1) ^ (p2^k1) == p1^p2` which may reveal a lot
 about the pointers (and subsequently `k1`).
@@ -491,9 +540,9 @@ about the pointers (and subsequently `k1`).
 Instead mimalloc uses an extra key `k2` and encodes as `((p^k2)<<<k1)+k1`.
 Since these operations are not associative, the above approaches do not
 work so well any more even if the `p` can be guesstimated. For example,
-for the read case we can subtract two entries to discard the `+k1` term, 
+for the read case we can subtract two entries to discard the `+k1` term,
 but that leads to `((p1^k2)<<<k1) - ((p2^k2)<<<k1)` at best.
-We include the left-rotation since xor and addition are otherwise linear 
+We include the left-rotation since xor and addition are otherwise linear
 in the lowest bit. Finally, both keys are unique per page which reduces
 the re-use of keys by a large factor.
 
@@ -619,9 +668,8 @@ static inline size_t _mi_os_numa_node_count(void) {
 
 
 // -------------------------------------------------------------------
-// Getting the thread id should be performant
-// as it is called in the fast path of `_mi_free`,
-// so we specialize for various platforms.
+// Getting the thread id should be performant as it is called in the
+// fast path of `_mi_free` and we specialize for various platforms.
 // -------------------------------------------------------------------
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -630,24 +678,55 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
   // Windows: works on Intel and ARM in both 32- and 64-bit
   return (uintptr_t)NtCurrentTeb();
 }
-#elif (defined(__GNUC__) || defined(__clang__)) && \
+
+#elif defined(__GNUC__) && \
       (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))
-// TLS register on x86 is in the FS or GS register
-// see: https://akkadia.org/drepper/tls.pdf
+
+// TLS register on x86 is in the FS or GS register, see: https://akkadia.org/drepper/tls.pdf
+static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
+  void* res;
+  const size_t ofs = (slot*sizeof(void*));
+#if defined(__i386__)
+  __asm__("movl %%gs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // 32-bit always uses GS
+#elif defined(__MACH__) && defined(__x86_64__)
+  __asm__("movq %%gs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86_64 macOSX uses GS
+#elif defined(__x86_64__)
+  __asm__("movq %%fs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86_64 Linux, BSD uses FS
+#elif defined(__arm__)
+  void** tcb; UNUSED(ofs);
+  asm volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
+  res = tcb[slot];
+#elif defined(__aarch64__)
+  void** tcb; UNUSED(ofs);
+  asm volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+  res = tcb[slot];
+#endif
+  return res;
+}
+
+// setting is only used on macOSX for now
+static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
+  const size_t ofs = (slot*sizeof(void*));
+#if defined(__i386__)
+  __asm__("movl %1,%%gs:%0" : "=m" (*((void**)ofs)) : "rn" (value) : );  // 32-bit always uses GS
+#elif defined(__MACH__) && defined(__x86_64__)
+  __asm__("movq %1,%%gs:%0" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 macOSX uses GS
+#elif defined(__x86_64__)
+  __asm__("movq %1,%%fs:%1" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 Linux, BSD uses FS
+#elif defined(__arm__)
+  void** tcb; UNUSED(ofs);
+  asm volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
+  tcb[slot] = value;
+#elif defined(__aarch64__)
+  void** tcb; UNUSED(ofs);
+  asm volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+  tcb[slot] = value;
+#endif
+}
+
 static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
-  uintptr_t tid;
-  #if defined(__i386__)
-  __asm__("movl %%gs:0, %0" : "=r" (tid) : : );  // 32-bit always uses GS
-  #elif defined(__MACH__)
-  __asm__("movq %%gs:0, %0" : "=r" (tid) : : );  // x86_64 macOS uses GS
-  #elif defined(__x86_64__)
-  __asm__("movq %%fs:0, %0" : "=r" (tid) : : );  // x86_64 Linux, BSD uses FS
-  #elif defined(__arm__)
-  asm volatile ("mrc p15, 0, %0, c13, c0, 3" : "=r" (tid));
-  #elif defined(__aarch64__)
-  asm volatile ("mrs %0, tpidr_el0" : "=r" (tid));
-  #endif
-  return tid;
+  // in all our targets, slot 0 is the pointer to the thread control block
+  return (uintptr_t)mi_tls_slot(0);
 }
 #else
 // otherwise use standard C
