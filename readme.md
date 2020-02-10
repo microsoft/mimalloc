@@ -57,6 +57,12 @@ Enjoy!
 
 ### Releases
 
+* 2020-02-09, `v1.6.0`: stable release 1.6: fixed potential memory leak, improved overriding
+  and thread local support on FreeBSD, NetBSD, DragonFly, and macOSX. New byte-precise
+  heap block overflow detection in debug mode (besides the double-free detection and free-list
+  corruption detection). Add `nodiscard` attribute to most allocation functions.
+  Enable `MIMALLOC_PAGE_RESET` by default. New reclamation strategy for abandoned heap pages
+  for better memory footprint.
 * 2020-02-09, `v1.5.0`: stable release 1.5: improved free performance, small bug fixes.
 * 2020-01-22, `v1.4.0`: stable release 1.4: improved performance for delayed OS page reset,
 more eager concurrent free, addition of STL allocator, fixed potential memory leak.
