@@ -93,52 +93,55 @@ static inline void* mi_heapx_calloc_aligned(mi_heap_t* heap, size_t count, size_
 }
 
 mi_decl_allocator void* mi_heap_malloc_aligned_at(mi_heap_t* heap, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heapx_malloc_aligned_at(heap, size, alignment, offset  MI_SOURCE_RET);
+  return mi_heapx_malloc_aligned_at(heap, size, alignment, offset  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_heap_malloc_aligned(mi_heap_t* heap, size_t size, size_t alignment) mi_attr_noexcept {
-  return _mi_heapx_malloc_aligned(heap, size, alignment  MI_SOURCE_RET);
+  return _mi_heapx_malloc_aligned(heap, size, alignment  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_heap_zalloc_aligned_at(mi_heap_t* heap, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heapx_zalloc_aligned_at(heap, size, alignment, offset  MI_SOURCE_RET);
+  return mi_heapx_zalloc_aligned_at(heap, size, alignment, offset  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_heap_zalloc_aligned(mi_heap_t* heap, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_heapx_zalloc_aligned(heap, size, alignment  MI_SOURCE_RET);
+  return mi_heapx_zalloc_aligned(heap, size, alignment  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_heap_calloc_aligned_at(mi_heap_t* heap, size_t count, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heapx_calloc_aligned_at(heap, count, size, alignment, offset  MI_SOURCE_RET);
+  return mi_heapx_calloc_aligned_at(heap, count, size, alignment, offset  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_heap_calloc_aligned(mi_heap_t* heap, size_t count, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_heapx_calloc_aligned(heap, count, size, alignment  MI_SOURCE_RET);
+  return mi_heapx_calloc_aligned(heap, count, size, alignment  MI_SOURCE_RET());
 }
 
 
 mi_decl_allocator void* mi_malloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heapx_malloc_aligned_at(mi_get_default_heap(), size, alignment, offset  MI_SOURCE_RET);
+  return mi_heapx_malloc_aligned_at(mi_get_default_heap(), size, alignment, offset  MI_SOURCE_RET());
 }
 
+mi_decl_allocator void* mi_source_malloc_aligned(size_t size, size_t alignment  MI_SOURCE_PARAM) mi_attr_noexcept {
+  return _mi_heapx_malloc_aligned(mi_get_default_heap(), size, alignment  MI_SOURCE_ARG);
+}
 mi_decl_allocator void* mi_malloc_aligned(size_t size, size_t alignment) mi_attr_noexcept {
-  return _mi_heapx_malloc_aligned(mi_get_default_heap(), size, alignment  MI_SOURCE_RET);
+  return mi_source_malloc_aligned(size, alignment  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_zalloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heapx_zalloc_aligned_at(mi_get_default_heap(), size, alignment, offset  MI_SOURCE_RET);
+  return mi_heapx_zalloc_aligned_at(mi_get_default_heap(), size, alignment, offset  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_zalloc_aligned(size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_heapx_zalloc_aligned(mi_get_default_heap(), size, alignment  MI_SOURCE_RET);
+  return mi_heapx_zalloc_aligned(mi_get_default_heap(), size, alignment  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_calloc_aligned_at(size_t count, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heapx_calloc_aligned_at(mi_get_default_heap(), count, size, alignment, offset  MI_SOURCE_RET);
+  return mi_heapx_calloc_aligned_at(mi_get_default_heap(), count, size, alignment, offset  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_calloc_aligned(size_t count, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_heapx_calloc_aligned(mi_get_default_heap(), count, size, alignment  MI_SOURCE_RET);
+  return mi_heapx_calloc_aligned(mi_get_default_heap(), count, size, alignment  MI_SOURCE_RET());
 }
 
 
@@ -209,54 +212,54 @@ static inline void* mi_heapx_recalloc_aligned(mi_heap_t* heap, void* p, size_t n
 }
 
 mi_decl_allocator void* mi_realloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heapx_realloc_aligned_at(mi_get_default_heap(), p, newsize, alignment, offset  MI_SOURCE_RET);
+  return mi_heapx_realloc_aligned_at(mi_get_default_heap(), p, newsize, alignment, offset  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_realloc_aligned(void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_heapx_realloc_aligned(mi_get_default_heap(), p, newsize, alignment   MI_SOURCE_RET);
+  return mi_heapx_realloc_aligned(mi_get_default_heap(), p, newsize, alignment   MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_rezalloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heapx_rezalloc_aligned_at(mi_get_default_heap(), p, newsize, alignment, offset  MI_SOURCE_RET);
+  return mi_heapx_rezalloc_aligned_at(mi_get_default_heap(), p, newsize, alignment, offset  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_rezalloc_aligned(void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_heapx_rezalloc_aligned(mi_get_default_heap(), p, newsize, alignment  MI_SOURCE_RET);
+  return mi_heapx_rezalloc_aligned(mi_get_default_heap(), p, newsize, alignment  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_recalloc_aligned_at(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heapx_recalloc_aligned_at(mi_get_default_heap(), p, newcount, size, alignment, offset  MI_SOURCE_RET);
+  return mi_heapx_recalloc_aligned_at(mi_get_default_heap(), p, newcount, size, alignment, offset  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_recalloc_aligned(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_heapx_recalloc_aligned(mi_get_default_heap(), p, newcount, size, alignment  MI_SOURCE_RET);
+  return mi_heapx_recalloc_aligned(mi_get_default_heap(), p, newcount, size, alignment  MI_SOURCE_RET());
 }
 
 
 mi_decl_allocator void* mi_heap_realloc_aligned_at(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heapx_realloc_aligned_at(heap, p, newsize, alignment, offset  MI_SOURCE_RET);
+  return mi_heapx_realloc_aligned_at(heap, p, newsize, alignment, offset  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_heap_realloc_aligned(mi_heap_t* heap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_heapx_realloc_aligned(heap, p, newsize, alignment  MI_SOURCE_RET);
+  return mi_heapx_realloc_aligned(heap, p, newsize, alignment  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_heap_rezalloc_aligned_at(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heapx_rezalloc_aligned_at(heap, p, newsize, alignment, offset  MI_SOURCE_RET);
+  return mi_heapx_rezalloc_aligned_at(heap, p, newsize, alignment, offset  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_heap_rezalloc_aligned(mi_heap_t* heap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_heapx_rezalloc_aligned(heap, p, newsize, alignment   MI_SOURCE_RET);
+  return mi_heapx_rezalloc_aligned(heap, p, newsize, alignment   MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_heap_recalloc_aligned_at(mi_heap_t* heap, void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(newcount, size, &total)) return NULL;
-  return mi_heapx_rezalloc_aligned_at(heap, p, total, alignment, offset   MI_SOURCE_RET);
+  return mi_heapx_rezalloc_aligned_at(heap, p, total, alignment, offset   MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_heap_recalloc_aligned(mi_heap_t* heap, void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(newcount, size, &total)) return NULL;
-  return mi_heapx_rezalloc_aligned(heap, p, total, alignment   MI_SOURCE_RET);
+  return mi_heapx_rezalloc_aligned(heap, p, total, alignment   MI_SOURCE_RET());
 }

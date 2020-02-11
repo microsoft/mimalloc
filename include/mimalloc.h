@@ -360,6 +360,58 @@ mi_decl_nodiscard mi_decl_export void* mi_new_n(size_t count, size_t size) mi_at
 mi_decl_nodiscard mi_decl_export void* mi_new_realloc(void* p, size_t newsize) mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_nodiscard mi_decl_export void* mi_new_reallocn(void* p, size_t newcount, size_t size) mi_attr_malloc mi_attr_alloc_size2(2, 3);
 
+
+// ---------------------------------------------------------------------------------------------
+// Experimental: Debugging API that tracks the source location of an allocation
+// ---------------------------------------------------------------------------------------------
+
+typedef struct mi_source_s {
+  long long src; // packed encoding of the source location 
+} mi_source_t;
+
+mi_decl_export mi_source_t  mi_source_ret(void* return_address);
+mi_decl_export mi_source_t  mi_source_loc(const char* fname, int lineno);
+mi_decl_export void* mi_source_unpack(mi_source_t source, const char** fname, int* lineno);
+
+#ifdef NDEBUG
+#define MI_SOURCE_PARAM
+#define MI_SOURCE_ARG
+#define MI_SOURCE_RET()
+#define MI_SOURCE_LOC()
+#else
+#ifdef _MSC_VER
+#include <intrin.h> 
+#define mi_return_address()     _ReturnAddress()
+#elif (defined(__GNUC__) && (__GNUC__>=3))  // includes clang and icc
+#define mi_return_address()     __builtin_return_address(0)
+#else
+#define mi_return_address()     NULL
+#endif
+#define MI_SOURCE_PARAM         , mi_source_t __mi_source
+#define MI_SOURCE_ARG           , __mi_source
+#define MI_SOURCE_RET()         , mi_source_ret(mi_return_address())
+#define MI_SOURCE_LOC()         , mi_source_loc(__FILE__,__LINE__)  
+#endif
+
+mi_decl_nodiscard mi_decl_export mi_decl_allocator void* mi_source_malloc(size_t size  MI_SOURCE_PARAM)                mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_nodiscard mi_decl_export mi_decl_allocator void* mi_source_calloc(size_t count, size_t size  MI_SOURCE_PARAM)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(1, 2);
+mi_decl_nodiscard mi_decl_export mi_decl_allocator void* mi_source_realloc(void* p, size_t newsize  MI_SOURCE_PARAM)   mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export mi_decl_allocator void* mi_source_malloc_aligned(size_t size, size_t alignment  MI_SOURCE_PARAM) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export mi_decl_allocator void* mi_source_reallocn(void* p, size_t count, size_t size  MI_SOURCE_PARAM)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2, 3);
+mi_decl_nodiscard mi_decl_export char* mi_source_strdup(const char* s  MI_SOURCE_PARAM) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export char* mi_source_strndup(const char* s, size_t n  MI_SOURCE_PARAM) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export char* mi_source_realpath(const char* fname, char* resolved_name  MI_SOURCE_PARAM) mi_attr_noexcept;
+
+
+mi_decl_nodiscard mi_decl_export void* mi_source_new(size_t size  MI_SOURCE_PARAM) mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_nodiscard mi_decl_export void* mi_source_new_aligned(size_t size, size_t alignment  MI_SOURCE_PARAM) mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
+mi_decl_nodiscard mi_decl_export void* mi_source_new_nothrow(size_t size  MI_SOURCE_PARAM) mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_nodiscard mi_decl_export void* mi_source_new_aligned_nothrow(size_t size, size_t alignment  MI_SOURCE_PARAM) mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
+
+
+// ----------------------------------------------------------------------
+// end of extern "C"
+// ----------------------------------------------------------------------
 #ifdef __cplusplus
 }
 #endif
@@ -420,4 +472,7 @@ template<class T1,class T2> bool operator==(const mi_stl_allocator<T1>& , const 
 template<class T1,class T2> bool operator!=(const mi_stl_allocator<T1>& , const mi_stl_allocator<T2>& ) mi_attr_noexcept { return false; }
 #endif // __cplusplus
 
-#endif
+
+
+#endif // MIMALLOC_H
+

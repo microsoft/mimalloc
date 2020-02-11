@@ -51,7 +51,7 @@ typedef struct mi_option_desc_s {
 static mi_option_desc_t options[_mi_option_last] =
 {
   // stable options
-  { MI_DEBUG, UNINIT, MI_OPTION(show_errors) },
+  { 1, UNINIT, MI_OPTION(show_errors) },
   { 0, UNINIT, MI_OPTION(show_stats) },
   { 0, UNINIT, MI_OPTION(verbose) },
 
@@ -381,33 +381,73 @@ void _mi_error_message(int err, const char* fmt, ...) {
   mi_call_error_handler(err);
 }
 
-#if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
-const char* _mi_debug_fname_base = "mimalloc_fname_base";
-#endif
+// -----------------------------------------------------------------------------------------------
+// compressed location: 
+// lsb=1:  bit 63-19: relative file name char* (to `mi_fname_base`), bit 18-1: line number
+// lsb=0:  bit 63-01: return address
+// -----------------------------------------------------------------------------------------------
+static const char* mi_debug_fname_base = "mimalloc_fname_base";
+
+#define MI_FNAME_SHIFT  16
+#define MI_LINE_SHIFT   (MI_FNAME_SHIFT + MI_INTPTR_SHIFT)
+#define MI_LINE_MASK    ((1L << MI_LINE_SHIFT) - 1)
+
+mi_source_t mi_source_ret(void* return_address) {
+  mi_source_t source = { ((intptr_t)return_address << 1) };
+  return source;
+}
+
+mi_source_t mi_source_loc(const char* fname, int lineno ) {
+  ptrdiff_t delta = fname - mi_debug_fname_base;
+  mi_assert_internal(((delta << MI_FNAME_SHIFT) >> MI_FNAME_SHIFT) == delta);
+  mi_source_t source = { ((((intptr_t)delta) << MI_FNAME_SHIFT) | ((lineno << 1) & MI_LINE_MASK) | 1) };
+  return source;
+}
+
+void* mi_source_unpack(mi_source_t source, const char** fname, int* lineno) {
+  *fname = NULL;
+  *lineno = 0;
+  if (source.src == 0) {
+    return NULL;
+  }
+  else if ((source.src & 1) == 1) {
+    *fname = (const char*)(mi_debug_fname_base + ((source.src >> MI_LINE_SHIFT) << MI_INTPTR_SHIFT) );
+    *lineno = (source.src & MI_LINE_MASK) >> 1;
+    return NULL;
+  }
+  else {
+    return ((void*)(source.src >> 1));
+  }
+}
+
+// -----------------------------------------------------------------------------------------------
+// Error message for a specific heap block
+// -----------------------------------------------------------------------------------------------
 
 void _mi_page_block_error_message(int err, const mi_page_t* page, const mi_block_t* block, const char* msg) {
 #if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
   const size_t bsize = mi_page_usable_block_size(page);
   const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + bsize);  
   const size_t size = (padding->delta <= bsize ? bsize - padding->delta : bsize);
-  if (padding->source==0) {
-    mi_show_error_message("%s: at block %p of size %zu\n", msg, block, size);
-  }
-  else if ((padding->source & 1) == 0) {
+  const char* fname;
+  int lineno;
+  void* return_addr = mi_source_unpack(padding->source, &fname, &lineno);
+  if (return_addr != NULL) {
 #ifdef _MSC_VER
     const char* hint = "  hint: paste the code address in the disassembly window in the debugger to find the source location.\n";
 #else
     const char* hint = "";
 #endif
-    mi_show_error_message("%s: at block %p of size %zu allocated at 0x%p.\n%s", msg, block, size, (void*)(padding->source >> 1), hint);    
+    mi_show_error_message("%s: at block %p of size %zu allocated at 0x%p.\n%s", msg, block, size, return_addr, hint);
+  }
+  else if (fname != NULL) {
+    mi_show_error_message("%s: at block %p of size %zu allocated at %s:%i.\n", msg, block, size, fname, lineno);
   }
   else {
-    const char* fname  = _mi_debug_fname_base + ((int32_t)(padding->source >> 32));
-    size_t      lineno = ((uint32_t)padding->source) >> 1;
-    mi_show_error_message("%s: at block %p of size %zu allocated at %s:%zu", msg, block, size, fname, lineno);
+    mi_show_error_message("%s: at block %p of size %zu.\n", msg, block, mi_page_usable_block_size(page));
   }
 #else
-  mi_show_error_message("%s: at block %p of size %zu", msg, block, mi_page_usable_block_size(page));
+  mi_show_error_message("%s: at block %p of size %zu.\n", msg, block, mi_page_usable_block_size(page));
 #endif
   mi_call_error_handler(err);
 }

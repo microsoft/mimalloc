@@ -18,22 +18,22 @@ not accidentally mix pointers from different allocators).
 #include <mimalloc.h>
 
 // Standard C allocation
-#define malloc(n)               mi_malloc(n)
-#define calloc(n,c)             mi_calloc(n,c)
-#define realloc(p,n)            mi_realloc(p,n)
+#define malloc(n)               mi_source_malloc(n  MI_SOURCE_LOC())
+#define calloc(n,c)             mi_source_calloc(n,c  MI_SOURCE_LOC())
+#define realloc(p,n)            mi_source_realloc(p,n  MI_SOURCE_LOC())
 #define free(p)                 mi_free(p)
 
-#define strdup(s)               mi_strdup(s)
-#define strndup(s)              mi_strndup(s)
-#define realpath(f,n)           mi_realpath(f,n)
+#define strdup(s)               mi_source_strdup(s  MI_SOURCE_LOC())
+#define strndup(s)              mi_source_strndup(s  MI_SOURCE_LOC())
+#define realpath(f,n)           mi_source_realpath(f,n  MI_SOURCE_LOC())
 
 // Microsoft extensions
 #define _expand(p,n)            mi_expand(p,n)
 #define _msize(p)               mi_usable_size(p)
 #define _recalloc(p,n,c)        mi_recalloc(p,n,c)
 
-#define _strdup(s)              mi_strdup(s)
-#define _strndup(s)             mi_strndup(s)
+#define _strdup(s)              mi_source_strdup(s  MI_SOURCE_LOC())
+#define _strndup(s)             mi_source_strndup(s  MI_SOURCE_LOC())
 #define _wcsdup(s)              (wchar_t*)mi_wcsdup((const unsigned short*)(s))
 #define _mbsdup(s)              mi_mbsdup(s)
 #define _dupenv_s(b,n,v)        mi_dupenv_s(b,n,v)
@@ -54,7 +54,7 @@ not accidentally mix pointers from different allocators).
 #define _posix_memalign(p,a,n)  mi_posix_memalign(p,a,n)
 
 // Microsoft aligned variants
-#define _aligned_malloc(n,a)                  mi_malloc_aligned(n,a)
+#define _aligned_malloc(n,a)                  mi_source_malloc_aligned(n,a  MI_SOURCE_LOC())
 #define _aligned_realloc(p,n,a)               mi_realloc_aligned(p,n,a)
 #define _aligned_recalloc(p,s,n,a)            mi_aligned_recalloc(p,s,n,a)
 #define _aligned_msize(p,a,o)                 mi_usable_size(p)

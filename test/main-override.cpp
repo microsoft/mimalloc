@@ -4,7 +4,9 @@
 #include <string.h>
 #include <stdint.h>
 
+#include <mimalloc-new-delete.h>
 #include <mimalloc.h>
+#include <mimalloc-override.h>
 #include <new>
 #include <vector>
 
@@ -57,8 +59,16 @@ int main() {
 
 static void dangling_ptr_write() {
   for (int i = 0; i < 1000; i++) {
-    uint8_t* p = new uint8_t[16];
-    free(p);
+    uint8_t* p;
+    if ((i & 1) == 0) {
+      p = (uint8_t*)malloc(16);
+      free(p);
+    }
+    else {
+      p = new uint8_t[16];
+      // delete p;   // delete sets the pointer to an invalid value generally
+      free(p);  
+    }
     p[0] = 0;
   }
 }

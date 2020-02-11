@@ -22,18 +22,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
-#include <intrin.h>             
-#define mi_return_address()     _ReturnAddress()
 #elif (defined(__GNUC__) && (__GNUC__>=3))  // includes clang and icc
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
 #define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
-#define mi_return_address()     __builtin_return_address(0)
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_cache_align
-#define mi_return_address()
 #endif
 
 
@@ -135,9 +131,6 @@ void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
 mi_decl_allocator void* _mi_heapx_malloc(mi_heap_t* heap, size_t size  MI_SOURCE_PARAM) mi_attr_noexcept;
 mi_decl_allocator void* _mi_heapx_malloc_zero(mi_heap_t* heap, size_t size, bool zero  MI_SOURCE_PARAM);
 mi_decl_allocator void* _mi_heapx_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero  MI_SOURCE_PARAM);
-mi_decl_allocator void* _mi_heapx_malloc_aligned(mi_heap_t* heap, size_t size, size_t alignment  MI_SOURCE_PARAM) mi_attr_noexcept;
-mi_decl_allocator void* _mi_heapx_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size  MI_SOURCE_PARAM) mi_attr_noexcept;
-mi_decl_allocator char* _mi_heapx_strdup(mi_heap_t* heap, const char* s  MI_SOURCE_PARAM) mi_attr_noexcept;
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);

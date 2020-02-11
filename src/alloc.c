@@ -50,7 +50,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
   padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
   padding->delta  = (uint32_t)(delta);
-  padding->source = source;
+  padding->source = __mi_source;
   uint8_t* fill = (uint8_t*)padding - delta;
   const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
   for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
@@ -76,11 +76,11 @@ static inline mi_decl_allocator void* mi_heapx_malloc_small(mi_heap_t* heap, siz
 }
 
 extern inline mi_decl_allocator void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_heapx_malloc_small(heap, size MI_SOURCE_RET);
+  return mi_heapx_malloc_small(heap, size MI_SOURCE_RET());
 }
 
 extern inline mi_decl_allocator void* mi_malloc_small(size_t size) mi_attr_noexcept {
-  return mi_heapx_malloc_small(mi_get_default_heap(), size MI_SOURCE_RET);
+  return mi_heapx_malloc_small(mi_get_default_heap(), size MI_SOURCE_RET());
 }
 
 // The main allocation function
@@ -104,10 +104,13 @@ inline mi_decl_allocator void* _mi_heapx_malloc(mi_heap_t* heap, size_t size MI_
 }
 
 extern inline mi_decl_allocator void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return _mi_heapx_malloc(heap, size   MI_SOURCE_RET);
+  return _mi_heapx_malloc(heap, size   MI_SOURCE_RET());
+}
+extern inline mi_decl_allocator void* mi_source_malloc(size_t size  MI_SOURCE_PARAM) mi_attr_noexcept {
+  return _mi_heapx_malloc(mi_get_default_heap(), size  MI_SOURCE_ARG);
 }
 extern inline mi_decl_allocator void* mi_malloc(size_t size) mi_attr_noexcept {
-  return _mi_heapx_malloc(mi_get_default_heap(), size  MI_SOURCE_RET);
+  return mi_source_malloc(size  MI_SOURCE_RET());
 }
 
 
@@ -131,7 +134,7 @@ void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
 
 // zero initialized small block
 mi_decl_allocator void* mi_zalloc_small(size_t size) mi_attr_noexcept {
-  void* p = mi_heapx_malloc_small(mi_get_default_heap(), size  MI_SOURCE_RET);
+  void* p = mi_heapx_malloc_small(mi_get_default_heap(), size  MI_SOURCE_RET());
   if (p != NULL) {
     _mi_block_zero_init(_mi_ptr_page(p), p, size);  // todo: can we avoid getting the page again?
   }
@@ -151,11 +154,11 @@ static inline mi_decl_allocator void* mi_heapx_zalloc(mi_heap_t* heap, size_t si
 }
 
 extern inline mi_decl_allocator void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_heapx_zalloc(heap, size  MI_SOURCE_RET);
+  return mi_heapx_zalloc(heap, size  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_zalloc(size_t size) mi_attr_noexcept {
-  return mi_heapx_zalloc(mi_get_default_heap(), size  MI_SOURCE_RET);
+  return mi_heapx_zalloc(mi_get_default_heap(), size  MI_SOURCE_RET());
 }
 
 
@@ -542,11 +545,13 @@ static inline mi_decl_allocator void* mi_heapx_calloc(mi_heap_t* heap, size_t co
 }
 
 mi_decl_allocator void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
-  return mi_heapx_calloc(heap, count, size  MI_SOURCE_RET);
+  return mi_heapx_calloc(heap, count, size  MI_SOURCE_RET());
 }
-
+mi_decl_allocator void* mi_source_calloc(size_t count, size_t size  MI_SOURCE_PARAM) mi_attr_noexcept {
+  return mi_heapx_calloc(mi_get_default_heap(), count, size  MI_SOURCE_ARG);
+}
 mi_decl_allocator void* mi_calloc(size_t count, size_t size) mi_attr_noexcept {
-  return mi_heapx_calloc(mi_get_default_heap(), count, size  MI_SOURCE_RET);
+  return mi_source_calloc(count, size  MI_SOURCE_RET());
 }
 
 // Uninitialized `calloc`
@@ -557,11 +562,11 @@ static inline mi_decl_allocator void* mi_heapx_mallocn(mi_heap_t* heap, size_t c
 }
 
 extern mi_decl_allocator void* mi_heap_mallocn(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
-  return mi_heapx_mallocn(heap, count, size  MI_SOURCE_RET);
+  return mi_heapx_mallocn(heap, count, size  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_mallocn(size_t count, size_t size) mi_attr_noexcept {
-  return mi_heapx_mallocn(mi_get_default_heap(), count, size  MI_SOURCE_RET);
+  return mi_heapx_mallocn(mi_get_default_heap(), count, size  MI_SOURCE_RET());
 }
 
 // Expand in place or fail
@@ -597,7 +602,7 @@ static mi_decl_allocator void* mi_heapx_realloc(mi_heap_t* heap, void* p, size_t
 
 
 mi_decl_allocator void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
-  return mi_heapx_realloc(heap, p, newsize  MI_SOURCE_RET);
+  return mi_heapx_realloc(heap, p, newsize  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* _mi_heapx_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size  MI_SOURCE_PARAM) mi_attr_noexcept {
@@ -607,49 +612,55 @@ mi_decl_allocator void* _mi_heapx_reallocn(mi_heap_t* heap, void* p, size_t coun
 }
 
 mi_decl_allocator void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
-  return _mi_heapx_reallocn(heap, p, count, size   MI_SOURCE_RET);
+  return _mi_heapx_reallocn(heap, p, count, size   MI_SOURCE_RET());
 }
 // Reallocate but free `p` on errors
 mi_decl_allocator void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
-  void* newp = mi_heapx_realloc(heap, p, newsize  MI_SOURCE_RET);
+  void* newp = mi_heapx_realloc(heap, p, newsize  MI_SOURCE_RET());
   if (newp==NULL && p!=NULL) mi_free(p);
   return newp;
 }
 
 mi_decl_allocator void* mi_heap_rezalloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
-  return _mi_heapx_realloc_zero(heap, p, newsize, true  MI_SOURCE_RET);
+  return _mi_heapx_realloc_zero(heap, p, newsize, true  MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(count, size, &total)) return NULL;
-  return _mi_heapx_realloc_zero(heap, p, total, true  MI_SOURCE_RET);
+  return _mi_heapx_realloc_zero(heap, p, total, true  MI_SOURCE_RET());
 }
 
 
+mi_decl_allocator void* mi_source_realloc(void* p, size_t newsize  MI_SOURCE_PARAM) mi_attr_noexcept {
+  return mi_heapx_realloc(mi_get_default_heap(), p, newsize  MI_SOURCE_ARG);
+}
 mi_decl_allocator void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
-  return mi_heapx_realloc(mi_get_default_heap(),p,newsize  MI_SOURCE_RET);
+  return mi_source_realloc(p, newsize  MI_SOURCE_RET());
 }
 
+mi_decl_allocator void* mi_source_reallocn(void* p, size_t count, size_t size  MI_SOURCE_PARAM) mi_attr_noexcept {
+  return _mi_heapx_reallocn(mi_get_default_heap(), p, count, size  MI_SOURCE_ARG);
+}
 mi_decl_allocator void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
-  return _mi_heapx_reallocn(mi_get_default_heap(),p,count,size  MI_SOURCE_RET);
+  return mi_source_reallocn(p,count,size  MI_SOURCE_RET());
 }
 
 // Reallocate but free `p` on errors
 mi_decl_allocator void* mi_reallocf(void* p, size_t newsize) mi_attr_noexcept {
-  void* newp = mi_heapx_realloc(mi_get_default_heap(), p, newsize   MI_SOURCE_RET);
+  void* newp = mi_heapx_realloc(mi_get_default_heap(), p, newsize   MI_SOURCE_RET());
   if (newp==NULL && p!=NULL) mi_free(p);
   return newp;
 }
 
 mi_decl_allocator void* mi_rezalloc(void* p, size_t newsize) mi_attr_noexcept {
-  return _mi_heapx_realloc_zero(mi_get_default_heap(), p, newsize, true   MI_SOURCE_RET);
+  return _mi_heapx_realloc_zero(mi_get_default_heap(), p, newsize, true   MI_SOURCE_RET());
 }
 
 mi_decl_allocator void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(count, size, &total)) return NULL;
-  return _mi_heapx_realloc_zero(mi_get_default_heap(), p, total, true  MI_SOURCE_RET);
+  return _mi_heapx_realloc_zero(mi_get_default_heap(), p, total, true  MI_SOURCE_RET());
 }
 
 
@@ -659,7 +670,7 @@ mi_decl_allocator void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_
 // ------------------------------------------------------
 
 // `strdup` using mi_malloc
-mi_decl_allocator char* _mi_heapx_strdup(mi_heap_t* heap, const char* s  MI_SOURCE_PARAM) mi_attr_noexcept {
+static char* mi_heapx_strdup(mi_heap_t* heap, const char* s  MI_SOURCE_PARAM) mi_attr_noexcept {
   if (s == NULL) return NULL;
   size_t n = strlen(s);
   char* t = (char*)_mi_heapx_malloc(heap, n+1  MI_SOURCE_ARG);
@@ -668,10 +679,13 @@ mi_decl_allocator char* _mi_heapx_strdup(mi_heap_t* heap, const char* s  MI_SOUR
 }
 
 char* mi_heap_strdup(mi_heap_t* heap, const char* s) mi_attr_noexcept {
-  return _mi_heapx_strdup(heap, s  MI_SOURCE_RET);
+  return mi_heapx_strdup(heap, s  MI_SOURCE_RET());
+}
+char* mi_source_strdup(const char* s  MI_SOURCE_PARAM) mi_attr_noexcept {
+  return mi_heapx_strdup(mi_get_default_heap(), s  MI_SOURCE_ARG);
 }
 char* mi_strdup(const char* s) mi_attr_noexcept {
-  return _mi_heapx_strdup(mi_get_default_heap(), s  MI_SOURCE_RET);
+  return mi_source_strdup(s  MI_SOURCE_RET());
 }
 
 // `strndup` using mi_malloc
@@ -687,10 +701,13 @@ static char* mi_heapx_strndup(mi_heap_t* heap, const char* s, size_t n  MI_SOURC
 }
 
 char* mi_heap_strndup(mi_heap_t* heap, const char* s, size_t n) mi_attr_noexcept {
-  return mi_heapx_strndup(heap, s, n  MI_SOURCE_RET);
+  return mi_heapx_strndup(heap, s, n  MI_SOURCE_RET());
+}
+char* mi_source_strndup(const char* s, size_t n  MI_SOURCE_PARAM) mi_attr_noexcept {
+  return mi_heapx_strndup(mi_get_default_heap(), s, n  MI_SOURCE_ARG);
 }
 char* mi_strndup(const char* s, size_t n) mi_attr_noexcept {
-  return mi_heapx_strndup(mi_get_default_heap(), s, n  MI_SOURCE_RET);
+  return mi_source_strndup(s, n  MI_SOURCE_RET());
 }
 
 #ifndef __wasi__
@@ -747,11 +764,13 @@ static char* mi_heapx_realpath(mi_heap_t* heap, const char* fname, char* resolve
 #endif
 
 char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
-  return mi_heapx_realpath(heap, fname, resolved_name  MI_SOURCE_RET);
+  return mi_heapx_realpath(heap, fname, resolved_name  MI_SOURCE_RET());
 }
-
+char* mi_source_realpath(const char* fname, char* resolved_name  MI_SOURCE_PARAM) mi_attr_noexcept {
+  return mi_heapx_realpath(mi_get_default_heap(), fname, resolved_name  MI_SOURCE_ARG);
+}
 char* mi_realpath(const char* fname, char* resolved_name) mi_attr_noexcept {
-  return mi_heapx_realpath(mi_get_default_heap(), fname, resolved_name  MI_SOURCE_RET);
+  return mi_heapx_realpath(mi_get_default_heap(), fname, resolved_name  MI_SOURCE_RET());
 }
 #endif
 
@@ -807,51 +826,61 @@ static bool mi_try_new_handler(bool nothrow) {
 }
 #endif
 
-static mi_decl_noinline void* mi_heapx_try_new(mi_heap_t* heap, size_t size, bool nothrow   MI_SOURCE_PARAM) {
+static mi_decl_noinline void* mi_source_try_new(size_t size, bool nothrow   MI_SOURCE_PARAM) {
   void* p = NULL;
   while(p == NULL && mi_try_new_handler(nothrow)) {
-    p = _mi_heapx_malloc(heap, size  MI_SOURCE_ARG);
+    p = mi_source_malloc(size  MI_SOURCE_ARG);
   }
   return p;
 }
 
-static inline void* mi_heapx_new(size_t size  MI_SOURCE_PARAM) {
-  mi_heap_t* const heap = mi_get_default_heap();
-  void* p = _mi_heapx_malloc(heap, size  MI_SOURCE_ARG);
-  if (mi_unlikely(p == NULL)) return mi_heapx_try_new(heap, size, false  MI_SOURCE_ARG);
+inline void* mi_source_new(size_t size  MI_SOURCE_PARAM) {
+  void* p = mi_source_malloc(size  MI_SOURCE_ARG);
+  if (mi_unlikely(p == NULL)) return mi_source_try_new(size, false  MI_SOURCE_ARG);
   return p;
 }
 
 void* mi_new(size_t size) {
-  return mi_heapx_new(size  MI_SOURCE_RET);
+  return mi_source_new(size  MI_SOURCE_RET());
 }
 
-void* mi_new_nothrow(size_t size) {
-  mi_heap_t* const heap = mi_get_default_heap();
-  void* p = _mi_heapx_malloc(heap, size  MI_SOURCE_RET);
-  if (mi_unlikely(p == NULL)) return mi_heapx_try_new(heap, size, true  MI_SOURCE_RET);
+void* mi_source_new_nothrow(size_t size  MI_SOURCE_PARAM) {
+  void* p = mi_source_malloc(size  MI_SOURCE_ARG);
+  if (mi_unlikely(p == NULL)) return mi_source_try_new(size, true  MI_SOURCE_ARG);
   return p;
 }
 
-void* mi_new_aligned(size_t size, size_t alignment) {
-  mi_heap_t* const heap = mi_get_default_heap();
+void* mi_new_nothrow(size_t size) {
+  return mi_source_new_nothrow(size MI_SOURCE_RET());
+}
+
+
+void* mi_source_new_aligned(size_t size, size_t alignment  MI_SOURCE_PARAM) {
   void* p;
   do {
-    p = _mi_heapx_malloc_aligned(heap, size, alignment  MI_SOURCE_RET);
+    p = mi_source_malloc_aligned(size, alignment  MI_SOURCE_ARG);
   }
   while(p == NULL && mi_try_new_handler(false));
   return p;
 }
 
-void* mi_new_aligned_nothrow(size_t size, size_t alignment) {
-  mi_heap_t* const heap = mi_get_default_heap();  
+void* mi_new_aligned(size_t size, size_t alignment) {
+  return mi_source_new_aligned(size, alignment  MI_SOURCE_RET());
+}
+
+void* mi_source_new_aligned_nothrow(size_t size, size_t alignment  MI_SOURCE_PARAM) {
   void* p;
   do {
-    p = _mi_heapx_malloc_aligned(heap, size, alignment  MI_SOURCE_RET);
+    p = mi_source_malloc_aligned(size, alignment  MI_SOURCE_ARG);
   }
   while(p == NULL && mi_try_new_handler(true));
   return p;
 }
+
+void* mi_new_aligned_nothrow(size_t size, size_t alignment) {
+  return mi_source_new_aligned_nothrow(size, alignment  MI_SOURCE_RET());
+}
+
 
 void* mi_new_n(size_t count, size_t size) {
   size_t total;
@@ -860,7 +889,7 @@ void* mi_new_n(size_t count, size_t size) {
     return NULL;
   }
   else {
-    return mi_heapx_new(total  MI_SOURCE_RET);
+    return mi_source_new(total  MI_SOURCE_RET());
   }
 }
 
@@ -868,7 +897,7 @@ void* mi_new_realloc(void* p, size_t newsize) {
   mi_heap_t* const heap = mi_get_default_heap();
   void* q;
   do {
-    q = mi_heapx_realloc(heap, p, newsize  MI_SOURCE_RET);
+    q = mi_heapx_realloc(heap, p, newsize  MI_SOURCE_RET());
   } while (q == NULL && mi_try_new_handler(false));
   return q;
 }
@@ -882,7 +911,7 @@ void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
   }
   void* q;
   do {
-    q = mi_heapx_realloc(heap, p, total  MI_SOURCE_RET);
+    q = mi_heapx_realloc(heap, p, total  MI_SOURCE_RET());
   } while (q == NULL && mi_try_new_handler(false));
   return q;
 }
