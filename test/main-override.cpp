@@ -23,10 +23,12 @@ public:
   ~Test() { }
 };
 
+void dangling_ptr_write();
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
   atexit(free_p);
+  dangling_ptr_write();
   void* p1 = malloc(78);
   void* p2 = mi_malloc_aligned(16,24);
   free(p1);  
@@ -51,6 +53,14 @@ int main() {
   delete t;  
   mi_stats_print(NULL);
   return 0;
+}
+
+static void dangling_ptr_write() {
+  for (int i = 0; i < 1000; i++) {
+    uint8_t* p = new uint8_t[16];
+    free(p);
+    p[0] = 0;
+  }
 }
 
 class Static {

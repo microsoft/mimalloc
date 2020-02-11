@@ -48,7 +48,14 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
   if (p == NULL) return EINVAL;
   if (alignment % sizeof(void*) != 0) return EINVAL;   // natural alignment
   if (!_mi_is_power_of_two(alignment)) return EINVAL;  // not a power of 2
-  void* q = (alignment <= MI_MAX_ALIGN_SIZE ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
+  mi_heap_t* heap = mi_get_default_heap();
+  void* q; 
+  if (alignment <= MI_MAX_ALIGN_SIZE) {
+    q = _mi_heapx_malloc(heap, size  MI_SOURCE_RET);
+  }
+  else {
+    q = _mi_heapx_malloc_aligned(heap, size, alignment  MI_SOURCE_RET);
+  }
   if (q==NULL && size != 0) return ENOMEM;
   mi_assert_internal(((uintptr_t)q % alignment) == 0);
   *p = q;
@@ -56,32 +63,47 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
 }
 
 void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept {
-  void* p = (alignment <= MI_MAX_ALIGN_SIZE ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
+  mi_heap_t* heap = mi_get_default_heap();
+  void* p;
+  if (alignment <= MI_MAX_ALIGN_SIZE) {
+    p = _mi_heapx_malloc(heap, size  MI_SOURCE_RET);
+  }
+  else {
+    p = _mi_heapx_malloc_aligned(heap, size, alignment  MI_SOURCE_RET);
+  }
   mi_assert_internal(((uintptr_t)p % alignment) == 0);
   return p;
 }
 
 void* mi_valloc(size_t size) mi_attr_noexcept {
-  return mi_malloc_aligned(size, _mi_os_page_size());
+  return _mi_heapx_malloc_aligned(mi_get_default_heap(), size, _mi_os_page_size()  MI_SOURCE_RET);
 }
 
 void* mi_pvalloc(size_t size) mi_attr_noexcept {
   size_t psize = _mi_os_page_size();
   if (size >= SIZE_MAX - psize) return NULL; // overflow
   size_t asize = ((size + psize - 1) / psize) * psize;
-  return mi_malloc_aligned(asize, psize);
+  return _mi_heapx_malloc_aligned(mi_get_default_heap(), asize, psize  MI_SOURCE_RET);
 }
 
 void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept {
   if (alignment==0 || !_mi_is_power_of_two(alignment)) return NULL; 
   if ((size&(alignment-1)) != 0) return NULL; // C11 requires integral multiple, see <https://en.cppreference.com/w/c/memory/aligned_alloc>
-  void* p = (alignment <= MI_MAX_ALIGN_SIZE ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
+  mi_heap_t* heap = mi_get_default_heap();
+  void* p;
+  if (alignment <= MI_MAX_ALIGN_SIZE) {
+    p = _mi_heapx_malloc(heap, size  MI_SOURCE_RET);
+  }
+  else {
+    p = _mi_heapx_malloc_aligned(heap, size, alignment  MI_SOURCE_RET);
+  }
   mi_assert_internal(((uintptr_t)p % alignment) == 0);
   return p;
 }
 
 void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  // BSD
-  void* newp = mi_reallocn(p,count,size);
+  mi_heap_t* heap = mi_get_default_heap();
+  void* newp = _mi_heapx_reallocn(heap, p, count, size  MI_SOURCE_RET);
   if (newp==NULL) errno = ENOMEM;
   return newp;
 }
@@ -97,7 +119,7 @@ unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept {
   size_t len;
   for(len = 0; s[len] != 0; len++) { }
   size_t size = (len+1)*sizeof(unsigned short);
-  unsigned short* p = (unsigned short*)mi_malloc(size);
+  unsigned short* p = (unsigned short*)_mi_heapx_malloc(mi_get_default_heap(), size  MI_SOURCE_RET);
   if (p != NULL) {
     memcpy(p,s,size);
   }
@@ -105,7 +127,7 @@ unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept {
 }
 
 unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexcept {
-  return (unsigned char*)mi_strdup((const char*)s);
+  return (unsigned char*)_mi_heapx_strdup(mi_get_default_heap(), (const char*)s  MI_SOURCE_RET);
 }
 
 int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
@@ -117,7 +139,7 @@ int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
     *buf = NULL;
   }
   else {
-    *buf = mi_strdup(p);
+    *buf = _mi_heapx_strdup(mi_get_default_heap(), p  MI_SOURCE_RET);
     if (*buf==NULL) return ENOMEM;
     if (size != NULL) *size = strlen(p);
   }

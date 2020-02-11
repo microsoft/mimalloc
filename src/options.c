@@ -303,10 +303,17 @@ void _mi_verbose_message(const char* fmt, ...) {
   va_end(args);
 }
 
-static void mi_show_error_message(const char* fmt, va_list args) {
+static void mi_vshow_error_message(const char* fmt, va_list args) {
   if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
   if (mi_atomic_increment(&error_count) > mi_max_error_count) return;
   mi_vfprintf(NULL, NULL, "mimalloc: error: ", fmt, args);
+}
+
+static void mi_show_error_message(const char* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  mi_vshow_error_message(fmt,args);
+  va_end(args);
 }
 
 void _mi_warning_message(const char* fmt, ...) {
@@ -355,20 +362,56 @@ void mi_register_error(mi_error_fun* fun, void* arg) {
   mi_atomic_write_ptr(void,&mi_error_arg, arg);
 }
 
-void _mi_error_message(int err, const char* fmt, ...) {
-  // show detailed error message
-  va_list args;
-  va_start(args, fmt);
-  mi_show_error_message(fmt, args);
-  va_end(args);
-  // and call the error handler which may abort (or return normally)
+static void mi_call_error_handler(int err) {
   if (mi_error_handler != NULL) {
-    mi_error_handler(err, mi_atomic_read_ptr(void,&mi_error_arg));
+    mi_error_handler(err, mi_atomic_read_ptr(void, &mi_error_arg));
   }
   else {
     mi_error_default(err);
   }
 }
+
+void _mi_error_message(int err, const char* fmt, ...) {
+  // show detailed error message
+  va_list args;
+  va_start(args, fmt);
+  mi_vshow_error_message(fmt, args);
+  va_end(args);
+  // and call the error handler which may abort (or return normally)
+  mi_call_error_handler(err);
+}
+
+#if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
+const char* _mi_debug_fname_base = "mimalloc_fname_base";
+#endif
+
+void _mi_page_block_error_message(int err, const mi_page_t* page, const mi_block_t* block, const char* msg) {
+#if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
+  const size_t bsize = mi_page_usable_block_size(page);
+  const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + bsize);  
+  const size_t size = (padding->delta <= bsize ? bsize - padding->delta : bsize);
+  if (padding->source==0) {
+    mi_show_error_message("%s: at block %p of size %zu\n", msg, block, size);
+  }
+  else if ((padding->source & 1) == 0) {
+#ifdef _MSC_VER
+    const char* hint = "  hint: paste the code address in the disassembly window in the debugger to find the source location.\n";
+#else
+    const char* hint = "";
+#endif
+    mi_show_error_message("%s: at block %p of size %zu allocated at 0x%p.\n%s", msg, block, size, (void*)(padding->source >> 1), hint);    
+  }
+  else {
+    const char* fname  = _mi_debug_fname_base + ((int32_t)(padding->source >> 32));
+    size_t      lineno = ((uint32_t)padding->source) >> 1;
+    mi_show_error_message("%s: at block %p of size %zu allocated at %s:%zu", msg, block, size, fname, lineno);
+  }
+#else
+  mi_show_error_message("%s: at block %p of size %zu", msg, block, mi_page_usable_block_size(page));
+#endif
+  mi_call_error_handler(err);
+}
+
 
 // --------------------------------------------------------
 // Initialize options by checking the environment

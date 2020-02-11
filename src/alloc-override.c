@@ -186,8 +186,8 @@ int posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_me
 
   void* __libc_valloc(size_t size) { return mi_valloc(size); }
   void* __libc_pvalloc(size_t size) { return mi_pvalloc(size); }
-  void* __libc_memalign(size_t alignment, size_t size)          { return mi_memalign(alignment,size); }
-  int __posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p,alignment,size); }
+  void* __libc_memalign(size_t alignment, size_t size) { return mi_memalign(alignment, size); }
+  int __posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
 #endif
 
 #ifdef __cplusplus

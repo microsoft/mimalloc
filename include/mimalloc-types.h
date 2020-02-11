@@ -270,6 +270,33 @@ typedef struct mi_segment_s {
 
 
 // ------------------------------------------------------
+// In debug mode there is a padding stucture at the end 
+// of the blocks to check for buffer overflows.
+// ------------------------------------------------------
+#if defined(MI_PADDING)
+// compressed location: 
+// lsb=1:  bit 63-32: relative file name char* (to `mi_fname_base`), bit 31-1: line number
+// lsb=0:  bit 63-01: return address
+typedef int64_t mi_source_t;
+typedef struct mi_padding_s {
+  uint32_t    canary;  // encoded block value to check validity of the padding (in case of heap block overflow)
+  uint32_t    delta;   // padding bytes before the block. (mi_usable_size(p) - delta == exact allocated bytes)
+  mi_source_t source;  // source location
+} mi_padding_t;
+#define MI_PADDING_SIZE   (sizeof(mi_padding_t))
+#define MI_PADDING_WSIZE  ((MI_PADDING_SIZE + MI_INTPTR_SIZE - 1) / MI_INTPTR_SIZE)
+#define MI_SOURCE_PARAM   , mi_source_t source
+#define MI_SOURCE_ARG     , source
+#define MI_SOURCE_RET     , ((intptr_t)mi_return_address() << (intptr_t)1)
+#else
+#define MI_PADDING_SIZE   0
+#define MI_PADDING_WSIZE  0
+#define MI_SOURCE_PARAM
+#define MI_SOURCE_ARG
+#define MI_SOURCE_RET     
+#endif
+
+// ------------------------------------------------------
 // Heaps
 // Provide first-class heaps to allocate from.
 // A heap just owns a set of pages for allocation and
@@ -300,20 +327,6 @@ typedef struct mi_random_cxt_s {
   uint32_t output[16];
   int      output_available;
 } mi_random_ctx_t;
-
-
-// In debug mode there is a padding stucture at the end of the blocks to check for buffer overflows
-#if defined(MI_PADDING)
-typedef struct mi_padding_s {
-  uint32_t canary; // encoded block value to check validity of the padding (in case of overflow)
-  uint32_t delta;  // padding bytes before the block. (mi_usable_size(p) - delta == exact allocated bytes)
-} mi_padding_t;
-#define MI_PADDING_SIZE   (sizeof(mi_padding_t))
-#define MI_PADDING_WSIZE  ((MI_PADDING_SIZE + MI_INTPTR_SIZE - 1) / MI_INTPTR_SIZE)
-#else
-#define MI_PADDING_SIZE   0
-#define MI_PADDING_WSIZE  0
-#endif
 
 #define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1)
 

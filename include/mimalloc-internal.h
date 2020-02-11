@@ -22,14 +22,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
+#include <intrin.h>             
+#define mi_return_address()     _ReturnAddress()
 #elif (defined(__GNUC__) && (__GNUC__>=3))  // includes clang and icc
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
 #define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
+#define mi_return_address()     __builtin_return_address(0)
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_cache_align
+#define mi_return_address()
 #endif
 
 
@@ -41,6 +45,7 @@ void       _mi_verbose_message(const char* fmt, ...);
 void       _mi_trace_message(const char* fmt, ...);
 void       _mi_options_init(void);
 void       _mi_error_message(int err, const char* fmt, ...);
+void       _mi_page_block_error_message(int err, const mi_page_t* page, const mi_block_t* block, const char* fmt);
 
 // random.c
 void       _mi_random_init(mi_random_ctx_t* ctx);
@@ -89,7 +94,7 @@ void       _mi_abandoned_await_readers(void);
 
 
 // "page.c"
-void*      _mi_malloc_generic(mi_heap_t* heap, size_t size)  mi_attr_noexcept mi_attr_malloc;
+void*      _mi_malloc_generic(mi_heap_t* heap, size_t size MI_SOURCE_PARAM)  mi_attr_noexcept mi_attr_malloc;
 
 void       _mi_page_retire(mi_page_t* page);                                  // free the page if there are no other pages with many free blocks
 void       _mi_page_unfull(mi_page_t* page);
@@ -122,12 +127,17 @@ mi_msecs_t  _mi_clock_end(mi_msecs_t start);
 mi_msecs_t  _mi_clock_start(void);
 
 // "alloc.c"
-void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept;  // called from `_mi_malloc_generic`
-void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero);
-void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero);
+void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size  MI_SOURCE_PARAM) mi_attr_noexcept;  // called from `_mi_malloc_generic`
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
 void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
+
+mi_decl_allocator void* _mi_heapx_malloc(mi_heap_t* heap, size_t size  MI_SOURCE_PARAM) mi_attr_noexcept;
+mi_decl_allocator void* _mi_heapx_malloc_zero(mi_heap_t* heap, size_t size, bool zero  MI_SOURCE_PARAM);
+mi_decl_allocator void* _mi_heapx_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero  MI_SOURCE_PARAM);
+mi_decl_allocator void* _mi_heapx_malloc_aligned(mi_heap_t* heap, size_t size, size_t alignment  MI_SOURCE_PARAM) mi_attr_noexcept;
+mi_decl_allocator void* _mi_heapx_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size  MI_SOURCE_PARAM) mi_attr_noexcept;
+mi_decl_allocator char* _mi_heapx_strdup(mi_heap_t* heap, const char* s  MI_SOURCE_PARAM) mi_attr_noexcept;
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
@@ -606,7 +616,8 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   // check for free list corruption: is `next` at least in the same page?
   // TODO: check if `next` is `page->block_size` aligned?
   if (mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next))) {
-    _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (uintptr_t)next);
+    //_mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (uintptr_t)next);
+    _mi_page_block_error_message(EFAULT, page, block, "corrupted free list entry" );
     next = NULL;
   }
   return next;

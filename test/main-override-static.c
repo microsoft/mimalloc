@@ -11,6 +11,7 @@ static void double_free1();
 static void double_free2();
 static void corrupt_free();
 static void block_overflow1();
+static void dangling_ptr_write();
 
 int main() {
   mi_version();
@@ -20,6 +21,7 @@ int main() {
   // double_free2();
   // corrupt_free();
   // block_overflow1();
+  dangling_ptr_write();
 
   void* p1 = malloc(78);
   void* p2 = malloc(24);
@@ -47,6 +49,14 @@ static void block_overflow1() {
   uint8_t* p = (uint8_t*)mi_malloc(17);
   p[18] = 0;
   free(p);
+}
+
+static void dangling_ptr_write() {
+  for (int i = 0; i < 1000; i++) {
+    uint8_t* p = (uint8_t*)mi_malloc(16);
+    free(p);
+    p[0] = 0;
+  }  
 }
 
 // The double free samples come ArcHeap [1] by Insu Yun (issue #161)
