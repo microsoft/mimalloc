@@ -321,6 +321,9 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   }
   mi_assert_internal(from->pages[MI_BIN_FULL].first == NULL);
 
+  // mark all pages to no longer add to delayed_free
+  mi_heap_visit_pages(from, &mi_heap_page_never_delayed_free, NULL, NULL);
+
   // free outstanding thread delayed free blocks
   _mi_heap_delayed_free(from);
 
