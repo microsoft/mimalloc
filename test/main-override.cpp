@@ -6,9 +6,9 @@
 
 #include <mimalloc-new-delete.h>
 #include <mimalloc.h>
-#include <mimalloc-override.h>
 #include <new>
 #include <vector>
+// #include <mimalloc-override.h>
 
 static void* p = malloc(8);
 
@@ -30,12 +30,12 @@ void dangling_ptr_write();
 int main() {
   mi_stats_reset();  // ignore earlier allocations
   atexit(free_p);
-  dangling_ptr_write();
+  //dangling_ptr_write();
   void* p1 = malloc(78);
   void* p2 = mi_malloc_aligned(16,24);
   free(p1);  
   p1 = malloc(8);
-  char* s = mi_strdup("hello\n");
+  char* s = _strdup("hello\n");
   /*
   char* s = _strdup("hello\n");
   char* buf = NULL;
@@ -48,10 +48,11 @@ int main() {
   p1 = realloc(p1, 32);
   free(p1);
   free(p2);
-  mi_free(s);
+  mi_free(s);  
   Test* t = new Test(42);
   delete t;
-  t = new (std::nothrow) Test(42);
+  // t = new(std::nothrow) Test(42);   // does not work with overriding :-(
+  t = new Test(42);
   delete t;  
   mi_stats_print(NULL);
   return 0;
@@ -60,7 +61,7 @@ int main() {
 static void dangling_ptr_write() {
   for (int i = 0; i < 1000; i++) {
     uint8_t* p;
-    if ((i & 1) == 0) {
+    if ((i & 1) == 1) {
       p = (uint8_t*)malloc(16);
       free(p);
     }

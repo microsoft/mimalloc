@@ -26,18 +26,18 @@ terms of the MIT license. A copy of the license can be found in the file
   #else
     #define MI_FORWARD(fun)      __attribute__((alias(#fun), used, visibility("default")))
   #endif
-  #define MI_FORWARD1(fun,x)      MI_FORWARD(fun)
-  #define MI_FORWARD2(fun,x,y)    MI_FORWARD(fun)
-  #define MI_FORWARD3(fun,x,y,z)  MI_FORWARD(fun)
-  #define MI_FORWARD0(fun,x)      MI_FORWARD(fun)
-  #define MI_FORWARD02(fun,x,y)   MI_FORWARD(fun)
+  #define MI_FORWARD1(fun,x)      MI_FORWARD(mi_##fun)
+  #define MI_FORWARD2(fun,x,y)    MI_FORWARD(mi_##fun)
+  #define MI_FORWARD3(fun,x,y,z)  MI_FORWARD(mi_##fun)
+  #define MI_FORWARD0(fun,x)      MI_FORWARD(mi_##fun)
+  #define MI_FORWARD02(fun,x,y)   MI_FORWARD(mi_##fun)
 #else
   // use forwarding by calling our `mi_` function
-  #define MI_FORWARD1(fun,x)      { return fun(x); }
-  #define MI_FORWARD2(fun,x,y)    { return fun(x,y); }
-  #define MI_FORWARD3(fun,x,y,z)  { return fun(x,y,z); }
-  #define MI_FORWARD0(fun,x)      { fun(x); }
-  #define MI_FORWARD02(fun,x,y)   { fun(x,y); }
+  #define MI_FORWARD1(fun,x)      { return mi_source_##fun(x  MI_SOURCE_RET()); }
+  #define MI_FORWARD2(fun,x,y)    { return mi_source_##fun(x,y  MI_SOURCE_RET()); }
+  #define MI_FORWARD3(fun,x,y,z)  { return mi_source_##fun(x,y,z  MI_SOURCE_RET()); }
+  #define MI_FORWARD0(fun,x)      { mi_##fun(x); }
+  #define MI_FORWARD02(fun,x,y)   { mi_##fun(x,y); }
 #endif
 
 #if defined(__APPLE__) && defined(MI_SHARED_LIB_EXPORT) && defined(MI_INTERPOSE)
@@ -68,10 +68,10 @@ terms of the MIT license. A copy of the license can be found in the file
   // we just override new/delete which does work in a static library.
 #else
   // On all other systems forward to our API
-  void* malloc(size_t size)              MI_FORWARD1(mi_malloc, size);
-  void* calloc(size_t size, size_t n)    MI_FORWARD2(mi_calloc, size, n);
-  void* realloc(void* p, size_t newsize) MI_FORWARD2(mi_realloc, p, newsize);
-  void  free(void* p)                    MI_FORWARD0(mi_free, p);
+  void* malloc(size_t size)              MI_FORWARD1(malloc, size);
+  void* calloc(size_t size, size_t n)    MI_FORWARD2(calloc, size, n);
+  void* realloc(void* p, size_t newsize) MI_FORWARD2(realloc, p, newsize);
+  void  free(void* p)                    MI_FORWARD0(free, p);
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
@@ -89,18 +89,18 @@ terms of the MIT license. A copy of the license can be found in the file
   // see <https://en.cppreference.com/w/cpp/memory/new/operator_new>
   // ------------------------------------------------------
   #include <new>
-  void operator delete(void* p) noexcept              MI_FORWARD0(mi_free,p);
-  void operator delete[](void* p) noexcept            MI_FORWARD0(mi_free,p);
+  void operator delete(void* p) noexcept              MI_FORWARD0(free,p);
+  void operator delete[](void* p) noexcept            MI_FORWARD0(free,p);
 
-  void* operator new(std::size_t n) noexcept(false)   MI_FORWARD1(mi_new,n);
-  void* operator new[](std::size_t n) noexcept(false) MI_FORWARD1(mi_new,n);
+  void* operator new(std::size_t n) noexcept(false)   MI_FORWARD1(new,n);
+  void* operator new[](std::size_t n) noexcept(false) MI_FORWARD1(new,n);
 
-  void* operator new  (std::size_t n, const std::nothrow_t& tag) noexcept { UNUSED(tag); return mi_new_nothrow(n); }
-  void* operator new[](std::size_t n, const std::nothrow_t& tag) noexcept { UNUSED(tag); return mi_new_nothrow(n); }
+  void* operator new  (std::size_t n, const std::nothrow_t& ) noexcept { return mi_source_new_nothrow(n  MI_SOURCE_RET()); }
+  void* operator new[](std::size_t n, const std::nothrow_t& ) noexcept { return mi_source_new_nothrow(n  MI_SOURCE_RET()); }
 
   #if (__cplusplus >= 201402L || _MSC_VER >= 1916)
-  void operator delete  (void* p, std::size_t n) noexcept MI_FORWARD02(mi_free_size,p,n);
-  void operator delete[](void* p, std::size_t n) noexcept MI_FORWARD02(mi_free_size,p,n);
+  void operator delete  (void* p, std::size_t n) noexcept MI_FORWARD02(free_size,p,n);
+  void operator delete[](void* p, std::size_t n) noexcept MI_FORWARD02(free_size,p,n);
   #endif
 
   #if (__cplusplus > 201402L || defined(__cpp_aligned_new)) && (!defined(__GNUC__) || (__GNUC__ > 5))
@@ -109,10 +109,10 @@ terms of the MIT license. A copy of the license can be found in the file
   void operator delete  (void* p, std::size_t n, std::align_val_t al) noexcept { mi_free_size_aligned(p, n, static_cast<size_t>(al)); };
   void operator delete[](void* p, std::size_t n, std::align_val_t al) noexcept { mi_free_size_aligned(p, n, static_cast<size_t>(al)); };
 
-  void* operator new( std::size_t n, std::align_val_t al)   noexcept(false) { return mi_new_aligned(n, static_cast<size_t>(al)); }
-  void* operator new[]( std::size_t n, std::align_val_t al) noexcept(false) { return mi_new_aligned(n, static_cast<size_t>(al)); }
-  void* operator new  (std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_new_aligned_nothrow(n, static_cast<size_t>(al)); }
-  void* operator new[](std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_new_aligned_nothrow(n, static_cast<size_t>(al)); }
+  void* operator new( std::size_t n, std::align_val_t al)   noexcept(false) { return mi_source_new_aligned(n, static_cast<size_t>(al)  MI_SOURCE_RET()); }
+  void* operator new[]( std::size_t n, std::align_val_t al) noexcept(false) { return mi_source_new_aligned(n, static_cast<size_t>(al)  MI_SOURCE_RET()); }
+  void* operator new  (std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_source_new_aligned_nothrow(n, static_cast<size_t>(al)  MI_SOURCE_RET()); }
+  void* operator new[](std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_source_new_aligned_nothrow(n, static_cast<size_t>(al)  MI_SOURCE_RET()); }
   #endif
 
 #elif (defined(__GNUC__) || defined(__clang__))
@@ -121,10 +121,10 @@ terms of the MIT license. A copy of the license can be found in the file
   // used by GCC and CLang).
   // See <https://itanium-cxx-abi.github.io/cxx-abi/abi.html#mangling>
   // ------------------------------------------------------
-  void _ZdlPv(void* p)            MI_FORWARD0(mi_free,p); // delete
-  void _ZdaPv(void* p)            MI_FORWARD0(mi_free,p); // delete[]
-  void _ZdlPvm(void* p, size_t n) MI_FORWARD02(mi_free_size,p,n);
-  void _ZdaPvm(void* p, size_t n) MI_FORWARD02(mi_free_size,p,n);
+  void _ZdlPv(void* p)            MI_FORWARD0(free,p); // delete
+  void _ZdaPv(void* p)            MI_FORWARD0(free,p); // delete[]
+  void _ZdlPvm(void* p, size_t n) MI_FORWARD02(free_size,p,n);
+  void _ZdaPvm(void* p, size_t n) MI_FORWARD02(free_size,p,n);
   void _ZdlPvSt11align_val_t(void* p, size_t al)            { mi_free_aligned(p,al); }
   void _ZdaPvSt11align_val_t(void* p, size_t al)            { mi_free_aligned(p,al); }
   void _ZdlPvmSt11align_val_t(void* p, size_t n, size_t al) { mi_free_size_aligned(p,n,al); }
@@ -132,19 +132,19 @@ terms of the MIT license. A copy of the license can be found in the file
 
   typedef struct mi_nothrow_s {  } mi_nothrow_t;
   #if (MI_INTPTR_SIZE==8)
-    void* _Znwm(size_t n)                             MI_FORWARD1(mi_new,n);  // new 64-bit
-    void* _Znam(size_t n)                             MI_FORWARD1(mi_new,n);  // new[] 64-bit
-    void* _ZnwmSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(mi_new_aligned, n, al);
-    void* _ZnamSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(mi_new_aligned, n, al);
-    void* _ZnwmRKSt9nothrow_t(size_t n, mi_nothrow_t tag) { UNUSED(tag); return mi_new_nothrow(n); }
-    void* _ZnamRKSt9nothrow_t(size_t n, mi_nothrow_t tag) { UNUSED(tag); return mi_new_nothrow(n); }
-    void* _ZnwmSt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { UNUSED(tag); return mi_new_aligned_nothrow(n,al); }
-    void* _ZnamSt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { UNUSED(tag); return mi_new_aligned_nothrow(n,al); }
+    void* _Znwm(size_t n)                             MI_FORWARD1(new,n);  // new 64-bit
+    void* _Znam(size_t n)                             MI_FORWARD1(new,n);  // new[] 64-bit
+    void* _ZnwmSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(new_aligned, n, al);
+    void* _ZnamSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(new_aligned, n, al);
+    void* _ZnwmRKSt9nothrow_t(size_t n, mi_nothrow_t tag) { UNUSED(tag); return mi_source_new_nothrow(n  MI_SOURCE_RET()); }
+    void* _ZnamRKSt9nothrow_t(size_t n, mi_nothrow_t tag) { UNUSED(tag); return mi_source_new_nothrow(n  MI_SOURCE_RET()); }
+    void* _ZnwmSt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { UNUSED(tag); return mi_new_aligned_nothrow(n,al  MI_SOURCE_RET()); }
+    void* _ZnamSt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { UNUSED(tag); return mi_new_aligned_nothrow(n,al  MI_SOURCE_RET()); }
   #elif (MI_INTPTR_SIZE==4)
-    void* _Znwj(size_t n)                             MI_FORWARD1(mi_new,n);  // new 64-bit
-    void* _Znaj(size_t n)                             MI_FORWARD1(mi_new,n);  // new[] 64-bit
-    void* _ZnwjSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(mi_new_aligned, n, al);
-    void* _ZnajSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(mi_new_aligned, n, al);
+    void* _Znwj(size_t n)                             MI_FORWARD1(new,n);  // new 64-bit
+    void* _Znaj(size_t n)                             MI_FORWARD1(new,n);  // new[] 64-bit
+    void* _ZnwjSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(new_aligned, n, al);
+    void* _ZnajSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(new_aligned, n, al);
     void* _ZnwjRKSt9nothrow_t(size_t n, mi_nothrow_t tag) { UNUSED(tag); return mi_new_nothrow(n); }
     void* _ZnajRKSt9nothrow_t(size_t n, mi_nothrow_t tag) { UNUSED(tag); return mi_new_nothrow(n); }
     void* _ZnwjSt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { UNUSED(tag); return mi_new_aligned_nothrow(n,al); }
@@ -163,31 +163,31 @@ extern "C" {
 // Posix & Unix functions definitions
 // ------------------------------------------------------
 
-void*  reallocf(void* p, size_t newsize) MI_FORWARD2(mi_reallocf,p,newsize);
-size_t malloc_size(void* p)              MI_FORWARD1(mi_usable_size,p);
-size_t malloc_usable_size(void *p)       MI_FORWARD1(mi_usable_size,p);
-void   cfree(void* p)                    MI_FORWARD0(mi_free, p);
+void*  reallocf(void* p, size_t newsize) MI_FORWARD2(reallocf,p,newsize);
+void   cfree(void* p)                    MI_FORWARD0(free, p);
+size_t malloc_size(void* p)              { return mi_usable_size(p); }
+size_t malloc_usable_size(void* p)       { return mi_usable_size(p); }
 
 // no forwarding here due to aliasing/name mangling issues
-void* valloc(size_t size)                                   { return mi_valloc(size); }
-void* pvalloc(size_t size)                                  { return mi_pvalloc(size); }
-void* reallocarray(void* p, size_t count, size_t size)      { return mi_reallocarray(p, count, size); }
-void* memalign(size_t alignment, size_t size)               { return mi_memalign(alignment, size); }
-void* aligned_alloc(size_t alignment, size_t size)          { return mi_aligned_alloc(alignment, size); }
-int posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
+void* valloc(size_t size)                                   { return mi_source_valloc(size  MI_SOURCE_RET()); }
+void* pvalloc(size_t size)                                  { return mi_source_pvalloc(size  MI_SOURCE_RET()); }
+void* reallocarray(void* p, size_t count, size_t size)      { return mi_source_reallocarray(p, count, size  MI_SOURCE_RET()); }
+void* memalign(size_t alignment, size_t size)               { return mi_source_memalign(alignment, size  MI_SOURCE_RET()); }
+void* aligned_alloc(size_t alignment, size_t size)          { return mi_source_aligned_alloc(alignment, size  MI_SOURCE_RET()); }
+int posix_memalign(void** p, size_t alignment, size_t size) { return mi_source_posix_memalign(p, alignment, size  MI_SOURCE_RET()); }
 
 #if defined(__GLIBC__) && defined(__linux__)
   // forward __libc interface (needed for glibc-based Linux distributions)
-  void* __libc_malloc(size_t size)                  MI_FORWARD1(mi_malloc,size);
-  void* __libc_calloc(size_t count, size_t size)    MI_FORWARD2(mi_calloc,count,size);
-  void* __libc_realloc(void* p, size_t size)        MI_FORWARD2(mi_realloc,p,size);
-  void  __libc_free(void* p)                        MI_FORWARD0(mi_free,p);
-  void  __libc_cfree(void* p)                       MI_FORWARD0(mi_free,p);
+  void* __libc_malloc(size_t size)                  MI_FORWARD1(malloc,size);
+  void* __libc_calloc(size_t count, size_t size)    MI_FORWARD2(calloc,count,size);
+  void* __libc_realloc(void* p, size_t size)        MI_FORWARD2(realloc,p,size);
+  void  __libc_free(void* p)                        MI_FORWARD0(free,p);
+  void  __libc_cfree(void* p)                       MI_FORWARD0(free,p);
 
-  void* __libc_valloc(size_t size) { return mi_valloc(size); }
-  void* __libc_pvalloc(size_t size) { return mi_pvalloc(size); }
-  void* __libc_memalign(size_t alignment, size_t size) { return mi_memalign(alignment, size); }
-  int __posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
+  void* __libc_valloc(size_t size) { return mi_source_valloc(size  MI_SOURCE_RET()); }
+  void* __libc_pvalloc(size_t size) { return mi_source_pvalloc(size  MI_SOURCE_RET()); }
+  void* __libc_memalign(size_t alignment, size_t size) { return mi_source_memalign(alignment, size  MI_SOURCE_RET()); }
+  int __posix_memalign(void** p, size_t alignment, size_t size) { return mi_source_posix_memalign(p, alignment, size  MI_SOURCE_RET()); }
 #endif
 
 #ifdef __cplusplus

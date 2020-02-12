@@ -42,7 +42,8 @@ void mi_cfree(void* p) mi_attr_noexcept {
   }
 }
 
-int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept {
+MI_SOURCE_API3(int, posix_memalign, void**, p, size_t, alignment, size_t, size)
+{
   // Note: The spec dictates we should not modify `*p` on an error. (issue#27)
   // <http://man7.org/linux/man-pages/man3/posix_memalign.3.html>
   if (p == NULL) return EINVAL;
@@ -50,10 +51,10 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
   if (!_mi_is_power_of_two(alignment)) return EINVAL;  // not a power of 2
   void* q; 
   if (alignment <= MI_MAX_ALIGN_SIZE) {
-    q = mi_source_malloc(size  MI_SOURCE_RET());
+    q = mi_source_malloc(size  MI_SOURCE_ARG);
   }
   else {
-    q = mi_source_malloc_aligned(size, alignment  MI_SOURCE_RET());
+    q = mi_source_malloc_aligned(size, alignment  MI_SOURCE_ARG);
   }
   if (q==NULL && size != 0) return ENOMEM;
   mi_assert_internal(((uintptr_t)q % alignment) == 0);
@@ -61,45 +62,50 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
   return 0;
 }
 
-void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept {
+MI_SOURCE_API2(void*, memalign, size_t, alignment, size_t, size)
+{
   void* p;
   if (alignment <= MI_MAX_ALIGN_SIZE) {
-    p = mi_source_malloc(size  MI_SOURCE_RET());
+    p = mi_source_malloc(size  MI_SOURCE_ARG);
   }
   else {
-    p = mi_source_malloc_aligned(size, alignment  MI_SOURCE_RET());
+    p = mi_source_malloc_aligned(size, alignment  MI_SOURCE_ARG);
   }
   mi_assert_internal(((uintptr_t)p % alignment) == 0);
   return p;
 }
 
-void* mi_valloc(size_t size) mi_attr_noexcept {
-  return mi_source_malloc_aligned(size, _mi_os_page_size()  MI_SOURCE_RET());
+MI_SOURCE_API1(void*, valloc, size_t, size)
+{
+  return mi_source_malloc_aligned(size, _mi_os_page_size()  MI_SOURCE_ARG);
 }
 
-void* mi_pvalloc(size_t size) mi_attr_noexcept {
+MI_SOURCE_API1(void*, pvalloc, size_t, size)
+{
   size_t psize = _mi_os_page_size();
   if (size >= SIZE_MAX - psize) return NULL; // overflow
   size_t asize = ((size + psize - 1) / psize) * psize;
-  return mi_source_malloc_aligned(asize, psize  MI_SOURCE_RET());
+  return mi_source_malloc_aligned(asize, psize  MI_SOURCE_ARG);
 }
 
-void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept {
+MI_SOURCE_API2(void*, aligned_alloc, size_t, alignment, size_t, size)
+{
   if (alignment==0 || !_mi_is_power_of_two(alignment)) return NULL; 
   if ((size&(alignment-1)) != 0) return NULL; // C11 requires integral multiple, see <https://en.cppreference.com/w/c/memory/aligned_alloc>
   void* p;
   if (alignment <= MI_MAX_ALIGN_SIZE) {
-    p = mi_source_malloc(size  MI_SOURCE_RET());
+    p = mi_source_malloc(size  MI_SOURCE_ARG);
   }
   else {
-    p = mi_source_malloc_aligned(size, alignment  MI_SOURCE_RET());
+    p = mi_source_malloc_aligned(size, alignment  MI_SOURCE_ARG);
   }
   mi_assert_internal(((uintptr_t)p % alignment) == 0);
   return p;
 }
 
-void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  // BSD
-  void* newp = mi_source_reallocn(p, count, size  MI_SOURCE_RET());
+MI_SOURCE_API3(void*, reallocarray, void*, p, size_t, count, size_t, size )
+{
+  void* newp = mi_source_reallocn(p, count, size  MI_SOURCE_ARG);
   if (newp==NULL) errno = ENOMEM;
   return newp;
 }
@@ -110,23 +116,26 @@ void* mi__expand(void* p, size_t newsize) mi_attr_noexcept {  // Microsoft
   return res;
 }
 
-unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept {
+MI_SOURCE_API1(unsigned short*, wcsdup, const unsigned short*, s)
+{
   if (s==NULL) return NULL;
   size_t len;
   for(len = 0; s[len] != 0; len++) { }
   size_t size = (len+1)*sizeof(unsigned short);
-  unsigned short* p = (unsigned short*)mi_source_malloc(size  MI_SOURCE_RET());
+  unsigned short* p = (unsigned short*)mi_source_malloc(size  MI_SOURCE_ARG);
   if (p != NULL) {
     memcpy(p,s,size);
   }
   return p;
 }
 
-unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexcept {
-  return (unsigned char*)mi_source_strdup((const char*)s  MI_SOURCE_RET());
+MI_SOURCE_API1(unsigned char*, mbsdup, const unsigned char*, s)
+{
+  return (unsigned char*)mi_source_strdup((const char*)s  MI_SOURCE_ARG);
 }
 
-int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
+MI_SOURCE_API3(int, dupenv_s, char**, buf, size_t*, size, const char*, name)
+{
   if (buf==NULL || name==NULL) return EINVAL;
   if (size != NULL) *size = 0;
   #pragma warning(suppress:4996)
@@ -135,18 +144,22 @@ int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
     *buf = NULL;
   }
   else {
-    *buf = mi_source_strdup(p  MI_SOURCE_RET());
+    *buf = mi_source_strdup(p  MI_SOURCE_ARG);
     if (*buf==NULL) return ENOMEM;
     if (size != NULL) *size = strlen(p);
   }
   return 0;
 }
 
-int mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name) mi_attr_noexcept {
+MI_SOURCE_API3(int, wdupenv_s, unsigned short**, buf, size_t*, size, const unsigned short*, name)
+{
   if (buf==NULL || name==NULL) return EINVAL;
   if (size != NULL) *size = 0;
 #if !defined(_WIN32) || (defined(WINAPI_FAMILY) && (WINAPI_FAMILY != WINAPI_FAMILY_DESKTOP_APP))
   // not supported
+  #ifndef NDEBUG
+  UNUSED(__mi_source);
+  #endif
   *buf = NULL;
   return EINVAL;
 #else
@@ -156,7 +169,7 @@ int mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name)
     *buf = NULL;
   }
   else {
-    *buf = mi_wcsdup(p);
+    *buf = mi_source_wcsdup(p  MI_SOURCE_ARG);
     if (*buf==NULL) return ENOMEM;
     if (size != NULL) *size = wcslen((const wchar_t*)p);
   }
