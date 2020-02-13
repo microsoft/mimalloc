@@ -386,6 +386,7 @@ void _mi_error_message(int err, const char* fmt, ...) {
 // lsb=1:  bit 63-19: relative file name char* (to `mi_fname_base`), bit 18-1: line number
 // lsb=0:  bit 63-01: return address
 // -----------------------------------------------------------------------------------------------
+#ifndef NDEBUG
 static const char* mi_debug_fname_base = "mimalloc_fname_base";
 
 #define MI_FNAME_SHIFT  16
@@ -393,14 +394,14 @@ static const char* mi_debug_fname_base = "mimalloc_fname_base";
 #define MI_LINE_MASK    ((1L << MI_LINE_SHIFT) - 1)
 
 mi_source_t mi_source_ret(void* return_address) {
-  mi_source_t source = { ((intptr_t)return_address << 1) };
+  mi_source_t source = { ((long long)return_address << 1) };
   return source;
 }
 
 mi_source_t mi_source_loc(const char* fname, int lineno ) {
-  ptrdiff_t delta = fname - mi_debug_fname_base;
+  long long delta = fname - mi_debug_fname_base;
   mi_assert_internal(((delta << MI_FNAME_SHIFT) >> MI_FNAME_SHIFT) == delta);
-  mi_source_t source = { ((((intptr_t)delta) << MI_FNAME_SHIFT) | ((lineno << 1) & MI_LINE_MASK) | 1) };
+  mi_source_t source = { ((((long long)delta) << MI_FNAME_SHIFT) | ((lineno << 1) & MI_LINE_MASK) | 1) };
   return source;
 }
 
@@ -419,6 +420,7 @@ void* mi_source_unpack(mi_source_t source, const char** fname, int* lineno) {
     return ((void*)(source.src >> 1));
   }
 }
+#endif
 
 // -----------------------------------------------------------------------------------------------
 // Error message for a specific heap block

@@ -774,7 +774,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
 
 
 // Generic allocation routine if the fast path (`alloc.c:mi_page_malloc`) does not succeed.
-void* _mi_malloc_generic(mi_heap_t* heap, size_t size MI_SOURCE_PARAM) mi_attr_noexcept
+void* _mi_malloc_generic(mi_heap_t* heap, size_t size MI_SOURCE_XPARAM) mi_attr_noexcept
 {
   mi_assert_internal(heap != NULL);
 
@@ -815,5 +815,5 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size MI_SOURCE_PARAM) mi_attr_n
   mi_assert_internal(mi_page_block_size(page) >= size);
 
   // and try again, this time succeeding! (i.e. this should never recurse)
-  return _mi_page_malloc(heap, page, size  MI_SOURCE_ARG);
+  return _mi_page_malloc(heap, page, size  MI_SOURCE_XARG);
 }

@@ -4,6 +4,7 @@ This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
+#define MI_NO_SOURCE_DEBUG
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
@@ -22,11 +23,11 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Fast allocation in a page: just pop from the free list.
 // Fall back to generic allocation only if the list is empty.
-extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size MI_SOURCE_PARAM) mi_attr_noexcept {
+extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size MI_SOURCE_XPARAM) mi_attr_noexcept {
   mi_assert_internal(page->xblock_size==0||mi_page_block_size(page) >= size);
   mi_block_t* block = page->free;
   if (mi_unlikely(block == NULL)) {
-    return _mi_malloc_generic(heap, size  MI_SOURCE_ARG); // slow path
+    return _mi_malloc_generic(heap, size  MI_SOURCE_XARG); // slow path
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   // pop from the free list
@@ -60,13 +61,13 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 }
 
 // allocate a small block
-MI_ALLOC_API1(void*,malloc_small, mi_heap_t*,heap, size_t,size)
+MI_ALLOC_API1(void*, malloc_small, mi_heap_t*, heap, size_t, size)
 {
   mi_assert(heap!=NULL);
   mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
   mi_assert(size <= MI_SMALL_SIZE_MAX);
   mi_page_t* page = _mi_heap_get_free_small_page(heap,size + MI_PADDING_SIZE);
-  void* p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE  MI_SOURCE_ARG);
+  void* p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE  MI_SOURCE_XARG);
   mi_assert_internal(p==NULL || mi_usable_size(p) >= size);
   #if MI_STAT>1
   if (p != NULL) {
@@ -79,15 +80,15 @@ MI_ALLOC_API1(void*,malloc_small, mi_heap_t*,heap, size_t,size)
 
 
 // The main allocation function
-MI_ALLOC_API1(void*, malloc, mi_heap_t*,heap, size_t,size)
+MI_ALLOC_API1(void*, malloc, mi_heap_t*, heap, size_t, size)
 {
   if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
-    return mi_heap_source_malloc_small(heap, size   MI_SOURCE_ARG);
+    return mi_base_malloc_small(heap, size  MI_SOURCE_XARG);
   }
   else {
     mi_assert(heap!=NULL);
     mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
-    void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE  MI_SOURCE_ARG);
+    void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE  MI_SOURCE_XARG);
     mi_assert_internal(p == NULL || mi_usable_size(p) >= size);
     #if MI_STAT>1
     if (p != NULL) {
@@ -121,15 +122,15 @@ void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
 // zero initialized small block
 MI_ALLOC_API1(void*, zalloc_small, mi_heap_t*, heap, size_t, size)
 {
-  void* p = mi_heap_source_malloc_small(heap, size  MI_SOURCE_ARG);
+  void* p = mi_base_malloc_small(heap, size  MI_SOURCE_XARG);
   if (p != NULL) {
     _mi_block_zero_init(_mi_ptr_page(p), p, size);  // todo: can we avoid getting the page again?
   }
   return p;
 }
 
-mi_decl_allocator void* _mi_heap_source_malloc_zero(mi_heap_t* heap, size_t size, bool zero  MI_SOURCE_PARAM) {
-  void* p = mi_heap_source_malloc(heap,size  MI_SOURCE_ARG);
+mi_decl_restrict void* _mi_base_malloc_zero(mi_heap_t* heap, size_t size, bool zero  MI_SOURCE_XPARAM) {
+  void* p = mi_base_malloc(heap, size  MI_SOURCE_XARG);
   if (zero && p != NULL) {
     _mi_block_zero_init(_mi_ptr_page(p),p,size);  // todo: can we avoid getting the page again?
   }
@@ -138,7 +139,7 @@ mi_decl_allocator void* _mi_heap_source_malloc_zero(mi_heap_t* heap, size_t size
 
 MI_ALLOC_API1(void*, zalloc, mi_heap_t*,heap, size_t,size)
 {
-  return _mi_heap_source_malloc_zero(heap, size, true  MI_SOURCE_ARG);
+  return _mi_base_malloc_zero(heap, size, true  MI_SOURCE_XARG);
 }
 
 
@@ -518,37 +519,37 @@ void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
   mi_free(p);
 }
 
-MI_ALLOC_API2(void*, calloc, mi_heap_t*,heap, size_t,count, size_t,size)
+MI_ALLOC_API2(void*, calloc, mi_heap_t*, heap, size_t, count, size_t, size)
 {
   size_t total;
   if (mi_count_size_overflow(count,size,&total)) return NULL;
-  return mi_heap_source_zalloc(heap, total  MI_SOURCE_ARG);
+  return mi_base_zalloc(heap, total  MI_SOURCE_XARG);
 }
 
 // Uninitialized `calloc`
-MI_ALLOC_API2(void*, mallocn, mi_heap_t*,heap, size_t,count, size_t,size)
+MI_ALLOC_API2(void*, mallocn, mi_heap_t*, heap, size_t, count, size_t, size)
 {
   size_t total;
   if (mi_count_size_overflow(count, size, &total)) return NULL;
-  return mi_heap_source_malloc(heap, total  MI_SOURCE_ARG);
+  return mi_base_malloc(heap, total  MI_SOURCE_XARG);
 }
 
 
 // Expand in place or fail
-mi_decl_allocator void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_restrict void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
   if (p == NULL) return NULL;
   size_t size = mi_usable_size(p);
   if (newsize > size) return NULL;
   return p; // it fits
 }
 
-mi_decl_allocator void* _mi_heap_source_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero  MI_SOURCE_PARAM) {
-  if (p == NULL) return _mi_heap_source_malloc_zero(heap,newsize,zero  MI_SOURCE_ARG);
+mi_decl_restrict void* _mi_base_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero  MI_SOURCE_XPARAM) {
+  if (p == NULL) return _mi_base_malloc_zero(heap,newsize,zero  MI_SOURCE_XARG);
   size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size / 2)) {
     return p;  // reallocation still fits and not more than 50% waste
   }
-  void* newp = mi_heap_source_malloc(heap,newsize  MI_SOURCE_ARG);
+  void* newp = mi_base_malloc(heap, newsize  MI_SOURCE_XARG);
   if (mi_likely(newp != NULL)) {
     if (zero && newsize > size) {
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
@@ -561,36 +562,36 @@ mi_decl_allocator void* _mi_heap_source_realloc_zero(mi_heap_t* heap, void* p, s
   return newp;
 }
 
-MI_ALLOC_API2(void*, realloc, mi_heap_t*,heap, void*,p, size_t,newsize)
+MI_ALLOC_API2(void*, realloc, mi_heap_t*, heap, void*, p, size_t, newsize)
 {
-  return _mi_heap_source_realloc_zero(heap, p, newsize, false  MI_SOURCE_ARG);
+  return _mi_base_realloc_zero(heap, p, newsize, false  MI_SOURCE_XARG);
 }
 
-MI_ALLOC_API3(void*, reallocn, mi_heap_t*,heap, void*,p, size_t,count, size_t,size)
+MI_ALLOC_API3(void*, reallocn, mi_heap_t*, heap, void*, p, size_t, count, size_t, size)
 {
   size_t total;
   if (mi_count_size_overflow(count, size, &total)) return NULL;
-  return mi_heap_source_realloc(heap, p, total  MI_SOURCE_ARG);
+  return mi_base_realloc(heap, p, total  MI_SOURCE_XARG);
 }
 
 // Reallocate but free `p` on errors
 MI_ALLOC_API2(void*, reallocf, mi_heap_t*, heap, void*, p, size_t, newsize)
 {
-  void* newp = mi_heap_source_realloc(heap, p, newsize  MI_SOURCE_ARG);
+  void* newp = mi_base_realloc(heap, p, newsize  MI_SOURCE_XARG);
   if (newp==NULL && p!=NULL) mi_free(p);
   return newp;
 }
 
 MI_ALLOC_API2(void*, rezalloc, mi_heap_t*, heap, void*, p, size_t, newsize)
 {
-  return _mi_heap_source_realloc_zero(heap, p, newsize, true  MI_SOURCE_ARG);
+  return _mi_base_realloc_zero(heap, p, newsize, true  MI_SOURCE_XARG);
 }
 
 MI_ALLOC_API3(void*, recalloc, mi_heap_t*, heap, void*, p, size_t, count, size_t, size)
 {
   size_t total;
   if (mi_count_size_overflow(count, size, &total)) return NULL;
-  return _mi_heap_source_realloc_zero(heap, p, total, true  MI_SOURCE_ARG);
+  return _mi_base_realloc_zero(heap, p, total, true  MI_SOURCE_XARG);
 }
 
 
@@ -604,7 +605,7 @@ MI_ALLOC_API1(char*, strdup, mi_heap_t*,heap, const char*,s)
 {
   if (s == NULL) return NULL;
   size_t n = strlen(s);
-  char* t = (char*)mi_heap_source_malloc(heap, n+1  MI_SOURCE_ARG);
+  char* t = (char*)mi_base_malloc(heap, n+1  MI_SOURCE_XARG);
   if (t != NULL) memcpy(t, s, n + 1);
   return t;
 }
@@ -616,7 +617,7 @@ MI_ALLOC_API2(char*, strndup, mi_heap_t*, heap, const char*, s, size_t, n)
   if (s == NULL) return NULL;
   size_t m = strlen(s);
   if (n > m) n = m;
-  char* t = (char*)mi_heap_source_malloc(heap, n+1   MI_SOURCE_ARG);
+  char* t = (char*)mi_base_malloc(heap, n+1  MI_SOURCE_XARG);
   if (t == NULL) return NULL;
   memcpy(t, s, n);
   t[n] = 0;
@@ -646,7 +647,7 @@ MI_ALLOC_API2(char*, realpath, mi_heap_t*, heap, const char*, fname, char*, reso
     return resolved_name;
   }
   else {
-    return mi_heap_source_strndup(heap, buf, PATH_MAX  MI_SOURCE_ARG);
+    return mi_base_strndup(heap, buf, PATH_MAX  MI_SOURCE_XARG);
   }
 }
 #else
@@ -672,7 +673,7 @@ MI_ALLOC_API2(char*, realpath, mi_heap_t*, heap, const char*, fname, char*, reso
     char* buf = (char*)mi_malloc(n+1);
     if (buf==NULL) return NULL;
     char* rname  = realpath(fname,buf);
-    char* result = mi_heap_source_strndup(heap, rname, n  MI_SOURCE_ARG); // ok if `rname==NULL`
+    char* result = mi_base_strndup(heap, rname, n  MI_SOURCE_XARG); // ok if `rname==NULL`
     mi_free(buf);
     return result;
   }
@@ -733,90 +734,72 @@ static bool mi_try_new_handler(bool nothrow) {
 }
 #endif
 
-static mi_decl_noinline void* mi_source_try_new(size_t size, bool nothrow   MI_SOURCE_PARAM) {
+static mi_decl_noinline void* mi_base_try_new(size_t size, bool nothrow   MI_SOURCE_XPARAM) {
   void* p = NULL;
   while(p == NULL && mi_try_new_handler(nothrow)) {
-    p = mi_source_malloc(size  MI_SOURCE_ARG);
+    p = MI_SOURCE_ARG(mi_malloc, size);
   }
   return p;
 }
 
-inline mi_decl_allocator void* mi_source_new(size_t size  MI_SOURCE_PARAM) {
-  void* p = mi_source_malloc(size  MI_SOURCE_ARG);
-  if (mi_unlikely(p == NULL)) return mi_source_try_new(size, false  MI_SOURCE_ARG);
+MI_NEW_API1(void*, new, size_t, size) 
+{
+  void* p = MI_SOURCE_ARG(mi_malloc, size);
+  if (mi_unlikely(p == NULL)) return mi_base_try_new(size, false  MI_SOURCE_XARG);
   return p;
 }
 
-mi_decl_allocator void* mi_new(size_t size) {
-  return mi_source_new(size  MI_SOURCE_RET());
-}
-
-mi_decl_allocator void* mi_source_new_nothrow(size_t size  MI_SOURCE_PARAM) {
-  void* p = mi_source_malloc(size  MI_SOURCE_ARG);
-  if (mi_unlikely(p == NULL)) return mi_source_try_new(size, true  MI_SOURCE_ARG);
+MI_NEW_API1(void*, new_nothrow, size_t, size) 
+{
+  void* p = MI_SOURCE_ARG(mi_malloc, size);
+  if (mi_unlikely(p == NULL)) return mi_base_try_new(size, true  MI_SOURCE_XARG);
   return p;
 }
 
-mi_decl_allocator void* mi_new_nothrow(size_t size) {
-  return mi_source_new_nothrow(size MI_SOURCE_RET());
-}
 
-
-mi_decl_allocator void* mi_source_new_aligned(size_t size, size_t alignment  MI_SOURCE_PARAM) {
+MI_NEW_API2(void*, new_aligned, size_t, size, size_t, alignment) 
+{
   void* p;
   do {
-    p = mi_source_malloc_aligned(size, alignment  MI_SOURCE_ARG);
+    p = MI_SOURCE_ARG(mi_malloc_aligned, size, alignment);
   }
   while(p == NULL && mi_try_new_handler(false));
   return p;
 }
 
-mi_decl_allocator void* mi_new_aligned(size_t size, size_t alignment) {
-  return mi_source_new_aligned(size, alignment  MI_SOURCE_RET());
-}
-
-mi_decl_allocator void* mi_source_new_aligned_nothrow(size_t size, size_t alignment  MI_SOURCE_PARAM) {
+MI_NEW_API2(void*, new_aligned_nothrow, size_t, size, size_t, alignment) 
+{
   void* p;
   do {
-    p = mi_source_malloc_aligned(size, alignment  MI_SOURCE_ARG);
+    p = MI_SOURCE_ARG(mi_malloc_aligned, size, alignment);
   }
   while(p == NULL && mi_try_new_handler(true));
   return p;
 }
 
-mi_decl_allocator void* mi_new_aligned_nothrow(size_t size, size_t alignment) {
-  return mi_source_new_aligned_nothrow(size, alignment  MI_SOURCE_RET());
-}
-
-
-mi_decl_allocator void* mi_source_new_n(size_t count, size_t size  MI_SOURCE_PARAM) {
+MI_NEW_API2(void*, new_n, size_t, count, size_t, size)
+{
   size_t total;
   if (mi_unlikely(mi_count_size_overflow(count, size, &total))) {
     mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
     return NULL;
   }
   else {
-    return mi_source_new(total  MI_SOURCE_ARG);
+    return MI_SOURCE_ARG(mi_new, total);
   }
 }
 
-mi_decl_allocator void* mi_new_n(size_t count, size_t size) {
-  return mi_source_new_n(count, size  MI_SOURCE_RET());
-}
-
-mi_decl_allocator void* mi_source_new_realloc(void* p, size_t newsize  MI_SOURCE_PARAM) {
+MI_NEW_API2(void*, new_realloc, void*, p, size_t, newsize)
+{
   void* q;
   do {
-    q = mi_source_realloc(p, newsize  MI_SOURCE_ARG);
+    q = MI_SOURCE_ARG(mi_realloc, p, newsize);
   } while (q == NULL && mi_try_new_handler(false));
   return q;
 }
 
-mi_decl_allocator void* mi_new_realloc(void* p, size_t newsize) {
-  return mi_source_new_realloc(p, newsize  MI_SOURCE_RET());
-}
-
-mi_decl_allocator void* mi_source_new_reallocn(void* p, size_t newcount, size_t size  MI_SOURCE_PARAM) {
+MI_NEW_API3(void*, new_reallocn, void*, p, size_t, newcount, size_t, size)
+{
   size_t total;
   if (mi_unlikely(mi_count_size_overflow(newcount, size, &total))) {
     mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
@@ -824,11 +807,7 @@ mi_decl_allocator void* mi_source_new_reallocn(void* p, size_t newcount, size_t 
   }
   void* q;
   do {
-    q = mi_source_realloc(p, total  MI_SOURCE_ARG);
+    q = MI_SOURCE_ARG(mi_realloc, p, total);
   } while (q == NULL && mi_try_new_handler(false));
   return q;
-}
-
-mi_decl_allocator void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
-  return mi_source_new_reallocn(p, newcount, size  MI_SOURCE_RET());
 }

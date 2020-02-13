@@ -9,6 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // mi prefixed publi definitions of various Posix, Unix, and C++ functions
 // for convenience and used when overriding these functions.
 // ------------------------------------------------------------------------
+#define MI_NO_SOURCE_DEBUG
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
@@ -42,34 +43,27 @@ void mi_cfree(void* p) mi_attr_noexcept {
   }
 }
 
-MI_SOURCE_API3(int, posix_memalign, void**, p, size_t, alignment, size_t, size)
+void* mi__expand(void* p, size_t newsize) mi_attr_noexcept {  // Microsoft
+  void* res = mi_expand(p, newsize);
+  if (res == NULL) errno = ENOMEM;
+  return res;
+}
+
+MI_SOURCE_API3(void*, reallocarray, void*, p, size_t, count, size_t, size)
 {
-  // Note: The spec dictates we should not modify `*p` on an error. (issue#27)
-  // <http://man7.org/linux/man-pages/man3/posix_memalign.3.html>
-  if (p == NULL) return EINVAL;
-  if (alignment % sizeof(void*) != 0) return EINVAL;   // natural alignment
-  if (!_mi_is_power_of_two(alignment)) return EINVAL;  // not a power of 2
-  void* q; 
-  if (alignment <= MI_MAX_ALIGN_SIZE) {
-    q = mi_source_malloc(size  MI_SOURCE_ARG);
-  }
-  else {
-    q = mi_source_malloc_aligned(size, alignment  MI_SOURCE_ARG);
-  }
-  if (q==NULL && size != 0) return ENOMEM;
-  mi_assert_internal(((uintptr_t)q % alignment) == 0);
-  *p = q;
-  return 0;
+  void* newp = MI_SOURCE_ARG(mi_reallocn, p, count, size);
+  if (newp==NULL) errno = ENOMEM;
+  return newp;
 }
 
 MI_SOURCE_API2(void*, memalign, size_t, alignment, size_t, size)
 {
   void* p;
   if (alignment <= MI_MAX_ALIGN_SIZE) {
-    p = mi_source_malloc(size  MI_SOURCE_ARG);
+    p = MI_SOURCE_ARG(mi_malloc, size);
   }
   else {
-    p = mi_source_malloc_aligned(size, alignment  MI_SOURCE_ARG);
+    p = MI_SOURCE_ARG(mi_malloc_aligned, size, alignment);
   }
   mi_assert_internal(((uintptr_t)p % alignment) == 0);
   return p;
@@ -77,15 +71,15 @@ MI_SOURCE_API2(void*, memalign, size_t, alignment, size_t, size)
 
 MI_SOURCE_API1(void*, valloc, size_t, size)
 {
-  return mi_source_malloc_aligned(size, _mi_os_page_size()  MI_SOURCE_ARG);
+  return MI_SOURCE_ARG(mi_malloc_aligned, size, _mi_os_page_size());
 }
 
 MI_SOURCE_API1(void*, pvalloc, size_t, size)
 {
   size_t psize = _mi_os_page_size();
   if (size >= SIZE_MAX - psize) return NULL; // overflow
-  size_t asize = ((size + psize - 1) / psize) * psize;
-  return mi_source_malloc_aligned(asize, psize  MI_SOURCE_ARG);
+  size_t asize = _mi_align_up(size, psize); 
+  return MI_SOURCE_ARG(mi_malloc_aligned, asize, psize);
 }
 
 MI_SOURCE_API2(void*, aligned_alloc, size_t, alignment, size_t, size)
@@ -94,27 +88,46 @@ MI_SOURCE_API2(void*, aligned_alloc, size_t, alignment, size_t, size)
   if ((size&(alignment-1)) != 0) return NULL; // C11 requires integral multiple, see <https://en.cppreference.com/w/c/memory/aligned_alloc>
   void* p;
   if (alignment <= MI_MAX_ALIGN_SIZE) {
-    p = mi_source_malloc(size  MI_SOURCE_ARG);
+    p = MI_SOURCE_ARG(mi_malloc, size);
   }
   else {
-    p = mi_source_malloc_aligned(size, alignment  MI_SOURCE_ARG);
+    p = MI_SOURCE_ARG(mi_malloc_aligned, size, alignment);
   }
   mi_assert_internal(((uintptr_t)p % alignment) == 0);
   return p;
 }
 
-MI_SOURCE_API3(void*, reallocarray, void*, p, size_t, count, size_t, size )
+static int mi_base_posix_memalign(void** p, size_t alignment, size_t size  MI_SOURCE_XPARAM)
 {
-  void* newp = mi_source_reallocn(p, count, size  MI_SOURCE_ARG);
-  if (newp==NULL) errno = ENOMEM;
-  return newp;
+  // Note: The spec dictates we should not modify `*p` on an error. (issue#27)
+  // <http://man7.org/linux/man-pages/man3/posix_memalign.3.html>
+  if (p == NULL) return EINVAL;
+  if (alignment % sizeof(void*) != 0) return EINVAL;   // natural alignment
+  if (!_mi_is_power_of_two(alignment)) return EINVAL;  // not a power of 2
+  void* q;
+  if (alignment <= MI_MAX_ALIGN_SIZE) {
+    q = MI_SOURCE_ARG(mi_malloc, size);
+  }
+  else {
+    q = MI_SOURCE_ARG(mi_malloc_aligned, size, alignment);
+  }
+  if (q==NULL && size != 0) return ENOMEM;
+  mi_assert_internal(((uintptr_t)q % alignment) == 0);
+  *p = q;
+  return 0;
 }
 
-void* mi__expand(void* p, size_t newsize) mi_attr_noexcept {  // Microsoft
-  void* res = mi_expand(p, newsize);
-  if (res == NULL) errno = ENOMEM;
-  return res;
+#ifndef NDEBUG
+int dbg_mi_posix_memalign(void** p, size_t alignment, size_t size, mi_source_t __mi_source) mi_attr_noexcept {
+  UNUSED(__mi_source);
+  return mi_base_posix_memalign(p, alignment, size  MI_SOURCE_XARG);
 }
+#endif
+
+int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept  {
+  return mi_base_posix_memalign(p, alignment, size  MI_SOURCE_XRET());
+}
+
 
 MI_SOURCE_API1(unsigned short*, wcsdup, const unsigned short*, s)
 {
@@ -122,7 +135,7 @@ MI_SOURCE_API1(unsigned short*, wcsdup, const unsigned short*, s)
   size_t len;
   for(len = 0; s[len] != 0; len++) { }
   size_t size = (len+1)*sizeof(unsigned short);
-  unsigned short* p = (unsigned short*)mi_source_malloc(size  MI_SOURCE_ARG);
+  unsigned short* p = (unsigned short*)MI_SOURCE_ARG(mi_malloc, size);
   if (p != NULL) {
     memcpy(p,s,size);
   }
@@ -131,10 +144,10 @@ MI_SOURCE_API1(unsigned short*, wcsdup, const unsigned short*, s)
 
 MI_SOURCE_API1(unsigned char*, mbsdup, const unsigned char*, s)
 {
-  return (unsigned char*)mi_source_strdup((const char*)s  MI_SOURCE_ARG);
+  return (unsigned char*)MI_SOURCE_ARG(mi_strdup,(const char*)s);
 }
 
-MI_SOURCE_API3(int, dupenv_s, char**, buf, size_t*, size, const char*, name)
+static int mi_base_dupenv_s(char** buf, size_t* size, const char* name  MI_SOURCE_XPARAM)
 {
   if (buf==NULL || name==NULL) return EINVAL;
   if (size != NULL) *size = 0;
@@ -144,14 +157,26 @@ MI_SOURCE_API3(int, dupenv_s, char**, buf, size_t*, size, const char*, name)
     *buf = NULL;
   }
   else {
-    *buf = mi_source_strdup(p  MI_SOURCE_ARG);
+    *buf = MI_SOURCE_ARG(mi_strdup, p);
     if (*buf==NULL) return ENOMEM;
     if (size != NULL) *size = strlen(p);
   }
   return 0;
 }
 
-MI_SOURCE_API3(int, wdupenv_s, unsigned short**, buf, size_t*, size, const unsigned short*, name)
+#ifndef NDEBUG
+int dbg_mi_dupenv_s(char** buf, size_t* size, const char* name, mi_source_t __mi_source) mi_attr_noexcept {
+  UNUSED(__mi_source);
+  return mi_base_dupenv_s(buf, size, name  MI_SOURCE_XARG);
+}
+#endif
+
+int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
+  return mi_base_dupenv_s(buf, size, name  MI_SOURCE_XRET());
+}
+
+
+static int mi_base_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name  MI_SOURCE_XPARAM)
 {
   if (buf==NULL || name==NULL) return EINVAL;
   if (size != NULL) *size = 0;
@@ -169,7 +194,7 @@ MI_SOURCE_API3(int, wdupenv_s, unsigned short**, buf, size_t*, size, const unsig
     *buf = NULL;
   }
   else {
-    *buf = mi_source_wcsdup(p  MI_SOURCE_ARG);
+    *buf = MI_SOURCE_ARG(mi_wcsdup, p);
     if (*buf==NULL) return ENOMEM;
     if (size != NULL) *size = wcslen((const wchar_t*)p);
   }
@@ -177,10 +202,32 @@ MI_SOURCE_API3(int, wdupenv_s, unsigned short**, buf, size_t*, size, const unsig
 #endif
 }
 
-void* mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept { // Microsoft
-  return mi_recalloc_aligned_at(p, newcount, size, alignment, offset);
+#ifndef NDEBUG
+int dbg_mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name, mi_source_t __mi_source) mi_attr_noexcept {
+  UNUSED(__mi_source);
+  return mi_base_wdupenv_s(buf, size, name  MI_SOURCE_XARG);
+}
+#endif
+
+int mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name) mi_attr_noexcept  {
+  return mi_base_wdupenv_s(buf, size, name  MI_SOURCE_XRET());
 }
 
-void* mi_aligned_recalloc(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept { // Microsoft
-  return mi_recalloc_aligned(p, newcount, size, alignment);
+
+#ifndef NDEBUG
+mi_decl_restrict void* dbg_mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t alignment, size_t offset, mi_source_t __mi_source) mi_attr_noexcept { // Microsoft
+  return dbg_mi_recalloc_aligned_at(p, newcount, size, alignment, offset, __mi_source);
+}
+
+mi_decl_restrict void* dbg_mi_aligned_recalloc(void* p, size_t newcount, size_t size, size_t alignment, mi_source_t __mi_source) mi_attr_noexcept { // Microsoft
+  return dbg_mi_recalloc_aligned(p, newcount, size, alignment, __mi_source);
+}
+#endif
+
+mi_decl_restrict void* mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept { // Microsoft
+  return MI_SOURCE_RET(mi_recalloc_aligned_at,p, newcount, size, alignment, offset);
+}
+
+mi_decl_restrict void* mi_aligned_recalloc(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept { // Microsoft
+  return MI_SOURCE_RET(mi_recalloc_aligned,p, newcount, size, alignment);
 }

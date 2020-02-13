@@ -6,6 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 #define _DEFAULT_SOURCE
 
+#define  MI_NO_SOURCE_DEBUG
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 

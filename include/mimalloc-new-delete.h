@@ -25,11 +25,11 @@ terms of the MIT license. A copy of the license can be found in the file
   void operator delete(void* p) noexcept              { mi_free(p); };
   void operator delete[](void* p) noexcept            { mi_free(p); };
 
-  void* operator new(std::size_t n) noexcept(false)   { return mi_source_new(n  MI_SOURCE_RET()); }
-  void* operator new[](std::size_t n) noexcept(false) { return mi_source_new(n  MI_SOURCE_RET()); }
+  void* operator new(std::size_t n) noexcept(false)   { return MI_SOURCE_RET(mi_new, n); }
+  void* operator new[](std::size_t n) noexcept(false) { return MI_SOURCE_RET(mi_new, n); }
 
-  void* operator new  (std::size_t n, const std::nothrow_t& tag) noexcept { (void)(tag); return mi_source_new_nothrow(n  MI_SOURCE_RET()); }
-  void* operator new[](std::size_t n, const std::nothrow_t& tag) noexcept { (void)(tag); return mi_source_new_nothrow(n  MI_SOURCE_RET()); }
+  void* operator new  (std::size_t n, const std::nothrow_t& ) noexcept { return MI_SOURCE_RET(mi_new_nothrow, n); }
+  void* operator new[](std::size_t n, const std::nothrow_t& ) noexcept { return MI_SOURCE_RET(mi_new_nothrow, n); }
 
   #if (__cplusplus >= 201402L || _MSC_VER >= 1916)
   void operator delete  (void* p, std::size_t n) noexcept { mi_free_size(p,n); };
@@ -42,19 +42,19 @@ terms of the MIT license. A copy of the license can be found in the file
   void operator delete  (void* p, std::size_t n, std::align_val_t al) noexcept { mi_free_size_aligned(p, n, static_cast<size_t>(al)); };
   void operator delete[](void* p, std::size_t n, std::align_val_t al) noexcept { mi_free_size_aligned(p, n, static_cast<size_t>(al)); };
 
-  void* operator new( std::size_t n, std::align_val_t al)   noexcept(false) { return mi_source_new_aligned(n, static_cast<size_t>(al)  MI_SOURCE_RET()); }
-  void* operator new[]( std::size_t n, std::align_val_t al) noexcept(false) { return mi_source_new_aligned(n, static_cast<size_t>(al)  MI_SOURCE_RET()); }
-  void* operator new  (std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_source_new_aligned_nothrow(n, static_cast<size_t>(al)  MI_SOURCE_RET()); }
-  void* operator new[](std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_source_new_aligned_nothrow(n, static_cast<size_t>(al)  MI_SOURCE_RET()); }
+  void* operator new( std::size_t n, std::align_val_t al)   noexcept(false) { return MI_SOURCE_RET(mi_new_aligned, n, static_cast<size_t>(al)); }
+  void* operator new[]( std::size_t n, std::align_val_t al) noexcept(false) { return MI_SOURCE_RET(mi_new_aligned, n, static_cast<size_t>(al)); }
+  void* operator new  (std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return MI_SOURCE_RET(mi_new_aligned_nothrow, n, static_cast<size_t>(al)); }
+  void* operator new[](std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return MI_SOURCE_RET(mi_new_aligned_nothrow, n, static_cast<size_t>(al)); }
   #endif
 
+  #if !defined(NDEBUG)
   // Instances for debug override of the new operator
-  #ifndef NDEBUG
-  void* operator new(std::size_t n  MI_SOURCE_PARAM)   noexcept(false) { return mi_source_new(n  MI_SOURCE_ARG); }
-  void* operator new[](std::size_t n  MI_SOURCE_PARAM) noexcept(false) { return mi_source_new(n  MI_SOURCE_ARG); }
+  void* operator new(std::size_t n, mi_source_t __mi_source)   noexcept(false) { (void)(__mi_source); return MI_SOURCE_ARG(mi_new, n); }
+  void* operator new[](std::size_t n, mi_source_t __mi_source) noexcept(false) { (void)(__mi_source); return MI_SOURCE_ARG(mi_new, n); }
 
-  void operator delete(void* p MI_SOURCE_PARAM)   noexcept { mi_free(p); };
-  void operator delete[](void* p MI_SOURCE_PARAM) noexcept { mi_free(p); };
+  void operator delete(void* p, mi_source_t )   noexcept { mi_free(p); };
+  void operator delete[](void* p, mi_source_t ) noexcept { mi_free(p); };
   #endif
 #endif
 

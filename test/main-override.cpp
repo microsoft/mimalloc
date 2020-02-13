@@ -8,7 +8,7 @@
 #include <mimalloc.h>
 #include <new>
 #include <vector>
-// #include <mimalloc-override.h>
+#include <mimalloc-override.h>
 
 static void* p = malloc(8);
 
@@ -49,6 +49,7 @@ int main() {
   free(p1);
   free(p2);
   mi_free(s);  
+  s[0] = 0;
   Test* t = new Test(42);
   delete t;
   // t = new(std::nothrow) Test(42);   // does not work with overriding :-(
@@ -61,7 +62,7 @@ int main() {
 static void dangling_ptr_write() {
   for (int i = 0; i < 1000; i++) {
     uint8_t* p;
-    if ((i & 1) == 1) {
+    if ((i & 1) == 0) {   // do ==0 or ==1 to get either malloc or new allocation
       p = (uint8_t*)malloc(16);
       free(p);
     }
