@@ -8,6 +8,25 @@
 #include <new>
 #include <vector>
 
+#include <thread>
+#include <mimalloc.h>
+#include <assert.h>
+
+// Issue #202
+void thread_main() {
+  mi_heap_t* heap = mi_heap_new();
+  void* q = mi_heap_malloc(heap,1024);
+  // mi_heap_delete(heap); // uncomment to prevent assertion
+}
+
+int main() {
+  auto t1 = std::thread(thread_main);
+  t1.join();
+  return 0;
+}
+
+/*
+
 static void* p = malloc(8);
 
 void free_p() {
@@ -32,13 +51,13 @@ int main() {
   free(p1);  
   p1 = malloc(8);
   char* s = mi_strdup("hello\n");
-  /*
-  char* s = _strdup("hello\n");
-  char* buf = NULL;
-  size_t len;
-  _dupenv_s(&buf,&len,"MIMALLOC_VERBOSE"); 
-  mi_free(buf);
-  */
+  
+  //char* s = _strdup("hello\n");
+  //char* buf = NULL;
+  //size_t len;
+  //_dupenv_s(&buf,&len,"MIMALLOC_VERBOSE"); 
+  //mi_free(buf);
+  
   mi_free(p2);
   p2 = malloc(16);
   p1 = realloc(p1, 32);
@@ -85,3 +104,4 @@ bool test_stl_allocator2() {
   vec.pop_back();
   return vec.size() == 0;
 }
+*/

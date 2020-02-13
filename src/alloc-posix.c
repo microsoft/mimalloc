@@ -55,24 +55,24 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
   return 0;
 }
 
-void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept {
+mi_decl_restrict void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept {
   void* p = (alignment <= MI_MAX_ALIGN_SIZE ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
   mi_assert_internal(((uintptr_t)p % alignment) == 0);
   return p;
 }
 
-void* mi_valloc(size_t size) mi_attr_noexcept {
+mi_decl_restrict void* mi_valloc(size_t size) mi_attr_noexcept {
   return mi_malloc_aligned(size, _mi_os_page_size());
 }
 
-void* mi_pvalloc(size_t size) mi_attr_noexcept {
+mi_decl_restrict void* mi_pvalloc(size_t size) mi_attr_noexcept {
   size_t psize = _mi_os_page_size();
   if (size >= SIZE_MAX - psize) return NULL; // overflow
   size_t asize = ((size + psize - 1) / psize) * psize;
   return mi_malloc_aligned(asize, psize);
 }
 
-void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept {
+mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept {
   if (alignment==0 || !_mi_is_power_of_two(alignment)) return NULL; 
   if ((size&(alignment-1)) != 0) return NULL; // C11 requires integral multiple, see <https://en.cppreference.com/w/c/memory/aligned_alloc>
   void* p = (alignment <= MI_MAX_ALIGN_SIZE ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
@@ -92,7 +92,7 @@ void* mi__expand(void* p, size_t newsize) mi_attr_noexcept {  // Microsoft
   return res;
 }
 
-unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept {
+mi_decl_restrict unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept {
   if (s==NULL) return NULL;
   size_t len;
   for(len = 0; s[len] != 0; len++) { }
@@ -104,7 +104,7 @@ unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept {
   return p;
 }
 
-unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexcept {
+mi_decl_restrict unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexcept {
   return (unsigned char*)mi_strdup((const char*)s);
 }
 
