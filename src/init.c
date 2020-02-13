@@ -97,6 +97,7 @@ const mi_heap_t _mi_heap_empty = {
   { 0, 0 },         // keys
   { {0}, {0}, 0 },
   0,                // page count
+  NULL,             // next
   false
 };
 
@@ -111,7 +112,7 @@ extern mi_heap_t _mi_heap_main;
 
 static mi_tld_t tld_main = {
   0, false,
-  &_mi_heap_main,
+  &_mi_heap_main, &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, {NULL ,NULL, 0},
     0, 0, 0, 0, 0, 0, NULL,
     tld_main_stats, tld_main_os
@@ -130,6 +131,7 @@ mi_heap_t _mi_heap_main = {
   { 0, 0 },         // the key of the main heap can be fixed (unlike page keys that need to be secure!)
   { {0x846ca68b}, {0}, 0 },  // random
   0,                // page count
+  NULL,             // next heap
   false             // can reclaim
 };
 
@@ -192,6 +194,7 @@ static bool _mi_heap_init(void) {
     heap->keys[1] = _mi_heap_random_next(heap);
     heap->tld = tld;
     tld->heap_backing = heap;
+    tld->heaps = heap;
     tld->segments.stats = &tld->stats;
     tld->segments.os = &tld->os;
     tld->os.stats = &tld->stats;
@@ -207,11 +210,23 @@ static bool _mi_heap_done(mi_heap_t* heap) {
   // reset default heap
   _mi_heap_set_default_direct(_mi_is_main_thread() ? &_mi_heap_main : (mi_heap_t*)&_mi_heap_empty);
 
-  // todo: delete all non-backing heaps?
-
-  // switch to backing heap and free it
+  // switch to backing heap
   heap = heap->tld->heap_backing;
   if (!mi_heap_is_initialized(heap)) return false;
+
+
+  // delete all non-backing heaps in this thread
+  mi_heap_t* curr = heap->tld->heaps;
+  while (curr != NULL) {
+    mi_heap_t* next = curr->next; // save `next` as `curr` will be freed
+    if (curr != heap) {
+      mi_assert_internal(!mi_heap_is_backing(curr));
+      mi_heap_delete(curr);
+    }
+    curr = next;
+  }
+  mi_assert_internal(heap->tld->heaps == heap && heap->next == NULL);
+  mi_assert_internal(mi_heap_is_backing(heap));
 
   // collect if not the main thread
   if (heap != &_mi_heap_main) {

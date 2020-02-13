@@ -191,7 +191,7 @@ mi_heap_t* mi_heap_get_backing(void) {
 
 mi_heap_t* mi_heap_new(void) {
   mi_heap_t* bheap = mi_heap_get_backing();
-  mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);
+  mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);  // todo: OS allocate in secure mode?
   if (heap==NULL) return NULL;
   memcpy(heap, &_mi_heap_empty, sizeof(mi_heap_t));
   heap->tld = bheap->tld;
@@ -201,6 +201,9 @@ mi_heap_t* mi_heap_new(void) {
   heap->keys[0] = _mi_heap_random_next(heap);
   heap->keys[1] = _mi_heap_random_next(heap);
   heap->no_reclaim = true;  // don't reclaim abandoned pages or otherwise destroy is unsafe
+  // push on the thread local heaps list
+  heap->next = heap->tld->heaps;
+  heap->tld->heaps = heap;
   return heap;
 }
 
@@ -230,6 +233,22 @@ static void mi_heap_free(mi_heap_t* heap) {
   if (mi_heap_is_default(heap)) {
     _mi_heap_set_default_direct(heap->tld->heap_backing);
   }
+
+  // remove ourselves from the thread local heaps list
+  // linear search but we expect the number of heaps to be relatively small
+  mi_heap_t* prev = NULL;
+  mi_heap_t* curr = heap->tld->heaps; 
+  while (curr != heap && curr != NULL) {
+    prev = curr;
+    curr = curr->next;
+  }
+  mi_assert_internal(curr == heap);
+  if (curr == heap) {
+    if (prev != NULL) { prev->next = heap->next; }
+                 else { heap->tld->heaps = heap->next; }
+  }
+  mi_assert_internal(heap->tld->heaps != NULL);
+
   // and free the used memory
   mi_free(heap);
 }

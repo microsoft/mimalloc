@@ -28,7 +28,7 @@ int main() {
   mi_stats_reset();  // ignore earlier allocations
   // heap_no_delete();  // issue #202
   // heap_late_free();  // issue #204
-  various_tests();
+  // various_tests();
   mi_stats_print(NULL);
   return 0;
 }
