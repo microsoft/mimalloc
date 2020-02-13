@@ -329,6 +329,7 @@ static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* fro
   mi_page_set_in_full(page, mi_page_queue_is_full(to));
 }
 
+// Only called from `mi_heap_absorb`.
 size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append) {
   mi_assert_internal(mi_heap_contains_queue(heap,pq));
   mi_assert_internal(pq->block_size == append->block_size);
@@ -339,6 +340,10 @@ size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue
   size_t count = 0;
   for (mi_page_t* page = append->first; page != NULL; page = page->next) {
     mi_page_set_heap(page,heap);
+    // set it to delayed free (not overriding NEVER_DELAYED_FREE) which has as a
+    // side effect that it spins until any DELAYED_FREEING is finished. This ensures
+    // that after appending only the new heap will be used for delayed free operations.
+    _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, false);
     count++;
   }
 

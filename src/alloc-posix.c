@@ -56,7 +56,7 @@ MI_SOURCE_API3(void*, reallocarray, void*, p, size_t, count, size_t, size)
   return newp;
 }
 
-MI_SOURCE_API2(void*, memalign, size_t, alignment, size_t, size)
+MI_SOURCE_API2(mi_decl_restrict void*, memalign, size_t, alignment, size_t, size)
 {
   void* p;
   if (alignment <= MI_MAX_ALIGN_SIZE) {
@@ -69,12 +69,12 @@ MI_SOURCE_API2(void*, memalign, size_t, alignment, size_t, size)
   return p;
 }
 
-MI_SOURCE_API1(void*, valloc, size_t, size)
+MI_SOURCE_API1(mi_decl_restrict void*, valloc, size_t, size)
 {
   return MI_SOURCE_ARG(mi_malloc_aligned, size, _mi_os_page_size());
 }
 
-MI_SOURCE_API1(void*, pvalloc, size_t, size)
+MI_SOURCE_API1(mi_decl_restrict void*, pvalloc, size_t, size)
 {
   size_t psize = _mi_os_page_size();
   if (size >= SIZE_MAX - psize) return NULL; // overflow
@@ -82,7 +82,7 @@ MI_SOURCE_API1(void*, pvalloc, size_t, size)
   return MI_SOURCE_ARG(mi_malloc_aligned, asize, psize);
 }
 
-MI_SOURCE_API2(void*, aligned_alloc, size_t, alignment, size_t, size)
+MI_SOURCE_API2(mi_decl_restrict void*, aligned_alloc, size_t, alignment, size_t, size)
 {
   if (alignment==0 || !_mi_is_power_of_two(alignment)) return NULL; 
   if ((size&(alignment-1)) != 0) return NULL; // C11 requires integral multiple, see <https://en.cppreference.com/w/c/memory/aligned_alloc>
@@ -128,8 +128,7 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
   return mi_base_posix_memalign(p, alignment, size  MI_SOURCE_XRET());
 }
 
-
-MI_SOURCE_API1(unsigned short*, wcsdup, const unsigned short*, s)
+MI_SOURCE_API1(mi_decl_restrict unsigned short*, wcsdup, const unsigned short*, s)
 {
   if (s==NULL) return NULL;
   size_t len;
@@ -142,7 +141,7 @@ MI_SOURCE_API1(unsigned short*, wcsdup, const unsigned short*, s)
   return p;
 }
 
-MI_SOURCE_API1(unsigned char*, mbsdup, const unsigned char*, s)
+MI_SOURCE_API1(mi_decl_restrict unsigned char*, mbsdup, const unsigned char*, s)
 {
   return (unsigned char*)MI_SOURCE_ARG(mi_strdup,(const char*)s);
 }
@@ -215,19 +214,19 @@ int mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name)
 
 
 #ifndef NDEBUG
-mi_decl_restrict void* dbg_mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t alignment, size_t offset, mi_source_t __mi_source) mi_attr_noexcept { // Microsoft
+void* dbg_mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t alignment, size_t offset, mi_source_t __mi_source) mi_attr_noexcept { // Microsoft
   return dbg_mi_recalloc_aligned_at(p, newcount, size, alignment, offset, __mi_source);
 }
 
-mi_decl_restrict void* dbg_mi_aligned_recalloc(void* p, size_t newcount, size_t size, size_t alignment, mi_source_t __mi_source) mi_attr_noexcept { // Microsoft
+void* dbg_mi_aligned_recalloc(void* p, size_t newcount, size_t size, size_t alignment, mi_source_t __mi_source) mi_attr_noexcept { // Microsoft
   return dbg_mi_recalloc_aligned(p, newcount, size, alignment, __mi_source);
 }
 #endif
 
-mi_decl_restrict void* mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept { // Microsoft
+void* mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept { // Microsoft
   return MI_SOURCE_RET(mi_recalloc_aligned_at,p, newcount, size, alignment, offset);
 }
 
-mi_decl_restrict void* mi_aligned_recalloc(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept { // Microsoft
+void* mi_aligned_recalloc(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept { // Microsoft
   return MI_SOURCE_RET(mi_recalloc_aligned,p, newcount, size, alignment);
 }

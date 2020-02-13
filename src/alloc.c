@@ -61,7 +61,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 }
 
 // allocate a small block
-MI_ALLOC_API1(void*, malloc_small, mi_heap_t*, heap, size_t, size)
+MI_ALLOC_API1(mi_decl_restrict void*, malloc_small, mi_heap_t*, heap, size_t, size)
 {
   mi_assert(heap!=NULL);
   mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
@@ -80,7 +80,7 @@ MI_ALLOC_API1(void*, malloc_small, mi_heap_t*, heap, size_t, size)
 
 
 // The main allocation function
-MI_ALLOC_API1(void*, malloc, mi_heap_t*, heap, size_t, size)
+MI_ALLOC_API1(mi_decl_restrict void*, malloc, mi_heap_t*, heap, size_t, size)
 {
   if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
     return mi_base_malloc_small(heap, size  MI_SOURCE_XARG);
@@ -120,7 +120,7 @@ void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
 }
 
 // zero initialized small block
-MI_ALLOC_API1(void*, zalloc_small, mi_heap_t*, heap, size_t, size)
+MI_ALLOC_API1(mi_decl_restrict void*, zalloc_small, mi_heap_t*, heap, size_t, size)
 {
   void* p = mi_base_malloc_small(heap, size  MI_SOURCE_XARG);
   if (p != NULL) {
@@ -137,7 +137,7 @@ mi_decl_restrict void* _mi_base_malloc_zero(mi_heap_t* heap, size_t size, bool z
   return p;
 }
 
-MI_ALLOC_API1(void*, zalloc, mi_heap_t*,heap, size_t,size)
+MI_ALLOC_API1(mi_decl_restrict void*, zalloc, mi_heap_t*,heap, size_t,size)
 {
   return _mi_base_malloc_zero(heap, size, true  MI_SOURCE_XARG);
 }
@@ -519,7 +519,7 @@ void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
   mi_free(p);
 }
 
-MI_ALLOC_API2(void*, calloc, mi_heap_t*, heap, size_t, count, size_t, size)
+MI_ALLOC_API2(mi_decl_restrict void*, calloc, mi_heap_t*, heap, size_t, count, size_t, size)
 {
   size_t total;
   if (mi_count_size_overflow(count,size,&total)) return NULL;
@@ -527,7 +527,7 @@ MI_ALLOC_API2(void*, calloc, mi_heap_t*, heap, size_t, count, size_t, size)
 }
 
 // Uninitialized `calloc`
-MI_ALLOC_API2(void*, mallocn, mi_heap_t*, heap, size_t, count, size_t, size)
+MI_ALLOC_API2(mi_decl_restrict void*, mallocn, mi_heap_t*, heap, size_t, count, size_t, size)
 {
   size_t total;
   if (mi_count_size_overflow(count, size, &total)) return NULL;
@@ -536,14 +536,19 @@ MI_ALLOC_API2(void*, mallocn, mi_heap_t*, heap, size_t, count, size_t, size)
 
 
 // Expand in place or fail
-mi_decl_restrict void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
+MI_ALLOC_API2(void*, expand, mi_heap_t*, heap, void*, p, size_t, newsize) 
+{
+  UNUSED(heap);
+#ifndef NDEBUG
+  UNUSED(__mi_source);
+#endif
   if (p == NULL) return NULL;
   size_t size = mi_usable_size(p);
   if (newsize > size) return NULL;
   return p; // it fits
 }
 
-mi_decl_restrict void* _mi_base_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero  MI_SOURCE_XPARAM) {
+void* _mi_base_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero  MI_SOURCE_XPARAM) {
   if (p == NULL) return _mi_base_malloc_zero(heap,newsize,zero  MI_SOURCE_XARG);
   size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size / 2)) {
@@ -601,7 +606,7 @@ MI_ALLOC_API3(void*, recalloc, mi_heap_t*, heap, void*, p, size_t, count, size_t
 // ------------------------------------------------------
 
 // `strdup` using mi_malloc
-MI_ALLOC_API1(char*, strdup, mi_heap_t*,heap, const char*,s) 
+MI_ALLOC_API1(mi_decl_restrict char*, strdup, mi_heap_t*,heap, const char*,s)
 {
   if (s == NULL) return NULL;
   size_t n = strlen(s);
@@ -610,9 +615,8 @@ MI_ALLOC_API1(char*, strdup, mi_heap_t*,heap, const char*,s)
   return t;
 }
 
-
 // `strndup` using mi_malloc
-MI_ALLOC_API2(char*, strndup, mi_heap_t*, heap, const char*, s, size_t, n)
+MI_ALLOC_API2(mi_decl_restrict char*, strndup, mi_heap_t*, heap, const char*, s, size_t, n)
 {
   if (s == NULL) return NULL;
   size_t m = strlen(s);
@@ -632,7 +636,7 @@ MI_ALLOC_API2(char*, strndup, mi_heap_t*, heap, const char*, s, size_t, n)
 #define PATH_MAX MAX_PATH
 #endif
 #include <windows.h>
-MI_ALLOC_API2(char*, realpath, mi_heap_t*, heap, const char*, fname, char*, resolved_name)
+MI_ALLOC_API2(mi_decl_restrict char*, realpath, mi_heap_t*, heap, const char*, fname, char*, resolved_name)
 {
   // todo: use GetFullPathNameW to allow longer file names
   char buf[PATH_MAX];
@@ -663,7 +667,7 @@ static size_t mi_path_max() {
   return path_max;
 }
 
-MI_ALLOC_API2(char*, realpath, mi_heap_t*, heap, const char*, fname, char*, resolved_name)
+MI_ALLOC_API2(mi_decl_restrict char*, realpath, mi_heap_t*, heap, const char*, fname, char*, resolved_name)
 {
   if (resolved_name != NULL) {
     return realpath(fname,resolved_name);
@@ -734,7 +738,7 @@ static bool mi_try_new_handler(bool nothrow) {
 }
 #endif
 
-static mi_decl_noinline void* mi_base_try_new(size_t size, bool nothrow   MI_SOURCE_XPARAM) {
+static mi_decl_noinline mi_decl_restrict void* mi_base_try_new(size_t size, bool nothrow   MI_SOURCE_XPARAM) {
   void* p = NULL;
   while(p == NULL && mi_try_new_handler(nothrow)) {
     p = MI_SOURCE_ARG(mi_malloc, size);
@@ -742,14 +746,14 @@ static mi_decl_noinline void* mi_base_try_new(size_t size, bool nothrow   MI_SOU
   return p;
 }
 
-MI_NEW_API1(void*, new, size_t, size) 
+MI_NEW_API1(mi_decl_restrict void*, new, size_t, size)
 {
   void* p = MI_SOURCE_ARG(mi_malloc, size);
   if (mi_unlikely(p == NULL)) return mi_base_try_new(size, false  MI_SOURCE_XARG);
   return p;
 }
 
-MI_NEW_API1(void*, new_nothrow, size_t, size) 
+MI_SOURCE_API1(mi_decl_restrict void*, new_nothrow, size_t, size)
 {
   void* p = MI_SOURCE_ARG(mi_malloc, size);
   if (mi_unlikely(p == NULL)) return mi_base_try_new(size, true  MI_SOURCE_XARG);
@@ -757,7 +761,7 @@ MI_NEW_API1(void*, new_nothrow, size_t, size)
 }
 
 
-MI_NEW_API2(void*, new_aligned, size_t, size, size_t, alignment) 
+MI_NEW_API2(mi_decl_restrict void*, new_aligned, size_t, size, size_t, alignment)
 {
   void* p;
   do {
@@ -767,7 +771,7 @@ MI_NEW_API2(void*, new_aligned, size_t, size, size_t, alignment)
   return p;
 }
 
-MI_NEW_API2(void*, new_aligned_nothrow, size_t, size, size_t, alignment) 
+MI_SOURCE_API2(mi_decl_restrict void*, new_aligned_nothrow, size_t, size, size_t, alignment)
 {
   void* p;
   do {
@@ -777,7 +781,7 @@ MI_NEW_API2(void*, new_aligned_nothrow, size_t, size, size_t, alignment)
   return p;
 }
 
-MI_NEW_API2(void*, new_n, size_t, count, size_t, size)
+MI_NEW_API2(mi_decl_restrict void*, new_n, size_t, count, size_t, size)
 {
   size_t total;
   if (mi_unlikely(mi_count_size_overflow(count, size, &total))) {

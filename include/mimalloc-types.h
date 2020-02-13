@@ -332,6 +332,7 @@ struct mi_heap_s {
   uintptr_t             keys[2];                             // two random keys used to encode the `thread_delayed_free` list
   mi_random_ctx_t       random;                              // random number context used for secure allocation
   size_t                page_count;                          // total number of pages in the `pages` queues.
+  mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
 };
 
@@ -472,6 +473,7 @@ struct mi_tld_s {
   unsigned long long  heartbeat;     // monotonic heartbeat count
   bool                recurse;       // true if deferred was called; used to prevent infinite recursion.
   mi_heap_t*          heap_backing;  // backing heap of this thread (cannot be deleted)
+  mi_heap_t*          heaps;         // list of heaps in this thread (so we can abandon all when the thread terminates)
   mi_segments_tld_t   segments;      // segment tld
   mi_os_tld_t         os;            // os tld
   mi_stats_t          stats;         // statistics
