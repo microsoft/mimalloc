@@ -338,6 +338,8 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   
   // transfer all pages by appending the queues; this will set a new heap field 
   // so threads may do delayed frees in either heap for a while.
+  // note: appending waits for each page to not be in the `MI_DELAYED_FREEING` state
+  // so after this only the new heap will get delayed frees
   for (size_t i = 0; i <= MI_BIN_FULL; i++) {
     mi_page_queue_t* pq = &heap->pages[i];
     mi_page_queue_t* append = &from->pages[i];
@@ -351,7 +353,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   // note: be careful here as the `heap` field in all those pages no longer point to `from`,
   // turns out to be ok as `_mi_heap_delayed_free` only visits the list and calls a 
   // the regular `_mi_free_delayed_block` which is safe.
-  _mi_heap_delayed_free(from);
+  _mi_heap_delayed_free(from);  
   mi_assert_internal(from->thread_delayed_free == NULL);
 
   // and reset the `from` heap
