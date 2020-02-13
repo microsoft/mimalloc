@@ -12,20 +12,26 @@
 #include <mimalloc.h>
 #include <assert.h>
 
-// Issue #202
-void thread_main() {
-  mi_heap_t* heap = mi_heap_new();
-  void* q = mi_heap_malloc(heap,1024);
-  // mi_heap_delete(heap); // uncomment to prevent assertion
-}
+#ifdef _WIN32
+#include <windows.h>
+static void msleep(unsigned long msecs) { Sleep(msecs); }
+#else
+#include <unistd.h>
+static void msleep(unsigned long msecs) { usleep(msecs * 1000UL); }
+#endif
+
+void heap_no_delete();
+void heap_late_free();
+void various_tests();
 
 int main() {
-  auto t1 = std::thread(thread_main);
-  t1.join();
+  mi_stats_reset();  // ignore earlier allocations
+  // heap_no_delete();  // issue #202
+  // heap_late_free();  // issue #204
+  various_tests();
+  mi_stats_print(NULL);
   return 0;
 }
-
-/*
 
 static void* p = malloc(8);
 
@@ -43,8 +49,7 @@ public:
 };
 
 
-int main() {
-  mi_stats_reset();  // ignore earlier allocations
+void various_tests() {  
   atexit(free_p);
   void* p1 = malloc(78);
   void* p2 = mi_malloc_aligned(16,24);
@@ -68,8 +73,6 @@ int main() {
   delete t;
   t = new (std::nothrow) Test(42);
   delete t;  
-  mi_stats_print(NULL);
-  return 0;
 }
 
 class Static {
@@ -104,4 +107,37 @@ bool test_stl_allocator2() {
   vec.pop_back();
   return vec.size() == 0;
 }
-*/
+
+
+
+// Issue #202
+void heap_no_delete_worker() {
+  mi_heap_t* heap = mi_heap_new();
+  void* q = mi_heap_malloc(heap,1024);
+  // mi_heap_delete(heap); // uncomment to prevent assertion
+}
+
+void heap_no_delete() {
+  auto t1 = std::thread(heap_no_delete_worker);
+  t1.join();  
+}
+
+
+// Issue #204
+volatile void* global_p;
+
+void t1main() {
+  mi_heap_t* heap = mi_heap_new();
+  global_p = mi_heap_malloc(heap, 1024);
+  mi_heap_delete(heap);
+}
+
+void heap_late_free() {
+  auto t1 = std::thread(t1main);
+
+  msleep(2000);
+  assert(global_p);
+  mi_free((void*)global_p);
+
+  t1.join();
+}
