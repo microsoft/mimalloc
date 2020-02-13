@@ -226,6 +226,7 @@ static void mi_heap_reset_pages(mi_heap_t* heap) {
 
 // called from `mi_heap_destroy` and `mi_heap_delete` to free the internal heap resources.
 static void mi_heap_free(mi_heap_t* heap) {
+  mi_assert(heap != NULL);
   mi_assert_internal(mi_heap_is_initialized(heap));
   if (mi_heap_is_backing(heap)) return; // dont free the backing heap
 
@@ -305,6 +306,7 @@ void _mi_heap_destroy_pages(mi_heap_t* heap) {
 }
 
 void mi_heap_destroy(mi_heap_t* heap) {
+  mi_assert(heap != NULL);
   mi_assert(mi_heap_is_initialized(heap));
   mi_assert(heap->no_reclaim);
   mi_assert_expensive(mi_heap_is_valid(heap));
@@ -359,6 +361,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
 // Safe delete a heap without freeing any still allocated blocks in that heap.
 void mi_heap_delete(mi_heap_t* heap)
 {
+  mi_assert(heap != NULL);
   mi_assert(mi_heap_is_initialized(heap));
   mi_assert_expensive(mi_heap_is_valid(heap));
   if (!mi_heap_is_initialized(heap)) return;
