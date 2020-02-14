@@ -18,9 +18,15 @@ terms of the MIT license. A copy of the license can be found in the file
 // See <https://en.cppreference.com/w/cpp/memory/new/operator_new>
 // -----------------------------------------------------------------------------------
 #if defined(__cplusplus)
+  #if defined(new)              // in case this is included over `mimalloc-override.h`
+  #pragma push_macro("new")
+  #define MI_PUSHED_NEW
+  #undef new
+  #endif
+
   #include <new>
   #include <mimalloc.h>
-
+ 
   void operator delete(void* p) noexcept              { mi_free(p); };
   void operator delete[](void* p) noexcept            { mi_free(p); };
 
@@ -54,6 +60,10 @@ terms of the MIT license. A copy of the license can be found in the file
 
   void operator delete(void* p, mi_source_t )   noexcept { mi_free(p); };
   void operator delete[](void* p, mi_source_t ) noexcept { mi_free(p); };
+  #endif
+
+  #if defined(MI_PUSHED_NEW)
+  #pragma pop_macro("new")
   #endif
 #endif
 
