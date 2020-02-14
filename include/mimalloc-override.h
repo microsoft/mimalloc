@@ -27,17 +27,25 @@ not accidentally mix pointers from different allocators).
 #define strndup(s)              mi_strndup(s)
 #define realpath(f,n)           mi_realpath(f,n)
 
+#define wcsdup(s)               mi_wcsdup(s)
+#define mbsdup(s)               mi_mbsdup(s)
+#define getcwd(b,n)             mi_getcwd(b,n)
+
 // Microsoft extensions
-#define _expand(p,n)            mi_expand(p,n)
+#define _expand(p,n)            mi__expand(p,n)
 #define _msize(p)               mi_usable_size(p)
 #define _recalloc(p,n,c)        mi_recalloc(p,n,c)
 
 #define _strdup(s)              mi_strdup(s)
 #define _strndup(s)             mi_strndup(s)
-#define _wcsdup(s)              (wchar_t*)mi_wcsdup((const unsigned short*)(s))
+#define _wcsdup(s)              mi_wcsdup(s)
 #define _mbsdup(s)              mi_mbsdup(s)
-#define _dupenv_s(b,n,v)        mi_dupenv_s(b,n,v)
-#define _wdupenv_s(b,n,v)       mi_wdupenv_s((unsigned short*)(b),n,(const unsigned short*)(v))
+#define _getcwd(b,n)            mi_getcwd(b,n)
+#define _dupenv_s(b,n,v)        mi__dupenv_s(b,n,v)
+#define _wdupenv_s(b,n,v)       mi__wdupenv_s(b,n,v)
+#define _fullpath(b,p,n)        mi__fullpath(b,p,n)
+#define _wfullpath(b,p,n)       mi__wfullpath(b,p,n)
+#define _wgetcwd(b,n)           mi__wgetcwd(b,n)
 
 // Various Posix and Unix variants
 #define reallocf(p,n)           mi_reallocf(p,n)
@@ -56,7 +64,7 @@ not accidentally mix pointers from different allocators).
 // Microsoft aligned variants
 #define _aligned_malloc(n,a)                  mi_malloc_aligned(n,a)
 #define _aligned_realloc(p,n,a)               mi_realloc_aligned(p,n,a)
-#define _aligned_recalloc(p,s,n,a)            mi_aligned_recalloc(p,s,n,a)
+#define _aligned_recalloc(p,s,n,a)            mi_recalloc_aligned(p,s,n,a)
 #define _aligned_msize(p,a,o)                 mi_usable_size(p)
 #define _aligned_free(p)                      mi_free(p)
 #define _aligned_offset_malloc(n,a,o)         mi_malloc_aligned_at(n,a,o)

@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <string.h>  // memset, memcpy, strlen
 #include <stdlib.h>  // malloc, exit
+#include <wchar.h>   // wcslen
 
 #define MI_IN_ALLOC_C
 #include "alloc-override.c"
@@ -599,18 +600,16 @@ MI_ALLOC_API3(void*, recalloc, mi_heap_t*, heap, void*, p, size_t, count, size_t
   return _mi_base_realloc_zero(heap, p, total, true  MI_SOURCE_XARG);
 }
 
-
-
-// ------------------------------------------------------
-// strdup, strndup, and realpath
-// ------------------------------------------------------
+/*-------------------------------------------------------
+  strdup, strndup, and realpath
+-------------------------------------------------------*/
 
 // `strdup` using mi_malloc
-MI_ALLOC_API1(mi_decl_restrict char*, strdup, mi_heap_t*,heap, const char*,s)
+MI_ALLOC_API1(mi_decl_restrict char*, strdup, mi_heap_t*, heap, const char*, s)
 {
   if (s == NULL) return NULL;
   size_t n = strlen(s);
-  char* t = (char*)mi_base_malloc(heap, n+1  MI_SOURCE_XARG);
+  char* t = (char*)MI_SOURCE_ARG(mi_heap_malloc, heap, n+1);
   if (t != NULL) memcpy(t, s, n + 1);
   return t;
 }
@@ -621,13 +620,12 @@ MI_ALLOC_API2(mi_decl_restrict char*, strndup, mi_heap_t*, heap, const char*, s,
   if (s == NULL) return NULL;
   size_t m = strlen(s);
   if (n > m) n = m;
-  char* t = (char*)mi_base_malloc(heap, n+1  MI_SOURCE_XARG);
+  char* t = (char*)MI_SOURCE_ARG(mi_heap_malloc, heap, n+1);
   if (t == NULL) return NULL;
   memcpy(t, s, n);
   t[n] = 0;
   return t;
 }
-
 
 #ifndef __wasi__
 // `realpath` using mi_malloc
@@ -635,6 +633,10 @@ MI_ALLOC_API2(mi_decl_restrict char*, strndup, mi_heap_t*, heap, const char*, s,
 #ifndef PATH_MAX
 #define PATH_MAX MAX_PATH
 #endif
+size_t _mi_path_max(void) {
+  return PATH_MAX;
+}
+
 #include <windows.h>
 MI_ALLOC_API2(mi_decl_restrict char*, realpath, mi_heap_t*, heap, const char*, fname, char*, resolved_name)
 {
@@ -651,15 +653,15 @@ MI_ALLOC_API2(mi_decl_restrict char*, realpath, mi_heap_t*, heap, const char*, f
     return resolved_name;
   }
   else {
-    return mi_base_strndup(heap, buf, PATH_MAX  MI_SOURCE_XARG);
+    return MI_SOURCE_ARG(mi_heap_strndup, heap, buf, PATH_MAX);
   }
 }
 #else
 #include <unistd.h>  // pathconf
-static size_t mi_path_max() {
+size_t _mi_path_max(void) {
   static size_t path_max = 0;
   if (path_max <= 0) {
-    long m = pathconf("/",_PC_PATH_MAX);
+    long m = pathconf("/", _PC_PATH_MAX);
     if (m <= 0) path_max = 4096;      // guess
     else if (m < 256) path_max = 256; // at least 256
     else path_max = m;
@@ -670,19 +672,21 @@ static size_t mi_path_max() {
 MI_ALLOC_API2(mi_decl_restrict char*, realpath, mi_heap_t*, heap, const char*, fname, char*, resolved_name)
 {
   if (resolved_name != NULL) {
-    return realpath(fname,resolved_name);
+    return realpath(fname, resolved_name);
   }
   else {
-    size_t n  = mi_path_max();
-    char* buf = (char*)mi_malloc(n+1);
+    size_t n = _mi_path_max();
+    char* buf = (char*)MI_SOURCE_ARG(mi_heap_malloc, heap, n+1);
     if (buf==NULL) return NULL;
-    char* rname  = realpath(fname,buf);
-    char* result = mi_base_strndup(heap, rname, n  MI_SOURCE_XARG); // ok if `rname==NULL`
+    char* rname = realpath(fname, buf);
+    char* result = MI_SOURCE_ARG(mi_heap_strndup, heap, rname, n); // ok if `rname==NULL`
     mi_free(buf);
     return result;
   }
 }
 #endif
+
+#else // wasi
 
 #endif
 

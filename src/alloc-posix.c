@@ -10,6 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // for convenience and used when overriding these functions.
 // ------------------------------------------------------------------------
 #define MI_NO_SOURCE_DEBUG
+#define _CRT_SECURE_NO_WARNINGS
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
@@ -20,6 +21,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <errno.h>
 #include <string.h>  // memcpy
 #include <stdlib.h>  // getenv
+#include <wchar.h>   // wcslen, wcrcpy
 
 #ifndef EINVAL
 #define EINVAL 22
@@ -97,7 +99,7 @@ MI_SOURCE_API2(mi_decl_restrict void*, aligned_alloc, size_t, alignment, size_t,
   return p;
 }
 
-static int mi_base_posix_memalign(void** p, size_t alignment, size_t size  MI_SOURCE_XPARAM)
+MI_SOURCE_API3(int, posix_memalign, void**, p, size_t, alignment, size_t, size)
 {
   // Note: The spec dictates we should not modify `*p` on an error. (issue#27)
   // <http://man7.org/linux/man-pages/man3/posix_memalign.3.html>
@@ -117,24 +119,13 @@ static int mi_base_posix_memalign(void** p, size_t alignment, size_t size  MI_SO
   return 0;
 }
 
-#ifndef NDEBUG
-int dbg_mi_posix_memalign(void** p, size_t alignment, size_t size, mi_source_t __mi_source) mi_attr_noexcept {
-  UNUSED(__mi_source);
-  return mi_base_posix_memalign(p, alignment, size  MI_SOURCE_XARG);
-}
-#endif
-
-int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept  {
-  return mi_base_posix_memalign(p, alignment, size  MI_SOURCE_XRET());
-}
-
-MI_SOURCE_API1(mi_decl_restrict unsigned short*, wcsdup, const unsigned short*, s)
+MI_SOURCE_API1(mi_decl_restrict wchar_t*, wcsdup, const wchar_t*, s)
 {
   if (s==NULL) return NULL;
   size_t len;
   for(len = 0; s[len] != 0; len++) { }
-  size_t size = (len+1)*sizeof(unsigned short);
-  unsigned short* p = (unsigned short*)MI_SOURCE_ARG(mi_malloc, size);
+  size_t size = (len+1)*sizeof(wchar_t);
+  wchar_t* p = (wchar_t*)MI_SOURCE_ARG(mi_malloc, size);
   if (p != NULL) {
     memcpy(p,s,size);
   }
@@ -146,7 +137,112 @@ MI_SOURCE_API1(mi_decl_restrict unsigned char*, mbsdup, const unsigned char*, s)
   return (unsigned char*)MI_SOURCE_ARG(mi_strdup,(const char*)s);
 }
 
-static int mi_base_dupenv_s(char** buf, size_t* size, const char* name  MI_SOURCE_XPARAM)
+
+#ifdef _WIN32
+#include <direct.h>  // getcwd
+#else
+#include <unistd.h>  // getcwd
+#endif
+
+MI_SOURCE_API2(mi_decl_restrict char*, getcwd, char*, buf, size_t, buf_len) {
+  if (buf!=NULL && buf_len > 0) {
+    #pragma warning(suppress:4996)
+    return getcwd(buf, (int)buf_len);
+  }
+  else {
+    size_t pmax = _mi_path_max();
+    char* cbuf = (char*)MI_SOURCE_ARG(mi_malloc, pmax+1);
+    #pragma warning(suppress:4996)
+    char* res = getcwd(cbuf, (int)pmax);
+    if (res != NULL) {
+      res = MI_SOURCE_ARG(mi_strdup, cbuf); // shrink
+    }
+    mi_free(cbuf);
+    return res;
+  }  
+}
+
+MI_SOURCE_API3(mi_decl_restrict char*, _fullpath, char*, buf, const char*, path, size_t, buf_len) {
+  if (path==NULL) return NULL;
+  char* full = MI_SOURCE_ARG(mi_realpath, path, NULL);
+  if (full==NULL) return NULL;
+  if (buf==NULL) {
+    return full;
+  }
+  else {
+    size_t len = strlen(full);
+    if (len < buf_len) {
+      strcpy(buf, full);
+    }
+    mi_free(full);
+    return (len < buf_len ? buf : NULL);
+  }
+}
+
+
+// -----------------------------------------------------------------------------
+// Microsoft: _wgetcwd, _wfullpath, _(w)dupenv, _aligned_recalloc, _aligned_offset_recalloc
+// -----------------------------------------------------------------------------
+
+static wchar_t* mi_mbstowcs_dup(const char* s  MI_SOURCE_XPARAM) {
+  if (s==NULL) return NULL;
+  size_t len = strlen(s);
+  wchar_t* ws = (wchar_t*)MI_SOURCE_ARG(mi_malloc, (len + 1)*sizeof(wchar_t));  // over allocate by a factor 2
+  mbstowcs(ws, s, len + 1);
+  return ws;
+}
+
+static char* mi_wcstombs_dup(const wchar_t* ws  MI_SOURCE_XPARAM) {
+  if (ws==NULL) return NULL;
+  size_t len = wcslen(ws);
+  size_t sz  = (len + 1)*sizeof(wchar_t)*2; // over allocate by a factor 4 :( ok for our purposes though
+  char* s = (char*)MI_SOURCE_ARG(mi_malloc, sz);  
+  wcstombs(s, ws, sz);
+  return s;
+}
+
+MI_SOURCE_API3(mi_decl_restrict wchar_t*, _wfullpath, wchar_t*, wbuf, const wchar_t*, wpath, size_t, wbuf_len) {
+  if (wpath==NULL) return NULL;
+  char* path = mi_wcstombs_dup(wbuf  MI_SOURCE_XARG);
+  char* full = MI_SOURCE_ARG(mi_realpath, path, NULL);
+  mi_free(path);
+  if (full==NULL) return NULL;
+  wchar_t* wfull = mi_mbstowcs_dup( full  MI_SOURCE_XARG);
+  mi_free(full);
+  if (wbuf==NULL) {    
+    return wfull;
+  }
+  else {
+    size_t len = wcslen(wfull);
+    if (len < wbuf_len) {
+      wcscpy(wbuf, wfull);
+    }
+    mi_free(wfull);
+    return (len < wbuf_len ? wbuf : NULL);
+  }
+}
+
+MI_SOURCE_API2(mi_decl_restrict wchar_t*, _wgetcwd, wchar_t*, wbuf, size_t, wbuf_len) 
+{
+  char* res = MI_SOURCE_ARG(mi_getcwd, NULL, 0);
+  if (res == NULL) return NULL;
+  wchar_t* wres = mi_mbstowcs_dup( res  MI_SOURCE_XARG);
+  mi_free(res);
+  if (wbuf == NULL || wbuf_len == 0) {
+    return wres;
+  }
+  else {
+    size_t len = wcslen(wres);
+    if (len < wbuf_len) {
+      wcscpy(wbuf, wres);
+    }
+    mi_free(wres);
+    return (len < wbuf_len ? wbuf : NULL);
+  }
+}
+
+
+MI_SOURCE_API3(int, _dupenv_s, char**, buf, size_t*, size, const char*, name)
 {
   if (buf==NULL || name==NULL) return EINVAL;
   if (size != NULL) *size = 0;
@@ -163,19 +259,7 @@ static int mi_base_dupenv_s(char** buf, size_t* size, const char* name  MI_SOURC
   return 0;
 }
 
-#ifndef NDEBUG
-int dbg_mi_dupenv_s(char** buf, size_t* size, const char* name, mi_source_t __mi_source) mi_attr_noexcept {
-  UNUSED(__mi_source);
-  return mi_base_dupenv_s(buf, size, name  MI_SOURCE_XARG);
-}
-#endif
-
-int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
-  return mi_base_dupenv_s(buf, size, name  MI_SOURCE_XRET());
-}
-
-
-static int mi_base_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name  MI_SOURCE_XPARAM)
+MI_SOURCE_API3(int, _wdupenv_s, wchar_t**, buf, size_t*, size, const wchar_t*, name)
 {
   if (buf==NULL || name==NULL) return EINVAL;
   if (size != NULL) *size = 0;
@@ -188,28 +272,17 @@ static int mi_base_wdupenv_s(unsigned short** buf, size_t* size, const unsigned 
   return EINVAL;
 #else
   #pragma warning(suppress:4996)
-  unsigned short* p = (unsigned short*)_wgetenv((const wchar_t*)name);
+  wchar_t* p = (wchar_t*)_wgetenv(name);
   if (p==NULL) {
     *buf = NULL;
   }
   else {
     *buf = MI_SOURCE_ARG(mi_wcsdup, p);
     if (*buf==NULL) return ENOMEM;
-    if (size != NULL) *size = wcslen((const wchar_t*)p);
+    if (size != NULL) *size = wcslen(p);
   }
   return 0;
 #endif
-}
-
-#ifndef NDEBUG
-int dbg_mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name, mi_source_t __mi_source) mi_attr_noexcept {
-  UNUSED(__mi_source);
-  return mi_base_wdupenv_s(buf, size, name  MI_SOURCE_XARG);
-}
-#endif
-
-int mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name) mi_attr_noexcept  {
-  return mi_base_wdupenv_s(buf, size, name  MI_SOURCE_XRET());
 }
 
 

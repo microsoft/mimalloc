@@ -176,6 +176,13 @@ void* memalign(size_t alignment, size_t size)               { return MI_SOURCE_R
 void* aligned_alloc(size_t alignment, size_t size)          { return MI_SOURCE_RET(mi_aligned_alloc, alignment, size); }
 int posix_memalign(void** p, size_t alignment, size_t size) { return MI_SOURCE_RET(mi_posix_memalign, p, alignment, size); }
 
+char*    strdup(const char* s)      { return MI_SOURCE_RET(mi_strdup, s); }
+wchar_t* wcsdup(const wchar_t* s)   { return MI_SOURCE_RET(mi_wcsdup, s); }
+
+// gives compile errors if we override :-(
+// char* get_current_dir_name(void)        { return MI_SOURCE_RET(mi_getcwd, NULL, 0); }
+// char* getcwd(char* buf, size_t buf_len) { return MI_SOURCE_RET(mi_getcwd, buf, buf_len); }
+
 #if defined(__GLIBC__) && defined(__linux__)
   // forward __libc interface (needed for glibc-based Linux distributions)
   void* __libc_malloc(size_t size)                  MI_FORWARD1(mi_malloc,size);

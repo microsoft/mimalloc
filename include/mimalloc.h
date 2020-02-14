@@ -86,6 +86,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stddef.h>     // size_t
 #include <stdbool.h>    // bool
+#include <stdlib.h>     // wchar_t
 
 #ifdef __cplusplus
 extern "C" {
@@ -110,15 +111,15 @@ mi_decl_export mi_source_t  mi_source_loc(const char* fname, int lineno);
 mi_decl_export void*        mi_source_unpack(mi_source_t source, const char** fname, int* lineno);
 
 #define mi_declx(tp,name,attrs,...) \
-  mi_decl_export tp dbg_##name( __VA_ARGS__, mi_source_t dbg_source) attrs; \
-  mi_decl_export tp name(__VA_ARGS__) attrs 
+  tp dbg_##name( __VA_ARGS__, mi_source_t dbg_source) attrs; \
+  tp name(__VA_ARGS__) attrs 
 
 #endif
 
-#define mi_decl_malloc(tp,name,...)  mi_declx(mi_decl_nodiscard mi_decl_restrict tp, name, mi_attr_noexcept mi_attr_malloc, __VA_ARGS__)
-#define mi_decl_new(tp,name,...)     mi_declx(mi_decl_nodiscard mi_decl_restrict tp, name, mi_attr_malloc, __VA_ARGS__)
-#define mi_decl_realloc(tp,name,...) mi_declx(mi_decl_nodiscard tp, name, mi_attr_noexcept, __VA_ARGS__)
-#define mi_decl_noexcpt(tp,name,...) mi_declx(tp, name, mi_attr_noexcept, __VA_ARGS__)
+#define mi_decl_malloc(tp,name,...)  mi_declx(mi_decl_nodiscard mi_decl_export mi_decl_restrict tp, name, mi_attr_noexcept mi_attr_malloc, __VA_ARGS__)
+#define mi_decl_new(tp,name,...)     mi_declx(mi_decl_nodiscard mi_decl_export mi_decl_restrict tp, name, mi_attr_malloc, __VA_ARGS__)
+#define mi_decl_realloc(tp,name,...) mi_declx(mi_decl_nodiscard mi_decl_export tp, name, mi_attr_noexcept, __VA_ARGS__)
+#define mi_decl_noexcpt(tp,name,...) mi_declx(mi_decl_export tp, name, mi_attr_noexcept, __VA_ARGS__)
 
 
 // ------------------------------------------------------
@@ -152,8 +153,8 @@ mi_decl_malloc( void*, mi_mallocn, size_t count, size_t size)            mi_attr
 mi_decl_realloc(void*, mi_reallocn, void* p, size_t count, size_t size)  mi_attr_alloc_size2(2,3);
 mi_decl_realloc(void*, mi_reallocf, void* p, size_t newsize)             mi_attr_alloc_size(2);
 
-mi_decl_export mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept;
-mi_decl_export mi_decl_nodiscard size_t mi_good_size(size_t size)     mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export size_t mi_usable_size(const void* p) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size)     mi_attr_noexcept;
 
 
 // ------------------------------------------------------
@@ -206,7 +207,7 @@ mi_decl_realloc(void*, mi_realloc_aligned_at, void* p, size_t newsize, size_t al
 struct mi_heap_s;
 typedef struct mi_heap_s mi_heap_t;
 
-mi_decl_export mi_decl_nodiscard mi_heap_t* mi_heap_new(void);
+mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new(void);
 mi_decl_export void       mi_heap_delete(mi_heap_t* heap);
 mi_decl_export void       mi_heap_destroy(mi_heap_t* heap);
 mi_decl_export mi_heap_t* mi_heap_set_default(mi_heap_t* heap);
@@ -266,9 +267,9 @@ mi_decl_realloc(void*, mi_heap_recalloc_aligned_at, mi_heap_t* heap, void* p, si
 // Analysis
 // ------------------------------------------------------
 
-mi_decl_export mi_decl_nodiscard bool mi_heap_contains_block(mi_heap_t* heap, const void* p);
-mi_decl_export mi_decl_nodiscard bool mi_heap_check_owned(mi_heap_t* heap, const void* p);
-mi_decl_export mi_decl_nodiscard bool mi_check_owned(const void* p);
+mi_decl_nodiscard mi_decl_export bool mi_heap_contains_block(mi_heap_t* heap, const void* p);
+mi_decl_nodiscard mi_decl_export bool mi_heap_check_owned(mi_heap_t* heap, const void* p);
+mi_decl_nodiscard mi_decl_export bool mi_check_owned(const void* p);
 
 // An area of heap space contains blocks of a single size.
 typedef struct mi_heap_area_s {
@@ -284,8 +285,8 @@ typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_
 mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block_visit_fun* visitor, void* arg);
 
 // Experimental
-mi_decl_export mi_decl_nodiscard bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
-mi_decl_export mi_decl_nodiscard bool mi_is_redirected() mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export bool mi_is_redirected() mi_attr_noexcept;
 
 mi_decl_export int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t timeout_msecs) mi_attr_noexcept;
 mi_decl_export int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msecs) mi_attr_noexcept;
@@ -342,13 +343,13 @@ typedef enum mi_option_e {
 } mi_option_t;
 
 
-mi_decl_export mi_decl_nodiscard bool mi_option_is_enabled(mi_option_t option);
+mi_decl_nodiscard mi_decl_export bool mi_option_is_enabled(mi_option_t option);
 mi_decl_export void mi_option_enable(mi_option_t option);
 mi_decl_export void mi_option_disable(mi_option_t option);
 mi_decl_export void mi_option_set_enabled(mi_option_t option, bool enable);
 mi_decl_export void mi_option_set_enabled_default(mi_option_t option, bool enable);
 
-mi_decl_export mi_decl_nodiscard long mi_option_get(mi_option_t option);
+mi_decl_nodiscard mi_decl_export long mi_option_get(mi_option_t option);
 mi_decl_export void mi_option_set(mi_option_t option, long value);
 mi_decl_export void mi_option_set_default(mi_option_t option, long value);
 
@@ -359,8 +360,8 @@ mi_decl_export void mi_option_set_default(mi_option_t option, long value);
 // note: we use `mi_cfree` as "checked free" and it checks if the pointer is in our heap before free-ing.
 // -------------------------------------------------------------------------------------------------------
 
-mi_decl_export mi_decl_nodiscard size_t mi_malloc_size(const void* p)        mi_attr_noexcept;
-mi_decl_export mi_decl_nodiscard size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export size_t mi_malloc_size(const void* p)        mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept;
 
 mi_decl_export void mi_cfree(void* p) mi_attr_noexcept;
 mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
@@ -376,12 +377,17 @@ mi_decl_realloc(void*, mi_reallocarray, void* p, size_t count, size_t size)  mi_
 mi_decl_realloc(void*, mi_aligned_recalloc, void* p, size_t newcount, size_t size, size_t alignment)  mi_attr_alloc_size2(2, 3) mi_attr_alloc_align(4);
 mi_decl_realloc(void*, mi_aligned_offset_recalloc, void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_alloc_size2(2, 3);
 
-mi_decl_malloc( unsigned short*, mi_wcsdup, const unsigned short* s);
-mi_decl_malloc( unsigned char*,  mi_mbsdup, const unsigned char* s);
-mi_decl_noexcpt(int,   mi_dupenv_s, char** buf, size_t* size, const char* name);
-mi_decl_noexcpt(int,   mi_wdupenv_s, unsigned short** buf, size_t* size, const unsigned short* name);
-mi_decl_noexcpt(void*, mi__expand, void* p, size_t newsize);
+mi_decl_malloc(wchar_t*,  mi_wcsdup, const wchar_t* s);
+mi_decl_malloc(unsigned char*, mi_mbsdup, const unsigned char* s);
+mi_decl_malloc(char*,     mi_getcwd, char* buf, size_t buf_len);
 
+mi_decl_noexcpt(int,      mi__dupenv_s, char** buf, size_t* size, const char* name);
+mi_decl_noexcpt(int,      mi__wdupenv_s, wchar_t** buf, size_t* size, const wchar_t* name);
+mi_decl_noexcpt(void*,    mi__expand, void* p, size_t newsize);
+mi_decl_malloc( char*,    mi__fullpath, char* buf, const char* path, size_t buf_len);
+mi_decl_malloc( wchar_t*, mi__wfullpath, wchar_t* buf, const wchar_t* path, size_t buf_len);
+mi_decl_malloc( wchar_t*, mi__wgetcwd, wchar_t* buf, size_t buf_len);
+// todo: tempnam, _wgetdcwd, and _wgetdcwd_nolock
 
 // The `mi_new` wrappers implement C++ semantics on out-of-memory instead of directly returning `NULL`.
 // (and call `std::get_new_handler` and potentially raise a `std::bad_alloc` exception).
@@ -390,8 +396,8 @@ mi_decl_new(void*, mi_new_aligned, size_t size, size_t alignment) mi_attr_alloc_
 mi_decl_new(void*, mi_new_n, size_t count, size_t size) mi_attr_alloc_size2(1, 2);
 mi_decl_malloc(void*, mi_new_nothrow, size_t size) mi_attr_alloc_size(1);
 mi_decl_malloc(void*, mi_new_aligned_nothrow, size_t size, size_t alignment) mi_attr_alloc_size(1) mi_attr_alloc_align(2);
-mi_declx(mi_decl_nodiscard void*, mi_new_realloc, , void* p, size_t newsize) mi_attr_alloc_size(2) ;
-mi_declx(mi_decl_nodiscard void*, mi_new_reallocn, , void* p, size_t newcount, size_t size) mi_attr_alloc_size2(2, 3) ;
+mi_declx(mi_decl_nodiscard mi_decl_export void*, mi_new_realloc, , void* p, size_t newsize) mi_attr_alloc_size(2) ;
+mi_declx(mi_decl_nodiscard mi_decl_export void*, mi_new_reallocn, , void* p, size_t newcount, size_t size) mi_attr_alloc_size2(2, 3) ;
 
 
 // ----------------------------------------------------------------------
@@ -553,8 +559,13 @@ template<class T1, class T2> bool operator!=(const mi_stl_allocator<T1>&, const 
 
 #define mi_wcsdup(s)              MI_SOURCE_LOC(mi_wcsdup,s)
 #define mi_mbsdup(s)              MI_SOURCE_LOC(mi_mbsdup,s)
-#define mi_dupenv_s(b,s,n)        MI_SOURCE_LOC(mi_dupenv_s,b,s,n)
-#define mi_wdupenv_s(b,s,n)       MI_SOURCE_LOC(mi_wdupenv_s,b,s,n)
+#define mi_getcwd(b,n)            MI_SOURCE_LOC(mi_getcwd(b,n)
+#define mi__dupenv_s(b,s,n)       MI_SOURCE_LOC(mi__dupenv_s,b,s,n)
+#define mi__wdupenv_s(b,s,n)      MI_SOURCE_LOC(mi__wdupenv_s,b,s,n)
+#define mi__expand(p,n)           MI_SOURCE_LOC(mi__expand,p,n)
+#define mi__fullpath(b,p,n)       MI_SOURCE_LOC(mi__fullpath,b,p,n)
+#define mi__wfullpath(b,p,n)      MI_SOURCE_LOC(mi__wfullpath,b,p,n)
+#define mi__wgetcwd(b,n)          MI_SOURCE_LOC(mi__wgetcwd,b,n)
 
 #define mi_posix_memalign(p,a,s)  MI_SOURCE_LOC(mi_posix_memalign,p,a,s)
 #define mi_memalign(a,s)          MI_SOURCE_LOC(mi_memalign,a,s)

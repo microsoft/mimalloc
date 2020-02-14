@@ -127,6 +127,7 @@ void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size  MI_SO
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
 void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
+size_t      _mi_path_max(void);
 
 mi_decl_restrict void* _mi_base_malloc_zero(mi_heap_t* heap, size_t size, bool zero  MI_SOURCE_XPARAM) mi_attr_malloc mi_attr_alloc_size(2);
 void*       _mi_base_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero  MI_SOURCE_XPARAM) mi_attr_alloc_size(2);

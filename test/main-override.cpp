@@ -9,7 +9,7 @@
 #include <mimalloc.h>
 #include <mimalloc-new-delete.h>
 #include <mimalloc-override.h>
-
+#include <crtdbg.h>
 
 #ifdef _WIN32
 #include <windows.h>
