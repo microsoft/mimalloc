@@ -95,24 +95,24 @@ extern "C" {
 
 // -----------------------------------------------------------------------------------
 // Debugging
-// The debug build declares two entry points for each allocation function:
+// We declare two entry points for each allocation function:
 // the normal one (`mi_malloc`) and one that takes a source argument (`dbg_mi_malloc`)
 // The following macros make it easier to specify this.
+// Note: these are even defined in release mode (where the source argument is ignored)
+// so one can still build a debug program that links with the release build of mimalloc.
 // -----------------------------------------------------------------------------------
 
-#if defined(NDEBUG)
-#define mi_export_alloc(decls,tp,name,attrs,...)  decls mi_decl_export tp name(__VA_ARGS__) attrs   // release mode has just one entry point
-#else
 typedef struct mi_source_s {
   long long src; // packed encoding of the source location.
 } mi_source_t;
+
 mi_decl_export mi_source_t  mi_source_ret(void* return_address);
 mi_decl_export mi_source_t  mi_source_loc(const char* fname, int lineno);
 mi_decl_export void*        mi_source_unpack(mi_source_t source, const char** fname, int* lineno);
+
 #define mi_export_alloc(decls,tp,name,attrs,...) \
   decls mi_decl_export tp dbg_##name( __VA_ARGS__, mi_source_t dbg_source) attrs; \
   decls mi_decl_export tp name(__VA_ARGS__) attrs
-#endif
 
 #define mi_export_malloc(tp,name,...)  mi_export_alloc(mi_decl_nodiscard, mi_decl_restrict tp, name, mi_attr_noexcept mi_attr_malloc, __VA_ARGS__)
 #define mi_export_realloc(tp,name,...) mi_export_alloc(mi_decl_nodiscard, tp, name, mi_attr_noexcept, __VA_ARGS__)

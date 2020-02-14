@@ -753,11 +753,7 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
 // The big preprocessor macros that follow emit the 5 declarations with default
 // implementations for the first 4 versions so only the 5th needs to be implemented.
 // -------------------------------------------------------------------------------------------------------------
-#ifdef NDEBUG
-#define MI_DEBUG_ONLY(x)
-#else
-#define MI_DEBUG_ONLY(x)  x
-#endif
+#define MI_DEBUG_ONLY(x)  x  // we still allow dbg entry points in release mode to enable linking with a release build
 
 #define MI_ALLOC_API1(tp,name,tp0,arg0,tp1,arg1) \
    static tp mi_base_##name(tp0 arg0, tp1 arg1  MI_SOURCE_XPARAM) mi_attr_noexcept; \
