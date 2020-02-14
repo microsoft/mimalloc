@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018,2019, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2020, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -9,8 +9,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // mi prefixed publi definitions of various Posix, Unix, and C++ functions
 // for convenience and used when overriding these functions.
 // ------------------------------------------------------------------------
-#define MI_NO_SOURCE_DEBUG
-#define _CRT_SECURE_NO_WARNINGS
+#define  _CRT_SECURE_NO_WARNINGS
+#define  MI_DEBUG_NO_SOURCE_LOC
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
@@ -189,6 +189,7 @@ static wchar_t* mi_mbstowcs_dup(const char* s  MI_SOURCE_XPARAM) {
   size_t len = strlen(s);
   wchar_t* ws = (wchar_t*)MI_SOURCE_ARG(mi_malloc, (len + 1)*sizeof(wchar_t));  // over allocate by a factor 2
   mbstowcs(ws, s, len + 1);
+  ws[len] = 0;
   return ws;
 }
 
@@ -198,6 +199,7 @@ static char* mi_wcstombs_dup(const wchar_t* ws  MI_SOURCE_XPARAM) {
   size_t sz  = (len + 1)*sizeof(wchar_t)*2; // over allocate by a factor 4 :( ok for our purposes though
   char* s = (char*)MI_SOURCE_ARG(mi_malloc, sz);  
   wcstombs(s, ws, sz);
+  s[sz] = 0;
   return s;
 }
 

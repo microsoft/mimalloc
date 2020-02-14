@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018,2019 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2020 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -74,7 +74,7 @@ not accidentally mix pointers from different allocators).
 // Overload new operators
 // This requires including <mimalloc-new-delete.h> somewhere!
 // See also <https://www.modernescpp.com/index.php/overloading-operator-new-and-delete-2>
-#if !defined(NDEBUG) && defined(__cplusplus) && !defined(MI_NO_SOURCE_DEBUG)
+#if !defined(NDEBUG) && defined(__cplusplus) && !defined(MI_DEBUG_NO_SOURCE_LOC)
 #define new  new(mi_source_loc(__FILE__,__LINE__))
 #endif
 

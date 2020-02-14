@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018,2019 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2020 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -8,16 +8,15 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_NEW_DELETE_H
 #define MIMALLOC_NEW_DELETE_H
 
-// ----------------------------------------------------------------------------
-// This header provides convenient overrides for the new and
-// delete operations in C++.
+// -----------------------------------------------------------------------------------
+// This header provides convenient overrides for the new and delete operations in C++.
 //
 // This header should be included in only one source file!
 //
 // On Windows, or when linking dynamically with mimalloc, these
 // can be more performant than the standard new-delete operations.
 // See <https://en.cppreference.com/w/cpp/memory/new/operator_new>
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 #if defined(__cplusplus)
   #include <new>
   #include <mimalloc.h>
@@ -49,7 +48,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #endif
 
   #if !defined(NDEBUG)
-  // Instances for debug override of the new operator
+  // Instances for debug override of the new operator (in `mimalloc-override.h`)
   void* operator new(std::size_t n, mi_source_t __mi_source)   noexcept(false) { (void)(__mi_source); return MI_SOURCE_ARG(mi_new, n); }
   void* operator new[](std::size_t n, mi_source_t __mi_source) noexcept(false) { (void)(__mi_source); return MI_SOURCE_ARG(mi_new, n); }
 
