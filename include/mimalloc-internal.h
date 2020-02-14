@@ -290,13 +290,13 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 
 #if defined(MI_MALLOC_OVERRIDE)
 #if defined(__MACH__) // OSX
-#define MI_TLS_SLOT               89  // seems unused? 
+#define MI_TLS_SLOT               89  // seems unused?
 // other possible unused ones are 9, 29, __PTK_FRAMEWORK_JAVASCRIPTCORE_KEY4 (94), __PTK_FRAMEWORK_GC_KEY9 (112) and __PTK_FRAMEWORK_OLDGC_KEY9 (89)
 // see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
 #elif defined(__OpenBSD__)
-// use end bytes of a name; goes wrong if anyone uses names > 23 characters (ptrhread specifies 16) 
+// use end bytes of a name; goes wrong if anyone uses names > 23 characters (ptrhread specifies 16)
 // see <https://github.com/openbsd/src/blob/master/lib/libc/include/thread_private.h#L371>
-#define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 4*sizeof(void*) + 24)  
+#define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 4*sizeof(void*) + 24)
 #elif defined(__DragonFly__)
 #warning "mimalloc is not working correctly on DragonFly yet."
 #define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
@@ -754,89 +754,89 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
 // implementations for the first 4 versions so only the 5th needs to be implemented.
 // -------------------------------------------------------------------------------------------------------------
 #ifdef NDEBUG
-#define MI_DEBUG_ONLY(x) 
+#define MI_DEBUG_ONLY(x)
 #else
 #define MI_DEBUG_ONLY(x)  x
 #endif
 
 #define MI_ALLOC_API1(tp,name,tp0,arg0,tp1,arg1) \
-   static inline tp mi_base_##name(tp0 arg0, tp1 arg1  MI_SOURCE_XPARAM) mi_attr_noexcept; \
+   static tp mi_base_##name(tp0 arg0, tp1 arg1  MI_SOURCE_XPARAM) mi_attr_noexcept; \
    tp mi_##name(tp1 arg1) mi_attr_noexcept { return mi_base_##name(mi_get_default_heap(), arg1  MI_SOURCE_XRET()); } \
    tp mi_heap_##name(mi_heap_t* heap, tp1 arg1) mi_attr_noexcept { return mi_base_##name(heap, arg1  MI_SOURCE_XRET()); } \
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, mi_source_t __mi_source) mi_attr_noexcept { (void)__mi_source; return mi_base_##name(mi_get_default_heap(), arg1  MI_SOURCE_XARG); }) \
    MI_DEBUG_ONLY(tp dbg_mi_heap_##name(mi_heap_t* heap, tp1 arg1, mi_source_t __mi_source) mi_attr_noexcept { (void)__mi_source; return mi_base_##name(heap, arg1  MI_SOURCE_XARG); }) \
-   static inline tp mi_base_##name(tp0 arg0, tp1 arg1  MI_SOURCE_XPARAM) mi_attr_noexcept 
+   static tp mi_base_##name(tp0 arg0, tp1 arg1  MI_SOURCE_XPARAM) mi_attr_noexcept
 
 #define MI_ALLOC_API2(tp,name,tp0,arg0,tp1,arg1,tp2,arg2) \
-   static inline tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2 MI_SOURCE_XPARAM) mi_attr_noexcept; \
+   static tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2 MI_SOURCE_XPARAM) mi_attr_noexcept; \
    tp mi_##name(tp1 arg1, tp2 arg2) mi_attr_noexcept { return mi_base_##name(mi_get_default_heap(), arg1, arg2  MI_SOURCE_XRET()); } \
    tp mi_heap_##name(mi_heap_t* heap, tp1 arg1, tp2 arg2) mi_attr_noexcept { return mi_base_##name(heap, arg1, arg2  MI_SOURCE_XRET()); } \
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, tp2 arg2, mi_source_t __mi_source) mi_attr_noexcept { (void)__mi_source; return mi_base_##name(mi_get_default_heap(), arg1, arg2  MI_SOURCE_XARG); }) \
    MI_DEBUG_ONLY(tp dbg_mi_heap_##name(mi_heap_t* heap, tp1 arg1, tp2 arg2, mi_source_t __mi_source) mi_attr_noexcept { (void)__mi_source; return mi_base_##name(heap, arg1, arg2  MI_SOURCE_XARG); }) \
-   static inline tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2  MI_SOURCE_XPARAM) mi_attr_noexcept 
+   static tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2  MI_SOURCE_XPARAM) mi_attr_noexcept
 
 #define MI_ALLOC_API3(tp,name,tp0,arg0,tp1,arg1,tp2,arg2,tp3,arg3) \
-   static inline tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3 MI_SOURCE_XPARAM) mi_attr_noexcept; \
+   static tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3 MI_SOURCE_XPARAM) mi_attr_noexcept; \
    tp mi_##name(tp1 arg1, tp2 arg2, tp3 arg3) mi_attr_noexcept { return mi_base_##name(mi_get_default_heap(), arg1, arg2, arg3  MI_SOURCE_XRET()); } \
    tp mi_heap_##name(mi_heap_t* heap, tp1 arg1, tp2 arg2, tp3 arg3) mi_attr_noexcept { return mi_base_##name(heap, arg1, arg2, arg3  MI_SOURCE_XRET()); } \
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, tp2 arg2, tp3 arg3, mi_source_t __mi_source) mi_attr_noexcept { (void)__mi_source; return mi_base_##name(mi_get_default_heap(), arg1, arg2, arg3  MI_SOURCE_XARG); }) \
    MI_DEBUG_ONLY(tp dbg_mi_heap_##name(mi_heap_t* heap, tp1 arg1, tp2 arg2, tp3 arg3, mi_source_t __mi_source) mi_attr_noexcept { (void)__mi_source; return mi_base_##name(heap, arg1, arg2, arg3  MI_SOURCE_XARG); }) \
-   static inline tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3  MI_SOURCE_XPARAM) mi_attr_noexcept 
+   static tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3  MI_SOURCE_XPARAM) mi_attr_noexcept
 
 #define MI_ALLOC_API4(tp,name,tp0,arg0,tp1,arg1,tp2,arg2,tp3,arg3,tp4,arg4) \
-   static inline tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4 MI_SOURCE_XPARAM) mi_attr_noexcept; \
+   static tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4 MI_SOURCE_XPARAM) mi_attr_noexcept; \
    tp mi_##name(tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4) mi_attr_noexcept { return mi_base_##name(mi_get_default_heap(), arg1, arg2, arg3, arg4  MI_SOURCE_XRET()); } \
    tp mi_heap_##name(mi_heap_t* heap, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4) mi_attr_noexcept { return mi_base_##name(heap, arg1, arg2, arg3, arg4  MI_SOURCE_XRET()); } \
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4, mi_source_t __mi_source) mi_attr_noexcept { (void)__mi_source; return mi_base_##name(mi_get_default_heap(), arg1, arg2, arg3, arg4  MI_SOURCE_XARG); }) \
    MI_DEBUG_ONLY(tp dbg_mi_heap_##name(mi_heap_t* heap, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4, mi_source_t __mi_source) mi_attr_noexcept { (void)__mi_source; return mi_base_##name(heap, arg1, arg2, arg3, arg4  MI_SOURCE_XARG); }) \
-   static inline tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4  MI_SOURCE_XPARAM) mi_attr_noexcept 
+   static tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4  MI_SOURCE_XPARAM) mi_attr_noexcept
 
 #define MI_ALLOC_API5(tp,name,tp0,arg0,tp1,arg1,tp2,arg2,tp3,arg3,tp4,arg4,tp5,arg5) \
-   static inline tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4, tp5 arg5 MI_SOURCE_XPARAM) mi_attr_noexcept; \
+   static tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4, tp5 arg5 MI_SOURCE_XPARAM) mi_attr_noexcept; \
    tp mi_##name(tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4, tp5 arg5) mi_attr_noexcept { return mi_base_##name(mi_get_default_heap(), arg1, arg2, arg3, arg4, arg5  MI_SOURCE_XRET()); } \
    tp mi_heap_##name(mi_heap_t* heap, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4, tp5 arg5) mi_attr_noexcept { return mi_base_##name(heap, arg1, arg2, arg3, arg4, arg5  MI_SOURCE_XRET()); } \
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4, tp5 arg5, mi_source_t __mi_source) mi_attr_noexcept { (void)__mi_source; return mi_base_##name(mi_get_default_heap(), arg1, arg2, arg3, arg4, arg5  MI_SOURCE_XARG); }) \
    MI_DEBUG_ONLY(tp dbg_mi_heap_##name(mi_heap_t* heap, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4, tp5 arg5, mi_source_t __mi_source) mi_attr_noexcept { (void)__mi_source; return mi_base_##name(heap, arg1, arg2, arg3, arg4, arg5  MI_SOURCE_XARG); } ) \
-   static inline tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4, tp5 arg5  MI_SOURCE_XPARAM) mi_attr_noexcept 
+   static tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4, tp5 arg5  MI_SOURCE_XPARAM) mi_attr_noexcept
 
 
 #define MI_NEW_API1(tp,name,tp1,arg1) \
-   static inline tp mi_base_##name(tp1 arg1  MI_SOURCE_XPARAM); \
+   static tp mi_base_##name(tp1 arg1  MI_SOURCE_XPARAM); \
    tp mi_##name(tp1 arg1) { return mi_base_##name(arg1  MI_SOURCE_XRET()); } \
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, mi_source_t __mi_source) { (void)__mi_source; return mi_base_##name(arg1  MI_SOURCE_XARG); }) \
-   static inline tp mi_base_##name(tp1 arg1  MI_SOURCE_XPARAM)
+   static tp mi_base_##name(tp1 arg1  MI_SOURCE_XPARAM)
 
 #define MI_NEW_API2(tp,name,tp1,arg1,tp2,arg2) \
-   static inline tp mi_base_##name(tp1 arg1, tp2 arg2  MI_SOURCE_XPARAM); \
+   static tp mi_base_##name(tp1 arg1, tp2 arg2  MI_SOURCE_XPARAM); \
    tp mi_##name(tp1 arg1, tp2 arg2) { return mi_base_##name(arg1, arg2  MI_SOURCE_XRET()); } \
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, tp2 arg2, mi_source_t __mi_source) { (void)__mi_source; return mi_base_##name(arg1, arg2  MI_SOURCE_XARG); }) \
-   static inline tp mi_base_##name(tp1 arg1, tp2 arg2  MI_SOURCE_XPARAM)
+   static tp mi_base_##name(tp1 arg1, tp2 arg2  MI_SOURCE_XPARAM)
 
 #define MI_NEW_API3(tp,name,tp1,arg1,tp2,arg2,tp3,arg3) \
-   static inline tp mi_base_##name(tp1 arg1, tp2 arg2, tp3 arg3  MI_SOURCE_XPARAM); \
+   static tp mi_base_##name(tp1 arg1, tp2 arg2, tp3 arg3  MI_SOURCE_XPARAM); \
    tp mi_##name(tp1 arg1, tp2 arg2, tp3 arg3) { return mi_base_##name(arg1, arg2, arg3  MI_SOURCE_XRET()); } \
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, tp2 arg2, tp3 arg3, mi_source_t __mi_source) { (void)__mi_source; return mi_base_##name(arg1, arg2, arg3  MI_SOURCE_XARG); }) \
-   static inline tp mi_base_##name(tp1 arg1, tp2 arg2, tp3 arg3  MI_SOURCE_XPARAM)
+   static tp mi_base_##name(tp1 arg1, tp2 arg2, tp3 arg3  MI_SOURCE_XPARAM)
 
 
 
 #define MI_SOURCE_API1(tp,name,tp1,arg1) \
-   static inline tp mi_base_##name(tp1 arg1  MI_SOURCE_XPARAM); \
+   static tp mi_base_##name(tp1 arg1  MI_SOURCE_XPARAM); \
    tp mi_##name(tp1 arg1) mi_attr_noexcept { return mi_base_##name(arg1  MI_SOURCE_XRET()); } \
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, mi_source_t __mi_source) mi_attr_noexcept  { (void)__mi_source; return mi_base_##name(arg1  MI_SOURCE_XARG); }) \
-   static inline tp mi_base_##name(tp1 arg1  MI_SOURCE_XPARAM)
+   static tp mi_base_##name(tp1 arg1  MI_SOURCE_XPARAM)
 
 #define MI_SOURCE_API2(tp,name,tp1,arg1,tp2,arg2) \
-   static inline tp mi_base_##name(tp1 arg1, tp2 arg2  MI_SOURCE_XPARAM); \
+   static tp mi_base_##name(tp1 arg1, tp2 arg2  MI_SOURCE_XPARAM); \
    tp mi_##name(tp1 arg1, tp2 arg2) mi_attr_noexcept { return mi_base_##name(arg1, arg2  MI_SOURCE_XRET()); } \
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, tp2 arg2, mi_source_t __mi_source) mi_attr_noexcept  { (void)__mi_source; return mi_base_##name(arg1, arg2  MI_SOURCE_XARG); }) \
-   static inline tp mi_base_##name(tp1 arg1, tp2 arg2  MI_SOURCE_XPARAM)
+   static tp mi_base_##name(tp1 arg1, tp2 arg2  MI_SOURCE_XPARAM)
 
 #define MI_SOURCE_API3(tp,name,tp1,arg1,tp2,arg2,tp3,arg3) \
-   static inline tp mi_base_##name(tp1 arg1, tp2 arg2, tp3 arg3  MI_SOURCE_XPARAM); \
+   static tp mi_base_##name(tp1 arg1, tp2 arg2, tp3 arg3  MI_SOURCE_XPARAM); \
    tp mi_##name(tp1 arg1, tp2 arg2, tp3 arg3) mi_attr_noexcept { return mi_base_##name(arg1, arg2, arg3  MI_SOURCE_XRET()); } \
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, tp2 arg2, tp3 arg3, mi_source_t __mi_source) mi_attr_noexcept  { (void)__mi_source; return mi_base_##name(arg1, arg2, arg3  MI_SOURCE_XARG); }) \
-   static inline tp mi_base_##name(tp1 arg1, tp2 arg2, tp3 arg3  MI_SOURCE_XPARAM)
+   static tp mi_base_##name(tp1 arg1, tp2 arg2, tp3 arg3  MI_SOURCE_XPARAM)
 
 
 #endif

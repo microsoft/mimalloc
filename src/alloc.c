@@ -62,7 +62,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 }
 
 // allocate a small block
-MI_ALLOC_API1(mi_decl_restrict void*, malloc_small, mi_heap_t*, heap, size_t, size)
+MI_ALLOC_API1(inline mi_decl_restrict void*, malloc_small, mi_heap_t*, heap, size_t, size)
 {
   mi_assert(heap!=NULL);
   mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
@@ -81,7 +81,7 @@ MI_ALLOC_API1(mi_decl_restrict void*, malloc_small, mi_heap_t*, heap, size_t, si
 
 
 // The main allocation function
-MI_ALLOC_API1(mi_decl_restrict void*, malloc, mi_heap_t*, heap, size_t, size)
+MI_ALLOC_API1(inline mi_decl_restrict void*, malloc, mi_heap_t*, heap, size_t, size)
 {
   if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
     return mi_base_malloc_small(heap, size  MI_SOURCE_XARG);
@@ -398,7 +398,7 @@ void mi_free(void* p) mi_attr_noexcept
       "(this may still be a valid very large allocation (over 64MiB))\n", p);
     if (mi_likely(_mi_ptr_cookie(segment) == segment->cookie)) {
       _mi_warning_message("(yes, the previous pointer %p was valid after all)\n", p);
-    } 
+    }
   }
 #endif
 #if (MI_DEBUG!=0 || MI_SECURE>=4)
@@ -537,7 +537,7 @@ MI_ALLOC_API2(mi_decl_restrict void*, mallocn, mi_heap_t*, heap, size_t, count, 
 
 
 // Expand in place or fail
-MI_ALLOC_API2(void*, expand, mi_heap_t*, heap, void*, p, size_t, newsize) 
+MI_ALLOC_API2(void*, expand, mi_heap_t*, heap, void*, p, size_t, newsize)
 {
   UNUSED(heap);
 #ifndef NDEBUG
