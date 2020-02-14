@@ -465,7 +465,7 @@ bool _mi_free_delayed_block(mi_block_t* block) {
 }
 
 // Bytes available in a block
-inline size_t mi_usable_size(const void* p) mi_attr_noexcept {
+size_t mi_usable_size(const void* p) mi_attr_noexcept {
   if (p==NULL) return 0;
   const mi_segment_t* const segment = _mi_ptr_segment(p);
   const mi_page_t* const page = _mi_segment_page_of(segment, p);

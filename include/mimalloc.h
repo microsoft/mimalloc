@@ -26,13 +26,13 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if (__cplusplus >= 201703)
   #define mi_decl_nodiscard    [[nodiscard]]
-#elif (__GNUC__ >= 4)         
+#elif (__GNUC__ >= 4)
   #define mi_decl_nodiscard    __attribute__((warn_unused_result))
 #elif (_MSC_VER >= 1700)
   #define mi_decl_nodiscard    _Check_return_
-#else 
-  #define mi_decl_nodiscard 
-#endif 
+#else
+  #define mi_decl_nodiscard
+#endif
 
 #ifdef _MSC_VER
   #if !defined(MI_SHARED_LIB)
@@ -99,7 +99,7 @@ extern "C" {
 
 #ifdef NDEBUG
 
-#define mi_declx(tp,name,attrs,...)  mi_decl_export tp name(__VA_ARGS__) attrs 
+#define mi_declx(tp,name,attrs,...)  tp name(__VA_ARGS__) attrs 
 
 #else
 typedef struct mi_source_s {
@@ -112,7 +112,7 @@ mi_decl_export void*        mi_source_unpack(mi_source_t source, const char** fn
 
 #define mi_declx(tp,name,attrs,...) \
   tp dbg_##name( __VA_ARGS__, mi_source_t dbg_source) attrs; \
-  tp name(__VA_ARGS__) attrs 
+  tp name(__VA_ARGS__) attrs
 
 #endif
 
@@ -480,7 +480,7 @@ template<class T1, class T2> bool operator!=(const mi_stl_allocator<T1>&, const 
 
 #else
 #ifdef _MSC_VER
-#include <intrin.h> 
+#include <intrin.h>
 #define mi_return_address()     _ReturnAddress()
 #elif (defined(__GNUC__) && (__GNUC__>=3))  // includes clang and icc
 #define mi_return_address()     __builtin_return_address(0)
@@ -490,7 +490,7 @@ template<class T1, class T2> bool operator!=(const mi_stl_allocator<T1>&, const 
 #define MI_SOURCE_XPARAM        , mi_source_t __mi_source
 #define MI_SOURCE_XARG          , __mi_source
 #define MI_SOURCE_XRET()        , mi_source_ret(mi_return_address())
-#define MI_SOURCE_XLOC()        , mi_source_loc(__FILE__,__LINE__)  
+#define MI_SOURCE_XLOC()        , mi_source_loc(__FILE__,__LINE__)
 #define MI_SOURCE_ARG(fun,...)  dbg_##fun(__VA_ARGS__  MI_SOURCE_XARG)
 #define MI_SOURCE_RET(fun,...)  dbg_##fun(__VA_ARGS__  MI_SOURCE_XRET())
 #define MI_SOURCE_LOC(fun,...)  dbg_##fun(__VA_ARGS__  MI_SOURCE_XLOC())
@@ -581,4 +581,3 @@ template<class T1, class T2> bool operator!=(const mi_stl_allocator<T1>&, const 
 
 
 #endif // MIMALLOC_H
-
