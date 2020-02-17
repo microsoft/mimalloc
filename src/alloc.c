@@ -25,7 +25,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   mi_assert_internal(page->xblock_size==0||mi_page_block_size(page) >= size);
   mi_block_t* block = page->free;
   if (mi_unlikely(block == NULL)) {
-    return _mi_malloc_generic(heap, size); // slow path
+    return _mi_malloc_generic(heap, size); 
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   // pop from the free list
@@ -86,7 +86,7 @@ extern inline mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size
   else {
     mi_assert(heap!=NULL);
     mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
-    void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE);
+    void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE);      // note: size can overflow but it is detected in malloc_generic
     mi_assert_internal(p == NULL || mi_usable_size(p) >= size);
     #if MI_STAT>1
     if (p != NULL) {
