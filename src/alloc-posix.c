@@ -48,7 +48,7 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
   if (p == NULL) return EINVAL;
   if (alignment % sizeof(void*) != 0) return EINVAL;   // natural alignment
   if (!_mi_is_power_of_two(alignment)) return EINVAL;  // not a power of 2
-  void* q = (alignment <= MI_MAX_ALIGN_SIZE ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
+  void* q = (mi_malloc_satisfies_alignment(alignment, size) ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
   if (q==NULL && size != 0) return ENOMEM;
   mi_assert_internal(((uintptr_t)q % alignment) == 0);
   *p = q;
@@ -56,26 +56,26 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
 }
 
 mi_decl_restrict void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept {
-  void* p = (alignment <= MI_MAX_ALIGN_SIZE ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
+  void* p = (mi_malloc_satisfies_alignment(alignment,size) ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
   mi_assert_internal(((uintptr_t)p % alignment) == 0);
   return p;
 }
 
 mi_decl_restrict void* mi_valloc(size_t size) mi_attr_noexcept {
-  return mi_malloc_aligned(size, _mi_os_page_size());
+  return mi_memalign( _mi_os_page_size(), size );
 }
 
 mi_decl_restrict void* mi_pvalloc(size_t size) mi_attr_noexcept {
   size_t psize = _mi_os_page_size();
   if (size >= SIZE_MAX - psize) return NULL; // overflow
-  size_t asize = ((size + psize - 1) / psize) * psize;
+  size_t asize = _mi_align_up(size, psize);
   return mi_malloc_aligned(asize, psize);
 }
 
 mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept {
   if (alignment==0 || !_mi_is_power_of_two(alignment)) return NULL; 
   if ((size&(alignment-1)) != 0) return NULL; // C11 requires integral multiple, see <https://en.cppreference.com/w/c/memory/aligned_alloc>
-  void* p = (alignment <= MI_MAX_ALIGN_SIZE ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
+  void* p = (mi_malloc_satisfies_alignment(alignment, size) ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
   mi_assert_internal(((uintptr_t)p % alignment) == 0);
   return p;
 }
