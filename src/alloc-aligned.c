@@ -21,7 +21,6 @@ static mi_decl_restrict void* mi_base_malloc_zero_aligned_at(mi_heap_t* const he
 
   if (mi_unlikely(size > PTRDIFF_MAX)) return NULL;   // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
   if (mi_unlikely(alignment==0 || !_mi_is_power_of_two(alignment))) return NULL; // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
-  if (alignment <= MI_MAX_ALIGN_SIZE && offset==0) return _mi_base_malloc_zero(heap, size, zero  MI_SOURCE_XARG);
   const uintptr_t align_mask = alignment-1;  // for any x, `(x & align_mask) == (x % alignment)`
   
   // try if there is a small block available with just the right alignment

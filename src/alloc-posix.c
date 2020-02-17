@@ -61,7 +61,7 @@ MI_SOURCE_API3(void*, reallocarray, void*, p, size_t, count, size_t, size)
 MI_SOURCE_API2(mi_decl_restrict void*, memalign, size_t, alignment, size_t, size)
 {
   void* p;
-  if (alignment <= MI_MAX_ALIGN_SIZE) {
+  if (mi_malloc_satisfies_alignment(alignment, size)) {
     p = MI_SOURCE_ARG(mi_malloc, size);
   }
   else {
@@ -73,7 +73,7 @@ MI_SOURCE_API2(mi_decl_restrict void*, memalign, size_t, alignment, size_t, size
 
 MI_SOURCE_API1(mi_decl_restrict void*, valloc, size_t, size)
 {
-  return MI_SOURCE_ARG(mi_malloc_aligned, size, _mi_os_page_size());
+  return MI_SOURCE_ARG(mi_memalign, _mi_os_page_size(), size);
 }
 
 MI_SOURCE_API1(mi_decl_restrict void*, pvalloc, size_t, size)
@@ -89,7 +89,7 @@ MI_SOURCE_API2(mi_decl_restrict void*, aligned_alloc, size_t, alignment, size_t,
   if (alignment==0 || !_mi_is_power_of_two(alignment)) return NULL; 
   if ((size&(alignment-1)) != 0) return NULL; // C11 requires integral multiple, see <https://en.cppreference.com/w/c/memory/aligned_alloc>
   void* p;
-  if (alignment <= MI_MAX_ALIGN_SIZE) {
+  if (mi_malloc_satisfies_alignment(alignment, size)) {
     p = MI_SOURCE_ARG(mi_malloc, size);
   }
   else {
@@ -107,7 +107,7 @@ MI_SOURCE_API3(int, posix_memalign, void**, p, size_t, alignment, size_t, size)
   if (alignment % sizeof(void*) != 0) return EINVAL;   // natural alignment
   if (!_mi_is_power_of_two(alignment)) return EINVAL;  // not a power of 2
   void* q;
-  if (alignment <= MI_MAX_ALIGN_SIZE) {
+  if (mi_malloc_satisfies_alignment(alignment, size)) {
     q = MI_SOURCE_ARG(mi_malloc, size);
   }
   else {
