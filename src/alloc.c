@@ -62,6 +62,11 @@ extern inline mi_decl_restrict void* mi_heap_malloc_small(mi_heap_t* heap, size_
   mi_assert(heap!=NULL);
   mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
   mi_assert(size <= MI_SMALL_SIZE_MAX);
+  #if (MI_PADDING)
+  if (size == 0) {
+    size = sizeof(void*);
+  }
+  #endif
   mi_page_t* page = _mi_heap_get_free_small_page(heap,size + MI_PADDING_SIZE);
   void* p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE);
   mi_assert_internal(p==NULL || mi_usable_size(p) >= size);

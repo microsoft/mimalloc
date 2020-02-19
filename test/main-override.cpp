@@ -22,12 +22,14 @@ static void msleep(unsigned long msecs) { usleep(msecs * 1000UL); }
 
 void heap_no_delete();
 void heap_late_free();
+void padding_shrink();
 void various_tests();
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
   // heap_no_delete();  // issue #202
   // heap_late_free();  // issue #204
+  padding_shrink();  // issue #209
   various_tests();
   mi_stats_print(NULL);
   return 0;
@@ -140,4 +142,18 @@ void heap_late_free() {
   mi_free((void*)global_p);
 
   t1.join();
+}
+
+// issue  #209
+static void* shared_p;
+static void alloc0(/* void* arg */)
+{
+  shared_p = mi_malloc(8);
+}
+
+void padding_shrink(void)
+{
+  auto t1 = std::thread(alloc0);
+  t1.join();
+  mi_free(shared_p);
 }
