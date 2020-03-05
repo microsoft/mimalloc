@@ -216,7 +216,7 @@ if(NOT WIN32)
   # install a symlink in the /usr/local/lib to the versioned library
   set(mi_symlink "${CMAKE_SHARED_MODULE_PREFIX}${mi_basename}${CMAKE_SHARED_LIBRARY_SUFFIX}")
   set(mi_soname "mimalloc-${mi_version}/${mi_symlink}.${mi_version}")
-  install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${mi_soname} ${mi_symlink} WORKING_DIRECTORY ${CMAKE_INSTALL_PREFIX}/${mi_install_dir}/..)")
+  install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${mi_soname} ${mi_symlink} WORKING_DIRECTORY ${mi_install_dir}/..)")
   install(CODE "MESSAGE(\"-- Symbolic link: ${CMAKE_INSTALL_PREFIX}/lib/${mi_symlink} -> ${mi_soname}\")")
 endif()
 
