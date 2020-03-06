@@ -241,7 +241,9 @@ static bool _mi_heap_done(mi_heap_t* heap) {
     mi_assert_internal(heap->tld->segments.count == 0);
     _mi_os_free(heap, sizeof(mi_thread_data_t), &_mi_stats_main);
   }
-#if (MI_DEBUG > 0)
+#if 0  
+  // never free the main thread even in debug mode; if a dll is linked statically with mimalloc,
+  // there may still be delete/free calls after the mi_fls_done is called. Issue #207
   else {
     _mi_heap_destroy_pages(heap);
     mi_assert_internal(heap->tld->heap_backing == &_mi_heap_main);
