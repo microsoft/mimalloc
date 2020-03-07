@@ -485,6 +485,10 @@ static void mi_process_done(void) {
   if (process_done) return;
   process_done = true;
 
+  #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+  FlsSetValue(mi_fls_key, NULL);  // don't call main-thread callback
+  FlsFree(mi_fls_key);            // call thread-done on all threads to prevent dangling callback pointer if statically linked with a DLL; Issue #208
+  #endif
   #ifndef NDEBUG
   mi_collect(true);
   #endif
@@ -492,7 +496,7 @@ static void mi_process_done(void) {
       mi_option_is_enabled(mi_option_verbose)) {
     mi_stats_print(NULL);
   }
-  mi_allocator_done();
+  mi_allocator_done();  
   _mi_verbose_message("process done: 0x%zx\n", _mi_heap_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
 }
