@@ -132,7 +132,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel")
 endif()
 
 # Architecture flags
-if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm")
+if(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "arm")
     list(APPEND mi_cflags -march=native)
 endif()
 
