@@ -131,6 +131,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel")
   endif()
 endif()
 
+# Architecture flags
+if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm")
+    list(APPEND mi_cflags -march=native)
+endif()
+
 # extra needed libraries
 if(WIN32)
   list(APPEND mi_libraries psapi shell32 user32 bcrypt)
