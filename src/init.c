@@ -97,6 +97,7 @@ const mi_heap_t _mi_heap_empty = {
   { 0, 0 },         // keys
   { {0}, {0}, 0 },
   0,                // page count
+  MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next
   false
 };
@@ -131,6 +132,7 @@ mi_heap_t _mi_heap_main = {
   { 0, 0 },         // the key of the main heap can be fixed (unlike page keys that need to be secure!)
   { {0x846ca68b}, {0}, 0 },  // random
   0,                // page count
+  MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
   false             // can reclaim
 };
@@ -241,7 +243,9 @@ static bool _mi_heap_done(mi_heap_t* heap) {
     mi_assert_internal(heap->tld->segments.count == 0);
     _mi_os_free(heap, sizeof(mi_thread_data_t), &_mi_stats_main);
   }
-#if (MI_DEBUG > 0)
+#if 0  
+  // never free the main thread even in debug mode; if a dll is linked statically with mimalloc,
+  // there may still be delete/free calls after the mi_fls_done is called. Issue #207
   else {
     _mi_heap_destroy_pages(heap);
     mi_assert_internal(heap->tld->heap_backing == &_mi_heap_main);
@@ -483,6 +487,10 @@ static void mi_process_done(void) {
   if (process_done) return;
   process_done = true;
 
+  #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+  FlsSetValue(mi_fls_key, NULL);  // don't call main-thread callback
+  FlsFree(mi_fls_key);            // call thread-done on all threads to prevent dangling callback pointer if statically linked with a DLL; Issue #208
+  #endif
   #ifndef NDEBUG
   mi_collect(true);
   #endif
@@ -490,7 +498,7 @@ static void mi_process_done(void) {
       mi_option_is_enabled(mi_option_verbose)) {
     mi_stats_print(NULL);
   }
-  mi_allocator_done();
+  mi_allocator_done();  
   _mi_verbose_message("process done: 0x%zx\n", _mi_heap_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
 }

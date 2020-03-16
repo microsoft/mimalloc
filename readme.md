@@ -11,7 +11,7 @@ mimalloc (pronounced "me-malloc")
 is a general purpose allocator with excellent [performance](#performance) characteristics.
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
-Latest release:`v1.6.0` (2020-02-09).
+Latest release:`v1.6.1` (2020-02-17).
 
 It is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -57,6 +57,7 @@ Enjoy!
 
 ### Releases
 
+* 2020-02-17, `v1.6.1`: stable release 1.6: minor updates (build with clang-cl, fix alignment issue for small objects).
 * 2020-02-09, `v1.6.0`: stable release 1.6: fixed potential memory leak, improved overriding
   and thread local support on FreeBSD, NetBSD, DragonFly, and macOSX. New byte-precise
   heap block overflow detection in debug mode (besides the double-free detection and free-list
@@ -275,8 +276,7 @@ resolved to the _mimalloc_ library.
 Note that certain security restrictions may apply when doing this from
 the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
 
-Note: unfortunately, at this time, dynamic overriding on macOS seems broken but it is
-actively worked on to fix this (see issue [`#50`](https://github.com/microsoft/mimalloc/issues/50)).
+(Note: macOS support for dynamic overriding is recent, please report any issues.)
 
 ### Override on Windows
 

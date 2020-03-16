@@ -123,7 +123,7 @@ int main() {
   });
   CHECK_BODY("posix_memalign_nomem", {
     void* p = &p;
-    int err = mi_posix_memalign(&p, sizeof(void*), SIZE_MAX);
+    volatile int err = mi_posix_memalign(&p, sizeof(void*), SIZE_MAX);
     result = (err==ENOMEM && p==&p);
   });
 

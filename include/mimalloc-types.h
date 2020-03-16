@@ -332,6 +332,8 @@ struct mi_heap_s {
   uintptr_t             keys[2];                             // two random keys used to encode the `thread_delayed_free` list
   mi_random_ctx_t       random;                              // random number context used for secure allocation
   size_t                page_count;                          // total number of pages in the `pages` queues.
+  size_t                page_retired_min;                    // smallest retired index (retired pages are fully free, but still in the page queues)
+  size_t                page_retired_max;                    // largest retired index into the `pages` array.
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
 };

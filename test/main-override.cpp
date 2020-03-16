@@ -7,7 +7,7 @@
 #include <vector>
 #include <thread>
 #include <mimalloc.h>
-// #include <mimalloc-new-delete.h>
+#include <mimalloc-new-delete.h>
 #include <mimalloc-override.h>
 
 #ifdef _WIN32
@@ -28,6 +28,7 @@ int main() {
   // heap_no_delete();  // issue #202
   // heap_late_free();  // issue #204
   // dangling_ptr_write();
+  // padding_shrink();  // issue #209
   various_tests();
   mi_stats_print(NULL);
   return 0;
@@ -159,3 +160,18 @@ static void heap_late_free() {
 
   t1.join();
 }
+
+// issue  #209
+static void* shared_p;
+static void alloc0(/* void* arg */)
+{
+  shared_p = mi_malloc(8);
+}
+
+void padding_shrink(void)
+{
+  auto t1 = std::thread(alloc0);
+  t1.join();
+  mi_free(shared_p);
+}
+

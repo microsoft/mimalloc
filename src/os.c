@@ -209,7 +209,12 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
   // on 64-bit systems, try to use the virtual address area after 4TiB for 4MiB aligned allocations
   void* hint;
   if (addr == NULL && (hint = mi_os_get_aligned_hint(try_alignment,size)) != NULL) {
-    return VirtualAlloc(hint, size, flags, PAGE_READWRITE);
+    void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
+    if (p != NULL) return p;
+    DWORD err = GetLastError();
+    if (err != ERROR_INVALID_ADDRESS) { // if linked with multiple instances, we may have tried to allocate at an already allocated area
+      return NULL;
+    }
   }
 #endif
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
