@@ -10,8 +10,8 @@
 mimalloc (pronounced "me-malloc")
 is a general purpose allocator with excellent [performance](#performance) characteristics.
 Initially developed by Daan Leijen for the run-time systems of the
-[Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages. 
-Latest release:`v1.4.0` (2020-01-22).
+[Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
+Latest release:`v1.6.1` (2020-02-17).
 
 It is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -47,7 +47,7 @@ It also has an easy way to override the allocator in [Windows](#override_on_wind
 - __fast__: In our benchmarks (see [below](#performance)),
   _mimalloc_ outperforms other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
   and usually uses less memory (up to 25% more in the worst case). A nice property
-  is that it does consistently well over a wide range of benchmarks. There is also good huge OS page 
+  is that it does consistently well over a wide range of benchmarks. There is also good huge OS page
   support for larger server programs.
 
 The [documentation](https://microsoft.github.io/mimalloc) gives a full overview of the API.
@@ -57,7 +57,15 @@ Enjoy!
 
 ### Releases
 
-* 2020-01-22, `v1.4.0`: stable release 1.4: improved performance for delayed OS page reset, 
+* 2020-02-17, `v1.6.1`: stable release 1.6: minor updates (build with clang-cl, fix alignment issue for small objects).
+* 2020-02-09, `v1.6.0`: stable release 1.6: fixed potential memory leak, improved overriding
+  and thread local support on FreeBSD, NetBSD, DragonFly, and macOSX. New byte-precise
+  heap block overflow detection in debug mode (besides the double-free detection and free-list
+  corruption detection). Add `nodiscard` attribute to most allocation functions.
+  Enable `MIMALLOC_PAGE_RESET` by default. New reclamation strategy for abandoned heap pages
+  for better memory footprint.
+* 2020-02-09, `v1.5.0`: stable release 1.5: improved free performance, small bug fixes.
+* 2020-01-22, `v1.4.0`: stable release 1.4: improved performance for delayed OS page reset,
 more eager concurrent free, addition of STL allocator, fixed potential memory leak.
 * 2020-01-15, `v1.3.0`: stable release 1.3: bug fixes, improved randomness and [stronger
 free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396) in secure mode.
@@ -212,13 +220,13 @@ or via environment variables.
    <!--
    - `MIMALLOC_EAGER_REGION_COMMIT=1`: on Windows, commit large (256MiB) regions eagerly. On Windows, these regions
    show in the working set even though usually just a small part is committed to physical memory. This is why it
-   turned off by default on Windows as it looks not good in the task manager. However, turning it on has no 
+   turned off by default on Windows as it looks not good in the task manager. However, turning it on has no
    real drawbacks and may improve performance by a little.
    -->
 - `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where N is the number of 1GiB huge OS pages. This reserves the huge pages at
    startup and can give quite a (latency) performance improvement on long running workloads. Usually it is better to not use
    `MIMALLOC_LARGE_OS_PAGES` in combination with this setting. Just like large OS pages, use with care as reserving
-   contiguous physical memory can take a long time when memory is fragmented (but reserving the huge pages is done at 
+   contiguous physical memory can take a long time when memory is fragmented (but reserving the huge pages is done at
    startup only once).
    Note that we usually need to explicitly enable huge OS pages (as on [Windows][windows-huge] and [Linux][linux-huge])). With huge OS pages, it may be beneficial to set the setting
    `MIMALLOC_EAGER_COMMIT_DELAY=N` (with usually `N` as 1) to delay the initial `N` segments
@@ -268,8 +276,7 @@ resolved to the _mimalloc_ library.
 Note that certain security restrictions may apply when doing this from
 the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
 
-Note: unfortunately, at this time, dynamic overriding on macOS seems broken but it is
-actively worked on to fix this (see issue [`#50`](https://github.com/microsoft/mimalloc/issues/50)).
+(Note: macOS support for dynamic overriding is recent, please report any issues.)
 
 ### Override on Windows
 

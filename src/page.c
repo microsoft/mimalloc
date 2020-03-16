@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 /* -----------------------------------------------------------
   The core of the allocator. Every segment contains
-  pages of a certain block size. The main function
+  pages of a {certain block size. The main function
   exported is `mi_malloc_generic`.
 ----------------------------------------------------------- */
 
@@ -105,7 +105,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
 bool _mi_page_is_valid(mi_page_t* page) {
   mi_assert_internal(mi_page_is_valid_init(page));
   #if MI_SECURE
-  mi_assert_internal(page->key != 0);
+  mi_assert_internal(page->keys[0] != 0);
   #endif
   if (mi_page_heap(page)!=NULL) {
     mi_segment_t* segment = _mi_page_segment(page);
@@ -281,7 +281,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
 
   // and free them all
   while(block != NULL) {
-    mi_block_t* next = mi_block_nextx(heap,block, heap->key[0], heap->key[1]);
+    mi_block_t* next = mi_block_nextx(heap,block, heap->keys);
     // use internal free instead of regular one to keep stats etc correct
     if (!_mi_free_delayed_block(block)) {
       // we might already start delayed freeing while another thread has not yet
@@ -289,7 +289,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
       mi_block_t* dfree;
       do {
         dfree = mi_atomic_read_ptr_relaxed(mi_block_t,&heap->thread_delayed_free);
-        mi_block_set_nextx(heap, block, dfree, heap->key[0], heap->key[1]);
+        mi_block_set_nextx(heap, block, dfree, heap->keys);
       } while (!mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, block, dfree));
     }
     block = next;
@@ -348,7 +348,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
 
 #if MI_DEBUG>1
   // check there are no references left..
-  for (mi_block_t* block = (mi_block_t*)pheap->thread_delayed_free; block != NULL; block = mi_block_nextx(pheap, block, pheap->key[0], pheap->key[1])) {
+  for (mi_block_t* block = (mi_block_t*)pheap->thread_delayed_free; block != NULL; block = mi_block_nextx(pheap, block, pheap->keys)) {
     mi_assert_internal(_mi_ptr_page(block) != page);
   }
 #endif
@@ -393,7 +393,8 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   _mi_segment_page_free(page, force, segments_tld);
 }
 
-#define MI_MAX_RETIRE_SIZE    (4*MI_SMALL_SIZE_MAX)
+#define MI_MAX_RETIRE_SIZE    (MI_MEDIUM_OBJ_SIZE_MAX)
+#define MI_RETIRE_CYCLES      (16)
 
 // Retire a page with no more used blocks
 // Important to not retire too quickly though as new
@@ -418,7 +419,13 @@ void _mi_page_retire(mi_page_t* page) {
   if (mi_likely(page->xblock_size <= MI_MAX_RETIRE_SIZE && !mi_page_is_in_full(page))) {
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
-      page->retire_expire = 16;
+      page->retire_expire = MI_RETIRE_CYCLES;
+      mi_heap_t* heap = mi_page_heap(page);
+      mi_assert_internal(pq >= heap->pages);
+      const size_t index = pq - heap->pages;
+      mi_assert_internal(index < MI_BIN_FULL && index < MI_BIN_HUGE);
+      if (index < heap->page_retired_min) heap->page_retired_min = index;
+      if (index > heap->page_retired_max) heap->page_retired_max = index;
       mi_assert_internal(mi_page_all_free(page));
       return; // dont't free after all
     }
@@ -427,15 +434,23 @@ void _mi_page_retire(mi_page_t* page) {
 }
 
 // free retired pages: we don't need to look at the entire queues
-// since we only retire pages that are the last one in a queue.
+// since we only retire pages that are at the head position in a queue.
 void _mi_heap_collect_retired(mi_heap_t* heap, bool force) {
-  for(mi_page_queue_t* pq = heap->pages; pq->block_size <= MI_MAX_RETIRE_SIZE; pq++) {
-    mi_page_t* page = pq->first;
+  size_t min = MI_BIN_FULL;
+  size_t max = 0;
+  for(size_t bin = heap->page_retired_min; bin <= heap->page_retired_max; bin++) {
+    mi_page_queue_t* pq   = &heap->pages[bin];
+    mi_page_t*       page = pq->first;
     if (page != NULL && page->retire_expire != 0) {
       if (mi_page_all_free(page)) {
         page->retire_expire--;
         if (force || page->retire_expire == 0) {
           _mi_page_free(pq->first, pq, force);
+        }
+        else {
+          // keep retired, update min/max
+          if (bin < min) min = bin;
+          if (bin > max) max = bin;
         }
       }
       else {
@@ -443,6 +458,8 @@ void _mi_heap_collect_retired(mi_heap_t* heap, bool force) {
       }
     }
   }
+  heap->page_retired_min = min;
+  heap->page_retired_max = max;
 }
 
 
@@ -618,8 +635,8 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
   #ifdef MI_ENCODE_FREELIST
-  page->key[0] = _mi_heap_random_next(heap);
-  page->key[1] = _mi_heap_random_next(heap);
+  page->keys[0] = _mi_heap_random_next(heap);
+  page->keys[1] = _mi_heap_random_next(heap);
   #endif
   page->is_zero = page->is_zero_init;
 
@@ -634,8 +651,8 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->retire_expire == 0);
   mi_assert_internal(!mi_page_has_aligned(page));
   #if (MI_ENCODE_FREELIST)
-  mi_assert_internal(page->key[0] != 0);
-  mi_assert_internal(page->key[1] != 0);
+  mi_assert_internal(page->keys[0] != 0);
+  mi_assert_internal(page->keys[1] != 0);
   #endif
   mi_assert_expensive(mi_page_is_valid_init(page));
 
@@ -760,13 +777,13 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
 // just that page, we always treat them as abandoned and any thread
 // that frees the block can free the whole page and segment directly.
 static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
-  size_t block_size = _mi_wsize_from_size(size) * sizeof(uintptr_t);
+  size_t block_size = _mi_os_good_alloc_size(size);
   mi_assert_internal(_mi_bin(block_size) == MI_BIN_HUGE);
   bool is_huge = (block_size > MI_LARGE_OBJ_SIZE_MAX);
   mi_page_queue_t* pq = (is_huge ? NULL : mi_page_queue(heap, block_size));
   mi_page_t* page = mi_page_fresh_alloc(heap, pq, block_size);
   if (page != NULL) {
-    const size_t bsize = mi_page_block_size(page);
+    const size_t bsize = mi_page_usable_block_size(page);
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(bsize >= size);
 
@@ -794,6 +811,7 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
 
 
 // Generic allocation routine if the fast path (`alloc.c:mi_page_malloc`) does not succeed.
+// Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
 void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
 {
   mi_assert_internal(heap != NULL);
@@ -813,9 +831,10 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
 
   // huge allocation?
   mi_page_t* page;
-  if (mi_unlikely(size > MI_MEDIUM_OBJ_SIZE_MAX)) {
-    if (mi_unlikely(size > PTRDIFF_MAX)) {
-      _mi_error_message(EOVERFLOW, "allocation request is too large (%zu b requested)\n", size);
+  const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`  
+  if (mi_unlikely(req_size > (MI_MEDIUM_OBJ_SIZE_MAX - MI_PADDING_SIZE))) {
+    if (mi_unlikely(req_size > PTRDIFF_MAX)) { // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
+      _mi_error_message(EOVERFLOW, "allocation request is too large (%zu b requested)\n", req_size);
       return NULL;
     }
     else {
@@ -824,6 +843,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   }
   else {
     // otherwise find a page with free blocks in our size segregated queues
+    mi_assert_internal(size >= MI_PADDING_SIZE);
     page = mi_find_free_page(heap,size);
   }
   if (mi_unlikely(page == NULL)) { // out of memory

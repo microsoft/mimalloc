@@ -861,12 +861,12 @@ Note: the current implementation is one possible design;
 another way might be to keep track of abandoned segments
 in the regions. This would have the advantage of keeping
 all concurrent code in one place and not needing to deal
-with ABA issues. The drawback is that it is unclear how to 
-scan abandoned segments efficiently in that case as they 
+with ABA issues. The drawback is that it is unclear how to
+scan abandoned segments efficiently in that case as they
 would be spread among all other segments in the regions.
 ----------------------------------------------------------- */
 
-// Use the bottom 20-bits (on 64-bit) of the aligned segment pointers 
+// Use the bottom 20-bits (on 64-bit) of the aligned segment pointers
 // to put in a tag that increments on update to avoid the A-B-A problem.
 #define MI_TAGGED_MASK   MI_SEGMENT_MASK
 typedef uintptr_t        mi_tagged_segment_t;
@@ -882,7 +882,7 @@ static mi_tagged_segment_t mi_tagged_segment(mi_segment_t* segment, mi_tagged_se
 }
 
 // This is a list of visited abandoned pages that were full at the time.
-// this list migrates to `abandoned` when that becomes NULL. The use of 
+// this list migrates to `abandoned` when that becomes NULL. The use of
 // this list reduces contention and the rate at which segments are visited.
 static mi_decl_cache_align volatile _Atomic(mi_segment_t*)       abandoned_visited; // = NULL
 
@@ -908,7 +908,7 @@ static void mi_abandoned_visited_push(mi_segment_t* segment) {
 }
 
 // Move the visited list to the abandoned list.
-static bool mi_abandoned_visited_revisit(void) 
+static bool mi_abandoned_visited_revisit(void)
 {
   // quick check if the visited list is empty
   if (mi_atomic_read_ptr_relaxed(mi_segment_t,&abandoned_visited)==NULL) return false;
@@ -974,12 +974,12 @@ static mi_segment_t* mi_abandoned_pop(void) {
   segment = mi_tagged_segment_ptr(ts);
   if (mi_likely(segment == NULL)) {
     if (mi_likely(!mi_abandoned_visited_revisit())) { // try to swap in the visited list on NULL
-      return NULL;  
+      return NULL;
     }
   }
 
   // Do a pop. We use a reader count to prevent
-  // a segment to be decommitted while a read is still pending, 
+  // a segment to be decommitted while a read is still pending,
   // and a tagged pointer to prevent A-B-A link corruption.
   // (this is called from `memory.c:_mi_mem_free` for example)
   mi_atomic_increment(&abandoned_readers);  // ensure no segment gets decommitted
@@ -1192,7 +1192,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
       // free the segment (by forced reclaim) to make it available to other threads.
       // note1: we prefer to free a segment as that might lead to reclaiming another
       // segment that is still partially used.
-      // note2: we could in principle optimize this by skipping reclaim and directly 
+      // note2: we could in principle optimize this by skipping reclaim and directly
       // freeing but that would violate some invariants temporarily)
       mi_segment_reclaim(segment, heap, 0, NULL, tld);
     }
@@ -1216,7 +1216,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
 
 
 /* -----------------------------------------------------------
-   Reclaim or allocate  
+   Reclaim or allocate
 ----------------------------------------------------------- */
 
 static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t needed_slices, size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) 
@@ -1291,6 +1291,34 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
   mi_assert_internal(mi_page_block_size(page) >= size);
   segment->thread_id = 0; // huge segments are immediately abandoned
   return page;
+}
+
+// free huge block from another thread
+void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block_t* block) {
+  // huge page segments are always abandoned and can be freed immediately by any thread
+  mi_assert_internal(segment == _mi_page_segment(page));
+  mi_assert_internal(mi_atomic_read_relaxed(&segment->thread_id)==0);
+
+  // claim it and free
+  mi_heap_t* heap = mi_get_default_heap();
+  // paranoia: if this it the last reference, the cas should always succeed
+  if (mi_atomic_cas_strong(&segment->thread_id, heap->thread_id, 0)) {
+    mi_block_set_next(page, block, page->free);
+    page->free = block;
+    page->used--;
+    page->is_zero = false;
+    mi_assert(page->used == 0);
+    mi_segments_tld_t* tld = &heap->tld->segments;
+    const size_t bsize = mi_page_usable_block_size(page);
+    if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+      _mi_stat_decrease(&tld->stats->large, bsize); 
+    }
+    else {
+      _mi_stat_decrease(&tld->stats->huge, bsize);
+    }
+    // mi_segments_track_size((long)segment->segment_size, tld);
+    _mi_segment_page_free(page, true, tld);
+  }
 }
 
 /* -----------------------------------------------------------

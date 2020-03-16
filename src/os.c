@@ -188,7 +188,7 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
   if (was_committed) _mi_stat_decrease(&stats->committed, size);
   _mi_stat_decrease(&stats->reserved, size);
   if (err) {
-#pragma warning(suppress:4996)
+    #pragma warning(suppress:4996)
     _mi_warning_message("munmap failed: %s, addr 0x%8li, size %lu\n", strerror(errno), (size_t)addr, size);
     return false;
   }
@@ -208,15 +208,20 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
   // on 64-bit systems, try to use the virtual address area after 4TiB for 4MiB aligned allocations
   void* hint;
   if (addr == NULL && (hint = mi_os_get_aligned_hint(try_alignment,size)) != NULL) {
-    return VirtualAlloc(hint, size, flags, PAGE_READWRITE);
+    void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
+    if (p != NULL) return p;
+    DWORD err = GetLastError();
+    if (err != ERROR_INVALID_ADDRESS) { // if linked with multiple instances, we may have tried to allocate at an already allocated area
+      return NULL;
+    }
   }
 #endif
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   // on modern Windows try use VirtualAlloc2 for aligned allocation
   if (try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
-    MEM_ADDRESS_REQUIREMENTS reqs = { 0 };
+    MEM_ADDRESS_REQUIREMENTS reqs = { 0, 0, 0 };
     reqs.Alignment = try_alignment;
-    MEM_EXTENDED_PARAMETER param = { 0 };
+    MEM_EXTENDED_PARAMETER param = { {0, 0}, {0} };
     param.Type = MemExtendedParameterAddressRequirements;
     param.Pointer = &reqs;
     return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
@@ -284,6 +289,7 @@ static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int pr
   }
   #else
   UNUSED(try_alignment);
+  UNUSED(mi_os_get_aligned_hint);
   #endif
   if (p==NULL) {
     p = mmap(addr,size,protect_flags,flags,fd,0);
@@ -826,7 +832,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
   mi_win_enable_large_os_pages();
 
   #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
-  MEM_EXTENDED_PARAMETER params[3] = { {0,0},{0,0},{0,0} };
+  MEM_EXTENDED_PARAMETER params[3] = { {{0,0},{0}},{{0,0},{0}},{{0,0},{0}} };
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
   static bool mi_huge_pages_available = true;
   if (pNtAllocateVirtualMemoryEx != NULL && mi_huge_pages_available) {
@@ -850,7 +856,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
     else {
       // fall back to regular large pages
       mi_huge_pages_available = false; // don't try further huge pages
-      _mi_warning_message("unable to allocate using huge (1GiB) pages, trying large (2MiB) pages instead (status 0x%lx)\n", err);
+      _mi_warning_message("unable to allocate using huge (1gb) pages, trying large (2mb) pages instead (status 0x%lx)\n", err);
     }
   }
   // on modern Windows try use VirtualAlloc2 for numa aware large OS page allocation
@@ -891,7 +897,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) 
     // see: <https://lkml.org/lkml/2017/2/9/875>
     long err = mi_os_mbind(p, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
     if (err != 0) {
-      _mi_warning_message("failed to bind huge (1GiB) pages to NUMA node %d: %s\n", numa_node, strerror(errno));
+      _mi_warning_message("failed to bind huge (1gb) pages to numa node %d: %s\n", numa_node, strerror(errno));
     }
   }
   return p;
@@ -1075,4 +1081,3 @@ int _mi_os_numa_node_get(mi_os_tld_t* tld) {
   if (numa_node >= numa_count) { numa_node = numa_node % numa_count; }
   return (int)numa_node;
 }
-

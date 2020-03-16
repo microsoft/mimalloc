@@ -188,7 +188,7 @@ static void test_stress(void) {
         free_items(p);
       }
     }
-    mi_collect(false);
+    // mi_collect(false);
 #ifndef NDEBUG
     if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
 #endif
@@ -206,7 +206,7 @@ static void leak(intptr_t tid) {
   }
 }
 
-static void test_leak(void) {  
+static void test_leak(void) {
   for (int n = 0; n < ITER; n++) {
     run_os_threads(THREADS, &leak);
     mi_collect(false);
@@ -242,14 +242,14 @@ int main(int argc, char** argv) {
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
   srand(0x7feb352d);
-  mi_stats_reset();
+  // mi_stats_reset();
 #ifdef STRESS
     test_stress();
 #else
     test_leak();
-#endif  
+#endif
 
-  mi_collect(true);
+  // mi_collect(true);
   mi_stats_print(NULL);
   //bench_end_program();
   return 0;
@@ -262,7 +262,7 @@ static void (*thread_entry_fun)(intptr_t) = &stress;
 
 #include <windows.h>
 
-static DWORD WINAPI thread_entry(LPVOID param) {  
+static DWORD WINAPI thread_entry(LPVOID param) {
   thread_entry_fun((intptr_t)param);
   return 0;
 }

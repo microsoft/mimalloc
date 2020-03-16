@@ -31,7 +31,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 #endif
 
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
+// #include "mimalloc-internal.h"
 
 // ---------------------------------------------------------------------------
 // Test macros: CHECK(name,predicate) and CHECK_BODY(name,body)
@@ -98,38 +98,34 @@ int main() {
 
   // ---------------------------------------------------
   // Extended
-  // ---------------------------------------------------
-  #if defined(MI_MALLOC_OVERRIDE) && !defined(_WIN32)
+  // ---------------------------------------------------  
   CHECK_BODY("posix_memalign1", {
     void* p = &p;
-    int err = posix_memalign(&p, sizeof(void*), 32);
-    mi_assert((err==0 && (uintptr_t)p % sizeof(void*) == 0) || p==&p);
+    int err = mi_posix_memalign(&p, sizeof(void*), 32);
+    result = ((err==0 && (uintptr_t)p % sizeof(void*) == 0) || p==&p);
     mi_free(p);
-    result = (err==0);
   });
   CHECK_BODY("posix_memalign_no_align", {
     void* p = &p;
-    int err = posix_memalign(&p, 3, 32);
-    mi_assert(p==&p);
-    result = (err==EINVAL);
+    int err = mi_posix_memalign(&p, 3, 32);
+    result = (err==EINVAL && p==&p);
   });
   CHECK_BODY("posix_memalign_zero", {
     void* p = &p;
-    int err = posix_memalign(&p, sizeof(void*), 0);
+    int err = mi_posix_memalign(&p, sizeof(void*), 0);
     mi_free(p);
     result = (err==0);
   });
   CHECK_BODY("posix_memalign_nopow2", {
     void* p = &p;
-    int err = posix_memalign(&p, 3*sizeof(void*), 32);
+    int err = mi_posix_memalign(&p, 3*sizeof(void*), 32);
     result = (err==EINVAL && p==&p);
   });
   CHECK_BODY("posix_memalign_nomem", {
     void* p = &p;
-    int err = posix_memalign(&p, sizeof(void*), SIZE_MAX);
+    int err = mi_posix_memalign(&p, sizeof(void*), SIZE_MAX);
     result = (err==ENOMEM && p==&p);
   });
-  #endif
 
   // ---------------------------------------------------
   // Aligned API
@@ -140,12 +136,37 @@ int main() {
   CHECK_BODY("malloc-aligned2", {
     void* p = mi_malloc_aligned(48,32); result = (p != NULL && (uintptr_t)(p) % 32 == 0); mi_free(p);
   });
+  CHECK_BODY("malloc-aligned3", {
+    void* p1 = mi_malloc_aligned(48,32); bool result1 = (p1 != NULL && (uintptr_t)(p1) % 32 == 0); 
+    void* p2 = mi_malloc_aligned(48,32); bool result2 = (p2 != NULL && (uintptr_t)(p2) % 32 == 0);
+    mi_free(p2);
+    mi_free(p1);
+    result = (result1&&result2);
+  });
+  CHECK_BODY("malloc-aligned4", {
+    void* p;
+    bool ok = true;
+    for (int i = 0; i < 8 && ok; i++) {
+      p = mi_malloc_aligned(8, 16);
+      ok = (p != NULL && (uintptr_t)(p) % 16 == 0); mi_free(p);
+    }
+    result = ok;
+  });
   CHECK_BODY("malloc-aligned-at1", {
     void* p = mi_malloc_aligned_at(48,32,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 32 == 0); mi_free(p);
   });
   CHECK_BODY("malloc-aligned-at2", {
     void* p = mi_malloc_aligned_at(50,32,8); result = (p != NULL && ((uintptr_t)(p) + 8) % 32 == 0); mi_free(p);
-  });
+  });  
+  CHECK_BODY("memalign1", {
+    void* p;
+    bool ok = true;
+    for (int i = 0; i < 8 && ok; i++) {
+      p = mi_memalign(16,8);
+      ok = (p != NULL && (uintptr_t)(p) % 16 == 0); mi_free(p);
+    }
+    result = ok;
+    });
 
   // ---------------------------------------------------
   // Heaps

@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 /* ----------------------------------------------------------------------------
 We use our own PRNG to keep predictable performance of random number generation
-and to avoid implementations that use a lock. We only use the OS provided 
+and to avoid implementations that use a lock. We only use the OS provided
 random source to initialize the initial seeds. Since we do not need ultimate
 performance but we do rely on the security (for secret cookies in secure mode)
 we use a cryptographically secure generator (chacha20).
@@ -21,11 +21,11 @@ we use a cryptographically secure generator (chacha20).
 
 
 /* ----------------------------------------------------------------------------
-Chacha20 implementation as the original algorithm with a 64-bit nonce 
+Chacha20 implementation as the original algorithm with a 64-bit nonce
 and counter: https://en.wikipedia.org/wiki/Salsa20
 The input matrix has sixteen 32-bit values:
 Position  0 to  3: constant key
-Position  4 to 11: the key 
+Position  4 to 11: the key
 Position 12 to 13: the counter.
 Position 14 to 15: the nonce.
 
@@ -44,8 +44,8 @@ static inline void qround(uint32_t x[16], size_t a, size_t b, size_t c, size_t d
   x[c] += x[d]; x[b] = rotl(x[b] ^ x[c], 7);
 }
 
-static void chacha_block(mi_random_ctx_t* ctx) 
-{  
+static void chacha_block(mi_random_ctx_t* ctx)
+{
   // scramble into `x`
   uint32_t x[16];
   for (size_t i = 0; i < 16; i++) {
@@ -72,8 +72,8 @@ static void chacha_block(mi_random_ctx_t* ctx)
   ctx->input[12] += 1;
   if (ctx->input[12] == 0) {
     ctx->input[13] += 1;
-    if (ctx->input[13] == 0) {  // and keep increasing into the nonce 
-      ctx->input[14] += 1;  
+    if (ctx->input[13] == 0) {  // and keep increasing into the nonce
+      ctx->input[14] += 1;
     }
   }
 }
@@ -83,7 +83,7 @@ static uint32_t chacha_next32(mi_random_ctx_t* ctx) {
     chacha_block(ctx);
     ctx->output_available = 16; // (assign again to suppress static analysis warning)
   }
-  const uint32_t x = ctx->output[16 - ctx->output_available];  
+  const uint32_t x = ctx->output[16 - ctx->output_available];
   ctx->output[16 - ctx->output_available] = 0; // reset once the data is handed out
   ctx->output_available--;
   return x;
@@ -94,9 +94,9 @@ static inline uint32_t read32(const uint8_t* p, size_t idx32) {
   return ((uint32_t)p[i+0] | (uint32_t)p[i+1] << 8 | (uint32_t)p[i+2] << 16 | (uint32_t)p[i+3] << 24);
 }
 
-static void chacha_init(mi_random_ctx_t* ctx, const uint8_t key[32], uint64_t nonce) 
+static void chacha_init(mi_random_ctx_t* ctx, const uint8_t key[32], uint64_t nonce)
 {
-  // since we only use chacha for randomness (and not encryption) we 
+  // since we only use chacha for randomness (and not encryption) we
   // do not _need_ to read 32-bit values as little endian but we do anyways
   // just for being compatible :-)
   memset(ctx, 0, sizeof(*ctx));
@@ -110,7 +110,7 @@ static void chacha_init(mi_random_ctx_t* ctx, const uint8_t key[32], uint64_t no
   ctx->input[12] = 0;
   ctx->input[13] = 0;
   ctx->input[14] = (uint32_t)nonce;
-  ctx->input[15] = (uint32_t)(nonce >> 32);  
+  ctx->input[15] = (uint32_t)(nonce >> 32);
 }
 
 static void chacha_split(mi_random_ctx_t* ctx, uint64_t nonce, mi_random_ctx_t* ctx_new) {
@@ -184,7 +184,7 @@ static bool os_random_buf(void* buf, size_t buf_len) {
   arc4random_buf(buf, buf_len);
   return true;
 }
-#elif defined(__linux__) 
+#elif defined(__linux__)
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -241,8 +241,8 @@ static bool os_random_buf(void* buf, size_t buf_len) {
 #include <time.h>
 #endif
 
-static uintptr_t os_random_weak(uintptr_t extra_seed) {
-  uintptr_t x = (uintptr_t)&os_random_weak ^ extra_seed; // ASLR makes the address random
+uintptr_t _os_random_weak(uintptr_t extra_seed) {
+  uintptr_t x = (uintptr_t)&_os_random_weak ^ extra_seed; // ASLR makes the address random
   #if defined(_WIN32)
     LARGE_INTEGER pcount;
     QueryPerformanceCounter(&pcount);
@@ -267,10 +267,10 @@ static uintptr_t os_random_weak(uintptr_t extra_seed) {
 void _mi_random_init(mi_random_ctx_t* ctx) {
   uint8_t key[32];
   if (!os_random_buf(key, sizeof(key))) {
-    // if we fail to get random data from the OS, we fall back to a 
+    // if we fail to get random data from the OS, we fall back to a
     // weak random source based on the current time
     _mi_warning_message("unable to use secure randomness\n");
-    uintptr_t x = os_random_weak(0);
+    uintptr_t x = _os_random_weak(0);
     for (size_t i = 0; i < 8; i++) {  // key is eight 32-bit words.
       x = _mi_random_shuffle(x);
       ((uint32_t*)key)[i] = (uint32_t)x;
@@ -280,7 +280,7 @@ void _mi_random_init(mi_random_ctx_t* ctx) {
 }
 
 /* --------------------------------------------------------
-test vectors from <https://tools.ietf.org/html/rfc8439> 
+test vectors from <https://tools.ietf.org/html/rfc8439>
 ----------------------------------------------------------- */
 /*
 static bool array_equals(uint32_t* x, uint32_t* y, size_t n) {

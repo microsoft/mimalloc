@@ -13,7 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "It is only possible to override "malloc" on Windows when building as a DLL (and linking the C runtime as a DLL)"
 #endif
 
-#if defined(MI_MALLOC_OVERRIDE) && !defined(_WIN32)
+#if defined(MI_MALLOC_OVERRIDE) && !(defined(_WIN32)) // || (defined(__MACH__) && !defined(MI_INTERPOSE)))
 
 // ------------------------------------------------------
 // Override system malloc
@@ -47,26 +47,31 @@ terms of the MIT license. A copy of the license can be found in the file
     const void* replacement;
     const void* target;
   };
-  #define MI_INTERPOSEX(oldfun,newfun)  { (const void*)&newfun, (const void*)&oldfun }
-  #define MI_INTERPOSE_MI(fun)         MI_INTERPOSEX(fun,mi_##fun)
+  #define MI_INTERPOSE_FUN(oldfun,newfun) { (const void*)&newfun, (const void*)&oldfun }
+  #define MI_INTERPOSE_MI(fun)            MI_INTERPOSE_FUN(fun,mi_##fun)
   __attribute__((used)) static struct mi_interpose_s _mi_interposes[]  __attribute__((section("__DATA, __interpose"))) =
   {
     MI_INTERPOSE_MI(malloc),
     MI_INTERPOSE_MI(calloc),
     MI_INTERPOSE_MI(realloc),
-    MI_INTERPOSE_MI(free),
     MI_INTERPOSE_MI(strdup),
-    MI_INTERPOSE_MI(strndup)
+    MI_INTERPOSE_MI(strndup),
+    MI_INTERPOSE_MI(realpath),
+    MI_INTERPOSE_MI(posix_memalign),
+    MI_INTERPOSE_MI(reallocf),
+    MI_INTERPOSE_MI(valloc),
+    // some code allocates from a zone but deallocates using plain free :-( (like NxHashResizeToCapacity <https://github.com/nneonneo/osx-10.9-opensource/blob/master/objc4-551.1/runtime/hashtable2.mm>)
+    MI_INTERPOSE_FUN(free,mi_cfree), // use safe free that checks if pointers are from us
   };
 #elif defined(_MSC_VER)
   // cannot override malloc unless using a dll.
   // we just override new/delete which does work in a static library.
 #else
   // On all other systems forward to our API
-  void* malloc(size_t size)              mi_attr_noexcept  MI_FORWARD1(mi_malloc, size);
-  void* calloc(size_t size, size_t n)    mi_attr_noexcept  MI_FORWARD2(mi_calloc, size, n);
-  void* realloc(void* p, size_t newsize) mi_attr_noexcept  MI_FORWARD2(mi_realloc, p, newsize);
-  void  free(void* p)                    mi_attr_noexcept  MI_FORWARD0(mi_free, p);
+  void* malloc(size_t size)              MI_FORWARD1(mi_malloc, size);
+  void* calloc(size_t size, size_t n)    MI_FORWARD2(mi_calloc, size, n);
+  void* realloc(void* p, size_t newsize) MI_FORWARD2(mi_realloc, p, newsize);
+  void  free(void* p)                    MI_FORWARD0(mi_free, p);
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
@@ -94,8 +99,8 @@ terms of the MIT license. A copy of the license can be found in the file
   void* operator new[](std::size_t n, const std::nothrow_t& tag) noexcept { UNUSED(tag); return mi_new_nothrow(n); }
 
   #if (__cplusplus >= 201402L || _MSC_VER >= 1916)
-  void operator delete  (void* p, std::size_t n) MI_FORWARD02(mi_free_size,p,n);
-  void operator delete[](void* p, std::size_t n) MI_FORWARD02(mi_free_size,p,n);
+  void operator delete  (void* p, std::size_t n) noexcept MI_FORWARD02(mi_free_size,p,n);
+  void operator delete[](void* p, std::size_t n) noexcept MI_FORWARD02(mi_free_size,p,n);
   #endif
 
   #if (__cplusplus > 201402L || defined(__cpp_aligned_new)) && (!defined(__GNUC__) || (__GNUC__ > 5))
@@ -194,4 +199,3 @@ int posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_me
 #endif
 
 #endif // MI_MALLOC_OVERRIDE && !_WIN32
-
