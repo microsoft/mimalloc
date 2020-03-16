@@ -380,7 +380,8 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   _mi_segment_page_free(page, force, segments_tld);
 }
 
-#define MI_MAX_RETIRE_SIZE    (4*MI_SMALL_SIZE_MAX)
+#define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX  
+#define MI_RETIRE_CYCLES      (16)
 
 // Retire a page with no more used blocks
 // Important to not retire too quickly though as new
@@ -405,7 +406,13 @@ void _mi_page_retire(mi_page_t* page) {
   if (mi_likely(page->xblock_size <= MI_MAX_RETIRE_SIZE && !mi_page_is_in_full(page))) {
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
-      page->retire_expire = 16;
+      page->retire_expire = MI_RETIRE_CYCLES;
+      mi_heap_t* heap = mi_page_heap(page);
+      mi_assert_internal(pq >= heap->pages);
+      const size_t index = pq - heap->pages;
+      mi_assert_internal(index < MI_BIN_FULL && index < MI_BIN_HUGE);
+      if (index < heap->page_retired_min) heap->page_retired_min = index;
+      if (index > heap->page_retired_max) heap->page_retired_max = index;
       mi_assert_internal(mi_page_all_free(page));
       return; // dont't free after all
     }
@@ -415,15 +422,23 @@ void _mi_page_retire(mi_page_t* page) {
 }
 
 // free retired pages: we don't need to look at the entire queues
-// since we only retire pages that are the last one in a queue.
+// since we only retire pages that are at the head position in a queue.
 void _mi_heap_collect_retired(mi_heap_t* heap, bool force) {
-  for(mi_page_queue_t* pq = heap->pages; pq->block_size <= MI_MAX_RETIRE_SIZE; pq++) {
-    mi_page_t* page = pq->first;
+  size_t min = MI_BIN_FULL;
+  size_t max = 0;
+  for(size_t bin = heap->page_retired_min; bin <= heap->page_retired_max; bin++) {
+    mi_page_queue_t* pq   = &heap->pages[bin];
+    mi_page_t*       page = pq->first;
     if (page != NULL && page->retire_expire != 0) {
       if (mi_page_all_free(page)) {
         page->retire_expire--;
         if (force || page->retire_expire == 0) {
           _mi_page_free(pq->first, pq, force);
+        }
+        else {
+          // keep retired, update min/max
+          if (bin < min) min = bin;
+          if (bin > max) max = bin;
         }
       }
       else {
@@ -431,6 +446,8 @@ void _mi_heap_collect_retired(mi_heap_t* heap, bool force) {
       }
     }
   }
+  heap->page_retired_min = min;
+  heap->page_retired_max = max;
 }
 
 
