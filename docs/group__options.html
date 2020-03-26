@@ -37,7 +37,7 @@
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">mi-malloc
-   &#160;<span id="projectnumber">1.0</span>
+   &#160;<span id="projectnumber">1.4</span>
    </div>
   </td>
    <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -123,11 +123,12 @@ Enumerations</h2></td></tr>
 <a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca2ecbe7ef32f5c84de3739aa4f0b805a1">mi_option_segment_cache</a>, 
 <br />
 &#160;&#160;<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cada854dd272c66342f18a93ee254a2968">mi_option_page_reset</a>, 
-<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cac2157a0cb79cd996c1db7d9f6a090c07">mi_option_cache_reset</a>, 
-<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cac81ee965b130fa81238913a3c239d536">mi_option_reset_decommits</a>, 
-<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca17a190c25be381142d87e0468c4c068c">mi_option_eager_commit_delay</a>, 
+<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cafb121d30d87591850d5410ccc3a95c6d">mi_option_segment_reset</a>, 
+<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca154fe170131d5212cff57e22b99523c5">mi_option_reset_delay</a>, 
+<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca0ac33a18f6b659fcfaf44efb0bab1b74">mi_option_use_numa_nodes</a>, 
 <br />
-&#160;&#160;<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cafb121d30d87591850d5410ccc3a95c6d">mi_option_segment_reset</a>, 
+&#160;&#160;<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cac81ee965b130fa81238913a3c239d536">mi_option_reset_decommits</a>, 
+<a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca17a190c25be381142d87e0468c4c068c">mi_option_eager_commit_delay</a>, 
 <a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca4b74ae2a69e445de6c2361b73c1d14bf">mi_option_os_tag</a>, 
 <a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca5b4357b74be0d87568036c32eb1a2e4a">_mi_option_last</a>
 <br />
@@ -183,15 +184,17 @@ Functions</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca2ecbe7ef32f5c84de3739aa4f0b805a1"></a>mi_option_segment_cache&#160;</td><td class="fielddoc"><p>The number of segments per thread to keep cached. </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884cada854dd272c66342f18a93ee254a2968"></a>mi_option_page_reset&#160;</td><td class="fielddoc"><p>Reset page memory when it becomes free. </p>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884cada854dd272c66342f18a93ee254a2968"></a>mi_option_page_reset&#160;</td><td class="fielddoc"><p>Reset page memory after <em>mi_option_reset_delay</em> milliseconds when it becomes free. </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884cac2157a0cb79cd996c1db7d9f6a090c07"></a>mi_option_cache_reset&#160;</td><td class="fielddoc"><p>Reset segment memory when a segment is cached. </p>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884cafb121d30d87591850d5410ccc3a95c6d"></a>mi_option_segment_reset&#160;</td><td class="fielddoc"><p>Experimental. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca154fe170131d5212cff57e22b99523c5"></a>mi_option_reset_delay&#160;</td><td class="fielddoc"><p>Delay in milli-seconds before resetting a page (100ms by default) </p>
+</td></tr>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca0ac33a18f6b659fcfaf44efb0bab1b74"></a>mi_option_use_numa_nodes&#160;</td><td class="fielddoc"><p>Pretend there are at most N NUMA nodes. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884cac81ee965b130fa81238913a3c239d536"></a>mi_option_reset_decommits&#160;</td><td class="fielddoc"><p>Experimental. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca17a190c25be381142d87e0468c4c068c"></a>mi_option_eager_commit_delay&#160;</td><td class="fielddoc"><p>Experimental. </p>
-</td></tr>
-<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884cafb121d30d87591850d5410ccc3a95c6d"></a>mi_option_segment_reset&#160;</td><td class="fielddoc"><p>Experimental. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca4b74ae2a69e445de6c2361b73c1d14bf"></a>mi_option_os_tag&#160;</td><td class="fielddoc"><p>OS tag to assign to mimalloc'd memory. </p>
 </td></tr>

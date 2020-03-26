@@ -1,24 +1,28 @@
 cmake_minimum_required(VERSION 3.0)
 project(libmimalloc C CXX)
-include("cmake/mimalloc-config-version.cmake")
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
 option(MI_OVERRIDE          "Override the standard malloc interface" ON)
-option(MI_INTERPOSE         "Use interpose to override standard malloc on macOS" ON)
-option(MI_SEE_ASM           "Generate assembly files" OFF)
-option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode" OFF)
+option(MI_DEBUG_FULL        "Use full internal heap invariant checking in DEBUG mode" OFF)
+option(MI_SECURE            "Use full security mitigations (like guard pages, allocation randomization, double-free mitigation, and free-list corruption detection)" OFF)
 option(MI_USE_CXX           "Use the C++ compiler to compile the library" OFF)
-option(MI_SECURE            "Use security mitigations (like guard pages and randomization)" OFF)
+option(MI_SEE_ASM           "Generate assembly files" OFF)
+option(MI_INTERPOSE         "Use interpose to override standard malloc on macOS" ON)
+option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" OFF) # enables interpose as well
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
 option(MI_BUILD_TESTS       "Build test executables" ON)
+option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 
-set(mi_install_dir "lib/mimalloc-${mi_version}")
+include("cmake/mimalloc-config-version.cmake")
 
 set(mi_sources
     src/stats.c
+    src/random.c
     src/os.c
-    src/memory.c
+    src/arena.c
+    src/region.c
     src/segment.c
     src/page.c
     src/alloc.c
@@ -28,47 +32,56 @@ set(mi_sources
     src/options.c
     src/init.c)
 
-# Set default build type
+# -----------------------------------------------------------------------------
+# Converience: set default build type depending on the build directory
+# -----------------------------------------------------------------------------
+
 if (NOT CMAKE_BUILD_TYPE)
-  if ("${CMAKE_BINARY_DIR}" MATCHES ".*(D|d)ebug$")
-    message(STATUS "No build type selected, default to *** Debug ***")
+  if ("${CMAKE_BINARY_DIR}" MATCHES ".*(D|d)ebug$" OR  MI_DEBUG_FULL MATCHES "ON")
+    message(STATUS "No build type selected, default to: Debug")
     set(CMAKE_BUILD_TYPE "Debug")
   else()
-    message(STATUS "No build type selected, default to *** Release ***")
+    message(STATUS "No build type selected, default to: Release")
     set(CMAKE_BUILD_TYPE "Release")
   endif()
-else()
-  message(STATUS "Build type specified as *** ${CMAKE_BUILD_TYPE} ***")
 endif()
 
 if("${CMAKE_BINARY_DIR}" MATCHES ".*(S|s)ecure$")
+  message(STATUS "Default to secure build")
   set(MI_SECURE "ON")
 endif()
 
-if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
+# -----------------------------------------------------------------------------
+# Process options
+# -----------------------------------------------------------------------------
+
+if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
 endif()
 
-
-# Options
 if(MI_OVERRIDE MATCHES "ON")
   message(STATUS "Override standard malloc (MI_OVERRIDE=ON)")
   if(APPLE)
+    if(MI_OSX_ZONE MATCHES "ON")
+      # use zone's on macOS
+      message(STATUS "  Use malloc zone to override malloc (MI_OSX_ZONE=ON)")
+      list(APPEND mi_sources src/alloc-override-osx.c)
+      if(NOT MI_INTERPOSE MATCHES "ON")
+        message(STATUS "  (enabling INTERPOSE as well since zone's require this)")
+        set(MI_INTERPOSE "ON")
+      endif()
+    endif()
     if(MI_INTERPOSE MATCHES "ON")
       # use interpose on macOS
       message(STATUS "  Use interpose to override malloc (MI_INTERPOSE=ON)")
       list(APPEND mi_defines MI_INTERPOSE)
-    else()
-      # use zone's on macOS
-      message(STATUS "  Use zone's to override malloc (MI_INTERPOSE=OFF)")
-      list(APPEND mi_sources src/alloc-override-osx.c)
     endif()
   endif()
 endif()
 
 if(MI_SECURE MATCHES "ON")
-  message(STATUS "Set secure build (MI_SECURE=ON)")
-  list(APPEND mi_defines MI_SECURE=2)
+  message(STATUS "Set full secure build (MI_SECURE=ON)")
+  list(APPEND mi_defines MI_SECURE=4)
 endif()
 
 if(MI_SEE_ASM MATCHES "ON")
@@ -77,47 +90,50 @@ if(MI_SEE_ASM MATCHES "ON")
 endif()
 
 if(MI_CHECK_FULL MATCHES "ON")
-  message(STATUS "Set debug level to full invariant checking (MI_CHECK_FULL=ON)")
+  message(STATUS "The MI_CHECK_FULL option is deprecated, use MI_DEBUG_FULL instead")
+  set(MI_DEBUG_FULL "ON")
+endif()
+
+if(MI_DEBUG_FULL MATCHES "ON")
+  message(STATUS "Set debug level to full internal invariant checking (MI_DEBUG_FULL=ON)")
   list(APPEND mi_defines MI_DEBUG=3)   # full invariant checking
 endif()
 
 if(MI_USE_CXX MATCHES "ON")
   message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-stress PROPERTIES LANGUAGE CXX )
+  if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang|Clang")
+    list(APPEND mi_cflags -Wno-deprecated)
+  endif()
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Intel")
+    list(APPEND mi_cflags -Kc++)
+  endif()
 endif()
 
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
-  list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas)
+  list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas -fvisibility=hidden)
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+    list(APPEND mi_cflags -Wno-invalid-memory-model)
+  endif()
+endif()
+
+if(CMAKE_C_COMPILER_ID MATCHES "Intel")
+  list(APPEND mi_cflags -Wall -fvisibility=hidden)
+endif()
+
+if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel")
   if(MI_LOCAL_DYNAMIC_TLS MATCHES "ON")
     list(APPEND mi_cflags -ftls-model=local-dynamic)
   else()
     list(APPEND mi_cflags -ftls-model=initial-exec)
   endif()
-  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
-    list(APPEND mi_cflags -Wno-invalid-memory-model)
-    list(APPEND mi_cflags -fvisibility=hidden)
-    list(APPEND mi_cflags -fbranch-target-load-optimize)
-  endif()
 endif()
-
-if(NOT(CMAKE_BUILD_TYPE MATCHES "Release|release|RelWithDebInfo|relwithdebinfo"))
-  string(TOLOWER "${CMAKE_BUILD_TYPE}" build_type)
-  set(mi_basename "mimalloc-${build_type}")
-else()
-  if(MI_SECURE MATCHES "ON")
-    set(mi_basename "mimalloc-secure")
-  else()
-    set(mi_basename "mimalloc")
-  endif()
-endif()
-message(STATUS "Output library name   : ${mi_basename}")
-message(STATUS "Installation directory: ${mi_install_dir}")
 
 # extra needed libraries
 if(WIN32)
-  list(APPEND mi_libraries psapi shell32 user32)
+  list(APPEND mi_libraries psapi shell32 user32 bcrypt)
 else()
   list(APPEND mi_libraries pthread)
   find_library(LIBRT rt)
@@ -127,9 +143,28 @@ else()
 endif()
 
 # -----------------------------------------------------------------------------
-# Main targets
+# Install and output names
 # -----------------------------------------------------------------------------
 
+set(mi_install_dir "${CMAKE_INSTALL_PREFIX}/lib/mimalloc-${mi_version}")
+if(MI_SECURE MATCHES "ON")
+  set(mi_basename "mimalloc-secure")
+else()
+  set(mi_basename "mimalloc")
+endif()
+string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
+if(NOT(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel)$"))
+  set(mi_basename "${mi_basename}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
+endif()
+message(STATUS "")
+message(STATUS "Library base name: ${mi_basename}")
+message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
+message(STATUS "Install directory: ${mi_install_dir}")
+message(STATUS "")
+
+# -----------------------------------------------------------------------------
+# Main targets
+# -----------------------------------------------------------------------------
 
 # shared library
 add_library(mimalloc SHARED ${mi_sources})
@@ -218,7 +253,7 @@ if (MI_BUILD_TESTS MATCHES "ON")
   target_compile_definitions(mimalloc-test-stress PRIVATE ${mi_defines})
   target_compile_options(mimalloc-test-stress PRIVATE ${mi_cflags})
   target_include_directories(mimalloc-test-stress PRIVATE include)
-  target_link_libraries(mimalloc-test-stress PRIVATE mimalloc-static ${mi_libraries})
+  target_link_libraries(mimalloc-test-stress PRIVATE mimalloc ${mi_libraries})
 
   enable_testing()
   add_test(test_api, mimalloc-test-api)
@@ -231,7 +266,7 @@ endif()
 if (MI_OVERRIDE MATCHES "ON")
   target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)
   if(NOT WIN32)
-    # It is only possible to override malloc on Windows when building as a DLL. (src/alloc-override.c)
+    # It is only possible to override malloc on Windows when building as a DLL.
     target_compile_definitions(mimalloc-static PRIVATE MI_MALLOC_OVERRIDE)
     target_compile_definitions(mimalloc-obj PRIVATE MI_MALLOC_OVERRIDE)
   endif()

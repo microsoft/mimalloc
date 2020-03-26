@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['extended_20functions',['Extended Functions',['../group__extended.html',1,'']]]
+  ['c_2b_2b_20wrappers',['C++ wrappers',['../group__cpp.html',1,'']]]
 ];
