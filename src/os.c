@@ -173,6 +173,39 @@ void _mi_os_init() {
 }
 #endif
 
+#if MI_USER_CLEANUP
+static mi_cleanup_fun* user_cleanup = NULL;
+static void* cleanup_udata = NULL;
+static void _mi_call_user_cleanup(void* p, size_t size)
+{
+  if(user_cleanup)
+    user_cleanup(cleanup_udata, p, size);
+#if (MI_DEBUG>1)
+  else
+    memset(p, 0, size);
+#endif
+}
+#else
+static void _mi_call_user_cleanup(void* p, size_t size)
+{
+  (void)p;
+  (void)size;
+#if (MI_DEBUG>1)
+  if (MI_SECURE==0)
+    memset(p, 0, size); // pretend it is eagerly reset
+#endif
+}
+#endif
+
+void mi_register_user_cleanup(mi_cleanup_fun* cleanup, void* user_data) mi_attr_noexcept
+{
+  (void)cleanup;
+  (void)user_data;
+#if MI_USER_CLEANUP
+  user_cleanup = cleanup;
+  cleanup_udata = user_data;
+#endif
+}
 
 /* -----------------------------------------------------------
   Raw allocation on Windows (VirtualAlloc) and Unix's (mmap).
@@ -182,6 +215,8 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
 {
   if (addr == NULL || size == 0) return true; // || _mi_os_is_huge_reserved(addr)
   bool err = false;
+  if(was_committed)
+    _mi_call_user_cleanup(addr, size);
 #if defined(_WIN32)
   err = (VirtualFree(addr, 0, MEM_RELEASE) == 0);
 #elif defined(__wasi__)
@@ -689,11 +724,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
         else _mi_stat_decrease(&stats->reset, csize);
   if (!reset) return true; // nothing to do on unreset!
 
-  #if (MI_DEBUG>1)
-  if (MI_SECURE==0) {
-    memset(start, 0, csize); // pretend it is eagerly reset
-  }
-  #endif
+  _mi_call_user_cleanup(start, csize);
 
 #if defined(_WIN32)
   // Testing shows that for us (on `malloc-large`) MEM_RESET is 2x faster than DiscardVirtualMemory

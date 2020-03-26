@@ -136,6 +136,9 @@ mi_decl_export void mi_register_output(mi_output_fun* out, void* arg) mi_attr_no
 typedef void (mi_cdecl mi_error_fun)(int err, void* arg);
 mi_decl_export void mi_register_error(mi_error_fun* fun, void* arg);
 
+typedef void (mi_cleanup_fun)(void* user_data, void* p, size_t size);
+mi_decl_export void mi_register_user_cleanup(mi_cleanup_fun* cleanup, void* user_data) mi_attr_noexcept;
+
 mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
 mi_decl_export int  mi_version(void)          mi_attr_noexcept;
 mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
