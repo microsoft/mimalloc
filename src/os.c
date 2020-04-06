@@ -866,6 +866,8 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
     params[0].ULong = (unsigned)numa_node;
     return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, params, 1);
   }
+  #else
+    UNUSED(numa_node);
   #endif
   // otherwise use regular virtual alloc on older windows
   return VirtualAlloc(addr, size, flags, PAGE_READWRITE);

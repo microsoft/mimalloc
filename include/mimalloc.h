@@ -42,13 +42,18 @@ terms of the MIT license. A copy of the license can be found in the file
   #else
     #define mi_decl_export              __declspec(dllimport)
   #endif
-  #if (_MSC_VER >= 1900) && !defined(__EDG__)
-    #define mi_decl_restrict            __declspec(allocator) __declspec(restrict)
+  #if defined(__MINGW32__)
+    #define mi_decl_restrict
+    #define mi_attr_malloc              __attribute__((malloc))
   #else
-    #define mi_decl_restrict            __declspec(restrict)
+    #if (_MSC_VER >= 1900) && !defined(__EDG__)
+      #define mi_decl_restrict          __declspec(allocator) __declspec(restrict)
+    #else
+      #define mi_decl_restrict          __declspec(restrict)
+    #endif
+    #define mi_attr_malloc
   #endif
   #define mi_cdecl                      __cdecl
-  #define mi_attr_malloc
   #define mi_attr_alloc_size(s)
   #define mi_attr_alloc_size2(s1,s2)
   #define mi_attr_alloc_align(p)

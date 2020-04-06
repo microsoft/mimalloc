@@ -168,7 +168,7 @@ void heap_thread_free_large_worker() {
 
 void heap_thread_free_large() {
   for (int i = 0; i < 100; i++) {
-    shared_p = mi_malloc(2*1024*1024 + 1);
+    shared_p = mi_malloc_aligned(2*1024*1024 + 1, 8);
     auto t1 = std::thread(heap_thread_free_large_worker);
     t1.join();
   }
