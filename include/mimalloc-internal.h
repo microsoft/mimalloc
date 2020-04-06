@@ -755,9 +755,13 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
 // The base version declares the source parameter as MI_SOURCE_XPARAM and can pass it through as MI_SOURCE_XARG
 //
 // The big preprocessor macros that follow emit the 5 declarations with default
-// implementations for the first 4 versions so only the 5th needs to be implemented.
+// implementations for the first 4 versions so only the 5th (base version) needs to be implemented.
+//
+// For example, we write:
+// > MI_ALLOC_API1(inline mi_decl_restrict void*, malloc_small, mi_heap_t*, heap, size_t, size) { ... }
+// to implement `malloc_small` where we can use `MI_SOURCE_XARG` to pass on the possible source argument.
 // -------------------------------------------------------------------------------------------------------------
-#define MI_DEBUG_ONLY(x)  x  // we still allow dbg entry points in release mode to enable linking with a release build
+#define MI_DEBUG_ONLY(x)  x  // we still emit dbg entry points in release mode to enable linking with a release build
 
 #define MI_ALLOC_API1(tp,name,tp0,arg0,tp1,arg1) \
    static tp mi_base_##name(tp0 arg0, tp1 arg1  MI_SOURCE_XPARAM) mi_attr_noexcept; \
@@ -800,6 +804,9 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
    static tp mi_base_##name(tp0 arg0, tp1 arg1, tp2 arg2, tp3 arg3, tp4 arg4, tp5 arg5  MI_SOURCE_XPARAM) mi_attr_noexcept
 
 
+// MI_NEW_API
+// These are for C++ `new` entry points that don't need entries with an explicit heap parameter (and can raise exceptions)
+
 #define MI_NEW_API1(tp,name,tp1,arg1) \
    static tp mi_base_##name(tp1 arg1  MI_SOURCE_XPARAM); \
    tp mi_##name(tp1 arg1) { return mi_base_##name(arg1  MI_SOURCE_XRET()); } \
@@ -818,7 +825,9 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
    MI_DEBUG_ONLY(tp dbg_mi_##name(tp1 arg1, tp2 arg2, tp3 arg3, mi_source_t __mi_source) { (void)__mi_source; return mi_base_##name(arg1, arg2, arg3  MI_SOURCE_XARG); }) \
    static tp mi_base_##name(tp1 arg1, tp2 arg2, tp3 arg3  MI_SOURCE_XPARAM)
 
-
+// MI_SOURCE_API
+// These are for C API entry points that don't need entries with an explicit heap parameter (like `aligned_alloc`)
+// These are marked as noexcept.
 
 #define MI_SOURCE_API1(tp,name,tp1,arg1) \
    static tp mi_base_##name(tp1 arg1  MI_SOURCE_XPARAM); \

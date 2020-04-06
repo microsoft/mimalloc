@@ -495,13 +495,13 @@ template<class T1, class T2> bool operator!=(const mi_stl_allocator<T1>&, const 
 #else
 #define mi_return_address()     NULL
 #endif
-#define MI_SOURCE_XPARAM        , mi_source_t __mi_source
-#define MI_SOURCE_XARG          , __mi_source
-#define MI_SOURCE_XRET()        , mi_source_ret(mi_return_address())
-#define MI_SOURCE_XLOC()        , mi_source_loc(__FILE__,__LINE__)
-#define MI_SOURCE_ARG(fun,...)  dbg_##fun(__VA_ARGS__  MI_SOURCE_XARG)
-#define MI_SOURCE_RET(fun,...)  dbg_##fun(__VA_ARGS__  MI_SOURCE_XRET())
-#define MI_SOURCE_LOC(fun,...)  dbg_##fun(__VA_ARGS__  MI_SOURCE_XLOC())
+#define MI_SOURCE_XPARAM        , mi_source_t __mi_source                  // declare the extra source parameter
+#define MI_SOURCE_XARG          , __mi_source                              // pass the extra source parameter as a source argument
+#define MI_SOURCE_XRET()        , mi_source_ret(mi_return_address())       // pass the return address as a source argument
+#define MI_SOURCE_XLOC()        , mi_source_loc(__FILE__,__LINE__)         // pass the current source location as a source argument
+#define MI_SOURCE_ARG(fun,...)  dbg_##fun(__VA_ARGS__  MI_SOURCE_XARG)     // call the debug entry with the given source argument
+#define MI_SOURCE_RET(fun,...)  dbg_##fun(__VA_ARGS__  MI_SOURCE_XRET())   // call the debug entry with the return address as the source
+#define MI_SOURCE_LOC(fun,...)  dbg_##fun(__VA_ARGS__  MI_SOURCE_XLOC())   // call the debug entry with the current source location as the source 
 #endif
 
 #if !defined(NDEBUG) && !defined(MI_DEBUG_NO_SOURCE_LOC)

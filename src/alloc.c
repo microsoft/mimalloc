@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <string.h>  // memset, memcpy, strlen
 #include <stdlib.h>  // malloc, exit
+#include <stdio.h>   // snprintf
 #include <wchar.h>   // wcslen
 
 #define MI_IN_ALLOC_C
@@ -240,7 +241,9 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
   size_t size;
   size_t wrong;
   if (!mi_verify_padding(page,block,&size,&wrong)) {
-    _mi_page_block_error_message(EFAULT, page, block, "buffer overflow in heap block (write after %zu bytes)" );
+    char msg[80];
+    snprintf(msg, 79, "buffer overflow in heap block (write after %zu bytes)", (wrong > 0 ? wrong - 1 : wrong));
+    _mi_page_block_error_message(EFAULT, page, block, msg );
   }
 }
 
