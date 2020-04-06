@@ -34,7 +34,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_decl_nodiscard 
 #endif 
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) || defined(__MINGW32__)
   #if !defined(MI_SHARED_LIB)
     #define mi_decl_export
   #elif defined(MI_SHARED_LIB_EXPORT)
