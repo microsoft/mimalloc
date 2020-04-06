@@ -474,15 +474,16 @@ size_t mi_usable_size(const void* p) mi_attr_noexcept {
   if (p==NULL) return 0;
   const mi_segment_t* const segment = _mi_ptr_segment(p);
   const mi_page_t* const page = _mi_segment_page_of(segment, p);
-  const mi_block_t* const block = (const mi_block_t*)p;
-  const size_t size = mi_page_usable_size_of(page, block);
+  const mi_block_t* block = (const mi_block_t*)p;
   if (mi_unlikely(mi_page_has_aligned(page))) {
-    ptrdiff_t const adjust = (uint8_t*)p - (uint8_t*)_mi_page_ptr_unalign(segment,page,p);
+    block = _mi_page_ptr_unalign(segment, page, p);
+    size_t size = mi_page_usable_size_of(page, block);
+    ptrdiff_t const adjust = (uint8_t*)p - (uint8_t*)block;
     mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);
     return (size - adjust);
   }
   else {
-    return size;
+    return mi_page_usable_size_of(page, block);
   }
 }
 

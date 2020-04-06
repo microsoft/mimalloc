@@ -18,17 +18,18 @@ static void msleep(unsigned long msecs) { Sleep(msecs); }
 static void msleep(unsigned long msecs) { usleep(msecs * 1000UL); }
 #endif
 
-static void heap_no_delete();
-static void heap_late_free();
-static void various_tests();
-static void dangling_ptr_write();
+void heap_thread_free_large(); // issue #221
+void heap_no_delete();         // issue #202
+void heap_late_free();         // issue #204
+void padding_shrink();         // issue #209
+void various_tests();
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
-  // heap_no_delete();  // issue #202
-  // heap_late_free();  // issue #204
-  // dangling_ptr_write();
-  // padding_shrink();  // issue #209
+  heap_thread_free_large();
+  heap_no_delete();  
+  heap_late_free();  
+  padding_shrink();  
   various_tests();
   mi_stats_print(NULL);
   return 0;
@@ -70,7 +71,7 @@ static void various_tests() {
   free(p1);
   free(p2);
   mi_free(s);
-  s[0] = 0;
+  // s[0] = 0;  // test corruption
   Test* t = new Test(42);
   delete t;
   // t = new(std::nothrow) Test(42);   // does not work with overriding :-(
@@ -175,3 +176,16 @@ void padding_shrink(void)
   mi_free(shared_p);
 }
 
+
+// Issue #221
+void heap_thread_free_large_worker() {
+  mi_free(shared_p);
+}
+
+void heap_thread_free_large() {
+  for (int i = 0; i < 100; i++) {
+    shared_p = mi_malloc_aligned(2*1024*1024 + 1, 8);
+    auto t1 = std::thread(heap_thread_free_large_worker);
+    t1.join();
+  }
+}
