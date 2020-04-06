@@ -1015,6 +1015,11 @@ void _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats) {
 Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
 #ifdef WIN32
+#ifdef __MINGW32__  // until mingw updates its headers
+typedef struct _PROCESSOR_NUMBER { WORD Group; BYTE Number; BYTE Reserved; } PROCESSOR_NUMBER, *PPROCESSOR_NUMBER;
+WINBASEAPI VOID WINAPI GetCurrentProcessorNumberEx(_Out_ PPROCESSOR_NUMBER ProcNumber);
+WINBASEAPI BOOL WINAPI GetNumaProcessorNodeEx(_In_  PPROCESSOR_NUMBER Processor, _Out_ PUSHORT NodeNumber);
+#endif
 static size_t mi_os_numa_nodex() {
   PROCESSOR_NUMBER pnum;
   USHORT numa_node = 0;
