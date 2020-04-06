@@ -363,6 +363,7 @@ void mi_register_error(mi_error_fun* fun, void* arg) {
 }
 
 static void mi_call_error_handler(int err) {
+  if (err == 0) return;
   if (mi_error_handler != NULL) {
     mi_error_handler(err, mi_atomic_read_ptr(void, &mi_error_arg));
   }
@@ -372,11 +373,13 @@ static void mi_call_error_handler(int err) {
 }
 
 void _mi_error_message(int err, const char* fmt, ...) {
-  // show detailed error message
-  va_list args;
-  va_start(args, fmt);
-  mi_vshow_error_message(fmt, args);
-  va_end(args);
+  if (fmt != NULL) {
+    // show detailed error message  
+    va_list args;
+    va_start(args, fmt);
+    mi_vshow_error_message(fmt, args);
+    va_end(args);
+  }
   // and call the error handler which may abort (or return normally)
   mi_call_error_handler(err);
 }
@@ -436,20 +439,20 @@ void _mi_page_block_error_message(int err, const mi_page_t* page, const mi_block
   void* return_addr = mi_source_unpack(padding->source, &fname, &lineno);
   if (return_addr != NULL) {
 #ifdef _MSC_VER
-    const char* hint = "  hint: paste the code address in the disassembly window in the debugger to find the source location.\n";
+    const char* hint = "  hint: paste the 'allocated at' address in the disassembly window in the debugger to find the source location.\n";
 #else
     const char* hint = "";
 #endif
-    mi_show_error_message("%s: at block %p of size %zu allocated at 0x%p.\n%s", msg, block, size, return_addr, hint);
+    mi_show_error_message("%s: block %p of size %zu allocated at 0x%p.\n%s", msg, block, size, return_addr, hint);
   }
   else if (fname != NULL) {
-    mi_show_error_message("%s: at block %p of size %zu allocated at %s:%i.\n", msg, block, size, fname, lineno);
+    mi_show_error_message("%s: block %p of size %zu allocated at %s:%i.\n", msg, block, size, fname, lineno);
   }
   else {
-    mi_show_error_message("%s: at block %p of size %zu.\n", msg, block, mi_page_usable_block_size(page));
+    mi_show_error_message("%s: block %p of size %zu.\n", msg, block, mi_page_usable_block_size(page));
   }
 #else
-  mi_show_error_message("%s: at block %p of size %zu.\n", msg, block, mi_page_usable_block_size(page));
+  mi_show_error_message("%s: block %p of size %zu.\n", msg, block, mi_page_usable_block_size(page));
 #endif
   mi_call_error_handler(err);
 }

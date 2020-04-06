@@ -202,6 +202,8 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 // ---------------------------------------------------------------------------
 
 #if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
+static void mi_check_padding(const mi_page_t* page, const mi_block_t* block);
+
 static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
   *bsize = mi_page_usable_block_size(page);
   const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + *bsize);
@@ -242,9 +244,40 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
   size_t size;
   size_t wrong;
   if (!mi_verify_padding(page,block,&size,&wrong)) {
-    char msg[80];
-    snprintf(msg, 79, "buffer overflow in heap block (write after %zu bytes)", (wrong > 0 ? wrong - 1 : wrong));
-    _mi_page_block_error_message(EFAULT, page, block, msg );
+    char msg[128];
+    snprintf(msg, 127, "buffer overflow in heap block (write after > %zu bytes), at", wrong);
+    _mi_page_block_error_message(0, page, block, msg );
+    // Get page info
+    const mi_segment_t* segment = _mi_page_segment(page);
+    size_t psize;
+    const mi_block_t* first = (mi_block_t*)_mi_page_start(segment, page, &psize);
+    const size_t bsize      = mi_page_block_size(page);  // full block size including padding
+    const mi_block_t* last  = (mi_block_t*)((uint8_t*)first + (bsize*page->capacity));
+    #define MI_BLOCK_REL(blk,n) ((mi_block_t*)((uint8_t*)(blk) + ((n)*bsize)))
+    // search down from this block to the first one that is not corrupted
+    const mi_block_t* low;
+    size_t size2;
+    size_t wrong2;
+    for (low = MI_BLOCK_REL(block, -1); low >= first; low = MI_BLOCK_REL(low, -1)) {
+      if (mi_verify_padding(page, low, &size2, &wrong2)) break;
+    }
+    if (low < MI_BLOCK_REL(block,-1)) {
+      snprintf(msg, 127, "the overflow may have originated earlier (write after > %zu bytes), from", wrong + (((uint8_t*)block - (uint8_t*)low)) - bsize);
+      _mi_page_block_error_message(0, page, low, msg);
+    }
+    else {
+      low = MI_BLOCK_REL(block,-1);
+    }
+    // search upward to last uncorrupted block
+    const mi_block_t* hi;
+    for (hi = MI_BLOCK_REL(block,1); hi < last; hi = MI_BLOCK_REL(hi, 1)) {
+      if (mi_verify_padding(page, hi, &size, &wrong)) break;
+    }
+    if (hi > (MI_BLOCK_REL(block, 1))) {
+      snprintf(msg, 127, "the overflow may have spanned further (write after > %zu bytes), upto", ((uint8_t*)hi - (uint8_t*)low) - bsize);
+      _mi_page_block_error_message(0, page, hi, msg);
+    }
+    _mi_error_message(EFAULT,NULL);
   }
 }
 

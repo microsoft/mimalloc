@@ -11,6 +11,7 @@ static void double_free1();
 static void double_free2();
 static void corrupt_free();
 static void block_overflow1();
+static void block_overflow2();
 static void dangling_ptr_write();
 
 int main() {
@@ -20,7 +21,8 @@ int main() {
   // double_free1();
   // double_free2();
   // corrupt_free();
-  block_overflow1();
+  // block_overflow1();
+  block_overflow2();
   // dangling_ptr_write();
 
   void* p1 = malloc(78);
@@ -50,6 +52,21 @@ static void block_overflow1() {
   p[18] = 0;
   free(p);
 }
+
+static void block_overflow2() {
+  void* p[100];
+  for (int i = 0; i < 100; i++) {
+    p[i] = mi_malloc(17);
+  }
+  memset(p[10], 0, 90);
+  memset(p[40], 0, 90);
+  memset(p[79], 0, 70);
+  for (int i = 99; i >= 0; i-=2) {
+    if (i > 0) free(p[i - 1]);
+    free(p[i]);
+  }
+}
+
 
 static void dangling_ptr_write() {
   for (int i = 0; i < 1000; i++) {
