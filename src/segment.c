@@ -1290,7 +1290,7 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
   mi_assert_internal(mi_atomic_read_relaxed(&segment->thread_id)==0);
 
   // claim it and free
-  mi_heap_t* heap = mi_get_default_heap();
+  mi_heap_t* heap = mi_heap_get_default(); // issue #221; don't use the internal get_default_heap as we need to ensure the thread is initialized.
   // paranoia: if this it the last reference, the cas should always succeed
   if (mi_atomic_cas_strong(&segment->thread_id, heap->thread_id, 0)) {
     mi_block_set_next(page, block, page->free);

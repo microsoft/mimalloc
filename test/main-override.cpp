@@ -29,10 +29,12 @@ void various_tests();
 int main() {
   mi_stats_reset();  // ignore earlier allocations
   heap_thread_free_large();
+  /*
   heap_no_delete();  
   heap_late_free();  
   padding_shrink();  
   various_tests();
+  */
   mi_stats_print(NULL);
   return 0;
 }
