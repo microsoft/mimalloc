@@ -20,7 +20,7 @@ static void msleep(unsigned long msecs) { Sleep(msecs); }
 static void msleep(unsigned long msecs) { usleep(msecs * 1000UL); }
 #endif
 
-void heap_thread_free_large(); // issue #212
+void heap_thread_free_large(); // issue #221
 void heap_no_delete();         // issue #202
 void heap_late_free();         // issue #204
 void padding_shrink();         // issue #209
