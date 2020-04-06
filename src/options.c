@@ -390,11 +390,15 @@ void _mi_error_message(int err, const char* fmt, ...) {
 // lsb=0:  bit 63-01: return address
 // -----------------------------------------------------------------------------------------------
 #ifndef NDEBUG
-static const char* mi_debug_fname_base = "mimalloc_fname_base";
+static const char* mi_debug_fname_base    = "mimalloc_fname_base";
+static const char* mi_debug_fname_invalid = "<mimalloc: invalid source name (due to corruption)>";
 
 #define MI_FNAME_SHIFT  16
 #define MI_LINE_SHIFT   (MI_FNAME_SHIFT + MI_INTPTR_SHIFT)
 #define MI_LINE_MASK    ((1L << MI_LINE_SHIFT) - 1)
+
+static volatile _Atomic(uintptr_t) mi_fname_min = (uintptr_t)&mi_debug_fname_base;
+static volatile _Atomic(uintptr_t) mi_fname_max = (uintptr_t)&mi_debug_fname_base;
 
 mi_source_t mi_source_ret(void* return_address) {
   mi_source_t source = { ((long long)return_address << 1) };
@@ -402,21 +406,50 @@ mi_source_t mi_source_ret(void* return_address) {
 }
 
 mi_source_t mi_source_loc(const char* fname, int lineno ) {
+  // extend the range? (the range is used to check later if a pointer points into our data segment)
+  uintptr_t ufname = (uintptr_t)fname;
+  uintptr_t min;
+  do {
+    min = mi_atomic_read_relaxed(&mi_fname_min);
+  } while (ufname < min && !mi_atomic_cas_weak(&mi_fname_min, ufname, min));
+  uintptr_t max;
+  do {
+    max = mi_atomic_read_relaxed(&mi_fname_max);
+  } while (ufname > max && !mi_atomic_cas_weak(&mi_fname_max, ufname, max));
+  // encode
   long long delta = fname - mi_debug_fname_base;
   mi_assert_internal(((delta << MI_FNAME_SHIFT) >> MI_FNAME_SHIFT) == delta);
   mi_source_t source = { ((((long long)delta) << MI_FNAME_SHIFT) | ((lineno << 1) & MI_LINE_MASK) | 1) };
   return source;
 }
 
-void* mi_source_unpack(mi_source_t source, const char** fname, int* lineno) {
-  *fname = NULL;
-  *lineno = 0;
+void* mi_source_unpack(mi_source_t source, const char** pfname, int* plineno) {
+  *pfname = NULL;
+  *plineno = 0;
   if (source.src == 0) {
     return NULL;
   }
   else if ((source.src & 1) == 1) {
-    *fname = (const char*)(mi_debug_fname_base + ((source.src >> MI_LINE_SHIFT) << MI_INTPTR_SHIFT) );
-    *lineno = (source.src & MI_LINE_MASK) >> 1;
+    const char* fname = (const char*)(mi_debug_fname_base + ((source.src >> MI_LINE_SHIFT) << MI_INTPTR_SHIFT) );
+    const int lineno  = (source.src & MI_LINE_MASK) >> 1;
+    // check if the file pointer is in range in case it was corrupted
+    uintptr_t ufname = (uintptr_t)(fname);
+    if (ufname >= mi_atomic_read_relaxed(&mi_fname_min) && ufname <= mi_atomic_read_relaxed(&mi_fname_max)) {
+      // in our range, check too if it is not pointing into arbitrary data; i.e. no longer than 256 characters, and no strange characters
+      bool ok = false;
+      for (int i = 0; i < 256; i++) {
+        const char c = fname[i];
+        if (c == 0) { ok = true;  break; }
+        else if (c < ' ' || c > '~') { break; } // strange characters
+      }
+      if (ok) {
+        *pfname = fname;  
+      }
+    }
+    // check line number range
+    if (lineno > 0 && lineno <= 1000000L && *pfname != NULL) {
+      *plineno = lineno;  
+    }
     return NULL;
   }
   else {
