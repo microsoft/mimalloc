@@ -823,7 +823,7 @@ and possibly associated with a specific NUMA node. (use `numa_node>=0`)
 -----------------------------------------------------------------------------*/
 #define MI_HUGE_OS_PAGE_SIZE  (GiB)
 
-#if defined(WIN32) && (MI_INTPTR_SIZE >= 8)
+#if defined(_WIN32) && (MI_INTPTR_SIZE >= 8)
 static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
 {
   mi_assert_internal(size%GiB == 0);
@@ -1016,12 +1016,12 @@ void _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats) {
 /* ----------------------------------------------------------------------------
 Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
-#ifdef WIN32
-#ifdef __MINGW32__  // until mingw updates its headers
-typedef struct _PROCESSOR_NUMBER { WORD Group; BYTE Number; BYTE Reserved; } PROCESSOR_NUMBER, *PPROCESSOR_NUMBER;
-WINBASEAPI VOID WINAPI GetCurrentProcessorNumberEx(_Out_ PPROCESSOR_NUMBER ProcNumber);
-WINBASEAPI BOOL WINAPI GetNumaProcessorNodeEx(_In_  PPROCESSOR_NUMBER Processor, _Out_ PUSHORT NodeNumber);
-#endif
+#ifdef _WIN32
+  #if (_WIN32_WINNT < 0x601)  // before Win7
+  typedef struct _PROCESSOR_NUMBER { WORD Group; BYTE Number; BYTE Reserved; } PROCESSOR_NUMBER, *PPROCESSOR_NUMBER;
+  WINBASEAPI VOID WINAPI GetCurrentProcessorNumberEx(_Out_ PPROCESSOR_NUMBER ProcNumber);
+  WINBASEAPI BOOL WINAPI GetNumaProcessorNodeEx(_In_  PPROCESSOR_NUMBER Processor, _Out_ PUSHORT NodeNumber);
+  #endif
 static size_t mi_os_numa_nodex() {
   PROCESSOR_NUMBER pnum;
   USHORT numa_node = 0;
