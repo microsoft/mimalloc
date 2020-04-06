@@ -213,7 +213,8 @@ static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* bloc
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block) {
   size_t bsize;
   size_t delta;
-  bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
+  bool ok = mi_page_decode_padding(page, block, &delta, &bsize);  
+  if (!ok) { mi_check_padding(page, block); }
   mi_assert_internal(ok); mi_assert_internal(delta <= bsize);
   return (ok ? bsize - delta : 0);
 }

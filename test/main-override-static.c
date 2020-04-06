@@ -17,9 +17,9 @@ int main() {
   mi_version();
 
   // detect double frees and heap corruption
-  double_free1();
-  double_free2();
-  corrupt_free();
+  // double_free1();
+  // double_free2();
+  // corrupt_free();
   block_overflow1();
   // dangling_ptr_write();
 
@@ -98,8 +98,8 @@ static void double_free2() {
 
 
 // Try to corrupt the heap through buffer overflow
-#define N   256
-#define SZ  64
+#define N   1024
+#define SZ  40
 
 static void corrupt_free() {
   void* p[N];
@@ -115,12 +115,12 @@ static void corrupt_free() {
   // try to corrupt the free list
   for (int i = 0; i < N; i++) {
     if (p[i] != NULL) {
-      memset(p[i], 0, SZ+8);
+      memset(p[i], 0, SZ+32);
     }
   }
   // allocate more.. trying to trigger an allocation from a corrupted entry
   // this may need many allocations to get there (if at all)
-  for (int i = 0; i < 4096; i++) {
+  for (int i = 0; i < 4*4096; i++) {
     malloc(SZ);
   }
 }
