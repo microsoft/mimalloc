@@ -905,6 +905,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) 
 }
 #else
 static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) {
+  UNUSED(addr); UNUSED(size); UNUSED(numa_node);
   return NULL;
 }
 #endif
@@ -940,6 +941,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
 }
 #else
 static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
+  UNUSED(pages);
   if (total_size != NULL) *total_size = 0;
   return NULL;
 }
