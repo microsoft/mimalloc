@@ -44,7 +44,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
     mi_heap_stat_increase(heap, normal[bin], 1);
   }
 #endif
-#if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
+#if (MI_PADDING > 0) && defined(MI_ENCODE_FREELIST)
   mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
   ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
   mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
@@ -203,7 +203,7 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 // Check for heap block overflow by setting up padding at the end of the block
 // ---------------------------------------------------------------------------
 
-#if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
+#if (MI_PADDING>0) && defined(MI_ENCODE_FREELIST)
 static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
   *bsize = mi_page_usable_block_size(page);
   const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + *bsize);
