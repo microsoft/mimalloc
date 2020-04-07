@@ -10,19 +10,21 @@
 static void double_free1();
 static void double_free2();
 static void corrupt_free();
+static void block_overflow1();
 
 int main() {
   mi_version();
-  
+
   // detect double frees and heap corruption
-  //double_free1();
-  //double_free2();
-  //corrupt_free();
+  // double_free1();
+  // double_free2();
+  // corrupt_free();
+  // block_overflow1();
 
   void* p1 = malloc(78);
   void* p2 = malloc(24);
   free(p1);
-  p1 = malloc(8);
+  p1 = mi_malloc(8);
   //char* s = strdup("hello\n");
   free(p2);
   p2 = malloc(16);
@@ -41,6 +43,11 @@ int main() {
   return 0;
 }
 
+static void block_overflow1() {
+  uint8_t* p = (uint8_t*)mi_malloc(17);
+  p[18] = 0;
+  free(p);
+}
 
 // The double free samples come ArcHeap [1] by Insu Yun (issue #161)
 // [1]: https://arxiv.org/pdf/1903.00503.pdf

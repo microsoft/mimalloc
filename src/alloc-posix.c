@@ -9,7 +9,6 @@ terms of the MIT license. A copy of the license can be found in the file
 // mi prefixed publi definitions of various Posix, Unix, and C++ functions
 // for convenience and used when overriding these functions.
 // ------------------------------------------------------------------------
-
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
@@ -47,33 +46,38 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
   // Note: The spec dictates we should not modify `*p` on an error. (issue#27)
   // <http://man7.org/linux/man-pages/man3/posix_memalign.3.html>
   if (p == NULL) return EINVAL;
-  if (alignment % sizeof(void*) != 0) return EINVAL;      // natural alignment
+  if (alignment % sizeof(void*) != 0) return EINVAL;   // natural alignment
   if (!_mi_is_power_of_two(alignment)) return EINVAL;  // not a power of 2
-  void* q = mi_malloc_aligned(size, alignment);
+  void* q = (mi_malloc_satisfies_alignment(alignment, size) ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
   if (q==NULL && size != 0) return ENOMEM;
+  mi_assert_internal(((uintptr_t)q % alignment) == 0);
   *p = q;
   return 0;
 }
 
-void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept {
-  return mi_malloc_aligned(size, alignment);
+mi_decl_restrict void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept {
+  void* p = (mi_malloc_satisfies_alignment(alignment,size) ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
+  mi_assert_internal(((uintptr_t)p % alignment) == 0);
+  return p;
 }
 
-void* mi_valloc(size_t size) mi_attr_noexcept {
-  return mi_malloc_aligned(size, _mi_os_page_size());
+mi_decl_restrict void* mi_valloc(size_t size) mi_attr_noexcept {
+  return mi_memalign( _mi_os_page_size(), size );
 }
 
-void* mi_pvalloc(size_t size) mi_attr_noexcept {
+mi_decl_restrict void* mi_pvalloc(size_t size) mi_attr_noexcept {
   size_t psize = _mi_os_page_size();
   if (size >= SIZE_MAX - psize) return NULL; // overflow
-  size_t asize = ((size + psize - 1) / psize) * psize;
+  size_t asize = _mi_align_up(size, psize);
   return mi_malloc_aligned(asize, psize);
 }
 
-void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept {
+mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept {
   if (alignment==0 || !_mi_is_power_of_two(alignment)) return NULL; 
   if ((size&(alignment-1)) != 0) return NULL; // C11 requires integral multiple, see <https://en.cppreference.com/w/c/memory/aligned_alloc>
-  return mi_malloc_aligned(size, alignment);
+  void* p = (mi_malloc_satisfies_alignment(alignment, size) ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
+  mi_assert_internal(((uintptr_t)p % alignment) == 0);
+  return p;
 }
 
 void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  // BSD
@@ -88,7 +92,7 @@ void* mi__expand(void* p, size_t newsize) mi_attr_noexcept {  // Microsoft
   return res;
 }
 
-unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept {
+mi_decl_restrict unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept {
   if (s==NULL) return NULL;
   size_t len;
   for(len = 0; s[len] != 0; len++) { }
@@ -100,7 +104,7 @@ unsigned short* mi_wcsdup(const unsigned short* s) mi_attr_noexcept {
   return p;
 }
 
-unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexcept {
+mi_decl_restrict unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexcept {
   return (unsigned char*)mi_strdup((const char*)s);
 }
 
