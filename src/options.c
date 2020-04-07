@@ -390,9 +390,7 @@ void _mi_error_message(int err, const char* fmt, ...) {
 // lsb=1:  bit 63-19: relative file name char* (to `mi_fname_base`), bit 18-1: line number
 // lsb=0:  bit 63-01: return address
 // -----------------------------------------------------------------------------------------------
-#ifndef NDEBUG
 static const char* mi_debug_fname_base    = "mimalloc_fname_base";
-static const char* mi_debug_fname_invalid = "<mimalloc: invalid source name (due to corruption)>";
 
 #define MI_FNAME_SHIFT  16
 #define MI_LINE_SHIFT   (MI_FNAME_SHIFT + MI_INTPTR_SHIFT)
@@ -459,14 +457,14 @@ void* mi_source_unpack(mi_source_t source, const char** pfname, int* plineno) {
     return ((void*)(source.src >> 1));
   }
 }
-#endif
+
 
 // -----------------------------------------------------------------------------------------------
 // Error message for a specific heap block
 // -----------------------------------------------------------------------------------------------
 
 void _mi_page_block_error_message(int err, const mi_page_t* page, const mi_block_t* block, const char* msg) {
-#if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
+#if (MI_PADDING>0) && defined(MI_ENCODE_FREELIST)
   const size_t bsize = mi_page_usable_block_size(page);
   const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + bsize);  
   const size_t size = (padding->delta <= bsize ? bsize - padding->delta : bsize);

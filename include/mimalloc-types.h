@@ -57,7 +57,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
-#if (MI_SECURE>=3 || MI_DEBUG>=1 || defined(MI_PADDING))
+#if (MI_SECURE>=3 || MI_DEBUG>=1 || MI_PADDING > 0)
 #define MI_ENCODE_FREELIST  1
 #endif
 
@@ -318,8 +318,8 @@ typedef struct mi_random_cxt_s {
   int      output_available;
 } mi_random_ctx_t;
 
-#define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1)
 
+#define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1)
 
 // A heap owns a set of pages.
 struct mi_heap_s {
