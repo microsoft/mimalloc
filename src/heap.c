@@ -561,3 +561,46 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_vis
   mi_visit_blocks_args_t args = { visit_blocks, visitor, arg };
   return mi_heap_visit_areas(heap, &mi_heap_area_visitor, &args);
 }
+
+// -----------------------------------------------------------------------
+// Print heap blocks in JSON format
+// -----------------------------------------------------------------------
+
+typedef struct mi_print_json_s {
+  size_t area_count;
+  size_t block_count;
+  mi_output_fun* out;
+  void* out_arg;
+} mi_print_json_t;
+
+static bool mi_heap_print_json_visit(const mi_heap_t* heap, const mi_heap_area_t* area, const mi_block_info_t* info, void* arg) {
+  mi_print_json_t* varg = (mi_print_json_t*)(arg);
+  if (info==NULL) {
+    _mi_fprintf(varg->out, varg->out_arg, varg->area_count==0 ? " {" : "  ]\n}\n,{");
+    varg->area_count++;
+    varg->block_count = 0;
+    _mi_fprintf(varg->out, varg->out_arg, "\"page\": %zu, \"start\": 0x%p, \"block_size\": %zu, \"used_size\": %zu,\n  \"reserved\": %zu, \"committed\": %zu,", varg->area_count, area->blocks, area->block_size, area->used, area->reserved, area->committed);
+    _mi_fprintf(varg->out, varg->out_arg, " \"blocks\": [\n");
+  }
+  else {
+    _mi_fprintf(varg->out, varg->out_arg, varg->block_count==0 ? "   {" : "  ,{");
+    varg->block_count++;
+    _mi_fprintf(varg->out, varg->out_arg, "\"block\": 0x%p, \"valid\": %s, \"size\": %zu, \"usable_size\": %zu, \"allocated_size\": %zu,\n    ", info->block, info->valid ? "true" : "false", info->size, info->usable_size, info->allocated_size);
+    int lineno;
+    const char* fname;
+    void* ret = mi_source_unpack(info->source, &fname, &lineno);
+    if (fname!=NULL) _mi_fprintf(varg->out, varg->out_arg, "\"source\": \"%s:%i\" }\n", fname, lineno);
+    else if (ret != NULL) _mi_fprintf(varg->out, varg->out_arg, "\"source\": \"(%p)\" }\n", ret);
+    else _mi_fprintf(varg->out, varg->out_arg, "\"source\": \"\" }\n");
+  }
+  return true;
+}
+
+void mi_heap_print_json(mi_heap_t* heap, mi_output_fun* out, void* arg) {
+  if (heap==NULL) heap = mi_heap_get_default();
+  mi_print_json_t info = { 0, 0, out, arg };
+  _mi_fprintf(info.out, info.out_arg, "{ \"heap\": 0x%p, \"thread_id\": 0x%zx, \"page_count\": %zu", heap, heap->thread_id, heap->page_count);
+  _mi_fprintf(info.out, info.out_arg, ", \"pages\": [\n");
+  mi_heap_visit_blocks(heap, true, &mi_heap_print_json_visit, &info);
+  _mi_fprintf(info.out, info.out_arg, info.area_count==0 ? "]\n" : "  ] }\n] }\n");
+}

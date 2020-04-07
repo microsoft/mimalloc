@@ -431,6 +431,7 @@ void* mi_source_unpack(mi_source_t source, const char** pfname, int* plineno) {
     return NULL;
   }
   else if ((source.src & 1) == 1) {
+#if (MI_SECURE==0)  // do not try to unpack the pointer if in secure mode as we cannot guarantee its correctness.
     const char* fname = (const char*)(mi_debug_fname_base + ((source.src >> MI_LINE_SHIFT) << MI_INTPTR_SHIFT) );
     const int lineno  = (source.src & MI_LINE_MASK) >> 1;
     // check if the file pointer is in range in case it was corrupted
@@ -451,6 +452,7 @@ void* mi_source_unpack(mi_source_t source, const char** pfname, int* plineno) {
     if (lineno > 0 && lineno <= 1000000L && *pfname != NULL) {
       *plineno = lineno;  
     }
+#endif
     return NULL;
   }
   else {
