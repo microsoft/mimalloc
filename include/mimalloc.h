@@ -338,6 +338,7 @@ typedef enum mi_option_e {
   mi_option_eager_commit_delay,
   mi_option_reset_delay,
   mi_option_use_numa_nodes,
+  mi_option_debug_extra_padding,
   mi_option_os_tag,
   mi_option_max_errors,
   _mi_option_last,

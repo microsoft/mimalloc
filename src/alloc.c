@@ -19,17 +19,19 @@ terms of the MIT license. A copy of the license can be found in the file
 #undef MI_IN_ALLOC_C
 
 
-// ------------------------------------------------------
+// ----------------------------------------------------------------------------------------
 // Allocation
-// ------------------------------------------------------
+// Eventually all allocations pass through `mi_heap_malloc` and `mi_heap_malloc_small`,
+// and those end up at `_mi_page_malloc` (sometimes via `_mi_malloc_generic`).
+// ----------------------------------------------------------------------------------------
 
 // Fast allocation in a page: just pop from the free list.
 // Fall back to generic allocation only if the list is empty.
-extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size MI_SOURCE_XPARAM) mi_attr_noexcept {
+extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size MI_EXTRA_PADDING_XPARAM MI_SOURCE_XPARAM) mi_attr_noexcept {
   mi_assert_internal(page->xblock_size==0||mi_page_block_size(page) >= size);
   mi_block_t* block = page->free;
   if (mi_unlikely(block == NULL)) {
-    return _mi_malloc_generic(heap, size  MI_SOURCE_XARG); // slow path
+    return _mi_malloc_generic(heap, size  MI_EXTRA_PADDING_XARG  MI_SOURCE_XARG); // slow path
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   // pop from the free list
@@ -50,13 +52,13 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 #endif
 #if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
   mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
-  ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
-  mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
+  ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - __extra_padding));
+  mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - __extra_padding + delta));
   padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
   padding->delta  = (uint32_t)(delta);
   padding->source = __mi_source;
   uint8_t* fill = (uint8_t*)padding - delta;
-  const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
+  const size_t maxpad = (delta > 4096 ? 4096 : delta); // set at most N initial padding bytes
   for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
 #endif
   return block;
@@ -68,13 +70,17 @@ MI_ALLOC_API1(inline mi_decl_restrict void*, malloc_small, mi_heap_t*, heap, siz
   mi_assert(heap!=NULL);
   mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
   mi_assert(size <= MI_SMALL_SIZE_MAX);
+  const size_t __extra_padding = mi_extra_padding();
   #if (MI_PADDING)
   if (size == 0) {
     size = sizeof(void*);
   }
+  if ((size + __extra_padding) > MI_SMALL_SIZE_MAX) {
+    return MI_SOURCE_ARG(mi_heap_malloc, heap, size);  // call base malloc in case we were invoked directly
+  }
   #endif
-  mi_page_t* page = _mi_heap_get_free_small_page(heap,size + MI_PADDING_SIZE);
-  void* p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE  MI_SOURCE_XARG);
+  mi_page_t* page = _mi_heap_get_free_small_page(heap,size + __extra_padding);
+  void* p = _mi_page_malloc(heap, page, size + __extra_padding  MI_EXTRA_PADDING_XARG  MI_SOURCE_XARG);
   mi_assert_internal(p==NULL || mi_usable_size(p) >= size);
   #if MI_STAT>1
   if (p != NULL) {
@@ -89,13 +95,14 @@ MI_ALLOC_API1(inline mi_decl_restrict void*, malloc_small, mi_heap_t*, heap, siz
 // The main allocation function
 MI_ALLOC_API1(inline mi_decl_restrict void*, malloc, mi_heap_t*, heap, size_t, size)
 {
-  if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
+  const size_t __extra_padding = mi_extra_padding();
+  if (mi_likely(size <= MI_SMALL_SIZE_MAX - __extra_padding && __extra_padding < MI_SMALL_SIZE_MAX)) {  // careful for overflow
     return mi_base_malloc_small(heap, size  MI_SOURCE_XARG);
   }
   else {
     mi_assert(heap!=NULL);
-    mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
-    void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE  MI_SOURCE_XARG); // note: size can overflow but it is detected in malloc_generic
+    mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local    
+    void* const p = _mi_malloc_generic(heap, size + __extra_padding  MI_EXTRA_PADDING_XARG  MI_SOURCE_XARG); // note: size + __extra_padding can overflow but it is detected in malloc_generic
     mi_assert_internal(p == NULL || mi_usable_size(p) >= size);
     #if MI_STAT>1
     if (p != NULL) {

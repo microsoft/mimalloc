@@ -24,7 +24,8 @@ static mi_decl_restrict void* mi_base_malloc_zero_aligned_at(mi_heap_t* const he
   const uintptr_t align_mask = alignment-1;  // for any x, `(x & align_mask) == (x % alignment)`
   
   // try if there is a small block available with just the right alignment
-  const size_t padsize = size + MI_PADDING_SIZE;
+  const size_t __extra_padding = mi_extra_padding();
+  const size_t padsize = size + __extra_padding;        // safe for overflow as size <= PTRDIFF_MAX 
   if (mi_likely(padsize <= MI_SMALL_SIZE_MAX)) {
     mi_page_t* page = _mi_heap_get_free_small_page(heap,padsize);
     const bool is_aligned = (((uintptr_t)page->free+offset) & align_mask)==0;
@@ -33,7 +34,7 @@ static mi_decl_restrict void* mi_base_malloc_zero_aligned_at(mi_heap_t* const he
       #if MI_STAT>1
       mi_heap_stat_increase( heap, malloc, size);
       #endif
-      void* p = _mi_page_malloc(heap,page,padsize  MI_SOURCE_XARG); // TODO: inline _mi_page_malloc
+      void* p = _mi_page_malloc(heap,page,padsize  MI_EXTRA_PADDING_XARG  MI_SOURCE_XARG); // TODO: inline _mi_page_malloc
       mi_assert_internal(p != NULL);
       mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
       if (zero) _mi_block_zero_init(page,p,size);
