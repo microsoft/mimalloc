@@ -33,7 +33,7 @@ int main() {
   free(p2);
   p2 = malloc(16);
   p1 = realloc(p1, 32);
-  mi_heap_print_json(NULL,NULL,NULL);
+  mi_heap_check_leak(NULL,NULL,NULL);
   free(p1);
   free(p2);
   //free(s);

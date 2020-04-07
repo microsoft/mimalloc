@@ -574,6 +574,7 @@ typedef struct mi_print_json_s {
 } mi_print_json_t;
 
 static bool mi_heap_print_json_visit(const mi_heap_t* heap, const mi_heap_area_t* area, const mi_block_info_t* info, void* arg) {
+  UNUSED(heap);
   mi_print_json_t* varg = (mi_print_json_t*)(arg);
   if (info==NULL) {
     _mi_fprintf(varg->out, varg->out_arg, varg->area_count==0 ? " {" : "  ]\n}\n,{");
@@ -599,8 +600,21 @@ static bool mi_heap_print_json_visit(const mi_heap_t* heap, const mi_heap_area_t
 void mi_heap_print_json(mi_heap_t* heap, mi_output_fun* out, void* arg) {
   if (heap==NULL) heap = mi_heap_get_default();
   mi_print_json_t info = { 0, 0, out, arg };
-  _mi_fprintf(info.out, info.out_arg, "{ \"heap\": 0x%p, \"thread_id\": 0x%zx, \"page_count\": %zu", heap, heap->thread_id, heap->page_count);
+  _mi_fprintf(info.out, info.out_arg, "{ \"heap\": 0x%p, \"thread_id\": 0x%zx, \"page_count\": %zu, \"block_padding\": %zu", heap, heap->thread_id, heap->page_count, mi_extra_padding() );
   _mi_fprintf(info.out, info.out_arg, ", \"pages\": [\n");
   mi_heap_visit_blocks(heap, true, &mi_heap_print_json_visit, &info);
   _mi_fprintf(info.out, info.out_arg, info.area_count==0 ? "]\n" : "  ] }\n] }\n");
+}
+
+bool mi_heap_is_empty(mi_heap_t* heap) {
+  if (heap==NULL) heap = mi_heap_get_default();
+  mi_collect(false);
+  return (heap->page_count == 0);
+}
+
+void mi_heap_check_leak(mi_heap_t* heap, mi_output_fun* out, void* arg) {
+  if (!mi_heap_is_empty(heap)) {
+    _mi_fprintf(out,arg,"mimalloc: potential memory leak detected. Current heap blocks:\n");
+    mi_heap_print_json(heap, out, arg);
+  }
 }
