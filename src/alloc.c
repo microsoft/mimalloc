@@ -18,6 +18,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "alloc-override.c"
 #undef MI_IN_ALLOC_C
 
+#define MI_PADDING_MAX_VALIDATE   (4*1024)   // max. bytes validated for overwrites
 
 // ----------------------------------------------------------------------------------------
 // Allocation
@@ -58,7 +59,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   padding->delta  = (uint32_t)(delta);
   padding->source = __mi_source;
   uint8_t* fill = (uint8_t*)padding - delta;
-  const size_t maxpad = (delta > 4096 ? 4096 : delta); // set at most N initial padding bytes
+  const size_t maxpad = (delta > MI_PADDING_MAX_VALIDATE ? MI_PADDING_MAX_VALIDATE : delta); // set at most N initial padding bytes
   for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
 #endif
   return block;
@@ -211,9 +212,13 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 #if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
 static void mi_check_padding(const mi_page_t* page, const mi_block_t* block);
 
-static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
+static const mi_padding_t* mi_page_get_padding(const mi_page_t* page, const mi_block_t* block, size_t* bsize) {
   *bsize = mi_page_usable_block_size(page);
-  const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + *bsize);
+  return (mi_padding_t*)((uint8_t*)block + *bsize);
+}
+
+static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
+  const mi_padding_t* const padding = mi_page_get_padding(page, block, bsize);
   *delta = padding->delta;
   return ((uint32_t)mi_ptr_encode(page,block,page->keys) == padding->canary && *delta <= *bsize);
 }
@@ -237,7 +242,7 @@ static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, si
   mi_assert_internal(bsize >= delta);
   *size = bsize - delta;
   uint8_t* fill = (uint8_t*)block + bsize - delta;
-  const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // check at most the first N padding bytes
+  const size_t maxpad = (delta > MI_PADDING_MAX_VALIDATE ? MI_PADDING_MAX_VALIDATE : delta); // check at most the first N padding bytes
   for (size_t i = 0; i < maxpad; i++) {
     if (fill[i] != MI_DEBUG_PADDING) {
       *wrong = bsize - delta + i;
@@ -322,6 +327,25 @@ static void mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, co
   UNUSED(min_size);
 }
 #endif
+
+void _mi_page_block_info(const mi_page_t* page, const mi_block_t* block, mi_block_info_t* info) {
+  mi_assert_internal(page!=NULL);
+  mi_assert_internal(block!=NULL);
+  mi_assert_internal(info!=NULL);
+  memset(info, 0, sizeof(*info));
+  info->block = (void*)block;
+  info->size = mi_page_block_size(page);
+#if MI_PADDING
+  const mi_padding_t* padding = mi_page_get_padding(page, block, &info->usable_size);
+  info->source = padding->source;
+  size_t wrong;
+  info->valid = mi_verify_padding(page, block, &info->allocated_size, &wrong);
+#else
+  info->usable_size = mi_usable_size(block);
+  info->allocated_size = info->usable_size;
+#endif
+}
+
 
 // ------------------------------------------------------
 // Free

@@ -7,6 +7,44 @@
 #include <mimalloc.h>
 #include <mimalloc-override.h>  // redefines malloc etc.
 
+
+typedef struct mi_visit_info_s {
+  size_t area_count;
+  size_t block_count;
+} mi_visit_info_t;
+
+static bool visit(const mi_heap_t* heap, const mi_heap_area_t* area, const mi_block_info_t* info, void* arg) {
+  mi_visit_info_t* varg = (mi_visit_info_t*)(arg);
+  if (info==NULL) {
+    printf(varg->area_count==0 ? " {" : "  ]\n}\n,{");
+    varg->area_count++;
+    varg->block_count = 0;
+    printf("\"area\": %zu, \"start\": 0x%p, \"block_size\": %zu, \"used_size\": %zu,\n  \"reserved\": %zu, \"committed\": %zu,", varg->area_count, area->blocks, area->block_size, area->used, area->reserved, area->committed);
+    printf(" \"blocks\": [\n");
+  }
+  else {
+    printf(varg->block_count==0 ? "   {" : "  ,{");
+    varg->block_count++;
+    printf("\"block\": 0x%p, \"valid\": %s, \"size\": %zu, \"usable_size\": %zu, \"allocated_size\": %zu,\n    ", info->block, info->valid ? "true" : "false", info->size, info->usable_size, info->allocated_size);
+    int lineno;
+    const char* fname;
+    void* ret = mi_source_unpack(info->source, &fname, &lineno);
+    if (fname!=NULL) printf("\"source\": \"%s:%i\" }\n", fname, lineno);
+    else if (ret != NULL) printf("\"source\": \"(%p)\" }\n", ret);
+    else printf("\"source\": \"\" }\n");
+  }
+}
+
+static void mi_heap_to_json(mi_heap_t* heap) {
+  if (heap==NULL) heap = mi_heap_get_default();
+  mi_visit_info_t info = { 0, 0 };
+  printf("[\n");
+  mi_heap_visit_blocks(heap, true, &visit, &info);
+  printf(info.area_count==0 ? "]\n" : "  ] }\n]\n");
+}
+
+
+
 static void double_free1();
 static void double_free2();
 static void corrupt_free();
@@ -22,7 +60,7 @@ int main() {
   // double_free2();
   // corrupt_free();
   // block_overflow1();
-  block_overflow2();
+  // block_overflow2();
   // dangling_ptr_write();
 
   void* p1 = malloc(78);
@@ -52,7 +90,6 @@ static void block_overflow1() {
   p[18] = 0;
   free(p);
 }
-
 static void block_overflow2() {
   void* p[100];
   for (int i = 0; i < 100; i++) {

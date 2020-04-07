@@ -468,7 +468,10 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
   if (page->capacity == 1) {
     // optimize page with one block
     mi_assert_internal(page->used == 1 && page->free == NULL);
-    return visitor(mi_page_heap(page), area, pstart, bsize, arg);
+    mi_block_info_t info;
+    mi_block_t* block = (mi_block_t*)(pstart);
+    _mi_page_block_info(page, block, &info);
+    return visitor(mi_page_heap(page), area, &info, arg);
   }
 
   // create a bitmap of free blocks.
@@ -501,8 +504,10 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
     }
     else if ((m & ((uintptr_t)1 << bit)) == 0) {
       used_count++;
-      uint8_t* block = pstart + (i * bsize);
-      if (!visitor(mi_page_heap(page), area, block, bsize, arg)) return false;
+      mi_block_info_t info;
+      mi_block_t*     block = (mi_block_t*)(pstart + (i * bsize));
+      _mi_page_block_info(page, block, &info);
+      if (!visitor(mi_page_heap(page), area, &info, arg)) return false;
     }
   }
   mi_assert_internal(page->used == used_count);
@@ -522,7 +527,7 @@ static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
   xarea.area.reserved = page->reserved * bsize;
   xarea.area.committed = page->capacity * bsize;
   xarea.area.blocks = _mi_page_start(_mi_page_segment(page), page, NULL);
-  xarea.area.used = page->used;
+  xarea.area.used = page->used * bsize;
   xarea.area.block_size = bsize;
   return fun(heap, &xarea, arg);
 }
@@ -542,7 +547,7 @@ typedef struct mi_visit_blocks_args_s {
 
 static bool mi_heap_area_visitor(const mi_heap_t* heap, const mi_heap_area_ex_t* xarea, void* arg) {
   mi_visit_blocks_args_t* args = (mi_visit_blocks_args_t*)arg;
-  if (!args->visitor(heap, &xarea->area, NULL, xarea->area.block_size, args->arg)) return false;
+  if (!args->visitor(heap, &xarea->area, NULL, args->arg)) return false;
   if (args->visit_blocks) {
     return mi_heap_area_visit_blocks(xarea, args->visitor, args->arg);
   }
