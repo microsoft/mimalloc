@@ -13,6 +13,7 @@ option(MI_INTERPOSE         "Use interpose to override standard malloc on macOS"
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" OFF) # enables interpose as well
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
 option(MI_BUILD_TESTS       "Build test executables" ON)
+option(MI_USER_CLEANUP      "Enable user defined functionality for custom memory clean function" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 
 include("cmake/mimalloc-config-version.cmake")
@@ -82,6 +83,11 @@ endif()
 if(MI_SECURE MATCHES "ON")
   message(STATUS "Set full secure build (MI_SECURE=ON)")
   list(APPEND mi_defines MI_SECURE=4)
+endif()
+
+if(MI_USER_CLEANUP MATCHES "ON")
+  message(STATUS "Enable mi_register_user_cleanup functionality (MI_USER_CLEANUP=ON)")
+  list(APPEND mi_defines MI_USER_CLEANUP=1)
 endif()
 
 if(MI_SEE_ASM MATCHES "ON")
