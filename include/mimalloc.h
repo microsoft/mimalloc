@@ -282,13 +282,13 @@ typedef struct mi_heap_area_s {
   size_t block_size;  // size in bytes of each block
 } mi_heap_area_t;
 
-// Information about a block
+// Information about an allocated block. 
 typedef struct mi_block_info_s {
   void*       block;          // start of the block
   size_t      size;           // full size including padding etc.
   size_t      usable_size;    // usable size (available for in-place realloc)
-  size_t      allocated_size; // actual allocated size (only precise in debug mode with padding)
-  bool        valid;          // is the block valid? (only detects corrupt blocks with padding enabled)
+  size_t      allocated_size; // actual allocated size (only precise in debug mode with padding enabled)
+  bool        valid;          // is the block valid? (only detects heap overflow with padding enabled)
   mi_source_t source;         // the source location that allocated this block (only valid in debug mode with padding)
 } mi_block_info_t;
 

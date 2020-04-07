@@ -608,13 +608,13 @@ void mi_heap_print_json(mi_heap_t* heap, mi_output_fun* out, void* arg) {
 
 bool mi_heap_is_empty(mi_heap_t* heap) {
   if (heap==NULL) heap = mi_heap_get_default();
-  mi_collect(false);
+  mi_heap_collect(heap,false);
   return (heap->page_count == 0);
 }
 
 void mi_heap_check_leak(mi_heap_t* heap, mi_output_fun* out, void* arg) {
   if (!mi_heap_is_empty(heap)) {
-    _mi_fprintf(out,arg,"mimalloc: potential memory leak detected. Current heap blocks:\n");
+    _mi_fprintf(out,arg,"mimalloc: potential memory leak detected; current heap blocks:\n");
     mi_heap_print_json(heap, out, arg);
   }
 }
