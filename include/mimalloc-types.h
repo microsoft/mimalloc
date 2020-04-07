@@ -273,7 +273,7 @@ typedef struct mi_segment_s {
 // In debug mode there is a padding stucture at the end 
 // of the blocks to check for buffer overflows.
 // ------------------------------------------------------
-#if defined(MI_PADDING)
+#if (MI_PADDING)
 typedef struct mi_padding_s {
   uint32_t    canary;  // encoded block value to check validity of the padding (in case of heap block overflow)
   uint32_t    delta;   // padding bytes before the block. (mi_usable_size(p) - delta == exact allocated bytes)
