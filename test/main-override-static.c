@@ -6,41 +6,44 @@
 
 #include <mimalloc.h>
 #include <mimalloc-override.h>  // redefines malloc etc.
-
+#include <mimalloc-internal.h>
 
 typedef struct mi_visit_info_s {
   size_t area_count;
   size_t block_count;
+  mi_output_fun* out;
+  void* out_arg;
 } mi_visit_info_t;
 
 static bool visit(const mi_heap_t* heap, const mi_heap_area_t* area, const mi_block_info_t* info, void* arg) {
   mi_visit_info_t* varg = (mi_visit_info_t*)(arg);
   if (info==NULL) {
-    printf(varg->area_count==0 ? " {" : "  ]\n}\n,{");
+    _mi_fprintf(varg->out, varg->out_arg, varg->area_count==0 ? " {" : "  ]\n}\n,{");
     varg->area_count++;
     varg->block_count = 0;
-    printf("\"area\": %zu, \"start\": 0x%p, \"block_size\": %zu, \"used_size\": %zu,\n  \"reserved\": %zu, \"committed\": %zu,", varg->area_count, area->blocks, area->block_size, area->used, area->reserved, area->committed);
-    printf(" \"blocks\": [\n");
+    _mi_fprintf(varg->out, varg->out_arg, "\"area\": %zu, \"start\": 0x%p, \"block_size\": %zu, \"used_size\": %zu,\n  \"reserved\": %zu, \"committed\": %zu,", varg->area_count, area->blocks, area->block_size, area->used, area->reserved, area->committed);
+    _mi_fprintf(varg->out, varg->out_arg, " \"blocks\": [\n");
   }
   else {
-    printf(varg->block_count==0 ? "   {" : "  ,{");
+    _mi_fprintf(varg->out, varg->out_arg, varg->block_count==0 ? "   {" : "  ,{");
     varg->block_count++;
-    printf("\"block\": 0x%p, \"valid\": %s, \"size\": %zu, \"usable_size\": %zu, \"allocated_size\": %zu,\n    ", info->block, info->valid ? "true" : "false", info->size, info->usable_size, info->allocated_size);
+    _mi_fprintf(varg->out, varg->out_arg, "\"block\": 0x%p, \"valid\": %s, \"size\": %zu, \"usable_size\": %zu, \"allocated_size\": %zu,\n    ", info->block, info->valid ? "true" : "false", info->size, info->usable_size, info->allocated_size);
     int lineno;
     const char* fname;
     void* ret = mi_source_unpack(info->source, &fname, &lineno);
-    if (fname!=NULL) printf("\"source\": \"%s:%i\" }\n", fname, lineno);
-    else if (ret != NULL) printf("\"source\": \"(%p)\" }\n", ret);
-    else printf("\"source\": \"\" }\n");
+    if (fname!=NULL) _mi_fprintf(varg->out, varg->out_arg, "\"source\": \"%s:%i\" }\n", fname, lineno);
+    else if (ret != NULL) _mi_fprintf(varg->out, varg->out_arg, "\"source\": \"(%p)\" }\n", ret);
+    else _mi_fprintf(varg->out, varg->out_arg, "\"source\": \"\" }\n");
   }
+  return true;
 }
 
-static void mi_heap_to_json(mi_heap_t* heap) {
+static void mi_heap_to_json(mi_heap_t* heap, mi_output_fun* out, void* arg ) {
   if (heap==NULL) heap = mi_heap_get_default();
-  mi_visit_info_t info = { 0, 0 };
-  printf("[\n");
+  mi_visit_info_t info = { 0, 0, out, arg };
+  _mi_fprintf(info.out, info.out_arg, "[\n");
   mi_heap_visit_blocks(heap, true, &visit, &info);
-  printf(info.area_count==0 ? "]\n" : "  ] }\n]\n");
+  _mi_fprintf(info.out, info.out_arg, info.area_count==0 ? "]\n" : "  ] }\n]\n");
 }
 
 
@@ -71,6 +74,7 @@ int main() {
   free(p2);
   p2 = malloc(16);
   p1 = realloc(p1, 32);
+  mi_heap_to_json(NULL,NULL,NULL);
   free(p1);
   free(p2);
   //free(s);
