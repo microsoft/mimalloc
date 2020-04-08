@@ -61,7 +61,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
-#if (MI_SECURE>=3 || MI_DEBUG>=1 || defined(MI_PADDING))
+#if (MI_SECURE>=3 || MI_DEBUG>=1 || MI_PADDING > 0)
 #define MI_ENCODE_FREELIST  1
 #endif
 
@@ -307,7 +307,7 @@ typedef struct mi_random_cxt_s {
 
 
 // In debug mode there is a padding stucture at the end of the blocks to check for buffer overflows
-#if defined(MI_PADDING)
+#if (MI_PADDING)
 typedef struct mi_padding_s {
   uint32_t canary; // encoded block value to check validity of the padding (in case of overflow)
   uint32_t delta;  // padding bytes before the block. (mi_usable_size(p) - delta == exact allocated bytes)

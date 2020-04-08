@@ -15,6 +15,7 @@ option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanis
 option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_USER_CLEANUP      "Enable user defined functionality for custom memory clean function" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
+option(MI_PADDING           "Enable padding to detect heap block overflow (only in debug mode)" ON)
 
 include("cmake/mimalloc-config-version.cmake")
 
@@ -103,6 +104,11 @@ endif()
 if(MI_DEBUG_FULL MATCHES "ON")
   message(STATUS "Set debug level to full internal invariant checking (MI_DEBUG_FULL=ON)")
   list(APPEND mi_defines MI_DEBUG=3)   # full invariant checking
+endif()
+
+if(MI_PADDING MATCHES "OFF")
+  message(STATUS "Disable padding of heap blocks in debug mode (MI_PADDING=OFF)")
+  list(APPEND mi_defines MI_PADDING=0)
 endif()
 
 if(MI_USE_CXX MATCHES "ON")
