@@ -63,6 +63,11 @@ static void* atomic_exchange_ptr(volatile void** p, void* newval);
 
 typedef uintptr_t* random_t;
 
+void memory_cleanup(void* user_data, void* ptr, size_t size) {
+     (void)user_data;
+     memset(ptr, 0, size);
+}
+
 static uintptr_t pick(random_t r) {
   uintptr_t x = *r;
 #if (UINTPTR_MAX > UINT32_MAX)
@@ -218,6 +223,7 @@ static void test_leak(void) {
 #endif
 
 int main(int argc, char** argv) {
+  mi_register_user_cleanup(memory_cleanup, NULL);
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
   if (argc >= 2) {
     char* end;
