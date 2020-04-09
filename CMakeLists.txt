@@ -14,6 +14,7 @@ option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macO
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
 option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
+option(MI_WIN_NUMA          "Support NUMA aware allocation on Windows" ON)
 
 include("cmake/mimalloc-config-version.cmake")
 
@@ -109,6 +110,11 @@ if(MI_USE_CXX MATCHES "ON")
   if(CMAKE_CXX_COMPILER_ID MATCHES "Intel")
     list(APPEND mi_cflags -Kc++)
   endif()
+endif()
+
+if(MI_WIN_NUMA MATCHES "ON")
+  message(STATUS "Support NUMA aware allocation on Windows (MI_WIN_NUMA=ON)")
+  list(APPEND mi_defines MI_WIN_NUMA)
 endif()
 
 # Compiler flags

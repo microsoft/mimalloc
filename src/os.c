@@ -1007,7 +1007,7 @@ void _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats) {
 /* ----------------------------------------------------------------------------
 Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
-#ifdef WIN32
+#if defined(WIN32) && defined(MI_WIN_NUMA)
 static size_t mi_os_numa_nodex() {
   PROCESSOR_NUMBER pnum;
   USHORT numa_node = 0;
