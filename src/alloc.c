@@ -693,12 +693,13 @@ MI_ALLOC_API1(mi_decl_restrict char*, strdup, mi_heap_t*, heap, const char*, s)
 MI_ALLOC_API2(mi_decl_restrict char*, strndup, mi_heap_t*, heap, const char*, s, size_t, n)
 {
   if (s == NULL) return NULL;
-  size_t m = strlen(s);
-  if (n > m) n = m;
-  char* t = (char*)MI_SOURCE_ARG(mi_heap_malloc, heap, n+1);
+  const char* end = (const char*)memchr(s, 0, n);  // find end of string in the first `n` characters (returns NULL if not found)
+  const size_t m = (end != NULL ? (end - s) : n);  // `m` is the minimum of `n` or the end-of-string
+  mi_assert_internal(m <= n);
+  char* t = (char*)MI_SOURCE_ARG(mi_heap_malloc, heap, m+1);
   if (t == NULL) return NULL;
-  memcpy(t, s, n);
-  t[n] = 0;
+  memcpy(t, s, m);
+  t[m] = 0;
   return t;
 }
 
