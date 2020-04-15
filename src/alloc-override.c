@@ -177,8 +177,15 @@ void* valloc(size_t size)                                   { return mi_valloc(s
 void* pvalloc(size_t size)                                  { return mi_pvalloc(size); }
 void* reallocarray(void* p, size_t count, size_t size)      { return mi_reallocarray(p, count, size); }
 void* memalign(size_t alignment, size_t size)               { return mi_memalign(alignment, size); }
-void* aligned_alloc(size_t alignment, size_t size)          { return mi_aligned_alloc(alignment, size); }
 int posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
+
+// on some glibc `aligned_alloc` is declared `static inline` so we cannot override it (e.g. Conda). 
+// In those cases it will use `memalign`, `posix_memalign`, or `_aligned_malloc` so we override that instead.
+#if _GLIBCXX_HAVE__ALIGNED_MALLOC
+void* _aligned_malloc(size_t alignment, size_t size) { return mi_aligned_alloc(alignment, size); }
+#else
+void* aligned_alloc(size_t alignment, size_t size)   { return mi_aligned_alloc(alignment, size); }
+#endif
 
 #if defined(__GLIBC__) && defined(__linux__)
   // forward __libc interface (needed for glibc-based Linux distributions)
