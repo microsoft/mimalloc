@@ -475,7 +475,7 @@ void _mi_page_block_error_message(int err, const mi_page_t* page, const mi_block
 #ifdef _MSC_VER
     const char* hint = "  hint: paste the 'allocated at' address in the disassembly window in the debugger to find the source location.\n";
 #else
-    const char* hint = "";
+    const char* hint = "  hint: in gdb/lldb use 'list *<address>' to list the source location of the 'allocated at' address.\n";
 #endif
     mi_show_error_message("%s: block %p of size %zu allocated at 0x%p.\n%s", msg, block, size, return_addr, hint);
   }
