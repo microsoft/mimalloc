@@ -649,12 +649,13 @@ mi_decl_restrict char* mi_strdup(const char* s) mi_attr_noexcept {
 // `strndup` using mi_malloc
 mi_decl_restrict char* mi_heap_strndup(mi_heap_t* heap, const char* s, size_t n) mi_attr_noexcept {
   if (s == NULL) return NULL;
-  size_t m = strlen(s);
-  if (n > m) n = m;
-  char* t = (char*)mi_heap_malloc(heap, n+1);
+  const char* end = (const char*)memchr(s, 0, n);  // find end of string in the first `n` characters (returns NULL if not found)
+  const size_t m = (end != NULL ? (end - s) : n);  // `m` is the minimum of `n` or the end-of-string
+  mi_assert_internal(m <= n);
+  char* t = (char*)mi_heap_malloc(heap, m+1);
   if (t == NULL) return NULL;
-  memcpy(t, s, n);
-  t[n] = 0;
+  memcpy(t, s, m);
+  t[m] = 0;
   return t;
 }
 
