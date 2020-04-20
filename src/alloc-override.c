@@ -163,29 +163,30 @@ extern "C" {
 // Posix & Unix functions definitions
 // ------------------------------------------------------
 
+void   cfree(void* p)                    MI_FORWARD0(mi_free, p);
 void*  reallocf(void* p, size_t newsize) MI_FORWARD2(mi_reallocf,p,newsize);
 size_t malloc_size(void* p)              MI_FORWARD1(mi_usable_size,p);
 #if !defined(__ANDROID__)
 size_t malloc_usable_size(void *p)       MI_FORWARD1(mi_usable_size,p);
 #else
-size_t malloc_usable_size(const void *p)       MI_FORWARD1(mi_usable_size,p);
+size_t malloc_usable_size(const void *p) MI_FORWARD1(mi_usable_size,p);
 #endif
-void   cfree(void* p)                    MI_FORWARD0(mi_free, p);
 
 // no forwarding here due to aliasing/name mangling issues
-void* valloc(size_t size)                                   { return mi_valloc(size); }
-void* pvalloc(size_t size)                                  { return mi_pvalloc(size); }
-void* reallocarray(void* p, size_t count, size_t size)      { return mi_reallocarray(p, count, size); }
-void* memalign(size_t alignment, size_t size)               { return mi_memalign(alignment, size); }
-int posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
+void* valloc(size_t size)                                     { return mi_valloc(size); }
+void* pvalloc(size_t size)                                    { return mi_pvalloc(size); }
+void* reallocarray(void* p, size_t count, size_t size)        { return mi_reallocarray(p, count, size); }
+void* memalign(size_t alignment, size_t size)                 { return mi_memalign(alignment, size); }
+int   posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
+void* _aligned_malloc(size_t alignment, size_t size)          { return mi_aligned_alloc(alignment, size); }
 
-// on some glibc `aligned_alloc` is declared `static inline` so we cannot override it (e.g. Conda). 
-// In those cases it will use `memalign`, `posix_memalign`, or `_aligned_malloc` so we override that instead.
-#if _GLIBCXX_HAVE__ALIGNED_MALLOC
-void* _aligned_malloc(size_t alignment, size_t size) { return mi_aligned_alloc(alignment, size); }
-#else
+// on some glibc `aligned_alloc` is declared `static inline` so we cannot override it (e.g. Conda). This happens
+// when _GLIBCXX_HAVE_ALIGNED_ALLOC is not defined. However, in those cases it will use `memalign`, `posix_memalign`, 
+// or `_aligned_malloc` and we can avoid overriding it ourselves.
+#if _GLIBCXX_HAVE_ALIGNED_ALLOC
 void* aligned_alloc(size_t alignment, size_t size)   { return mi_aligned_alloc(alignment, size); }
 #endif
+
 
 #if defined(__GLIBC__) && defined(__linux__)
   // forward __libc interface (needed for glibc-based Linux distributions)
@@ -195,10 +196,10 @@ void* aligned_alloc(size_t alignment, size_t size)   { return mi_aligned_alloc(a
   void  __libc_free(void* p)                        MI_FORWARD0(mi_free,p);
   void  __libc_cfree(void* p)                       MI_FORWARD0(mi_free,p);
 
-  void* __libc_valloc(size_t size) { return mi_valloc(size); }
-  void* __libc_pvalloc(size_t size) { return mi_pvalloc(size); }
-  void* __libc_memalign(size_t alignment, size_t size)          { return mi_memalign(alignment,size); }
-  int __posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p,alignment,size); }
+  void* __libc_valloc(size_t size)                                { return mi_valloc(size); }
+  void* __libc_pvalloc(size_t size)                               { return mi_pvalloc(size); }
+  void* __libc_memalign(size_t alignment, size_t size)            { return mi_memalign(alignment,size); }
+  int   __posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p,alignment,size); }
 #endif
 
 #ifdef __cplusplus
