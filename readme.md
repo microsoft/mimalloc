@@ -213,16 +213,20 @@ or via environment variables.
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
 - `MIMALLOC_VERBOSE=1`: show verbose messages.
 - `MIMALLOC_SHOW_ERRORS=1`: show error and warning messages.
-- `MIMALLOC_PAGE_RESET=0`: by default, mimalloc will reset (or purge) OS pages when not in use to signal to the OS
+- `MIMALLOC_PAGE_RESET=0`: by default, mimalloc will reset (or purge) OS pages that are not in use, to signal to the OS
    that the underlying physical memory can be reused. This can reduce memory fragmentation in long running (server)
-   programs. By setting it to `0` no such page resets will be done which can improve performance for programs that are not long
-   running. As an alternative, the `MIMALLOC_RESET_DELAY=`<msecs> can be set higher (100ms by default) to make the page
+   programs. By setting it to `0` this will no longer be done which can improve performance for batch-like programs.
+   As an alternative, the `MIMALLOC_RESET_DELAY=`<msecs> can be set higher (100ms by default) to make the page
    reset occur less frequently instead of turning it off completely.
+- `MIMALLOC_USE_NUMA_NODES=N`: pretend there are at most `N` NUMA nodes. If not set, the actual NUMA nodes are detected
+   at runtime. Setting `N` to 1 may avoid problems in some virtual environments. Also, setting it to a lower number than
+   the actual NUMA nodes is fine and will only cause threads to potentially allocate more memory across actual NUMA
+   nodes (but this can happen in any case as NUMA local allocation is always a best effort but not guaranteed).
 - `MIMALLOC_LARGE_OS_PAGES=1`: use large OS pages (2MiB) when available; for some workloads this can significantly
    improve performance. Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
    to explicitly allow large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
    the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
-   can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead when possible).
+   can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead whenever possible).
    <!--
    - `MIMALLOC_EAGER_REGION_COMMIT=1`: on Windows, commit large (256MiB) regions eagerly. On Windows, these regions
    show in the working set even though usually just a small part is committed to physical memory. This is why it
@@ -235,7 +239,8 @@ or via environment variables.
    `MIMALLOC_LARGE_OS_PAGES` in combination with this setting. Just like large OS pages, use with care as reserving
    contiguous physical memory can take a long time when memory is fragmented (but reserving the huge pages is done at
    startup only once).
-   Note that we usually need to explicitly enable huge OS pages (as on [Windows][windows-huge] and [Linux][linux-huge])). With huge OS pages, it may be beneficial to set the setting
+   Note that we usually need to explicitly enable huge OS pages (as on [Windows][windows-huge] and [Linux][linux-huge])).
+   With huge OS pages, it may be beneficial to set the setting
    `MIMALLOC_EAGER_COMMIT_DELAY=N` (`N` is 1 by default) to delay the initial `N` segments (of 4MiB)
    of a thread to not allocate in the huge OS pages; this prevents threads that are short lived
    and allocate just a little to take up space in the huge OS page area (which cannot be reset).
