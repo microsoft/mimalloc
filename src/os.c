@@ -212,10 +212,12 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
     if (p != NULL) return p;
     DWORD err = GetLastError();
-    if (err != ERROR_INVALID_ADDRESS) { // if linked with multiple instances, we may have tried to allocate at an already allocated area
+    if (err != ERROR_INVALID_ADDRESS &&   // If linked with multiple instances, we may have tried to allocate at an already allocated area (#210)
+        err != ERROR_INVALID_PARAMETER) { // Windows7 instability (#230)
       return NULL;
     }
-  }
+    // fall through
+  } 
 #endif
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   // on modern Windows try use VirtualAlloc2 for aligned allocation
@@ -228,6 +230,7 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
   }
 #endif
+  // last resort
   return VirtualAlloc(addr, size, flags, PAGE_READWRITE);
 }
 

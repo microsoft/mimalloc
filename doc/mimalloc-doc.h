@@ -1009,27 +1009,30 @@ or via environment variables.
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
 - `MIMALLOC_VERBOSE=1`: show verbose messages.
 - `MIMALLOC_SHOW_ERRORS=1`: show error and warning messages.
-- `MIMALLOC_PAGE_RESET=1`: reset (or purge) OS pages when not in use. This can reduce
-   memory fragmentation in long running (server) programs. If performance is impacted,
-   `MIMALLOC_RESET_DELAY=`_msecs_ can be set higher (100ms by default) to make the page
-   reset occur less frequently.
-- `MIMALLOC_LARGE_OS_PAGES=1`: use large OS pages when available; for some workloads this can significantly
+- `MIMALLOC_PAGE_RESET=0`: by default, mimalloc will reset (or purge) OS pages when not in use to signal to the OS
+   that the underlying physical memory can be reused. This can reduce memory fragmentation in long running (server)
+   programs. By setting it to `0` no such page resets will be done which can improve performance for programs that are not long
+   running. As an alternative, the `MIMALLOC_RESET_DELAY=`<msecs> can be set higher (100ms by default) to make the page
+   reset occur less frequently instead of turning it off completely.
+- `MIMALLOC_LARGE_OS_PAGES=1`: use large OS pages (2MiB) when available; for some workloads this can significantly
    improve performance. Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
    to explicitly allow large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
    the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
    can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead when possible).
-- `MIMALLOC_EAGER_REGION_COMMIT=1`: on Windows, commit large (256MiB) regions eagerly. On Windows, these regions
-   show in the working set even though usually just a small part is committed to physical memory. This is why it
-   turned off by default on Windows as it looks not good in the task manager. However, in reality it is always better
-   to turn it on as it improves performance and has no other drawbacks.
-- `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where N is the number of 1GiB huge OS pages. This reserves the huge pages at
-   startup and can give quite a performance improvement on long running workloads. Usually it is better to not use
+- `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where N is the number of 1GiB _huge_ OS pages. This reserves the huge pages at
+   startup and sometimes this can give a large (latency) performance improvement on big workloads.
+   Usually it is better to not use
    `MIMALLOC_LARGE_OS_PAGES` in combination with this setting. Just like large OS pages, use with care as reserving
-   contiguous physical memory can take a long time when memory is fragmented.
+   contiguous physical memory can take a long time when memory is fragmented (but reserving the huge pages is done at
+   startup only once).
    Note that we usually need to explicitly enable huge OS pages (as on [Windows][windows-huge] and [Linux][linux-huge])). With huge OS pages, it may be beneficial to set the setting
-   `MIMALLOC_EAGER_COMMIT_DELAY=N` (with usually `N` as 1) to delay the initial `N` segments
+   `MIMALLOC_EAGER_COMMIT_DELAY=N` (`N` is 1 by default) to delay the initial `N` segments (of 4MiB)
    of a thread to not allocate in the huge OS pages; this prevents threads that are short lived
    and allocate just a little to take up space in the huge OS page area (which cannot be reset).
+
+Use caution when using `fork` in combination with either large or huge OS pages: on a fork, the OS uses copy-on-write
+for all pages in the original process including the huge OS pages. When any memory is now written in that area, the
+OS will copy the entire 1GiB huge page (or 2MiB large page) which can cause the memory usage to grow in big increments.
 
 [linux-huge]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/tuning_and_optimizing_red_hat_enterprise_linux_for_oracle_9i_and_10g_databases/sect-oracle_9i_and_10g_tuning_guide-large_memory_optimization_big_pages_and_huge_pages-configuring_huge_pages_in_red_hat_enterprise_linux_4_or_5
 [windows-huge]: https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/enable-the-lock-pages-in-memory-option-windows?view=sql-server-2017
@@ -1074,14 +1077,18 @@ resolved to the _mimalloc_ library.
 Note that certain security restrictions may apply when doing this from
 the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
 
-Note: unfortunately, at this time, dynamic overriding on macOS seems broken but it is actively worked on to fix this
-(see issue [`#50`](https://github.com/microsoft/mimalloc/issues/50)).
+(Note: macOS support for dynamic overriding is recent, please report any issues.)
+
 
 ### Windows
 
-Overriding on Windows is robust but requires that you link your program explicitly with
+Overriding on Windows is robust and has the
+particular advantage to be able to redirect all malloc/free calls that go through
+the (dynamic) C runtime allocator, including those from other DLL's or libraries.
+
+The overriding on Windows requires that you link your program explicitly with
 the mimalloc DLL and use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
-Moreover, you need to ensure the `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) is available
+Also, the `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) must be available
 in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency).
 The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
 mimalloc (in `mimalloc-override.dll`).
@@ -1090,14 +1097,15 @@ To ensure the mimalloc DLL is loaded at run-time it is easiest to insert some
 call to the mimalloc API in the `main` function, like `mi_version()`
 (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
 for an example on how to use this. For best performance on Windows with C++, it
-is highly recommended to also override the `new`/`delete` operations (by including
+is also recommended to also override the `new`/`delete` operations (by including
 [`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
 overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully redirected.
 
-(Note: in principle, it is possible to patch existing executables
-that are linked with the dynamic C runtime (`ucrtbase.dll`) by just putting the `mimalloc-override.dll` into the import table (and putting `mimalloc-redirect.dll` in the same folder)
+(Note: in principle, it is possible to even patch existing executables without any recompilation
+if they are linked with the dynamic C runtime (`ucrtbase.dll`) -- just put the `mimalloc-override.dll`
+into the import table (and put `mimalloc-redirect.dll` in the same folder)
 Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388)).
 
 
