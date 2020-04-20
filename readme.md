@@ -75,6 +75,11 @@ free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af
 * 2019-09-01, `v1.0.8`: pre-release 8: more robust windows dynamic overriding, initial huge page support.
 * 2019-08-10, `v1.0.6`: pre-release 6: various performance improvements.
 
+Special thanks to:
+
+* Jason Gibson (@jasongibson) for exhaustive testing on large workloads and server environments and finding complex bugs in (early versions of) `mimalloc`.
+* Manuel Pöter (@mpoeter) and Sam Gross (@colesbury) for finding an ABA concurrency issue in abandoned segment reclamation.
+
 # Building
 
 ## Windows
