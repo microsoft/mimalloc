@@ -286,9 +286,13 @@ the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-i
 
 ### Override on Windows
 
-<span id="override_on_windows">Overriding on Windows</span> is robust but requires that you link your program explicitly with
+<span id="override_on_windows">Overriding on Windows</span> is robust and has the
+particular advantage to be able to redirect all malloc/free calls that go through
+the (dynamic) C runtime allocator, including those from other DLL's or libraries.
+
+The overriding on Windows requires that you link your program explicitly with
 the mimalloc DLL and use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
-Moreover, you need to ensure the `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) is available
+Also, the `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) must be available
 in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency).
 The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
 mimalloc (in `mimalloc-override.dll`).
@@ -303,8 +307,9 @@ is also recommended to also override the `new`/`delete` operations (by including
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
 overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully redirected.
 
-(Note: in principle, it is possible to patch existing executables
-that are linked with the dynamic C runtime (`ucrtbase.dll`) by just putting the `mimalloc-override.dll` into the import table (and putting `mimalloc-redirect.dll` in the same folder)
+(Note: in principle, it is possible to even patch existing executables without any recompilation
+if they are linked with the dynamic C runtime (`ucrtbase.dll`) -- just put the `mimalloc-override.dll`
+into the import table (and put `mimalloc-redirect.dll` in the same folder)
 Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388)).
 
 
