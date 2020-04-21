@@ -475,7 +475,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   if (any_reset && mi_option_is_enabled(mi_option_reset_decommits)) {
     fully_committed = false;
   }
-  if (segment->page_kind >= MI_PAGE_LARGE && !mi_option_is_enabled(mi_option_eager_page_commit)) {
+  if (segment->page_kind < MI_PAGE_LARGE && !mi_option_is_enabled(mi_option_eager_page_commit)) {
     fully_committed = false;
   }
 
