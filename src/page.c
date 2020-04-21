@@ -792,7 +792,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
 
 // Generic allocation routine if the fast path (`alloc.c:mi_page_malloc`) does not succeed.
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
-void* _mi_malloc_generic(mi_heap_t* heap, size_t size  MI_EXTRA_PADDING_XPARAM  MI_SOURCE_XPARAM) mi_attr_noexcept
+void* _mi_malloc_generic(mi_heap_t* heap, size_t size  MI_SOURCE_XPARAM) mi_attr_noexcept
 {
   mi_assert_internal(heap != NULL);
 
@@ -811,8 +811,8 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size  MI_EXTRA_PADDING_XPARAM  
 
   // huge allocation?
   mi_page_t* page;
-  const size_t req_size = size - MI_EXTRA_PADDING_ARG;  // correct for padding_size in case of an overflow on `size`  
-  if (mi_unlikely(req_size > (MI_LARGE_OBJ_SIZE_MAX - MI_EXTRA_PADDING_ARG) )) {
+  const size_t req_size = size - mi_extra_padding(heap);  // correct for padding_size in case of an overflow on `size`  
+  if (mi_unlikely(req_size > (MI_LARGE_OBJ_SIZE_MAX - mi_extra_padding(heap)) )) {
     if (mi_unlikely(req_size > PTRDIFF_MAX)) {  // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
       _mi_error_message(EOVERFLOW, "allocation request is too large (%zu b requested)\n", req_size);
       return NULL;
@@ -823,7 +823,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size  MI_EXTRA_PADDING_XPARAM  
   }
   else {
     // otherwise find a page with free blocks in our size segregated queues
-    mi_assert_internal(size >= MI_EXTRA_PADDING_ARG);
+    mi_assert_internal(size >= mi_extra_padding(heap));
     page = mi_find_free_page(heap,size);
   }
   if (mi_unlikely(page == NULL)) { // out of memory
@@ -835,5 +835,5 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size  MI_EXTRA_PADDING_XPARAM  
   mi_assert_internal(mi_page_block_size(page) >= size);
 
   // and try again, this time succeeding! (i.e. this should never recurse)
-  return _mi_page_malloc(heap, page, size  MI_EXTRA_PADDING_XARG  MI_SOURCE_XARG);
+  return _mi_page_malloc(heap, page, size  MI_SOURCE_XARG);
 }

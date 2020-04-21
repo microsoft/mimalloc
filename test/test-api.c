@@ -153,7 +153,10 @@ int main() {
     result = ok;
   });
   CHECK_BODY("malloc-aligned5", {
-    void* p = mi_malloc_aligned(4097,4096); size_t usable = mi_usable_size(p); result = usable >= 4097 && usable < 10000; mi_free(p);
+    void* p = mi_malloc_aligned(4097,4096); 
+    size_t usable = mi_usable_size(p); 
+    result = (usable >= 4097 && usable < 12000 && ((uintptr_t)p % 4096) == 0); 
+    mi_free(p);
   });
   CHECK_BODY("malloc-aligned-at1", {
     void* p = mi_malloc_aligned_at(48,32,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 32 == 0); mi_free(p);

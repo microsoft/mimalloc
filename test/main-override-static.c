@@ -16,7 +16,7 @@ static void dangling_ptr_write();
 
 int main() {
   mi_version();
-
+  mi_heap_set_extra_padding(mi_heap_get_default(), 200);
   // detect double frees and heap corruption
   // double_free1();
   // double_free2();

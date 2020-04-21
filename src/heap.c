@@ -200,6 +200,7 @@ mi_heap_t* mi_heap_new(void) {
   heap->cookie  = _mi_heap_random_next(heap) | 1;
   heap->keys[0] = _mi_heap_random_next(heap);
   heap->keys[1] = _mi_heap_random_next(heap);
+  heap->extra_padding = bheap->extra_padding;
   heap->no_reclaim = true;  // don't reclaim abandoned pages or otherwise destroy is unsafe
   // push on the thread local heaps list
   heap->next = heap->tld->heaps;
@@ -209,6 +210,11 @@ mi_heap_t* mi_heap_new(void) {
 
 uintptr_t _mi_heap_random_next(mi_heap_t* heap) {
   return _mi_random_next(&heap->random);
+}
+
+void mi_heap_set_extra_padding(mi_heap_t* heap, size_t extra_padding) {
+  if (extra_padding > 1*MiB) extra_padding = 1*MiB;
+  heap->extra_padding = extra_padding;
 }
 
 // zero out the page queues
@@ -580,13 +586,17 @@ static bool mi_heap_print_json_visit(const mi_heap_t* heap, const mi_heap_area_t
     _mi_fprintf(varg->out, varg->out_arg, varg->area_count==0 ? " {" : "  ]\n}\n,{");
     varg->area_count++;
     varg->block_count = 0;
-    _mi_fprintf(varg->out, varg->out_arg, "\"page\": %zu, \"start\": 0x%p, \"block_size\": %zu, \"used_size\": %zu,\n  \"reserved\": %zu, \"committed\": %zu,", varg->area_count, area->blocks, area->block_size, area->used, area->reserved, area->committed);
+    _mi_fprintf(varg->out, varg->out_arg, 
+                  "\"page\": %zu, \"start\": 0x%p, \"block_size\": %zu, \"used_size\": %zu,\n  \"reserved\": %zu, \"committed\": %zu,", 
+                  varg->area_count, area->blocks, area->block_size, area->used, area->reserved, area->committed);
     _mi_fprintf(varg->out, varg->out_arg, " \"blocks\": [\n");
   }
   else {
     _mi_fprintf(varg->out, varg->out_arg, varg->block_count==0 ? "   {" : "  ,{");
     varg->block_count++;
-    _mi_fprintf(varg->out, varg->out_arg, "\"block\": 0x%p, \"valid\": %s, \"size\": %zu, \"usable_size\": %zu, \"allocated_size\": %zu,\n    ", info->block, info->valid ? "true" : "false", info->size, info->usable_size, info->allocated_size);
+    _mi_fprintf(varg->out, varg->out_arg, 
+                   "\"block\": 0x%p, \"valid\": %s, \"size\": %zu, \"usable_size\": %zu, \"allocated_size\": %zu,\n    ", 
+                   info->block, info->valid ? "true" : "false", info->size, info->usable_size, info->allocated_size);
     int lineno;
     const char* fname;
     void* ret = mi_source_unpack(info->source, &fname, &lineno);
@@ -600,7 +610,7 @@ static bool mi_heap_print_json_visit(const mi_heap_t* heap, const mi_heap_area_t
 void mi_heap_print_json(mi_heap_t* heap, mi_output_fun* out, void* arg) {
   if (heap==NULL) heap = mi_heap_get_default();
   mi_print_json_t info = { 0, 0, out, arg };
-  _mi_fprintf(info.out, info.out_arg, "{ \"heap\": 0x%p, \"thread_id\": 0x%zx, \"page_count\": %zu, \"block_padding\": %zu", heap, heap->thread_id, heap->page_count, mi_extra_padding() );
+  _mi_fprintf(info.out, info.out_arg, "{ \"heap\": 0x%p, \"thread_id\": 0x%zx, \"page_count\": %zu, \"block_padding\": %zu", heap, heap->thread_id, heap->page_count, mi_extra_padding(heap) );
   _mi_fprintf(info.out, info.out_arg, ", \"pages\": [\n");
   mi_heap_visit_blocks(heap, true, &mi_heap_print_json_visit, &info);
   _mi_fprintf(info.out, info.out_arg, info.area_count==0 ? "]\n" : "  ] }\n] }\n");

@@ -98,6 +98,7 @@ const mi_heap_t _mi_heap_empty = {
   { {0}, {0}, 0 },
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
+  0,                // extra padding
   NULL,             // next
   false
 };
@@ -133,6 +134,7 @@ mi_heap_t _mi_heap_main = {
   { {0x846ca68b}, {0}, 0 },  // random
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
+  0,                // extra_padding
   NULL,             // next heap
   false             // can reclaim
 };
@@ -149,6 +151,7 @@ static void mi_heap_main_init(void) {
     _mi_random_init(&_mi_heap_main.random);
     _mi_heap_main.keys[0] = _mi_heap_random_next(&_mi_heap_main);
     _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
+    _mi_heap_main.extra_padding = mi_option_get(mi_option_debug_extra_padding);
   }
 }
 
@@ -195,6 +198,7 @@ static bool _mi_heap_init(void) {
     heap->keys[0] = _mi_heap_random_next(heap);
     heap->keys[1] = _mi_heap_random_next(heap);
     heap->tld = tld;
+    heap->extra_padding = _mi_heap_main.extra_padding;
     tld->heap_backing = heap;
     tld->heaps = heap;
     tld->segments.stats = &tld->stats;

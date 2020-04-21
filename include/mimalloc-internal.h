@@ -32,26 +32,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_cache_align
 #endif
 
-/* -----------------------------------------------------------
-  Padding
------------------------------------------------------------ */
-#if (MI_PADDING) 
-#define MI_EXTRA_PADDING_XPARAM  , size_t __extra_padding
-#define MI_EXTRA_PADDING_XARG    , __extra_padding
-#define MI_EXTRA_PADDING_ARG     __extra_padding
-static inline size_t mi_extra_padding() {
-  return MI_PADDING_SIZE + mi_option_get(mi_option_debug_extra_padding);
-}
-#else
-#define MI_EXTRA_PADDING_XPARAM  
-#define MI_EXTRA_PADDING_XARG    
-#define MI_EXTRA_PADDING_ARG     0
-static inline size_t mi_extra_padding() {
-  return 0;
-}
-#endif
-
-
 
 // "options.c"
 void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
@@ -110,7 +90,7 @@ void       _mi_abandoned_await_readers(void);
 
 
 // "page.c"
-void*      _mi_malloc_generic(mi_heap_t* heap, size_t size  MI_EXTRA_PADDING_XPARAM  MI_SOURCE_XPARAM)  mi_attr_noexcept mi_attr_malloc;
+void*      _mi_malloc_generic(mi_heap_t* heap, size_t size  MI_SOURCE_XPARAM)  mi_attr_noexcept mi_attr_malloc;
 
 void       _mi_page_retire(mi_page_t* page);                                  // free the page if there are no other pages with many free blocks
 void       _mi_page_unfull(mi_page_t* page);
@@ -143,7 +123,7 @@ mi_msecs_t  _mi_clock_end(mi_msecs_t start);
 mi_msecs_t  _mi_clock_start(void);
 
 // "alloc.c"
-void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size  MI_EXTRA_PADDING_XPARAM  MI_SOURCE_XPARAM) mi_attr_noexcept;  // called from `_mi_malloc_generic`
+void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size MI_SOURCE_XPARAM) mi_attr_noexcept;  // called from `_mi_malloc_generic`
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
 void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
@@ -156,6 +136,21 @@ void*       _mi_base_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
 #endif
+
+
+/* -----------------------------------------------------------
+  Padding
+----------------------------------------------------------- */
+#if (MI_PADDING) 
+static inline size_t mi_extra_padding(mi_heap_t* const heap) {
+  return (MI_PADDING_SIZE + heap->extra_padding);
+}
+#else
+static inline size_t mi_extra_padding() {
+  return 0;
+}
+#endif
+
 
 
 // ------------------------------------------------------
