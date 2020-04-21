@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 161   // major + 2 digits minor
+#define MI_MALLOC_VERSION 162   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -28,11 +28,11 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_decl_nodiscard    [[nodiscard]]
 #elif (__GNUC__ >= 4) || defined(__clang__)  // includes clang, icc, and clang-cl
   #define mi_decl_nodiscard    __attribute__((warn_unused_result))
-#elif (_MSC_VER >= 1700) 
+#elif (_MSC_VER >= 1700)
   #define mi_decl_nodiscard    _Check_return_
-#else 
-  #define mi_decl_nodiscard 
-#endif 
+#else
+  #define mi_decl_nodiscard
+#endif
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
   #if !defined(MI_SHARED_LIB)
