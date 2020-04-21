@@ -15,6 +15,7 @@ option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanis
 option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_PADDING           "Enable padding to detect heap block overflow (only in debug mode)" ON)
+option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
 
 include("cmake/mimalloc-config-version.cmake")
 
@@ -103,6 +104,11 @@ endif()
 if(MI_PADDING MATCHES "OFF")
   message(STATUS "Disable padding of heap blocks in debug mode (MI_PADDING=OFF)")
   list(APPEND mi_defines MI_PADDING=0)
+endif()
+
+if(MI_XMALLOC MATCHES "ON")
+  message(STATUS "Enable abort() calls on memory allocation failure (MI_XMALLOC=ON)")
+  list(APPEND mi_defines MI_XMALLOC=1)
 endif()
 
 if(MI_USE_CXX MATCHES "ON")
