@@ -67,6 +67,7 @@ if(MI_OVERRIDE MATCHES "ON")
       # use zone's on macOS
       message(STATUS "  Use malloc zone to override malloc (MI_OSX_ZONE=ON)")
       list(APPEND mi_sources src/alloc-override-osx.c)
+      list(APPEND mi_defines MI_OSX_ZONE=1)
       if(NOT MI_INTERPOSE MATCHES "ON")
         message(STATUS "  (enabling INTERPOSE as well since zone's require this)")
         set(MI_INTERPOSE "ON")
