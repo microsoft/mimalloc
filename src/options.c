@@ -260,13 +260,17 @@ static void mi_recurse_exit(void) {
 }
 
 void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message) {
-  if (!mi_recurse_enter()) return;
   if (out==NULL || (FILE*)out==stdout || (FILE*)out==stderr) { // TODO: use mi_out_stderr for stderr?
+    if (!mi_recurse_enter()) return;
     out = mi_out_get_default(&arg);
+    if (prefix != NULL) out(prefix, arg);
+    out(message, arg);
+    mi_recurse_exit();
   }
-  if (prefix != NULL) out(prefix,arg);
-  out(message,arg);
-  mi_recurse_exit();
+  else {
+    if (prefix != NULL) out(prefix, arg);
+    out(message, arg);
+  }
 }
 
 // Define our own limited `fprintf` that avoids memory allocation.
