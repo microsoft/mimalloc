@@ -627,8 +627,13 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     if (!commit) {
       // ensure the initial info is committed
       bool commit_zero = false;
-      _mi_mem_commit(segment, pre_size, &commit_zero, tld->os);
+      bool ok = _mi_mem_commit(segment, pre_size, &commit_zero, tld->os);
       if (commit_zero) is_zero = true;
+      if (!ok) {
+        // commit failed; we cannot touch the memory: free the segment directly and return `NULL`
+        _mi_mem_free(segment, MI_SEGMENT_SIZE, memid, false, false, os_tld);
+        return NULL;  
+      }
     }
     segment->memid = memid;
     segment->mem_is_fixed = mem_large;
