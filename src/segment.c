@@ -204,9 +204,9 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
     mi_segment_protect_range((uint8_t*)segment + segment->segment_info_size - os_page_size, os_page_size, protect);
     if (MI_SECURE <= 1 || segment->capacity == 1) {
       // and protect the last (or only) page too
-      mi_assert_internal(segment->page_kind >= MI_PAGE_LARGE);
+      mi_assert_internal(MI_SECURE <= 1 || segment->page_kind >= MI_PAGE_LARGE);
       uint8_t* start = (uint8_t*)segment + segment->segment_size - os_page_size;
-      if (protect && !mi_option_is_enabled(mi_option_eager_page_commit)) {
+      if (protect && !segment->mem_is_committed) {
         // ensure secure page is committed
         _mi_mem_commit(start, os_page_size, NULL, tld);
       }
@@ -730,13 +730,12 @@ static void mi_segment_page_claim(mi_segment_t* segment, mi_page_t* page, mi_seg
     mi_assert_internal(!segment->mem_is_fixed);
     mi_assert_internal(!page->is_reset);
     page->is_committed = true;
-    if (segment->page_kind < MI_PAGE_LARGE
-      || !mi_option_is_enabled(mi_option_eager_page_commit)) {
+    if (segment->page_kind < MI_PAGE_LARGE || mi_option_is_enabled(mi_option_eager_page_commit)) {
       size_t psize;
       uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
       bool is_zero = false;
       const size_t gsize = (MI_SECURE >= 2 ? _mi_os_page_size() : 0);
-      _mi_mem_commit(start, psize + gsize, &is_zero, tld->os);
+      _mi_mem_commit(start, psize + gsize, &is_zero, tld->os);  // todo: what if this fails?
       if (gsize > 0) { mi_segment_protect_range(start + psize, gsize, true); }
       if (is_zero) { page->is_zero_init = true; }
     }
