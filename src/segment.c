@@ -236,12 +236,12 @@ static void mi_page_reset(mi_segment_t* segment, mi_page_t* page, size_t size, m
   void* start = mi_segment_raw_page_start(segment, page, &psize);
   page->is_reset = true;
   mi_assert_internal(size <= psize);
-  size_t reset_size = (size == 0 || size > psize ? psize : size);
+  size_t reset_size = ((size == 0 || size > psize) ? psize : size);
   if (size == 0 && segment->page_kind >= MI_PAGE_LARGE && !mi_option_is_enabled(mi_option_eager_page_commit)) {
     mi_assert_internal(page->xblock_size > 0);
     reset_size = page->capacity * mi_page_block_size(page);
   }
-  _mi_mem_reset(start, reset_size, tld->os);
+  if (reset_size > 0) _mi_mem_reset(start, reset_size, tld->os);
 }
 
 static void mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size, mi_segments_tld_t* tld)
@@ -258,7 +258,7 @@ static void mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size,
     unreset_size = page->capacity * mi_page_block_size(page);
   }
   bool is_zero = false;
-  _mi_mem_unreset(start, unreset_size, &is_zero, tld->os);
+  if (unreset_size > 0) _mi_mem_unreset(start, unreset_size, &is_zero, tld->os);
   if (is_zero) page->is_zero_init = true;
 }
 
@@ -719,27 +719,30 @@ static bool mi_segment_has_free(const mi_segment_t* segment) {
   return (segment->used < segment->capacity);
 }
 
-static void mi_segment_page_claim(mi_segment_t* segment, mi_page_t* page, mi_segments_tld_t* tld) {
+static bool mi_segment_page_claim(mi_segment_t* segment, mi_page_t* page, mi_segments_tld_t* tld) {
   mi_assert_internal(_mi_page_segment(page) == segment);
   mi_assert_internal(!page->segment_in_use);
-  // set in-use before doing unreset to prevent delayed reset
   mi_pages_reset_remove(page, tld);
-  page->segment_in_use = true;
-  segment->used++;
+  // check commit
   if (!page->is_committed) {
     mi_assert_internal(!segment->mem_is_fixed);
     mi_assert_internal(!page->is_reset);
-    page->is_committed = true;
     if (segment->page_kind < MI_PAGE_LARGE || mi_option_is_enabled(mi_option_eager_page_commit)) {
       size_t psize;
       uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
       bool is_zero = false;
       const size_t gsize = (MI_SECURE >= 2 ? _mi_os_page_size() : 0);
-      _mi_mem_commit(start, psize + gsize, &is_zero, tld->os);  // todo: what if this fails?
+      bool ok = _mi_mem_commit(start, psize + gsize, &is_zero, tld->os);
+      if (!ok) return false; // failed to commit!
       if (gsize > 0) { mi_segment_protect_range(start + psize, gsize, true); }
       if (is_zero) { page->is_zero_init = true; }
     }
+    page->is_committed = true;
   }
+  // set in-use before doing unreset to prevent delayed reset
+  page->segment_in_use = true;
+  segment->used++;
+  // check reset
   if (page->is_reset) {
     mi_page_unreset(segment, page, 0, tld); // todo: only unreset the part that was reset?
   }
@@ -750,6 +753,7 @@ static void mi_segment_page_claim(mi_segment_t* segment, mi_page_t* page, mi_seg
     mi_assert_internal(!mi_segment_has_free(segment));
     mi_segment_remove_from_free_queue(segment, tld);
   }
+  return true;
 }
 
 
@@ -1216,8 +1220,8 @@ static mi_page_t* mi_segment_find_free(mi_segment_t* segment, mi_segments_tld_t*
   for (size_t i = 0; i < segment->capacity; i++) {  // TODO: use a bitmap instead of search?
     mi_page_t* page = &segment->pages[i];
     if (!page->segment_in_use) {
-      mi_segment_page_claim(segment, page, tld);
-      return page;
+      bool ok = mi_segment_page_claim(segment, page, tld);
+      if (ok) return page;
     }
   }
   mi_assert(false);
