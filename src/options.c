@@ -51,7 +51,11 @@ typedef struct mi_option_desc_s {
 static mi_option_desc_t options[_mi_option_last] =
 {
   // stable options
-  { MI_DEBUG | MI_SHOW_ERRORS, UNINIT, MI_OPTION(show_errors) },
+#if MI_DEBUG || defined(MI_SHOW_ERRORS)
+  { 1, UNINIT, MI_OPTION(show_errors) },
+#else
+  { 0, UNINIT, MI_OPTION(show_errors) },
+#endif
   { 0, UNINIT, MI_OPTION(show_stats) },
   { 0, UNINIT, MI_OPTION(verbose) },
 

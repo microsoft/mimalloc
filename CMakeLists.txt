@@ -116,8 +116,6 @@ endif()
 if(MI_SHOW_ERRORS MATCHES "ON")
   message(STATUS "Enable printing of error and warning messages by default (MI_SHOW_ERRORS=ON)")
   list(APPEND mi_defines MI_SHOW_ERRORS=1)
-else()
-  list(APPEND mi_defines MI_SHOW_ERRORS=0)
 endif()
 
 if(MI_USE_CXX MATCHES "ON")
