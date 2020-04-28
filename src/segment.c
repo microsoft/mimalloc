@@ -671,7 +671,8 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     if (!commit) {
       // at least commit the info slices
       mi_assert_internal(MI_COMMIT_SIZE > info_slices*MI_SEGMENT_SLICE_SIZE);
-      _mi_os_commit(segment, MI_COMMIT_SIZE, &is_zero, tld->stats);
+      bool ok = _mi_os_commit(segment, MI_COMMIT_SIZE, &is_zero, tld->stats);
+      if (!ok) return NULL; // failed to commit
     }
     segment->memid = memid;
     segment->mem_is_fixed = mem_large;

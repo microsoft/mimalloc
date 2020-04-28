@@ -60,7 +60,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(verbose) },
 
   // the following options are experimental and not all combinations make sense.
-  { 1, UNINIT, MI_OPTION(eager_commit) },        // commit on demand?
+  { 0, UNINIT, MI_OPTION(eager_commit) },        // commit on demand?
   #if defined(_WIN32) || (MI_INTPTR_SIZE <= 4)   // and other OS's without overcommit?
   { 0, UNINIT, MI_OPTION(eager_region_commit) },
   { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
@@ -79,7 +79,7 @@ static mi_option_desc_t options[_mi_option_last] =
 #else
   { 1, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
 #endif
-  { 1, UNINIT, MI_OPTION(allow_decommit) },      // decommit pages when not eager committed
+  { 1,    UNINIT, MI_OPTION(allow_decommit) },    // decommit pages when not eager committed
   { 100,  UNINIT, MI_OPTION(reset_delay) },       // reset delay in milli-seconds
   { 1000, UNINIT, MI_OPTION(arena_reset_delay) }, // reset delay in milli-seconds
   { 0,    UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes. 
