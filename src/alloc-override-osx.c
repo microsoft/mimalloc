@@ -41,8 +41,11 @@ extern malloc_zone_t* malloc_default_purgeable_zone(void) __attribute__((weak_im
 ------------------------------------------------------ */
 
 static size_t zone_size(malloc_zone_t* zone, const void* p) {
-  UNUSED(zone); UNUSED(p);
-  return 0; // as we cannot guarantee that `p` comes from us, just return 0
+  UNUSED(zone);
+  if (!mi_is_in_heap_region(p))
+    return 0; // not our pointer, bail out
+  
+  return mi_usable_size(p);
 }
 
 static void* zone_malloc(malloc_zone_t* zone, size_t size) {

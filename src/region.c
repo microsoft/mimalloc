@@ -49,7 +49,7 @@ bool    _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
 bool    _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 
 // arena.c
-void    _mi_arena_free(void* p, size_t size, size_t memid, mi_stats_t* stats);
+void    _mi_arena_free(void* p, size_t size, size_t memid, bool all_committed, mi_stats_t* stats);
 void*   _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
 void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
 
@@ -187,7 +187,7 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   const uintptr_t idx = mi_atomic_increment(&regions_count);
   if (idx >= MI_REGION_MAX) {
     mi_atomic_decrement(&regions_count);
-    _mi_arena_free(start, MI_REGION_SIZE, arena_memid, tld->stats);
+    _mi_arena_free(start, MI_REGION_SIZE, arena_memid, region_commit, tld->stats);
     _mi_warning_message("maximum regions used: %zu GiB (perhaps recompile with a larger setting for MI_HEAP_REGION_MAX_SIZE)", _mi_divide_up(MI_HEAP_REGION_MAX_SIZE, GiB));
     return false;
   }
@@ -391,7 +391,7 @@ void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_re
   mem_region_t* region;
   if (mi_memid_is_arena(id,&region,&bit_idx,&arena_memid)) {
    // was a direct arena allocation, pass through
-    _mi_arena_free(p, size, arena_memid, tld->stats);
+    _mi_arena_free(p, size, arena_memid, full_commit, tld->stats);
   }
   else {
     // allocated in a region
@@ -454,12 +454,13 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
         // on success, free the whole region
         uint8_t* start = mi_atomic_read_ptr(uint8_t,&regions[i].start);
         size_t arena_memid = mi_atomic_read_relaxed(&regions[i].arena_memid);
+        uintptr_t commit = mi_atomic_read_relaxed(&regions[i].commit);
         memset(&regions[i], 0, sizeof(mem_region_t));
         // and release the whole region
         mi_atomic_write(&region->info, 0);
         if (start != NULL) { // && !_mi_os_is_huge_reserved(start)) {         
           _mi_abandoned_await_readers(); // ensure no pending reads
-          _mi_arena_free(start, MI_REGION_SIZE, arena_memid, tld->stats);
+          _mi_arena_free(start, MI_REGION_SIZE, arena_memid, (~commit == 0), tld->stats);
         }
       }
     }
