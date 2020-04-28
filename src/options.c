@@ -352,6 +352,11 @@ static void mi_error_default(int err) {
     abort();
   }
 #endif
+#if defined(MI_XMALLOC)
+  if (err==ENOMEM || err==EOVERFLOW) { // abort on memory allocation fails in xmalloc mode
+    abort();
+  }
+#endif
 }
 
 void mi_register_error(mi_error_fun* fun, void* arg) {
