@@ -35,9 +35,9 @@ const mi_page_t _mi_page_empty = {
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
 
-#if defined(MI_PADDING) && (MI_INTPTR_SIZE >= 8)
+#if (MI_PADDING>0) && (MI_INTPTR_SIZE >= 8)
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY(), MI_PAGE_EMPTY() }
-#elif defined(MI_PADDING)
+#elif (MI_PADDING>0)
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY(), MI_PAGE_EMPTY(), MI_PAGE_EMPTY() }
 #else
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY() }
@@ -312,6 +312,12 @@ static void _mi_thread_done(mi_heap_t* default_heap);
   // use thread local storage keys to detect thread ending
   #include <windows.h>
   #include <fibersapi.h>
+  #if (_WIN32_WINNT < 0x600)  // before Windows Vista 
+  WINBASEAPI DWORD WINAPI FlsAlloc( _In_opt_ PFLS_CALLBACK_FUNCTION lpCallback );
+  WINBASEAPI PVOID WINAPI FlsGetValue( _In_ DWORD dwFlsIndex );
+  WINBASEAPI BOOL  WINAPI FlsSetValue( _In_ DWORD dwFlsIndex, _In_opt_ PVOID lpFlsData );
+  WINBASEAPI BOOL  WINAPI FlsFree(_In_ DWORD dwFlsIndex);
+  #endif
   static DWORD mi_fls_key = (DWORD)(-1);
   static void NTAPI mi_fls_done(PVOID value) {
     if (value!=NULL) _mi_thread_done((mi_heap_t*)value);

@@ -211,10 +211,12 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
     if (p != NULL) return p;
     DWORD err = GetLastError();
-    if (err != ERROR_INVALID_ADDRESS) { // if linked with multiple instances, we may have tried to allocate at an already allocated area
+    if (err != ERROR_INVALID_ADDRESS &&   // If linked with multiple instances, we may have tried to allocate at an already allocated area (#210)
+        err != ERROR_INVALID_PARAMETER) { // Windows7 instability (#230)
       return NULL;
     }
-  }
+    // fall through
+  } 
 #endif
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   // on modern Windows try use VirtualAlloc2 for aligned allocation
@@ -227,6 +229,7 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
   }
 #endif
+  // last resort
   return VirtualAlloc(addr, size, flags, PAGE_READWRITE);
 }
 
@@ -614,7 +617,7 @@ static void mi_mprotect_hint(int err) {
 }
 
 // Commit/Decommit memory.
-// Usuelly commit is aligned liberal, while decommit is aligned conservative.
+// Usually commit is aligned liberal, while decommit is aligned conservative.
 // (but not for the reset version where we want commit to be conservative as well)
 static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservative, bool* is_zero, mi_stats_t* stats) {
   // page align in the range, commit liberally, decommit conservative
@@ -822,7 +825,7 @@ and possibly associated with a specific NUMA node. (use `numa_node>=0`)
 -----------------------------------------------------------------------------*/
 #define MI_HUGE_OS_PAGE_SIZE  (GiB)
 
-#if defined(WIN32) && (MI_INTPTR_SIZE >= 8)
+#if defined(_WIN32) && (MI_INTPTR_SIZE >= 8)
 static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
 {
   mi_assert_internal(size%GiB == 0);
@@ -865,6 +868,8 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
     params[0].ULong = (unsigned)numa_node;
     return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, params, 1);
   }
+  #else
+    UNUSED(numa_node);
   #endif
   // otherwise use regular virtual alloc on older windows
   return VirtualAlloc(addr, size, flags, PAGE_READWRITE);
@@ -904,6 +909,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) 
 }
 #else
 static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) {
+  UNUSED(addr); UNUSED(size); UNUSED(numa_node);
   return NULL;
 }
 #endif
@@ -939,6 +945,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
 }
 #else
 static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
+  UNUSED(pages);
   if (total_size != NULL) *total_size = 0;
   return NULL;
 }
@@ -1011,7 +1018,12 @@ void _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats) {
 /* ----------------------------------------------------------------------------
 Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
-#ifdef WIN32
+#ifdef _WIN32
+  #if (_WIN32_WINNT < 0x601)  // before Win7
+  typedef struct _PROCESSOR_NUMBER { WORD Group; BYTE Number; BYTE Reserved; } PROCESSOR_NUMBER, *PPROCESSOR_NUMBER;
+  WINBASEAPI VOID WINAPI GetCurrentProcessorNumberEx(_Out_ PPROCESSOR_NUMBER ProcNumber);
+  WINBASEAPI BOOL WINAPI GetNumaProcessorNodeEx(_In_  PPROCESSOR_NUMBER Processor, _Out_ PUSHORT NodeNumber);
+  #endif
 static size_t mi_os_numa_nodex() {
   PROCESSOR_NUMBER pnum;
   USHORT numa_node = 0;

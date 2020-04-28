@@ -57,10 +57,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
-#if (MI_SECURE>=3 || MI_DEBUG>=1 || defined(MI_PADDING))
+#if (MI_SECURE>=3 || MI_DEBUG>=1 || MI_PADDING > 0)
 #define MI_ENCODE_FREELIST  1
 #endif
-
 
 // ------------------------------------------------------
 // Platform specific values
@@ -101,7 +100,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Main tuning parameters for segment and page sizes
 // Sizes for 64-bit, divide by two for 32-bit
 #define MI_SEGMENT_SLICE_SHIFT            (13 + MI_INTPTR_SHIFT)         // 64kb
-#define MI_SEGMENT_SHIFT                  ( 8 + MI_SEGMENT_SLICE_SHIFT)  // 16mb
+#define MI_SEGMENT_SHIFT                  ( 7 + MI_SEGMENT_SLICE_SHIFT)  // 8mb
 
 #define MI_SMALL_PAGE_SHIFT               (MI_SEGMENT_SLICE_SHIFT)       // 64kb
 #define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SMALL_PAGE_SHIFT)     // 512kb
@@ -332,7 +331,7 @@ typedef struct mi_random_cxt_s {
 
 
 // In debug mode there is a padding stucture at the end of the blocks to check for buffer overflows
-#if defined(MI_PADDING)
+#if (MI_PADDING)
 typedef struct mi_padding_s {
   uint32_t canary; // encoded block value to check validity of the padding (in case of overflow)
   uint32_t delta;  // padding bytes before the block. (mi_usable_size(p) - delta == exact allocated bytes)

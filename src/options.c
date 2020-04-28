@@ -51,7 +51,11 @@ typedef struct mi_option_desc_s {
 static mi_option_desc_t options[_mi_option_last] =
 {
   // stable options
-  { MI_DEBUG, UNINIT, MI_OPTION(show_errors) },
+#if MI_DEBUG || defined(MI_SHOW_ERRORS)
+  { 1, UNINIT, MI_OPTION(show_errors) },
+#else
+  { 0, UNINIT, MI_OPTION(show_errors) },
+#endif
   { 0, UNINIT, MI_OPTION(show_stats) },
   { 0, UNINIT, MI_OPTION(verbose) },
 
@@ -262,13 +266,17 @@ static void mi_recurse_exit(void) {
 }
 
 void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message) {
-  if (!mi_recurse_enter()) return;
   if (out==NULL || (FILE*)out==stdout || (FILE*)out==stderr) { // TODO: use mi_out_stderr for stderr?
+    if (!mi_recurse_enter()) return;
     out = mi_out_get_default(&arg);
+    if (prefix != NULL) out(prefix, arg);
+    out(message, arg);
+    mi_recurse_exit();
   }
-  if (prefix != NULL) out(prefix,arg);
-  out(message,arg);
-  mi_recurse_exit();
+  else {
+    if (prefix != NULL) out(prefix, arg);
+    out(message, arg);
+  }
 }
 
 // Define our own limited `fprintf` that avoids memory allocation.
@@ -347,6 +355,11 @@ static void mi_error_default(int err) {
 #endif
 #if (MI_SECURE>0)
   if (err==EFAULT) {  // abort on serious errors in secure mode (corrupted meta-data)
+    abort();
+  }
+#endif
+#if defined(MI_XMALLOC)
+  if (err==ENOMEM || err==EOVERFLOW) { // abort on memory allocation fails in xmalloc mode
     abort();
   }
 #endif

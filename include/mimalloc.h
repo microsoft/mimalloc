@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 161   // major + 2 digits minor
+#define MI_MALLOC_VERSION 163   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -28,13 +28,13 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_decl_nodiscard    [[nodiscard]]
 #elif (__GNUC__ >= 4) || defined(__clang__)  // includes clang, icc, and clang-cl
   #define mi_decl_nodiscard    __attribute__((warn_unused_result))
-#elif (_MSC_VER >= 1700) 
+#elif (_MSC_VER >= 1700)
   #define mi_decl_nodiscard    _Check_return_
-#else 
-  #define mi_decl_nodiscard 
-#endif 
+#else
+  #define mi_decl_nodiscard
+#endif
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) || defined(__MINGW32__)
   #if !defined(MI_SHARED_LIB)
     #define mi_decl_export
   #elif defined(MI_SHARED_LIB_EXPORT)
@@ -42,13 +42,18 @@ terms of the MIT license. A copy of the license can be found in the file
   #else
     #define mi_decl_export              __declspec(dllimport)
   #endif
-  #if (_MSC_VER >= 1900) && !defined(__EDG__)
-    #define mi_decl_restrict            __declspec(allocator) __declspec(restrict)
+  #if defined(__MINGW32__)
+    #define mi_decl_restrict
+    #define mi_attr_malloc              __attribute__((malloc))
   #else
-    #define mi_decl_restrict            __declspec(restrict)
+    #if (_MSC_VER >= 1900) && !defined(__EDG__)
+      #define mi_decl_restrict          __declspec(allocator) __declspec(restrict)
+    #else
+      #define mi_decl_restrict          __declspec(restrict)
+    #endif
+    #define mi_attr_malloc
   #endif
   #define mi_cdecl                      __cdecl
-  #define mi_attr_malloc
   #define mi_attr_alloc_size(s)
   #define mi_attr_alloc_size2(s1,s2)
   #define mi_attr_alloc_align(p)

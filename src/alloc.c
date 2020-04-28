@@ -44,7 +44,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
     mi_heap_stat_increase(heap, normal[bin], 1);
   }
 #endif
-#if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
+#if (MI_PADDING > 0) && defined(MI_ENCODE_FREELIST)
   mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
   ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
   mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
@@ -203,7 +203,7 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 // Check for heap block overflow by setting up padding at the end of the block
 // ---------------------------------------------------------------------------
 
-#if defined(MI_PADDING) && defined(MI_ENCODE_FREELIST)
+#if (MI_PADDING>0) && defined(MI_ENCODE_FREELIST)
 static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
   *bsize = mi_page_usable_block_size(page);
   const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + *bsize);
@@ -506,15 +506,16 @@ size_t mi_usable_size(const void* p) mi_attr_noexcept {
   if (p==NULL) return 0;
   const mi_segment_t* const segment = _mi_ptr_segment(p);
   const mi_page_t* const page = _mi_segment_page_of(segment, p);
-  const mi_block_t* const block = (const mi_block_t*)p;
-  const size_t size = mi_page_usable_size_of(page, block);
+  const mi_block_t* block = (const mi_block_t*)p;
   if (mi_unlikely(mi_page_has_aligned(page))) {
-    ptrdiff_t const adjust = (uint8_t*)p - (uint8_t*)_mi_page_ptr_unalign(segment,page,p);
+    block = _mi_page_ptr_unalign(segment, page, p);
+    size_t size = mi_page_usable_size_of(page, block);
+    ptrdiff_t const adjust = (uint8_t*)p - (uint8_t*)block;
     mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);
     return (size - adjust);
   }
   else {
-    return size;
+    return mi_page_usable_size_of(page, block);
   }
 }
 
@@ -677,12 +678,13 @@ mi_decl_restrict char* mi_strdup(const char* s) mi_attr_noexcept {
 // `strndup` using mi_malloc
 mi_decl_restrict char* mi_heap_strndup(mi_heap_t* heap, const char* s, size_t n) mi_attr_noexcept {
   if (s == NULL) return NULL;
-  size_t m = strlen(s);
-  if (n > m) n = m;
-  char* t = (char*)mi_heap_malloc(heap, n+1);
+  const char* end = (const char*)memchr(s, 0, n);  // find end of string in the first `n` characters (returns NULL if not found)
+  const size_t m = (end != NULL ? (size_t)(end - s) : n);  // `m` is the minimum of `n` or the end-of-string
+  mi_assert_internal(m <= n);
+  char* t = (char*)mi_heap_malloc(heap, m+1);
   if (t == NULL) return NULL;
-  memcpy(t, s, n);
-  t[n] = 0;
+  memcpy(t, s, m);
+  t[m] = 0;
   return t;
 }
 
