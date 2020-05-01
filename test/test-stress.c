@@ -39,10 +39,12 @@ static size_t use_one_size = 0;              // use single object size of `N * s
 
 
 #ifdef USE_STD_MALLOC
+#define custom_mallocn(n,s)   malloc(n*s)
 #define custom_calloc(n,s)    calloc(n,s)
 #define custom_realloc(p,s)   realloc(p,s)
 #define custom_free(p)        free(p)
 #else
+#define custom_mallocn(n,s)   mi_mallocn(n,s)
 #define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
@@ -97,7 +99,7 @@ static void* alloc_items(size_t items, random_t r) {
   if (items == 40) items++;              // pthreads uses that size for stack increases
   if (use_one_size > 0) items = (use_one_size / sizeof(uintptr_t));
   if (items==0) items = 1;
-  uintptr_t* p = (uintptr_t*)custom_calloc(items,sizeof(uintptr_t));
+  uintptr_t* p = (uintptr_t*)custom_mallocn(items,sizeof(uintptr_t));
   if (p != NULL) {
     for (uintptr_t i = 0; i < items; i++) {
       p[i] = (items - i) ^ cookie;
@@ -242,14 +244,18 @@ int main(int argc, char** argv) {
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
   srand(0x7feb352d);
-  // mi_stats_reset();
+#ifndef NDEBUG
+  mi_stats_reset();
+#endif
 #ifdef STRESS
     test_stress();
 #else
     test_leak();
 #endif
-
-  // mi_collect(true);
+#ifndef NDEBUG
+  mi_collect(true);
+  mi_heap_check_leak(NULL,NULL,NULL);
+#endif
   mi_stats_print(NULL);
   //bench_end_program();
   return 0;

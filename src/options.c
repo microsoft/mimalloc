@@ -51,7 +51,11 @@ typedef struct mi_option_desc_s {
 static mi_option_desc_t options[_mi_option_last] =
 {
   // stable options
+#if MI_DEBUG || defined(MI_SHOW_ERRORS)
   { 1, UNINIT, MI_OPTION(show_errors) },
+#else
+  { 0, UNINIT, MI_OPTION(show_errors) },
+#endif
   { 0, UNINIT, MI_OPTION(show_stats) },
   { 0, UNINIT, MI_OPTION(verbose) },
 
@@ -77,7 +81,7 @@ static mi_option_desc_t options[_mi_option_last] =
 #endif
   { 100, UNINIT, MI_OPTION(reset_delay) },       // reset delay in milli-seconds
   { 0,   UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes.
-  { 0,   UNINIT, MI_OPTION(debug_extra_padding) }, // extra padding in bytes
+  { 0,   UNINIT, MI_OPTION(debug_extra_padding) }, // extra padding in bytes (on top of the standard end padding in debug mode)
   { 100, UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
   { 16,  UNINIT, MI_OPTION(max_errors) }         // maximum errors that are output
 };
@@ -261,13 +265,17 @@ static void mi_recurse_exit(void) {
 }
 
 void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message) {
-  if (!mi_recurse_enter()) return;
   if (out==NULL || (FILE*)out==stdout || (FILE*)out==stderr) { // TODO: use mi_out_stderr for stderr?
+    if (!mi_recurse_enter()) return;
     out = mi_out_get_default(&arg);
+    if (prefix != NULL) out(prefix, arg);
+    out(message, arg);
+    mi_recurse_exit();
   }
-  if (prefix != NULL) out(prefix,arg);
-  out(message,arg);
-  mi_recurse_exit();
+  else {
+    if (prefix != NULL) out(prefix, arg);
+    out(message, arg);
+  }
 }
 
 // Define our own limited `fprintf` that avoids memory allocation.
@@ -353,6 +361,11 @@ static void mi_error_default(int err) {
 #endif
 #if (MI_SECURE>0)
   if (err==EFAULT) {  // abort on serious errors in secure mode (corrupted meta-data)
+    abort();
+  }
+#endif
+#if defined(MI_XMALLOC)
+  if (err==ENOMEM || err==EOVERFLOW) { // abort on memory allocation fails in xmalloc mode
     abort();
   }
 #endif

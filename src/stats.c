@@ -237,9 +237,51 @@ static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bin
 #endif
 
 
+
+//------------------------------------------------------------
+// Use an output wrapper for line-buffered output
+// (which is nice when using loggers etc.)
+//------------------------------------------------------------
+typedef struct buffered_s {
+  mi_output_fun* out;   // original output function
+  void*          arg;   // and state
+  char*          buf;   // local buffer of at least size `count+1`
+  size_t         used;  // currently used chars `used <= count`  
+  size_t         count; // total chars available for output
+} buffered_t;
+
+static void mi_buffered_flush(buffered_t* buf) {
+  buf->buf[buf->used] = 0;
+  _mi_fputs(buf->out, buf->arg, NULL, buf->buf);
+  buf->used = 0;
+}
+
+static void mi_buffered_out(const char* msg, void* arg) {
+  buffered_t* buf = (buffered_t*)arg;
+  if (msg==NULL || buf==NULL) return;
+  for (const char* src = msg; *src != 0; src++) {
+    char c = *src;
+    if (buf->used >= buf->count) mi_buffered_flush(buf);
+    mi_assert_internal(buf->used < buf->count);
+    buf->buf[buf->used++] = c;
+    if (c == '\n') mi_buffered_flush(buf);
+  }
+}
+
+//------------------------------------------------------------
+// Print statistics
+//------------------------------------------------------------
+
 static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit);
 
-static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun* out, void* arg) mi_attr_noexcept {
+static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun* out0, void* arg0) mi_attr_noexcept {
+  // wrap the output function to be line buffered
+  char buf[256];
+  buffered_t buffer = { out0, arg0, buf, 0, 255 };
+  mi_output_fun* out = &mi_buffered_out;
+  void* arg = &buffer;
+
+  // and print using that
   mi_print_header(out,arg);
   #if MI_STAT>1
   mi_stat_count_t normal = { 0,0,0,0 };
@@ -287,7 +329,7 @@ static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun
     _mi_fprintf(out, arg, ", commit charge: ");
     mi_printf_amount((int64_t)peak_commit, 1, out, arg, "%s");
   }
-  _mi_fprintf(out, arg, "\n");
+  _mi_fprintf(out, arg, "\n");  
 }
 
 static mi_msecs_t mi_time_start; // = 0

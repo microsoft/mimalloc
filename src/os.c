@@ -618,7 +618,7 @@ static void mi_mprotect_hint(int err) {
 }
 
 // Commit/Decommit memory.
-// Usuelly commit is aligned liberal, while decommit is aligned conservative.
+// Usually commit is aligned liberal, while decommit is aligned conservative.
 // (but not for the reset version where we want commit to be conservative as well)
 static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservative, bool* is_zero, mi_stats_t* stats) {
   // page align in the range, commit liberally, decommit conservative

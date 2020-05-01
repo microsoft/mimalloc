@@ -165,7 +165,7 @@ extern "C" {
 
 void   cfree(void* p)                    MI_FORWARD0(mi_free, p);
 void*  reallocf(void* p, size_t newsize) MI_FORWARD2(mi_reallocf,p,newsize);
-size_t malloc_size(void* p)              MI_FORWARD1(mi_usable_size, p);
+size_t malloc_size(const void* p)        MI_FORWARD1(mi_usable_size,p);
 #if !defined(__ANDROID__)
 size_t malloc_usable_size(void* p)       MI_FORWARD1(mi_usable_size, p);
 #else

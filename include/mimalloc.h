@@ -101,7 +101,8 @@ extern "C" {
 // -----------------------------------------------------------------------------------
 // Debugging
 // We declare two entry points for each allocation function:
-// the normal one (`mi_malloc`) and one that takes a source argument (`dbg_mi_malloc`)
+// the normal one (`mi_malloc`) and one that takes a source argument (`dbg_mi_malloc`). 
+// The source argument is stored in heap blocks to track allocations in debug mode.
 // The following macros make it easier to specify this.
 // Note: these are even defined in release mode (where the source argument is ignored)
 // so one can still build a debug program that links with the release build of mimalloc.
@@ -356,8 +357,7 @@ typedef enum mi_option_e {
   mi_option_debug_extra_padding,
   mi_option_os_tag,
   mi_option_max_errors,
-  _mi_option_last,
-  mi_option_eager_page_commit = mi_option_eager_commit
+  _mi_option_last
 } mi_option_t;
 
 

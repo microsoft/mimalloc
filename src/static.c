@@ -25,5 +25,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "alloc.c"
 #include "alloc-aligned.c"
 #include "alloc-posix.c"
+#if MI_OSX_ZONE
+#include "alloc-override-osx.c"
+#endif
 #include "init.c"
 #include "options.c"
