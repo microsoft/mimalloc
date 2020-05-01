@@ -205,6 +205,7 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
 
   // and share it 
   mi_region_info_t info;
+  info.value = 0;                        // initialize the full union to zero
   info.x.valid = true;
   info.x.is_large = region_large;
   info.x.numa_node = (short)_mi_os_numa_node(tld);
