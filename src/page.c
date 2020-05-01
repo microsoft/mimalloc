@@ -570,7 +570,8 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld)
   if (page->capacity >= page->reserved) return;
 
   size_t page_size;
-  uint8_t* page_start = _mi_page_start(_mi_page_segment(page), page, &page_size);
+  //uint8_t* page_start = 
+  _mi_page_start(_mi_page_segment(page), page, &page_size);
   mi_stat_counter_increase(tld->stats.pages_extended, 1);
 
   // calculate the extend count
@@ -587,12 +588,6 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld)
 
   mi_assert_internal(extend > 0 && extend + page->capacity <= page->reserved);
   mi_assert_internal(extend < (1UL<<16));
-
-  // commit on-demand for large and huge pages?
-  if (_mi_page_segment(page)->page_kind >= MI_PAGE_LARGE && !mi_option_is_enabled(mi_option_eager_page_commit)) {
-    uint8_t* start = page_start + (page->capacity * bsize);
-    _mi_mem_commit(start, extend * bsize, NULL, &tld->os);
-  }
 
   // and append the extend the free list
   if (extend < MI_MIN_SLICES || MI_SECURE==0) { //!mi_option_is_enabled(mi_option_secure)) {
