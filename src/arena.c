@@ -127,146 +127,191 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
 /* -----------------------------------------------------------
   Arena cache
 ----------------------------------------------------------- */
-#define MI_CACHE_FIELDS (8)
-#define MI_CACHE_MAX    (MI_BITMAP_FIELD_BITS*MI_CACHE_FIELDS)       // 512 on 64-bit
+
+
+/* -----------------------------------------------------------
+  Arena cache
+----------------------------------------------------------- */
+#define MI_CACHE_MAX (256) 
+#define MI_MAX_NUMA  (4)
+
+#define MI_SLOT_IN_USE ((void*)1)
 
 typedef struct mi_cache_slot_s {
-  void*      p;
-  size_t     memid;
-  mi_msecs_t expire;
-  bool       is_committed;  // TODO: use bit from p to reduce size?
+  volatile _Atomic(void*)p;
+  volatile size_t     memid;
+  volatile mi_msecs_t expire;
+  volatile bool       is_committed;
+  volatile bool       is_large;
 } mi_cache_slot_t;
 
-static mi_cache_slot_t cache[MI_CACHE_MAX];    // = 0
+static mi_cache_slot_t cache[MI_MAX_NUMA][MI_CACHE_MAX];    // = 0
+static volatile _Atomic(uintptr_t)cache_count[MI_MAX_NUMA];  // = 0
 
-#define BITS_SET()  (UINTPTR_MAX)
-static mi_bitmap_field_t cache_available[MI_CACHE_FIELDS] = { MI_INIT8(BITS_SET) };        // zero bit = available!
-static mi_bitmap_field_t cache_available_large[MI_CACHE_FIELDS] = { MI_INIT8(BITS_SET) };
-static mi_bitmap_field_t cache_inuse[MI_CACHE_FIELDS];   // zero bit = free
-
+typedef union mi_cache_count_u {
+  uintptr_t value;
+  struct {
+    int16_t count;        // at most `count` elements in the cache
+#if MI_INTPTR_SIZE > 4
+    uint32_t epoch;       // each push/pop increase this
+#else
+    uint16_t epoch;
+#endif
+  } x;
+} mi_cache_count_t;
 
 static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld) {
   // only segment blocks
   if (size != MI_SEGMENT_SIZE || alignment > MI_SEGMENT_ALIGN) return NULL;
 
-  // numa node determines start field
-  size_t start_field = 0;
-  if (numa_node > 0) {
-    start_field = (MI_CACHE_FIELDS / _mi_os_numa_node_count())*numa_node;
-    if (start_field >= MI_CACHE_FIELDS) start_field = 0;
-  }
-
-  // find an available slot
-  mi_bitmap_index_t bitidx = 0;
-  bool claimed = false;
-  if (*large) {  // large allowed?
-    claimed = mi_bitmap_try_find_from_claim(cache_available_large, MI_CACHE_FIELDS, start_field, 1, &bitidx);
-    if (claimed) *large = true;
-  }
-  if (!claimed) {
-    claimed = mi_bitmap_try_find_from_claim(cache_available, MI_CACHE_FIELDS, start_field, 1, &bitidx);
-    if (claimed) *large = false;
-  }
-
-  if (!claimed) return NULL;
-
-  // found a slot
-  mi_cache_slot_t* slot = &cache[mi_bitmap_index_bit(bitidx)];
-  void* p = slot->p;
-  *memid = slot->memid;
-  *is_zero = false;
-  bool committed = slot->is_committed;
-  slot->p = NULL;
-  slot->expire = 0;
-  if (*commit && !committed) {
-    bool commit_zero;
-    _mi_os_commit(p, MI_SEGMENT_SIZE, &commit_zero, tld->stats);
-    *commit = true;
+  // set numa range 
+  int numa_min = numa_node;
+  int numa_max = numa_min;
+  if (numa_node < 0) {
+    numa_min = 0;
+    numa_max = _mi_os_numa_node_count() % MI_MAX_NUMA;
   }
   else {
-    *commit = committed;
+    if (numa_node >= MI_MAX_NUMA) numa_node %= MI_MAX_NUMA;
+    numa_min = numa_max = numa_node;
   }
 
-  // mark the slot as free again
-  mi_assert_internal(mi_bitmap_is_claimed(cache_inuse, MI_CACHE_FIELDS, 1, bitidx));
-  mi_bitmap_unclaim(cache_inuse, MI_CACHE_FIELDS, 1, bitidx);
-  return p;
+  // find a free slot
+  mi_cache_slot_t* slot;
+  for (int n = numa_min; n <= numa_max; n++) {
+    mi_cache_count_t top = { 0 };
+    top.value = mi_atomic_read_relaxed(&cache_count[n]);
+    int16_t count = top.x.count;
+    for (int16_t i = count - 1; i >= 0; i--) {
+      slot = &cache[n][i];
+      void* p = mi_atomic_read_ptr_relaxed(mi_cache_slot_t, &slot->p);
+      if (p == NULL) {
+        if (count > 0) { count = i; }
+      }
+      else if (p > MI_SLOT_IN_USE) { // not NULL or 1
+        if (count >= 0 && count < top.x.count) {  // new lower bound?
+          mi_cache_count_t newtop = { 0 };
+          newtop.x.count = count;
+          newtop.x.epoch = top.x.epoch + 1;
+          mi_atomic_cas_strong(&cache_count[n], newtop.value, top.value);  // it's fine to not succeed; just causes longer scans
+        }
+        count = -1; // don't try to set lower bound again
+        if (mi_atomic_cas_ptr_weak(mi_cache_slot_t, &slot->p, MI_SLOT_IN_USE, p)) {
+          // claimed
+          if (!*large && slot->is_large) {
+            // back out again
+            mi_atomic_write_ptr(mi_cache_slot_t, &slot->p, p); // make it available again
+          }
+          else {
+            // keep it
+            *memid = slot->memid;
+            *large = slot->is_large;
+            *is_zero = false;
+            bool committed = slot->is_committed;
+            mi_atomic_write_ptr(mi_cache_slot_t, &slot->p, NULL); // set it free
+            if (*commit && !committed) {
+              bool commit_zero;
+              _mi_os_commit(p, MI_SEGMENT_SIZE, &commit_zero, tld->stats);
+              *commit = true;
+            }
+            else {
+              *commit = committed;
+            }
+            return p;
+          }
+        }
+      }
+    }
+  }
+  return NULL;
 }
 
 static void mi_cache_purge(mi_os_tld_t* tld) {
-  UNUSED(tld);
+  // TODO: for each numa node instead?
+  // if (mi_option_get(mi_option_arena_reset_delay) == 0) return;
+
   mi_msecs_t now = _mi_clock_now();
-  size_t idx = (_mi_random_shuffle((uintptr_t)now) % MI_CACHE_MAX);            // random start
-  size_t purged = 0;
-  for (size_t visited = 0; visited < MI_CACHE_FIELDS; visited++,idx++) {  // probe just N slots
-    if (idx >= MI_CACHE_MAX) idx = 0; // wrap
-    mi_cache_slot_t* slot = &cache[idx];
-    if (slot->expire != 0 && now >= slot->expire) {  // racy read
-      // seems expired, first claim it from available
-      purged++;
-      mi_bitmap_index_t bitidx = mi_bitmap_index_create_from_bit(idx);
-      if (mi_bitmap_claim(cache_available, MI_CACHE_FIELDS, 1, bitidx, NULL)) {
-        // was available, we claimed it
-        if (slot->expire != 0 && now >= slot->expire) {  // safe read
-          // still expired, decommit it
-          slot->expire = 0;
-          mi_assert_internal(slot->is_committed && mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
-          _mi_abandoned_await_readers();  // wait until safe to decommit
-          _mi_os_decommit(slot->p, MI_SEGMENT_SIZE, tld->stats);
-          slot->is_committed = false;
+  int numa_node = _mi_os_numa_node(NULL);
+  if (numa_node > MI_MAX_NUMA) numa_node %= MI_MAX_NUMA;
+  mi_cache_slot_t* slot;
+  int purged = 0;
+  mi_cache_count_t top = { 0 };
+  top.value = mi_atomic_read_relaxed(&cache_count[numa_node]);
+  for (int i = 0; i < top.x.count; i++) {
+    slot = &cache[numa_node][i];
+    void* p = mi_atomic_read_ptr_relaxed(mi_cache_slot_t, &slot->p);
+    if (p > MI_SLOT_IN_USE && !slot->is_committed && !slot->is_large) {
+      mi_msecs_t expire = slot->expire;
+      if (expire != 0 && now >= expire) {
+        // expired, try to claim it
+        if (mi_atomic_cas_ptr_weak(mi_cache_slot_t, &slot->p, MI_SLOT_IN_USE, p)) {
+          // claimed! test again
+          if (slot->is_committed && !slot->is_large && now >= slot->expire) {
+            _mi_abandoned_await_readers();  // wait until safe to decommit
+            _mi_os_decommit(p, MI_SEGMENT_SIZE, tld->stats);
+            slot->is_committed = false;
+          }
+          // and unclaim again
+          mi_atomic_write_ptr(mi_cache_slot_t, &slot->p, p);
+          purged++;
+          if (purged >= 4) break; // limit to at most 4 decommits per push
         }
-        mi_bitmap_unclaim(cache_available, MI_CACHE_FIELDS, 1, bitidx); // make it available again for a pop
       }
-      if (purged > 4) break;  // bound to no more than 4 purge tries per push
     }
   }
 }
 
-static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_committed, bool is_large, mi_os_tld_t* tld) 
-{
-  // only for segment blocks
-  if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
-  
-  // numa node determines start field
-  int numa_node = _mi_os_numa_node(NULL);
-  size_t start_field = 0;
-  if (numa_node > 0) {
-    start_field = (MI_CACHE_FIELDS / _mi_os_numa_node_count())*numa_node;
-    if (start_field >= MI_CACHE_FIELDS) start_field = 0;
-  }
 
-  // purge expired entries
+static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_committed, bool is_large, mi_os_tld_t* tld)
+{
   mi_cache_purge(tld);
 
-  // find an available slot
-  mi_bitmap_index_t bitidx;
-  bool claimed = mi_bitmap_try_find_from_claim(cache_inuse, MI_CACHE_FIELDS, start_field, 1, &bitidx);
-  if (!claimed) return false;
+  // only for segment blocks
+  if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
 
-  mi_assert_internal(mi_bitmap_is_claimed(cache_available, MI_CACHE_FIELDS, 1, bitidx));
-  mi_assert_internal(mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
-
-  // set the slot
-  mi_cache_slot_t* slot = &cache[mi_bitmap_index_bit(bitidx)];
-  slot->p = start;
-  slot->memid = memid;
-  slot->expire = 0;
-  slot->is_committed = is_committed;
-  if (is_committed && !is_large) {
-    long delay = mi_option_get(mi_option_arena_reset_delay);
-    if (delay == 0) {
-      _mi_abandoned_await_readers(); // wait until safe to decommit
-      _mi_os_decommit(start, size, tld->stats);
-      slot->is_committed = false;
-    }
-    else {
-      slot->expire = _mi_clock_now() + delay;
+  // try to add it to the cache
+  int numa_node = _mi_os_numa_node(NULL);
+  if (numa_node > MI_MAX_NUMA) numa_node %= MI_MAX_NUMA;
+  mi_cache_slot_t* slot;
+  mi_cache_count_t top = { 0 };
+  top.value = mi_atomic_read_relaxed(&cache_count[numa_node]);
+  for (int16_t i = top.x.count; i < MI_CACHE_MAX; i++) {
+    slot = &cache[numa_node][i];
+    void* p = mi_atomic_read_ptr_relaxed(mi_cache_slot_t, &slot->p);
+    if (p == NULL) { // free slot
+      if (mi_atomic_cas_ptr_weak(mi_cache_slot_t, &slot->p, MI_SLOT_IN_USE, NULL)) {
+        // claimed!
+        // first try to increase the top bound
+        mi_cache_count_t newtop = { 0 };
+        newtop.x.count = i+1;
+        newtop.x.epoch = top.x.epoch + 1;
+        while (!mi_atomic_cas_strong(&cache_count[numa_node], newtop.value, top.value)) {
+          top.value = mi_atomic_read_relaxed(&cache_count[numa_node]);
+          if (top.x.count > newtop.x.count) break; // another push max'd it
+          newtop.x.epoch = top.x.epoch + 1;        // otherwise try again
+        }
+        // set the slot
+        slot->expire = 0;
+        slot->is_committed = is_committed;
+        slot->memid = memid;
+        slot->is_large = is_large;
+        if (is_committed) {
+          long delay = mi_option_get(mi_option_arena_reset_delay);
+          if (delay == 0 && !is_large) {
+            _mi_abandoned_await_readers(); // wait until safe to decommit
+            _mi_os_decommit(start, size, tld->stats);
+            slot->is_committed = false;
+          }
+          else {
+            slot->expire = _mi_clock_now() + delay;
+          }
+        }
+        mi_atomic_write_ptr(mi_cache_slot_t, &slot->p, start); // and make it available;
+        return true;
+      }
     }
   }
-  
-  // make it available
-  mi_bitmap_unclaim((is_large ? cache_available_large : cache_available), MI_CACHE_FIELDS, 1, bitidx);
-  return true;
+  return false;
 }
 
 
