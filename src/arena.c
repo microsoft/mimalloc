@@ -128,7 +128,7 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
   Arena cache
 ----------------------------------------------------------- */
 #define MI_CACHE_MAX (256) 
-#define MI_MAX_NUMA  (8)
+#define MI_MAX_NUMA  (4)
 
 #define MI_SLOT_IN_USE ((void*)1)
 
