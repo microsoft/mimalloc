@@ -211,6 +211,7 @@ endif()
 
 # static library
 add_library(mimalloc-static STATIC ${mi_sources})
+set_property(TARGET mimalloc-static PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
 target_compile_options(mimalloc-static PRIVATE ${mi_cflags})
 target_link_libraries(mimalloc-static PUBLIC ${mi_libraries})
@@ -247,6 +248,7 @@ endif()
 
 # single object file for more predictable static overriding
 add_library(mimalloc-obj OBJECT src/static.c)
+set_property(TARGET mimalloc-obj PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(mimalloc-obj PRIVATE ${mi_defines})
 target_compile_options(mimalloc-obj PRIVATE ${mi_cflags})
 target_include_directories(mimalloc-obj PUBLIC

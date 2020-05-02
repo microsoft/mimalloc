@@ -268,7 +268,6 @@ static void mi_segments_track_size(long segment_size, mi_segments_tld_t* tld) {
   if (tld->current_size > tld->peak_size) tld->peak_size = tld->current_size;
 }
 
-
 static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   segment->thread_id = 0;
   mi_segment_map_freed_at(segment);
