@@ -42,6 +42,11 @@ static inline mi_bitmap_index_t mi_bitmap_index_create(size_t idx, size_t bitidx
   return (idx*MI_BITMAP_FIELD_BITS) + bitidx;
 }
 
+// Create a bit index.
+static inline mi_bitmap_index_t mi_bitmap_index_create_from_bit(size_t full_bitidx) {  
+  return mi_bitmap_index_create(full_bitidx / MI_BITMAP_FIELD_BITS, full_bitidx % MI_BITMAP_FIELD_BITS);
+}
+
 // Get the field index from a bit index.
 static inline size_t mi_bitmap_index_field(mi_bitmap_index_t bitmap_idx) {
   return (bitmap_idx / MI_BITMAP_FIELD_BITS);
@@ -177,16 +182,25 @@ static inline bool mi_bitmap_try_find_claim_field(mi_bitmap_t bitmap, size_t idx
   return false;
 }
 
-
 // Find `count` bits of 0 and set them to 1 atomically; returns `true` on success.
+// Starts at idx, and wraps around to search in all `bitmap_fields` fields.
 // For now, `count` can be at most MI_BITMAP_FIELD_BITS and will never span fields.
-static inline bool mi_bitmap_try_find_claim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t* bitmap_idx) {
-  for (size_t idx = 0; idx < bitmap_fields; idx++) {
+static inline bool mi_bitmap_try_find_from_claim(mi_bitmap_t bitmap, const size_t bitmap_fields, const size_t start_field_idx, const size_t count, mi_bitmap_index_t* bitmap_idx) {
+  size_t idx = start_field_idx;
+  for (size_t visited = 0; visited < bitmap_fields; visited++, idx++) {
+    if (idx >= bitmap_fields) idx = 0; // wrap
     if (mi_bitmap_try_find_claim_field(bitmap, idx, count, bitmap_idx)) {
       return true;
     }
   }
   return false;
+}
+
+
+// Find `count` bits of 0 and set them to 1 atomically; returns `true` on success.
+// For now, `count` can be at most MI_BITMAP_FIELD_BITS and will never span fields.
+static inline bool mi_bitmap_try_find_claim(mi_bitmap_t bitmap, const size_t bitmap_fields, const size_t count, mi_bitmap_index_t* bitmap_idx) {
+  return mi_bitmap_try_find_from_claim(bitmap, bitmap_fields, 0, count, bitmap_idx);
 }
 
 // Set `count` bits at `bitmap_idx` to 0 atomically
