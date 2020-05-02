@@ -164,10 +164,12 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
     }
     else {  // free range of slices; only last slice needs a valid back offset
       mi_slice_t* last = &segment->slices[maxindex];
-      mi_assert_internal((uint8_t*)slice == (uint8_t*)last - last->slice_offset);
+      if (segment->kind != MI_SEGMENT_HUGE || slice->slice_count <= segment->slice_entries) {
+        mi_assert_internal((uint8_t*)slice == (uint8_t*)last - last->slice_offset);
+      }
       mi_assert_internal(slice == last || last->slice_count == 0 );
       mi_assert_internal(last->xblock_size == 0 || (segment->kind==MI_SEGMENT_HUGE && last->xblock_size==1));
-      if (segment->kind != MI_SEGMENT_HUGE && segment->thread_id != 0) { // segment is not huge or abandonded
+      if (segment->kind != MI_SEGMENT_HUGE && segment->thread_id != 0) { // segment is not huge or abandoned
         sq = mi_span_queue_for(slice->slice_count,tld);
         mi_assert_internal(mi_span_queue_contains(sq,slice));
       }
@@ -713,6 +715,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   _mi_stat_increase(&tld->stats->page_committed, mi_segment_info_size(segment));
 
   // set up guard pages
+  size_t guard_slices = 0;
   if (MI_SECURE>0) {
     // in secure mode, we set up a protected page in between the segment info
     // and the page data
@@ -723,6 +726,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     mi_segment_ensure_committed(segment, end, os_page_size, tld->stats);
     _mi_os_protect(end, os_page_size);
     if (slice_entries == segment_slices) segment->slice_entries--; // don't use the last slice :-(
+    guard_slices = 1;
   }
 
   // reserve first slices for segment info
@@ -737,7 +741,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   }
   else {
     mi_assert_internal(huge_page!=NULL);
-    *huge_page = mi_segment_span_allocate(segment, info_slices, segment_slices - info_slices, tld);
+    *huge_page = mi_segment_span_allocate(segment, info_slices, segment_slices - info_slices - guard_slices, tld);
   }
 
   mi_assert_expensive(mi_segment_is_valid(segment,tld));

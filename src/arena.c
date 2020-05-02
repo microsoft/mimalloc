@@ -157,7 +157,7 @@ static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool* co
   }
 
   // find an available slot
-  mi_bitmap_index_t bitidx;
+  mi_bitmap_index_t bitidx = 0;
   bool claimed = false;
   if (*large) {  // large allowed?
     claimed = mi_bitmap_try_find_from_claim(cache_available_large, MI_CACHE_FIELDS, start_field, 1, &bitidx);
