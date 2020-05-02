@@ -393,7 +393,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   _mi_segment_page_free(page, force, segments_tld);
 }
 
-#define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX  
+#define MI_MAX_RETIRE_SIZE    MI_MEDIUM_OBJ_SIZE_MAX  
 #define MI_RETIRE_CYCLES      (8)
 
 // Retire a page with no more used blocks
