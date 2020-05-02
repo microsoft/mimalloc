@@ -166,8 +166,8 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
       mi_slice_t* last = &segment->slices[maxindex];
       mi_assert_internal((uint8_t*)slice == (uint8_t*)last - last->slice_offset);
       mi_assert_internal(slice == last || last->slice_count == 0 );
-      mi_assert_internal(last->xblock_size == 0);
-      if (segment->kind == MI_SEGMENT_NORMAL && segment->thread_id != 0) { // segment is not huge or abandonded
+      mi_assert_internal(last->xblock_size == 0 || (segment->kind==MI_SEGMENT_HUGE && last->xblock_size==1));
+      if (segment->kind != MI_SEGMENT_HUGE && segment->thread_id != 0) { // segment is not huge or abandonded
         sq = mi_span_queue_for(slice->slice_count,tld);
         mi_assert_internal(mi_span_queue_contains(sq,slice));
       }
@@ -525,8 +525,10 @@ static mi_slice_t* mi_segment_span_free_coalesce(mi_slice_t* slice, mi_segments_
 
   // for huge pages, just mark as free but don't add to the queues
   if (segment->kind == MI_SEGMENT_HUGE) {
-    mi_assert_internal(segment->used == 0);
+    mi_assert_internal(segment->used == 1);  // decreased right after this call in `mi_segment_page_clear`
     slice->xblock_size = 0;  // mark as free anyways
+    // we should mark the last slice `xblock_size=0` now to maintain invariants but we skip it to 
+    // avoid a possible cache miss (and the segment is about to be freed)
     return slice;
   }
 
@@ -1022,8 +1024,8 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
     slice = slice + slice->slice_count;
   }
 
-  // perform delayed decommits instead
-  mi_segment_delayed_decommit(segment, mi_option_is_enabled(mi_option_abandoned_page_reset), tld->stats);    
+  // perform delayed decommits
+  mi_segment_delayed_decommit(segment, mi_option_is_enabled(mi_option_abandoned_page_reset) /* force? */, tld->stats);    
   
   // all pages in the segment are abandoned; add it to the abandoned list
   _mi_stat_increase(&tld->stats->segments_abandoned, 1);
@@ -1297,6 +1299,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
 // free huge block from another thread
 void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block_t* block) {
   // huge page segments are always abandoned and can be freed immediately by any thread
+  mi_assert_internal(segment->kind==MI_SEGMENT_HUGE);
   mi_assert_internal(segment == _mi_page_segment(page));
   mi_assert_internal(mi_atomic_read_relaxed(&segment->thread_id)==0);
 
