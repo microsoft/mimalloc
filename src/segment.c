@@ -273,7 +273,12 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_segment_map_freed_at(segment);
   mi_segments_track_size(-((long)mi_segment_size(segment)),tld);
   if (MI_SECURE>0) {
-    _mi_os_unprotect(segment, mi_segment_size(segment)); // ensure no more guard pages are set
+    // _mi_os_unprotect(segment, mi_segment_size(segment)); // ensure no more guard pages are set
+    // unprotect the guard pages; we cannot just unprotect the whole segment size as part may be decommitted
+    size_t os_page_size = _mi_os_page_size();
+    _mi_os_unprotect((uint8_t*)segment + mi_segment_info_size(segment) - os_page_size, os_page_size);
+    uint8_t* end = (uint8_t*)segment + mi_segment_size(segment) - os_page_size;
+    _mi_os_unprotect(end, os_page_size);
   }
 
   // purge delayed decommits now? (no, leave it to the cache)
