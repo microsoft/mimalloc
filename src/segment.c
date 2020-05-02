@@ -960,6 +960,7 @@ static void mi_abandoned_push(mi_segment_t* segment) {
 }
 
 // Wait until there are no more pending reads on segments that used to be in the abandoned list
+// called for example from `arena.c` before decommitting
 void _mi_abandoned_await_readers(void) {
   uintptr_t n;
   do {
@@ -982,8 +983,7 @@ static mi_segment_t* mi_abandoned_pop(void) {
 
   // Do a pop. We use a reader count to prevent
   // a segment to be decommitted while a read is still pending,
-  // and a tagged pointer to prevent A-B-A link corruption.
-  // (this is called from `memory.c:_mi_mem_free` for example)
+  // and a tagged pointer to prevent A-B-A link corruption.  
   mi_atomic_increment(&abandoned_readers);  // ensure no segment gets decommitted
   mi_tagged_segment_t next = 0;
   do {

@@ -127,8 +127,8 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
 /* -----------------------------------------------------------
   Arena cache
 ----------------------------------------------------------- */
-#define MI_CACHE_MAX (128) 
-#define MI_MAX_NUMA  (16)
+#define MI_CACHE_MAX (256) 
+#define MI_MAX_NUMA  (8)
 
 #define MI_SLOT_IN_USE ((void*)1)
 
@@ -140,7 +140,20 @@ typedef struct mi_cache_slot_s {
   volatile bool       is_large;
 } mi_cache_slot_t;
 
-static mi_cache_slot_t cache[MI_MAX_NUMA][MI_CACHE_MAX];
+static mi_cache_slot_t cache[MI_MAX_NUMA][MI_CACHE_MAX];    // = 0
+static volatile _Atomic(uintptr_t) cache_count[MI_MAX_NUMA];  // = 0
+
+typedef union mi_cache_count_u {
+  uintptr_t value;
+  struct {
+    int16_t count;        // at most `count` elements in the cache
+#if MI_INTPTR_SIZE > 4
+    uint32_t epoch;       // each push/pop increase this
+#else
+    uint16_t epoch;
+#endif
+  } x;
+} mi_cache_count_t;
 
 static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld) {
   // only segment blocks
@@ -161,10 +174,23 @@ static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool* co
   // find a free slot
   mi_cache_slot_t* slot;
   for (int n = numa_min; n <= numa_max; n++) {
-    for (int i = 0; i < MI_CACHE_MAX; i++) {
+    mi_cache_count_t top = { 0 };
+    top.value = mi_atomic_read_relaxed(&cache_count[n]);
+    int16_t count = top.x.count;
+    for (int16_t i = count - 1; i >= 0; i--) {
       slot = &cache[n][i];
       void* p = mi_atomic_read_ptr_relaxed(mi_cache_slot_t,&slot->p);
-      if (p > MI_SLOT_IN_USE) { // not NULL or 1
+      if (p == NULL) {
+        if (count > 0) { count = i; }
+      }
+      else if (p > MI_SLOT_IN_USE) { // not NULL or 1
+        if (count >= 0 && count < top.x.count) {  // new lower bound?
+          mi_cache_count_t newtop = { 0 };
+          newtop.x.count = count;
+          newtop.x.epoch = top.x.epoch + 1;
+          mi_atomic_cas_strong(&cache_count[n], newtop.value, top.value);  // it's fine to not succeed; just causes longer scans
+        }
+        count = -1; // don't try to set lower bound again
         if (mi_atomic_cas_ptr_weak(mi_cache_slot_t, &slot->p, MI_SLOT_IN_USE, p)) {
           // claimed
           if (!*large && slot->is_large) {
@@ -204,7 +230,9 @@ static void mi_cache_purge(mi_os_tld_t* tld) {
   if (numa_node > MI_MAX_NUMA) numa_node %= MI_MAX_NUMA;
   mi_cache_slot_t* slot;
   int purged = 0;
-  for (int i = 0; i < MI_CACHE_MAX; i++) {
+  mi_cache_count_t top = { 0 };
+  top.value = mi_atomic_read_relaxed(&cache_count[numa_node]);
+  for (int i = 0; i < top.x.count; i++) {
     slot = &cache[numa_node][i];
     void* p = mi_atomic_read_ptr_relaxed(mi_cache_slot_t, &slot->p);
     if (p > MI_SLOT_IN_USE && !slot->is_committed && !slot->is_large) {
@@ -240,12 +268,24 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_commit
   int numa_node = _mi_os_numa_node(NULL);
   if (numa_node > MI_MAX_NUMA) numa_node %= MI_MAX_NUMA;
   mi_cache_slot_t* slot;
-  for (int i = 0; i < MI_CACHE_MAX; i++) {
+  mi_cache_count_t top = { 0 };
+  top.value = mi_atomic_read_relaxed(&cache_count[numa_node]);
+  for (int16_t i = top.x.count; i < MI_CACHE_MAX; i++) {
     slot = &cache[numa_node][i];
     void* p = mi_atomic_read_ptr_relaxed(mi_cache_slot_t, &slot->p);
     if (p == NULL) { // free slot
       if (mi_atomic_cas_ptr_weak(mi_cache_slot_t, &slot->p, MI_SLOT_IN_USE, NULL)) {
         // claimed!
+        // first try to increase the top bound
+        mi_cache_count_t newtop = { 0 };
+        newtop.x.count = i+1;
+        newtop.x.epoch = top.x.epoch + 1;
+        while (!mi_atomic_cas_strong(&cache_count[numa_node], newtop.value, top.value)) {
+          top.value = mi_atomic_read_relaxed(&cache_count[numa_node]);
+          if (top.x.count > newtop.x.count) break; // another push max'd it
+          newtop.x.epoch = top.x.epoch + 1;        // otherwise try again
+        }
+        // set the slot
         slot->expire = 0;
         slot->is_committed = is_committed;
         slot->memid = memid;
