@@ -783,7 +783,7 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
   mi_page_queue_t* pq = (is_huge ? NULL : mi_page_queue(heap, block_size));
   mi_page_t* page = mi_page_fresh_alloc(heap, pq, block_size);
   if (page != NULL) {
-    const size_t bsize = mi_page_usable_block_size(page);
+    const size_t bsize = mi_page_block_size(page);  // note: not `mi_page_usable_block_size` as `size` includes padding
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(bsize >= size);
 
