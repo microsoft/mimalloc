@@ -81,7 +81,7 @@ static mi_option_desc_t options[_mi_option_last] =
 #endif
   { 1,    UNINIT, MI_OPTION(allow_decommit) },    // decommit pages when not eager committed
   { 250,  UNINIT, MI_OPTION(reset_delay) },       // reset delay in milli-seconds
-  { 250,  UNINIT, MI_OPTION(arena_reset_delay) }, // reset delay in milli-seconds
+  { 500,  UNINIT, MI_OPTION(arena_reset_delay) }, // reset delay in milli-seconds
   { 0,    UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes. 
   { 100,  UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
   { 16,   UNINIT, MI_OPTION(max_errors) }         // maximum errors that are output
