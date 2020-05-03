@@ -764,9 +764,9 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
   mi_assert_internal(_mi_bin(block_size) == MI_BIN_HUGE);
   mi_page_t* page = mi_page_fresh_alloc(heap,NULL,block_size);
   if (page != NULL) {
-    const size_t bsize = mi_page_usable_block_size(page);
-    mi_assert_internal(mi_page_immediate_available(page));
+    const size_t bsize = mi_page_block_size(page);  // note: not `mi_page_usable_block_size` as `size` includes padding already
     mi_assert_internal(bsize >= size);
+    mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(_mi_page_segment(page)->page_kind==MI_PAGE_HUGE);
     mi_assert_internal(_mi_page_segment(page)->used==1);
     mi_assert_internal(_mi_page_segment(page)->thread_id==0); // abandoned, not in the huge queue
