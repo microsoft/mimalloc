@@ -128,8 +128,8 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
   Arena cache
 ----------------------------------------------------------- */
 
-#define MI_CACHE_FIELDS (8)
-#define MI_CACHE_MAX    (MI_BITMAP_FIELD_BITS*MI_CACHE_FIELDS)       // 512 on 64-bit
+#define MI_CACHE_FIELDS (16)
+#define MI_CACHE_MAX    (MI_BITMAP_FIELD_BITS*MI_CACHE_FIELDS)       // 1024 on 64-bit
 
 typedef struct mi_cache_slot_s {
   void*      p;
@@ -141,8 +141,8 @@ typedef struct mi_cache_slot_s {
 static mi_cache_slot_t cache[MI_CACHE_MAX];    // = 0
 
 #define BITS_SET()  (UINTPTR_MAX)
-static mi_bitmap_field_t cache_available[MI_CACHE_FIELDS] = { MI_INIT8(BITS_SET) };        // zero bit = available!
-static mi_bitmap_field_t cache_available_large[MI_CACHE_FIELDS] = { MI_INIT8(BITS_SET) };
+static mi_bitmap_field_t cache_available[MI_CACHE_FIELDS] = { MI_INIT16(BITS_SET) };        // zero bit = available!
+static mi_bitmap_field_t cache_available_large[MI_CACHE_FIELDS] = { MI_INIT16(BITS_SET) };
 static mi_bitmap_field_t cache_inuse[MI_CACHE_FIELDS];   // zero bit = free
 
 
