@@ -164,7 +164,7 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
     }
     else {  // free range of slices; only last slice needs a valid back offset
       mi_slice_t* last = &segment->slices[maxindex];
-      if (segment->kind != MI_SEGMENT_HUGE || slice->slice_count <= segment->slice_entries) {
+      if (segment->kind != MI_SEGMENT_HUGE || slice->slice_count <= (segment->slice_entries - segment->segment_info_slices)) {
         mi_assert_internal((uint8_t*)slice == (uint8_t*)last - last->slice_offset);
       }
       mi_assert_internal(slice == last || last->slice_count == 0 );
@@ -424,7 +424,7 @@ static void mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_
 }
 
 static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
-  if (!segment->allow_decommit) return; // TODO: check option_decommit?
+  if (!segment->allow_decommit) return;
   if (segment->commit_mask == 1) return; // fully decommitted
   if (mi_option_get(mi_option_reset_delay) == 0) {
     mi_segment_commitx(segment, false, p, size, stats);
@@ -698,7 +698,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
 
   if (!commit_info_still_good) {
     segment->commit_mask = (!commit ? 0x01 : ~((uintptr_t)0)); // on lazy commit, the initial part is always committed
-    segment->allow_decommit = mi_option_is_enabled(mi_option_allow_decommit);
+    segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_fixed);
     segment->decommit_expire = 0;
     segment->decommit_mask = 0;
   }
