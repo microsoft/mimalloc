@@ -255,6 +255,32 @@ OS will copy the entire 1GiB huge page (or 2MiB large page) which can cause the 
 [linux-huge]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/tuning_and_optimizing_red_hat_enterprise_linux_for_oracle_9i_and_10g_databases/sect-oracle_9i_and_10g_tuning_guide-large_memory_optimization_big_pages_and_huge_pages-configuring_huge_pages_in_red_hat_enterprise_linux_4_or_5
 [windows-huge]: https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/enable-the-lock-pages-in-memory-option-windows?view=sql-server-2017
 
+## Secure Mode
+
+_mimalloc_ can be build in secure mode by using the `-DMI_SECURE=ON` flags in `cmake`. This build enables various mitigations
+to make mimalloc more robust against exploits. In particular:
+
+- All internal mimalloc pages are surrounded by guard pages and the heap metadata is behind a guard page as well (so a buffer overflow
+  exploit cannot reach into the metadata),
+- All free list pointers are 
+  [encoded](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396) 
+  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption,
+- Double free's are detected (and ignored),
+- The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to 
+  mitigate against attacks that rely on a predicable allocation order. Similarly, the larger heap blocks allocated by mimalloc 
+  from the OS are also address randomized.
+
+As always, evaluate with care as part of an overall security strategy as all of the above are mitigations but not guarantees.
+
+## Debug Mode
+
+When _mimalloc_ is built using debug mode, various checks are done at runtime to catch development errors. 
+
+- Statistics are maintained in detail for each object size. They can be shown using `MIMALLOC_SHOW_STATS=1` at runtime.
+- All objects have padding at the end to detect (byte precise) heap block overflows.
+- Double free's, and freeing invalid heap pointers are detected.
+- Corrupted free-lists and some forms of use-after-free are detected.
+
 
 # Overriding Malloc
 
