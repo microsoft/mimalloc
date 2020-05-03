@@ -24,9 +24,10 @@ int main() {
   // block_overflow1();
   // block_overflow2();
   // dangling_ptr_write();
+  void* (*fun_mimalloc)(size_t) = &mi_malloc;
 
   void* p1 = malloc(78);
-  void* p2 = malloc(24);
+  void* p2 = fun_mimalloc(24);
   free(p1);
   p1 = mi_malloc(8);
   //char* s = strdup("hello\n");
