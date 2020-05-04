@@ -216,23 +216,25 @@ static bool _mi_heap_done(mi_heap_t* heap) {
   heap = heap->tld->heap_backing;
   if (!mi_heap_is_initialized(heap)) return false;
 
-
-  // delete all non-backing heaps in this thread
-  mi_heap_t* curr = heap->tld->heaps;
-  while (curr != NULL) {
-    mi_heap_t* next = curr->next; // save `next` as `curr` will be freed
-    if (curr != heap) {
-      mi_assert_internal(!mi_heap_is_backing(curr));
-      mi_heap_delete(curr);
+  // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local heaps
+  if (heap->thread_id == _mi_thread_id()) {  
+    // delete all non-backing heaps in this thread
+    mi_heap_t* curr = heap->tld->heaps;
+    while (curr != NULL) {
+      mi_heap_t* next = curr->next; // save `next` as `curr` will be freed
+      if (curr != heap) {
+        mi_assert_internal(!mi_heap_is_backing(curr));
+        mi_heap_delete(curr);
+      }
+      curr = next;
     }
-    curr = next;
-  }
-  mi_assert_internal(heap->tld->heaps == heap && heap->next == NULL);
-  mi_assert_internal(mi_heap_is_backing(heap));
+    mi_assert_internal(heap->tld->heaps == heap && heap->next == NULL);
+    mi_assert_internal(mi_heap_is_backing(heap));
 
-  // collect if not the main thread
-  if (heap != &_mi_heap_main) {
-    _mi_heap_collect_abandon(heap);
+    // collect if not the main thread
+    if (heap != &_mi_heap_main) {
+      _mi_heap_collect_abandon(heap);
+    }
   }
 
   // merge stats
@@ -240,7 +242,7 @@ static bool _mi_heap_done(mi_heap_t* heap) {
 
   // free if not the main thread
   if (heap != &_mi_heap_main) {
-    mi_assert_internal(heap->tld->segments.count == 0);
+    mi_assert_internal(heap->tld->segments.count == 0 || heap->thread_id != _mi_thread_id());
     _mi_os_free(heap, sizeof(mi_thread_data_t), &_mi_stats_main);
   }
 #if 0  
@@ -294,6 +296,10 @@ static void _mi_thread_done(mi_heap_t* default_heap);
   #endif
   static DWORD mi_fls_key = (DWORD)(-1);
   static void NTAPI mi_fls_done(PVOID value) {
+    if (mi_fls_key != -1 && _mi_is_main_thread()) {
+      FlsSetValue(mi_fls_key, NULL); // null out once to prevent recursion on the main thread
+      mi_fls_key = -1;
+    }
     if (value!=NULL) _mi_thread_done((mi_heap_t*)value);
   }
 #elif defined(MI_USE_PTHREADS)
