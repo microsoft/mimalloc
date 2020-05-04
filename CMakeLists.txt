@@ -18,6 +18,8 @@ option(MI_PADDING           "Enable padding to detect heap block overflow (only 
 option(MI_BUILD_SHARED      "Build shared library" ON)
 option(MI_BUILD_STATIC      "Build static library" ON)
 option(MI_BUILD_OBJECT      "Build object" ON)
+option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
+option(MI_SHOW_ERRORS       "Show error and warning messages by default" OFF)
 
 include("cmake/mimalloc-config-version.cmake")
 
@@ -70,6 +72,7 @@ if(MI_OVERRIDE MATCHES "ON")
       # use zone's on macOS
       message(STATUS "  Use malloc zone to override malloc (MI_OSX_ZONE=ON)")
       list(APPEND mi_sources src/alloc-override-osx.c)
+      list(APPEND mi_defines MI_OSX_ZONE=1)
       if(NOT MI_INTERPOSE MATCHES "ON")
         message(STATUS "  (enabling INTERPOSE as well since zone's require this)")
         set(MI_INTERPOSE "ON")
@@ -106,6 +109,16 @@ endif()
 if(MI_PADDING MATCHES "OFF")
   message(STATUS "Disable padding of heap blocks in debug mode (MI_PADDING=OFF)")
   list(APPEND mi_defines MI_PADDING=0)
+endif()
+
+if(MI_XMALLOC MATCHES "ON")
+  message(STATUS "Enable abort() calls on memory allocation failure (MI_XMALLOC=ON)")
+  list(APPEND mi_defines MI_XMALLOC=1)
+endif()
+
+if(MI_SHOW_ERRORS MATCHES "ON")
+  message(STATUS "Enable printing of error and warning messages by default (MI_SHOW_ERRORS=ON)")
+  list(APPEND mi_defines MI_SHOW_ERRORS=1)
 endif()
 
 if(MI_USE_CXX MATCHES "ON")
@@ -212,6 +225,7 @@ if (MI_BUILD_STATIC)
   message(STATUS "Static library will be built")
 
   add_library(mimalloc-static STATIC ${mi_sources})
+  set_property(TARGET mimalloc-static PROPERTY POSITION_INDEPENDENT_CODE ON)
   target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
   target_compile_options(mimalloc-static PRIVATE ${mi_cflags})
   target_link_libraries(mimalloc-static PUBLIC ${mi_libraries})
@@ -219,7 +233,7 @@ if (MI_BUILD_STATIC)
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${mi_install_dir}/include>
   )
-  if(WIN32 AND MI_BUILD_SHARED)
+  if(WIN32)
     # When building both static and shared libraries on Windows, a static library should use a
     # different output name to avoid the conflict with the import library of a shared one.
     string(REPLACE "mimalloc" "mimalloc-static" mi_output_name ${mi_basename})
@@ -251,6 +265,7 @@ if (MI_BUILD_OBJECT)
   message(STATUS "Library object will be built")
 
   add_library(mimalloc-obj OBJECT src/static.c)
+  set_property(TARGET mimalloc-obj PROPERTY POSITION_INDEPENDENT_CODE ON)
   target_compile_definitions(mimalloc-obj PRIVATE ${mi_defines})
   target_compile_options(mimalloc-obj PRIVATE ${mi_cflags})
   target_include_directories(mimalloc-obj PUBLIC

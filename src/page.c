@@ -381,7 +381,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
 }
 
 #define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX  
-#define MI_RETIRE_CYCLES      (16)
+#define MI_RETIRE_CYCLES      (8)
 
 // Retire a page with no more used blocks
 // Important to not retire too quickly though as new
@@ -406,7 +406,7 @@ void _mi_page_retire(mi_page_t* page) {
   if (mi_likely(page->xblock_size <= MI_MAX_RETIRE_SIZE && !mi_page_is_in_full(page))) {
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
-      page->retire_expire = MI_RETIRE_CYCLES;
+      page->retire_expire = (page->xblock_size <= MI_SMALL_OBJ_SIZE_MAX ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
       mi_heap_t* heap = mi_page_heap(page);
       mi_assert_internal(pq >= heap->pages);
       const size_t index = pq - heap->pages;
@@ -570,7 +570,8 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld)
   if (page->capacity >= page->reserved) return;
 
   size_t page_size;
-  uint8_t* page_start = _mi_page_start(_mi_page_segment(page), page, &page_size);
+  //uint8_t* page_start = 
+  _mi_page_start(_mi_page_segment(page), page, &page_size);
   mi_stat_counter_increase(tld->stats.pages_extended, 1);
 
   // calculate the extend count
@@ -587,12 +588,6 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld)
 
   mi_assert_internal(extend > 0 && extend + page->capacity <= page->reserved);
   mi_assert_internal(extend < (1UL<<16));
-
-  // commit on-demand for large and huge pages?
-  if (_mi_page_segment(page)->page_kind >= MI_PAGE_LARGE && !mi_option_is_enabled(mi_option_eager_page_commit)) {
-    uint8_t* start = page_start + (page->capacity * bsize);
-    _mi_mem_commit(start, extend * bsize, NULL, &tld->os);
-  }
 
   // and append the extend the free list
   if (extend < MI_MIN_SLICES || MI_SECURE==0) { //!mi_option_is_enabled(mi_option_secure)) {
