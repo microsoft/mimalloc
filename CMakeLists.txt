@@ -4,22 +4,22 @@ project(libmimalloc C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-option(MI_OVERRIDE          "Override the standard malloc interface" ON)
-option(MI_DEBUG_FULL        "Use full internal heap invariant checking in DEBUG mode" OFF)
 option(MI_SECURE            "Use full security mitigations (like guard pages, allocation randomization, double-free mitigation, and free-list corruption detection)" OFF)
-option(MI_USE_CXX           "Use the C++ compiler to compile the library" OFF)
+option(MI_DEBUG_FULL        "Use full internal heap invariant checking in DEBUG mode (expensive)" OFF)
+option(MI_PADDING           "Enable padding to detect heap block overflow (used only in DEBUG mode)" ON)
+option(MI_OVERRIDE          "Override the standard malloc interface (e.g. define entry points for malloc() etc)" ON)
+option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
+option(MI_SHOW_ERRORS       "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
+option(MI_USE_CXX           "Use the C++ compiler to compile the library (instead of the C compiler)" OFF)
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_INTERPOSE         "Use interpose to override standard malloc on macOS" ON)
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" OFF) # enables interpose as well
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
-option(MI_BUILD_TESTS       "Build test executables" ON)
-option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
-option(MI_PADDING           "Enable padding to detect heap block overflow (only in debug mode)" ON)
 option(MI_BUILD_SHARED      "Build shared library" ON)
 option(MI_BUILD_STATIC      "Build static library" ON)
-option(MI_BUILD_OBJECT      "Build object" ON)
-option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
-option(MI_SHOW_ERRORS       "Show error and warning messages by default" OFF)
+option(MI_BUILD_OBJECT      "Build object library" ON)
+option(MI_BUILD_TESTS       "Build test executables" ON)
+option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 
 include("cmake/mimalloc-config-version.cmake")
 
@@ -185,10 +185,23 @@ string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
 if(NOT(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel)$"))
   set(mi_basename "${mi_basename}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
 endif()
+if(MI_BUILD_SHARED)
+  list(APPEND mi_build_targets "shared")
+endif()
+if(MI_BUILD_STATIC)
+  list(APPEND mi_build_targets "static")
+endif()
+if(MI_BUILD_OBJECT)
+  list(APPEND mi_build_targets "object")
+endif()
+if(MI_BUILD_TESTS)
+  list(APPEND mi_build_targets "tests")
+endif()
 message(STATUS "")
 message(STATUS "Library base name: ${mi_basename}")
 message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
 message(STATUS "Install directory: ${mi_install_dir}")
+message(STATUS "Build targets    : ${mi_build_targets}")
 message(STATUS "")
 
 # -----------------------------------------------------------------------------
@@ -197,8 +210,6 @@ message(STATUS "")
 
 # shared library
 if(MI_BUILD_SHARED)
-  message(STATUS "Shared library will be built")
-
   add_library(mimalloc SHARED ${mi_sources})
   set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} OUTPUT_NAME ${mi_basename} )
   target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
@@ -222,8 +233,6 @@ endif()
 
 # static library
 if (MI_BUILD_STATIC)
-  message(STATUS "Static library will be built")
-
   add_library(mimalloc-static STATIC ${mi_sources})
   set_property(TARGET mimalloc-static PROPERTY POSITION_INDEPENDENT_CODE ON)
   target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
@@ -262,8 +271,6 @@ endif()
 
 # single object file for more predictable static overriding
 if (MI_BUILD_OBJECT)
-  message(STATUS "Library object will be built")
-
   add_library(mimalloc-obj OBJECT src/static.c)
   set_property(TARGET mimalloc-obj PROPERTY POSITION_INDEPENDENT_CODE ON)
   target_compile_definitions(mimalloc-obj PRIVATE ${mi_defines})
@@ -279,7 +286,7 @@ if (MI_BUILD_OBJECT)
   # the FILES expression can also be: $<TARGET_OBJECTS:mimalloc-obj>
   # but that fails cmake versions less than 3.10 so we leave it as is for now
   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}
-         DESTINATION ${mi_install_dir}
+          DESTINATION ${mi_install_dir}
           RENAME ${mi_basename}${CMAKE_C_OUTPUT_EXTENSION} )
 endif()
 
