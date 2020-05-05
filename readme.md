@@ -11,7 +11,7 @@ mimalloc (pronounced "me-malloc")
 is a general purpose allocator with excellent [performance](#performance) characteristics.
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
-Latest release:`v1.6.2` (2020-04-20).
+Latest release:`v1.6.3` (2020-05-05).
 
 It is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -57,6 +57,8 @@ Enjoy!
 
 ### Releases
 
+* 2020-05-05, `v1.6.3`: stable release 1.6: improved behavior in out-of-memory situations, improved malloc zones on macOS,
+  build PIC static libraries by default, add option to abort on out-of-memory, line buffered statistics.
 * 2020-04-20, `v1.6.2`: stable release 1.6: fix compilation on Android, MingW, Raspberry, and Conda,
   stability fix for Windows 7, fix multiple mimalloc instances in one executable, fix `strnlen` overload,
   fix aligned debug padding.
@@ -262,19 +264,19 @@ to make mimalloc more robust against exploits. In particular:
 
 - All internal mimalloc pages are surrounded by guard pages and the heap metadata is behind a guard page as well (so a buffer overflow
   exploit cannot reach into the metadata),
-- All free list pointers are 
-  [encoded](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396) 
+- All free list pointers are
+  [encoded](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396)
   with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption,
 - Double free's are detected (and ignored),
-- The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to 
-  mitigate against attacks that rely on a predicable allocation order. Similarly, the larger heap blocks allocated by mimalloc 
+- The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
+  mitigate against attacks that rely on a predicable allocation order. Similarly, the larger heap blocks allocated by mimalloc
   from the OS are also address randomized.
 
 As always, evaluate with care as part of an overall security strategy as all of the above are mitigations but not guarantees.
 
 ## Debug Mode
 
-When _mimalloc_ is built using debug mode, various checks are done at runtime to catch development errors. 
+When _mimalloc_ is built using debug mode, various checks are done at runtime to catch development errors.
 
 - Statistics are maintained in detail for each object size. They can be shown using `MIMALLOC_SHOW_STATS=1` at runtime.
 - All objects have padding at the end to detect (byte precise) heap block overflows.
