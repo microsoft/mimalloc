@@ -3,9 +3,13 @@
 #include <assert.h>
 #include <string.h>
 #include <stdint.h>
+
 #include <new>
 #include <vector>
+#include <future>
+#include <iostream>
 #include <thread>
+
 #include <mimalloc.h>
 #include <mimalloc-new-delete.h>
 #include <mimalloc-override.h>
@@ -23,14 +27,16 @@ void heap_no_delete();         // issue #202
 void heap_late_free();         // issue #204
 void padding_shrink();         // issue #209
 void various_tests();
+void test_mt_shutdown();
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
   heap_thread_free_large();
-  heap_no_delete();  
-  heap_late_free();  
-  padding_shrink();  
+  heap_no_delete();
+  heap_late_free();
+  padding_shrink();
   various_tests();
+  //test_mt_shutdown();
   mi_stats_print(NULL);
   return 0;
 }
@@ -133,7 +139,7 @@ bool test_stl_allocator2() {
 // Issue #202
 static void heap_no_delete_worker() {
   mi_heap_t* heap = mi_heap_new();
-  void* q = mi_heap_malloc(heap,1024);
+  void* q = mi_heap_malloc(heap, 1024);
   // mi_heap_delete(heap); // uncomment to prevent assertion
 }
 
@@ -188,4 +194,30 @@ void heap_thread_free_large() {
     auto t1 = std::thread(heap_thread_free_large_worker);
     t1.join();
   }
+}
+
+
+
+void test_mt_shutdown()
+{
+  const int threads = 5;
+  std::vector< std::future< std::vector< char* > > > ts;
+
+  auto fn = [&]()
+  {
+    std::vector< char* > ps;
+    ps.reserve(1000);
+    for (int i = 0; i < 1000; i++)
+      ps.emplace_back(new char[1]);
+    return ps;
+  };
+
+  for (int i = 0; i < threads; i++)
+    ts.emplace_back(std::async(std::launch::async, fn));
+
+  for (auto& f : ts)
+    for (auto& p : f.get())
+      delete[] p;
+
+  std::cout << "done" << std::endl;
 }

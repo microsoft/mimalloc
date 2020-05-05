@@ -220,7 +220,6 @@ static bool _mi_heap_done(mi_heap_t* heap) {
   heap = heap->tld->heap_backing;
   if (!mi_heap_is_initialized(heap)) return false;
 
-
   // delete all non-backing heaps in this thread
   mi_heap_t* curr = heap->tld->heaps;
   while (curr != NULL) {
@@ -238,13 +237,14 @@ static bool _mi_heap_done(mi_heap_t* heap) {
   if (heap != &_mi_heap_main) {
     _mi_heap_collect_abandon(heap);
   }
+  
 
   // merge stats
   _mi_stats_done(&heap->tld->stats);
 
   // free if not the main thread
   if (heap != &_mi_heap_main) {
-    mi_assert_internal(heap->tld->segments.count == 0);
+    mi_assert_internal(heap->tld->segments.count == 0 || heap->thread_id != _mi_thread_id());
     _mi_os_free(heap, sizeof(mi_thread_data_t), &_mi_stats_main);
   }
 #if 0  
@@ -359,12 +359,16 @@ void mi_thread_done(void) mi_attr_noexcept {
 }
 
 static void _mi_thread_done(mi_heap_t* heap) {
+  // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local heaps...
+  if (heap->thread_id != _mi_thread_id()) return;
+
   // stats
   if (!_mi_is_main_thread() && mi_heap_is_initialized(heap))  {
     _mi_stat_decrease(&heap->tld->stats.threads, 1);
   }
+
   // abandon the thread local heap
-  if (_mi_heap_done(heap)) return; // returns true if already ran
+  if (_mi_heap_done(heap)) return;  // returns true if already ran
 }
 
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
