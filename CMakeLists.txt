@@ -4,19 +4,22 @@ project(libmimalloc C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-option(MI_OVERRIDE          "Override the standard malloc interface" ON)
-option(MI_DEBUG_FULL        "Use full internal heap invariant checking in DEBUG mode" OFF)
 option(MI_SECURE            "Use full security mitigations (like guard pages, allocation randomization, double-free mitigation, and free-list corruption detection)" OFF)
-option(MI_USE_CXX           "Use the C++ compiler to compile the library" OFF)
+option(MI_DEBUG_FULL        "Use full internal heap invariant checking in DEBUG mode (expensive)" OFF)
+option(MI_PADDING           "Enable padding to detect heap block overflow (used only in DEBUG mode)" ON)
+option(MI_OVERRIDE          "Override the standard malloc interface (e.g. define entry points for malloc() etc)" ON)
+option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
+option(MI_SHOW_ERRORS       "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
+option(MI_USE_CXX           "Use the C++ compiler to compile the library (instead of the C compiler)" OFF)
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_INTERPOSE         "Use interpose to override standard malloc on macOS" ON)
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" OFF) # enables interpose as well
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
+option(MI_BUILD_SHARED      "Build shared library" ON)
+option(MI_BUILD_STATIC      "Build static library" ON)
+option(MI_BUILD_OBJECT      "Build object library" ON)
 option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
-option(MI_PADDING           "Enable padding to detect heap block overflow (only in debug mode)" ON)
-option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
-option(MI_SHOW_ERRORS       "Show error and warning messages by default" OFF)
 
 include("cmake/mimalloc-config-version.cmake")
 
@@ -181,10 +184,23 @@ string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
 if(NOT(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel)$"))
   set(mi_basename "${mi_basename}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
 endif()
+if(MI_BUILD_SHARED)
+  list(APPEND mi_build_targets "shared")
+endif()
+if(MI_BUILD_STATIC)
+  list(APPEND mi_build_targets "static")
+endif()
+if(MI_BUILD_OBJECT)
+  list(APPEND mi_build_targets "object")
+endif()
+if(MI_BUILD_TESTS)
+  list(APPEND mi_build_targets "tests")
+endif()
 message(STATUS "")
 message(STATUS "Library base name: ${mi_basename}")
 message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
 message(STATUS "Install directory: ${mi_install_dir}")
+message(STATUS "Build targets    : ${mi_build_targets}")
 message(STATUS "")
 
 # -----------------------------------------------------------------------------
@@ -192,53 +208,59 @@ message(STATUS "")
 # -----------------------------------------------------------------------------
 
 # shared library
-add_library(mimalloc SHARED ${mi_sources})
-set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} OUTPUT_NAME ${mi_basename} )
-target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
-target_compile_options(mimalloc PRIVATE ${mi_cflags})
-target_link_libraries(mimalloc PUBLIC ${mi_libraries})
-target_include_directories(mimalloc PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:${mi_install_dir}/include>
-)
-if(WIN32)
-  # On windows copy the mimalloc redirection dll too.
-  target_link_libraries(mimalloc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect.lib)
-  add_custom_command(TARGET mimalloc POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect.dll" $<TARGET_FILE_DIR:mimalloc>
-    COMMENT "Copy mimalloc-redirect.dll to output directory")
+if(MI_BUILD_SHARED)
+  add_library(mimalloc SHARED ${mi_sources})
+  set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} OUTPUT_NAME ${mi_basename} )
+  target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
+  target_compile_options(mimalloc PRIVATE ${mi_cflags})
+  target_link_libraries(mimalloc PUBLIC ${mi_libraries})
+  target_include_directories(mimalloc PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:${mi_install_dir}/include>
+  )
+  if(WIN32)
+    # On windows copy the mimalloc redirection dll too.
+    target_link_libraries(mimalloc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect.lib)
+    add_custom_command(TARGET mimalloc POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect.dll" $<TARGET_FILE_DIR:mimalloc>
+      COMMENT "Copy mimalloc-redirect.dll to output directory")
+  endif()
+
+  install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_dir} LIBRARY)
+  install(EXPORT mimalloc DESTINATION ${mi_install_dir}/cmake)
 endif()
 
 # static library
-add_library(mimalloc-static STATIC ${mi_sources})
-set_property(TARGET mimalloc-static PROPERTY POSITION_INDEPENDENT_CODE ON)
-target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
-target_compile_options(mimalloc-static PRIVATE ${mi_cflags})
-target_link_libraries(mimalloc-static PUBLIC ${mi_libraries})
-target_include_directories(mimalloc-static PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:${mi_install_dir}/include>
-)
-if(WIN32)
-  # When building both static and shared libraries on Windows, a static library should use a
-  # different output name to avoid the conflict with the import library of a shared one.
-  string(REPLACE "mimalloc" "mimalloc-static" mi_output_name ${mi_basename})
-  set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_output_name})
-else()
-  set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_basename})
+if (MI_BUILD_STATIC)
+  add_library(mimalloc-static STATIC ${mi_sources})
+  set_property(TARGET mimalloc-static PROPERTY POSITION_INDEPENDENT_CODE ON)
+  target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
+  target_compile_options(mimalloc-static PRIVATE ${mi_cflags})
+  target_link_libraries(mimalloc-static PUBLIC ${mi_libraries})
+  target_include_directories(mimalloc-static PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:${mi_install_dir}/include>
+  )
+  if(WIN32)
+    # When building both static and shared libraries on Windows, a static library should use a
+    # different output name to avoid the conflict with the import library of a shared one.
+    string(REPLACE "mimalloc" "mimalloc-static" mi_output_name ${mi_basename})
+    set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_output_name})
+  else()
+    set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_basename})
+  endif()
+
+  install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_dir})
 endif()
 
-# install static and shared library, and the include files
-install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_dir} LIBRARY)
-install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_dir})
+# install include files
 install(FILES include/mimalloc.h DESTINATION ${mi_install_dir}/include)
 install(FILES include/mimalloc-override.h DESTINATION ${mi_install_dir}/include)
 install(FILES include/mimalloc-new-delete.h DESTINATION ${mi_install_dir}/include)
 install(FILES cmake/mimalloc-config.cmake DESTINATION ${mi_install_dir}/cmake)
 install(FILES cmake/mimalloc-config-version.cmake DESTINATION ${mi_install_dir}/cmake)
-install(EXPORT mimalloc DESTINATION ${mi_install_dir}/cmake)
 
-if(NOT WIN32)
+if(NOT WIN32 AND MI_BUILD_SHARED)
   # install a symlink in the /usr/local/lib to the versioned library
   set(mi_symlink "${CMAKE_SHARED_MODULE_PREFIX}${mi_basename}${CMAKE_SHARED_LIBRARY_SUFFIX}")
   set(mi_soname "mimalloc-${mi_version}/${mi_symlink}.${mi_version}")
@@ -247,23 +269,25 @@ if(NOT WIN32)
 endif()
 
 # single object file for more predictable static overriding
-add_library(mimalloc-obj OBJECT src/static.c)
-set_property(TARGET mimalloc-obj PROPERTY POSITION_INDEPENDENT_CODE ON)
-target_compile_definitions(mimalloc-obj PRIVATE ${mi_defines})
-target_compile_options(mimalloc-obj PRIVATE ${mi_cflags})
-target_include_directories(mimalloc-obj PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:${mi_install_dir}/include>
-)
+if (MI_BUILD_OBJECT)
+  add_library(mimalloc-obj OBJECT src/static.c)
+  set_property(TARGET mimalloc-obj PROPERTY POSITION_INDEPENDENT_CODE ON)
+  target_compile_definitions(mimalloc-obj PRIVATE ${mi_defines})
+  target_compile_options(mimalloc-obj PRIVATE ${mi_cflags})
+  target_include_directories(mimalloc-obj PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:${mi_install_dir}/include>
+  )
 
-# the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
-# install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_dir})
+  # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
+  # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_dir})
 
-# the FILES expression can also be: $<TARGET_OBJECTS:mimalloc-obj>
-# but that fails cmake versions less than 3.10 so we leave it as is for now
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}
-        DESTINATION ${mi_install_dir}
-        RENAME ${mi_basename}${CMAKE_C_OUTPUT_EXTENSION} )
+  # the FILES expression can also be: $<TARGET_OBJECTS:mimalloc-obj>
+  # but that fails cmake versions less than 3.10 so we leave it as is for now
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}
+          DESTINATION ${mi_install_dir}
+          RENAME ${mi_basename}${CMAKE_C_OUTPUT_EXTENSION} )
+endif()
 
 # -----------------------------------------------------------------------------
 # API surface testing
@@ -291,10 +315,16 @@ endif()
 # Set override properties
 # -----------------------------------------------------------------------------
 if (MI_OVERRIDE MATCHES "ON")
-  target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)
+  if (MI_BUILD_SHARED)
+    target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)
+  endif()
   if(NOT WIN32)
     # It is only possible to override malloc on Windows when building as a DLL.
-    target_compile_definitions(mimalloc-static PRIVATE MI_MALLOC_OVERRIDE)
-    target_compile_definitions(mimalloc-obj PRIVATE MI_MALLOC_OVERRIDE)
+    if (MI_BUILD_STATIC)
+      target_compile_definitions(mimalloc-static PRIVATE MI_MALLOC_OVERRIDE)
+    endif()
+    if (MI_BUILD_OBJECT)
+      target_compile_definitions(mimalloc-obj PRIVATE MI_MALLOC_OVERRIDE)
+    endif()
   endif()
 endif()
