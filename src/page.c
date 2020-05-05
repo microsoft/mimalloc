@@ -785,7 +785,9 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size) {
 }
 
 
-static mi_page_t *_mi_find_page(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+// Allocate a page
+// Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
+static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   // huge allocation?
   const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`  
   if (mi_unlikely(req_size > (MI_LARGE_OBJ_SIZE_MAX - MI_PADDING_SIZE) )) {
@@ -797,10 +799,11 @@ static mi_page_t *_mi_find_page(mi_heap_t* heap, size_t size) mi_attr_noexcept {
       return mi_huge_page_alloc(heap,size);
     }
   }
-
-  // otherwise find a page with free blocks in our size segregated queues
-  mi_assert_internal(size >= MI_PADDING_SIZE);
-  return mi_find_free_page(heap,size);
+  else {
+    // otherwise find a page with free blocks in our size segregated queues
+    mi_assert_internal(size >= MI_PADDING_SIZE);
+    return mi_find_free_page(heap, size);
+  }
 }
 
 // Generic allocation routine if the fast path (`alloc.c:mi_page_malloc`) does not succeed.
@@ -822,10 +825,11 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   // free delayed frees from other threads
   _mi_heap_delayed_free(heap);
 
-  mi_page_t* page = _mi_find_page(heap, size);
-  if (mi_unlikely(page == NULL)) { // out of memory, try to collect and retry allocation
+  // find (or allocate) a page of the right size
+  mi_page_t* page = mi_find_page(heap, size);
+  if (mi_unlikely(page == NULL)) { // first time out of memory, try to collect and retry the allocation once more
     mi_heap_collect(heap, true /* force */);
-    page = _mi_find_page(heap, size);
+    page = mi_find_page(heap, size);
   }
 
   if (mi_unlikely(page == NULL)) { // out of memory
