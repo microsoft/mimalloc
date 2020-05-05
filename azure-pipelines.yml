@@ -40,8 +40,8 @@ jobs:
       cd $(BuildType)
       ctest
     displayName: CTest
-#  - upload: $(Build.SourcesDirectory)/$(BuildType)
-#    artifact: mimalloc-windows-$(BuildType)
+  - upload: $(Build.SourcesDirectory)/$(BuildType)
+    artifact: mimalloc-windows-$(BuildType)
 
 - job:
   displayName: Linux
@@ -99,8 +99,8 @@ jobs:
     displayName: Make
   - script: make test -C $(BuildType)
     displayName: CTest
-#  - upload: $(Build.SourcesDirectory)/$(BuildType)
-#    artifact: mimalloc-ubuntu-$(BuildType)
+  - upload: $(Build.SourcesDirectory)/$(BuildType)
+    artifact: mimalloc-ubuntu-$(BuildType)
 
 - job:
   displayName: macOS
@@ -127,5 +127,5 @@ jobs:
     displayName: Make
   - script: make test -C $(BuildType)
     displayName: CTest
-#  - upload: $(Build.SourcesDirectory)/$(BuildType)
-#    artifact: mimalloc-macos-$(BuildType)
+  - upload: $(Build.SourcesDirectory)/$(BuildType)
+    artifact: mimalloc-macos-$(BuildType)
