@@ -400,6 +400,14 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
   dest[dest_size - 1] = 0;
 }
 
+static inline int mi_strnicmp(const char* s, const char* t, size_t n) {
+  if (n==0) return 0;
+  for (; *s != 0 && *t != 0 && n > 0; s++, t++, n--) {
+    if (toupper(*s) != toupper(*t)) break;
+  }
+  return (n==0 ? 0 : *s - *t);
+}
+
 #if defined _WIN32
 // On Windows use GetEnvironmentVariable instead of getenv to work
 // reliably even when this is invoked before the C runtime is initialized.
@@ -411,11 +419,45 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
   size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
   return (len > 0 && len < result_size);
 }
-#else
+#elif !defined(MI_USE_ENVIRON) || (MI_USE_ENVIRON!=0)
+// On Posix systemsr use `environ` to acces environment variables 
+// even before the C runtime is initialized.
+#if defined(__APPLE__)
+#include <crt_externs.h>
+static char** mi_get_environ(void) {
+  return (*_NSGetEnviron());
+}
+#else 
+extern char** environ;
+static char** mi_get_environ(void) {
+  return environ;
+}
+#endif
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
+  if (name==NULL) return false;  
+  const size_t len = strlen(name);
+  if (len == 0) return false;  
+  char** env = mi_get_environ();
+  if (env == NULL) return false;
+  // compare all entries
+  for (; *env != NULL; env++) {
+    const char* s = *env;
+    if (mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
+      // found it
+      mi_strlcpy(result, s + len + 1, result_size);
+      return true;
+    }
+  }
+  return false;
+}
+#else  
+// fallback: use standard C `getenv` but this cannot be used while initializing the C runtime
+static bool mi_getenv(const char* name, char* result, size_t result_size) {
+  // cannot call getenv() when still initializing the C runtime.
+  if (_mi_preloading()) return false;
   const char* s = getenv(name);
   if (s == NULL) {
-    // in unix environments we check the upper case name too.
+    // we check the upper case name too.
     char buf[64+1];
     size_t len = strlen(name);
     if (len >= sizeof(buf)) len = sizeof(buf) - 1;
@@ -434,11 +476,8 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
   }
 }
 #endif
-static void mi_option_init(mi_option_desc_t* desc) {
-  #ifndef _WIN32
-  // cannot call getenv() when still initializing the C runtime.
-  if (_mi_preloading()) return;
-  #endif
+
+static void mi_option_init(mi_option_desc_t* desc) {  
   // Read option value from the environment
   char buf[64+1];
   mi_strlcpy(buf, "mimalloc_", sizeof(buf));
@@ -471,9 +510,9 @@ static void mi_option_init(mi_option_desc_t* desc) {
         desc->init = DEFAULTED;
       }
     }
+    mi_assert_internal(desc->init != UNINIT);
   }
-  else {
+  else if (!_mi_preloading()) {
     desc->init = DEFAULTED;
   }
-  mi_assert_internal(desc->init != UNINIT);
 }
