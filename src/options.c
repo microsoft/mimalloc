@@ -439,9 +439,9 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
   if (len == 0) return false;  
   char** env = mi_get_environ();
   if (env == NULL) return false;
-  // compare all entries
-  for (; *env != NULL; env++) {
-    const char* s = *env;
+  // compare up to 256 entries
+  for (int i = 0; i < 256 && env[i] != NULL; i++) {
+    const char* s = env[i];
     if (mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
       // found it
       mi_strlcpy(result, s + len + 1, result_size);
