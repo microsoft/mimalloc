@@ -17,8 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t size, const size_t alignment, const size_t offset, const bool zero) mi_attr_noexcept {
   // note: we don't require `size > offset`, we just guarantee that
   // the address at offset is aligned regardless of the allocated size.
-  mi_assert(alignment > 0 && alignment % sizeof(void*) == 0);
-
+  mi_assert(alignment > 0);
   if (mi_unlikely(size > PTRDIFF_MAX)) return NULL;   // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
   if (mi_unlikely(alignment==0 || !_mi_is_power_of_two(alignment))) return NULL; // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
   const uintptr_t align_mask = alignment-1;  // for any x, `(x & align_mask) == (x % alignment)`
