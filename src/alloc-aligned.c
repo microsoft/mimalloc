@@ -54,7 +54,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
 
   // .. and align within the allocation
   uintptr_t adjust = alignment - (((uintptr_t)p + offset) & align_mask);
-  mi_assert_internal(adjust % sizeof(uintptr_t) == 0);
+  mi_assert_internal(adjust >= alignment);
   void* aligned_p = (adjust == alignment ? p : (void*)((uintptr_t)p + adjust));
   if (aligned_p != p) mi_page_set_has_aligned(_mi_ptr_page(p), true); 
   mi_assert_internal(((uintptr_t)aligned_p + offset) % alignment == 0);
