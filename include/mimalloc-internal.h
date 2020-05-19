@@ -263,7 +263,7 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
     return false;
   }
   else if (mi_unlikely(mi_mul_overflow(count, size, total))) {
-    _mi_error_message(EOVERFLOW, "allocation request too large (%zu * %zu bytes)\n", count, size);
+    _mi_error_message(EOVERFLOW, "allocation request is too large (%zu * %zu bytes)\n", count, size);
     *total = SIZE_MAX;
     return true;
   }

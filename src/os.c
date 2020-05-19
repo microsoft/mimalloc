@@ -262,7 +262,7 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
     p = mi_win_virtual_allocx(addr, size, try_alignment, flags);
   }
   if (p == NULL) {
-    _mi_warning_message("unable to allocate memory: error code: %i, addr: %p, size: 0x%x, large only: %d, allow_large: %d\n", GetLastError(), addr, size, large_only, allow_large);
+    _mi_warning_message("unable to allocate OS memory (%zu bytes, error code: %i, address: %p, large only: %d, allow large: %d)\n", size, GetLastError(), addr, large_only, allow_large);
   }
   return p;
 }
@@ -398,6 +398,9 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
       };
     }
     #endif
+  }
+  if (p == NULL) {
+    _mi_warning_message("unable to allocate OS memory (%zu bytes, error code: %i, address: %p, large only: %d, allow large: %d)\n", size, errno, addr, large_only, allow_large);
   }
   return p;
 }

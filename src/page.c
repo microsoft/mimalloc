@@ -792,7 +792,7 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`  
   if (mi_unlikely(req_size > (MI_LARGE_OBJ_SIZE_MAX - MI_PADDING_SIZE) )) {
     if (mi_unlikely(req_size > PTRDIFF_MAX)) {  // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
-      _mi_error_message(EOVERFLOW, "allocation request is too large (%zu b requested)\n", req_size);
+      _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
       return NULL;
     }
     else {
@@ -833,7 +833,8 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   }
 
   if (mi_unlikely(page == NULL)) { // out of memory
-    _mi_error_message(ENOMEM, "cannot allocate memory (%zu bytes requested)\n", size);
+    const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`  
+    _mi_error_message(ENOMEM, "unable to allocate memory (%zu bytes)\n", req_size);
     return NULL;
   }
 
