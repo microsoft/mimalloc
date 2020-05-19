@@ -431,7 +431,7 @@ static size_t mi_segment_size(size_t capacity, size_t required, size_t* pre_size
     guardsize = page_size;
     required = _mi_align_up(required, page_size);
   }
-;
+
   if (info_size != NULL) *info_size = isize;
   if (pre_size != NULL)  *pre_size  = isize + guardsize;
   return (required==0 ? MI_SEGMENT_SIZE : _mi_align_up( required + isize + 2*guardsize, MI_PAGE_HUGE_ALIGN) );
