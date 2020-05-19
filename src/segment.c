@@ -245,6 +245,7 @@ static void mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size,
   mi_assert_internal(page->is_reset);
   mi_assert_internal(page->is_committed);
   mi_assert_internal(!segment->mem_is_fixed);
+  if (segment->mem_is_fixed || !page->is_committed || !page->is_reset) return;
   page->is_reset = false;
   size_t psize;
   uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
