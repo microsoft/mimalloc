@@ -240,18 +240,23 @@ static void mi_page_reset(mi_segment_t* segment, mi_page_t* page, size_t size, m
   if (reset_size > 0) _mi_mem_reset(start, reset_size, tld->os);
 }
 
-static void mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size, mi_segments_tld_t* tld)
+static bool mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size, mi_segments_tld_t* tld)
 {
   mi_assert_internal(page->is_reset);
   mi_assert_internal(page->is_committed);
   mi_assert_internal(!segment->mem_is_fixed);
+  if (segment->mem_is_fixed || !page->is_committed || !page->is_reset) return;
   page->is_reset = false;
   size_t psize;
   uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
   size_t unreset_size = (size == 0 || size > psize ? psize : size);
   bool is_zero = false;
-  if (unreset_size > 0) _mi_mem_unreset(start, unreset_size, &is_zero, tld->os);
+  bool ok = true;
+  if (unreset_size > 0) {
+    ok = _mi_mem_unreset(start, unreset_size, &is_zero, tld->os);
+  }
   if (is_zero) page->is_zero_init = true;
+  return ok;
 }
 
 
@@ -427,7 +432,7 @@ static size_t mi_segment_size(size_t capacity, size_t required, size_t* pre_size
     guardsize = page_size;
     required = _mi_align_up(required, page_size);
   }
-;
+
   if (info_size != NULL) *info_size = isize;
   if (pre_size != NULL)  *pre_size  = isize + guardsize;
   return (required==0 ? MI_SEGMENT_SIZE : _mi_align_up( required + isize + 2*guardsize, MI_PAGE_HUGE_ALIGN) );
@@ -630,7 +635,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     mi_segments_track_size((long)segment_size, tld);
   }
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
-
+  mi_assert_internal(segment->mem_is_fixed ? segment->mem_is_committed : true);  
   if (!pages_still_good) {
     // zero the segment info (but not the `mem` fields)
     ptrdiff_t ofs = offsetof(mi_segment_t, next);
@@ -731,7 +736,13 @@ static bool mi_segment_page_claim(mi_segment_t* segment, mi_page_t* page, mi_seg
   segment->used++;
   // check reset
   if (page->is_reset) {
-    mi_page_unreset(segment, page, 0, tld); // todo: only unreset the part that was reset?
+    mi_assert_internal(!segment->mem_is_fixed);
+    bool ok = mi_page_unreset(segment, page, 0, tld); 
+    if (!ok) {
+      page->segment_in_use = false;
+      segment->used--;
+      return false;
+    }
   }
   mi_assert_internal(page->segment_in_use);
   mi_assert_internal(segment->used <= segment->capacity);
