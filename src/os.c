@@ -26,7 +26,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <linux/mman.h> // linux mmap flags
 #endif
 #if defined(__APPLE__)
+#include <TargetConditionals.h>
+#if !TARGET_IOS_IPHONE && !TARGET_IOS_SIMULATOR
 #include <mach/vm_statistics.h>
+#endif
 #endif
 #endif
 
