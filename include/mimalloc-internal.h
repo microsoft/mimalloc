@@ -175,8 +175,8 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #endif
 
 // ------------------------------------------------------
-// Fast `memcpy()` on x86(_64) platforms unavailable,
-// use REP MOVSB
+// Fast `memcpy()` on x86(_64) platforms unavailable
+// on Windows, use REP MOVSB if necessary
 // ------------------------------------------------------
 
 #if defined(_M_IX86) || defined(_M_X64)
