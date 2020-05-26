@@ -174,6 +174,22 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #define EOVERFLOW (75)
 #endif
 
+// ------------------------------------------------------
+// Fast `memcpy()` on x86(_64) platforms unavailable,
+// use REP MOVSB
+// ------------------------------------------------------
+
+#if defined(_M_IX86) || defined(_M_X64)
+#include <intrin.h>
+#define _mi_memcpy _mi_memcpy_rep_movsb
+static inline void _mi_memcpy_rep_movsb (void *d, const void *s, size_t n) {
+  __movsb(d, s, n);
+  return;
+}
+#else
+#define _mi_memcpy memcpy
+#endif
+
 
 /* -----------------------------------------------------------
   Inlined definitions

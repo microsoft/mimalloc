@@ -188,7 +188,7 @@ static bool _mi_heap_init(void) {
     // OS allocated so already zero initialized
     mi_tld_t*  tld = &td->tld;
     mi_heap_t* heap = &td->heap;
-    memcpy(heap, &_mi_heap_empty, sizeof(*heap));
+    _mi_memcpy(heap, &_mi_heap_empty, sizeof(*heap));
     heap->thread_id = _mi_thread_id();
     _mi_random_init(&heap->random);
     heap->cookie  = _mi_heap_random_next(heap) | 1;
