@@ -183,7 +183,10 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #include <intrin.h>
 #define _mi_memcpy _mi_memcpy_rep_movsb
 static inline void _mi_memcpy_rep_movsb (void *d, const void *s, size_t n) {
-  __movsb(d, s, n);
+  unsigned char* Destination = (unsigned char*) d;
+  unsigned const char* Source = (unsigned const char*) s;
+  size_t Count = n;
+  __movsb(Destination, Source, Count);
   return;
 }
 #else
