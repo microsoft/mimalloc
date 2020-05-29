@@ -92,12 +92,12 @@ size_t _mi_os_good_alloc_size(size_t size) {
   return _mi_align_up(size, align_size);
 }
 
-void mi_register_mmap_fun(mi_mmap_fun* callback, void* arg) {
+void mi_register_mmap_fun(mi_mmap_fun* callback, void* arg) mi_attr_noexcept {
   mmap_function = callback;
   mmap_function_arg = arg;
 }
 
-void mi_register_munmap_fun(mi_munmap_fun* callback, void* arg) {
+void mi_register_munmap_fun(mi_munmap_fun* callback, void* arg) mi_attr_noexcept {
   munmap_function = callback;
   munmap_function_arg = arg;
 }
