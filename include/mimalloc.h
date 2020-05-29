@@ -323,6 +323,25 @@ mi_decl_export void mi_option_set(mi_option_t option, long value);
 mi_decl_export void mi_option_set_default(mi_option_t option, long value);
 
 
+typedef enum mi_mmap_flag_e {
+  // mmap wrapper may allocate from huge pages.
+  // mmap wrapper should not use huge pages if this flag not set.
+  mi_mmap_allow_large = 0x1,
+
+  // mmap wrapper must allocate from huge pages (mi_mmap_allow_large will be set as well).
+  mi_mmap_large_only = 0x2,
+  mi_mmap_commit     = 0x4,
+} mi_mmap_flag_t;
+typedef unsigned int mi_mmap_flags_t;
+
+typedef void* (mi_cdecl mi_mmap_fun)(void* addr, size_t size, size_t try_alignment, mi_mmap_flags_t mmap_flags, void* arg, bool* is_large);
+mi_decl_export void mi_register_mmap_fun(mi_mmap_fun* callback, void* arg) mi_attr_noexcept;
+
+// Returns true on error, false otherwise.
+typedef bool (mi_cdecl mi_munmap_fun)(void* addr, size_t size, void* arg);
+mi_decl_export void mi_register_munmap_fun(mi_munmap_fun* callback, void* arg) mi_attr_noexcept;
+
+
 // -------------------------------------------------------------------------------------------------------
 // "mi" prefixed implementations of various posix, Unix, Windows, and C++ allocation functions.
 // (This can be convenient when providing overrides of these functions as done in `mimalloc-override.h`.)
