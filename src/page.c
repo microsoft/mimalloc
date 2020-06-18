@@ -816,6 +816,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   if (mi_unlikely(!mi_heap_is_initialized(heap))) {
     mi_thread_init(); // calls `_mi_heap_init` in turn
     heap = mi_get_default_heap();
+    if (mi_unlikely(!mi_heap_is_initialized(heap))) { return NULL; }
   }
   mi_assert_internal(mi_heap_is_initialized(heap));
 

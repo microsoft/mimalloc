@@ -176,10 +176,15 @@ static bool _mi_heap_init(void) {
   }
   else {
     // use `_mi_os_alloc` to allocate directly from the OS
-    mi_thread_data_t* td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t),&_mi_stats_main); // Todo: more efficient allocation?
+    mi_thread_data_t* td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main); // Todo: more efficient allocation?
     if (td == NULL) {
-      _mi_error_message(ENOMEM, "failed to allocate thread local heap memory\n");
-      return false;
+      // if this fails, try once more. (issue #257)
+      td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main);
+      if (td == NULL) {
+        // really out of memory
+        _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
+        return false;
+      }
     }
     // OS allocated so already zero initialized
     mi_tld_t*  tld = &td->tld;
@@ -341,7 +346,8 @@ void mi_thread_init(void) mi_attr_noexcept
   // don't further initialize for the main thread
   if (_mi_is_main_thread()) return;
 
-  _mi_stat_increase(&mi_get_default_heap()->tld->stats.threads, 1);
+  mi_heap_t* heap = mi_get_default_heap();
+  if (mi_heap_is_initialized(heap)) { _mi_stat_increase(&mi_get_default_heap()->tld->stats.threads, 1); }
 
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
