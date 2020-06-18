@@ -1042,7 +1042,7 @@ static size_t mi_os_numa_nodex() {
 static size_t mi_os_numa_node_countx(void) {
   ULONG numa_max = 0;
   GetNumaHighestNodeNumber(&numa_max);
-  return (numa_max + 1);
+  return ((size_t)numa_max + 1);
 }
 #elif defined(__linux__)
 #include <sys/syscall.h>  // getcpu
