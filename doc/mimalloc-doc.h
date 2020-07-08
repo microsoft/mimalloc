@@ -752,8 +752,8 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block
 /// Runtime options.
 typedef enum mi_option_e {
   // stable options
-  mi_option_show_stats,   ///< Print statistics to `stderr` when the program is done.
   mi_option_show_errors,  ///< Print error messages to `stderr`.
+  mi_option_show_stats,   ///< Print statistics to `stderr` when the program is done.
   mi_option_verbose,      ///< Print verbose messages to `stderr`.
   // the following options are experimental
   mi_option_eager_commit, ///< Eagerly commit segments (4MiB) (enabled by default).
@@ -772,9 +772,11 @@ typedef enum mi_option_e {
 } mi_option_t;
 
 
-bool  mi_option_enabled(mi_option_t option);
-void  mi_option_enable(mi_option_t option, bool enable);
-void  mi_option_enable_default(mi_option_t option, bool enable);
+bool  mi_option_is_enabled(mi_option_t option);
+void  mi_option_enable(mi_option_t option);
+void  mi_option_disable(mi_option_t option);
+void  mi_option_set_enabled(mi_option_t option, bool enable);
+void  mi_option_set_enabled_default(mi_option_t option, bool enable);
 
 long  mi_option_get(mi_option_t option);
 void  mi_option_set(mi_option_t option, long value);
