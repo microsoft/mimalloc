@@ -401,6 +401,16 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
       };
     }
     #endif
+    #if defined(__sun)
+    if (allow_large && use_large_os_page(size, try_alignment)) {
+      struct memcntl_mha cmd = {0};
+      cmd.mha_pagesize = large_os_page_size;
+      cmd.mha_cmd = MHA_MAPSIZE_VA;
+      if (memcntl(p, size, MC_HAT_ADVISE, (caddr_t)&cmd, 0, 0) == 0) {
+        *is_large = true;
+      }
+    }
+    #endif
   }
   if (p == NULL) {
     _mi_warning_message("unable to allocate OS memory (%zu bytes, error code: %i, address: %p, large only: %d, allow large: %d)\n", size, errno, addr, large_only, allow_large);
