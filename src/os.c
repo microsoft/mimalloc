@@ -23,7 +23,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf
 #if defined(__linux__)
+#include <features.h>
+#if defined(__GLIBC__)
 #include <linux/mman.h> // linux mmap flags
+#else
+#include <sys/mman.h>
+#endif
 #endif
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
