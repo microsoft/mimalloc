@@ -93,12 +93,22 @@ size_t _mi_os_good_alloc_size(size_t size) {
 // We use VirtualAlloc2 for aligned allocation, but it is only supported on Windows 10 and Windows Server 2016.
 // So, we need to look it up dynamically to run on older systems. (use __stdcall for 32-bit compatibility)
 // NtAllocateVirtualAllocEx is used for huge OS page allocation (1GiB)
+//
 // We hide MEM_EXTENDED_PARAMETER to compile with older SDK's.
 #include <winternl.h>
 typedef PVOID    (__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, /* MEM_EXTENDED_PARAMETER* */ void*, ULONG);
 typedef NTSTATUS (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*, ULONG, ULONG, /* MEM_EXTENDED_PARAMETER* */ PVOID, ULONG);
 static PVirtualAlloc2 pVirtualAlloc2 = NULL;
 static PNtAllocateVirtualMemoryEx pNtAllocateVirtualMemoryEx = NULL;
+
+// Similarly, GetNumaProcesorNodeEx is only supported since Windows 7
+#if (_WIN32_WINNT < 0x601)  // before Win7
+typedef struct _PROCESSOR_NUMBER { WORD Group; BYTE Number; BYTE Reserved; } PROCESSOR_NUMBER, *PPROCESSOR_NUMBER;
+#endif
+typedef VOID (__stdcall *PGetCurrentProcessorNumberEx)(PPROCESSOR_NUMBER ProcNumber);
+typedef BOOL (__stdcall *PGetNumaProcessorNodeEx)(PPROCESSOR_NUMBER Processor, PUSHORT NodeNumber);
+static PGetCurrentProcessorNumberEx pGetCurrentProcessorNumberEx = NULL;
+static PGetNumaProcessorNodeEx      pGetNumaProcessorNodeEx = NULL;
 
 static bool mi_win_enable_large_os_pages()
 {
@@ -150,9 +160,17 @@ void _mi_os_init(void) {
     if (pVirtualAlloc2==NULL) pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2");
     FreeLibrary(hDll);
   }
+  // NtAllocateVirtualMemoryEx is used for huge page allocation
   hDll = LoadLibrary(TEXT("ntdll.dll"));
   if (hDll != NULL) {
     pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)(void (*)(void))GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
+    FreeLibrary(hDll);
+  }
+  // Try to use Win7+ numa API
+  hDll = LoadLibrary(TEXT("kernel32.dll"));
+  if (hDll != NULL) {
+    pGetCurrentProcessorNumberEx = (PGetCurrentProcessorNumberEx)(void (*)(void))GetProcAddress(hDll, "GetCurrentProcessorNumberEx");
+    pGetNumaProcessorNodeEx = (PGetNumaProcessorNodeEx)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNodeEx");
     FreeLibrary(hDll);
   }
   if (mi_option_is_enabled(mi_option_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
@@ -1025,17 +1043,24 @@ void _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats) {
 /* ----------------------------------------------------------------------------
 Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
-#ifdef _WIN32
-  #if (_WIN32_WINNT < 0x601)  // before Win7
-  typedef struct _PROCESSOR_NUMBER { WORD Group; BYTE Number; BYTE Reserved; } PROCESSOR_NUMBER, *PPROCESSOR_NUMBER;
-  WINBASEAPI VOID WINAPI GetCurrentProcessorNumberEx(_Out_ PPROCESSOR_NUMBER ProcNumber);
-  WINBASEAPI BOOL WINAPI GetNumaProcessorNodeEx(_In_  PPROCESSOR_NUMBER Processor, _Out_ PUSHORT NodeNumber);
-  #endif
+#ifdef _WIN32  
 static size_t mi_os_numa_nodex() {
-  PROCESSOR_NUMBER pnum;
   USHORT numa_node = 0;
-  GetCurrentProcessorNumberEx(&pnum);
-  GetNumaProcessorNodeEx(&pnum,&numa_node);
+  if (pGetCurrentProcessorNumberEx != NULL && pGetNumaProcessorNodeEx != NULL) {
+    // Extended API is supported
+    PROCESSOR_NUMBER pnum;
+    (*pGetCurrentProcessorNumberEx)(&pnum);
+    USHORT nnode = 0;
+    BOOL ok = (*pGetNumaProcessorNodeEx)(&pnum, &nnode);
+    if (ok) numa_node = nnode;
+  }
+  else {
+    // Vista or earlier, use older API that is limited to 64 processors. Issue #277
+    DWORD pnum = GetCurrentProcessorNumber();
+    UCHAR nnode = 0;
+    BOOL ok = GetNumaProcessorNode((UCHAR)pnum, &nnode);
+    if (ok) numa_node = nnode;    
+  }
   return numa_node;
 }
 
