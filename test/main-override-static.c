@@ -11,6 +11,7 @@ static void double_free1();
 static void double_free2();
 static void corrupt_free();
 static void block_overflow1();
+static void invalid_free();
 
 int main() {
   mi_version();
@@ -19,7 +20,8 @@ int main() {
   // double_free1();
   // double_free2();
   // corrupt_free();
-  block_overflow1();
+  // block_overflow1();
+  invalid_free();
 
   void* p1 = malloc(78);
   void* p2 = malloc(24);
@@ -41,6 +43,11 @@ int main() {
   //mi_free(p2);
   mi_stats_print(NULL);
   return 0;
+}
+
+static void invalid_free() {
+  free((void*)0xBADBEEF);
+  realloc((void*)0xBADBEEF,10);
 }
 
 static void block_overflow1() {
