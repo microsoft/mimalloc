@@ -39,6 +39,8 @@ It also has an easy way to override the allocator in [Windows](#override_on_wind
   randomized allocation, encrypted free lists, etc. to protect against various
   heap vulnerabilities. The performance penalty is usually around 10% on average
   over our benchmarks.
+- __user function for clean up memory__: _mimalloc_ can be built with MI_USER_CLEANUP=ON flag. This mode
+  allows setup user function for memory clean up before it returned to system.
 - __first-class heaps__: efficiently create and use multiple heaps to allocate across different regions.
   A heap can be destroyed at once instead of deallocating each object separately.  
 - __bounded__: it does not suffer from _blowup_ \[1\], has bounded worst-case allocation
