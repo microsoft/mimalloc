@@ -70,6 +70,7 @@ void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
 // must be thread safe as it is called from stats_merge
 static void mi_stat_add(mi_stat_count_t* stat, const mi_stat_count_t* src, int64_t unit) {
   if (stat==src) return;
+  if (src->allocated==0 && src->freed==0) return;
   mi_atomic_addi64( &stat->allocated, src->allocated * unit);
   mi_atomic_addi64( &stat->current, src->current * unit);
   mi_atomic_addi64( &stat->freed, src->freed * unit);
