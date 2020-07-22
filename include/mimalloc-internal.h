@@ -241,6 +241,10 @@ static inline bool mi_malloc_satisfies_alignment(size_t alignment, size_t size) 
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
 #include <limits.h>   // UINT_MAX, ULONG_MAX
+#if defined(_CLOCK_T)
+#undef _CLOCK_T
+#endif
+
 #if (SIZE_MAX == UINT_MAX)
   return __builtin_umul_overflow(count, size, total);
 #elif (SIZE_MAX == ULONG_MAX)
