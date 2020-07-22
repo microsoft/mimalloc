@@ -257,23 +257,28 @@ static inline bool mi_malloc_satisfies_alignment(size_t alignment, size_t size) 
 }
 
 // Overflow detecting multiply
-static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
-#include <limits.h>   // UINT_MAX, ULONG_MAX
-#if (SIZE_MAX == UINT_MAX)
-  return __builtin_umul_overflow(count, size, total);
-#elif (SIZE_MAX == ULONG_MAX)
-  return __builtin_umull_overflow(count, size, total);
-#else
-  return __builtin_umulll_overflow(count, size, total);
+#include <limits.h>      // UINT_MAX, ULONG_MAX
+#if defined(_CLOCK_T)    // for Illumos
+#undef _CLOCK_T
 #endif
+static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
+  #if (SIZE_MAX == UINT_MAX)
+    return __builtin_umul_overflow(count, size, total);
+  #elif (SIZE_MAX == ULONG_MAX)
+    return __builtin_umull_overflow(count, size, total);
+  #else
+    return __builtin_umulll_overflow(count, size, total);
+  #endif
+}
 #else /* __builtin_umul_overflow is unavailable */
+static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
   #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
   *total = count * size;
   return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
-          && size > 0 && (SIZE_MAX / size) < count);
-#endif
+    && size > 0 && (SIZE_MAX / size) < count);
 }
+#endif
 
 // Safe multiply `count*size` into `total`; return `true` on overflow.
 static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* total) {

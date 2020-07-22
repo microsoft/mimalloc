@@ -182,7 +182,8 @@ void* _aligned_malloc(size_t alignment, size_t size)        { return MI_SOURCE_R
 // on some glibc `aligned_alloc` is declared `static inline` so we cannot override it (e.g. Conda). This happens
 // when _GLIBCXX_HAVE_ALIGNED_ALLOC is not defined. However, in those cases it will use `memalign`, `posix_memalign`, 
 // or `_aligned_malloc` and we can avoid overriding it ourselves.
-#if _GLIBCXX_HAVE_ALIGNED_ALLOC
+// We should always override if using C compilation. (issue #276)
+#if _GLIBCXX_HAVE_ALIGNED_ALLOC || !defined(__cplusplus)
 void* aligned_alloc(size_t alignment, size_t size) { return MI_SOURCE_RET(mi_aligned_alloc, alignment, size); }
 #endif
 

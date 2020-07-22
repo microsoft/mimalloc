@@ -454,34 +454,45 @@ static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool l
   _mi_free_block(page, local, block);
 }
 
-// Free a block
-void mi_free(void* p) mi_attr_noexcept
+// Get the segment data belonging to a pointer
+// This is just a single `and` in assembly but does further checks in debug mode
+// (and secure mode) if this was a valid pointer.
+static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* msg) 
 {
+  UNUSED(msg);
 #if (MI_DEBUG>0)
   if (mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0)) {
-    _mi_error_message(EINVAL, "trying to free an invalid (unaligned) pointer: %p\n", p);
-    return;
+    _mi_error_message(EINVAL, "%s: invalid (unaligned) pointer: %p\n", msg, p);
+    return NULL;
   }
 #endif
 
-  const mi_segment_t* const segment = _mi_ptr_segment(p);
-  if (mi_unlikely(segment == NULL)) return;  // checks for (p==NULL)
+  mi_segment_t* const segment = _mi_ptr_segment(p);
+  if (mi_unlikely(segment == NULL)) return NULL;  // checks also for (p==NULL)
 
-#if (MI_DEBUG!=0)
+#if (MI_DEBUG>0)
   if (mi_unlikely(!mi_is_in_heap_region(p))) {
-    _mi_warning_message("possibly trying to free a pointer that does not point to a valid heap region: %p\n"
-      "(this may still be a valid very large allocation (over 64MiB))\n", p);
+    _mi_warning_message("%s: pointer might not point to a valid heap region: %p\n"
+      "(this may still be a valid very large allocation (over 64MiB))\n", msg, p);
     if (mi_likely(_mi_ptr_cookie(segment) == segment->cookie)) {
       _mi_warning_message("(yes, the previous pointer %p was valid after all)\n", p);
     }
   }
 #endif
-#if (MI_DEBUG!=0 || MI_SECURE>=4)
+#if (MI_DEBUG>0 || MI_SECURE>=4)
   if (mi_unlikely(_mi_ptr_cookie(segment) != segment->cookie)) {
-    _mi_error_message(EINVAL, "trying to free a pointer that does not point to a valid heap space: %p\n", p);
-    return;
+    _mi_error_message(EINVAL, "%s: pointer does not point to a valid heap space: %p\n", p);
   }
 #endif
+  return segment;
+}
+
+
+// Free a block
+void mi_free(void* p) mi_attr_noexcept
+{
+  const mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
+  if (mi_unlikely(segment == NULL)) return; 
 
   const uintptr_t tid = _mi_thread_id();
   mi_page_t* const page = _mi_segment_page_of(segment, p);
@@ -540,9 +551,9 @@ bool _mi_free_delayed_block(mi_block_t* block) {
 }
 
 // Bytes available in a block
-size_t mi_usable_size(const void* p) mi_attr_noexcept {
-  if (p==NULL) return 0;
-  const mi_segment_t* const segment = _mi_ptr_segment(p);
+static size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noexcept {
+  const mi_segment_t* const segment = mi_checked_ptr_segment(p,msg);
+  if (segment==NULL) return 0;
   const mi_page_t* const page = _mi_segment_page_of(segment, p);
   const mi_block_t* block = (const mi_block_t*)p;
   if (mi_unlikely(mi_page_has_aligned(page))) {
@@ -555,6 +566,10 @@ size_t mi_usable_size(const void* p) mi_attr_noexcept {
   else {
     return mi_page_usable_size_of(page, block);
   }
+}
+
+size_t mi_usable_size(const void* p) mi_attr_noexcept {
+  return _mi_usable_size(p, "mi_usable_size");
 }
 
 
@@ -581,7 +596,7 @@ void* _mi_externs[] = {
 
 void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   UNUSED_RELEASE(size);
-  mi_assert(p == NULL || size <= mi_usable_size(p));
+  mi_assert(p == NULL || size <= _mi_usable_size(p,"mi_free_size"));
   mi_free(p);
 }
 
@@ -621,14 +636,14 @@ MI_ALLOC_API2(void*, expand, mi_heap_t*, heap, void*, p, size_t, newsize)
   UNUSED(__mi_source);
 #endif
   if (p == NULL) return NULL;
-  size_t size = mi_usable_size(p);
+  size_t size = _mi_usable_size(p,"mi_expand");
   if (newsize > size) return NULL;
   return p; // it fits
 }
 
 void* _mi_base_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero  MI_SOURCE_XPARAM) {
   if (p == NULL) return _mi_base_malloc_zero(heap,newsize,zero  MI_SOURCE_XARG);
-  size_t size = mi_usable_size(p);
+  size_t size = _mi_usable_size(p,"mi_realloc");
   if (newsize <= size && newsize >= (size / 2)) {
     return p;  // reallocation still fits and not more than 50% waste
   }

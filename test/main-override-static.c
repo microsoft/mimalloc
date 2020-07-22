@@ -13,6 +13,7 @@ static void corrupt_free();
 static void block_overflow1();
 static void block_overflow2();
 static void dangling_ptr_write();
+static void invalid_free();
 
 int main() {
   mi_version();
@@ -24,6 +25,8 @@ int main() {
   // block_overflow1();
   // block_overflow2();
   // dangling_ptr_write();
+  invalid_free();
+
   void* (*fun_mimalloc)(size_t) = &mi_malloc;
 
   void* p1 = malloc(78);
@@ -47,6 +50,11 @@ int main() {
   //mi_free(p2);
   mi_stats_print(NULL);
   return 0;
+}
+
+static void invalid_free() {
+  free((void*)0xBADBEEF);
+  realloc((void*)0xBADBEEF,10);
 }
 
 static void block_overflow1() {

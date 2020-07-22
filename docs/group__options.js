@@ -1,8 +1,8 @@
 var group__options =
 [
     [ "mi_option_t", "group__options.html#gafebf7ed116adb38ae5218bc3ce06884c", [
-      [ "mi_option_show_stats", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca0957ef73b2550764b4840edf48422fda", null ],
       [ "mi_option_show_errors", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884cafbf4822e5c00732c5984b32a032837f0", null ],
+      [ "mi_option_show_stats", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca0957ef73b2550764b4840edf48422fda", null ],
       [ "mi_option_verbose", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca7c8b7bf5281c581bad64f5daa6442777", null ],
       [ "mi_option_eager_commit", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca1e8de72c93da7ff22d91e1e27b52ac2b", null ],
       [ "mi_option_eager_region_commit", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca32ce97ece29f69e82579679cf8a307ad", null ],
@@ -18,10 +18,12 @@ var group__options =
       [ "mi_option_os_tag", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca4b74ae2a69e445de6c2361b73c1d14bf", null ],
       [ "_mi_option_last", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca5b4357b74be0d87568036c32eb1a2e4a", null ]
     ] ],
-    [ "mi_option_enable", "group__options.html#ga6d45a20a3131f18bc351b69763b38ce4", null ],
-    [ "mi_option_enable_default", "group__options.html#ga37988264b915a7db92530cc02d5494cb", null ],
-    [ "mi_option_enabled", "group__options.html#gacebe3f6d91b4a50b54eb84e2a1da1b30", null ],
+    [ "mi_option_disable", "group__options.html#gaebf6ff707a2e688ebb1a2296ca564054", null ],
+    [ "mi_option_enable", "group__options.html#ga04180ae41b0d601421dd62ced40ca050", null ],
     [ "mi_option_get", "group__options.html#ga7e8af195cc81d3fa64ccf2662caa565a", null ],
+    [ "mi_option_is_enabled", "group__options.html#ga459ad98f18b3fc9275474807fe0ca188", null ],
     [ "mi_option_set", "group__options.html#gaf84921c32375e25754dc2ee6a911fa60", null ],
-    [ "mi_option_set_default", "group__options.html#ga7ef623e440e6e5545cb08c94e71e4b90", null ]
+    [ "mi_option_set_default", "group__options.html#ga7ef623e440e6e5545cb08c94e71e4b90", null ],
+    [ "mi_option_set_enabled", "group__options.html#ga9a13d05fcb77489cb06d4d017ebd8bed", null ],
+    [ "mi_option_set_enabled_default", "group__options.html#ga65518b69ec5d32336b50e07f74b3f629", null ]
 ];
