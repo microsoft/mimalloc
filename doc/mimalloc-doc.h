@@ -298,7 +298,7 @@ size_t mi_good_size(size_t size);
 /// resource usage by calling this every once in a while.
 void   mi_collect(bool force);
 
-/// Print the main statistics.
+/// Deprecated
 /// @param out Ignored, outputs to the registered output function or stderr by default.
 ///
 /// Most detailed when using a debug build.
@@ -309,7 +309,7 @@ void mi_stats_print(void* out);
 /// @param arg Optional argument passed to \a out (if not \a NULL)
 ///
 /// Most detailed when using a debug build.
-void mi_stats_print(mi_output_fun* out, void* arg);
+void mi_stats_print_out(mi_output_fun* out, void* arg);
 
 /// Reset statistics.
 void mi_stats_reset(void);

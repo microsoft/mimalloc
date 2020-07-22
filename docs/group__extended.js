@@ -16,7 +16,7 @@ var group__extended =
     [ "mi_reserve_huge_os_pages_interleave", "group__extended.html#ga3132f521fb756fc0e8ec0b74fb58df50", null ],
     [ "mi_stats_merge", "group__extended.html#ga854b1de8cb067c7316286c28b2fcd3d1", null ],
     [ "mi_stats_print", "group__extended.html#ga2d126e5c62d3badc35445e5d84166df2", null ],
-    [ "mi_stats_print", "group__extended.html#ga256cc6f13a142deabbadd954a217e228", null ],
+    [ "mi_stats_print_out", "group__extended.html#ga537f13b299ddf801e49a5a94fde02c79", null ],
     [ "mi_stats_reset", "group__extended.html#ga3bb8468b8cfcc6e2a61d98aee85c5f99", null ],
     [ "mi_thread_done", "group__extended.html#ga0ae4581e85453456a0d658b2b98bf7bf", null ],
     [ "mi_thread_init", "group__extended.html#gaf8e73efc2cbca9ebfdfb166983a04c17", null ],
