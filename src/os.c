@@ -36,6 +36,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <mach/vm_statistics.h>
 #endif
 #endif
+#if defined(__HAIKU__)
+#define madvise posix_madvise
+#define MADV_DONTNEED POSIX_MADV_DONTNEED
+#endif
 #endif
 
 /* -----------------------------------------------------------
@@ -905,7 +909,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
   return VirtualAlloc(addr, size, flags, PAGE_READWRITE);
 }
 
-#elif defined(MI_OS_USE_MMAP) && (MI_INTPTR_SIZE >= 8)
+#elif defined(MI_OS_USE_MMAP) && (MI_INTPTR_SIZE >= 8) && !defined(__HAIKU__)
 #include <sys/syscall.h>
 #ifndef MPOL_PREFERRED
 #define MPOL_PREFERRED 1

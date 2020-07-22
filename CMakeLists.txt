@@ -156,7 +156,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "Intel")
   list(APPEND mi_cflags -Wall -fvisibility=hidden)
 endif()
 
-if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel")
+if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
   if(MI_LOCAL_DYNAMIC_TLS MATCHES "ON")
     list(APPEND mi_cflags -ftls-model=local-dynamic)
   else()
