@@ -65,10 +65,13 @@ static inline void mi_atomic_yield(void);
 // Note: not using _Atomic(int64_t) as it is only used for statistics.
 static inline void mi_atomic_addi64(volatile int64_t* p, int64_t add);
 
-// Atomically take the maximum a 64-bit value; returns the previous value.
-// Note: not using _Atomic(int64_t) as it is only used for statistics.
+// Atomically update `*p` with the maximum of `*p` and `x` as a 64-bit value.
+// Returns the previous value. Note: not using _Atomic(int64_t) as it is only used for statistics.
 static inline void mi_atomic_maxi64(volatile int64_t* p, int64_t x);
 
+// Atomically read a 64-bit value
+// Note: not using _Atomic(int64_t) as it is only used for statistics.
+static inline int64_t mi_atomic_readi64(volatile int64_t* p);
 
 // Atomically subtract a value; returns the previous value.
 static inline uintptr_t mi_atomic_sub(volatile _Atomic(uintptr_t)* p, uintptr_t sub) {
@@ -188,23 +191,24 @@ static inline void mi_atomic_maxi64(volatile _Atomic(int64_t)*p, int64_t x) {
   } while (current < x && _InterlockedCompareExchange64(p, x, current) != current);
 }
 
+static inline int64_t mi_atomic_readi64(volatile _Atomic(int64_t)*p) {
+  #ifdef _WIN64
+  return *p;
+  #else
+  int64_t current;
+  do {
+    current = *p;
+  } while (_InterlockedCompareExchange64(p, current, current) != current);
+  return current;
+  #endif
+}
+
 #else
 #ifdef __cplusplus
 #define  MI_USING_STD   using namespace std;
 #else
 #define  MI_USING_STD
 #endif
-static inline void mi_atomic_addi64(volatile int64_t* p, int64_t add) {
-  MI_USING_STD
-  atomic_fetch_add_explicit((volatile _Atomic(int64_t)*)p, add, memory_order_relaxed);
-}
-static inline void mi_atomic_maxi64(volatile int64_t* p, int64_t x) {
-  MI_USING_STD
-  int64_t current;
-  do {
-    current = atomic_load_explicit((volatile _Atomic(int64_t)*)p, memory_order_relaxed);
-  } while (current < x && !atomic_compare_exchange_weak_explicit((volatile _Atomic(int64_t)*)p, &current, x, memory_order_acq_rel, memory_order_relaxed));
-}
 static inline uintptr_t mi_atomic_add(volatile _Atomic(uintptr_t)* p, uintptr_t add) {
   MI_USING_STD
   return atomic_fetch_add_explicit(p, add, memory_order_relaxed);
@@ -240,6 +244,21 @@ static inline uintptr_t mi_atomic_read(const volatile _Atomic(uintptr_t)* p) {
 static inline void mi_atomic_write(volatile _Atomic(uintptr_t)* p, uintptr_t x) {
   MI_USING_STD
   return atomic_store_explicit(p, x, memory_order_release);
+}
+static inline void mi_atomic_addi64(volatile int64_t* p, int64_t add) {
+  MI_USING_STD
+  atomic_fetch_add_explicit((volatile _Atomic(int64_t)*)p, add, memory_order_relaxed);
+}
+static inline int64_t mi_atomic_readi64(volatile int64_t* p) {
+  MI_USING_STD
+  return atomic_load_explicit((volatile _Atomic(int64_t)*) p, memory_order_relaxed);
+}
+static inline void mi_atomic_maxi64(volatile int64_t* p, int64_t x) {
+  MI_USING_STD
+  int64_t current;
+  do {
+    current = mi_atomic_readi64(p);
+  } while (current < x && !atomic_compare_exchange_weak_explicit((volatile _Atomic(int64_t)*)p, &current, x, memory_order_acq_rel, memory_order_relaxed));
 }
 
 #if defined(__cplusplus)

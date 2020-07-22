@@ -27,7 +27,7 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   {
     // add atomically (for abandoned pages)
     mi_atomic_addi64(&stat->current,amount);
-    mi_atomic_maxi64(&stat->peak, stat->current);
+    mi_atomic_maxi64(&stat->peak, mi_atomic_readi64(&stat->current));
     if (amount > 0) {
       mi_atomic_addi64(&stat->allocated,amount);
     }
