@@ -978,7 +978,7 @@ static mi_segment_t* mi_abandoned_pop(void) {
   mi_atomic_increment(&abandoned_readers);  // ensure no segment gets decommitted
   mi_tagged_segment_t next = 0;
   do {
-    ts = mi_atomic_read_relaxed(&abandoned);
+    ts = mi_atomic_read(&abandoned);
     segment = mi_tagged_segment_ptr(ts);
     if (segment != NULL) {
       next = mi_tagged_segment(segment->abandoned_next, ts); // note: reads the segment's `abandoned_next` field so should not be decommitted
