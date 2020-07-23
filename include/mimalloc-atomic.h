@@ -215,11 +215,11 @@ static inline uintptr_t mi_atomic_add(volatile _Atomic(uintptr_t)* p, uintptr_t 
 }
 static inline uintptr_t mi_atomic_and(volatile _Atomic(uintptr_t)* p, uintptr_t x) {
   MI_USING_STD
-  return atomic_fetch_and_explicit(p, x, memory_order_relaxed);
+  return atomic_fetch_and_explicit(p, x, memory_order_acq_rel);
 }
 static inline uintptr_t mi_atomic_or(volatile _Atomic(uintptr_t)* p, uintptr_t x) {
   MI_USING_STD
-  return atomic_fetch_or_explicit(p, x, memory_order_relaxed);
+  return atomic_fetch_or_explicit(p, x, memory_order_acq_rel);
 }
 static inline bool mi_atomic_cas_weak(volatile _Atomic(uintptr_t)* p, uintptr_t desired, uintptr_t expected) {
   MI_USING_STD
