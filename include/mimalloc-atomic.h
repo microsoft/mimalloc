@@ -93,33 +93,58 @@ static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)* p, intptr_t sub) {
   return (intptr_t)mi_atomic_addi(p,-sub);
 }
 
-// Atomically read a pointer; Memory order is relaxed (i.e. no fence, only atomic).
-#define mi_atomic_read_ptr_relaxed(T,p)  \
-  (T*)(mi_atomic_read_relaxed((const _Atomic(uintptr_t)*)(p)))
-
-// Atomically read a pointer; Memory order is acquire.
-#define mi_atomic_read_ptr(T,p) \
-  (T*)(mi_atomic_read((const _Atomic(uintptr_t)*)(p)))
-
-// Atomically write a pointer; Memory order is acquire.
-#define mi_atomic_write_ptr(T,p,x) \
-  mi_atomic_write((_Atomic(uintptr_t)*)(p), (uintptr_t)((T*)x))
-
-
-static inline bool mi_atomic_cas_weak_voidp(_Atomic(void*)*p, void** expected, void* desired, void* unused) {
-  (void)(unused);
+// Atomically compare and exchange a void pointer; returns `true` if successful. May fail spuriously.
+// Memory order is release. (like a write)
+static inline bool mi_atomic_cas_weak_voidp(_Atomic(void*)* p, void** expected, void* desired, void* unused1, void* unused2) {
+  (void)unused1; (void)unused2;  // for extra type check
   return mi_atomic_cas_weak((_Atomic(uintptr_t)*)p, (uintptr_t*)expected, (uintptr_t)desired);
+}
+
+// Atomically read a void pointer; Memory order is relaxed (i.e. no fence, only atomic).
+static inline void* mi_atomic_read_voidp(const _Atomic(void*)* p, void* unused) {
+  (void)unused; // for extra type check
+  return (void*)mi_atomic_read((const _Atomic(uintptr_t)*) p);
+}
+
+// Atomically read a void pointer; Memory order is acquire.
+static inline void* mi_atomic_read_voidp_relaxed(const _Atomic(void*)*p, void* unused) {
+  (void)unused; // for extra type check
+  return (void*)mi_atomic_read_relaxed((const _Atomic(uintptr_t)*) p);
+}
+
+// Atomically write a void pointer; Memory order is acquire.
+static inline void mi_atomic_write_voidp(_Atomic(void*)* p, void* exchange, void* unused) {
+  (void)unused; // for extra type check
+  mi_atomic_write((_Atomic(uintptr_t)*) p, (uintptr_t)exchange);
+}
+
+// Atomically exchange a void pointer; Memory order is release-acquire.
+static inline void* mi_atomic_exchange_voidp(_Atomic(void*)*p, void* exchange, void* unused) {
+  (void)unused; // for extra type check
+  return (void*)mi_atomic_exchange((_Atomic(uintptr_t)*) p, (uintptr_t)exchange);
 }
 
 // Atomically compare and exchange a pointer; returns `true` if successful. May fail spuriously.
 // Memory order is release. (like a write)
 #define mi_atomic_cas_ptr_weak(T,p,expected,desired) \
-  mi_atomic_cas_weak_voidp((_Atomic(void*)*)(p), (void**)(expected), desired, *(expected))
-    
+  mi_atomic_cas_weak_voidp((_Atomic(void*)*)(p), (void**)(expected), desired, *(p), *(expected))
 
+// Atomically read a pointer; Memory order is relaxed (i.e. no fence, only atomic).
+#define mi_atomic_read_ptr_relaxed(T,p)  \
+  (T*)(mi_atomic_read_voidp_relaxed((const _Atomic(void*)*)(p), *(p)))
+
+// Atomically read a pointer; Memory order is acquire.
+#define mi_atomic_read_ptr(T,p) \
+  (T*)(mi_atomic_read_voidp((const _Atomic(void*)*)(p), *(p)))
+
+// Atomically write a pointer; Memory order is acquire.
+#define mi_atomic_write_ptr(T,p,x) \
+  mi_atomic_write_voidp((_Atomic(void*)*)(p), x, *(p))
+    
 // Atomically exchange a pointer value.
 #define mi_atomic_exchange_ptr(T,p,exchange) \
-  (T*)mi_atomic_exchange((_Atomic(uintptr_t)*)(p), (uintptr_t)((T*)exchange))
+  (T*)(mi_atomic_exchange_voidp((_Atomic(void*)*)(p), exchange, *(p)))
+
 
 
 #if !defined(__cplusplus) && defined(_MSC_VER)
@@ -170,9 +195,6 @@ static inline void mi_atomic_write(_Atomic(uintptr_t)* p, uintptr_t x) {
   #else
   mi_atomic_exchange(p,x);
   #endif
-}
-static inline void mi_atomic_yield(void) {
-  YieldProcessor();
 }
 static inline int64_t mi_atomic_addi64_relaxed(volatile _Atomic(int64_t)* p, int64_t add) {
   #ifdef _WIN64
@@ -246,35 +268,41 @@ static inline void mi_atomic_maxi64_relaxed(volatile int64_t* p, int64_t x) {
   int64_t current = atomic_load_explicit((_Atomic(int64_t)*)p, memory_order_relaxed);
   while (current < x && !atomic_compare_exchange_weak_explicit((_Atomic(int64_t)*)p, &current, x, memory_order_acq_rel, memory_order_acquire)) { /* nothing */ };
 }
+#endif
 
 #if defined(__cplusplus)
-  #include <thread>
-  static inline void mi_atomic_yield(void) {
-    std::this_thread::yield();
-  }
+#include <thread>
+static inline void mi_atomic_yield(void) {
+  std::this_thread::yield();
+}
+#elif defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+static inline void mi_atomic_yield(void) {
+  YieldProcessor();
+}
 #elif (defined(__GNUC__) || defined(__clang__)) && \
       (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))
 #if defined(__x86_64__) || defined(__i386__)
-  static inline void mi_atomic_yield(void) {
-    asm volatile ("pause" ::: "memory");
-  }
+static inline void mi_atomic_yield(void) {
+  asm volatile ("pause" ::: "memory");
+}
 #elif defined(__arm__) || defined(__aarch64__)
-  static inline void mi_atomic_yield(void) {
-    asm volatile("yield");
-  }
+static inline void mi_atomic_yield(void) {
+  asm volatile("yield");
+}
 #endif
 #elif defined(__wasi__)
-  #include <sched.h>
-  static inline void mi_atomic_yield(void) {
-    sched_yield();
-  }
+#include <sched.h>
+static inline void mi_atomic_yield(void) {
+  sched_yield();
+}
 #else
-  #include <unistd.h>
-  static inline void mi_atomic_yield(void) {
-    sleep(0);
-  }
+#include <unistd.h>
+static inline void mi_atomic_yield(void) {
+  sleep(0);
+}
 #endif
 
-#endif
 
 #endif // __MIMALLOC_ATOMIC_H
