@@ -159,7 +159,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   do {
     head = mi_tf_block(tfree);
     tfreex = mi_tf_set_block(tfree,NULL);
-  } while (!mi_atomic_cas_weak(&page->xthread_free, &tfree, tfreex));
+  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));
 
   // return if the list is empty
   if (head == NULL) return;

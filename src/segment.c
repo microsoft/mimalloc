@@ -982,7 +982,7 @@ static mi_segment_t* mi_abandoned_pop(void) {
       mi_segment_t* anext = mi_atomic_read_ptr_relaxed(mi_segment_t, &segment->abandoned_next);
       next = mi_tagged_segment(anext, ts); // note: reads the segment's `abandoned_next` field so should not be decommitted
     }
-  } while (segment != NULL && !mi_atomic_cas_weak(&abandoned, &ts, next));
+  } while (segment != NULL && !mi_atomic_cas_weak_acq_rel(&abandoned, &ts, next));
   mi_atomic_decrement(&abandoned_readers);  // release reader lock
   if (segment != NULL) {
     mi_atomic_write_ptr(mi_segment_t, &segment->abandoned_next, NULL);

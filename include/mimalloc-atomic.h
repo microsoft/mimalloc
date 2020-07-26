@@ -27,18 +27,22 @@ terms of the MIT license. A copy of the license can be found in the file
 // Atomic operations specialized for mimalloc
 // ------------------------------------------------------
 
-// Atomically add a value; returns the previous value. Memory ordering is acquire-release.
+// Atomically add a value; returns the previous value. Memory ordering is relaxed.
 static inline uintptr_t mi_atomic_add(_Atomic(uintptr_t)* p, uintptr_t add);
 
-// Atomically "and" a value; returns the previous value. Memory ordering is acquire-release.
+// Atomically "and" a value; returns the previous value. Memory ordering is release.
 static inline uintptr_t mi_atomic_and(_Atomic(uintptr_t)* p, uintptr_t x);
 
-// Atomically "or" a value; returns the previous value. Memory ordering is acquire-release.
+// Atomically "or" a value; returns the previous value. Memory ordering is release.
 static inline uintptr_t mi_atomic_or(_Atomic(uintptr_t)* p, uintptr_t x);
 
 // Atomically compare and exchange a value; returns `true` if successful.
-// May fail spuriously. Memory ordering is acquire-release; with acquire on failure.
+// May fail spuriously. Memory ordering is release; with relaxed on failure.
 static inline bool mi_atomic_cas_weak(_Atomic(uintptr_t)* p, uintptr_t* expected, uintptr_t desired);
+
+// Atomically compare and exchange a value; returns `true` if successful.
+// May fail spuriously. Memory ordering is acquire-release; with acquire on failure.
+static inline bool mi_atomic_cas_weak_acq_rel(_Atomic(uintptr_t)*p, uintptr_t* expected, uintptr_t desired);
 
 // Atomically compare and exchange a value; returns `true` if successful.
 // Memory ordering is acquire-release; with acquire on failure.
@@ -180,6 +184,9 @@ static inline bool mi_atomic_cas_strong(_Atomic(uintptr_t)* p, uintptr_t* expect
 static inline bool mi_atomic_cas_weak(_Atomic(uintptr_t)* p, uintptr_t* expected, uintptr_t desired) {
   return mi_atomic_cas_strong(p,expected,desired);
 }
+static inline bool mi_atomic_cas_weak_acq_rel(_Atomic(uintptr_t)*p, uintptr_t* expected, uintptr_t desired) {
+  return mi_atomic_cas_strong(p, expected, desired);
+}
 static inline uintptr_t mi_atomic_exchange(_Atomic(uintptr_t)* p, uintptr_t exchange) {
   return (uintptr_t)MI_64(_InterlockedExchange)((volatile msc_intptr_t*)p, (msc_intptr_t)exchange);
 }
@@ -225,17 +232,21 @@ static inline void mi_atomic_maxi64_relaxed(volatile _Atomic(int64_t)*p, int64_t
 #endif
 static inline uintptr_t mi_atomic_add(_Atomic(uintptr_t)* p, uintptr_t add) {
   MI_USING_STD
-  return atomic_fetch_add_explicit(p, add, memory_order_acq_rel);
+  return atomic_fetch_add_explicit(p, add, memory_order_relaxed);
 }
 static inline uintptr_t mi_atomic_and(_Atomic(uintptr_t)* p, uintptr_t x) {
   MI_USING_STD
-  return atomic_fetch_and_explicit(p, x, memory_order_acq_rel);
+  return atomic_fetch_and_explicit(p, x, memory_order_release);
 }
 static inline uintptr_t mi_atomic_or(_Atomic(uintptr_t)* p, uintptr_t x) {
   MI_USING_STD
-  return atomic_fetch_or_explicit(p, x, memory_order_acq_rel);
+  return atomic_fetch_or_explicit(p, x, memory_order_release);
 }
 static inline bool mi_atomic_cas_weak(_Atomic(uintptr_t)* p, uintptr_t* expected, uintptr_t desired) {
+  MI_USING_STD
+  return atomic_compare_exchange_weak_explicit(p, expected, desired, memory_order_release, memory_order_relaxed);
+}
+static inline bool mi_atomic_cas_weak_acq_rel(_Atomic(uintptr_t)*p, uintptr_t* expected, uintptr_t desired) {
   MI_USING_STD
   return atomic_compare_exchange_weak_explicit(p, expected, desired, memory_order_acq_rel, memory_order_acquire);
 }
@@ -266,7 +277,7 @@ static inline int64_t mi_atomic_addi64_relaxed(volatile int64_t* p, int64_t add)
 static inline void mi_atomic_maxi64_relaxed(volatile int64_t* p, int64_t x) {
   MI_USING_STD
   int64_t current = atomic_load_explicit((_Atomic(int64_t)*)p, memory_order_relaxed);
-  while (current < x && !atomic_compare_exchange_weak_explicit((_Atomic(int64_t)*)p, &current, x, memory_order_acq_rel, memory_order_acquire)) { /* nothing */ };
+  while (current < x && !atomic_compare_exchange_weak_explicit((_Atomic(int64_t)*)p, &current, x, memory_order_release, memory_order_relaxed)) { /* nothing */ };
 }
 #endif
 
