@@ -72,6 +72,14 @@ static inline uintptr_t mi_bitmap_mask_(size_t count, size_t bitidx) {
 #if defined(_MSC_VER)
 #define MI_HAVE_BITSCAN
 #include <intrin.h>
+#ifndef MI_64
+#if MI_INTPTR_SIZE==8
+#define MI_64(f) f##64
+#else
+#define MI_64(f) f
+#endif
+#endif
+
 static inline size_t mi_bsf(uintptr_t x) {
   if (x==0) return 8*MI_INTPTR_SIZE;
   DWORD idx;

@@ -13,12 +13,12 @@ terms of the MIT license. A copy of the license can be found in the file
 // We need to be portable between C, C++, and MSVC.
 // ------------------------------------------------------
 
-#if defined(_MSC_VER)
-#define _Atomic(tp)         tp
-#define ATOMIC_VAR_INIT(x)  x
-#elif defined(__cplusplus)
+#if defined(__cplusplus)
 #include <atomic>
 #define  _Atomic(tp)        std::atomic<tp>
+#elif defined(_MSC_VER)
+#define _Atomic(tp)         tp
+#define ATOMIC_VAR_INIT(x)  x
 #else
 #include <stdatomic.h>
 #endif
@@ -126,7 +126,7 @@ static inline intptr_t mi_atomic_subi(volatile _Atomic(intptr_t)* p, intptr_t su
   (T*)mi_atomic_exchange((volatile _Atomic(uintptr_t)*)(p), (uintptr_t)((T*)exchange))
 
 
-#ifdef _MSC_VER
+#if !defined(__cplusplus) && defined(_MSC_VER)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <intrin.h>
