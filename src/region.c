@@ -86,13 +86,13 @@ typedef union mi_region_info_u {
 // A region owns a chunk of REGION_SIZE (256MiB) (virtual) memory with
 // a bit map with one bit per MI_SEGMENT_SIZE (4MiB) block.
 typedef struct mem_region_s {
-  volatile _Atomic(uintptr_t)        info;        // mi_region_info_t.value
-  volatile _Atomic(void*)            start;       // start of the memory area 
+  _Atomic(uintptr_t)        info;        // mi_region_info_t.value
+  _Atomic(void*)            start;       // start of the memory area 
   mi_bitmap_field_t                  in_use;      // bit per in-use block
   mi_bitmap_field_t                  dirty;       // track if non-zero per block
   mi_bitmap_field_t                  commit;      // track if committed per block
   mi_bitmap_field_t                  reset;       // track if reset per block
-  volatile _Atomic(uintptr_t)        arena_memid; // if allocated from a (huge page) arena
+  _Atomic(uintptr_t)        arena_memid; // if allocated from a (huge page) arena
   uintptr_t                          padding;     // round to 8 fields
 } mem_region_t;
 
@@ -100,7 +100,7 @@ typedef struct mem_region_s {
 static mem_region_t regions[MI_REGION_MAX];
 
 // Allocated regions
-static volatile _Atomic(uintptr_t) regions_count; // = 0;        
+static _Atomic(uintptr_t) regions_count; // = 0;        
 
 
 /* ----------------------------------------------------------------------------
@@ -447,10 +447,8 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
     mem_region_t* region = &regions[i];
     if (mi_atomic_read_relaxed(&region->info) != 0) {
       // if no segments used, try to claim the whole region
-      uintptr_t m;
-      do {
-        m = mi_atomic_read_relaxed(&region->in_use);
-      } while(m == 0 && !mi_atomic_cas_weak(&region->in_use, MI_BITMAP_FIELD_FULL, 0 ));
+      uintptr_t m = mi_atomic_read_relaxed(&region->in_use);
+      while (m == 0 && !mi_atomic_cas_weak(&region->in_use, &m, MI_BITMAP_FIELD_FULL)) { /* nothing */ };
       if (m == 0) {
         // on success, free the whole region
         uint8_t* start = mi_atomic_read_ptr(uint8_t,&regions[i].start);

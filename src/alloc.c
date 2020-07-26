@@ -305,11 +305,10 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   }
 
   // Try to put the block on either the page-local thread free list, or the heap delayed free list.
-  mi_thread_free_t tfree;
   mi_thread_free_t tfreex;
   bool use_delayed;
+  mi_thread_free_t tfree = mi_atomic_read_relaxed(&page->xthread_free);
   do {
-    tfree = mi_atomic_read_relaxed(&page->xthread_free);
     use_delayed = (mi_tf_delayed(tfree) == MI_USE_DELAYED_FREE);
     if (mi_unlikely(use_delayed)) {
       // unlikely: this only happens on the first concurrent free in a page that is in the full list
@@ -320,7 +319,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       mi_block_set_next(page, block, mi_tf_block(tfree));
       tfreex = mi_tf_set_block(tfree,block);
     }
-  } while (!mi_atomic_cas_weak(&page->xthread_free, tfreex, tfree));
+  } while (!mi_atomic_cas_weak(&page->xthread_free, &tfree, tfreex));
 
   if (mi_unlikely(use_delayed)) {
     // racy read on `heap`, but ok because MI_DELAYED_FREEING is set (see `mi_heap_delete` and `mi_heap_collect_abandon`)
@@ -328,19 +327,19 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
     mi_assert_internal(heap != NULL);
     if (heap != NULL) {
       // add to the delayed free list of this heap. (do this atomically as the lock only protects heap memory validity)
-      mi_block_t* dfree;
+      mi_block_t* dfree = mi_atomic_read_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
       do {
-        dfree = mi_atomic_read_ptr_relaxed(mi_block_t,&heap->thread_delayed_free);
         mi_block_set_nextx(heap,block,dfree, heap->keys);
-      } while (!mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, block, dfree));
+      } while (!mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, &dfree, block));
     }
 
     // and reset the MI_DELAYED_FREEING flag
+    tfree = mi_atomic_read_relaxed(&page->xthread_free);
     do {
-      tfreex = tfree = mi_atomic_read_relaxed(&page->xthread_free);
+      tfreex = tfree;
       mi_assert_internal(mi_tf_delayed(tfree) == MI_DELAYED_FREEING);
       tfreex = mi_tf_set_delayed(tfree,MI_NO_DELAYED_FREE);
-    } while (!mi_atomic_cas_weak(&page->xthread_free, tfreex, tfree));
+    } while (!mi_atomic_cas_weak(&page->xthread_free, &tfree, tfreex));
   }
 }
 

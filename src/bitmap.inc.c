@@ -30,7 +30,7 @@ and that the sequence must be smaller or equal to the bits in a field.
 #define MI_BITMAP_FIELD_FULL   (~((uintptr_t)0))   // all bits set
 
 // An atomic bitmap of `uintptr_t` fields
-typedef volatile _Atomic(uintptr_t)  mi_bitmap_field_t;
+typedef _Atomic(uintptr_t)  mi_bitmap_field_t;
 typedef mi_bitmap_field_t*           mi_bitmap_t;
 
 // A bitmap index is the index of the bit in a bitmap.
@@ -123,7 +123,7 @@ static inline bool mi_bitmap_try_claim_field(mi_bitmap_t bitmap, size_t bitmap_f
 
   uintptr_t field = mi_atomic_read_relaxed(&bitmap[idx]);
   if ((field & mask) == 0) { // free?
-    if (mi_atomic_cas_strong(&bitmap[idx], (field|mask), field)) {
+    if (mi_atomic_cas_strong(&bitmap[idx], &field, (field|mask))) {
       // claimed!
       return true;
     }
@@ -137,7 +137,7 @@ static inline bool mi_bitmap_try_claim_field(mi_bitmap_t bitmap, size_t bitmap_f
 static inline bool mi_bitmap_try_find_claim_field(mi_bitmap_t bitmap, size_t idx, const size_t count, mi_bitmap_index_t* bitmap_idx)
 {
   mi_assert_internal(bitmap_idx != NULL);
-  volatile _Atomic(uintptr_t)* field = &bitmap[idx];
+  _Atomic(uintptr_t)* field = &bitmap[idx];
   uintptr_t map  = mi_atomic_read(field);
   if (map==MI_BITMAP_FIELD_FULL) return false; // short cut
 
@@ -158,9 +158,8 @@ static inline bool mi_bitmap_try_find_claim_field(mi_bitmap_t bitmap, size_t idx
       mi_assert_internal((m >> bitidx) == mask); // no overflow?
       const uintptr_t newmap = map | m;
       mi_assert_internal((newmap^map) >> bitidx == mask);
-      if (!mi_atomic_cas_weak(field, newmap, map)) {  // TODO: use strong cas here?
-        // no success, another thread claimed concurrently.. keep going
-        map = mi_atomic_read(field);
+      if (!mi_atomic_cas_weak(field, &map, newmap)) {  // TODO: use strong cas here?
+        // no success, another thread claimed concurrently.. keep going (with updated `map`)
         continue;
       }
       else {

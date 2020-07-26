@@ -217,7 +217,7 @@ static void mi_out_buf_stderr(const char* msg, void* arg) {
 // For now, don't register output from multiple threads.
 #pragma warning(suppress:4180)
 static mi_output_fun* volatile mi_out_default; // = NULL
-static volatile _Atomic(void*) mi_out_arg; // = NULL
+static _Atomic(void*) mi_out_arg; // = NULL
 
 static mi_output_fun* mi_out_get_default(void** parg) {
   if (parg != NULL) { *parg = mi_atomic_read_ptr(void,&mi_out_arg); }
@@ -241,7 +241,7 @@ static void mi_add_stderr_output() {
 // --------------------------------------------------------
 // Messages, all end up calling `_mi_fputs`.
 // --------------------------------------------------------
-static volatile _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
+static _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
 
 // When overriding malloc, we may recurse into mi_vfprintf if an allocation
 // inside the C runtime causes another message.
@@ -339,7 +339,7 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, co
 // --------------------------------------------------------
 
 static mi_error_fun* volatile  mi_error_handler; // = NULL
-static volatile _Atomic(void*) mi_error_arg;     // = NULL
+static _Atomic(void*) mi_error_arg;     // = NULL
 
 static void mi_error_default(int err) {
   UNUSED(err);

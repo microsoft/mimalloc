@@ -63,7 +63,7 @@ typedef struct mi_arena_s {
   bool     is_zero_init;                  // is the arena zero initialized?
   bool     is_committed;                  // is the memory committed
   bool     is_large;                      // large OS page allocated
-  volatile _Atomic(uintptr_t) search_idx; // optimization to start the search for free blocks
+  _Atomic(uintptr_t) search_idx; // optimization to start the search for free blocks
   mi_bitmap_field_t* blocks_dirty;        // are the blocks potentially non-zero?
   mi_bitmap_field_t* blocks_committed;    // if `!is_committed`, are the blocks committed?
   mi_bitmap_field_t  blocks_inuse[1];       // in-place bitmap of in-use blocks (of size `field_count`)

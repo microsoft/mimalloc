@@ -26,13 +26,13 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   if (mi_is_in_main(stat))
   {
     // add atomically (for abandoned pages)
-    mi_atomic_addi64(&stat->current,amount);
-    mi_atomic_maxi64(&stat->peak, mi_atomic_readi64(&stat->current));
+    int64_t current = mi_atomic_addi64_relaxed(&stat->current, amount);
+    mi_atomic_maxi64_relaxed(&stat->peak, current + amount);
     if (amount > 0) {
-      mi_atomic_addi64(&stat->allocated,amount);
+      mi_atomic_addi64_relaxed(&stat->allocated,amount);
     }
     else {
-      mi_atomic_addi64(&stat->freed, -amount);
+      mi_atomic_addi64_relaxed(&stat->freed, -amount);
     }
   }
   else {
@@ -50,8 +50,8 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
 
 void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {  
   if (mi_is_in_main(stat)) {
-    mi_atomic_addi64( &stat->count, 1 );
-    mi_atomic_addi64( &stat->total, (int64_t)amount );
+    mi_atomic_addi64_relaxed( &stat->count, 1 );
+    mi_atomic_addi64_relaxed( &stat->total, (int64_t)amount );
   }
   else {
     stat->count++;
@@ -71,17 +71,17 @@ void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
 static void mi_stat_add(mi_stat_count_t* stat, const mi_stat_count_t* src, int64_t unit) {
   if (stat==src) return;
   if (src->allocated==0 && src->freed==0) return;
-  mi_atomic_addi64( &stat->allocated, src->allocated * unit);
-  mi_atomic_addi64( &stat->current, src->current * unit);
-  mi_atomic_addi64( &stat->freed, src->freed * unit);
+  mi_atomic_addi64_relaxed( &stat->allocated, src->allocated * unit);
+  mi_atomic_addi64_relaxed( &stat->current, src->current * unit);
+  mi_atomic_addi64_relaxed( &stat->freed, src->freed * unit);
   // peak scores do not work across threads..
-  mi_atomic_addi64( &stat->peak, src->peak * unit);
+  mi_atomic_addi64_relaxed( &stat->peak, src->peak * unit);
 }
 
 static void mi_stat_counter_add(mi_stat_counter_t* stat, const mi_stat_counter_t* src, int64_t unit) {
   if (stat==src) return;
-  mi_atomic_addi64( &stat->total, src->total * unit);
-  mi_atomic_addi64( &stat->count, src->count * unit);
+  mi_atomic_addi64_relaxed( &stat->total, src->total * unit);
+  mi_atomic_addi64_relaxed( &stat->count, src->count * unit);
 }
 
 // must be thread safe as it is called from stats_merge
