@@ -155,6 +155,7 @@ typedef enum mi_delayed_e {
 
 // The `in_full` and `has_aligned` page flags are put in a union to efficiently
 // test if both are false (`full_aligned == 0`) in the `mi_free` routine.
+#if !MI_TSAN
 typedef union mi_page_flags_s {
   uint8_t full_aligned;
   struct {
@@ -162,6 +163,16 @@ typedef union mi_page_flags_s {
     uint8_t has_aligned : 1;
   } x;
 } mi_page_flags_t;
+#else
+// under thread sanitizer, use a byte for each flag to suppress warning, issue #130
+typedef union mi_page_flags_s {
+  uint16_t full_aligned;
+  struct {
+    uint8_t in_full;
+    uint8_t has_aligned;
+  } x;
+} mi_page_flags_t;
+#endif
 
 // Thread free list.
 // We use the bottom 2 bits of the pointer for mi_delayed_t flags
@@ -245,12 +256,13 @@ typedef struct mi_segment_s {
   // memory fields
   size_t               memid;            // id for the os-level memory manager
   bool                 mem_is_fixed;     // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)
-  bool                 mem_is_committed; // `true` if the whole segment is eagerly committed
+  bool                 mem_is_committed; // `true` if the whole segment is eagerly committed  
 
   // segment fields
   struct mi_segment_s* next;             // must be the first segment field -- see `segment.c:segment_alloc`
   struct mi_segment_s* prev;
-  struct mi_segment_s* abandoned_next;
+  _Atomic(struct mi_segment_s*) abandoned_next;
+
   size_t               abandoned;        // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
   size_t               abandoned_visits; // count how often this segment is visited in the abandoned list (to force reclaim it it is too long)
 
