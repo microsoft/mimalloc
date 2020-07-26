@@ -472,7 +472,6 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   if (any_reset && mi_option_is_enabled(mi_option_reset_decommits)) {
     fully_committed = false;
   }
-  
   _mi_mem_free(segment, segment_size, segment->memid, fully_committed, any_reset, tld->os);
 }
 
@@ -629,6 +628,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
         return NULL;  
       }
     }
+    atomic_thread_fence(memory_order_acq_rel);
     segment->memid = memid;
     segment->mem_is_fixed = mem_large;
     segment->mem_is_committed = commit;
@@ -638,6 +638,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   mi_assert_internal(segment->mem_is_fixed ? segment->mem_is_committed : true);  
   if (!pages_still_good) {
     // zero the segment info (but not the `mem` fields)
+    atomic_thread_fence(memory_order_release);  // with read of `abandoned_next` in `mi_abandoned_pop`
     ptrdiff_t ofs = offsetof(mi_segment_t, next);
     memset((uint8_t*)segment + ofs, 0, info_size - ofs);
 
@@ -791,6 +792,7 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, bool a
   uint16_t reserved = page->reserved;
   ptrdiff_t ofs = offsetof(mi_page_t,capacity);
   memset((uint8_t*)page + ofs, 0, sizeof(*page) - ofs);
+  atomic_thread_fence(memory_order_release);
   page->capacity = capacity;
   page->reserved = reserved;
   page->xblock_size = block_size;
@@ -801,7 +803,7 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, bool a
     mi_pages_reset_add(segment, page, tld);
   }
 
-  page->capacity = 0;  // after reset there can be zero'd now
+  page->capacity = 0;  // after reset these can be zero'd now
   page->reserved = 0;
 }
 
@@ -979,7 +981,7 @@ static mi_segment_t* mi_abandoned_pop(void) {
   do {
     segment = mi_tagged_segment_ptr(ts);
     if (segment != NULL) {
-      mi_segment_t* anext = mi_atomic_read_ptr_relaxed(mi_segment_t, &segment->abandoned_next);
+      mi_segment_t* anext = mi_atomic_read_ptr(mi_segment_t, &segment->abandoned_next);
       next = mi_tagged_segment(anext, ts); // note: reads the segment's `abandoned_next` field so should not be decommitted
     }
   } while (segment != NULL && !mi_atomic_cas_weak_acq_rel(&abandoned, &ts, next));

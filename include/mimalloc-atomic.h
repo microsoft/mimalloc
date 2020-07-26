@@ -232,15 +232,15 @@ static inline void mi_atomic_maxi64_relaxed(volatile _Atomic(int64_t)*p, int64_t
 #endif
 static inline uintptr_t mi_atomic_add(_Atomic(uintptr_t)* p, uintptr_t add) {
   MI_USING_STD
-  return atomic_fetch_add_explicit(p, add, memory_order_relaxed);
+  return atomic_fetch_add_explicit(p, add, memory_order_acq_rel);
 }
 static inline uintptr_t mi_atomic_and(_Atomic(uintptr_t)* p, uintptr_t x) {
   MI_USING_STD
-  return atomic_fetch_and_explicit(p, x, memory_order_release);
+  return atomic_fetch_and_explicit(p, x, memory_order_acq_rel);
 }
 static inline uintptr_t mi_atomic_or(_Atomic(uintptr_t)* p, uintptr_t x) {
   MI_USING_STD
-  return atomic_fetch_or_explicit(p, x, memory_order_release);
+  return atomic_fetch_or_explicit(p, x, memory_order_acq_rel);
 }
 static inline bool mi_atomic_cas_weak(_Atomic(uintptr_t)* p, uintptr_t* expected, uintptr_t desired) {
   MI_USING_STD

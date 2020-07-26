@@ -189,7 +189,7 @@ static void test_stress(void) {
       }
     }
     // mi_collect(false);
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
 #endif
   }

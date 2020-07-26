@@ -323,7 +323,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
 
   if (mi_unlikely(use_delayed)) {
     // racy read on `heap`, but ok because MI_DELAYED_FREEING is set (see `mi_heap_delete` and `mi_heap_collect_abandon`)
-    mi_heap_t* const heap = mi_page_heap(page);
+    mi_heap_t* const heap = (mi_heap_t*)(mi_atomic_read(&page->xheap)); //mi_page_heap(page);
     mi_assert_internal(heap != NULL);
     if (heap != NULL) {
       // add to the delayed free list of this heap. (do this atomically as the lock only protects heap memory validity)
