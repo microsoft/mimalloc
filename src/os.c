@@ -759,12 +759,12 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   if (p != start) return false;
 #else
 #if defined(MADV_FREE)
-  static int advice = MADV_FREE;
-  int err = madvise(start, csize, advice);
+  static _Atomic(uintptr_t) advice = ATOMIC_VAR_INIT(MADV_FREE);
+  int err = madvise(start, csize, (int)mi_atomic_read_relaxed(&advice));
   if (err != 0 && errno == EINVAL && advice == MADV_FREE) {
     // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
-    advice = MADV_DONTNEED;
-    err = madvise(start, csize, advice);
+    mi_atomic_write(&advice, MADV_DONTNEED);
+    err = madvise(start, csize, MADV_DONTNEED);
   }
 #elif defined(__wasi__)
   int err = 0;
