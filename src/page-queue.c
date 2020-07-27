@@ -260,7 +260,7 @@ static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
   heap->page_count--;
   page->next = NULL;
   page->prev = NULL;
-  // mi_atomic_write_ptr(mi_atomic_cast(void*, &page->heap), NULL);
+  // mi_atomic_store_ptr_release(mi_atomic_cast(void*, &page->heap), NULL);
   mi_page_set_in_full(page,false);
 }
 
@@ -274,7 +274,7 @@ static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_
                         (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
 
   mi_page_set_in_full(page, mi_page_queue_is_full(queue));
-  // mi_atomic_write_ptr(mi_atomic_cast(void*, &page->heap), heap);
+  // mi_atomic_store_ptr_release(mi_atomic_cast(void*, &page->heap), heap);
   page->next = queue->first;
   page->prev = NULL;
   if (queue->first != NULL) {
@@ -341,7 +341,7 @@ size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue
   for (mi_page_t* page = append->first; page != NULL; page = page->next) {
     // inline `mi_page_set_heap` to avoid wrong assertion during absorption;
     // in this case it is ok to be delayed freeing since both "to" and "from" heap are still alive.
-    mi_atomic_write(&page->xheap, (uintptr_t)heap); 
+    mi_atomic_store_release(&page->xheap, (uintptr_t)heap); 
     // set the flag to delayed free (not overriding NEVER_DELAYED_FREE) which has as a
     // side effect that it spins until any DELAYED_FREEING is finished. This ensures
     // that after appending only the new heap will be used for delayed free operations.

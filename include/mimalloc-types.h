@@ -259,9 +259,9 @@ typedef struct mi_segment_s {
   bool                 mem_is_committed; // `true` if the whole segment is eagerly committed  
 
   // segment fields
-  struct mi_segment_s* next;             // must be the first segment field -- see `segment.c:segment_alloc`
-  struct mi_segment_s* prev;
   _Atomic(struct mi_segment_s*) abandoned_next;
+  struct mi_segment_s* next;             // must be the first segment field after abandoned_next -- see `segment.c:segment_init`
+  struct mi_segment_s* prev;
 
   size_t               abandoned;        // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
   size_t               abandoned_visits; // count how often this segment is visited in the abandoned list (to force reclaim it it is too long)

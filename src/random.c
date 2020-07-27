@@ -210,11 +210,11 @@ static bool os_random_buf(void* buf, size_t buf_len) {
   #define GRND_NONBLOCK (1)
   #endif
   static _Atomic(uintptr_t) no_getrandom; // = 0
-  if (mi_atomic_read(&no_getrandom)==0) {
+  if (mi_atomic_load_acquire(&no_getrandom)==0) {
     ssize_t ret = syscall(SYS_getrandom, buf, buf_len, GRND_NONBLOCK);
     if (ret >= 0) return (buf_len == (size_t)ret);
     if (ret != ENOSYS) return false;
-    mi_atomic_write(&no_getrandom,1); // don't call again, and fall back to /dev/urandom
+    mi_atomic_store_release(&no_getrandom,1); // don't call again, and fall back to /dev/urandom
   }
 #endif
   int flags = O_RDONLY;

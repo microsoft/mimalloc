@@ -126,7 +126,7 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool overrid
   mi_delayed_t     old_delay;
   mi_thread_free_t tfree;  
   do {
-    tfree = mi_atomic_read(&page->xthread_free); // note: must acquire as we can break/repeat this loop and not do a CAS;
+    tfree = mi_atomic_load_acquire(&page->xthread_free); // note: must acquire as we can break/repeat this loop and not do a CAS;
     tfreex = mi_tf_set_delayed(tfree, delay);
     old_delay = mi_tf_delayed(tfree);
     if (mi_unlikely(old_delay == MI_DELAYED_FREEING)) {
@@ -140,7 +140,7 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool overrid
       break; // leave never-delayed flag set
     }
   } while ((old_delay == MI_DELAYED_FREEING) ||
-           !mi_atomic_cas_weak(&page->xthread_free, &tfree, tfreex));
+           !mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
 }
 
 /* -----------------------------------------------------------
@@ -155,7 +155,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
 {
   mi_block_t* head;
   mi_thread_free_t tfreex;
-  mi_thread_free_t tfree = mi_atomic_read_relaxed(&page->xthread_free);
+  mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
   do {
     head = mi_tf_block(tfree);
     tfreex = mi_tf_set_block(tfree,NULL);
@@ -273,8 +273,8 @@ static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
 ----------------------------------------------------------- */
 void _mi_heap_delayed_free(mi_heap_t* heap) {
   // take over the list (note: no atomic exchange since it is often NULL)
-  mi_block_t* block = mi_atomic_read_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
-  while (block != NULL && !mi_atomic_cas_ptr_weak(mi_block_t, &heap->thread_delayed_free, &block, NULL)) { /* nothing */ };
+  mi_block_t* block = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
+  while (block != NULL && !mi_atomic_cas_ptr_weak_acq_rel(mi_block_t, &heap->thread_delayed_free, &block, NULL)) { /* nothing */ };
 
   // and free them all
   while(block != NULL) {
@@ -283,10 +283,10 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
     if (!_mi_free_delayed_block(block)) {
       // we might already start delayed freeing while another thread has not yet
       // reset the delayed_freeing flag; in that case delay it further by reinserting.
-      mi_block_t* dfree = mi_atomic_read_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
+      mi_block_t* dfree = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
       do {
         mi_block_set_nextx(heap, block, dfree, heap->keys);
-      } while (!mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, &dfree, block));
+      } while (!mi_atomic_cas_ptr_weak_release(mi_block_t,&heap->thread_delayed_free, &dfree, block));
     }
     block = next;
   }
@@ -736,14 +736,14 @@ void _mi_deferred_free(mi_heap_t* heap, bool force) {
   heap->tld->heartbeat++;
   if (deferred_free != NULL && !heap->tld->recurse) {
     heap->tld->recurse = true;
-    deferred_free(force, heap->tld->heartbeat, mi_atomic_read_ptr_relaxed(void,&deferred_arg));
+    deferred_free(force, heap->tld->heartbeat, mi_atomic_load_ptr_relaxed(void,&deferred_arg));
     heap->tld->recurse = false;
   }
 }
 
 void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noexcept {
   deferred_free = fn;
-  mi_atomic_write_ptr(void,&deferred_arg, arg);
+  mi_atomic_store_ptr_release(void,&deferred_arg, arg);
 }
 
 
