@@ -5,6 +5,11 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #define _DEFAULT_SOURCE
+#if defined(__sun)
+// same remarks as os.c for the static's context.
+#undef _XOPEN_SOURCE
+#undef _POSIX_C_SOURCE
+#endif
 
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
