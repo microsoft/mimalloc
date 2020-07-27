@@ -466,13 +466,17 @@ static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_r
   *page_reclaim = 0;
 }
 
-#elif defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__))
+#elif defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__)) || defined(__HAIKU__)
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/resource.h>
 
 #if defined(__APPLE__) && defined(__MACH__)
 #include <mach/mach.h>
+#endif
+
+#if defined(__HAIKU__)
+#include <kernel/OS.h>
 #endif
 
 static mi_msecs_t timeval_secs(const struct timeval* tv) {
@@ -482,6 +486,7 @@ static mi_msecs_t timeval_secs(const struct timeval* tv) {
 static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
   struct rusage rusage;
   getrusage(RUSAGE_SELF, &rusage);
+#if !defined(__HAIKU__)
 #if defined(__APPLE__) && defined(__MACH__)
   *peak_rss = rusage.ru_maxrss;
 #else
@@ -490,6 +495,22 @@ static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_r
   *page_faults = rusage.ru_majflt;
   *page_reclaim = rusage.ru_minflt;
   *peak_commit = 0;
+#else
+// Haiku does not have (yet?) a way to
+// get these stats per process
+  thread_info tid;
+  area_info mem;
+  ssize_t c;
+  *peak_rss = 0;
+  *page_faults = 0;
+  *page_reclaim = 0;
+  *peak_commit = 0;
+  get_thread_info(find_thread(0), &tid);
+
+  while (get_next_area_info(tid.team, &c, &mem) == B_OK) {
+      *peak_rss += mem.ram_size;
+  }
+#endif
   *utime = timeval_secs(&rusage.ru_utime);
   *stime = timeval_secs(&rusage.ru_stime);
 }
