@@ -124,8 +124,10 @@ typedef struct _PROCESSOR_NUMBER { WORD Group; BYTE Number; BYTE Reserved; } PRO
 #endif
 typedef VOID (__stdcall *PGetCurrentProcessorNumberEx)(PPROCESSOR_NUMBER ProcNumber);
 typedef BOOL (__stdcall *PGetNumaProcessorNodeEx)(PPROCESSOR_NUMBER Processor, PUSHORT NodeNumber);
+typedef BOOL (__stdcall* PGetNumaNodeProcessorMaskEx)(USHORT Node, PGROUP_AFFINITY ProcessorMask);
 static PGetCurrentProcessorNumberEx pGetCurrentProcessorNumberEx = NULL;
 static PGetNumaProcessorNodeEx      pGetNumaProcessorNodeEx = NULL;
+static PGetNumaNodeProcessorMaskEx  pGetNumaNodeProcessorMaskEx = NULL;
 
 static bool mi_win_enable_large_os_pages()
 {
@@ -188,6 +190,7 @@ void _mi_os_init(void) {
   if (hDll != NULL) {
     pGetCurrentProcessorNumberEx = (PGetCurrentProcessorNumberEx)(void (*)(void))GetProcAddress(hDll, "GetCurrentProcessorNumberEx");
     pGetNumaProcessorNodeEx = (PGetNumaProcessorNodeEx)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNodeEx");
+    pGetNumaNodeProcessorMaskEx = (PGetNumaNodeProcessorMaskEx)(void (*)(void))GetProcAddress(hDll, "GetNumaNodeProcessorMaskEx");
     FreeLibrary(hDll);
   }
   if (mi_option_is_enabled(mi_option_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
@@ -1094,6 +1097,25 @@ static size_t mi_os_numa_nodex() {
 static size_t mi_os_numa_node_countx(void) {
   ULONG numa_max = 0;
   GetNumaHighestNodeNumber(&numa_max);
+  // find the highest node number that has actual processors assigned to it. Issue #282
+  while(numa_max > 0) {
+    if (pGetNumaNodeProcessorMaskEx != NULL) {
+      // Extended API is supported
+      GROUP_AFFINITY affinity;
+      if ((*pGetNumaNodeProcessorMaskEx)((USHORT)numa_max, &affinity)) {
+        if (affinity.Mask != 0) break;  // found the maximum non-empty node
+      }
+    }
+    else {
+      // Vista or earlier, use older API that is limited to 64 processors.
+      ULONGLONG mask;
+      if (GetNumaNodeProcessorMask((UCHAR)numa_max, &mask)) {
+        if (mask != 0) break; // found the maximum non-empty node
+      };
+    }
+    // max node was invalid or had no processor assigned, try again
+    numa_max--;
+  }
   return ((size_t)numa_max + 1);
 }
 #elif defined(__linux__)
