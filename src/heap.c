@@ -128,7 +128,6 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
     _mi_abandoned_reclaim_all(heap, &heap->tld->segments);
   }
   
-
   // if abandoning, mark all pages to no longer add to delayed_free
   if (collect == MI_ABANDON) {
     mi_heap_visit_pages(heap, &mi_heap_page_never_delayed_free, NULL, NULL);
@@ -150,12 +149,10 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
     _mi_segment_thread_collect(&heap->tld->segments);
   }
 
-  #ifndef NDEBUG
-  // collect regions
+  // collect regions on program-exit (or shared library unload)
   if (collect >= MI_FORCE && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
     _mi_mem_collect(&heap->tld->os);
   }
-  #endif
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
