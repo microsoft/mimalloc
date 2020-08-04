@@ -142,7 +142,7 @@ Notes:
 # Using the library
 
 The preferred usage is including `<mimalloc.h>`, linking with
-the shared- or static library, and using the `mi_malloc` API exclusively for allocation. For example,
+the shared- or static library, and using the `mi_malloc` API exclusively for allocation. For example.
 ```
 > gcc -o myprogram -lmimalloc myfile.c
 ```
