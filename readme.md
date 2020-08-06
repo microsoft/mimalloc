@@ -411,7 +411,7 @@ as [mimalloc-bench](https://github.com/daanx/mimalloc-bench).
 Testing on a big Amazon EC2 compute instance
 ([c5.18xlarge](https://aws.amazon.com/ec2/instance-types/#Compute_Optimized))
 consisting of a 72 processor Intel Xeon at 3GHz
-with 144GiB ECC memory, running	Ubuntu 18.04.1 with LibC 2.27 and GCC 7.4.0.
+with 144GiB ECC memory, running	Ubuntu 18.04.1 with glibc 2.27 and GCC 7.4.0.
 The measured allocators are _mimalloc_ (xmi, tag:v1.4.0, page reset enabled)
 and its secure build as _smi_,
 Google's [_tcmalloc_](https://github.com/gperftools/gperftools) (tc, tag:gperftools-2.7) used in Chrome,
@@ -421,7 +421,7 @@ the Intel thread building blocks [allocator](https://github.com/intel/tbb) (tbb,
 the original scalable [_Hoard_](https://github.com/emeryberger/Hoard) (tag:3.13) allocator by Emery Berger \[1],
 the memory compacting [_Mesh_](https://github.com/plasma-umass/Mesh) (git:51222e7) allocator by
 Bobby Powers _et al_ \[8],
-and finally the default system allocator (glibc, 2.7.0) (based on _PtMalloc2_).
+and finally the default system allocator (glibc, 2.27) (based on _PtMalloc2_).
 
 <img width="90%" src="doc/bench-c5-18xlarge-2020-01-20-a.svg"/>
 <img width="90%" src="doc/bench-c5-18xlarge-2020-01-20-b.svg"/>
