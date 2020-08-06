@@ -14,7 +14,9 @@
 #include <mimalloc.h>
 #include <assert.h>
 
+#ifdef _WIN32
 #include <mimalloc-new-delete.h>
+#endif
 
 #ifdef _WIN32
 #include <windows.h>
