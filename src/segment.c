@@ -198,26 +198,26 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
   // add/remove guard pages
   if (MI_SECURE != 0) {
     // in secure mode, we set up a protected page in between the segment info and the page data
-    const size_t os_page_size = _mi_os_page_size();
-    mi_assert_internal((segment->segment_info_size - os_page_size) >= (sizeof(mi_segment_t) + ((segment->capacity - 1) * sizeof(mi_page_t))));
-    mi_assert_internal(((uintptr_t)segment + segment->segment_info_size) % os_page_size == 0);
-    mi_segment_protect_range((uint8_t*)segment + segment->segment_info_size - os_page_size, os_page_size, protect);
+    const size_t os_psize = _mi_os_page_size();
+    mi_assert_internal((segment->segment_info_size - os_psize) >= (sizeof(mi_segment_t) + ((segment->capacity - 1) * sizeof(mi_page_t))));
+    mi_assert_internal(((uintptr_t)segment + segment->segment_info_size) % os_psize == 0);
+    mi_segment_protect_range((uint8_t*)segment + segment->segment_info_size - os_psize, os_psize, protect);
     if (MI_SECURE <= 1 || segment->capacity == 1) {
       // and protect the last (or only) page too
       mi_assert_internal(MI_SECURE <= 1 || segment->page_kind >= MI_PAGE_LARGE);
-      uint8_t* start = (uint8_t*)segment + segment->segment_size - os_page_size;
+      uint8_t* start = (uint8_t*)segment + segment->segment_size - os_psize;
       if (protect && !segment->mem_is_committed) {
         // ensure secure page is committed
-        _mi_mem_commit(start, os_page_size, NULL, tld);
+        _mi_mem_commit(start, os_psize, NULL, tld);
       }
-      mi_segment_protect_range(start, os_page_size, protect);
+      mi_segment_protect_range(start, os_psize, protect);
     }
     else {
       // or protect every page
       const size_t page_size = mi_segment_page_size(segment);
       for (size_t i = 0; i < segment->capacity; i++) {
         if (segment->pages[i].is_committed) {
-          mi_segment_protect_range((uint8_t*)segment + (i+1)*page_size - os_page_size, os_page_size, protect);
+          mi_segment_protect_range((uint8_t*)segment + (i+1)*page_size - os_psize, os_psize, protect);
         }
       }
     }

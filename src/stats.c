@@ -278,7 +278,8 @@ static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_r
 static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun* out0, void* arg0) mi_attr_noexcept {
   // wrap the output function to be line buffered
   char buf[256];
-  buffered_t buffer = { out0, arg0, buf, 0, 255 };
+  buffered_t buffer = { out0, arg0, NULL, 0, 255 };
+  buffer.buf = buf;
   mi_output_fun* out = &mi_buffered_out;
   void* arg = &buffer;
 

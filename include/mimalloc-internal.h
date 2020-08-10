@@ -703,11 +703,11 @@ static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
   __asm__("movq %%fs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86_64 Linux, BSD uses FS
 #elif defined(__arm__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
+  __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
   res = tcb[slot];
 #elif defined(__aarch64__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+  __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
   res = tcb[slot];
 #endif
   return res;
@@ -724,11 +724,11 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
   __asm__("movq %1,%%fs:%1" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 Linux, BSD uses FS
 #elif defined(__arm__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
+  __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
   tcb[slot] = value;
 #elif defined(__aarch64__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+  __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
   tcb[slot] = value;
 #endif
 }

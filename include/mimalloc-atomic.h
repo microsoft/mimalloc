@@ -270,11 +270,11 @@ static inline void mi_atomic_maxi64(volatile int64_t* p, int64_t x) {
       (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))
 #if defined(__x86_64__) || defined(__i386__)
   static inline void mi_atomic_yield(void) {
-    asm volatile ("pause" ::: "memory");
+    __asm__ volatile ("pause" ::: "memory");
   }
 #elif defined(__arm__) || defined(__aarch64__)
   static inline void mi_atomic_yield(void) {
-    asm volatile("yield");
+    __asm__ volatile("yield");
   }
 #endif
 #elif defined(__wasi__)
