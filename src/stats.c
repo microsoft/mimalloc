@@ -223,7 +223,7 @@ static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bin
     if (bins[i].allocated > 0) {
       found = true;
       int64_t unit = _mi_bin_size((uint8_t)i);
-      snprintf(buf, 64, "%s %3zu", fmt, i);
+      snprintf(buf, 64, "%s %3lu", fmt, (long)i);
       mi_stat_add(all, &bins[i], unit);
       mi_stat_print(&bins[i], buf, unit, out, arg);
     }
