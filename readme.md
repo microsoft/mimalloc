@@ -103,7 +103,7 @@ We use [`cmake`](https://cmake.org)<sup>1</sup> as the build system:
 ```
 > mkdir -p out/release
 > cd out/release
-> cmake ../..
+> cmake -DCMAKE_BUILD_TYPE=Release ../..
 > make
 ```
 This builds the library as a shared (dynamic)
