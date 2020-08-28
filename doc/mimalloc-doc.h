@@ -298,7 +298,7 @@ size_t mi_good_size(size_t size);
 /// resource usage by calling this every once in a while.
 void   mi_collect(bool force);
 
-/// Print the main statistics.
+/// Deprecated
 /// @param out Ignored, outputs to the registered output function or stderr by default.
 ///
 /// Most detailed when using a debug build.
@@ -309,7 +309,7 @@ void mi_stats_print(void* out);
 /// @param arg Optional argument passed to \a out (if not \a NULL)
 ///
 /// Most detailed when using a debug build.
-void mi_stats_print(mi_output_fun* out, void* arg);
+void mi_stats_print_out(mi_output_fun* out, void* arg);
 
 /// Reset statistics.
 void mi_stats_reset(void);
@@ -752,8 +752,8 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block
 /// Runtime options.
 typedef enum mi_option_e {
   // stable options
-  mi_option_show_stats,   ///< Print statistics to `stderr` when the program is done.
   mi_option_show_errors,  ///< Print error messages to `stderr`.
+  mi_option_show_stats,   ///< Print statistics to `stderr` when the program is done.
   mi_option_verbose,      ///< Print verbose messages to `stderr`.
   // the following options are experimental
   mi_option_eager_commit, ///< Eagerly commit segments (4MiB) (enabled by default).
@@ -772,9 +772,11 @@ typedef enum mi_option_e {
 } mi_option_t;
 
 
-bool  mi_option_enabled(mi_option_t option);
-void  mi_option_enable(mi_option_t option, bool enable);
-void  mi_option_enable_default(mi_option_t option, bool enable);
+bool  mi_option_is_enabled(mi_option_t option);
+void  mi_option_enable(mi_option_t option);
+void  mi_option_disable(mi_option_t option);
+void  mi_option_set_enabled(mi_option_t option, bool enable);
+void  mi_option_set_enabled_default(mi_option_t option, bool enable);
 
 long  mi_option_get(mi_option_t option);
 void  mi_option_set(mi_option_t option, long value);

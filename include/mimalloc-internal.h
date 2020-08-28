@@ -245,23 +245,28 @@ static inline bool mi_malloc_satisfies_alignment(size_t alignment, size_t size) 
 }
 
 // Overflow detecting multiply
-static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
-#include <limits.h>   // UINT_MAX, ULONG_MAX
-#if (SIZE_MAX == UINT_MAX)
-  return __builtin_umul_overflow(count, size, total);
-#elif (SIZE_MAX == ULONG_MAX)
-  return __builtin_umull_overflow(count, size, total);
-#else
-  return __builtin_umulll_overflow(count, size, total);
+#include <limits.h>      // UINT_MAX, ULONG_MAX
+#if defined(_CLOCK_T)    // for Illumos
+#undef _CLOCK_T
 #endif
+static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
+  #if (SIZE_MAX == UINT_MAX)
+    return __builtin_umul_overflow(count, size, total);
+  #elif (SIZE_MAX == ULONG_MAX)
+    return __builtin_umull_overflow(count, size, total);
+  #else
+    return __builtin_umulll_overflow(count, size, total);
+  #endif
+}
 #else /* __builtin_umul_overflow is unavailable */
+static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
   #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
   *total = count * size;
   return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
-          && size > 0 && (SIZE_MAX / size) < count);
-#endif
+    && size > 0 && (SIZE_MAX / size) < count);
 }
+#endif
 
 // Safe multiply `count*size` into `total`; return `true` on overflow.
 static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* total) {
@@ -585,11 +590,11 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
 
 static inline uintptr_t mi_rotl(uintptr_t x, uintptr_t shift) {
   shift %= MI_INTPTR_BITS;
-  return ((x << shift) | (x >> (MI_INTPTR_BITS - shift)));
+  return (shift==0 ? x : ((x << shift) | (x >> (MI_INTPTR_BITS - shift))));
 }
 static inline uintptr_t mi_rotr(uintptr_t x, uintptr_t shift) {
   shift %= MI_INTPTR_BITS;
-  return ((x >> shift) | (x << (MI_INTPTR_BITS - shift)));
+  return (shift==0 ? x : ((x >> shift) | (x << (MI_INTPTR_BITS - shift))));
 }
 
 static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
@@ -714,11 +719,11 @@ static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
   __asm__("movq %%fs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86_64 Linux, BSD uses FS
 #elif defined(__arm__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
+  __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
   res = tcb[slot];
 #elif defined(__aarch64__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+  __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
   res = tcb[slot];
 #endif
   return res;
@@ -735,11 +740,11 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
   __asm__("movq %1,%%fs:%1" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 Linux, BSD uses FS
 #elif defined(__arm__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
+  __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
   tcb[slot] = value;
 #elif defined(__aarch64__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+  __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
   tcb[slot] = value;
 #endif
 }

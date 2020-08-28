@@ -27,7 +27,7 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   {
     // add atomically (for abandoned pages)
     mi_atomic_addi64(&stat->current,amount);
-    if (stat->current > stat->peak) stat->peak = stat->current;  // racing.. it's ok
+    mi_atomic_maxi64(&stat->peak, mi_atomic_readi64(&stat->current));
     if (amount > 0) {
       mi_atomic_addi64(&stat->allocated,amount);
     }
@@ -70,6 +70,7 @@ void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
 // must be thread safe as it is called from stats_merge
 static void mi_stat_add(mi_stat_count_t* stat, const mi_stat_count_t* src, int64_t unit) {
   if (stat==src) return;
+  if (src->allocated==0 && src->freed==0) return;
   mi_atomic_addi64( &stat->allocated, src->allocated * unit);
   mi_atomic_addi64( &stat->current, src->current * unit);
   mi_atomic_addi64( &stat->freed, src->freed * unit);
@@ -222,7 +223,7 @@ static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bin
     if (bins[i].allocated > 0) {
       found = true;
       int64_t unit = _mi_bin_size((uint8_t)i);
-      snprintf(buf, 64, "%s %3zu", fmt, i);
+      snprintf(buf, 64, "%s %3lu", fmt, (long)i);
       mi_stat_add(all, &bins[i], unit);
       mi_stat_print(&bins[i], buf, unit, out, arg);
     }
@@ -277,7 +278,8 @@ static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_r
 static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun* out0, void* arg0) mi_attr_noexcept {
   // wrap the output function to be line buffered
   char buf[256];
-  buffered_t buffer = { out0, arg0, buf, 0, 255 };
+  buffered_t buffer = { out0, arg0, NULL, 0, 255 };
+  buffer.buf = buf;
   mi_output_fun* out = &mi_buffered_out;
   void* arg = &buffer;
 
@@ -465,13 +467,17 @@ static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_r
   *page_reclaim = 0;
 }
 
-#elif defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__))
+#elif defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__)) || defined(__HAIKU__)
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/resource.h>
 
 #if defined(__APPLE__) && defined(__MACH__)
 #include <mach/mach.h>
+#endif
+
+#if defined(__HAIKU__)
+#include <kernel/OS.h>
 #endif
 
 static mi_msecs_t timeval_secs(const struct timeval* tv) {
@@ -481,6 +487,7 @@ static mi_msecs_t timeval_secs(const struct timeval* tv) {
 static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
   struct rusage rusage;
   getrusage(RUSAGE_SELF, &rusage);
+#if !defined(__HAIKU__)
 #if defined(__APPLE__) && defined(__MACH__)
   *peak_rss = rusage.ru_maxrss;
 #else
@@ -489,6 +496,22 @@ static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_r
   *page_faults = rusage.ru_majflt;
   *page_reclaim = rusage.ru_minflt;
   *peak_commit = 0;
+#else
+// Haiku does not have (yet?) a way to
+// get these stats per process
+  thread_info tid;
+  area_info mem;
+  ssize_t c;
+  *peak_rss = 0;
+  *page_faults = 0;
+  *page_reclaim = 0;
+  *peak_commit = 0;
+  get_thread_info(find_thread(0), &tid);
+
+  while (get_next_area_info(tid.team, &c, &mem) == B_OK) {
+      *peak_rss += mem.ram_size;
+  }
+#endif
   *utime = timeval_secs(&rusage.ru_utime);
   *stime = timeval_secs(&rusage.ru_stime);
 }

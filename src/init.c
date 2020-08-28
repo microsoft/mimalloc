@@ -371,8 +371,8 @@ void mi_thread_init(void) mi_attr_noexcept
   // don't further initialize for the main thread
   if (_mi_is_main_thread()) return;
 
-  mi_heap_t* heap = mi_get_default_heap();
-  if (mi_heap_is_initialized(heap)) { _mi_stat_increase(&mi_get_default_heap()->tld->stats.threads, 1); }
+  mi_heap_t* const heap = mi_get_default_heap();
+  if (mi_heap_is_initialized(heap)) { _mi_stat_increase(&heap->tld->stats.threads, 1); }
 
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
@@ -528,11 +528,15 @@ static void mi_process_done(void) {
   FlsSetValue(mi_fls_key, NULL);  // don't call main-thread callback
   FlsFree(mi_fls_key);            // call thread-done on all threads to prevent dangling callback pointer if statically linked with a DLL; Issue #208
   #endif
-  #ifndef NDEBUG
-  mi_collect(true);
+  
+  #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)  
+  // free all memory if possible on process exit. This is not needed for a stand-alone process
+  // but should be done if mimalloc is statically linked into another shared library which
+  // is repeatedly loaded/unloaded, see issue #281.
+  mi_collect(true /* force */ );
   #endif
-  if (mi_option_is_enabled(mi_option_show_stats) ||
-      mi_option_is_enabled(mi_option_verbose)) {
+
+  if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
     mi_stats_print(NULL);
   }
   mi_allocator_done();  

@@ -11,7 +11,7 @@ mimalloc (pronounced "me-malloc")
 is a general purpose allocator with excellent [performance](#performance) characteristics.
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
-Latest release:`v1.6.3` (2020-05-05).
+Latest release:`v1.6.4` (2020-08-06).
 
 It is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -57,6 +57,8 @@ Enjoy!
 
 ### Releases
 
+* 2020-08-06, `v1.6.4`: stable release 1.6: improved error recovery in low-memory situations,
+  support for IllumOS and Haiku, NUMA support for Vista/XP, improved NUMA detection for AMD Ryzen, ubsan support.
 * 2020-05-05, `v1.6.3`: stable release 1.6: improved behavior in out-of-memory situations, improved malloc zones on macOS,
   build PIC static libraries by default, add option to abort on out-of-memory, line buffered statistics.
 * 2020-04-20, `v1.6.2`: stable release 1.6: fix compilation on Android, MingW, Raspberry, and Conda,
@@ -409,7 +411,7 @@ as [mimalloc-bench](https://github.com/daanx/mimalloc-bench).
 Testing on a big Amazon EC2 compute instance
 ([c5.18xlarge](https://aws.amazon.com/ec2/instance-types/#Compute_Optimized))
 consisting of a 72 processor Intel Xeon at 3GHz
-with 144GiB ECC memory, running	Ubuntu 18.04.1 with LibC 2.27 and GCC 7.4.0.
+with 144GiB ECC memory, running	Ubuntu 18.04.1 with glibc 2.27 and GCC 7.4.0.
 The measured allocators are _mimalloc_ (xmi, tag:v1.4.0, page reset enabled)
 and its secure build as _smi_,
 Google's [_tcmalloc_](https://github.com/gperftools/gperftools) (tc, tag:gperftools-2.7) used in Chrome,
@@ -419,7 +421,7 @@ the Intel thread building blocks [allocator](https://github.com/intel/tbb) (tbb,
 the original scalable [_Hoard_](https://github.com/emeryberger/Hoard) (tag:3.13) allocator by Emery Berger \[1],
 the memory compacting [_Mesh_](https://github.com/plasma-umass/Mesh) (git:51222e7) allocator by
 Bobby Powers _et al_ \[8],
-and finally the default system allocator (glibc, 2.7.0) (based on _PtMalloc2_).
+and finally the default system allocator (glibc, 2.27) (based on _PtMalloc2_).
 
 <img width="90%" src="doc/bench-c5-18xlarge-2020-01-20-a.svg"/>
 <img width="90%" src="doc/bench-c5-18xlarge-2020-01-20-b.svg"/>
