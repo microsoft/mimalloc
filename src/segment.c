@@ -137,6 +137,7 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(_mi_ptr_cookie(segment) == segment->cookie);
   mi_assert_internal(segment->abandoned <= segment->used);
   mi_assert_internal(segment->thread_id == 0 || segment->thread_id == _mi_thread_id());
+  mi_assert_internal((segment->commit_mask & segment->decommit_mask) == segment->decommit_mask); // can only decommit committed blocks
   //mi_assert_internal(segment->segment_info_size % MI_SEGMENT_SLICE_SIZE == 0);
   mi_slice_t* slice = &segment->slices[0];
   const mi_slice_t* end = mi_segment_slices_end(segment);
@@ -414,8 +415,9 @@ static void mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
   if (commit && (segment->decommit_mask & mask) != 0) {
     segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
   }
-  // always undo delayed decommits 
-  segment->decommit_mask &= ~mask;    
+  // always undo delayed decommits
+  segment->decommit_mask &= ~mask;   
+  mi_assert_internal((segment->commit_mask & segment->decommit_mask) == segment->decommit_mask);
 }
 
 static void mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
@@ -425,19 +427,19 @@ static void mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_
 
 static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
   if (!segment->allow_decommit) return;
-  if (segment->commit_mask == 1) return; // fully decommitted
+  if (segment->commit_mask == 1) return; // fully decommitted (1 = the initial segment metadata span)
   if (mi_option_get(mi_option_reset_delay) == 0) {
     mi_segment_commitx(segment, false, p, size, stats);
   }
   else {
-    // create mask
+    // register for future decommit in the decommit mask
     uint8_t* start;
     size_t   full_size;
     uintptr_t mask = mi_segment_commit_mask(segment, true /*conservative*/, p, size, &start, &full_size);
     if (mask==0 || full_size==0) return;
     
     // update delayed commit
-    segment->decommit_mask |= mask;
+    segment->decommit_mask |= (mask & segment->commit_mask);  // only decommit what is committed; span_free may try to decommit more
     segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
   }  
 }
