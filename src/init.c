@@ -285,7 +285,7 @@ static void _mi_thread_done(mi_heap_t* default_heap);
   // nothing to do as it is done in DllMain
 #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
   // use thread local storage keys to detect thread ending
-  #include <windows.h>
+  #include <Windows.h>
   #include <fibersapi.h>
   #if (_WIN32_WINNT < 0x600)  // before Windows Vista 
   WINBASEAPI DWORD WINAPI FlsAlloc( _In_opt_ PFLS_CALLBACK_FUNCTION lpCallback );
@@ -405,11 +405,11 @@ static bool os_preloading = true;    // true until this module is initialized
 static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
 
 // Returns true if this module has not been initialized; Don't use C runtime routines until it returns false.
-bool _mi_preloading() {
+bool _mi_preloading(void) {
   return os_preloading;
 }
 
-bool mi_is_redirected() mi_attr_noexcept {
+bool mi_is_redirected(void) mi_attr_noexcept {
   return mi_redirected;
 }
 
@@ -431,7 +431,7 @@ mi_decl_export void _mi_redirect_entry(DWORD reason) {
   }
 }
 __declspec(dllimport) bool mi_allocator_init(const char** message);
-__declspec(dllimport) void mi_allocator_done();
+__declspec(dllimport) void mi_allocator_done(void);
 #ifdef __cplusplus
 }
 #endif
@@ -440,7 +440,7 @@ static bool mi_allocator_init(const char** message) {
   if (message != NULL) *message = NULL;
   return true;
 }
-static void mi_allocator_done() {
+static void mi_allocator_done(void) {
   // nothing to do
 }
 #endif

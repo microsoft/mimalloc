@@ -128,7 +128,7 @@ static inline intptr_t mi_atomic_subi(volatile _Atomic(intptr_t)* p, intptr_t su
 
 #ifdef _MSC_VER
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+#include <Windows.h>
 #include <intrin.h>
 #ifdef _WIN64
 typedef LONG64   msc_intptr_t;

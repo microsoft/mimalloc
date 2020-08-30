@@ -684,7 +684,7 @@ mi_decl_restrict char* mi_strndup(const char* s, size_t n) mi_attr_noexcept {
 #ifndef PATH_MAX
 #define PATH_MAX MAX_PATH
 #endif
-#include <windows.h>
+#include <Windows.h>
 mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
   // todo: use GetFullPathNameW to allow longer file names
   char buf[PATH_MAX];
@@ -765,12 +765,12 @@ typedef void (*std_new_handler_t)();
 std_new_handler_t __attribute((weak)) _ZSt15get_new_handlerv() {
   return NULL;
 }
-std_new_handler_t mi_get_new_handler() {
+static std_new_handler_t mi_get_new_handler() {
   return _ZSt15get_new_handlerv();
 }
 #else
 // note: on windows we could dynamically link to `?get_new_handler@std@@YAP6AXXZXZ`.
-std_new_handler_t mi_get_new_handler() {
+static std_new_handler_t mi_get_new_handler() {
   return NULL;
 }
 #endif

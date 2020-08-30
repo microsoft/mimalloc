@@ -24,7 +24,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 #if defined(_WIN32)
-#include <windows.h>
+#include <Windows.h>
 #elif defined(__wasi__)
 // stdlib.h is all we need, and has already been included in mimalloc.h
 #else

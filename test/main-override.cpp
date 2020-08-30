@@ -19,7 +19,7 @@
 #endif
 
 #ifdef _WIN32
-#include <windows.h>
+#include <Windows.h>
 static void msleep(unsigned long msecs) { Sleep(msecs); }
 #else
 #include <unistd.h>
