@@ -155,27 +155,36 @@ uintptr_t _mi_random_next(mi_random_ctx_t* ctx) {
 
 /* ----------------------------------------------------------------------------
 To initialize a fresh random context we rely on the OS:
-- Windows     : BCryptGenRandom
+- Windows     : RtlGenRandom
 - osX,bsd,wasi: arc4random_buf
 - Linux       : getrandom,/dev/urandom
 If we cannot get good randomness, we fall back to weak randomness based on a timer and ASLR.
 -----------------------------------------------------------------------------*/
 
 #if defined(_WIN32)
+/*
+// We prefer BCryptGenRandom over RtlGenRandom but it leads to a crash a when using dynamic override combined with the C++ runtime :-( 
 #pragma comment (lib,"bcrypt.lib")
 #include <bcrypt.h>
 static bool os_random_buf(void* buf, size_t buf_len) {
   return (BCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
 }
-/*
-#define SystemFunction036 NTAPI SystemFunction036
-#include <NTSecAPI.h>
-#undef SystemFunction036
-static bool os_random_buf(void* buf, size_t buf_len) {
-  RtlGenRandom(buf, (ULONG)buf_len);
-  return true;
-}
 */
+#define RtlGenRandom  SystemFunction036
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOLEAN NTAPI RtlGenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
+#ifdef __cplusplus
+}
+#endif
+static bool os_random_buf(void* buf, size_t buf_len) {
+  mi_assert_internal(buf_len >= sizeof(uintptr_t));
+  memset(buf, 0, buf_len);
+  RtlGenRandom(buf, (ULONG)buf_len);
+  return (((uintptr_t*)buf)[0] != 0);  // sanity check (but RtlGenRandom should never fail)
+}
+
 #elif defined(ANDROID) || defined(XP_DARWIN) || defined(__APPLE__) || defined(__DragonFly__) || \
       defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
       defined(__sun) || defined(__wasi__)
@@ -200,12 +209,12 @@ static bool os_random_buf(void* buf, size_t buf_len) {
   #ifndef GRND_NONBLOCK
   #define GRND_NONBLOCK (1)
   #endif
-  static volatile _Atomic(uintptr_t) no_getrandom; // = 0
-  if (mi_atomic_read(&no_getrandom)==0) {
+  static _Atomic(uintptr_t) no_getrandom; // = 0
+  if (mi_atomic_load_acquire(&no_getrandom)==0) {
     ssize_t ret = syscall(SYS_getrandom, buf, buf_len, GRND_NONBLOCK);
     if (ret >= 0) return (buf_len == (size_t)ret);
     if (ret != ENOSYS) return false;
-    mi_atomic_write(&no_getrandom,1); // don't call again, and fall back to /dev/urandom
+    mi_atomic_store_release(&no_getrandom,1); // don't call again, and fall back to /dev/urandom
   }
 #endif
   int flags = O_RDONLY;
@@ -234,7 +243,7 @@ static bool os_random_buf(void* buf, size_t buf_len) {
 #endif
 
 #if defined(_WIN32)
-#include <windows.h>
+#include <Windows.h>
 #elif defined(__APPLE__)
 #include <mach/mach_time.h>
 #else

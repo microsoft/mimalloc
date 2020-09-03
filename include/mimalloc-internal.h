@@ -467,21 +467,21 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
 
 // Thread free access
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
-  return (mi_block_t*)(mi_atomic_read_relaxed(&page->xthread_free) & ~3);
+  return (mi_block_t*)(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free) & ~3);
 }
 
 static inline mi_delayed_t mi_page_thread_free_flag(const mi_page_t* page) {
-  return (mi_delayed_t)(mi_atomic_read_relaxed(&page->xthread_free) & 3);
+  return (mi_delayed_t)(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free) & 3);
 }
 
 // Heap access
 static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
-  return (mi_heap_t*)(mi_atomic_read_relaxed(&page->xheap));
+  return (mi_heap_t*)(mi_atomic_load_relaxed(&((mi_page_t*)page)->xheap));
 }
 
 static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
-  mi_atomic_write(&page->xheap,(uintptr_t)heap);
+  mi_atomic_store_release(&page->xheap,(uintptr_t)heap);
 }
 
 // Thread free flag helpers

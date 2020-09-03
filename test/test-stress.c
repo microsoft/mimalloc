@@ -189,7 +189,7 @@ static void test_stress(void) {
       }
     }
     // mi_collect(false);
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
 #endif
   }
@@ -260,7 +260,7 @@ static void (*thread_entry_fun)(intptr_t) = &stress;
 
 #ifdef _WIN32
 
-#include <windows.h>
+#include <Windows.h>
 
 static DWORD WINAPI thread_entry(LPVOID param) {
   thread_entry_fun((intptr_t)param);
