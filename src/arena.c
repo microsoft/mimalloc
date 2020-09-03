@@ -63,7 +63,7 @@ typedef struct mi_arena_s {
   bool     is_zero_init;                  // is the arena zero initialized?
   bool     is_committed;                  // is the memory committed
   bool     is_large;                      // large OS page allocated
-  volatile _Atomic(uintptr_t) search_idx; // optimization to start the search for free blocks
+  _Atomic(uintptr_t) search_idx; // optimization to start the search for free blocks
   mi_bitmap_field_t* blocks_dirty;        // are the blocks potentially non-zero?
   mi_bitmap_field_t* blocks_committed;    // if `!is_committed`, are the blocks committed?
   mi_bitmap_field_t  blocks_inuse[1];       // in-place bitmap of in-use blocks (of size `field_count`)
@@ -105,12 +105,12 @@ static size_t mi_block_count_of_size(size_t size) {
 static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* bitmap_idx)
 {
   const size_t fcount = arena->field_count;
-  size_t idx = mi_atomic_read(&arena->search_idx);  // start from last search
+  size_t idx = mi_atomic_load_acquire(&arena->search_idx);  // start from last search
   for (size_t visited = 0; visited < fcount; visited++, idx++) {
     if (idx >= fcount) idx = 0;  // wrap around
     // try to atomically claim a range of bits
     if (mi_bitmap_try_find_claim_field(arena->blocks_inuse, idx, blocks, bitmap_idx)) {
-      mi_atomic_write(&arena->search_idx, idx);  // start search from here next time
+      mi_atomic_store_release(&arena->search_idx, idx);  // start search from here next time
       return true;
     }
   }
@@ -175,7 +175,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
     mi_assert_internal(size <= bcount*MI_ARENA_BLOCK_SIZE);
     // try numa affine allocation
     for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-      mi_arena_t* arena = mi_atomic_read_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
       if (arena==NULL) break; // end reached
       if ((arena->numa_node<0 || arena->numa_node==numa_node) && // numa local?
           (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
@@ -187,7 +187,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
     }
     // try from another numa node instead..
     for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-      mi_arena_t* arena = mi_atomic_read_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
       if (arena==NULL) break; // end reached
       if ((arena->numa_node>=0 && arena->numa_node!=numa_node) && // not numa local!
           (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
@@ -228,7 +228,7 @@ void _mi_arena_free(void* p, size_t size, size_t memid, bool all_committed, mi_s
     size_t bitmap_idx;
     mi_arena_id_indices(memid, &arena_idx, &bitmap_idx);
     mi_assert_internal(arena_idx < MI_MAX_ARENAS);
-    mi_arena_t* arena = mi_atomic_read_ptr_relaxed(mi_arena_t,&mi_arenas[arena_idx]);
+    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t,&mi_arenas[arena_idx]);
     mi_assert_internal(arena != NULL);
     if (arena == NULL) {
       _mi_error_message(EINVAL, "trying to free from non-existent arena: %p, size %zu, memid: 0x%zx\n", p, size, memid);
@@ -254,15 +254,15 @@ void _mi_arena_free(void* p, size_t size, size_t memid, bool all_committed, mi_s
 
 static bool mi_arena_add(mi_arena_t* arena) {
   mi_assert_internal(arena != NULL);
-  mi_assert_internal((uintptr_t)mi_atomic_read_ptr_relaxed(uint8_t,&arena->start) % MI_SEGMENT_ALIGN == 0);
+  mi_assert_internal((uintptr_t)mi_atomic_load_ptr_relaxed(uint8_t,&arena->start) % MI_SEGMENT_ALIGN == 0);
   mi_assert_internal(arena->block_count > 0);
 
-  uintptr_t i = mi_atomic_increment(&mi_arena_count);
+  uintptr_t i = mi_atomic_increment_acq_rel(&mi_arena_count);
   if (i >= MI_MAX_ARENAS) {
-    mi_atomic_decrement(&mi_arena_count);
+    mi_atomic_decrement_acq_rel(&mi_arena_count);
     return false;
   }
-  mi_atomic_write_ptr(mi_arena_t,&mi_arenas[i], arena);
+  mi_atomic_store_ptr_release(mi_arena_t,&mi_arenas[i], arena);
   return true;
 }
 

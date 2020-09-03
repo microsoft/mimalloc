@@ -173,11 +173,11 @@ static _Atomic(uintptr_t) out_len;
 static void mi_out_buf(const char* msg, void* arg) {
   UNUSED(arg);
   if (msg==NULL) return;
-  if (mi_atomic_read_relaxed(&out_len)>=MI_MAX_DELAY_OUTPUT) return;
+  if (mi_atomic_load_relaxed(&out_len)>=MI_MAX_DELAY_OUTPUT) return;
   size_t n = strlen(msg);
   if (n==0) return;
   // claim space
-  uintptr_t start = mi_atomic_add(&out_len, n);
+  uintptr_t start = mi_atomic_add_acq_rel(&out_len, n);
   if (start >= MI_MAX_DELAY_OUTPUT) return;
   // check bound
   if (start+n >= MI_MAX_DELAY_OUTPUT) {
@@ -189,7 +189,7 @@ static void mi_out_buf(const char* msg, void* arg) {
 static void mi_out_buf_flush(mi_output_fun* out, bool no_more_buf, void* arg) {
   if (out==NULL) return;
   // claim (if `no_more_buf == true`, no more output will be added after this point)
-  size_t count = mi_atomic_add(&out_len, (no_more_buf ? MI_MAX_DELAY_OUTPUT : 1));
+  size_t count = mi_atomic_add_acq_rel(&out_len, (no_more_buf ? MI_MAX_DELAY_OUTPUT : 1));
   // and output the current contents
   if (count>MI_MAX_DELAY_OUTPUT) count = MI_MAX_DELAY_OUTPUT;
   out_buf[count] = 0;
@@ -217,17 +217,17 @@ static void mi_out_buf_stderr(const char* msg, void* arg) {
 // For now, don't register output from multiple threads.
 #pragma warning(suppress:4180)
 static mi_output_fun* volatile mi_out_default; // = NULL
-static volatile _Atomic(void*) mi_out_arg; // = NULL
+static _Atomic(void*) mi_out_arg; // = NULL
 
 static mi_output_fun* mi_out_get_default(void** parg) {
-  if (parg != NULL) { *parg = mi_atomic_read_ptr(void,&mi_out_arg); }
+  if (parg != NULL) { *parg = mi_atomic_load_ptr_acquire(void,&mi_out_arg); }
   mi_output_fun* out = mi_out_default;
   return (out == NULL ? &mi_out_buf : out);
 }
 
 void mi_register_output(mi_output_fun* out, void* arg) mi_attr_noexcept {
   mi_out_default = (out == NULL ? &mi_out_stderr : out); // stop using the delayed output buffer
-  mi_atomic_write_ptr(void,&mi_out_arg, arg);
+  mi_atomic_store_ptr_release(void,&mi_out_arg, arg);
   if (out!=NULL) mi_out_buf_flush(out,true,arg);         // output all the delayed output now
 }
 
@@ -241,7 +241,7 @@ static void mi_add_stderr_output() {
 // --------------------------------------------------------
 // Messages, all end up calling `_mi_fputs`.
 // --------------------------------------------------------
-static volatile _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
+static _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
 
 // When overriding malloc, we may recurse into mi_vfprintf if an allocation
 // inside the C runtime causes another message.
@@ -313,13 +313,13 @@ void _mi_verbose_message(const char* fmt, ...) {
 
 static void mi_show_error_message(const char* fmt, va_list args) {
   if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
-  if (mi_atomic_increment(&error_count) > mi_max_error_count) return;
+  if (mi_atomic_increment_acq_rel(&error_count) > mi_max_error_count) return;
   mi_vfprintf(NULL, NULL, "mimalloc: error: ", fmt, args);
 }
 
 void _mi_warning_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
-  if (mi_atomic_increment(&error_count) > mi_max_error_count) return;
+  if (mi_atomic_increment_acq_rel(&error_count) > mi_max_error_count) return;
   va_list args;
   va_start(args,fmt);
   mi_vfprintf(NULL, NULL, "mimalloc: warning: ", fmt, args);
@@ -339,7 +339,7 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, co
 // --------------------------------------------------------
 
 static mi_error_fun* volatile  mi_error_handler; // = NULL
-static volatile _Atomic(void*) mi_error_arg;     // = NULL
+static _Atomic(void*) mi_error_arg;     // = NULL
 
 static void mi_error_default(int err) {
   UNUSED(err);
@@ -365,7 +365,7 @@ static void mi_error_default(int err) {
 
 void mi_register_error(mi_error_fun* fun, void* arg) {
   mi_error_handler = fun;  // can be NULL
-  mi_atomic_write_ptr(void,&mi_error_arg, arg);
+  mi_atomic_store_ptr_release(void,&mi_error_arg, arg);
 }
 
 void _mi_error_message(int err, const char* fmt, ...) {
@@ -376,7 +376,7 @@ void _mi_error_message(int err, const char* fmt, ...) {
   va_end(args);
   // and call the error handler which may abort (or return normally)
   if (mi_error_handler != NULL) {
-    mi_error_handler(err, mi_atomic_read_ptr(void,&mi_error_arg));
+    mi_error_handler(err, mi_atomic_load_ptr_acquire(void,&mi_error_arg));
   }
   else {
     mi_error_default(err);
