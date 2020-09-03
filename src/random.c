@@ -155,7 +155,7 @@ uintptr_t _mi_random_next(mi_random_ctx_t* ctx) {
 
 /* ----------------------------------------------------------------------------
 To initialize a fresh random context we rely on the OS:
-- Windows     : BCryptGenRandom
+- Windows     : RtlGenRandom
 - osX,bsd,wasi: arc4random_buf
 - Linux       : getrandom,/dev/urandom
 If we cannot get good randomness, we fall back to weak randomness based on a timer and ASLR.
