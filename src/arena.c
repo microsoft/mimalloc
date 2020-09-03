@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 /* ----------------------------------------------------------------------------
 "Arenas" are fixed area's of OS memory from which we can allocate
-large blocks (>= MI_ARENA_BLOCK_SIZE, 32MiB).
+large blocks (>= MI_ARENA_BLOCK_SIZE, 8MiB).
 In contrast to the rest of mimalloc, the arenas are shared between
 threads and need to be accessed using atomic operations.
 
@@ -55,9 +55,9 @@ bool  _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 // size in count of arena blocks.
 typedef uintptr_t mi_block_info_t;
 #define MI_SEGMENT_ALIGN      MI_SEGMENT_SIZE
-#define MI_ARENA_BLOCK_SIZE   MI_SEGMENT_ALIGN         // 64MiB
-#define MI_ARENA_MAX_OBJ_SIZE (MI_BITMAP_FIELD_BITS * MI_ARENA_BLOCK_SIZE)  // 4GiB
-#define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 32MiB
+#define MI_ARENA_BLOCK_SIZE   MI_SEGMENT_ALIGN         // 8MiB
+#define MI_ARENA_MAX_OBJ_SIZE (MI_BITMAP_FIELD_BITS * MI_ARENA_BLOCK_SIZE)  // 512MiB
+#define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 4MiB
 #define MI_MAX_ARENAS         (64)                     // not more than 256 (since we use 8 bits in the memid)
 
 // A memory arena descriptor
