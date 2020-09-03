@@ -1392,7 +1392,7 @@ static void mi_segment_map_allocated_at(const mi_segment_t* segment) {
   size_t index = mi_segment_map_index_of(segment, &bitidx);
   mi_assert_internal(index < MI_SEGMENT_MAP_WSIZE);
   if (index==0) return;
-  uintptr_t mask = mi_segment_map[index];
+  uintptr_t mask = mi_atomic_load_relaxed(&mi_segment_map[index]);
   uintptr_t newmask;
   do {
     newmask = (mask | ((uintptr_t)1 << bitidx));
@@ -1404,7 +1404,7 @@ static void mi_segment_map_freed_at(const mi_segment_t* segment) {
   size_t index = mi_segment_map_index_of(segment, &bitidx);
   mi_assert_internal(index < MI_SEGMENT_MAP_WSIZE);
   if (index == 0) return;
-  uintptr_t mask = mi_segment_map[index];
+  uintptr_t mask = mi_atomic_load_relaxed(&mi_segment_map[index]);
   uintptr_t newmask;
   do {    
     newmask = (mask & ~((uintptr_t)1 << bitidx));
@@ -1417,7 +1417,8 @@ static mi_segment_t* _mi_segment_of(const void* p) {
   size_t bitidx;
   size_t index = mi_segment_map_index_of(segment, &bitidx);
   // fast path: for any pointer to valid small/medium/large object or first MI_SEGMENT_SIZE in huge
-  if (mi_likely((mi_segment_map[index] & ((uintptr_t)1 << bitidx)) != 0)) {
+  const uintptr_t mask = mi_atomic_load_relaxed(&mi_segment_map[index]);
+  if (mi_likely((mask & ((uintptr_t)1 << bitidx)) != 0)) {
     return segment; // yes, allocated by us
   }
   if (index==0) return NULL;
@@ -1427,16 +1428,17 @@ static mi_segment_t* _mi_segment_of(const void* p) {
   // note: we could maintain a lowest index to speed up the path for invalid pointers?
   size_t lobitidx;
   size_t loindex;
-  uintptr_t lobits = mi_segment_map[index] & (((uintptr_t)1 << bitidx) - 1);
+  uintptr_t lobits = mask & (((uintptr_t)1 << bitidx) - 1);
   if (lobits != 0) {
     loindex = index;
     lobitidx = _mi_bsr(lobits);
   }
   else {
+    uintptr_t lomask = mask;
     loindex = index - 1;
-    while (loindex > 0 && mi_segment_map[loindex] == 0) loindex--;
+    while (loindex > 0 && (lomask = mi_atomic_load_relaxed(&mi_segment_map[loindex])) == 0) loindex--;
     if (loindex==0) return NULL;
-    lobitidx = _mi_bsr(mi_segment_map[loindex]);
+    lobitidx = _mi_bsr(lomask);
   }
   // take difference as the addresses could be larger than the MAX_ADDRESS space.
   size_t diff = (((index - loindex) * (8*MI_INTPTR_SIZE)) + bitidx - lobitidx) * MI_SEGMENT_SIZE;
