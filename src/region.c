@@ -88,12 +88,12 @@ typedef union mi_region_info_u {
 typedef struct mem_region_s {
   _Atomic(uintptr_t)        info;        // mi_region_info_t.value
   _Atomic(void*)            start;       // start of the memory area 
-  mi_bitmap_field_t                  in_use;      // bit per in-use block
-  mi_bitmap_field_t                  dirty;       // track if non-zero per block
-  mi_bitmap_field_t                  commit;      // track if committed per block
-  mi_bitmap_field_t                  reset;       // track if reset per block
+  mi_bitmap_field_t         in_use;      // bit per in-use block
+  mi_bitmap_field_t         dirty;       // track if non-zero per block
+  mi_bitmap_field_t         commit;      // track if committed per block
+  mi_bitmap_field_t         reset;       // track if reset per block
   _Atomic(uintptr_t)        arena_memid; // if allocated from a (huge page) arena
-  uintptr_t                          padding;     // round to 8 fields
+  uintptr_t                 padding;     // round to 8 fields
 } mem_region_t;
 
 // The region map
