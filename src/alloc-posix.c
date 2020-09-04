@@ -20,6 +20,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memcpy
 #include <stdlib.h>  // getenv
 
+#ifdef _MSC_VER
+#pragma warning(disable:4996)  // getenv _wgetenv
+#endif
+
 #ifndef EINVAL
 #define EINVAL 22
 #endif
@@ -111,8 +115,7 @@ mi_decl_restrict unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexc
 int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
   if (buf==NULL || name==NULL) return EINVAL;
   if (size != NULL) *size = 0;
-  #pragma warning(suppress:4996)
-  char* p = getenv(name);
+  char* p = getenv(name);        // mscver warning 4996
   if (p==NULL) {
     *buf = NULL;
   }
@@ -132,8 +135,7 @@ int mi_wdupenv_s(unsigned short** buf, size_t* size, const unsigned short* name)
   *buf = NULL;
   return EINVAL;
 #else
-  #pragma warning(suppress:4996)
-  unsigned short* p = (unsigned short*)_wgetenv((const wchar_t*)name);
+  unsigned short* p = (unsigned short*)_wgetenv((const wchar_t*)name);  // msvc warning 4996
   if (p==NULL) {
     *buf = NULL;
   }

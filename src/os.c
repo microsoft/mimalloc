@@ -22,6 +22,10 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <string.h>  // strerror
 
+#ifdef _MSC_VER
+#pragma warning(disable:4996)  // strerror
+#endif
+
 
 #if defined(_WIN32)
 #include <Windows.h>
@@ -233,7 +237,6 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
   if (was_committed) _mi_stat_decrease(&stats->committed, size);
   _mi_stat_decrease(&stats->reserved, size);
   if (err) {
-    #pragma warning(suppress:4996)
     _mi_warning_message("munmap failed: %s, addr 0x%8li, size %lu\n", strerror(errno), (size_t)addr, size);
     return false;
   }
