@@ -14,6 +14,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <ctype.h>  // toupper
 #include <stdarg.h>
 
+#ifdef _MSC_VER
+#pragma warning(disable:4996)   // strncpy, strncat
+#endif
+
+
 static uintptr_t mi_max_error_count = 16;  // stop outputting errors after this
 
 static void mi_add_stderr_output();
@@ -217,7 +222,6 @@ static void mi_out_buf_stderr(const char* msg, void* arg) {
 
 // Should be atomic but gives errors on many platforms as generally we cannot cast a function pointer to a uintptr_t.
 // For now, don't register output from multiple threads.
-#pragma warning(suppress:4180)
 static mi_output_fun* volatile mi_out_default; // = NULL
 static _Atomic(void*) mi_out_arg; // = NULL
 
@@ -391,13 +395,11 @@ void _mi_error_message(int err, const char* fmt, ...) {
 
 static void mi_strlcpy(char* dest, const char* src, size_t dest_size) {
   dest[0] = 0;
-  #pragma warning(suppress:4996)
   strncpy(dest, src, dest_size - 1);
   dest[dest_size - 1] = 0;
 }
 
 static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
-  #pragma warning(suppress:4996)
   strncat(dest, src, dest_size - 1);
   dest[dest_size - 1] = 0;
 }
@@ -424,7 +426,7 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
 #elif !defined(MI_USE_ENVIRON) || (MI_USE_ENVIRON!=0)
 // On Posix systemsr use `environ` to acces environment variables 
 // even before the C runtime is initialized.
-#if defined(__APPLE__)
+#if defined(__APPLE__) && defined(__has_include) && __has_include(<crt_externs.h>)
 #include <crt_externs.h>
 static char** mi_get_environ(void) {
   return (*_NSGetEnviron());

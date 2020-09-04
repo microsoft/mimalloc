@@ -176,6 +176,8 @@ static void double_free2();
 static void corrupt_free();
 static void block_overflow1();
 static void invalid_free();
+static void test_aslr(void);
+
 
 
 int main() {
@@ -185,7 +187,8 @@ int main() {
   // double_free1();
   // double_free2();
   // corrupt_free();
-  //block_overflow1();
+  // block_overflow1();
+  // test_aslr();
   invalid_free();
 
   void* p1 = malloc(78);
@@ -286,4 +289,11 @@ static void corrupt_free() {
   for (int i = 0; i < 4096; i++) {
     malloc(SZ);
   }
+}
+
+static void test_aslr(void) {
+  void* p[256];
+  p[0] = malloc(378200);
+  p[1] = malloc(1134626);
+  printf("p1: %p, p2: %p\n", p[0], p[1]);
 }
