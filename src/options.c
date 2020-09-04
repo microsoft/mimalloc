@@ -422,7 +422,7 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
 #elif !defined(MI_USE_ENVIRON) || (MI_USE_ENVIRON!=0)
 // On Posix systemsr use `environ` to acces environment variables 
 // even before the C runtime is initialized.
-#if defined(__APPLE__)
+#if defined(__APPLE__) && defined(__has_include) && __has_include(<crt_externs.h>)
 #include <crt_externs.h>
 static char** mi_get_environ(void) {
   return (*_NSGetEnviron());
