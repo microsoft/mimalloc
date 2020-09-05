@@ -126,7 +126,11 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(sysctl -n hw.ncpu) -C $(BuildType)
     displayName: Make
-  - script: make test -C $(BuildType)
+  #- script: make test -C $(BuildType)
+  #  displayName: CTest
+  - script: |
+      cd $(BuildType)
+      ctest --verbose --timeout 120
     displayName: CTest
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-macos-$(BuildType)
