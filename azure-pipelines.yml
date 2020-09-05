@@ -41,6 +41,8 @@ jobs:
   #    cd $(BuildType)
   #    ctest --verbose --timeout 120
   #  displayName: CTest
+  #- script: $(BuildType)\$(BuildType)\mimalloc-test-stress
+  #  displayName: TestStress
   #- upload: $(Build.SourcesDirectory)/$(BuildType)
   #  artifact: mimalloc-windows-$(BuildType)
 
