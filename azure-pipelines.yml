@@ -130,8 +130,7 @@ jobs:
   #  displayName: CTest
   - script: |
       cd $(BuildType)
-      export MIMALLOC_VERBOSE=1
-      ctest --verbose --timeout 120
+      MIMALLOC_VERBOSE=1 ctest --verbose --timeout 120
     displayName: CTest
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-macos-$(BuildType)
