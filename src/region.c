@@ -195,13 +195,13 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   // allocated, initialize and claim the initial blocks
   mem_region_t* r = &regions[idx];
   r->arena_memid  = arena_memid;
-  mi_atomic_store_release(&r->in_use, 0);
+  mi_atomic_store_release(&r->in_use, (uintptr_t)0);
   mi_atomic_store_release(&r->dirty, (is_zero ? 0 : MI_BITMAP_FIELD_FULL));
   mi_atomic_store_release(&r->commit, (region_commit ? MI_BITMAP_FIELD_FULL : 0));
-  mi_atomic_store_release(&r->reset, 0);
+  mi_atomic_store_release(&r->reset, (uintptr_t)0);
   *bit_idx = 0;
   mi_bitmap_claim(&r->in_use, 1, blocks, *bit_idx, NULL);
-  mi_atomic_store_ptr_release(uint8_t*,&r->start, start);
+  mi_atomic_store_ptr_release(void,&r->start, start);
 
   // and share it 
   mi_region_info_t info;
@@ -456,7 +456,7 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
         uintptr_t commit = mi_atomic_load_relaxed(&regions[i].commit);
         memset(&regions[i], 0, sizeof(mem_region_t));
         // and release the whole region
-        mi_atomic_store_release(&region->info, 0);
+        mi_atomic_store_release(&region->info, (uintptr_t)0);
         if (start != NULL) { // && !_mi_os_is_huge_reserved(start)) {         
           _mi_abandoned_await_readers(); // ensure no pending reads
           _mi_arena_free(start, MI_REGION_SIZE, arena_memid, (~commit == 0), tld->stats);

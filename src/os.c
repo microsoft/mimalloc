@@ -296,7 +296,7 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
       if (large_only) return p;
       // fall back to non-large page allocation on error (`p == NULL`).
       if (p == NULL) {
-        mi_atomic_store_release(&large_page_try_ok,10);  // on error, don't try again for the next N allocations
+        mi_atomic_store_release(&large_page_try_ok,10UL);  // on error, don't try again for the next N allocations
       }
     }
   }
@@ -420,7 +420,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
         #endif
         if (large_only) return p;
         if (p == NULL) {
-          mi_atomic_store_release(&large_page_try_ok, 10);  // on error, don't try again for the next N allocations
+          mi_atomic_store_release(&large_page_try_ok, 10UL);  // on error, don't try again for the next N allocations
         }
       }
     }
@@ -776,7 +776,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   int err = madvise(start, csize, (int)mi_atomic_load_relaxed(&advice));
   if (err != 0 && errno == EINVAL && advice == MADV_FREE) {
     // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
-    mi_atomic_store_release(&advice, MADV_DONTNEED);
+    mi_atomic_store_release(&advice, (uintptr_t)MADV_DONTNEED);
     err = madvise(start, csize, MADV_DONTNEED);
   }
 #elif defined(__wasi__)

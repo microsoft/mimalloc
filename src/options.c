@@ -172,7 +172,7 @@ static void mi_out_stderr(const char* msg, void* arg) {
 // an output function is registered it is called immediately with
 // the output up to that point.
 #ifndef MI_MAX_DELAY_OUTPUT
-#define MI_MAX_DELAY_OUTPUT (32*1024)
+#define MI_MAX_DELAY_OUTPUT ((uintptr_t)(32*1024))
 #endif
 static char out_buf[MI_MAX_DELAY_OUTPUT+1];
 static _Atomic(uintptr_t) out_len;
