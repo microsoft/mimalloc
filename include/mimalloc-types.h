@@ -12,6 +12,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdint.h>   // uintptr_t, uint16_t, etc
 #include <mimalloc-atomic.h>  // _Atomic
 
+#ifdef _MSC_VER
+#pragma warning(disable:4214) // bitfield is not int
+#endif 
+
 // Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
 #ifndef MI_MAX_ALIGN_SIZE

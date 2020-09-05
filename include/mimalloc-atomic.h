@@ -131,18 +131,23 @@ typedef enum mi_memory_order_e {
 } mi_memory_order;
 
 static inline uintptr_t mi_atomic_fetch_add_explicit(_Atomic(uintptr_t)* p, uintptr_t add, mi_memory_order mo) {
+  (void)(mo);
   return (uintptr_t)MI_64(_InterlockedExchangeAdd)((volatile msc_intptr_t*)p, (msc_intptr_t)add);
 }
 static inline uintptr_t mi_atomic_fetch_sub_explicit(_Atomic(uintptr_t)*p, uintptr_t sub, mi_memory_order mo) {
+  (void)(mo);
   return (uintptr_t)MI_64(_InterlockedExchangeAdd)((volatile msc_intptr_t*)p, -((msc_intptr_t)sub));
 }
 static inline uintptr_t mi_atomic_fetch_and_explicit(_Atomic(uintptr_t)* p, uintptr_t x, mi_memory_order mo) {
+  (void)(mo);
   return (uintptr_t)MI_64(_InterlockedAnd)((volatile msc_intptr_t*)p, (msc_intptr_t)x);
 }
 static inline uintptr_t mi_atomic_fetch_or_explicit(_Atomic(uintptr_t)* p, uintptr_t x, mi_memory_order mo) {
+  (void)(mo);
   return (uintptr_t)MI_64(_InterlockedOr)((volatile msc_intptr_t*)p, (msc_intptr_t)x);
 }
 static inline bool mi_atomic_compare_exchange_strong_explicit(_Atomic(uintptr_t)* p, uintptr_t* expected, uintptr_t desired, mi_memory_order mo1, mi_memory_order mo2) {
+  (void)(mo1); (void)(mo2);
   uintptr_t read = (uintptr_t)MI_64(_InterlockedCompareExchange)((volatile msc_intptr_t*)p, (msc_intptr_t)desired, (msc_intptr_t)(*expected));
   if (read == *expected) {
     return true;
@@ -156,13 +161,16 @@ static inline bool mi_atomic_compare_exchange_weak_explicit(_Atomic(uintptr_t)*p
   return mi_atomic_compare_exchange_strong_explicit(p, expected, desired, mo1, mo2);
 }
 static inline uintptr_t mi_atomic_exchange_explicit(_Atomic(uintptr_t)* p, uintptr_t exchange, mi_memory_order mo) {
+  (void)(mo);
   return (uintptr_t)MI_64(_InterlockedExchange)((volatile msc_intptr_t*)p, (msc_intptr_t)exchange);
 }
-static inline mi_atomic_thread_fence(mi_memory_order mo) {
+static inline void mi_atomic_thread_fence(mi_memory_order mo) {
+  (void)(mo);
   _Atomic(uintptr_t)x = 0;
   mi_atomic_exchange_explicit(&x, 1, mo);
 }
 static inline uintptr_t mi_atomic_load_explicit(_Atomic(uintptr_t) const* p, mi_memory_order mo) {
+  (void)(mo);
   #if defined(_M_IX86) || defined(_M_X64)
   return *p;
   #else
@@ -174,6 +182,7 @@ static inline uintptr_t mi_atomic_load_explicit(_Atomic(uintptr_t) const* p, mi_
   #endif
 }
 static inline void mi_atomic_store_explicit(_Atomic(uintptr_t)* p, uintptr_t x, mi_memory_order mo) {
+  (void)(mo);
   #if defined(_M_IX86) || defined(_M_X64)
   *p = x;
   #else
