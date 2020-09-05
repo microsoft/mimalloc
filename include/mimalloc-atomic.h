@@ -61,10 +61,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_atomic_and_acq_rel(p,x)               mi_atomic(fetch_and_explicit)(p,x,mi_memory_order(acq_rel))
 #define mi_atomic_or_acq_rel(p,x)                mi_atomic(fetch_or_explicit)(p,x,mi_memory_order(acq_rel))
 
-#define mi_atomic_increment_relaxed(p)           mi_atomic_add_relaxed(p,1)
-#define mi_atomic_decrement_relaxed(p)           mi_atomic_sub_relaxed(p,1)
-#define mi_atomic_increment_acq_rel(p)           mi_atomic_add_acq_rel(p,1)
-#define mi_atomic_decrement_acq_rel(p)           mi_atomic_sub_acq_rel(p,1)
+#define mi_atomic_increment_relaxed(p)           mi_atomic_add_relaxed(p,(uintptr_t)1)
+#define mi_atomic_decrement_relaxed(p)           mi_atomic_sub_relaxed(p,(uintptr_t)1)
+#define mi_atomic_increment_acq_rel(p)           mi_atomic_add_acq_rel(p,(uintptr_t)1)
+#define mi_atomic_decrement_acq_rel(p)           mi_atomic_sub_acq_rel(p,(uintptr_t)1)
 
 static inline void mi_atomic_yield(void);
 static inline intptr_t mi_atomic_addi(_Atomic(intptr_t)* p, intptr_t add);
@@ -73,11 +73,21 @@ static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)* p, intptr_t sub);
 
 #if defined(__cplusplus) || !defined(_MSC_VER)
 
-// In C++/C11 atomics we have polymorpic atomics so can use the typed `ptr` variants 
-// (where `tp` is the type of atomic value)
+// In C++/C11 atomics we have polymorphic atomics so can use the typed `ptr` variants (where `tp` is the type of atomic value)
 // We use these macros so we can provide a typed wrapper in MSVC in C compilation mode as well
 #define mi_atomic_load_ptr_acquire(tp,p)                mi_atomic_load_acquire(p)
 #define mi_atomic_load_ptr_relaxed(tp,p)                mi_atomic_load_relaxed(p)
+
+// In C++ we need to add casts to help resolve templates if NULL is passed
+#if defined(__cplusplus)
+#define mi_atomic_store_ptr_release(tp,p,x)             mi_atomic_store_release(p,(tp*)x)
+#define mi_atomic_store_ptr_relaxed(tp,p,x)             mi_atomic_store_relaxed(p,(tp*)x)
+#define mi_atomic_cas_ptr_weak_release(tp,p,exp,des)    mi_atomic_cas_weak_release(p,exp,(tp*)des)
+#define mi_atomic_cas_ptr_weak_acq_rel(tp,p,exp,des)    mi_atomic_cas_weak_acq_rel(p,exp,(tp*)des)
+#define mi_atomic_cas_ptr_strong_release(tp,p,exp,des)  mi_atomic_cas_strong_release(p,exp,(tp*)des)
+#define mi_atomic_exchange_ptr_release(tp,p,x)          mi_atomic_exchange_release(p,(tp*)x)
+#define mi_atomic_exchange_ptr_acq_rel(tp,p,x)          mi_atomic_exchange_acq_rel(p,(tp*)x)
+#else
 #define mi_atomic_store_ptr_release(tp,p,x)             mi_atomic_store_release(p,x)
 #define mi_atomic_store_ptr_relaxed(tp,p,x)             mi_atomic_store_relaxed(p,x)
 #define mi_atomic_cas_ptr_weak_release(tp,p,exp,des)    mi_atomic_cas_weak_release(p,exp,des)
@@ -85,6 +95,7 @@ static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)* p, intptr_t sub);
 #define mi_atomic_cas_ptr_strong_release(tp,p,exp,des)  mi_atomic_cas_strong_release(p,exp,des)
 #define mi_atomic_exchange_ptr_release(tp,p,x)          mi_atomic_exchange_release(p,x)
 #define mi_atomic_exchange_ptr_acq_rel(tp,p,x)          mi_atomic_exchange_acq_rel(p,x)
+#endif
 
 // These are used by the statistics
 static inline int64_t mi_atomic_addi64_relaxed(volatile int64_t* p, int64_t add) {
