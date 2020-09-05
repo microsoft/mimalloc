@@ -106,6 +106,13 @@ static inline void mi_atomic_maxi64_relaxed(volatile int64_t* p, int64_t x) {
   while (current < x && !mi_atomic_cas_weak_release((_Atomic(int64_t)*)p, &current, x)) { /* nothing */ };
 }
 
+// Used by timers
+#define mi_atomic_loadi64_acquire(p)    mi_atomic(load_explicit)(p,mi_memory_order(acquire))
+#define mi_atomic_loadi64_relaxed(p)    mi_atomic(load_explicit)(p,mi_memory_order(relaxed))
+#define mi_atomic_storei64_release(p,x) mi_atomic(store_explicit)(p,x,mi_memory_order(release))
+#define mi_atomic_storei64_relaxed(p,x) mi_atomic(store_explicit)(p,x,mi_memory_order(relaxed))
+
+
 
 #elif defined(_MSC_VER)
 
@@ -189,6 +196,27 @@ static inline void mi_atomic_store_explicit(_Atomic(uintptr_t)* p, uintptr_t x, 
   mi_atomic_exchange_explicit(p,x,mo);
   #endif
 }
+static inline int64_t mi_atomic_loadi64_explicit(_Atomic(int64_t)* p, mi_memory_order mo) {
+  (void)(mo);
+#if defined(_M_X64)
+  return *p;
+#else
+  int64_t old = *p;
+  int64_t x = old;
+  while ((old = InterlockedCompareExchange64(p, x, old)) != x) {
+    x = old;
+  }
+  return x;
+#endif
+}
+static inline void mi_atomic_storei64_explicit(_Atomic(int64_t)* p, int64_t x, mi_memory_order mo) {
+  (void)(mo);
+#if defined(x_M_IX86) || defined(_M_X64)
+  *p = x;
+#else
+  InterlockedExchange64(p,x);
+#endif
+}
 
 // These are used by the statistics
 static inline int64_t mi_atomic_addi64_relaxed(volatile _Atomic(int64_t)* p, int64_t add) {
@@ -221,6 +249,12 @@ static inline void mi_atomic_maxi64_relaxed(volatile _Atomic(int64_t)*p, int64_t
 #define mi_atomic_cas_ptr_strong_release(tp,p,exp,des)  mi_atomic_cas_strong_release((_Atomic(uintptr_t)*)(p),(uintptr_t*)exp,(uintptr_t)des)
 #define mi_atomic_exchange_ptr_release(tp,p,x)          (tp*)mi_atomic_exchange_release((_Atomic(uintptr_t)*)(p),(uintptr_t)x)
 #define mi_atomic_exchange_ptr_acq_rel(tp,p,x)          (tp*)mi_atomic_exchange_acq_rel((_Atomic(uintptr_t)*)(p),(uintptr_t)x)
+
+#define mi_atomic_loadi64_acquire(p)    mi_atomic(loadi64_explicit)(p,mi_memory_order(acquire))
+#define mi_atomic_loadi64_relaxed(p)    mi_atomic(loadi64_explicit)(p,mi_memory_order(relaxed))
+#define mi_atomic_storei64_release(p,x) mi_atomic(storei64_explicit)(p,x,mi_memory_order(release))
+#define mi_atomic_storei64_relaxed(p,x) mi_atomic(storei64_explicit)(p,x,mi_memory_order(relaxed))
+
 
 #endif
 

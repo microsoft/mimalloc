@@ -280,7 +280,6 @@ typedef mi_page_t mi_slice_t;
 
 typedef int64_t  mi_msecs_t;
 
-
 // Segments are large allocated memory blocks (8mb on 64 bit) from
 // the OS. Inside segments we allocated fixed size _pages_ that
 // contain blocks.

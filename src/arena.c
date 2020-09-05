@@ -179,7 +179,7 @@ static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool* co
   *is_zero = false;
   bool committed = slot->is_committed;
   slot->p = NULL;
-  mi_atomic_store_release(&slot->expire,(mi_msecs_t)0);
+  mi_atomic_storei64_release(&slot->expire,(mi_msecs_t)0);
   if (*commit && !committed) {
     bool commit_zero;
     _mi_os_commit(p, MI_SEGMENT_SIZE, &commit_zero, tld->stats);
@@ -203,17 +203,17 @@ static void mi_cache_purge(mi_os_tld_t* tld) {
   for (size_t visited = 0; visited < MI_CACHE_FIELDS; visited++,idx++) {  // probe just N slots
     if (idx >= MI_CACHE_MAX) idx = 0; // wrap
     mi_cache_slot_t* slot = &cache[idx];
-    mi_msecs_t expire = mi_atomic_load_relaxed(&slot->expire);
+    mi_msecs_t expire = mi_atomic_loadi64_relaxed(&slot->expire);
     if (expire != 0 && now >= expire) {  // racy read
       // seems expired, first claim it from available
       purged++;
       mi_bitmap_index_t bitidx = mi_bitmap_index_create_from_bit(idx);
       if (mi_bitmap_claim(cache_available, MI_CACHE_FIELDS, 1, bitidx, NULL)) {
         // was available, we claimed it
-        expire = mi_atomic_load_acquire(&slot->expire);
+        expire = mi_atomic_loadi64_acquire(&slot->expire);
         if (expire != 0 && now >= expire) {  // safe read
           // still expired, decommit it
-          mi_atomic_store_relaxed(&slot->expire,(mi_msecs_t)0);
+          mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
           mi_assert_internal(slot->is_committed && mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
           _mi_abandoned_await_readers();  // wait until safe to decommit
           _mi_os_decommit(slot->p, MI_SEGMENT_SIZE, tld->stats);
@@ -254,7 +254,7 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_commit
   mi_cache_slot_t* slot = &cache[mi_bitmap_index_bit(bitidx)];
   slot->p = start;
   slot->memid = memid;
-  mi_atomic_store_relaxed(&slot->expire,(mi_msecs_t)0);
+  mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
   slot->is_committed = is_committed;
   if (is_committed && !is_large) {
     long delay = mi_option_get(mi_option_arena_reset_delay);
@@ -264,7 +264,7 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, bool is_commit
       slot->is_committed = false;
     }
     else {
-      mi_atomic_store_release(&slot->expire, _mi_clock_now() + delay);
+      mi_atomic_storei64_release(&slot->expire, _mi_clock_now() + delay);
     }
   }
   

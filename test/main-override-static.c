@@ -49,6 +49,7 @@ static inline uint8_t mi_bsr32(uint32_t x) {
 }
 #endif
 
+/*
 // Bit scan reverse: return the index of the highest bit.
 uint8_t _mi_bsr(uintptr_t x) {
   if (x == 0) return 0;
@@ -61,6 +62,8 @@ uint8_t _mi_bsr(uintptr_t x) {
   # error "define bsr for non-32 or 64-bit platforms"
   #endif
 }
+*/
+
 
 static inline size_t _mi_wsize_from_size(size_t size) {
   return (size + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
