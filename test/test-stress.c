@@ -25,9 +25,9 @@ terms of the MIT license.
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
 // argument defaults
-static int THREADS =  8;      // more repeatable if THREADS <= #processors
+static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 10;      // scaling factor
-static int ITER    =100;      // N full iterations destructing and re-creating all threads
+static int ITER    = 50;      // N full iterations destructing and re-creating all threads
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int SCALE   = 100;  // scaling factor
