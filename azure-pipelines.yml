@@ -36,12 +36,12 @@ jobs:
     inputs:
       solution: $(BuildType)/libmimalloc.sln
       configuration: '$(MSBuildConfiguration)'
-  - script: |
-      cd $(BuildType)
-      ctest --verbose --timeout 120
-    displayName: CTest
-  - upload: $(Build.SourcesDirectory)/$(BuildType)
-    artifact: mimalloc-windows-$(BuildType)
+  #- script: |
+  #    cd $(BuildType)
+  #    ctest --verbose --timeout 120
+  #  displayName: CTest
+  #- upload: $(Build.SourcesDirectory)/$(BuildType)
+  #  artifact: mimalloc-windows-$(BuildType)
 
 - job:
   displayName: Linux
