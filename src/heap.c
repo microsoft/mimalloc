@@ -11,6 +11,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <string.h>  // memset, memcpy
 
+#if defined(_MSC_VER) && (_MSC_VER < 1920)
+#pragma warning(disable:4204)  // non-constant aggregate initializer
+#endif
 
 /* -----------------------------------------------------------
   Helpers
@@ -550,9 +553,6 @@ static bool mi_heap_area_visitor(const mi_heap_t* heap, const mi_heap_area_ex_t*
 
 // Visit all blocks in a heap
 bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
-  mi_visit_blocks_args_t args = { 0 };
-  args.visit_blocks = visit_blocks;
-  args.visitor = visitor;
-  args.arg = arg;
+  mi_visit_blocks_args_t args = { visit_blocks, visitor, arg };
   return mi_heap_visit_areas(heap, &mi_heap_area_visitor, &args);
 }
