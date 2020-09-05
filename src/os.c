@@ -297,7 +297,7 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
       if (large_only) return p;
       // fall back to non-large page allocation on error (`p == NULL`).
       if (p == NULL) {
-        mi_atomic_store_release(&large_page_try_ok,10);  // on error, don't try again for the next N allocations
+        mi_atomic_store_release(&large_page_try_ok,10UL);  // on error, don't try again for the next N allocations
       }
     }
   }
@@ -421,7 +421,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
         #endif
         if (large_only) return p;
         if (p == NULL) {
-          mi_atomic_store_release(&large_page_try_ok, 10);  // on error, don't try again for the next N allocations
+          mi_atomic_store_release(&large_page_try_ok, 10UL);  // on error, don't try again for the next N allocations
         }
       }
     }
