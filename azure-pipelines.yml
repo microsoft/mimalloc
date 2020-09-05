@@ -38,7 +38,7 @@ jobs:
       configuration: '$(MSBuildConfiguration)'
   - script: |
       cd $(BuildType)
-      ctest --verbose
+      ctest --verbose --timeout 120
     displayName: CTest
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-windows-$(BuildType)
