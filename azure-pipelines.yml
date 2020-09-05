@@ -6,6 +6,7 @@
 trigger:
 - master
 - dev
+- dev-slice
 
 jobs:
 - job:
