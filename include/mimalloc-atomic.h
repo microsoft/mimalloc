@@ -17,7 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // instead of passing the memory order as a parameter.
 // -----------------------------------------------------------------------------------------------
 
-#if defined(__cplusplus) && !defined(_MSC_VER)
+#if defined(__cplusplus)
 // Use C++ atomics
 #include <atomic>
 #define  _Atomic(tp)            std::atomic<tp>
@@ -71,7 +71,7 @@ static inline intptr_t mi_atomic_addi(_Atomic(intptr_t)* p, intptr_t add);
 static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)* p, intptr_t sub);
 
 
-#if (!defined(_MSC_VER)) // defined(__cplusplus) || !defined(_MSC_VER)
+#if defined(__cplusplus) || !defined(_MSC_VER)
 
 // In C++/C11 atomics we have polymorphic atomics so can use the typed `ptr` variants (where `tp` is the type of atomic value)
 // We use these macros so we can provide a typed wrapper in MSVC in C compilation mode as well
@@ -193,7 +193,7 @@ static inline void mi_atomic_store_explicit(_Atomic(uintptr_t)* p, uintptr_t x, 
 // These are used by the statistics
 static inline int64_t mi_atomic_addi64_relaxed(volatile _Atomic(int64_t)* p, int64_t add) {
   #ifdef _WIN64
-  return (int64_t)mi_atomic_addi((_Atomic(intptr_t)*)p,add);
+  return (int64_t)mi_atomic_addi((int64_t*)p,add);
   #else
   int64_t current;
   int64_t sum;
@@ -208,7 +208,7 @@ static inline void mi_atomic_maxi64_relaxed(volatile _Atomic(int64_t)*p, int64_t
   int64_t current;
   do {
     current = *p;
-  } while (current < x && _InterlockedCompareExchange64((int64_t*)p, x, current) != current);
+  } while (current < x && _InterlockedCompareExchange64(p, x, current) != current);
 }
 
 // The pointer macros cast to `uintptr_t`.
@@ -222,8 +222,6 @@ static inline void mi_atomic_maxi64_relaxed(volatile _Atomic(int64_t)*p, int64_t
 #define mi_atomic_exchange_ptr_release(tp,p,x)          (tp*)mi_atomic_exchange_release((_Atomic(uintptr_t)*)(p),(uintptr_t)x)
 #define mi_atomic_exchange_ptr_acq_rel(tp,p,x)          (tp*)mi_atomic_exchange_acq_rel((_Atomic(uintptr_t)*)(p),(uintptr_t)x)
 
-#else
-#pragma message("define atomics for this platform (not C11, C++, msvc)")
 #endif
 
 
