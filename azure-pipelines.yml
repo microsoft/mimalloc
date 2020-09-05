@@ -128,11 +128,11 @@ jobs:
     displayName: Make
   #- script: make test -C $(BuildType)
   #  displayName: CTest
-  - script: MIMALLOC_VERBOSE=1 ./mimalloc-test-stress
-    workingDirectory: $(BuildType)
-    displayName: TestStress    
   - script: MIMALLOC_VERBOSE=1 ./mimalloc-test-api
     workingDirectory: $(BuildType)
     displayName: TestAPI
+  - script: MIMALLOC_VERBOSE=1 ./mimalloc-test-stress
+    workingDirectory: $(BuildType)
+    displayName: TestStress    
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-macos-$(BuildType)
