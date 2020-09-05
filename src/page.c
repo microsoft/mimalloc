@@ -274,7 +274,7 @@ static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
 void _mi_heap_delayed_free(mi_heap_t* heap) {
   // take over the list (note: no atomic exchange since it is often NULL)
   mi_block_t* block = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
-  while (block != NULL && !mi_atomic_cas_ptr_weak_acq_rel(mi_block_t, &heap->thread_delayed_free, &block, NULL)) { /* nothing */ };
+  while (block != NULL && !mi_atomic_cas_ptr_weak_acq_rel(mi_block_t, &heap->thread_delayed_free, (void**)&block, NULL)) { /* nothing */ };
 
   // and free them all
   while(block != NULL) {

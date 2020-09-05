@@ -921,7 +921,7 @@ static bool mi_abandoned_visited_revisit(void)
   if (mi_atomic_load_ptr_relaxed(mi_segment_t, &abandoned_visited) == NULL) return false;
 
   // grab the whole visited list
-  mi_segment_t* first = mi_atomic_exchange_ptr_acq_rel(mi_segment_t, &abandoned_visited, NULL);
+  mi_segment_t* first = (mi_segment_t*)mi_atomic_exchange_ptr_acq_rel(mi_segment_t, &abandoned_visited, NULL);
   if (first == NULL) return false;
 
   // first try to swap directly if the abandoned list happens to be NULL
