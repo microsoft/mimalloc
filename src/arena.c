@@ -141,7 +141,7 @@ typedef struct mi_cache_slot_s {
 
 static mi_cache_slot_t cache[MI_CACHE_MAX];    // = 0
 
-#define BITS_SET()  (UINTPTR_MAX)
+#define BITS_SET()  ATOMIC_VAR_INIT(UINTPTR_MAX)
 static mi_bitmap_field_t cache_available[MI_CACHE_FIELDS] = { MI_CACHE_BITS_SET };        // zero bit = available!
 static mi_bitmap_field_t cache_available_large[MI_CACHE_FIELDS] = { MI_CACHE_BITS_SET };
 static mi_bitmap_field_t cache_inuse[MI_CACHE_FIELDS];   // zero bit = free
