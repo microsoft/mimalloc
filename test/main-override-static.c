@@ -180,7 +180,7 @@ static void corrupt_free();
 static void block_overflow1();
 static void invalid_free();
 static void test_aslr(void);
-
+static void test_process_info(void);
 
 
 int main() {
@@ -214,6 +214,7 @@ int main() {
   //mi_free(p2);  
   mi_collect(true);
   mi_stats_print(NULL);
+  test_process_info();
   return 0;
 }
 
@@ -299,4 +300,16 @@ static void test_aslr(void) {
   p[0] = malloc(378200);
   p[1] = malloc(1134626);
   printf("p1: %p, p2: %p\n", p[0], p[1]);
+}
+
+static void test_process_info(void) {
+  double utime = 0;
+  double stime = 0;
+  size_t current_rss = 0;
+  size_t peak_rss = 0;
+  size_t current_commit = 0;
+  size_t peak_commit = 0;
+  size_t page_faults = 0;
+  mi_process_info(&utime, &stime, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
+  printf("process info: user: %.3f s, rss: %zd b, commit: %zd b\n\n", utime, peak_rss, peak_commit);
 }

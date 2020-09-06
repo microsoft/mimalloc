@@ -153,6 +153,7 @@ mi_decl_export void mi_thread_init(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
 
+mi_decl_export void mi_process_info(double* user_time, double* system_time, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept;
 
 // -------------------------------------------------------------------------------------
 // Aligned allocation
