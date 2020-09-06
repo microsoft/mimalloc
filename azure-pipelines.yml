@@ -12,7 +12,7 @@ jobs:
   displayName: Windows-2017
   pool:
     vmImage:
-     windows-2017
+      vs2017-win2016
   strategy:
     matrix:
       Debug:
@@ -82,7 +82,7 @@ jobs:
   displayName: Linux
   pool:
     vmImage:
-     ubuntu-16.04
+     ubuntu-18.04
   strategy:
     matrix:
       Debug:
