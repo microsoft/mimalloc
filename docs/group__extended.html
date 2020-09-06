@@ -187,6 +187,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gaad25050b19f30cd79397b227e0157a3f"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#gaad25050b19f30cd79397b227e0157a3f">mi_is_redirected</a> ()</td></tr>
 <tr class="memdesc:gaad25050b19f30cd79397b227e0157a3f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Is the C runtime <em>malloc</em> API redirected?  <a href="#gaad25050b19f30cd79397b227e0157a3f">More...</a><br /></td></tr>
 <tr class="separator:gaad25050b19f30cd79397b227e0157a3f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga9144506d5ffa8cc03547867bd15e1032"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__extended.html#ga9144506d5ffa8cc03547867bd15e1032">mi_process_info</a> (size_t *user_msecs, size_t *system_msecs, size_t *current_rss, size_t *peak_rss, size_t *current_commit, size_t *peak_commit, size_t *page_faults)</td></tr>
+<tr class="memdesc:ga9144506d5ffa8cc03547867bd15e1032"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return process information (time and memory usage).  <a href="#ga9144506d5ffa8cc03547867bd15e1032">More...</a><br /></td></tr>
+<tr class="separator:ga9144506d5ffa8cc03547867bd15e1032"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>Extended functionality. </p>
@@ -410,6 +413,79 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>a pointer to newly allocated memory of at least <em>size</em> bytes, or <em>NULL</em> if out of memory. This function is meant for use in run-time systems for best performance and does not check if <em>size</em> was indeed small &ndash; use with care! </dd></dl>
+
+</div>
+</div>
+<a id="ga9144506d5ffa8cc03547867bd15e1032"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga9144506d5ffa8cc03547867bd15e1032">&#9670;&nbsp;</a></span>mi_process_info()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_process_info </td>
+          <td>(</td>
+          <td class="paramtype">size_t *&#160;</td>
+          <td class="paramname"><em>user_msecs</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t *&#160;</td>
+          <td class="paramname"><em>system_msecs</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t *&#160;</td>
+          <td class="paramname"><em>current_rss</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t *&#160;</td>
+          <td class="paramname"><em>peak_rss</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t *&#160;</td>
+          <td class="paramname"><em>current_commit</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t *&#160;</td>
+          <td class="paramname"><em>peak_commit</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t *&#160;</td>
+          <td class="paramname"><em>page_faults</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Return process information (time and memory usage). </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">user_msecs</td><td>Optional. User time in milli-seconds. </td></tr>
+    <tr><td class="paramname">system_msecs</td><td>Optional. System time in milli-seconds. </td></tr>
+    <tr><td class="paramname">current_rss</td><td>Optional. Current working set size (touched pages). </td></tr>
+    <tr><td class="paramname">peak_rss</td><td>Optional. Peak working set size (touched pages). </td></tr>
+    <tr><td class="paramname">current_commit</td><td>Optional. Current committed memory (backed by the page file). </td></tr>
+    <tr><td class="paramname">peak_commit</td><td>Optional. Peak committed memory (backed by the page file). </td></tr>
+    <tr><td class="paramname">page_faults</td><td>Optional. Count of hard page faults.</td></tr>
+  </table>
+  </dd>
+</dl>
+<p>The <em>current_rss</em> is precise on Windows and MacOSX; other systems estimate this using <em>current_commit</em>. The <em>commit</em> is precise on Windows but estimated on other systems as the amount of read/write accessible memory reserved by mimalloc. </p>
 
 </div>
 </div>
