@@ -100,14 +100,12 @@ static bool use_large_os_page(size_t size, size_t alignment) {
 
 // round to a good OS allocation size (bounded by max 12.5% waste)
 size_t _mi_os_good_alloc_size(size_t size) {
-  size_t align_size = _mi_os_page_size();
-  /*
+  size_t align_size;
   if (size < 512*KiB) align_size = _mi_os_page_size();
   else if (size < 2*MiB) align_size = 64*KiB;
   else if (size < 8*MiB) align_size = 256*KiB;
   else if (size < 32*MiB) align_size = 1*MiB;
   else align_size = 4*MiB;
-  */
   if (size >= (SIZE_MAX - align_size)) return size; // possible overflow?
   return _mi_align_up(size, align_size);
 }

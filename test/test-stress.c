@@ -272,7 +272,7 @@ static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
   DWORD* tids = (DWORD*)custom_calloc(nthreads,sizeof(DWORD));
   HANDLE* thandles = (HANDLE*)custom_calloc(nthreads,sizeof(HANDLE));
   for (uintptr_t i = 0; i < nthreads; i++) {
-    thandles[i] = CreateThread(0, 4096, &thread_entry, (void*)(i), 0, &tids[i]);
+    thandles[i] = CreateThread(0, 8*1024, &thread_entry, (void*)(i), 0, &tids[i]);
   }
   for (size_t i = 0; i < nthreads; i++) {
     WaitForSingleObject(thandles[i], INFINITE);
