@@ -882,6 +882,10 @@ static mi_decl_cache_align _Atomic(mi_segment_t*)       abandoned_visited; // = 
 // The abandoned page list (tagged as it supports pop)
 static mi_decl_cache_align _Atomic(mi_tagged_segment_t) abandoned;         // = NULL
 
+// Maintain these for debug purposes (these counts may be a bit off)
+static mi_decl_cache_align _Atomic(uintptr_t)           abandoned_count; 
+static mi_decl_cache_align _Atomic(uintptr_t)           abandoned_visited_count;
+
 // We also maintain a count of current readers of the abandoned list
 // in order to prevent resetting/decommitting segment memory if it might
 // still be read.
@@ -897,6 +901,7 @@ static void mi_abandoned_visited_push(mi_segment_t* segment) {
   do {
     mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, anext);
   } while (!mi_atomic_cas_ptr_weak_release(mi_segment_t, &abandoned_visited, &anext, segment));
+  mi_atomic_increment_relaxed(&abandoned_visited_count);
 }
 
 // Move the visited list to the abandoned list.
@@ -913,8 +918,13 @@ static bool mi_abandoned_visited_revisit(void)
   mi_tagged_segment_t afirst;
   mi_tagged_segment_t ts = mi_atomic_load_relaxed(&abandoned);
   if (mi_tagged_segment_ptr(ts)==NULL) {
+    uintptr_t count = mi_atomic_load_relaxed(&abandoned_visited_count);
     afirst = mi_tagged_segment(first, ts);
-    if (mi_atomic_cas_strong_acq_rel(&abandoned, &ts, afirst)) return true;
+    if (mi_atomic_cas_strong_acq_rel(&abandoned, &ts, afirst)) {
+      mi_atomic_add_relaxed(&abandoned_count, count);
+      mi_atomic_sub_relaxed(&abandoned_visited_count, count);
+      return true;
+    }
   }
 
   // find the last element of the visited list: O(n)
@@ -927,10 +937,14 @@ static bool mi_abandoned_visited_revisit(void)
   // and atomically prepend to the abandoned list
   // (no need to increase the readers as we don't access the abandoned segments)
   mi_tagged_segment_t anext = mi_atomic_load_relaxed(&abandoned);
+  uintptr_t count;
   do {
+    count = mi_atomic_load_relaxed(&abandoned_visited_count);
     mi_atomic_store_ptr_release(mi_segment_t, &last->abandoned_next, mi_tagged_segment_ptr(anext));
     afirst = mi_tagged_segment(first, anext);
   } while (!mi_atomic_cas_weak_release(&abandoned, &anext, afirst));
+  mi_atomic_add_relaxed(&abandoned_count, count);
+  mi_atomic_sub_relaxed(&abandoned_visited_count, count);
   return true;
 }
 
@@ -946,6 +960,7 @@ static void mi_abandoned_push(mi_segment_t* segment) {
     mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, mi_tagged_segment_ptr(ts));
     next = mi_tagged_segment(segment, ts);
   } while (!mi_atomic_cas_weak_release(&abandoned, &ts, next));
+  mi_atomic_increment_relaxed(&abandoned_count);
 }
 
 // Wait until there are no more pending reads on segments that used to be in the abandoned list
@@ -986,6 +1001,7 @@ static mi_segment_t* mi_abandoned_pop(void) {
   mi_atomic_decrement_relaxed(&abandoned_readers);  // release reader lock
   if (segment != NULL) {
     mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);
+    mi_atomic_decrement_relaxed(&abandoned_count);
   }
   return segment;
 }
