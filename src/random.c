@@ -162,14 +162,13 @@ If we cannot get good randomness, we fall back to weak randomness based on a tim
 -----------------------------------------------------------------------------*/
 
 #if defined(_WIN32)
-/*
 // We prefer BCryptGenRandom over RtlGenRandom but it leads to a crash a when using dynamic override combined with the C++ runtime :-( 
 #pragma comment (lib,"bcrypt.lib")
 #include <bcrypt.h>
 static bool os_random_buf(void* buf, size_t buf_len) {
   return (BCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
 }
-*/
+/*
 #pragma comment (lib,"advapi32.lib")
 #define RtlGenRandom  SystemFunction036
 #ifdef __cplusplus
@@ -185,7 +184,7 @@ static bool os_random_buf(void* buf, size_t buf_len) {
   bool ok = (RtlGenRandom(buf, (ULONG)buf_len) != 0);
   return ok;
 }
-
+*/
 #elif defined(ANDROID) || defined(XP_DARWIN) || defined(__APPLE__) || defined(__DragonFly__) || \
       defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
       defined(__sun) || defined(__wasi__)
