@@ -37,6 +37,7 @@ jobs:
     inputs:
       solution: $(BuildType)/libmimalloc.sln
       configuration: '$(MSBuildConfiguration)'
+      msbuildArguments: -m
   - script: |
       cd $(BuildType)
       ctest --verbose --timeout 120
