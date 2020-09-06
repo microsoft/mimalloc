@@ -704,8 +704,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
 
   #if defined(_WIN32)
   if (commit) {
-    // if the memory was already committed, the call succeeds but it is not zero'd
-    // *is_zero = true;
+    // *is_zero = true;  // note: if the memory was already committed, the call succeeds but the memory is not zero'd
     void* p = VirtualAlloc(start, csize, MEM_COMMIT, PAGE_READWRITE);
     err = (p == start ? 0 : GetLastError());
   }
@@ -717,33 +716,33 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   // WebAssembly guests can't control memory protection
   #elif defined(MAP_FIXED) && !defined(__APPLE__)
   // Linux
-  if (!commit) {
+  if (commit) {
+    // commit: just change the protection
+    err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
+    if (err != 0) { err = errno; }
+  } 
+  else {
     // decommit: use mmap with MAP_FIXED to discard the existing memory (and reduce rss)
     const int fd = mi_unix_mmap_fd();
     void* p = mmap(start, csize, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), fd, 0);
     if (p != start) { err = errno; }
   }
-  else {
-    // commit: just change the protection
+  #else
+  // macOSX and others.
+  if (commit) {
+    // commit: ensure we can access the area
     err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
     if (err != 0) { err = errno; }
-  }
-  #else
-  // MacOS and others.
-  if (!commit) {
+  } 
+  else {
     #if defined(MADV_DONTNEED)
-    // decommit: use MADV_DONTNEED as it decrease rss immediately (unlike MADV_FREE)
+    // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
     err = madvise(start, csize, MADV_DONTNEED);
     #else
     // decommit: just disable access
     err = mprotect(start, csize, PROT_NONE);
     if (err != 0) { err = errno; }
     #endif
-  }
-  else {
-    // commit: ensure we can access the area
-    err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
-    if (err != 0) { err = errno; }
   }
   #endif
   if (err != 0) {
