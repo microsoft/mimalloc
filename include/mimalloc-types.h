@@ -276,9 +276,11 @@ typedef enum mi_segment_kind_e {
 #error "not enough commit bits to cover the segment size"
 #endif
 
-typedef mi_page_t mi_slice_t;
+typedef mi_page_t  mi_slice_t;
 
-typedef int64_t  mi_msecs_t;
+typedef int64_t    mi_msecs_t;
+
+typedef uintptr_t  mi_commit_mask_t;
 
 // Segments are large allocated memory blocks (8mb on 64 bit) from
 // the OS. Inside segments we allocated fixed size _pages_ that
@@ -290,8 +292,8 @@ typedef struct mi_segment_s {
 
   bool              allow_decommit;
   mi_msecs_t        decommit_expire;
-  uintptr_t         decommit_mask;
-  uintptr_t         commit_mask;
+  mi_commit_mask_t  decommit_mask;
+  mi_commit_mask_t  commit_mask;
 
   _Atomic(struct mi_segment_s*) abandoned_next;
 

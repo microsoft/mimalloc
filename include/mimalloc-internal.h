@@ -650,6 +650,82 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
   #endif
 }
 
+
+// -------------------------------------------------------------------
+// commit mask
+// -------------------------------------------------------------------
+
+static inline mi_commit_mask_t mi_commit_mask_empty(void) {
+  return 0;
+}
+
+static inline mi_commit_mask_t mi_commit_mask_full(void) {
+  return ~mi_commit_mask_empty();
+}
+
+static inline mi_commit_mask_t mi_commit_mask_create(uintptr_t bitidx, uintptr_t bitcount) {
+  mi_assert_internal(bitidx < MI_INTPTR_BITS);
+  mi_assert_internal((bitidx + bitcount) <= MI_INTPTR_BITS);
+  if (bitcount == MI_INTPTR_BITS) {
+    mi_assert_internal(bitidx==0);
+    return mi_commit_mask_full();
+  }
+  else if (bitcount == 0) {
+    return mi_commit_mask_empty();
+  }
+  else {
+    return (((uintptr_t)1 << bitcount) - 1) << bitidx;
+  }
+}
+
+static inline bool mi_commit_mask_is_empty(mi_commit_mask_t mask) {
+  return (mask == 0);
+}
+
+static inline bool mi_commit_mask_is_full(mi_commit_mask_t mask) {
+  return (~mask == 0);
+}
+
+static inline bool mi_commit_mask_all_set(mi_commit_mask_t commit, mi_commit_mask_t mask) {
+  return ((commit & mask) == mask);
+}
+
+static inline bool mi_commit_mask_any_set(mi_commit_mask_t commit, mi_commit_mask_t mask) {
+  return ((commit & mask) != 0);
+}
+
+static mi_decl_nodiscard inline mi_commit_mask_t mi_commit_mask_intersect(mi_commit_mask_t commit, mi_commit_mask_t mask) {
+  return (commit & mask);
+}
+
+static inline void mi_commit_mask_clear(mi_commit_mask_t* commit, mi_commit_mask_t mask) {
+  *commit = *commit & ~mask;
+}
+
+static inline void mi_commit_mask_set(mi_commit_mask_t* commit, mi_commit_mask_t mask) {
+  *commit = *commit | mask;
+}
+
+#define mi_commit_mask_foreach(mask,idx,count) \
+  idx = 0; \
+  while (mask != 0) {     \
+    /* count ones */      \
+    count = 0;            \
+    while ((mask&1)==1) { \
+      mask >>= 1;         \
+      count++;            \
+    }                     \
+    /* if found, do action */ \
+    if (count > 0) {
+
+#define mi_commit_mask_foreach_end() \
+    } \
+    idx += count; \
+    /* shift out the zero */ \
+    mask >>= 1;   \
+    idx++;        \
+  }
+
 // -------------------------------------------------------------------
 // Fast "random" shuffle
 // -------------------------------------------------------------------

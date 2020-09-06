@@ -268,8 +268,8 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   // mi_segment_delayed_decommit(segment,true,tld->stats);
   
   // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
-  _mi_arena_free(segment, mi_segment_size(segment), segment->memid, 
-                   (~segment->commit_mask == 0 && segment->decommit_mask == 0), segment->mem_is_fixed, tld->os);
+  bool fully_committed = (mi_commit_mask_is_full(segment->commit_mask) && mi_commit_mask_is_empty(segment->decommit_mask));  
+  _mi_arena_free(segment, mi_segment_size(segment), segment->memid, fully_committed, segment->mem_is_fixed, tld->os);
 }
 
 
@@ -339,7 +339,7 @@ void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
    Span management
 ----------------------------------------------------------- */
 
-static uintptr_t mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uint8_t* p, size_t size, uint8_t** start_p, size_t* full_size) {
+static mi_commit_mask_t mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uint8_t* p, size_t size, uint8_t** start_p, size_t* full_size) {
   mi_assert_internal(_mi_ptr_segment(p) == segment);
   if (size == 0 || size > MI_SEGMENT_SIZE) return 0;
   if (p >= (uint8_t*)segment + mi_segment_size(segment)) return 0;
@@ -370,39 +370,38 @@ static uintptr_t mi_segment_commit_mask(mi_segment_t* segment, bool conservative
   }
   mi_assert_internal((bitidx + bitcount) <= (MI_INTPTR_SIZE*8));
 
-  uintptr_t mask = (((uintptr_t)1 << bitcount) - 1) << bitidx;
-  return mask;
+  return mi_commit_mask_create(bitidx, bitcount);
 }
 
 static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, size_t size, mi_stats_t* stats) {    
   // commit liberal, but decommit conservative
   uint8_t* start;
   size_t   full_size;
-  uintptr_t mask = mi_segment_commit_mask(segment,!commit/*conservative*/,p,size,&start,&full_size);  
-  if (mask==0 || full_size==0) return true;
+  mi_commit_mask_t mask = mi_segment_commit_mask(segment,!commit/*conservative*/,p,size,&start,&full_size);  
+  if (mi_commit_mask_is_empty(mask) || full_size==0) return true;
 
-  if (commit && (segment->commit_mask & mask) != mask) {
+  if (commit && !mi_commit_mask_all_set(segment->commit_mask, mask)) {
     bool is_zero = false;
     if (!_mi_os_commit(start,full_size,&is_zero,stats)) return false;
-    segment->commit_mask |= mask;     
+    mi_commit_mask_set(&segment->commit_mask,mask);     
   }
-  else if (!commit && (segment->commit_mask & mask) != 0) {
+  else if (!commit && mi_commit_mask_any_set(segment->commit_mask,mask)) {
     mi_assert_internal((void*)start != (void*)segment);
     _mi_os_decommit(start, full_size, stats);  // ok if this fails
-    segment->commit_mask &= ~mask;
+    mi_commit_mask_clear(&segment->commit_mask, mask);
   }
   // increase expiration of reusing part of the delayed decommit
-  if (commit && (segment->decommit_mask & mask) != 0) {
+  if (commit && mi_commit_mask_any_set(segment->decommit_mask, mask)) {
     segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
   }
   // always undo delayed decommits
-  segment->decommit_mask &= ~mask;   
+  mi_commit_mask_clear(&segment->decommit_mask, mask);   
   mi_assert_internal((segment->commit_mask & segment->decommit_mask) == segment->decommit_mask);
   return true;
 }
 
 static bool mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
-  if (~segment->commit_mask == 0 && segment->decommit_mask==0) return true; // fully committed
+  if (mi_commit_mask_is_full(segment->commit_mask) && mi_commit_mask_is_empty(segment->decommit_mask)) return true; // fully committed
   return mi_segment_commitx(segment,true,p,size,stats);
 }
 
@@ -416,44 +415,36 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
     // register for future decommit in the decommit mask
     uint8_t* start;
     size_t   full_size;
-    uintptr_t mask = mi_segment_commit_mask(segment, true /*conservative*/, p, size, &start, &full_size);
-    if (mask==0 || full_size==0) return;
+    mi_commit_mask_t mask = mi_segment_commit_mask(segment, true /*conservative*/, p, size, &start, &full_size);
+    if (mi_commit_mask_is_empty(mask) || full_size==0) return;
     
     // update delayed commit
-    segment->decommit_mask |= (mask & segment->commit_mask);  // only decommit what is committed; span_free may try to decommit more
+    mi_commit_mask_set(&segment->decommit_mask, mi_commit_mask_intersect(mask,segment->commit_mask));  // only decommit what is committed; span_free may try to decommit more
     segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
   }  
 }
 
 static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_stats_t* stats) {
-  if (segment->decommit_mask == 0) return;
+  if (mi_commit_mask_is_empty(segment->decommit_mask)) return;
   mi_msecs_t now = _mi_clock_now();
   if (!force && now < segment->decommit_expire) return;
 
-  uintptr_t mask = segment->decommit_mask;
+  mi_commit_mask_t mask = segment->decommit_mask;
   segment->decommit_expire = 0;
-  segment->decommit_mask = 0;
+  segment->decommit_mask = mi_commit_mask_empty();
 
-  uintptr_t idx = 0;
-  while (mask != 0) {
-    // count ones
-    size_t count = 0;
-    while ((mask&1)==1) {
-      mask >>= 1;
-      count++;
-    }
+  uintptr_t idx;
+  uintptr_t count;
+  mi_commit_mask_foreach(mask, idx, count) {
     // if found, decommit that sequence
     if (count > 0) {
       uint8_t* p = (uint8_t*)segment + (idx*MI_COMMIT_SIZE);
       size_t size = count * MI_COMMIT_SIZE;
       mi_segment_commitx(segment, false, p, size, stats);
-      idx += count;
     }
-    // shift out the 0
-    mask >>= 1;
-    idx++;
   }
-  mi_assert_internal(segment->decommit_mask == 0);
+  mi_commit_mask_foreach_end()
+  mi_assert_internal(mi_commit_mask_is_empty(segment->decommit_mask));
 }
 
 
@@ -693,10 +684,10 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   }
 
   if (!commit_info_still_good) {
-    segment->commit_mask = (!commit ? 0x01 : ~((uintptr_t)0)); // on lazy commit, the initial part is always committed
+    segment->commit_mask = (!commit ? 0x01 : mi_commit_mask_full()); // on lazy commit, the initial part is always committed
     segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_fixed);
     segment->decommit_expire = 0;
-    segment->decommit_mask = 0;
+    segment->decommit_mask = mi_commit_mask_empty();
   }
 
   // initialize segment info
