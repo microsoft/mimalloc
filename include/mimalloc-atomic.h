@@ -217,27 +217,6 @@ static inline void mi_atomic_storei64_explicit(_Atomic(int64_t)*p, int64_t x, mi
   InterlockedExchange64(p, x);
 #endif
 }
-static inline int64_t mi_atomic_loadi64_explicit(_Atomic(int64_t)* p, mi_memory_order mo) {
-  (void)(mo);
-#if defined(_M_X64)
-  return *p;
-#else
-  int64_t old = *p;
-  int64_t x = old;
-  while ((old = InterlockedCompareExchange64(p, x, old)) != x) {
-    x = old;
-  }
-  return x;
-#endif
-}
-static inline void mi_atomic_storei64_explicit(_Atomic(int64_t)* p, int64_t x, mi_memory_order mo) {
-  (void)(mo);
-#if defined(x_M_IX86) || defined(_M_X64)
-  *p = x;
-#else
-  InterlockedExchange64(p,x);
-#endif
-}
 
 // These are used by the statistics
 static inline int64_t mi_atomic_addi64_relaxed(volatile _Atomic(int64_t)*p, int64_t add) {
