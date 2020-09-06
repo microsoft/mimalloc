@@ -137,7 +137,7 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(_mi_ptr_cookie(segment) == segment->cookie);
   mi_assert_internal(segment->abandoned <= segment->used);
   mi_assert_internal(segment->thread_id == 0 || segment->thread_id == _mi_thread_id());
-  mi_assert_internal((segment->commit_mask & segment->decommit_mask) == segment->decommit_mask); // can only decommit committed blocks
+  mi_assert_internal(mi_commit_mask_all_set(segment->commit_mask, segment->decommit_mask)); // can only decommit committed blocks
   //mi_assert_internal(segment->segment_info_size % MI_SEGMENT_SLICE_SIZE == 0);
   mi_slice_t* slice = &segment->slices[0];
   const mi_slice_t* end = mi_segment_slices_end(segment);
@@ -268,8 +268,7 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   // mi_segment_delayed_decommit(segment,true,tld->stats);
   
   // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
-  bool fully_committed = (mi_commit_mask_is_full(segment->commit_mask) && mi_commit_mask_is_empty(segment->decommit_mask));  
-  _mi_arena_free(segment, mi_segment_size(segment), segment->memid, fully_committed, segment->mem_is_fixed, tld->os);
+  _mi_arena_free(segment, mi_segment_size(segment), segment->memid, segment->commit_mask, segment->mem_is_fixed, tld->os);
 }
 
 
@@ -382,11 +381,15 @@ static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
 
   if (commit && !mi_commit_mask_all_set(segment->commit_mask, mask)) {
     bool is_zero = false;
-    if (!_mi_os_commit(start,full_size,&is_zero,stats)) return false;
+    mi_commit_mask_t cmask = mi_commit_mask_intersect(segment->commit_mask, mask);
+    _mi_stat_decrease(&_mi_stats_main.committed, mi_commit_mask_committed_size(cmask, MI_SEGMENT_SIZE)); // adjust for overlap
+    if (!_mi_os_commit(start,full_size,&is_zero,stats)) return false;    
     mi_commit_mask_set(&segment->commit_mask,mask);     
   }
   else if (!commit && mi_commit_mask_any_set(segment->commit_mask,mask)) {
     mi_assert_internal((void*)start != (void*)segment);
+    mi_commit_mask_t cmask = mi_commit_mask_intersect(segment->commit_mask, mask);
+    _mi_stat_increase(&_mi_stats_main.committed, full_size - mi_commit_mask_committed_size(cmask, MI_SEGMENT_SIZE)); // adjust for overlap
     _mi_os_decommit(start, full_size, stats);  // ok if this fails
     mi_commit_mask_clear(&segment->commit_mask, mask);
   }
@@ -401,6 +404,7 @@ static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
 }
 
 static bool mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
+  mi_assert_internal(mi_commit_mask_all_set(segment->commit_mask, segment->decommit_mask));
   if (mi_commit_mask_is_full(segment->commit_mask) && mi_commit_mask_is_empty(segment->decommit_mask)) return true; // fully committed
   return mi_segment_commitx(segment,true,p,size,stats);
 }
@@ -648,29 +652,30 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   // Commit eagerly only if not the first N lazy segments (to reduce impact of many threads that allocate just a little)
   const bool eager_delay = (tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager = !eager_delay && mi_option_is_enabled(mi_option_eager_commit);
-  bool commit = eager || (required > 0); 
+  const bool commit = eager || (required > 0); 
   
   // Try to get from our cache first
   bool is_zero = false;
   const bool commit_info_still_good = (segment != NULL);
+  mi_commit_mask_t commit_mask = (segment != NULL ? segment->commit_mask : mi_commit_mask_empty());
   if (segment==NULL) {
     // Allocate the segment from the OS
     bool mem_large = (!eager_delay && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy    
     size_t memid = 0;
-    // segment = (mi_segment_t*)_mi_os_alloc_aligned(segment_size, MI_SEGMENT_SIZE, commit, &mem_large, os_tld);
-    segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_zero, &memid, os_tld);
-
+    segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, MI_SEGMENT_SIZE, commit, &commit_mask, &mem_large, &is_zero, &memid, os_tld);
     if (segment == NULL) return NULL;  // failed to allocate
     mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
-    if (!commit) {
+
+    if (!mi_commit_mask_all_set(commit_mask,mi_commit_mask_create(0, 1))) {
       // at least commit the info slices
       mi_assert_internal(MI_COMMIT_SIZE > info_slices*MI_SEGMENT_SLICE_SIZE);
       bool ok = _mi_os_commit(segment, MI_COMMIT_SIZE, &is_zero, tld->stats);
-      if (!ok) return NULL; // failed to commit
+      if (!ok) return NULL; // failed to commit   
+      mi_commit_mask_set(&commit_mask,mi_commit_mask_create(0, 1)); 
     }
     segment->memid = memid;
     segment->mem_is_fixed = mem_large;
-    segment->mem_is_committed = commit;
+    segment->mem_is_committed = mi_commit_mask_is_full(commit_mask);
     mi_segments_track_size((long)(segment_size), tld);
     mi_segment_map_allocated_at(segment);
   }
@@ -684,7 +689,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   }
 
   if (!commit_info_still_good) {
-    segment->commit_mask = (!commit ? 0x01 : mi_commit_mask_full()); // on lazy commit, the initial part is always committed
+    segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
     segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_fixed);
     segment->decommit_expire = 0;
     segment->decommit_mask = mi_commit_mask_empty();

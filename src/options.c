@@ -65,7 +65,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(verbose) },
 
   // the following options are experimental and not all combinations make sense.
-  { 1, UNINIT, MI_OPTION(eager_commit) },        // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
+  { 1, UNINIT, MI_OPTION(eager_commit) },        // commit per segment directly (8MiB)  (but see also `eager_commit_delay`)
   #if defined(_WIN32) || (MI_INTPTR_SIZE <= 4)   // and other OS's without overcommit?
   { 0, UNINIT, MI_OPTION(eager_region_commit) },
   { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
@@ -82,7 +82,7 @@ static mi_option_desc_t options[_mi_option_last] =
 #if defined(__NetBSD__)
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
 #else
-  { 1, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
+  { 4, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
 #endif
   { 1,    UNINIT, MI_OPTION(allow_decommit) },    // decommit pages when not eager committed
   { 250,  UNINIT, MI_OPTION(reset_delay) },       // reset delay in milli-seconds
