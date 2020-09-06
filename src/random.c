@@ -155,20 +155,23 @@ uintptr_t _mi_random_next(mi_random_ctx_t* ctx) {
 
 /* ----------------------------------------------------------------------------
 To initialize a fresh random context we rely on the OS:
-- Windows     : RtlGenRandom
+- Windows     : BCryptGenRandom (or RtlGenRandom)
 - osX,bsd,wasi: arc4random_buf
 - Linux       : getrandom,/dev/urandom
 If we cannot get good randomness, we fall back to weak randomness based on a timer and ASLR.
 -----------------------------------------------------------------------------*/
 
 #if defined(_WIN32)
-// We prefer BCryptGenRandom over RtlGenRandom but it leads to a crash a when using dynamic override combined with the C++ runtime :-( 
+
+#if !defined(MI_USE_RTLGENRANDOM)
+// We prefer BCryptGenRandom over RtlGenRandom
 #pragma comment (lib,"bcrypt.lib")
 #include <bcrypt.h>
 static bool os_random_buf(void* buf, size_t buf_len) {
   return (BCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
 }
-/*
+#else
+// Use (unofficial) RtlGenRandom
 #pragma comment (lib,"advapi32.lib")
 #define RtlGenRandom  SystemFunction036
 #ifdef __cplusplus
@@ -179,12 +182,10 @@ BOOLEAN NTAPI RtlGenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
 }
 #endif
 static bool os_random_buf(void* buf, size_t buf_len) {
-  mi_assert_internal(buf_len >= sizeof(uintptr_t));
-  memset(buf, 0, buf_len);
-  bool ok = (RtlGenRandom(buf, (ULONG)buf_len) != 0);
-  return ok;
+  return (RtlGenRandom(buf, (ULONG)buf_len) != 0);
 }
-*/
+#endif
+
 #elif defined(ANDROID) || defined(XP_DARWIN) || defined(__APPLE__) || defined(__DragonFly__) || \
       defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
       defined(__sun) || defined(__wasi__)
@@ -252,6 +253,7 @@ static bool os_random_buf(void* buf, size_t buf_len) {
 
 uintptr_t _os_random_weak(uintptr_t extra_seed) {
   uintptr_t x = (uintptr_t)&_os_random_weak ^ extra_seed; // ASLR makes the address random
+  
   #if defined(_WIN32)
     LARGE_INTEGER pcount;
     QueryPerformanceCounter(&pcount);
