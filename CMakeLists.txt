@@ -190,7 +190,7 @@ endif()
 
 # extra needed libraries
 if(WIN32)
-  list(APPEND mi_libraries psapi shell32 user32 bcrypt)
+  list(APPEND mi_libraries psapi shell32 user32 advapi32 bcrypt)
 else()
   if(NOT ${CMAKE_C_COMPILER} MATCHES "android")
     list(APPEND mi_libraries pthread)
