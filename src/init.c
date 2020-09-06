@@ -226,7 +226,7 @@ static bool _mi_heap_init(void) {
     tld->segments.stats = &tld->stats;
     tld->segments.os = &tld->os;
     tld->os.stats = &tld->stats;
-    _mi_heap_set_default_direct(heap);
+    _mi_heap_set_default_direct(heap);    
   }
   return false;
 }
@@ -260,9 +260,8 @@ static bool _mi_heap_done(mi_heap_t* heap) {
     _mi_heap_collect_abandon(heap);
   }
   
-
   // merge stats
-  _mi_stats_done(&heap->tld->stats);
+  _mi_stats_done(&heap->tld->stats);  
 
   // free if not the main thread
   if (heap != &_mi_heap_main) {
@@ -362,18 +361,13 @@ void mi_thread_init(void) mi_attr_noexcept
 {
   // ensure our process has started already
   mi_process_init();
-
+  
   // initialize the thread local default heap
   // (this will call `_mi_heap_set_default_direct` and thus set the
   //  fiber/pthread key to a non-zero value, ensuring `_mi_thread_done` is called)
   if (_mi_heap_init()) return;  // returns true if already initialized
 
-  // don't further initialize for the main thread
-  if (_mi_is_main_thread()) return;
-
-  mi_heap_t* const heap = mi_get_default_heap();
-  if (mi_heap_is_initialized(heap)) { _mi_stat_increase(&heap->tld->stats.threads, 1); }
-
+  _mi_stat_increase(&_mi_stats_main.threads, 1);
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
@@ -382,14 +376,11 @@ void mi_thread_done(void) mi_attr_noexcept {
 }
 
 static void _mi_thread_done(mi_heap_t* heap) {
+  _mi_stat_decrease(&_mi_stats_main.threads, 1);
+
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local heaps...
   if (heap->thread_id != _mi_thread_id()) return;
-
-  // stats
-  if (!_mi_is_main_thread() && mi_heap_is_initialized(heap))  {
-    _mi_stat_decrease(&heap->tld->stats.threads, 1);
-  }
-
+  
   // abandon the thread local heap
   if (_mi_heap_done(heap)) return;  // returns true if already ran
 }

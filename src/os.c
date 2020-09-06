@@ -601,14 +601,18 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
   OS API: alloc, free, alloc_aligned
 ----------------------------------------------------------- */
 
-void* _mi_os_alloc(size_t size, mi_stats_t* stats) {
+void* _mi_os_alloc(size_t size, mi_stats_t* tld_stats) {
+  UNUSED(tld_stats);
+  mi_stats_t* stats = &_mi_stats_main;
   if (size == 0) return NULL;
   size = _mi_os_good_alloc_size(size);
   bool is_large = false;
   return mi_os_mem_alloc(size, 0, true, false, &is_large, stats);
 }
 
-void  _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats) {
+void  _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* tld_stats) {
+  UNUSED(tld_stats);
+  mi_stats_t* stats = &_mi_stats_main;
   if (size == 0 || p == NULL) return;
   size = _mi_os_good_alloc_size(size);
   mi_os_mem_free(p, size, was_committed, stats);
@@ -628,7 +632,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* lar
     allow_large = *large;
     *large = false;
   }
-  return mi_os_mem_alloc_aligned(size, alignment, commit, allow_large, (large!=NULL?large:&allow_large), tld->stats);
+  return mi_os_mem_alloc_aligned(size, alignment, commit, allow_large, (large!=NULL?large:&allow_large), &_mi_stats_main /*tld->stats*/ );
 }
 
 
@@ -685,11 +689,11 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   if (csize == 0) return true;  // || _mi_os_is_huge_reserved(addr))
   int err = 0;
   if (commit) {
-    _mi_stat_increase(&stats->committed, csize);
+    _mi_stat_increase(&stats->committed, size);  // use size for precise commit vs. decommit
     _mi_stat_counter_increase(&stats->commit_calls, 1);
   }
   else {
-    _mi_stat_decrease(&stats->committed, csize);
+    _mi_stat_decrease(&stats->committed, size);
   }
 
   #if defined(_WIN32)
@@ -728,16 +732,20 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   return (err == 0);
 }
 
-bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {
+bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats) {
+  UNUSED(tld_stats);
+  mi_stats_t* stats = &_mi_stats_main;
   return mi_os_commitx(addr, size, true, false /* liberal */, is_zero, stats);
 }
 
-bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats) {
+bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* tld_stats) {
+  UNUSED(tld_stats);
+  mi_stats_t* stats = &_mi_stats_main;
   bool is_zero;
   return mi_os_commitx(addr, size, false, true /* conservative */, &is_zero, stats);
 }
 
-bool _mi_os_commit_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {
+static bool mi_os_commit_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {  
   return mi_os_commitx(addr, size, true, true /* conservative */, is_zero, stats);
 }
 
@@ -797,7 +805,9 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
 // but may be used later again. This will release physical memory
 // pages and reduce swapping while keeping the memory committed.
 // We page align to a conservative area inside the range to reset.
-bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
+bool _mi_os_reset(void* addr, size_t size, mi_stats_t* tld_stats) {
+  UNUSED(tld_stats);
+  mi_stats_t* stats = &_mi_stats_main;
   if (mi_option_is_enabled(mi_option_reset_decommits)) {
     return _mi_os_decommit(addr, size, stats);
   }
@@ -806,9 +816,11 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
   }
 }
 
-bool _mi_os_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {
+bool _mi_os_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats) {
+  UNUSED(tld_stats);
+  mi_stats_t* stats = &_mi_stats_main;
   if (mi_option_is_enabled(mi_option_reset_decommits)) {
-    return _mi_os_commit_unreset(addr, size, is_zero, stats);  // re-commit it (conservatively!)
+    return mi_os_commit_unreset(addr, size, is_zero, stats);  // re-commit it (conservatively!)
   }
   else {
     *is_zero = false;
