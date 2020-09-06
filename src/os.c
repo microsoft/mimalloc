@@ -715,7 +715,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   }
   #elif defined(__wasi__)
   // WebAssembly guests can't control memory protection
-  #elif defined(MAP_FIXED)
+  #elif defined(MAP_FIXED) && !defined(__APPLE__)
   if (!commit) {
     // use mmap with MAP_FIXED to discard the existing memory (and reduce commit charge)
     const int fd = mi_unix_mmap_fd();
