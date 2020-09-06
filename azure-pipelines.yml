@@ -100,7 +100,8 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(nproc) -C $(BuildType)
     displayName: Make
-  - script: make test -C $(BuildType)
+  - script: ctest --verbose --timeout 120
+    workingDirectory: $(BuildType)
     displayName: CTest
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-ubuntu-$(BuildType)
