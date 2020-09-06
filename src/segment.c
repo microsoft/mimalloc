@@ -411,7 +411,6 @@ static bool mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_
 
 static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
   if (!segment->allow_decommit) return;
-  if (segment->commit_mask == 1) return; // fully decommitted (1 = the initial segment metadata span)
   if (mi_option_get(mi_option_reset_delay) == 0) {
     mi_segment_commitx(segment, false, p, size, stats);
   }
@@ -666,12 +665,14 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     if (segment == NULL) return NULL;  // failed to allocate
     mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
 
-    if (!mi_commit_mask_all_set(commit_mask,mi_commit_mask_create(0, 1))) {
+    const size_t commit_needed = _mi_divide_up(info_slices*MI_SEGMENT_SLICE_SIZE, MI_COMMIT_SIZE);
+    mi_assert_internal(commit_needed>0);
+    if (!mi_commit_mask_all_set(commit_mask,mi_commit_mask_create(0, commit_needed))) {
       // at least commit the info slices
-      mi_assert_internal(MI_COMMIT_SIZE > info_slices*MI_SEGMENT_SLICE_SIZE);
-      bool ok = _mi_os_commit(segment, MI_COMMIT_SIZE, &is_zero, tld->stats);
+      mi_assert_internal(commit_needed*MI_COMMIT_SIZE > info_slices*MI_SEGMENT_SLICE_SIZE);
+      bool ok = _mi_os_commit(segment, commit_needed*MI_COMMIT_SIZE, &is_zero, tld->stats);
       if (!ok) return NULL; // failed to commit   
-      mi_commit_mask_set(&commit_mask,mi_commit_mask_create(0, 1)); 
+      mi_commit_mask_set(&commit_mask,mi_commit_mask_create(0, commit_needed)); 
     }
     segment->memid = memid;
     segment->mem_is_fixed = mem_large;
