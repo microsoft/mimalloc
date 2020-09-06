@@ -129,20 +129,16 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(sysctl -n hw.ncpu) -C $(BuildType)
     displayName: Make
-<<<<<<< HEAD
-  #- script: make test -C $(BuildType)
-  #  displayName: CTest
-  - script: MIMALLOC_VERBOSE=1 ./mimalloc-test-api
-    workingDirectory: $(BuildType)
-    displayName: TestAPI
-  - script: MIMALLOC_VERBOSE=1 ./mimalloc-test-stress
-    workingDirectory: $(BuildType)
-    displayName: TestStress    
-=======
+  # - script: MIMALLOC_VERBOSE=1 ./mimalloc-test-api
+  #   workingDirectory: $(BuildType)
+  #   displayName: TestAPI
+  # - script: MIMALLOC_VERBOSE=1 ./mimalloc-test-stress
+  #   workingDirectory: $(BuildType)
+  #   displayName: TestStress    
   - script: ctest --verbose --timeout 120
     workingDirectory: $(BuildType)
     displayName: CTest
->>>>>>> dev
+    
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-macos-$(BuildType)
 
