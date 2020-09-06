@@ -12,7 +12,7 @@ jobs:
   displayName: Windows
   pool:
     vmImage:
-     windows-2019
+      windows-2019
   strategy:
     matrix:
       Debug:
@@ -36,10 +36,10 @@ jobs:
     inputs:
       solution: $(BuildType)/libmimalloc.sln
       configuration: '$(MSBuildConfiguration)'
-  - script: |
-      cd $(BuildType)
-      ctest --verbose --timeout 120
-    displayName: CTest
+      msbuildArguments: -m
+- script: ctest --verbose --timeout 120
+  workingDirectory: $(BuildType)
+  displayName: CTest
   #- script: $(BuildType)\$(BuildType)\mimalloc-test-stress
   #  displayName: TestStress
   #- upload: $(Build.SourcesDirectory)/$(BuildType)
@@ -99,7 +99,8 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(nproc) -C $(BuildType)
     displayName: Make
-  - script: make test -C $(BuildType)
+  - script: ctest --verbose --timeout 120
+    workingDirectory: $(BuildType)
     displayName: CTest
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-ubuntu-$(BuildType)
@@ -127,7 +128,8 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(sysctl -n hw.ncpu) -C $(BuildType)
     displayName: Make
-  - script: make test -C $(BuildType)
+  - script: ctest --verbose --timeout 120
+    workingDirectory: $(BuildType)
     displayName: CTest
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-macos-$(BuildType)
