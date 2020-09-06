@@ -716,20 +716,35 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   #elif defined(__wasi__)
   // WebAssembly guests can't control memory protection
   #elif defined(MAP_FIXED) && !defined(__APPLE__)
+  // Linux
   if (!commit) {
-    // use mmap with MAP_FIXED to discard the existing memory (and reduce commit charge)
+    // decommit: use mmap with MAP_FIXED to discard the existing memory (and reduce rss)
     const int fd = mi_unix_mmap_fd();
     void* p = mmap(start, csize, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), fd, 0);
     if (p != start) { err = errno; }
   }
   else {
-    // for commit, just change the protection
+    // commit: just change the protection
     err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
     if (err != 0) { err = errno; }
   }
   #else
-  err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
-  if (err != 0) { err = errno; }
+  // MacOS and others.
+  if (!commit) {
+    #if defined(MADV_DONTNEED)
+    // decommit: use MADV_DONTNEED as it decrease rss immediately (unlike MADV_FREE)
+    err = madvise(start, csize, MADV_DONTNEED);
+    #else
+    // decommit: just disable access
+    err = mprotect(start, csize, PROT_NONE);
+    if (err != 0) { err = errno; }
+    #endif
+  }
+  else {
+    // commit: ensure we can access the area
+    err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
+    if (err != 0) { err = errno; }
+  }
   #endif
   if (err != 0) {
     _mi_warning_message("%s error: start: %p, csize: 0x%x, err: %i\n", commit ? "commit" : "decommit", start, csize, err);
