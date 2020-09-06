@@ -303,13 +303,17 @@ static void test_aslr(void) {
 }
 
 static void test_process_info(void) {
-  double utime = 0;
-  double stime = 0;
+  size_t user_msecs = 0;
+  size_t system_msecs = 0;
   size_t current_rss = 0;
   size_t peak_rss = 0;
   size_t current_commit = 0;
   size_t peak_commit = 0;
-  size_t page_faults = 0;
-  mi_process_info(&utime, &stime, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
-  printf("process info: user: %.3f s, rss: %zd b, commit: %zd b\n\n", utime, peak_rss, peak_commit);
+  size_t page_faults = 0;  
+  for (int i = 0; i < 100000; i++) {
+    void* p = calloc(100,10);
+    free(p);
+  }
+  mi_process_info(&user_msecs, &system_msecs, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
+  printf("\n\n*** process info: user: %3zd.%03zd s, rss: %zd b, commit: %zd b\n\n", user_msecs/1000, user_msecs%1000, peak_rss, peak_commit);
 }

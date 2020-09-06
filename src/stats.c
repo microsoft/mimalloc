@@ -543,7 +543,7 @@ static void mi_stat_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* c
 #endif
 
 
-mi_decl_export void mi_process_info(double* user_time, double* system_time, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept
+mi_decl_export void mi_process_info(size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept
 {
   mi_msecs_t utime = 0;
   mi_msecs_t stime = 0;
@@ -553,8 +553,8 @@ mi_decl_export void mi_process_info(double* user_time, double* system_time, size
   size_t peak_commit0 = 0;
   size_t page_faults0 = 0;  
   mi_stat_process_info(&utime, &stime, &current_rss0, &peak_rss0, &current_commit0, &peak_commit0, &page_faults0);
-  if (user_time!=NULL)      *user_time      = ((double)(utime/1000)) + (((double)(utime%1000))*1e-3);
-  if (system_time!=NULL)    *system_time    = ((double)(stime/1000)) + (((double)(stime%1000))*1e-3);
+  if (user_msecs!=NULL)     *user_msecs     = (utime < 0 ? 0 : (utime < (mi_msecs_t)SIZE_MAX ? (size_t)utime : SIZE_MAX));
+  if (system_msecs!=NULL)   *system_msecs   = (stime < 0 ? 0 : (stime < (mi_msecs_t)SIZE_MAX ? (size_t)stime : SIZE_MAX));
   if (current_rss!=NULL)    *current_rss    = current_rss0;
   if (peak_rss!=NULL)       *peak_rss       = peak_rss0;
   if (current_commit!=NULL) *current_commit = current_commit0;
