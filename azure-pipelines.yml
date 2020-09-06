@@ -36,10 +36,10 @@ jobs:
     inputs:
       solution: $(BuildType)/libmimalloc.sln
       configuration: '$(MSBuildConfiguration)'
-  - script: |
-      cd $(BuildType)
-      ctest --verbose --timeout 120
-    displayName: CTest
+  #- script: |
+  #    cd $(BuildType)
+  #    ctest --verbose --timeout 120
+  #  displayName: CTest
   #- script: $(BuildType)\$(BuildType)\mimalloc-test-stress
   #  displayName: TestStress
   #- upload: $(Build.SourcesDirectory)/$(BuildType)
