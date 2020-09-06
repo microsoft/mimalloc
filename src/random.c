@@ -170,6 +170,7 @@ static bool os_random_buf(void* buf, size_t buf_len) {
   return (BCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
 }
 */
+#pragma comment (lib,"advapi32.lib")
 #define RtlGenRandom  SystemFunction036
 #ifdef __cplusplus
 extern "C" {
@@ -181,8 +182,8 @@ BOOLEAN NTAPI RtlGenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
 static bool os_random_buf(void* buf, size_t buf_len) {
   mi_assert_internal(buf_len >= sizeof(uintptr_t));
   memset(buf, 0, buf_len);
-  RtlGenRandom(buf, (ULONG)buf_len);
-  return (((uintptr_t*)buf)[0] != 0);  // sanity check (but RtlGenRandom should never fail)
+  bool ok = (RtlGenRandom(buf, (ULONG)buf_len) != 0);
+  return ok;
 }
 
 #elif defined(ANDROID) || defined(XP_DARWIN) || defined(__APPLE__) || defined(__DragonFly__) || \
