@@ -261,7 +261,7 @@ typedef enum mi_page_kind_e {
 typedef struct mi_segment_s {
   // memory fields
   size_t               memid;            // id for the os-level memory manager
-  bool                 mem_is_fixed;     // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)
+  bool                 mem_is_pinned;    // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)
   bool                 mem_is_committed; // `true` if the whole segment is eagerly committed  
 
   // segment fields

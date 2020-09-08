@@ -231,7 +231,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
 static void mi_page_reset(mi_segment_t* segment, mi_page_t* page, size_t size, mi_segments_tld_t* tld) {
   mi_assert_internal(page->is_committed);
   if (!mi_option_is_enabled(mi_option_page_reset)) return;
-  if (segment->mem_is_fixed || page->segment_in_use || !page->is_committed || page->is_reset) return;
+  if (segment->mem_is_pinned || page->segment_in_use || !page->is_committed || page->is_reset) return;
   size_t psize;
   void* start = mi_segment_raw_page_start(segment, page, &psize);
   page->is_reset = true;
@@ -244,8 +244,8 @@ static bool mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size,
 {
   mi_assert_internal(page->is_reset);
   mi_assert_internal(page->is_committed);
-  mi_assert_internal(!segment->mem_is_fixed);
-  if (segment->mem_is_fixed || !page->is_committed || !page->is_reset) return true;
+  mi_assert_internal(!segment->mem_is_pinned);
+  if (segment->mem_is_pinned || !page->is_committed || !page->is_reset) return true;
   page->is_reset = false;
   size_t psize;
   uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
@@ -284,7 +284,7 @@ static void mi_pages_reset_add(mi_segment_t* segment, mi_page_t* page, mi_segmen
   mi_assert_expensive(!mi_pages_reset_contains(page, tld));
   mi_assert_internal(_mi_page_segment(page)==segment);
   if (!mi_option_is_enabled(mi_option_page_reset)) return;
-  if (segment->mem_is_fixed || page->segment_in_use || !page->is_committed || page->is_reset) return;
+  if (segment->mem_is_pinned || page->segment_in_use || !page->is_committed || page->is_reset) return;
 
   if (mi_option_get(mi_option_reset_delay) == 0) {
     // reset immediately?
@@ -324,7 +324,7 @@ static void mi_pages_reset_remove(mi_page_t* page, mi_segments_tld_t* tld) {
 }
 
 static void mi_pages_reset_remove_all_in_segment(mi_segment_t* segment, bool force_reset, mi_segments_tld_t* tld) {
-  if (segment->mem_is_fixed) return; // never reset in huge OS pages
+  if (segment->mem_is_pinned) return; // never reset in huge OS pages
   for (size_t i = 0; i < segment->capacity; i++) {
     mi_page_t* page = &segment->pages[i];
     if (!page->segment_in_use && page->is_committed && !page->is_reset) {
@@ -458,7 +458,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   segment->thread_id = 0;
   mi_segments_track_size(-((long)segment_size),tld);
   if (MI_SECURE != 0) {
-    mi_assert_internal(!segment->mem_is_fixed);
+    mi_assert_internal(!segment->mem_is_pinned);
     mi_segment_protect(segment, false, tld->os); // ensure no more guard pages are set
   }
 
@@ -587,7 +587,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     else
     {
       if (MI_SECURE!=0) {
-        mi_assert_internal(!segment->mem_is_fixed);
+        mi_assert_internal(!segment->mem_is_pinned);
         mi_segment_protect(segment, false, tld->os); // reset protection if the page kind differs
       }
       // different page kinds; unreset any reset pages, and unprotect
@@ -615,10 +615,12 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     // Allocate the segment from the OS
     size_t memid;
     bool   mem_large = (!eager_delayed && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy
-    segment = (mi_segment_t*)_mi_mem_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_zero, &memid, os_tld);
+    bool   is_pinned = false;
+    segment = (mi_segment_t*)_mi_mem_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_pinned, &is_zero, &memid, os_tld);
     if (segment == NULL) return NULL;  // failed to allocate
     if (!commit) {
       // ensure the initial info is committed
+      mi_assert_internal(!mem_large && !is_pinned);
       bool commit_zero = false;
       bool ok = _mi_mem_commit(segment, pre_size, &commit_zero, tld->os);
       if (commit_zero) is_zero = true;
@@ -629,12 +631,12 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
       }
     }
     segment->memid = memid;
-    segment->mem_is_fixed = mem_large;
+    segment->mem_is_pinned = (mem_large || is_pinned);
     segment->mem_is_committed = commit;    
     mi_segments_track_size((long)segment_size, tld);
   }
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
-  mi_assert_internal(segment->mem_is_fixed ? segment->mem_is_committed : true);  
+  mi_assert_internal(segment->mem_is_pinned ? segment->mem_is_committed : true);  
   mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);  // tsan
   if (!pages_still_good) {
     // zero the segment info (but not the `mem` fields)
@@ -719,7 +721,7 @@ static bool mi_segment_page_claim(mi_segment_t* segment, mi_page_t* page, mi_seg
   mi_pages_reset_remove(page, tld);
   // check commit
   if (!page->is_committed) {
-    mi_assert_internal(!segment->mem_is_fixed);
+    mi_assert_internal(!segment->mem_is_pinned);
     mi_assert_internal(!page->is_reset);    
     size_t psize;
     uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
@@ -736,7 +738,7 @@ static bool mi_segment_page_claim(mi_segment_t* segment, mi_page_t* page, mi_seg
   segment->used++;
   // check reset
   if (page->is_reset) {
-    mi_assert_internal(!segment->mem_is_fixed);
+    mi_assert_internal(!segment->mem_is_pinned);
     bool ok = mi_page_unreset(segment, page, 0, tld); 
     if (!ok) {
       page->segment_in_use = false;
