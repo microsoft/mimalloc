@@ -7,7 +7,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
-#include "bitmap.inc.c"  // mi_bsr
 
 #include <string.h>  // memset
 #include <stdio.h>
@@ -49,29 +48,26 @@ static uint8_t* mi_slice_start(const mi_slice_t* slice) {
    Bins
 ----------------------------------------------------------- */
 // Use bit scan forward to quickly find the first zero bit if it is available
-#if !defined(MI_HAVE_BITSCAN)
-#error "define bsr for your platform"
-#endif
 
-static size_t mi_slice_bin8(size_t slice_count) {
+static inline size_t mi_slice_bin8(size_t slice_count) {
   if (slice_count<=1) return slice_count;
   mi_assert_internal(slice_count <= MI_SLICES_PER_SEGMENT);
   slice_count--;
-  size_t s = mi_bsr(slice_count);
+  size_t s = mi_bsr(slice_count);  // slice_count > 1
   if (s <= 2) return slice_count + 1;
   size_t bin = ((s << 2) | ((slice_count >> (s - 2))&0x03)) - 4;
   return bin;
 }
 
-static size_t mi_slice_bin(size_t slice_count) {
+static inline size_t mi_slice_bin(size_t slice_count) {
   mi_assert_internal(slice_count*MI_SEGMENT_SLICE_SIZE <= MI_SEGMENT_SIZE);
   mi_assert_internal(mi_slice_bin8(MI_SLICES_PER_SEGMENT) <= MI_SEGMENT_BIN_MAX);
-  size_t bin = (slice_count==0 ? 0 : mi_slice_bin8(slice_count));
+  size_t bin = mi_slice_bin8(slice_count);
   mi_assert_internal(bin <= MI_SEGMENT_BIN_MAX);
   return bin;
 }
 
-static size_t mi_slice_index(const mi_slice_t* slice) {
+static inline size_t mi_slice_index(const mi_slice_t* slice) {
   mi_segment_t* segment = _mi_ptr_segment(slice);
   ptrdiff_t index = slice - segment->slices;
   mi_assert_internal(index >= 0 && index < (ptrdiff_t)segment->slice_entries);
@@ -1436,7 +1432,7 @@ static mi_segment_t* _mi_segment_of(const void* p) {
   }
   if (index==0) return NULL;
   // search downwards for the first segment in case it is an interior pointer
-  // could be slow but searches in MI_INTPTR_SIZE * MI_SEGMENT_SIZE (4GiB) steps trough 
+  // could be slow but searches in MI_INTPTR_SIZE * MI_SEGMENT_SIZE (512MiB) steps trough 
   // valid huge objects
   // note: we could maintain a lowest index to speed up the path for invalid pointers?
   size_t lobitidx;
@@ -1444,14 +1440,14 @@ static mi_segment_t* _mi_segment_of(const void* p) {
   uintptr_t lobits = mask & (((uintptr_t)1 << bitidx) - 1);
   if (lobits != 0) {
     loindex = index;
-    lobitidx = _mi_bsr(lobits);
+    lobitidx = mi_bsr(lobits);    // lobits != 0
   }
   else {
     uintptr_t lomask = mask;
     loindex = index - 1;
     while (loindex > 0 && (lomask = mi_atomic_load_relaxed(&mi_segment_map[loindex])) == 0) loindex--;
     if (loindex==0) return NULL;
-    lobitidx = _mi_bsr(lomask);
+    lobitidx = mi_bsr(lomask);    // lomask != 0
   }
   // take difference as the addresses could be larger than the MAX_ADDRESS space.
   size_t diff = (((index - loindex) * (8*MI_INTPTR_SIZE)) + bitidx - lobitidx) * MI_SEGMENT_SIZE;

@@ -368,7 +368,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   const int fd = mi_unix_mmap_fd();
   #if defined(MAP_ALIGNED)  // BSD
   if (try_alignment > 0) {
-    size_t n = _mi_bsr(try_alignment);
+    size_t n = mi_bsr(try_alignment);
     if (((size_t)1 << n) == try_alignment && n >= 12 && n <= 30) {  // alignment is a power of 2 and 4096 <= alignment <= 1GiB
       flags |= MAP_ALIGNED(n);
     }

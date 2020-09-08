@@ -109,7 +109,6 @@ void       _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback fro
 
 size_t     _mi_bin_size(uint8_t bin);           // for stats
 uint8_t    _mi_bin(size_t size);                // for stats
-uint8_t    _mi_bsr(uintptr_t x);                // bit-scan-right, used on BSD in "os.c"
 
 // "heap.c"
 void       _mi_heap_destroy_pages(mi_heap_t* heap);
@@ -858,6 +857,109 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
   return (uintptr_t)&_mi_heap_default;
 }
 #endif
+
+// -----------------------------------------------------------------------
+// Count bits: trailing or leading zeros (with MI_INTPTR_BITS on all zero)
+// -----------------------------------------------------------------------
+
+#if defined(__GNUC__)
+
+#include <limits.h>       // LONG_MAX
+#define MI_HAVE_FAST_BITSCAN
+static inline size_t mi_clz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;
+#if (INTPTR_MAX == LONG_MAX)
+  return __builtin_clzl(x);
+#else
+  return __builtin_clzll(x);
+#endif
+}
+static inline size_t mi_ctz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;
+#if (INTPTR_MAX == LONG_MAX)
+  return __builtin_ctzl(x);
+#else
+  return __builtin_ctzll(x);
+#endif
+}
+
+#elif defined(_MSC_VER) 
+
+#include <limits.h>       // LONG_MAX
+#define MI_HAVE_FAST_BITSCAN
+static inline size_t mi_clz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;
+  unsigned long idx;
+#if (INTPTR_MAX == LONG_MAX)
+  _BitScanReverse(&idx, x);
+#else
+  _BitScanReverse64(&idx, x);
+#endif  
+  return ((MI_INTPTR_BITS - 1) - idx);
+}
+static inline size_t mi_ctz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;
+  unsigned long idx;
+#if (INTPTR_MAX == LONG_MAX)
+  _BitScanForward(&idx, x);
+#else
+  _BitScanForward64(&idx, x);
+#endif  
+  return idx;
+}
+
+#else
+static inline size_t mi_ctz32(uint32_t x) {
+  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
+  static const unsigned char debruijn[32] = {
+    0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
+  };
+  if (x==0) return 32;
+  return debruijn[((x & -(int32_t)x) * 0x077CB531UL) >> 27];
+}
+static inline size_t mi_clz32(uint32_t x) {
+  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
+  static const uint8_t debruijn[32] = {
+    31, 22, 30, 21, 18, 10, 29, 2, 20, 17, 15, 13, 9, 6, 28, 1,
+    23, 19, 11, 3, 16, 14, 7, 24, 12, 4, 8, 25, 5, 26, 27, 0
+  };
+  if (x==0) return 32;
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  return debruijn[(uint32_t)(x * 0x07C4ACDDUL) >> 27];
+}
+
+static inline size_t mi_clz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;  
+#if (MI_INTPTR_BITS <= 32)
+  return mi_clz32((uint32_t)x);
+#else
+  size_t count = mi_clz32((uint32_t)(x >> 32));
+  if (count < 32) return count;
+  return (32 + mi_clz32((uint32_t)x));
+#endif
+}
+static inline size_t mi_ctz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;
+#if (MI_INTPTR_BITS <= 32)
+  return mi_ctz32((uint32_t)x);
+#else
+  size_t count = mi_ctz32((uint32_t)x);
+  if (count < 32) return count;
+  return (32 + mi_ctz32((uint32_t)(x>>32)));
+#endif
+}
+
+#endif
+
+// "bit scan reverse": Return index of the highest bit (or MI_INTPTR_BITS if `x` is zero)
+static inline size_t mi_bsr(uintptr_t x) {
+  return (x==0 ? MI_INTPTR_BITS : MI_INTPTR_BITS - 1 - mi_clz(x));
+}
 
 
 #endif

@@ -37,7 +37,7 @@ Possible issues:
 
 #include <string.h>  // memset
 
-#include "bitmap.inc.c"
+#include "bitmap.h"
 
 // Internal raw OS interface
 size_t  _mi_os_large_page_size();
@@ -200,7 +200,7 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   mi_atomic_store_release(&r->commit, (region_commit ? MI_BITMAP_FIELD_FULL : 0));
   mi_atomic_store_release(&r->reset, (uintptr_t)0);
   *bit_idx = 0;
-  mi_bitmap_claim(&r->in_use, 1, blocks, *bit_idx, NULL);
+  _mi_bitmap_claim(&r->in_use, 1, blocks, *bit_idx, NULL);
   mi_atomic_store_ptr_release(void,&r->start, start);
 
   // and share it 
@@ -248,7 +248,7 @@ static bool mi_region_try_claim(int numa_node, size_t blocks, bool allow_large, 
     // if this region suits our demand (numa node matches, large OS page matches)
     if (mi_region_is_suitable(r, numa_node, allow_large)) {
       // then try to atomically claim a segment(s) in this region
-      if (mi_bitmap_try_find_claim_field(&r->in_use, 0, blocks, bit_idx)) {
+      if (_mi_bitmap_try_find_claim_field(&r->in_use, 0, blocks, bit_idx)) {
         tld->region_idx = idx;    // remember the last found position
         *region = r;
         return true;
@@ -277,7 +277,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
   // ------------------------------------------------
   // found a region and claimed `blocks` at `bit_idx`, initialize them now
   mi_assert_internal(region != NULL);
-  mi_assert_internal(mi_bitmap_is_claimed(&region->in_use, 1, blocks, bit_idx));
+  mi_assert_internal(_mi_bitmap_is_claimed(&region->in_use, 1, blocks, bit_idx));
 
   mi_region_info_t info;
   info.value = mi_atomic_load_acquire(&region->info);
@@ -285,7 +285,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
   mi_assert_internal(!(info.x.is_large && !*is_large));
   mi_assert_internal(start != NULL);
 
-  *is_zero = mi_bitmap_claim(&region->dirty, 1, blocks, bit_idx, NULL);  
+  *is_zero = _mi_bitmap_claim(&region->dirty, 1, blocks, bit_idx, NULL);  
   *is_large = info.x.is_large;
   *memid = mi_memid_create(region, bit_idx);
   void* p = start + (mi_bitmap_index_bit_in_field(bit_idx) * MI_SEGMENT_SIZE);
@@ -294,7 +294,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
   if (*commit) {
     // ensure commit
     bool any_uncommitted;
-    mi_bitmap_claim(&region->commit, 1, blocks, bit_idx, &any_uncommitted);
+    _mi_bitmap_claim(&region->commit, 1, blocks, bit_idx, &any_uncommitted);
     if (any_uncommitted) {
       mi_assert_internal(!info.x.is_large);
       bool commit_zero;
@@ -304,12 +304,12 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
   }
   else {
     // no need to commit, but check if already fully committed
-    *commit = mi_bitmap_is_claimed(&region->commit, 1, blocks, bit_idx);
+    *commit = _mi_bitmap_is_claimed(&region->commit, 1, blocks, bit_idx);
   }  
-  mi_assert_internal(!*commit || mi_bitmap_is_claimed(&region->commit, 1, blocks, bit_idx));
+  mi_assert_internal(!*commit || _mi_bitmap_is_claimed(&region->commit, 1, blocks, bit_idx));
 
   // unreset reset blocks
-  if (mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx)) {
+  if (_mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx)) {
     // some blocks are still reset
     mi_assert_internal(!info.x.is_large);
     mi_assert_internal(!mi_option_is_enabled(mi_option_eager_commit) || *commit || mi_option_get(mi_option_eager_commit_delay) > 0); 
@@ -320,7 +320,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
       if (reset_zero) *is_zero = true;
     }
   }
-  mi_assert_internal(!mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx));
+  mi_assert_internal(!_mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx));
   
   #if (MI_DEBUG>=2)
   if (*commit) { ((uint8_t*)p)[0] = 0; }
@@ -409,12 +409,12 @@ void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_re
 
     // committed?
     if (full_commit && (size % MI_SEGMENT_SIZE) == 0) {
-      mi_bitmap_claim(&region->commit, 1, blocks, bit_idx, NULL);
+      _mi_bitmap_claim(&region->commit, 1, blocks, bit_idx, NULL);
     }
 
     if (any_reset) {
       // set the is_reset bits if any pages were reset
-      mi_bitmap_claim(&region->reset, 1, blocks, bit_idx, NULL);
+      _mi_bitmap_claim(&region->reset, 1, blocks, bit_idx, NULL);
     }
 
     // reset the blocks to reduce the working set.
@@ -423,7 +423,7 @@ void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_re
            mi_option_is_enabled(mi_option_reset_decommits))) // cannot reset halfway committed segments, use only `option_page_reset` instead            
     {
       bool any_unreset;
-      mi_bitmap_claim(&region->reset, 1, blocks, bit_idx, &any_unreset);
+      _mi_bitmap_claim(&region->reset, 1, blocks, bit_idx, &any_unreset);
       if (any_unreset) {
         _mi_abandoned_await_readers(); // ensure no more pending write (in case reset = decommit)
         _mi_mem_reset(p, blocks * MI_SEGMENT_SIZE, tld);

@@ -23,7 +23,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "stats.c"
 #include "random.c"
 #include "os.c"
-//#include "memory.c"
+#include "bitmap.c"
 #include "arena.c"
 #include "segment.c"
 #include "page.c"

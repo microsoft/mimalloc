@@ -28,7 +28,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 #include <string.h>  // memset
 #include <errno.h> // ENOMEM
 
-#include "bitmap.inc.c"  // atomic bitmap
+#include "bitmap.h"  // atomic bitmap
 
 
 // os.c
@@ -105,7 +105,7 @@ static size_t mi_block_count_of_size(size_t size) {
 static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* bitmap_idx)
 {
   size_t idx = mi_atomic_load_acquire(&arena->search_idx);  // start from last search
-  if (mi_bitmap_try_find_from_claim_across(arena->blocks_inuse, arena->field_count, idx, blocks, bitmap_idx)) {
+  if (_mi_bitmap_try_find_from_claim_across(arena->blocks_inuse, arena->field_count, idx, blocks, bitmap_idx)) {
     mi_atomic_store_release(&arena->search_idx, idx);  // start search from here next time
     return true;
   };
@@ -154,11 +154,11 @@ static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool com
   mi_bitmap_index_t bitidx = 0;
   bool claimed = false;
   if (*large) {  // large allowed?
-    claimed = mi_bitmap_try_find_from_claim(cache_available_large, MI_CACHE_FIELDS, start_field, 1, &bitidx);
+    claimed = _mi_bitmap_try_find_from_claim(cache_available_large, MI_CACHE_FIELDS, start_field, 1, &bitidx);
     if (claimed) *large = true;
   }
   if (!claimed) {
-    claimed = mi_bitmap_try_find_from_claim(cache_available, MI_CACHE_FIELDS, start_field, 1, &bitidx);
+    claimed = _mi_bitmap_try_find_from_claim(cache_available, MI_CACHE_FIELDS, start_field, 1, &bitidx);
     if (claimed) *large = false;
   }
 
@@ -189,8 +189,8 @@ static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool com
   *commit_mask = cmask;
   
   // mark the slot as free again
-  mi_assert_internal(mi_bitmap_is_claimed(cache_inuse, MI_CACHE_FIELDS, 1, bitidx));
-  mi_bitmap_unclaim(cache_inuse, MI_CACHE_FIELDS, 1, bitidx);
+  mi_assert_internal(_mi_bitmap_is_claimed(cache_inuse, MI_CACHE_FIELDS, 1, bitidx));
+  _mi_bitmap_unclaim(cache_inuse, MI_CACHE_FIELDS, 1, bitidx);
   return p;
 }
 
@@ -231,19 +231,19 @@ static void mi_cache_purge(mi_os_tld_t* tld) {
       // seems expired, first claim it from available
       purged++;
       mi_bitmap_index_t bitidx = mi_bitmap_index_create_from_bit(idx);
-      if (mi_bitmap_claim(cache_available, MI_CACHE_FIELDS, 1, bitidx, NULL)) {
+      if (_mi_bitmap_claim(cache_available, MI_CACHE_FIELDS, 1, bitidx, NULL)) {
         // was available, we claimed it
         expire = mi_atomic_loadi64_acquire(&slot->expire);
         if (expire != 0 && now >= expire) {  // safe read
           // still expired, decommit it
           mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
-          mi_assert_internal(!mi_commit_mask_is_empty(slot->commit_mask) && mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
+          mi_assert_internal(!mi_commit_mask_is_empty(slot->commit_mask) && _mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
           _mi_abandoned_await_readers();  // wait until safe to decommit
           // decommit committed parts
           mi_commit_mask_decommit(&slot->commit_mask, slot->p, MI_SEGMENT_SIZE, tld->stats);
           //_mi_os_decommit(slot->p, MI_SEGMENT_SIZE, tld->stats);
         }
-        mi_bitmap_unclaim(cache_available, MI_CACHE_FIELDS, 1, bitidx); // make it available again for a pop
+        _mi_bitmap_unclaim(cache_available, MI_CACHE_FIELDS, 1, bitidx); // make it available again for a pop
       }
       if (purged > 4) break;  // bound to no more than 4 purge tries per push
     }
@@ -268,11 +268,11 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, mi_commit_mask
 
   // find an available slot
   mi_bitmap_index_t bitidx;
-  bool claimed = mi_bitmap_try_find_from_claim(cache_inuse, MI_CACHE_FIELDS, start_field, 1, &bitidx);
+  bool claimed = _mi_bitmap_try_find_from_claim(cache_inuse, MI_CACHE_FIELDS, start_field, 1, &bitidx);
   if (!claimed) return false;
 
-  mi_assert_internal(mi_bitmap_is_claimed(cache_available, MI_CACHE_FIELDS, 1, bitidx));
-  mi_assert_internal(mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
+  mi_assert_internal(_mi_bitmap_is_claimed(cache_available, MI_CACHE_FIELDS, 1, bitidx));
+  mi_assert_internal(_mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
 
   // set the slot
   mi_cache_slot_t* slot = &cache[mi_bitmap_index_bit(bitidx)];
@@ -292,7 +292,7 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, mi_commit_mask
   }
   
   // make it available
-  mi_bitmap_unclaim((is_large ? cache_available_large : cache_available), MI_CACHE_FIELDS, 1, bitidx);
+  _mi_bitmap_unclaim((is_large ? cache_available_large : cache_available), MI_CACHE_FIELDS, 1, bitidx);
   return true;
 }
 
@@ -310,7 +310,7 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   // claimed it! set the dirty bits (todo: no need for an atomic op here?)
   void* p  = arena->start + (mi_bitmap_index_bit(bitmap_index)*MI_ARENA_BLOCK_SIZE);
   *memid   = mi_arena_id_create(arena_index, bitmap_index);
-  *is_zero = mi_bitmap_claim_across(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
+  *is_zero = _mi_bitmap_claim_across(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
   *large   = arena->is_large;
   if (arena->is_committed) {
     // always committed
@@ -319,7 +319,7 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   else if (*commit) {
     // arena not committed as a whole, but commit requested: ensure commit now
     bool any_uncommitted;
-    mi_bitmap_claim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted);
+    _mi_bitmap_claim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted);
     if (any_uncommitted) {
       bool commit_zero;
       _mi_os_commit(p, needed_bcount * MI_ARENA_BLOCK_SIZE, &commit_zero, tld->stats);
@@ -328,7 +328,7 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   }
   else {
     // no need to commit, but check if already fully committed
-    *commit = mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
+    *commit = _mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
   }
   return p;
 }
@@ -443,7 +443,7 @@ void _mi_arena_free(void* p, size_t size, size_t memid, mi_commit_mask_t commit_
       return;
     }
     const size_t blocks = mi_block_count_of_size(size);
-    bool ones = mi_bitmap_unclaim_across(arena->blocks_inuse, arena->field_count, blocks, bitmap_idx);
+    bool ones = _mi_bitmap_unclaim_across(arena->blocks_inuse, arena->field_count, blocks, bitmap_idx);
     if (!ones) {
       _mi_error_message(EAGAIN, "trying to free an already freed block: %p, size %zu\n", p, size);
       return;
@@ -495,7 +495,7 @@ bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_la
   if (post > 0) {
     // don't use leftover bits at the end
     mi_bitmap_index_t postidx = mi_bitmap_index_create(fields - 1, MI_BITMAP_FIELD_BITS - post);
-    mi_bitmap_claim(arena->blocks_inuse, fields, post, postidx, NULL);
+    _mi_bitmap_claim(arena->blocks_inuse, fields, post, postidx, NULL);
   }
 
   mi_arena_add(arena);
