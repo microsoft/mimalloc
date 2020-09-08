@@ -6,8 +6,9 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 /* ----------------------------------------------------------------------------
-  Implements a cache of segments to avoid expensive OS calls
-  and also the full memory map of all segments.
+  Implements a cache of segments to avoid expensive OS calls and to reuse
+  the commit_mask to optimize the commit/decommit calls.
+  The full memory map of all segments is also implemented here.
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
