@@ -136,7 +136,7 @@ static mi_bitmap_field_t cache_available_large[MI_CACHE_FIELDS] = { MI_CACHE_BIT
 static mi_bitmap_field_t cache_inuse[MI_CACHE_FIELDS];   // zero bit = free
 
 
-static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool commit, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld) {
+static mi_decl_noinline void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool commit, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld) {
   UNUSED(tld);
   UNUSED(commit);
 
@@ -194,7 +194,7 @@ static void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool com
   return p;
 }
 
-static void mi_commit_mask_decommit(mi_commit_mask_t* cmask, void* p, size_t total, mi_stats_t* stats) {
+static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, void* p, size_t total, mi_stats_t* stats) {
   if (mi_commit_mask_is_empty(*cmask)) {
     // nothing
   }    
@@ -218,7 +218,7 @@ static void mi_commit_mask_decommit(mi_commit_mask_t* cmask, void* p, size_t tot
   *cmask = mi_commit_mask_empty();
 }
 
-static void mi_cache_purge(mi_os_tld_t* tld) {
+static mi_decl_noinline void mi_cache_purge(mi_os_tld_t* tld) {
   UNUSED(tld);
   mi_msecs_t now = _mi_clock_now();
   size_t idx = (_mi_random_shuffle((uintptr_t)now) % MI_CACHE_MAX);            // random start
@@ -250,7 +250,7 @@ static void mi_cache_purge(mi_os_tld_t* tld) {
   }
 }
 
-static bool mi_cache_push(void* start, size_t size, size_t memid, mi_commit_mask_t commit_mask, bool is_large, mi_os_tld_t* tld) 
+static mi_decl_noinline bool mi_cache_push(void* start, size_t size, size_t memid, mi_commit_mask_t commit_mask, bool is_large, mi_os_tld_t* tld)
 {
   // only for segment blocks
   if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
@@ -301,8 +301,8 @@ static bool mi_cache_push(void* start, size_t size, size_t memid, mi_commit_mask
   Arena Allocation
 ----------------------------------------------------------- */
 
-static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t needed_bcount,
-                                 bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
+static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t needed_bcount,
+                                                  bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
 {
   mi_bitmap_index_t bitmap_index;
   if (!mi_arena_alloc(arena, needed_bcount, &bitmap_index)) return NULL;
@@ -333,6 +333,52 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   return p;
 }
 
+static mi_decl_noinline void* mi_arena_allocate(int numa_node, size_t size, size_t alignment, bool commit, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
+{  
+  UNUSED_RELEASE(alignment);
+  mi_assert_internal(alignment <= MI_SEGMENT_ALIGN);
+  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);  
+  const size_t bcount = mi_block_count_of_size(size);
+  if (mi_likely(max_arena == 0)) return NULL;
+  mi_assert_internal(size <= bcount*MI_ARENA_BLOCK_SIZE);
+
+  // try numa affine allocation
+  for (size_t i = 0; i < max_arena; i++) {
+    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+    if (arena==NULL) break; // end reached
+    if ((arena->numa_node<0 || arena->numa_node==numa_node) && // numa local?
+      (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
+    {
+      bool acommit = commit;
+      void* p = mi_arena_alloc_from(arena, i, bcount, &acommit, large, is_zero, memid, tld);
+      mi_assert_internal((uintptr_t)p % alignment == 0);
+      if (p != NULL) {
+        *commit_mask = (acommit ? mi_commit_mask_full() : mi_commit_mask_empty());
+        return p;
+      }
+    }
+  }
+
+  // try from another numa node instead..
+  for (size_t i = 0; i < max_arena; i++) {
+    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+    if (arena==NULL) break; // end reached
+    if ((arena->numa_node>=0 && arena->numa_node!=numa_node) && // not numa local!
+      (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
+    {
+      bool acommit = commit;
+      void* p = mi_arena_alloc_from(arena, i, bcount, &acommit, large, is_zero, memid, tld);
+      mi_assert_internal((uintptr_t)p % alignment == 0);
+      if (p != NULL) {
+        *commit_mask = (acommit ? mi_commit_mask_full() : mi_commit_mask_empty());
+        return p;
+      }
+    }
+  }
+  return NULL;
+}
+
+
 void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
                               bool commit, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero,
                               size_t* memid, mi_os_tld_t* tld)
@@ -343,60 +389,25 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
   *is_zero = false;
 
   bool default_large = false;
-  if (large==NULL) large = &default_large;  // ensure `large != NULL`
+  if (large==NULL) large = &default_large;     // ensure `large != NULL`
   const int numa_node = _mi_os_numa_node(tld); // current numa node
 
-  // try to allocate in an arena if the alignment is small enough
-  // and the object is not too large or too small.  
-  if (alignment <= MI_SEGMENT_ALIGN && size >= MI_ARENA_MIN_OBJ_SIZE) {
-    const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
-    if (mi_unlikely(max_arena > 0)) {
-      const size_t bcount = mi_block_count_of_size(size);
-      mi_assert_internal(size <= bcount*MI_ARENA_BLOCK_SIZE);
-      // try numa affine allocation
-      for (size_t i = 0; i < max_arena; i++) {
-        mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
-        if (arena==NULL) break; // end reached
-        if ((arena->numa_node<0 || arena->numa_node==numa_node) && // numa local?
-          (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
-        {
-          bool acommit = commit;
-          void* p = mi_arena_alloc_from(arena, i, bcount, &acommit, large, is_zero, memid, tld);
-          mi_assert_internal((uintptr_t)p % alignment == 0);
-          if (p != NULL) {
-            *commit_mask = (acommit ? mi_commit_mask_full() : mi_commit_mask_empty());
-            return p;
-          }
-        }
-      }
-      // try from another numa node instead..
-      for (size_t i = 0; i < max_arena; i++) {
-        mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
-        if (arena==NULL) break; // end reached
-        if ((arena->numa_node>=0 && arena->numa_node!=numa_node) && // not numa local!
-          (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
-        {
-          bool acommit = commit;
-          void* p = mi_arena_alloc_from(arena, i, bcount, &acommit, large, is_zero, memid, tld);
-          mi_assert_internal((uintptr_t)p % alignment == 0);
-          if (p != NULL) {
-            *commit_mask = (acommit ? mi_commit_mask_full() : mi_commit_mask_empty());
-            return p;
-          }
-        }
-      }
-    }
+  // try to get from the cache 
+  if (size == MI_SEGMENT_SIZE && alignment <= MI_SEGMENT_ALIGN) {
+    void* p = mi_cache_pop(numa_node, size, alignment, commit, commit_mask, large, is_zero, memid, tld);
+    if (p != NULL) return p;
   }
 
-  // try to get from the cache 
-  void* p = mi_cache_pop(numa_node, size, alignment, commit, commit_mask, large, is_zero, memid, tld);
-  if (p != NULL) return p;
-
+  // try to allocate in an arena if the alignment is small enough and the object is not too small (as for heap meta data)
+  if (size >= MI_ARENA_MIN_OBJ_SIZE && alignment <= MI_SEGMENT_ALIGN) {
+    void* p = mi_arena_allocate(numa_node, size, alignment, commit, commit_mask, large, is_zero, memid, tld);
+    if (p != NULL) return p;
+  }
 
   // finally, fall back to the OS
   *is_zero = true;
   *memid   = MI_MEMID_OS;
-  p = _mi_os_alloc_aligned(size, alignment, commit, large, tld->stats);
+  void* p = _mi_os_alloc_aligned(size, alignment, commit, large, tld->stats);
   *commit_mask = ((p!=NULL && commit) ? mi_commit_mask_full() : mi_commit_mask_empty());
   return p;
 }
