@@ -49,50 +49,6 @@ static inline bool mi_page_queue_is_special(const mi_page_queue_t* pq) {
   Bins
 ----------------------------------------------------------- */
 
-// Bit scan reverse: return the index of the highest bit.
-static inline uint8_t mi_bsr32(uint32_t x);
-
-#if defined(_MSC_VER)
-#include <intrin.h>
-static inline uint8_t mi_bsr32(uint32_t x) {
-  uint32_t idx;
-  _BitScanReverse((DWORD*)&idx, x);
-  return (uint8_t)idx;
-}
-#elif defined(__GNUC__) || defined(__clang__)
-static inline uint8_t mi_bsr32(uint32_t x) {
-  return (31 - __builtin_clz(x));
-}
-#else
-static inline uint8_t mi_bsr32(uint32_t x) {
-  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
-  static const uint8_t debruijn[32] = {
-     31,  0, 22,  1, 28, 23, 18,  2, 29, 26, 24, 10, 19,  7,  3, 12,
-     30, 21, 27, 17, 25,  9,  6, 11, 20, 16,  8,  5, 15,  4, 14, 13,
-  };
-  x |= x >> 1;
-  x |= x >> 2;
-  x |= x >> 4;
-  x |= x >> 8;
-  x |= x >> 16;
-  x++;
-  return debruijn[(x*0x076be629) >> 27];
-}
-#endif
-
-// Bit scan reverse: return the index of the highest bit.
-uint8_t _mi_bsr(uintptr_t x) {
-  if (x == 0) return 0;
-#if MI_INTPTR_SIZE==8
-  uint32_t hi = (x >> 32);
-  return (hi == 0 ? mi_bsr32((uint32_t)x) : 32 + mi_bsr32(hi));
-#elif MI_INTPTR_SIZE==4
-  return mi_bsr32(x);
-#else
-# error "define bsr for non-32 or 64-bit platforms"
-#endif
-}
-
 // Return the bin for a given field size.
 // Returns MI_BIN_HUGE if the size is too large.
 // We use `wsize` for the size in "machine word sizes",
@@ -125,7 +81,7 @@ extern inline uint8_t _mi_bin(size_t size) {
     #endif
     wsize--;
     // find the highest bit
-    uint8_t b = mi_bsr32((uint32_t)wsize);
+    uint8_t b = (uint8_t)mi_bsr(wsize);  // note: wsize != 0
     // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin

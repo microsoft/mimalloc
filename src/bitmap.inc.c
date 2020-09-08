@@ -68,47 +68,6 @@ static inline uintptr_t mi_bitmap_mask_(size_t count, size_t bitidx) {
 }
 
 
-/* -----------------------------------------------------------
-  Use bit scan forward/reverse to quickly find the first zero bit if it is available
------------------------------------------------------------ */
-#if defined(_MSC_VER)
-#define MI_HAVE_BITSCAN
-#include <intrin.h>
-#ifndef MI_64
-#if MI_INTPTR_SIZE==8
-#define MI_64(f) f##64
-#else
-#define MI_64(f) f
-#endif
-#endif
-
-static inline size_t mi_bsf(uintptr_t x) {
-  if (x==0) return 8*MI_INTPTR_SIZE;
-  DWORD idx;
-  MI_64(_BitScanForward)(&idx, x);
-  return idx;
-}
-static inline size_t mi_bsr(uintptr_t x) {
-  if (x==0) return 8*MI_INTPTR_SIZE;
-  DWORD idx;
-  MI_64(_BitScanReverse)(&idx, x);
-  return idx;
-}
-#elif defined(__GNUC__) || defined(__clang__)
-#include <limits.h> // LONG_MAX
-#define MI_HAVE_BITSCAN
-#if (INTPTR_MAX == LONG_MAX)
-# define MI_L(x)  x##l
-#else
-# define MI_L(x)  x##ll
-#endif
-static inline size_t mi_bsf(uintptr_t x) {
-  return (x==0 ? 8*MI_INTPTR_SIZE : MI_L(__builtin_ctz)(x));
-}
-static inline size_t mi_bsr(uintptr_t x) {
-  return (x==0 ? 8*MI_INTPTR_SIZE : (8*MI_INTPTR_SIZE - 1) - MI_L(__builtin_clz)(x));
-}
-#endif
 
 /* -----------------------------------------------------------
   Claim a bit sequence atomically
@@ -148,8 +107,8 @@ static inline bool mi_bitmap_try_find_claim_field(mi_bitmap_t bitmap, size_t idx
   const uintptr_t mask = mi_bitmap_mask_(count, 0);
   const size_t    bitidx_max = MI_BITMAP_FIELD_BITS - count;
 
-#ifdef MI_HAVE_BITSCAN
-  size_t bitidx = mi_bsf(~map);    // quickly find the first zero bit if possible
+#ifdef MI_HAVE_FAST_BITSCAN
+  size_t bitidx = mi_ctz(~map);    // quickly find the first zero bit if possible
 #else
   size_t bitidx = 0;               // otherwise start at 0
 #endif
@@ -157,7 +116,8 @@ static inline bool mi_bitmap_try_find_claim_field(mi_bitmap_t bitmap, size_t idx
 
   // scan linearly for a free range of zero bits
   while (bitidx <= bitidx_max) {
-    if ((map & m) == 0) {  // are the mask bits free at bitidx?
+    const uintptr_t mapm = map & m;
+    if (mapm == 0) {  // are the mask bits free at bitidx?
       mi_assert_internal((m >> bitidx) == mask); // no overflow?
       const uintptr_t newmap = map | m;
       mi_assert_internal((newmap^map) >> bitidx == mask);
@@ -173,8 +133,8 @@ static inline bool mi_bitmap_try_find_claim_field(mi_bitmap_t bitmap, size_t idx
     }
     else {
       // on to the next bit range
-#ifdef MI_HAVE_BITSCAN
-      const size_t shift = (count == 1 ? 1 : mi_bsr(map & m) - bitidx + 1);
+#ifdef MI_HAVE_FAST_BITSCAN
+      const size_t shift = (count == 1 ? 1 : mi_bsr(mapm) - bitidx + 1);
       mi_assert_internal(shift > 0 && shift <= count);
 #else
       const size_t shift = 1;
@@ -270,8 +230,8 @@ static inline bool mi_bitmap_try_find_claim_field_across(mi_bitmap_t bitmap, siz
   // check initial trailing zeros
   _Atomic(uintptr_t)* field = &bitmap[idx];
   uintptr_t map = mi_atomic_load_relaxed(field);  
-  const uintptr_t bitidx = (map==0 ? 0 : mi_bsr(map) + 1);
-  const size_t initial = MI_BITMAP_FIELD_BITS - bitidx;    // count of initial zeros starting at idx
+  const size_t initial = mi_clz(map);  // count of initial zeros starting at idx
+  mi_assert_internal(initial >= 0 && initial <= MI_BITMAP_FIELD_BITS);
   if (initial == 0)     return false;
   if (initial >= count) return mi_bitmap_try_find_claim_field(bitmap, idx, count, bitmap_idx);     // no need to cross fields
   if (_mi_divide_up(count - initial, MI_BITMAP_FIELD_BITS) >= (bitmap_fields - idx)) return false; // not enough entries
@@ -321,7 +281,7 @@ static inline bool mi_bitmap_try_find_claim_field_across(mi_bitmap_t bitmap, siz
   } while (!mi_atomic_cas_strong_acq_rel(field, &map, newmap));
 
   // claimed!
-  *bitmap_idx = mi_bitmap_index_create(idx, bitidx);
+  *bitmap_idx = mi_bitmap_index_create(idx, MI_BITMAP_FIELD_BITS - initial);
   return true;
 
 rollback: 
