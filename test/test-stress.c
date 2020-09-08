@@ -217,7 +217,7 @@ static void test_leak(void) {
 }
 #endif
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) {  
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
   if (argc >= 2) {
     char* end;
@@ -235,6 +235,7 @@ int main(int argc, char** argv) {
     if (n > 0) ITER = n;
   }
   printf("Using %d threads with a %d%% load-per-thread and %d iterations\n", THREADS, SCALE, ITER);
+  //mi_reserve_os_memory(512*1024*1024ULL, true, true);
   //int res = mi_reserve_huge_os_pages(4,1);
   //printf("(reserve huge: %i\n)", res);
 
