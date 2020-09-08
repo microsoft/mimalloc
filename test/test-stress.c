@@ -235,7 +235,7 @@ int main(int argc, char** argv) {
     if (n > 0) ITER = n;
   }
   printf("Using %d threads with a %d%% load-per-thread and %d iterations\n", THREADS, SCALE, ITER);
-  //mi_reserve_os_memory(512*1024*1024ULL, true, true);
+  //mi_reserve_os_memory(1024*1024*1024ULL, false, true);
   //int res = mi_reserve_huge_os_pages(4,1);
   //printf("(reserve huge: %i\n)", res);
 

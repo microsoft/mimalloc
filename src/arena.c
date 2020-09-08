@@ -197,6 +197,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool*
   }
 
   // finally, fall back to the OS
+  if (mi_option_is_enabled(mi_option_limit_os_alloc)) return NULL;
   *is_zero = true;
   *memid   = MI_MEMID_OS;  
   void* p = _mi_os_alloc_aligned(size, alignment, *commit, large, tld->stats);
@@ -326,7 +327,7 @@ int mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noe
     _mi_verbose_message("failed to reserve %zu k memory\n", _mi_divide_up(size,1024));
     return ENOMEM;
   }
-  _mi_verbose_message("reserved %zu kb memory\n", _mi_divide_up(size,1024));
+  _mi_verbose_message("reserved %zu kb memory%s\n", _mi_divide_up(size,1024), large ? " (in large os pages)" : "");
   return 0;
 }
 
