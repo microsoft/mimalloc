@@ -32,7 +32,7 @@ of 256MiB in practice.
 #include <string.h>  // memset
 #include <errno.h> // ENOMEM
 
-#include "bitmap.inc.c"  // atomic bitmap
+#include "bitmap.h"  // atomic bitmap
 
 
 // os.c
@@ -105,7 +105,7 @@ static size_t mi_block_count_of_size(size_t size) {
 static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* bitmap_idx)
 {
   size_t idx = mi_atomic_load_acquire(&arena->search_idx);  // start from last search
-  if (mi_bitmap_try_find_from_claim_across(arena->blocks_inuse, arena->field_count, idx, blocks, bitmap_idx)) {
+  if (_mi_bitmap_try_find_from_claim_across(arena->blocks_inuse, arena->field_count, idx, blocks, bitmap_idx)) {
     mi_atomic_store_release(&arena->search_idx, idx);  // start search from here next time
     return true;
   };
@@ -126,7 +126,7 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   // claimed it! set the dirty bits (todo: no need for an atomic op here?)
   void* p  = arena->start + (mi_bitmap_index_bit(bitmap_index)*MI_ARENA_BLOCK_SIZE);
   *memid   = mi_arena_id_create(arena_index, bitmap_index);
-  *is_zero = mi_bitmap_claim_across(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
+  *is_zero = _mi_bitmap_claim_across(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
   *large   = arena->is_large;
   if (arena->is_committed) {
     // always committed
@@ -135,7 +135,7 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   else if (*commit) {
     // arena not committed as a whole, but commit requested: ensure commit now
     bool any_uncommitted;
-    mi_bitmap_claim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted);
+    _mi_bitmap_claim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted);
     if (any_uncommitted) {
       bool commit_zero;
       _mi_os_commit(p, needed_bcount * MI_ARENA_BLOCK_SIZE, &commit_zero, tld->stats);
@@ -144,7 +144,7 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   }
   else {
     // no need to commit, but check if already fully committed
-    *commit = mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
+    *commit = _mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
   }
   return p;
 }
@@ -235,7 +235,7 @@ void _mi_arena_free(void* p, size_t size, size_t memid, bool all_committed, mi_s
       return;
     }
     const size_t blocks = mi_block_count_of_size(size);
-    bool ones = mi_bitmap_unclaim_across(arena->blocks_inuse, arena->field_count, blocks, bitmap_idx);
+    bool ones = _mi_bitmap_unclaim_across(arena->blocks_inuse, arena->field_count, blocks, bitmap_idx);
     if (!ones) {
       _mi_error_message(EAGAIN, "trying to free an already freed block: %p, size %zu\n", p, size);
       return;
@@ -287,7 +287,7 @@ bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_la
   if (post > 0) {
     // don't use leftover bits at the end
     mi_bitmap_index_t postidx = mi_bitmap_index_create(fields - 1, MI_BITMAP_FIELD_BITS - post);
-    mi_bitmap_claim(arena->blocks_inuse, fields, post, postidx, NULL);
+    _mi_bitmap_claim(arena->blocks_inuse, fields, post, postidx, NULL);
   }
 
   mi_arena_add(arena);

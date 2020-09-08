@@ -29,6 +29,7 @@ set(mi_sources
     src/stats.c
     src/random.c
     src/os.c
+    src/bitmap.c
     src/arena.c
     src/region.c
     src/segment.c
