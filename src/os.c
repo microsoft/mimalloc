@@ -623,9 +623,9 @@ void  _mi_os_free(void* p, size_t size, mi_stats_t* stats) {
   _mi_os_free_ex(p, size, true, stats);
 }
 
-void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_os_tld_t* tld)
+void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_stats_t* tld_stats)
 {
-  UNUSED(tld);
+  UNUSED(tld_stats);
   if (size == 0) return NULL;
   size = _mi_os_good_alloc_size(size);
   alignment = _mi_align_up(alignment, _mi_os_page_size());

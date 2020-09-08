@@ -14,6 +14,7 @@ static void block_overflow1();
 static void invalid_free();
 static void test_aslr(void);
 static void test_process_info(void);
+static void test_reserved(void);
 
 int main() {
   mi_version();
@@ -24,7 +25,8 @@ int main() {
   // corrupt_free();
   // block_overflow1();
   // test_aslr();
-  invalid_free();
+  // invalid_free();
+  // test_reserved();
 
   void* p1 = malloc(78);
   void* p2 = malloc(24);
@@ -147,4 +149,20 @@ static void test_process_info(void) {
   }
   mi_process_info(&user_msecs, &system_msecs, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
   printf("\n\n*** process info: user: %3zd.%03zd s, rss: %zd b, commit: %zd b\n\n", user_msecs/1000, user_msecs%1000, peak_rss, peak_commit);
+}
+
+static void test_reserved(void) {
+#define KiB 1024ULL
+#define MiB (KiB*KiB)
+#define GiB (MiB*KiB)
+  mi_reserve_os_memory(4*GiB, false, true);
+  void* p1 = malloc(100);
+  void* p2 = malloc(100000);
+  void* p3 = malloc(2*GiB);
+  void* p4 = malloc(1*GiB + 100000);
+  free(p1);
+  free(p2);
+  free(p3);
+  p3 = malloc(1*GiB);
+  free(p4);
 }
