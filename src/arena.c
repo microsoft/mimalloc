@@ -8,23 +8,18 @@ terms of the MIT license. A copy of the license can be found in the file
 
 /* ----------------------------------------------------------------------------
 "Arenas" are fixed area's of OS memory from which we can allocate
-large blocks (>= MI_ARENA_BLOCK_SIZE, 8MiB).
+large blocks (>= MI_ARENA_MIN_BLOCK_SIZE, 4MiB).
 In contrast to the rest of mimalloc, the arenas are shared between
 threads and need to be accessed using atomic operations.
 
 Currently arenas are only used to for huge OS page (1GiB) reservations,
-otherwise it delegates to direct allocation from the OS.
+or direct OS memory reservations -- otherwise it delegates to direct allocation from the OS.
 In the future, we can expose an API to manually add more kinds of arenas
 which is sometimes needed for embedded devices or shared memory for example.
 (We can also employ this with WASI or `sbrk` systems to reserve large arenas
  on demand and be able to reuse them efficiently).
 
-The arena allocation needs to be thread safe and we use an atomic
-bitmap to allocate. The current implementation of the bitmap can
-only do this within a field (`uintptr_t`) so we can allocate at most
-blocks of 2GiB (64*32MiB) and no object can cross the boundary. This
-can lead to fragmentation but fortunately most objects will be regions
-of 256MiB in practice.
+The arena allocation needs to be thread safe and we use an atomic bitmap to allocate.
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
@@ -55,7 +50,7 @@ bool  _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 // size in count of arena blocks.
 typedef uintptr_t mi_block_info_t;
 #define MI_SEGMENT_ALIGN      MI_SEGMENT_SIZE
-#define MI_ARENA_BLOCK_SIZE   MI_SEGMENT_ALIGN         // 8MiB
+#define MI_ARENA_BLOCK_SIZE   MI_SEGMENT_SIZE          // 8MiB
 #define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 4MiB
 #define MI_MAX_ARENAS         (64)                     // not more than 256 (since we use 8 bits in the memid)
 
@@ -352,43 +347,42 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
   const int numa_node = _mi_os_numa_node(tld); // current numa node
 
   // try to allocate in an arena if the alignment is small enough
-  // and the object is not too large or too small.
-  if (alignment <= MI_SEGMENT_ALIGN &&
-      // size <= MI_ARENA_MAX_OBJ_SIZE &&
-      size >= MI_ARENA_MIN_OBJ_SIZE)
-  {
-    const size_t bcount = mi_block_count_of_size(size);
-    
-    mi_assert_internal(size <= bcount*MI_ARENA_BLOCK_SIZE);
-    // try numa affine allocation
-    for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
-      if (arena==NULL) break; // end reached
-      if ((arena->numa_node<0 || arena->numa_node==numa_node) && // numa local?
+  // and the object is not too large or too small.  
+  if (alignment <= MI_SEGMENT_ALIGN && size >= MI_ARENA_MIN_OBJ_SIZE) {
+    const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+    if (mi_unlikely(max_arena > 0)) {
+      const size_t bcount = mi_block_count_of_size(size);
+      mi_assert_internal(size <= bcount*MI_ARENA_BLOCK_SIZE);
+      // try numa affine allocation
+      for (size_t i = 0; i < max_arena; i++) {
+        mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+        if (arena==NULL) break; // end reached
+        if ((arena->numa_node<0 || arena->numa_node==numa_node) && // numa local?
           (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
-      {
-        bool acommit = commit;
-        void* p = mi_arena_alloc_from(arena, i, bcount, &acommit, large, is_zero, memid, tld);
-        mi_assert_internal((uintptr_t)p % alignment == 0);
-        if (p != NULL) {
-          *commit_mask = (acommit ? mi_commit_mask_full() : mi_commit_mask_empty());
-          return p;
+        {
+          bool acommit = commit;
+          void* p = mi_arena_alloc_from(arena, i, bcount, &acommit, large, is_zero, memid, tld);
+          mi_assert_internal((uintptr_t)p % alignment == 0);
+          if (p != NULL) {
+            *commit_mask = (acommit ? mi_commit_mask_full() : mi_commit_mask_empty());
+            return p;
+          }
         }
       }
-    }
-    // try from another numa node instead..
-    for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
-      if (arena==NULL) break; // end reached
-      if ((arena->numa_node>=0 && arena->numa_node!=numa_node) && // not numa local!
+      // try from another numa node instead..
+      for (size_t i = 0; i < max_arena; i++) {
+        mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+        if (arena==NULL) break; // end reached
+        if ((arena->numa_node>=0 && arena->numa_node!=numa_node) && // not numa local!
           (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
-      {
-        bool acommit = commit;
-        void* p = mi_arena_alloc_from(arena, i, bcount, &acommit, large, is_zero, memid, tld);
-        mi_assert_internal((uintptr_t)p % alignment == 0);
-        if (p != NULL) {
-          *commit_mask = (acommit ? mi_commit_mask_full() : mi_commit_mask_empty());
-          return p;
+        {
+          bool acommit = commit;
+          void* p = mi_arena_alloc_from(arena, i, bcount, &acommit, large, is_zero, memid, tld);
+          mi_assert_internal((uintptr_t)p % alignment == 0);
+          if (p != NULL) {
+            *commit_mask = (acommit ? mi_commit_mask_full() : mi_commit_mask_empty());
+            return p;
+          }
         }
       }
     }

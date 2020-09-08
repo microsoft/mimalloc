@@ -67,8 +67,8 @@ static inline size_t mi_bitmap_index_bit(mi_bitmap_index_t bitmap_idx) {
 static inline uintptr_t mi_bitmap_mask_(size_t count, size_t bitidx) {
   mi_assert_internal(count + bitidx <= MI_BITMAP_FIELD_BITS);
   mi_assert_internal(count > 0);
-  if (count >= MI_BITMAP_FIELD_BITS) return MI_BITMAP_FIELD_FULL;
-  if (count == 0) return 0;
+  //if (count >= MI_BITMAP_FIELD_BITS) return MI_BITMAP_FIELD_FULL;
+  //if (count == 0) return 0;
   return ((((uintptr_t)1 << count) - 1) << bitidx);
 }
 
@@ -145,6 +145,7 @@ static inline bool mi_bitmap_try_find_claim_field(mi_bitmap_t bitmap, size_t idx
 {
   mi_assert_internal(bitmap_idx != NULL);
   mi_assert_internal(count <= MI_BITMAP_FIELD_BITS);
+  mi_assert_internal(count > 0);
   _Atomic(uintptr_t)* field = &bitmap[idx];
   uintptr_t map  = mi_atomic_load_relaxed(field);
   if (map==MI_BITMAP_FIELD_FULL) return false; // short cut
