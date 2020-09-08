@@ -31,6 +31,7 @@ set(mi_sources
     src/os.c
     src/bitmap.c
     src/arena.c
+    src/segment-cache.c
     src/segment.c
     src/page.c
     src/alloc.c

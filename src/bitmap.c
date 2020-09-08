@@ -40,7 +40,7 @@ static inline uintptr_t mi_bitmap_mask_(size_t count, size_t bitidx) {
 
 // Try to atomically claim a sequence of `count` bits in a single
 // field at `idx` in `bitmap`. Returns `true` on success.
-bool _mi_bitmap_try_find_claim_field(mi_bitmap_t bitmap, size_t idx, const size_t count, mi_bitmap_index_t* bitmap_idx)
+inline bool _mi_bitmap_try_find_claim_field(mi_bitmap_t bitmap, size_t idx, const size_t count, mi_bitmap_index_t* bitmap_idx)
 {
   mi_assert_internal(bitmap_idx != NULL);
   mi_assert_internal(count <= MI_BITMAP_FIELD_BITS);

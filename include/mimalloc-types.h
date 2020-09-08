@@ -114,6 +114,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Derived constants
 #define MI_SEGMENT_SIZE                   (1ULL<<MI_SEGMENT_SHIFT)
+#define MI_SEGMENT_ALIGN                  MI_SEGMENT_SIZE
 #define MI_SEGMENT_MASK                   (MI_SEGMENT_SIZE - 1)
 #define MI_SEGMENT_SLICE_SIZE             (1ULL<< MI_SEGMENT_SLICE_SHIFT)
 #define MI_SLICES_PER_SEGMENT             (MI_SEGMENT_SIZE / MI_SEGMENT_SLICE_SIZE) // 1024

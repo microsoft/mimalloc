@@ -1,6 +1,5 @@
-
 /* ----------------------------------------------------------------------------
-Copyright (c) 2019, Microsoft Research, Daan Leijen
+Copyright (c) 2019, 2020, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -49,7 +48,6 @@ bool  _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 // Block info: bit 0 contains the `in_use` bit, the upper bits the
 // size in count of arena blocks.
 typedef uintptr_t mi_block_info_t;
-#define MI_SEGMENT_ALIGN      MI_SEGMENT_SIZE
 #define MI_ARENA_BLOCK_SIZE   MI_SEGMENT_SIZE          // 8MiB
 #define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 4MiB
 #define MI_MAX_ARENAS         (64)                     // not more than 256 (since we use 8 bits in the memid)
@@ -114,190 +112,6 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
 
 
 /* -----------------------------------------------------------
-  Arena cache
------------------------------------------------------------ */
-
-#define MI_CACHE_FIELDS     (16)
-#define MI_CACHE_MAX        (MI_BITMAP_FIELD_BITS*MI_CACHE_FIELDS)       // 1024 on 64-bit
-#define MI_CACHE_BITS_SET   MI_INIT16(BITS_SET)
-
-typedef struct mi_cache_slot_s {
-  void*               p;
-  size_t              memid;
-  mi_commit_mask_t    commit_mask;
-  _Atomic(mi_msecs_t) expire;
-} mi_cache_slot_t;
-
-static mi_cache_slot_t cache[MI_CACHE_MAX];    // = 0
-
-#define BITS_SET()  ATOMIC_VAR_INIT(UINTPTR_MAX)
-static mi_bitmap_field_t cache_available[MI_CACHE_FIELDS] = { MI_CACHE_BITS_SET };        // zero bit = available!
-static mi_bitmap_field_t cache_available_large[MI_CACHE_FIELDS] = { MI_CACHE_BITS_SET };
-static mi_bitmap_field_t cache_inuse[MI_CACHE_FIELDS];   // zero bit = free
-
-
-static mi_decl_noinline void* mi_cache_pop(int numa_node, size_t size, size_t alignment, bool commit, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld) {
-  UNUSED(tld);
-  UNUSED(commit);
-
-  // only segment blocks
-  if (size != MI_SEGMENT_SIZE || alignment > MI_SEGMENT_ALIGN) return NULL;
-
-  // numa node determines start field
-  size_t start_field = 0;
-  if (numa_node > 0) {
-    start_field = (MI_CACHE_FIELDS / _mi_os_numa_node_count())*numa_node;
-    if (start_field >= MI_CACHE_FIELDS) start_field = 0;
-  }
-
-  // find an available slot
-  mi_bitmap_index_t bitidx = 0;
-  bool claimed = false;
-  if (*large) {  // large allowed?
-    claimed = _mi_bitmap_try_find_from_claim(cache_available_large, MI_CACHE_FIELDS, start_field, 1, &bitidx);
-    if (claimed) *large = true;
-  }
-  if (!claimed) {
-    claimed = _mi_bitmap_try_find_from_claim(cache_available, MI_CACHE_FIELDS, start_field, 1, &bitidx);
-    if (claimed) *large = false;
-  }
-
-  if (!claimed) return NULL;
-
-  // found a slot
-  mi_cache_slot_t* slot = &cache[mi_bitmap_index_bit(bitidx)];
-  void* p = slot->p;
-  *memid = slot->memid;
-  *is_zero = false;
-  mi_commit_mask_t cmask = slot->commit_mask;  // copy
-  slot->p = NULL;
-  mi_atomic_storei64_release(&slot->expire,(mi_msecs_t)0);
-  // ignore commit request
-  /*
-  if (commit && !mi_commit_mask_is_full(cmask)) {
-    bool commit_zero;
-    bool ok = _mi_os_commit(p, MI_SEGMENT_SIZE, &commit_zero, tld->stats); // todo: only commit needed parts?
-    if (!ok) {
-      *commit_mask = cmask;
-    }
-    else {
-      *commit_mask = mi_commit_mask_full();
-    }
-  }
-  else {
-  */
-  *commit_mask = cmask;
-  
-  // mark the slot as free again
-  mi_assert_internal(_mi_bitmap_is_claimed(cache_inuse, MI_CACHE_FIELDS, 1, bitidx));
-  _mi_bitmap_unclaim(cache_inuse, MI_CACHE_FIELDS, 1, bitidx);
-  return p;
-}
-
-static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, void* p, size_t total, mi_stats_t* stats) {
-  if (mi_commit_mask_is_empty(*cmask)) {
-    // nothing
-  }    
-  else if (mi_commit_mask_is_full(*cmask)) {
-    _mi_os_decommit(p, total, stats);
-  }
-  else {
-    // todo: one call to decommit the whole at once?
-    mi_assert_internal((total%MI_COMMIT_MASK_BITS)==0);
-    size_t    part = total/MI_COMMIT_MASK_BITS;
-    uintptr_t idx;
-    uintptr_t count;
-    mi_commit_mask_t mask = *cmask;
-    mi_commit_mask_foreach(mask, idx, count) {
-      void*  start = (uint8_t*)p + (idx*part);
-      size_t size = count*part;
-      _mi_os_decommit(start, size, stats);
-    }
-    mi_commit_mask_foreach_end()
-  }
-  *cmask = mi_commit_mask_empty();
-}
-
-static mi_decl_noinline void mi_cache_purge(mi_os_tld_t* tld) {
-  UNUSED(tld);
-  mi_msecs_t now = _mi_clock_now();
-  size_t idx = (_mi_random_shuffle((uintptr_t)now) % MI_CACHE_MAX);            // random start
-  size_t purged = 0;
-  for (size_t visited = 0; visited < MI_CACHE_FIELDS; visited++,idx++) {  // probe just N slots
-    if (idx >= MI_CACHE_MAX) idx = 0; // wrap
-    mi_cache_slot_t* slot = &cache[idx];
-    mi_msecs_t expire = mi_atomic_loadi64_relaxed(&slot->expire);
-    if (expire != 0 && now >= expire) {  // racy read
-      // seems expired, first claim it from available
-      purged++;
-      mi_bitmap_index_t bitidx = mi_bitmap_index_create_from_bit(idx);
-      if (_mi_bitmap_claim(cache_available, MI_CACHE_FIELDS, 1, bitidx, NULL)) {
-        // was available, we claimed it
-        expire = mi_atomic_loadi64_acquire(&slot->expire);
-        if (expire != 0 && now >= expire) {  // safe read
-          // still expired, decommit it
-          mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
-          mi_assert_internal(!mi_commit_mask_is_empty(slot->commit_mask) && _mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
-          _mi_abandoned_await_readers();  // wait until safe to decommit
-          // decommit committed parts
-          mi_commit_mask_decommit(&slot->commit_mask, slot->p, MI_SEGMENT_SIZE, tld->stats);
-          //_mi_os_decommit(slot->p, MI_SEGMENT_SIZE, tld->stats);
-        }
-        _mi_bitmap_unclaim(cache_available, MI_CACHE_FIELDS, 1, bitidx); // make it available again for a pop
-      }
-      if (purged > 4) break;  // bound to no more than 4 purge tries per push
-    }
-  }
-}
-
-static mi_decl_noinline bool mi_cache_push(void* start, size_t size, size_t memid, mi_commit_mask_t commit_mask, bool is_large, mi_os_tld_t* tld)
-{
-  // only for segment blocks
-  if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
-  
-  // numa node determines start field
-  int numa_node = _mi_os_numa_node(NULL);
-  size_t start_field = 0;
-  if (numa_node > 0) {
-    start_field = (MI_CACHE_FIELDS / _mi_os_numa_node_count())*numa_node;
-    if (start_field >= MI_CACHE_FIELDS) start_field = 0;
-  }
-
-  // purge expired entries
-  mi_cache_purge(tld);
-
-  // find an available slot
-  mi_bitmap_index_t bitidx;
-  bool claimed = _mi_bitmap_try_find_from_claim(cache_inuse, MI_CACHE_FIELDS, start_field, 1, &bitidx);
-  if (!claimed) return false;
-
-  mi_assert_internal(_mi_bitmap_is_claimed(cache_available, MI_CACHE_FIELDS, 1, bitidx));
-  mi_assert_internal(_mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
-
-  // set the slot
-  mi_cache_slot_t* slot = &cache[mi_bitmap_index_bit(bitidx)];
-  slot->p = start;
-  slot->memid = memid;
-  mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
-  slot->commit_mask = commit_mask;
-  if (!mi_commit_mask_is_empty(commit_mask) && !is_large) {
-    long delay = mi_option_get(mi_option_arena_reset_delay);
-    if (delay == 0) {
-      _mi_abandoned_await_readers(); // wait until safe to decommit
-      mi_commit_mask_decommit(&slot->commit_mask, start, MI_SEGMENT_SIZE, tld->stats);
-    }
-    else {
-      mi_atomic_storei64_release(&slot->expire, _mi_clock_now() + delay);
-    }
-  }
-  
-  // make it available
-  _mi_bitmap_unclaim((is_large ? cache_available_large : cache_available), MI_CACHE_FIELDS, 1, bitidx);
-  return true;
-}
-
-
-/* -----------------------------------------------------------
   Arena Allocation
 ----------------------------------------------------------- */
 
@@ -333,7 +147,7 @@ static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t aren
   return p;
 }
 
-static mi_decl_noinline void* mi_arena_allocate(int numa_node, size_t size, size_t alignment, bool commit, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
+static mi_decl_noinline void* mi_arena_allocate(int numa_node, size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
 {  
   UNUSED_RELEASE(alignment);
   mi_assert_internal(alignment <= MI_SEGMENT_ALIGN);
@@ -349,11 +163,9 @@ static mi_decl_noinline void* mi_arena_allocate(int numa_node, size_t size, size
     if ((arena->numa_node<0 || arena->numa_node==numa_node) && // numa local?
       (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
     {
-      bool acommit = commit;
-      void* p = mi_arena_alloc_from(arena, i, bcount, &acommit, large, is_zero, memid, tld);
+      void* p = mi_arena_alloc_from(arena, i, bcount, commit, large, is_zero, memid, tld);
       mi_assert_internal((uintptr_t)p % alignment == 0);
       if (p != NULL) {
-        *commit_mask = (acommit ? mi_commit_mask_full() : mi_commit_mask_empty());
         return p;
       }
     }
@@ -366,11 +178,9 @@ static mi_decl_noinline void* mi_arena_allocate(int numa_node, size_t size, size
     if ((arena->numa_node>=0 && arena->numa_node!=numa_node) && // not numa local!
       (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
     {
-      bool acommit = commit;
-      void* p = mi_arena_alloc_from(arena, i, bcount, &acommit, large, is_zero, memid, tld);
+      void* p = mi_arena_alloc_from(arena, i, bcount, commit, large, is_zero, memid, tld);
       mi_assert_internal((uintptr_t)p % alignment == 0);
       if (p != NULL) {
-        *commit_mask = (acommit ? mi_commit_mask_full() : mi_commit_mask_empty());
         return p;
       }
     }
@@ -379,11 +189,10 @@ static mi_decl_noinline void* mi_arena_allocate(int numa_node, size_t size, size
 }
 
 
-void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
-                              bool commit, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero,
+void* _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero,
                               size_t* memid, mi_os_tld_t* tld)
 {
-  mi_assert_internal(commit_mask != NULL && large != NULL && is_zero != NULL && memid != NULL && tld != NULL);
+  mi_assert_internal(commit != NULL && large != NULL && is_zero != NULL && memid != NULL && tld != NULL);
   mi_assert_internal(size > 0);
   *memid   = MI_MEMID_OS;
   *is_zero = false;
@@ -392,49 +201,35 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment,
   if (large==NULL) large = &default_large;     // ensure `large != NULL`
   const int numa_node = _mi_os_numa_node(tld); // current numa node
 
-  // try to get from the cache 
-  if (size == MI_SEGMENT_SIZE && alignment <= MI_SEGMENT_ALIGN) {
-    void* p = mi_cache_pop(numa_node, size, alignment, commit, commit_mask, large, is_zero, memid, tld);
-    if (p != NULL) return p;
-  }
-
   // try to allocate in an arena if the alignment is small enough and the object is not too small (as for heap meta data)
   if (size >= MI_ARENA_MIN_OBJ_SIZE && alignment <= MI_SEGMENT_ALIGN) {
-    void* p = mi_arena_allocate(numa_node, size, alignment, commit, commit_mask, large, is_zero, memid, tld);
+    void* p = mi_arena_allocate(numa_node, size, alignment, commit, large, is_zero, memid, tld);
     if (p != NULL) return p;
   }
 
   // finally, fall back to the OS
   *is_zero = true;
   *memid   = MI_MEMID_OS;
-  void* p = _mi_os_alloc_aligned(size, alignment, commit, large, tld->stats);
-  *commit_mask = ((p!=NULL && commit) ? mi_commit_mask_full() : mi_commit_mask_empty());
-  return p;
+  return _mi_os_alloc_aligned(size, alignment, *commit, large, tld->stats);
 }
 
-void* _mi_arena_alloc(size_t size, bool commit, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld) 
+void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld) 
 {
-  return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, commit, commit_mask, large, is_zero, memid, tld);
+  return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, commit, large, is_zero, memid, tld);
 }
 
 /* -----------------------------------------------------------
   Arena free
 ----------------------------------------------------------- */
 
-void _mi_arena_free(void* p, size_t size, size_t memid, mi_commit_mask_t commit_mask, bool is_large, mi_os_tld_t* tld) {
+void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, mi_os_tld_t* tld) {
   mi_assert_internal(size > 0 && tld->stats != NULL);
   if (p==NULL) return;
   if (size==0) return;
 
   if (memid == MI_MEMID_OS) {
     // was a direct OS allocation, pass through
-    if (!mi_cache_push(p, size, memid, commit_mask, is_large, tld)) {
-      _mi_abandoned_await_readers(); // wait until safe to free
-      // TODO: is it safe on all platforms to free even it contains decommitted parts? (eg. macOS)
-      const size_t csize = mi_commit_mask_committed_size(commit_mask, size);
-      _mi_stat_decrease(&_mi_stats_main.committed, csize);
-      _mi_os_free_ex(p, size, false /*pretend decommitted to not double count stats*/, tld->stats);
-    }
+    _mi_os_free_ex(p, size, is_committed, tld->stats);
   }
   else {
     // allocated in an arena

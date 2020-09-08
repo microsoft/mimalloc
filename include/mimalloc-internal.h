@@ -62,19 +62,24 @@ void       _mi_os_init(void);                                      // called fro
 void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocate thread local data
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
 
-bool      _mi_os_protect(void* addr, size_t size);
-bool      _mi_os_unprotect(void* addr, size_t size);
-bool      _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* stats);
-bool      _mi_os_decommit(void* p, size_t size, mi_stats_t* stats);
-bool      _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
-bool      _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
-size_t    _mi_os_good_alloc_size(size_t size);
+bool       _mi_os_protect(void* addr, size_t size);
+bool       _mi_os_unprotect(void* addr, size_t size);
+bool       _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* stats);
+bool       _mi_os_decommit(void* p, size_t size, mi_stats_t* stats);
+bool       _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
+bool       _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
+size_t     _mi_os_good_alloc_size(size_t size);
 
 // arena.c
-void*     _mi_arena_alloc_aligned(size_t size, size_t alignment, bool commit, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
-void*     _mi_arena_alloc(size_t size, bool commit, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
-void      _mi_arena_free(void* p, size_t size, size_t memid, mi_commit_mask_t commit_mask, bool is_large, mi_os_tld_t* tld);
+void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
+void*      _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
+void       _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, mi_os_tld_t* tld);
 
+// "segment-cache.c"
+void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
+bool       _mi_segment_cache_push(void* start, size_t size, size_t memid, mi_commit_mask_t commit_mask, bool is_large, mi_os_tld_t* tld);
+void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
+void       _mi_segment_map_freed_at(const mi_segment_t* segment);
 
 // "segment.c"
 mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_wsize, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
@@ -463,6 +468,10 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
   return mi_page_block_size(page) - MI_PADDING_SIZE;
 }
 
+// size of a segment
+static inline size_t mi_segment_size(mi_segment_t* segment) {
+  return segment->segment_slices * MI_SEGMENT_SLICE_SIZE;
+}
 
 // Thread free access
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
