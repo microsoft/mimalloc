@@ -74,7 +74,8 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset uses MADV_FREE/MADV_DONTNEED
   #endif
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
-  { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },
+  { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },  // per 1GiB huge pages
+  { 0, UNINIT, MI_OPTION(reserve_os_memory)     },
   { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
   { 1, UNINIT, MI_OPTION(page_reset) },          // reset page memory on free
   { 0, UNINIT, MI_OPTION(abandoned_page_reset) },// reset free page memory when a thread terminates
@@ -504,6 +505,14 @@ static void mi_option_init(mi_option_desc_t* desc) {
     else {
       char* end = buf;
       long value = strtol(buf, &end, 10);
+      if (desc->option == mi_option_reserve_os_memory) {
+        // this option is interpreted in KiB to prevent overflow of `long`
+        if (*end == 'K') { end++; }
+        else if (*end == 'M') { value *= KiB; end++; }
+        else if (*end == 'G') { value *= MiB; end++; }
+        else { value = (value + KiB - 1) / KiB; }
+        if (*end == 'B') { end++; }
+      }
       if (*end == 0) {
         desc->value = value;
         desc->init = INITIALIZED;

@@ -478,7 +478,11 @@ void mi_process_init(void) mi_attr_noexcept {
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages = mi_option_get(mi_option_reserve_huge_os_pages);
     mi_reserve_huge_os_pages_interleave(pages, 0, pages*500);
-  }  
+  } 
+  if (mi_option_is_enabled(mi_option_reserve_os_memory)) {
+    long ksize = mi_option_get(mi_option_reserve_os_memory);
+    if (ksize > 0) mi_reserve_os_memory((size_t)ksize*KiB, true, true);
+  }
 }
 
 // Called when the process is done (through `at_exit`)
