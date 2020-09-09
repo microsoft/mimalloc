@@ -117,7 +117,6 @@ static bool mi_slice_is_used(const mi_slice_t* slice) {
 }
 
 
-
 #if (MI_DEBUG>=3)
 static bool mi_span_queue_contains(mi_span_queue_t* sq, mi_slice_t* slice) {
   for (mi_slice_t* s = sq->first; s != NULL; s = s->next) {
@@ -258,11 +257,11 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   
   // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
   const size_t size = mi_segment_size(segment);
-  if (size != MI_SEGMENT_SIZE || !_mi_segment_cache_push(segment, size, segment->memid, segment->commit_mask, segment->mem_is_fixed, tld->os)) {
+  if (size != MI_SEGMENT_SIZE || !_mi_segment_cache_push(segment, size, segment->memid, segment->commit_mask, segment->mem_is_large, segment->mem_is_pinned, tld->os)) {
     const size_t csize = mi_commit_mask_committed_size(segment->commit_mask, size);
-    if (csize > 0 && !segment->mem_is_fixed) _mi_stat_decrease(&_mi_stats_main.committed, csize);
+    if (csize > 0 && !segment->mem_is_pinned) _mi_stat_decrease(&_mi_stats_main.committed, csize);
     _mi_abandoned_await_readers();  // wait until safe to free
-    _mi_arena_free(segment, mi_segment_size(segment), segment->memid, segment->mem_is_fixed /* pretend not committed to not double count decommits */, tld->os);
+    _mi_arena_free(segment, mi_segment_size(segment), segment->memid, segment->mem_is_pinned /* pretend not committed to not double count decommits */, tld->os);
   }
 }
 
@@ -655,10 +654,11 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   if (segment==NULL) {
     // Allocate the segment from the OS
     bool mem_large = (!eager_delay && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy    
+    bool is_pinned = false;
     size_t memid = 0;
-    segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, &commit_mask, &mem_large, &is_zero, &memid, os_tld);
+    segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, &commit_mask, &mem_large, &is_pinned, &is_zero, &memid, os_tld);
     if (segment==NULL) {
-      segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_zero, &memid, os_tld);
+      segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_pinned, &is_zero, &memid, os_tld);
       if (segment == NULL) return NULL;  // failed to allocate
       commit_mask = (commit ? mi_commit_mask_full() : mi_commit_mask_empty());
     }    
@@ -674,7 +674,8 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
       mi_commit_mask_set(&commit_mask,mi_commit_mask_create(0, commit_needed)); 
     }
     segment->memid = memid;
-    segment->mem_is_fixed = mem_large;
+    segment->mem_is_pinned = is_pinned;
+    segment->mem_is_large = mem_large;
     segment->mem_is_committed = mi_commit_mask_is_full(commit_mask);
     mi_segments_track_size((long)(segment_size), tld);
     _mi_segment_map_allocated_at(segment);
@@ -690,7 +691,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
 
   if (!commit_info_still_good) {
     segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
-    segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_fixed);
+    segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_pinned && !segment->mem_is_large);
     segment->decommit_expire = 0;
     segment->decommit_mask = mi_commit_mask_empty();
   }
@@ -801,7 +802,7 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
   _mi_stat_decrease(&tld->stats->pages, 1);
 
   // reset the page memory to reduce memory pressure?
-  if (!segment->mem_is_fixed && !page->is_reset && mi_option_is_enabled(mi_option_page_reset)) {
+  if (!segment->mem_is_pinned && !page->is_reset && mi_option_is_enabled(mi_option_page_reset)) {
     size_t psize;
     uint8_t* start = _mi_page_start(segment, page, &psize);
     page->is_reset = true;

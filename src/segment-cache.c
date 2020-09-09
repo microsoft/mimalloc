@@ -25,6 +25,7 @@ terms of the MIT license. A copy of the license can be found in the file
 typedef struct mi_cache_slot_s {
   void*               p;
   size_t              memid;
+  bool                is_pinned;
   mi_commit_mask_t    commit_mask;
   _Atomic(mi_msecs_t) expire;
 } mi_cache_slot_t;
@@ -36,7 +37,7 @@ static mi_decl_cache_align mi_bitmap_field_t cache_available_large[MI_CACHE_FIEL
 static mi_decl_cache_align mi_bitmap_field_t cache_inuse[MI_CACHE_FIELDS];   // zero bit = free
 
 
-mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, bool* large, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
+mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
 {
   // only segment blocks
   if (size != MI_SEGMENT_SIZE) return NULL;
@@ -67,6 +68,7 @@ mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* comm
   mi_cache_slot_t* slot = &cache[mi_bitmap_index_bit(bitidx)];
   void* p = slot->p;
   *memid = slot->memid;
+  *is_pinned = slot->is_pinned;
   *is_zero = false;
   mi_commit_mask_t cmask = slot->commit_mask;  // copy
   slot->p = NULL;
@@ -139,7 +141,7 @@ static mi_decl_noinline void mi_segment_cache_purge(mi_os_tld_t* tld)
   }
 }
 
-mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t memid, mi_commit_mask_t commit_mask, bool is_large, mi_os_tld_t* tld)
+mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t memid, mi_commit_mask_t commit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld)
 {
   // only for normal segment blocks
   if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
@@ -162,14 +164,20 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
 
   mi_assert_internal(_mi_bitmap_is_claimed(cache_available, MI_CACHE_FIELDS, 1, bitidx));
   mi_assert_internal(_mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
+#if MI_DEBUG>1
+  if (is_pinned || is_large) {
+    mi_assert_internal(mi_commit_mask_is_full(commit_mask));
+  }
+#endif
 
   // set the slot
   mi_cache_slot_t* slot = &cache[mi_bitmap_index_bit(bitidx)];
   slot->p = start;
   slot->memid = memid;
+  slot->is_pinned = is_pinned;
   mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
   slot->commit_mask = commit_mask;
-  if (!mi_commit_mask_is_empty(commit_mask) && !is_large) {
+  if (!mi_commit_mask_is_empty(commit_mask) && !is_large && !is_pinned) {
     long delay = mi_option_get(mi_option_arena_reset_delay);
     if (delay == 0) {
       _mi_abandoned_await_readers(); // wait until safe to decommit

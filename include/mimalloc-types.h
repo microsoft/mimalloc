@@ -288,10 +288,11 @@ typedef uintptr_t  mi_commit_mask_t;
 // contain blocks.
 typedef struct mi_segment_s {
   size_t            memid;              // memory id for arena allocation
-  bool              mem_is_fixed;       // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)    
+  bool              mem_is_pinned;      // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)    
+  bool              mem_is_large;       // in large/huge os pages?
   bool              mem_is_committed;   // `true` if the whole segment is eagerly committed
 
-  bool              allow_decommit;
+  bool              allow_decommit;     
   mi_msecs_t        decommit_expire;
   mi_commit_mask_t  decommit_mask;
   mi_commit_mask_t  commit_mask;

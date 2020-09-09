@@ -304,6 +304,7 @@ typedef enum mi_option_e {
   mi_option_reset_decommits,
   mi_option_large_os_pages,         // implies eager commit
   mi_option_reserve_huge_os_pages,
+  mi_option_reserve_os_memory,
   mi_option_segment_cache,
   mi_option_page_reset,
   mi_option_abandoned_page_reset,
@@ -313,6 +314,7 @@ typedef enum mi_option_e {
   mi_option_reset_delay,
   mi_option_arena_reset_delay,
   mi_option_use_numa_nodes,
+  mi_option_limit_os_alloc,
   mi_option_os_tag,
   mi_option_max_errors,
   _mi_option_last
