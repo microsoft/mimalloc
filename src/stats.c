@@ -497,7 +497,9 @@ static void mi_stat_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* c
   getrusage(RUSAGE_SELF, &rusage);
   *utime = timeval_secs(&rusage.ru_utime);
   *stime = timeval_secs(&rusage.ru_stime);
+#if !defined(__HAIKU__)
   *page_faults = rusage.ru_majflt;
+#endif
   // estimate commit using our stats
   *peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.peak));
   *current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.current));
