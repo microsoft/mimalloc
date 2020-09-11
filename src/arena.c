@@ -228,14 +228,14 @@ void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, b
   Arena free
 ----------------------------------------------------------- */
 
-void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, mi_os_tld_t* tld) {
+void _mi_arena_free(void* p, size_t size, size_t memid, bool all_committed, mi_os_tld_t* tld) {
   mi_assert_internal(size > 0 && tld->stats != NULL);
   if (p==NULL) return;
   if (size==0) return;
 
   if (memid == MI_MEMID_OS) {
     // was a direct OS allocation, pass through
-    _mi_os_free_ex(p, size, is_committed, tld->stats);
+    _mi_os_free_ex(p, size, all_committed, tld->stats);
   }
   else {
     // allocated in an arena
@@ -258,7 +258,7 @@ void _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, mi_os
     }
     // potentially decommit
     if (arena->is_committed) {
-      mi_assert_internal(all_committed); 
+      mi_assert_internal(all_committed); // note: may be not true as we may "pretend" to be not committed (in segment.c)
     }
     else {
       mi_assert_internal(arena->blocks_committed != NULL);
