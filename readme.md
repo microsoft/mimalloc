@@ -18,19 +18,27 @@ without code changes, for example, on dynamically linked ELF-based systems (Linu
 ```
 > LD_PRELOAD=/usr/bin/libmimalloc.so  myprogram
 ```
-It also has an easy way to override the allocator in [Windows](#override_on_windows). Notable aspects of the design include:
+It also has an easy way to override the default allocator in [Windows](#override_on_windows). Notable aspects of the design include:
 
-- __small and consistent__: the library is about 6k LOC using simple and
+- __small and consistent__: the library is about 8k LOC using simple and
   consistent data structures. This makes it very suitable
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for
   bounded worst-case times with reference counting).
-- __free list sharding__: the big idea: instead of one big free list (per size class) we have
-  many smaller lists per memory "page" which both reduces fragmentation
-  and increases locality --
+- __free list sharding__: instead of one big free list (per size class) we have
+  many smaller lists per "mimalloc page" which reduces fragmentation and
+  increases locality --
   things that are allocated close in time get allocated close in memory.
-  (A memory "page" in _mimalloc_ contains blocks of one size class and is
-  usually 64KiB on a 64-bit system).
+  (A mimalloc page contains blocks of one size class and is usually 64KiB on a 64-bit system).
+- __free list multi-sharding__: the big idea! Not only do we shard the free list
+  per mimalloc page, but for each page we have multiple free lists. In particular, there
+  is one list for thread-local `free` operatinons, and another separate one for concurrent `free`
+  operations. Free-ing from another thread can now be a single CAS without needing
+  a sophisticated data structure to coordinate between threads. Since there will be 
+  thousands of separate free lists, contention is naturally distributed over the heap,
+  and the chance of contending on a single location will be low -- this is quite  
+  similar to randomized algorithms like skip lists where adding
+  a random oracle removes the need for a more complex algorithm.
 - __eager page reset__: when a "page" becomes empty (with increased chance
   due to free list sharding) the memory is marked to the OS as unused ("reset" or "purged")
   reducing (real) memory pressure and fragmentation, especially in long running
