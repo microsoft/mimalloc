@@ -223,7 +223,7 @@ completely and redirect all calls to the _mimalloc_ library instead .
 ## Environment Options
 
 You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)),
-or via environment variables.
+or via environment variables:
 
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
 - `MIMALLOC_VERBOSE=1`: show verbose messages.
@@ -273,11 +273,11 @@ _mimalloc_ can be build in secure mode by using the `-DMI_SECURE=ON` flags in `c
 to make mimalloc more robust against exploits. In particular:
 
 - All internal mimalloc pages are surrounded by guard pages and the heap metadata is behind a guard page as well (so a buffer overflow
-  exploit cannot reach into the metadata),
+  exploit cannot reach into the metadata).
 - All free list pointers are
   [encoded](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396)
-  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption,
-- Double free's are detected (and ignored),
+  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption.
+- Double free's are detected (and ignored).
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
   mitigate against attacks that rely on a predicable allocation order. Similarly, the larger heap blocks allocated by mimalloc
   from the OS are also address randomized.
