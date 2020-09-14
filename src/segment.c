@@ -207,10 +207,16 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
       mi_assert_internal(MI_SECURE <= 1 || segment->page_kind >= MI_PAGE_LARGE);
       uint8_t* start = (uint8_t*)segment + segment->segment_size - os_psize;
       if (protect && !segment->mem_is_committed) {
-        // ensure secure page is committed
-        _mi_mem_commit(start, os_psize, NULL, tld);
+        if (protect) {
+          // ensure secure page is committed
+          if (_mi_mem_commit(start, os_psize, NULL, tld)) {  // if this fails that is ok (as it is an unaccessible page)
+            mi_segment_protect_range(start, os_psize, protect);
+          }
+        }
       }
-      mi_segment_protect_range(start, os_psize, protect);
+      else {
+        mi_segment_protect_range(start, os_psize, protect);
+      }
     }
     else {
       // or protect every page
@@ -606,8 +612,11 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
       // ensure the initial info is committed
       if (segment->capacity < capacity) {
         bool commit_zero = false;
-        _mi_mem_commit(segment, pre_size, &commit_zero, tld->os);
+        bool ok = _mi_mem_commit(segment, pre_size, &commit_zero, tld->os);
         if (commit_zero) is_zero = true;
+        if (!ok) {
+          return NULL;
+        }
       }
     }
   }
