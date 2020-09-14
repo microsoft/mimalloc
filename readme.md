@@ -36,7 +36,7 @@ It also has an easy way to override the default allocator in [Windows](#override
   operations. Free-ing from another thread can now be a single CAS without needing
   a sophisticated data structure to coordinate between threads. Since there will be 
   thousands of separate free lists, contention is naturally distributed over the heap,
-  and the chance of contending on a single location will be low -- this is quite  
+  and the chance of contending on a single location will be low -- this is quite
   similar to randomized algorithms like skip lists where adding
   a random oracle removes the need for a more complex algorithm.
 - __eager page reset__: when a "page" becomes empty (with increased chance
