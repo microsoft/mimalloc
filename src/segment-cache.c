@@ -74,7 +74,7 @@ mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* comm
   slot->p = NULL;
   mi_atomic_storei64_release(&slot->expire,(mi_msecs_t)0);
   *commit_mask = cmask;
-  
+
   // mark the slot as free again
   mi_assert_internal(_mi_bitmap_is_claimed(cache_inuse, MI_CACHE_FIELDS, 1, bitidx));
   _mi_bitmap_unclaim(cache_inuse, MI_CACHE_FIELDS, 1, bitidx);
@@ -85,7 +85,7 @@ static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, vo
 {
   if (mi_commit_mask_is_empty(*cmask)) {
     // nothing
-  }    
+  }
   else if (mi_commit_mask_is_full(*cmask)) {
     _mi_os_decommit(p, total, stats);
   }
@@ -108,7 +108,7 @@ static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, vo
 
 #define MI_MAX_PURGE_PER_PUSH  (4)
 
-static mi_decl_noinline void mi_segment_cache_purge(mi_os_tld_t* tld) 
+static mi_decl_noinline void mi_segment_cache_purge(mi_os_tld_t* tld)
 {
   UNUSED(tld);
   mi_msecs_t now = _mi_clock_now();
@@ -145,7 +145,7 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
 {
   // only for normal segment blocks
   if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
-  
+
   // numa node determines start field
   int numa_node = _mi_os_numa_node(NULL);
   size_t start_field = 0;
@@ -187,7 +187,7 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
       mi_atomic_storei64_release(&slot->expire, _mi_clock_now() + delay);
     }
   }
-  
+
   // make it available
   _mi_bitmap_unclaim((is_large ? cache_available_large : cache_available), MI_CACHE_FIELDS, 1, bitidx);
   return true;
@@ -217,9 +217,15 @@ static _Atomic(uintptr_t)mi_segment_map[MI_SEGMENT_MAP_WSIZE];  // 2KiB per TB w
 
 static size_t mi_segment_map_index_of(const mi_segment_t* segment, size_t* bitidx) {
   mi_assert_internal(_mi_ptr_segment(segment) == segment); // is it aligned on MI_SEGMENT_SIZE?
-  uintptr_t segindex = ((uintptr_t)segment % MI_MAX_ADDRESS) / MI_SEGMENT_SIZE;
-  *bitidx = segindex % (8*MI_INTPTR_SIZE);
-  return (segindex / (8*MI_INTPTR_SIZE));
+  if ((uintptr_t)segment >= MI_MAX_ADDRESS) {
+    *bitidx = 0;
+    return 0;
+  }
+  else {
+    uintptr_t segindex = ((uintptr_t)segment) / MI_SEGMENT_SIZE;
+    *bitidx = segindex % MI_INTPTR_BITS;
+    return (segindex / MI_INTPTR_BITS);
+  }
 }
 
 void _mi_segment_map_allocated_at(const mi_segment_t* segment) {
@@ -257,8 +263,11 @@ static mi_segment_t* _mi_segment_of(const void* p) {
     return segment; // yes, allocated by us
   }
   if (index==0) return NULL;
+
+  // TODO: maintain max/min allocated range for efficiency for more efficient rejection of invalid pointers?
+
   // search downwards for the first segment in case it is an interior pointer
-  // could be slow but searches in MI_INTPTR_SIZE * MI_SEGMENT_SIZE (512MiB) steps trough 
+  // could be slow but searches in MI_INTPTR_SIZE * MI_SEGMENT_SIZE (512MiB) steps trough
   // valid huge objects
   // note: we could maintain a lowest index to speed up the path for invalid pointers?
   size_t lobitidx;
