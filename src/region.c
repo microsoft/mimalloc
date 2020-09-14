@@ -298,12 +298,12 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* is_large, bo
     if (any_uncommitted) {
       mi_assert_internal(!info.x.is_large);
       bool commit_zero = false;
-      bool ok = _mi_mem_commit(p, blocks * MI_SEGMENT_SIZE, &commit_zero, tld);
-      if (commit_zero) *is_zero = true;
-      if (!ok)
-      {
+      if (!_mi_mem_commit(p, blocks * MI_SEGMENT_SIZE, &commit_zero, tld)) {
+        // failed to commit! unclaim and return
+        mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
         return NULL;
       }
+      if (commit_zero) *is_zero = true;      
     }
   }
   else {
