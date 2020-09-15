@@ -118,7 +118,7 @@ This builds the library as a shared (dynamic)
 library (`.so` or `.dylib`), a static library (`.a`), and
 as a single object file (`.o`).
 
-`> sudo make install` (install the library and header files in `/usr/local/lib`  and `/usr/local/include`)
+`> sudo make install` (install the library and header files in `/usr/local/lib`  and `/usr/local/include`).
 
 You can build the debug version which does many internal checks and
 maintains detailed statistics as:
@@ -132,7 +132,7 @@ maintains detailed statistics as:
 This will name the shared library as `libmimalloc-debug.so`.
 
 Finally, you can build a _secure_ version that uses guard pages, encrypted
-free lists, etc., as:
+free lists, etc. as:
 ```
 > mkdir -p out/secure
 > cd out/secure
@@ -286,7 +286,7 @@ As always, evaluate with care as part of an overall security strategy as all of 
 
 ## Debug Mode
 
-When _mimalloc_ is built using debug mode, various checks are done at runtime to catch development errors.
+When _mimalloc_ is built using debug mode, various checks are done at runtime to catch development errors:
 
 - Statistics are maintained in detail for each object size. They can be shown using `MIMALLOC_SHOW_STATS=1` at runtime.
 - All objects have padding at the end to detect (byte precise) heap block overflows.
