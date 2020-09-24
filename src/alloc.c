@@ -448,8 +448,7 @@ void mi_free(void* p) mi_attr_noexcept
     #endif
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
-    page->used--;
-    if (mi_unlikely(mi_page_all_free(page))) {
+    if (mi_unlikely(--page->used == 0)) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))    
       _mi_page_retire(page);
     }
   }
