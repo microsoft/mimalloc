@@ -32,9 +32,9 @@ It also has an easy way to override the default allocator in [Windows](#override
   (A mimalloc page contains blocks of one size class and is usually 64KiB on a 64-bit system).
 - __free list multi-sharding__: the big idea! Not only do we shard the free list
   per mimalloc page, but for each page we have multiple free lists. In particular, there
-  is one list for thread-local `free` operatinons, and another separate one for concurrent `free`
+  is one list for thread-local `free` operations, and another one for concurrent `free`
   operations. Free-ing from another thread can now be a single CAS without needing
-  a sophisticated data structure to coordinate between threads. Since there will be 
+  sophisticated coordination between threads. Since there will be 
   thousands of separate free lists, contention is naturally distributed over the heap,
   and the chance of contending on a single location will be low -- this is quite
   similar to randomized algorithms like skip lists where adding
