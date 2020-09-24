@@ -11,26 +11,34 @@ mimalloc (pronounced "me-malloc")
 is a general purpose allocator with excellent [performance](#performance) characteristics.
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
-Latest release:`v1.6.4` (2020-08-06).
+Latest release:`v1.6.5` (2020-09-24).
 
 It is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
 ```
 > LD_PRELOAD=/usr/bin/libmimalloc.so  myprogram
 ```
-It also has an easy way to override the allocator in [Windows](#override_on_windows). Notable aspects of the design include:
+It also has an easy way to override the default allocator in [Windows](#override_on_windows). Notable aspects of the design include:
 
-- __small and consistent__: the library is about 6k LOC using simple and
+- __small and consistent__: the library is about 8k LOC using simple and
   consistent data structures. This makes it very suitable
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for
   bounded worst-case times with reference counting).
-- __free list sharding__: the big idea: instead of one big free list (per size class) we have
-  many smaller lists per memory "page" which both reduces fragmentation
-  and increases locality --
+- __free list sharding__: instead of one big free list (per size class) we have
+  many smaller lists per "mimalloc page" which reduces fragmentation and
+  increases locality --
   things that are allocated close in time get allocated close in memory.
-  (A memory "page" in _mimalloc_ contains blocks of one size class and is
-  usually 64KiB on a 64-bit system).
+  (A mimalloc page contains blocks of one size class and is usually 64KiB on a 64-bit system).
+- __free list multi-sharding__: the big idea! Not only do we shard the free list
+  per mimalloc page, but for each page we have multiple free lists. In particular, there
+  is one list for thread-local `free` operations, and another one for concurrent `free`
+  operations. Free-ing from another thread can now be a single CAS without needing
+  sophisticated coordination between threads. Since there will be 
+  thousands of separate free lists, contention is naturally distributed over the heap,
+  and the chance of contending on a single location will be low -- this is quite
+  similar to randomized algorithms like skip lists where adding
+  a random oracle removes the need for a more complex algorithm.
 - __eager page reset__: when a "page" becomes empty (with increased chance
   due to free list sharding) the memory is marked to the OS as unused ("reset" or "purged")
   reducing (real) memory pressure and fragmentation, especially in long running
@@ -55,8 +63,18 @@ You can read more on the design of _mimalloc_ in the [technical report](https://
 
 Enjoy!  
 
+### Branches
+
+* `master`: latest stable release.
+* `dev`: latest development branch.
+* `dev-slice`: experimental branch with a different way of managing mimalloc pages that tends 
+  to use less memory than regular mimalloc with similar performance. Give it a try and please
+  report any significant performance improvement or degradation.
+
 ### Releases
 
+* 2020-09-24, `v1.6.5`: stable release 1.6: using standard C atomics, passing tsan testing, improved
+  handling of failing to commit on Windows, add `mi_process_info` api call.
 * 2020-08-06, `v1.6.4`: stable release 1.6: improved error recovery in low-memory situations,
   support for IllumOS and Haiku, NUMA support for Vista/XP, improved NUMA detection for AMD Ryzen, ubsan support.
 * 2020-05-05, `v1.6.3`: stable release 1.6: improved behavior in out-of-memory situations, improved malloc zones on macOS,
@@ -84,8 +102,15 @@ free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af
 
 Special thanks to:
 
-* Jason Gibson (@jasongibson) for exhaustive testing on large workloads and server environments and finding complex bugs in (early versions of) `mimalloc`.
+* Mary Feofanova (@mary3000), Evgeniy Moiseenko, and Manuel Pöter (@mpoeter) for making mimalloc TSAN checkable, and finding
+  memory model bugs using the [genMC] model checker.
+* Weipeng Liu (@pongba), Zhuowei Li, Junhua Wang, and Jakub Szymanski, for their early support of mimalloc and deployment
+  at large scale services, leading to many improvements in the mimalloc algorithms for large workloads.
+* Jason Gibson (@jasongibson) for exhaustive testing on large scale workloads and server environments, and finding complex bugs 
+  in (early versions of) `mimalloc`.
 * Manuel Pöter (@mpoeter) and Sam Gross (@colesbury) for finding an ABA concurrency issue in abandoned segment reclamation.
+
+[genMC]: https://plv.mpi-sws.org/genmc/
 
 # Building
 
@@ -215,7 +240,7 @@ completely and redirect all calls to the _mimalloc_ library instead .
 ## Environment Options
 
 You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)),
-or via environment variables.
+or via environment variables:
 
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
 - `MIMALLOC_VERBOSE=1`: show verbose messages.
@@ -265,11 +290,11 @@ _mimalloc_ can be build in secure mode by using the `-DMI_SECURE=ON` flags in `c
 to make mimalloc more robust against exploits. In particular:
 
 - All internal mimalloc pages are surrounded by guard pages and the heap metadata is behind a guard page as well (so a buffer overflow
-  exploit cannot reach into the metadata),
+  exploit cannot reach into the metadata).
 - All free list pointers are
   [encoded](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396)
-  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption,
-- Double free's are detected (and ignored),
+  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption.
+- Double free's are detected (and ignored).
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
   mitigate against attacks that rely on a predicable allocation order. Similarly, the larger heap blocks allocated by mimalloc
   from the OS are also address randomized.
