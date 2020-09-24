@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 166   // major + 2 digits minor
+#define MI_MALLOC_VERSION 167   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -153,7 +153,9 @@ mi_decl_export void mi_thread_init(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
 
-mi_decl_export void mi_process_info(size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept;
+mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, 
+                                    size_t* current_rss, size_t* peak_rss, 
+                                    size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept;
 
 // -------------------------------------------------------------------------------------
 // Aligned allocation
