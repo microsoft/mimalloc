@@ -68,13 +68,13 @@ Enjoy!
 * `master`: latest stable release.
 * `dev`: latest development branch.
 * `dev-slice`: experimental branch with a different way of managing mimalloc pages that tends 
-  to use less memory than plain mimalloc with similar performance. Give it a try and please
+  to use less memory than regular mimalloc with similar performance. Give it a try and please
   report any significant performance improvement or degradation.
 
 ### Releases
 
 * 2020-09-24, `v1.6.5`: stable release 1.6: using standard C atomics, passing tsan testing, improved
-  handling of out-of-memory and failed commits, add `mi_process_info` api call.
+  handling of failing to commit on Windows, add `mi_process_info` api call.
 * 2020-08-06, `v1.6.4`: stable release 1.6: improved error recovery in low-memory situations,
   support for IllumOS and Haiku, NUMA support for Vista/XP, improved NUMA detection for AMD Ryzen, ubsan support.
 * 2020-05-05, `v1.6.3`: stable release 1.6: improved behavior in out-of-memory situations, improved malloc zones on macOS,
