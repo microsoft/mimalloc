@@ -442,7 +442,8 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
 bool mi_is_redirected();
 
 /// Return process information (time and memory usage).
-/// @param user_msecs      Optional. User time in milli-seconds.
+/// @param elapsed_msecs   Optional. Elapsed wall-clock time of the process in milli-seconds.
+/// @param user_msecs      Optional. User time in milli-seconds (as the sum over all threads).
 /// @param system_msecs    Optional. System time in milli-seconds.
 /// @param current_rss     Optional. Current working set size (touched pages).
 /// @param peak_rss        Optional. Peak working set size (touched pages).
@@ -453,7 +454,7 @@ bool mi_is_redirected();
 /// The \a current_rss is precise on Windows and MacOSX; other systems estimate
 /// this using \a current_commit. The \a commit is precise on Windows but estimated
 /// on other systems as the amount of read/write accessible memory reserved by mimalloc.
-void mi_process_info(size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults);
+void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults);
 
 /// \}
 

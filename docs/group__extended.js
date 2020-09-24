@@ -9,7 +9,7 @@ var group__extended =
     [ "mi_is_in_heap_region", "group__extended.html#ga5f071b10d4df1c3658e04e7fd67a94e6", null ],
     [ "mi_is_redirected", "group__extended.html#gaad25050b19f30cd79397b227e0157a3f", null ],
     [ "mi_malloc_small", "group__extended.html#ga7136c2e55cb22c98ecf95d08d6debb99", null ],
-    [ "mi_process_info", "group__extended.html#ga9144506d5ffa8cc03547867bd15e1032", null ],
+    [ "mi_process_info", "group__extended.html#ga7d862c2affd5790381da14eb102a364d", null ],
     [ "mi_register_deferred_free", "group__extended.html#ga3460a6ca91af97be4058f523d3cb8ece", null ],
     [ "mi_register_error", "group__extended.html#gaa1d55e0e894be240827e5d87ec3a1f45", null ],
     [ "mi_register_output", "group__extended.html#gae5b17ff027cd2150b43a33040250cf3f", null ],
