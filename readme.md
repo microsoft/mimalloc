@@ -63,8 +63,18 @@ You can read more on the design of _mimalloc_ in the [technical report](https://
 
 Enjoy!  
 
+### Branches
+
+* `master`: latest stable release.
+* `dev`: latest development branch.
+* `dev-slice`: experimental branch with a different way of managing mimalloc pages that tends 
+  to use less memory than plain mimalloc with similar performance. Give it a try and please
+  report any significant performance improvement or degradation.
+
 ### Releases
 
+* 2020-09-24, `v1.6.5`: stable release 1.6: using standard C atomics, passing tsan testing, improved
+  handling of out-of-memory and failed commits, add `mi_process_info` api call.
 * 2020-08-06, `v1.6.4`: stable release 1.6: improved error recovery in low-memory situations,
   support for IllumOS and Haiku, NUMA support for Vista/XP, improved NUMA detection for AMD Ryzen, ubsan support.
 * 2020-05-05, `v1.6.3`: stable release 1.6: improved behavior in out-of-memory situations, improved malloc zones on macOS,
@@ -92,8 +102,15 @@ free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af
 
 Special thanks to:
 
-* Jason Gibson (@jasongibson) for exhaustive testing on large workloads and server environments and finding complex bugs in (early versions of) `mimalloc`.
+* Mary Feofanova (@mary3000), Evgeniy Moiseenko, and Manuel Pöter (@mpoeter) for making mimalloc TSAN checkable, and finding
+  memory model bugs using the [genMC] model checker.
+* Weipeng Liu (@pongba), Zhuowei Li, Junhua Wang, and Jakub Szymanski, for their early support of mimalloc and deployment
+  at large scale services, leading to many improvements in the mimalloc algorithms for large workloads.
+* Jason Gibson (@jasongibson) for exhaustive testing on large scale workloads and server environments, and finding complex bugs 
+  in (early versions of) `mimalloc`.
 * Manuel Pöter (@mpoeter) and Sam Gross (@colesbury) for finding an ABA concurrency issue in abandoned segment reclamation.
+
+[genMC]: https://plv.mpi-sws.org/genmc/
 
 # Building
 
