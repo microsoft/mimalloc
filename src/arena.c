@@ -103,9 +103,9 @@ static size_t mi_block_count_of_size(size_t size) {
 ----------------------------------------------------------- */
 static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* bitmap_idx)
 {
-  size_t idx = mi_atomic_load_acquire(&arena->search_idx);  // start from last search
+  size_t idx = mi_atomic_load_relaxed(&arena->search_idx);  // start from last search; ok to be relaxed as the exact start does not matter
   if (_mi_bitmap_try_find_from_claim_across(arena->blocks_inuse, arena->field_count, idx, blocks, bitmap_idx)) {
-    mi_atomic_store_release(&arena->search_idx, idx);  // start search from here next time
+    mi_atomic_store_relaxed(&arena->search_idx, idx);  // start search from here next time
     return true;
   };
   return false;
