@@ -276,9 +276,9 @@ static void mi_buffered_out(const char* msg, void* arg) {
 // Print statistics
 //------------------------------------------------------------
 
-static void mi_stat_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults);
+static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults);
 
-static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun* out0, void* arg0) mi_attr_noexcept {
+static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) mi_attr_noexcept {
   // wrap the output function to be line buffered
   char buf[256];
   buffered_t buffer = { out0, arg0, NULL, 0, 255 };
@@ -319,8 +319,8 @@ static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun
   mi_stat_print(&stats->threads, "threads", -1, out, arg);
   mi_stat_counter_print_avg(&stats->searches, "searches", out, arg);
   _mi_fprintf(out, arg, "%10s: %7i\n", "numa nodes", _mi_os_numa_node_count());
-  if (elapsed > 0) _mi_fprintf(out, arg, "%10s: %7ld.%03ld s\n", "elapsed", elapsed/1000, elapsed%1000);
-
+  
+  mi_msecs_t elapsed;
   mi_msecs_t user_time;
   mi_msecs_t sys_time;
   size_t current_rss;
@@ -328,8 +328,9 @@ static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun
   size_t current_commit;
   size_t peak_commit;
   size_t page_faults;
-  mi_stat_process_info(&user_time, &sys_time, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
-  _mi_fprintf(out, arg, "%10s: user: %ld.%03ld s, system: %ld.%03ld s, faults: %lu, rss: ", "process", 
+  mi_stat_process_info(&elapsed, &user_time, &sys_time, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
+  _mi_fprintf(out, arg, "%10s: %7ld.%03ld s\n", "elapsed", elapsed/1000, elapsed%1000);
+  _mi_fprintf(out, arg, "%10s: user: %ld.%03ld s, system: %ld.%03ld s, faults: %lu, rss: ", "process",
               user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, (unsigned long)page_faults );
   mi_printf_amount((int64_t)peak_rss, 1, out, arg, "%s");
   if (peak_commit > 0) {
@@ -339,7 +340,7 @@ static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun
   _mi_fprintf(out, arg, "\n");  
 }
 
-static mi_msecs_t mi_time_start; // = 0
+static mi_msecs_t mi_process_start; // = 0
 
 static mi_stats_t* mi_stats_get_default(void) {
   mi_heap_t* heap = mi_heap_get_default();
@@ -357,7 +358,7 @@ void mi_stats_reset(void) mi_attr_noexcept {
   mi_stats_t* stats = mi_stats_get_default();
   if (stats != &_mi_stats_main) { memset(stats, 0, sizeof(mi_stats_t)); }
   memset(&_mi_stats_main, 0, sizeof(mi_stats_t));
-  mi_time_start = _mi_clock_start();
+  if (mi_process_start == 0) { mi_process_start = _mi_clock_start(); };
 }
 
 void mi_stats_merge(void) mi_attr_noexcept {
@@ -369,9 +370,8 @@ void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
 }
 
 void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
-  mi_msecs_t elapsed = _mi_clock_end(mi_time_start);
   mi_stats_merge_from(mi_stats_get_default());
-  _mi_stats_print(&_mi_stats_main, elapsed, out, arg);
+  _mi_stats_print(&_mi_stats_main, out, arg);
 }
 
 void mi_stats_print(void* out) mi_attr_noexcept {
@@ -380,8 +380,7 @@ void mi_stats_print(void* out) mi_attr_noexcept {
 }
 
 void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
-  mi_msecs_t elapsed = _mi_clock_end(mi_time_start);
-  _mi_stats_print(mi_stats_get_default(), elapsed, out, arg);
+  _mi_stats_print(mi_stats_get_default(), out, arg);
 }
 
 
@@ -456,8 +455,9 @@ static mi_msecs_t filetime_msecs(const FILETIME* ftime) {
   return msecs;
 }
 
-static void mi_stat_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) 
+static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) 
 {
+  *elapsed = _mi_clock_end(mi_process_start);
   FILETIME ct;
   FILETIME ut;
   FILETIME st;
@@ -491,8 +491,9 @@ static mi_msecs_t timeval_secs(const struct timeval* tv) {
   return ((mi_msecs_t)tv->tv_sec * 1000L) + ((mi_msecs_t)tv->tv_usec / 1000L);
 }
 
-static void mi_stat_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
+static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
 {
+  *elapsed = _mi_clock_end(mi_process_start);
   struct rusage rusage;
   getrusage(RUSAGE_SELF, &rusage);
   *utime = timeval_secs(&rusage.ru_utime);
@@ -532,8 +533,9 @@ static void mi_stat_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* c
 #pragma message("define a way to get process info")
 #endif
 
-static void mi_stat_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
+static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
 {
+  *elapsed = _mi_clock_end(mi_process_start);
   *peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.peak));
   *current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.current));
   *peak_rss    = *peak_commit;
@@ -545,8 +547,9 @@ static void mi_stat_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* c
 #endif
 
 
-mi_decl_export void mi_process_info(size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept
+mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept
 {
+  mi_msecs_t elapsed = 0;
   mi_msecs_t utime = 0;
   mi_msecs_t stime = 0;
   size_t current_rss0 = 0;
@@ -554,9 +557,10 @@ mi_decl_export void mi_process_info(size_t* user_msecs, size_t* system_msecs, si
   size_t current_commit0 = 0;
   size_t peak_commit0 = 0;
   size_t page_faults0 = 0;  
-  mi_stat_process_info(&utime, &stime, &current_rss0, &peak_rss0, &current_commit0, &peak_commit0, &page_faults0);
-  if (user_msecs!=NULL)     *user_msecs     = (utime < 0 ? 0 : (utime < (mi_msecs_t)SIZE_MAX ? (size_t)utime : SIZE_MAX));
-  if (system_msecs!=NULL)   *system_msecs   = (stime < 0 ? 0 : (stime < (mi_msecs_t)SIZE_MAX ? (size_t)stime : SIZE_MAX));
+  mi_stat_process_info(&elapsed,&utime, &stime, &current_rss0, &peak_rss0, &current_commit0, &peak_commit0, &page_faults0);
+  if (elapsed_msecs!=NULL)  *elapsed_msecs = (elapsed < 0 ? 0 : (elapsed < (mi_msecs_t)PTRDIFF_MAX ? (size_t)elapsed : PTRDIFF_MAX));
+  if (user_msecs!=NULL)     *user_msecs     = (utime < 0 ? 0 : (utime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)utime : PTRDIFF_MAX));
+  if (system_msecs!=NULL)   *system_msecs   = (stime < 0 ? 0 : (stime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)stime : PTRDIFF_MAX));
   if (current_rss!=NULL)    *current_rss    = current_rss0;
   if (peak_rss!=NULL)       *peak_rss       = peak_rss0;
   if (current_commit!=NULL) *current_commit = current_commit0;

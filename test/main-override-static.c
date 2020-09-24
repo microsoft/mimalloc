@@ -134,6 +134,7 @@ static void test_aslr(void) {
 }
 
 static void test_process_info(void) {
+  size_t elapsed = 0;
   size_t user_msecs = 0;
   size_t system_msecs = 0;
   size_t current_rss = 0;
@@ -145,6 +146,23 @@ static void test_process_info(void) {
     void* p = calloc(100,10);
     free(p);
   }
-  mi_process_info(&user_msecs, &system_msecs, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
-  printf("\n\n*** process info: user: %3zd.%03zd s, rss: %zd b, commit: %zd b\n\n", user_msecs/1000, user_msecs%1000, peak_rss, peak_commit);
+  mi_process_info(&elapsed, &user_msecs, &system_msecs, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
+  printf("\n\n*** process info: elapsed %3zd.%03zd s, user: %3zd.%03zd s, rss: %zd b, commit: %zd b\n\n", elapsed/1000, elapsed%1000, user_msecs/1000, user_msecs%1000, peak_rss, peak_commit);
 }
+
+static void test_reserved(void) {
+#define KiB 1024ULL
+#define MiB (KiB*KiB)
+#define GiB (MiB*KiB)
+  mi_reserve_os_memory(4*GiB, false, true);
+  void* p1 = malloc(100);
+  void* p2 = malloc(100000);
+  void* p3 = malloc(2*GiB);
+  void* p4 = malloc(1*GiB + 100000);
+  free(p1);
+  free(p2);
+  free(p3);
+  p3 = malloc(1*GiB);
+  free(p4);
+}
+
