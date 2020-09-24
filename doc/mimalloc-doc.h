@@ -26,17 +26,25 @@ without code changes, for example, on Unix you can use it as:
 
 Notable aspects of the design include:
 
-- __small and consistent__: the library is less than 6k LOC using simple and
+- __small and consistent__: the library is about 8k LOC using simple and
   consistent data structures. This makes it very suitable
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for
   bounded worst-case times with reference counting).
-- __free list sharding__: the big idea: instead of one big free list (per size class) we have
-  many smaller lists per memory "page" which both reduces fragmentation
-  and increases locality --
+- __free list sharding__: instead of one big free list (per size class) we have
+  many smaller lists per "mimalloc page" which reduces fragmentation and
+  increases locality --
   things that are allocated close in time get allocated close in memory.
-  (A memory "page" in _mimalloc_ contains blocks of one size class and is
-  usually 64KiB on a 64-bit system).
+  (A mimalloc page contains blocks of one size class and is usually 64KiB on a 64-bit system).
+- __free list multi-sharding__: the big idea! Not only do we shard the free list
+  per mimalloc page, but for each page we have multiple free lists. In particular, there
+  is one list for thread-local `free` operations, and another one for concurrent `free`
+  operations. Free-ing from another thread can now be a single CAS without needing
+  sophisticated coordination between threads. Since there will be 
+  thousands of separate free lists, contention is naturally distributed over the heap,
+  and the chance of contending on a single location will be low -- this is quite
+  similar to randomized algorithms like skip lists where adding
+  a random oracle removes the need for a more complex algorithm.
 - __eager page reset__: when a "page" becomes empty (with increased chance
   due to free list sharding) the memory is marked to the OS as unused ("reset" or "purged")
   reducing (real) memory pressure and fragmentation, especially in long running
@@ -51,7 +59,7 @@ Notable aspects of the design include:
   times (_wcat_), bounded space overhead (~0.2% meta-data, with at most 12.5% waste in allocation sizes),
   and has no internal points of contention using only atomic operations.
 - __fast__: In our benchmarks (see [below](#performance)),
-  _mimalloc_ always outperforms all other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
+  _mimalloc_ outperforms all other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
   and usually uses less memory (up to 25% more in the worst case). A nice property
   is that it does consistently well over a wide range of benchmarks.
 
@@ -442,7 +450,8 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
 bool mi_is_redirected();
 
 /// Return process information (time and memory usage).
-/// @param user_msecs      Optional. User time in milli-seconds.
+/// @param elapsed_msecs   Optional. Elapsed wall-clock time of the process in milli-seconds.
+/// @param user_msecs      Optional. User time in milli-seconds (as the sum over all threads).
 /// @param system_msecs    Optional. System time in milli-seconds.
 /// @param current_rss     Optional. Current working set size (touched pages).
 /// @param peak_rss        Optional. Peak working set size (touched pages).
@@ -453,7 +462,7 @@ bool mi_is_redirected();
 /// The \a current_rss is precise on Windows and MacOSX; other systems estimate
 /// this using \a current_commit. The \a commit is precise on Windows but estimated
 /// on other systems as the amount of read/write accessible memory reserved by mimalloc.
-void mi_process_info(size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults);
+void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults);
 
 /// \}
 

@@ -243,7 +243,7 @@ static bool mi_region_is_suitable(const mem_region_t* region, int numa_node, boo
 static bool mi_region_try_claim(int numa_node, size_t blocks, bool allow_large, mem_region_t** region, mi_bitmap_index_t* bit_idx, mi_os_tld_t* tld)
 {
   // try all regions for a free slot  
-  const size_t count = mi_atomic_load_acquire(&regions_count);
+  const size_t count = mi_atomic_load_relaxed(&regions_count); // monotonic, so ok to be relaxed
   size_t idx = tld->region_idx; // Or start at 0 to reuse low addresses? Starting at 0 seems to increase latency though
   for (size_t visited = 0; visited < count; visited++, idx++) {
     if (idx >= count) idx = 0;  // wrap around
