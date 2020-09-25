@@ -384,7 +384,7 @@ static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
     mi_assert_internal((void*)start != (void*)segment);
     mi_commit_mask_t cmask = mi_commit_mask_intersect(segment->commit_mask, mask);
     _mi_stat_increase(&_mi_stats_main.committed, full_size - mi_commit_mask_committed_size(cmask, MI_SEGMENT_SIZE)); // adjust for overlap
-    _mi_os_decommit(start, full_size, stats);  // ok if this fails
+    if (segment->allow_decommit) { _mi_os_decommit(start, full_size, stats); } // ok if this fails
     mi_commit_mask_clear(&segment->commit_mask, mask);
   }
   // increase expiration of reusing part of the delayed decommit
@@ -422,7 +422,7 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
 }
 
 static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_stats_t* stats) {
-  if (mi_commit_mask_is_empty(segment->decommit_mask)) return;
+  if (!segment->allow_decommit || mi_commit_mask_is_empty(segment->decommit_mask)) return;
   mi_msecs_t now = _mi_clock_now();
   if (!force && now < segment->decommit_expire) return;
 

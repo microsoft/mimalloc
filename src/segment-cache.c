@@ -177,8 +177,8 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
   slot->is_pinned = is_pinned;
   mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
   slot->commit_mask = commit_mask;
-  if (!mi_commit_mask_is_empty(commit_mask) && !is_large && !is_pinned) {
-    long delay = mi_option_get(mi_option_arena_reset_delay);
+  if (!mi_commit_mask_is_empty(commit_mask) && !is_large && !is_pinned && mi_option_is_enabled(mi_option_allow_decommit)) {
+    long delay = mi_option_get(mi_option_segment_decommit_delay);
     if (delay == 0) {
       _mi_abandoned_await_readers(); // wait until safe to decommit
       mi_commit_mask_decommit(&slot->commit_mask, start, MI_SEGMENT_SIZE, tld->stats);

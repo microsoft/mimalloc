@@ -314,7 +314,7 @@ typedef enum mi_option_e {
   mi_option_eager_commit_delay,
   mi_option_allow_decommit,
   mi_option_reset_delay,
-  mi_option_arena_reset_delay,
+  mi_option_segment_decommit_delay,
   mi_option_use_numa_nodes,
   mi_option_limit_os_alloc,
   mi_option_os_tag,
