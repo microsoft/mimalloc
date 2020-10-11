@@ -114,7 +114,7 @@ static bool mi_heap_page_never_delayed_free(mi_heap_t* heap, mi_page_queue_t* pq
 
 static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 {
-  if (!mi_heap_is_initialized(heap)) return;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return;
   _mi_deferred_free(heap, collect >= MI_FORCE);
 
   // note: never reclaim on collect but leave it to threads that need storage to reclaim 
@@ -213,6 +213,7 @@ uintptr_t _mi_heap_random_next(mi_heap_t* heap) {
 
 // zero out the page queues
 static void mi_heap_reset_pages(mi_heap_t* heap) {
+  mi_assert_internal(heap != NULL);
   mi_assert_internal(mi_heap_is_initialized(heap));
   // TODO: copy full empty heap instead?
   memset(&heap->pages_free_direct, 0, sizeof(heap->pages_free_direct));
@@ -228,6 +229,7 @@ static void mi_heap_reset_pages(mi_heap_t* heap) {
 static void mi_heap_free(mi_heap_t* heap) {
   mi_assert(heap != NULL);
   mi_assert_internal(mi_heap_is_initialized(heap));
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return;
   if (mi_heap_is_backing(heap)) return; // dont free the backing heap
 
   // reset default
@@ -310,7 +312,7 @@ void mi_heap_destroy(mi_heap_t* heap) {
   mi_assert(mi_heap_is_initialized(heap));
   mi_assert(heap->no_reclaim);
   mi_assert_expensive(mi_heap_is_valid(heap));
-  if (!mi_heap_is_initialized(heap)) return;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return;
   if (!heap->no_reclaim) {
     // don't free in case it may contain reclaimed pages
     mi_heap_delete(heap);
@@ -366,7 +368,7 @@ void mi_heap_delete(mi_heap_t* heap)
   mi_assert(heap != NULL);
   mi_assert(mi_heap_is_initialized(heap));
   mi_assert_expensive(mi_heap_is_valid(heap));
-  if (!mi_heap_is_initialized(heap)) return;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return;
 
   if (!mi_heap_is_backing(heap)) {
     // tranfer still used pages to the backing heap
@@ -381,8 +383,9 @@ void mi_heap_delete(mi_heap_t* heap)
 }
 
 mi_heap_t* mi_heap_set_default(mi_heap_t* heap) {
+  mi_assert(heap != NULL);
   mi_assert(mi_heap_is_initialized(heap));
-  if (!mi_heap_is_initialized(heap)) return NULL;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return NULL;
   mi_assert_expensive(mi_heap_is_valid(heap));
   mi_heap_t* old = mi_get_default_heap();
   _mi_heap_set_default_direct(heap);
@@ -408,7 +411,7 @@ static mi_heap_t* mi_heap_of_block(const void* p) {
 
 bool mi_heap_contains_block(mi_heap_t* heap, const void* p) {
   mi_assert(heap != NULL);
-  if (!mi_heap_is_initialized(heap)) return false;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return false;
   return (heap == mi_heap_of_block(p));
 }
 
@@ -426,7 +429,7 @@ static bool mi_heap_page_check_owned(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
 
 bool mi_heap_check_owned(mi_heap_t* heap, const void* p) {
   mi_assert(heap != NULL);
-  if (!mi_heap_is_initialized(heap)) return false;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return false;
   if (((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0) return false;  // only aligned pointers
   bool found = false;
   mi_heap_visit_pages(heap, &mi_heap_page_check_owned, (void*)p, &found);
