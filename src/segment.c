@@ -385,11 +385,13 @@ static uint8_t* mi_segment_raw_page_start(const mi_segment_t* segment, const mi_
     psize -= segment->segment_info_size;
   }
 
-  if (MI_SECURE > 1 || (MI_SECURE == 1 && page->segment_idx == segment->capacity - 1)) {
-    // secure == 1: the last page has an os guard page at the end
-    // secure >  1: every page has an os guard page
+#if (MI_SECURE > 1)  // every page has an os guard page
+  psize -= _mi_os_page_size();
+#elif (MI_SECURE==1) // the last page has an os guard page at the end
+  if (page->segment_idx == segment->capacity - 1) {
     psize -= _mi_os_page_size();
   }
+#endif
 
   if (page_size != NULL) *page_size = psize;
   mi_assert_internal(page->xblock_size == 0 || _mi_ptr_page(p) == page);
