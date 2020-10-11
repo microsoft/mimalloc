@@ -299,7 +299,8 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
 }
 #endif
 
-// always maintain stats for huge objects
+#if (MI_STAT>0)
+// maintain stats for huge objects
 static void mi_stat_huge_free(const mi_page_t* page) {
   mi_heap_t* const heap = mi_heap_get_default();
   const size_t bsize = mi_page_block_size(page); // to match stats in `page.c:mi_page_huge_alloc`
@@ -310,6 +311,11 @@ static void mi_stat_huge_free(const mi_page_t* page) {
     mi_heap_stat_decrease(heap, giant, bsize);
   }
 }
+#else
+static void mi_stat_huge_free(const mi_page_t* page) {
+  UNUSED(page);
+}
+#endif
 
 // ------------------------------------------------------
 // Free
