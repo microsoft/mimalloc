@@ -15,10 +15,11 @@ static void invalid_free();
 static void test_aslr(void);
 static void test_process_info(void);
 static void test_reserved(void);
+static void negative_stat(void);
 
 int main() {
   mi_version();
-
+  mi_stats_reset();
   // detect double frees and heap corruption
   // double_free1();
   // double_free2();
@@ -27,27 +28,29 @@ int main() {
   // test_aslr();
   // invalid_free();
   // test_reserved();
-
+  // negative_stat();
+  
   void* p1 = malloc(78);
   void* p2 = malloc(24);
   free(p1);
   p1 = mi_malloc(8);
-  //char* s = strdup("hello\n");
+  char* s = strdup("hello\n");
   free(p2);
+  
   p2 = malloc(16);
   p1 = realloc(p1, 32);
   free(p1);
   free(p2);
-  //free(s);
-  //mi_collect(true);
-
+  free(s);
+  
   /* now test if override worked by allocating/freeing across the api's*/
   //p1 = mi_malloc(32);
   //free(p1);
   //p2 = malloc(32);
   //mi_free(p2);
+  mi_collect(true);
   mi_stats_print(NULL);
-  test_process_info();
+  // test_process_info();
   return 0;
 }
 
@@ -166,4 +169,14 @@ static void test_reserved(void) {
   free(p3);
   p3 = malloc(1*GiB);
   free(p4);
+}
+
+
+
+static void negative_stat(void) {
+  int* p = mi_malloc(60000);
+  mi_stats_print_out(NULL, NULL);
+  *p = 100;
+  mi_free(p);
+  mi_stats_print_out(NULL, NULL);  
 }

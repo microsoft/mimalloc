@@ -282,6 +282,35 @@ static void mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, co
 }
 #endif
 
+// only maintain stats for smaller objects if requested
+#if (MI_STAT>1)
+static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
+  mi_heap_t* const heap = mi_heap_get_default();
+  const size_t usize = mi_page_usable_size_of(page, block);
+  const size_t bsize = mi_page_usable_block_size(page);
+  mi_heap_stat_decrease(heap, malloc, usize);
+  if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+    mi_heap_stat_decrease(heap, normal[_mi_bin(bsize)], 1);
+  }
+}
+#else
+static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
+  UNUSED(page); UNUSED(block);
+}
+#endif
+
+// always maintain stats for huge objects
+static void mi_stat_huge_free(const mi_page_t* page) {
+  mi_heap_t* const heap = mi_heap_get_default();
+  const size_t bsize = mi_page_block_size(page); // to match stats in `page.c:mi_page_huge_alloc`
+  if (bsize <= MI_HUGE_OBJ_SIZE_MAX) {
+    mi_heap_stat_decrease(heap, huge, bsize);
+  }
+  else {
+    mi_heap_stat_decrease(heap, giant, bsize);
+  }
+}
+
 // ------------------------------------------------------
 // Free
 // ------------------------------------------------------
@@ -300,6 +329,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   // huge page segments are always abandoned and can be freed immediately
   mi_segment_t* const segment = _mi_page_segment(page);
   if (segment->page_kind==MI_PAGE_HUGE) {
+    mi_stat_huge_free(page);
     _mi_segment_huge_page_free(segment, page, block);
     return;
   }
@@ -343,7 +373,6 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   }
 }
 
-
 // regular free
 static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block)
 {
@@ -383,6 +412,7 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool local, void* p) {
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
+  mi_stat_free(page, block);
   _mi_free_block(page, local, block);
 }
 
@@ -430,19 +460,11 @@ void mi_free(void* p) mi_attr_noexcept
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_block_t*)p;
 
-#if (MI_STAT>1)
-  mi_heap_t* const heap = mi_heap_get_default();
-  const size_t bsize = mi_page_usable_block_size(page);
-  mi_heap_stat_decrease(heap, malloc, bsize);
-  if (bsize <= MI_LARGE_OBJ_SIZE_MAX) { // huge page stats are accounted for in `_mi_page_retire`
-    mi_heap_stat_decrease(heap, normal[_mi_bin(bsize)], 1);
-  }
-#endif
-
   if (mi_likely(tid == segment->thread_id && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     if (mi_unlikely(mi_check_is_double_free(page,block))) return;
     mi_check_padding(page, block);
+    mi_stat_free(page, block);
     #if (MI_DEBUG!=0)
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
     #endif

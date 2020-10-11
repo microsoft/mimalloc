@@ -1334,13 +1334,6 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
     page->is_zero = false;
     mi_assert(page->used == 0);
     mi_tld_t* tld = heap->tld;
-    const size_t bsize = mi_page_usable_block_size(page);
-    if (bsize > MI_HUGE_OBJ_SIZE_MAX) {
-      _mi_stat_decrease(&tld->stats.giant, bsize); 
-    }
-    else {
-      _mi_stat_decrease(&tld->stats.huge, bsize);
-    }
     mi_segments_track_size((long)segment->segment_size, &tld->segments);
     _mi_segment_page_free(page, true, &tld->segments);
   }
