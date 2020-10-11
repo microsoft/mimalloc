@@ -1324,7 +1324,7 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
 
   // claim it and free
   mi_heap_t* heap = mi_heap_get_default(); // issue #221; don't use the internal get_default_heap as we need to ensure the thread is initialized.
-  // paranoia: if this it the last reference, the cas should always succeed
+  // paranoia: if this is the last reference, the cas should always succeed
   uintptr_t expected_tid = 0;
   if (mi_atomic_cas_strong_acq_rel(&segment->thread_id, &expected_tid, heap->thread_id)) {
     mi_block_set_next(page, block, page->free);
@@ -1333,13 +1333,6 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
     page->is_zero = false;
     mi_assert(page->used == 0);
     mi_tld_t* tld = heap->tld;
-    const size_t bsize = mi_page_usable_block_size(page);
-    if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
-      _mi_stat_decrease(&tld->stats.large, bsize); 
-    }
-    else {
-      _mi_stat_decrease(&tld->stats.huge, bsize);
-    }
     // mi_segments_track_size((long)segment->segment_size, tld);
     _mi_segment_page_free(page, true, &tld->segments);
   }

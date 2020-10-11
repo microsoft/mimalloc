@@ -123,7 +123,7 @@ static void free_items(void* p) {
 
 static void stress(intptr_t tid) {
   //bench_start_thread();
-  uintptr_t r = (tid * 43); // rand();
+  uintptr_t r = ((tid + 1) * 43); // rand();
   const size_t max_item_shift = 5; // 128
   const size_t max_item_retained_shift = max_item_shift + 2;
   size_t allocs = 100 * ((size_t)SCALE) * (tid % 8 + 1); // some threads do more
@@ -243,14 +243,18 @@ int main(int argc, char** argv) {
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
   srand(0x7feb352d);
-  // mi_stats_reset();
+  #ifndef NDEBUG
+  mi_stats_reset();
+  #endif
 #ifdef STRESS
     test_stress();
 #else
     test_leak();
 #endif
 
-  // mi_collect(true);
+  #ifndef NDEBUG
+  mi_collect(true);
+  #endif
   mi_stats_print(NULL);
   //bench_end_program();
   return 0;
