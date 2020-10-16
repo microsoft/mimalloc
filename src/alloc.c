@@ -23,20 +23,22 @@ terms of the MIT license. A copy of the license can be found in the file
 // Fall back to generic allocation only if the list is empty.
 extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept {
   mi_assert_internal(page->xblock_size==0||mi_page_block_size(page) >= size);
-  mi_block_t* block = page->free;
+  mi_block_t* const block = page->free;
   if (mi_unlikely(block == NULL)) {
     return _mi_malloc_generic(heap, size); 
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   // pop from the free list
-  page->free = mi_block_next(page, block);
   page->used++;
+  page->free = mi_block_next(page, block);
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
+
 #if (MI_DEBUG>0)
   if (!page->is_zero) { memset(block, MI_DEBUG_UNINIT, size); }
 #elif (MI_SECURE!=0)
   block->next = 0;  // don't leak internal data
 #endif
+
 #if (MI_STAT>1)
   const size_t bsize = mi_page_usable_block_size(page);
   if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
@@ -44,6 +46,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
     mi_heap_stat_increase(heap, normal[bin], 1);
   }
 #endif
+
 #if (MI_PADDING > 0) && defined(MI_ENCODE_FREELIST)
   mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
   ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
@@ -54,6 +57,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
   for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
 #endif
+
   return block;
 }
 
