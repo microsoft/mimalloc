@@ -163,8 +163,8 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool*
   // try to allocate in an arena if the alignment is small enough
   // and the object is not too large or too small.
   if (alignment <= MI_SEGMENT_ALIGN &&
-      // size <= MI_ARENA_MAX_OBJ_SIZE &&
-      size >= MI_ARENA_MIN_OBJ_SIZE)
+      size >= MI_ARENA_MIN_OBJ_SIZE &&
+      mi_atomic_load_relaxed(&mi_arena_count) > 0)
   {
     const size_t bcount = mi_block_count_of_size(size);
     const int numa_node = _mi_os_numa_node(tld); // current numa node
