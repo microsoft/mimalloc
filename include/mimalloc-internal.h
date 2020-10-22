@@ -286,7 +286,7 @@ We try to circumvent this in an efficient way:
 - macOSX : we use an unused TLS slot from the OS allocated slots (MI_TLS_SLOT). On OSX, the
            loader itself calls `malloc` even before the modules are initialized.
 - OpenBSD: we use an unused slot from the pthread block (MI_TLS_PTHREAD_SLOT_OFS).
-- DragonFly: not yet working.
+- DragonFly: the uniqueid use is buggy but kept for reference.
 ------------------------------------------------------------------------------------------- */
 
 extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
@@ -304,7 +304,7 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 #define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 4*sizeof(void*) + 24)  
 #elif defined(__DragonFly__)
 #warning "mimalloc is not working correctly on DragonFly yet."
-#define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
+//#define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
 #endif
 #endif
 
@@ -316,7 +316,7 @@ static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
   pthread_t self = pthread_self();
   #if defined(__DragonFly__)
   if (self==NULL) {
-    static mi_heap_t* pheap_main = _mi_heap_main_get();
+    mi_heap_t* pheap_main = _mi_heap_main_get();
     return &pheap_main;
   }
   #endif

@@ -306,7 +306,7 @@ static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
   pthread_t* threads = (pthread_t*)custom_calloc(nthreads,sizeof(pthread_t));
   memset(threads, 0, sizeof(pthread_t) * nthreads);
   //pthread_setconcurrency(nthreads);
-  for (uintptr_t i = 0; i < nthreads; i++) {
+  for (size_t i = 0; i < nthreads; i++) {
     pthread_create(&threads[i], NULL, &thread_entry, (void*)i);
   }
   for (size_t i = 0; i < nthreads; i++) {
