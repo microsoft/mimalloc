@@ -435,7 +435,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
     // though since properly aligned allocations will already use large pages if available
     // in that case -- in particular for our large regions (in `memory.c`).
     // However, some systems only allow THP if called with explicit `madvise`, so
-    // when large OS pages are enabled for mimalloc, we call `madvice` anyways.
+    // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
     if (allow_large && use_large_os_page(size, try_alignment)) {
       if (madvise(p, size, MADV_HUGEPAGE) == 0) {
         *is_large = true; // possibly
@@ -721,6 +721,9 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
     // for commit, just change the protection
     err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
     if (err != 0) { err = errno; }
+  #if defined(MADV_FREE_REUSE)
+    while ((err = madvise(start, csize, MADV_FREE_REUSE)) != 0 && errno == EAGAIN) {}
+  #endif
   }
   #else
   err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
@@ -782,9 +785,17 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   if (p != start) return false;
 #else
 #if defined(MADV_FREE)
+  #if defined(MADV_FREE_REUSABLE)
+  static _Atomic(uintptr_t) advice = ATOMIC_VAR_INIT(MADV_FREE_REUSABLE);
+  int oadvice = (int)mi_atomic_load_relaxed(&advice);
+  int err;
+  while ((err = madvise(start, csize, oadvice)) != 0 && errno == EAGAIN) {}
+  if (err != 0 && errno == EINVAL && advice == MADV_FREE_REUSABLE) {
+  #else
   static _Atomic(uintptr_t) advice = ATOMIC_VAR_INIT(MADV_FREE);
   int err = madvise(start, csize, (int)mi_atomic_load_relaxed(&advice));
   if (err != 0 && errno == EINVAL && advice == MADV_FREE) {
+  #endif
     // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
     mi_atomic_store_release(&advice, (uintptr_t)MADV_DONTNEED);
     err = madvise(start, csize, MADV_DONTNEED);
