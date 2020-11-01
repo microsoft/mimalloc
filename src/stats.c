@@ -167,6 +167,7 @@ static void mi_print_count(int64_t n, int64_t unit, mi_output_fun* out, void* ar
 static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg ) {
   _mi_fprintf(out, arg,"%10s:", msg);
   if (unit>0) {
+    mi_print_amount(stat->current, unit, out, arg);
     mi_print_amount(stat->peak, unit, out, arg);
     mi_print_amount(stat->allocated, unit, out, arg);
     mi_print_amount(stat->freed, unit, out, arg);
@@ -178,6 +179,7 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
       _mi_fprintf(out, arg, "  ok\n");
   }
   else if (unit<0) {
+    mi_print_amount(stat->current, -1, out, arg);
     mi_print_amount(stat->peak, -1, out, arg);
     mi_print_amount(stat->allocated, -1, out, arg);
     mi_print_amount(stat->freed, -1, out, arg);
@@ -194,6 +196,7 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
       _mi_fprintf(out, arg, "  ok\n");
   }
   else {
+    mi_print_amount(stat->current, 1, out, arg);
     mi_print_amount(stat->peak, 1, out, arg);
     mi_print_amount(stat->allocated, 1, out, arg);
     _mi_fprintf(out, arg, "\n");
@@ -215,7 +218,7 @@ static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char*
 
 
 static void mi_print_header(mi_output_fun* out, void* arg ) {
-  _mi_fprintf(out, arg, "%10s: %10s %10s %10s %10s %10s\n", "heap stats", "peak  ", "total  ", "freed  ", "unit  ", "count  ");
+  _mi_fprintf(out, arg, "%10s: %10s %10s %10s %10s %10s %10s\n", "heap stats", "current  ", "peak  ", "total  ", "freed  ", "unit  ", "count  ");
 }
 
 #if MI_STAT>1
