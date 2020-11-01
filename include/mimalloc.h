@@ -317,6 +317,7 @@ typedef enum mi_option_e {
   mi_option_limit_os_alloc,
   mi_option_os_tag,
   mi_option_max_errors,
+  mi_option_max_warnings,
   _mi_option_last
 } mi_option_t;
 
