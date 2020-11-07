@@ -246,10 +246,10 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   if (MI_SECURE>0) {
     // _mi_os_unprotect(segment, mi_segment_size(segment)); // ensure no more guard pages are set
     // unprotect the guard pages; we cannot just unprotect the whole segment size as part may be decommitted
-    size_t os_page_size = _mi_os_page_size();
-    _mi_os_unprotect((uint8_t*)segment + mi_segment_info_size(segment) - os_page_size, os_page_size);
-    uint8_t* end = (uint8_t*)segment + mi_segment_size(segment) - os_page_size;
-    _mi_os_unprotect(end, os_page_size);
+    size_t os_pagesize = _mi_os_page_size();
+    _mi_os_unprotect((uint8_t*)segment + mi_segment_info_size(segment) - os_pagesize, os_pagesize);
+    uint8_t* end = (uint8_t*)segment + mi_segment_size(segment) - os_pagesize;
+    _mi_os_unprotect(end, os_pagesize);
   }
 
   // purge delayed decommits now? (no, leave it to the cache)
@@ -712,12 +712,12 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   if (MI_SECURE>0) {
     // in secure mode, we set up a protected page in between the segment info
     // and the page data
-    size_t os_page_size = _mi_os_page_size();    
-    mi_assert_internal(mi_segment_info_size(segment) - os_page_size >= pre_size);
-    _mi_os_protect((uint8_t*)segment + mi_segment_info_size(segment) - os_page_size, os_page_size);
-    uint8_t* end = (uint8_t*)segment + mi_segment_size(segment) - os_page_size;
-    mi_segment_ensure_committed(segment, end, os_page_size, tld->stats);
-    _mi_os_protect(end, os_page_size);
+    size_t os_pagesize = _mi_os_page_size();    
+    mi_assert_internal(mi_segment_info_size(segment) - os_pagesize >= pre_size);
+    _mi_os_protect((uint8_t*)segment + mi_segment_info_size(segment) - os_pagesize, os_pagesize);
+    uint8_t* end = (uint8_t*)segment + mi_segment_size(segment) - os_pagesize;
+    mi_segment_ensure_committed(segment, end, os_pagesize, tld->stats);
+    _mi_os_protect(end, os_pagesize);
     if (slice_entries == segment_slices) segment->slice_entries--; // don't use the last slice :-(
     guard_slices = 1;
   }
