@@ -116,8 +116,8 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   mi_stat_counter_add(&stats->giant_count, &src->giant_count, 1);
 #if MI_STAT>1
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
-    if (src->normal[i].allocated > 0 || src->normal[i].freed > 0) {
-      mi_stat_add(&stats->normal[i], &src->normal[i], 1);
+    if (src->normal_bins[i].allocated > 0 || src->normal_bins[i].freed > 0) {
+      mi_stat_add(&stats->normal_bins[i], &src->normal_bins[i], 1);
     }
   }
 #endif
@@ -290,7 +290,7 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_print_header(out,arg);
   #if MI_STAT>1
   mi_stat_count_t normal = { 0,0,0,0 };
-  mi_stats_print_bins(&normal, stats->normal, MI_BIN_HUGE, "normal",out,arg);
+  mi_stats_print_bins(&normal, stats->normal_bins, MI_BIN_HUGE, "normal",out,arg);
   mi_stat_print(&normal, "normal", 1, out, arg);
   mi_stat_print(&stats->huge, "huge", (stats->huge_count.count == 0 ? 1 : -(stats->huge.allocated / stats->huge_count.count)), out, arg);
   mi_stat_print(&stats->giant, "giant", (stats->giant_count.count == 0 ? 1 : -(stats->giant.allocated / stats->giant_count.count)), out, arg);

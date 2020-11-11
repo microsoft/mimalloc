@@ -428,7 +428,7 @@ typedef struct mi_stats_s {
   mi_stat_counter_t huge_count;
   mi_stat_counter_t giant_count;
 #if MI_STAT>1
-  mi_stat_count_t normal[MI_BIN_HUGE+1];
+  mi_stat_count_t normal_bins[MI_BIN_HUGE+1];
 #endif
 } mi_stats_t;
 

@@ -284,7 +284,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   _mi_page_free_collect(page, false);  // update used count
   const size_t inuse = page->used;
   if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
-    mi_heap_stat_decrease(heap, normal[_mi_bin(bsize)], inuse);
+    mi_heap_stat_decrease(heap, normal_bins[_mi_bin(bsize)], inuse);
   }
   mi_heap_stat_decrease(heap, malloc, bsize * inuse);  // todo: off for aligned blocks...
 #endif
