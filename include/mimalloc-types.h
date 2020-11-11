@@ -416,6 +416,7 @@ typedef struct mi_stats_s {
   mi_stat_count_t segments_abandoned;
   mi_stat_count_t pages_abandoned;
   mi_stat_count_t threads;
+  mi_stat_count_t normal;
   mi_stat_count_t huge;
   mi_stat_count_t giant;
   mi_stat_count_t malloc;
@@ -425,6 +426,7 @@ typedef struct mi_stats_s {
   mi_stat_counter_t commit_calls;
   mi_stat_counter_t page_no_retire;
   mi_stat_counter_t searches;
+  mi_stat_counter_t normal_count;
   mi_stat_counter_t huge_count;
   mi_stat_counter_t giant_count;
 #if MI_STAT>1
@@ -447,6 +449,7 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 #define mi_stat_counter_increase(stat,amount) (void)0
 #endif
 
+#define mi_heap_stat_counter_increase(heap,stat,amount)  mi_stat_counter_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_increase(heap,stat,amount)  mi_stat_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_decrease(heap,stat,amount)  mi_stat_decrease( (heap)->tld->stats.stat, amount)
 

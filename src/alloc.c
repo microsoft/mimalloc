@@ -39,11 +39,15 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   block->next = 0;  // don't leak internal data
 #endif
 
-#if (MI_STAT>1)
+#if (MI_STAT>0)
   const size_t bsize = mi_page_usable_block_size(page);
   if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+    mi_heap_stat_increase(heap, normal, bsize);
+    mi_heap_stat_counter_increase(heap, normal_count, 1);
+#if (MI_STAT>1)
     const size_t bin = _mi_bin(bsize);
     mi_heap_stat_increase(heap, normal_bins[bin], 1);
+#endif
   }
 #endif
 
@@ -287,14 +291,22 @@ static void mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, co
 #endif
 
 // only maintain stats for smaller objects if requested
-#if (MI_STAT>1)
+#if (MI_STAT>0)
 static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
+#if (MI_STAT < 2)  
+  UNUSED(block);
+#endif
   mi_heap_t* const heap = mi_heap_get_default();
+  const size_t bsize = mi_page_usable_block_size(page);  
+#if (MI_STAT>1)
   const size_t usize = mi_page_usable_size_of(page, block);
-  const size_t bsize = mi_page_usable_block_size(page);
   mi_heap_stat_decrease(heap, malloc, usize);
+#endif  
   if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+    mi_heap_stat_decrease(heap, normal, bsize);
+#if (MI_STAT > 1)
     mi_heap_stat_decrease(heap, normal_bins[_mi_bin(bsize)], 1);
+#endif
   }
 }
 #else
