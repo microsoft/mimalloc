@@ -19,7 +19,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 
-static uintptr_t mi_max_error_count   = 64; // stop outputting errors after this
+static uintptr_t mi_max_error_count   = 16; // stop outputting errors after this
 static uintptr_t mi_max_warning_count = 16; // stop outputting warnings after this
 
 static void mi_add_stderr_output();
@@ -90,7 +90,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0,   UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes.
   { 0,   UNINIT, MI_OPTION(limit_os_alloc) },    // 1 = do not use OS memory for allocation (but only reserved arenas)
   { 100, UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
-  { 64,  UNINIT, MI_OPTION(max_errors) },        // maximum errors that are output
+  { 16,  UNINIT, MI_OPTION(max_errors) },        // maximum errors that are output
   { 16,  UNINIT, MI_OPTION(max_warnings) }       // maximum warnings that are output
 
 };
