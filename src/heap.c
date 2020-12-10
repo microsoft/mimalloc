@@ -274,10 +274,10 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   const size_t bsize = mi_page_block_size(page);
   if (bsize > MI_MEDIUM_OBJ_SIZE_MAX) {
     if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
-      _mi_stat_decrease(&heap->tld->stats.large,bsize);
+      mi_heap_stat_decrease(heap, large, bsize);
     }
     else {
-      _mi_stat_decrease(&heap->tld->stats.huge, bsize);
+      mi_heap_stat_decrease(heap, huge, bsize);
     }
   }
 #if (MI_STAT>1)
