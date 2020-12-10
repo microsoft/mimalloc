@@ -19,8 +19,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 
-static uintptr_t mi_max_error_count   = -1ULL; // stop outputting errors after this
-static uintptr_t mi_max_warning_count = 16;  // stop outputting warnings after this
+static uintptr_t mi_max_error_count   = 64; // stop outputting errors after this
+static uintptr_t mi_max_warning_count = 16; // stop outputting warnings after this
 
 static void mi_add_stderr_output();
 
@@ -90,8 +90,9 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0,   UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes.
   { 0,   UNINIT, MI_OPTION(limit_os_alloc) },    // 1 = do not use OS memory for allocation (but only reserved arenas)
   { 100, UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
-  { 16,  UNINIT, MI_OPTION(max_warnings) },      // maximum warnings that are output
-  { -1ULL, UNINIT, MI_OPTION(max_errors) }       // maximum errors that are output
+  { 64,  UNINIT, MI_OPTION(max_errors) },        // maximum errors that are output
+  { 16,  UNINIT, MI_OPTION(max_warnings) }       // maximum warnings that are output
+
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -250,7 +251,8 @@ static void mi_add_stderr_output() {
 // --------------------------------------------------------
 // Messages, all end up calling `_mi_fputs`.
 // --------------------------------------------------------
-static _Atomic(uintptr_t) error_count; // = 0;  // when MAX_ERROR_COUNT stop emitting errors and warnings
+static _Atomic(uintptr_t) error_count;   // = 0;  // when >= max_error_count stop emitting errors
+static _Atomic(uintptr_t) warning_count; // = 0;  // when >= max_warning_count stop emitting warnings
 
 // When overriding malloc, we may recurse into mi_vfprintf if an allocation
 // inside the C runtime causes another message.
@@ -328,7 +330,7 @@ static void mi_show_error_message(const char* fmt, va_list args) {
 
 void _mi_warning_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
-  if (mi_atomic_increment_acq_rel(&error_count) > mi_max_warning_count) return;
+  if (mi_atomic_increment_acq_rel(&warning_count) > mi_max_warning_count) return;
   va_list args;
   va_start(args,fmt);
   mi_vfprintf(NULL, NULL, "mimalloc: warning: ", fmt, args);
