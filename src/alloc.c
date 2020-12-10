@@ -778,7 +778,12 @@ but we call `exit` instead (i.e. not returning).
 #ifdef __cplusplus
 #include <new>
 static bool mi_try_new_handler(bool nothrow) {
-  std::new_handler h = std::get_new_handler();
+  #if defined(_MSC_VER) || (__cplusplus >= 201103L)
+    std::new_handler h = std::get_new_handler();
+  #else
+    std::new_handler h = std::set_new_handler();
+    std::set_new_handler(h);
+  #endif  
   if (h==NULL) {
     if (!nothrow) throw std::bad_alloc();
     return false;
