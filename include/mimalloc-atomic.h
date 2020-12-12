@@ -282,16 +282,22 @@ static inline void mi_atomic_yield(void) {
   YieldProcessor();
 }
 #elif (defined(__GNUC__) || defined(__clang__)) && \
-      (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))
+      (defined(__x86_64__) || defined(__i386__) || (defined(__arm__) && __ARM_ARCH__ >= 7) || defined(__aarch64__))
 #if defined(__x86_64__) || defined(__i386__)
 static inline void mi_atomic_yield(void) {
   __asm__ volatile ("pause" ::: "memory");
 }
-#elif defined(__arm__) || defined(__aarch64__)
+#elif (defined(__arm__) && __ARM_ARCH__ >= 7) || defined(__aarch64__)
 static inline void mi_atomic_yield(void) {
-  __asm__ volatile("yield");
+  __asm__ volatile("yield" ::: "memory");
 }
 #endif
+#elif defined(__sun)
+// Fallback for other archs
+#include <synch.h>
+static inline void mi_atomic_yield(void) {
+  smt_pause();
+}
 #elif defined(__wasi__)
 #include <sched.h>
 static inline void mi_atomic_yield(void) {
