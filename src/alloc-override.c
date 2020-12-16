@@ -60,6 +60,13 @@ terms of the MIT license. A copy of the license can be found in the file
     MI_INTERPOSE_MI(posix_memalign),
     MI_INTERPOSE_MI(reallocf),
     MI_INTERPOSE_MI(valloc),
+    #ifndef MI_OSX_ZONE
+    // some code allocates from default zone but deallocates using plain free :-( (like NxHashResizeToCapacity <https://github.com/nneonneo/osx-10.9-opensource/blob/master/objc4-551.1/runtime/hashtable2.mm>)
+    MI_INTERPOSE_FUN(free,mi_cfree), // use safe free that checks if pointers are from us
+    #else
+    // We interpose malloc_default_zone in alloc-override-osx.c
+    MI_INTERPOSE_MI(free),
+    #endif
     // some code allocates from a zone but deallocates using plain free :-( (like NxHashResizeToCapacity <https://github.com/nneonneo/osx-10.9-opensource/blob/master/objc4-551.1/runtime/hashtable2.mm>)
     MI_INTERPOSE_FUN(free,mi_cfree), // use safe free that checks if pointers are from us
   };

@@ -259,7 +259,7 @@ static _Atomic(uintptr_t) warning_count; // = 0;  // when >= max_warning_count s
 static mi_decl_thread bool recurse = false;
 
 static bool mi_recurse_enter(void) {
-  #ifdef MI_TLS_RECURSE_GUARD
+  #if defined(__MACH__) || defined(MI_TLS_RECURSE_GUARD)
   if (_mi_preloading()) return true;
   #endif
   if (recurse) return false;
@@ -268,7 +268,7 @@ static bool mi_recurse_enter(void) {
 }
 
 static void mi_recurse_exit(void) {
-  #ifdef MI_TLS_RECURSE_GUARD
+  #if defined(__MACH__) || defined(MI_TLS_RECURSE_GUARD)
   if (_mi_preloading()) return;
   #endif
   recurse = false;
