@@ -20,7 +20,6 @@ terms of the MIT license.
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include <mimalloc.h>
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
@@ -43,6 +42,7 @@ static size_t use_one_size = 0;              // use single object size of `N * s
 #define custom_realloc(p,s)   realloc(p,s)
 #define custom_free(p)        free(p)
 #else
+#include <mimalloc.h>
 #define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
@@ -243,19 +243,23 @@ int main(int argc, char** argv) {
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
   srand(0x7feb352d);
-  #ifndef NDEBUG
+   
+#if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
   mi_stats_reset();
-  #endif
-#ifdef STRESS
-    test_stress();
-#else
-    test_leak();
 #endif
 
-  #ifndef NDEBUG
+#ifdef STRESS
+  test_stress();
+#else
+  test_leak();
+#endif
+  
+#if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
   mi_collect(true);
-  #endif
+#endif  
+#ifndef USE_STD_MALLOC
   mi_stats_print(NULL);
+#endif
   //bench_end_program();
   return 0;
 }
