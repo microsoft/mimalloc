@@ -102,6 +102,8 @@ free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af
 
 Special thanks to:
 
+* [David Carlier](https://devnexen.blogspot.com/) (@devnexen) for his many contributions, and making
+  mimalloc work better on many less common operating systems, like Haiku, Dragonfly, etc.
 * Mary Feofanova (@mary3000), Evgeniy Moiseenko, and Manuel Pöter (@mpoeter) for making mimalloc TSAN checkable, and finding
   memory model bugs using the [genMC] model checker.
 * Weipeng Liu (@pongba), Zhuowei Li, Junhua Wang, and Jakub Szymanski, for their early support of mimalloc and deployment
@@ -111,6 +113,14 @@ Special thanks to:
 * Manuel Pöter (@mpoeter) and Sam Gross (@colesbury) for finding an ABA concurrency issue in abandoned segment reclamation.
 
 [genMC]: https://plv.mpi-sws.org/genmc/
+
+### Usage
+
+mimalloc is used in various large scale low-latency services and programs, for example:
+
+<a href="https://www.bing.com"><img align="left"  height="50" src="https://upload.wikimedia.org/wikipedia/commons/e/e9/Bing_logo.svg"></a>
+<a href="https://azure.microsoft.com/"><img align="left" height="50" src="https://upload.wikimedia.org/wikipedia/commons/a/a8/Microsoft_Azure_Logo.svg"></a>
+<a href="https://deathstrandingpc.505games.com"><img height="100" src="doc/ds-logo.jpg" style="border-radius=1ex;vertical-align:center"></a>
 
 # Building
 
