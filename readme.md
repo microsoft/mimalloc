@@ -102,6 +102,8 @@ free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af
 
 Special thanks to:
 
+* [David Carlier](https://devnexen.blogspot.com/) (@devnexen) for his many contributions, and making
+  mimalloc work better on many less common operating systems, like Haiku, Dragonfly, etc.
 * Mary Feofanova (@mary3000), Evgeniy Moiseenko, and Manuel Pöter (@mpoeter) for making mimalloc TSAN checkable, and finding
   memory model bugs using the [genMC] model checker.
 * Weipeng Liu (@pongba), Zhuowei Li, Junhua Wang, and Jakub Szymanski, for their early support of mimalloc and deployment
