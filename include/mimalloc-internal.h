@@ -707,7 +707,7 @@ static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
   res = tcb[slot];
 #elif defined(__aarch64__)
   void** tcb; UNUSED(ofs);
-#if defined(__MACH__)
+#if defined(__APPLE__)
   __asm__ volatile ("mrs %0, tpidrro_el0" : "=r" (tcb));
 #else
   __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
