@@ -301,11 +301,8 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_print(&total, "total", 1, out, arg);
   #endif
   #if MI_STAT>1
-  mi_stat_print(&stats->malloc, "malloc total", 1, out, arg);
-
-  _mi_fprintf(out, arg, "malloc requested:     ");
-  mi_print_amount(stats->malloc.allocated, 1, out, arg);
-  _mi_fprintf(out, arg, "\n\n");
+  mi_stat_print(&stats->malloc, "malloc req", 1, out, arg);
+  _mi_fprintf(out, arg, "\n");
   #endif
   mi_stat_print(&stats->reserved, "reserved", 1, out, arg);
   mi_stat_print(&stats->committed, "committed", 1, out, arg);
