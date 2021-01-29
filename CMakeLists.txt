@@ -221,7 +221,7 @@ else()
   set(mi_install_dir "${CMAKE_INSTALL_PREFIX}/lib/mimalloc-${mi_version}")
 endif()
 
-if(MI_SECURE MATCHES)
+if(MI_SECURE)
   set(mi_basename "mimalloc-secure")
 else()
   set(mi_basename "mimalloc")
