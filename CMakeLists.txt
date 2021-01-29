@@ -22,6 +22,7 @@ option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
+option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
 
 include("cmake/mimalloc-config-version.cmake")
 
@@ -214,12 +215,18 @@ endif()
 # Install and output names
 # -----------------------------------------------------------------------------
 
-set(mi_install_dir "${CMAKE_INSTALL_PREFIX}/lib/mimalloc-${mi_version}")
-if(MI_SECURE)
+if (MI_INSTALL_TOPLEVEL)
+  set(mi_install_dir "${CMAKE_INSTALL_PREFIX}")
+else()
+  set(mi_install_dir "${CMAKE_INSTALL_PREFIX}/lib/mimalloc-${mi_version}")
+endif()
+
+if(MI_SECURE MATCHES)
   set(mi_basename "mimalloc-secure")
 else()
   set(mi_basename "mimalloc")
 endif()
+
 string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
 if(NOT(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel)$"))
   set(mi_basename "${mi_basename}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
@@ -236,6 +243,7 @@ endif()
 if(MI_BUILD_TESTS)
   list(APPEND mi_build_targets "tests")
 endif()
+
 message(STATUS "")
 message(STATUS "Library base name: ${mi_basename}")
 message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
@@ -271,7 +279,14 @@ if(MI_BUILD_SHARED)
       COMMENT "Copy mimalloc-redirect.dll to output directory")
   endif()
 
-  install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_dir} LIBRARY)
+  if (MI_INSTALL_TOPLEVEL MATCHES "ON")
+    install(TARGETS mimalloc EXPORT mimalloc LIBRARY
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib)
+  else()
+    install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_dir} LIBRARY)
+  endif()
   install(EXPORT mimalloc DESTINATION ${mi_install_dir}/cmake)
 endif()
 
@@ -305,7 +320,7 @@ install(FILES include/mimalloc-new-delete.h DESTINATION ${mi_install_dir}/includ
 install(FILES cmake/mimalloc-config.cmake DESTINATION ${mi_install_dir}/cmake)
 install(FILES cmake/mimalloc-config-version.cmake DESTINATION ${mi_install_dir}/cmake)
 
-if(NOT WIN32 AND MI_BUILD_SHARED)
+if(NOT WIN32 AND MI_BUILD_SHARED AND NOT MI_INSTALL_TOPLEVEL)
   # install a symlink in the /usr/local/lib to the versioned library
   set(mi_symlink "${CMAKE_SHARED_MODULE_PREFIX}${mi_basename}${CMAKE_SHARED_LIBRARY_SUFFIX}")
   set(mi_soname "mimalloc-${mi_version}/${mi_symlink}.${mi_version}")
