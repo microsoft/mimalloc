@@ -19,6 +19,8 @@ option(MI_BUILD_SHARED      "Build shared library" ON)
 option(MI_BUILD_STATIC      "Build static library" ON)
 option(MI_BUILD_OBJECT      "Build object library" ON)
 option(MI_BUILD_TESTS       "Build test executables" ON)
+option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
+option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
 
@@ -28,6 +30,7 @@ set(mi_sources
     src/stats.c
     src/random.c
     src/os.c
+    src/bitmap.c
     src/arena.c
     src/region.c
     src/segment.c
@@ -44,7 +47,7 @@ set(mi_sources
 # -----------------------------------------------------------------------------
 
 if (NOT CMAKE_BUILD_TYPE)
-  if ("${CMAKE_BINARY_DIR}" MATCHES ".*(D|d)ebug$" OR  MI_DEBUG_FULL MATCHES "ON")
+  if ("${CMAKE_BINARY_DIR}" MATCHES ".*(D|d)ebug$" OR  MI_DEBUG_FULL)
     message(STATUS "No build type selected, default to: Debug")
     set(CMAKE_BUILD_TYPE "Debug")
   else()
@@ -66,20 +69,20 @@ if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
 endif()
 
-if(MI_OVERRIDE MATCHES "ON")
+if(MI_OVERRIDE)
   message(STATUS "Override standard malloc (MI_OVERRIDE=ON)")
   if(APPLE)
-    if(MI_OSX_ZONE MATCHES "ON")
+    if(MI_OSX_ZONE)
       # use zone's on macOS
       message(STATUS "  Use malloc zone to override malloc (MI_OSX_ZONE=ON)")
       list(APPEND mi_sources src/alloc-override-osx.c)
       list(APPEND mi_defines MI_OSX_ZONE=1)
-      if(NOT MI_INTERPOSE MATCHES "ON")
+      if(NOT MI_INTERPOSE)
         message(STATUS "  (enabling INTERPOSE as well since zone's require this)")
         set(MI_INTERPOSE "ON")
       endif()
     endif()
-    if(MI_INTERPOSE MATCHES "ON")
+    if(MI_INTERPOSE)
       # use interpose on macOS
       message(STATUS "  Use interpose to override malloc (MI_INTERPOSE=ON)")
       list(APPEND mi_defines MI_INTERPOSE)
@@ -87,42 +90,71 @@ if(MI_OVERRIDE MATCHES "ON")
   endif()
 endif()
 
-if(MI_SECURE MATCHES "ON")
+if(MI_SECURE)
   message(STATUS "Set full secure build (MI_SECURE=ON)")
   list(APPEND mi_defines MI_SECURE=4)
 endif()
 
-if(MI_SEE_ASM MATCHES "ON")
+if(MI_SEE_ASM)
   message(STATUS "Generate assembly listings (MI_SEE_ASM=ON)")
   list(APPEND mi_cflags -save-temps)
 endif()
 
-if(MI_CHECK_FULL MATCHES "ON")
+if(MI_CHECK_FULL)
   message(STATUS "The MI_CHECK_FULL option is deprecated, use MI_DEBUG_FULL instead")
   set(MI_DEBUG_FULL "ON")
 endif()
 
-if(MI_DEBUG_FULL MATCHES "ON")
+if(MI_DEBUG_FULL)
   message(STATUS "Set debug level to full internal invariant checking (MI_DEBUG_FULL=ON)")
   list(APPEND mi_defines MI_DEBUG=3)   # full invariant checking
 endif()
 
-if(MI_PADDING MATCHES "OFF")
+if(NOT MI_PADDING)
   message(STATUS "Disable padding of heap blocks in debug mode (MI_PADDING=OFF)")
   list(APPEND mi_defines MI_PADDING=0)
 endif()
 
-if(MI_XMALLOC MATCHES "ON")
+if(MI_XMALLOC)
   message(STATUS "Enable abort() calls on memory allocation failure (MI_XMALLOC=ON)")
   list(APPEND mi_defines MI_XMALLOC=1)
 endif()
 
-if(MI_SHOW_ERRORS MATCHES "ON")
+if(MI_SHOW_ERRORS)
   message(STATUS "Enable printing of error and warning messages by default (MI_SHOW_ERRORS=ON)")
   list(APPEND mi_defines MI_SHOW_ERRORS=1)
 endif()
 
-if(MI_USE_CXX MATCHES "ON")
+if(MI_DEBUG_TSAN)
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    message(STATUS "Build with thread sanitizer (MI_DEBUG_TSAN=ON)")
+    list(APPEND mi_defines MI_TSAN=1)
+    list(APPEND mi_cflags -fsanitize=thread -g -O1)
+    list(APPEND CMAKE_EXE_LINKER_FLAGS -fsanitize=thread)
+  else()
+    message(WARNING "Can only use thread sanitizer with clang (MI_DEBUG_TSAN=ON but ignored)")    
+  endif()  
+endif()
+
+if(MI_DEBUG_UBSAN)
+  if(CMAKE_BUILD_TYPE MATCHES "Debug")    
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      message(STATUS "Build with undefined-behavior sanitizer (MI_DEBUG_UBSAN=ON)")
+      list(APPEND mi_cflags -fsanitize=undefined -g)
+      list(APPEND CMAKE_EXE_LINKER_FLAGS -fsanitize=undefined)
+      if (NOT MI_USE_CXX)
+        message(STATUS "(switch to use C++ due to MI_DEBUG_UBSAN)")
+        set(MI_USE_CXX "ON")
+      endif()
+    else()
+      message(WARNING "Can only use undefined-behavior sanitizer with clang++ (MI_DEBUG_UBSAN=ON but ignored)")    
+    endif()  
+  else()
+    message(WARNING "Can only use thread sanitizer with a debug build (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")    
+  endif()
+endif()
+
+if(MI_USE_CXX)
   message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
   set_source_files_properties(src/static.c test/test-api.c test/test-stress PROPERTIES LANGUAGE CXX )
@@ -146,22 +178,29 @@ if(CMAKE_C_COMPILER_ID MATCHES "Intel")
   list(APPEND mi_cflags -Wall -fvisibility=hidden)
 endif()
 
-if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel")
-  if(MI_LOCAL_DYNAMIC_TLS MATCHES "ON")
+if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
+  if(MI_LOCAL_DYNAMIC_TLS)
     list(APPEND mi_cflags -ftls-model=local-dynamic)
   else()
     list(APPEND mi_cflags -ftls-model=initial-exec)
   endif()
 endif()
 
+if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
+  list(APPEND mi_cflags /Zc:__cplusplus)
+endif()
+
 # Architecture flags
-if(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "arm")
-    list(APPEND mi_cflags -march=native)
+if(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "arm" AND NOT APPLE)
+    check_cxx_compiler_flag(-march=native CXX_SUPPORTS_MARCH_NATIVE)
+    if (CXX_SUPPORTS_MARCH_NATIVE)
+        list(APPEND mi_cflags -march=native)
+    endif()
 endif()
 
 # extra needed libraries
 if(WIN32)
-  list(APPEND mi_libraries psapi shell32 user32 bcrypt)
+  list(APPEND mi_libraries psapi shell32 user32 advapi32 bcrypt)
 else()
   if(NOT ${CMAKE_C_COMPILER} MATCHES "android")
     list(APPEND mi_libraries pthread)
@@ -176,16 +215,18 @@ endif()
 # Install and output names
 # -----------------------------------------------------------------------------
 
-if (MI_INSTALL_TOPLEVEL MATCHES "ON")
+if (MI_INSTALL_TOPLEVEL)
   set(mi_install_dir "${CMAKE_INSTALL_PREFIX}")
 else()
   set(mi_install_dir "${CMAKE_INSTALL_PREFIX}/lib/mimalloc-${mi_version}")
 endif()
-if(MI_SECURE MATCHES "ON")
+
+if(MI_SECURE MATCHES)
   set(mi_basename "mimalloc-secure")
 else()
   set(mi_basename "mimalloc")
 endif()
+
 string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
 if(NOT(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel)$"))
   set(mi_basename "${mi_basename}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
@@ -202,9 +243,15 @@ endif()
 if(MI_BUILD_TESTS)
   list(APPEND mi_build_targets "tests")
 endif()
+
 message(STATUS "")
 message(STATUS "Library base name: ${mi_basename}")
 message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
+if(MI_USE_CXX)
+  message(STATUS "Compiler         : ${CMAKE_CXX_COMPILER}")
+else()
+  message(STATUS "Compiler         : ${CMAKE_C_COMPILER}")
+endif()
 message(STATUS "Install directory: ${mi_install_dir}")
 message(STATUS "Build targets    : ${mi_build_targets}")
 message(STATUS "")
@@ -306,7 +353,7 @@ endif()
 # API surface testing
 # -----------------------------------------------------------------------------
 
-if (MI_BUILD_TESTS MATCHES "ON")
+if (MI_BUILD_TESTS)
   add_executable(mimalloc-test-api test/test-api.c)
   target_compile_definitions(mimalloc-test-api PRIVATE ${mi_defines})
   target_compile_options(mimalloc-test-api PRIVATE ${mi_cflags})
@@ -327,7 +374,7 @@ endif()
 # -----------------------------------------------------------------------------
 # Set override properties
 # -----------------------------------------------------------------------------
-if (MI_OVERRIDE MATCHES "ON")
+if (MI_OVERRIDE)
   if (MI_BUILD_SHARED)
     target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)
   endif()

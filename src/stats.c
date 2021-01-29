@@ -11,6 +11,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdio.h>  // fputs, stderr
 #include <string.h> // memset
 
+#if defined(_MSC_VER) && (_MSC_VER < 1920)
+#pragma warning(disable:4204)  // non-constant aggregate initializer
+#endif
 
 /* -----------------------------------------------------------
   Statistics operations
@@ -26,13 +29,13 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   if (mi_is_in_main(stat))
   {
     // add atomically (for abandoned pages)
-    mi_atomic_addi64(&stat->current,amount);
-    if (stat->current > stat->peak) stat->peak = stat->current;  // racing.. it's ok
+    int64_t current = mi_atomic_addi64_relaxed(&stat->current, amount);
+    mi_atomic_maxi64_relaxed(&stat->peak, current + amount);
     if (amount > 0) {
-      mi_atomic_addi64(&stat->allocated,amount);
+      mi_atomic_addi64_relaxed(&stat->allocated,amount);
     }
     else {
-      mi_atomic_addi64(&stat->freed, -amount);
+      mi_atomic_addi64_relaxed(&stat->freed, -amount);
     }
   }
   else {
@@ -50,8 +53,8 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
 
 void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {  
   if (mi_is_in_main(stat)) {
-    mi_atomic_addi64( &stat->count, 1 );
-    mi_atomic_addi64( &stat->total, (int64_t)amount );
+    mi_atomic_addi64_relaxed( &stat->count, 1 );
+    mi_atomic_addi64_relaxed( &stat->total, (int64_t)amount );
   }
   else {
     stat->count++;
@@ -70,17 +73,18 @@ void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
 // must be thread safe as it is called from stats_merge
 static void mi_stat_add(mi_stat_count_t* stat, const mi_stat_count_t* src, int64_t unit) {
   if (stat==src) return;
-  mi_atomic_addi64( &stat->allocated, src->allocated * unit);
-  mi_atomic_addi64( &stat->current, src->current * unit);
-  mi_atomic_addi64( &stat->freed, src->freed * unit);
-  // peak scores do not work across threads..
-  mi_atomic_addi64( &stat->peak, src->peak * unit);
+  if (src->allocated==0 && src->freed==0) return;
+  mi_atomic_addi64_relaxed( &stat->allocated, src->allocated * unit);
+  mi_atomic_addi64_relaxed( &stat->current, src->current * unit);
+  mi_atomic_addi64_relaxed( &stat->freed, src->freed * unit);
+  // peak scores do not work across threads.. 
+  mi_atomic_addi64_relaxed( &stat->peak, src->peak * unit);
 }
 
 static void mi_stat_counter_add(mi_stat_counter_t* stat, const mi_stat_counter_t* src, int64_t unit) {
   if (stat==src) return;
-  mi_atomic_addi64( &stat->total, src->total * unit);
-  mi_atomic_addi64( &stat->count, src->count * unit);
+  mi_atomic_addi64_relaxed( &stat->total, src->total * unit);
+  mi_atomic_addi64_relaxed( &stat->count, src->count * unit);
 }
 
 // must be thread safe as it is called from stats_merge
@@ -99,6 +103,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
 
   mi_stat_add(&stats->malloc, &src->malloc, 1);
   mi_stat_add(&stats->segments_cache, &src->segments_cache, 1);
+  mi_stat_add(&stats->normal, &src->normal, 1);
   mi_stat_add(&stats->huge, &src->huge, 1);
   mi_stat_add(&stats->giant, &src->giant, 1);
 
@@ -108,12 +113,13 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
 
   mi_stat_counter_add(&stats->page_no_retire, &src->page_no_retire, 1);
   mi_stat_counter_add(&stats->searches, &src->searches, 1);
+  mi_stat_counter_add(&stats->normal_count, &src->normal_count, 1);
   mi_stat_counter_add(&stats->huge_count, &src->huge_count, 1);
   mi_stat_counter_add(&stats->giant_count, &src->giant_count, 1);
 #if MI_STAT>1
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
-    if (src->normal[i].allocated > 0 || src->normal[i].freed > 0) {
-      mi_stat_add(&stats->normal[i], &src->normal[i], 1);
+    if (src->normal_bins[i].allocated > 0 || src->normal_bins[i].freed > 0) {
+      mi_stat_add(&stats->normal_bins[i], &src->normal_bins[i], 1);
     }
   }
 #endif
@@ -145,7 +151,7 @@ static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* 
     const int64_t tens = (n / (divider/10));
     const long whole = (long)(tens/10);
     const long frac1 = (long)(tens%10);
-    snprintf(buf, len, "%ld.%ld %s%s", whole, frac1, magnitude, suffix);
+    snprintf(buf, len, "%ld.%ld %s%s", whole, (frac1 < 0 ? -frac1 : frac1), magnitude, suffix);
   }
   _mi_fprintf(out, arg, (fmt==NULL ? "%11s" : fmt), buf);
 }
@@ -166,6 +172,7 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
     mi_print_amount(stat->peak, unit, out, arg);
     mi_print_amount(stat->allocated, unit, out, arg);
     mi_print_amount(stat->freed, unit, out, arg);
+    mi_print_amount(stat->current, unit, out, arg);
     mi_print_amount(unit, 1, out, arg);
     mi_print_count(stat->allocated, unit, out, arg);
     if (stat->allocated > stat->freed)
@@ -177,6 +184,7 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
     mi_print_amount(stat->peak, -1, out, arg);
     mi_print_amount(stat->allocated, -1, out, arg);
     mi_print_amount(stat->freed, -1, out, arg);
+    mi_print_amount(stat->current, -1, out, arg);
     if (unit==-1) {
       _mi_fprintf(out, arg, "%22s", "");
     }
@@ -192,6 +200,8 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
   else {
     mi_print_amount(stat->peak, 1, out, arg);
     mi_print_amount(stat->allocated, 1, out, arg);
+    _mi_fprintf(out, arg, "%11s", " ");  // no freed 
+    mi_print_amount(stat->current, 1, out, arg);
     _mi_fprintf(out, arg, "\n");
   }
 }
@@ -211,24 +221,21 @@ static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char*
 
 
 static void mi_print_header(mi_output_fun* out, void* arg ) {
-  _mi_fprintf(out, arg, "%10s: %10s %10s %10s %10s %10s\n", "heap stats", "peak  ", "total  ", "freed  ", "unit  ", "count  ");
+  _mi_fprintf(out, arg, "%10s: %10s %10s %10s %10s %10s %10s\n", "heap stats", "peak  ", "total  ", "freed  ", "current  ", "unit  ", "count  ");
 }
 
 #if MI_STAT>1
-static void mi_stats_print_bins(mi_stat_count_t* all, const mi_stat_count_t* bins, size_t max, const char* fmt, mi_output_fun* out, void* arg) {
+static void mi_stats_print_bins(const mi_stat_count_t* bins, size_t max, const char* fmt, mi_output_fun* out, void* arg) {
   bool found = false;
   char buf[64];
   for (size_t i = 0; i <= max; i++) {
     if (bins[i].allocated > 0) {
       found = true;
       int64_t unit = _mi_bin_size((uint8_t)i);
-      snprintf(buf, 64, "%s %3zu", fmt, i);
-      mi_stat_add(all, &bins[i], unit);
+      snprintf(buf, 64, "%s %3lu", fmt, (long)i);
       mi_stat_print(&bins[i], buf, unit, out, arg);
     }
   }
-  //snprintf(buf, 64, "%s all", fmt);
-  //mi_stat_print(all, buf, 1);
   if (found) {
     _mi_fprintf(out, arg, "\n");
     mi_print_header(out, arg);
@@ -272,31 +279,34 @@ static void mi_buffered_out(const char* msg, void* arg) {
 // Print statistics
 //------------------------------------------------------------
 
-static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit);
+static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults);
 
-static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun* out0, void* arg0) mi_attr_noexcept {
+static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) mi_attr_noexcept {
   // wrap the output function to be line buffered
   char buf[256];
-  buffered_t buffer = { out0, arg0, buf, 0, 255 };
+  buffered_t buffer = { out0, arg0, NULL, 0, 255 };
+  buffer.buf = buf;
   mi_output_fun* out = &mi_buffered_out;
   void* arg = &buffer;
 
   // and print using that
   mi_print_header(out,arg);
   #if MI_STAT>1
-  mi_stat_count_t normal = { 0,0,0,0 };
-  mi_stats_print_bins(&normal, stats->normal, MI_BIN_HUGE, "normal",out,arg);
-  mi_stat_print(&normal, "normal", 1, out, arg);
+  mi_stats_print_bins(stats->normal_bins, MI_BIN_HUGE, "normal",out,arg);
+  #endif
+  #if MI_STAT
+  mi_stat_print(&stats->normal, "normal", (stats->normal_count.count == 0 ? 1 : -(stats->normal.allocated / stats->normal_count.count)), out, arg);
   mi_stat_print(&stats->huge, "huge", (stats->huge_count.count == 0 ? 1 : -(stats->huge.allocated / stats->huge_count.count)), out, arg);
   mi_stat_print(&stats->giant, "giant", (stats->giant_count.count == 0 ? 1 : -(stats->giant.allocated / stats->giant_count.count)), out, arg);
   mi_stat_count_t total = { 0,0,0,0 };
-  mi_stat_add(&total, &normal, 1);
+  mi_stat_add(&total, &stats->normal, 1);
   mi_stat_add(&total, &stats->huge, 1);
   mi_stat_add(&total, &stats->giant, 1);
   mi_stat_print(&total, "total", 1, out, arg);
-  _mi_fprintf(out, arg, "malloc requested:     ");
-  mi_print_amount(stats->malloc.allocated, 1, out, arg);
-  _mi_fprintf(out, arg, "\n\n");
+  #endif
+  #if MI_STAT>1
+  mi_stat_print(&stats->malloc, "malloc req", 1, out, arg);
+  _mi_fprintf(out, arg, "\n");
   #endif
   mi_stat_print(&stats->reserved, "reserved", 1, out, arg);
   mi_stat_print(&stats->committed, "committed", 1, out, arg);
@@ -314,25 +324,28 @@ static void _mi_stats_print(mi_stats_t* stats, mi_msecs_t elapsed, mi_output_fun
   mi_stat_print(&stats->threads, "threads", -1, out, arg);
   mi_stat_counter_print_avg(&stats->searches, "searches", out, arg);
   _mi_fprintf(out, arg, "%10s: %7i\n", "numa nodes", _mi_os_numa_node_count());
-  if (elapsed > 0) _mi_fprintf(out, arg, "%10s: %7ld.%03ld s\n", "elapsed", elapsed/1000, elapsed%1000);
-
+  
+  mi_msecs_t elapsed;
   mi_msecs_t user_time;
   mi_msecs_t sys_time;
+  size_t current_rss;
   size_t peak_rss;
-  size_t page_faults;
-  size_t page_reclaim;
+  size_t current_commit;
   size_t peak_commit;
-  mi_process_info(&user_time, &sys_time, &peak_rss, &page_faults, &page_reclaim, &peak_commit);
-  _mi_fprintf(out, arg, "%10s: user: %ld.%03ld s, system: %ld.%03ld s, faults: %lu, reclaims: %lu, rss: ", "process", user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, (unsigned long)page_faults, (unsigned long)page_reclaim );
+  size_t page_faults;
+  mi_stat_process_info(&elapsed, &user_time, &sys_time, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
+  _mi_fprintf(out, arg, "%10s: %7ld.%03ld s\n", "elapsed", elapsed/1000, elapsed%1000);
+  _mi_fprintf(out, arg, "%10s: user: %ld.%03ld s, system: %ld.%03ld s, faults: %lu, rss: ", "process",
+              user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, (unsigned long)page_faults );
   mi_printf_amount((int64_t)peak_rss, 1, out, arg, "%s");
   if (peak_commit > 0) {
-    _mi_fprintf(out, arg, ", commit charge: ");
+    _mi_fprintf(out, arg, ", commit: ");
     mi_printf_amount((int64_t)peak_commit, 1, out, arg, "%s");
   }
   _mi_fprintf(out, arg, "\n");  
 }
 
-static mi_msecs_t mi_time_start; // = 0
+static mi_msecs_t mi_process_start; // = 0
 
 static mi_stats_t* mi_stats_get_default(void) {
   mi_heap_t* heap = mi_heap_get_default();
@@ -350,7 +363,7 @@ void mi_stats_reset(void) mi_attr_noexcept {
   mi_stats_t* stats = mi_stats_get_default();
   if (stats != &_mi_stats_main) { memset(stats, 0, sizeof(mi_stats_t)); }
   memset(&_mi_stats_main, 0, sizeof(mi_stats_t));
-  mi_time_start = _mi_clock_start();
+  if (mi_process_start == 0) { mi_process_start = _mi_clock_start(); };
 }
 
 void mi_stats_merge(void) mi_attr_noexcept {
@@ -362,9 +375,8 @@ void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
 }
 
 void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
-  mi_msecs_t elapsed = _mi_clock_end(mi_time_start);
   mi_stats_merge_from(mi_stats_get_default());
-  _mi_stats_print(&_mi_stats_main, elapsed, out, arg);
+  _mi_stats_print(&_mi_stats_main, out, arg);
 }
 
 void mi_stats_print(void* out) mi_attr_noexcept {
@@ -373,8 +385,7 @@ void mi_stats_print(void* out) mi_attr_noexcept {
 }
 
 void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
-  mi_msecs_t elapsed = _mi_clock_end(mi_time_start);
-  _mi_stats_print(mi_stats_get_default(), elapsed, out, arg);
+  _mi_stats_print(mi_stats_get_default(), out, arg);
 }
 
 
@@ -382,7 +393,7 @@ void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
 // Basic timer for convenience; use milli-seconds to avoid doubles
 // ----------------------------------------------------------------
 #ifdef _WIN32
-#include <windows.h>
+#include <Windows.h>
 static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
   static LARGE_INTEGER mfreq; // = 0
   if (mfreq.QuadPart == 0LL) {
@@ -437,7 +448,7 @@ mi_msecs_t _mi_clock_end(mi_msecs_t start) {
 // --------------------------------------------------------
 
 #if defined(_WIN32)
-#include <windows.h>
+#include <Windows.h>
 #include <psapi.h>
 #pragma comment(lib,"psapi.lib")
 
@@ -448,7 +459,10 @@ static mi_msecs_t filetime_msecs(const FILETIME* ftime) {
   mi_msecs_t msecs = (i.QuadPart / 10000); // FILETIME is in 100 nano seconds
   return msecs;
 }
-static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
+
+static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) 
+{
+  *elapsed = _mi_clock_end(mi_process_start);
   FILETIME ct;
   FILETIME ut;
   FILETIME st;
@@ -456,16 +470,16 @@ static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_r
   GetProcessTimes(GetCurrentProcess(), &ct, &et, &st, &ut);
   *utime = filetime_msecs(&ut);
   *stime = filetime_msecs(&st);
-
   PROCESS_MEMORY_COUNTERS info;
   GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
-  *peak_rss = (size_t)info.PeakWorkingSetSize;
-  *page_faults = (size_t)info.PageFaultCount;
-  *peak_commit = (size_t)info.PeakPagefileUsage;
-  *page_reclaim = 0;
+  *current_rss    = (size_t)info.WorkingSetSize;
+  *peak_rss       = (size_t)info.PeakWorkingSetSize;
+  *current_commit = (size_t)info.PagefileUsage;
+  *peak_commit    = (size_t)info.PeakPagefileUsage;
+  *page_faults    = (size_t)info.PageFaultCount;  
 }
 
-#elif defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__))
+#elif defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__)) || defined(__HAIKU__)
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/resource.h>
@@ -474,23 +488,48 @@ static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_r
 #include <mach/mach.h>
 #endif
 
+#if defined(__HAIKU__)
+#include <kernel/OS.h>
+#endif
+
 static mi_msecs_t timeval_secs(const struct timeval* tv) {
   return ((mi_msecs_t)tv->tv_sec * 1000L) + ((mi_msecs_t)tv->tv_usec / 1000L);
 }
 
-static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
+static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
+{
+  *elapsed = _mi_clock_end(mi_process_start);
   struct rusage rusage;
   getrusage(RUSAGE_SELF, &rusage);
-#if defined(__APPLE__) && defined(__MACH__)
-  *peak_rss = rusage.ru_maxrss;
-#else
-  *peak_rss = rusage.ru_maxrss * 1024;
-#endif
-  *page_faults = rusage.ru_majflt;
-  *page_reclaim = rusage.ru_minflt;
-  *peak_commit = 0;
   *utime = timeval_secs(&rusage.ru_utime);
   *stime = timeval_secs(&rusage.ru_stime);
+#if !defined(__HAIKU__)
+  *page_faults = rusage.ru_majflt;
+#endif
+  // estimate commit using our stats
+  *peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.peak));
+  *current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.current));
+  *current_rss    = *current_commit;  // estimate 
+#if defined(__HAIKU__)
+  // Haiku does not have (yet?) a way to
+  // get these stats per process
+  thread_info tid;
+  area_info mem;
+  ssize_t c;
+  get_thread_info(find_thread(0), &tid);
+  while (get_next_area_info(tid.team, &c, &mem) == B_OK) {
+    *peak_rss += mem.ram_size;
+  }
+#elif defined(__APPLE__) && defined(__MACH__)
+  *peak_rss = rusage.ru_maxrss;         // BSD reports in bytes
+  struct mach_task_basic_info info;
+  mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;
+  if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &infoCount) == KERN_SUCCESS) {
+    *current_rss = (size_t)info.resident_size;
+  }
+#else
+  *peak_rss = rusage.ru_maxrss * 1024;  // Linux reports in KiB
+#endif  
 }
 
 #else
@@ -499,12 +538,38 @@ static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_r
 #pragma message("define a way to get process info")
 #endif
 
-static void mi_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* peak_rss, size_t* page_faults, size_t* page_reclaim, size_t* peak_commit) {
-  *peak_rss = 0;
+static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
+{
+  *elapsed = _mi_clock_end(mi_process_start);
+  *peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.peak));
+  *current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.current));
+  *peak_rss    = *peak_commit;
+  *current_rss = *current_commit;
   *page_faults = 0;
-  *page_reclaim = 0;
-  *peak_commit = 0;
   *utime = 0;
   *stime = 0;
 }
 #endif
+
+
+mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept
+{
+  mi_msecs_t elapsed = 0;
+  mi_msecs_t utime = 0;
+  mi_msecs_t stime = 0;
+  size_t current_rss0 = 0;
+  size_t peak_rss0 = 0;
+  size_t current_commit0 = 0;
+  size_t peak_commit0 = 0;
+  size_t page_faults0 = 0;  
+  mi_stat_process_info(&elapsed,&utime, &stime, &current_rss0, &peak_rss0, &current_commit0, &peak_commit0, &page_faults0);
+  if (elapsed_msecs!=NULL)  *elapsed_msecs = (elapsed < 0 ? 0 : (elapsed < (mi_msecs_t)PTRDIFF_MAX ? (size_t)elapsed : PTRDIFF_MAX));
+  if (user_msecs!=NULL)     *user_msecs     = (utime < 0 ? 0 : (utime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)utime : PTRDIFF_MAX));
+  if (system_msecs!=NULL)   *system_msecs   = (stime < 0 ? 0 : (stime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)stime : PTRDIFF_MAX));
+  if (current_rss!=NULL)    *current_rss    = current_rss0;
+  if (peak_rss!=NULL)       *peak_rss       = peak_rss0;
+  if (current_commit!=NULL) *current_commit = current_commit0;
+  if (peak_commit!=NULL)    *peak_commit    = peak_commit0;
+  if (page_faults!=NULL)    *page_faults    = page_faults0;
+}
+

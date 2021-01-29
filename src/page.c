@@ -122,11 +122,11 @@ bool _mi_page_is_valid(mi_page_t* page) {
 #endif
 
 void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never) {
-  mi_thread_free_t tfree;
   mi_thread_free_t tfreex;
   mi_delayed_t     old_delay;
+  mi_thread_free_t tfree;  
   do {
-    tfree = mi_atomic_read(&page->xthread_free);  // note: must acquire as we can break this loop and not do a CAS
+    tfree = mi_atomic_load_acquire(&page->xthread_free); // note: must acquire as we can break/repeat this loop and not do a CAS;
     tfreex = mi_tf_set_delayed(tfree, delay);
     old_delay = mi_tf_delayed(tfree);
     if (mi_unlikely(old_delay == MI_DELAYED_FREEING)) {
@@ -140,7 +140,7 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool overrid
       break; // leave never-delayed flag set
     }
   } while ((old_delay == MI_DELAYED_FREEING) ||
-           !mi_atomic_cas_weak(&page->xthread_free, tfreex, tfree));
+           !mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
 }
 
 /* -----------------------------------------------------------
@@ -154,13 +154,12 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool overrid
 static void _mi_page_thread_free_collect(mi_page_t* page)
 {
   mi_block_t* head;
-  mi_thread_free_t tfree;
   mi_thread_free_t tfreex;
+  mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
   do {
-    tfree = mi_atomic_read_relaxed(&page->xthread_free);
     head = mi_tf_block(tfree);
     tfreex = mi_tf_set_block(tfree,NULL);
-  } while (!mi_atomic_cas_weak(&page->xthread_free, tfreex, tfree));
+  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));
 
   // return if the list is empty
   if (head == NULL) return;
@@ -273,11 +272,9 @@ static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
    (put there by other threads if they deallocated in a full page)
 ----------------------------------------------------------- */
 void _mi_heap_delayed_free(mi_heap_t* heap) {
-  // take over the list (note: no atomic exchange is it is often NULL)
-  mi_block_t* block;
-  do {
-    block = mi_atomic_read_ptr_relaxed(mi_block_t,&heap->thread_delayed_free);
-  } while (block != NULL && !mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, NULL, block));
+  // take over the list (note: no atomic exchange since it is often NULL)
+  mi_block_t* block = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
+  while (block != NULL && !mi_atomic_cas_ptr_weak_acq_rel(mi_block_t, &heap->thread_delayed_free, &block, NULL)) { /* nothing */ };
 
   // and free them all
   while(block != NULL) {
@@ -286,11 +283,10 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
     if (!_mi_free_delayed_block(block)) {
       // we might already start delayed freeing while another thread has not yet
       // reset the delayed_freeing flag; in that case delay it further by reinserting.
-      mi_block_t* dfree;
+      mi_block_t* dfree = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
       do {
-        dfree = mi_atomic_read_ptr_relaxed(mi_block_t,&heap->thread_delayed_free);
         mi_block_set_nextx(heap, block, dfree, heap->keys);
-      } while (!mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, block, dfree));
+      } while (!mi_atomic_cas_ptr_weak_release(mi_block_t,&heap->thread_delayed_free, &dfree, block));
     }
     block = next;
   }
@@ -709,14 +705,17 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
   mi_page_queue_t* pq = mi_page_queue(heap,size);
   mi_page_t* page = pq->first;
   if (page != NULL) {
-    if ((MI_SECURE >= 3) && page->capacity < page->reserved && ((_mi_heap_random_next(heap) & 1) == 1)) {
-      // in secure mode, we extend half the time to increase randomness
+   #if (MI_SECURE>=3) // in secure mode, we extend half the time to increase randomness      
+    if (page->capacity < page->reserved && ((_mi_heap_random_next(heap) & 1) == 1)) {
       mi_page_extend_free(heap, page, heap->tld);
       mi_assert_internal(mi_page_immediate_available(page));
     }
-    else {
+    else 
+   #endif
+    {
       _mi_page_free_collect(page,false);
     }
+    
     if (mi_page_immediate_available(page)) {
       page->retire_expire = 0;
       return page; // fast path
@@ -734,20 +733,20 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
 ----------------------------------------------------------- */
 
 static mi_deferred_free_fun* volatile deferred_free = NULL;
-static volatile _Atomic(void*) deferred_arg; // = NULL
+static _Atomic(void*) deferred_arg; // = NULL
 
 void _mi_deferred_free(mi_heap_t* heap, bool force) {
   heap->tld->heartbeat++;
   if (deferred_free != NULL && !heap->tld->recurse) {
     heap->tld->recurse = true;
-    deferred_free(force, heap->tld->heartbeat, mi_atomic_read_ptr_relaxed(void,&deferred_arg));
+    deferred_free(force, heap->tld->heartbeat, mi_atomic_load_ptr_relaxed(void,&deferred_arg));
     heap->tld->recurse = false;
   }
 }
 
 void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noexcept {
   deferred_free = fn;
-  mi_atomic_write_ptr(void,&deferred_arg, arg);
+  mi_atomic_store_ptr_release(void,&deferred_arg, arg);
 }
 
 
@@ -792,7 +791,7 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`  
   if (mi_unlikely(req_size > (MI_LARGE_OBJ_SIZE_MAX - MI_PADDING_SIZE) )) {
     if (mi_unlikely(req_size > PTRDIFF_MAX)) {  // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
-      _mi_error_message(EOVERFLOW, "allocation request is too large (%zu b requested)\n", req_size);
+      _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
       return NULL;
     }
     else {
@@ -816,6 +815,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   if (mi_unlikely(!mi_heap_is_initialized(heap))) {
     mi_thread_init(); // calls `_mi_heap_init` in turn
     heap = mi_get_default_heap();
+    if (mi_unlikely(!mi_heap_is_initialized(heap))) { return NULL; }
   }
   mi_assert_internal(mi_heap_is_initialized(heap));
 
@@ -833,7 +833,8 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   }
 
   if (mi_unlikely(page == NULL)) { // out of memory
-    _mi_error_message(ENOMEM, "cannot allocate memory (%zu bytes requested)\n", size);
+    const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`  
+    _mi_error_message(ENOMEM, "unable to allocate memory (%zu bytes)\n", req_size);
     return NULL;
   }
 

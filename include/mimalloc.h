@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2020, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 163   // major + 2 digits minor
+#define MI_MALLOC_VERSION 167   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -24,7 +24,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_noexcept
 #endif
 
-#if (__cplusplus >= 201703)
+#if defined(__cplusplus) && (__cplusplus >= 201703)
   #define mi_decl_nodiscard    [[nodiscard]]
 #elif (__GNUC__ >= 4) || defined(__clang__)  // includes clang, icc, and clang-cl
   #define mi_decl_nodiscard    __attribute__((warn_unused_result))
@@ -153,6 +153,9 @@ mi_decl_export void mi_thread_init(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
 
+mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, 
+                                    size_t* current_rss, size_t* peak_rss, 
+                                    size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept;
 
 // -------------------------------------------------------------------------------------
 // Aligned allocation
@@ -192,7 +195,7 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_mallocn(mi_heap_
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 
 mi_decl_nodiscard mi_decl_export void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize)              mi_attr_noexcept mi_attr_alloc_size(3);
-mi_decl_nodiscard mi_decl_export void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size)  mi_attr_noexcept mi_attr_alloc_size2(3,4);;
+mi_decl_nodiscard mi_decl_export void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size)  mi_attr_noexcept mi_attr_alloc_size2(3,4);
 mi_decl_nodiscard mi_decl_export void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize)             mi_attr_noexcept mi_attr_alloc_size(3);
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_heap_strdup(mi_heap_t* heap, const char* s)            mi_attr_noexcept mi_attr_malloc;
@@ -256,10 +259,14 @@ mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_b
 
 // Experimental
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
-mi_decl_nodiscard mi_decl_export bool mi_is_redirected() mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export bool mi_is_redirected(void) mi_attr_noexcept;
 
 mi_decl_export int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t timeout_msecs) mi_attr_noexcept;
 mi_decl_export int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msecs) mi_attr_noexcept;
+
+mi_decl_export int  mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept;
+mi_decl_export bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept;
+
 
 // deprecated
 mi_decl_export int  mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
@@ -299,6 +306,7 @@ typedef enum mi_option_e {
   mi_option_reset_decommits,
   mi_option_large_os_pages,         // implies eager commit
   mi_option_reserve_huge_os_pages,
+  mi_option_reserve_os_memory,
   mi_option_segment_cache,
   mi_option_page_reset,
   mi_option_abandoned_page_reset,
@@ -306,8 +314,10 @@ typedef enum mi_option_e {
   mi_option_eager_commit_delay,
   mi_option_reset_delay,
   mi_option_use_numa_nodes,
+  mi_option_limit_os_alloc,
   mi_option_os_tag,
   mi_option_max_errors,
+  mi_option_max_warnings,
   _mi_option_last
 } mi_option_t;
 

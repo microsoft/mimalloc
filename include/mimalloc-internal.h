@@ -32,7 +32,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_cache_align
 #endif
 
-
 // "options.c"
 void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
 void       _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
@@ -64,7 +63,7 @@ void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free th
 size_t     _mi_os_good_alloc_size(size_t size);
 
 // memory.c
-void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_zero, size_t* id, mi_os_tld_t* tld);
+void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* id, mi_os_tld_t* tld);
 void       _mi_mem_free(void* p, size_t size, size_t id, bool fully_committed, bool any_reset, mi_os_tld_t* tld);
 
 bool       _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld);
@@ -107,7 +106,6 @@ void       _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback fro
 
 size_t     _mi_bin_size(uint8_t bin);           // for stats
 uint8_t    _mi_bin(size_t size);                // for stats
-uint8_t    _mi_bsr(uintptr_t x);                // bit-scan-right, used on BSD in "os.c"
 
 // "heap.c"
 void       _mi_heap_destroy_pages(mi_heap_t* heap);
@@ -238,23 +236,28 @@ static inline bool mi_malloc_satisfies_alignment(size_t alignment, size_t size) 
 }
 
 // Overflow detecting multiply
-static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 #if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
-#include <limits.h>   // UINT_MAX, ULONG_MAX
-#if (SIZE_MAX == UINT_MAX)
-  return __builtin_umul_overflow(count, size, total);
-#elif (SIZE_MAX == ULONG_MAX)
-  return __builtin_umull_overflow(count, size, total);
-#else
-  return __builtin_umulll_overflow(count, size, total);
+#include <limits.h>      // UINT_MAX, ULONG_MAX
+#if defined(_CLOCK_T)    // for Illumos
+#undef _CLOCK_T
 #endif
+static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
+  #if (SIZE_MAX == UINT_MAX)
+    return __builtin_umul_overflow(count, size, total);
+  #elif (SIZE_MAX == ULONG_MAX)
+    return __builtin_umull_overflow(count, size, total);
+  #else
+    return __builtin_umulll_overflow(count, size, total);
+  #endif
+}
 #else /* __builtin_umul_overflow is unavailable */
+static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
   #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
   *total = count * size;
   return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
-          && size > 0 && (SIZE_MAX / size) < count);
-#endif
+    && size > 0 && (SIZE_MAX / size) < count);
 }
+#endif
 
 // Safe multiply `count*size` into `total`; return `true` on overflow.
 static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* total) {
@@ -263,7 +266,7 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
     return false;
   }
   else if (mi_unlikely(mi_mul_overflow(count, size, total))) {
-    _mi_error_message(EOVERFLOW, "allocation request too large (%zu * %zu bytes)\n", count, size);
+    _mi_error_message(EOVERFLOW, "allocation request is too large (%zu * %zu bytes)\n", count, size);
     *total = SIZE_MAX;
     return true;
   }
@@ -282,7 +285,7 @@ We try to circumvent this in an efficient way:
 - macOSX : we use an unused TLS slot from the OS allocated slots (MI_TLS_SLOT). On OSX, the
            loader itself calls `malloc` even before the modules are initialized.
 - OpenBSD: we use an unused slot from the pthread block (MI_TLS_PTHREAD_SLOT_OFS).
-- DragonFly: not yet working.
+- DragonFly: the uniqueid use is buggy but kept for reference.
 ------------------------------------------------------------------------------------------- */
 
 extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
@@ -300,7 +303,7 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 #define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 4*sizeof(void*) + 24)  
 #elif defined(__DragonFly__)
 #warning "mimalloc is not working correctly on DragonFly yet."
-#define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
+//#define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
 #endif
 #endif
 
@@ -312,7 +315,7 @@ static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
   pthread_t self = pthread_self();
   #if defined(__DragonFly__)
   if (self==NULL) {
-    static mi_heap_t* pheap_main = _mi_heap_main_get();
+    mi_heap_t* pheap_main = _mi_heap_main_get();
     return &pheap_main;
   }
   #endif
@@ -443,21 +446,21 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
 
 // Thread free access
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
-  return (mi_block_t*)(mi_atomic_read_relaxed(&page->xthread_free) & ~3);
+  return (mi_block_t*)(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free) & ~3);
 }
 
 static inline mi_delayed_t mi_page_thread_free_flag(const mi_page_t* page) {
-  return (mi_delayed_t)(mi_atomic_read_relaxed(&page->xthread_free) & 3);
+  return (mi_delayed_t)(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free) & 3);
 }
 
 // Heap access
 static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
-  return (mi_heap_t*)(mi_atomic_read_relaxed(&page->xheap));
+  return (mi_heap_t*)(mi_atomic_load_relaxed(&((mi_page_t*)page)->xheap));
 }
 
 static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
-  mi_atomic_write(&page->xheap,(uintptr_t)heap);
+  mi_atomic_store_release(&page->xheap,(uintptr_t)heap);
 }
 
 // Thread free flag helpers
@@ -569,11 +572,11 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
 
 static inline uintptr_t mi_rotl(uintptr_t x, uintptr_t shift) {
   shift %= MI_INTPTR_BITS;
-  return ((x << shift) | (x >> (MI_INTPTR_BITS - shift)));
+  return (shift==0 ? x : ((x << shift) | (x >> (MI_INTPTR_BITS - shift))));
 }
 static inline uintptr_t mi_rotr(uintptr_t x, uintptr_t shift) {
   shift %= MI_INTPTR_BITS;
-  return ((x >> shift) | (x << (MI_INTPTR_BITS - shift)));
+  return (shift==0 ? x : ((x >> shift) | (x << (MI_INTPTR_BITS - shift))));
 }
 
 static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
@@ -694,15 +697,21 @@ static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
   __asm__("movl %%gs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // 32-bit always uses GS
 #elif defined(__MACH__) && defined(__x86_64__)
   __asm__("movq %%gs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86_64 macOSX uses GS
+#elif defined(__x86_64__) && (MI_INTPTR_SIZE==4)
+  __asm__("movl %%fs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x32 ABI
 #elif defined(__x86_64__)
   __asm__("movq %%fs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86_64 Linux, BSD uses FS
 #elif defined(__arm__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
+  __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
   res = tcb[slot];
 #elif defined(__aarch64__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+#if defined(__APPLE__) // issue #343
+  __asm__ volatile ("mrs %0, tpidrro_el0" : "=r" (tcb));
+#else
+  __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+#endif
   res = tcb[slot];
 #endif
   return res;
@@ -715,15 +724,21 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
   __asm__("movl %1,%%gs:%0" : "=m" (*((void**)ofs)) : "rn" (value) : );  // 32-bit always uses GS
 #elif defined(__MACH__) && defined(__x86_64__)
   __asm__("movq %1,%%gs:%0" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 macOSX uses GS
+#elif defined(__x86_64__) && (MI_INTPTR_SIZE==4)
+  __asm__("movl %1,%%fs:%1" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x32 ABI
 #elif defined(__x86_64__)
   __asm__("movq %1,%%fs:%1" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 Linux, BSD uses FS
 #elif defined(__arm__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
+  __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
   tcb[slot] = value;
 #elif defined(__aarch64__)
   void** tcb; UNUSED(ofs);
-  asm volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+#if defined(__APPLE__) // issue #343
+  __asm__ volatile ("mrs %0, tpidrro_el0" : "=r" (tcb));
+#else
+  __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+#endif
   tcb[slot] = value;
 #endif
 }
@@ -738,6 +753,109 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
   return (uintptr_t)&_mi_heap_default;
 }
 #endif
+
+// -----------------------------------------------------------------------
+// Count bits: trailing or leading zeros (with MI_INTPTR_BITS on all zero)
+// -----------------------------------------------------------------------
+
+#if defined(__GNUC__)
+
+#include <limits.h>       // LONG_MAX
+#define MI_HAVE_FAST_BITSCAN
+static inline size_t mi_clz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;
+#if (INTPTR_MAX == LONG_MAX)
+  return __builtin_clzl(x);
+#else
+  return __builtin_clzll(x);
+#endif
+}
+static inline size_t mi_ctz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;
+#if (INTPTR_MAX == LONG_MAX)
+  return __builtin_ctzl(x);
+#else
+  return __builtin_ctzll(x);
+#endif
+}
+
+#elif defined(_MSC_VER) 
+
+#include <limits.h>       // LONG_MAX
+#define MI_HAVE_FAST_BITSCAN
+static inline size_t mi_clz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;
+  unsigned long idx;
+#if (INTPTR_MAX == LONG_MAX)
+  _BitScanReverse(&idx, x);
+#else
+  _BitScanReverse64(&idx, x);
+#endif  
+  return ((MI_INTPTR_BITS - 1) - idx);
+}
+static inline size_t mi_ctz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;
+  unsigned long idx;
+#if (INTPTR_MAX == LONG_MAX)
+  _BitScanForward(&idx, x);
+#else
+  _BitScanForward64(&idx, x);
+#endif  
+  return idx;
+}
+
+#else
+static inline size_t mi_ctz32(uint32_t x) {
+  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
+  static const unsigned char debruijn[32] = {
+    0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
+  };
+  if (x==0) return 32;
+  return debruijn[((x & -(int32_t)x) * 0x077CB531UL) >> 27];
+}
+static inline size_t mi_clz32(uint32_t x) {
+  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
+  static const uint8_t debruijn[32] = {
+    31, 22, 30, 21, 18, 10, 29, 2, 20, 17, 15, 13, 9, 6, 28, 1,
+    23, 19, 11, 3, 16, 14, 7, 24, 12, 4, 8, 25, 5, 26, 27, 0
+  };
+  if (x==0) return 32;
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  return debruijn[(uint32_t)(x * 0x07C4ACDDUL) >> 27];
+}
+
+static inline size_t mi_clz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;  
+#if (MI_INTPTR_BITS <= 32)
+  return mi_clz32((uint32_t)x);
+#else
+  size_t count = mi_clz32((uint32_t)(x >> 32));
+  if (count < 32) return count;
+  return (32 + mi_clz32((uint32_t)x));
+#endif
+}
+static inline size_t mi_ctz(uintptr_t x) {
+  if (x==0) return MI_INTPTR_BITS;
+#if (MI_INTPTR_BITS <= 32)
+  return mi_ctz32((uint32_t)x);
+#else
+  size_t count = mi_ctz32((uint32_t)x);
+  if (count < 32) return count;
+  return (32 + mi_ctz32((uint32_t)(x>>32)));
+#endif
+}
+
+#endif
+
+// "bit scan reverse": Return index of the highest bit (or MI_INTPTR_BITS if `x` is zero)
+static inline size_t mi_bsr(uintptr_t x) {
+  return (x==0 ? MI_INTPTR_BITS : MI_INTPTR_BITS - 1 - mi_clz(x));
+}
 
 
 #endif

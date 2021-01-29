@@ -12,9 +12,15 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdint.h>   // uintptr_t, uint16_t, etc
 #include <mimalloc-atomic.h>  // _Atomic
 
+#ifdef _MSC_VER
+#pragma warning(disable:4214) // bitfield is not int
+#endif 
+
 // Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
+#ifndef MI_MAX_ALIGN_SIZE
 #define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
+#endif
 
 // ------------------------------------------------------
 // Variants
@@ -155,6 +161,7 @@ typedef enum mi_delayed_e {
 
 // The `in_full` and `has_aligned` page flags are put in a union to efficiently
 // test if both are false (`full_aligned == 0`) in the `mi_free` routine.
+#if !MI_TSAN
 typedef union mi_page_flags_s {
   uint8_t full_aligned;
   struct {
@@ -162,6 +169,16 @@ typedef union mi_page_flags_s {
     uint8_t has_aligned : 1;
   } x;
 } mi_page_flags_t;
+#else
+// under thread sanitizer, use a byte for each flag to suppress warning, issue #130
+typedef union mi_page_flags_s {
+  uint16_t full_aligned;
+  struct {
+    uint8_t in_full;
+    uint8_t has_aligned;
+  } x;
+} mi_page_flags_t;
+#endif
 
 // Thread free list.
 // We use the bottom 2 bits of the pointer for mi_delayed_t flags
@@ -222,8 +239,8 @@ typedef struct mi_page_s {
   uint32_t              xblock_size;       // size available in each block (always `>0`) 
 
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
-  volatile _Atomic(mi_thread_free_t) xthread_free;   // list of deferred free blocks freed by other threads
-  volatile _Atomic(uintptr_t)        xheap;
+  _Atomic(mi_thread_free_t) xthread_free;  // list of deferred free blocks freed by other threads
+  _Atomic(uintptr_t)        xheap;
   
   struct mi_page_s*     next;              // next page owned by this thread with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by this thread with the same `block_size`
@@ -243,28 +260,29 @@ typedef enum mi_page_kind_e {
 // contain blocks.
 typedef struct mi_segment_s {
   // memory fields
-  size_t          memid;            // id for the os-level memory manager
-  bool            mem_is_fixed;     // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)
-  bool            mem_is_committed; // `true` if the whole segment is eagerly committed
+  size_t               memid;            // id for the os-level memory manager
+  bool                 mem_is_pinned;    // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)
+  bool                 mem_is_committed; // `true` if the whole segment is eagerly committed  
 
   // segment fields
-  struct mi_segment_s* next;        // must be the first segment field -- see `segment.c:segment_alloc`
+  _Atomic(struct mi_segment_s*) abandoned_next;
+  struct mi_segment_s* next;             // must be the first segment field after abandoned_next -- see `segment.c:segment_init`
   struct mi_segment_s* prev;
-  struct mi_segment_s* abandoned_next;
-  size_t          abandoned;        // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
-  size_t          abandoned_visits; // count how often this segment is visited in the abandoned list (to force reclaim it it is too long)
 
-  size_t          used;        // count of pages in use (`used <= capacity`)
-  size_t          capacity;    // count of available pages (`#free + used`)
-  size_t          segment_size;// for huge pages this may be different from `MI_SEGMENT_SIZE`
-  size_t          segment_info_size;  // space we are using from the first page for segment meta-data and possible guard pages.
-  uintptr_t       cookie;      // verify addresses in secure mode: `_mi_ptr_cookie(segment) == segment->cookie`
+  size_t               abandoned;        // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
+  size_t               abandoned_visits; // count how often this segment is visited in the abandoned list (to force reclaim it it is too long)
+
+  size_t               used;             // count of pages in use (`used <= capacity`)
+  size_t               capacity;         // count of available pages (`#free + used`)
+  size_t               segment_size;     // for huge pages this may be different from `MI_SEGMENT_SIZE`
+  size_t               segment_info_size;// space we are using from the first page for segment meta-data and possible guard pages.
+  uintptr_t            cookie;           // verify addresses in secure mode: `_mi_ptr_cookie(segment) == segment->cookie`
 
   // layout like this to optimize access in `mi_free`
-  size_t          page_shift;  // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).
-  volatile _Atomic(uintptr_t) thread_id;   // unique id of the thread owning this segment
-  mi_page_kind_t  page_kind;   // kind of pages: small, large, or huge
-  mi_page_t       pages[1];    // up to `MI_SMALL_PAGES_PER_SEGMENT` pages
+  size_t               page_shift;       // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).
+  _Atomic(uintptr_t)   thread_id;        // unique id of the thread owning this segment
+  mi_page_kind_t       page_kind;        // kind of pages: small, large, or huge
+  mi_page_t            pages[1];         // up to `MI_SMALL_PAGES_PER_SEGMENT` pages
 } mi_segment_t;
 
 
@@ -322,7 +340,7 @@ struct mi_heap_s {
   mi_tld_t*             tld;
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
   mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
-  volatile _Atomic(mi_block_t*) thread_delayed_free;
+  _Atomic(mi_block_t*)  thread_delayed_free;
   uintptr_t             thread_id;                           // thread this heap belongs too
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   uintptr_t             keys[2];                             // two random keys used to encode the `thread_delayed_free` list
@@ -398,6 +416,7 @@ typedef struct mi_stats_s {
   mi_stat_count_t segments_abandoned;
   mi_stat_count_t pages_abandoned;
   mi_stat_count_t threads;
+  mi_stat_count_t normal;
   mi_stat_count_t huge;
   mi_stat_count_t giant;
   mi_stat_count_t malloc;
@@ -407,10 +426,11 @@ typedef struct mi_stats_s {
   mi_stat_counter_t commit_calls;
   mi_stat_counter_t page_no_retire;
   mi_stat_counter_t searches;
+  mi_stat_counter_t normal_count;
   mi_stat_counter_t huge_count;
   mi_stat_counter_t giant_count;
 #if MI_STAT>1
-  mi_stat_count_t normal[MI_BIN_HUGE+1];
+  mi_stat_count_t normal_bins[MI_BIN_HUGE+1];
 #endif
 } mi_stats_t;
 
@@ -429,6 +449,7 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 #define mi_stat_counter_increase(stat,amount) (void)0
 #endif
 
+#define mi_heap_stat_counter_increase(heap,stat,amount)  mi_stat_counter_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_increase(heap,stat,amount)  mi_stat_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_decrease(heap,stat,amount)  mi_stat_decrease( (heap)->tld->stats.stat, amount)
 

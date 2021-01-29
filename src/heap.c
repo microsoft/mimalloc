@@ -11,6 +11,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <string.h>  // memset, memcpy
 
+#if defined(_MSC_VER) && (_MSC_VER < 1920)
+#pragma warning(disable:4204)  // non-constant aggregate initializer
+#endif
 
 /* -----------------------------------------------------------
   Helpers
@@ -111,7 +114,7 @@ static bool mi_heap_page_never_delayed_free(mi_heap_t* heap, mi_page_queue_t* pq
 
 static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 {
-  if (!mi_heap_is_initialized(heap)) return;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return;
   _mi_deferred_free(heap, collect >= MI_FORCE);
 
   // note: never reclaim on collect but leave it to threads that need storage to reclaim 
@@ -128,7 +131,6 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
     _mi_abandoned_reclaim_all(heap, &heap->tld->segments);
   }
   
-
   // if abandoning, mark all pages to no longer add to delayed_free
   if (collect == MI_ABANDON) {
     mi_heap_visit_pages(heap, &mi_heap_page_never_delayed_free, NULL, NULL);
@@ -143,19 +145,17 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
-  mi_assert_internal( collect != MI_ABANDON || mi_atomic_read_ptr(mi_block_t,&heap->thread_delayed_free) == NULL );
+  mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
   // collect segment caches
   if (collect >= MI_FORCE) {
     _mi_segment_thread_collect(&heap->tld->segments);
   }
 
-  #ifndef NDEBUG
-  // collect regions
+  // collect regions on program-exit (or shared library unload)
   if (collect >= MI_FORCE && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
     _mi_mem_collect(&heap->tld->os);
   }
-  #endif
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
@@ -213,6 +213,7 @@ uintptr_t _mi_heap_random_next(mi_heap_t* heap) {
 
 // zero out the page queues
 static void mi_heap_reset_pages(mi_heap_t* heap) {
+  mi_assert_internal(heap != NULL);
   mi_assert_internal(mi_heap_is_initialized(heap));
   // TODO: copy full empty heap instead?
   memset(&heap->pages_free_direct, 0, sizeof(heap->pages_free_direct));
@@ -228,6 +229,7 @@ static void mi_heap_reset_pages(mi_heap_t* heap) {
 static void mi_heap_free(mi_heap_t* heap) {
   mi_assert(heap != NULL);
   mi_assert_internal(mi_heap_is_initialized(heap));
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return;
   if (mi_heap_is_backing(heap)) return; // dont free the backing heap
 
   // reset default
@@ -272,17 +274,20 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   const size_t bsize = mi_page_block_size(page);
   if (bsize > MI_LARGE_OBJ_SIZE_MAX) {
     if (bsize > MI_HUGE_OBJ_SIZE_MAX) {
-      _mi_stat_decrease(&heap->tld->stats.giant, bsize);
+      mi_heap_stat_decrease(heap, giant, bsize);
     }
     else {
-      _mi_stat_decrease(&heap->tld->stats.huge, bsize);
+      mi_heap_stat_decrease(heap, huge, bsize);
     }
   }
-#if (MI_STAT>1)
+#if (MI_STAT)
   _mi_page_free_collect(page, false);  // update used count
   const size_t inuse = page->used;
   if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
-    mi_heap_stat_decrease(heap, normal[_mi_bin(bsize)], inuse);
+    mi_heap_stat_decrease(heap, normal, bsize * inuse);
+#if (MI_STAT>1)
+    mi_heap_stat_decrease(heap, normal_bins[_mi_bin(bsize)], inuse);
+#endif
   }
   mi_heap_stat_decrease(heap, malloc, bsize * inuse);  // todo: off for aligned blocks...
 #endif
@@ -310,7 +315,7 @@ void mi_heap_destroy(mi_heap_t* heap) {
   mi_assert(mi_heap_is_initialized(heap));
   mi_assert(heap->no_reclaim);
   mi_assert_expensive(mi_heap_is_valid(heap));
-  if (!mi_heap_is_initialized(heap)) return;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return;
   if (!heap->no_reclaim) {
     // don't free in case it may contain reclaimed pages
     mi_heap_delete(heap);
@@ -354,7 +359,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   // turns out to be ok as `_mi_heap_delayed_free` only visits the list and calls a 
   // the regular `_mi_free_delayed_block` which is safe.
   _mi_heap_delayed_free(from);  
-  mi_assert_internal(from->thread_delayed_free == NULL);
+  mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_block_t,&from->thread_delayed_free) == NULL);
 
   // and reset the `from` heap
   mi_heap_reset_pages(from);  
@@ -366,7 +371,7 @@ void mi_heap_delete(mi_heap_t* heap)
   mi_assert(heap != NULL);
   mi_assert(mi_heap_is_initialized(heap));
   mi_assert_expensive(mi_heap_is_valid(heap));
-  if (!mi_heap_is_initialized(heap)) return;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return;
 
   if (!mi_heap_is_backing(heap)) {
     // tranfer still used pages to the backing heap
@@ -381,8 +386,9 @@ void mi_heap_delete(mi_heap_t* heap)
 }
 
 mi_heap_t* mi_heap_set_default(mi_heap_t* heap) {
+  mi_assert(heap != NULL);
   mi_assert(mi_heap_is_initialized(heap));
-  if (!mi_heap_is_initialized(heap)) return NULL;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return NULL;
   mi_assert_expensive(mi_heap_is_valid(heap));
   mi_heap_t* old = mi_get_default_heap();
   _mi_heap_set_default_direct(heap);
@@ -408,7 +414,7 @@ static mi_heap_t* mi_heap_of_block(const void* p) {
 
 bool mi_heap_contains_block(mi_heap_t* heap, const void* p) {
   mi_assert(heap != NULL);
-  if (!mi_heap_is_initialized(heap)) return false;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return false;
   return (heap == mi_heap_of_block(p));
 }
 
@@ -426,7 +432,7 @@ static bool mi_heap_page_check_owned(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
 
 bool mi_heap_check_owned(mi_heap_t* heap, const void* p) {
   mi_assert(heap != NULL);
-  if (!mi_heap_is_initialized(heap)) return false;
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return false;
   if (((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0) return false;  // only aligned pointers
   bool found = false;
   mi_heap_visit_pages(heap, &mi_heap_page_check_owned, (void*)p, &found);

@@ -20,7 +20,6 @@ terms of the MIT license.
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include <mimalloc.h>
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
@@ -43,6 +42,7 @@ static size_t use_one_size = 0;              // use single object size of `N * s
 #define custom_realloc(p,s)   realloc(p,s)
 #define custom_free(p)        free(p)
 #else
+#include <mimalloc.h>
 #define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
@@ -123,7 +123,7 @@ static void free_items(void* p) {
 
 static void stress(intptr_t tid) {
   //bench_start_thread();
-  uintptr_t r = (tid * 43); // rand();
+  uintptr_t r = ((tid + 1) * 43); // rand();
   const size_t max_item_shift = 5; // 128
   const size_t max_item_retained_shift = max_item_shift + 2;
   size_t allocs = 100 * ((size_t)SCALE) * (tid % 8 + 1); // some threads do more
@@ -189,7 +189,7 @@ static void test_stress(void) {
       }
     }
     // mi_collect(false);
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
 #endif
   }
@@ -217,7 +217,7 @@ static void test_leak(void) {
 }
 #endif
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) {  
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
   if (argc >= 2) {
     char* end;
@@ -235,6 +235,7 @@ int main(int argc, char** argv) {
     if (n > 0) ITER = n;
   }
   printf("Using %d threads with a %d%% load-per-thread and %d iterations\n", THREADS, SCALE, ITER);
+  //mi_reserve_os_memory(1024*1024*1024ULL, false, true);
   //int res = mi_reserve_huge_os_pages(4,1);
   //printf("(reserve huge: %i\n)", res);
 
@@ -250,7 +251,9 @@ int main(int argc, char** argv) {
 #endif
 
   // mi_collect(true);
+#ifndef USE_STD_MALLOC
   mi_stats_print(NULL);
+#endif
   //bench_end_program();
   return 0;
 }
@@ -260,7 +263,7 @@ static void (*thread_entry_fun)(intptr_t) = &stress;
 
 #ifdef _WIN32
 
-#include <windows.h>
+#include <Windows.h>
 
 static DWORD WINAPI thread_entry(LPVOID param) {
   thread_entry_fun((intptr_t)param);
@@ -272,7 +275,7 @@ static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
   DWORD* tids = (DWORD*)custom_calloc(nthreads,sizeof(DWORD));
   HANDLE* thandles = (HANDLE*)custom_calloc(nthreads,sizeof(HANDLE));
   for (uintptr_t i = 0; i < nthreads; i++) {
-    thandles[i] = CreateThread(0, 4096, &thread_entry, (void*)(i), 0, &tids[i]);
+    thandles[i] = CreateThread(0, 8*1024, &thread_entry, (void*)(i), 0, &tids[i]);
   }
   for (size_t i = 0; i < nthreads; i++) {
     WaitForSingleObject(thandles[i], INFINITE);
@@ -305,7 +308,7 @@ static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
   pthread_t* threads = (pthread_t*)custom_calloc(nthreads,sizeof(pthread_t));
   memset(threads, 0, sizeof(pthread_t) * nthreads);
   //pthread_setconcurrency(nthreads);
-  for (uintptr_t i = 0; i < nthreads; i++) {
+  for (size_t i = 0; i < nthreads; i++) {
     pthread_create(&threads[i], NULL, &thread_entry, (void*)i);
   }
   for (size_t i = 0; i < nthreads; i++) {

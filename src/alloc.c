@@ -23,27 +23,34 @@ terms of the MIT license. A copy of the license can be found in the file
 // Fall back to generic allocation only if the list is empty.
 extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept {
   mi_assert_internal(page->xblock_size==0||mi_page_block_size(page) >= size);
-  mi_block_t* block = page->free;
+  mi_block_t* const block = page->free;
   if (mi_unlikely(block == NULL)) {
     return _mi_malloc_generic(heap, size); 
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   // pop from the free list
-  page->free = mi_block_next(page, block);
   page->used++;
+  page->free = mi_block_next(page, block);
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
+
 #if (MI_DEBUG>0)
   if (!page->is_zero) { memset(block, MI_DEBUG_UNINIT, size); }
 #elif (MI_SECURE!=0)
   block->next = 0;  // don't leak internal data
 #endif
-#if (MI_STAT>1)
+
+#if (MI_STAT>0)
   const size_t bsize = mi_page_usable_block_size(page);
   if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+    mi_heap_stat_increase(heap, normal, bsize);
+    mi_heap_stat_counter_increase(heap, normal_count, 1);
+#if (MI_STAT>1)
     const size_t bin = _mi_bin(bsize);
-    mi_heap_stat_increase(heap, normal[bin], 1);
+    mi_heap_stat_increase(heap, normal_bins[bin], 1);
+#endif
   }
 #endif
+
 #if (MI_PADDING > 0) && defined(MI_ENCODE_FREELIST)
   mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
   ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
@@ -54,6 +61,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
   for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
 #endif
+
   return block;
 }
 
@@ -282,6 +290,49 @@ static void mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, co
 }
 #endif
 
+// only maintain stats for smaller objects if requested
+#if (MI_STAT>0)
+static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
+#if (MI_STAT < 2)  
+  UNUSED(block);
+#endif
+  mi_heap_t* const heap = mi_heap_get_default();
+  const size_t bsize = mi_page_usable_block_size(page);  
+#if (MI_STAT>1)
+  const size_t usize = mi_page_usable_size_of(page, block);
+  mi_heap_stat_decrease(heap, malloc, usize);
+#endif  
+  if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+    mi_heap_stat_decrease(heap, normal, bsize);
+#if (MI_STAT > 1)
+    mi_heap_stat_decrease(heap, normal_bins[_mi_bin(bsize)], 1);
+#endif
+  }
+}
+#else
+static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
+  UNUSED(page); UNUSED(block);
+}
+#endif
+
+#if (MI_STAT>0)
+// maintain stats for huge objects
+static void mi_stat_huge_free(const mi_page_t* page) {
+  mi_heap_t* const heap = mi_heap_get_default();
+  const size_t bsize = mi_page_block_size(page); // to match stats in `page.c:mi_page_huge_alloc`
+  if (bsize <= MI_HUGE_OBJ_SIZE_MAX) {
+    mi_heap_stat_decrease(heap, huge, bsize);
+  }
+  else {
+    mi_heap_stat_decrease(heap, giant, bsize);
+  }
+}
+#else
+static void mi_stat_huge_free(const mi_page_t* page) {
+  UNUSED(page);
+}
+#endif
+
 // ------------------------------------------------------
 // Free
 // ------------------------------------------------------
@@ -300,16 +351,16 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   // huge page segments are always abandoned and can be freed immediately
   mi_segment_t* const segment = _mi_page_segment(page);
   if (segment->page_kind==MI_PAGE_HUGE) {
+    mi_stat_huge_free(page);
     _mi_segment_huge_page_free(segment, page, block);
     return;
   }
 
   // Try to put the block on either the page-local thread free list, or the heap delayed free list.
-  mi_thread_free_t tfree;
   mi_thread_free_t tfreex;
   bool use_delayed;
+  mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
   do {
-    tfree = mi_atomic_read_relaxed(&page->xthread_free);
     use_delayed = (mi_tf_delayed(tfree) == MI_USE_DELAYED_FREE);
     if (mi_unlikely(use_delayed)) {
       // unlikely: this only happens on the first concurrent free in a page that is in the full list
@@ -320,30 +371,29 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       mi_block_set_next(page, block, mi_tf_block(tfree));
       tfreex = mi_tf_set_block(tfree,block);
     }
-  } while (!mi_atomic_cas_weak(&page->xthread_free, tfreex, tfree));
+  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
 
   if (mi_unlikely(use_delayed)) {
     // racy read on `heap`, but ok because MI_DELAYED_FREEING is set (see `mi_heap_delete` and `mi_heap_collect_abandon`)
-    mi_heap_t* const heap = mi_page_heap(page);
+    mi_heap_t* const heap = (mi_heap_t*)(mi_atomic_load_acquire(&page->xheap)); //mi_page_heap(page);
     mi_assert_internal(heap != NULL);
     if (heap != NULL) {
       // add to the delayed free list of this heap. (do this atomically as the lock only protects heap memory validity)
-      mi_block_t* dfree;
+      mi_block_t* dfree = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
       do {
-        dfree = mi_atomic_read_ptr_relaxed(mi_block_t,&heap->thread_delayed_free);
         mi_block_set_nextx(heap,block,dfree, heap->keys);
-      } while (!mi_atomic_cas_ptr_weak(mi_block_t,&heap->thread_delayed_free, block, dfree));
+      } while (!mi_atomic_cas_ptr_weak_release(mi_block_t,&heap->thread_delayed_free, &dfree, block));
     }
 
     // and reset the MI_DELAYED_FREEING flag
+    tfree = mi_atomic_load_relaxed(&page->xthread_free);
     do {
-      tfreex = tfree = mi_atomic_read_relaxed(&page->xthread_free);
+      tfreex = tfree;
       mi_assert_internal(mi_tf_delayed(tfree) == MI_DELAYED_FREEING);
       tfreex = mi_tf_set_delayed(tfree,MI_NO_DELAYED_FREE);
-    } while (!mi_atomic_cas_weak(&page->xthread_free, tfreex, tfree));
+    } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
   }
 }
-
 
 // regular free
 static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block)
@@ -384,62 +434,65 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool local, void* p) {
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
+  mi_stat_free(page, block);
   _mi_free_block(page, local, block);
 }
+
+// Get the segment data belonging to a pointer
+// This is just a single `and` in assembly but does further checks in debug mode
+// (and secure mode) if this was a valid pointer.
+static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* msg) 
+{
+  UNUSED(msg);
+#if (MI_DEBUG>0)
+  if (mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0)) {
+    _mi_error_message(EINVAL, "%s: invalid (unaligned) pointer: %p\n", msg, p);
+    return NULL;
+  }
+#endif
+
+  mi_segment_t* const segment = _mi_ptr_segment(p);
+  if (mi_unlikely(segment == NULL)) return NULL;  // checks also for (p==NULL)
+
+#if (MI_DEBUG>0)
+  if (mi_unlikely(!mi_is_in_heap_region(p))) {
+    _mi_warning_message("%s: pointer might not point to a valid heap region: %p\n"
+      "(this may still be a valid very large allocation (over 64MiB))\n", msg, p);
+    if (mi_likely(_mi_ptr_cookie(segment) == segment->cookie)) {
+      _mi_warning_message("(yes, the previous pointer %p was valid after all)\n", p);
+    }
+  }
+#endif
+#if (MI_DEBUG>0 || MI_SECURE>=4)
+  if (mi_unlikely(_mi_ptr_cookie(segment) != segment->cookie)) {
+    _mi_error_message(EINVAL, "%s: pointer does not point to a valid heap space: %p\n", p);
+  }
+#endif
+  return segment;
+}
+
 
 // Free a block
 void mi_free(void* p) mi_attr_noexcept
 {
-#if (MI_DEBUG>0)
-  if (mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0)) {
-    _mi_error_message(EINVAL, "trying to free an invalid (unaligned) pointer: %p\n", p);
-    return;
-  }
-#endif
-
-  const mi_segment_t* const segment = _mi_ptr_segment(p);
-  if (mi_unlikely(segment == NULL)) return;  // checks for (p==NULL)
-
-#if (MI_DEBUG!=0)
-  if (mi_unlikely(!mi_is_in_heap_region(p))) {
-    _mi_warning_message("possibly trying to free a pointer that does not point to a valid heap region: %p\n"
-      "(this may still be a valid very large allocation (over 64MiB))\n", p);
-    if (mi_likely(_mi_ptr_cookie(segment) == segment->cookie)) {
-      _mi_warning_message("(yes, the previous pointer %p was valid after all)\n", p);
-    } 
-  }
-#endif
-#if (MI_DEBUG!=0 || MI_SECURE>=4)
-  if (mi_unlikely(_mi_ptr_cookie(segment) != segment->cookie)) {
-    _mi_error_message(EINVAL, "trying to free a pointer that does not point to a valid heap space: %p\n", p);
-    return;
-  }
-#endif
+  const mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
+  if (mi_unlikely(segment == NULL)) return; 
 
   const uintptr_t tid = _mi_thread_id();
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_block_t*)p;
 
-#if (MI_STAT>1)
-  mi_heap_t* const heap = mi_heap_get_default();
-  const size_t bsize = mi_page_usable_block_size(page);
-  mi_heap_stat_decrease(heap, malloc, bsize);
-  if (bsize <= MI_LARGE_OBJ_SIZE_MAX) { // huge page stats are accounted for in `_mi_page_retire`
-    mi_heap_stat_decrease(heap, normal[_mi_bin(bsize)], 1);
-  }
-#endif
-
   if (mi_likely(tid == segment->thread_id && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     if (mi_unlikely(mi_check_is_double_free(page,block))) return;
     mi_check_padding(page, block);
+    mi_stat_free(page, block);
     #if (MI_DEBUG!=0)
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
     #endif
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
-    page->used--;
-    if (mi_unlikely(mi_page_all_free(page))) {
+    if (mi_unlikely(--page->used == 0)) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))    
       _mi_page_retire(page);
     }
   }
@@ -473,9 +526,9 @@ bool _mi_free_delayed_block(mi_block_t* block) {
 }
 
 // Bytes available in a block
-size_t mi_usable_size(const void* p) mi_attr_noexcept {
-  if (p==NULL) return 0;
-  const mi_segment_t* const segment = _mi_ptr_segment(p);
+static size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noexcept {
+  const mi_segment_t* const segment = mi_checked_ptr_segment(p,msg);
+  if (segment==NULL) return 0;
   const mi_page_t* const page = _mi_segment_page_of(segment, p);
   const mi_block_t* block = (const mi_block_t*)p;
   if (mi_unlikely(mi_page_has_aligned(page))) {
@@ -488,6 +541,10 @@ size_t mi_usable_size(const void* p) mi_attr_noexcept {
   else {
     return mi_page_usable_size_of(page, block);
   }
+}
+
+size_t mi_usable_size(const void* p) mi_attr_noexcept {
+  return _mi_usable_size(p, "mi_usable_size");
 }
 
 
@@ -513,7 +570,7 @@ void* _mi_externs[] = {
 
 void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   UNUSED_RELEASE(size);
-  mi_assert(p == NULL || size <= mi_usable_size(p));
+  mi_assert(p == NULL || size <= _mi_usable_size(p,"mi_free_size"));
   mi_free(p);
 }
 
@@ -553,14 +610,14 @@ mi_decl_restrict void* mi_mallocn(size_t count, size_t size) mi_attr_noexcept {
 // Expand in place or fail
 void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
   if (p == NULL) return NULL;
-  size_t size = mi_usable_size(p);
+  size_t size = _mi_usable_size(p,"mi_expand");
   if (newsize > size) return NULL;
   return p; // it fits
 }
 
 void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) {
   if (p == NULL) return _mi_heap_malloc_zero(heap,newsize,zero);
-  size_t size = mi_usable_size(p);
+  size_t size = _mi_usable_size(p,"mi_realloc");
   if (newsize <= size && newsize >= (size / 2)) {
     return p;  // reallocation still fits and not more than 50% waste
   }
@@ -669,7 +726,7 @@ mi_decl_restrict char* mi_strndup(const char* s, size_t n) mi_attr_noexcept {
 #ifndef PATH_MAX
 #define PATH_MAX MAX_PATH
 #endif
-#include <windows.h>
+#include <Windows.h>
 mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
   // todo: use GetFullPathNameW to allow longer file names
   char buf[PATH_MAX];
@@ -733,7 +790,12 @@ but we call `exit` instead (i.e. not returning).
 #ifdef __cplusplus
 #include <new>
 static bool mi_try_new_handler(bool nothrow) {
-  std::new_handler h = std::get_new_handler();
+  #if defined(_MSC_VER) || (__cplusplus >= 201103L)
+    std::new_handler h = std::get_new_handler();
+  #else
+    std::new_handler h = std::set_new_handler();
+    std::set_new_handler(h);
+  #endif  
   if (h==NULL) {
     if (!nothrow) throw std::bad_alloc();
     return false;
@@ -750,12 +812,12 @@ typedef void (*std_new_handler_t)();
 std_new_handler_t __attribute((weak)) _ZSt15get_new_handlerv() {
   return NULL;
 }
-std_new_handler_t mi_get_new_handler() {
+static std_new_handler_t mi_get_new_handler() {
   return _ZSt15get_new_handlerv();
 }
 #else
 // note: on windows we could dynamically link to `?get_new_handler@std@@YAP6AXXZXZ`.
-std_new_handler_t mi_get_new_handler() {
+static std_new_handler_t mi_get_new_handler() {
   return NULL;
 }
 #endif

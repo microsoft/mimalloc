@@ -73,8 +73,8 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), \
-  { 0, 0 }, { 0, 0 }, { 0, 0 },  \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 },     \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 
@@ -105,10 +105,6 @@ const mi_heap_t _mi_heap_empty = {
 // the thread-local default heap for allocation
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 
-
-#define tld_main_stats  ((mi_stats_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,stats)))
-#define tld_main_os     ((mi_os_tld_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,os)))
-
 extern mi_heap_t _mi_heap_main;
 
 static mi_tld_t tld_main = {
@@ -116,9 +112,9 @@ static mi_tld_t tld_main = {
   &_mi_heap_main, &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, {NULL ,NULL, 0},
     0, 0, 0, 0, 0, 0, NULL,
-    tld_main_stats, tld_main_os
+    &tld_main.stats, &tld_main.os
   }, // segments
-  { 0, tld_main_stats },  // os
+  { 0, &tld_main.stats },  // os
   { MI_STATS_NULL }       // stats
 };
 
@@ -180,10 +176,15 @@ static bool _mi_heap_init(void) {
   }
   else {
     // use `_mi_os_alloc` to allocate directly from the OS
-    mi_thread_data_t* td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t),&_mi_stats_main); // Todo: more efficient allocation?
+    mi_thread_data_t* td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main); // Todo: more efficient allocation?
     if (td == NULL) {
-      _mi_error_message(ENOMEM, "failed to allocate thread local heap memory\n");
-      return false;
+      // if this fails, try once more. (issue #257)
+      td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main);
+      if (td == NULL) {
+        // really out of memory
+        _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
+        return false;
+      }
     }
     // OS allocated so already zero initialized
     mi_tld_t*  tld = &td->tld;
@@ -200,7 +201,7 @@ static bool _mi_heap_init(void) {
     tld->segments.stats = &tld->stats;
     tld->segments.os = &tld->os;
     tld->os.stats = &tld->stats;
-    _mi_heap_set_default_direct(heap);
+    _mi_heap_set_default_direct(heap);    
   }
   return false;
 }
@@ -234,9 +235,8 @@ static bool _mi_heap_done(mi_heap_t* heap) {
     _mi_heap_collect_abandon(heap);
   }
   
-
   // merge stats
-  _mi_stats_done(&heap->tld->stats);
+  _mi_stats_done(&heap->tld->stats);  
 
   // free if not the main thread
   if (heap != &_mi_heap_main) {
@@ -284,7 +284,7 @@ static void _mi_thread_done(mi_heap_t* default_heap);
   // nothing to do as it is done in DllMain
 #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
   // use thread local storage keys to detect thread ending
-  #include <windows.h>
+  #include <Windows.h>
   #include <fibersapi.h>
   #if (_WIN32_WINNT < 0x600)  // before Windows Vista 
   WINBASEAPI DWORD WINAPI FlsAlloc( _In_opt_ PFLS_CALLBACK_FUNCTION lpCallback );
@@ -336,17 +336,13 @@ void mi_thread_init(void) mi_attr_noexcept
 {
   // ensure our process has started already
   mi_process_init();
-
+  
   // initialize the thread local default heap
   // (this will call `_mi_heap_set_default_direct` and thus set the
   //  fiber/pthread key to a non-zero value, ensuring `_mi_thread_done` is called)
   if (_mi_heap_init()) return;  // returns true if already initialized
 
-  // don't further initialize for the main thread
-  if (_mi_is_main_thread()) return;
-
-  _mi_stat_increase(&mi_get_default_heap()->tld->stats.threads, 1);
-
+  _mi_stat_increase(&_mi_stats_main.threads, 1);
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
@@ -355,14 +351,11 @@ void mi_thread_done(void) mi_attr_noexcept {
 }
 
 static void _mi_thread_done(mi_heap_t* heap) {
+  _mi_stat_decrease(&_mi_stats_main.threads, 1);
+
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local heaps...
   if (heap->thread_id != _mi_thread_id()) return;
-
-  // stats
-  if (!_mi_is_main_thread() && mi_heap_is_initialized(heap))  {
-    _mi_stat_decrease(&heap->tld->stats.threads, 1);
-  }
-
+  
   // abandon the thread local heap
   if (_mi_heap_done(heap)) return;  // returns true if already ran
 }
@@ -403,11 +396,11 @@ static bool os_preloading = true;    // true until this module is initialized
 static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
 
 // Returns true if this module has not been initialized; Don't use C runtime routines until it returns false.
-bool _mi_preloading() {
+bool _mi_preloading(void) {
   return os_preloading;
 }
 
-bool mi_is_redirected() mi_attr_noexcept {
+bool mi_is_redirected(void) mi_attr_noexcept {
   return mi_redirected;
 }
 
@@ -429,7 +422,7 @@ mi_decl_export void _mi_redirect_entry(DWORD reason) {
   }
 }
 __declspec(dllimport) bool mi_allocator_init(const char** message);
-__declspec(dllimport) void mi_allocator_done();
+__declspec(dllimport) void mi_allocator_done(void);
 #ifdef __cplusplus
 }
 #endif
@@ -438,7 +431,7 @@ static bool mi_allocator_init(const char** message) {
   if (message != NULL) *message = NULL;
   return true;
 }
-static void mi_allocator_done() {
+static void mi_allocator_done(void) {
   // nothing to do
 }
 #endif
@@ -485,6 +478,10 @@ void mi_process_init(void) mi_attr_noexcept {
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages = mi_option_get(mi_option_reserve_huge_os_pages);
     mi_reserve_huge_os_pages_interleave(pages, 0, pages*500);
+  } 
+  if (mi_option_is_enabled(mi_option_reserve_os_memory)) {
+    long ksize = mi_option_get(mi_option_reserve_os_memory);
+    if (ksize > 0) mi_reserve_os_memory((size_t)ksize*KiB, true, true);
   }
 }
 
@@ -501,11 +498,15 @@ static void mi_process_done(void) {
   FlsSetValue(mi_fls_key, NULL);  // don't call main-thread callback
   FlsFree(mi_fls_key);            // call thread-done on all threads to prevent dangling callback pointer if statically linked with a DLL; Issue #208
   #endif
-  #ifndef NDEBUG
-  mi_collect(true);
+  
+  #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)  
+  // free all memory if possible on process exit. This is not needed for a stand-alone process
+  // but should be done if mimalloc is statically linked into another shared library which
+  // is repeatedly loaded/unloaded, see issue #281.
+  mi_collect(true /* force */ );
   #endif
-  if (mi_option_is_enabled(mi_option_show_stats) ||
-      mi_option_is_enabled(mi_option_verbose)) {
+
+  if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
     mi_stats_print(NULL);
   }
   mi_allocator_done();  

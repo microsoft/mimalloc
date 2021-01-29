@@ -46,10 +46,10 @@
     <ClCompile Include="..\..\src\arena.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\bitmap.inc.c">
+    <ClCompile Include="..\..\src\random.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\random.c">
+    <ClCompile Include="..\..\src\bitmap.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -71,6 +71,9 @@
     </ClInclude>
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc-types.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\bitmap.h">
+      <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

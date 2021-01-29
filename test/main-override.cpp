@@ -14,10 +14,12 @@
 #include <mimalloc.h>
 #include <assert.h>
 
+#ifdef _WIN32
 #include <mimalloc-new-delete.h>
+#endif
 
 #ifdef _WIN32
-#include <windows.h>
+#include <Windows.h>
 static void msleep(unsigned long msecs) { Sleep(msecs); }
 #else
 #include <unistd.h>
