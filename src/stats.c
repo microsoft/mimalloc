@@ -151,7 +151,7 @@ static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* 
     const int64_t tens = (n / (divider/10));
     const long whole = (long)(tens/10);
     const long frac1 = (long)(tens%10);
-    snprintf(buf, len, "%ld.%ld %s%s", whole, frac1, magnitude, suffix);
+    snprintf(buf, len, "%ld.%ld %s%s", whole, (frac1 < 0 ? -frac1 : frac1), magnitude, suffix);
   }
   _mi_fprintf(out, arg, (fmt==NULL ? "%11s" : fmt), buf);
 }
@@ -169,10 +169,10 @@ static void mi_print_count(int64_t n, int64_t unit, mi_output_fun* out, void* ar
 static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg ) {
   _mi_fprintf(out, arg,"%10s:", msg);
   if (unit>0) {
-    mi_print_amount(stat->current, unit, out, arg);
     mi_print_amount(stat->peak, unit, out, arg);
     mi_print_amount(stat->allocated, unit, out, arg);
     mi_print_amount(stat->freed, unit, out, arg);
+    mi_print_amount(stat->current, unit, out, arg);
     mi_print_amount(unit, 1, out, arg);
     mi_print_count(stat->allocated, unit, out, arg);
     if (stat->allocated > stat->freed)
@@ -181,10 +181,10 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
       _mi_fprintf(out, arg, "  ok\n");
   }
   else if (unit<0) {
-    mi_print_amount(stat->current, -1, out, arg);
     mi_print_amount(stat->peak, -1, out, arg);
     mi_print_amount(stat->allocated, -1, out, arg);
     mi_print_amount(stat->freed, -1, out, arg);
+    mi_print_amount(stat->current, -1, out, arg);
     if (unit==-1) {
       _mi_fprintf(out, arg, "%22s", "");
     }
@@ -198,9 +198,10 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
       _mi_fprintf(out, arg, "  ok\n");
   }
   else {
-    mi_print_amount(stat->current, 1, out, arg);
     mi_print_amount(stat->peak, 1, out, arg);
     mi_print_amount(stat->allocated, 1, out, arg);
+    _mi_fprintf(out, arg, "%11s", " ");  // no freed 
+    mi_print_amount(stat->current, 1, out, arg);
     _mi_fprintf(out, arg, "\n");
   }
 }
@@ -220,7 +221,7 @@ static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char*
 
 
 static void mi_print_header(mi_output_fun* out, void* arg ) {
-  _mi_fprintf(out, arg, "%10s: %10s %10s %10s %10s %10s %10s\n", "heap stats", "current  ", "peak  ", "total  ", "freed  ", "unit  ", "count  ");
+  _mi_fprintf(out, arg, "%10s: %10s %10s %10s %10s %10s %10s\n", "heap stats", "peak  ", "total  ", "freed  ", "current  ", "unit  ", "count  ");
 }
 
 #if MI_STAT>1
