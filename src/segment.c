@@ -1104,6 +1104,7 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t slices_needed, s
       if (mi_page_all_free(page)) {
         // if this page is all free now, free it without adding to any queues (yet) 
         mi_assert_internal(page->next == NULL && page->prev==NULL);
+        _mi_stat_decrease(&tld->stats->pages_abandoned, 1);
         segment->abandoned--;
         slice = mi_segment_page_clear(page, tld); // re-assign slice due to coalesce!
         mi_assert_internal(!mi_slice_is_used(slice));
