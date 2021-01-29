@@ -185,6 +185,10 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
   endif()
 endif()
 
+if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
+  list(APPEND mi_cflags /Zc:__cplusplus)
+endif()
+
 # Architecture flags
 if(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "arm" AND NOT APPLE)
     check_cxx_compiler_flag(-march=native CXX_SUPPORTS_MARCH_NATIVE)
