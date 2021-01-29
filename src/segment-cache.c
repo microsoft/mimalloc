@@ -16,6 +16,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "bitmap.h"  // atomic bitmap
 
+//#define MI_CACHE_DISABLE 1  
+
 #define MI_CACHE_FIELDS     (16)
 #define MI_CACHE_MAX        (MI_BITMAP_FIELD_BITS*MI_CACHE_FIELDS)       // 1024 on 64-bit
 
@@ -39,6 +41,10 @@ static mi_decl_cache_align mi_bitmap_field_t cache_inuse[MI_CACHE_FIELDS];   // 
 
 mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
 {
+#ifdef MI_CACHE_DISABLE
+  return NULL;
+#else
+
   // only segment blocks
   if (size != MI_SEGMENT_SIZE) return NULL;
 
@@ -79,6 +85,7 @@ mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* comm
   mi_assert_internal(_mi_bitmap_is_claimed(cache_inuse, MI_CACHE_FIELDS, 1, bitidx));
   _mi_bitmap_unclaim(cache_inuse, MI_CACHE_FIELDS, 1, bitidx);
   return p;
+#endif
 }
 
 static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, void* p, size_t total, mi_stats_t* stats)
@@ -143,6 +150,10 @@ static mi_decl_noinline void mi_segment_cache_purge(mi_os_tld_t* tld)
 
 mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t memid, mi_commit_mask_t commit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld)
 {
+#ifdef MI_CACHE_DISABLE
+  return false;
+#else
+
   // only for normal segment blocks
   if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
 
@@ -191,6 +202,7 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
   // make it available
   _mi_bitmap_unclaim((is_large ? cache_available_large : cache_available), MI_CACHE_FIELDS, 1, bitidx);
   return true;
+#endif
 }
 
 

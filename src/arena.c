@@ -49,7 +49,7 @@ bool  _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
 // Block info: bit 0 contains the `in_use` bit, the upper bits the
 // size in count of arena blocks.
 typedef uintptr_t mi_block_info_t;
-#define MI_ARENA_BLOCK_SIZE   MI_SEGMENT_SIZE          // 8MiB
+#define MI_ARENA_BLOCK_SIZE   (MI_SEGMENT_SIZE)        // 8MiB  (must be at least MI_SEGMENT_ALIGN)
 #define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 4MiB
 #define MI_MAX_ARENAS         (64)                     // not more than 256 (since we use 8 bits in the memid)
 
@@ -103,7 +103,7 @@ static size_t mi_block_count_of_size(size_t size) {
 ----------------------------------------------------------- */
 static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* bitmap_idx)
 {
-  size_t idx = mi_atomic_load_relaxed(&arena->search_idx);  // start from last search; ok to be relaxed as the exact start does not matter
+  size_t idx = 0; // mi_atomic_load_relaxed(&arena->search_idx);  // start from last search; ok to be relaxed as the exact start does not matter
   if (_mi_bitmap_try_find_from_claim_across(arena->blocks_inuse, arena->field_count, idx, blocks, bitmap_idx)) {
     mi_atomic_store_relaxed(&arena->search_idx, mi_bitmap_index_field(*bitmap_idx));  // start search from found location next time around
     return true;
@@ -346,6 +346,33 @@ int mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noe
   return 0;
 }
 
+static size_t mi_debug_show_bitmap(const char* prefix, mi_bitmap_field_t* fields, size_t field_count ) {
+  size_t inuse_count = 0;
+  for (size_t i = 0; i < field_count; i++) {
+    char buf[MI_BITMAP_FIELD_BITS + 1];
+    uintptr_t field = mi_atomic_load_relaxed(&fields[i]);
+    for (size_t bit = 0; bit < MI_BITMAP_FIELD_BITS; bit++) {
+      bool inuse = ((((uintptr_t)1 << bit) & field) != 0);
+      if (inuse) inuse_count++;
+      buf[MI_BITMAP_FIELD_BITS - 1 - bit] = (inuse ? 'x' : '.');
+    }
+    buf[MI_BITMAP_FIELD_BITS] = 0;
+    _mi_verbose_message("%s%s\n", prefix, buf);
+  }
+  return inuse_count;
+}
+
+void mi_debug_show_arenas(void) mi_attr_noexcept {
+  size_t max_arenas = mi_atomic_load_relaxed(&mi_arena_count);
+  for (size_t i = 0; i < max_arenas; i++) {
+    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+    if (arena == NULL) break;
+    size_t inuse_count = 0;
+    _mi_verbose_message("arena %zu: %zu blocks with %zu fields\n", i, arena->block_count, arena->field_count);
+    inuse_count += mi_debug_show_bitmap("  ", arena->blocks_inuse, arena->field_count);
+    _mi_verbose_message("  blocks in use ('x'): %zu\n", inuse_count);
+  }
+}
 
 /* -----------------------------------------------------------
   Reserve a huge page arena.
