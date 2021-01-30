@@ -137,7 +137,7 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
           memset((uint8_t*)newp + start, 0, newsize - start);
         }
       }
-      memcpy(newp, p, (newsize > size ? size : newsize));
+      _mi_memcpy(newp, p, (newsize > size ? size : newsize));
       mi_free(p); // only free if successful
     }
     return newp;

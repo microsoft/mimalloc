@@ -50,8 +50,8 @@ uintptr_t  _os_random_weak(uintptr_t extra_seed);
 static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 
 // init.c
-extern mi_stats_t       _mi_stats_main;
-extern const mi_page_t  _mi_page_empty;
+extern mi_decl_cache_align mi_stats_t       _mi_stats_main;
+extern mi_decl_cache_align const mi_page_t  _mi_page_empty;
 bool       _mi_is_main_thread(void);
 bool       _mi_preloading();  // true while the C runtime is not ready
 
@@ -177,6 +177,21 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #endif
 #ifndef EOVERFLOW      // count*size overflow
 #define EOVERFLOW (75)
+#endif
+
+
+// -----------------------------------------------------------------------------------
+// On windows x86/x64 with msvc/clang-cl, use `rep movsb` for `memcpy` (issue #201)
+// -----------------------------------------------------------------------------------
+
+#if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
+#include <intrin.h>
+static inline void _mi_memcpy_rep_movsb(void* d, const void* s, size_t n) {
+  __movsb((unsigned char*)d, (const unsigned char*)s, n);
+}
+#define _mi_memcpy(d,s,n)  _mi_memcpy_rep_movsb(d,s,n)
+#else
+#define _mi_memcpy(d,s,n)  memcpy(d,s,n)
 #endif
 
 
