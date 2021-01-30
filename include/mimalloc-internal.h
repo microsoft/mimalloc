@@ -172,23 +172,19 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #define EOVERFLOW (75)
 #endif
 
-// ------------------------------------------------------
-// Fast `memcpy()` on x86(_64) platforms unavailable
-// on Windows, use REP MOVSB if necessary
-// ------------------------------------------------------
 
-#if defined(_M_IX86) || defined(_M_X64)
+// -----------------------------------------------------------------------------------
+// On windows x86/x64 with msvc/clang-cl, use `rep movsb` for `memcpy` (issue #201)
+// -----------------------------------------------------------------------------------
+
+#if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
 #include <intrin.h>
-#define _mi_memcpy _mi_memcpy_rep_movsb
-static inline void _mi_memcpy_rep_movsb (void *d, const void *s, size_t n) {
-  unsigned char* Destination = (unsigned char*) d;
-  unsigned const char* Source = (unsigned const char*) s;
-  size_t Count = n;
-  __movsb(Destination, Source, Count);
-  return;
+static inline void _mi_memcpy_rep_movsb(void* d, const void* s, size_t n) {
+  __movsb((unsigned char*)d, (const unsigned char*)s, n);
 }
+#define _mi_memcpy(d,s,n)  _mi_memcpy_rep_movsb(d,s,n)
 #else
-#define _mi_memcpy memcpy
+#define _mi_memcpy(d,s,n)  memcpy(d,s,n)
 #endif
 
 
