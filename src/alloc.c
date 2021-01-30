@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
 
-#include <string.h>  // memset, memcpy, strlen
+#include <string.h>  // memset, strlen
 #include <stdlib.h>  // malloc, exit
 
 #define MI_IN_ALLOC_C
@@ -628,7 +628,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
       size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
       memset((uint8_t*)newp + start, 0, newsize - start);
     }
-    _mi_memcpy(newp, p, (newsize > size ? size : newsize));
+    _mi_memcpy_aligned(newp, p, (newsize > size ? size : newsize));
     mi_free(p); // only free if successful
   }
   return newp;

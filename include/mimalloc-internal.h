@@ -173,21 +173,6 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #endif
 
 
-// -----------------------------------------------------------------------------------
-// On windows x86/x64 with msvc/clang-cl, use `rep movsb` for `memcpy` (issue #201)
-// -----------------------------------------------------------------------------------
-
-#if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
-#include <intrin.h>
-static inline void _mi_memcpy_rep_movsb(void* d, const void* s, size_t n) {
-  __movsb((unsigned char*)d, (const unsigned char*)s, n);
-}
-#define _mi_memcpy(d,s,n)  _mi_memcpy_rep_movsb(d,s,n)
-#else
-#define _mi_memcpy(d,s,n)  memcpy(d,s,n)
-#endif
-
-
 /* -----------------------------------------------------------
   Inlined definitions
 ----------------------------------------------------------- */
@@ -871,6 +856,57 @@ static inline size_t mi_ctz(uintptr_t x) {
 static inline size_t mi_bsr(uintptr_t x) {
   return (x==0 ? MI_INTPTR_BITS : MI_INTPTR_BITS - 1 - mi_clz(x));
 }
+
+
+// ---------------------------------------------------------------------------------
+// Provide our own `_mi_memcpy` for potential performance optimizations.
+//
+// For now, only on Windows with msvc/clang-cl we optimize to `rep movsb` if 
+// we happen to run on x86/x64 cpu's that have "fast short rep movsb" (FSRM) support 
+// (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017). See also issue #201 and pr #253. 
+// ---------------------------------------------------------------------------------
+
+#if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
+#include <intrin.h>
+#include <string.h>
+extern bool _mi_cpu_has_fsrm;
+static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
+  if (_mi_cpu_has_fsrm) {
+    __movsb((unsigned char*)dst, (const unsigned char*)src, n);
+  }
+  else {
+    memcpy(dst, src, n); // todo: use noinline?
+  }
+}
+#else
+#include <string.h>
+static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
+  memcpy(dst, src, n);
+}
+#endif
+
+
+// -------------------------------------------------------------------------------
+// The `_mi_memcpy_aligned` can be used if the pointers are machine-word aligned 
+// This is used for example in `mi_realloc`.
+// -------------------------------------------------------------------------------
+
+#if (__GNUC__ >= 4) || defined(__clang__)
+// On GCC/CLang we provide a hint that the pointers are word aligned.
+#include <string.h>
+static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
+  mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
+  void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
+  const void* asrc = __builtin_assume_aligned(src, MI_INTPTR_SIZE);
+  memcpy(adst, asrc, n);
+}
+#else
+// Default fallback on `_mi_memcpy`
+static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
+  mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
+  _mi_memcpy(dst, src, n);
+}
+#endif
 
 
 #endif

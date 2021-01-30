@@ -17,7 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // ------------------------------------------------------
 
 #include <errno.h>
-#include <string.h>  // memcpy
+#include <string.h>  // memset
 #include <stdlib.h>  // getenv
 
 #ifdef _MSC_VER

@@ -193,7 +193,7 @@ mi_heap_t* mi_heap_new(void) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);  // todo: OS allocate in secure mode?
   if (heap==NULL) return NULL;
-  _mi_memcpy(heap, &_mi_heap_empty, sizeof(mi_heap_t));
+  _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(mi_heap_t));
   heap->tld = bheap->tld;
   heap->thread_id = _mi_thread_id();
   _mi_random_split(&bheap->random, &heap->random);
@@ -220,7 +220,7 @@ static void mi_heap_reset_pages(mi_heap_t* heap) {
 #ifdef MI_MEDIUM_DIRECT
   memset(&heap->pages_free_medium, 0, sizeof(heap->pages_free_medium));
 #endif
-  _mi_memcpy(&heap->pages, &_mi_heap_empty.pages, sizeof(heap->pages));
+  _mi_memcpy_aligned(&heap->pages, &_mi_heap_empty.pages, sizeof(heap->pages));
   heap->thread_delayed_free = NULL;
   heap->page_count = 0;
 }
