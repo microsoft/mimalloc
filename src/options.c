@@ -194,7 +194,7 @@ static void mi_out_buf(const char* msg, void* arg) {
   if (start+n >= MI_MAX_DELAY_OUTPUT) {
     n = MI_MAX_DELAY_OUTPUT-start-1;
   }
-  memcpy(&out_buf[start], msg, n);
+  _mi_memcpy(&out_buf[start], msg, n);
 }
 
 static void mi_out_buf_flush(mi_output_fun* out, bool no_more_buf, void* arg) {

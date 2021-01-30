@@ -628,7 +628,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
       size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
       memset((uint8_t*)newp + start, 0, newsize - start);
     }
-    memcpy(newp, p, (newsize > size ? size : newsize));
+    _mi_memcpy(newp, p, (newsize > size ? size : newsize));
     mi_free(p); // only free if successful
   }
   return newp;
@@ -695,7 +695,7 @@ mi_decl_restrict char* mi_heap_strdup(mi_heap_t* heap, const char* s) mi_attr_no
   if (s == NULL) return NULL;
   size_t n = strlen(s);
   char* t = (char*)mi_heap_malloc(heap,n+1);
-  if (t != NULL) memcpy(t, s, n + 1);
+  if (t != NULL) _mi_memcpy(t, s, n + 1);
   return t;
 }
 
@@ -711,7 +711,7 @@ mi_decl_restrict char* mi_heap_strndup(mi_heap_t* heap, const char* s, size_t n)
   mi_assert_internal(m <= n);
   char* t = (char*)mi_heap_malloc(heap, m+1);
   if (t == NULL) return NULL;
-  memcpy(t, s, m);
+  _mi_memcpy(t, s, m);
   t[m] = 0;
   return t;
 }
