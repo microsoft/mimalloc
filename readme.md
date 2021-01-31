@@ -571,7 +571,7 @@ Note that the _xmalloc-testN_ memory usage should be disregarded as it
 allocates more the faster the program runs. Similarly, memory usage of
 _larsonN_, _mstressN_, _rptestN_ and _sh8bench_ can vary depending on scheduling and
 speed. Nevertheless, we hope to improve the memory usage on _mstressN_
-and _rptestN_ (just as _cfrac_, _larsonN_ and _sh8bench_ have a very small working set which skews the results).
+and _rptestN_ (just as _cfrac_, _larsonN_ and _sh8bench_ have a small working set which skews the results).
 
 <!--
 # Previous Benchmarks
