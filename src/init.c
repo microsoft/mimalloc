@@ -102,7 +102,7 @@ const mi_page_t _mi_page_empty = {
 // may lead to allocation itself on some platforms)
 // --------------------------------------------------------
 
-const mi_heap_t _mi_heap_empty = {
+mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
@@ -120,7 +120,7 @@ const mi_heap_t _mi_heap_empty = {
 #define tld_empty_stats  ((mi_stats_t*)((uint8_t*)&tld_empty + offsetof(mi_tld_t,stats)))
 #define tld_empty_os     ((mi_os_tld_t*)((uint8_t*)&tld_empty + offsetof(mi_tld_t,os)))
 
-static const mi_tld_t tld_empty = {
+mi_decl_cache_align static const mi_tld_t tld_empty = {
   0,
   false,
   NULL, NULL,
@@ -213,8 +213,8 @@ static bool _mi_heap_init(void) {
     // OS allocated so already zero initialized
     mi_tld_t*  tld = &td->tld;
     mi_heap_t* heap = &td->heap;
-    _mi_memcpy(tld, &tld_empty, sizeof(*tld));
-    _mi_memcpy(heap, &_mi_heap_empty, sizeof(*heap));
+    _mi_memcpy_aligned(tld, &tld_empty, sizeof(*tld));
+    _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(*heap));
     heap->thread_id = _mi_thread_id();
     _mi_random_init(&heap->random);
     heap->cookie  = _mi_heap_random_next(heap) | 1;
@@ -483,6 +483,22 @@ static void mi_process_load(void) {
   }
 }
 
+#if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
+#include <intrin.h>
+mi_decl_cache_align bool _mi_cpu_has_fsrm = false;
+
+static void mi_detect_cpu_features(void) {
+  // FSRM for fast rep movsb support (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017))
+  int32_t cpu_info[4];
+  __cpuid(cpu_info, 7);
+  _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https ://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+}
+#else
+static void mi_detect_cpu_features(void) {
+  // nothing
+}
+#endif
+
 // Initialize the process; called by thread_init or the process loader
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
@@ -491,6 +507,7 @@ void mi_process_init(void) mi_attr_noexcept {
   mi_process_setup_auto_thread_done();
 
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
+  mi_detect_cpu_features();
   _mi_os_init();
   mi_heap_main_init();
   #if (MI_DEBUG)
