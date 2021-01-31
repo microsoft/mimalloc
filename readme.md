@@ -413,7 +413,7 @@ under your control or otherwise mixing of pointers from different heaps may occu
 
 # Performance
 
-Last update: 2020-01-20
+Last update: 2021-01-30
 
 We tested _mimalloc_ against many other top allocators over a wide
 range of benchmarks, ranging from various real world programs to
@@ -430,9 +430,14 @@ suffering from (too much) underperformance in less common situations.
 
 As always, interpret these results with care since some benchmarks test synthetic
 or uncommon situations that may never apply to your workloads. For example, most
-allocators do not do well on `xmalloc-testN` but that includes the best
+allocators do not do well on `xmalloc-testN` but that includes even the best
 industrial allocators like _jemalloc_ and _tcmalloc_ that are used in some of
 the world's largest systems (like Chrome or FreeBSD).
+
+Also, the benchmarks here do not measure the behaviour on very large and long-running server workloads,
+or worst-case latencies of allocation. Much work has gone into `mimalloc` to work well on such
+workloads (for example, to reduce virtual memory fragmentation on long-running services)
+but such optimizations are not always reflected in the current benchmark suite.
 
 We show here only an overview -- for
 more specific details and further benchmarks we refer to the
@@ -441,27 +446,26 @@ The benchmark suite is automated and available separately
 as [mimalloc-bench](https://github.com/daanx/mimalloc-bench).
 
 
-## Benchmark Results on 36-core Intel
+## Benchmark Results on a 16-core AMD 5950x (Zen3)
 
-Testing on a big Amazon EC2 compute instance
-([c5.18xlarge](https://aws.amazon.com/ec2/instance-types/#Compute_Optimized))
-consisting of a 72 processor Intel Xeon at 3GHz
-with 144GiB ECC memory, running	Ubuntu 18.04.1 with glibc 2.27 and GCC 7.4.0.
-The measured allocators are _mimalloc_ (xmi, tag:v1.4.0, page reset enabled)
-and its secure build as _smi_,
-Google's [_tcmalloc_](https://github.com/gperftools/gperftools) (tc, tag:gperftools-2.7) used in Chrome,
+Testing on the 16-core AMD 5950x processor at 3.4Ghz (4.9Ghz boost), with
+with 32GiB memory at 3600Mhz, running	Ubuntu 20.04 with glibc 2.31 and GCC 9.3.0.
+We measure three versions of _mimalloc_: the main version _mi_ (tag:v1.6.8),
+the v2.0 beta version as _xmi_ (tag:v2.0.0), and main version in secure mode as _smi_ (tag:v1.6.8).
+The other allocators are
+Google's [_tcmalloc_](https://github.com/gperftools/gperftools) (tc, tag:gperftools-2.8.1) used in Chrome,
 Facebook's [_jemalloc_](https://github.com/jemalloc/jemalloc) (je, tag:5.2.1) by Jason Evans used in Firefox and FreeBSD,
-the Intel thread building blocks [allocator](https://github.com/intel/tbb) (tbb, tag:2020),
-[rpmalloc](https://github.com/mjansson/rpmalloc) (rp,tag:1.4.0) by Mattias Jansson,
-the original scalable [_Hoard_](https://github.com/emeryberger/Hoard) (tag:3.13) allocator by Emery Berger \[1],
-the memory compacting [_Mesh_](https://github.com/plasma-umass/Mesh) (git:51222e7) allocator by
+the Intel thread building blocks [allocator](https://github.com/intel/tbb) (tbb, tag:v2020.3),
+[rpmalloc](https://github.com/mjansson/rpmalloc) (rp,tag:1.4.1) by Mattias Jansson,
+the original scalable [_Hoard_](https://github.com/emeryberger/Hoard) (git:d880f72) allocator by Emery Berger \[1],
+the memory compacting [_Mesh_](https://github.com/plasma-umass/Mesh) (git:67ff31a) allocator by
 Bobby Powers _et al_ \[8],
-and finally the default system allocator (glibc, 2.27) (based on _PtMalloc2_).
+and finally the default system allocator (glibc, 2.31) (based on _PtMalloc2_).
 
-<img width="90%" src="doc/bench-2020/bench-c5-18xlarge-2020-01-20-a.svg"/>
-<img width="90%" src="doc/bench-2020/bench-c5-18xlarge-2020-01-20-b.svg"/>
+<img width="90%" src="doc/bench-2021/bench-amd5950x-2021-01-30-a.svg"/>
+<img width="90%" src="doc/bench-2021/bench-amd5950x-2021-01-30-b.svg"/>
 
-Any benchmarks ending in `N` run on all processors in parallel.
+Any benchmarks ending in `N` run on all 32 logical cores in parallel.
 Results are averaged over 10 runs and reported relative
 to mimalloc (where 1.2 means it took 1.2&times; longer to run).
 The legend also contains the _overall relative score_ between the
@@ -476,18 +480,17 @@ _jemalloc_.
 
 The _leanN_ program is interesting as a large realistic and
 concurrent workload of the [Lean](https://github.com/leanprover/lean)
-theorem prover compiling its own standard library, and there is a 7%
+theorem prover compiling its own standard library, and there is a 13%
 speedup over _tcmalloc_. This is
 quite significant: if Lean spends 20% of its time in the
-allocator that means that _mimalloc_ is 1.3&times; faster than _tcmalloc_
+allocator that means that _mimalloc_ is 1.6&times; faster than _tcmalloc_
 here. (This is surprising as that is not measured in a pure
 allocation benchmark like _alloc-test_. We conjecture that we see this
 outsized improvement here because _mimalloc_ has better locality in
 the allocation which improves performance for the *other* computations
 in a program as well).
 
-The single threaded _redis_ benchmark again show that most allocators do well on such workloads where _tcmalloc_
-did best this time.
+The single threaded _redis_ benchmark again show that most allocators do well on such workloads.
 
 The _larsonN_ server benchmark by Larson and Krishnan \[2] allocates and frees between threads. They observed this
 behavior (which they call _bleeding_) in actual server applications, and the benchmark simulates this.
@@ -511,14 +514,12 @@ The _alloc-test_, by
 [OLogN Technologies AG](http://ithare.com/testing-memory-allocators-ptmalloc2-tcmalloc-hoard-jemalloc-while-trying-to-simulate-real-world-loads/), is a very allocation intensive benchmark doing millions of
 allocations in various size classes. The test is scaled such that when an
 allocator performs almost identically on _alloc-test1_ as _alloc-testN_ it
-means that it scales linearly. Here, _tcmalloc_, and
-_Hoard_ seem to scale less well and do more than 10% worse on the multi-core version. Even the best industrial
-allocators (_tcmalloc_, _jemalloc_, and _tbb_) are more than 10% slower as _mimalloc_ here.
+means that it scales linearly. 
 
 The _sh6bench_ and _sh8bench_ benchmarks are
 developed by [MicroQuill](http://www.microquill.com/) as part of SmartHeap.
 In _sh6bench_ _mimalloc_ does much
-better than the others (more than 1.5&times; faster than _jemalloc_).
+better than the others (more than 2.5&times; faster than _jemalloc_).
 We cannot explain this well but believe it is
 caused in part by the "reverse" free-ing pattern in _sh6bench_.
 The _sh8bench_ is a variation with object migration
@@ -528,7 +529,7 @@ The _xmalloc-testN_ benchmark by Lever and Boreham \[5] and Christian Eder, simu
 some threads only allocate, and others only free -- they observed this pattern in
 larger server applications. Here we see that
 the _mimalloc_ technique of having non-contended sharded thread free
-lists pays off as it outperforms others by a very large margin. Only _rpmalloc_ and _tbb_ also scale well on this benchmark.
+lists pays off as it outperforms others by a very large margin. Only _rpmalloc_, _tbb_, and _glibc_ also scale well on this benchmark.
 
 The _cache-scratch_ benchmark by Emery Berger \[1], and introduced with
 the Hoard allocator to test for _passive-false_ sharing of cache lines.
@@ -542,7 +543,69 @@ cache line sharing completely, while _Hoard_ and _glibc_ seem to mitigate
 the effects. Kukanov and Voss \[7] describe in detail
 how the design of _tbb_ avoids the false cache line sharing.
 
-## On 24-core AMD Epyc
+
+## On a 36-core Intel Xeon
+
+For completeness, here are the results on a big Amazon
+[c5.18xlarge](https://aws.amazon.com/ec2/instance-types/#Compute_Optimized) instance
+consisting of a 2&times;18-core Intel Xeon at 3GHz
+with 144GiB ECC memory, running	Ubuntu 20.04 with glibc 2.31, GCC 9.3.0, and
+Clang 10.0.0. This time, the mimalloc allocators (mi, xmi, and smi) were
+compiled with the Clang compiler instead of GCC.
+The results are similar to the AMD results but it is interesting to
+see the differences in the _larsonN_, _mstressN_, and _xmalloc-testN_ benchmarks.
+
+<img width="90%" src="doc/bench-2021/bench-c5-18xlarge-2021-01-30-a.svg"/>
+<img width="90%" src="doc/bench-2021/bench-c5-18xlarge-2021-01-30-b.svg"/>
+
+
+## Peak Working Set
+
+The following figure shows the peak working set (rss) of the allocators
+on the benchmarks (on the c5.18xlarge instance).
+
+<img width="90%" src="doc/bench-2021/bench-c5-18xlarge-2021-01-30-rss-a.svg"/>
+<img width="90%" src="doc/bench-2021/bench-c5-18xlarge-2021-01-30-rss-b.svg"/>
+
+Note that the _xmalloc-testN_ memory usage should be disregarded as it
+allocates more the faster the program runs. Similarly, memory usage of
+_mstressN_, _rptestN_ and _sh8bench_ can vary depending on scheduling and
+speed. Nevertheless, even though _mimalloc_ is fast on these benchmarks we
+believe the memory usage is too high and hope to improve.
+
+<!--
+# Previous Benchmarks
+
+Todo: should we create a separate page for this?
+
+## Benchmark Results on 36-core Intel: 2020-01-20
+
+Testing on a big Amazon EC2 compute instance
+([c5.18xlarge](https://aws.amazon.com/ec2/instance-types/#Compute_Optimized))
+consisting of a 72 processor Intel Xeon at 3GHz
+with 144GiB ECC memory, running	Ubuntu 18.04.1 with glibc 2.27 and GCC 7.4.0.
+The measured allocators are _mimalloc_ (xmi, tag:v1.4.0, page reset enabled)
+and its secure build as _smi_,
+Google's [_tcmalloc_](https://github.com/gperftools/gperftools) (tc, tag:gperftools-2.7) used in Chrome,
+Facebook's [_jemalloc_](https://github.com/jemalloc/jemalloc) (je, tag:5.2.1) by Jason Evans used in Firefox and FreeBSD,
+the Intel thread building blocks [allocator](https://github.com/intel/tbb) (tbb, tag:2020),
+[rpmalloc](https://github.com/mjansson/rpmalloc) (rp,tag:1.4.0) by Mattias Jansson,
+the original scalable [_Hoard_](https://github.com/emeryberger/Hoard) (tag:3.13) allocator by Emery Berger \[1],
+the memory compacting [_Mesh_](https://github.com/plasma-umass/Mesh) (git:51222e7) allocator by
+Bobby Powers _et al_ \[8],
+and finally the default system allocator (glibc, 2.27) (based on _PtMalloc2_).
+
+<img width="90%" src="doc/bench-2020/bench-c5-18xlarge-2020-01-20-a.svg"/>
+<img width="90%" src="doc/bench-2020/bench-c5-18xlarge-2020-01-20-b.svg"/>
+
+The following figure shows the peak working set (rss) of the allocators
+on the benchmarks (on the c5.18xlarge instance).
+
+<img width="90%" src="doc/bench-2020/bench-c5-18xlarge-2020-01-20-rss-a.svg"/>
+<img width="90%" src="doc/bench-2020/bench-c5-18xlarge-2020-01-20-rss-b.svg"/>
+
+
+## On 24-core AMD Epyc, 2020-01-16
 
 For completeness, here are the results on a
 [r5a.12xlarge](https://aws.amazon.com/ec2/instance-types/#Memory_Optimized) instance
@@ -553,21 +616,7 @@ see the differences in the _larsonN_, _mstressN_, and _xmalloc-testN_ benchmarks
 <img width="90%" src="doc/bench-2020/bench-r5a-12xlarge-2020-01-16-a.svg"/>
 <img width="90%" src="doc/bench-2020/bench-r5a-12xlarge-2020-01-16-b.svg"/>
 
-
-## Peak Working Set
-
-The following figure shows the peak working set (rss) of the allocators
-on the benchmarks (on the c5.18xlarge instance).
-
-<img width="90%" src="doc/bench-2020/bench-c5-18xlarge-2020-01-20-rss-a.svg"/>
-<img width="90%" src="doc/bench-2020/bench-c5-18xlarge-2020-01-20-rss-b.svg"/>
-
-Note that the _xmalloc-testN_ memory usage should be disregarded as it
-allocates more the faster the program runs. Similarly, memory usage of
-_mstressN_, _rptestN_ and _sh8bench_ can vary depending on scheduling and
-speed. Nevertheless, even though _mimalloc_ is fast on these benchmarks we
-believe the memory usage is too high and hope to improve.
-
+-->
 
 # References
 
