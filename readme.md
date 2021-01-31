@@ -12,7 +12,8 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v1.7.0` (2020-01-31).
+Latest release tag: `v2.0.0` (beta, 2021-01-31).  
+Latest stable  tag: `v1.7.0` (2021-01-31).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -67,15 +68,20 @@ Enjoy!
 ### Branches
 
 * `master`: latest stable release.
-* `dev`: latest development branch.
-* `dev-slice`: experimental branch with a different way of managing mimalloc pages that tends 
-  to use less memory than regular mimalloc with similar performance. Give it a try and please
-  report any significant performance improvement or degradation.
+* `dev`: development branch for mimalloc v1.
+* `dev-slice`: development branch for mimalloc v2 with a new algorithm for managing internal mimalloc pages.
 
-### Releases
+### Release
+
+* 2021-01-31, `v2.0.0`: beta release 2.0: new algorithm for managing internal mimalloc pages that tends to use reduce memory usage
+  and fragmentation compared to mimalloc v1 (especially for large workloads). Should otherwise have similar performance
+  (see [below](#performance)); please report if you observe any significant performance regression.
 
 * 2021-01-31, `v1.7.0`: stable release 1.7: support explicit user provided memory regions, more precise statistics,
   improve macOS overriding, initial support for Apple M1, improved DragonFly support, faster memcpy on Windows, various small fixes.
+
+### Older Releases
+
 * 2020-09-24, `v1.6.7`: stable release 1.6: using standard C atomics, passing tsan testing, improved
   handling of failing to commit on Windows, add [`mi_process_info`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc.h#L156) api call.
 * 2020-08-06, `v1.6.4`: stable release 1.6: improved error recovery in low-memory situations,
