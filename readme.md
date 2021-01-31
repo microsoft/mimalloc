@@ -54,7 +54,7 @@ It also has an easy way to override the default allocator in [Windows](#override
   and has no internal points of contention using only atomic operations.
 - __fast__: In our benchmarks (see [below](#performance)),
   _mimalloc_ outperforms other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
-  and usually uses less memory (up to 25% more in the worst case). A nice property
+  and often uses less memory. A nice property
   is that it does consistently well over a wide range of benchmarks. There is also good huge OS page
   support for larger server programs.
 
