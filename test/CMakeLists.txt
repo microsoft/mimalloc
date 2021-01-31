@@ -13,7 +13,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Import mimalloc (if installed)
-find_package(mimalloc 1.6 REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
+find_package(mimalloc 1.7 REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 message(STATUS "Found mimalloc installed at: ${MIMALLOC_TARGET_DIR}")
 
 # overriding with a dynamic library

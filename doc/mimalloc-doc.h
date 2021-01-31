@@ -1209,7 +1209,7 @@ synthetic benchmarks that see how the allocator behaves under more
 extreme circumstances.
 
 In our benchmarks, _mimalloc_ always outperforms all other leading
-allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc) (Apr 2019),
+allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc) (Jan 2021),
 and usually uses less memory (up to 25% more in the worst case).
 A nice property is that it does *consistently* well over the wide
 range of benchmarks.
