@@ -6,12 +6,12 @@
 trigger:
   branches:
     include:
-      - master
-      - dev
-      - dev-slice
+    - master
+    - dev
+    - dev-slice
   tags:
     include:
-      - v*
+    - v*
 
 jobs:  
 - job:
