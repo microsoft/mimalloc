@@ -548,7 +548,7 @@ how the design of _tbb_ avoids the false cache line sharing.
 
 For completeness, here are the results on a big Amazon
 [c5.18xlarge](https://aws.amazon.com/ec2/instance-types/#Compute_Optimized) instance
-consisting of a 2&times;18-core Intel Xeon at 3GHz
+consisting of a 2&times;18-core Intel Xeon (Cascade Lake) at 3.4GHz (boost 3.5GHz)
 with 144GiB ECC memory, running	Ubuntu 20.04 with glibc 2.31, GCC 9.3.0, and
 Clang 10.0.0. This time, the mimalloc allocators (mi, xmi, and smi) were
 compiled with the Clang compiler instead of GCC.
