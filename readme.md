@@ -14,7 +14,7 @@ Initially developed by Daan Leijen for the run-time systems of the
 
 Latest release tag: `v1.7.0` (2020-01-31).
 
-It is a drop-in replacement for `malloc` and can be used in other programs
+mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
 ```
 > LD_PRELOAD=/usr/bin/libmimalloc.so  myprogram
