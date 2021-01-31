@@ -11,7 +11,8 @@ mimalloc (pronounced "me-malloc")
 is a general purpose allocator with excellent [performance](#performance) characteristics.
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
-Latest release:`v1.6.7` (2020-09-24).
+
+Latest release:`v1.7.0` (2020-01-31).
 
 It is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -73,6 +74,8 @@ Enjoy!
 
 ### Releases
 
+* 2021-01-31, `v1.7.0`: stable release 1.7: support explicit user provided memory regions, more precise statistics,
+  improve macOS overriding, initial support for Apple M1, improved DragonFly support, faster memcpy on Windows, various small fixes.
 * 2020-09-24, `v1.6.7`: stable release 1.6: using standard C atomics, passing tsan testing, improved
   handling of failing to commit on Windows, add [`mi_process_info`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc.h#L156) api call.
 * 2020-08-06, `v1.6.4`: stable release 1.6: improved error recovery in low-memory situations,
