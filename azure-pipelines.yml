@@ -4,8 +4,14 @@
 # https://aka.ms/yaml
 
 trigger:
-- master
-- dev
+  branches:
+    include:
+    - master
+    - dev
+    - dev-slice
+  tags:
+    include:
+    - v*
 
 jobs:  
 - job:
