@@ -831,7 +831,7 @@ static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
   res = tcb[slot];
 #elif defined(__aarch64__)
   void** tcb; UNUSED(ofs);
-#if defined(__APPLE__) // issue #343
+#if defined(__APPLE__) // M1, issue #343
   __asm__ volatile ("mrs %0, tpidrro_el0" : "=r" (tcb));
 #else
   __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
@@ -858,7 +858,7 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
   tcb[slot] = value;
 #elif defined(__aarch64__)
   void** tcb; UNUSED(ofs);
-#if defined(__APPLE__) // issue #343
+#if defined(__APPLE__) // M1, issue #343
   __asm__ volatile ("mrs %0, tpidrro_el0" : "=r" (tcb));
 #else
   __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
@@ -868,8 +868,13 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
 }
 
 static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
-  // in all our targets, slot 0 is the pointer to the thread control block
+#if defined(__aarch64__) && defined(__APPLE__)  // M1
+  // on macOS on the M1, slot 0 does not seem to work, so we fall back to portable C for now. See issue #354
+  return (uintptr_t)&_mi_heap_default;
+#else
+  // in all our other targets, slot 0 is the pointer to the thread control block
   return (uintptr_t)mi_tls_slot(0);
+#endif
 }
 #else
 // otherwise use standard C
