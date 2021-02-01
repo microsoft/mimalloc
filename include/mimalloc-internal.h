@@ -744,8 +744,12 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
 }
 
 static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
-  // in all our targets, slot 0 is the pointer to the thread control block
+#if defined(__aarch64__) && defined(__APPLE__)
+  return (uintptr_t)&_mi_heap_default;
+#else
+  // in all our other targets, slot 0 is the pointer to the thread control block
   return (uintptr_t)mi_tls_slot(0);
+#endif
 }
 #else
 // otherwise use standard C
