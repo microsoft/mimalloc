@@ -324,9 +324,13 @@ static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
 #elif defined(MI_TLS_PTHREAD)
 #include <pthread.h>
 extern pthread_key_t _mi_heap_default_key;
-#else
-extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
 #endif
+
+// Default heap to allocate from (if not using TLS- or pthread slots).
+// Do not use this directly but use through `mi_heap_get_default()` (or the unchecked `mi_get_default_heap`).
+// This thread local variable is only used when neither MI_TLS_SLOT, MI_TLS_PTHREAD, or MI_TLS_PTHREAD_SLOT_OFS are defined.
+// However, on the Apple M1 we do use the address of this variable as the unique thread-id (issue #356).
+extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
 
 static inline mi_heap_t* mi_get_default_heap(void) {
 #if defined(MI_TLS_SLOT)
