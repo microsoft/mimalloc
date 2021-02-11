@@ -23,6 +23,7 @@ option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
+option(MI_BUILD_NATIVE      "Build with -march=native flag" OFF)
 
 include("cmake/mimalloc-config-version.cmake")
 
@@ -191,7 +192,7 @@ if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
 endif()
 
 # Architecture flags
-if(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "arm" AND NOT APPLE)
+if(MI_BUILD_NATIVE AND ${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "arm" AND NOT APPLE)
     check_cxx_compiler_flag(-march=native CXX_SUPPORTS_MARCH_NATIVE)
     if (CXX_SUPPORTS_MARCH_NATIVE)
         list(APPEND mi_cflags -march=native)
