@@ -244,7 +244,7 @@ static bool os_random_buf(void* buf, size_t buf_len) {
 #endif
 
 #if defined(_WIN32)
-#include <Windows.h>
+#include <windows.h>
 #elif defined(__APPLE__)
 #include <mach/mach_time.h>
 #else

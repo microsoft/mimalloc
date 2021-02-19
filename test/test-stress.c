@@ -273,7 +273,7 @@ static void (*thread_entry_fun)(intptr_t) = &stress;
 
 #ifdef _WIN32
 
-#include <Windows.h>
+#include <windows.h>
 
 static DWORD WINAPI thread_entry(LPVOID param) {
   thread_entry_fun((intptr_t)param);
