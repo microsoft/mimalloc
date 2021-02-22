@@ -32,14 +32,17 @@ void heap_late_free();         // issue #204
 void padding_shrink();         // issue #209
 void various_tests();
 void test_mt_shutdown();
+void large_alloc(void);        // issue #363
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
-  heap_thread_free_large();
-  heap_no_delete();
-  heap_late_free();
-  padding_shrink();
-  various_tests();
+  large_alloc();
+
+  //heap_thread_free_large();
+  //heap_no_delete();
+  //heap_late_free();
+  //padding_shrink();
+  //various_tests();
   //test_mt_shutdown();
   mi_stats_print(NULL);
   return 0;
@@ -176,7 +179,7 @@ void heap_thread_free_large_worker() {
 
 void heap_thread_free_large() {
   for (int i = 0; i < 100; i++) {
-    shared_p = mi_malloc_aligned(2*1024*1024 + 1, 8);
+    shared_p = mi_malloc_aligned(2 * 1024 * 1024 + 1, 8);
     auto t1 = std::thread(heap_thread_free_large_worker);
     t1.join();
   }
@@ -206,4 +209,16 @@ void test_mt_shutdown()
       delete[] p;
 
   std::cout << "done" << std::endl;
+}
+
+// issue #363
+using namespace std;
+
+void large_alloc(void)
+{
+  char* a = new char[1ull << 25];
+  thread th([&] {
+    delete[] a;
+    });
+  th.join();
 }

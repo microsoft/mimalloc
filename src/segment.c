@@ -1311,7 +1311,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, mi_segments_tld_t* tld
   mi_segment_t* segment = mi_segment_alloc(size,tld,os_tld,&page);
   if (segment == NULL || page==NULL) return NULL;
   mi_assert_internal(segment->used==1);
-  mi_assert_internal(mi_page_block_size(page) >= size);
+  mi_assert_internal(mi_page_block_size(page) >= size);  
   segment->thread_id = 0; // huge segments are immediately abandoned
   return page;
 }
@@ -1334,7 +1334,6 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
     page->is_zero = false;
     mi_assert(page->used == 0);
     mi_tld_t* tld = heap->tld;
-    // mi_segments_track_size((long)segment->segment_size, tld);
     _mi_segment_page_free(page, true, &tld->segments);
   }
 #if (MI_DEBUG!=0)
