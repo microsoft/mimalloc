@@ -372,13 +372,13 @@ static bool mi_bitmap_is_claimedx_across(mi_bitmap_t bitmap, size_t bitmap_field
   if ((prev & pre_mask) != 0) any_ones = true;
   while (mid_count-- > 0) {
     prev = mi_atomic_load_relaxed(field++);
-    if ((prev & pre_mask) != pre_mask) all_ones = false;
-    if ((prev & pre_mask) != 0) any_ones = true;
+    if ((prev & mid_mask) != mid_mask) all_ones = false;
+    if ((prev & mid_mask) != 0) any_ones = true;
   }
   if (post_mask!=0) {
     prev = mi_atomic_load_relaxed(field);
-    if ((prev & pre_mask) != pre_mask) all_ones = false;
-    if ((prev & pre_mask) != 0) any_ones = true;
+    if ((prev & post_mask) != post_mask) all_ones = false;
+    if ((prev & post_mask) != 0) any_ones = true;
   }  
   if (pany_ones != NULL) *pany_ones = any_ones;
   return all_ones;
