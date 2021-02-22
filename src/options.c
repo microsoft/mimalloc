@@ -422,7 +422,7 @@ static inline int mi_strnicmp(const char* s, const char* t, size_t n) {
 // reliably even when this is invoked before the C runtime is initialized.
 // i.e. when `_mi_preloading() == true`.
 // Note: on windows, environment names are not case sensitive.
-#include <Windows.h>
+#include <windows.h>
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
   result[0] = 0;
   size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);

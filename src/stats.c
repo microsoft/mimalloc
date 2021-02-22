@@ -393,7 +393,7 @@ void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
 // Basic timer for convenience; use milli-seconds to avoid doubles
 // ----------------------------------------------------------------
 #ifdef _WIN32
-#include <Windows.h>
+#include <windows.h>
 static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
   static LARGE_INTEGER mfreq; // = 0
   if (mfreq.QuadPart == 0LL) {
@@ -448,7 +448,7 @@ mi_msecs_t _mi_clock_end(mi_msecs_t start) {
 // --------------------------------------------------------
 
 #if defined(_WIN32)
-#include <Windows.h>
+#include <windows.h>
 #include <psapi.h>
 #pragma comment(lib,"psapi.lib")
 
