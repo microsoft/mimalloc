@@ -118,7 +118,7 @@ static inline void mi_atomic_maxi64_relaxed(volatile int64_t* p, int64_t x) {
 
 // MSVC C compilation wrapper that uses Interlocked operations to model C11 atomics.
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+#include <windows.h>
 #include <intrin.h>
 #ifdef _WIN64
 typedef LONG64   msc_intptr_t;
