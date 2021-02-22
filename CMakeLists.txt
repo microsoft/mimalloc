@@ -190,14 +190,6 @@ if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
   list(APPEND mi_cflags /Zc:__cplusplus)
 endif()
 
-# Architecture flags
-if(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "arm" AND NOT APPLE)
-    check_cxx_compiler_flag(-march=native CXX_SUPPORTS_MARCH_NATIVE)
-    if (CXX_SUPPORTS_MARCH_NATIVE)
-        list(APPEND mi_cflags -march=native)
-    endif()
-endif()
-
 # extra needed libraries
 if(WIN32)
   list(APPEND mi_libraries psapi shell32 user32 advapi32 bcrypt)
