@@ -44,7 +44,7 @@ int main() {
   padding_shrink();
   various_tests();
   large_alloc();
-  test_mt_shutdown();
+  //test_mt_shutdown();
   //fail_aslr();
   mi_stats_print(NULL);
   return 0;
@@ -230,5 +230,5 @@ void fail_aslr() {
   size_t sz = (4ULL << 40); // 4TiB
   void* p = malloc(sz);
   printf("pointer p: %p: area up to %p\n", p, (uint8_t*)p + sz);
-  *(int*)0x7FFFFFFF000 = 0;  // should segfault
+  *(int*)0x5FFFFFFF000 = 0;  // should segfault
 }
