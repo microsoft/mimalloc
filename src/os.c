@@ -476,6 +476,10 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   if (try_alignment == 0 || try_alignment > MI_SEGMENT_SIZE) return NULL;
   if ((size%MI_SEGMENT_SIZE) != 0) return NULL;
   if (size > 1*GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(4<<40 / 1<<30) = 1/4096.
+  #if (MI_SECURE>0)
+  size += MI_SEGMENT_SIZE;        // put in `MI_SEGMENT_SIZE` virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
+  #endif
+
   uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
   if (hint == 0 || hint > ((intptr_t)30<<40)) { // try to wrap around after 30TiB (area after 32TiB is used for huge OS pages)
     uintptr_t init = ((uintptr_t)4 << 40); // start at 4TiB area
