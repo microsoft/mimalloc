@@ -469,10 +469,17 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
 #if (MI_INTPTR_SIZE >= 8) && (defined(_WIN32) || (defined(MI_OS_USE_MMAP) && !defined(MAP_ALIGNED)))
 static mi_decl_cache_align _Atomic(uintptr_t) aligned_base;
 
-// Return a 4MiB aligned address that is probably available
-static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
+// Return a 4MiB aligned address that is probably available.
+// If this returns NULL, the OS will determine the address but on some OS's that may not be 
+// properly aligned which can be more costly as it needs to be adjusted afterwards.
+// For a size > 4GiB this always returns NULL in order to guarantee good ASLR randomization; 
+// otherwise an initial large allocation of say 2TiB has a 50% chance to include (known) addresses 
+// in the middle of the 4TiB - 8TiB address range (see issue #372).
+static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) 
+{
   if (try_alignment == 0 || try_alignment > MI_SEGMENT_SIZE) return NULL;
   if ((size%MI_SEGMENT_SIZE) != 0) return NULL;
+  if (size > 1*GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(4<<40 / 1<<30) = 1/4096.
   uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
   if (hint == 0 || hint > ((intptr_t)30<<40)) { // try to wrap around after 30TiB (area after 32TiB is used for huge OS pages)
     uintptr_t init = ((uintptr_t)4 << 40); // start at 4TiB area

@@ -33,17 +33,19 @@ void padding_shrink();         // issue #209
 void various_tests();
 void test_mt_shutdown();
 void large_alloc(void);        // issue #363
+void fail_aslr();              // issue #372
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
+  
+  heap_thread_free_large();
+  heap_no_delete();
+  heap_late_free();
+  padding_shrink();
+  various_tests();
   large_alloc();
-
-  //heap_thread_free_large();
-  //heap_no_delete();
-  //heap_late_free();
-  //padding_shrink();
-  //various_tests();
-  //test_mt_shutdown();
+  test_mt_shutdown();
+  //fail_aslr();
   mi_stats_print(NULL);
   return 0;
 }
@@ -221,4 +223,12 @@ void large_alloc(void)
     delete[] a;
     });
   th.join();
+}
+
+// issue #372
+void fail_aslr() {
+  size_t sz = (4ULL << 40); // 4TiB
+  void* p = malloc(sz);
+  printf("pointer p: %p: area up to %p\n", p, (uint8_t*)p + sz);
+  *(int*)0x7FFFFFFF000 = 0;  // should segfault
 }
