@@ -32,6 +32,7 @@ void heap_late_free();         // issue #204
 void padding_shrink();         // issue #209
 void various_tests();
 void test_mt_shutdown();
+void fail_aslr();              // issue #372
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
@@ -41,6 +42,7 @@ int main() {
   padding_shrink();
   various_tests();
   //test_mt_shutdown();
+  //test_aslr();
   mi_stats_print(NULL);
   return 0;
 }
@@ -206,4 +208,12 @@ void test_mt_shutdown()
       delete[] p;
 
   std::cout << "done" << std::endl;
+}
+
+// issue #372
+void fail_aslr() {
+  size_t sz = (4ULL << 40); // 4TiB
+  void* p = malloc(sz);
+  printf("pointer p: %p: area up to %p\n", p, (uint8_t*)p + sz);
+  *(int*)0x7FFFFFFF000 = 0;  // should segfault
 }
