@@ -634,7 +634,7 @@ bool mi_heap_visit_blocks(const mi_heap_t *heap, bool visit_blocks, mi_block_vis
   return mi_heap_visit_areas(heap, &mi_heap_area_visitor, &args);
 }
 
-void mi_heap_register_local_deferred_free(mi_heap_t *heap, mi_local_deferred_free_fun *deferred_free, void *arg)
+void mi_heap_register_local_deferred_free(mi_heap_t *heap, mi_local_deferred_free_fun *deferred_free, void *arg) mi_attr_noexcept
 {
   heap->deferred_free = (void *)deferred_free;
   heap->deferred_arg = arg;
