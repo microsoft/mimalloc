@@ -351,13 +351,6 @@ void mi_thread_stats_print_out(mi_output_fun* out, void* arg);
 /// @see mi_register_deferred_free
 typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat, void* arg);
 
-/// Type of deferred free function that is used per mi_heap_t. 
-/// @param heap Heap where this deferred function was registered first.
-/// @param force If \a true all outstanting items should be freed.
-/// @param heartbeat A monotonically increasing count.
-/// @param arg Argument that was passed at registration to hold extra state.
-typedef void (mi_local_deferred_free_fun)(mi_heap_t* heap,bool force,unsigned long long heartbeat,void* arg);
-
 /// Register a deferred free function.
 /// @param deferred_free Address of a deferred free-ing function or \a NULL to unregister.
 /// @param arg Argument that will be passed on to the deferred free function.
