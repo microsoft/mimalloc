@@ -1,0 +1,12 @@
+/home/aprokurov/Projects/mimalloc/CMakeFiles/install/local.dir
+/home/aprokurov/Projects/mimalloc/CMakeFiles/install.dir
+/home/aprokurov/Projects/mimalloc/CMakeFiles/list_install_components.dir
+/home/aprokurov/Projects/mimalloc/CMakeFiles/rebuild_cache.dir
+/home/aprokurov/Projects/mimalloc/CMakeFiles/edit_cache.dir
+/home/aprokurov/Projects/mimalloc/CMakeFiles/test.dir
+/home/aprokurov/Projects/mimalloc/CMakeFiles/mimalloc-test-stress.dir
+/home/aprokurov/Projects/mimalloc/CMakeFiles/install/strip.dir
+/home/aprokurov/Projects/mimalloc/CMakeFiles/mimalloc-obj.dir
+/home/aprokurov/Projects/mimalloc/CMakeFiles/mimalloc-static.dir
+/home/aprokurov/Projects/mimalloc/CMakeFiles/mimalloc-test-api.dir
+/home/aprokurov/Projects/mimalloc/CMakeFiles/mimalloc.dir

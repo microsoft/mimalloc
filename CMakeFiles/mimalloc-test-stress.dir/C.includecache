@@ -1,0 +1,42 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/aprokurov/Projects/mimalloc/test/test-stress.c
+stdio.h
+-
+stdlib.h
+-
+stdint.h
+-
+stdbool.h
+-
+string.h
+-
+mimalloc.h
+-
+Windows.h
+-
+pthread.h
+-
+atomic
+-
+stdatomic.h
+-
+
+include/mimalloc.h
+stddef.h
+-
+stdbool.h
+-
+cstdint
+-
+type_traits
+-
+utility
+-
+
