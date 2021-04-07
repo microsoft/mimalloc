@@ -751,6 +751,9 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
 #if defined(__aarch64__) && defined(__APPLE__)  // M1
   // on macOS on the M1, slot 0 does not seem to work, so we fall back to portable C for now. See issue #354
   return (uintptr_t)&_mi_heap_default;
+#elif defined(__BIONIC__) && (defined(__arm__) || defined(__aarch64__))
+  // on Android, slot 1 is the thread ID (pointer to pthread internal struct)
+  return (uintptr_t)mi_tls_slot(1);
 #else
   // in all our other targets, slot 0 is the pointer to the thread control block
   return (uintptr_t)mi_tls_slot(0);
