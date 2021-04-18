@@ -479,12 +479,12 @@ static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msec
   *page_faults    = (size_t)info.PageFaultCount;  
 }
 
-#elif defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__)) || defined(__HAIKU__)
+#elif defined(__unix__) || defined(__unix) || defined(unix) || defined(__APPLE__) || defined(__HAIKU__)
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/resource.h>
 
-#if defined(__APPLE__) && defined(__MACH__)
+#if defined(__APPLE__)
 #include <mach/mach.h>
 #endif
 
@@ -520,7 +520,7 @@ static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msec
   while (get_next_area_info(tid.team, &c, &mem) == B_OK) {
     *peak_rss += mem.ram_size;
   }
-#elif defined(__APPLE__) && defined(__MACH__)
+#elif defined(__APPLE__)
   *peak_rss = rusage.ru_maxrss;         // BSD reports in bytes
   struct mach_task_basic_info info;
   mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;

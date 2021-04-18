@@ -13,13 +13,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "It is only possible to override "malloc" on Windows when building as a DLL (and linking the C runtime as a DLL)"
 #endif
 
-#if defined(MI_MALLOC_OVERRIDE) && !(defined(_WIN32)) // || (defined(__MACH__) && !defined(MI_INTERPOSE)))
+#if defined(MI_MALLOC_OVERRIDE) && !(defined(_WIN32)) // || (defined(__APPLE__) && !defined(MI_INTERPOSE)))
 
 // ------------------------------------------------------
 // Override system malloc
 // ------------------------------------------------------
 
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__APPLE__)
   // use aliasing to alias the exported function to one of our `mi_` functions
   #if (defined(__GNUC__) && __GNUC__ >= 9)
     #define MI_FORWARD(fun)      __attribute__((alias(#fun), used, visibility("default"), copy(fun)))
@@ -81,7 +81,7 @@ terms of the MIT license. A copy of the license can be found in the file
   void  free(void* p)                    MI_FORWARD0(mi_free, p);
 #endif
 
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__APPLE__)
 #pragma GCC visibility push(default)
 #endif
 
@@ -214,7 +214,7 @@ void* aligned_alloc(size_t alignment, size_t size)   { return mi_aligned_alloc(a
 }
 #endif
 
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__APPLE__)
 #pragma GCC visibility pop
 #endif
 
