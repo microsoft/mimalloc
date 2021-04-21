@@ -65,7 +65,11 @@ static void* mi_align_up_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
 }
 
-static uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
+static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
+  mi_assert_internal(alignment != 0);
+  uintptr_t mask = alignment - 1;
+  if ((alignment & mask) == 0)  // power of two?
+    return sz & ~mask;
   return (sz / alignment) * alignment;
 }
 
