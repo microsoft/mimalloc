@@ -270,7 +270,7 @@ typedef struct mi_segment_s {
   struct mi_segment_s* prev;
 
   size_t               abandoned;        // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
-  size_t               abandoned_visits; // count how often this segment is visited in the abandoned list (to force reclaim it it is too long)
+  size_t               abandoned_visits; // count how often this segment is visited in the abandoned list (to force reclaim if it is too long)
 
   size_t               used;             // count of pages in use (`used <= capacity`)
   size_t               capacity;         // count of available pages (`#free + used`)
