@@ -250,7 +250,9 @@ int main(int argc, char** argv) {
     test_leak();
 #endif
 
-  // mi_collect(true);
+#ifndef NDEBUG
+  mi_collect(true);
+#endif
 #ifndef USE_STD_MALLOC
   mi_stats_print(NULL);
 #endif
