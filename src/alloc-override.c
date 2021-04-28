@@ -187,14 +187,12 @@ void* memalign(size_t alignment, size_t size)                 { return mi_memali
 int   posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
 void* _aligned_malloc(size_t alignment, size_t size)          { return mi_aligned_alloc(alignment, size); }
 
-// aligned_alloc is available when __USE_ISOC11 is defined.
-// if aligned_alloc is not available, we will use `memalign`, `posix_memalign`, or `_aligned_malloc`
-// and avoid overriding it ourselves.
-//
-// For example, Conda has a custom glibc where `aligned_alloc` is declared `static inline`.
-// Both _ISOC11_SOURCE and __USE_ISOC11 are undefined in Conda GCC7 or GCC9.
-// When compiling C codes, _ISOC11_SOURCE is undefined but __USE_ISOC11 is 1.
-#if __USE_ISOC11
+// `aligned_alloc` is only available when __USE_ISOC11 is defined.
+// Note: Conda has a custom glibc where `aligned_alloc` is declared `static inline` and we cannot
+// override it, but both _ISOC11_SOURCE and __USE_ISOC11 are undefined in Conda GCC7 or GCC9.
+// Fortunately, in the case where `aligned_alloc` is declared as `static inline` it
+// uses internally `memalign`, `posix_memalign`, or `_aligned_malloc` so we  can avoid overriding it ourselves.
+#if __USE_ISOC11 
 void* aligned_alloc(size_t alignment, size_t size)   { return mi_aligned_alloc(alignment, size); }
 #endif
 
