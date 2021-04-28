@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2021, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -13,13 +13,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "It is only possible to override "malloc" on Windows when building as a DLL (and linking the C runtime as a DLL)"
 #endif
 
-#if defined(MI_MALLOC_OVERRIDE) && !(defined(_WIN32)) // || (defined(__MACH__) && !defined(MI_INTERPOSE)))
+#if defined(MI_MALLOC_OVERRIDE) && !(defined(_WIN32)) // || (defined(__APPLE__) && !defined(MI_INTERPOSE)))
 
 // ------------------------------------------------------
 // Override system malloc
 // ------------------------------------------------------
 
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__APPLE__)
   // use aliasing to alias the exported function to one of our `mi_` functions
   #if (defined(__GNUC__) && __GNUC__ >= 9)
     #define MI_FORWARD(fun)      __attribute__((alias(#fun), used, visibility("default"), copy(fun)))
@@ -81,7 +81,7 @@ terms of the MIT license. A copy of the license can be found in the file
   void  free(void* p)                    MI_FORWARD0(mi_free, p);
 #endif
 
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__APPLE__)
 #pragma GCC visibility push(default)
 #endif
 
@@ -187,11 +187,12 @@ void* memalign(size_t alignment, size_t size)                 { return mi_memali
 int   posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
 void* _aligned_malloc(size_t alignment, size_t size)          { return mi_aligned_alloc(alignment, size); }
 
-// on some glibc `aligned_alloc` is declared `static inline` so we cannot override it (e.g. Conda). This happens
-// when _GLIBCXX_HAVE_ALIGNED_ALLOC is not defined. However, in those cases it will use `memalign`, `posix_memalign`, 
-// or `_aligned_malloc` and we can avoid overriding it ourselves.
-// We should always override if using C compilation. (issue #276)
-#if _GLIBCXX_HAVE_ALIGNED_ALLOC || !defined(__cplusplus)
+// `aligned_alloc` is only available when __USE_ISOC11 is defined.
+// Note: Conda has a custom glibc where `aligned_alloc` is declared `static inline` and we cannot
+// override it, but both _ISOC11_SOURCE and __USE_ISOC11 are undefined in Conda GCC7 or GCC9.
+// Fortunately, in the case where `aligned_alloc` is declared as `static inline` it
+// uses internally `memalign`, `posix_memalign`, or `_aligned_malloc` so we  can avoid overriding it ourselves.
+#if __USE_ISOC11 
 void* aligned_alloc(size_t alignment, size_t size)   { return mi_aligned_alloc(alignment, size); }
 #endif
 
@@ -214,7 +215,7 @@ void* aligned_alloc(size_t alignment, size_t size)   { return mi_aligned_alloc(a
 }
 #endif
 
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(__MACH__)
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__APPLE__)
 #pragma GCC visibility pop
 #endif
 

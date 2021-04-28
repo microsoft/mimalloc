@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2021, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -216,8 +216,16 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   }
 }
 
+// Align downwards
 static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
-  return (sz / alignment) * alignment;
+  mi_assert_internal(alignment != 0);
+  uintptr_t mask = alignment - 1;
+  if ((alignment & mask) == 0) { // power of two?
+    return (sz & ~mask);
+  }
+  else {
+    return ((sz / alignment) * alignment);
+  }
 }
 
 // Divide upwards: `s <= _mi_divide_up(s,d)*d < s+d`.
@@ -305,7 +313,7 @@ extern bool _mi_process_is_initialized;
 mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing heap
 
 #if defined(MI_MALLOC_OVERRIDE)
-#if defined(__MACH__) // OSX
+#if defined(__APPLE__) // macOS
 #define MI_TLS_SLOT               89  // seems unused? 
 // other possible unused ones are 9, 29, __PTK_FRAMEWORK_JAVASCRIPTCORE_KEY4 (94), __PTK_FRAMEWORK_GC_KEY9 (112) and __PTK_FRAMEWORK_OLDGC_KEY9 (89)
 // see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
@@ -823,7 +831,7 @@ static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
   const size_t ofs = (slot*sizeof(void*));
 #if defined(__i386__)
   __asm__("movl %%gs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // 32-bit always uses GS
-#elif defined(__MACH__) && defined(__x86_64__)
+#elif defined(__APPLE__) && defined(__x86_64__)
   __asm__("movq %%gs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86_64 macOSX uses GS
 #elif defined(__x86_64__) && (MI_INTPTR_SIZE==4)
   __asm__("movl %%fs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x32 ABI
@@ -850,7 +858,7 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
   const size_t ofs = (slot*sizeof(void*));
 #if defined(__i386__)
   __asm__("movl %1,%%gs:%0" : "=m" (*((void**)ofs)) : "rn" (value) : );  // 32-bit always uses GS
-#elif defined(__MACH__) && defined(__x86_64__)
+#elif defined(__APPLE__) && defined(__x86_64__)
   __asm__("movq %1,%%gs:%0" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 macOSX uses GS
 #elif defined(__x86_64__) && (MI_INTPTR_SIZE==4)
   __asm__("movl %1,%%fs:%1" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x32 ABI
@@ -875,6 +883,9 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
 #if defined(__aarch64__) && defined(__APPLE__)  // M1
   // on macOS on the M1, slot 0 does not seem to work, so we fall back to portable C for now. See issue #354
   return (uintptr_t)&_mi_heap_default;
+#elif defined(__BIONIC__) && (defined(__arm__) || defined(__aarch64__))
+  // on Android, slot 1 is the thread ID (pointer to pthread internal struct)
+  return (uintptr_t)mi_tls_slot(1);
 #else
   // in all our other targets, slot 0 is the pointer to the thread control block
   return (uintptr_t)mi_tls_slot(0);

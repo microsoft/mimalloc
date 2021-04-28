@@ -12,8 +12,8 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.0.0` (beta, 2021-01-31).  
-Latest stable  tag: `v1.7.0` (2021-01-31).
+Latest release tag: `v2.0.1` (beta, 2021-04-06).  
+Latest stable  tag: `v1.7.1` (2021-04-06).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -71,8 +71,10 @@ Enjoy!
 * `dev`: development branch for mimalloc v1.
 * `dev-slice`: development branch for mimalloc v2 with a new algorithm for managing internal mimalloc pages.
 
-### Release
+### Releases
 
+* 2021-04-06, `v1.7.1`, `v2.0.1` (beta): fix bug in arena allocation for huge pages, improved aslr on large allocations, improved M1 support (still experimental).
+  
 * 2021-01-31, `v2.0.0`: beta release 2.0: new algorithm for managing internal mimalloc pages that tends to use reduce memory usage
   and fragmentation compared to mimalloc v1 (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
