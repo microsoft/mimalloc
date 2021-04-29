@@ -99,7 +99,9 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next
-  false
+  false,
+  NULL,
+  NULL
 };
 
 // the thread-local default heap for allocation
@@ -130,7 +132,9 @@ mi_heap_t _mi_heap_main = {
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
-  false             // can reclaim
+  false,             // can reclaim
+  NULL,
+  NULL
 };
 
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.

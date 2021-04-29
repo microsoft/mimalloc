@@ -350,6 +350,9 @@ struct mi_heap_s {
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
+
+  mi_local_deferred_free_fun* deferred_free;                 // local deferred free function
+  void*                 deferred_free_arg;                   // argument passed to local deferred free function
 };
 
 
