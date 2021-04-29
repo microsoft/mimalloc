@@ -730,6 +730,7 @@ bool mi_heap_check_owned(mi_heap_t* heap, const void* p);
 /// @see mi_heap_contains_block()
 /// @see mi_heap_get_default()
 bool mi_check_owned(const void* p);
+
 /// Type of deferred free functions.
 /// @param heap The heap.
 /// @param force If \a true all outstanding items should be freed.
@@ -744,7 +745,8 @@ typedef void (mi_local_deferred_free_fun)(mi_heap_t* heap,bool force,unsigned lo
 /// @param deferred_free Address of a deferred free-ing function or \a NULL to unregister.
 /// @param arg Argument that will be passed on to the deferred free function.
 ///
-/// Some runtime systems use deferred free-ing, for example when using
+/// Some runtime systems (JSC through lazy sweeping, JikesRVM has 
+/// both lazy sweeping and deferred RC) use deferred free-ing, for example when using
 /// reference counting to limit the worst case free time.
 /// Such systems can register (re-entrant) deferred free function
 /// to free more memory on demand. When the \a force parameter is
