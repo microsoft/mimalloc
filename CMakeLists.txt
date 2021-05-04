@@ -265,10 +265,16 @@ if(MI_BUILD_SHARED)
   )
   if(WIN32)
     # On windows copy the mimalloc redirection dll too.
-    target_link_libraries(mimalloc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect.lib)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+      set(MIMALLOC_REDIRECT_SUFFIX "32")
+    else()
+      set(MIMALLOC_REDIRECT_SUFFIX "")
+    endif()
+
+    target_link_libraries(mimalloc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.lib)
     add_custom_command(TARGET mimalloc POST_BUILD
-      COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect.dll" $<TARGET_FILE_DIR:mimalloc>
-      COMMENT "Copy mimalloc-redirect.dll to output directory")
+      COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll" $<TARGET_FILE_DIR:mimalloc>
+      COMMENT "Copy mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll to output directory")
   endif()
 
   if (MI_INSTALL_TOPLEVEL MATCHES "ON")
