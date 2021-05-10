@@ -208,9 +208,9 @@ endif()
 # -----------------------------------------------------------------------------
 
 if (MI_INSTALL_TOPLEVEL)
-  set(mi_install_dir "${CMAKE_INSTALL_PREFIX}")
+  set(mi_install_dir "")
 else()
-  set(mi_install_dir "${CMAKE_INSTALL_PREFIX}/lib/mimalloc-${mi_version}")
+  set(mi_install_dir "lib/mimalloc-${mi_version}")
 endif()
 
 if(MI_SECURE)
