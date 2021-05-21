@@ -14,7 +14,7 @@ endif()
 
 # Import mimalloc (if installed)
 find_package(mimalloc 1.7 REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
-message(STATUS "Found mimalloc installed at: ${MIMALLOC_TARGET_DIR}")
+message(STATUS "Found mimalloc installed at: ${MIMALLOC_LIBRARY_DIR}")
 
 # overriding with a dynamic library
 add_executable(dynamic-override  main-override.c)
@@ -26,8 +26,8 @@ target_link_libraries(dynamic-override-cxx PUBLIC mimalloc)
 
 # overriding with a static object file works reliable as the symbols in the
 # object file have priority over those in library files
-add_executable(static-override-obj main-override.c ${MIMALLOC_TARGET_DIR}/mimalloc.o)
-target_include_directories(static-override-obj PUBLIC ${MIMALLOC_TARGET_DIR}/include)
+add_executable(static-override-obj main-override.c ${MIMALLOC_LIBRARY_DIR}/mimalloc.o)
+target_include_directories(static-override-obj PUBLIC ${MIMALLOC_INCLUDE_DIR})
 target_link_libraries(static-override-obj PUBLIC pthread)
 
 

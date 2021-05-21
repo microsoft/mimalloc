@@ -208,11 +208,13 @@ endif()
 # -----------------------------------------------------------------------------
 
 if (MI_INSTALL_TOPLEVEL)
-  set(mi_install_dir    "")
-  set(mi_install_libdir "lib")
+  set(mi_install_libdir   "lib")
+  set(mi_install_incdir   "include")
+  set(mi_install_cmakedir "cmake")
 else()
-  set(mi_install_dir    "lib/mimalloc-${mi_version}")
-  set(mi_install_libdir "${mi_install_dir}")
+  set(mi_install_libdir   "lib/mimalloc-${mi_version}")
+  set(mi_install_incdir   "include/mimalloc-${mi_version}")
+  set(mi_install_cmakedir "share/mimalloc-${mi_version}/cmake") 
 endif()
 
 if(MI_SECURE)
@@ -246,7 +248,7 @@ if(MI_USE_CXX)
 else()
   message(STATUS "Compiler         : ${CMAKE_C_COMPILER}")
 endif()
-message(STATUS "Install directory: ${mi_install_dir}")
+message(STATUS "Version          : ${mi_version}")
 message(STATUS "Build targets    : ${mi_build_targets}")
 message(STATUS "")
 
@@ -263,7 +265,7 @@ if(MI_BUILD_SHARED)
   target_link_libraries(mimalloc PUBLIC ${mi_libraries})
   target_include_directories(mimalloc PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-      $<INSTALL_INTERFACE:${mi_install_dir}/include>
+      $<INSTALL_INTERFACE:${mi_install_incdir}>
   )
   if(WIN32)
     # On windows copy the mimalloc redirection dll too.
@@ -280,7 +282,7 @@ if(MI_BUILD_SHARED)
   endif()
 
   install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_libdir} LIBRARY)  
-  install(EXPORT mimalloc DESTINATION ${mi_install_dir}/cmake)
+  install(EXPORT mimalloc DESTINATION ${mi_install_cmakedir})
 endif()
 
 # static library
@@ -292,7 +294,7 @@ if (MI_BUILD_STATIC)
   target_link_libraries(mimalloc-static PUBLIC ${mi_libraries})
   target_include_directories(mimalloc-static PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-      $<INSTALL_INTERFACE:${mi_install_dir}/include>
+      $<INSTALL_INTERFACE:${mi_install_incdir}>
   )
   if(WIN32)
     # When building both static and shared libraries on Windows, a static library should use a
@@ -307,18 +309,21 @@ if (MI_BUILD_STATIC)
 endif()
 
 # install include files
-install(FILES include/mimalloc.h DESTINATION ${mi_install_dir}/include)
-install(FILES include/mimalloc-override.h DESTINATION ${mi_install_dir}/include)
-install(FILES include/mimalloc-new-delete.h DESTINATION ${mi_install_dir}/include)
-install(FILES cmake/mimalloc-config.cmake DESTINATION ${mi_install_dir}/cmake)
-install(FILES cmake/mimalloc-config-version.cmake DESTINATION ${mi_install_dir}/cmake)
+install(FILES include/mimalloc.h DESTINATION ${mi_install_incdir})
+install(FILES include/mimalloc-override.h DESTINATION ${mi_install_incdir})
+install(FILES include/mimalloc-new-delete.h DESTINATION ${mi_install_incdir})
+install(FILES cmake/mimalloc-config.cmake DESTINATION ${mi_install_cmakedir})
+install(FILES cmake/mimalloc-config-version.cmake DESTINATION ${mi_install_cmakedir})
 
 if(NOT WIN32 AND MI_BUILD_SHARED AND NOT MI_INSTALL_TOPLEVEL)
   # install a symlink in the /usr/local/lib to the versioned library
+  # note: use delayed prefix expansion as \${CMAKE_INSTALL_PREFIX}
   set(mi_symlink "${CMAKE_SHARED_MODULE_PREFIX}${mi_basename}${CMAKE_SHARED_LIBRARY_SUFFIX}")
   set(mi_soname "mimalloc-${mi_version}/${mi_symlink}.${mi_version}")
   install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${mi_soname} ${mi_symlink} WORKING_DIRECTORY \${CMAKE_INSTALL_PREFIX}/lib)")
   install(CODE "MESSAGE(\"-- Symbolic link: \${CMAKE_INSTALL_PREFIX}/lib/${mi_symlink} -> ${mi_soname}\")")
+  install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${mi_soname} ${mi_symlink}.${mi_version} WORKING_DIRECTORY \${CMAKE_INSTALL_PREFIX}/lib)")
+  install(CODE "MESSAGE(\"-- Symbolic link: \${CMAKE_INSTALL_PREFIX}/lib/${mi_symlink}.${mi_version} -> ${mi_soname}\")")
 endif()
 
 # single object file for more predictable static overriding
@@ -329,11 +334,11 @@ if (MI_BUILD_OBJECT)
   target_compile_options(mimalloc-obj PRIVATE ${mi_cflags})
   target_include_directories(mimalloc-obj PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-      $<INSTALL_INTERFACE:${mi_install_dir}/include>
+      $<INSTALL_INTERFACE:${mi_install_incdir}>
   )
 
   # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
-  # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_dir})
+  # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_libdir})
 
   # the FILES expression can also be: $<TARGET_OBJECTS:mimalloc-obj>
   # but that fails cmake versions less than 3.10 so we leave it as is for now
