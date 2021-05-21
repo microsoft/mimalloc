@@ -208,9 +208,11 @@ endif()
 # -----------------------------------------------------------------------------
 
 if (MI_INSTALL_TOPLEVEL)
-  set(mi_install_dir "")
+  set(mi_install_dir    "")
+  set(mi_install_libdir "lib")
 else()
-  set(mi_install_dir "lib/mimalloc-${mi_version}")
+  set(mi_install_dir    "lib/mimalloc-${mi_version}")
+  set(mi_install_libdir "${mi_install_dir}")
 endif()
 
 if(MI_SECURE)
@@ -277,14 +279,7 @@ if(MI_BUILD_SHARED)
       COMMENT "Copy mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll to output directory")
   endif()
 
-  if (MI_INSTALL_TOPLEVEL MATCHES "ON")
-    install(TARGETS mimalloc EXPORT mimalloc LIBRARY
-        RUNTIME DESTINATION bin
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib)
-  else()
-    install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_dir} LIBRARY)
-  endif()
+  install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_libdir} LIBRARY)  
   install(EXPORT mimalloc DESTINATION ${mi_install_dir}/cmake)
 endif()
 
@@ -308,7 +303,7 @@ if (MI_BUILD_STATIC)
     set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_basename})
   endif()
 
-  install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_dir})
+  install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_libdir} LIBRARY)
 endif()
 
 # install include files
@@ -322,8 +317,8 @@ if(NOT WIN32 AND MI_BUILD_SHARED AND NOT MI_INSTALL_TOPLEVEL)
   # install a symlink in the /usr/local/lib to the versioned library
   set(mi_symlink "${CMAKE_SHARED_MODULE_PREFIX}${mi_basename}${CMAKE_SHARED_LIBRARY_SUFFIX}")
   set(mi_soname "mimalloc-${mi_version}/${mi_symlink}.${mi_version}")
-  install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${mi_soname} ${mi_symlink} WORKING_DIRECTORY ${mi_install_dir}/..)")
-  install(CODE "MESSAGE(\"-- Symbolic link: ${CMAKE_INSTALL_PREFIX}/lib/${mi_symlink} -> ${mi_soname}\")")
+  install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${mi_soname} ${mi_symlink} WORKING_DIRECTORY \${CMAKE_INSTALL_PREFIX}/lib)")
+  install(CODE "MESSAGE(\"-- Symbolic link: \${CMAKE_INSTALL_PREFIX}/lib/${mi_symlink} -> ${mi_soname}\")")
 endif()
 
 # single object file for more predictable static overriding
@@ -343,7 +338,7 @@ if (MI_BUILD_OBJECT)
   # the FILES expression can also be: $<TARGET_OBJECTS:mimalloc-obj>
   # but that fails cmake versions less than 3.10 so we leave it as is for now
   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}
-          DESTINATION ${mi_install_dir}
+          DESTINATION ${mi_install_libdir}
           RENAME ${mi_basename}${CMAKE_C_OUTPUT_EXTENSION} )
 endif()
 
