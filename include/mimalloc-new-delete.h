@@ -20,7 +20,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // ---------------------------------------------------------------------------
 #if defined(__cplusplus)
   #include <new>
-  #include <mimalloc.h>
+  #include "mimalloc.h"
 
   void operator delete(void* p) noexcept              { mi_free(p); };
   void operator delete[](void* p) noexcept            { mi_free(p); };
