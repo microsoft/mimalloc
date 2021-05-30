@@ -135,7 +135,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
 static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* arg, const char* fmt) {
   char buf[32];
   int  len = 32;
-  const char* suffix = (unit <= 0 ? " " : "b");
+  const char* suffix = (unit <= 0 ? " " : "B");
   const int64_t base = (unit == 0 ? 1000 : 1024);
   if (unit>0) n *= unit;
 
@@ -145,13 +145,13 @@ static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* 
   }
   else {
     int64_t divider = base;
-    const char* magnitude = "k";
-    if (pos >= divider*base) { divider *= base; magnitude = "m"; }
-    if (pos >= divider*base) { divider *= base; magnitude = "g"; }
+    const char* magnitude = "K";
+    if (pos >= divider*base) { divider *= base; magnitude = "M"; }
+    if (pos >= divider*base) { divider *= base; magnitude = "G"; }
     const int64_t tens = (n / (divider/10));
     const long whole = (long)(tens/10);
     const long frac1 = (long)(tens%10);
-    snprintf(buf, len, "%ld.%ld %s%s", whole, (frac1 < 0 ? -frac1 : frac1), magnitude, suffix);
+    snprintf(buf, len, "%ld.%ld %s%s%s", whole, (frac1 < 0 ? -frac1 : frac1), magnitude, (base == 1024 ? "i" : ""), suffix);
   }
   _mi_fprintf(out, arg, (fmt==NULL ? "%11s" : fmt), buf);
 }
