@@ -10,9 +10,9 @@ terms of the MIT license. A copy of the license can be found in the file
   the commit_mask to optimize the commit/decommit calls.
   The full memory map of all segments is also implemented here.
 -----------------------------------------------------------------------------*/
-#include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
+#include "../include/mimalloc.h"
+#include "../include/mimalloc-internal.h"
+#include "../include/mimalloc-atomic.h"
 
 #include "bitmap.h"  // atomic bitmap
 
