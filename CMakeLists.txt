@@ -263,7 +263,10 @@ if(MI_BUILD_SHARED)
   target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
   target_compile_options(mimalloc PRIVATE ${mi_cflags})
   target_link_libraries(mimalloc PUBLIC ${mi_libraries})
-  target_include_directories(mimalloc PUBLIC $<INSTALL_INTERFACE:${mi_install_incdir}>)
+  target_include_directories(mimalloc PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:${mi_install_incdir}>
+  )
   if(WIN32)
     # On windows copy the mimalloc redirection dll too.
     if(CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -289,7 +292,10 @@ if (MI_BUILD_STATIC)
   target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
   target_compile_options(mimalloc-static PRIVATE ${mi_cflags})
   target_link_libraries(mimalloc-static PUBLIC ${mi_libraries})
-  target_include_directories(mimalloc-static PUBLIC $<INSTALL_INTERFACE:${mi_install_incdir}>)
+  target_include_directories(mimalloc-static PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:${mi_install_incdir}>
+  )
   if(WIN32)
     # When building both static and shared libraries on Windows, a static library should use a
     # different output name to avoid the conflict with the import library of a shared one.
@@ -326,7 +332,10 @@ if (MI_BUILD_OBJECT)
   set_property(TARGET mimalloc-obj PROPERTY POSITION_INDEPENDENT_CODE ON)
   target_compile_definitions(mimalloc-obj PRIVATE ${mi_defines})
   target_compile_options(mimalloc-obj PRIVATE ${mi_cflags})
-  target_include_directories(mimalloc-obj PUBLIC $<INSTALL_INTERFACE:${mi_install_incdir}>)
+  target_include_directories(mimalloc-obj PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:${mi_install_incdir}>
+  )
 
   # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
   # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_libdir})

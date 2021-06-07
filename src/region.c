@@ -31,9 +31,9 @@ Possible issues:
   linearly. At what point will direct OS calls be faster? Is there a way to
   do this better without adding too much complexity?
 -----------------------------------------------------------------------------*/
-#include "../include/mimalloc.h"
-#include "../include/mimalloc-internal.h"
-#include "../include/mimalloc-atomic.h"
+#include "mimalloc.h"
+#include "mimalloc-internal.h"
+#include "mimalloc-atomic.h"
 
 #include <string.h>  // memset
 
