@@ -25,9 +25,9 @@ blocks of 2GiB (64*32MiB) and no object can cross the boundary. This
 can lead to fragmentation but fortunately most objects will be regions
 of 256MiB in practice.
 -----------------------------------------------------------------------------*/
-#include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
+#include "../include/mimalloc.h"
+#include "../include/mimalloc-internal.h"
+#include "../include/mimalloc-atomic.h"
 
 #include <string.h>  // memset
 #include <errno.h> // ENOMEM
