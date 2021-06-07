@@ -113,7 +113,7 @@ size_t _mi_os_good_alloc_size(size_t size) {
   else if (size < 8*MiB) align_size = 256*KiB;
   else if (size < 32*MiB) align_size = 1*MiB;
   else align_size = 4*MiB;
-  if (size >= (SIZE_MAX - align_size)) return size; // possible overflow?
+  if (mi_unlikely(size >= (SIZE_MAX - align_size))) return size; // possible overflow?
   return _mi_align_up(size, align_size);
 }
 
