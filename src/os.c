@@ -16,9 +16,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #undef _XOPEN_SOURCE
 #undef _POSIX_C_SOURCE
 #endif
-#include "../include/mimalloc.h"
-#include "../include/mimalloc-internal.h"
-#include "../include/mimalloc-atomic.h"
+#include "mimalloc.h"
+#include "mimalloc-internal.h"
+#include "mimalloc-atomic.h"
 
 #include <string.h>  // strerror
 

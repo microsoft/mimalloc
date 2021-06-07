@@ -17,8 +17,8 @@ The `_across` postfixed functions do allow sequences that can cross over
 between the fields. (This is used in arena allocation)
 ---------------------------------------------------------------------------- */
 
-#include "../include/mimalloc.h"
-#include "../include/mimalloc-internal.h"
+#include "mimalloc.h"
+#include "mimalloc-internal.h"
 #include "bitmap.h"
 
 /* -----------------------------------------------------------
