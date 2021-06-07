@@ -11,9 +11,9 @@ terms of the MIT license. A copy of the license can be found in the file
   exported is `mi_malloc_generic`.
 ----------------------------------------------------------- */
 
-#include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
+#include "../include/mimalloc.h"
+#include "../include/mimalloc-internal.h"
+#include "../include/mimalloc-atomic.h"
 
 /* -----------------------------------------------------------
   Definition of page queues for each block size

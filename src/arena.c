@@ -20,9 +20,9 @@ which is sometimes needed for embedded devices or shared memory for example.
 
 The arena allocation needs to be thread safe and we use an atomic bitmap to allocate.
 -----------------------------------------------------------------------------*/
-#include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
+#include "../include/mimalloc.h"
+#include "../include/mimalloc-internal.h"
+#include "../include/mimalloc-atomic.h"
 
 #include <string.h>  // memset
 #include <errno.h> // ENOMEM
