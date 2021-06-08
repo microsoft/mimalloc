@@ -557,6 +557,7 @@ void* _mi_externs[] = {
   (void*)&_mi_page_malloc,
   (void*)&mi_malloc,
   (void*)&mi_malloc_small,
+  (void*)&mi_zalloc_small,
   (void*)&mi_heap_malloc,
   (void*)&mi_heap_zalloc,
   (void*)&mi_heap_malloc_small
