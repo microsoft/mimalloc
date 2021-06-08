@@ -137,7 +137,7 @@ terms of the MIT license. A copy of the license can be found in the file
   void _ZdlPvmSt11align_val_t(void* p, size_t n, size_t al) { mi_free_size_aligned(p,n,al); }
   void _ZdaPvmSt11align_val_t(void* p, size_t n, size_t al) { mi_free_size_aligned(p,n,al); }
 
-  typedef struct mi_nothrow_s {  } mi_nothrow_t;
+  typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
   #if (MI_INTPTR_SIZE==8)
     void* _Znwm(size_t n)                             MI_FORWARD1(mi_new,n);  // new 64-bit
     void* _Znam(size_t n)                             MI_FORWARD1(mi_new,n);  // new[] 64-bit
