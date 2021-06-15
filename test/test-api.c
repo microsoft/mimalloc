@@ -161,6 +161,9 @@ int main() {
   CHECK_BODY("malloc-aligned-at2", {
     void* p = mi_malloc_aligned_at(50,32,8); result = (p != NULL && ((uintptr_t)(p) + 8) % 32 == 0); mi_free(p);
   });  
+  CHECK_BODY("realloc-aligned-at", {
+    void* p = mi_realloc_aligned_at(NULL,50,2,1); result = (p != NULL && ((uintptr_t)(p) + 1) % 2 == 0); mi_free(p);
+  });
   CHECK_BODY("memalign1", {
     void* p;
     bool ok = true;
