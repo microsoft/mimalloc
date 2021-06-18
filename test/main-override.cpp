@@ -33,6 +33,7 @@ void padding_shrink();         // issue #209
 void various_tests();
 void test_mt_shutdown();
 void fail_aslr();              // issue #372
+void tsan_numa_test();         // issue #414
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
@@ -41,6 +42,8 @@ int main() {
   heap_late_free();
   padding_shrink();
   various_tests();
+  tsan_numa_test();
+
   //test_mt_shutdown();
   //fail_aslr();
   mi_stats_print(NULL);
@@ -216,4 +219,16 @@ void fail_aslr() {
   void* p = malloc(sz);
   printf("pointer p: %p: area up to %p\n", p, (uint8_t*)p + sz);
   *(int*)0x5FFFFFFF000 = 0;  // should segfault
+}
+
+// issues #414
+void dummy_worker() {
+  void* p = mi_malloc(0);
+  mi_free(p);  
+}
+
+void tsan_numa_test() {
+  auto t1 = std::thread(dummy_worker);
+  dummy_worker();
+  t1.join();
 }
