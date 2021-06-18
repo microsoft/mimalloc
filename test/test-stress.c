@@ -37,6 +37,7 @@ static bool   allow_large_objects = true;    // allow very large objects?
 static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
 
 
+// #define USE_STD_MALLOC
 #ifdef USE_STD_MALLOC
 #define custom_calloc(n,s)    calloc(n,s)
 #define custom_realloc(p,s)   realloc(p,s)
@@ -256,12 +257,12 @@ int main(int argc, char** argv) {
 #else
   test_leak();
 #endif
-  
-#if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
+
+#ifndef USE_STD_MALLOC
+  #ifndef NDEBUG
   mi_collect(true);
   //mi_debug_show_arenas();
-#endif  
-#ifndef USE_STD_MALLOC
+  #endif
   mi_stats_print(NULL);
 #endif
   //bench_end_program();
