@@ -37,6 +37,7 @@ static bool   allow_large_objects = true;    // allow very large objects?
 static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
 
 
+// #define USE_STD_MALLOC
 #ifdef USE_STD_MALLOC
 #define custom_calloc(n,s)    calloc(n,s)
 #define custom_realloc(p,s)   realloc(p,s)
@@ -250,10 +251,10 @@ int main(int argc, char** argv) {
     test_leak();
 #endif
 
-#ifndef NDEBUG
-  mi_collect(true);
-#endif
 #ifndef USE_STD_MALLOC
+  #ifndef NDEBUG
+  mi_collect(true);
+  #endif
   mi_stats_print(NULL);
 #endif
   //bench_end_program();

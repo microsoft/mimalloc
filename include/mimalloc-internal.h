@@ -713,6 +713,7 @@ static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
   void** tcb; UNUSED(ofs);
 #if defined(__APPLE__) // M1, issue #343
   __asm__ volatile ("mrs %0, tpidrro_el0" : "=r" (tcb));
+  tcb = (void**)((uintptr_t)tcb & ~0x07UL);  // clear lower 3 bits
 #else
   __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
 #endif
@@ -740,6 +741,7 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
   void** tcb; UNUSED(ofs);
 #if defined(__APPLE__) // M1, issue #343
   __asm__ volatile ("mrs %0, tpidrro_el0" : "=r" (tcb));
+  tcb = (void**)((uintptr_t)tcb & ~0x07UL);  // clear lower 3 bits
 #else
   __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
 #endif
@@ -748,10 +750,7 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
 }
 
 static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
-#if defined(__aarch64__) && defined(__APPLE__)  // M1
-  // on macOS on the M1, slot 0 does not seem to work, so we fall back to portable C for now. See issue #354
-  return (uintptr_t)&_mi_heap_default;
-#elif defined(__BIONIC__) && (defined(__arm__) || defined(__aarch64__))
+#if defined(__BIONIC__) && (defined(__arm__) || defined(__aarch64__))
   // on Android, slot 1 is the thread ID (pointer to pthread internal struct)
   return (uintptr_t)mi_tls_slot(1);
 #else

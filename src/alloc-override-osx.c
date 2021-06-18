@@ -64,7 +64,7 @@ static void* zone_valloc(malloc_zone_t* zone, size_t size) {
 
 static void zone_free(malloc_zone_t* zone, void* p) {
   UNUSED(zone);
-  return mi_free(p);
+  mi_free(p);
 }
 
 static void* zone_realloc(malloc_zone_t* zone, void* p, size_t newsize) {
