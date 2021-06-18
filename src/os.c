@@ -1202,17 +1202,23 @@ static size_t mi_os_numa_node_countx(void) {
 }
 #endif
 
-size_t _mi_numa_node_count = 0;   // cache the node count
+_Atomic(size_t)  _mi_numa_node_count; // = 0   // cache the node count
 
 size_t _mi_os_numa_node_count_get(void) {
-  if (mi_unlikely(_mi_numa_node_count <= 0)) {
+  size_t count = mi_atomic_load_acquire(&_mi_numa_node_count);
+  if (count <= 0) {
     long ncount = mi_option_get(mi_option_use_numa_nodes); // given explicitly?
-    if (ncount <= 0) ncount = (long)mi_os_numa_node_countx();        // or detect dynamically
-    _mi_numa_node_count = (size_t)(ncount <= 0 ? 1 : ncount);
-    _mi_verbose_message("using %zd numa regions\n", _mi_numa_node_count);
+    if (ncount > 0) {
+      count = (size_t)ncount;
+    }
+    else {
+      count = mi_os_numa_node_countx(); // or detect dynamically
+      if (count == 0) count = 1;
+    }    
+    mi_atomic_store_release(&_mi_numa_node_count, count); // save it
+    _mi_verbose_message("using %zd numa regions\n", count);
   }
-  mi_assert_internal(_mi_numa_node_count >= 1);
-  return _mi_numa_node_count;
+  return count;
 }
 
 int _mi_os_numa_node_get(mi_os_tld_t* tld) {
