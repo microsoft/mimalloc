@@ -12,8 +12,8 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.0.1` (beta, 2021-04-06).  
-Latest stable  tag: `v1.7.1` (2021-04-06).
+Latest release tag: `v2.0.2` (beta, 2021-06-17).  
+Latest stable  tag: `v1.7.2` (2021-06-17).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -73,12 +73,17 @@ Enjoy!
 
 ### Releases
 
-* 2021-04-06, `v1.7.1`, `v2.0.1` (beta): fix bug in arena allocation for huge pages, improved aslr on large allocations, improved M1 support (still experimental).
-  
-* 2021-01-31, `v2.0.0`: beta release 2.0: new algorithm for managing internal mimalloc pages that tends to use reduce memory usage
-  and fragmentation compared to mimalloc v1 (especially for large workloads). Should otherwise have similar performance
+Note: the `v2.x` beta has a new algorithm for managing internal mimalloc pages that tends to use reduce memory usage
+  and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
 
+* 2021-06-17, `v1.7.2`, `v2.0.2` (beta): support M1, better installation layout on Linux, fix
+  thread_id on Android, prefer 2-6TiB area for aligned allocation to work better on pre-windows 8, various small fixes.
+
+* 2021-04-06, `v1.7.1`, `v2.0.1` (beta): fix bug in arena allocation for huge pages, improved aslr on large allocations, initial M1 support (still experimental).
+  
+* 2021-01-31, `v2.0.0`: beta release 2.0: new slice algorithm for managing internal mimalloc pages.
+  
 * 2021-01-31, `v1.7.0`: stable release 1.7: support explicit user provided memory regions, more precise statistics,
   improve macOS overriding, initial support for Apple M1, improved DragonFly support, faster memcpy on Windows, various small fixes.
 
