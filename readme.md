@@ -73,15 +73,17 @@ Enjoy!
 
 ### Releases
 
+Note: the `v2.x` beta has a new algorithm for managing internal mimalloc pages that tends to use reduce memory usage
+  and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
+  (see [below](#performance)); please report if you observe any significant performance regression.
+
 * 2021-06-17, `v1.7.2`, `v2.0.2` (beta): support M1, better installation layout on Linux, fix
-  thread_id on Android, prefer 2-6TiB area for aligned allocation to work better on pre-window 8, various small fixes.
+  thread_id on Android, prefer 2-6TiB area for aligned allocation to work better on pre-windows 8, various small fixes.
 
 * 2021-04-06, `v1.7.1`, `v2.0.1` (beta): fix bug in arena allocation for huge pages, improved aslr on large allocations, initial M1 support (still experimental).
   
-* 2021-01-31, `v2.0.0`: beta release 2.0: new algorithm for managing internal mimalloc pages that tends to use reduce memory usage
-  and fragmentation compared to mimalloc v1 (especially for large workloads). Should otherwise have similar performance
-  (see [below](#performance)); please report if you observe any significant performance regression.
-
+* 2021-01-31, `v2.0.0`: beta release 2.0: new slice algorithm for managing internal mimalloc pages.
+  
 * 2021-01-31, `v1.7.0`: stable release 1.7: support explicit user provided memory regions, more precise statistics,
   improve macOS overriding, initial support for Apple M1, improved DragonFly support, faster memcpy on Windows, various small fixes.
 
