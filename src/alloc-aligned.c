@@ -115,7 +115,7 @@ mi_decl_restrict void* mi_calloc_aligned(size_t count, size_t size, size_t align
 
 static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, size_t offset, bool zero) mi_attr_noexcept {
   mi_assert(alignment > 0);
-  if (alignment <= sizeof(uintptr_t)) return _mi_heap_realloc_zero(heap,p,newsize,zero);
+  if (alignment <= sizeof(uintptr_t) && offset == 0) return _mi_heap_realloc_zero(heap,p,newsize,zero);
   if (p == NULL) return mi_heap_malloc_zero_aligned_at(heap,newsize,alignment,offset,zero);
   size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size - (size / 2))
