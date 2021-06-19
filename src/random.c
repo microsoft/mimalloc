@@ -194,8 +194,10 @@ static bool os_random_buf(void* buf, size_t buf_len) {
   arc4random_buf(buf, buf_len);
   return true;
 }
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__HAIKU__)
+#if defined(__linux__)
 #include <sys/syscall.h>
+#endif
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
