@@ -90,7 +90,7 @@ static size_t os_alloc_granularity = 4096;
 static size_t large_os_page_size = 0;
 
 // OS (small) page size
-size_t _mi_os_page_size() {
+mi_decl_const size_t _mi_os_page_size() {
   return os_page_size;
 }
 

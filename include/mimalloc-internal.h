@@ -22,14 +22,17 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
+#define mi_decl_const
 #elif (defined(__GNUC__) && (__GNUC__>=3))  // includes clang and icc
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
 #define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
+#define mi_decl_const           __attribute__((const))
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_cache_align
+#define mi_decl_const
 #endif
 
 // "options.c"
@@ -56,7 +59,7 @@ bool       _mi_is_main_thread(void);
 bool       _mi_preloading();  // true while the C runtime is not ready
 
 // os.c
-size_t     _mi_os_page_size(void);
+size_t     _mi_os_page_size(void) mi_decl_const;
 void       _mi_os_init(void);                                      // called from process init
 void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocate thread local data
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
@@ -193,12 +196,12 @@ bool        _mi_page_is_valid(mi_page_t* page);
 
 
 // Is `x` a power of two? (0 is considered a power of two)
-static inline bool _mi_is_power_of_two(uintptr_t x) {
+mi_decl_const static inline bool _mi_is_power_of_two(uintptr_t x) {
   return ((x & (x - 1)) == 0);
 }
 
 // Align upwards
-static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
+mi_decl_const static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   mi_assert_internal(alignment != 0);
   uintptr_t mask = alignment - 1;
   if ((alignment & mask) == 0) {  // power of two?
@@ -210,7 +213,7 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
 }
 
 // Divide upwards: `s <= _mi_divide_up(s,d)*d < s+d`.
-static inline uintptr_t _mi_divide_up(uintptr_t size, size_t divider) {
+mi_decl_const static inline uintptr_t _mi_divide_up(uintptr_t size, size_t divider) {
   mi_assert_internal(divider != 0);
   return (divider == 0 ? size : ((size + divider - 1) / divider));
 }
@@ -225,13 +228,13 @@ static inline bool mi_mem_is_zero(void* p, size_t size) {
 
 // Align a byte size to a size in _machine words_,
 // i.e. byte size == `wsize*sizeof(void*)`.
-static inline size_t _mi_wsize_from_size(size_t size) {
+mi_decl_const static inline size_t _mi_wsize_from_size(size_t size) {
   mi_assert_internal(size <= SIZE_MAX - sizeof(uintptr_t));
   return (size + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
 }
 
 // Does malloc satisfy the alignment constraints already?
-static inline bool mi_malloc_satisfies_alignment(size_t alignment, size_t size) {
+mi_decl_const static inline bool mi_malloc_satisfies_alignment(size_t alignment, size_t size) {
   return (alignment == sizeof(void*) || (alignment == MI_MAX_ALIGN_SIZE && size > (MI_MAX_ALIGN_SIZE/2)));
 }
 
