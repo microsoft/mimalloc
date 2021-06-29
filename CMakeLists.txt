@@ -203,6 +203,9 @@ else()
   endif()
 endif()
 
+include("cmake/atomic.cmake")
+list(APPEND mi_libraries ${CMAKE_REQUIRED_LIBRARIES})
+
 # -----------------------------------------------------------------------------
 # Install and output names
 # -----------------------------------------------------------------------------
