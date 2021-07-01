@@ -115,7 +115,7 @@ jobs:
   displayName: macOS
   pool:
     vmImage:
-     macOS-10.14
+     macOS-10.15
   strategy:
     matrix:
       Debug:
