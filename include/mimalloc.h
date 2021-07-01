@@ -26,7 +26,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(__cplusplus) && (__cplusplus >= 201703)
   #define mi_decl_nodiscard    [[nodiscard]]
-#elif (__GNUC__ >= 4) || defined(__clang__)  // includes clang, icc, and clang-cl
+#elif (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)  // includes clang, icc, and clang-cl
   #define mi_decl_nodiscard    __attribute__((warn_unused_result))
 #elif (_MSC_VER >= 1700)
   #define mi_decl_nodiscard    _Check_return_
