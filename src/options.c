@@ -81,6 +81,9 @@ static mi_option_desc_t options[_mi_option_last] =
   { 1, UNINIT, MI_OPTION(page_reset) },          // reset page memory on free
   { 0, UNINIT, MI_OPTION(abandoned_page_reset) },// reset free page memory when a thread terminates
   { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
+#if defined(__linux__)
+  { 0, UNINIT, MI_OPTION(prefault) },
+#endif
 #if defined(__NetBSD__)
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
 #else
