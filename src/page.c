@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 /* -----------------------------------------------------------
   The core of the allocator. Every segment contains
-  pages of a {certain block size. The main function
+  pages of a certain block size. The main function
   exported is `mi_malloc_generic`.
 ----------------------------------------------------------- */
 
