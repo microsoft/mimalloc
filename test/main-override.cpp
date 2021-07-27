@@ -34,6 +34,7 @@ void various_tests();
 void test_mt_shutdown();
 void fail_aslr();              // issue #372
 void tsan_numa_test();         // issue #414
+void strdup_test();            // issue #445
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
@@ -43,6 +44,7 @@ int main() {
   padding_shrink();
   various_tests();
   tsan_numa_test();
+  strdup_test();
 
   //test_mt_shutdown();
   //fail_aslr();
@@ -74,18 +76,13 @@ void various_tests() {
   p1 = malloc(8);
   char* s = mi_strdup("hello\n");
 
-  //char* s = _strdup("hello\n");
-  //char* buf = NULL;
-  //size_t len;
-  //_dupenv_s(&buf,&len,"MIMALLOC_VERBOSE"); 
-  //mi_free(buf);
-
   mi_free(p2);
   p2 = malloc(16);
   p1 = realloc(p1, 32);
   free(p1);
   free(p2);
   mi_free(s);
+
   Test* t = new Test(42);
   delete t;
   t = new (std::nothrow) Test(42);
@@ -125,7 +122,17 @@ bool test_stl_allocator2() {
   return vec.size() == 0;
 }
 
-
+// issue 445
+static void strdup_test() {
+#ifdef _MSC_VER
+  char* s = _strdup("hello\n");
+  char* buf = NULL;
+  size_t len;
+  _dupenv_s(&buf, &len, "MIMALLOC_VERBOSE");
+  mi_free(buf);
+  mi_free(s);
+#endif
+}
 
 // Issue #202
 void heap_no_delete_worker() {
