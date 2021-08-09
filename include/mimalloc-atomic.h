@@ -173,7 +173,7 @@ static inline uintptr_t mi_atomic_exchange_explicit(_Atomic(uintptr_t)*p, uintpt
 }
 static inline void mi_atomic_thread_fence(mi_memory_order mo) {
   (void)(mo);
-  _Atomic(uintptr_t)x = 0;
+  _Atomic(uintptr_t) x = 0;
   mi_atomic_exchange_explicit(&x, 1, mo);
 }
 static inline uintptr_t mi_atomic_load_explicit(_Atomic(uintptr_t) const* p, mi_memory_order mo) {

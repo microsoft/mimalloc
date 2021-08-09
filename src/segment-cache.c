@@ -225,7 +225,7 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
 #define MI_SEGMENT_MAP_SIZE  (MI_SEGMENT_MAP_BITS / 8)
 #define MI_SEGMENT_MAP_WSIZE (MI_SEGMENT_MAP_SIZE / MI_INTPTR_SIZE)
 
-static _Atomic(uintptr_t)mi_segment_map[MI_SEGMENT_MAP_WSIZE];  // 2KiB per TB with 64MiB segments
+static _Atomic(uintptr_t) mi_segment_map[MI_SEGMENT_MAP_WSIZE];  // 2KiB per TB with 64MiB segments
 
 static size_t mi_segment_map_index_of(const mi_segment_t* segment, size_t* bitidx) {
   mi_assert_internal(_mi_ptr_segment(segment) == segment); // is it aligned on MI_SEGMENT_SIZE?
