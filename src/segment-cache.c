@@ -315,11 +315,12 @@ static bool  mi_is_valid_pointer(const void* p) {
   return (_mi_segment_of(p) != NULL);
 }
 
+/*
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
   return mi_is_valid_pointer(p);
 }
 
-/*
+
 // Return the full segment range belonging to a pointer
 static void* mi_segment_range_of(const void* p, size_t* size) {
   mi_segment_t* segment = _mi_segment_of(p);

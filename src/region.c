@@ -49,10 +49,14 @@ bool    _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
 bool    _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 
 // arena.c
-void    _mi_arena_free(void* p, size_t size, size_t memid, bool all_committed, mi_stats_t* stats);
+void    _mi_arena_free(void* p, size_t size, size_t memid, bool all_committed, mi_os_tld_t* tld);
 void*   _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
 void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
 
+// region.c
+bool    _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld);
+bool    _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld);
+bool    _mi_mem_commit(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld);
 
 
 // Constants
@@ -189,7 +193,7 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   const uintptr_t idx = mi_atomic_increment_acq_rel(&regions_count);
   if (idx >= MI_REGION_MAX) {
     mi_atomic_decrement_acq_rel(&regions_count);
-    _mi_arena_free(start, MI_REGION_SIZE, arena_memid, region_commit, tld->stats);
+    _mi_arena_free(start, MI_REGION_SIZE, arena_memid, region_commit, tld);
     _mi_warning_message("maximum regions used: %zu GiB (perhaps recompile with a larger setting for MI_HEAP_REGION_MAX_SIZE)", _mi_divide_up(MI_HEAP_REGION_MAX_SIZE, GiB));
     return false;
   }
@@ -304,7 +308,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* large, bool*
       bool commit_zero = false;
       if (!_mi_mem_commit(p, blocks * MI_SEGMENT_SIZE, &commit_zero, tld)) {
         // failed to commit! unclaim and return
-        mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
+        _mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
         return NULL;
       }
       if (commit_zero) *is_zero = true;      
@@ -321,7 +325,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* large, bool*
     // some blocks are still reset
     mi_assert_internal(!info.x.is_large && !info.x.is_pinned);
     mi_assert_internal(!mi_option_is_enabled(mi_option_eager_commit) || *commit || mi_option_get(mi_option_eager_commit_delay) > 0); 
-    mi_bitmap_unclaim(&region->reset, 1, blocks, bit_idx);
+    _mi_bitmap_unclaim(&region->reset, 1, blocks, bit_idx);
     if (*commit || !mi_option_is_enabled(mi_option_reset_decommits)) { // only if needed
       bool reset_zero = false;
       _mi_mem_unreset(p, blocks * MI_SEGMENT_SIZE, &reset_zero, tld);
@@ -401,7 +405,7 @@ void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_re
   mem_region_t* region;
   if (mi_memid_is_arena(id,&region,&bit_idx,&arena_memid)) {
    // was a direct arena allocation, pass through
-    _mi_arena_free(p, size, arena_memid, full_commit, tld->stats);
+    _mi_arena_free(p, size, arena_memid, full_commit, tld);
   }
   else {
     // allocated in a region
@@ -440,7 +444,7 @@ void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_re
     }    
 
     // and unclaim
-    bool all_unclaimed = mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
+    bool all_unclaimed = _mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
     mi_assert_internal(all_unclaimed); UNUSED(all_unclaimed);
   }
 }
@@ -468,7 +472,7 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
         mi_atomic_store_release(&region->info, (uintptr_t)0);
         if (start != NULL) { // && !_mi_os_is_huge_reserved(start)) {         
           _mi_abandoned_await_readers(); // ensure no pending reads
-          _mi_arena_free(start, MI_REGION_SIZE, arena_memid, (~commit == 0), tld->stats);
+          _mi_arena_free(start, MI_REGION_SIZE, arena_memid, (~commit == 0), tld);
         }
       }
     }
