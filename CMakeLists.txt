@@ -43,7 +43,7 @@ set(mi_sources
     src/init.c)
 
 # -----------------------------------------------------------------------------
-# Converience: set default build type depending on the build directory
+# Convenience: set default build type depending on the build directory
 # -----------------------------------------------------------------------------
 
 if (NOT CMAKE_BUILD_TYPE)
