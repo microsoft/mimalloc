@@ -24,6 +24,7 @@ option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clan
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
 
+include(GNUInstallDirs)
 include("cmake/mimalloc-config-version.cmake")
 
 set(mi_sources
@@ -208,9 +209,9 @@ endif()
 # -----------------------------------------------------------------------------
 
 if (MI_INSTALL_TOPLEVEL)
-  set(mi_install_libdir   "lib")
-  set(mi_install_incdir   "include")
-  set(mi_install_cmakedir "cmake")
+  set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}")
+  set(mi_install_incdir   "${CMAKE_INSTALL_INCLUDEDIR}")
+  set(mi_install_cmakedir "${CMAKE_INSTALL_LIBDIR}/cmake/mimalloc")
 else()
   set(mi_install_libdir   "lib/mimalloc-${mi_version}")
   set(mi_install_incdir   "include/mimalloc-${mi_version}")
