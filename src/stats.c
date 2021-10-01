@@ -479,7 +479,7 @@ static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msec
   *page_faults    = (size_t)info.PageFaultCount;  
 }
 
-#elif defined(__unix__) || defined(__unix) || defined(unix) || defined(__APPLE__) || defined(__HAIKU__)
+#elif !defined(__wasi__) && (defined(__unix__) || defined(__unix) || defined(unix) || defined(__APPLE__) || defined(__HAIKU__))
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/resource.h>
