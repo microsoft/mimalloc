@@ -26,11 +26,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #pragma warning(disable:4996)  // strerror
 #endif
 
+#if defined(__wasi__)
+#define MI_USE_SBRK
+#endif
 
 #if defined(_WIN32)
 #include <windows.h>
 #elif defined(__wasi__)
-// stdlib.h is all we need, and has already been included in mimalloc.h
+#include <unistd.h>    // sbrk
 #else
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf
@@ -88,11 +91,13 @@ size_t _mi_os_large_page_size() {
   return (large_os_page_size != 0 ? large_os_page_size : _mi_os_page_size());
 }
 
+#if !defined(MI_USE_SBRK) && !defined(__wasi__)
 static bool use_large_os_page(size_t size, size_t alignment) {
   // if we have access, check the size and alignment requirements
   if (large_os_page_size == 0 || !mi_option_is_enabled(mi_option_large_os_pages)) return false;
   return ((size % large_os_page_size) == 0 && (alignment % large_os_page_size) == 0);
 }
+#endif
 
 // round to a good OS allocation size (bounded by max 12.5% waste)
 size_t _mi_os_good_alloc_size(size_t size) {
@@ -225,8 +230,8 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
   bool err = false;
 #if defined(_WIN32)
   err = (VirtualFree(addr, 0, MEM_RELEASE) == 0);
-#elif defined(__wasi__)
-  err = 0; // WebAssembly's heap cannot be shrunk
+#elif defined(MI_USE_SBRK)
+  err = 0; // sbrk heap cannot be shrunk
 #else
   err = (munmap(addr, size) == -1);
 #endif
@@ -241,7 +246,9 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
   }
 }
 
+#if !defined(MI_USE_SBRK) && !defined(__wasi__)
 static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size);
+#endif
 
 #ifdef _WIN32
  
@@ -310,7 +317,32 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
   return p;
 }
 
-#elif defined(__wasi__)
+#elif defined(MI_USE_SBRK)
+#define MI_SBRK_FAIL ((void*)(-1)) 
+static void* mi_sbrk_heap_grow(size_t size, size_t try_alignment) {
+  void* pbase0 = sbrk(0);
+  if (pbase0 == MI_SBRK_FAIL) {
+    _mi_warning_message("unable to allocate sbrk() OS memory (%zu bytes)\n", size);
+    errno = ENOMEM;
+    return NULL;
+  }
+  uintptr_t base = (uintptr_t)pbase0;
+  uintptr_t aligned_base = _mi_align_up(base, (uintptr_t) try_alignment);
+  size_t alloc_size = _mi_align_up( aligned_base - base + size, _mi_os_page_size());
+  mi_assert(alloc_size >= size && (alloc_size % _mi_os_page_size()) == 0);
+  if (alloc_size < size) return NULL;
+  void* pbase1 = sbrk(alloc_size);
+  if (pbase1 == MI_SBRK_FAIL) {
+    _mi_warning_message("unable to allocate sbrk() OS memory (%zu bytes, %zu requested)\n", size, alloc_size);
+    errno = ENOMEM;
+    return NULL;
+  }
+  mi_assert(pbase0 == pbase1);
+  return (void*)aligned_base;
+}
+
+#elif defined(__wasi__)  
+ // currently unused as we use sbrk() on wasm
 static void* mi_wasm_heap_grow(size_t size, size_t try_alignment) {
   uintptr_t base = __builtin_wasm_memory_size(0) * _mi_os_page_size();
   uintptr_t aligned_base = _mi_align_up(base, (uintptr_t) try_alignment);
@@ -318,11 +350,13 @@ static void* mi_wasm_heap_grow(size_t size, size_t try_alignment) {
   mi_assert(alloc_size >= size && (alloc_size % _mi_os_page_size()) == 0);
   if (alloc_size < size) return NULL;
   if (__builtin_wasm_memory_grow(0, alloc_size / _mi_os_page_size()) == SIZE_MAX) {
+    _mi_warning_message("unable to allocate wasm_memory_grow() OS memory (%zu bytes, %zu requested)\n", size, alloc_size);
     errno = ENOMEM;
     return NULL;
   }
   return (void*)aligned_base;
 }
+
 #else
 #define MI_OS_USE_MMAP
 static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
@@ -503,6 +537,8 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   if (hint%try_alignment != 0) return NULL;
   return (void*)hint;
 }
+#elif defined(__wasi__) || defined(MI_USE_SBRK)
+// no need for mi_os_get_aligned_hint
 #else
 static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   UNUSED(try_alignment); UNUSED(size);
@@ -533,7 +569,12 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, boo
     int flags = MEM_RESERVE;
     if (commit) flags |= MEM_COMMIT;
     p = mi_win_virtual_alloc(NULL, size, try_alignment, flags, false, allow_large, is_large);
+  #elif defined(MI_USE_SBRK)
+    KK_UNUSED(allow_large);
+    *is_large = false;
+    p = mi_sbrk_heap_grow(size, try_alignment);
   #elif defined(__wasi__)
+    KK_UNUSED(allow_large);
     *is_large = false;
     p = mi_wasm_heap_grow(size, try_alignment);
   #else

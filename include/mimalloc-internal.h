@@ -32,6 +32,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_cache_align
 #endif
 
+#if defined(__EMSCRIPTEN__) && !defined(__wasi__)
+#define __wasi__
+#endif
+
 // "options.c"
 void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
 void       _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
@@ -262,10 +266,10 @@ static inline bool mi_malloc_satisfies_alignment(size_t alignment, size_t size) 
 #undef _CLOCK_T
 #endif
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
-  #if (SIZE_MAX == UINT_MAX)
-    return __builtin_umul_overflow(count, size, total);
-  #elif (SIZE_MAX == ULONG_MAX)
+  #if (SIZE_MAX == ULONG_MAX)
     return __builtin_umull_overflow(count, size, total);
+  #elif (SIZE_MAX == UINT_MAX)
+    return __builtin_umul_overflow(count, size, total);
   #else
     return __builtin_umulll_overflow(count, size, total);
   #endif
