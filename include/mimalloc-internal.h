@@ -22,7 +22,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
-#elif (defined(__GNUC__) && (__GNUC__>=3))  // includes clang and icc
+#elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
 #define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
@@ -240,7 +240,7 @@ static inline bool mi_malloc_satisfies_alignment(size_t alignment, size_t size) 
 }
 
 // Overflow detecting multiply
-#if __has_builtin(__builtin_umul_overflow) || __GNUC__ >= 5
+#if __has_builtin(__builtin_umul_overflow) || (defined(__GNUC__) && (__GNUC__ >= 5))
 #include <limits.h>      // UINT_MAX, ULONG_MAX
 #if defined(_CLOCK_T)    // for Illumos
 #undef _CLOCK_T
@@ -907,7 +907,7 @@ static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
 // This is used for example in `mi_realloc`.
 // -------------------------------------------------------------------------------
 
-#if (__GNUC__ >= 4) || defined(__clang__)
+#if (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)
 // On GCC/CLang we provide a hint that the pointers are word aligned.
 #include <string.h>
 static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
