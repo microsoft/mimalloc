@@ -225,13 +225,13 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
 #define MI_SEGMENT_MAP_SIZE  (MI_SEGMENT_MAP_BITS / 8)
 #define MI_SEGMENT_MAP_WSIZE (MI_SEGMENT_MAP_SIZE / MI_INTPTR_SIZE)
 
-static _Atomic(uintptr_t)mi_segment_map[MI_SEGMENT_MAP_WSIZE];  // 2KiB per TB with 64MiB segments
+static _Atomic(uintptr_t)mi_segment_map[MI_SEGMENT_MAP_WSIZE + 1];  // 2KiB per TB with 64MiB segments
 
 static size_t mi_segment_map_index_of(const mi_segment_t* segment, size_t* bitidx) {
   mi_assert_internal(_mi_ptr_segment(segment) == segment); // is it aligned on MI_SEGMENT_SIZE?
   if ((uintptr_t)segment >= MI_MAX_ADDRESS) {
     *bitidx = 0;
-    return 0;
+    return MI_SEGMENT_MAP_WSIZE;
   }
   else {
     uintptr_t segindex = ((uintptr_t)segment) / MI_SEGMENT_SIZE;
@@ -244,7 +244,7 @@ void _mi_segment_map_allocated_at(const mi_segment_t* segment) {
   size_t bitidx;
   size_t index = mi_segment_map_index_of(segment, &bitidx);
   mi_assert_internal(index < MI_SEGMENT_MAP_WSIZE);
-  if (index==0) return;
+  if (index==MI_SEGMENT_MAP_WSIZE) return;
   uintptr_t mask = mi_atomic_load_relaxed(&mi_segment_map[index]);
   uintptr_t newmask;
   do {
@@ -256,7 +256,7 @@ void _mi_segment_map_freed_at(const mi_segment_t* segment) {
   size_t bitidx;
   size_t index = mi_segment_map_index_of(segment, &bitidx);
   mi_assert_internal(index < MI_SEGMENT_MAP_WSIZE);
-  if (index == 0) return;
+  if (index == MI_SEGMENT_MAP_WSIZE) return;
   uintptr_t mask = mi_atomic_load_relaxed(&mi_segment_map[index]);
   uintptr_t newmask;
   do {
@@ -274,7 +274,7 @@ static mi_segment_t* _mi_segment_of(const void* p) {
   if (mi_likely((mask & ((uintptr_t)1 << bitidx)) != 0)) {
     return segment; // yes, allocated by us
   }
-  if (index==0) return NULL;
+  if (index==MI_SEGMENT_MAP_WSIZE) return NULL;
 
   // TODO: maintain max/min allocated range for efficiency for more efficient rejection of invalid pointers?
 
