@@ -145,6 +145,10 @@ terms of the MIT license. A copy of the license can be found in the file
 // Used as a special value to encode block sizes in 32 bits.
 #define MI_HUGE_BLOCK_SIZE                ((uint32_t)MI_HUGE_OBJ_SIZE_MAX)
 
+// blocks up to this size are always allocated aligned
+#define MI_MAX_ALIGN_GUARANTEE  (8*MI_MAX_ALIGN_SIZE)  
+
+
 
 // The free lists use encoded next fields
 // (Only actually encodes when MI_ENCODED_FREELIST is defined.)

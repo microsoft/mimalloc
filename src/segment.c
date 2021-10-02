@@ -184,20 +184,22 @@ static size_t mi_segment_info_size(mi_segment_t* segment) {
   return segment->segment_info_slices * MI_SEGMENT_SLICE_SIZE;
 }
 
-static uint8_t* _mi_segment_page_start_from_slice(const mi_segment_t* segment, const mi_slice_t* slice, size_t* page_size)
+static uint8_t* _mi_segment_page_start_from_slice(const mi_segment_t* segment, const mi_slice_t* slice, size_t xblock_size, size_t* page_size)
 {
   ptrdiff_t idx = slice - segment->slices;
   size_t psize = slice->slice_count*MI_SEGMENT_SLICE_SIZE;
-  if (page_size != NULL) *page_size = psize;
-  return (uint8_t*)segment + (idx*MI_SEGMENT_SLICE_SIZE);
+  // make the start not OS page aligned for smaller blocks to avoid page/cache effects
+  size_t start_offset = (xblock_size >= MI_INTPTR_SIZE && xblock_size <= 1024 ? MI_MAX_ALIGN_GUARANTEE : 0); 
+  if (page_size != NULL) *page_size = psize - start_offset;
+  return (uint8_t*)segment + ((idx*MI_SEGMENT_SLICE_SIZE) + start_offset);
 }
 
 // Start of the page available memory; can be used on uninitialized pages
 uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size)
 {
   const mi_slice_t* slice = mi_page_to_slice((mi_page_t*)page);
-  uint8_t* p = _mi_segment_page_start_from_slice(segment, slice, page_size);
-  mi_assert_internal(page->xblock_size == 0 || _mi_ptr_page(p) == page);
+  uint8_t* p = _mi_segment_page_start_from_slice(segment, slice, page->xblock_size, page_size);  
+  mi_assert_internal(page->xblock_size > 0 || _mi_ptr_page(p) == page);
   mi_assert_internal(_mi_ptr_segment(p) == segment);
   return p;
 }
@@ -556,7 +558,7 @@ static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_i
   mi_assert_internal(slice->xblock_size==0 || slice->xblock_size==1);
 
   // commit before changing the slice data
-  if (!mi_segment_ensure_committed(segment, _mi_segment_page_start_from_slice(segment, slice, NULL), slice_count * MI_SEGMENT_SLICE_SIZE, tld->stats)) {
+  if (!mi_segment_ensure_committed(segment, _mi_segment_page_start_from_slice(segment, slice, 0, NULL), slice_count * MI_SEGMENT_SLICE_SIZE, tld->stats)) {
     return NULL;  // commit failed!
   }
 
