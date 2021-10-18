@@ -264,7 +264,7 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 #ifdef _WIN32
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
 #if (MI_INTPTR_SIZE >= 8)
-  // on 64-bit systems, try to use the virtual address area after 4TiB for 4MiB aligned allocations
+  // on 64-bit systems, try to use the virtual address area after 2TiB for 4MiB aligned allocations
   void* hint;
   if (addr == NULL && (hint = mi_os_get_aligned_hint(try_alignment,size)) != NULL) {
     void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
@@ -377,7 +377,7 @@ static void* mi_wasm_heap_grow(size_t size, size_t try_alignment) {
 static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
   void* p = NULL;
   #if (MI_INTPTR_SIZE >= 8) && !defined(MAP_ALIGNED)
-  // on 64-bit systems, use the virtual address area after 4TiB for 4MiB aligned allocations
+  // on 64-bit systems, use the virtual address area after 2TiB for 4MiB aligned allocations
   void* hint;
   if (addr == NULL && (hint = mi_os_get_aligned_hint(try_alignment, size)) != NULL) {
     p = mmap(hint,size,protect_flags,flags,fd,0);
@@ -509,7 +509,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
 #endif
 
 // On 64-bit systems, we can do efficient aligned allocation by using
-// the 4TiB to 30TiB area to allocate them.
+// the 2TiB to 30TiB area to allocate them.
 #if (MI_INTPTR_SIZE >= 8) && (defined(_WIN32) || (defined(MI_OS_USE_MMAP) && !defined(MAP_ALIGNED)))
 static mi_decl_cache_align _Atomic(uintptr_t) aligned_base;
 
