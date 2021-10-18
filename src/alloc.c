@@ -826,7 +826,10 @@ static std_new_handler_t mi_get_new_handler() {
 static bool mi_try_new_handler(bool nothrow) {
   std_new_handler_t h = mi_get_new_handler();
   if (h==NULL) {
-    if (!nothrow) exit(ENOMEM);  // cannot throw in plain C, use exit as we are out of memory anyway.
+    if (!nothrow) {
+      _mi_error_message(EFAULT, "out of memory in 'new' call"); // cannot throw in plain C, use EFAULT to abort
+      abort();
+    }
     return false;
   }
   else {
