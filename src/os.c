@@ -269,12 +269,16 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
   if (addr == NULL && (hint = mi_os_get_aligned_hint(try_alignment,size)) != NULL) {
     void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
     if (p != NULL) return p;
+    // for robustness always fall through in case of an error
+    /*
     DWORD err = GetLastError();
     if (err != ERROR_INVALID_ADDRESS &&   // If linked with multiple instances, we may have tried to allocate at an already allocated area (#210)
         err != ERROR_INVALID_PARAMETER) { // Windows7 instability (#230)
       return NULL;
     }
-    // fall through
+    */
+    _mi_warning_message("unable to allocate hinted aligned OS memory (%zu bytes, error code: %x, address: %p, alignment: %d, flags: %x)\n", size, GetLastError(), hint, try_alignment, flags);
+    // fall through on error
   } 
 #endif
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
@@ -285,7 +289,10 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     MEM_EXTENDED_PARAMETER param = { {0, 0}, {0} };
     param.Type = MemExtendedParameterAddressRequirements;
     param.Pointer = &reqs;
-    return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
+    void* p = (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
+    if (p != NULL) return p;
+    _mi_warning_message("unable to allocate aligned OS memory (%zu bytes, error code: %x, address: %p, alignment: %d, flags: %x)\n", size, GetLastError(), addr, try_alignment, flags);
+    // fall through on error
   }
 #endif
   // last resort
