@@ -153,8 +153,8 @@ static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* 
     const int64_t tens = (n / (divider/10));
     const long whole = (long)(tens/10);
     const long frac1 = (long)(tens%10);
-    char unitdesc[16];
-    snprintf(unitdesc, 16, "%s%s%s", magnitude, (base==1024 ? "i" : ""), suffix);
+    char unitdesc[8];
+    snprintf(unitdesc, 8, "%s%s%s", magnitude, (base==1024 ? "i" : ""), suffix);
     snprintf(buf, len, "%ld.%ld %-3s", whole, (frac1 < 0 ? -frac1 : frac1), unitdesc);
   }
   _mi_fprintf(out, arg, (fmt==NULL ? "%11s" : fmt), buf);
