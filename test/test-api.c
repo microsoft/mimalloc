@@ -64,15 +64,15 @@ static int failed = 0;
 // ---------------------------------------------------------------------------
 // Test functions
 // ---------------------------------------------------------------------------
-bool test_heap1();
-bool test_heap2();
-bool test_stl_allocator1();
-bool test_stl_allocator2();
+bool test_heap1(void);
+bool test_heap2(void);
+bool test_stl_allocator1(void);
+bool test_stl_allocator2(void);
 
 // ---------------------------------------------------------------------------
 // Main testing
 // ---------------------------------------------------------------------------
-int main() {
+int main(void) {
   mi_option_disable(mi_option_verbose);
 
   // ---------------------------------------------------
