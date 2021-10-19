@@ -287,7 +287,7 @@ bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_la
     is_committed = true;
   }
   
-  const size_t bcount = mi_block_count_of_size(size);
+  const size_t bcount = size / MI_ARENA_BLOCK_SIZE; 
   const size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);
   const size_t bitmaps = (is_committed ? 2 : 3);
   const size_t asize  = sizeof(mi_arena_t) + (bitmaps*fields*sizeof(mi_bitmap_field_t));
