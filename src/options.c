@@ -491,8 +491,8 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
     return false;
   }
 }
-#endif
-#endif
+#endif  // !MI_USE_ENVIRON
+#endif  // !MI_NO_GETENV
 
 static void mi_option_init(mi_option_desc_t* desc) {  
   // Read option value from the environment
