@@ -333,7 +333,7 @@ void mi_heap_destroy(mi_heap_t* heap) {
   Safe Heap delete
 ----------------------------------------------------------- */
 
-// Tranfer the pages from one heap to the other
+// Transfer the pages from one heap to the other
 static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   mi_assert_internal(heap!=NULL);
   if (from==NULL || from->page_count == 0) return;

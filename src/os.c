@@ -98,7 +98,7 @@ size_t _mi_os_page_size() {
 }
 
 // if large OS pages are supported (2 or 4MiB), then return the size, otherwise return the small page size (4KiB)
-size_t _mi_os_large_page_size() {
+size_t _mi_os_large_page_size(void) {
   return (large_os_page_size != 0 ? large_os_page_size : _mi_os_page_size());
 }
 
@@ -215,7 +215,7 @@ void _mi_os_init(void) {
 }
 #elif defined(__wasi__)
 void _mi_os_init() {
-  os_page_size = 0x10000; // WebAssembly has a fixed page size: 64KB
+  os_page_size = 0x10000; // WebAssembly has a fixed page size: 64KiB
   os_alloc_granularity = 16;
 }
 #else
@@ -641,6 +641,10 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
         mi_os_mem_free(p, over_size, commit, stats);
         void* aligned_p = mi_align_up_ptr(p, alignment);
         p = mi_win_virtual_alloc(aligned_p, size, alignment, flags, false, allow_large, is_large);
+        if (p != NULL) {
+          _mi_stat_increase(&stats->reserved, size);
+          if (commit) { _mi_stat_increase(&stats->committed, size); }
+        }
         if (p == aligned_p) break; // success!
         if (p != NULL) { // should not happen?
           mi_os_mem_free(p, size, commit, stats);
@@ -792,9 +796,9 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
     // for commit, just change the protection
     err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
     if (err != 0) { err = errno; }
-    #if defined(MADV_FREE_REUSE)
-      while ((err = madvise(start, csize, MADV_FREE_REUSE)) != 0 && errno == EAGAIN) { errno = 0; }
-    #endif
+    //#if defined(MADV_FREE_REUSE)
+    //  while ((err = madvise(start, csize, MADV_FREE_REUSE)) != 0 && errno == EAGAIN) { errno = 0; }
+    //#endif
   }
   #else
   err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
@@ -856,17 +860,12 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   if (p != start) return false;
 #else
 #if defined(MADV_FREE)
-  #if defined(MADV_FREE_REUSABLE)
-    #define KK_MADV_FREE_INITIAL  MADV_FREE_REUSABLE
-  #else
-    #define KK_MADV_FREE_INITIAL  MADV_FREE
-  #endif
-  static _Atomic(uintptr_t) advice = ATOMIC_VAR_INIT(KK_MADV_FREE_INITIAL);
+  static _Atomic(uintptr_t) advice = ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
   int err;
   while ((err = madvise(start, csize, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
-  if (err != 0 && errno == EINVAL && oadvice == KK_MADV_FREE_INITIAL) {  
-    // if MADV_FREE/MADV_FREE_REUSABLE is not supported, fall back to MADV_DONTNEED from now on
+  if (err != 0 && errno == EINVAL && oadvice == MADV_FREE) {  
+    // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
     mi_atomic_store_release(&advice, (uintptr_t)MADV_DONTNEED);
     err = madvise(start, csize, MADV_DONTNEED);
   }
@@ -1012,7 +1011,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
     else {
       // fall back to regular large pages
       mi_huge_pages_available = false; // don't try further huge pages
-      _mi_warning_message("unable to allocate using huge (1gb) pages, trying large (2mb) pages instead (status 0x%lx)\n", err);
+      _mi_warning_message("unable to allocate using huge (1GiB) pages, trying large (2MiB) pages instead (status 0x%lx)\n", err);
     }
   }
   // on modern Windows try use VirtualAlloc2 for numa aware large OS page allocation
@@ -1055,7 +1054,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) 
     // see: <https://lkml.org/lkml/2017/2/9/875>
     long err = mi_os_mbind(p, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
     if (err != 0) {
-      _mi_warning_message("failed to bind huge (1gb) pages to numa node %d: %s\n", numa_node, strerror(errno));
+      _mi_warning_message("failed to bind huge (1GiB) pages to numa node %d: %s\n", numa_node, strerror(errno));
     }
   }
   return p;

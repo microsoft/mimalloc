@@ -64,15 +64,15 @@ static int failed = 0;
 // ---------------------------------------------------------------------------
 // Test functions
 // ---------------------------------------------------------------------------
-bool test_heap1();
-bool test_heap2();
-bool test_stl_allocator1();
-bool test_stl_allocator2();
+bool test_heap1(void);
+bool test_heap2(void);
+bool test_stl_allocator1(void);
+bool test_stl_allocator2(void);
 
 // ---------------------------------------------------------------------------
 // Main testing
 // ---------------------------------------------------------------------------
-int main() {
+int main(void) {
   mi_option_disable(mi_option_verbose);
 
   // ---------------------------------------------------
@@ -83,7 +83,7 @@ int main() {
     void* p = mi_malloc(0); mi_free(p);
   });
   CHECK_BODY("malloc-nomem1",{
-    result = (mi_malloc(SIZE_MAX/2) == NULL);
+    result = (mi_malloc((size_t)PTRDIFF_MAX + (size_t)1) == NULL);
   });
   CHECK_BODY("malloc-null",{
     mi_free(NULL);
