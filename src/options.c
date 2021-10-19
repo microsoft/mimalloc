@@ -409,6 +409,14 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
   dest[dest_size - 1] = 0;
 }
 
+#ifdef MI_NO_GETENV
+static bool mi_getenv(const char* name, char* result, size_t result_size) {
+  UNUSED(name);
+  UNUSED(result);
+  UNUSED(result_size);
+  return false;
+}
+#else
 static inline int mi_strnicmp(const char* s, const char* t, size_t n) {
   if (n==0) return 0;
   for (; *s != 0 && *t != 0 && n > 0; s++, t++, n--) {
@@ -416,7 +424,6 @@ static inline int mi_strnicmp(const char* s, const char* t, size_t n) {
   }
   return (n==0 ? 0 : *s - *t);
 }
-
 #if defined _WIN32
 // On Windows use GetEnvironmentVariable instead of getenv to work
 // reliably even when this is invoked before the C runtime is initialized.
@@ -484,6 +491,7 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
     return false;
   }
 }
+#endif
 #endif
 
 static void mi_option_init(mi_option_desc_t* desc) {  
