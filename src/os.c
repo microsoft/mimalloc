@@ -641,6 +641,11 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
         mi_os_mem_free(p, over_size, commit, stats);
         void* aligned_p = mi_align_up_ptr(p, alignment);
         p = mi_win_virtual_alloc(aligned_p, size, alignment, flags, false, allow_large, is_large);
+        if (p != NULL)
+        {
+            _mi_stat_increase(&stats->reserved, size);
+            if (commit) { _mi_stat_increase(&stats->committed, size); }
+        }
         if (p == aligned_p) break; // success!
         if (p != NULL) { // should not happen?
           mi_os_mem_free(p, size, commit, stats);
