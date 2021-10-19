@@ -412,10 +412,14 @@ mi_msecs_t _mi_clock_now(void) {
 }
 #else
 #include <time.h>
-#ifdef CLOCK_REALTIME
+#if defined(CLOCK_REALTIME) || defined(CLOCK_MONOTONIC)
 mi_msecs_t _mi_clock_now(void) {
   struct timespec t;
+  #ifdef CLOCK_MONOTONIC
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  #else  
   clock_gettime(CLOCK_REALTIME, &t);
+  #endif
   return ((mi_msecs_t)t.tv_sec * 1000) + ((mi_msecs_t)t.tv_nsec / 1000000);
 }
 #else
