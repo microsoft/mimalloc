@@ -782,8 +782,8 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   }
   #elif defined(__wasi__)
   // WebAssembly guests can't control memory protection
-  #elif defined(MAP_FIXED) && !defined(__APPLE__)
-  // Linux
+  #elif 0 && defined(MAP_FIXED) && !defined(__APPLE__)
+  // Linux: disabled for now as mmap fixed seems much more expensive than MADV_DONTNEED (and splits VMA's?)
   if (commit) {
     // commit: just change the protection
     err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
@@ -796,23 +796,21 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
     if (p != start) { err = errno; }
   }
   #else
-  // macOSX and others.
+  // Linux, macOSX and others.
   if (commit) {
-    // commit: ensure we can access the area
+    // commit: ensure we can access the area    
     err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
     if (err != 0) { err = errno; }
   } 
   else {
     #if defined(MADV_DONTNEED)
     // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
+    // (on the other hand, MADV_FREE would be good enough.. it is just not reflected in the stats :-( )
     err = madvise(start, csize, MADV_DONTNEED);
     #else
     // decommit: just disable access
     err = mprotect(start, csize, PROT_NONE);
     if (err != 0) { err = errno; }
-      #if defined(MADV_FREE_REUSE)
-      while ((err = madvise(start, csize, MADV_FREE_REUSE)) != 0 && errno == EAGAIN) { errno = 0; }
-      #endif
     #endif
   }
   #endif
@@ -872,17 +870,12 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   if (p != start) return false;
 #else
 #if defined(MADV_FREE)
-  #if defined(MADV_FREE_REUSABLE)
-    #define KK_MADV_FREE_INITIAL  MADV_FREE_REUSABLE
-  #else
-    #define KK_MADV_FREE_INITIAL  MADV_FREE
-  #endif
-  static _Atomic(uintptr_t) advice = ATOMIC_VAR_INIT(KK_MADV_FREE_INITIAL);
+  static _Atomic(uintptr_t) advice = ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
   int err;
   while ((err = madvise(start, csize, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
-  if (err != 0 && errno == EINVAL && oadvice == KK_MADV_FREE_INITIAL) {  
-    // if MADV_FREE/MADV_FREE_REUSABLE is not supported, fall back to MADV_DONTNEED from now on
+  if (err != 0 && errno == EINVAL && oadvice == MADV_FREE) {  
+    // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
     mi_atomic_store_release(&advice, (uintptr_t)MADV_DONTNEED);
     err = madvise(start, csize, MADV_DONTNEED);
   }
