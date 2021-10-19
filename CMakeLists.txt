@@ -165,7 +165,7 @@ endif()
 
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
-  list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas -fvisibility=hidden)
+  list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas -Wstrict-prototypes -fvisibility=hidden)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     list(APPEND mi_cflags -Wno-invalid-memory-model)
   endif()
