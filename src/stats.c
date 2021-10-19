@@ -524,6 +524,7 @@ static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msec
   while (get_next_area_info(tid.team, &c, &mem) == B_OK) {
     *peak_rss += mem.ram_size;
   }
+  *page_faults = 0;
 #elif defined(__APPLE__)
   *peak_rss = rusage.ru_maxrss;         // BSD reports in bytes
   struct mach_task_basic_info info;
