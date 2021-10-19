@@ -17,14 +17,14 @@ static uint8_t* mi_segment_raw_page_start(const mi_segment_t* segment, const mi_
 
 /* --------------------------------------------------------------------------------
   Segment allocation
-  We allocate pages inside bigger "segments" (4mb on 64-bit). This is to avoid
+  We allocate pages inside bigger "segments" (4MiB on 64-bit). This is to avoid
   splitting VMA's on Linux and reduce fragmentation on other OS's.
   Each thread owns its own segments.
 
   Currently we have:
-  - small pages (64kb), 64 in one segment
-  - medium pages (512kb), 8 in one segment
-  - large pages (4mb), 1 in one segment
+  - small pages (64KiB), 64 in one segment
+  - medium pages (512KiB), 8 in one segment
+  - large pages (4MiB), 1 in one segment
   - huge blocks > MI_LARGE_OBJ_SIZE_MAX become large segment with 1 page
 
   In any case the memory for a segment is virtual and usually committed on demand.

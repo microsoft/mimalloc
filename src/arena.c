@@ -330,7 +330,7 @@ int mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noe
     _mi_verbose_message("failed to reserve %zu k memory\n", _mi_divide_up(size,1024));
     return ENOMEM;
   }
-  _mi_verbose_message("reserved %zu kb memory%s\n", _mi_divide_up(size,1024), large ? " (in large os pages)" : "");
+  _mi_verbose_message("reserved %zu KiB memory%s\n", _mi_divide_up(size,1024), large ? " (in large os pages)" : "");
   return 0;
 }
 
@@ -347,10 +347,10 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
   size_t pages_reserved = 0;
   void* p = _mi_os_alloc_huge_os_pages(pages, numa_node, timeout_msecs, &pages_reserved, &hsize);
   if (p==NULL || pages_reserved==0) {
-    _mi_warning_message("failed to reserve %zu gb huge pages\n", pages);
+    _mi_warning_message("failed to reserve %zu GiB huge pages\n", pages);
     return ENOMEM;
   }
-  _mi_verbose_message("numa node %i: reserved %zu gb huge pages (of the %zu gb requested)\n", numa_node, pages_reserved, pages);
+  _mi_verbose_message("numa node %i: reserved %zu GiB huge pages (of the %zu GiB requested)\n", numa_node, pages_reserved, pages);
 
   if (!mi_manage_os_memory(p, hsize, true, true, true, numa_node)) {
     _mi_os_free_huge_pages(p, hsize, &_mi_stats_main);
