@@ -204,7 +204,7 @@ void _mi_os_init(void) {
 }
 #elif defined(__wasi__)
 void _mi_os_init() {
-  os_page_size = 0x10000; // WebAssembly has a fixed page size: 64KB
+  os_page_size = 0x10000; // WebAssembly has a fixed page size: 64KiB
   os_alloc_granularity = 16;
 }
 #else
@@ -638,6 +638,10 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
         mi_os_mem_free(p, over_size, commit, stats);
         void* aligned_p = mi_align_up_ptr(p, alignment);
         p = mi_win_virtual_alloc(aligned_p, size, alignment, flags, false, allow_large, is_large);
+        if (p != NULL) {
+          _mi_stat_increase(&stats->reserved, size);
+          if (commit) { _mi_stat_increase(&stats->committed, size); }
+        }
         if (p == aligned_p) break; // success!
         if (p != NULL) { // should not happen?
           mi_os_mem_free(p, size, commit, stats);
@@ -1024,7 +1028,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
     else {
       // fall back to regular large pages
       mi_huge_pages_available = false; // don't try further huge pages
-      _mi_warning_message("unable to allocate using huge (1gb) pages, trying large (2mb) pages instead (status 0x%lx)\n", err);
+      _mi_warning_message("unable to allocate using huge (1GiB) pages, trying large (2MiB) pages instead (status 0x%lx)\n", err);
     }
   }
   // on modern Windows try use VirtualAlloc2 for numa aware large OS page allocation
@@ -1067,7 +1071,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) 
     // see: <https://lkml.org/lkml/2017/2/9/875>
     long err = mi_os_mbind(p, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
     if (err != 0) {
-      _mi_warning_message("failed to bind huge (1gb) pages to numa node %d: %s\n", numa_node, strerror(errno));
+      _mi_warning_message("failed to bind huge (1GiB) pages to numa node %d: %s\n", numa_node, strerror(errno));
     }
   }
   return p;

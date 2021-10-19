@@ -83,7 +83,7 @@ int main(void) {
     void* p = mi_malloc(0); mi_free(p);
   });
   CHECK_BODY("malloc-nomem1",{
-    result = (mi_malloc(SIZE_MAX/2) == NULL);
+    result = (mi_malloc((size_t)PTRDIFF_MAX + (size_t)1) == NULL);
   });
   CHECK_BODY("malloc-null",{
     mi_free(NULL);

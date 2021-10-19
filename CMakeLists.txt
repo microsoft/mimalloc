@@ -43,7 +43,7 @@ set(mi_sources
     src/init.c)
 
 # -----------------------------------------------------------------------------
-# Converience: set default build type depending on the build directory
+# Convenience: set default build type depending on the build directory
 # -----------------------------------------------------------------------------
 
 if (NOT CMAKE_BUILD_TYPE)
@@ -224,7 +224,7 @@ else()
 endif()
 
 string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
-if(NOT(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel)$"))
+if(NOT(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel|none)$"))
   set(mi_basename "${mi_basename}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
 endif()
 if(MI_BUILD_SHARED)

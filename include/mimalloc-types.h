@@ -105,11 +105,11 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Main tuning parameters for segment and page sizes
 // Sizes for 64-bit, divide by two for 32-bit
-#define MI_SEGMENT_SLICE_SHIFT            (13 + MI_INTPTR_SHIFT)         // 64kb
-#define MI_SEGMENT_SHIFT                  ( 7 + MI_SEGMENT_SLICE_SHIFT)  //  8mb
+#define MI_SEGMENT_SLICE_SHIFT            (13 + MI_INTPTR_SHIFT)         // 64KiB
+#define MI_SEGMENT_SHIFT                  ( 7 + MI_SEGMENT_SLICE_SHIFT)  //  8MiB
 
-#define MI_SMALL_PAGE_SHIFT               (MI_SEGMENT_SLICE_SHIFT)       // 64kb
-#define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SMALL_PAGE_SHIFT)     // 512kb
+#define MI_SMALL_PAGE_SHIFT               (MI_SEGMENT_SLICE_SHIFT)       // 64KiB
+#define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SMALL_PAGE_SHIFT)     // 512KiB
 
 
 // Derived constants
@@ -122,12 +122,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SMALL_PAGE_SIZE                (1ULL<<MI_SMALL_PAGE_SHIFT)
 #define MI_MEDIUM_PAGE_SIZE               (1ULL<<MI_MEDIUM_PAGE_SHIFT)
 
-#define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/4)   // 8kb on 64-bit
+#define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/4)   // 8KiB on 64-bit
 
-#define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/4)  // 128kb on 64-bit
-#define MI_MEDIUM_OBJ_WSIZE_MAX           (MI_MEDIUM_OBJ_SIZE_MAX/MI_INTPTR_SIZE)   // 64kb on 64-bit
+#define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/4)  // 128KiB on 64-bit
+#define MI_MEDIUM_OBJ_WSIZE_MAX           (MI_MEDIUM_OBJ_SIZE_MAX/MI_INTPTR_SIZE)   
 
-#define MI_LARGE_OBJ_SIZE_MAX             (MI_SEGMENT_SIZE/2)      // 4mb on 64-bit
+#define MI_LARGE_OBJ_SIZE_MAX             (MI_SEGMENT_SIZE/2)      // 4MiB on 64-bit
 #define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)
 
 #define MI_HUGE_OBJ_SIZE_MAX              (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)        // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
@@ -264,10 +264,10 @@ typedef struct mi_page_s {
 
 
 typedef enum mi_page_kind_e {
-  MI_PAGE_SMALL,    // small blocks go into 64kb pages inside a segment
-  MI_PAGE_MEDIUM,   // medium blocks go into 512kb pages inside a segment
+  MI_PAGE_SMALL,    // small blocks go into 64KiB pages inside a segment
+  MI_PAGE_MEDIUM,   // medium blocks go into medium pages inside a segment
   MI_PAGE_LARGE,    // larger blocks go into a page of just one block
-  MI_PAGE_HUGE,     // huge blocks (>16mb) are put into a single page in a single segment.
+  MI_PAGE_HUGE,     // huge blocks (> 16 MiB) are put into a single page in a single segment.
 } mi_page_kind_t;
 
 typedef enum mi_segment_kind_e {
@@ -355,7 +355,7 @@ typedef struct mi_random_cxt_s {
 } mi_random_ctx_t;
 
 
-// In debug mode there is a padding stucture at the end of the blocks to check for buffer overflows
+// In debug mode there is a padding structure at the end of the blocks to check for buffer overflows
 #if (MI_PADDING)
 typedef struct mi_padding_s {
   uint32_t canary; // encoded block value to check validity of the padding (in case of overflow)

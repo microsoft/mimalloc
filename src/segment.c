@@ -18,9 +18,6 @@ static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_st
 /* --------------------------------------------------------------------------------
   Segment allocation
 
-  In any case the memory for a segment is virtual and usually committed on demand.
-  (i.e. we are careful to not touch the memory until we actually allocate a block there)
-
   If a  thread ends, it "abandons" pages with used blocks
   and there is an abandoned segment list whose segments can
   be reclaimed by still running threads, much like work-stealing.
