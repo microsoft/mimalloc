@@ -282,6 +282,8 @@ static bool mi_arena_add(mi_arena_t* arena) {
 
 bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept
 {
+  if (size < MI_ARENA_BLOCK_SIZE) return false;
+
   if (is_large) {
     mi_assert_internal(is_committed);
     is_committed = true;
@@ -321,7 +323,7 @@ bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_la
 // Reserve a range of regular OS memory
 int mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept 
 {
-  size = _mi_os_good_alloc_size(size);
+  size = _mi_align_up(size, MI_ARENA_BLOCK_SIZE); // at least one block
   bool large = allow_large;
   void* start = _mi_os_alloc_aligned(size, MI_SEGMENT_ALIGN, commit, &large, &_mi_stats_main);
   if (start==NULL) return ENOMEM;
