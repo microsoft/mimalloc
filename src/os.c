@@ -796,9 +796,9 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
     // for commit, just change the protection
     err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
     if (err != 0) { err = errno; }
-    #if defined(MADV_FREE_REUSE)
-      while ((err = madvise(start, csize, MADV_FREE_REUSE)) != 0 && errno == EAGAIN) { errno = 0; }
-    #endif
+    //#if defined(MADV_FREE_REUSE)
+    //  while ((err = madvise(start, csize, MADV_FREE_REUSE)) != 0 && errno == EAGAIN) { errno = 0; }
+    //#endif
   }
   #else
   err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
@@ -860,17 +860,12 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   if (p != start) return false;
 #else
 #if defined(MADV_FREE)
-  #if defined(MADV_FREE_REUSABLE)
-    #define KK_MADV_FREE_INITIAL  MADV_FREE_REUSABLE
-  #else
-    #define KK_MADV_FREE_INITIAL  MADV_FREE
-  #endif
-  static _Atomic(uintptr_t) advice = ATOMIC_VAR_INIT(KK_MADV_FREE_INITIAL);
+  static _Atomic(uintptr_t) advice = ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
   int err;
   while ((err = madvise(start, csize, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
-  if (err != 0 && errno == EINVAL && oadvice == KK_MADV_FREE_INITIAL) {  
-    // if MADV_FREE/MADV_FREE_REUSABLE is not supported, fall back to MADV_DONTNEED from now on
+  if (err != 0 && errno == EINVAL && oadvice == MADV_FREE) {  
+    // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
     mi_atomic_store_release(&advice, (uintptr_t)MADV_DONTNEED);
     err = madvise(start, csize, MADV_DONTNEED);
   }
