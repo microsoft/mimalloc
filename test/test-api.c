@@ -4,7 +4,9 @@ This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic ignored "-Walloc-size-larger-than="
+#endif
 
 /*
 Testing allocators is difficult as bugs may only surface after particular
