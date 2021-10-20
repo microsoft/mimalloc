@@ -229,7 +229,7 @@ static malloc_zone_t mi_malloc_zone = {
 };
 
 
-#if defined(MI_SHARED_LIB_EXPORT) && defined(MI_INTERPOSE)
+#if defined(MI_SHARED_LIB_EXPORT) && defined(MI_OSX_INTERPOSE)
 
 static malloc_zone_t *mi_malloc_default_zone(void) {
   return &mi_malloc_zone;
