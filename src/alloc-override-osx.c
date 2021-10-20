@@ -189,6 +189,10 @@ static malloc_zone_t* mi_get_default_zone()
   }
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#endif
+
 static malloc_introspection_t mi_introspect = {
   .enumerator = &intro_enumerator,
   .good_size = &intro_good_size,
@@ -199,23 +203,23 @@ static malloc_introspection_t mi_introspect = {
   .force_unlock = &intro_force_unlock,
 #if defined(MAC_OS_X_VERSION_10_6) && \
     MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
-  .zone_locked = &intro_zone_locked,
   .statistics = &intro_statistics,
+  .zone_locked = &intro_zone_locked,
 #endif
 };
 
 static malloc_zone_t mi_malloc_zone = {
   .size = &zone_size,
-  .zone_name = "mimalloc",
-  .introspect = &mi_introspect,
   .malloc = &zone_malloc,
   .calloc = &zone_calloc,
   .valloc = &zone_valloc,
   .free = &zone_free,
   .realloc = &zone_realloc,
   .destroy = &zone_destroy,
+  .zone_name = "mimalloc",
   .batch_malloc = &zone_batch_malloc,
   .batch_free = &zone_batch_free,
+  .introspect = &mi_introspect,  
 #if defined(MAC_OS_X_VERSION_10_6) && \
     MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
   // switch to version 9 on OSX 10.6 to support memalign.
@@ -243,16 +247,22 @@ __attribute__((used)) static struct {
 };
 #endif
 
-static void __attribute__((constructor(0))) _mi_macos_override_malloc() {
+
+#if defined(__clang__)
+__attribute__((constructor(0))) 
+#else
+__attribute__((constructor))      // seems not supported by g++-11 on the M1
+#endif
+static void _mi_macos_override_malloc() {
   malloc_zone_t* purgeable_zone = NULL;
 
-#if defined(MAC_OS_X_VERSION_10_6) && \
+  #if defined(MAC_OS_X_VERSION_10_6) && \
     MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
   // force the purgeable zone to exist to avoid strange bugs
   if (malloc_default_purgeable_zone) {
     purgeable_zone = malloc_default_purgeable_zone();
   }
-#endif
+  #endif
 
   // Register our zone.
   // thomcc: I think this is still needed to put us in the zone list.
