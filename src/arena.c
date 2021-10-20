@@ -310,7 +310,7 @@ bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_la
   // the bitmaps are already zero initialized due to os_alloc
   // initialize committed bitmap?
   if (arena->blocks_committed != NULL && is_committed) {
-    memset(arena->blocks_committed, 0xFF, fields*sizeof(mi_bitmap_field_t));
+    memset((void*)arena->blocks_committed, 0xFF, fields*sizeof(mi_bitmap_field_t)); // cast to void* to avoid atomic warning
   }
   // and claim leftover blocks if needed (so we never allocate there)
   ptrdiff_t post = (fields * MI_BITMAP_FIELD_BITS) - bcount;

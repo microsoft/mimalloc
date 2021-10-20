@@ -463,7 +463,7 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
         uint8_t* start = (uint8_t*)mi_atomic_load_ptr_acquire(uint8_t,&regions[i].start);
         size_t arena_memid = mi_atomic_load_relaxed(&regions[i].arena_memid);
         uintptr_t commit = mi_atomic_load_relaxed(&regions[i].commit);
-        memset(&regions[i], 0, sizeof(mem_region_t));
+        memset((void*)&regions[i], 0, sizeof(mem_region_t));  // cast to void* to avoid atomic warning
         // and release the whole region
         mi_atomic_store_release(&region->info, (uintptr_t)0);
         if (start != NULL) { // && !_mi_os_is_huge_reserved(start)) {         
