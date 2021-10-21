@@ -51,10 +51,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <mach/vm_statistics.h>
 #endif
 #endif
-#if defined(__HAIKU__)
-#define madvise posix_madvise
-#define MADV_DONTNEED POSIX_MADV_DONTNEED
-#endif
 #endif
 
 /* -----------------------------------------------------------
