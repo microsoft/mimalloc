@@ -51,6 +51,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <mach/vm_statistics.h>
 #endif
 #endif
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#if __FreeBSD_version >= 1200000
+#include <sys/cpuset.h>
+#include <sys/domainset.h>
+#include <sys/sysctl.h>
+#endif
+#endif
 #endif
 
 /* -----------------------------------------------------------
@@ -1235,6 +1243,29 @@ static size_t mi_os_numa_node_countx(void) {
     if (access(buf,R_OK) != 0) break;
   }
   return (node+1);
+}
+#elif defined(__FreeBSD__) && __FreeBSD_version >= 1200000
+static size_t mi_os_numa_nodex(void) {
+  domainset_t dom;
+  size_t node;
+  int policy;
+
+  if (cpuset_getdomain(CPU_LEVEL_CPUSET, CPU_WHICH_PID, -1, sizeof(dom), &dom, &policy) == -1) return 0ul;
+
+  for (node = 0; node < MAXMEMDOM; node++) {
+      if (DOMAINSET_ISSET(node, &dom)) return node;
+  }
+
+  return 0ul;
+}
+
+static size_t mi_os_numa_node_countx(void) {
+  size_t ndomains = 0;
+  size_t len = sizeof(ndomains);
+
+  if (sysctlbyname("vm.ndomains", &ndomains, &len, NULL, 0) == -1) return 0ul;
+
+  return ndomains;
 }
 #else
 static size_t mi_os_numa_nodex(void) {
