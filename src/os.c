@@ -39,6 +39,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <unistd.h>    // sysconf
 #if defined(__linux__)
 #include <features.h>
+#include <stdio.h> // sscanf, access
+#include <fcntl.h> // open
+#include <stdlib.h> // strtol
 #if defined(__GLIBC__)
 #include <linux/mman.h> // linux mmap flags
 #else
@@ -222,7 +225,31 @@ void _mi_os_init() {
     os_page_size = (size_t)result;
     os_alloc_granularity = os_page_size;
   }
+#if defined(__linux__)
+  // try to get large page size from OS
+  int fd = open("/proc/meminfo", O_RDONLY);
+  if (fd != -1) {
+    char buffer[4096];
+    buffer[read(fd, buffer, sizeof(buffer) - 1)] = 0;
+    close(fd);
+    char* large_size = strstr(buffer, "Hugepagesize:");
+    if (large_size == NULL) {
+      // huge pages are not available
+      large_os_page_size = 0;
+    }
+    else {
+      large_size += 13; // this is the length of "Hugepagesize:"
+      large_os_page_size = strtol(large_size, NULL, 0);
+      large_os_page_size *= KiB;
+    }
+  }
+  else {
+    // or fall back
+    large_os_page_size = 2*MiB;
+  }
+#else
   large_os_page_size = 2*MiB; // TODO: can we query the OS for this?
+#endif
 }
 #endif
 
@@ -1213,7 +1240,6 @@ static size_t mi_os_numa_node_countx(void) {
 }
 #elif defined(__linux__)
 #include <sys/syscall.h>  // getcpu
-#include <stdio.h>        // access
 
 static size_t mi_os_numa_nodex(void) {
 #ifdef SYS_getcpu
