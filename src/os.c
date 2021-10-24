@@ -39,6 +39,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <unistd.h>    // sysconf
 #if defined(__linux__)
 #include <features.h>
+#include <fcntl.h>
+#include <stdlib.h>
 #if defined(__GLIBC__)
 #include <linux/mman.h> // linux mmap flags
 #else
@@ -50,6 +52,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !TARGET_IOS_IPHONE && !TARGET_IOS_SIMULATOR
 #include <mach/vm_statistics.h>
 #endif
+#endif
+#if defined(__FreeBSD__)
+#include <sys/sysctl.h>
 #endif
 #endif
 
@@ -87,6 +92,9 @@ static size_t os_alloc_granularity = 4096;
 
 // if non-zero, use large page allocation
 static size_t large_os_page_size = 0;
+
+// if non-zero, enable page overcommit
+static int os_overcommit = 0;
 
 // OS (small) page size
 size_t _mi_os_page_size() {
@@ -223,6 +231,31 @@ void _mi_os_init() {
     os_alloc_granularity = os_page_size;
   }
   large_os_page_size = 2*MiB; // TODO: can we query the OS for this?
+#if defined(__linux__)
+  int fd = open("/proc/sys/vm/overcommit_memory", O_RDONLY);
+  if (fd != -1) {
+    char buf[1] = {0};
+    if (read(fd, buf, sizeof(buf)) == sizeof(buf)) {
+      switch (buf[0]) {
+      case '0': // heuristic mode
+      case '1': // always
+        os_overcommit = 1;
+	break;
+      default: // never regardless
+        os_overcommit = 0;
+      }
+    }
+    close(fd);
+  }
+#elif defined(__FreeBSD__)
+  int val = 0;
+  size_t olen = sizeof(val);
+  if (sysctlbyname("vm.overcommit", &val, &olen, NULL, 0) == 0) {
+    os_overcommit = val;
+  }
+#elif defined(__NetBSD__) || defined(__HAIKU__)
+  os_overcommit = 1;
+#endif
 }
 #endif
 
@@ -398,8 +431,11 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   #if !defined(MAP_NORESERVE)
   #define MAP_NORESERVE  0
   #endif
-  int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
+  int flags = MAP_PRIVATE | MAP_ANONYMOUS;
   int fd = -1;
+  if (os_overcommit) {
+    flags |= MAP_NORESERVE;
+  }
   #if defined(MAP_ALIGNED)  // BSD
   if (try_alignment > 0) {
     size_t n = mi_bsr(try_alignment);
