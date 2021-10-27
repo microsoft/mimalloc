@@ -267,6 +267,7 @@ void _mi_segment_map_freed_at(const mi_segment_t* segment) {
 // Determine the segment belonging to a pointer or NULL if it is not in a valid segment.
 static mi_segment_t* _mi_segment_of(const void* p) {
   mi_segment_t* segment = _mi_ptr_segment(p);
+  if (segment == NULL) return NULL; 
   size_t bitidx;
   size_t index = mi_segment_map_index_of(segment, &bitidx);
   // fast path: for any pointer to valid small/medium/large object or first MI_SEGMENT_SIZE in huge
