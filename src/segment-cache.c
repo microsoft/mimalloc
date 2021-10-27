@@ -234,9 +234,11 @@ static size_t mi_segment_map_index_of(const mi_segment_t* segment, size_t* bitid
     return MI_SEGMENT_MAP_WSIZE;
   }
   else {
-    uintptr_t segindex = ((uintptr_t)segment) / MI_SEGMENT_SIZE;
+    const uintptr_t segindex = ((uintptr_t)segment) / MI_SEGMENT_SIZE;
     *bitidx = segindex % MI_INTPTR_BITS;
-    return (segindex / MI_INTPTR_BITS);
+    const size_t mapindex = segindex / MI_INTPTR_BITS;
+    mi_assert_internal(mapindex < MI_SEGMENT_MAP_WSIZE);
+    return mapindex;
   }
 }
 
@@ -290,13 +292,21 @@ static mi_segment_t* _mi_segment_of(const void* p) {
     loindex = index;
     lobitidx = mi_bsr(lobits);    // lobits != 0
   }
+  else if (index == 0) {
+    return NULL;
+  }
   else {
+    mi_assert_internal(index > 0);
     uintptr_t lomask = mask;
-    loindex = index - 1;
-    while (loindex > 0 && (lomask = mi_atomic_load_relaxed(&mi_segment_map[loindex])) == 0) loindex--;
-    if (loindex==0) return NULL;
+    loindex = index;
+    do {
+      loindex--;  
+      lomask = mi_atomic_load_relaxed(&mi_segment_map[loindex]);      
+    } while (lomask != 0 && loindex > 0);
+    if (lomask == 0) return NULL;
     lobitidx = mi_bsr(lomask);    // lomask != 0
   }
+  mi_assert_internal(loindex < MI_SEGMENT_MAP_WSIZE);
   // take difference as the addresses could be larger than the MAX_ADDRESS space.
   size_t diff = (((index - loindex) * (8*MI_INTPTR_SIZE)) + bitidx - lobitidx) * MI_SEGMENT_SIZE;
   segment = (mi_segment_t*)((uint8_t*)segment - diff);
