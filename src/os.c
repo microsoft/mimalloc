@@ -399,6 +399,10 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   #define MAP_NORESERVE  0
   #endif
   int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
+  #if defined(__linux__)
+  if (mi_option_get(mi_option_prefault))
+    flags = flags | MAP_POPULATE;
+  #endif
   int fd = -1;
   #if defined(MAP_ALIGNED)  // BSD
   if (try_alignment > 0) {
@@ -429,6 +433,9 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
     }
     else {
       int lflags = flags & ~MAP_NORESERVE;  // using NORESERVE on huge pages seems to fail on Linux
+      #if defined(__linux__)
+      lflags = lflags & ~MAP_POPULATE; // don't use MAP_POPULATE on huge pages
+      #endif
       int lfd = fd;
       #ifdef MAP_ALIGNED_SUPER
       lflags |= MAP_ALIGNED_SUPER;

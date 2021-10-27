@@ -302,6 +302,10 @@ or via environment variables:
    `MIMALLOC_EAGER_COMMIT_DELAY=N` (`N` is 1 by default) to delay the initial `N` segments (of 4MiB)
    of a thread to not allocate in the huge OS pages; this prevents threads that are short lived
    and allocate just a little to take up space in the huge OS page area (which cannot be reset).
+-  `MIMALLOC_PREFAULT=1`: (Linux only) enable memory prefaulting when available. This option instructs the kernel to synchronously 
+   load the entire mapped region into active memory by specifying `MAP_POPULATE` in `mmap`. It will cause read-ahead on that memory, 
+   and then the subsequent accesses to the memory can proceed without page faults, improving some performance, but might also reduce 
+   some available memory. In `mimalloc_test_stress`, it is known to reduce about 95% page-faults.
 
 Use caution when using `fork` in combination with either large or huge OS pages: on a fork, the OS uses copy-on-write
 for all pages in the original process including the huge OS pages. When any memory is now written in that area, the
