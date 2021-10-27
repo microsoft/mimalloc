@@ -257,7 +257,7 @@ void _mi_segment_map_allocated_at(const mi_segment_t* segment) {
 void _mi_segment_map_freed_at(const mi_segment_t* segment) {
   size_t bitidx;
   size_t index = mi_segment_map_index_of(segment, &bitidx);
-  mi_assert_internal(index < MI_SEGMENT_MAP_WSIZE);
+  mi_assert_internal(index <= MI_SEGMENT_MAP_WSIZE);
   if (index == MI_SEGMENT_MAP_WSIZE) return;
   uintptr_t mask = mi_atomic_load_relaxed(&mi_segment_map[index]);
   uintptr_t newmask;
