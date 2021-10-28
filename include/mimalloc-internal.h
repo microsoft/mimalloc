@@ -247,11 +247,11 @@ static inline bool mi_malloc_satisfies_alignment(size_t alignment, size_t size) 
 #endif
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
   #if (SIZE_MAX == ULONG_MAX)
-    return __builtin_umull_overflow(count, size, total);
+    return __builtin_umull_overflow(count, size, (unsigned long *)total);
   #elif (SIZE_MAX == UINT_MAX)
-    return __builtin_umul_overflow(count, size, total);
+    return __builtin_umul_overflow(count, size, (unsigned int *)total);
   #else
-    return __builtin_umulll_overflow(count, size, total);
+    return __builtin_umulll_overflow(count, size, (unsigned long long *)total);
   #endif
 }
 #else /* __builtin_umul_overflow is unavailable */
