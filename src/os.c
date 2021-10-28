@@ -51,6 +51,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <mach/vm_statistics.h>
 #endif
 #endif
+#if defined(__FreeBSD__) || defined(__DragonFly__)
+#include <sys/param.h>
+#if __FreeBSD_version >= 1200000
+#include <sys/cpuset.h>
+#include <sys/domainset.h>
+#endif
+#include <sys/sysctl.h>
+#endif
 #endif
 
 /* -----------------------------------------------------------
@@ -1235,6 +1243,47 @@ static size_t mi_os_numa_node_countx(void) {
     if (access(buf,R_OK) != 0) break;
   }
   return (node+1);
+}
+#elif defined(__FreeBSD__) && __FreeBSD_version >= 1200000
+static size_t mi_os_numa_nodex(void) {
+  domainset_t dom;
+  size_t node;
+  int policy;
+
+  if (cpuset_getdomain(CPU_LEVEL_CPUSET, CPU_WHICH_PID, -1, sizeof(dom), &dom, &policy) == -1) return 0ul;
+
+  for (node = 0; node < MAXMEMDOM; node++) {
+      if (DOMAINSET_ISSET(node, &dom)) return node;
+  }
+
+  return 0ul;
+}
+
+static size_t mi_os_numa_node_countx(void) {
+  size_t ndomains = 0;
+  size_t len = sizeof(ndomains);
+
+  if (sysctlbyname("vm.ndomains", &ndomains, &len, NULL, 0) == -1) return 0ul;
+
+  return ndomains;
+}
+#elif defined(__DragonFly__)
+static size_t mi_os_numa_nodex(void) {
+  // TODO DragonFlyBSD does not seem to provide any userland mean to
+  // check this information, even less the possibility to control
+  // the allocation to a logical core level's granularity, only the kernel
+  // is fully NUMA aware at the moment.
+  return 0ul;
+}
+
+static size_t mi_os_numa_node_countx(void) {
+  size_t ncpus = 0, nvirtcoresperphys = 0;
+  size_t len = sizeof(size_t);
+
+  if (sysctlbyname("hw.ncpu", &ncpus, &len, NULL, 0) == -1) return 0ul;
+  if (sysctlbyname("hw.cpu_topology_ht_ids", &nvirtcoresperphys, &len, NULL, 0) == -1) return 0ul;
+
+  return nvirtcoresperphys * ncpus;
 }
 #else
 static size_t mi_os_numa_nodex(void) {
