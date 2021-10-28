@@ -18,7 +18,7 @@ Latest stable  tag: `v1.7.2` (2021-06-17).
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
 ```
-> LD_PRELOAD=/usr/bin/libmimalloc.so  myprogram
+> LD_PRELOAD=/usr/lib/libmimalloc.so  myprogram
 ```
 It also has an easy way to override the default allocator in [Windows](#override_on_windows). Notable aspects of the design include:
 
