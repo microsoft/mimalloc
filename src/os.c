@@ -39,6 +39,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <unistd.h>    // sysconf
 #if defined(__linux__)
 #include <features.h>
+#include <fcntl.h>
 #if defined(__GLIBC__)
 #include <linux/mman.h> // linux mmap flags
 #else
@@ -50,6 +51,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !TARGET_IOS_IPHONE && !TARGET_IOS_SIMULATOR
 #include <mach/vm_statistics.h>
 #endif
+#endif
+#if defined(__FreeBSD__) || defined(__DragonFly__)
+#include <sys/param.h>
+#if __FreeBSD_version >= 1200000
+#include <sys/cpuset.h>
+#include <sys/domainset.h>
+#endif
+#include <sys/sysctl.h>
 #endif
 #endif
 
@@ -76,6 +85,10 @@ static size_t os_alloc_granularity = 4096;
 
 // if non-zero, use large page allocation
 static size_t large_os_page_size = 0;
+
+// is memory overcommit allowed? 
+// set dynamically in _mi_os_init (and if true we use MAP_NORESERVE)
+static bool os_overcommit = true;
 
 // OS (small) page size
 size_t _mi_os_page_size() {
@@ -165,7 +178,9 @@ static bool mi_win_enable_large_os_pages()
   return (ok!=0);
 }
 
-void _mi_os_init(void) {
+void _mi_os_init(void) 
+{
+  os_overcommit = false;
   // get the page size
   SYSTEM_INFO si;
   GetSystemInfo(&si);
@@ -200,10 +215,36 @@ void _mi_os_init(void) {
 }
 #elif defined(__wasi__)
 void _mi_os_init() {
+  os_overcommit = false;
   os_page_size = 0x10000; // WebAssembly has a fixed page size: 64KiB
   os_alloc_granularity = 16;
 }
+
+#else  // generic unix
+
+static void os_detect_overcommit(void) {
+#if defined(__linux__)
+  int fd = open("/proc/sys/vm/overcommit_memory", O_RDONLY);
+	if (fd < 0) return;
+  char buf[128];
+  ssize_t nread = read(fd, &buf, sizeof(buf));
+	close(fd);
+  // <https://www.kernel.org/doc/Documentation/vm/overcommit-accounting>
+  // 0: heuristic overcommit, 1: always overcommit, 2: never overcommit (ignore NORESERVE)
+  if (nread >= 1) {
+    os_overcommit = (buf[0] == '0' || buf[0] == '1');
+  }
+#elif defined(__FreeBSD__)
+  int val = 0;
+  size_t olen = sizeof(val);
+  if (sysctlbyname("vm.overcommit", &val, &olen, NULL, 0) == 0) {
+    os_overcommit = (val != 0);
+  }  
 #else
+  // default: overcommit is true  
+#endif
+}
+
 void _mi_os_init() {
   // get the page size
   long result = sysconf(_SC_PAGESIZE);
@@ -212,6 +253,7 @@ void _mi_os_init() {
     os_alloc_granularity = os_page_size;
   }
   large_os_page_size = 2*MiB; // TODO: can we query the OS for this?
+  os_detect_overcommit();
 }
 #endif
 
@@ -401,8 +443,11 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   #if !defined(MAP_NORESERVE)
   #define MAP_NORESERVE  0
   #endif
-  int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
   const int fd = mi_unix_mmap_fd();
+  int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+  if (os_overcommit) {
+    flags |= MAP_NORESERVE;
+  }
   #if defined(MAP_ALIGNED)  // BSD
   if (try_alignment > 0) {
     size_t n = mi_bsr(try_alignment);
@@ -1245,6 +1290,35 @@ static size_t mi_os_numa_node_countx(void) {
     if (access(buf,R_OK) != 0) break;
   }
   return (node+1);
+}
+#elif defined(__FreeBSD__) && __FreeBSD_version >= 1200000
+static size_t mi_os_numa_nodex(void) {
+  domainset_t dom;
+  size_t node;
+  int policy;
+  if (cpuset_getdomain(CPU_LEVEL_CPUSET, CPU_WHICH_PID, -1, sizeof(dom), &dom, &policy) == -1) return 0ul;
+  for (node = 0; node < MAXMEMDOM; node++) {
+    if (DOMAINSET_ISSET(node, &dom)) return node;
+  }
+  return 0ul;
+}
+static size_t mi_os_numa_node_countx(void) {
+  size_t ndomains = 0;
+  size_t len = sizeof(ndomains);
+  if (sysctlbyname("vm.ndomains", &ndomains, &len, NULL, 0) == -1) return 0ul;
+  return ndomains;
+}
+#elif defined(__DragonFly__)
+static size_t mi_os_numa_nodex(void) {
+  // TODO: DragonFly does not seem to provide any userland means to get this information.
+  return 0ul;
+}
+static size_t mi_os_numa_node_countx(void) {
+  size_t ncpus = 0, nvirtcoresperphys = 0;
+  size_t len = sizeof(size_t);
+  if (sysctlbyname("hw.ncpu", &ncpus, &len, NULL, 0) == -1) return 0ul;
+  if (sysctlbyname("hw.cpu_topology_ht_ids", &nvirtcoresperphys, &len, NULL, 0) == -1) return 0ul;
+  return nvirtcoresperphys * ncpus;
 }
 #else
 static size_t mi_os_numa_nodex(void) {
