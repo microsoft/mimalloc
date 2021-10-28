@@ -40,7 +40,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #if defined(__linux__)
 #include <features.h>
 #include <fcntl.h>
-#include <stdlib.h>
 #if defined(__GLIBC__)
 #include <linux/mman.h> // linux mmap flags
 #else
@@ -98,8 +97,9 @@ static size_t os_alloc_granularity = 4096;
 // if non-zero, use large page allocation
 static size_t large_os_page_size = 0;
 
-// if non-zero, enable page overcommit
-static int os_overcommit = 0;
+// is memory overcommit allowed? 
+// set dynamically in _mi_os_init (and if true we use MAP_NORESERVE)
+static bool os_overcommit = true;
 
 // OS (small) page size
 size_t _mi_os_page_size() {
@@ -189,7 +189,9 @@ static bool mi_win_enable_large_os_pages()
   return (ok!=0);
 }
 
-void _mi_os_init(void) {
+void _mi_os_init(void) 
+{
+  os_overcommit = false;
   // get the page size
   SYSTEM_INFO si;
   GetSystemInfo(&si);
@@ -224,10 +226,36 @@ void _mi_os_init(void) {
 }
 #elif defined(__wasi__)
 void _mi_os_init() {
+  os_overcommit = false;
   os_page_size = 0x10000; // WebAssembly has a fixed page size: 64KiB
   os_alloc_granularity = 16;
 }
+
+#else  // generic unix
+
+static void os_detect_overcommit(void) {
+#if defined(__linux__)
+  int fd = open("/proc/sys/vm/overcommit_memory", O_RDONLY);
+	if (fd < 0) return;
+  char buf[128];
+  ssize_t nread = read(fd, &buf, sizeof(buf));
+	close(fd);
+  // <https://www.kernel.org/doc/Documentation/vm/overcommit-accounting>
+  // 0: heuristic overcommit, 1: always overcommit, 2: never overcommit (ignore NORESERVE)
+  if (nread >= 1) {
+    os_overcommit = (buf[0] == '0' || buf[0] == '1');
+  }
+#elif defined(__FreeBSD__)
+  int val = 0;
+  size_t olen = sizeof(val);
+  if (sysctlbyname("vm.overcommit", &val, &olen, NULL, 0) == 0) {
+    os_overcommit = (val != 0);
+  }  
 #else
+  // default: overcommit is true  
+#endif
+}
+
 void _mi_os_init() {
   // get the page size
   long result = sysconf(_SC_PAGESIZE);
@@ -236,31 +264,7 @@ void _mi_os_init() {
     os_alloc_granularity = os_page_size;
   }
   large_os_page_size = 2*MiB; // TODO: can we query the OS for this?
-#if defined(__linux__)
-  int fd = open("/proc/sys/vm/overcommit_memory", O_RDONLY);
-  if (fd != -1) {
-    char buf[1] = {0};
-    if (read(fd, buf, sizeof(buf)) == sizeof(buf)) {
-      switch (buf[0]) {
-      case '0': // heuristic mode
-      case '1': // always
-        os_overcommit = 1;
-	break;
-      default: // never regardless
-        os_overcommit = 0;
-      }
-    }
-    close(fd);
-  }
-#elif defined(__FreeBSD__)
-  int val = 0;
-  size_t olen = sizeof(val);
-  if (sysctlbyname("vm.overcommit", &val, &olen, NULL, 0) == 0) {
-    os_overcommit = val;
-  }
-#elif defined(__NetBSD__) || defined(__HAIKU__)
-  os_overcommit = 1;
-#endif
+  os_detect_overcommit();
 }
 #endif
 
