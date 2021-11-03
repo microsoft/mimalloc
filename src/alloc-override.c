@@ -13,7 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "It is only possible to override "malloc" on Windows when building as a DLL (and linking the C runtime as a DLL)"
 #endif
 
-#if defined(MI_MALLOC_OVERRIDE) && !(defined(_WIN32)) // || (defined(__APPLE__) && !defined(MI_OSX_INTERPOSE)))
+#if defined(MI_MALLOC_OVERRIDE) && !(defined(_WIN32)) 
 
 // ------------------------------------------------------
 // Override system malloc
@@ -41,7 +41,12 @@ terms of the MIT license. A copy of the license can be found in the file
   #define MI_FORWARD02(fun,x,y)   { fun(x,y); }
 #endif
 
-#if defined(__APPLE__) && defined(MI_SHARED_LIB_EXPORT) && defined(MI_OSX_INTERPOSE)
+#if defined(__APPLE__) && defined(MI_SHARED_LIB_EXPORT) && defined(MI_OSX_INTERPOSE)  
+  #include <malloc/malloc.h>
+  mi_decl_externc void  vfree(void* p);
+  mi_decl_externc size_t malloc_size(const void* p);
+  mi_decl_externc size_t malloc_good_size(size_t size);
+
   // use interposing so `DYLD_INSERT_LIBRARIES` works without `DYLD_FORCE_FLAT_NAMESPACE=1`
   // See: <https://books.google.com/books?id=K8vUkpOXhN4C&pg=PA73>
   struct mi_interpose_s {
@@ -50,6 +55,7 @@ terms of the MIT license. A copy of the license can be found in the file
   };
   #define MI_INTERPOSE_FUN(oldfun,newfun) { (const void*)&newfun, (const void*)&oldfun }
   #define MI_INTERPOSE_MI(fun)            MI_INTERPOSE_FUN(fun,mi_##fun)
+  
   __attribute__((used)) static struct mi_interpose_s _mi_interposes[]  __attribute__((section("__DATA, __interpose"))) =
   {
     MI_INTERPOSE_MI(malloc),
@@ -61,21 +67,24 @@ terms of the MIT license. A copy of the license can be found in the file
     MI_INTERPOSE_MI(posix_memalign),
     MI_INTERPOSE_MI(reallocf),
     MI_INTERPOSE_MI(valloc),
+    MI_INTERPOSE_MI(malloc_size),
+    MI_INTERPOSE_MI(malloc_good_size),
+    MI_INTERPOSE_MI(aligned_alloc),
     #ifndef MI_OSX_ZONE
-    // some code allocates from default zone but deallocates using plain free :-( (like NxHashResizeToCapacity <https://github.com/nneonneo/osx-10.9-opensource/blob/master/objc4-551.1/runtime/hashtable2.mm>)
+    // sometimes code allocates from default zone but deallocates using plain free :-( (like NxHashResizeToCapacity <https://github.com/nneonneo/osx-10.9-opensource/blob/master/objc4-551.1/runtime/hashtable2.mm>)
     MI_INTERPOSE_FUN(free,mi_cfree), // use safe free that checks if pointers are from us
+    MI_INTERPOSE_FUN(vfree,mi_cfree),
     #else
-    // We interpose malloc_default_zone in alloc-override-osx.c
+    // we interpose malloc_default_zone in alloc-override-osx.c so we can use mi_free safely
     MI_INTERPOSE_MI(free),
+    MI_INTERPOSE_FUN(vfree,mi_free),
     #endif
-    // some code allocates from a zone but deallocates using plain free :-( (like NxHashResizeToCapacity <https://github.com/nneonneo/osx-10.9-opensource/blob/master/objc4-551.1/runtime/hashtable2.mm>)
-    MI_INTERPOSE_FUN(free,mi_cfree), // use safe free that checks if pointers are from us
   };
 #elif defined(_MSC_VER)
   // cannot override malloc unless using a dll.
   // we just override new/delete which does work in a static library.
 #else
-  // On all other systems forward to our API
+  // On all other systems forward to our API  
   void* malloc(size_t size)              MI_FORWARD1(mi_malloc, size)
   void* calloc(size_t size, size_t n)    MI_FORWARD2(mi_calloc, size, n)
   void* realloc(void* p, size_t newsize) MI_FORWARD2(mi_realloc, p, newsize)
@@ -123,7 +132,7 @@ terms of the MIT license. A copy of the license can be found in the file
   void* operator new[](std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_new_aligned_nothrow(n, static_cast<size_t>(al)); }
   #endif
 
-#elif (defined(__GNUC__) || defined(__clang__))
+#elif (defined(__GNUC__) || defined(__clang__)) && !defined(MI_OSX_ZONE)
   // ------------------------------------------------------
   // Override by defining the mangled C++ names of the operators (as
   // used by GCC and CLang).
