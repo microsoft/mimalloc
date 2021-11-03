@@ -479,10 +479,10 @@ static void mi_detect_cpu_features(void) {
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   if (_mi_process_is_initialized) return;
-  mi_process_setup_auto_thread_done();
-
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
   _mi_process_is_initialized = true;
+  mi_process_setup_auto_thread_done();
+
   
   mi_detect_cpu_features();
   _mi_os_init();
