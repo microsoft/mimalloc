@@ -219,7 +219,6 @@ extern "C" {
   // Forward Posix/Unix calls as well
   void*  reallocf(void* p, size_t newsize) MI_FORWARD2(mi_reallocf,p,newsize)
   size_t malloc_size(const void* p)        MI_FORWARD1(mi_usable_size,p)
-  size_t malloc_good_size(size_t size)     MI_FORWARD1(mi_malloc_good_size,size)
   #if !defined(__ANDROID__) && !defined(__FreeBSD__)
   size_t malloc_usable_size(void *p)       MI_FORWARD1(mi_usable_size,p)
   #else
@@ -227,9 +226,11 @@ extern "C" {
   #endif
 
   // No forwarding here due to aliasing/name mangling issues
-  void* valloc(size_t size)  { return mi_valloc(size); }
-  void  vfree(void* p)       { mi_free(p); }                
-  int   posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
+  void*  valloc(size_t size)               { return mi_valloc(size); }
+  void   vfree(void* p)                    { mi_free(p); }                
+  size_t malloc_good_size(size_t size)     { return mi_malloc_good_size(size); }
+  int    posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
+  
 
   // `aligned_alloc` is only available when __USE_ISOC11 is defined.
   // Note: Conda has a custom glibc where `aligned_alloc` is declared `static inline` and we cannot
@@ -242,23 +243,23 @@ extern "C" {
 #endif
 
 // no forwarding here due to aliasing/name mangling issues
-void  cfree(void* p)                                          { mi_free(p); } 
-void* pvalloc(size_t size)                                    { return mi_pvalloc(size); }
-void* reallocarray(void* p, size_t count, size_t size)        { return mi_reallocarray(p, count, size); }
-void* memalign(size_t alignment, size_t size)                 { return mi_memalign(alignment, size); }
-void* _aligned_malloc(size_t alignment, size_t size)          { return mi_aligned_alloc(alignment, size); }
+void  cfree(void* p)                                    { mi_free(p); } 
+void* pvalloc(size_t size)                              { return mi_pvalloc(size); }
+void* reallocarray(void* p, size_t count, size_t size)  { return mi_reallocarray(p, count, size); }
+void* memalign(size_t alignment, size_t size)           { return mi_memalign(alignment, size); }
+void* _aligned_malloc(size_t alignment, size_t size)    { return mi_aligned_alloc(alignment, size); }
 
 #if defined(__GLIBC__) && defined(__linux__)
   // forward __libc interface (needed for glibc-based Linux distributions)
-  void* __libc_malloc(size_t size)                  MI_FORWARD1(mi_malloc,size)
-  void* __libc_calloc(size_t count, size_t size)    MI_FORWARD2(mi_calloc,count,size)
-  void* __libc_realloc(void* p, size_t size)        MI_FORWARD2(mi_realloc,p,size)
-  void  __libc_free(void* p)                        MI_FORWARD0(mi_free,p)
-  void  __libc_cfree(void* p)                       MI_FORWARD0(mi_free,p)
+  void* __libc_malloc(size_t size)                      MI_FORWARD1(mi_malloc,size)
+  void* __libc_calloc(size_t count, size_t size)        MI_FORWARD2(mi_calloc,count,size)
+  void* __libc_realloc(void* p, size_t size)            MI_FORWARD2(mi_realloc,p,size)
+  void  __libc_free(void* p)                            MI_FORWARD0(mi_free,p)
+  void  __libc_cfree(void* p)                           MI_FORWARD0(mi_free,p)
 
-  void* __libc_valloc(size_t size)                                { return mi_valloc(size); }
-  void* __libc_pvalloc(size_t size)                               { return mi_pvalloc(size); }
-  void* __libc_memalign(size_t alignment, size_t size)            { return mi_memalign(alignment,size); }
+  void* __libc_valloc(size_t size)                      { return mi_valloc(size); }
+  void* __libc_pvalloc(size_t size)                     { return mi_pvalloc(size); }
+  void* __libc_memalign(size_t alignment, size_t size)  { return mi_memalign(alignment,size); }
   int   __posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p,alignment,size); }
 #endif
 
