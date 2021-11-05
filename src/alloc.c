@@ -435,7 +435,7 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 }
 
 
-static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool local, void* p) {
+static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool local, void* p) mi_attr_noexcept {
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
   mi_stat_free(page, block);

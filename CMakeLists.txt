@@ -43,6 +43,7 @@ set(mi_sources
     src/options.c
     src/init.c)
 
+
 # -----------------------------------------------------------------------------
 # Convenience: set default build type depending on the build directory
 # -----------------------------------------------------------------------------
@@ -61,6 +62,7 @@ if("${CMAKE_BINARY_DIR}" MATCHES ".*(S|s)ecure$")
   message(STATUS "Default to secure build")
   set(MI_SECURE "ON")
 endif()
+
 
 # -----------------------------------------------------------------------------
 # Process options
@@ -85,10 +87,13 @@ if(MI_OVERRIDE)
     if(MI_OSX_INTERPOSE)
       # use interpose on macOS
       message(STATUS "  Use interpose to override malloc (MI_OSX_INTERPOSE=ON)")
-      list(APPEND mi_defines MI_OSX_INTERPOSE)
+      list(APPEND mi_defines MI_OSX_INTERPOSE=1)
       if (NOT MI_OSX_ZONE)
         message(STATUS "  WARNING: interpose usually also needs zone overriding (use -DMI_OSX_INTERPOSE=ON)")
       endif()
+    endif()
+    if((NOT MI_USE_CXX) AND MI_OVERRIDE)
+      message(STATUS "  WARNING: if overriding C++ new/delete, it is best to build mimalloc with a C++ compiler (use -DMI_USE_CXX=ON)")
     endif()
   endif()
 endif()
@@ -260,9 +265,9 @@ message(STATUS "")
 message(STATUS "Library base name: ${mi_basename}")
 message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
 if(MI_USE_CXX)
-  message(STATUS "Compiler         : ${CMAKE_CXX_COMPILER}")
+  message(STATUS "C++ Compiler     : ${CMAKE_CXX_COMPILER}")
 else()
-  message(STATUS "Compiler         : ${CMAKE_C_COMPILER}")
+  message(STATUS "C Compiler       : ${CMAKE_C_COMPILER}")
 endif()
 message(STATUS "Version          : ${mi_version}")
 message(STATUS "Build targets    : ${mi_build_targets}")

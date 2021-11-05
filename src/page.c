@@ -400,7 +400,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
 // Note: called from `mi_free` and benchmarks often
 // trigger this due to freeing everything and then
 // allocating again so careful when changing this.
-void _mi_page_retire(mi_page_t* page) {
+void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(mi_page_all_free(page));
