@@ -327,7 +327,7 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_counter_print(&stats->commit_calls, "commits", out, arg);
   mi_stat_print(&stats->threads, "threads", -1, out, arg);
   mi_stat_counter_print_avg(&stats->searches, "searches", out, arg);
-  _mi_fprintf(out, arg, "%10s: %7i\n", "numa nodes", _mi_os_numa_node_count());
+  _mi_fprintf(out, arg, "%10s: %7zu\n", "numa nodes", _mi_os_numa_node_count());
   
   mi_msecs_t elapsed;
   mi_msecs_t user_time;

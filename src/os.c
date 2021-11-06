@@ -846,7 +846,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   if (err != 0) { err = errno; }
   #endif
   if (err != 0) {
-    _mi_warning_message("%s error: start: %p, csize: 0x%x, err: %i\n", commit ? "commit" : "decommit", start, csize, err);
+    _mi_warning_message("%s error: start: %p, csize: 0x%zx, err: %i\n", commit ? "commit" : "decommit", start, csize, err);
     mi_mprotect_hint(err);
   }
   mi_assert_internal(err == 0);
@@ -916,7 +916,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   int err = madvise(start, csize, MADV_DONTNEED);
 #endif
   if (err != 0) {
-    _mi_warning_message("madvise reset error: start: %p, csize: 0x%x, errno: %i\n", start, csize, errno);
+    _mi_warning_message("madvise reset error: start: %p, csize: 0x%zx, errno: %i\n", start, csize, errno);
   }
   //mi_assert(err == 0);
   if (err != 0) return false;
@@ -975,7 +975,7 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   if (err != 0) { err = errno; }
 #endif
   if (err != 0) {
-    _mi_warning_message("mprotect error: start: %p, csize: 0x%x, err: %i\n", start, csize, err);
+    _mi_warning_message("mprotect error: start: %p, csize: 0x%zx, err: %i\n", start, csize, err);
     mi_mprotect_hint(err);
   }
   return (err == 0);
