@@ -510,7 +510,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
         #endif
         if (large_only) return p;
         if (p == NULL) {
-          mi_atomic_store_release(&large_page_try_ok, (uintptr_t)10);  // on error, don't try again for the next N allocations
+          mi_atomic_store_release(&large_page_try_ok, (uintptr_t)8);  // on error, don't try again for the next N allocations
         }
       }
     }
@@ -518,29 +518,30 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   if (p == NULL) {
     *is_large = false;
     p = mi_unix_mmapx(addr, size, try_alignment, protect_flags, flags, fd);
-    #if defined(MADV_HUGEPAGE)
-    // Many Linux systems don't allow MAP_HUGETLB but they support instead
-    // transparent huge pages (THP). It is not required to call `madvise` with MADV_HUGE
-    // though since properly aligned allocations will already use large pages if available
-    // in that case -- in particular for our large regions (in `memory.c`).
-    // However, some systems only allow THP if called with explicit `madvise`, so
-    // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
-    if (allow_large && use_large_os_page(size, try_alignment)) {
-      if (madvise(p, size, MADV_HUGEPAGE) == 0) {
-        *is_large = true; // possibly
-      };
-    }
-    #endif
-    #if defined(__sun)
-    if (allow_large && use_large_os_page(size, try_alignment)) {
-      struct memcntl_mha cmd = {0};
-      cmd.mha_pagesize = large_os_page_size;
-      cmd.mha_cmd = MHA_MAPSIZE_VA;
-      if (memcntl(p, size, MC_HAT_ADVISE, (caddr_t)&cmd, 0, 0) == 0) {
-        *is_large = true;
+    if (p != NULL) {
+      #if defined(MADV_HUGEPAGE)
+      // Many Linux systems don't allow MAP_HUGETLB but they support instead
+      // transparent huge pages (THP). Generally, it is not required to call `madvise` with MADV_HUGE
+      // though since properly aligned allocations will already use large pages if available
+      // in that case -- in particular for our large regions (in `memory.c`).
+      // However, some systems only allow THP if called with explicit `madvise`, so
+      // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
+      if (allow_large && use_large_os_page(size, try_alignment)) {
+        if (madvise(p, size, MADV_HUGEPAGE) == 0) {
+          *is_large = true; // possibly
+        };
       }
+      #elif defined(__sun)
+      if (allow_large && use_large_os_page(size, try_alignment)) {
+        struct memcntl_mha cmd = {0};
+        cmd.mha_pagesize = large_os_page_size;
+        cmd.mha_cmd = MHA_MAPSIZE_VA;
+        if (memcntl(p, size, MC_HAT_ADVISE, (caddr_t)&cmd, 0, 0) == 0) {
+          *is_large = true;
+        }
+      }      
+      #endif
     }
-    #endif
   }
   if (p == NULL) {
     _mi_warning_message("unable to allocate OS memory (%zu bytes, error code: %i, address: %p, large only: %d, allow large: %d)\n", size, errno, addr, large_only, allow_large);
