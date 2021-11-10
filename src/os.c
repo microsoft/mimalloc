@@ -564,7 +564,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
 
 // On 64-bit systems, we can do efficient aligned allocation by using
 // the 2TiB to 30TiB area to allocate them.
-#if (MI_INTPTR_SIZE >= 8) && (defined(_WIN32) || (defined(MI_OS_USE_MMAP) && !defined(MAP_ALIGNED)))
+#if (MI_INTPTR_SIZE >= 8) && (defined(_WIN32) || defined(MI_OS_USE_MMAP))
 static mi_decl_cache_align _Atomic(uintptr_t) aligned_base;
 
 // Return a 4MiB aligned address that is probably available.
