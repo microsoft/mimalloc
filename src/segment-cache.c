@@ -76,11 +76,10 @@ mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* comm
   *memid = slot->memid;
   *is_pinned = slot->is_pinned;
   *is_zero = false;
-  mi_commit_mask_t cmask = slot->commit_mask;  // copy
+  *commit_mask = slot->commit_mask;
   slot->p = NULL;
   mi_atomic_storei64_release(&slot->expire,(mi_msecs_t)0);
-  *commit_mask = cmask;
-
+  
   // mark the slot as free again
   mi_assert_internal(_mi_bitmap_is_claimed(cache_inuse, MI_CACHE_FIELDS, 1, bitidx));
   _mi_bitmap_unclaim(cache_inuse, MI_CACHE_FIELDS, 1, bitidx);
@@ -90,27 +89,26 @@ mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* comm
 
 static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, void* p, size_t total, mi_stats_t* stats)
 {
-  if (mi_commit_mask_is_empty(*cmask)) {
+  if (mi_commit_mask_is_empty(cmask)) {
     // nothing
   }
-  else if (mi_commit_mask_is_full(*cmask)) {
+  else if (mi_commit_mask_is_full(cmask)) {
     _mi_os_decommit(p, total, stats);
   }
   else {
     // todo: one call to decommit the whole at once?
     mi_assert_internal((total%MI_COMMIT_MASK_BITS)==0);
     size_t    part = total/MI_COMMIT_MASK_BITS;
-    uintptr_t idx;
-    uintptr_t count;
-    mi_commit_mask_t mask = *cmask;
-    mi_commit_mask_foreach(mask, idx, count) {
+    ptrdiff_t idx;
+    ptrdiff_t count;    
+    mi_commit_mask_foreach(cmask, idx, count) {
       void*  start = (uint8_t*)p + (idx*part);
       size_t size = count*part;
       _mi_os_decommit(start, size, stats);
     }
     mi_commit_mask_foreach_end()
   }
-  *cmask = mi_commit_mask_empty();
+  mi_commit_mask_create_empty(cmask);
 }
 
 #define MI_MAX_PURGE_PER_PUSH  (4)
@@ -135,7 +133,7 @@ static mi_decl_noinline void mi_segment_cache_purge(mi_os_tld_t* tld)
         if (expire != 0 && now >= expire) {  // safe read
           // still expired, decommit it
           mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
-          mi_assert_internal(!mi_commit_mask_is_empty(slot->commit_mask) && _mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
+          mi_assert_internal(!mi_commit_mask_is_empty(&slot->commit_mask) && _mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
           _mi_abandoned_await_readers();  // wait until safe to decommit
           // decommit committed parts
           // TODO: instead of decommit, we could also free to the OS?
@@ -148,7 +146,7 @@ static mi_decl_noinline void mi_segment_cache_purge(mi_os_tld_t* tld)
   }
 }
 
-mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t memid, mi_commit_mask_t commit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld)
+mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld)
 {
 #ifdef MI_CACHE_DISABLE
   return false;
@@ -187,7 +185,7 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
   slot->memid = memid;
   slot->is_pinned = is_pinned;
   mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
-  slot->commit_mask = commit_mask;
+  slot->commit_mask = *commit_mask;
   if (!mi_commit_mask_is_empty(commit_mask) && !is_large && !is_pinned && mi_option_is_enabled(mi_option_allow_decommit)) {
     long delay = mi_option_get(mi_option_segment_decommit_delay);
     if (delay == 0) {

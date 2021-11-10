@@ -83,9 +83,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // or otherwise one might define an intptr_t type that is larger than a pointer...
 // ------------------------------------------------------
 
-#if INTPTR_MAX == 9223372036854775807LL
+#if INTPTR_MAX == INT64_MAX
 # define MI_INTPTR_SHIFT (3)
-#elif INTPTR_MAX == 2147483647LL
+#elif INTPTR_MAX == INT32_MAX
 # define MI_INTPTR_SHIFT (2)
 #else
 #error platform must be 32 or 64 bits
@@ -93,6 +93,18 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define MI_INTPTR_SIZE  (1<<MI_INTPTR_SHIFT)
 #define MI_INTPTR_BITS  (MI_INTPTR_SIZE*8)
+
+#if SIZE_MAX == UINT64_MAX
+# define MI_SIZE_SHIFT (3)
+#elif SIZE_MAX == UINT32_MAX
+# define MI_SIZE_SHIFT (2)
+#else
+#error platform must be 32 or 64 bits
+#endif
+
+#define MI_SIZE_SIZE  (1<<MI_INTPTR_SHIFT)
+#define MI_SIZE_BITS  (MI_INTPTR_SIZE*8)
+
 
 #define KiB     ((size_t)1024)
 #define MiB     (KiB*KiB)
@@ -275,17 +287,22 @@ typedef enum mi_segment_kind_e {
   MI_SEGMENT_HUGE,   // > MI_LARGE_SIZE_MAX segment with just one huge page inside.
 } mi_segment_kind_t;
 
-#define MI_COMMIT_SIZE    (MI_SEGMENT_SIZE/MI_INTPTR_BITS)
+#define MI_COMMIT_SIZE             (128*1024)   
+#define MI_COMMIT_MASK_BITS        (MI_SEGMENT_SIZE / MI_COMMIT_SIZE)  
+#define MI_COMMIT_MASK_FIELD_BITS  MI_SIZE_BITS
+#define MI_COMMIT_MASK_N           (MI_COMMIT_MASK_BITS / MI_COMMIT_MASK_FIELD_BITS)
 
-#if (((1 << MI_SEGMENT_SHIFT)/MI_COMMIT_SIZE) > 8*MI_INTPTR_SIZE)
-#error "not enough commit bits to cover the segment size"
+#if (MI_COMMIT_MASK_BITS != (MI_COMMIT_MASK_N * MI_COMMIT_MASK_FIELD_BITS))
+#error "the segment size must be exactly divisible by the (commit size * size_t bits)"
 #endif
 
-typedef mi_page_t  mi_slice_t;
+typedef struct mi_commit_mask_s {
+  size_t mask[MI_COMMIT_MASK_N];
+} mi_commit_mask_t;
 
+typedef mi_page_t  mi_slice_t;
 typedef int64_t    mi_msecs_t;
 
-typedef uintptr_t  mi_commit_mask_t;
 
 // Segments are large allocated memory blocks (8mb on 64 bit) from
 // the OS. Inside segments we allocated fixed size _pages_ that
