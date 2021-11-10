@@ -413,23 +413,41 @@ static void* mi_wasm_heap_grow(size_t size, size_t try_alignment) {
 #else
 #define MI_OS_USE_MMAP
 static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
+  UNUSED(try_alignment);  
   void* p = NULL;
+  #if defined(MAP_ALIGNED)  // BSD
+  if (addr == NULL && try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0) {
+    size_t n = mi_bsr(try_alignment);
+    if (((size_t)1 << n) == try_alignment && n >= 12 && n <= 30) {  // alignment is a power of 2 and 4096 <= alignment <= 1GiB
+      flags |= MAP_ALIGNED(n);
+      p = mmap(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd, 0);
+      if (p!=MAP_FAILED) return p;
+      // fall back to regular mmap
+    }
+  }
+  #elif defined(MAP_ALIGN)  // Solaris
+  if (addr == NULL && try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0) {
+    p = mmap(try_alignment, size, protect_flags, flags | MAP_ALIGN, fd, 0);
+    if (p!=MAP_FAILED) return p;
+    // fall back to regular mmap
+  }
+  #endif
   #if (MI_INTPTR_SIZE >= 8) && !defined(MAP_ALIGNED)
   // on 64-bit systems, use the virtual address area after 2TiB for 4MiB aligned allocations
-  void* hint;
-  if (addr == NULL && (hint = mi_os_get_aligned_hint(try_alignment, size)) != NULL) {
-    p = mmap(hint,size,protect_flags,flags,fd,0);
-    if (p==MAP_FAILED) p = NULL; // fall back to regular mmap
+  if (addr == NULL) {
+    void* hint = mi_os_get_aligned_hint(try_alignment, size);
+    if (hint != NULL) {
+      p = mmap(hint, size, protect_flags, flags, fd, 0);
+      if (p!=MAP_FAILED) return p;
+      // fall back to regular mmap
+    }
   }
-  #else
-  UNUSED(try_alignment);
-  UNUSED(mi_os_get_aligned_hint);
   #endif
-  if (p==NULL) {
-    p = mmap(addr,size,protect_flags,flags,fd,0);
-    if (p==MAP_FAILED) p = NULL;
-  }
-  return p;
+  // regular mmap
+  p = mmap(addr, size, protect_flags, flags, fd, 0);
+  if (p!=MAP_FAILED) return p;  
+  // failed to allocate
+  return NULL;
 }
 
 static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int protect_flags, bool large_only, bool allow_large, bool* is_large) {
@@ -444,24 +462,17 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   int fd = -1;
   if (os_overcommit) {
     flags |= MAP_NORESERVE;
-  }
-  #if defined(MAP_ALIGNED)  // BSD
-  if (try_alignment > 0) {
-    size_t n = mi_bsr(try_alignment);
-    if (((size_t)1 << n) == try_alignment && n >= 12 && n <= 30) {  // alignment is a power of 2 and 4096 <= alignment <= 1GiB
-      flags |= MAP_ALIGNED(n);
-    }
-  }
-  #endif
+  }  
   #if defined(PROT_MAX)
   protect_flags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
   #endif
   #if defined(VM_MAKE_TAG)
   // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
   int os_tag = (int)mi_option_get(mi_option_os_tag);
-  if (os_tag < 100 || os_tag > 255) os_tag = 100;
+  if (os_tag < 100 || os_tag > 255) { os_tag = 100; }
   fd = VM_MAKE_TAG(os_tag);
   #endif
+  // huge page allocation
   if ((large_only || use_large_os_page(size, try_alignment)) && allow_large) {
     static _Atomic(uintptr_t) large_page_try_ok; // = 0;
     uintptr_t try_ok = mi_atomic_load_acquire(&large_page_try_ok);
@@ -515,6 +526,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
       }
     }
   }
+  // regular allocation
   if (p == NULL) {
     *is_large = false;
     p = mi_unix_mmapx(addr, size, try_alignment, protect_flags, flags, fd);
