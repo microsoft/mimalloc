@@ -303,20 +303,21 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
 #if (MI_INTPTR_SIZE >= 8)
   // on 64-bit systems, try to use the virtual address area after 2TiB for 4MiB aligned allocations
-  void* hint;
-  if (addr == NULL && (hint = mi_os_get_aligned_hint(try_alignment,size)) != NULL) {
-    void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
-    if (p != NULL) return p;
-    // for robustness always fall through in case of an error
-    /*
-    DWORD err = GetLastError();
-    if (err != ERROR_INVALID_ADDRESS &&   // If linked with multiple instances, we may have tried to allocate at an already allocated area (#210)
-        err != ERROR_INVALID_PARAMETER) { // Windows7 instability (#230)
-      return NULL;
+  if (addr == NULL) {
+    void* hint = mi_os_get_aligned_hint(try_alignment,size);
+    if (hint != NULL) {
+      void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
+      if (p != NULL) return p;
+      // for robustness always fall through in case of an error
+      /*
+      DWORD err = GetLastError();
+      if (err != ERROR_INVALID_ADDRESS &&   // If linked with multiple instances, we may have tried to allocate at an already allocated area (#210)
+          err != ERROR_INVALID_PARAMETER) { // Windows7 instability (#230)
+        return NULL;
+      }
+      */
+      _mi_warning_message("unable to allocate hinted aligned OS memory (%zu bytes, error code: %x, address: %p, alignment: %d, flags: %x)\n", size, GetLastError(), hint, try_alignment, flags);
     }
-    */
-    _mi_warning_message("unable to allocate hinted aligned OS memory (%zu bytes, error code: %x, address: %p, alignment: %d, flags: %x)\n", size, GetLastError(), hint, try_alignment, flags);
-    // fall through on error
   } 
 #endif
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
@@ -414,20 +415,19 @@ static void* mi_wasm_heap_grow(size_t size, size_t try_alignment) {
 #define MI_OS_USE_MMAP
 static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
   UNUSED(try_alignment);  
-  void* p = NULL;
   #if defined(MAP_ALIGNED)  // BSD
   if (addr == NULL && try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0) {
     size_t n = mi_bsr(try_alignment);
     if (((size_t)1 << n) == try_alignment && n >= 12 && n <= 30) {  // alignment is a power of 2 and 4096 <= alignment <= 1GiB
       flags |= MAP_ALIGNED(n);
-      p = mmap(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd, 0);
+      void* p = mmap(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd, 0);
       if (p!=MAP_FAILED) return p;
       // fall back to regular mmap
     }
   }
   #elif defined(MAP_ALIGN)  // Solaris
   if (addr == NULL && try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0) {
-    p = mmap(try_alignment, size, protect_flags, flags | MAP_ALIGN, fd, 0);
+    void* p = mmap(try_alignment, size, protect_flags, flags | MAP_ALIGN, fd, 0);
     if (p!=MAP_FAILED) return p;
     // fall back to regular mmap
   }
@@ -437,14 +437,14 @@ static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int pr
   if (addr == NULL) {
     void* hint = mi_os_get_aligned_hint(try_alignment, size);
     if (hint != NULL) {
-      p = mmap(hint, size, protect_flags, flags, fd, 0);
+      void* p = mmap(hint, size, protect_flags, flags, fd, 0);
       if (p!=MAP_FAILED) return p;
       // fall back to regular mmap
     }
   }
   #endif
   // regular mmap
-  p = mmap(addr, size, protect_flags, flags, fd, 0);
+  void* p = mmap(addr, size, protect_flags, flags, fd, 0);
   if (p!=MAP_FAILED) return p;  
   // failed to allocate
   return NULL;
