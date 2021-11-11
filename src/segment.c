@@ -256,7 +256,7 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   
   // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
   const size_t size = mi_segment_size(segment);
-  if (size != MI_SEGMENT_SIZE || !_mi_segment_cache_push(segment, size, segment->memid, &segment->commit_mask, segment->mem_is_large, segment->mem_is_pinned, tld->os)) {
+  if (size != MI_SEGMENT_SIZE || !_mi_segment_cache_push(segment, size, segment->memid, &segment->commit_mask, &segment->decommit_mask, segment->mem_is_large, segment->mem_is_pinned, tld->os)) {
     const size_t csize = mi_commit_mask_committed_size(&segment->commit_mask, size);
     if (csize > 0 && !segment->mem_is_pinned) _mi_stat_decrease(&_mi_stats_main.committed, csize);
     _mi_abandoned_await_readers();  // wait until safe to free
@@ -663,19 +663,21 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   bool is_zero = false;
   const bool commit_info_still_good = (segment != NULL);
   mi_commit_mask_t commit_mask;
+  mi_commit_mask_t decommit_mask;
   if (segment != NULL) {
     commit_mask = segment->commit_mask;
+    decommit_mask = segment->decommit_mask;
   }
   else {
     mi_commit_mask_create_empty(&commit_mask);
+    mi_commit_mask_create_empty(&decommit_mask);
   }
-
   if (segment==NULL) {
     // Allocate the segment from the OS
     bool mem_large = (!eager_delay && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy    
     bool is_pinned = false;
     size_t memid = 0;
-    segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, &commit_mask, &mem_large, &is_pinned, &is_zero, &memid, os_tld);
+    segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, &commit_mask, &decommit_mask, &mem_large, &is_pinned, &is_zero, &memid, os_tld);
     if (segment==NULL) {
       segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_pinned, &is_zero, &memid, os_tld);
       if (segment == NULL) return NULL;  // failed to allocate
@@ -718,9 +720,24 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   if (!commit_info_still_good) {
     segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
     segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_pinned && !segment->mem_is_large);
-    segment->decommit_expire = 0;
-    mi_commit_mask_create_empty( &segment->decommit_mask );
+    if (segment->allow_decommit) {
+      segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
+      segment->decommit_mask = decommit_mask;
+      mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
+      #if MI_DEBUG>2
+      const size_t commit_needed = _mi_divide_up(info_slices*MI_SEGMENT_SLICE_SIZE, MI_COMMIT_SIZE);
+      mi_commit_mask_t commit_needed_mask;
+      mi_commit_mask_create(0, commit_needed, &commit_needed_mask);
+      mi_assert_internal(!mi_commit_mask_any_set(&segment->decommit_mask, &commit_needed_mask));
+      #endif
+    }    
+    else {
+      mi_assert_internal(mi_commit_mask_is_empty(&decommit_mask));
+      segment->decommit_expire = 0;
+      mi_commit_mask_create_empty( &segment->decommit_mask );
+    }
   }
+  
 
   // initialize segment info
   segment->segment_slices = segment_slices;
