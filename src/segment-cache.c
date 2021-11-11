@@ -16,7 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "bitmap.h"  // atomic bitmap
 
-//#define MI_CACHE_DISABLE 1  
+//#define MI_CACHE_DISABLE 1    // define to completely disable the segment cache
 
 #define MI_CACHE_FIELDS     (16)
 #define MI_CACHE_MAX        (MI_BITMAP_FIELD_BITS*MI_CACHE_FIELDS)       // 1024 on 64-bit
@@ -42,8 +42,6 @@ static mi_decl_cache_align mi_bitmap_field_t cache_inuse[MI_CACHE_FIELDS];   // 
 
 mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
 {
-  if (_mi_preloading()) return NULL;
-
 #ifdef MI_CACHE_DISABLE
   return NULL;
 #else
