@@ -89,8 +89,8 @@ static mi_option_desc_t options[_mi_option_last] =
   { 1, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
 #endif
   { 1,    UNINIT, MI_OPTION(allow_decommit) },    // decommit slices when no longer used (after reset_delay milli-seconds)
-  { 10,   UNINIT, MI_OPTION(reset_delay) },       // page reset delay in milli-seconds (= decommit)
-  { 1000, UNINIT, MI_OPTION(segment_decommit_delay) },// decommit delay in milli-seconds for freed segments
+  { 100,  UNINIT, MI_OPTION(reset_delay) },       // page reset delay in milli-seconds (= decommit)
+  { 500,  UNINIT, MI_OPTION(segment_decommit_delay) },// decommit delay in milli-seconds for freed segments
   { 0,    UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes. 
   { 0,    UNINIT, MI_OPTION(limit_os_alloc) },    // 1 = do not use OS memory for allocation (but only reserved arenas)
   { 100,  UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose

@@ -15,6 +15,111 @@ terms of the MIT license. A copy of the license can be found in the file
 
 static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_stats_t* stats);
 
+// -------------------------------------------------------------------
+// commit mask
+// -------------------------------------------------------------------
+
+void mi_commit_mask_create(ptrdiff_t bitidx, ptrdiff_t bitcount, mi_commit_mask_t* cm) {
+  mi_assert_internal(bitidx < MI_COMMIT_MASK_BITS);
+  mi_assert_internal((bitidx + bitcount) <= MI_COMMIT_MASK_BITS);
+  if (bitcount == MI_COMMIT_MASK_BITS) {
+    mi_assert_internal(bitidx==0);
+    mi_commit_mask_create_full(cm);
+  }
+  else if (bitcount == 0) {
+    mi_commit_mask_create_empty(cm);
+  }
+  else {
+    mi_commit_mask_create_empty(cm);
+    ptrdiff_t i = bitidx / MI_COMMIT_MASK_FIELD_BITS;
+    ptrdiff_t ofs = bitidx % MI_COMMIT_MASK_FIELD_BITS;
+    while (bitcount > 0) {
+      mi_assert_internal(i < MI_COMMIT_MASK_N);
+      ptrdiff_t avail = MI_COMMIT_MASK_FIELD_BITS - ofs;
+      ptrdiff_t count = (bitcount > avail ? avail : bitcount);
+      size_t mask = (count >= MI_COMMIT_MASK_FIELD_BITS ? ~((size_t)0) : (((size_t)1 << count) - 1) << ofs);
+      cm->mask[i] = mask;
+      bitcount -= count;
+      ofs = 0;
+      i++;
+    }
+  }
+}
+
+
+size_t mi_commit_mask_committed_size(const mi_commit_mask_t* cm, size_t total) {
+  mi_assert_internal((total%MI_COMMIT_MASK_BITS)==0);
+  size_t count = 0;
+  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
+    size_t mask = cm->mask[i];
+    if (~mask == 0) {
+      count += MI_COMMIT_MASK_FIELD_BITS;
+    }
+    else {
+      for (; mask != 0; mask >>= 1) {  // todo: use popcount
+        if ((mask&1)!=0) count++;
+      }
+    }
+  }
+  // we use total since for huge segments each commit bit may represent a larger size
+  return ((total / MI_COMMIT_MASK_BITS) * count);
+}
+
+
+ptrdiff_t mi_commit_mask_next_run(const mi_commit_mask_t* cm, ptrdiff_t* idx) {
+  ptrdiff_t i = (*idx) / MI_COMMIT_MASK_FIELD_BITS;
+  ptrdiff_t ofs = (*idx) % MI_COMMIT_MASK_FIELD_BITS;
+  size_t mask = 0;
+  // find first ones
+  while (i < MI_COMMIT_MASK_N) {
+    mask = cm->mask[i];
+    mask >>= ofs;
+    if (mask != 0) {
+      while ((mask&1) == 0) {
+        mask >>= 1;
+        ofs++;
+      }
+      break;
+    }
+    i++;
+    ofs = 0;
+  }
+  if (i >= MI_COMMIT_MASK_N) {
+    // not found
+    *idx = MI_COMMIT_MASK_BITS;
+    return 0;
+  }
+  else {
+    // found, count ones
+    ptrdiff_t count = 0;
+    *idx = (i*MI_COMMIT_MASK_FIELD_BITS) + ofs;
+    do {
+      mi_assert_internal(ofs < MI_COMMIT_MASK_FIELD_BITS && (mask&1) == 1);
+      do {
+        count++;
+        mask >>= 1;
+      } while ((mask&1) == 1);
+      if ((((*idx + count) % MI_COMMIT_MASK_FIELD_BITS) == 0)) {
+        i++;
+        if (i >= MI_COMMIT_MASK_N) break;
+        mask = cm->mask[i];
+        ofs = 0;
+      }
+    } while ((mask&1) == 1);
+    mi_assert_internal(count > 0);
+    return count;
+  }
+}
+
+#define mi_commit_mask_foreach(cm,idx,count) \
+  idx = 0; \
+  while ((count = mi_commit_mask_next_run(cm,&idx)) > 0) { 
+
+#define mi_commit_mask_foreach_end() \
+    idx += count; \
+  }
+
+
 /* --------------------------------------------------------------------------------
   Segment allocation
 
@@ -374,9 +479,11 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
 }
 
 static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, size_t size, mi_stats_t* stats) {    
+  mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
+
   // commit liberal, but decommit conservative
-  uint8_t* start;
-  size_t   full_size;
+  uint8_t* start = NULL;
+  size_t   full_size = 0;
   mi_commit_mask_t mask;
   mi_segment_commit_mask(segment, !commit/*conservative*/, p, size, &start, &full_size, &mask);
   if (mi_commit_mask_is_empty(&mask) || full_size==0) return true;
@@ -391,10 +498,14 @@ static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
   }
   else if (!commit && mi_commit_mask_any_set(&segment->commit_mask, &mask)) {
     mi_assert_internal((void*)start != (void*)segment);
+    //mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &mask));
+
     mi_commit_mask_t cmask;
     mi_commit_mask_create_intersect(&segment->commit_mask, &mask, &cmask);
     _mi_stat_increase(&_mi_stats_main.committed, full_size - mi_commit_mask_committed_size(&cmask, MI_SEGMENT_SIZE)); // adjust for overlap
-    if (segment->allow_decommit) { _mi_os_decommit(start, full_size, stats); } // ok if this fails
+    if (segment->allow_decommit) { 
+      _mi_os_decommit(start, full_size, stats); // ok if this fails
+    } 
     mi_commit_mask_clear(&segment->commit_mask, &mask);
   }
   // increase expiration of reusing part of the delayed decommit
@@ -403,7 +514,6 @@ static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
   }
   // always undo delayed decommits
   mi_commit_mask_clear(&segment->decommit_mask, &mask);   
-  mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
   return true;
 }
 
@@ -420,8 +530,8 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
   }
   else {
     // register for future decommit in the decommit mask
-    uint8_t* start;
-    size_t   full_size;
+    uint8_t* start = NULL;
+    size_t   full_size = 0;
     mi_commit_mask_t mask; 
     mi_segment_commit_mask(segment, true /*conservative*/, p, size, &start, &full_size, &mask);
     if (mi_commit_mask_is_empty(&mask) || full_size==0) return;
@@ -719,7 +829,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
 
   if (!commit_info_still_good) {
     segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
-    segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_pinned && !segment->mem_is_large);
+    segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_pinned && !segment->mem_is_large);    
     if (segment->allow_decommit) {
       segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
       segment->decommit_mask = decommit_mask;

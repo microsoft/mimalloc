@@ -693,37 +693,14 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
 
 
 static inline void mi_commit_mask_create_empty(mi_commit_mask_t* cm) {
-  memset(cm, 0, sizeof(*cm));
+  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
+    cm->mask[i] = 0;
+  }
 }
 
 static inline void mi_commit_mask_create_full(mi_commit_mask_t* cm) {
-  memset(cm, 0xFF, sizeof(*cm));
-}
-
-static inline void mi_commit_mask_create(ptrdiff_t bitidx, ptrdiff_t bitcount, mi_commit_mask_t* cm) {
-  mi_assert_internal(bitidx < MI_COMMIT_MASK_BITS);
-  mi_assert_internal((bitidx + bitcount) <= MI_COMMIT_MASK_BITS);
-  if (bitcount == MI_COMMIT_MASK_BITS) {
-    mi_assert_internal(bitidx==0);
-    mi_commit_mask_create_full(cm);
-  }
-  else if (bitcount == 0) {
-    mi_commit_mask_create_empty(cm);
-  }
-  else {
-    mi_commit_mask_create_empty(cm);
-    ptrdiff_t i   = bitidx / MI_COMMIT_MASK_FIELD_BITS;
-    ptrdiff_t ofs = bitidx % MI_COMMIT_MASK_FIELD_BITS;
-    while (bitcount > 0) {
-      mi_assert_internal(i < MI_COMMIT_MASK_N);
-      ptrdiff_t avail = MI_COMMIT_MASK_FIELD_BITS - ofs;
-      ptrdiff_t count = (bitcount > avail ? avail : bitcount);
-      size_t mask = (((size_t)1 << count) - 1) << ofs;
-      cm->mask[i] = mask;
-      bitcount -= count;
-      ofs = 0;
-      i++;
-    }    
+  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
+    cm->mask[i] = ~((size_t)0);
   }
 }
 
@@ -773,70 +750,9 @@ static inline void mi_commit_mask_set(mi_commit_mask_t* res, const mi_commit_mas
   }
 }
 
-static inline size_t mi_commit_mask_committed_size(const mi_commit_mask_t* cm, size_t total) {  
-  mi_assert_internal((total%MI_COMMIT_MASK_BITS)==0);
-  size_t count = 0;
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
-    size_t mask = cm->mask[i];
-    if (~mask == 0) {
-      count += MI_COMMIT_MASK_FIELD_BITS;
-    }
-    else {
-      for (; mask != 0; mask >>= 1) {  // todo: use popcount
-        if ((mask&1)!=0) count++;
-      }
-    }
-  }  
-  // we use total since for huge segments each commit bit may represent a larger size
-  return (total / MI_COMMIT_MASK_BITS)* count;
-}
-
-
-static inline ptrdiff_t mi_commit_mask_next_run(const mi_commit_mask_t* cm, ptrdiff_t* idx ) {
-  ptrdiff_t i = (*idx) / MI_COMMIT_MASK_FIELD_BITS;
-  ptrdiff_t ofs = (*idx) % MI_COMMIT_MASK_FIELD_BITS;
-  size_t mask = 0;
-  // find first ones
-  while (i < MI_COMMIT_MASK_N) {
-    mask = cm->mask[i];
-    mask >>= ofs;
-    if (mask != 0) {
-      while ((mask&1) == 0) {
-        mask >>= 1;
-        ofs++;
-      }
-      break;
-    }
-    i++;
-    ofs = 0;
-  }
-  if (i >= MI_COMMIT_MASK_N) {
-    // not found
-    *idx = MI_COMMIT_MASK_BITS;
-    return 0;
-  }
-  else {
-    // found, count ones
-    ptrdiff_t count = 0;
-    *idx = (i*MI_COMMIT_MASK_FIELD_BITS) + ofs;
-    mi_assert_internal(ofs < MI_COMMIT_MASK_FIELD_BITS && (mask&1) == 1);
-    do {
-      do {
-        count++;
-        mask >>= 1;
-      } while (mask != 0);
-      if ((((count + ofs) % MI_COMMIT_MASK_FIELD_BITS) == 0)) {
-        i++;
-        if (i >= MI_COMMIT_MASK_N) break;
-        mask = cm->mask[i];
-        if ((mask&1)==0) break;
-        ofs = 0;
-      }
-    } while (mask != 0);
-    mi_assert_internal(count > 0);
-    return count;
-  }
-}
+void      mi_commit_mask_create(ptrdiff_t bitidx, ptrdiff_t bitcount, mi_commit_mask_t* cm);
+size_t    mi_commit_mask_committed_size(const mi_commit_mask_t* cm, size_t total);
+ptrdiff_t mi_commit_mask_next_run(const mi_commit_mask_t* cm, ptrdiff_t* idx);
 
 #define mi_commit_mask_foreach(cm,idx,count) \
   idx = 0; \
@@ -847,25 +763,6 @@ static inline ptrdiff_t mi_commit_mask_next_run(const mi_commit_mask_t* cm, ptrd
   }
       
 
-#define xmi_commit_mask_foreach(mask,idx,count) \
-  idx = 0; \
-  while (mask != 0) {     \
-    /* count ones */      \
-    count = 0;            \
-    while ((mask&1)==1) { \
-      mask >>= 1;         \
-      count++;            \
-    }                     \
-    /* if found, do action */ \
-    if (count > 0) {
-
-#define xmi_commit_mask_foreach_end() \
-    } \
-    idx += count; \
-    /* shift out the zero */ \
-    mask >>= 1;   \
-    idx++;        \
-  }
 
 // -------------------------------------------------------------------
 // Fast "random" shuffle
