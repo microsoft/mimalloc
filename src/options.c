@@ -116,7 +116,7 @@ void _mi_options_init(void) {
   mi_max_warning_count = mi_option_get(mi_option_max_warnings);
 }
 
-long mi_option_get(mi_option_t option) {
+mi_decl_nodiscard long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
   mi_option_desc_t* desc = &options[option];
   mi_assert(desc->option == option);  // index should match the option
@@ -142,7 +142,7 @@ void mi_option_set_default(mi_option_t option, long value) {
   }
 }
 
-bool mi_option_is_enabled(mi_option_t option) {
+mi_decl_nodiscard bool mi_option_is_enabled(mi_option_t option) {
   return (mi_option_get(option) != 0);
 }
 
