@@ -425,7 +425,7 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
     else if (segment->decommit_expire <= now) {
       // previous decommit mask already expired
       // mi_segment_delayed_decommit(segment, true, stats);
-      segment->decommit_expire = now + 1;
+      segment->decommit_expire = now + 1; // wait a tiny bit longer in case there is a series of free's
     }
     else {
       // previous decommit mask is not yet expired
