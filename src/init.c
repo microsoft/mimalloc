@@ -332,6 +332,12 @@ bool _mi_is_main_thread(void) {
   return (_mi_heap_main.thread_id==0 || _mi_heap_main.thread_id == _mi_thread_id());
 }
 
+static _Atomic(uintptr_t) thread_count = ATOMIC_VAR_INIT(1);
+
+size_t  _mi_current_thread_count(void) {
+  return mi_atomic_load_relaxed(&thread_count);
+}
+
 // This is called from the `mi_malloc_generic`
 void mi_thread_init(void) mi_attr_noexcept
 {
@@ -344,6 +350,7 @@ void mi_thread_init(void) mi_attr_noexcept
   if (_mi_heap_init()) return;  // returns true if already initialized
 
   _mi_stat_increase(&_mi_stats_main.threads, 1);
+  mi_atomic_increment_relaxed(&thread_count);
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
@@ -352,6 +359,7 @@ void mi_thread_done(void) mi_attr_noexcept {
 }
 
 static void _mi_thread_done(mi_heap_t* heap) {
+  mi_atomic_decrement_relaxed(&thread_count);
   _mi_stat_decrease(&_mi_stats_main.threads, 1);
 
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local heaps...
