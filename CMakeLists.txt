@@ -48,6 +48,7 @@ set(mi_sources
 # Convenience: set default build type depending on the build directory
 # -----------------------------------------------------------------------------
 
+message(STATUS "")    
 if (NOT CMAKE_BUILD_TYPE)
   if ("${CMAKE_BINARY_DIR}" MATCHES ".*(D|d)ebug$" OR  MI_DEBUG_FULL)
     message(STATUS "No build type selected, default to: Debug")
@@ -199,7 +200,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
     list(APPEND mi_cflags -ftls-model=initial-exec)
   endif()
   if(MI_OVERRIDE)
-    list(APPEND -fno-builtin-malloc)
+    list(APPEND mi_cflags -fno-builtin-malloc)
   endif()
 endif()
 
@@ -263,13 +264,14 @@ endif()
 
 message(STATUS "")
 message(STATUS "Library base name: ${mi_basename}")
+message(STATUS "Version          : ${mi_version}")
 message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
 if(MI_USE_CXX)
   message(STATUS "C++ Compiler     : ${CMAKE_CXX_COMPILER}")
 else()
   message(STATUS "C Compiler       : ${CMAKE_C_COMPILER}")
 endif()
-message(STATUS "Version          : ${mi_version}")
+message(STATUS "Compiler flags   : ${mi_cflags}")
 message(STATUS "Build targets    : ${mi_build_targets}")
 message(STATUS "")
 
