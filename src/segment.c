@@ -560,7 +560,7 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
     else if (segment->decommit_expire <= now) {
       // previous decommit mask already expired
       // mi_segment_delayed_decommit(segment, true, stats);
-      segment->decommit_expire = now + 1;
+      segment->decommit_expire = now + 1; // wait a tiny bit longer in case there is a series of free's
     }
     else {
       // previous decommit mask is not yet expired
@@ -790,7 +790,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   const size_t segment_size = segment_slices * MI_SEGMENT_SLICE_SIZE;
 
   // Commit eagerly only if not the first N lazy segments (to reduce impact of many threads that allocate just a little)
-  const bool eager_delay = (_mi_current_thread_count() > 4 && tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
+  const bool eager_delay = (_mi_current_thread_count() > 2 && tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager = !eager_delay && mi_option_is_enabled(mi_option_eager_commit);
   bool commit = eager || (required > 0); 
   
