@@ -19,6 +19,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_CACHE_LINE          64
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
+#pragma warning(disable:26812)  // unscoped enum warning
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
@@ -696,72 +697,39 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
 // commit mask
 // -------------------------------------------------------------------
 
-
 static inline void mi_commit_mask_create_empty(mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
+  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     cm->mask[i] = 0;
   }
 }
 
 static inline void mi_commit_mask_create_full(mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
+  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     cm->mask[i] = ~((size_t)0);
   }
 }
 
 static inline bool mi_commit_mask_is_empty(const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
+  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     if (cm->mask[i] != 0) return false;
   }
   return true;
 }
 
 static inline bool mi_commit_mask_is_full(const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
+  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     if (cm->mask[i] != 0) return false;
   }
   return true;
 }
 
-static inline bool mi_commit_mask_all_set(const mi_commit_mask_t* commit, const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
-    if ((commit->mask[i] & cm->mask[i]) != cm->mask[i]) return false;
-  }
-  return true;
-}
-
-static inline bool mi_commit_mask_any_set(const mi_commit_mask_t* commit, const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
-    if ((commit->mask[i] & cm->mask[i]) != 0) return true;
-  }
-  return false;
-}
-
-static inline void mi_commit_mask_create_intersect(const mi_commit_mask_t* commit, const mi_commit_mask_t* cm, mi_commit_mask_t* res) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
-    res->mask[i] = (commit->mask[i] & cm->mask[i]);
-  }
-}
-
-static inline void mi_commit_mask_clear(mi_commit_mask_t* res, const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
-    res->mask[i] &= ~(cm->mask[i]);
-  }
-}
-  
-static inline void mi_commit_mask_set(mi_commit_mask_t* res, const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_N; i++) {
-    res->mask[i] |= cm->mask[i];
-  }
-}
-
-void      mi_commit_mask_create(ptrdiff_t bitidx, ptrdiff_t bitcount, mi_commit_mask_t* cm);
-size_t    mi_commit_mask_committed_size(const mi_commit_mask_t* cm, size_t total);
-ptrdiff_t mi_commit_mask_next_run(const mi_commit_mask_t* cm, ptrdiff_t* idx);
+// defined in `segment.c`:
+size_t    _mi_commit_mask_committed_size(const mi_commit_mask_t* cm, size_t total);
+ptrdiff_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, ptrdiff_t* idx);
 
 #define mi_commit_mask_foreach(cm,idx,count) \
   idx = 0; \
-  while ((count = mi_commit_mask_next_run(cm,&idx)) > 0) { 
+  while ((count = _mi_commit_mask_next_run(cm,&idx)) > 0) { 
         
 #define mi_commit_mask_foreach_end() \
     idx += count; \

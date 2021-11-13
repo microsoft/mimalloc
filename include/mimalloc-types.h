@@ -287,17 +287,26 @@ typedef enum mi_segment_kind_e {
   MI_SEGMENT_HUGE,   // > MI_LARGE_SIZE_MAX segment with just one huge page inside.
 } mi_segment_kind_t;
 
-#define MI_COMMIT_SIZE             (4*64*1024)   
-#define MI_COMMIT_MASK_BITS        (MI_SEGMENT_SIZE / MI_COMMIT_SIZE)  
-#define MI_COMMIT_MASK_FIELD_BITS  MI_SIZE_BITS
-#define MI_COMMIT_MASK_N           (MI_COMMIT_MASK_BITS / MI_COMMIT_MASK_FIELD_BITS)
+// ------------------------------------------------------
+// A segment holds a commit mask where a bit is set if
+// the corresponding MI_COMMIT_SIZE area is committed.
+// The MI_COMMIT_SIZE must be a multiple of the slice
+// size. We define it as equal so we can decommit on a
+// slice level which helps with (real) memory fragmentation
+// over time.
+// ------------------------------------------------------
 
-#if (MI_COMMIT_MASK_BITS != (MI_COMMIT_MASK_N * MI_COMMIT_MASK_FIELD_BITS))
+#define MI_COMMIT_SIZE              (MI_SEGMENT_SLICE_SIZE)   
+#define MI_COMMIT_MASK_BITS         (MI_SEGMENT_SIZE / MI_COMMIT_SIZE)  
+#define MI_COMMIT_MASK_FIELD_BITS    MI_SIZE_BITS
+#define MI_COMMIT_MASK_FIELD_COUNT  (MI_COMMIT_MASK_BITS / MI_COMMIT_MASK_FIELD_BITS)
+
+#if (MI_COMMIT_MASK_BITS != (MI_COMMIT_MASK_FIELD_COUNT * MI_COMMIT_MASK_FIELD_BITS))
 #error "the segment size must be exactly divisible by the (commit size * size_t bits)"
 #endif
 
 typedef struct mi_commit_mask_s {
-  size_t mask[MI_COMMIT_MASK_N];
+  size_t mask[MI_COMMIT_MASK_FIELD_COUNT];
 } mi_commit_mask_t;
 
 typedef mi_page_t  mi_slice_t;
