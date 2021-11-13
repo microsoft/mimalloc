@@ -332,11 +332,11 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
 
 static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DWORD flags, bool large_only, bool allow_large, bool* is_large) {
   mi_assert_internal(!(large_only && !allow_large));
-  static _Atomic(uintptr_t) large_page_try_ok; // = 0;
+  static _Atomic(size_t) large_page_try_ok; // = 0;
   void* p = NULL;
   if ((large_only || use_large_os_page(size, try_alignment))
       && allow_large && (flags&MEM_COMMIT)!=0 && (flags&MEM_RESERVE)!=0) {
-    uintptr_t try_ok = mi_atomic_load_acquire(&large_page_try_ok);
+    size_t try_ok = mi_atomic_load_acquire(&large_page_try_ok);
     if (!large_only && try_ok > 0) {
       // if a large page allocation fails, it seems the calls to VirtualAlloc get very expensive.
       // therefore, once a large page allocation failed, we don't try again for `large_page_try_ok` times.
@@ -477,8 +477,8 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   #endif
   // huge page allocation
   if ((large_only || use_large_os_page(size, try_alignment)) && allow_large) {
-    static _Atomic(uintptr_t) large_page_try_ok; // = 0;
-    uintptr_t try_ok = mi_atomic_load_acquire(&large_page_try_ok);
+    static _Atomic(size_t) large_page_try_ok; // = 0;
+    size_t try_ok = mi_atomic_load_acquire(&large_page_try_ok);
     if (!large_only && try_ok > 0) {
       // If the OS is not configured for large OS pages, or the user does not have
       // enough permission, the `mmap` will always fail (but it might also fail for other reasons).
@@ -524,7 +524,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
         #endif
         if (large_only) return p;
         if (p == NULL) {
-          mi_atomic_store_release(&large_page_try_ok, (uintptr_t)8);  // on error, don't try again for the next N allocations
+          mi_atomic_store_release(&large_page_try_ok, (size_t)8);  // on error, don't try again for the next N allocations
         }
       }
     }
@@ -930,13 +930,13 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   if (p != start) return false;
 #else
 #if defined(MADV_FREE)
-  static _Atomic(uintptr_t) advice = ATOMIC_VAR_INIT(MADV_FREE);
+  static _Atomic(size_t) advice = ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
   int err;
   while ((err = madvise(start, csize, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
   if (err != 0 && errno == EINVAL && oadvice == MADV_FREE) {  
     // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
-    mi_atomic_store_release(&advice, (uintptr_t)MADV_DONTNEED);
+    mi_atomic_store_release(&advice, (size_t)MADV_DONTNEED);
     err = madvise(start, csize, MADV_DONTNEED);
   }
 #elif defined(__wasi__)
@@ -1118,7 +1118,7 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node) 
   void* p = mi_unix_mmap(addr, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
   if (p == NULL) return NULL;
   if (numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) { // at most 64 nodes
-    uintptr_t numa_mask = (1UL << numa_node);
+    unsigned long numa_mask = (1UL << numa_node);
     // TODO: does `mbind` work correctly for huge OS pages? should we
     // use `set_mempolicy` before calling mmap instead?
     // see: <https://lkml.org/lkml/2017/2/9/875>

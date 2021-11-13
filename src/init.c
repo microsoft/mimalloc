@@ -359,7 +359,7 @@ bool _mi_is_main_thread(void) {
   return (_mi_heap_main.thread_id==0 || _mi_heap_main.thread_id == _mi_thread_id());
 }
 
-static _Atomic(uintptr_t) thread_count = ATOMIC_VAR_INIT(1);
+static _Atomic(size_t) thread_count = ATOMIC_VAR_INIT(1);
 
 size_t  _mi_current_thread_count(void) {
   return mi_atomic_load_relaxed(&thread_count);

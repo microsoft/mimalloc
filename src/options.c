@@ -19,8 +19,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 
-static uintptr_t mi_max_error_count   = 16; // stop outputting errors after this
-static uintptr_t mi_max_warning_count = 16; // stop outputting warnings after this
+static size_t mi_max_error_count   = 16; // stop outputting errors after this
+static size_t mi_max_warning_count = 16; // stop outputting warnings after this
 
 static void mi_add_stderr_output(void);
 
@@ -179,10 +179,10 @@ static void mi_out_stderr(const char* msg, void* arg) {
 // an output function is registered it is called immediately with
 // the output up to that point.
 #ifndef MI_MAX_DELAY_OUTPUT
-#define MI_MAX_DELAY_OUTPUT ((uintptr_t)(32*1024))
+#define MI_MAX_DELAY_OUTPUT ((size_t)(32*1024))
 #endif
 static char out_buf[MI_MAX_DELAY_OUTPUT+1];
-static _Atomic(uintptr_t) out_len;
+static _Atomic(size_t) out_len;
 
 static void mi_out_buf(const char* msg, void* arg) {
   MI_UNUSED(arg);
@@ -191,7 +191,7 @@ static void mi_out_buf(const char* msg, void* arg) {
   size_t n = strlen(msg);
   if (n==0) return;
   // claim space
-  uintptr_t start = mi_atomic_add_acq_rel(&out_len, n);
+  size_t start = mi_atomic_add_acq_rel(&out_len, n);
   if (start >= MI_MAX_DELAY_OUTPUT) return;
   // check bound
   if (start+n >= MI_MAX_DELAY_OUTPUT) {
@@ -254,8 +254,8 @@ static void mi_add_stderr_output() {
 // --------------------------------------------------------
 // Messages, all end up calling `_mi_fputs`.
 // --------------------------------------------------------
-static _Atomic(uintptr_t) error_count;   // = 0;  // when >= max_error_count stop emitting errors
-static _Atomic(uintptr_t) warning_count; // = 0;  // when >= max_warning_count stop emitting warnings
+static _Atomic(size_t) error_count;   // = 0;  // when >= max_error_count stop emitting errors
+static _Atomic(size_t) warning_count; // = 0;  // when >= max_warning_count stop emitting warnings
 
 // When overriding malloc, we may recurse into mi_vfprintf if an allocation
 // inside the C runtime causes another message.

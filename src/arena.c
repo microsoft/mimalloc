@@ -62,7 +62,7 @@ typedef struct mi_arena_s {
   bool     is_zero_init;                  // is the arena zero initialized?
   bool     allow_decommit;                // is decommit allowed? if true, is_large should be false and blocks_committed != NULL
   bool     is_large;                      // large- or huge OS pages (always committed)
-  _Atomic(uintptr_t) search_idx;          // optimization to start the search for free blocks
+  _Atomic(size_t) search_idx;             // optimization to start the search for free blocks
   mi_bitmap_field_t* blocks_dirty;        // are the blocks potentially non-zero?
   mi_bitmap_field_t* blocks_committed;    // are the blocks committed? (can be NULL for memory that cannot be decommitted)
   mi_bitmap_field_t  blocks_inuse[1];     // in-place bitmap of in-use blocks (of size `field_count`)
@@ -71,7 +71,7 @@ typedef struct mi_arena_s {
 
 // The available arenas
 static mi_decl_cache_align _Atomic(mi_arena_t*) mi_arenas[MI_MAX_ARENAS];
-static mi_decl_cache_align _Atomic(uintptr_t)   mi_arena_count; // = 0
+static mi_decl_cache_align _Atomic(size_t)      mi_arena_count; // = 0
 
 
 /* -----------------------------------------------------------
@@ -286,7 +286,7 @@ static bool mi_arena_add(mi_arena_t* arena) {
   mi_assert_internal((uintptr_t)mi_atomic_load_ptr_relaxed(uint8_t,&arena->start) % MI_SEGMENT_ALIGN == 0);
   mi_assert_internal(arena->block_count > 0);
 
-  uintptr_t i = mi_atomic_increment_acq_rel(&mi_arena_count);
+  size_t i = mi_atomic_increment_acq_rel(&mi_arena_count);
   if (i >= MI_MAX_ARENAS) {
     mi_atomic_decrement_acq_rel(&mi_arena_count);
     return false;

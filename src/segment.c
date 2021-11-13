@@ -922,13 +922,13 @@ static mi_decl_cache_align _Atomic(mi_segment_t*)       abandoned_visited; // = 
 static mi_decl_cache_align _Atomic(mi_tagged_segment_t) abandoned;         // = NULL
 
 // Maintain these for debug purposes (these counts may be a bit off)
-static mi_decl_cache_align _Atomic(uintptr_t)           abandoned_count; 
-static mi_decl_cache_align _Atomic(uintptr_t)           abandoned_visited_count;
+static mi_decl_cache_align _Atomic(size_t)           abandoned_count; 
+static mi_decl_cache_align _Atomic(size_t)           abandoned_visited_count;
 
 // We also maintain a count of current readers of the abandoned list
 // in order to prevent resetting/decommitting segment memory if it might
 // still be read.
-static mi_decl_cache_align _Atomic(uintptr_t)           abandoned_readers; // = 0
+static mi_decl_cache_align _Atomic(size_t)           abandoned_readers; // = 0
 
 // Push on the visited list
 static void mi_abandoned_visited_push(mi_segment_t* segment) {
@@ -957,7 +957,7 @@ static bool mi_abandoned_visited_revisit(void)
   mi_tagged_segment_t afirst;
   mi_tagged_segment_t ts = mi_atomic_load_relaxed(&abandoned);
   if (mi_tagged_segment_ptr(ts)==NULL) {
-    uintptr_t count = mi_atomic_load_relaxed(&abandoned_visited_count);
+    size_t count = mi_atomic_load_relaxed(&abandoned_visited_count);
     afirst = mi_tagged_segment(first, ts);
     if (mi_atomic_cas_strong_acq_rel(&abandoned, &ts, afirst)) {
       mi_atomic_add_relaxed(&abandoned_count, count);
@@ -976,7 +976,7 @@ static bool mi_abandoned_visited_revisit(void)
   // and atomically prepend to the abandoned list
   // (no need to increase the readers as we don't access the abandoned segments)
   mi_tagged_segment_t anext = mi_atomic_load_relaxed(&abandoned);
-  uintptr_t count;
+  size_t count;
   do {
     count = mi_atomic_load_relaxed(&abandoned_visited_count);
     mi_atomic_store_ptr_release(mi_segment_t, &last->abandoned_next, mi_tagged_segment_ptr(anext));
@@ -1005,7 +1005,7 @@ static void mi_abandoned_push(mi_segment_t* segment) {
 // Wait until there are no more pending reads on segments that used to be in the abandoned list
 // called for example from `arena.c` before decommitting
 void _mi_abandoned_await_readers(void) {
-  uintptr_t n;
+  size_t n;
   do {
     n = mi_atomic_load_acquire(&abandoned_readers);
     if (n != 0) mi_atomic_yield();
@@ -1352,8 +1352,8 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
 
   // claim it and free
   mi_heap_t* heap = mi_heap_get_default(); // issue #221; don't use the internal get_default_heap as we need to ensure the thread is initialized.
-  // paranoia: if this is the last reference, the cas should always succeed
-  uintptr_t expected_tid = 0;
+  // paranoia: if this it the last reference, the cas should always succeed
+  size_t expected_tid = 0;
   if (mi_atomic_cas_strong_acq_rel(&segment->thread_id, &expected_tid, heap->thread_id)) {
     mi_block_set_next(page, block, page->free);
     page->free = block;
