@@ -307,9 +307,9 @@ typedef enum mi_segment_kind_e {
   MI_SEGMENT_HUGE,   // > MI_LARGE_SIZE_MAX segment with just one huge page inside.
 } mi_segment_kind_t;
 
-#define MI_COMMIT_SIZE    (MI_SEGMENT_SIZE/MI_INTPTR_BITS)
+#define MI_COMMIT_SIZE    (MI_SEGMENT_SIZE/MI_SIZE_BITS)
 
-#if (((1 << MI_SEGMENT_SHIFT)/MI_COMMIT_SIZE) > 8*MI_INTPTR_SIZE)
+#if (((1 << MI_SEGMENT_SHIFT)/MI_COMMIT_SIZE) > MI_SIZE_BITS)
 #error "not enough commit bits to cover the segment size"
 #endif
 
@@ -317,7 +317,7 @@ typedef mi_page_t  mi_slice_t;
 
 typedef int64_t    mi_msecs_t;
 
-typedef uintptr_t  mi_commit_mask_t;
+typedef size_t     mi_commit_mask_t;
 
 // Segments are large allocated memory blocks (8mb on 64 bit) from
 // the OS. Inside segments we allocated fixed size _pages_ that

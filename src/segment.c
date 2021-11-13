@@ -336,9 +336,9 @@ static mi_commit_mask_t mi_segment_commit_mask(mi_segment_t* segment, bool conse
   if (size == 0 || size > MI_SEGMENT_SIZE) return 0;
   if (p >= (uint8_t*)segment + mi_segment_size(segment)) return 0;
 
-  uintptr_t diff = (p - (uint8_t*)segment);
-  uintptr_t start;
-  uintptr_t end;
+  size_t diff = (p - (uint8_t*)segment);
+  size_t start;
+  size_t end;
   if (conservative) {
     start = _mi_align_up(diff, MI_COMMIT_SIZE);
     end   = _mi_align_down(diff + size, MI_COMMIT_SIZE);
@@ -353,14 +353,14 @@ static mi_commit_mask_t mi_segment_commit_mask(mi_segment_t* segment, bool conse
   *full_size = (end > start ? end - start : 0);
   if (*full_size == 0) return 0;
 
-  uintptr_t bitidx = start / MI_COMMIT_SIZE;
-  mi_assert_internal(bitidx < (MI_INTPTR_SIZE*8));
+  size_t bitidx = start / MI_COMMIT_SIZE;
+  mi_assert_internal(bitidx < MI_COMMIT_MASK_BITS);
   
-  uintptr_t bitcount = *full_size / MI_COMMIT_SIZE; // can be 0
+  size_t bitcount = *full_size / MI_COMMIT_SIZE; // can be 0
   if (bitidx + bitcount > MI_INTPTR_SIZE*8) {
     _mi_warning_message("commit mask overflow: %zu %zu %zu %zu 0x%p %zu\n", bitidx, bitcount, start, end, p, size);
   }
-  mi_assert_internal((bitidx + bitcount) <= (MI_INTPTR_SIZE*8));
+  mi_assert_internal((bitidx + bitcount) <= MI_COMMIT_MASK_BITS);
 
   return mi_commit_mask_create(bitidx, bitcount);
 }
@@ -443,8 +443,8 @@ static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_st
   segment->decommit_expire = 0;
   segment->decommit_mask = mi_commit_mask_empty();
 
-  uintptr_t idx;
-  uintptr_t count;
+  size_t idx;
+  size_t count;
   mi_commit_mask_foreach(mask, idx, count) {
     // if found, decommit that sequence
     if (count > 0) {
