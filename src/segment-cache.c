@@ -118,7 +118,7 @@ static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, vo
 
 static mi_decl_noinline void mi_segment_cache_purge(mi_os_tld_t* tld)
 {
-  UNUSED(tld);
+  MI_UNUSED(tld);
   mi_msecs_t now = _mi_clock_now();
   size_t idx = (_mi_random_shuffle((uintptr_t)now) % MI_CACHE_MAX);            // random start
   size_t purged = 0;

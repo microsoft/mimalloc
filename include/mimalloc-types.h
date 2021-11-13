@@ -17,7 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif 
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
-// due to SSE registers for example. This must be at least `MI_INTPTR_SIZE`
+// due to SSE registers for example. This must be at least `sizeof(void*)`
 #ifndef MI_MAX_ALIGN_SIZE
 #define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 #endif
@@ -67,6 +67,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ENCODE_FREELIST  1
 #endif
 
+
 // ------------------------------------------------------
 // Platform specific values
 // ------------------------------------------------------
@@ -83,20 +84,43 @@ terms of the MIT license. A copy of the license can be found in the file
 // or otherwise one might define an intptr_t type that is larger than a pointer...
 // ------------------------------------------------------
 
-#if INTPTR_MAX == 9223372036854775807LL
+#if INTPTR_MAX > INT64_MAX
+# define MI_INTPTR_SHIFT (4)  // assume 128-bit  (as on arm CHERI for example)
+#elif INTPTR_MAX == INT64_MAX
 # define MI_INTPTR_SHIFT (3)
-#elif INTPTR_MAX == 2147483647LL
+#elif INTPTR_MAX == INT32_MAX
 # define MI_INTPTR_SHIFT (2)
 #else
-#error platform must be 32 or 64 bits
+#error platform pointers must be 32, 64, or 128 bits
+#endif
+
+#if SIZE_MAX == UINT64_MAX
+# define MI_SIZE_SHIFT (3)
+typedef int64_t  mi_ssize_t;
+#elif SIZE_MAX == UINT32_MAX
+# define MI_SIZE_SHIFT (2)
+typedef int32_t  mi_ssize_t;
+#else
+#error platform objects must be 32 or 64 bits
+#endif
+
+#if (SIZE_MAX/2) > LONG_MAX
+# define MI_ZU(x)  x##ULL
+# define MI_ZI(x)  x##LL
+#else
+# define MI_ZU(x)  x##UL
+# define MI_ZI(x)  x##L
 #endif
 
 #define MI_INTPTR_SIZE  (1<<MI_INTPTR_SHIFT)
 #define MI_INTPTR_BITS  (MI_INTPTR_SIZE*8)
 
-#define KiB     ((size_t)1024)
-#define MiB     (KiB*KiB)
-#define GiB     (MiB*KiB)
+#define MI_SIZE_SIZE  (1<<MI_SIZE_SHIFT)
+#define MI_SIZE_BITS  (MI_SIZE_SIZE*8)
+
+#define MI_KiB     (MI_ZU(1024))
+#define MI_MiB     (MI_KiB*MI_KiB)
+#define MI_GiB     (MI_MiB*MI_KiB)
 
 
 // ------------------------------------------------------
@@ -113,14 +137,14 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 // Derived constants
-#define MI_SEGMENT_SIZE                   (1ULL<<MI_SEGMENT_SHIFT)
+#define MI_SEGMENT_SIZE                   (MI_ZU(1)<<MI_SEGMENT_SHIFT)
 #define MI_SEGMENT_ALIGN                  MI_SEGMENT_SIZE
 #define MI_SEGMENT_MASK                   (MI_SEGMENT_SIZE - 1)
-#define MI_SEGMENT_SLICE_SIZE             (1ULL<< MI_SEGMENT_SLICE_SHIFT)
+#define MI_SEGMENT_SLICE_SIZE             (MI_ZU(1)<< MI_SEGMENT_SLICE_SHIFT)
 #define MI_SLICES_PER_SEGMENT             (MI_SEGMENT_SIZE / MI_SEGMENT_SLICE_SIZE) // 128
 
-#define MI_SMALL_PAGE_SIZE                (1ULL<<MI_SMALL_PAGE_SHIFT)
-#define MI_MEDIUM_PAGE_SIZE               (1ULL<<MI_MEDIUM_PAGE_SHIFT)
+#define MI_SMALL_PAGE_SIZE                (MI_ZU(1)<<MI_SMALL_PAGE_SHIFT)
+#define MI_MEDIUM_PAGE_SIZE               (MI_ZU(1)<<MI_MEDIUM_PAGE_SHIFT)
 
 #define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/4)   // 8KiB on 64-bit
 
@@ -150,9 +174,17 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 
+
+// ------------------------------------------------------
+// Mimalloc pages contain allocated blocks
+// ------------------------------------------------------
+
 // The free lists use encoded next fields
 // (Only actually encodes when MI_ENCODED_FREELIST is defined.)
-typedef uintptr_t mi_encoded_t;
+typedef uintptr_t  mi_encoded_t;
+
+// thread id's
+typedef size_t     mi_threadid_t;
 
 // free lists contain blocks
 typedef struct mi_block_s {
@@ -316,7 +348,7 @@ typedef struct mi_segment_s {
 
   // layout like this to optimize access in `mi_free`
   mi_segment_kind_t kind;
-  _Atomic(uintptr_t) thread_id;          // unique id of the thread owning this segment
+  _Atomic(mi_threadid_t) thread_id;      // unique id of the thread owning this segment
   size_t            slice_entries;       // entries in the `slices` array, at most `MI_SLICES_PER_SEGMENT`
   mi_slice_t        slices[MI_SLICES_PER_SEGMENT];
 } mi_segment_t;
@@ -377,7 +409,7 @@ struct mi_heap_s {
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
   mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
   _Atomic(mi_block_t*)  thread_delayed_free;
-  uintptr_t             thread_id;                           // thread this heap belongs too
+  mi_threadid_t         thread_id;                           // thread this heap belongs too
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   uintptr_t             keys[2];                             // two random keys used to encode the `thread_delayed_free` list
   mi_random_ctx_t       random;                              // random number context used for secure allocation

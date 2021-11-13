@@ -43,43 +43,43 @@ extern malloc_zone_t* malloc_default_purgeable_zone(void) __attribute__((weak_im
 ------------------------------------------------------ */
 
 static size_t zone_size(malloc_zone_t* zone, const void* p) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   //if (!mi_is_in_heap_region(p)){ return 0; } // not our pointer, bail out
   return mi_usable_size(p);
 }
 
 static void* zone_malloc(malloc_zone_t* zone, size_t size) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   return mi_malloc(size);
 }
 
 static void* zone_calloc(malloc_zone_t* zone, size_t count, size_t size) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   return mi_calloc(count, size);
 }
 
 static void* zone_valloc(malloc_zone_t* zone, size_t size) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   return mi_malloc_aligned(size, _mi_os_page_size());
 }
 
 static void zone_free(malloc_zone_t* zone, void* p) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   mi_free(p);
 }
 
 static void* zone_realloc(malloc_zone_t* zone, void* p, size_t newsize) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   return mi_realloc(p, newsize);
 }
 
 static void* zone_memalign(malloc_zone_t* zone, size_t alignment, size_t size) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   return mi_malloc_aligned(size,alignment);
 }
 
 static void zone_destroy(malloc_zone_t* zone) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   // todo: ignore for now?
 }
 
@@ -100,18 +100,18 @@ static void zone_batch_free(malloc_zone_t* zone, void** ps, unsigned count) {
 }
 
 static size_t zone_pressure_relief(malloc_zone_t* zone, size_t size) {
-  UNUSED(zone); UNUSED(size);
+  MI_UNUSED(zone); MI_UNUSED(size);
   mi_collect(false);
   return 0;
 }
 
 static void zone_free_definite_size(malloc_zone_t* zone, void* p, size_t size) {
-  UNUSED(size);
+  MI_UNUSED(size);
   zone_free(zone,p);
 }
 
 static boolean_t zone_claimed_address(malloc_zone_t* zone, void* p) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   return mi_is_in_heap_region(p);
 }
 
@@ -126,43 +126,43 @@ static kern_return_t intro_enumerator(task_t task, void* p,
                             vm_range_recorder_t recorder)
 {
   // todo: enumerate all memory
-  UNUSED(task); UNUSED(p); UNUSED(type_mask); UNUSED(zone_address);
-  UNUSED(reader); UNUSED(recorder);
+  MI_UNUSED(task); MI_UNUSED(p); MI_UNUSED(type_mask); MI_UNUSED(zone_address);
+  MI_UNUSED(reader); MI_UNUSED(recorder);
   return KERN_SUCCESS;
 }
 
 static size_t intro_good_size(malloc_zone_t* zone, size_t size) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   return mi_good_size(size);
 }
 
 static boolean_t intro_check(malloc_zone_t* zone) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   return true;
 }
 
 static void intro_print(malloc_zone_t* zone, boolean_t verbose) {
-  UNUSED(zone); UNUSED(verbose);
+  MI_UNUSED(zone); MI_UNUSED(verbose);
   mi_stats_print(NULL);
 }
 
 static void intro_log(malloc_zone_t* zone, void* p) {
-  UNUSED(zone); UNUSED(p);
+  MI_UNUSED(zone); MI_UNUSED(p);
   // todo?
 }
 
 static void intro_force_lock(malloc_zone_t* zone) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   // todo?
 }
 
 static void intro_force_unlock(malloc_zone_t* zone) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   // todo?
 }
 
 static void intro_statistics(malloc_zone_t* zone, malloc_statistics_t* stats) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   // todo...
   stats->blocks_in_use = 0;
   stats->size_in_use = 0;
@@ -171,7 +171,7 @@ static void intro_statistics(malloc_zone_t* zone, malloc_statistics_t* stats) {
 }
 
 static boolean_t intro_zone_locked(malloc_zone_t* zone) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   return false;
 }
 
@@ -261,7 +261,7 @@ mi_decl_externc void _malloc_fork_child(void);
 
 
 static malloc_zone_t* mi_malloc_create_zone(vm_size_t size, unsigned flags) {
-  UNUSED(size); UNUSED(flags);
+  MI_UNUSED(size); MI_UNUSED(flags);
   return mi_get_default_zone();
 }
 
@@ -274,12 +274,12 @@ static malloc_zone_t* mi_malloc_default_purgeable_zone(void) {
 }
 
 static void mi_malloc_destroy_zone(malloc_zone_t* zone) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   // nothing.
 }
 
 static kern_return_t mi_malloc_get_all_zones (task_t task, memory_reader_t mr, vm_address_t** addresses, unsigned* count) {
-  UNUSED(task); UNUSED(mr);
+  MI_UNUSED(task); MI_UNUSED(mr);
   if (addresses != NULL) *addresses = NULL;
   if (count != NULL) *count = 0;
   return KERN_SUCCESS;
@@ -290,11 +290,11 @@ static const char* mi_malloc_get_zone_name(malloc_zone_t* zone) {
 }
 
 static void mi_malloc_set_zone_name(malloc_zone_t* zone, const char* name) {  
-  UNUSED(zone); UNUSED(name);
+  MI_UNUSED(zone); MI_UNUSED(name);
 }
 
 static int mi_malloc_jumpstart(uintptr_t cookie) {
-  UNUSED(cookie);
+  MI_UNUSED(cookie);
   return 1; // or 0 for no error?
 }
 
@@ -309,37 +309,37 @@ static void mi__malloc_fork_child(void) {
 }
 
 static void mi_malloc_printf(const char* fmt, ...) {
-  UNUSED(fmt);
+  MI_UNUSED(fmt);
 }
 
 static bool zone_check(malloc_zone_t* zone) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
   return true;
 }
 
 static malloc_zone_t* zone_from_ptr(const void* p) {
-  UNUSED(p);
+  MI_UNUSED(p);
   return mi_get_default_zone();
 }
 
 static void zone_log(malloc_zone_t* zone, void* p) {
-  UNUSED(zone); UNUSED(p);
+  MI_UNUSED(zone); MI_UNUSED(p);
 }
 
 static void zone_print(malloc_zone_t* zone, bool b) {
-  UNUSED(zone); UNUSED(b);
+  MI_UNUSED(zone); MI_UNUSED(b);
 }
 
 static void zone_print_ptr_info(void* p) {
-  UNUSED(p);
+  MI_UNUSED(p);
 }
 
 static void zone_register(malloc_zone_t* zone) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
 }
 
 static void zone_unregister(malloc_zone_t* zone) {
-  UNUSED(zone);
+  MI_UNUSED(zone);
 }
 
 // use interposing so `DYLD_INSERT_LIBRARIES` works without `DYLD_FORCE_FLAT_NAMESPACE=1`
