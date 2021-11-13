@@ -497,6 +497,10 @@ static inline size_t mi_segment_size(mi_segment_t* segment) {
   return segment->segment_slices * MI_SEGMENT_SLICE_SIZE;
 }
 
+static inline uint8_t* mi_segment_end(mi_segment_t* segment) {
+  return (uint8_t*)segment + mi_segment_size(segment);
+}
+
 // Thread free access
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
   return (mi_block_t*)(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free) & ~3);

@@ -448,7 +448,8 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
   mi_assert_internal(_mi_ptr_segment(p) == segment);
   mi_commit_mask_create_empty(cm);
   if (size == 0 || size > MI_SEGMENT_SIZE) return;
-  if (p >= (uint8_t*)segment + mi_segment_size(segment)) return;
+  const ptrdiff_t segsize = (ptrdiff_t)mi_segment_size(segment);
+  if (p >= (uint8_t*)segment + segsize) return;
 
   ptrdiff_t diff = (p - (uint8_t*)segment);
   ptrdiff_t start;
@@ -460,6 +461,10 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
   else {
     start = _mi_aligni_down(diff, MI_COMMIT_SIZE);
     end   = _mi_aligni_up(diff + size, MI_COMMIT_SIZE);
+  }
+  mi_assert_internal(end <= segsize);
+  if (end > segsize) {
+    end = segsize;
   }
 
   mi_assert_internal(start % MI_COMMIT_SIZE==0 && end % MI_COMMIT_SIZE == 0);
@@ -478,9 +483,14 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
   mi_commit_mask_create(bitidx, bitcount, cm);
 }
 
+#define MI_COMMIT_SIZE_BATCH  MiB
+
 static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, size_t size, mi_stats_t* stats) {    
   mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
 
+  //if (commit && size < MI_COMMIT_SIZE_BATCH && p + MI_COMMIT_SIZE_BATCH <= mi_segment_end(segment)) {
+  //  size = MI_COMMIT_SIZE_BATCH;
+  // }
   // commit liberal, but decommit conservative
   uint8_t* start = NULL;
   size_t   full_size = 0;
@@ -541,6 +551,21 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
     mi_commit_mask_create_intersect(&segment->commit_mask, &mask, &cmask);  // only decommit what is committed; span_free may try to decommit more
     mi_commit_mask_set(&segment->decommit_mask, &cmask);
     segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
+    mi_msecs_t now = _mi_clock_now();
+    if (segment->decommit_expire == 0) {
+      // no previous decommits, initialize now
+      mi_assert_internal(mi_commit_mask_is_empty(&segment->decommit_mask));
+      segment->decommit_expire = now + mi_option_get(mi_option_reset_delay);
+    }
+    else if (segment->decommit_expire <= now) {
+      // previous decommit mask already expired
+      // mi_segment_delayed_decommit(segment, true, stats);
+      segment->decommit_expire = now + 1;
+    }
+    else {
+      // previous decommit mask is not yet expired
+      // segment->decommit_expire++;
+    }
   }  
 }
 
