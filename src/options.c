@@ -19,8 +19,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 
-static uintptr_t mi_max_error_count   = 16; // stop outputting errors after this
-static uintptr_t mi_max_warning_count = 16; // stop outputting warnings after this
+static size_t mi_max_error_count   = 16; // stop outputting errors after this
+static size_t mi_max_warning_count = 16; // stop outputting warnings after this
 
 static void mi_add_stderr_output(void);
 
@@ -106,7 +106,7 @@ void _mi_options_init(void) {
   mi_add_stderr_output(); // now it safe to use stderr for output
   for(int i = 0; i < _mi_option_last; i++ ) {
     mi_option_t option = (mi_option_t)i;
-    long l = mi_option_get(option); UNUSED(l); // initialize
+    long l = mi_option_get(option); MI_UNUSED(l); // initialize
     if (option != mi_option_verbose) {
       mi_option_desc_t* desc = &options[option];
       _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
@@ -116,7 +116,7 @@ void _mi_options_init(void) {
   mi_max_warning_count = mi_option_get(mi_option_max_warnings);
 }
 
-long mi_option_get(mi_option_t option) {
+mi_decl_nodiscard long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
   mi_option_desc_t* desc = &options[option];
   mi_assert(desc->option == option);  // index should match the option
@@ -142,7 +142,7 @@ void mi_option_set_default(mi_option_t option, long value) {
   }
 }
 
-bool mi_option_is_enabled(mi_option_t option) {
+mi_decl_nodiscard bool mi_option_is_enabled(mi_option_t option) {
   return (mi_option_get(option) != 0);
 }
 
@@ -164,7 +164,7 @@ void mi_option_disable(mi_option_t option) {
 
 
 static void mi_out_stderr(const char* msg, void* arg) {
-  UNUSED(arg);
+  MI_UNUSED(arg);
   #ifdef _WIN32
   // on windows with redirection, the C runtime cannot handle locale dependent output
   // after the main thread closes so we use direct console output.
@@ -179,19 +179,19 @@ static void mi_out_stderr(const char* msg, void* arg) {
 // an output function is registered it is called immediately with
 // the output up to that point.
 #ifndef MI_MAX_DELAY_OUTPUT
-#define MI_MAX_DELAY_OUTPUT ((uintptr_t)(32*1024))
+#define MI_MAX_DELAY_OUTPUT ((size_t)(32*1024))
 #endif
 static char out_buf[MI_MAX_DELAY_OUTPUT+1];
-static _Atomic(uintptr_t) out_len;
+static _Atomic(size_t) out_len;
 
 static void mi_out_buf(const char* msg, void* arg) {
-  UNUSED(arg);
+  MI_UNUSED(arg);
   if (msg==NULL) return;
   if (mi_atomic_load_relaxed(&out_len)>=MI_MAX_DELAY_OUTPUT) return;
   size_t n = strlen(msg);
   if (n==0) return;
   // claim space
-  uintptr_t start = mi_atomic_add_acq_rel(&out_len, n);
+  size_t start = mi_atomic_add_acq_rel(&out_len, n);
   if (start >= MI_MAX_DELAY_OUTPUT) return;
   // check bound
   if (start+n >= MI_MAX_DELAY_OUTPUT) {
@@ -254,8 +254,8 @@ static void mi_add_stderr_output() {
 // --------------------------------------------------------
 // Messages, all end up calling `_mi_fputs`.
 // --------------------------------------------------------
-static _Atomic(uintptr_t) error_count;   // = 0;  // when >= max_error_count stop emitting errors
-static _Atomic(uintptr_t) warning_count; // = 0;  // when >= max_warning_count stop emitting warnings
+static _Atomic(size_t) error_count;   // = 0;  // when >= max_error_count stop emitting errors
+static _Atomic(size_t) warning_count; // = 0;  // when >= max_warning_count stop emitting warnings
 
 // When overriding malloc, we may recurse into mi_vfprintf if an allocation
 // inside the C runtime causes another message.
@@ -356,7 +356,7 @@ static mi_error_fun* volatile  mi_error_handler; // = NULL
 static _Atomic(void*) mi_error_arg;     // = NULL
 
 static void mi_error_default(int err) {
-  UNUSED(err);
+  MI_UNUSED(err);
 #if (MI_DEBUG>0) 
   if (err==EFAULT) {
     #ifdef _MSC_VER
@@ -414,9 +414,9 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
 
 #ifdef MI_NO_GETENV
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
-  UNUSED(name);
-  UNUSED(result);
-  UNUSED(result_size);
+  MI_UNUSED(name);
+  MI_UNUSED(result);
+  MI_UNUSED(result_size);
   return false;
 }
 #else
@@ -524,9 +524,9 @@ static void mi_option_init(mi_option_desc_t* desc) {
       if (desc->option == mi_option_reserve_os_memory) {
         // this option is interpreted in KiB to prevent overflow of `long`
         if (*end == 'K') { end++; }
-        else if (*end == 'M') { value *= KiB; end++; }
-        else if (*end == 'G') { value *= MiB; end++; }
-        else { value = (value + KiB - 1) / KiB; }
+        else if (*end == 'M') { value *= MI_KiB; end++; }
+        else if (*end == 'G') { value *= MI_MiB; end++; }
+        else { value = (value + MI_KiB - 1) / MI_KiB; }
         if (*end == 'B') { end++; }
       }
       if (*end == 0) {

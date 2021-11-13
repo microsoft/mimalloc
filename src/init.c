@@ -359,7 +359,7 @@ bool _mi_is_main_thread(void) {
   return (_mi_heap_main.thread_id==0 || _mi_heap_main.thread_id == _mi_thread_id());
 }
 
-static _Atomic(uintptr_t) thread_count = ATOMIC_VAR_INIT(1);
+static _Atomic(size_t) thread_count = ATOMIC_VAR_INIT(1);
 
 size_t  _mi_current_thread_count(void) {
   return mi_atomic_load_relaxed(&thread_count);
@@ -477,7 +477,7 @@ static void mi_process_load(void) {
   mi_heap_main_init();
   #if defined(MI_TLS_RECURSE_GUARD)
   volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
-  UNUSED(dummy);
+  MI_UNUSED(dummy);
   #endif
   os_preloading = false;
   atexit(&mi_process_done);
@@ -536,7 +536,7 @@ void mi_process_init(void) mi_attr_noexcept {
   if (mi_option_is_enabled(mi_option_reserve_os_memory)) {
     long ksize = mi_option_get(mi_option_reserve_os_memory);
     if (ksize > 0) {
-      mi_reserve_os_memory((size_t)ksize*KiB, true /* commit? */, true /* allow large pages? */);
+      mi_reserve_os_memory((size_t)ksize*MI_KiB, true /* commit? */, true /* allow large pages? */);
     }
   }
 }
@@ -575,8 +575,8 @@ static void mi_process_done(void) {
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
   // Windows DLL: easy to hook into process_init and thread_done
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
-    UNUSED(reserved);
-    UNUSED(inst);
+    MI_UNUSED(reserved);
+    MI_UNUSED(inst);
     if (reason==DLL_PROCESS_ATTACH) {
       mi_process_load();
     }
