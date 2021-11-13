@@ -100,9 +100,9 @@ static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, vo
   else {
     // todo: one call to decommit the whole at once?
     mi_assert_internal((total%MI_COMMIT_MASK_BITS)==0);
-    size_t    part = total/MI_COMMIT_MASK_BITS;
-    ptrdiff_t idx;
-    ptrdiff_t count;    
+    size_t part = total/MI_COMMIT_MASK_BITS;
+    size_t idx;
+    size_t count;    
     mi_commit_mask_foreach(cmask, idx, count) {
       void*  start = (uint8_t*)p + (idx*part);
       size_t size = count*part;

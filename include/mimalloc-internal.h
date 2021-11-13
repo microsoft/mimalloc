@@ -698,34 +698,34 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
 // -------------------------------------------------------------------
 
 static inline void mi_commit_mask_create_empty(mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     cm->mask[i] = 0;
   }
 }
 
 static inline void mi_commit_mask_create_full(mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     cm->mask[i] = ~((size_t)0);
   }
 }
 
 static inline bool mi_commit_mask_is_empty(const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     if (cm->mask[i] != 0) return false;
   }
   return true;
 }
 
 static inline bool mi_commit_mask_is_full(const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     if (cm->mask[i] != 0) return false;
   }
   return true;
 }
 
 // defined in `segment.c`:
-size_t    _mi_commit_mask_committed_size(const mi_commit_mask_t* cm, size_t total);
-ptrdiff_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, ptrdiff_t* idx);
+size_t _mi_commit_mask_committed_size(const mi_commit_mask_t* cm, size_t total);
+size_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, size_t* idx);
 
 #define mi_commit_mask_foreach(cm,idx,count) \
   idx = 0; \

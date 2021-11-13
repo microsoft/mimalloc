@@ -21,38 +21,38 @@ static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_st
 // -------------------------------------------------------------------
 
 static bool mi_commit_mask_all_set(const mi_commit_mask_t* commit, const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     if ((commit->mask[i] & cm->mask[i]) != cm->mask[i]) return false;
   }
   return true;
 }
 
 static bool mi_commit_mask_any_set(const mi_commit_mask_t* commit, const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     if ((commit->mask[i] & cm->mask[i]) != 0) return true;
   }
   return false;
 }
 
 static void mi_commit_mask_create_intersect(const mi_commit_mask_t* commit, const mi_commit_mask_t* cm, mi_commit_mask_t* res) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     res->mask[i] = (commit->mask[i] & cm->mask[i]);
   }
 }
 
 static void mi_commit_mask_clear(mi_commit_mask_t* res, const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     res->mask[i] &= ~(cm->mask[i]);
   }
 }
 
 static void mi_commit_mask_set(mi_commit_mask_t* res, const mi_commit_mask_t* cm) {
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     res->mask[i] |= cm->mask[i];
   }
 }
 
-static void mi_commit_mask_create(ptrdiff_t bitidx, ptrdiff_t bitcount, mi_commit_mask_t* cm) {
+static void mi_commit_mask_create(size_t bitidx, size_t bitcount, mi_commit_mask_t* cm) {
   mi_assert_internal(bitidx < MI_COMMIT_MASK_BITS);
   mi_assert_internal((bitidx + bitcount) <= MI_COMMIT_MASK_BITS);
   if (bitcount == MI_COMMIT_MASK_BITS) {
@@ -64,12 +64,12 @@ static void mi_commit_mask_create(ptrdiff_t bitidx, ptrdiff_t bitcount, mi_commi
   }
   else {
     mi_commit_mask_create_empty(cm);
-    ptrdiff_t i = bitidx / MI_COMMIT_MASK_FIELD_BITS;
-    ptrdiff_t ofs = bitidx % MI_COMMIT_MASK_FIELD_BITS;
+    size_t i = bitidx / MI_COMMIT_MASK_FIELD_BITS;
+    size_t ofs = bitidx % MI_COMMIT_MASK_FIELD_BITS;
     while (bitcount > 0) {
       mi_assert_internal(i < MI_COMMIT_MASK_FIELD_COUNT);
-      ptrdiff_t avail = MI_COMMIT_MASK_FIELD_BITS - ofs;
-      ptrdiff_t count = (bitcount > avail ? avail : bitcount);
+      size_t avail = MI_COMMIT_MASK_FIELD_BITS - ofs;
+      size_t count = (bitcount > avail ? avail : bitcount);
       size_t mask = (count >= MI_COMMIT_MASK_FIELD_BITS ? ~((size_t)0) : (((size_t)1 << count) - 1) << ofs);
       cm->mask[i] = mask;
       bitcount -= count;
@@ -82,7 +82,7 @@ static void mi_commit_mask_create(ptrdiff_t bitidx, ptrdiff_t bitcount, mi_commi
 size_t _mi_commit_mask_committed_size(const mi_commit_mask_t* cm, size_t total) {
   mi_assert_internal((total%MI_COMMIT_MASK_BITS)==0);
   size_t count = 0;
-  for (ptrdiff_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
     size_t mask = cm->mask[i];
     if (~mask == 0) {
       count += MI_COMMIT_MASK_FIELD_BITS;
@@ -98,9 +98,9 @@ size_t _mi_commit_mask_committed_size(const mi_commit_mask_t* cm, size_t total) 
 }
 
 
-ptrdiff_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, ptrdiff_t* idx) {
-  ptrdiff_t i = (*idx) / MI_COMMIT_MASK_FIELD_BITS;
-  ptrdiff_t ofs = (*idx) % MI_COMMIT_MASK_FIELD_BITS;
+size_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, size_t* idx) {
+  size_t i = (*idx) / MI_COMMIT_MASK_FIELD_BITS;
+  size_t ofs = (*idx) % MI_COMMIT_MASK_FIELD_BITS;
   size_t mask = 0;
   // find first ones
   while (i < MI_COMMIT_MASK_FIELD_COUNT) {
@@ -123,7 +123,7 @@ ptrdiff_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, ptrdiff_t* idx) {
   }
   else {
     // found, count ones
-    ptrdiff_t count = 0;
+    size_t count = 0;
     *idx = (i*MI_COMMIT_MASK_FIELD_BITS) + ofs;
     do {
       mi_assert_internal(ofs < MI_COMMIT_MASK_FIELD_BITS && (mask&1) == 1);
@@ -602,8 +602,8 @@ static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_st
   segment->decommit_expire = 0;
   mi_commit_mask_create_empty(&segment->decommit_mask);
 
-  ptrdiff_t idx;
-  ptrdiff_t count;
+  size_t idx;
+  size_t count;
   mi_commit_mask_foreach(&mask, idx, count) {
     // if found, decommit that sequence
     if (count > 0) {
