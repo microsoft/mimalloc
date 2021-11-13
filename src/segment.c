@@ -152,6 +152,7 @@ size_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, size_t* idx) {
   be reclaimed by still running threads, much like work-stealing.
 -------------------------------------------------------------------------------- */
 
+
 /* -----------------------------------------------------------
    Slices
 ----------------------------------------------------------- */
@@ -493,7 +494,7 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
   
   size_t bitcount = *full_size / MI_COMMIT_SIZE; // can be 0
   if (bitidx + bitcount > MI_COMMIT_MASK_BITS) {
-    _mi_warning_message("commit mask overflow: %zu %zu %zu %zu 0x%p %zu\n", bitidx, bitcount, start, end, p, size);
+    _mi_warning_message("commit mask overflow: idx=%zu count=%zu start=%zx end=%zx p=0x%p size=%zu fullsize=%zu\n", bitidx, bitcount, start, end, p, size, *full_size);
   }
   mi_assert_internal((bitidx + bitcount) <= MI_COMMIT_MASK_BITS);
   mi_commit_mask_create(bitidx, bitcount, cm);
