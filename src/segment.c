@@ -696,7 +696,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
 }
 
 static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
-  UNUSED(force);
+  MI_UNUSED(force);
   mi_assert(segment != NULL);
   // note: don't reset pages even on abandon as the whole segment is freed? (and ready for reuse)
   bool force_reset = (force && mi_option_is_enabled(mi_option_abandoned_page_reset));

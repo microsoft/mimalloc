@@ -187,11 +187,11 @@ bool        _mi_page_is_valid(mi_page_t* page);
 /* -----------------------------------------------------------
   Inlined definitions
 ----------------------------------------------------------- */
-#define UNUSED(x)     (void)(x)
+#define MI_UNUSED(x)     (void)(x)
 #if (MI_DEBUG>0)
-#define UNUSED_RELEASE(x)
+#define MI_UNUSED_RELEASE(x)
 #else
-#define UNUSED_RELEASE(x)  UNUSED(x)
+#define MI_UNUSED_RELEASE(x)  MI_UNUSED(x)
 #endif
 
 #define MI_INIT4(x)   x(),x(),x(),x()
@@ -413,11 +413,11 @@ static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
 }
 
 // used internally
-static inline uintptr_t _mi_segment_page_idx_of(const mi_segment_t* segment, const void* p) {
+static inline size_t _mi_segment_page_idx_of(const mi_segment_t* segment, const void* p) {
   // if (segment->page_size > MI_SEGMENT_SIZE) return &segment->pages[0];  // huge pages
   ptrdiff_t diff = (uint8_t*)p - (uint8_t*)segment;
   mi_assert_internal(diff >= 0 && (size_t)diff < MI_SEGMENT_SIZE);
-  uintptr_t idx = (uintptr_t)diff >> segment->page_shift;
+  size_t idx = (size_t)diff >> segment->page_shift;
   mi_assert_internal(idx < segment->capacity);
   mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM || idx == 0);
   return idx;
@@ -425,7 +425,7 @@ static inline uintptr_t _mi_segment_page_idx_of(const mi_segment_t* segment, con
 
 // Get the page containing the pointer
 static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const void* p) {
-  uintptr_t idx = _mi_segment_page_idx_of(segment, p);
+  size_t idx = _mi_segment_page_idx_of(segment, p);
   return &((mi_segment_t*)segment)->pages[idx];
 }
 
@@ -583,8 +583,8 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
   mi_segment_t* segmentp = _mi_ptr_segment(p);
   mi_segment_t* segmentq = _mi_ptr_segment(q);
   if (segmentp != segmentq) return false;
-  uintptr_t idxp = _mi_segment_page_idx_of(segmentp, p);
-  uintptr_t idxq = _mi_segment_page_idx_of(segmentq, q);
+  size_t idxp = _mi_segment_page_idx_of(segmentp, p);
+  size_t idxq = _mi_segment_page_idx_of(segmentq, q);
   return (idxp == idxq);
 }
 
@@ -611,7 +611,7 @@ static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* bl
   #ifdef MI_ENCODE_FREELIST
   return (mi_block_t*)mi_ptr_decode(null, block->next, keys);
   #else
-  UNUSED(keys); UNUSED(null);
+  MI_UNUSED(keys); MI_UNUSED(null);
   return (mi_block_t*)block->next;
   #endif
 }
@@ -620,7 +620,7 @@ static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const
   #ifdef MI_ENCODE_FREELIST
   block->next = mi_ptr_encode(null, next, keys);
   #else
-  UNUSED(keys); UNUSED(null);
+  MI_UNUSED(keys); MI_UNUSED(null);
   block->next = (mi_encoded_t)next;
   #endif
 }
@@ -636,7 +636,7 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   }
   return next;
   #else
-  UNUSED(page);
+  MI_UNUSED(page);
   return mi_block_nextx(page,block,NULL);
   #endif
 }
@@ -645,7 +645,7 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
   #ifdef MI_ENCODE_FREELIST
   mi_block_set_nextx(page,block,next, page->keys);
   #else
-  UNUSED(page);
+  MI_UNUSED(page);
   mi_block_set_nextx(page,block,next,NULL);
   #endif
 }
@@ -700,7 +700,7 @@ static inline size_t _mi_os_numa_node_count(void) {
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
+static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
   // Windows: works on Intel and ARM in both 32- and 64-bit
   return (uintptr_t)NtCurrentTeb();
 }
@@ -721,11 +721,11 @@ static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
 #elif defined(__x86_64__)
   __asm__("movq %%fs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86_64 Linux, BSD uses FS
 #elif defined(__arm__)
-  void** tcb; UNUSED(ofs);
+  void** tcb; MI_UNUSED(ofs);
   __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
   res = tcb[slot];
 #elif defined(__aarch64__)
-  void** tcb; UNUSED(ofs);
+  void** tcb; MI_UNUSED(ofs);
   #if defined(__APPLE__) // M1, issue #343
   __asm__ volatile ("mrs %0, tpidrro_el0" : "=r" (tcb));
   tcb = (void**)((uintptr_t)tcb & ~0x07UL);  // clear lower 3 bits
@@ -749,11 +749,11 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
 #elif defined(__x86_64__)
   __asm__("movq %1,%%fs:%1" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 Linux, BSD uses FS
 #elif defined(__arm__)
-  void** tcb; UNUSED(ofs);
+  void** tcb; MI_UNUSED(ofs);
   __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
   tcb[slot] = value;
 #elif defined(__aarch64__)
-  void** tcb; UNUSED(ofs);
+  void** tcb; MI_UNUSED(ofs);
   #if defined(__APPLE__) // M1, issue #343
   __asm__ volatile ("mrs %0, tpidrro_el0" : "=r" (tcb));
   tcb = (void**)((uintptr_t)tcb & ~0x07UL);  // clear lower 3 bits
@@ -764,7 +764,7 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
 #endif
 }
 
-static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
+static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 #if defined(__BIONIC__) && (defined(__arm__) || defined(__aarch64__))
   // on Android, slot 1 is the thread ID (pointer to pthread internal struct)
   return (uintptr_t)mi_tls_slot(1);
@@ -775,7 +775,7 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
 }
 #else
 // otherwise use standard C
-static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
+static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
   return (uintptr_t)&_mi_heap_default;
 }
 #endif

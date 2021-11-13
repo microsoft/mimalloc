@@ -103,7 +103,7 @@ void _mi_options_init(void) {
   mi_add_stderr_output(); // now it safe to use stderr for output
   for(int i = 0; i < _mi_option_last; i++ ) {
     mi_option_t option = (mi_option_t)i;
-    long l = mi_option_get(option); UNUSED(l); // initialize
+    long l = mi_option_get(option); MI_UNUSED(l); // initialize
     if (option != mi_option_verbose) {
       mi_option_desc_t* desc = &options[option];
       _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
@@ -161,7 +161,7 @@ void mi_option_disable(mi_option_t option) {
 
 
 static void mi_out_stderr(const char* msg, void* arg) {
-  UNUSED(arg);
+  MI_UNUSED(arg);
   #ifdef _WIN32
   // on windows with redirection, the C runtime cannot handle locale dependent output
   // after the main thread closes so we use direct console output.
@@ -182,7 +182,7 @@ static char out_buf[MI_MAX_DELAY_OUTPUT+1];
 static _Atomic(uintptr_t) out_len;
 
 static void mi_out_buf(const char* msg, void* arg) {
-  UNUSED(arg);
+  MI_UNUSED(arg);
   if (msg==NULL) return;
   if (mi_atomic_load_relaxed(&out_len)>=MI_MAX_DELAY_OUTPUT) return;
   size_t n = strlen(msg);
@@ -353,7 +353,7 @@ static mi_error_fun* volatile  mi_error_handler; // = NULL
 static _Atomic(void*) mi_error_arg;     // = NULL
 
 static void mi_error_default(int err) {
-  UNUSED(err);
+  MI_UNUSED(err);
 #if (MI_DEBUG>0) 
   if (err==EFAULT) {
     #ifdef _MSC_VER
@@ -411,9 +411,9 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
 
 #ifdef MI_NO_GETENV
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
-  UNUSED(name);
-  UNUSED(result);
-  UNUSED(result_size);
+  MI_UNUSED(name);
+  MI_UNUSED(result);
+  MI_UNUSED(result_size);
   return false;
 }
 #else
@@ -521,9 +521,9 @@ static void mi_option_init(mi_option_desc_t* desc) {
       if (desc->option == mi_option_reserve_os_memory) {
         // this option is interpreted in KiB to prevent overflow of `long`
         if (*end == 'K') { end++; }
-        else if (*end == 'M') { value *= KiB; end++; }
-        else if (*end == 'G') { value *= MiB; end++; }
-        else { value = (value + KiB - 1) / KiB; }
+        else if (*end == 'M') { value *= MI_KiB; end++; }
+        else if (*end == 'G') { value *= MI_MiB; end++; }
+        else { value = (value + MI_KiB - 1) / MI_KiB; }
         if (*end == 'B') { end++; }
       }
       if (*end == 0) {

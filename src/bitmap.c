@@ -122,7 +122,7 @@ bool mi_bitmap_unclaim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, m
   const size_t idx = mi_bitmap_index_field(bitmap_idx);
   const size_t bitidx = mi_bitmap_index_bit_in_field(bitmap_idx);
   const uintptr_t mask = mi_bitmap_mask_(count, bitidx);
-  mi_assert_internal(bitmap_fields > idx); UNUSED(bitmap_fields);
+  mi_assert_internal(bitmap_fields > idx); MI_UNUSED(bitmap_fields);
   // mi_assert_internal((bitmap[idx] & mask) == mask);
   uintptr_t prev = mi_atomic_and_acq_rel(&bitmap[idx], ~mask);
   return ((prev & mask) == mask);
@@ -135,7 +135,7 @@ bool _mi_bitmap_claim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi
   const size_t idx = mi_bitmap_index_field(bitmap_idx);
   const size_t bitidx = mi_bitmap_index_bit_in_field(bitmap_idx);
   const uintptr_t mask = mi_bitmap_mask_(count, bitidx);
-  mi_assert_internal(bitmap_fields > idx); UNUSED(bitmap_fields);
+  mi_assert_internal(bitmap_fields > idx); MI_UNUSED(bitmap_fields);
   //mi_assert_internal(any_zero != NULL || (bitmap[idx] & mask) == 0);
   uintptr_t prev = mi_atomic_or_acq_rel(&bitmap[idx], mask);
   if (any_zero != NULL) *any_zero = ((prev & mask) != mask);
@@ -147,7 +147,7 @@ static bool mi_bitmap_is_claimedx(mi_bitmap_t bitmap, size_t bitmap_fields, size
   const size_t idx = mi_bitmap_index_field(bitmap_idx);
   const size_t bitidx = mi_bitmap_index_bit_in_field(bitmap_idx);
   const uintptr_t mask = mi_bitmap_mask_(count, bitidx);
-  mi_assert_internal(bitmap_fields > idx); UNUSED(bitmap_fields);
+  mi_assert_internal(bitmap_fields > idx); MI_UNUSED(bitmap_fields);
   uintptr_t field = mi_atomic_load_relaxed(&bitmap[idx]);
   if (any_ones != NULL) *any_ones = ((field & mask) != 0);
   return ((field & mask) == mask);
@@ -281,7 +281,7 @@ bool _mi_bitmap_try_find_from_claim_across(mi_bitmap_t bitmap, const size_t bitm
 
 // Helper for masks across fields; returns the mid count, post_mask may be 0
 static size_t mi_bitmap_mask_across(mi_bitmap_index_t bitmap_idx, size_t bitmap_fields, size_t count, uintptr_t* pre_mask, uintptr_t* mid_mask, uintptr_t* post_mask) {
-  UNUSED_RELEASE(bitmap_fields);
+  MI_UNUSED_RELEASE(bitmap_fields);
   const size_t bitidx = mi_bitmap_index_bit_in_field(bitmap_idx);
   if (mi_likely(bitidx + count <= MI_BITMAP_FIELD_BITS)) {
     *pre_mask = mi_bitmap_mask_(count, bitidx);

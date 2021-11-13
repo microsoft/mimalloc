@@ -30,7 +30,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Index a block in a page
 static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_start, size_t block_size, size_t i) {
-  UNUSED(page);
+  MI_UNUSED(page);
   mi_assert_internal(page != NULL);
   mi_assert_internal(i <= page->reserved);
   return (mi_block_t*)((uint8_t*)page_start + (i * block_size));
@@ -459,7 +459,7 @@ void _mi_heap_collect_retired(mi_heap_t* heap, bool force) {
 #define MI_MIN_SLICES       (2)
 
 static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* const page, const size_t bsize, const size_t extend, mi_stats_t* const stats) {
-  UNUSED(stats);
+  MI_UNUSED(stats);
   #if (MI_SECURE<=2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
@@ -517,7 +517,7 @@ static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* co
 
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend, mi_stats_t* const stats)
 {
-  UNUSED(stats);
+  MI_UNUSED(stats);
   #if (MI_SECURE <= 2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);

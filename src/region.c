@@ -57,9 +57,9 @@ void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, boo
 
 // Constants
 #if (MI_INTPTR_SIZE==8)
-#define MI_HEAP_REGION_MAX_SIZE    (256 * GiB)  // 64KiB for the region map 
+#define MI_HEAP_REGION_MAX_SIZE    (256 * MI_GiB)  // 64KiB for the region map 
 #elif (MI_INTPTR_SIZE==4)
-#define MI_HEAP_REGION_MAX_SIZE    (3 * GiB)    // ~ KiB for the region map
+#define MI_HEAP_REGION_MAX_SIZE    (3 * MI_GiB)    // ~ KiB for the region map
 #else
 #error "define the maximum heap space allowed for regions on this platform"
 #endif
@@ -190,7 +190,7 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   if (idx >= MI_REGION_MAX) {
     mi_atomic_decrement_acq_rel(&regions_count);
     _mi_arena_free(start, MI_REGION_SIZE, arena_memid, region_commit, tld->stats);
-    _mi_warning_message("maximum regions used: %zu GiB (perhaps recompile with a larger setting for MI_HEAP_REGION_MAX_SIZE)", _mi_divide_up(MI_HEAP_REGION_MAX_SIZE, GiB));
+    _mi_warning_message("maximum regions used: %zu GiB (perhaps recompile with a larger setting for MI_HEAP_REGION_MAX_SIZE)", _mi_divide_up(MI_HEAP_REGION_MAX_SIZE, MI_GiB));
     return false;
   }
 
@@ -441,7 +441,7 @@ void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_re
 
     // and unclaim
     bool all_unclaimed = mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
-    mi_assert_internal(all_unclaimed); UNUSED(all_unclaimed);
+    mi_assert_internal(all_unclaimed); MI_UNUSED(all_unclaimed);
   }
 }
 
