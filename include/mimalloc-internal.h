@@ -702,21 +702,6 @@ static inline mi_commit_mask_t mi_commit_mask_full(void) {
   return ~mi_commit_mask_empty();
 }
 
-static inline mi_commit_mask_t mi_commit_mask_create(uintptr_t bitidx, uintptr_t bitcount) {
-  mi_assert_internal(bitidx < MI_COMMIT_MASK_BITS);
-  mi_assert_internal((bitidx + bitcount) <= MI_COMMIT_MASK_BITS);
-  if (bitcount == MI_COMMIT_MASK_BITS) {
-    mi_assert_internal(bitidx==0);
-    return mi_commit_mask_full();
-  }
-  else if (bitcount == 0) {
-    return mi_commit_mask_empty();
-  }
-  else {
-    return (((uintptr_t)1 << bitcount) - 1) << bitidx;
-  }
-}
-
 static inline bool mi_commit_mask_is_empty(mi_commit_mask_t mask) {
   return (mask == 0);
 }
@@ -725,42 +710,7 @@ static inline bool mi_commit_mask_is_full(mi_commit_mask_t mask) {
   return ((~mask) == 0);
 }
 
-static inline bool mi_commit_mask_all_set(mi_commit_mask_t commit, mi_commit_mask_t mask) {
-  return ((commit & mask) == mask);
-}
-
-static inline bool mi_commit_mask_any_set(mi_commit_mask_t commit, mi_commit_mask_t mask) {
-  return ((commit & mask) != 0);
-}
-
-mi_decl_nodiscard static inline mi_commit_mask_t mi_commit_mask_intersect(mi_commit_mask_t commit, mi_commit_mask_t mask) {
-  return (commit & mask);
-}
-
-static inline void mi_commit_mask_clear(mi_commit_mask_t* commit, mi_commit_mask_t mask) {
-  *commit = (*commit) & (~mask);
-}
-
-static inline void mi_commit_mask_set(mi_commit_mask_t* commit, mi_commit_mask_t mask) {
-  *commit = (*commit) | mask;
-}
-
-static inline size_t mi_commit_mask_committed_size(mi_commit_mask_t mask, size_t total) {
-  if (mi_commit_mask_is_full(mask)) {
-    return total;
-  }
-  else if (mi_commit_mask_is_empty(mask)) {
-    return 0;
-  }
-  else {
-    size_t count = 0;
-    for (; mask != 0; mask >>= 1) {  // todo: use popcount
-      if ((mask&1)!=0) count++;
-    }
-    return (total/MI_COMMIT_MASK_BITS)*count;
-  }
-}
-
+size_t _mi_commit_mask_committed_size(mi_commit_mask_t mask, size_t total);
 
 #define mi_commit_mask_foreach(mask,idx,count) \
   idx = 0; \
@@ -781,6 +731,7 @@ static inline size_t mi_commit_mask_committed_size(mi_commit_mask_t mask, size_t
     mask >>= 1;   \
     idx++;        \
   }
+
 
 // -------------------------------------------------------------------
 // Fast "random" shuffle

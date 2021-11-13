@@ -23,6 +23,64 @@ static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_st
   be reclaimed by still running threads, much like work-stealing.
 -------------------------------------------------------------------------------- */
 
+// -------------------------------------------------------------------
+// commit mask
+// -------------------------------------------------------------------
+
+static mi_commit_mask_t mi_commit_mask_create(uintptr_t bitidx, uintptr_t bitcount) {
+  mi_assert_internal(bitidx < MI_COMMIT_MASK_BITS);
+  mi_assert_internal((bitidx + bitcount) <= MI_COMMIT_MASK_BITS);
+  if (bitcount == MI_COMMIT_MASK_BITS) {
+    mi_assert_internal(bitidx==0);
+    return mi_commit_mask_full();
+  }
+  else if (bitcount == 0) {
+    return mi_commit_mask_empty();
+  }
+  else {
+    return (((uintptr_t)1 << bitcount) - 1) << bitidx;
+  }
+}
+
+
+static bool mi_commit_mask_all_set(mi_commit_mask_t commit, mi_commit_mask_t mask) {
+  return ((commit & mask) == mask);
+}
+
+static bool mi_commit_mask_any_set(mi_commit_mask_t commit, mi_commit_mask_t mask) {
+  return ((commit & mask) != 0);
+}
+
+mi_decl_nodiscard static mi_commit_mask_t mi_commit_mask_intersect(mi_commit_mask_t commit, mi_commit_mask_t mask) {
+  return (commit & mask);
+}
+
+static void mi_commit_mask_clear(mi_commit_mask_t* commit, mi_commit_mask_t mask) {
+  *commit = (*commit) & (~mask);
+}
+
+static void mi_commit_mask_set(mi_commit_mask_t* commit, mi_commit_mask_t mask) {
+  *commit = (*commit) | mask;
+}
+
+size_t _mi_commit_mask_committed_size(mi_commit_mask_t mask, size_t total) {
+  if (mi_commit_mask_is_full(mask)) {
+    return total;
+  }
+  else if (mi_commit_mask_is_empty(mask)) {
+    return 0;
+  }
+  else {
+    size_t count = 0;
+    for (; mask != 0; mask >>= 1) {  // todo: use popcount
+      if ((mask&1)!=0) count++;
+    }
+    return (total/MI_COMMIT_MASK_BITS)*count;
+  }
+}
+
+
+
 /* -----------------------------------------------------------
    Slices
 ----------------------------------------------------------- */
@@ -257,7 +315,7 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
   const size_t size = mi_segment_size(segment);
   if (size != MI_SEGMENT_SIZE || !_mi_segment_cache_push(segment, size, segment->memid, segment->commit_mask, segment->decommit_mask, segment->mem_is_large, segment->mem_is_pinned, tld->os)) {
-    const size_t csize = mi_commit_mask_committed_size(segment->commit_mask, size);
+    const size_t csize = _mi_commit_mask_committed_size(segment->commit_mask, size);
     if (csize > 0 && !segment->mem_is_pinned) _mi_stat_decrease(&_mi_stats_main.committed, csize);
     _mi_abandoned_await_readers();  // wait until safe to free
     _mi_arena_free(segment, mi_segment_size(segment), segment->memid, segment->mem_is_pinned /* pretend not committed to not double count decommits */, tld->os);
@@ -358,7 +416,7 @@ static mi_commit_mask_t mi_segment_commit_mask(mi_segment_t* segment, bool conse
   
   size_t bitcount = *full_size / MI_COMMIT_SIZE; // can be 0
   if (bitidx + bitcount > MI_INTPTR_SIZE*8) {
-    _mi_warning_message("commit mask overflow: %zu %zu %zu %zu 0x%p %zu\n", bitidx, bitcount, start, end, p, size);
+    _mi_warning_message("commit mask overflow: idx=%zu count=%zu start=%zx end=%zx p=0x%p size=%zu fullsize=%zu\n", bitidx, bitcount, start, end, p, size, *full_size);
   }
   mi_assert_internal((bitidx + bitcount) <= MI_COMMIT_MASK_BITS);
 
@@ -375,14 +433,14 @@ static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
   if (commit && !mi_commit_mask_all_set(segment->commit_mask, mask)) {
     bool is_zero = false;
     mi_commit_mask_t cmask = mi_commit_mask_intersect(segment->commit_mask, mask);
-    _mi_stat_decrease(&_mi_stats_main.committed, mi_commit_mask_committed_size(cmask, MI_SEGMENT_SIZE)); // adjust for overlap
+    _mi_stat_decrease(&_mi_stats_main.committed, _mi_commit_mask_committed_size(cmask, MI_SEGMENT_SIZE)); // adjust for overlap
     if (!_mi_os_commit(start,full_size,&is_zero,stats)) return false;    
     mi_commit_mask_set(&segment->commit_mask,mask);     
   }
   else if (!commit && mi_commit_mask_any_set(segment->commit_mask,mask)) {
     mi_assert_internal((void*)start != (void*)segment);
     mi_commit_mask_t cmask = mi_commit_mask_intersect(segment->commit_mask, mask);
-    _mi_stat_increase(&_mi_stats_main.committed, full_size - mi_commit_mask_committed_size(cmask, MI_SEGMENT_SIZE)); // adjust for overlap
+    _mi_stat_increase(&_mi_stats_main.committed, full_size - _mi_commit_mask_committed_size(cmask, MI_SEGMENT_SIZE)); // adjust for overlap
     if (segment->allow_decommit) { _mi_os_decommit(start, full_size, stats); } // ok if this fails
     mi_commit_mask_clear(&segment->commit_mask, mask);
   }
