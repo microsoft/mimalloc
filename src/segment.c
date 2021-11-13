@@ -460,31 +460,23 @@ void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
    Span management
 ----------------------------------------------------------- */
 
-static ptrdiff_t _mi_aligni_up(ptrdiff_t sz, size_t alignment) {
-  return (ptrdiff_t)_mi_align_up(sz, alignment);
-}
-
-static ptrdiff_t _mi_aligni_down(ptrdiff_t sz, size_t alignment) {
-  return (ptrdiff_t)_mi_align_down(sz, alignment);
-}
-
 static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uint8_t* p, size_t size, uint8_t** start_p, size_t* full_size, mi_commit_mask_t* cm) {
   mi_assert_internal(_mi_ptr_segment(p) == segment);
   mi_commit_mask_create_empty(cm);
   if (size == 0 || size > MI_SEGMENT_SIZE) return;
-  const ptrdiff_t segsize = (ptrdiff_t)mi_segment_size(segment);
+  const size_t segsize = mi_segment_size(segment);
   if (p >= (uint8_t*)segment + segsize) return;
 
-  ptrdiff_t diff = (p - (uint8_t*)segment);
-  ptrdiff_t start;
-  ptrdiff_t end;
+  size_t diff = (p - (uint8_t*)segment);
+  size_t start;
+  size_t end;
   if (conservative) {
-    start = _mi_aligni_up(diff, MI_COMMIT_SIZE);
-    end   = _mi_aligni_down(diff + size, MI_COMMIT_SIZE);
+    start = _mi_align_up(diff, MI_COMMIT_SIZE);
+    end   = _mi_align_down(diff + size, MI_COMMIT_SIZE);
   }
   else {
-    start = _mi_aligni_down(diff, MI_COMMIT_SIZE);
-    end   = _mi_aligni_up(diff + size, MI_COMMIT_SIZE);
+    start = _mi_align_down(diff, MI_COMMIT_SIZE);
+    end   = _mi_align_up(diff + size, MI_COMMIT_SIZE);
   }
   mi_assert_internal(end <= segsize);
   if (end > segsize) {
@@ -496,10 +488,10 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
   *full_size = (end > start ? end - start : 0);
   if (*full_size == 0) return;
 
-  ptrdiff_t bitidx = start / MI_COMMIT_SIZE;
+  size_t bitidx = start / MI_COMMIT_SIZE;
   mi_assert_internal(bitidx < MI_COMMIT_MASK_BITS);
   
-  ptrdiff_t bitcount = *full_size / MI_COMMIT_SIZE; // can be 0
+  size_t bitcount = *full_size / MI_COMMIT_SIZE; // can be 0
   if (bitidx + bitcount > MI_COMMIT_MASK_BITS) {
     _mi_warning_message("commit mask overflow: %zu %zu %zu %zu 0x%p %zu\n", bitidx, bitcount, start, end, p, size);
   }
