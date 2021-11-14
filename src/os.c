@@ -101,6 +101,10 @@ static size_t large_os_page_size = 0;
 // set dynamically in _mi_os_init (and if true we use MAP_NORESERVE)
 static bool os_overcommit = true;
 
+bool _mi_os_has_overcommit(void) {
+  return os_overcommit;
+}
+
 // OS (small) page size
 size_t _mi_os_page_size() {
   return os_page_size;
@@ -460,7 +464,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   #endif
   int flags = MAP_PRIVATE | MAP_ANONYMOUS;
   int fd = -1;
-  if (os_overcommit) {
+  if (_mi_os_has_overcommit()) {
     flags |= MAP_NORESERVE;
   }  
   #if defined(PROT_MAX)
