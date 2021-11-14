@@ -472,13 +472,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   }  
   #if defined(PROT_MAX)
   protect_flags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
-  #endif  
-  #if defined(VM_MAKE_TAG)
-  // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
-  int os_tag = (int)mi_option_get(mi_option_os_tag);
-  if (os_tag < 100 || os_tag > 255) { os_tag = 100; }
-  fd = VM_MAKE_TAG(os_tag);
-  #endif
+  #endif    
   // huge page allocation
   if ((large_only || use_large_os_page(size, try_alignment)) && allow_large) {
     static _Atomic(size_t) large_page_try_ok; // = 0;
