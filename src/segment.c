@@ -714,7 +714,9 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   const size_t segment_size = segment_slices * MI_SEGMENT_SLICE_SIZE;
 
   // Commit eagerly only if not the first N lazy segments (to reduce impact of many threads that allocate just a little)
-  const bool eager_delay = (_mi_current_thread_count() > 2 && tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
+  const bool eager_delay = (!_mi_os_has_overcommit() &&             // never delay on overcommit systems
+                            _mi_current_thread_count() > 2 &&       // do not delay for the first N threads
+                            tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager = !eager_delay && mi_option_is_enabled(mi_option_eager_commit);
   bool commit = eager || (required > 0); 
   
