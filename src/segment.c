@@ -541,7 +541,7 @@ static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
     segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
   }
   // always undo delayed decommits
-  mi_commit_mask_clear(&segment->decommit_mask, &mask);   
+  mi_commit_mask_clear(&segment->decommit_mask, &mask);
   return true;
 }
 
@@ -579,11 +579,11 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
     else if (segment->decommit_expire <= now) {
       // previous decommit mask already expired
       // mi_segment_delayed_decommit(segment, true, stats);
-      segment->decommit_expire = now + 1; // wait a tiny bit longer in case there is a series of free's
+      segment->decommit_expire = now + 5; // wait a tiny bit longer in case there is a series of free's
     }
     else {
       // previous decommit mask is not yet expired
-      // segment->decommit_expire++;
+      // segment->decommit_expire += 1; // = now + mi_option_get(mi_option_reset_delay);
     }
   }  
 }
