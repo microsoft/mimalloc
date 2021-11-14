@@ -76,6 +76,7 @@ static mi_option_desc_t options[_mi_option_last] =
   #endif
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },  // per 1GiB huge pages
+  { -1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) }, // reserve huge pages at node N
   { 0, UNINIT, MI_OPTION(reserve_os_memory)     },
   { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
   { 1, UNINIT, MI_OPTION(page_reset) },          // reset page memory on free
