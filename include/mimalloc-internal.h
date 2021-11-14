@@ -718,7 +718,7 @@ static inline bool mi_commit_mask_is_empty(const mi_commit_mask_t* cm) {
 
 static inline bool mi_commit_mask_is_full(const mi_commit_mask_t* cm) {
   for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
-    if (cm->mask[i] != 0) return false;
+    if (cm->mask[i] != ~((size_t)0)) return false;
   }
   return true;
 }
