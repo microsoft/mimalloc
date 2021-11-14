@@ -1315,7 +1315,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
     }
     else {
       // otherwise, push on the visited list so it gets not looked at too quickly again
-      mi_segment_delayed_decommit(segment, false, tld->stats); // decommit if needed
+      mi_segment_delayed_decommit(segment, true, tld->stats); // decommit if needed
       mi_abandoned_visited_push(segment);
     }
   }
