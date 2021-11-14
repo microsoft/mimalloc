@@ -4,8 +4,8 @@ if (MIMALLOC_SHARE_DIR MATCHES "/share/")
   string(REPLACE "/share/" "/lib/"     MIMALLOC_LIBRARY_DIR ${MIMALLOC_SHARE_DIR})
   string(REPLACE "/share/" "/include/" MIMALLOC_INCLUDE_DIR ${MIMALLOC_SHARE_DIR})
 else()
-  # if MI_INSTALL_TOPLEVEL==ON
-  set(MIMALLOC_LIBRARY_DIR "${MIMALLOC_SHARE_DIR}/lib")      
-  set(MIMALLOC_INCLUDE_DIR "${MIMALLOC_SHARE_DIR}/include")  
+  # installed with -DMI_INSTALL_TOPLEVEL=ON
+  string(REPLACE "/lib/cmake" "/lib"     MIMALLOC_LIBRARY_DIR "${MIMALLOC_SHARE_DIR}")  
+  string(REPLACE "/lib/cmake" "/include" MIMALLOC_INCLUDE_DIR "${MIMALLOC_SHARE_DIR}")  
 endif()  
 set(MIMALLOC_TARGET_DIR "${MIMALLOC_LIBRARY_DIR}") # legacy

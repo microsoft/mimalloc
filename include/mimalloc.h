@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 201   // major + 2 digits minor
+#define MI_MALLOC_VERSION 203   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -391,6 +391,7 @@ mi_decl_nodiscard mi_decl_export void* mi_new_reallocn(void* p, size_t newcount,
 // ---------------------------------------------------------------------------------------------
 #ifdef __cplusplus
 
+#include <cstddef>     // std::size_t
 #include <cstdint>     // PTRDIFF_MAX
 #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
 #include <type_traits> // std::true_type

@@ -802,7 +802,10 @@ static bool mi_try_new_handler(bool nothrow) {
     std::set_new_handler(h);
   #endif  
   if (h==NULL) {
-    if (!nothrow) throw std::bad_alloc();
+    _mi_error_message(ENOMEM, "out of memory in 'new'");      
+    if (!nothrow) {
+      throw std::bad_alloc();
+    }
     return false;
   }
   else {
@@ -830,9 +833,9 @@ static std_new_handler_t mi_get_new_handler() {
 static bool mi_try_new_handler(bool nothrow) {
   std_new_handler_t h = mi_get_new_handler();
   if (h==NULL) {
+    _mi_error_message(ENOMEM, "out of memory in 'new'");       
     if (!nothrow) {
-      _mi_error_message(EFAULT, "out of memory in 'new' call"); // cannot throw in plain C, use EFAULT to abort
-      abort();
+      abort();  // cannot throw in plain C, use abort
     }
     return false;
   }
