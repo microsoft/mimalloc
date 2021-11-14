@@ -583,7 +583,7 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
     }
     else {
       // previous decommit mask is not yet expired
-      // segment->decommit_expire += 1; // = now + mi_option_get(mi_option_reset_delay);
+      // segment->decommit_expire += 2; // = now + mi_option_get(mi_option_reset_delay);
     }
   }  
 }

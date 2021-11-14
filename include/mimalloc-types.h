@@ -308,12 +308,11 @@ typedef enum mi_segment_kind_e {
 // A segment holds a commit mask where a bit is set if
 // the corresponding MI_COMMIT_SIZE area is committed.
 // The MI_COMMIT_SIZE must be a multiple of the slice
-// size. We define it as equal so we can decommit on a
-// slice level which helps with (real) memory fragmentation
-// over time.
+// size. If it is equal we have the most fine grained 
+// decommit but in practice 2x seems to perform better.
 // ------------------------------------------------------
 
-#define MI_COMMIT_SIZE              (MI_SEGMENT_SLICE_SIZE)   
+#define MI_COMMIT_SIZE              (2*MI_SEGMENT_SLICE_SIZE)   
 #define MI_COMMIT_MASK_BITS         (MI_SEGMENT_SIZE / MI_COMMIT_SIZE)  
 #define MI_COMMIT_MASK_FIELD_BITS    MI_SIZE_BITS
 #define MI_COMMIT_MASK_FIELD_COUNT  (MI_COMMIT_MASK_BITS / MI_COMMIT_MASK_FIELD_BITS)
