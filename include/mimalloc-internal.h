@@ -19,6 +19,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_CACHE_LINE          64
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
+#pragma warning(disable:26812)  // unscoped enum warning
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
@@ -88,7 +89,7 @@ void       _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed,
 
 // "segment-cache.c"
 void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
-bool       _mi_segment_cache_push(void* start, size_t size, size_t memid, mi_commit_mask_t commit_mask, mi_commit_mask_t decommit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld);
+bool       _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* decommit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld);
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
 void       _mi_segment_map_freed_at(const mi_segment_t* segment);
 
@@ -499,6 +500,10 @@ static inline size_t mi_segment_size(mi_segment_t* segment) {
   return segment->segment_slices * MI_SEGMENT_SLICE_SIZE;
 }
 
+static inline uint8_t* mi_segment_end(mi_segment_t* segment) {
+  return (uint8_t*)segment + mi_segment_size(segment);
+}
+
 // Thread free access
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
   return (mi_block_t*)(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free) & ~3);
@@ -693,45 +698,45 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
 // commit mask
 // -------------------------------------------------------------------
 
-#define MI_COMMIT_MASK_BITS  (sizeof(mi_commit_mask_t)*8)
-
-static inline mi_commit_mask_t mi_commit_mask_empty(void) {
-  return 0;
-}
-
-static inline mi_commit_mask_t mi_commit_mask_full(void) {
-  return ~mi_commit_mask_empty();
-}
-
-static inline bool mi_commit_mask_is_empty(mi_commit_mask_t mask) {
-  return (mask == 0);
-}
-
-static inline bool mi_commit_mask_is_full(mi_commit_mask_t mask) {
-  return ((~mask) == 0);
-}
-
-size_t _mi_commit_mask_committed_size(mi_commit_mask_t mask, size_t total);
-
-#define mi_commit_mask_foreach(mask,idx,count) \
-  idx = 0; \
-  while (mask != 0) {     \
-    /* count ones */      \
-    count = 0;            \
-    while ((mask&1)==1) { \
-      mask >>= 1;         \
-      count++;            \
-    }                     \
-    /* if found, do action */ \
-    if (count > 0) {
-
-#define mi_commit_mask_foreach_end() \
-    } \
-    idx += count; \
-    /* shift out the zero */ \
-    mask >>= 1;   \
-    idx++;        \
+static inline void mi_commit_mask_create_empty(mi_commit_mask_t* cm) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+    cm->mask[i] = 0;
   }
+}
+
+static inline void mi_commit_mask_create_full(mi_commit_mask_t* cm) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+    cm->mask[i] = ~((size_t)0);
+  }
+}
+
+static inline bool mi_commit_mask_is_empty(const mi_commit_mask_t* cm) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+    if (cm->mask[i] != 0) return false;
+  }
+  return true;
+}
+
+static inline bool mi_commit_mask_is_full(const mi_commit_mask_t* cm) {
+  for (size_t i = 0; i < MI_COMMIT_MASK_FIELD_COUNT; i++) {
+    if (cm->mask[i] != ~((size_t)0)) return false;
+  }
+  return true;
+}
+
+// defined in `segment.c`:
+size_t _mi_commit_mask_committed_size(const mi_commit_mask_t* cm, size_t total);
+size_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, size_t* idx);
+
+#define mi_commit_mask_foreach(cm,idx,count) \
+  idx = 0; \
+  while ((count = _mi_commit_mask_next_run(cm,&idx)) > 0) { 
+        
+#define mi_commit_mask_foreach_end() \
+    idx += count; \
+  }
+      
+
 
 
 // -------------------------------------------------------------------

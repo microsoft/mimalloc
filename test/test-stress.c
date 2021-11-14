@@ -39,12 +39,12 @@ static size_t use_one_size = 0;              // use single object size of `N * s
 
 // #define USE_STD_MALLOC
 #ifdef USE_STD_MALLOC
-#define custom_calloc(n,s)    calloc(n,s)
+#define custom_calloc(n,s)    malloc(n*s)
 #define custom_realloc(p,s)   realloc(p,s)
 #define custom_free(p)        free(p)
 #else
 #include <mimalloc.h>
-#define custom_calloc(n,s)    mi_calloc(n,s)
+#define custom_calloc(n,s)    mi_malloc(n*s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
 #endif

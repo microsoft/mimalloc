@@ -147,13 +147,10 @@ typedef int32_t  mi_ssize_t;
 #define MI_MEDIUM_PAGE_SIZE               (MI_ZU(1)<<MI_MEDIUM_PAGE_SHIFT)
 
 #define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/4)   // 8KiB on 64-bit
-
 #define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/4)  // 128KiB on 64-bit
 #define MI_MEDIUM_OBJ_WSIZE_MAX           (MI_MEDIUM_OBJ_SIZE_MAX/MI_INTPTR_SIZE)   
-
 #define MI_LARGE_OBJ_SIZE_MAX             (MI_SEGMENT_SIZE/2)      // 32MiB on 64-bit
 #define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)
-
 #define MI_HUGE_OBJ_SIZE_MAX              (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)        // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
@@ -307,17 +304,30 @@ typedef enum mi_segment_kind_e {
   MI_SEGMENT_HUGE,   // > MI_LARGE_SIZE_MAX segment with just one huge page inside.
 } mi_segment_kind_t;
 
-#define MI_COMMIT_SIZE    (MI_SEGMENT_SIZE/MI_SIZE_BITS)
+// ------------------------------------------------------
+// A segment holds a commit mask where a bit is set if
+// the corresponding MI_COMMIT_SIZE area is committed.
+// The MI_COMMIT_SIZE must be a multiple of the slice
+// size. If it is equal we have the most fine grained 
+// decommit (but in practice 2x seems to perform better).
+// ------------------------------------------------------
 
-#if (((1 << MI_SEGMENT_SHIFT)/MI_COMMIT_SIZE) > MI_SIZE_BITS)
-#error "not enough commit bits to cover the segment size"
+#define MI_COMMIT_SIZE              (MI_SEGMENT_SLICE_SIZE)   
+#define MI_COMMIT_MASK_BITS         (MI_SEGMENT_SIZE / MI_COMMIT_SIZE)  
+#define MI_COMMIT_MASK_FIELD_BITS    MI_SIZE_BITS
+#define MI_COMMIT_MASK_FIELD_COUNT  (MI_COMMIT_MASK_BITS / MI_COMMIT_MASK_FIELD_BITS)
+
+#if (MI_COMMIT_MASK_BITS != (MI_COMMIT_MASK_FIELD_COUNT * MI_COMMIT_MASK_FIELD_BITS))
+#error "the segment size must be exactly divisible by the (commit size * size_t bits)"
 #endif
 
-typedef mi_page_t  mi_slice_t;
+typedef struct mi_commit_mask_s {
+  size_t mask[MI_COMMIT_MASK_FIELD_COUNT];
+} mi_commit_mask_t;
 
+typedef mi_page_t  mi_slice_t;
 typedef int64_t    mi_msecs_t;
 
-typedef size_t     mi_commit_mask_t;
 
 // Segments are large allocated memory blocks (8mb on 64 bit) from
 // the OS. Inside segments we allocated fixed size _pages_ that

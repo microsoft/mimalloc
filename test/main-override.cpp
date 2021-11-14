@@ -52,7 +52,7 @@ int main() {
 
   //test_mt_shutdown();
   //fail_aslr();
-  //bench_alloc_large();
+  bench_alloc_large();
   mi_stats_print(NULL);
   return 0;
 }
