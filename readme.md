@@ -18,7 +18,7 @@ Latest stable  tag: `v1.7.3` (2021-11-14).
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
 ```
-> LD_PRELOAD=/usr/bin/libmimalloc.so  myprogram
+> LD_PRELOAD=/usr/lib/libmimalloc.so  myprogram
 ```
 It also has an easy way to override the default allocator in [Windows](#override_on_windows). Notable aspects of the design include:
 
@@ -311,6 +311,8 @@ or via environment variables:
    `MIMALLOC_EAGER_COMMIT_DELAY=N` (`N` is 1 by default) to delay the initial `N` segments (of 4MiB)
    of a thread to not allocate in the huge OS pages; this prevents threads that are short lived
    and allocate just a little to take up space in the huge OS page area (which cannot be reset).
+- `MIMALLOC_RESERVE_HUGE_OS_PAGES_AT=N`: where N is the numa node. This reserves the huge pages at a specific numa node. 
+   (`N` is -1 by default to reserve huge pages evenly among the given number of numa nodes (or use the available ones as detected))
 
 Use caution when using `fork` in combination with either large or huge OS pages: on a fork, the OS uses copy-on-write
 for all pages in the original process including the huge OS pages. When any memory is now written in that area, the
