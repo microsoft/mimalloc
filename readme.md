@@ -311,8 +311,9 @@ or via environment variables:
    `MIMALLOC_EAGER_COMMIT_DELAY=N` (`N` is 1 by default) to delay the initial `N` segments (of 4MiB)
    of a thread to not allocate in the huge OS pages; this prevents threads that are short lived
    and allocate just a little to take up space in the huge OS page area (which cannot be reset).
-- `MIMALLOC_RESERVE_HUGE_OS_PAGES_AT=N`: where N is the numa node. This reserves the huge pages at a specific numa node. 
-   (`N` is -1 by default to reserve huge pages evenly among the given number of numa nodes (or use the available ones as detected))
+   The huge pages are usually allocated evenly among NUMA nodes.
+   We can use `MIMALLOC_RESERVE_HUGE_OS_PAGES_AT=N` where `N` is the numa node (starting at 0) to allocate all 
+   the huge pages at a specific numa node instead. 
 
 Use caution when using `fork` in combination with either large or huge OS pages: on a fork, the OS uses copy-on-write
 for all pages in the original process including the huge OS pages. When any memory is now written in that area, the
