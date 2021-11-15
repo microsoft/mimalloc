@@ -128,9 +128,14 @@ typedef int32_t  mi_ssize_t;
 // ------------------------------------------------------
 
 // Main tuning parameters for segment and page sizes
-// Sizes for 64-bit, divide by two for 32-bit
-#define MI_SEGMENT_SLICE_SHIFT            (13 + MI_INTPTR_SHIFT)         // 64KiB
+// Sizes for 64-bit (usually divide by two for 32-bit)
+#define MI_SEGMENT_SLICE_SHIFT            (13 + MI_INTPTR_SHIFT)         // 64KiB  (32KiB on 32-bit)
+
+#if MI_INTPTR_SIZE > 4
 #define MI_SEGMENT_SHIFT                  (10 + MI_SEGMENT_SLICE_SHIFT)  // 64MiB
+#else
+#define MI_SEGMENT_SHIFT                  ( 7 + MI_SEGMENT_SLICE_SHIFT)  // 4MiB on 32-bit
+#endif
 
 #define MI_SMALL_PAGE_SHIFT               (MI_SEGMENT_SLICE_SHIFT)       // 64KiB
 #define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SMALL_PAGE_SHIFT)     // 512KiB
