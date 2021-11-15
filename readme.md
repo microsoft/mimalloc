@@ -12,8 +12,8 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.0.2` (beta, 2021-06-17).  
-Latest stable  tag: `v1.7.2` (2021-06-17).
+Latest release tag: `v2.0.3` (beta, 2021-11-14).  
+Latest stable  tag: `v1.7.3` (2021-11-14).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -76,6 +76,10 @@ Enjoy!
 Note: the `v2.x` beta has a new algorithm for managing internal mimalloc pages that tends to use reduce memory usage
   and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
+
+* 2021-11-14, `v1.7.3`, `v2.0.3` (beta): improved WASM support, improved macOS support and performance (including
+  M1), improved performance for v2 for large objects, Python integration improvements, more standard
+  installation directories, various small fixes.
 
 * 2021-06-17, `v1.7.2`, `v2.0.2` (beta): support M1, better installation layout on Linux, fix
   thread_id on Android, prefer 2-6TiB area for aligned allocation to work better on pre-windows 8, various small fixes.
@@ -142,7 +146,7 @@ mimalloc is used in various large scale low-latency services and programs, for e
 
 ## Windows
 
-Open `ide/vs2019/mimalloc.sln` in Visual Studio 2019 and build (or `ide/vs2017/mimalloc.sln`).
+Open `ide/vs2019/mimalloc.sln` in Visual Studio 2019 and build.
 The `mimalloc` project builds a static library (in `out/msvc-x64`), while the
 `mimalloc-override` project builds a DLL for overriding malloc
 in the entire program.
@@ -190,6 +194,11 @@ Notes:
 1. Install CMake: `sudo apt-get install cmake`
 2. Install CCMake: `sudo apt-get install cmake-curses-gui`
 
+
+## Single source
+
+You can also directly build the single `src/static.c` file as part of your project without
+needing `cmake` at all. Make sure to also add the mimalloc `include` directory to the include path.
 
 
 # Using the library
@@ -337,9 +346,9 @@ When _mimalloc_ is built using debug mode, various checks are done at runtime to
 - Corrupted free-lists and some forms of use-after-free are detected.
 
 
-# Overriding Malloc
+# Overriding Standard Malloc
 
-Overriding the standard `malloc` can be done either _dynamically_ or _statically_.
+Overriding the standard `malloc` (and `new`) can be done either _dynamically_ or _statically_.
 
 ## Dynamic override
 
@@ -370,13 +379,12 @@ On macOS we can also preload the mimalloc shared
 library so all calls to the standard `malloc` interface are
 resolved to the _mimalloc_ library.
 ```
-> env DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram
+> env DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram
 ```
 
 Note that certain security restrictions may apply when doing this from
 the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
 
-(Note: macOS support for dynamic overriding is recent, please report any issues.)
 
 ### Override on Windows
 
@@ -386,7 +394,7 @@ the (dynamic) C runtime allocator, including those from other DLL's or libraries
 
 The overriding on Windows requires that you link your program explicitly with
 the mimalloc DLL and use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
-Also, the `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) must be available
+Also, the `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) must be put
 in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency).
 The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
 mimalloc (in `mimalloc-override.dll`).
