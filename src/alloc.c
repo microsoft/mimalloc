@@ -475,12 +475,13 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
   return segment;
 }
 
-// Free a block with a known threadid
-static mi_decl_always_inline void _mi_free_with_threadid(void* p, mi_threadid_t tid) mi_attr_noexcept
+// Free a block 
+void mi_free(void* p) mi_attr_noexcept
 {
   const mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
   if (mi_unlikely(segment == NULL)) return; 
 
+  mi_threadid_t tid = _mi_thread_id();
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_block_t*)p;
 
@@ -504,25 +505,6 @@ static mi_decl_always_inline void _mi_free_with_threadid(void* p, mi_threadid_t 
     mi_free_generic(segment, tid == segment->thread_id, p);
   }
 }
-
-// Get the current thread id
-size_t mi_get_current_threadid(void) mi_attr_noexcept {
-  return _mi_thread_id();
-}
-
-// Free a block passing the current thread id explicitly
-void mi_decl_noinline mi_unsafe_free_with_threadid(void* p, size_t current_tid ) mi_attr_noexcept 
-{
-  mi_assert(current_tid == _mi_thread_id());
-  _mi_free_with_threadid(p,current_tid);
-}
-
-
-// Free a block
-void mi_decl_noinline mi_free(void* p) mi_attr_noexcept {
-  _mi_free_with_threadid(p, _mi_thread_id());
-}
-
 
 bool _mi_free_delayed_block(mi_block_t* block) {
   // get segment and page
