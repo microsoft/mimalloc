@@ -511,7 +511,7 @@ size_t mi_get_current_threadid(void) mi_attr_noexcept {
 }
 
 // Free a block passing the current thread id explicitly
-void mi_unsafe_free_with_threadid(void* p, size_t current_tid ) mi_attr_noexcept 
+void mi_decl_noinline mi_unsafe_free_with_threadid(void* p, size_t current_tid ) mi_attr_noexcept 
 {
   mi_assert(current_tid == _mi_thread_id());
   _mi_free_with_threadid(p,current_tid);
@@ -519,7 +519,7 @@ void mi_unsafe_free_with_threadid(void* p, size_t current_tid ) mi_attr_noexcept
 
 
 // Free a block
-void mi_free(void* p) mi_attr_noexcept {
+void mi_decl_noinline mi_free(void* p) mi_attr_noexcept {
   _mi_free_with_threadid(p, _mi_thread_id());
 }
 
