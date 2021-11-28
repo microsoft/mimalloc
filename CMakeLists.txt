@@ -280,7 +280,7 @@ message(STATUS "")
 # shared library
 if(MI_BUILD_SHARED)
   add_library(mimalloc SHARED ${mi_sources})
-  set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} OUTPUT_NAME ${mi_basename} )
+  set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} SOVERSION ${mi_version_major} OUTPUT_NAME ${mi_basename} )
   target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
   target_compile_options(mimalloc PRIVATE ${mi_cflags})
   target_link_libraries(mimalloc PUBLIC ${mi_libraries})
@@ -336,16 +336,6 @@ install(FILES include/mimalloc-new-delete.h DESTINATION ${mi_install_incdir})
 install(FILES cmake/mimalloc-config.cmake DESTINATION ${mi_install_cmakedir})
 install(FILES cmake/mimalloc-config-version.cmake DESTINATION ${mi_install_cmakedir})
 
-if(NOT WIN32 AND MI_BUILD_SHARED AND NOT MI_INSTALL_TOPLEVEL)
-  # install a symlink in the /usr/local/lib to the versioned library
-  # note: use delayed prefix expansion as \${CMAKE_INSTALL_PREFIX}
-  set(mi_symlink "${CMAKE_SHARED_MODULE_PREFIX}${mi_basename}${CMAKE_SHARED_LIBRARY_SUFFIX}")
-  set(mi_soname "mimalloc-${mi_version}/${mi_symlink}.${mi_version}")
-  install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${mi_soname} ${mi_symlink} WORKING_DIRECTORY \${CMAKE_INSTALL_PREFIX}/lib)")
-  install(CODE "MESSAGE(\"-- Symbolic link: \${CMAKE_INSTALL_PREFIX}/lib/${mi_symlink} -> ${mi_soname}\")")
-  install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${mi_soname} ${mi_symlink}.${mi_version} WORKING_DIRECTORY \${CMAKE_INSTALL_PREFIX}/lib)")
-  install(CODE "MESSAGE(\"-- Symbolic link: \${CMAKE_INSTALL_PREFIX}/lib/${mi_symlink}.${mi_version} -> ${mi_soname}\")")
-endif()
 
 # single object file for more predictable static overriding
 if (MI_BUILD_OBJECT)
