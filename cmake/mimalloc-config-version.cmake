@@ -1,6 +1,7 @@
 set(mi_version_major 1)
 set(mi_version_minor 7)
-set(mi_version ${mi_version_major}.${mi_version_minor})
+set(mi_version_patch 3)
+set(mi_version ${mi_version_major}.${mi_version_minor}.${mi_version_patch})
 
 set(PACKAGE_VERSION ${mi_version})
 if(PACKAGE_FIND_VERSION_MAJOR)
