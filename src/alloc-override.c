@@ -183,6 +183,7 @@ size_t malloc_usable_size(const void *p) MI_FORWARD1(mi_usable_size,p);
 void* valloc(size_t size)                                     { return mi_valloc(size); }
 void* pvalloc(size_t size)                                    { return mi_pvalloc(size); }
 void* reallocarray(void* p, size_t count, size_t size)        { return mi_reallocarray(p, count, size); }
+int   reallocarr(void* p, size_t count, size_t size)          { return mi_reallocarr(&p, count, size); }
 void* memalign(size_t alignment, size_t size)                 { return mi_memalign(alignment, size); }
 int   posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
 void* _aligned_malloc(size_t alignment, size_t size)          { return mi_aligned_alloc(alignment, size); }

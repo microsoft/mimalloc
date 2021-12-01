@@ -90,6 +90,20 @@ void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  
   return newp;
 }
 
+int mi_reallocarr( void* p, size_t count, size_t size ) mi_attr_noexcept { // NetBSD
+  void** op = (void** )p;
+  int serrno = errno;
+  void* newp = mi_reallocn(p,count,size);
+  if (mi_unlikely(newp == NULL)) {
+    errno = ENOMEM;
+    return errno;
+  } else {
+    *op = newp;
+    errno = serrno;
+    return 0;
+  }
+}
+
 void* mi__expand(void* p, size_t newsize) mi_attr_noexcept {  // Microsoft
   void* res = mi_expand(p, newsize);
   if (res == NULL) errno = ENOMEM;
