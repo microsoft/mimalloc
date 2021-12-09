@@ -350,6 +350,41 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, co
 #endif
 
 // --------------------------------------------------------
+// Stack traces
+// --------------------------------------------------------
+
+#if (MI_DEBUG_TRACE > 0) && defined(_WIN32)
+void _mi_stack_trace_capture(void** strace, size_t len, size_t skip) {
+  CaptureStackBackTrace((DWORD)skip + 1, (DWORD)len, strace, NULL);
+}
+
+#include <dbghelp.h>
+#pragma comment(lib,"dbghelp")
+void _mi_stack_trace_print(const void* const* strace, size_t len, const mi_block_t* block, size_t bsize, size_t avail) {
+  HANDLE current_process = GetCurrentProcess();
+  SymInitialize(current_process, NULL, TRUE);
+  PSYMBOL_INFO info = (PSYMBOL_INFO)_malloca(sizeof(SYMBOL_INFO) + 256 * sizeof(TCHAR));
+  if (info==NULL) return;
+  memset(info, 0, sizeof(info));
+  info->MaxNameLen = 255;
+  info->SizeOfStruct = sizeof(SYMBOL_INFO);
+  _mi_fprintf(NULL, NULL, "for block %p of %zu allocated bytes (%zu total in block), allocated at:\n", block, avail, bsize);
+  for (size_t i = 0; i < len && strace[i] != NULL; i++) {
+    if (SymFromAddr(current_process, (DWORD64)(strace[i]), 0, info)) {
+      _mi_fprintf(NULL, NULL, "  frame %2zu: %8p: %s\n", i, strace[i], info->Name);
+    }
+    else {
+      _mi_fprintf(NULL, NULL, "  frame %2zu: %8p: <unknown address: error: 0x%04x>\n", i, strace[i], GetLastError());
+    }
+  }  
+}
+#else 
+void _mi_capture_stack_trace(void** strace, size_t len, size_t skip) {
+  MI_UNUSED(strace); MI_UNUSED(len); MI_UNUSED(skip);  
+}
+#endif
+
+// --------------------------------------------------------
 // Errors
 // --------------------------------------------------------
 

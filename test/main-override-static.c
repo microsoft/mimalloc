@@ -178,6 +178,7 @@ static void double_free1();
 static void double_free2();
 static void corrupt_free();
 static void block_overflow1();
+static void block_overflow2();
 static void invalid_free();
 static void test_aslr(void);
 static void test_process_info(void);
@@ -193,6 +194,7 @@ int main() {
   // double_free2();
   // corrupt_free();
   // block_overflow1();
+  // block_overflow2();
   // test_aslr();
   // invalid_free();
   // test_reserved();
@@ -232,6 +234,15 @@ static void block_overflow1() {
   p[18] = 0;
   free(p);
 }
+
+#define OVF_SIZE 100
+
+static void block_overflow2() {
+  uint8_t* p = (uint8_t*)mi_malloc(30);
+  memset(p+30, 0, OVF_SIZE);
+  free(p);
+}
+
 
 // The double free samples come ArcHeap [1] by Insu Yun (issue #161)
 // [1]: https://arxiv.org/pdf/1903.00503.pdf
@@ -274,6 +285,7 @@ static void double_free2() {
 // Try to corrupt the heap through buffer overflow
 #define N   256
 #define SZ  64
+#define OVF_SZ 100
 
 static void corrupt_free() {
   void* p[N];
@@ -289,13 +301,18 @@ static void corrupt_free() {
   // try to corrupt the free list
   for (int i = 0; i < N; i++) {
     if (p[i] != NULL) {
-      memset(p[i], 0, SZ+8);
+      memset(p[i], 0, SZ+OVF_SZ);
     }
   }
   // allocate more.. trying to trigger an allocation from a corrupted entry
   // this may need many allocations to get there (if at all)
   for (int i = 0; i < 4096; i++) {
     malloc(SZ);
+  }
+  // free the rest
+  for (int i = 0; i < N; i++) {
+    free(p[i]);
+    p[i] = NULL;
   }
 }
 
