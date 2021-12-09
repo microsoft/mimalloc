@@ -61,7 +61,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #if !defined(MI_PADDING_EXTRA)   // use extra padding bytes?
-#define MI_PADDING_EXTRA   (664)
+#define MI_PADDING_EXTRA   (128)
 #endif
 
 #if !defined(MI_DEBUG_TRACE)     // store stack trace at each allocation
@@ -69,7 +69,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #if !defined(MI_DEBUG_TRACE_LEN)     // store stack trace at each allocation
-#define MI_DEBUG_TRACE_LEN  (6)      // store up to N frames 
+#define MI_DEBUG_TRACE_LEN  (8)      // store up to N frames 
 #endif
 
 
