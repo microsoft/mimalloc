@@ -30,15 +30,8 @@ const mi_page_t _mi_page_empty = {
   NULL, NULL
 };
 
-#define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
-
-#if (MI_PADDING>0) && (MI_INTPTR_SIZE >= 8)
-#define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY(), MI_PAGE_EMPTY() }
-#elif (MI_PADDING>0)
-#define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY(), MI_PAGE_EMPTY(), MI_PAGE_EMPTY() }
-#else
+#define MI_PAGE_EMPTY()       ((mi_page_t*)&_mi_page_empty)
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY() }
-#endif
 
 
 // Empty page queues for every bin

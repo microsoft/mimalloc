@@ -16,6 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_trace_message(...)
 #endif
 
+
 #define MI_CACHE_LINE          64
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
@@ -50,6 +51,11 @@ void       _mi_verbose_message(const char* fmt, ...);
 void       _mi_trace_message(const char* fmt, ...);
 void       _mi_options_init(void);
 void       _mi_error_message(int err, const char* fmt, ...);
+
+#if MI_DEBUG_TRACE > 0
+void       _mi_stack_trace_capture(void** strace, size_t len, size_t skip);
+void       _mi_stack_trace_print(const void* const* strace, size_t len, const mi_block_t* block, size_t bsize, size_t avail);
+#endif
 
 // random.c
 void       _mi_random_init(mi_random_ctx_t* ctx);
@@ -389,7 +395,7 @@ static inline uintptr_t _mi_ptr_cookie(const void* p) {
 ----------------------------------------------------------- */
 
 static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t size) {
-  mi_assert_internal(size <= (MI_SMALL_SIZE_MAX + MI_PADDING_SIZE));
+  mi_assert_internal(size <= (MI_SMALL_SIZE_MAX));
   const size_t idx = _mi_wsize_from_size(size);
   mi_assert_internal(idx < MI_PAGES_DIRECT);
   return heap->pages_free_direct[idx];

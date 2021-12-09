@@ -61,6 +61,9 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
   padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
   padding->delta  = (uint32_t)(delta);
+  #if (MI_DEBUG_TRACE)
+  _mi_stack_trace_capture(padding->strace, MI_DEBUG_TRACE_LEN, 2);
+  #endif
   uint8_t* fill = (uint8_t*)padding - delta;
   const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
   for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
@@ -79,7 +82,7 @@ extern inline mi_decl_restrict void* mi_heap_malloc_small(mi_heap_t* heap, size_
     size = sizeof(void*);
   }
   #endif
-  mi_page_t* page = _mi_heap_get_free_small_page(heap,size + MI_PADDING_SIZE);
+  mi_page_t* page = _mi_heap_get_free_small_page(heap, size + MI_PADDING_SIZE);
   void* p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE);
   mi_assert_internal(p==NULL || mi_usable_size(p) >= size);
   #if MI_STAT>1
@@ -97,10 +100,11 @@ extern inline mi_decl_restrict void* mi_malloc_small(size_t size) mi_attr_noexce
 
 // The main allocation function
 extern inline mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
+  if (mi_likely(size + MI_PADDING_SIZE <= MI_SMALL_SIZE_MAX)) {
     return mi_heap_malloc_small(heap, size);
   }
-  else {
+  else 
+  {
     mi_assert(heap!=NULL);
     mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
     void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE);      // note: size can overflow but it is detected in malloc_generic
@@ -216,18 +220,38 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 // ---------------------------------------------------------------------------
 
 #if (MI_PADDING>0) && defined(MI_ENCODE_FREELIST)
-static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
+static const mi_padding_t* mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
   *bsize = mi_page_usable_block_size(page);
   const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + *bsize);
   *delta = padding->delta;
-  return ((uint32_t)mi_ptr_encode(page,block,page->keys) == padding->canary && *delta <= *bsize);
+  if ((uint32_t)mi_ptr_encode(page, block, page->keys) == padding->canary && *delta <= *bsize) {
+    return padding;
+  }
+  else {
+    return NULL;
+  }
 }
+
+#if MI_DEBUG_TRACE > 0
+static void _mi_error_trace(const mi_page_t* page, const mi_block_t* block) {
+  size_t bsize;
+  size_t delta;
+  const mi_padding_t* padding = mi_page_decode_padding(page, block, &delta, &bsize);
+  if (padding != NULL) {
+    _mi_stack_trace_print(padding->strace, MI_DEBUG_TRACE_LEN, block, bsize, bsize - delta);
+  }
+}
+#else 
+static void _mi_error_trace(const mi_page_t* page, const mi_block_t* block) {
+  MI_UNUSED(page); MI_UNUSED(block);
+}
+#endif
 
 // Return the exact usable size of a block.
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block) {
   size_t bsize;
   size_t delta;
-  bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
+  bool ok = (mi_page_decode_padding(page, block, &delta, &bsize) != NULL);
   mi_assert_internal(ok); mi_assert_internal(delta <= bsize);
   return (ok ? bsize - delta : 0);
 }
@@ -235,7 +259,7 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
 static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, size_t* size, size_t* wrong) {
   size_t bsize;
   size_t delta;
-  bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
+  bool ok = (mi_page_decode_padding(page, block, &delta, &bsize) != NULL);
   *size = *wrong = bsize;
   if (!ok) return false;
   mi_assert_internal(bsize >= delta);
@@ -255,6 +279,7 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
   size_t size;
   size_t wrong;
   if (!mi_verify_padding(page,block,&size,&wrong)) {
+    _mi_error_trace(page, block);
     _mi_error_message(EFAULT, "buffer overflow in heap block %p of size %zu: write after %zu bytes\n", block, size, wrong );
   }
 }
@@ -405,8 +430,8 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
   // and push it on the free list
   if (mi_likely(local)) {
     // owning thread can free a block directly
-    if (mi_unlikely(mi_check_is_double_free(page, block))) return;
     mi_check_padding(page, block);
+    if (mi_unlikely(mi_check_is_double_free(page, block))) return;
     #if (MI_DEBUG!=0)
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
     #endif
@@ -487,8 +512,8 @@ void mi_free(void* p) mi_attr_noexcept
 
   if (mi_likely(tid == mi_atomic_load_relaxed(&segment->thread_id) && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
-    if (mi_unlikely(mi_check_is_double_free(page,block))) return;
     mi_check_padding(page, block);
+    if (mi_unlikely(mi_check_is_double_free(page,block))) return;
     mi_stat_free(page, block);
     #if (MI_DEBUG!=0)
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));

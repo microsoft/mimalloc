@@ -60,6 +60,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_PADDING  1
 #endif
 
+#if !defined(MI_PADDING_EXTRA)   // use extra padding bytes?
+#define MI_PADDING_EXTRA   (64)
+#endif
+
+#if !defined(MI_DEBUG_TRACE)     // store stack trace at each allocation
+#define MI_DEBUG_TRACE  1
+#endif
+
+#if !defined(MI_DEBUG_TRACE_LEN)     // store stack trace at each allocation
+#define MI_DEBUG_TRACE_LEN  (6)      // store up to N frames 
+#endif
+
 
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
@@ -356,15 +368,16 @@ typedef struct mi_random_cxt_s {
 typedef struct mi_padding_s {
   uint32_t canary; // encoded block value to check validity of the padding (in case of overflow)
   uint32_t delta;  // padding bytes before the block. (mi_usable_size(p) - delta == exact allocated bytes)
+  #if (MI_DEBUG_TRACE > 0)
+  void* strace[MI_DEBUG_TRACE_LEN];  // stack trace at allocation time
+  #endif
 } mi_padding_t;
-#define MI_PADDING_SIZE   (sizeof(mi_padding_t))
-#define MI_PADDING_WSIZE  ((MI_PADDING_SIZE + MI_INTPTR_SIZE - 1) / MI_INTPTR_SIZE)
+#define MI_PADDING_SIZE   (sizeof(mi_padding_t) + MI_PADDING_EXTRA)
 #else
 #define MI_PADDING_SIZE   0
-#define MI_PADDING_WSIZE  0
 #endif
 
-#define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1)
+#define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + 1)
 
 
 // A heap owns a set of pages.
