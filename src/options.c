@@ -376,7 +376,7 @@ void _mi_stack_trace_print(const char* msg, void** strace, size_t len, const mi_
     }
   }  
 }
-#elif (MI_DEBUG_TRACE > 0) && (defined(__linux__) || defined(__FreeBSD__))
+#elif (MI_DEBUG_TRACE > 0) && (defined(__linux__) || defined(__FreeBSD__) || defined(__APPLE__))
 #include <execinfo.h>
 #define MI_TRACE_LEN (64)
 void _mi_stack_trace_capture(void** strace, size_t len, size_t skip) {
