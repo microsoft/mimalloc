@@ -60,7 +60,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_PADDING  1
 #endif
 
-#if !defined(MI_DEBUG_TRACE)          // store stack trace at each allocation
+#if !defined(MI_DEBUG_TRACE)         // store stack trace at each allocation
 #define MI_DEBUG_TRACE  MI_DEBUG     
 #endif
 
@@ -79,6 +79,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
+// (It must be enabled if MI_PADDING is enabled as the same mechanism is used to encode the canary.)
 #if (MI_SECURE>=3 || MI_DEBUG>=1 || MI_PADDING > 0)
 #define MI_ENCODE_FREELIST  1
 #endif
@@ -367,11 +368,20 @@ typedef struct mi_random_cxt_s {
 } mi_random_ctx_t;
 
 
-// In debug mode there is a padding structure at the end of the blocks to check for buffer overflows
+// If MI_PADDING is enabled, there is a padding structure at the end of the blocks to check for buffer overflows
+// The full layout is of a block becomes:
+// 
+// |--- data ---------|--- fill ----------|--- struct padding_s -----------------------------------------|
+// |.. actual data .. | .. delta bytes .. | canary_lo | .. extra .. | canary | delta | .. stack trace .. |
+// 
+// where the delta bytes are used to align the padding structure and to detect byte precise overflow.
+// The `canary` is used to see if `delta` and `strace` are not corrupted, while `canary_lo` can
+// detect overflow into the `extra` padding (where the stack trace could remain valid)
+
 #if (MI_PADDING)
 typedef struct mi_padding_s {
   #if MI_PADDING_EXTRA > 0
-  uint32_t canary_lo; 
+  uint32_t canary_lo;                // extra canary to detect initial overflow
   uint8_t  extra[MI_PADDING_EXTRA];
   #endif
   uint32_t canary;                   // encoded block value to check validity of the delat (in case of overflow)
@@ -380,7 +390,7 @@ typedef struct mi_padding_s {
   void* strace[MI_DEBUG_TRACE_LEN];  // stack trace at allocation time
   #endif
 } mi_padding_t;
-#define MI_PADDING_MINSIZE  (8)  // 2*sizeof(uint32_t)
+#define MI_PADDING_MINSIZE  (8)      // 2*sizeof(uint32_t)
 #define MI_PADDING_SIZE     (sizeof(mi_padding_t))
 #else
 #define MI_PADDING_MINSIZE  (0)
@@ -388,6 +398,8 @@ typedef struct mi_padding_s {
 #endif
 
 // add 2 more for minimal padding (MI_PADDING && !MI_DEBUG_TRACE && MI_PADDING_EXTRA==0)
+// since this is used in secure mode, we optimize this case by allowing 
+// `heap_malloc_small` to also work with `MI_WSMALL_SIZE_MAX + MI_PADDING_MINSIZE` sizes.
 // see `init.c` where all are initialized with an empty page and the check at `heap_malloc_small`.
 #define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + 1 + 2)
 
