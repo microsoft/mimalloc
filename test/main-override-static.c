@@ -194,8 +194,8 @@ int main() {
   // detect double frees and heap corruption
   // double_free1();
   // double_free2();
-  // double_free3();
-  // corrupt_free1();
+  double_free3();
+  corrupt_free1();
   // corrupt_free2();
   // block_overflow1();
   // block_overflow2();
@@ -385,7 +385,7 @@ static void test_reserved(void) {
 
 
 static void negative_stat(void) {
-  int* p = mi_malloc(60000);
+  int* p = (int*)mi_malloc(60000);
   mi_stats_print_out(NULL, NULL);
   *p = 100;
   mi_free(p);
