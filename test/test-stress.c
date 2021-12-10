@@ -103,9 +103,7 @@ static void* alloc_items(size_t items, random_t r) {
     for (uintptr_t i = 0; i < items; i++) {
       p[i] = (items - i) ^ cookie;
     }
-    if (pick(r)%1000 <= 1) {
-      p[items+1] = 42; // overflow
-    }
+    // if (pick(r)%1000 <= 1) { p[items+1] = 42; } // overflow heap block    
   }  
   return p;
 }
