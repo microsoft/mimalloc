@@ -60,7 +60,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_PADDING  1
 #endif
 
-#if !defined(MI_DEBUG_TRACE)         // store stack trace at each allocation
+#if !defined(MI_DEBUG_TRACE)          // store stack trace at each allocation
 #define MI_DEBUG_TRACE  MI_DEBUG     
 #endif
 
