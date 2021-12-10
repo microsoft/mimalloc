@@ -115,6 +115,8 @@
       <ExceptionHandling>Sync</ExceptionHandling>
       <CompileAs>Default</CompileAs>
       <SupportJustMyCode>false</SupportJustMyCode>
+      <PreprocessorDefinitions>
+      </PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

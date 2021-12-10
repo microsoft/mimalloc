@@ -167,7 +167,7 @@ If we cannot get good randomness, we fall back to weak randomness based on a tim
 
 #if defined(_WIN32)
 
-#if !defined(MI_USE_RTLGENRANDOM)
+#if defined(MI_USE_BCRYPTGENRANDOM)
 // We prefer BCryptGenRandom over RtlGenRandom
 #pragma comment (lib,"bcrypt.lib")
 #include <bcrypt.h>

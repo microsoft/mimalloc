@@ -37,18 +37,20 @@ static void fail_aslr();              // issue #372
 static void tsan_numa_test();         // issue #414
 static void strdup_test();            // issue #445 
 static void bench_alloc_large(void);  // issue #xxx
+static void corrupt_free();
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
 
-   heap_thread_free_large();
-   heap_no_delete();
-   heap_late_free();
-   padding_shrink();
-   various_tests();
-   large_alloc();
-   tsan_numa_test();
-   strdup_test();
+  heap_thread_free_large();
+  heap_no_delete();
+  heap_late_free();
+  padding_shrink();
+  various_tests();
+  large_alloc();
+  tsan_numa_test();
+  strdup_test();
+  // corrupt_free();
 
   //test_mt_shutdown();
   //fail_aslr();
@@ -255,6 +257,41 @@ static void tsan_numa_test() {
   auto t1 = std::thread(dummy_worker);
   dummy_worker();
   t1.join();
+}
+
+
+// Try to corrupt the heap through buffer overflow
+#define N   256
+#define SZ  64
+#define OVF_SZ 32
+
+static void corrupt_free() {
+  void* p[N];
+  // allocate
+  for (int i = 0; i < N; i++) {
+    p[i] = malloc(SZ);
+  }
+  // free some
+  for (int i = 0; i < N; i += (N/10)) {
+    free(p[i]);
+    p[i] = NULL;
+  }
+  // try to corrupt the free list
+  for (int i = 0; i < N; i++) {
+    if (p[i] != NULL) {
+      memset(p[i], 0, SZ+OVF_SZ);
+    }
+  }
+  // allocate more.. trying to trigger an allocation from a corrupted entry
+  // this may need many allocations to get there (if at all)
+  for (int i = 0; i < 4096; i++) {
+    malloc(SZ);
+  }
+  // free the rest
+  for (int i = 0; i < N; i++) {
+    free(p[i]);
+    p[i] = NULL;
+  }
 }
 
 // issue #?
