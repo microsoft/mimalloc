@@ -285,7 +285,7 @@ static void double_free2() {
 // Try to corrupt the heap through buffer overflow
 #define N   256
 #define SZ  64
-#define OVF_SZ 100
+#define OVF_SZ 32
 
 static void corrupt_free() {
   void* p[N];
