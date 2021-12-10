@@ -168,7 +168,8 @@ If we cannot get good randomness, we fall back to weak randomness based on a tim
 #if defined(_WIN32)
 
 #if defined(MI_USE_BCRYPTGENRANDOM)
-// We prefer BCryptGenRandom over RtlGenRandom
+// We would like to use BCryptGenRandom instead of RtlGenRandom but it can lead to a deadlock 
+// under the VS debugger when using dynamic overriding.
 #pragma comment (lib,"bcrypt.lib")
 #include <bcrypt.h>
 static bool os_random_buf(void* buf, size_t buf_len) {
