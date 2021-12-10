@@ -60,16 +60,20 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_PADDING  1
 #endif
 
-#if !defined(MI_PADDING_EXTRA)   // use extra padding bytes?
-#define MI_PADDING_EXTRA   (64)
+#if !defined(MI_DEBUG_TRACE)         // store stack trace at each allocation
+#define MI_DEBUG_TRACE  MI_DEBUG     
 #endif
 
-#if !defined(MI_DEBUG_TRACE)     // store stack trace at each allocation
-#define MI_DEBUG_TRACE  1
+#if !defined(MI_DEBUG_TRACE_LEN)     
+#define MI_DEBUG_TRACE_LEN  (7)      // store up to N frames if tracing is enabled
 #endif
 
-#if !defined(MI_DEBUG_TRACE_LEN)     // store stack trace at each allocation
-#define MI_DEBUG_TRACE_LEN  (6)      // store up to N frames 
+#if !defined(MI_PADDING_EXTRA)       // use extra padding bytes? (so a stack trace can be preserved or next block corruption prevented)
+#if MI_DEBUG_TRACE > 0
+#define MI_PADDING_EXTRA    (128)      
+#else
+#define MI_PADDING_EXTRA    (0)      
+#endif
 #endif
 
 
@@ -366,18 +370,26 @@ typedef struct mi_random_cxt_s {
 // In debug mode there is a padding structure at the end of the blocks to check for buffer overflows
 #if (MI_PADDING)
 typedef struct mi_padding_s {
-  uint32_t canary; // encoded block value to check validity of the padding (in case of overflow)
-  uint32_t delta;  // padding bytes before the block. (mi_usable_size(p) - delta == exact allocated bytes)
+  #if MI_PADDING_EXTRA > 0
+  uint32_t canary_lo; 
+  uint8_t  extra[MI_PADDING_EXTRA];
+  #endif
+  uint32_t canary;                   // encoded block value to check validity of the delat (in case of overflow)
+  uint32_t delta;                    // padding bytes before the block. (mi_usable_size(p) - delta == exact allocated bytes)
   #if (MI_DEBUG_TRACE > 0)
   void* strace[MI_DEBUG_TRACE_LEN];  // stack trace at allocation time
   #endif
 } mi_padding_t;
-#define MI_PADDING_SIZE   (sizeof(mi_padding_t) + MI_PADDING_EXTRA)
+#define MI_PADDING_MINSIZE  (8)  // 2*sizeof(uint32_t)
+#define MI_PADDING_SIZE     (sizeof(mi_padding_t))
 #else
-#define MI_PADDING_SIZE   0
+#define MI_PADDING_MINSIZE  (0)
+#define MI_PADDING_SIZE     (0)
 #endif
 
-#define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + 1)
+// add 2 more for minimal padding (MI_PADDING && !MI_DEBUG_TRACE && MI_PADDING_EXTRA==0)
+// see `init.c` where all are initialized with an empty page and the check at `heap_malloc_small`.
+#define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + 1 + 2)
 
 
 // A heap owns a set of pages.

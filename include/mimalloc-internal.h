@@ -395,7 +395,7 @@ static inline uintptr_t _mi_ptr_cookie(const void* p) {
 ----------------------------------------------------------- */
 
 static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t size) {
-  mi_assert_internal(size <= (MI_SMALL_SIZE_MAX));
+  mi_assert_internal(size <= (MI_SMALL_SIZE_MAX + 2*sizeof(void*)));  // +2 for the minimal padding (see MI_PAGES_DIRECT)
   const size_t idx = _mi_wsize_from_size(size);
   mi_assert_internal(idx < MI_PAGES_DIRECT);
   return heap->pages_free_direct[idx];
