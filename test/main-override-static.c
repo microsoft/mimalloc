@@ -176,7 +176,9 @@ void mi_bins() {
 
 static void double_free1();
 static void double_free2();
-static void corrupt_free();
+static void double_free3();
+static void corrupt_free1();
+static void corrupt_free2();
 static void block_overflow1();
 static void block_overflow2();
 static void invalid_free();
@@ -192,7 +194,9 @@ int main() {
   // detect double frees and heap corruption
   // double_free1();
   // double_free2();
-  // corrupt_free();
+  // double_free3();
+  // corrupt_free1();
+  // corrupt_free2();
   // block_overflow1();
   // block_overflow2();
   // test_aslr();
@@ -281,13 +285,35 @@ static void double_free2() {
   fprintf(stderr, "p1: %p-%p, p2: %p-%p\n", p[4], (uint8_t*)(p[4]) + 917504, p[1], (uint8_t*)(p[1]) + 786432);
 }
 
+static void double_free3() {
+  void* p1 = malloc(32);
+  void* p2 = malloc(32);
+  void* p3 = malloc(32);
+  free(p2);
+  free(p1);
+  free(p2);
+  free(p3);
+}
+
+static void corrupt_free1() {
+  void* p1 = malloc(32);
+  void* p2 = malloc(32);
+  void* p3 = malloc(32);
+  free(p2);
+  memset(p2, 0, 8); // corrupt free list entry
+  mi_collect(true);
+  p2 = malloc(32);  // should trigger corrupted free list
+  free(p1);
+  free(p2);
+  free(p3);
+}
 
 // Try to corrupt the heap through buffer overflow
 #define N   256
 #define SZ  64
 #define OVF_SZ 32
 
-static void corrupt_free() {
+static void corrupt_free2() {
   void* p[N];
   // allocate
   for (int i = 0; i < N; i++) {

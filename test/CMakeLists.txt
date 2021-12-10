@@ -15,6 +15,7 @@ if (NOT CMAKE_BUILD_TYPE)
   endif()
 endif()
 
+
 # Import mimalloc (if installed)
 find_package(mimalloc 2.0 REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 message(STATUS "Found mimalloc installed at: ${MIMALLOC_LIBRARY_DIR}")

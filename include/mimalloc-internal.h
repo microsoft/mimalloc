@@ -55,7 +55,7 @@ void       _mi_error_message(int err, const char* fmt, ...);
 
 #if MI_DEBUG_TRACE > 0
 void       _mi_stack_trace_capture(void** strace, size_t len, size_t skip);
-void       _mi_stack_trace_print(const void* const* strace, size_t len, const mi_block_t* block, size_t bsize, size_t avail);
+void       _mi_stack_trace_print(const char* msg, void** strace, size_t len, const mi_block_t* block, size_t bsize, size_t avail);
 #endif
 
 // random.c
@@ -152,6 +152,7 @@ void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
 void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
+void        _mi_error_trace_with_predecessor(const mi_page_t* page, const mi_block_t* block, const char* msg);
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
@@ -416,7 +417,7 @@ static inline uintptr_t _mi_ptr_cookie(const void* p) {
 ----------------------------------------------------------- */
 
 static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t size) {
-  mi_assert_internal(size <= (MI_SMALL_SIZE_MAX + 2*sizeof(void*)));  // +2 for the minimal padding (see MI_PAGES_DIRECT)
+  mi_assert_internal(size <= (MI_SMALL_SIZE_MAX + MI_PADDING_MINSIZE));  
   const size_t idx = _mi_wsize_from_size(size);
   mi_assert_internal(idx < MI_PAGES_DIRECT);
   return heap->pages_free_direct[idx];
@@ -484,7 +485,7 @@ static inline mi_page_t* _mi_ptr_page(void* p) {
 // Get the block size of a page (special case for huge objects)
 static inline size_t mi_page_block_size(const mi_page_t* page) {
   const size_t bsize = page->xblock_size;
-  mi_assert_internal(bsize > 0);
+  mi_assert_internal(bsize > 0);  
   if (mi_likely(bsize < MI_HUGE_BLOCK_SIZE)) {
     return bsize;
   }
@@ -680,7 +681,8 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   // check for free list corruption: is `next` at least in the same page?
   // TODO: check if `next` is `page->block_size` aligned?
   if (mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next))) {
-    _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (uintptr_t)next);
+    _mi_error_trace_with_predecessor(page, block, "free block");
+    _mi_error_message(EFAULT, "corrupted free list entry of size %zu at %p: value 0x%zx\n", mi_page_block_size(page), block, (uintptr_t)next);
     next = NULL;
   }
   return next;
