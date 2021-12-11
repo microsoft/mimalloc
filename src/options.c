@@ -398,6 +398,8 @@ void _mi_stack_trace_capture(void** strace, size_t len, size_t skip) {
 void _mi_stack_trace_print(const char* msg, void** strace, size_t len, const mi_block_t* block, size_t bsize, size_t avail) {
   _mi_fprintf(NULL, NULL, "trace %s at %p of size %zu (%zub usable), allocated at:\n", 
                 (msg==NULL ? "block" : msg), block, avail, bsize);
+  while( len > 0 && strace[len-1] == NULL) { len--; }
+  if (len == 0) return;
   char** names = backtrace_symbols(strace, len);
   for (size_t i = 0; i < len && strace[i] != NULL; i++) {
     _mi_fprintf(NULL, NULL, "  %2zu: %8p: %s\n", i, strace[i], (names == NULL || names[i] == NULL ? "<unknown>" : names[i]));

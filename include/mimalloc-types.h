@@ -70,7 +70,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if !defined(MI_PADDING_EXTRA)       // use extra padding bytes? (so a stack trace can be preserved or next block corruption prevented)
 #if MI_DEBUG_TRACE > 0
-#define MI_PADDING_EXTRA    (64)      
+#define MI_PADDING_EXTRA    (64)       
 #else
 #define MI_PADDING_EXTRA    (0)      
 #endif
