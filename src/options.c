@@ -358,7 +358,7 @@ void _mi_stack_trace_capture(void** strace, size_t len, size_t skip) {
 #include <dbghelp.h>
 #pragma comment(lib,"dbghelp")
 void _mi_stack_trace_print(const char* msg, void** strace, size_t len, const mi_block_t* block, size_t bsize, size_t avail) {
-  _mi_fprintf(NULL, NULL, "trace %s at %p of size %zu (%zub total available), backtrace:\n", 
+  _mi_fprintf(NULL, NULL, "trace %s at %p of size %zu (%zub usable), allocated at:\n", 
                (msg==NULL ? "block" : msg), block, avail, bsize);
   HANDLE current_process = GetCurrentProcess();
   SymInitialize(current_process, NULL, TRUE);
@@ -383,15 +383,18 @@ void _mi_stack_trace_capture(void** strace, size_t len, size_t skip) {
   if (_mi_preloading()) return;
   if (!mi_recurse_enter()) return;  // needed for pthreads
   void* trace[MI_TRACE_LEN];
-  backtrace(trace, MI_TRACE_LEN);
+  size_t trace_len = skip + len;
+  if (trace_len > len) { trace_len = MI_TRACE_LEN; }
+  memset(trace,0,trace_len);
+  trace_len = backtrace(trace, trace_len);
   for (size_t i = 0; i < len; i++) {
-    void* p = (i + skip < MI_TRACE_LEN ? trace[i+skip] : NULL);
+    void* p = (i + skip < trace_len ? trace[i+skip] : NULL);
     strace[i] = p;
   }
   mi_recurse_exit();
 }
 void _mi_stack_trace_print(const char* msg, void** strace, size_t len, const mi_block_t* block, size_t bsize, size_t avail) {
-  _mi_fprintf(NULL, NULL, "trace %s at %p of size %zu (%zub total available), backtrace:\n", 
+  _mi_fprintf(NULL, NULL, "trace %s at %p of size %zu (%zub usable), allocated at:\n", 
                 (msg==NULL ? "block" : msg), block, avail, bsize);
   char** names = backtrace_symbols(strace, len);
   for (size_t i = 0; i < len && strace[i] != NULL; i++) {

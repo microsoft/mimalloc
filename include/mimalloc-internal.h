@@ -144,7 +144,7 @@ void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
 void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
-void        _mi_error_trace_with_predecessor(const mi_page_t* page, const mi_block_t* block, const char* msg);
+void        _mi_show_block_trace_with_predecessor(const mi_page_t* page, const mi_block_t* block, const char* msg);
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
@@ -639,7 +639,7 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   // check for free list corruption: is `next` at least in the same page?
   // TODO: check if `next` is `page->block_size` aligned?
   if (mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next))) {
-    _mi_error_trace_with_predecessor(page, block, "free block");
+    _mi_show_block_trace_with_predecessor(page, block, "free block");
     _mi_error_message(EFAULT, "corrupted free list entry of size %zu at %p: value 0x%zx\n", mi_page_block_size(page), block, (uintptr_t)next);
     next = NULL;
   }
