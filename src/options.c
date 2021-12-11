@@ -361,15 +361,15 @@ void _mi_stack_trace_capture(void** strace, size_t len, size_t skip) {
 #include <dbghelp.h>
 #pragma comment(lib,"dbghelp")
 void _mi_stack_trace_print(const char* msg, void** strace, size_t len, const mi_block_t* block, size_t bsize, size_t avail) {
-  _mi_fprintf(NULL, NULL, "trace %s at %p of size %zu (%zub total available), backtrace:\n", 
+  _mi_fprintf(NULL, NULL, "trace %s at %p of size %zu (%zub usable), allocated at:\n", 
                (msg==NULL ? "block" : msg), block, avail, bsize);
-  HANDLE current_process = GetCurrentProcess();
-  SymInitialize(current_process, NULL, TRUE);
   PSYMBOL_INFO info = (PSYMBOL_INFO)_malloca(sizeof(SYMBOL_INFO) + 256 * sizeof(TCHAR));
   if (info==NULL) return;
   memset(info, 0, sizeof(info));
   info->MaxNameLen = 255;
   info->SizeOfStruct = sizeof(SYMBOL_INFO);
+  HANDLE current_process = GetCurrentProcess();
+  if (!SymInitialize(current_process, NULL, TRUE)) return;
   for (size_t i = 0; i < len && strace[i] != NULL; i++) {
     if (SymFromAddr(current_process, (DWORD64)(strace[i]), 0, info)) {
       _mi_fprintf(NULL, NULL, "  %2zu: %8p: %s\n", i, strace[i], info->Name);
@@ -378,24 +378,31 @@ void _mi_stack_trace_print(const char* msg, void** strace, size_t len, const mi_
       _mi_fprintf(NULL, NULL, "  %2zu: %8p: <unknown address: error: 0x%04x>\n", i, strace[i], GetLastError());
     }
   }  
+  SymCleanup(current_process);
 }
 #elif (MI_DEBUG_TRACE > 0) && (defined(__linux__) || defined(__FreeBSD__) || defined(__APPLE__))
 #include <execinfo.h>
-#define MI_TRACE_LEN (64)
+#define MI_MAX_TRACE_LEN (64)
 void _mi_stack_trace_capture(void** strace, size_t len, size_t skip) {
   if (_mi_preloading()) return;
   if (!mi_recurse_enter()) return;  // needed for pthreads
-  void* trace[MI_TRACE_LEN];
-  backtrace(trace, MI_TRACE_LEN);
+  void* trace[MI_MAX_TRACE_LEN];
+  size_t trace_len = skip + len;
+  if (trace_len > len) { trace_len = MI_MAX_TRACE_LEN; }
+  memset(trace,0,trace_len);
+  trace_len = backtrace(trace, trace_len);
   for (size_t i = 0; i < len; i++) {
-    void* p = (i + skip < MI_TRACE_LEN ? trace[i+skip] : NULL);
+    void* p = (i + skip < trace_len ? trace[i+skip] : NULL);
     strace[i] = p;
   }
   mi_recurse_exit();
 }
+
 void _mi_stack_trace_print(const char* msg, void** strace, size_t len, const mi_block_t* block, size_t bsize, size_t avail) {
-  _mi_fprintf(NULL, NULL, "trace %s at %p of size %zu (%zub total available), backtrace:\n", 
+  _mi_fprintf(NULL, NULL, "trace %s at %p of size %zu (%zub usable), allocated at:\n", 
                 (msg==NULL ? "block" : msg), block, avail, bsize);
+  while( len > 0 && strace[len-1] == NULL) { len--; }
+  if (len == 0) return;
   char** names = backtrace_symbols(strace, len);
   for (size_t i = 0; i < len && strace[i] != NULL; i++) {
     _mi_fprintf(NULL, NULL, "  %2zu: %8p: %s\n", i, strace[i], (names == NULL || names[i] == NULL ? "<unknown>" : names[i]));

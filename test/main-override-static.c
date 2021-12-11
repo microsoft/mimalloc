@@ -230,7 +230,8 @@ int main() {
 
 static void invalid_free() {
   free((void*)0xBADBEEF);
-  realloc((void*)0xBADBEEF,10);
+  void* p = realloc((void*)0xBADBEEF,10);
+  free(p);
 }
 
 static void block_overflow1() {
@@ -333,7 +334,7 @@ static void corrupt_free2() {
   // allocate more.. trying to trigger an allocation from a corrupted entry
   // this may need many allocations to get there (if at all)
   for (int i = 0; i < 4096; i++) {
-    malloc(SZ);
+    void* p = malloc(SZ);
   }
   // free the rest
   for (int i = 0; i < N; i++) {

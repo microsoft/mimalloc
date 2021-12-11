@@ -201,7 +201,7 @@ static mi_padding_t* mi_page_decode_padding(const mi_page_t* page, const mi_bloc
 }
 
 #if MI_DEBUG_TRACE > 0
-static void _mi_error_trace(const mi_page_t* page, const mi_block_t* block, const char* msg) {
+static void _mi_show_block_trace(const mi_page_t* page, const mi_block_t* block, const char* msg) {
   size_t bsize;
   size_t delta;
   mi_padding_t* padding = mi_page_decode_padding(page, block, &delta, &bsize);
@@ -210,7 +210,7 @@ static void _mi_error_trace(const mi_page_t* page, const mi_block_t* block, cons
   }
 }
 #else 
-static void _mi_error_trace(const mi_page_t* page, const mi_block_t* block) {
+static void _mi_show_block_trace(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(page); MI_UNUSED(block);
 }
 #endif
@@ -253,7 +253,7 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
   size_t size;
   size_t wrong;
   if (mi_unlikely(!mi_verify_padding(page,block,&size,&wrong))) {
-    _mi_error_trace(page, block, NULL);
+    _mi_show_block_trace_with_predecessor(page, block, NULL);
     _mi_error_message(EFAULT, "buffer overflow in heap block %p of size %zu: write after %zu bytes\n", block, size, wrong );
   }
 }
@@ -289,7 +289,7 @@ static void mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, co
   MI_UNUSED(page); MI_UNUSED(block); MI_UNUSED(min_size);
 }
 
-static void _mi_error_trace(const mi_page_t* page, const mi_block_t* block, const char* msg) {
+static void _mi_show_block_trace(const mi_page_t* page, const mi_block_t* block, const char* msg) {
   MI_UNUSED(page); MI_UNUSED(block); MI_UNUSED(msg);
 }
 #endif
@@ -305,12 +305,12 @@ static const mi_block_t* mi_block_predecessor(const mi_page_t* page, const mi_bl
 }
 
 // Used if a free list is corrupted which is usually caused by the previous block(s)
-void _mi_error_trace_with_predecessor(const mi_page_t* page, const mi_block_t* block, const char* msg) {
+void _mi_show_block_trace_with_predecessor(const mi_page_t* page, const mi_block_t* block, const char* msg) {
   const mi_block_t* prev = mi_block_predecessor(page,block);
   if (prev != NULL) {
-    _mi_error_trace(page, prev, "predecessor block");
+    _mi_show_block_trace(page, prev, "predecessor block");
   }
-  _mi_error_trace(page, block, msg);
+  _mi_show_block_trace(page, block, msg);
 }
 
 
@@ -336,7 +336,7 @@ static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, con
       mi_list_contains(page, page->local_free, block) ||
       mi_list_contains(page, mi_page_thread_free(page), block))
   {
-    _mi_error_trace(page, block, NULL);
+    _mi_show_block_trace(page, block, NULL);
     _mi_error_message(EAGAIN, "double free detected of block %p with size %zu\n", block, mi_page_usable_size_of(page,block));
     return true;
   }
