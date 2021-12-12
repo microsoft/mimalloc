@@ -210,8 +210,8 @@ static void _mi_show_block_trace(const mi_page_t* page, const mi_block_t* block,
   }
 }
 #else 
-static void _mi_show_block_trace(const mi_page_t* page, const mi_block_t* block) {
-  MI_UNUSED(page); MI_UNUSED(block);
+static void _mi_show_block_trace(const mi_page_t* page, const mi_block_t* block, const char* msg) {
+  MI_UNUSED(page); MI_UNUSED(block); MI_UNUSED(msg);
 }
 #endif
 
