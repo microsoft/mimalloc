@@ -504,7 +504,12 @@ void mi_process_init(void) mi_attr_noexcept {
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages = mi_option_get(mi_option_reserve_huge_os_pages);
-    mi_reserve_huge_os_pages_interleave(pages, 0, pages*500);
+    long reserve_at = mi_option_get(mi_option_reserve_huge_os_pages_at);
+    if (reserve_at != -1) {
+      mi_reserve_huge_os_pages_at(pages, reserve_at, pages*500);
+    } else {
+      mi_reserve_huge_os_pages_interleave(pages, 0, pages*500);
+    }
   } 
   if (mi_option_is_enabled(mi_option_reserve_os_memory)) {
     long ksize = mi_option_get(mi_option_reserve_os_memory);
