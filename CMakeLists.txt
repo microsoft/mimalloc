@@ -225,18 +225,20 @@ endif()
 if(WIN32)
   list(APPEND mi_libraries psapi shell32 user32 advapi32 bcrypt)
 else()
-  if(NOT ${CMAKE_C_COMPILER} MATCHES "android")
-    list(APPEND mi_libraries pthread)
-    find_library(MI_LIBRT rt)
-    if(MI_LIBRT)
-      list(APPEND mi_libraries ${MI_LIBRT})
+  find_library(MI_LIBPTHREAD pthread)
+  if (MI_LIBPTHREAD)                      
+      list(APPEND mi_libraries ${MI_LIBPTHREAD})
+  endif()
+  find_library(MI_LIBRT rt)
+  if(MI_LIBRT)
+    list(APPEND mi_libraries ${MI_LIBRT})
+  endif()
+  if(MI_DEBUG_TRACE)
+    find_library(MI_LIBEXECINFO NAMES execinfo)  
+    if (MI_LIBEXECINFO)
+      list(APPEND mi_libraries ${MI_LIBEXECINFO})
     endif()
-    if(MI_DEBUG_TRACE)
-      find_library(MI_LIBEXECINFO NAMES execinfo)  
-      if (MI_LIBEXECINFO)                            # on freeBSD
-        list(APPEND mi_libraries ${MI_LIBEXECINFO})
-      endif()
-    endif()
+  endif()
   endif()
 endif()
 
@@ -248,14 +250,17 @@ endif()
 # Install and output names
 # -----------------------------------------------------------------------------
 
+set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}")   # for dynamic/shared library and symlinks
+
+# install at top level or use versioned directories for side-by-side installation?
 if (MI_INSTALL_TOPLEVEL)
-  set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}")
-  set(mi_install_incdir   "${CMAKE_INSTALL_INCLUDEDIR}")
-  set(mi_install_cmakedir "${CMAKE_INSTALL_LIBDIR}/cmake/mimalloc")
+  set(mi_install_objdir     "${CMAKE_INSTALL_LIBDIR}")
+  set(mi_install_incdir     "${CMAKE_INSTALL_INCLUDEDIR}")        
+  set(mi_install_cmakedir   "${CMAKE_INSTALL_LIBDIR}/cmake/mimalloc")
 else()
-  set(mi_install_libdir   "lib/mimalloc-${mi_version}")
-  set(mi_install_incdir   "include/mimalloc-${mi_version}")
-  set(mi_install_cmakedir "share/mimalloc-${mi_version}/cmake") 
+  set(mi_install_objdir     "${CMAKE_INSTALL_LIBDIR}/mimalloc-${mi_version}")       # for static library and object files
+  set(mi_install_incdir     "${CMAKE_INSTALL_INCLUDEDIR}/mimalloc-${mi_version}")   # for includes
+  set(mi_install_cmakedir   "${CMAKE_INSTALL_LIBDIR}/cmake/mimalloc-${mi_version}") # for cmake package info
 endif()
 
 if(MI_SECURE)
@@ -303,7 +308,7 @@ message(STATUS "")
 # shared library
 if(MI_BUILD_SHARED)
   add_library(mimalloc SHARED ${mi_sources})
-  set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} OUTPUT_NAME ${mi_basename} )
+  set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} SOVERSION ${mi_version_major} OUTPUT_NAME ${mi_basename} )
   target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
   target_compile_options(mimalloc PRIVATE ${mi_cflags})
   target_link_libraries(mimalloc PUBLIC ${mi_libraries})
@@ -349,7 +354,7 @@ if (MI_BUILD_STATIC)
     set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_basename})
   endif()
 
-  install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_libdir} LIBRARY)
+  install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_objdir} LIBRARY)
 endif()
 
 # install include files
@@ -359,16 +364,6 @@ install(FILES include/mimalloc-new-delete.h DESTINATION ${mi_install_incdir})
 install(FILES cmake/mimalloc-config.cmake DESTINATION ${mi_install_cmakedir})
 install(FILES cmake/mimalloc-config-version.cmake DESTINATION ${mi_install_cmakedir})
 
-if(NOT WIN32 AND MI_BUILD_SHARED AND NOT MI_INSTALL_TOPLEVEL)
-  # install a symlink in the /usr/local/lib to the versioned library
-  # note: use delayed prefix expansion as \${CMAKE_INSTALL_PREFIX}
-  set(mi_symlink "${CMAKE_SHARED_MODULE_PREFIX}${mi_basename}${CMAKE_SHARED_LIBRARY_SUFFIX}")
-  set(mi_soname "mimalloc-${mi_version}/${mi_symlink}.${mi_version}")
-  install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${mi_soname} ${mi_symlink} WORKING_DIRECTORY \${CMAKE_INSTALL_PREFIX}/lib)")
-  install(CODE "MESSAGE(\"-- Symbolic link: \${CMAKE_INSTALL_PREFIX}/lib/${mi_symlink} -> ${mi_soname}\")")
-  install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${mi_soname} ${mi_symlink}.${mi_version} WORKING_DIRECTORY \${CMAKE_INSTALL_PREFIX}/lib)")
-  install(CODE "MESSAGE(\"-- Symbolic link: \${CMAKE_INSTALL_PREFIX}/lib/${mi_symlink}.${mi_version} -> ${mi_soname}\")")
-endif()
 
 # single object file for more predictable static overriding
 if (MI_BUILD_OBJECT)
@@ -387,7 +382,7 @@ if (MI_BUILD_OBJECT)
   # the FILES expression can also be: $<TARGET_OBJECTS:mimalloc-obj>
   # but that fails cmake versions less than 3.10 so we leave it as is for now
   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}
-          DESTINATION ${mi_install_libdir}
+          DESTINATION ${mi_install_objdir}
           RENAME ${mi_basename}${CMAKE_C_OUTPUT_EXTENSION} )
 endif()
 
