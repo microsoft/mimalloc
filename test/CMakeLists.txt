@@ -29,7 +29,7 @@ target_link_libraries(dynamic-override-cxx PUBLIC mimalloc)
 
 # overriding with a static object file works reliable as the symbols in the
 # object file have priority over those in library files
-add_executable(static-override-obj main-override.c ${MIMALLOC_LIBRARY_DIR}/mimalloc.o)
+add_executable(static-override-obj main-override.c ${MIMALLOC_OBJECT_DIR}/mimalloc.o)
 target_include_directories(static-override-obj PUBLIC ${MIMALLOC_INCLUDE_DIR})
 target_link_libraries(static-override-obj PUBLIC pthread)
 

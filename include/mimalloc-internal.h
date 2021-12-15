@@ -834,9 +834,9 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
 #elif defined(__APPLE__) && defined(__x86_64__)
   __asm__("movq %1,%%gs:%0" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 macOSX uses GS
 #elif defined(__x86_64__) && (MI_INTPTR_SIZE==4)
-  __asm__("movl %1,%%fs:%1" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x32 ABI
+  __asm__("movl %1,%%fs:%0" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x32 ABI
 #elif defined(__x86_64__)
-  __asm__("movq %1,%%fs:%1" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 Linux, BSD uses FS
+  __asm__("movq %1,%%fs:%0" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 Linux, BSD uses FS
 #elif defined(__arm__)
   void** tcb; MI_UNUSED(ofs);
   __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
