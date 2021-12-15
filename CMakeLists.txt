@@ -228,14 +228,17 @@ endif()
 # Install and output names
 # -----------------------------------------------------------------------------
 
+set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}")   # for dynamic/shared library and symlinks
+
+# install at top level or use versioned directories for side-by-side installation?
 if (MI_INSTALL_TOPLEVEL)
-  set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}")
-  set(mi_install_incdir   "${CMAKE_INSTALL_INCLUDEDIR}")
-  set(mi_install_cmakedir "${CMAKE_INSTALL_LIBDIR}/cmake/mimalloc")
+  set(mi_install_objdir     "${CMAKE_INSTALL_LIBDIR}")
+  set(mi_install_incdir     "${CMAKE_INSTALL_INCLUDEDIR}")        
+  set(mi_install_cmakedir   "${CMAKE_INSTALL_LIBDIR}/cmake/mimalloc")
 else()
-  set(mi_install_libdir   "lib/mimalloc-${mi_version}")
-  set(mi_install_incdir   "include/mimalloc-${mi_version}")
-  set(mi_install_cmakedir "share/mimalloc-${mi_version}/cmake") 
+  set(mi_install_objdir     "${CMAKE_INSTALL_LIBDIR}/mimalloc-${mi_version}")       # for static library and object files
+  set(mi_install_incdir     "${CMAKE_INSTALL_INCLUDEDIR}/mimalloc-${mi_version}")   # for includes
+  set(mi_install_cmakedir   "${CMAKE_INSTALL_LIBDIR}/cmake/mimalloc-${mi_version}") # for cmake package info
 endif()
 
 if(MI_SECURE)
@@ -329,7 +332,7 @@ if (MI_BUILD_STATIC)
     set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_basename})
   endif()
 
-  install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_libdir} LIBRARY)
+  install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_objdir} LIBRARY)
 endif()
 
 # install include files
@@ -357,7 +360,7 @@ if (MI_BUILD_OBJECT)
   # the FILES expression can also be: $<TARGET_OBJECTS:mimalloc-obj>
   # but that fails cmake versions less than 3.10 so we leave it as is for now
   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}
-          DESTINATION ${mi_install_libdir}
+          DESTINATION ${mi_install_objdir}
           RENAME ${mi_basename}${CMAKE_C_OUTPUT_EXTENSION} )
 endif()
 
