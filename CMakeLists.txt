@@ -210,27 +210,29 @@ endif()
 if(WIN32)
   list(APPEND mi_libraries psapi shell32 user32 advapi32 bcrypt)
 else()
-  find_library(LIBPTHREAD pthread)
-  if (LIBPTHREAD)                      
-      list(APPEND mi_libraries ${LIBPTHREAD})
+  find_library(MI_LIBPTHREAD pthread)
+  if (MI_LIBPTHREAD)                      
+    list(APPEND mi_libraries ${MI_LIBPTHREAD})
   endif()
-  find_library(LIBRT rt)
-  if(LIBRT)
-    list(APPEND mi_libraries ${LIBRT})
+  find_library(MI_LIBRT rt)
+  if(MI_LIBRT)
+    list(APPEND mi_libraries ${MI_LIBRT})
   endif()  
-endif()
-
-if (MI_USE_LIBATOMIC) 
-  list(APPEND mi_libraries atomic)
+  find_library(MI_LIBATOMIC atomic)
+  if (MI_LIBATOMIC OR MI_USE_LIBATOMIC) 
+    list(APPEND mi_libraries atomic)
+  endif()
 endif()
 
 # -----------------------------------------------------------------------------
 # Install and output names
 # -----------------------------------------------------------------------------
 
-set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}")   # for dynamic/shared library and symlinks
+# dynamic/shared library and symlinks always go to /usr/local/lib equivalent
+set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}") 
 
-# install at top level or use versioned directories for side-by-side installation?
+# static libraries and object files, includes, and cmake config files
+# are either installed at top level, or use versioned directories for side-by-side installation (default)
 if (MI_INSTALL_TOPLEVEL)
   set(mi_install_objdir     "${CMAKE_INSTALL_LIBDIR}")
   set(mi_install_incdir     "${CMAKE_INSTALL_INCLUDEDIR}")        
