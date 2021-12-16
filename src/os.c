@@ -8,6 +8,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #define _DEFAULT_SOURCE   // ensure mmap flags are defined
 #endif
 
+#define MI_USE_SBRK
+
 #if defined(__sun)
 // illumos provides new mman.h api when any of these are defined
 // otherwise the old api based on caddr_t which predates the void pointers one.
@@ -24,6 +26,10 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #ifdef _MSC_VER
 #pragma warning(disable:4996)  // strerror
+#endif
+
+#if defined(__wasi__)
+#define MI_USE_SBRK
 #endif
 
 #if defined(_WIN32)
