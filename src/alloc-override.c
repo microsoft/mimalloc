@@ -245,7 +245,7 @@ extern "C" {
 void  cfree(void* p)                                    { mi_free(p); } 
 void* pvalloc(size_t size)                              { return mi_pvalloc(size); }
 void* reallocarray(void* p, size_t count, size_t size)  { return mi_reallocarray(p, count, size); }
-int   reallocarr(void* p, size_t count, size_t size)    { return mi_reallocarr(&p, count, size); }
+int   reallocarr(void* p, size_t count, size_t size)    { return mi_reallocarr(p, count, size); }
 void* memalign(size_t alignment, size_t size)           { return mi_memalign(alignment, size); }
 void* _aligned_malloc(size_t alignment, size_t size)    { return mi_aligned_alloc(alignment, size); }
 
