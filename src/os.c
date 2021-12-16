@@ -26,10 +26,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #pragma warning(disable:4996)  // strerror
 #endif
 
-#if defined(__wasi__)
-#define MI_USE_SBRK
-#endif
-
 #if defined(_WIN32)
 #include <windows.h>
 #elif defined(__wasi__)
