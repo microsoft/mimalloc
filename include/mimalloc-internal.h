@@ -43,6 +43,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_externc  
 #endif
 
+#if !defined(_WIN32) && !defined(__wasi__) 
+#define  MI_USE_PTHREADS
+#include <pthread.h>
+#endif
+
 // "options.c"
 void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
 void       _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
@@ -318,7 +323,7 @@ We try to circumvent this in an efficient way:
 - macOSX : we use an unused TLS slot from the OS allocated slots (MI_TLS_SLOT). On OSX, the
            loader itself calls `malloc` even before the modules are initialized.
 - OpenBSD: we use an unused slot from the pthread block (MI_TLS_PTHREAD_SLOT_OFS).
-- DragonFly: the uniqueid use is buggy but kept for reference.
+- DragonFly: defaults are working but seem slow compared to freeBSD (see PR #323)
 ------------------------------------------------------------------------------------------- */
 
 extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
@@ -335,16 +340,18 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 // use end bytes of a name; goes wrong if anyone uses names > 23 characters (ptrhread specifies 16) 
 // see <https://github.com/openbsd/src/blob/master/lib/libc/include/thread_private.h#L371>
 #define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 4*sizeof(void*) + 24)  
-#elif defined(__DragonFly__)
-#warning "mimalloc is not working correctly on DragonFly yet."
-//#define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
+// #elif defined(__DragonFly__)
+// #warning "mimalloc is not working correctly on DragonFly yet."
+// #define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
+#elif defined(__ANDROID__)
+// See issue #381
+#define MI_TLS_PTHREAD
 #endif
 #endif
 
 #if defined(MI_TLS_SLOT)
 static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept;   // forward declaration
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
-#include <pthread.h>
 static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
   pthread_t self = pthread_self();
   #if defined(__DragonFly__)
@@ -356,7 +363,6 @@ static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
   return (mi_heap_t**)((uint8_t*)self + MI_TLS_PTHREAD_SLOT_OFS);
 }
 #elif defined(MI_TLS_PTHREAD)
-#include <pthread.h>
 extern pthread_key_t _mi_heap_default_key;
 #endif
 
@@ -854,8 +860,8 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
 }
 
 static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
-#if defined(__BIONIC__) && (defined(__arm__) || defined(__aarch64__))
-  // on Android, slot 1 is the thread ID (pointer to pthread internal struct)
+#if defined(__arm__) || (defined(__ANDROID__) && defined(__aarch64__))
+  // issue #384, #495: on arm32 and arm32/arm64 Android, slot 1 is the thread ID (pointer to pthread internal struct) 
   return (uintptr_t)mi_tls_slot(1);
 #else
   // in all our other targets, slot 0 is the pointer to the thread control block
