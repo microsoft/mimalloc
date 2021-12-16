@@ -33,11 +33,17 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 size_t mi_malloc_size(const void* p) mi_attr_noexcept {
+  //if (!mi_is_in_heap_region(p)) return 0;
   return mi_usable_size(p);
 }
 
 size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept {
+  //if (!mi_is_in_heap_region(p)) return 0;
   return mi_usable_size(p);
+}
+
+size_t mi_malloc_good_size(size_t size) mi_attr_noexcept {
+  return mi_good_size(size);
 }
 
 void mi_cfree(void* p) mi_attr_noexcept {
@@ -86,13 +92,23 @@ mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_n
 
 void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  // BSD
   void* newp = mi_reallocn(p,count,size);
-  if (newp==NULL) errno = ENOMEM;
+  if (newp==NULL) { errno = ENOMEM; }
   return newp;
+}
+
+int mi_reallocarr( void* p, size_t count, size_t size ) mi_attr_noexcept { // NetBSD
+  mi_assert(p != NULL);
+  if (p == NULL) return EINVAL;  // should we set errno as well?
+  void** op = (void**)p;  
+  void* newp = mi_reallocarray(*op, count, size);
+  if (mi_unlikely(newp == NULL)) return errno;
+  *op = newp;
+  return 0;
 }
 
 void* mi__expand(void* p, size_t newsize) mi_attr_noexcept {  // Microsoft
   void* res = mi_expand(p, newsize);
-  if (res == NULL) errno = ENOMEM;
+  if (res == NULL) { errno = ENOMEM; }
   return res;
 }
 
