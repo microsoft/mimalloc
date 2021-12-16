@@ -98,10 +98,15 @@ void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  
 
 int mi_reallocarr( void* p, size_t count, size_t size ) mi_attr_noexcept { // NetBSD
   mi_assert(p != NULL);
-  if (p == NULL) return EINVAL;  // should we set errno as well?
+  if (p == NULL) {
+	  errno = EINVAL;
+	  return errno;
+  }
+  int s_errno = errno;
   void** op = (void**)p;  
   void* newp = mi_reallocarray(*op, count, size);
-  if (mi_unlikely(newp == NULL)) return errno;
+  if (mi_unlikely(newp == NULL)) { return errno; }
+  errno = s_errno;
   *op = newp;
   return 0;
 }
