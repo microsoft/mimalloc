@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018,2019 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2020 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license.
 -----------------------------------------------------------------------------*/
@@ -25,7 +25,7 @@ terms of the MIT license.
 //
 // argument defaults
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
-static int SCALE   = 10;      // scaling factor
+static int SCALE   = 25;      // scaling factor
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
@@ -37,6 +37,7 @@ static bool   allow_large_objects = true;    // allow very large objects?
 static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
 
 
+// #define USE_STD_MALLOC
 #ifdef USE_STD_MALLOC
 #define custom_calloc(n,s)    calloc(n,s)
 #define custom_realloc(p,s)   realloc(p,s)
@@ -250,8 +251,10 @@ int main(int argc, char** argv) {
     test_leak();
 #endif
 
-  // mi_collect(true);
 #ifndef USE_STD_MALLOC
+  #ifndef NDEBUG
+  mi_collect(true);
+  #endif
   mi_stats_print(NULL);
 #endif
   //bench_end_program();

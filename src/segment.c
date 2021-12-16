@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2020, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -17,14 +17,14 @@ static uint8_t* mi_segment_raw_page_start(const mi_segment_t* segment, const mi_
 
 /* --------------------------------------------------------------------------------
   Segment allocation
-  We allocate pages inside bigger "segments" (4mb on 64-bit). This is to avoid
+  We allocate pages inside bigger "segments" (4MiB on 64-bit). This is to avoid
   splitting VMA's on Linux and reduce fragmentation on other OS's.
   Each thread owns its own segments.
 
   Currently we have:
-  - small pages (64kb), 64 in one segment
-  - medium pages (512kb), 8 in one segment
-  - large pages (4mb), 1 in one segment
+  - small pages (64KiB), 64 in one segment
+  - medium pages (512KiB), 8 in one segment
+  - large pages (4MiB), 1 in one segment
   - huge blocks > MI_LARGE_OBJ_SIZE_MAX become large segment with 1 page
 
   In any case the memory for a segment is virtual and usually committed on demand.
@@ -579,7 +579,10 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   mi_assert_internal(segment_size >= required);
 
   // Initialize parameters
-  const bool eager_delayed = (page_kind <= MI_PAGE_MEDIUM && tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
+  const bool eager_delayed = (page_kind <= MI_PAGE_MEDIUM &&          // don't delay for large objects
+                              !_mi_os_has_overcommit() &&             // never delay on overcommit systems
+                              _mi_current_thread_count() > 2 &&       // do not delay for the first N threads
+                              tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager  = !eager_delayed && mi_option_is_enabled(mi_option_eager_commit);
   bool commit = eager; // || (page_kind >= MI_PAGE_LARGE);
   bool pages_still_good = false;
@@ -695,7 +698,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
 }
 
 static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
-  UNUSED(force);
+  MI_UNUSED(force);
   mi_assert(segment != NULL);
   // note: don't reset pages even on abandon as the whole segment is freed? (and ready for reuse)
   bool force_reset = (force && mi_option_is_enabled(mi_option_abandoned_page_reset));
@@ -896,13 +899,13 @@ static mi_decl_cache_align _Atomic(mi_segment_t*)       abandoned_visited; // = 
 static mi_decl_cache_align _Atomic(mi_tagged_segment_t) abandoned;         // = NULL
 
 // Maintain these for debug purposes (these counts may be a bit off)
-static mi_decl_cache_align _Atomic(uintptr_t)           abandoned_count; 
-static mi_decl_cache_align _Atomic(uintptr_t)           abandoned_visited_count;
+static mi_decl_cache_align _Atomic(size_t)           abandoned_count; 
+static mi_decl_cache_align _Atomic(size_t)           abandoned_visited_count;
 
 // We also maintain a count of current readers of the abandoned list
 // in order to prevent resetting/decommitting segment memory if it might
 // still be read.
-static mi_decl_cache_align _Atomic(uintptr_t)           abandoned_readers; // = 0
+static mi_decl_cache_align _Atomic(size_t)           abandoned_readers; // = 0
 
 // Push on the visited list
 static void mi_abandoned_visited_push(mi_segment_t* segment) {
@@ -931,7 +934,7 @@ static bool mi_abandoned_visited_revisit(void)
   mi_tagged_segment_t afirst;
   mi_tagged_segment_t ts = mi_atomic_load_relaxed(&abandoned);
   if (mi_tagged_segment_ptr(ts)==NULL) {
-    uintptr_t count = mi_atomic_load_relaxed(&abandoned_visited_count);
+    size_t count = mi_atomic_load_relaxed(&abandoned_visited_count);
     afirst = mi_tagged_segment(first, ts);
     if (mi_atomic_cas_strong_acq_rel(&abandoned, &ts, afirst)) {
       mi_atomic_add_relaxed(&abandoned_count, count);
@@ -950,7 +953,7 @@ static bool mi_abandoned_visited_revisit(void)
   // and atomically prepend to the abandoned list
   // (no need to increase the readers as we don't access the abandoned segments)
   mi_tagged_segment_t anext = mi_atomic_load_relaxed(&abandoned);
-  uintptr_t count;
+  size_t count;
   do {
     count = mi_atomic_load_relaxed(&abandoned_visited_count);
     mi_atomic_store_ptr_release(mi_segment_t, &last->abandoned_next, mi_tagged_segment_ptr(anext));
@@ -978,7 +981,7 @@ static void mi_abandoned_push(mi_segment_t* segment) {
 
 // Wait until there are no more pending reads on segments that used to be in the abandoned list
 void _mi_abandoned_await_readers(void) {
-  uintptr_t n;
+  size_t n;
   do {
     n = mi_atomic_load_acquire(&abandoned_readers);
     if (n != 0) mi_atomic_yield();
@@ -1326,7 +1329,7 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
   // claim it and free
   mi_heap_t* heap = mi_heap_get_default(); // issue #221; don't use the internal get_default_heap as we need to ensure the thread is initialized.
   // paranoia: if this it the last reference, the cas should always succeed
-  uintptr_t expected_tid = 0;
+  size_t expected_tid = 0;
   if (mi_atomic_cas_strong_acq_rel(&segment->thread_id, &expected_tid, heap->thread_id)) {
     mi_block_set_next(page, block, page->free);
     page->free = block;

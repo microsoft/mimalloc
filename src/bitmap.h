@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2019,2020 Microsoft Research, Daan Leijen
+Copyright (c) 2019-2020 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 /* ----------------------------------------------------------------------------
 Concurrent bitmap that can set/reset sequences of bits atomically,
-represeted as an array of fields where each field is a machine word (`uintptr_t`)
+represeted as an array of fields where each field is a machine word (`size_t`)
 
 There are two api's; the standard one cannot have sequences that cross
 between the bitmap fields (and a sequence must be <= MI_BITMAP_FIELD_BITS).
@@ -24,11 +24,11 @@ between the fields. (This is used in arena allocation)
   Bitmap definition
 ----------------------------------------------------------- */
 
-#define MI_BITMAP_FIELD_BITS   (8*MI_INTPTR_SIZE)
-#define MI_BITMAP_FIELD_FULL   (~((uintptr_t)0))   // all bits set
+#define MI_BITMAP_FIELD_BITS   (8*MI_SIZE_SIZE)
+#define MI_BITMAP_FIELD_FULL   (~((size_t)0))   // all bits set
 
-// An atomic bitmap of `uintptr_t` fields
-typedef _Atomic(uintptr_t)  mi_bitmap_field_t;
+// An atomic bitmap of `size_t` fields
+typedef _Atomic(size_t)  mi_bitmap_field_t;
 typedef mi_bitmap_field_t*  mi_bitmap_t;
 
 // A bitmap index is the index of the bit in a bitmap.

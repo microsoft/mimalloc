@@ -1,5 +1,5 @@
 /*----------------------------------------------------------------------------
-Copyright (c) 2018, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2020, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 /* -----------------------------------------------------------
   The core of the allocator. Every segment contains
-  pages of a {certain block size. The main function
+  pages of a certain block size. The main function
   exported is `mi_malloc_generic`.
 ----------------------------------------------------------- */
 
@@ -30,7 +30,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Index a block in a page
 static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_start, size_t block_size, size_t i) {
-  UNUSED(page);
+  MI_UNUSED(page);
   mi_assert_internal(page != NULL);
   mi_assert_internal(i <= page->reserved);
   return (mi_block_t*)((uint8_t*)page_start + (i * block_size));
@@ -84,9 +84,10 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_list_is_valid(page,page->local_free));
 
   #if MI_DEBUG>3 // generally too expensive to check this
-  if (page->flags.is_zero) {
-    for(mi_block_t* block = page->free; block != NULL; mi_block_next(page,block)) {
-      mi_assert_expensive(mi_mem_is_zero(block + 1, page->block_size - sizeof(mi_block_t)));
+  if (page->is_zero) {
+    const size_t ubsize = mi_page_usable_block_size(page);
+    for(mi_block_t* block = page->free; block != NULL; block = mi_block_next(page,block)) {
+      mi_assert_expensive(mi_mem_is_zero(block + 1, ubsize - sizeof(mi_block_t)));
     }
   }
   #endif
@@ -385,7 +386,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
 // Note: called from `mi_free` and benchmarks often
 // trigger this due to freeing everything and then
 // allocating again so careful when changing this.
-void _mi_page_retire(mi_page_t* page) {
+void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(mi_page_all_free(page));
@@ -458,7 +459,7 @@ void _mi_heap_collect_retired(mi_heap_t* heap, bool force) {
 #define MI_MIN_SLICES       (2)
 
 static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* const page, const size_t bsize, const size_t extend, mi_stats_t* const stats) {
-  UNUSED(stats);
+  MI_UNUSED(stats);
   #if (MI_SECURE<=2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
@@ -516,7 +517,7 @@ static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* co
 
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend, mi_stats_t* const stats)
 {
-  UNUSED(stats);
+  MI_UNUSED(stats);
   #if (MI_SECURE <= 2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
