@@ -317,6 +317,9 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 #elif defined(__DragonFly__)
 #warning "mimalloc is not working correctly on DragonFly yet."
 //#define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
+#elif defined(__ANDROID__)
+// See issue #381
+#define MI_TLS_PTHREAD
 #endif
 #endif
 
@@ -766,7 +769,7 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
 }
 
 static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
-#if defined(__arm__) || (defined(__BIONIC__) && defined(__aarch64__))
+#if defined(__arm__) || (defined(__ANDROID__) && defined(__aarch64__))
   // issue #384, #495: on arm32 and arm32/arm64 Android, slot 1 is the thread ID (pointer to pthread internal struct) 
   return (uintptr_t)mi_tls_slot(1);
 #else
