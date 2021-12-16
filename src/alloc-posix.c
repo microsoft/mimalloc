@@ -92,27 +92,23 @@ mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_n
 
 void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  // BSD
   void* newp = mi_reallocn(p,count,size);
-  if (newp==NULL) errno = ENOMEM;
+  if (newp==NULL) { errno = ENOMEM; }
   return newp;
 }
 
 int mi_reallocarr( void* p, size_t count, size_t size ) mi_attr_noexcept { // NetBSD
-  void** op = (void** )p;
-  int serrno = errno;
-  void* newp = mi_reallocn(p,count,size);
-  if (mi_unlikely(newp == NULL)) {
-    errno = ENOMEM;
-    return errno;
-  } else {
-    *op = newp;
-    errno = serrno;
-    return 0;
-  }
+  mi_assert(p != NULL);
+  if (p == NULL) return EINVAL;  // should we set errno as well?
+  void** op = (void**)p;  
+  void* newp = mi_reallocarray(*op, count, size);
+  if (mi_unlikely(newp == NULL)) return errno;
+  *op = newp;
+  return 0;
 }
 
 void* mi__expand(void* p, size_t newsize) mi_attr_noexcept {  // Microsoft
   void* res = mi_expand(p, newsize);
-  if (res == NULL) errno = ENOMEM;
+  if (res == NULL) { errno = ENOMEM; }
   return res;
 }
 
