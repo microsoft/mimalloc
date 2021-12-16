@@ -231,7 +231,7 @@ void _mi_os_init(void)
 #elif defined(__wasi__)
 void _mi_os_init() {
   os_overcommit = false;
-  os_page_size = 0x10000; // WebAssembly has a fixed page size: 64KiB
+  os_page_size = 64*MI_KiB; // WebAssembly has a fixed page size: 64KiB
   os_alloc_granularity = 16;
 }
 
@@ -283,7 +283,7 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
   bool err = false;
 #if defined(_WIN32)
   err = (VirtualFree(addr, 0, MEM_RELEASE) == 0);
-#elif defined(MI_USE_SBRK)
+#elif defined(MI_USE_SBRK) || defined(__wasi__)
   err = 0; // sbrk heap cannot be shrunk
 #else
   err = (munmap(addr, size) == -1);
@@ -376,38 +376,47 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
 }
 
 #elif defined(MI_USE_SBRK) || defined(__wasi__)
-
 #if defined(MI_USE_SBRK) 
-#define MI_SBRK_FAIL ((void*)(-1)) 
-static void* mi_memory_grow( size_t size ) {
-  void* p = sbrk(size);
-  if (p == MI_SBRK_FAIL) {
-    _mi_warning_message("unable to allocate sbrk() OS memory (%zu bytes)\n", size);
-    errno = ENOMEM;
-    return NULL;
+// unfortunately sbrk is usually not safe to call from multiple threads
+#if defined(MI_USE_PTHREADS)
+  static pthread_mutex_t mi_sbrk_mutex = PTHREAD_MUTEX_INITIALIZER;
+  static void* mi_sbrk(size_t size) {
+    pthread_mutex_lock(&mi_sbrk_mutex);
+    void* p = sbrk(size);
+    pthread_mutex_unlock(&mi_sbrk_mutex);
+    return p;
   }
-  return p;
-}
+  #else
+  static void* mi_sbrk(size_t size) {
+    return sbrk(size);
+  }
+  #endif
+  static void* mi_memory_grow( size_t size ) {
+    void* p = mi_sbrk(size);
+    if (p == (void*)(-1)) {
+      _mi_warning_message("unable to allocate sbrk() OS memory (%zu bytes)\n", size);
+      errno = ENOMEM;
+      return NULL;
+    }
+    if (size > 0) { memset(p,0,size); }
+    return p;
+  }
 #elif defined(__wasi__)
-static void* mi_memory_grow( size_t size ) {
-  if (size > 0) {
-    size_t base = __builtin_wasm_memory_grow( 0, _mi_divide_up(size, _mi_os_page_size()) );
+  static void* mi_memory_grow( size_t size ) {
+    size_t base;
+    if (size > 0) {
+      base = __builtin_wasm_memory_grow( 0, _mi_divide_up(size, _mi_os_page_size()) );
+    }
+    else {
+      base = __builtin_wasm_memory_size(0);
+    }
     if (base == SIZE_MAX) {
       _mi_warning_message("unable to allocate wasm_memory_grow OS memory (%zu bytes)\n", size);    
       errno = ENOMEM;
       return NULL;
     }
-    return (void*)(base * _mi_os_page_size());
+    return (void*)(base * _mi_os_page_size());    
   }
-  else {
-    size_t base = __builtin_wasm_memory_size(0);
-    if (base == SIZE_MAX) {
-      errno = ENOMEM;      
-      return NULL; 
-    }
-    return (void*)(base * _mi_os_page_size());
-  }
-}
 #endif
 
 static void* mi_heap_grow(size_t size, size_t try_alignment) {
@@ -432,17 +441,19 @@ static void* mi_heap_grow(size_t size, size_t try_alignment) {
       errno = 0;
       void* pbase2 = mi_memory_grow( alloc_size );
       if (pbase2 == NULL) { return NULL; }
+      base = (uintptr_t)pbase2;
       aligned_base = _mi_align_up(base, try_alignment);
-      mi_assert_internal(aligned_base + size <= (uintptr_t)pbase2 + alloc_size);
     }    
-  }
-  else {
-    mi_assert_internal(aligned_base + size <= (uintptr_t)pbase1 + alloc_size);
-  }
+    else {
+      // it still fits
+      mi_assert_internal(aligned_base + size <= base + alloc_size);
+    }
+  }  
+  mi_assert_internal(aligned_base + size <= base + alloc_size);
   return (void*)aligned_base;
 }
 
-#else
+#else 
 #define MI_OS_USE_MMAP
 static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
   MI_UNUSED(try_alignment);  

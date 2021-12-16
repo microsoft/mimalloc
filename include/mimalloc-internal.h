@@ -42,6 +42,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_externc  
 #endif
 
+#if !defined(_WIN32) && !defined(__wasi__) 
+#define  MI_USE_PTHREADS
+#include <pthread.h>
+#endif
+
 // "options.c"
 void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
 void       _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
@@ -326,7 +331,6 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 #if defined(MI_TLS_SLOT)
 static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept;   // forward declaration
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
-#include <pthread.h>
 static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
   pthread_t self = pthread_self();
   #if defined(__DragonFly__)
@@ -338,7 +342,6 @@ static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
   return (mi_heap_t**)((uint8_t*)self + MI_TLS_PTHREAD_SLOT_OFS);
 }
 #elif defined(MI_TLS_PTHREAD)
-#include <pthread.h>
 extern pthread_key_t _mi_heap_default_key;
 #endif
 

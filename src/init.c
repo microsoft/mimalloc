@@ -275,12 +275,6 @@ static bool _mi_heap_done(mi_heap_t* heap) {
 
 static void _mi_thread_done(mi_heap_t* default_heap);
 
-#ifdef __wasi__
-// no pthreads in the WebAssembly Standard Interface
-#elif !defined(_WIN32)
-#define MI_USE_PTHREADS
-#endif
-
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
   // nothing to do as it is done in DllMain
 #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
@@ -300,7 +294,6 @@ static void _mi_thread_done(mi_heap_t* default_heap);
 #elif defined(MI_USE_PTHREADS)
   // use pthread local storage keys to detect thread ending
   // (and used with MI_TLS_PTHREADS for the default heap)
-  #include <pthread.h>
   pthread_key_t _mi_heap_default_key = (pthread_key_t)(-1);
   static void mi_pthread_done(void* value) {
     if (value!=NULL) _mi_thread_done((mi_heap_t*)value);
