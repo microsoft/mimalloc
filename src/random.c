@@ -160,7 +160,8 @@ uintptr_t _mi_random_next(mi_random_ctx_t* ctx) {
 /* ----------------------------------------------------------------------------
 To initialize a fresh random context we rely on the OS:
 - Windows     : BCryptGenRandom (or RtlGenRandom)
-- osX,bsd,wasi: arc4random_buf
+- macOS       : CCRandomGenerateBytes
+- bsd,wasi    : arc4random_buf
 - Linux       : getrandom,/dev/urandom
 If we cannot get good randomness, we fall back to weak randomness based on a timer and ASLR.
 -----------------------------------------------------------------------------*/
@@ -191,7 +192,36 @@ static bool os_random_buf(void* buf, size_t buf_len) {
 }
 #endif
 
-#elif defined(ANDROID) || defined(XP_DARWIN) || defined(__APPLE__) || defined(__DragonFly__) || \
+#elif defined(__APPLE__)
+#include <AvailabilityMacros.h>
+#if defined(MAC_OS_X_VERSION_10_10) && \
+    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_10
+#include <CommonCrypto/CommonRandom.h>
+#endif
+static bool os_random_buf(void* buf, size_t buf_len) {
+  /* The implementation of arc4random_buf(3) differs from its documentation.
+   * It is documented as "always successful, and no return value is reserved
+   * to indicate an error." However, the actual implementation invokes the
+   * function "ccrng_generate" without validating the error cases. It might
+   * fail silently, which leads to unexpected source of entropy.
+   * See:
+   *   https://opensource.apple.com/source/Libc/Libc-1439.40.11/gen/FreeBSD/arc4random.c.auto.html
+   *
+   * CCRandomGenerateBytes(), on the contrary, returns cryptographically strong
+   * random bits with explicit status code.
+   */
+#if defined(MAC_OS_X_VERSION_10_15) && \
+    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_15
+  return CCRandomGenerateBytes(buf, buf_len) == kCCSuccess;
+#else
+  /* Prior to macOS 10.15, CCRandomGenerateBytes() might take a bit longer time
+   * to complete, so failback to arc4random_buf().
+   */
+  arc4random_buf(buf, buf_len);
+  return true;
+#endif
+}
+#elif defined(ANDROID) || defined(__DragonFly__) || \
       defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
       defined(__sun) // todo: what to use with __wasi__?
 #include <stdlib.h>
