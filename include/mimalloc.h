@@ -356,7 +356,7 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_pvalloc(size_t size) 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2) mi_attr_alloc_align(1);
 
 mi_decl_nodiscard mi_decl_export void* mi_reallocarray(void* p, size_t count, size_t size) mi_attr_noexcept mi_attr_alloc_size2(2,3);
-mi_decl_nodiscard mi_decl_export int   mi_reallocarr(void* p, size_t count, size_t size) mi_attr_noexcept mi_attr_alloc_size2(2,3);
+mi_decl_nodiscard mi_decl_export int   mi_reallocarr(void* p, size_t count, size_t size) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export void* mi_aligned_recalloc(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export void* mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept;
 
