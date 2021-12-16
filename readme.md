@@ -141,6 +141,7 @@ mimalloc is used in various large scale low-latency services and programs, for e
 <a href="https://www.bing.com"><img align="left"  height="50" src="https://upload.wikimedia.org/wikipedia/commons/e/e9/Bing_logo.svg"></a>
 <a href="https://azure.microsoft.com/"><img align="left" height="50" src="https://upload.wikimedia.org/wikipedia/commons/a/a8/Microsoft_Azure_Logo.svg"></a>
 <a href="https://deathstrandingpc.505games.com"><img height="100" src="doc/ds-logo.jpg" style="border-radius=1ex;vertical-align:center"></a>
+<a href="https://www.perforce.com/products/helix-core"><img height="50" src="https://www.perforce.com/themes/custom/themekit/logo.svg"></a>
 
 # Building
 
