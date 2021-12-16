@@ -88,6 +88,7 @@ static void* mi_align_down_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_down((uintptr_t)p, alignment);
 }
 
+
 // page size (initialized properly in `os_init`)
 static size_t os_page_size = 4096;
 
@@ -274,8 +275,8 @@ void _mi_os_init() {
 
 
 /* -----------------------------------------------------------
-  Raw allocation on Windows (VirtualAlloc) and Unix's (mmap).
------------------------------------------------------------ */
+  free memory
+-------------------------------------------------------------- */
 
 static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats_t* stats)
 {
@@ -303,6 +304,10 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
 static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 #endif
 
+/* -----------------------------------------------------------
+  Raw allocation on Windows (VirtualAlloc) 
+-------------------------------------------------------------- */
+
 #ifdef _WIN32
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
 #if (MI_INTPTR_SIZE >= 8)
@@ -326,7 +331,7 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
 #endif
 #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   // on modern Windows try use VirtualAlloc2 for aligned allocation
-  if (try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
+  if (try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
     MEM_ADDRESS_REQUIREMENTS reqs = { 0, 0, 0 };
     reqs.Alignment = try_alignment;
     MEM_EXTENDED_PARAMETER param = { {0, 0}, {0} };
@@ -375,90 +380,93 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
   return p;
 }
 
+/* -----------------------------------------------------------
+  Raw allocation using `sbrk` or `wasm_memory_grow`
+-------------------------------------------------------------- */
+
 #elif defined(MI_USE_SBRK) || defined(__wasi__)
 #if defined(MI_USE_SBRK) 
-// unfortunately sbrk is usually not safe to call from multiple threads
-#if defined(MI_USE_PTHREADS)
-  static pthread_mutex_t mi_sbrk_mutex = PTHREAD_MUTEX_INITIALIZER;
-  static void* mi_sbrk(size_t size) {
-    pthread_mutex_lock(&mi_sbrk_mutex);
-    void* p = sbrk(size);
-    pthread_mutex_unlock(&mi_sbrk_mutex);
-    return p;
-  }
-  #else
-  static void* mi_sbrk(size_t size) {
-    return sbrk(size);
-  }
-  #endif
   static void* mi_memory_grow( size_t size ) {
-    void* p = mi_sbrk(size);
-    if (p == (void*)(-1)) {
-      _mi_warning_message("unable to allocate sbrk() OS memory (%zu bytes)\n", size);
-      errno = ENOMEM;
-      return NULL;
-    }
-    if (size > 0) { memset(p,0,size); }
+    void* p = sbrk(size);
+    if (p == (void*)(-1)) return NULL;
+    #if !defined(__wasi__) // on wasi this is always zero initialized already (?)
+    memset(p,0,size); 
+    #endif
     return p;
   }
 #elif defined(__wasi__)
   static void* mi_memory_grow( size_t size ) {
-    size_t base;
-    if (size > 0) {
-      base = __builtin_wasm_memory_grow( 0, _mi_divide_up(size, _mi_os_page_size()) );
-    }
-    else {
-      base = __builtin_wasm_memory_size(0);
-    }
-    if (base == SIZE_MAX) {
-      _mi_warning_message("unable to allocate wasm_memory_grow OS memory (%zu bytes)\n", size);    
-      errno = ENOMEM;
-      return NULL;
-    }
+    size_t base = (size > 0 ? __builtin_wasm_memory_grow(0,_mi_divide_up(size, _mi_os_page_size()))
+                            : __builtin_wasm_memory_size(0));
+    if (base == SIZE_MAX) return NULL;     
     return (void*)(base * _mi_os_page_size());    
   }
 #endif
 
+#if defined(MI_USE_PTHREADS)
+static pthread_mutex_t mi_heap_grow_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
 static void* mi_heap_grow(size_t size, size_t try_alignment) {
-  if (try_alignment == 0) { try_alignment = _mi_os_page_size(); };
-  void* pbase0 = mi_memory_grow(0);
-  if (pbase0 == NULL) { return NULL; }
-  uintptr_t base = (uintptr_t)pbase0;
-  uintptr_t aligned_base = _mi_align_up(base, try_alignment);
-  size_t alloc_size = _mi_align_up( aligned_base - base + size, _mi_os_page_size());
-  mi_assert(alloc_size >= size && (alloc_size % _mi_os_page_size()) == 0);
-  if (alloc_size < size) return NULL;
-  void* pbase1 = mi_memory_grow(alloc_size);
-  if (pbase1 == NULL) { return NULL; }
-  if (pbase0 != pbase1) {
-    // another thread allocated in-between; now we may not be able to align correctly
-    base = (uintptr_t)pbase1;
-    aligned_base = _mi_align_up(base, try_alignment);
-    if (aligned_base + size > base + alloc_size) {
-      // we do not have enough space after alignment; since we cannot shrink safely,
-      // we waste the space :-( and allocate fresh with guaranteed enough overallocation
-      alloc_size = _mi_align_up( size + try_alignment, _mi_os_page_size() );
-      errno = 0;
-      void* pbase2 = mi_memory_grow( alloc_size );
-      if (pbase2 == NULL) { return NULL; }
-      base = (uintptr_t)pbase2;
-      aligned_base = _mi_align_up(base, try_alignment);
-    }    
-    else {
-      // it still fits
-      mi_assert_internal(aligned_base + size <= base + alloc_size);
+  void* p = NULL;
+  if (try_alignment <= 1) {
+    // `sbrk` is not thread safe in general so try to protect it (we could skip this on WASM but leave it in for now)
+    #if defined(MI_USE_PTHREADS) 
+    pthread_mutex_lock(&mi_heap_grow_mutex);
+    #endif
+    p = mi_memory_grow(size);
+    #if defined(MI_USE_PTHREADS)
+    pthread_mutex_unlock(&mi_heap_grow_mutex);
+    #endif
+  }
+  else {
+    void* base = NULL;
+    size_t alloc_size = 0;
+    // to allocate aligned use a lock to try to avoid thread interaction
+    // between getting the current size and actual allocation
+    // (also, `sbrk` is not thread safe in general)
+    #if defined(MI_USE_PTHREADS)
+    pthread_mutex_lock(&mi_heap_grow_mutex);
+    #endif
+    {
+      void* current = mi_memory_grow(0);  // get current size
+      if (current != NULL) {
+        void* aligned_current = mi_align_up_ptr(current, try_alignment);  // and align from there to minimize wasted space
+        alloc_size = _mi_align_up( ((uint8_t*)aligned_current - (uint8_t*)current) + size, _mi_os_page_size());
+        base = mi_memory_grow(alloc_size);        
+      }
     }
-  }  
-  mi_assert_internal(aligned_base + size <= base + alloc_size);
-  return (void*)aligned_base;
+    #if defined(MI_USE_PTHREADS)
+    pthread_mutex_unlock(&mi_heap_grow_mutex);
+    #endif
+    if (base != NULL) {
+      p = mi_align_up_ptr(base, try_alignment);
+      if ((uint8_t*)p + size > (uint8_t*)base + alloc_size) {
+        // another thread used wasm_memory_grow/sbrk in-between and we do not have enough
+        // space after alignment. Give up (and waste the space as we cannot shrink :-( )
+        // (in `mi_os_mem_alloc_aligned` this will fall back to overallocation to align)
+        p = NULL;
+      }
+    }
+  }
+  if (p == NULL) {
+    _mi_warning_message("unable to allocate sbrk/wasm_memory_grow OS memory (%zu bytes, %zu alignment)\n", size, try_alignment);    
+    errno = ENOMEM;
+    return NULL;
+  }
+  mi_assert_internal( try_alignment == 0 || (uintptr_t)p % try_alignment == 0 );
+  return p;
 }
 
+/* -----------------------------------------------------------
+  Raw allocation on Unix's (mmap)
+-------------------------------------------------------------- */
 #else 
 #define MI_OS_USE_MMAP
 static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
   MI_UNUSED(try_alignment);  
   #if defined(MAP_ALIGNED)  // BSD
-  if (addr == NULL && try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0) {
+  if (addr == NULL && try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0) {
     size_t n = mi_bsr(try_alignment);
     if (((size_t)1 << n) == try_alignment && n >= 12 && n <= 30) {  // alignment is a power of 2 and 4096 <= alignment <= 1GiB
       flags |= MAP_ALIGNED(n);
@@ -468,7 +476,7 @@ static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int pr
     }
   }
   #elif defined(MAP_ALIGN)  // Solaris
-  if (addr == NULL && try_alignment > 0 && (try_alignment % _mi_os_page_size()) == 0) {
+  if (addr == NULL && try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0) {
     void* p = mmap(try_alignment, size, protect_flags, flags | MAP_ALIGN, fd, 0);
     if (p!=MAP_FAILED) return p;
     // fall back to regular mmap
@@ -622,7 +630,7 @@ static mi_decl_cache_align _Atomic(uintptr_t) aligned_base;
 
 static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) 
 {
-  if (try_alignment == 0 || try_alignment > MI_SEGMENT_SIZE) return NULL;
+  if (try_alignment <= 1 || try_alignment > MI_SEGMENT_SIZE) return NULL;
   size = _mi_align_up(size, MI_SEGMENT_SIZE);
   if (size > 1*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<30) = 1/4096.
   #if (MI_SECURE>0)
@@ -652,13 +660,16 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
 }
 #endif
 
+/* -----------------------------------------------------------
+   Primitive allocation from the OS.
+-------------------------------------------------------------- */
 
-// Primitive allocation from the OS.
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
 static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, mi_stats_t* stats) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   if (size == 0) return NULL;
   if (!commit) allow_large = false;
+  if (try_alignment == 0) try_alignment = 1; // avoid 0 to ensure there will be no divide by zero when aligning
 
   void* p = NULL;
   /*
@@ -746,9 +757,9 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
     }
 #else
     // overallocate...
-    p = mi_os_mem_alloc(over_size, alignment, commit, false, is_large, stats);
+    p = mi_os_mem_alloc(over_size, 1, commit, false, is_large, stats);
     if (p == NULL) return NULL;
-    // and selectively unmap parts around the over-allocated area.
+    // and selectively unmap parts around the over-allocated area. (noop on sbrk)
     void* aligned_p = mi_align_up_ptr(p, alignment);
     size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
     size_t mid_size = _mi_align_up(size, _mi_os_page_size());
@@ -756,7 +767,7 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
     mi_assert_internal(pre_size < over_size && post_size < over_size && mid_size >= size);
     if (pre_size > 0)  mi_os_mem_free(p, pre_size, commit, stats);
     if (post_size > 0) mi_os_mem_free((uint8_t*)aligned_p + mid_size, post_size, commit, stats);
-    // we can return the aligned pointer on `mmap` systems
+    // we can return the aligned pointer on `mmap` (and sbrk) systems
     p = aligned_p;
 #endif
   }
