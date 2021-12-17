@@ -51,19 +51,19 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
   mi_assert(alignment > 0);
   if (mi_unlikely(alignment==0 || !_mi_is_power_of_two(alignment))) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
     #if MI_DEBUG > 0
-    _mi_error_message(EOVERFLOW, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu)", size, alignment);
+    _mi_error_message(EOVERFLOW, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu)\n", size, alignment);
     #endif
     return NULL;
   }
   if (mi_unlikely(alignment > MI_ALIGNED_MAX)) {  // we cannot align at a boundary larger than this (or otherwise we cannot find segment headers)
     #if MI_DEBUG > 0
-    _mi_error_message(EOVERFLOW, "aligned allocation has a maximum alignment of %zu (size %zu, alignment %zu)", MI_ALIGNED_MAX, size, alignment);
+    _mi_error_message(EOVERFLOW, "aligned allocation has a maximum alignment of %zu (size %zu, alignment %zu)\n", MI_ALIGNED_MAX, size, alignment);
     #endif
     return NULL;
   }
   if (mi_unlikely(size > PTRDIFF_MAX)) {          // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)                                                    
     #if MI_DEBUG > 0
-    _mi_error_message(EOVERFLOW, "aligned allocation request is too large (size %zu, alignment %zu)", size, alignment);
+    _mi_error_message(EOVERFLOW, "aligned allocation request is too large (size %zu, alignment %zu)\n", size, alignment);
     #endif
     return NULL;
   }
