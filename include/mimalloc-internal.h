@@ -708,21 +708,21 @@ static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 }
 
 #elif defined(__GNUC__) && \
-      (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))
+      (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))
 
-// TLS register on x86 is in the FS or GS register, see: https://akkadia.org/drepper/tls.pdf
+// see also https://akkadia.org/drepper/tls.pdf for more info on the TLS register.
 static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
   void* res;
   const size_t ofs = (slot*sizeof(void*));
 #if defined(__i386__)
-  __asm__("movl %%gs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // 32-bit always uses GS
+  __asm__("movl %%gs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86 32-bit always uses GS
 #elif defined(__APPLE__) && defined(__x86_64__)
   __asm__("movq %%gs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86_64 macOSX uses GS
 #elif defined(__x86_64__) && (MI_INTPTR_SIZE==4)
   __asm__("movl %%fs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x32 ABI
 #elif defined(__x86_64__)
   __asm__("movq %%fs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86_64 Linux, BSD uses FS
-#elif defined(__arm__)
+#elif defined(__arm__)   // arm32: defined but currently not used (see issue #495)
   void** tcb; MI_UNUSED(ofs);
   __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
   res = tcb[slot];
@@ -739,7 +739,7 @@ static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
   return res;
 }
 
-// setting is only used on macOSX for now
+// setting a tls slot is only used on macOSX for now
 static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
   const size_t ofs = (slot*sizeof(void*));
 #if defined(__i386__)
@@ -767,8 +767,8 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
 }
 
 static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
-#if defined(__arm__) || (defined(__ANDROID__) && defined(__aarch64__))
-  // issue #384, #495: on arm32 and arm32/arm64 Android, slot 1 is the thread ID (pointer to pthread internal struct) 
+#if defined(__ANDROID__) && (defined(__arm__) || defined(__aarch64__))
+  // issue #384, #495: on arm Android, slot 1 is the thread ID (pointer to pthread internal struct) 
   return (uintptr_t)mi_tls_slot(1);
 #else
   // in all our other targets, slot 0 is the pointer to the thread control block
@@ -776,7 +776,7 @@ static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 #endif
 }
 #else
-// otherwise use standard C
+// otherwise use portable C
 static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
   return (uintptr_t)&_mi_heap_default;
 }
