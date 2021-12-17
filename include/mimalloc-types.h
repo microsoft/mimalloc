@@ -158,7 +158,10 @@ typedef int32_t  mi_ssize_t;
 #define MI_BIN_HUGE  (73U)
 
 #if (MI_LARGE_OBJ_WSIZE_MAX >= 655360)
-#error "define more bins"
+#error "mimalloc internal: define more bins"
+#endif
+#if (MI_ALIGNED_MAX > MI_SEGMENT_SIZE/2)
+#error "mimalloc internal: the max aligned boundary is too large for the segment size"
 #endif
 
 // Used as a special value to encode block sizes in 32 bits.
