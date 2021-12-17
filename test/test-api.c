@@ -158,6 +158,16 @@ int main(void) {
   CHECK_BODY("malloc-aligned5", {
     void* p = mi_malloc_aligned(4097,4096); size_t usable = mi_usable_size(p); result = usable >= 4097 && usable < 10000; mi_free(p);
   });
+  CHECK_BODY("malloc-aligned6", {
+    void* p;
+    bool ok = true;
+    for (int i = 1; i < 8 && ok; i++) {
+      size_t align = 1UL << i;
+      p = mi_malloc_aligned(2*align, align);
+      ok = (p != NULL && (uintptr_t)(p) % align == 0); mi_free(p);
+    }
+    result = ok;
+  });
   CHECK_BODY("malloc-aligned-at1", {
     void* p = mi_malloc_aligned_at(48,32,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 32 == 0); mi_free(p);
   });
@@ -172,8 +182,8 @@ int main(void) {
       ok = (p != NULL && (uintptr_t)(p) % 16 == 0); mi_free(p);
     }
     result = ok;
-    });
-
+  });
+  
   // ---------------------------------------------------
   // Heaps
   // ---------------------------------------------------
