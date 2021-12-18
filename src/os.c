@@ -1254,8 +1254,8 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
     }
   }
   mi_assert_internal(page*MI_HUGE_OS_PAGE_SIZE <= size);
-  if (pages_reserved != NULL) *pages_reserved = page;
-  if (psize != NULL) *psize = page * MI_HUGE_OS_PAGE_SIZE;
+  if (pages_reserved != NULL) { *pages_reserved = page; }
+  if (psize != NULL) { *psize = page * MI_HUGE_OS_PAGE_SIZE; }
   return (page == 0 ? NULL : start);
 }
 
@@ -1267,6 +1267,7 @@ void _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats) {
   while (size >= MI_HUGE_OS_PAGE_SIZE) {
     _mi_os_free(base, MI_HUGE_OS_PAGE_SIZE, stats);
     size -= MI_HUGE_OS_PAGE_SIZE;
+    base += MI_HUGE_OS_PAGE_SIZE;
   }
 }
 
