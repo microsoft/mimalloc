@@ -160,7 +160,7 @@ typedef int32_t  mi_ssize_t;
 #if (MI_LARGE_OBJ_WSIZE_MAX >= 655360)
 #error "mimalloc internal: define more bins"
 #endif
-#if (MI_ALIGNED_MAX > MI_SEGMENT_SIZE/2)
+#if (MI_ALIGNMENT_MAX > MI_SEGMENT_SIZE/2)
 #error "mimalloc internal: the max aligned boundary is too large for the segment size"
 #endif
 
