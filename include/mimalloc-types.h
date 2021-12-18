@@ -172,13 +172,13 @@ typedef int32_t  mi_ssize_t;
 #endif
 
 // Maximum slice offset (15)
-#define MI_MAX_SLICE_OFFSET               ((MI_ALIGNED_MAX / MI_SEGMENT_SLICE_SIZE) - 1)
+#define MI_MAX_SLICE_OFFSET               ((MI_ALIGNMENT_MAX / MI_SEGMENT_SLICE_SIZE) - 1)
 
 // Used as a special value to encode block sizes in 32 bits.
 #define MI_HUGE_BLOCK_SIZE                ((uint32_t)MI_HUGE_OBJ_SIZE_MAX)
 
 // blocks up to this size are always allocated aligned
-#define MI_MAX_ALIGN_GUARANTEE  (8*MI_MAX_ALIGN_SIZE)  
+#define MI_MAX_ALIGN_GUARANTEE            (8*MI_MAX_ALIGN_SIZE)  
 
 
 
