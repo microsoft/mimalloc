@@ -159,20 +159,26 @@ int main(void) {
     void* p = mi_malloc_aligned(4097,4096); size_t usable = mi_usable_size(p); result = usable >= 4097 && usable < 10000; mi_free(p);
   });
   CHECK_BODY("malloc-aligned6", {
-    void* p;
     bool ok = true;
-    for (int i = 1; i < 8 && ok; i++) {
-      size_t align = (size_t)1 << i;
-      p = mi_malloc_aligned(2*align, align);
-      ok = (p != NULL && (uintptr_t)(p) % align == 0); mi_free(p);
+    for (size_t align = 1; align <= MI_ALIGNMENT_MAX && ok; align *= 2) {
+      void* ps[8];
+      for (int i = 0; i < 8 && ok; i++) {
+        ps[i] = mi_malloc_aligned(align/2 /*size*/, align);
+        if (ps[i] == NULL || (uintptr_t)(ps[i]) % align != 0) {
+          ok = false;
+        }
+      }
+      for (int i = 0; i < 8 && ok; i++) {
+        mi_free(ps[i]);
+      }
     }
     result = ok;
   });
   CHECK_BODY("malloc-aligned7", {
-    void* p = mi_malloc_aligned(1024,MI_ALIGNED_MAX); mi_free(p);
+    void* p = mi_malloc_aligned(1024,MI_ALIGNMENT_MAX); mi_free(p);
     });
   CHECK_BODY("malloc-aligned8", {
-    void* p = mi_malloc_aligned(1024,2*MI_ALIGNED_MAX); mi_free(p);
+    void* p = mi_malloc_aligned(1024,2*MI_ALIGNMENT_MAX); mi_free(p);
   });
   CHECK_BODY("malloc-aligned-at1", {
     void* p = mi_malloc_aligned_at(48,32,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 32 == 0); mi_free(p);

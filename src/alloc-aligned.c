@@ -18,7 +18,7 @@ terms of the MIT license. A copy of the license can be found in the file
 static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t* const heap, const size_t size, const size_t alignment, const size_t offset, const bool zero) mi_attr_noexcept
 {
   mi_assert_internal(size <= PTRDIFF_MAX);
-  mi_assert_internal(alignment!=0 && _mi_is_power_of_two(alignment) && alignment <= MI_ALIGNED_MAX);
+  mi_assert_internal(alignment!=0 && _mi_is_power_of_two(alignment) && alignment <= MI_ALIGNMENT_MAX);
 
   const uintptr_t align_mask = alignment-1;  // for any x, `(x & align_mask) == (x % alignment)`
   const size_t padsize = size + MI_PADDING_SIZE;
@@ -55,9 +55,9 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
     #endif
     return NULL;
   }
-  if (mi_unlikely(alignment > MI_ALIGNED_MAX)) {  // we cannot align at a boundary larger than this (or otherwise we cannot find segment headers)
+  if (mi_unlikely(alignment > MI_ALIGNMENT_MAX)) {  // we cannot align at a boundary larger than this (or otherwise we cannot find segment headers)
     #if MI_DEBUG > 0
-    _mi_error_message(EOVERFLOW, "aligned allocation has a maximum alignment of %zu (size %zu, alignment %zu)\n", MI_ALIGNED_MAX, size, alignment);
+    _mi_error_message(EOVERFLOW, "aligned allocation has a maximum alignment of %zu (size %zu, alignment %zu)\n", MI_ALIGNMENT_MAX, size, alignment);
     #endif
     return NULL;
   }
