@@ -564,11 +564,11 @@ static void mi_option_init(mi_option_desc_t* desc) {
           // if the 'mimalloc_verbose' env var has a bogus value we'd never know
           // (since the value defaults to 'off') so in that case briefly enable verbose
           desc->value = 1;
-          _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
+          _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name );
           desc->value = 0;
         }
         else {
-          _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
+          _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name );
         }
       }
     }
