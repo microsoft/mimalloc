@@ -536,7 +536,15 @@ static void mi_option_init(mi_option_desc_t* desc) {
          * so to avoid a possible infinite recursion it's important to mark the option as
          * "initialized" first */
         desc->init = DEFAULTED;
+        if (desc->option == mi_option_verbose) {
+          /* Special case: if the 'mimalloc_verbose' env var has a bogus value we'd never know
+           * (since the value default to 'off') - so in that one case briefly set the option to 'on' */
+          desc->value = 1;
+        }
         _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
+        if (desc->option == mi_option_verbose) {
+          desc->value = 0;
+        }
       }
     }
     mi_assert_internal(desc->init != UNINIT);
