@@ -262,7 +262,7 @@ static _Atomic(size_t) warning_count; // = 0;  // when >= max_warning_count stop
 // this may crash as the access may call _tlv_bootstrap that tries to 
 // (recursively) invoke malloc again to allocate space for the thread local
 // variables on demand. This is why we use a _mi_preloading test on such
-// platforms. However, code gen may move the initial thread local address
+// platforms. However, C code generator may move the initial thread local address
 // load before the `if` and we therefore split it out in a separate funcion.
 static mi_decl_thread bool recurse = false;
 
@@ -551,7 +551,8 @@ static void mi_option_init(mi_option_desc_t* desc) {
         else if (*end == 'M') { value *= MI_KiB; end++; }
         else if (*end == 'G') { value *= MI_MiB; end++; }
         else { value = (value + MI_KiB - 1) / MI_KiB; }
-        if (*end == 'B') { end++; }
+        if (end[0] == 'I' && end[1] == 'B') { end += 2; }
+        else if (*end == 'B') { end++; }
       }
       if (*end == 0) {
         desc->value = value;
