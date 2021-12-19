@@ -37,9 +37,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   page->free = mi_block_next(page, block);
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
 
-#if (MI_DEBUG>0)
-  if (!page->is_zero) { memset(block, MI_DEBUG_UNINIT, size); }
-#elif (MI_SECURE!=0)
+#if (MI_SECURE!=0)
   block->next = 0;  // don't leak internal data
 #endif
 
@@ -90,6 +88,10 @@ static inline mi_decl_restrict void* _mi_heap_malloc_small_init(mi_heap_t* heap,
   #endif
   if (init == MI_ALLOC_ZERO_INIT && p != NULL) {
     _mi_block_zero_init(_mi_ptr_page(p),p,size);  // todo: can we avoid getting the page again?
+  } else if (init == MI_ALLOC_UNINIT && p != NULL) {
+    #if MI_DEBUG >= 2
+    _mi_debug_uninit_fill(p, size);
+    #endif
   }
   return p;
 }
@@ -120,6 +122,10 @@ extern inline mi_decl_restrict void* _mi_heap_malloc_init(mi_heap_t* heap, size_
     #endif
     if (init == MI_ALLOC_ZERO_INIT && p != NULL) {
       _mi_block_zero_init(_mi_ptr_page(p),p,size);  // todo: can we avoid getting the page again?
+    } else if (init == MI_ALLOC_UNINIT && p != NULL) {
+      #if MI_DEBUG >= 2
+      _mi_debug_uninit_fill(p, size);
+      #endif
     }
     return p;
   }
@@ -151,6 +157,12 @@ void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
     memset(p, 0, mi_usable_size(p));
   }
 }
+
+#if MI_DEBUG >= 2
+void _mi_debug_uninit_fill(void* p, size_t size) {
+  memset(p, MI_DEBUG_UNINIT, size);
+}
+#endif
 
 // zero initialized small block
 mi_decl_restrict void* mi_zalloc_small(size_t size) mi_attr_noexcept {

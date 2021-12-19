@@ -83,6 +83,11 @@ static void* mi_heap_malloc_init_aligned_at(mi_heap_t* const heap, const size_t 
       mi_assert_internal(p != NULL);
       mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
       if (init == MI_ALLOC_ZERO_INIT) { _mi_block_zero_init(page, p, size); }
+      else if (init == MI_ALLOC_UNINIT) {
+      #if MI_DEBUG >= 2
+        _mi_debug_uninit_fill(p, size);
+      #endif
+      }
       return p;
     }
   }

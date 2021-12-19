@@ -148,6 +148,10 @@ void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
 bool        _mi_page_is_valid(mi_page_t* page);
 #endif
 
+#if MI_DEBUG >= 2
+void        _mi_debug_uninit_fill(void* p, size_t size);
+#endif
+
 
 // ------------------------------------------------------
 // Branches
