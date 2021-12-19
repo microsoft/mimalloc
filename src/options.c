@@ -415,26 +415,24 @@ void _mi_error_message(int err, const char* fmt, ...) {
 // --------------------------------------------------------
 
 static void mi_strlcpy(char* dest, const char* src, size_t dest_size) {
-  if (dest_size == 0)
-    return;
-
-  // Copy until end of 'src' or dest is (almost) full
-  while (*src && (dest_size > 1)) {
+  if (dest==NULL || src==NULL || dest_size == 0) return;
+  // copy until end of src, or when dest is (almost) full
+  while (*src != 0 && dest_size > 1) {
     *dest++ = *src++;
-    --dest_size;
+    dest_size--;
   }
-  // Null-terminate dest
+  // always zero terminate
   *dest = 0;
 }
 
 static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
-  // Skip existing data in 'dest'
-  while (*dest && (dest_size > 1)) {
-    ++dest;
-    --dest_size;
+  if (dest==NULL || src==NULL || dest_size == 0) return;
+  // find end of string in the dest buffer
+  while (*dest != 0 && dest_size > 1) {
+    dest++;
+    dest_size--;
   }
-
-  // Concatenate src
+  // and catenate
   mi_strlcpy(dest, src, dest_size);
 }
 
