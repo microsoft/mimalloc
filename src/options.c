@@ -257,22 +257,37 @@ static _Atomic(size_t) warning_count; // = 0;  // when >= max_warning_count stop
 
 // When overriding malloc, we may recurse into mi_vfprintf if an allocation
 // inside the C runtime causes another message.
+// In some cases (like on macOS) the loader already allocates which
+// calls into mimalloc; if we then access thread locals (like `recurse`)
+// this may crash as the access may call _tlv_bootstrap that tries to 
+// (recursively) invoke malloc again to allocate space for the thread local
+// variables on demand. This is why we use a _mi_preloading test on such
+// platforms. However, code gen may move the initial thread local address
+// load before the `if` and we therefore split it out in a separate funcion.
 static mi_decl_thread bool recurse = false;
+
+static mi_decl_noinline bool mi_recurse_enter_prim(void) {
+  if (recurse) return false;
+  recurse = true;
+  return true;
+}
+
+static mi_decl_noinline void mi_recurse_exit_prim(void) {
+  recurse = false;
+}
 
 static bool mi_recurse_enter(void) {
   #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
   if (_mi_preloading()) return true;
   #endif
-  if (recurse) return false;
-  recurse = true;
-  return true;
+  return mi_recurse_enter_prim();
 }
 
 static void mi_recurse_exit(void) {
   #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
   if (_mi_preloading()) return;
   #endif
-  recurse = false;
+  mi_recurse_exit_prim();
 }
 
 void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message) {
