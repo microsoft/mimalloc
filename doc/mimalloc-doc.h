@@ -51,7 +51,7 @@ Notable aspects of the design include:
   programs.
 - __secure__: _mimalloc_ can be build in secure mode, adding guard pages,
   randomized allocation, encrypted free lists, etc. to protect against various
-  heap vulnerabilities. The performance penalty is only around 3% on average
+  heap vulnerabilities. The performance penalty is only around 5% on average
   over our benchmarks.
 - __first-class heaps__: efficiently create and use multiple heaps to allocate across different regions.
   A heap can be destroyed at once instead of deallocating each object separately.
@@ -413,6 +413,28 @@ void mi_register_error(mi_error_fun* errfun, void* arg);
 /// This function is relatively fast.
 bool mi_is_in_heap_region(const void* p);
 
+/// Reserve OS memory for use by mimalloc. Reserved areas are used
+/// before allocating from the OS again. By reserving a large area upfront, 
+/// allocation can be more efficient, and can be better managed on systems
+/// without `mmap`/`VirtualAlloc` (like WASM for example).
+/// @param size        The size to reserve.
+/// @param commit      Commit the memory upfront.
+/// @param allow_large Allow large OS pages (2MiB) to be used?
+/// @return \a 0 if successful, and an error code otherwise (e.g. `ENOMEM`).
+int  mi_reserve_os_memory(size_t size, bool commit, bool allow_large);
+
+/// Manage a particular memory area for use by mimalloc. 
+/// This is just like `mi_reserve_os_memory` except that the area should already be
+/// allocated in some manner and available for use my mimalloc.
+/// @param start       Start of the memory area
+/// @param size        The size of the memory area.
+/// @param commit      Is the area already committed?
+/// @param is_large    Does it consist of large OS pages? Set this to \a true as well for memory
+///                    that should not be decommitted or protected (like rdma etc.)
+/// @param is_zero     Does the area consists of zero's?
+/// @param numa_node   Possible associated numa node or `-1`.
+/// @return \a true if successful, and \a false on error.
+bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node);
 
 /// Reserve \a pages of huge OS pages (1GiB) evenly divided over \a numa_nodes nodes,
 /// but stops after at most `timeout_msecs` seconds.
@@ -476,9 +498,12 @@ void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_m
 ///
 /// \{
 
+/// The maximum supported alignment size (currently 1MiB).
+#define MI_ALIGNMENT_MAX   (1024*1024UL)   
+
 /// Allocate \a size bytes aligned by \a alignment.
 /// @param size  number of bytes to allocate.
-/// @param alignment  the minimal alignment of the allocated memory.
+/// @param alignment  the minimal alignment of the allocated memory. Must be less than #MI_ALIGNMENT_MAX.
 /// @returns pointer to the allocated memory or \a NULL if out of memory.
 /// The returned pointer is aligned by \a alignment, i.e.
 /// `(uintptr_t)p % alignment == 0`.
@@ -829,7 +854,13 @@ void* mi_valloc(size_t size);
 
 void* mi_pvalloc(size_t size);
 void* mi_aligned_alloc(size_t alignment, size_t size);
+
+/// Correspond s to [reallocarray](https://www.freebsd.org/cgi/man.cgi?query=reallocarray&sektion=3&manpath=freebsd-release-ports)
+/// in FreeBSD.
 void* mi_reallocarray(void* p, size_t count, size_t size);
+
+/// Corresponds to [reallocarr](https://man.netbsd.org/reallocarr.3) in NetBSD.
+int   mi_reallocarr(void* p, size_t count, size_t size);
 
 void mi_free_size(void* p, size_t size);
 void mi_free_size_aligned(void* p, size_t size, size_t alignment);
@@ -1161,6 +1192,12 @@ void*  calloc(size_t size, size_t n);
 void*  realloc(void* p, size_t newsize);
 void   free(void* p);
 
+void*  aligned_alloc(size_t alignment, size_t size);
+char*  strdup(const char* s);
+char*  strndup(const char* s, size_t n);
+char*  realpath(const char* fname, char* resolved_name);
+
+
 // C++
 void   operator delete(void* p);
 void   operator delete[](void* p);
@@ -1180,15 +1217,23 @@ int    posix_memalign(void** p, size_t alignment, size_t size);
 
 // Linux
 void*  memalign(size_t alignment, size_t size);
-void*  aligned_alloc(size_t alignment, size_t size);
 void*  valloc(size_t size);
 void*  pvalloc(size_t size);
 size_t malloc_usable_size(void *p);
+void*  reallocf(void* p, size_t newsize);
+
+// macOS
+void   vfree(void* p);
+size_t malloc_size(const void* p);
+size_t malloc_good_size(size_t size);
 
 // BSD
 void*  reallocarray( void* p, size_t count, size_t size );
 void*  reallocf(void* p, size_t newsize);
 void   cfree(void* p);
+
+// NetBSD
+int    reallocarr(void* p, size_t count, size_t size);
 
 // Windows
 void*  _expand(void* p, size_t newsize);
