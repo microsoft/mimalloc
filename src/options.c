@@ -532,8 +532,11 @@ static void mi_option_init(mi_option_desc_t* desc) {
         desc->init = INITIALIZED;
       }
       else {
-        _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
+        /* _mi_warning_message() will itself call mi_option_get() for some options,
+         * so to avoid a possible infinite recursion it's important to mark the option as
+         * "initialized" first */
         desc->init = DEFAULTED;
+        _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
       }
     }
     mi_assert_internal(desc->init != UNINIT);
