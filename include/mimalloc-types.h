@@ -167,6 +167,11 @@ typedef int32_t  mi_ssize_t;
 // Used as a special value to encode block sizes in 32 bits.
 #define MI_HUGE_BLOCK_SIZE   ((uint32_t)MI_HUGE_OBJ_SIZE_MAX)
 
+typedef enum mi_alloc_init_e {
+  MI_ALLOC_UNINIT = 0,    // uninitialized memory (debug mode: fill with MI_DEBUG_UNINIT)
+  MI_ALLOC_ZERO_INIT = 1  // zero-initialize memory
+} mi_alloc_init_t;
+
 
 // ------------------------------------------------------
 // Mimalloc pages contain allocated blocks

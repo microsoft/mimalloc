@@ -147,16 +147,16 @@ mi_decl_restrict void* mi_zalloc_small(size_t size) mi_attr_noexcept {
   return p;
 }
 
-void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) {
+void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, mi_alloc_init_t init) {
   void* p = mi_heap_malloc(heap,size);
-  if (zero && p != NULL) {
+  if (init == MI_ALLOC_ZERO_INIT && p != NULL) {
     _mi_block_zero_init(_mi_ptr_page(p),p,size);  // todo: can we avoid getting the page again?
   }
   return p;
 }
 
 extern inline mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return _mi_heap_malloc_zero(heap, size, true);
+  return _mi_heap_malloc_zero(heap, size, MI_ALLOC_ZERO_INIT);
 }
 
 mi_decl_restrict void* mi_zalloc(size_t size) mi_attr_noexcept {
@@ -619,15 +619,15 @@ void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
   return p; // it fits
 }
 
-void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) {
-  if (p == NULL) return _mi_heap_malloc_zero(heap,newsize,zero);
+void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, mi_alloc_init_t init) {
+  if (p == NULL) return _mi_heap_malloc_zero(heap,newsize,init);
   size_t size = _mi_usable_size(p,"mi_realloc");
   if (newsize <= size && newsize >= (size / 2)) {
     return p;  // reallocation still fits and not more than 50% waste
   }
   void* newp = mi_heap_malloc(heap,newsize);
   if (mi_likely(newp != NULL)) {
-    if (zero && newsize > size) {
+    if (init == MI_ALLOC_ZERO_INIT && newsize > size) {
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
       size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
       memset((uint8_t*)newp + start, 0, newsize - start);
@@ -639,7 +639,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
 }
 
 void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
-  return _mi_heap_realloc_zero(heap, p, newsize, false);
+  return _mi_heap_realloc_zero(heap, p, newsize, MI_ALLOC_UNINIT);
 }
 
 void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
@@ -657,7 +657,7 @@ void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcep
 }
 
 void* mi_heap_rezalloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
-  return _mi_heap_realloc_zero(heap, p, newsize, true);
+  return _mi_heap_realloc_zero(heap, p, newsize, MI_ALLOC_ZERO_INIT);
 }
 
 void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
