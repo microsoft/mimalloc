@@ -35,6 +35,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 
 #include "mimalloc.h"
 // #include "mimalloc-internal.h"
+#include "mimalloc-types.h" // for MI_DEBUG
 
 // ---------------------------------------------------------------------------
 // Test macros: CHECK(name,predicate) and CHECK_BODY(name,body)
@@ -76,6 +77,9 @@ bool test_stl_allocator2(void);
 // Helper functions
 // ---------------------------------------------------------------------------
 bool check_zero_init(uint8_t* p, size_t size);
+#if MI_DEBUG >= 2
+bool check_debug_fill_uninit(uint8_t* p, size_t size);
+#endif
 
 // ---------------------------------------------------------------------------
 // Main testing
@@ -240,6 +244,115 @@ int main(void) {
     result &= check_zero_init(p, calloc_size);
     mi_free(p);
   });
+
+
+#if MI_DEBUG >= 2
+  // ---------------------------------------------------
+  // Debug filling
+  // ---------------------------------------------------
+  CHECK_BODY("malloc-uninit-small", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_malloc(malloc_size);
+    result = check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("malloc-uninit-large", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_malloc(malloc_size);
+    result = check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("malloc_small-uninit-small", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_malloc_small(malloc_size);
+    result = check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("realloc-small", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_malloc(malloc_size);
+    result = check_debug_fill_uninit(p, malloc_size);
+    malloc_size *= 3;
+    p = (uint8_t*)mi_realloc(p, malloc_size);
+    result &= check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("realloc-large", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_malloc(malloc_size);
+    result = check_debug_fill_uninit(p, malloc_size);
+    malloc_size *= 3;
+    p = (uint8_t*)mi_realloc(p, malloc_size);
+    result &= check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("mallocn-uninit-small", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_mallocn(malloc_size, 1);
+    result = check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("mallocn-uninit-large", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_mallocn(malloc_size, 1);
+    result = check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("reallocn-small", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_mallocn(malloc_size, 1);
+    result = check_debug_fill_uninit(p, malloc_size);
+    malloc_size *= 3;
+    p = (uint8_t*)mi_reallocn(p, malloc_size, 1);
+    result &= check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("reallocn-large", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_mallocn(malloc_size, 1);
+    result = check_debug_fill_uninit(p, malloc_size);
+    malloc_size *= 3;
+    p = (uint8_t*)mi_reallocn(p, malloc_size, 1);
+    result &= check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("malloc_aligned-small", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_malloc_aligned(malloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result = check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("malloc_aligned-large", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_malloc_aligned(malloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result = check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("realloc_aligned-small", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_malloc_aligned(malloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result = check_debug_fill_uninit(p, malloc_size);
+    malloc_size *= 3;
+    p = (uint8_t*)mi_realloc_aligned(p, malloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result &= check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("realloc_aligned-large", {
+    size_t malloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_malloc_aligned(malloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result = check_debug_fill_uninit(p, malloc_size);
+    malloc_size *= 3;
+    p = (uint8_t*)mi_realloc_aligned(p, malloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result &= check_debug_fill_uninit(p, malloc_size);
+    mi_free(p);
+  });
+#endif
 
 
   // ---------------------------------------------------
@@ -429,3 +542,16 @@ bool check_zero_init(uint8_t* p, size_t size) {
   }
   return result;
 }
+
+#if MI_DEBUG >= 2
+bool check_debug_fill_uninit(uint8_t* p, size_t size) {
+  if(!p)
+    return false;
+
+  bool result = true;
+  for (size_t i = 0; i < size; ++i) {
+    result &= p[i] == MI_DEBUG_UNINIT;
+  }
+  return result;
+}
+#endif
