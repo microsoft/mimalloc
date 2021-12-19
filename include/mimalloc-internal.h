@@ -138,8 +138,8 @@ mi_msecs_t  _mi_clock_start(void);
 
 // "alloc.c"
 void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept;  // called from `_mi_malloc_generic`
-void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, mi_alloc_init_t init);
-void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, mi_alloc_init_t init);
+void*       _mi_heap_malloc_init(mi_heap_t* heap, size_t size, mi_alloc_init_t init) mi_attr_noexcept;
+void*       _mi_heap_realloc_init(mi_heap_t* heap, void* p, size_t newsize, mi_alloc_init_t init);
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
 void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
