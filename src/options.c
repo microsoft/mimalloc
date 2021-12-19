@@ -545,18 +545,17 @@ static void mi_option_init(mi_option_desc_t* desc) {
         desc->init = INITIALIZED;
       }
       else {
-        /* _mi_warning_message() will itself call mi_option_get() for some options,
-         * so to avoid a possible infinite recursion it's important to mark the option as
-         * "initialized" first */
+        // set `init` first to avoid recursion through _mi_warning_message on mimalloc_verbose.
         desc->init = DEFAULTED;
-        if (desc->option == mi_option_verbose) {
-          /* Special case: if the 'mimalloc_verbose' env var has a bogus value we'd never know
-           * (since the value default to 'off') - so in that one case briefly set the option to 'on' */
+        if (desc->option == mi_option_verbose && desc->value == 0) {
+          // if the 'mimalloc_verbose' env var has a bogus value we'd never know
+          // (since the value defaults to 'off') so in that case briefly enable verbose
           desc->value = 1;
-        }
-        _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
-        if (desc->option == mi_option_verbose) {
+          _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
           desc->value = 0;
+        }
+        else {
+          _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
         }
       }
     }
