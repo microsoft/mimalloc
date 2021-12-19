@@ -73,6 +73,11 @@ bool test_stl_allocator1(void);
 bool test_stl_allocator2(void);
 
 // ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+bool check_zero_init(uint8_t* p, size_t size);
+
+// ---------------------------------------------------------------------------
 // Main testing
 // ---------------------------------------------------------------------------
 int main(void) {
@@ -98,6 +103,144 @@ int main(void) {
   CHECK_BODY("calloc0",{
     result = (mi_usable_size(mi_calloc(0,1000)) <= 16);
   });
+
+  // ---------------------------------------------------
+  // Zeroing allocation
+  // ---------------------------------------------------
+  CHECK_BODY("zalloc-small", {
+    size_t zalloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_zalloc(zalloc_size);
+    result = check_zero_init(p, zalloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("zalloc-large", {
+    size_t zalloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_zalloc(zalloc_size);
+    result = check_zero_init(p, zalloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("zalloc_small", {
+    size_t zalloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_zalloc_small(zalloc_size);
+    result = check_zero_init(p, zalloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("calloc-small", {
+    size_t calloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_calloc(calloc_size, 1);
+    result = check_zero_init(p, calloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("calloc-large", {
+    size_t calloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_calloc(calloc_size, 1);
+    result = check_zero_init(p, calloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("rezalloc-small", {
+    size_t zalloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_zalloc(zalloc_size);
+    result = check_zero_init(p, zalloc_size);
+    zalloc_size *= 3;
+    p = (uint8_t*)mi_rezalloc(p, zalloc_size);
+    result &= check_zero_init(p, zalloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("rezalloc-large", {
+    size_t zalloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_zalloc(zalloc_size);
+    result = check_zero_init(p, zalloc_size);
+    zalloc_size *= 3;
+    p = (uint8_t*)mi_rezalloc(p, zalloc_size);
+    result &= check_zero_init(p, zalloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("recalloc-small", {
+    size_t calloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_calloc(calloc_size, 1);
+    result = check_zero_init(p, calloc_size);
+    calloc_size *= 3;
+    p = (uint8_t*)mi_recalloc(p, calloc_size, 1);
+    result &= check_zero_init(p, calloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("recalloc-large", {
+    size_t calloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_calloc(calloc_size, 1);
+    result = check_zero_init(p, calloc_size);
+    calloc_size *= 3;
+    p = (uint8_t*)mi_recalloc(p, calloc_size, 1);
+    result &= check_zero_init(p, calloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("zalloc_aligned-small", {
+    size_t zalloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_zalloc_aligned(zalloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result = check_zero_init(p, zalloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("zalloc_aligned-large", {
+    size_t zalloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_zalloc_aligned(zalloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result = check_zero_init(p, zalloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("calloc_aligned-small", {
+    size_t calloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_calloc_aligned(calloc_size, 1, MI_MAX_ALIGN_SIZE * 2);
+    result = check_zero_init(p, calloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("calloc_aligned-large", {
+    size_t calloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_calloc_aligned(calloc_size, 1, MI_MAX_ALIGN_SIZE * 2);
+    result = check_zero_init(p, calloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("rezalloc_aligned-small", {
+    size_t zalloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_zalloc_aligned(zalloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result = check_zero_init(p, zalloc_size);
+    zalloc_size *= 3;
+    p = (uint8_t*)mi_rezalloc_aligned(p, zalloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result &= check_zero_init(p, zalloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("rezalloc_aligned-large", {
+    size_t zalloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_zalloc_aligned(zalloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result = check_zero_init(p, zalloc_size);
+    zalloc_size *= 3;
+    p = (uint8_t*)mi_rezalloc_aligned(p, zalloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result &= check_zero_init(p, zalloc_size);
+    mi_free(p);
+  });
+
+  CHECK_BODY("recalloc_aligned-small", {
+    size_t calloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_calloc_aligned(calloc_size, 1, MI_MAX_ALIGN_SIZE * 2);
+    result = check_zero_init(p, calloc_size);
+    calloc_size *= 3;
+    p = (uint8_t*)mi_recalloc_aligned(p, calloc_size, 1, MI_MAX_ALIGN_SIZE * 2);
+    result &= check_zero_init(p, calloc_size);
+    mi_free(p);
+  });
+  CHECK_BODY("recalloc_aligned-large", {
+    size_t calloc_size = MI_SMALL_SIZE_MAX * 2;
+    uint8_t* p = (uint8_t*)mi_calloc_aligned(calloc_size, 1, MI_MAX_ALIGN_SIZE * 2);
+    result = check_zero_init(p, calloc_size);
+    calloc_size *= 3;
+    p = (uint8_t*)mi_recalloc_aligned(p, calloc_size, 1, MI_MAX_ALIGN_SIZE * 2);
+    result &= check_zero_init(p, calloc_size);
+    mi_free(p);
+  });
+
 
   // ---------------------------------------------------
   // Extended
@@ -271,4 +414,18 @@ bool test_stl_allocator2() {
 #else
   return true;
 #endif
+}
+
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
+bool check_zero_init(uint8_t* p, size_t size) {
+  if(!p)
+    return false;
+  bool result = true;
+  for (size_t i = 0; i < size; ++i) {
+    result &= p[i] == 0;
+  }
+  return result;
 }
