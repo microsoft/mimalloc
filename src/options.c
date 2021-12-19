@@ -400,14 +400,27 @@ void _mi_error_message(int err, const char* fmt, ...) {
 // --------------------------------------------------------
 
 static void mi_strlcpy(char* dest, const char* src, size_t dest_size) {
-  dest[0] = 0;
-  strncpy(dest, src, dest_size - 1);
-  dest[dest_size - 1] = 0;
+  if (dest_size == 0)
+    return;
+
+  // Copy until end of 'src' or dest is (almost) full
+  while (*src && (dest_size > 1)) {
+    *dest++ = *src++;
+    --dest_size;
+  }
+  // Null-terminate dest
+  *dest = 0;
 }
 
 static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
-  strncat(dest, src, dest_size - 1);
-  dest[dest_size - 1] = 0;
+  // Skip existing data in 'dest'
+  while (*dest && (dest_size > 1)) {
+    ++dest;
+    --dest_size;
+  }
+
+  // Concatenate src
+  mi_strlcpy(dest, src, dest_size);
 }
 
 #ifdef MI_NO_GETENV
