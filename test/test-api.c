@@ -23,7 +23,6 @@ we therefore test the API over various inputs. Please add more tests :-)
 [1] https://github.com/daanx/mimalloc-bench
 */
 
-#include <stdio.h>
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -36,33 +35,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include "mimalloc.h"
 // #include "mimalloc-internal.h"
 
-// ---------------------------------------------------------------------------
-// Test macros: CHECK(name,predicate) and CHECK_BODY(name,body)
-// ---------------------------------------------------------------------------
-static int ok = 0;
-static int failed = 0;
-
-#define CHECK_BODY(name,body) \
- do { \
-  fprintf(stderr,"test: %s...  ", name ); \
-  bool result = true;                                     \
-  do { body } while(false);                                \
-  if (!(result)) {                                        \
-    failed++; \
-    fprintf(stderr,                                       \
-            "\n  FAILED: %s:%d:\n  %s\n",                 \
-            __FILE__,                                     \
-            __LINE__,                                     \
-            #body);                                       \
-    /* exit(1); */ \
-  } \
-  else { \
-    ok++;                               \
-    fprintf(stderr,"ok.\n");                    \
-  }                                             \
- } while (false)
-
-#define CHECK(name,expr)      CHECK_BODY(name,{ result = (expr); })
+#include "testhelper.h"
 
 // ---------------------------------------------------------------------------
 // Test functions
@@ -219,10 +192,7 @@ int main(void) {
   // ---------------------------------------------------
   // Done
   // ---------------------------------------------------[]
-  fprintf(stderr,"\n\n---------------------------------------------\n"
-                 "succeeded: %i\n"
-                 "failed   : %i\n\n", ok, failed);
-  return failed;
+  return print_test_summary();
 }
 
 // ---------------------------------------------------
