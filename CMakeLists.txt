@@ -330,6 +330,7 @@ if (MI_BUILD_STATIC)
   endif()
 
   install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_libdir} LIBRARY)
+  install(EXPORT mimalloc DESTINATION ${mi_install_cmakedir})
 endif()
 
 # install include files
