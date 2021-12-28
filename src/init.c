@@ -493,6 +493,11 @@ void mi_process_init(void) mi_attr_noexcept {
   #endif
   _mi_verbose_message("secure level: %d\n", MI_SECURE);
   mi_thread_init();
+#if defined(_WIN32) && !defined(MI_SHARED_LIB)
+  // When building as a static lib FLS cleanup happens to early for the main thread.
+  // Make it a no-op and perform it explicitly later.
+  FlsSetValue(mi_fls_key, NULL);
+#endif
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
@@ -522,6 +527,8 @@ static void mi_process_done(void) {
   process_done = true;
 
   #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+  // Explicitly clean up main thread
+  _mi_thread_done(_mi_heap_default);
   FlsSetValue(mi_fls_key, NULL);  // don't call main-thread callback
   FlsFree(mi_fls_key);            // call thread-done on all threads to prevent dangling callback pointer if statically linked with a DLL; Issue #208
   #endif
