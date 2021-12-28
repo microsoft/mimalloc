@@ -384,6 +384,35 @@ if (MI_BUILD_TESTS)
 
     add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
   endforeach()
+
+  # Test for static initialization order of user vs mimalloc code, in various combinations
+  # of static and shared linkage.
+  # The "test" is that the executables don't crash.
+  set(STATIC_USER_SRC test/static-user.cpp test/static-user.h)
+  foreach(mimalloc_link mimalloc mimalloc-static)
+    set(libname_static static-user-static_${mimalloc_link})
+    add_library(${libname_static} STATIC)
+    target_sources(${libname_static} PRIVATE ${STATIC_USER_SRC})
+    target_compile_definitions(${libname_static} PRIVATE STATIC_USER_BUILD)
+    target_link_libraries(${libname_static} PUBLIC ${mimalloc_link})
+
+    set(libname_shared static-user-shared_${mimalloc_link})
+    add_library(${libname_shared} SHARED)
+    target_sources(${libname_shared} PRIVATE ${STATIC_USER_SRC})
+    target_compile_definitions(${libname_shared} PRIVATE STATIC_USER_BUILD)
+    target_compile_definitions(${libname_shared} PUBLIC STATIC_USER_SHARED)
+    target_link_libraries(${libname_shared} PUBLIC ${mimalloc_link})
+
+    foreach(static_user_type static shared)
+      set(static_user_lib_name static-user-${static_user_type}_${mimalloc_link})
+      set(test_name test-${static_user_lib_name})
+      add_executable(${test_name})
+      target_sources(${test_name} PRIVATE test/test-static-user.c)
+      target_link_libraries(${test_name} PUBLIC ${static_user_lib_name})
+
+      add_test(NAME ${test_name} COMMAND ${test_name})
+    endforeach()
+  endforeach()
 endif()
 
 # -----------------------------------------------------------------------------
