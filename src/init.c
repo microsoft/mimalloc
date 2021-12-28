@@ -557,20 +557,6 @@ static void mi_process_done(void) {
     return TRUE;
   }
 
-#elif defined(__cplusplus)
-  // C++: use static initialization to detect process start
-  static bool _mi_process_init(void) {
-    mi_process_load();
-    return (_mi_heap_main.thread_id != 0);
-  }
-  static bool mi_initialized = _mi_process_init();
-
-#elif defined(__GNUC__) || defined(__clang__)
-  // GCC,Clang: use the constructor attribute
-  static void __attribute__((constructor)) _mi_process_init(void) {
-    mi_process_load();
-  }
-
 #elif defined(_MSC_VER)
   // MSVC: use data section magic for static libraries
   // See <https://www.codeguru.com/cpp/misc/misc/applicationcontrol/article.php/c6945/Running-Code-Before-and-After-Main.htm>
@@ -586,8 +572,22 @@ static void mi_process_done(void) {
     __pragma(comment(linker, "/include:" "__mi_msvc_initu"))
   #endif
   #pragma data_seg(".CRT$XIU")
-  _crt_cb _mi_msvc_initu[] = { &_mi_process_init };
+  extern "C" _crt_cb _mi_msvc_initu[] = { &_mi_process_init };
   #pragma data_seg()
+
+#elif defined(__cplusplus)
+  // C++: use static initialization to detect process start
+  static bool _mi_process_init(void) {
+    mi_process_load();
+    return (_mi_heap_main.thread_id != 0);
+  }
+  static bool mi_initialized = _mi_process_init();
+
+#elif defined(__GNUC__) || defined(__clang__)
+  // GCC,Clang: use the constructor attribute
+  static void __attribute__((constructor)) _mi_process_init(void) {
+    mi_process_load();
+  }
 
 #else
 #pragma message("define a way to call mi_process_load on your platform")
