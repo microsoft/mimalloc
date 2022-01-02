@@ -98,6 +98,11 @@ static size_t os_alloc_granularity = 4096;
 // if non-zero, use large page allocation
 static size_t large_os_page_size = 0;
 
+#if defined(MADV_HUGEPAGE)
+// only linux supports the THP's notion.
+static bool os_transparent_huge_pages = false;
+#endif
+
 // is memory overcommit allowed? 
 // set dynamically in _mi_os_init (and if true we use MAP_NORESERVE)
 static bool os_overcommit = true;
@@ -238,13 +243,37 @@ void _mi_os_init() {
 
 #else  // generic unix
 
+static void os_detect_transparent_huge_pages(void) {
+#if defined(MADV_HUGEPAGE)
+  int fd = -1;
+  size_t i;
+  static const char *paths[] = {
+      "/sys/kernel/mm/transparent_hugepage/enabled",
+      "/sys/kernel/mm/redhat_transparent_hugepage/enabled",
+  };
+
+  for (i = 0; i < sizeof(paths) / sizeof(paths[0]); i ++) {
+      fd = open(paths[i], O_RDONLY);
+      if (fd != -1) break;
+  }
+
+  if (fd < 0) return;
+  char buf[128];
+  ssize_t nread = read(fd, &buf, sizeof(buf));
+  close(fd);
+  if (nread >= 1) {
+      if (strstr(buf, "[madvise]")) os_transparent_huge_pages = true;
+  }
+#endif
+}
+
 static void os_detect_overcommit(void) {
 #if defined(__linux__)
   int fd = open("/proc/sys/vm/overcommit_memory", O_RDONLY);
-	if (fd < 0) return;
+  if (fd < 0) return;
   char buf[128];
   ssize_t nread = read(fd, &buf, sizeof(buf));
-	close(fd);
+  close(fd);
   // <https://www.kernel.org/doc/Documentation/vm/overcommit-accounting>
   // 0: heuristic overcommit, 1: always overcommit, 2: never overcommit (ignore NORESERVE)
   if (nread >= 1) {
@@ -270,6 +299,7 @@ void _mi_os_init() {
   }
   large_os_page_size = 2*MI_MiB; // TODO: can we query the OS for this?
   os_detect_overcommit();
+  os_detect_transparent_huge_pages();
 }
 #endif
 
@@ -588,7 +618,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
       // in that case -- in particular for our large regions (in `memory.c`).
       // However, some systems only allow THP if called with explicit `madvise`, so
       // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
-      if (allow_large && use_large_os_page(size, try_alignment)) {
+      if (os_transparent_huge_pages && allow_large && use_large_os_page(size, try_alignment)) {
         if (madvise(p, size, MADV_HUGEPAGE) == 0) {
           *is_large = true; // possibly
         };
