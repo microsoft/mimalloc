@@ -254,7 +254,7 @@ typedef struct mi_heap_area_s {
   void*  blocks;      // start of the area containing heap blocks
   size_t reserved;    // bytes reserved for this area (virtual)
   size_t committed;   // current available bytes for this area
-  size_t used;        // bytes in use by allocated blocks
+  size_t used;        // number of allocated blocks
   size_t block_size;  // size in bytes of each block
 } mi_heap_area_t;
 
