@@ -532,7 +532,6 @@ static void mi_process_done(void) {
   #if defined(_WIN32) && !defined(MI_SHARED_LIB)
   // Explicitly clean up main thread. See comment in mi_process_init() for reason
   _mi_thread_done(_mi_heap_default);
-  FlsSetValue(mi_fls_key, NULL);  // don't call main-thread callback
   FlsFree(mi_fls_key);            // call thread-done on all threads to prevent dangling callback pointer if statically linked with a DLL; Issue #208
   #endif
   
