@@ -98,6 +98,14 @@ int main(void) {
   CHECK_BODY("calloc0",{
     result = (mi_usable_size(mi_calloc(0,1000)) <= 16);
   });
+#if (MI_DEBUG==0)
+  CHECK_BODY("malloc_conceal",{
+    char* p = (char *)mi_malloc(24); 
+    p[0] = 1;
+    mi_freezero(p, 24);
+    result = p[0] == 0;
+  });
+#endif
 
   // ---------------------------------------------------
   // Extended

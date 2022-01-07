@@ -119,6 +119,49 @@ extern inline mi_decl_restrict void* mi_malloc(size_t size) mi_attr_noexcept {
   return mi_heap_malloc(mi_get_default_heap(), size);
 }
 
+mi_decl_restrict void* mi_malloc_conceal(size_t size) mi_attr_noexcept {
+  void* p;
+  p = mi_heap_malloc(mi_get_default_heap(), size);
+  if (mi_likely(p != NULL)) {
+#if defined(MADV_DONTDUMP)
+    madvise(p, size, MADV_DONTDUMP);
+#elif defined(MADV_NOCORE)
+    madvise(p, size, MADV_NOCORE);
+#endif
+  }
+  return p;
+}
+
+mi_decl_restrict void* mi_calloc_conceal(size_t count, size_t size) mi_attr_noexcept {
+  void* p;
+  p = mi_heap_calloc(mi_get_default_heap(),count,size);
+  if (mi_likely(p != NULL)) {
+#if defined(MADV_DONTDUMP)
+    madvise(p, size, MADV_DONTDUMP);
+#elif defined(MADV_NOCORE)
+    madvise(p, size, MADV_NOCORE);
+#endif
+  }
+  return p;
+}
+
+void mi_freezero(void* p, size_t size) mi_attr_noexcept {
+  mi_free(p);
+#if (MI_DEBUG==0)
+  if (size > 0) {
+#if defined(_MSC_VER)
+    SecureZeroMemory(p, size);
+#else
+    // reusing memset return value and using memory fence
+    // so memset call is generated regardless of the optimisation level
+    p = memset(p, 0, size);
+    __asm__ volatile("" :: "r"(p) : "memory");
+#endif
+  }
+#else
+  MI_UNUSED(size);
+#endif
+}
 
 void _mi_block_zero_init(const mi_page_t* page, void* p, size_t size) {
   // note: we need to initialize the whole usable block size to zero, not just the requested size,
