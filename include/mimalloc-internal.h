@@ -162,8 +162,8 @@ bool        _mi_page_is_valid(mi_page_t* page);
 // ------------------------------------------------------
 
 #if defined(__GNUC__) || defined(__clang__)
-#define mi_unlikely(x)     __builtin_expect((x),0)
-#define mi_likely(x)       __builtin_expect((x),1)
+#define mi_unlikely(x)     __builtin_expect(!!(x),false)
+#define mi_likely(x)       __builtin_expect(!!(x),true)
 #else
 #define mi_unlikely(x)     (x)
 #define mi_likely(x)       (x)
@@ -367,11 +367,15 @@ extern pthread_key_t _mi_heap_default_key;
 // However, on the Apple M1 we do use the address of this variable as the unique thread-id (issue #356).
 extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
 
-
 static inline mi_heap_t* mi_get_default_heap(void) {
 #if defined(MI_TLS_SLOT)
   mi_heap_t* heap = (mi_heap_t*)mi_tls_slot(MI_TLS_SLOT);
-  if (mi_unlikely(heap == NULL)) { heap = (mi_heap_t*)&_mi_heap_empty; } //_mi_heap_empty_get(); }
+  if (mi_unlikely(heap == NULL)) {
+    #ifdef __GNUC__
+    __asm(""); // prevent conditional load of the address of _mi_heap_empty
+    #endif
+    heap = (mi_heap_t*)&_mi_heap_empty;    
+  }
   return heap;
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
   mi_heap_t* heap = *mi_tls_pthread_heap_slot();
