@@ -200,6 +200,9 @@ static malloc_introspection_t mi_introspect = {
 };
 
 static malloc_zone_t mi_malloc_zone = {
+  // note: even with designators, the order is important for C++ compilation
+  //.reserved1 = NULL,
+  //.reserved2 = NULL,
   .size = &zone_size,
   .malloc = &zone_malloc,
   .calloc = &zone_calloc,
@@ -212,18 +215,20 @@ static malloc_zone_t mi_malloc_zone = {
   .batch_free = &zone_batch_free,
   .introspect = &mi_introspect,  
 #if defined(MAC_OS_X_VERSION_10_6) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
+  #if defined(MAC_OS_X_VERSION_10_7) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7)
+  .version = 10,
+  #else
+  .version = 9,
+  #endif
   // switch to version 9+ on OSX 10.6 to support memalign.
   .memalign = &zone_memalign,
   .free_definite_size = &zone_free_definite_size,
   .pressure_relief = &zone_pressure_relief,
-  #if defined(MAC_OS_X_VERSION_10_7) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
+  #if defined(MAC_OS_X_VERSION_10_7) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7)
   .claimed_address = &zone_claimed_address,
-  .version = 10
-  #else
-  .version = 9
   #endif
 #else
-  .version = 4
+  .version = 4,
 #endif
 };
 
