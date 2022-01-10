@@ -72,7 +72,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
   #else
   { 1, UNINIT, MI_OPTION(eager_region_commit) },
-  { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset uses MADV_FREE/MADV_DONTNEED
+  { 0, UNINIT, MI_OPTION(reset_decommits) },     // legacy; ignored now and reset always uses MADV_FREE/MADV_DONTNEED (issue #518)
   #endif
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },  // per 1GiB huge pages
