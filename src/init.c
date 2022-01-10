@@ -520,6 +520,14 @@ void mi_process_init(void) mi_attr_noexcept {
   #endif
   _mi_verbose_message("secure level: %d\n", MI_SECURE);
   mi_thread_init();
+#if defined(_WIN32) && !defined(MI_SHARED_LIB)
+  /* When building as a static lib the FLS cleanup happens to early for the main thread.
+   * To avoid that set the FLS value for the main thread to NULL; the eventual
+   * mi_fls_done() execution won't call _mi_thread_done().
+   * The latter function is later called explicitly from mi_process_done(). 
+   * See GitHub issue #508 for more background and explanation. */
+  FlsSetValue(mi_fls_key, NULL);
+#endif
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
@@ -549,7 +557,8 @@ static void mi_process_done(void) {
   process_done = true;
 
   #if defined(_WIN32) && !defined(MI_SHARED_LIB)
-  FlsSetValue(mi_fls_key, NULL);  // don't call main-thread callback
+  // Explicitly clean up main thread. See comment in mi_process_init() for reason
+  _mi_thread_done(_mi_heap_default);
   FlsFree(mi_fls_key);            // call thread-done on all threads to prevent dangling callback pointer if statically linked with a DLL; Issue #208
   #endif
   
@@ -584,20 +593,6 @@ static void mi_process_done(void) {
     return TRUE;
   }
 
-#elif defined(__cplusplus)
-  // C++: use static initialization to detect process start
-  static bool _mi_process_init(void) {
-    mi_process_load();
-    return (_mi_heap_main.thread_id != 0);
-  }
-  static bool mi_initialized = _mi_process_init();
-
-#elif defined(__GNUC__) || defined(__clang__)
-  // GCC,Clang: use the constructor attribute
-  static void __attribute__((constructor)) _mi_process_init(void) {
-    mi_process_load();
-  }
-
 #elif defined(_MSC_VER)
   // MSVC: use data section magic for static libraries
   // See <https://www.codeguru.com/cpp/misc/misc/applicationcontrol/article.php/c6945/Running-Code-Before-and-After-Main.htm>
@@ -613,8 +608,22 @@ static void mi_process_done(void) {
     __pragma(comment(linker, "/include:" "__mi_msvc_initu"))
   #endif
   #pragma data_seg(".CRT$XIU")
-  _crt_cb _mi_msvc_initu[] = { &_mi_process_init };
+  extern "C" _crt_cb _mi_msvc_initu[] = { &_mi_process_init };
   #pragma data_seg()
+
+#elif defined(__cplusplus)
+  // C++: use static initialization to detect process start
+  static bool _mi_process_init(void) {
+    mi_process_load();
+    return (_mi_heap_main.thread_id != 0);
+  }
+  static bool mi_initialized = _mi_process_init();
+
+#elif defined(__GNUC__) || defined(__clang__)
+  // GCC,Clang: use the constructor attribute
+  static void __attribute__((constructor)) _mi_process_init(void) {
+    mi_process_load();
+  }
 
 #else
 #pragma message("define a way to call mi_process_load on your platform")
