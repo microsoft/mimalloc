@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2020, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2022, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -32,8 +32,7 @@ terms of the MIT license. A copy of the license can be found in the file
 extern "C" {
 #endif
 
-#if defined(MAC_OS_X_VERSION_10_6) && \
-    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
 // only available from OSX 10.6
 extern malloc_zone_t* malloc_default_purgeable_zone(void) __attribute__((weak_import));
 #endif
@@ -192,8 +191,7 @@ static malloc_introspection_t mi_introspect = {
   .log = &intro_log,
   .force_lock = &intro_force_lock,
   .force_unlock = &intro_force_unlock,
-#if defined(MAC_OS_X_VERSION_10_6) && \
-    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
   .statistics = &intro_statistics,
   .zone_locked = &intro_zone_locked,
 #endif
@@ -214,7 +212,7 @@ static malloc_zone_t mi_malloc_zone = {
   .batch_malloc = &zone_batch_malloc,
   .batch_free = &zone_batch_free,
   .introspect = &mi_introspect,  
-#if defined(MAC_OS_X_VERSION_10_6) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
   #if defined(MAC_OS_X_VERSION_10_7) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7)
   .version = 10,
   #else
@@ -421,8 +419,7 @@ __attribute__((constructor))      // seems not supported by g++-11 on the M1
 static void _mi_macos_override_malloc() {
   malloc_zone_t* purgeable_zone = NULL;
 
-  #if defined(MAC_OS_X_VERSION_10_6) && \
-    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
+  #if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
   // force the purgeable zone to exist to avoid strange bugs
   if (malloc_default_purgeable_zone) {
     purgeable_zone = malloc_default_purgeable_zone();
