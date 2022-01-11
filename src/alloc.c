@@ -261,18 +261,23 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
 // list that is freed later by the owning heap. If the exact usable size is too small to
 // contain the pointer for the delayed list, then shrink the padding (by decreasing delta)
 // so it will later not trigger an overflow error in `mi_free_block`.
-static void mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
+// Returns the originally allocated byte size.
+static size_t mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
   size_t bsize;
   size_t delta;
   mi_padding_t* padding = mi_page_decode_padding(page, block, &delta, &bsize);
   mi_assert_internal(padding!=NULL);
-  if (padding == NULL) return;
-  if ((bsize - delta) >= min_size) return;  // usually already enough space
+  if (padding == NULL) return 0;
+  mi_assert_internal(bsize > delta);
+  if (bsize <= delta) return 0;
+  const size_t avail = bsize - delta;
+  if (avail >= min_size) return avail;      // usually already enough space
   mi_assert_internal(bsize >= min_size);
-  if (bsize < min_size) return;             // should never happen
+  if (bsize < min_size) return avail;       // should never happen
   size_t new_delta = (bsize - min_size);
   mi_assert_internal(new_delta < bsize);
   padding->delta = (uint32_t)new_delta;
+  return avail;
 }
 #else
 static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
@@ -284,8 +289,9 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
   return mi_page_usable_block_size(page);
 }
 
-static void mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
-  MI_UNUSED(page); MI_UNUSED(block); MI_UNUSED(min_size);
+static size_t mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
+  MI_UNUSED(block); MI_UNUSED(min_size);
+  return mi_page_usable_block_size(page);
 }
 
 static void _mi_show_block_trace(const mi_page_t* page, const mi_block_t* block, const char* msg) {
@@ -415,9 +421,9 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   // The padding check may access the non-thread-owned page for the key values.
   // that is safe as these are constant and the page won't be freed (as the block is not freed yet).
   mi_check_padding(page, block);
-  mi_padding_shrink(page, block, sizeof(mi_block_t)); // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
+  const size_t avail = mi_padding_shrink(page, block, sizeof(mi_block_t)); // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
   #if (MI_DEBUG!=0)
-  memset(block, MI_DEBUG_FREED, mi_page_usable_block_size(page));
+  memset(block, MI_DEBUG_FREED, avail);
   #endif
 
   // huge page segments are always abandoned and can be freed immediately
