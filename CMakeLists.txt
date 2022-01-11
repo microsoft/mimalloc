@@ -231,7 +231,7 @@ endif()
 # -----------------------------------------------------------------------------
 
 # dynamic/shared library and symlinks always go to /usr/local/lib equivalent
-set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}") 
+set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}")
 
 # static libraries and object files, includes, and cmake config files
 # are either installed at top level, or use versioned directories for side-by-side installation (default)
@@ -360,7 +360,7 @@ if (MI_BUILD_OBJECT)
   )
 
   # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
-  # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_libdir})
+  # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_objdir})
 
   # the FILES expression can also be: $<TARGET_OBJECTS:mimalloc-obj>
   # but that fails cmake versions less than 3.10 so we leave it as is for now
