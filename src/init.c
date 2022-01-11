@@ -520,14 +520,14 @@ void mi_process_init(void) mi_attr_noexcept {
   #endif
   _mi_verbose_message("secure level: %d\n", MI_SECURE);
   mi_thread_init();
-#if defined(_WIN32) && !defined(MI_SHARED_LIB)
-  /* When building as a static lib the FLS cleanup happens to early for the main thread.
-   * To avoid that set the FLS value for the main thread to NULL; the eventual
-   * mi_fls_done() execution won't call _mi_thread_done().
-   * The latter function is later called explicitly from mi_process_done(). 
-   * See GitHub issue #508 for more background and explanation. */
+
+  #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+  // When building as a static lib the FLS cleanup happens to early for the main thread.
+  // To avoid this, set the FLS value for the main thread to NULL so the fls cleanup
+  // will not call _mi_thread_done on the (still executing) main thread. See issue #508.
   FlsSetValue(mi_fls_key, NULL);
-#endif
+  #endif
+
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
@@ -557,9 +557,7 @@ static void mi_process_done(void) {
   process_done = true;
 
   #if defined(_WIN32) && !defined(MI_SHARED_LIB)
-  // Explicitly clean up main thread. See comment in mi_process_init() for reason
-  _mi_thread_done(_mi_heap_default);
-  FlsFree(mi_fls_key);            // call thread-done on all threads to prevent dangling callback pointer if statically linked with a DLL; Issue #208
+  FlsFree(mi_fls_key);  // call thread-done on all threads (except the main thread) to prevent dangling callback pointer if statically linked with a DLL; Issue #208
   #endif
   
   #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)  
@@ -600,7 +598,7 @@ static void mi_process_done(void) {
     mi_process_load();
     return 0;
   }
-  typedef int(*_crt_cb)(void);
+  typedef int(*_mi_crt_callback_t)(void);
   #if defined(_M_X64) || defined(_M_ARM64)
     __pragma(comment(linker, "/include:" "_mi_msvc_initu"))
     #pragma section(".CRT$XIU", long, read)
@@ -608,7 +606,7 @@ static void mi_process_done(void) {
     __pragma(comment(linker, "/include:" "__mi_msvc_initu"))
   #endif
   #pragma data_seg(".CRT$XIU")
-  extern "C" _crt_cb _mi_msvc_initu[] = { &_mi_process_init };
+  extern "C" _mi_crt_callback_t _mi_msvc_initu[] = { &_mi_process_init };
   #pragma data_seg()
 
 #elif defined(__cplusplus)
