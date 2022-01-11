@@ -178,21 +178,21 @@ typedef int32_t  mi_ssize_t;
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)
 
-#if (MI_LARGE_OBJ_WSIZE_MAX >= 655360)
+#if (MI_MEDIUM_OBJ_WSIZE_MAX >= 655360)
 #error "mimalloc internal: define more bins"
 #endif
-#if (MI_ALIGNMENT_MAX > MI_SEGMENT_SIZE/2)
-#error "mimalloc internal: the max aligned boundary is too large for the segment size"
+#if (MI_ALIGNED_MAX % MI_SEGMENT_SLICE_SIZE != 0)
+#error "mimalloc internal: the max aligned boundary must be an integral multiple of the segment slice size"
 #endif
 
-// Maximum slice offset (7)
-#define MI_MAX_SLICE_OFFSET               ((MI_MEDIUM_PAGE_SIZE / MI_SEGMENT_SLICE_SIZE) - 1)
+// Maximum slice offset (15)
+#define MI_MAX_SLICE_OFFSET               ((MI_ALIGNMENT_MAX / MI_SEGMENT_SLICE_SIZE) - 1)
 
 // Used as a special value to encode block sizes in 32 bits.
 #define MI_HUGE_BLOCK_SIZE                ((uint32_t)MI_HUGE_OBJ_SIZE_MAX)
 
 // blocks up to this size are always allocated aligned
-#define MI_MAX_ALIGN_GUARANTEE  (8*MI_MAX_ALIGN_SIZE)  
+#define MI_MAX_ALIGN_GUARANTEE            (8*MI_MAX_ALIGN_SIZE)  
 
 
 

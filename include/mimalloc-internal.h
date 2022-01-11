@@ -89,7 +89,7 @@ bool       _mi_os_unprotect(void* addr, size_t size);
 bool       _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* stats);
 bool       _mi_os_decommit(void* p, size_t size, mi_stats_t* stats);
 bool       _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
-bool       _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
+// bool       _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 size_t     _mi_os_good_alloc_size(size_t size);
 bool       _mi_os_has_overcommit(void);
 

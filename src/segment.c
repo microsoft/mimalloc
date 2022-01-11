@@ -317,7 +317,7 @@ static uint8_t* _mi_segment_page_start_from_slice(const mi_segment_t* segment, c
   size_t psize = (size_t)slice->slice_count * MI_SEGMENT_SLICE_SIZE;
   // make the start not OS page aligned for smaller blocks to avoid page/cache effects
   size_t start_offset = (xblock_size >= MI_INTPTR_SIZE && xblock_size <= 1024 ? MI_MAX_ALIGN_GUARANTEE : 0); 
-  if (page_size != NULL) *page_size = psize - start_offset;
+  if (page_size != NULL) { *page_size = psize - start_offset; }
   return (uint8_t*)segment + ((idx*MI_SEGMENT_SLICE_SIZE) + start_offset);
 }
 

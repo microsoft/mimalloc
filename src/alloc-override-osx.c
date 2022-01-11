@@ -32,8 +32,7 @@ terms of the MIT license. A copy of the license can be found in the file
 extern "C" {
 #endif
 
-#if defined(MAC_OS_X_VERSION_10_6) && \
-    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
 // only available from OSX 10.6
 extern malloc_zone_t* malloc_default_purgeable_zone(void) __attribute__((weak_import));
 #endif
