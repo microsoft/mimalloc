@@ -178,8 +178,11 @@ typedef int32_t  mi_ssize_t;
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)
 
-#if (MI_MEDIUM_OBJ_WSIZE_MAX >= 655360)
-#error "define more bins"
+#if (MI_LARGE_OBJ_WSIZE_MAX >= 655360)
+#error "mimalloc internal: define more bins"
+#endif
+#if (MI_ALIGNMENT_MAX > MI_SEGMENT_SIZE/2)
+#error "mimalloc internal: the max aligned boundary is too large for the segment size"
 #endif
 
 // Maximum slice offset (7)
@@ -478,9 +481,15 @@ struct mi_heap_s {
 // Debug
 // ------------------------------------------------------
 
+#if !defined(MI_DEBUG_UNINIT)
 #define MI_DEBUG_UNINIT     (0xD0)
+#endif
+#if !defined(MI_DEBUG_FREED)
 #define MI_DEBUG_FREED      (0xDF)
+#endif
+#if !defined(MI_DEBUG_PADDING)
 #define MI_DEBUG_PADDING    (0xDE)
+#endif
 
 #if (MI_DEBUG)
 // use our own assertion to print without memory allocation

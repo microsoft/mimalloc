@@ -22,9 +22,11 @@ option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
 option(MI_DEBUG_TRACE       "Store allocation stack trace in each heap block to debug heap block overflows or corruption" OFF)
+
+# deprecated options
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
-option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
-option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems)" OFF)
+option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version (deprecated)" OFF)
+option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
 
 set(MI_PADDING_EXTRA 0 CACHE STRING "Specify extra bytes for padding in each heap block (to debug heap block overflows)")
 
@@ -356,6 +358,7 @@ if (MI_BUILD_STATIC)
   endif()
 
   install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_objdir} LIBRARY)
+  install(EXPORT mimalloc DESTINATION ${mi_install_cmakedir})
 endif()
 
 # install include files
@@ -392,21 +395,17 @@ endif()
 # -----------------------------------------------------------------------------
 
 if (MI_BUILD_TESTS)
-  add_executable(mimalloc-test-api test/test-api.c)
-  target_compile_definitions(mimalloc-test-api PRIVATE ${mi_defines})
-  target_compile_options(mimalloc-test-api PRIVATE ${mi_cflags})
-  target_include_directories(mimalloc-test-api PRIVATE include)
-  target_link_libraries(mimalloc-test-api PRIVATE mimalloc ${mi_libraries})
-
-  add_executable(mimalloc-test-stress test/test-stress.c)
-  target_compile_definitions(mimalloc-test-stress PRIVATE ${mi_defines})
-  target_compile_options(mimalloc-test-stress PRIVATE ${mi_cflags})
-  target_include_directories(mimalloc-test-stress PRIVATE include)
-  target_link_libraries(mimalloc-test-stress PRIVATE mimalloc ${mi_libraries})
-
   enable_testing()
-  add_test(test_api, mimalloc-test-api)
-  add_test(test_stress, mimalloc-test-stress)
+
+  foreach(TEST_NAME api api-fill stress)
+    add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
+    target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
+    target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
+    target_include_directories(mimalloc-test-${TEST_NAME} PRIVATE include)
+    target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE mimalloc ${mi_libraries})
+
+    add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
+  endforeach()
 endif()
 
 # -----------------------------------------------------------------------------
