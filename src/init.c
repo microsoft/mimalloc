@@ -613,7 +613,7 @@ static void mi_process_done(void) {
     __pragma(comment(linker, "/include:" "__mi_msvc_initu"))
   #endif
   #pragma data_seg(".CRT$XIU")
-  extern "C" _mi_crt_callback_t _mi_msvc_initu[] = { &_mi_process_init };
+  mi_decl_externc _mi_crt_callback_t _mi_msvc_initu[] = { &_mi_process_init };
   #pragma data_seg()
 
 #elif defined(__cplusplus)
