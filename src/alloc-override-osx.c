@@ -183,6 +183,10 @@ static boolean_t intro_zone_locked(malloc_zone_t* zone) {
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #endif
 
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wc99-extensions"
+#endif
+
 static malloc_introspection_t mi_introspect = {
   .enumerator = &intro_enumerator,
   .good_size = &intro_good_size,
