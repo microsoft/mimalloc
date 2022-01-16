@@ -63,6 +63,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(show_errors) },
 #endif
   { 0, UNINIT, MI_OPTION(show_stats) },
+  { 0, UNINIT, MI_OPTION(show_histogram) },
   { 0, UNINIT, MI_OPTION(verbose) },
 
   // the following options are experimental and not all combinations make sense.

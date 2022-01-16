@@ -303,6 +303,7 @@ typedef enum mi_option_e {
   // stable options
   mi_option_show_errors,
   mi_option_show_stats,
+  mi_option_show_histogram,
   mi_option_verbose,
   // the following options are experimental
   mi_option_eager_commit,

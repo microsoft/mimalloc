@@ -543,6 +543,9 @@ static void mi_process_done(void) {
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
     mi_stats_print(NULL);
   }
+  if (mi_option_is_enabled(mi_option_show_histogram)) {
+    _mi_histogram_print(NULL);
+  }
   mi_allocator_done();  
   _mi_verbose_message("process done: 0x%zx\n", _mi_heap_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore

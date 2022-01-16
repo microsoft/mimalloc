@@ -451,6 +451,84 @@ mi_msecs_t _mi_clock_end(mi_msecs_t start) {
 }
 
 
+/* -----------------------------------------------------------
+  Histogram of allocations sizes (power of 2)
+----------------------------------------------------------- */
+
+static _Atomic(size_t) mi_hist[MI_SIZE_BITS] = { 0 };
+
+void _mi_histogram_log(size_t size)
+{
+  size_t bucket = MI_SIZE_BITS - 1 - mi_clz(size);
+  mi_atomic_increment_relaxed(mi_hist + bucket);
+}
+
+static char* _mi_make_bar(char *buf, size_t buflen, size_t value, size_t max, size_t width)
+{
+  /* we can't dynamically detect if the terminal supports unicode block characters */
+  #if defined(_WIN32)
+  size_t v = value * width / max;
+  buf[0] = '\0';
+  while (v > 0) {
+    strncat(buf, "*", buflen--);
+    v--;
+  }
+  #else
+  static const char* a[] = { " ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█" };
+  size_t v = value * width * 8 / max;
+  buf[0] = '\0';
+  while (v > 8) {
+    strncat(buf, a[8], buflen--);
+    v-=8;
+  }
+  strncat(buf, a[v], buflen--);
+  #endif
+  return buf;
+}
+
+static char* _mi_format_bytes(char *buf, size_t buflen, size_t count)
+{
+  #if MI_SIZE_BITS > 32
+  if (count & ~((((size_t)1) << 50) - (size_t)1)) {
+      snprintf(buf, buflen, "%zuPiB", (count+1) >> 50);
+  } else
+  if (count & ~((((size_t)1) << 40) - (size_t)1)) {
+      snprintf(buf, buflen, "%zuTiB", (count+1) >> 40);
+  } else
+  #endif
+  if (count & ~((((size_t)1) << 30) - (size_t)1)) {
+      snprintf(buf, buflen, "%zuGiB", (count+1) >> 30);
+  } else
+  if (count & ~((((size_t)1) << 20) - (size_t)1)) {
+      snprintf(buf, buflen, "%zuMiB", (count+1) >> 20);
+  } else
+  if (count & ~((((size_t)1) << 10) - (size_t)1)) {
+      snprintf(buf, buflen, "%zuKiB", (count+1) >> 10);
+  } else {
+      snprintf(buf, buflen, "%zuB", count);
+  }
+  return buf;
+}
+
+void _mi_histogram_print(mi_output_fun* out)
+{
+  #define _NCOLS 50
+  char bar[_NCOLS*3+1], num1[16], num2[16];
+  size_t max_allocs = 0;
+  for (size_t i = 0; i < MI_SIZE_BITS; i++) {
+    if (mi_hist[i] > max_allocs) { max_allocs = mi_hist[i]; }
+  }
+  _mi_fputs(out, NULL, NULL, "\nhistogram of allocation sizes\n");
+  for (size_t i = 0; i < MI_SIZE_BITS; i++) {
+    if (mi_hist[i]) {
+      _mi_fprintf(out, NULL, "%9s - %-9s [ %-9zu ] %s\n",
+        _mi_format_bytes(num1, sizeof(num1), ((size_t)1 << i)),
+        _mi_format_bytes(num2, sizeof(num2), ((size_t)1 << (i+1))-1),
+        mi_hist[i], _mi_make_bar(bar, sizeof(bar), mi_hist[i], max_allocs, _NCOLS));
+    }
+  }
+}
+
 // --------------------------------------------------------
 // Basic process statistics
 // --------------------------------------------------------

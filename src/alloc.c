@@ -98,13 +98,20 @@ extern inline mi_decl_restrict void* mi_malloc_small(size_t size) mi_attr_noexce
 // The main allocation function
 extern inline mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   if (mi_likely(size <= MI_SMALL_SIZE_MAX)) {
-    return mi_heap_malloc_small(heap, size);
+    void *p = mi_heap_malloc_small(heap, size);
+    #if MI_STAT>1
+    if (p) { _mi_histogram_log(size); }
+    #endif
+    return p;
   }
   else {
     mi_assert(heap!=NULL);
     mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
     void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE);      // note: size can overflow but it is detected in malloc_generic
     mi_assert_internal(p == NULL || mi_usable_size(p) >= size);
+    #if MI_STAT>1
+    if (p) { _mi_histogram_log(size); }
+    #endif
     #if MI_STAT>1
     if (p != NULL) {
       if (!mi_heap_is_initialized(heap)) { heap = mi_get_default_heap(); }
