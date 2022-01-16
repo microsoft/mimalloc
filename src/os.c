@@ -242,7 +242,7 @@ static void os_detect_overcommit(void) {
 #if defined(__linux__)
   int fd = open("/proc/sys/vm/overcommit_memory", O_RDONLY);
 	if (fd < 0) return;
-  char buf[128];
+  char buf[32];
   ssize_t nread = read(fd, &buf, sizeof(buf));
 	close(fd);
   // <https://www.kernel.org/doc/Documentation/vm/overcommit-accounting>
@@ -270,6 +270,17 @@ void _mi_os_init() {
   }
   large_os_page_size = 2*MI_MiB; // TODO: can we query the OS for this?
   os_detect_overcommit();
+}
+#endif
+
+
+#if defined(MADV_NORMAL)
+static int mi_madvise(void* addr, size_t length, int advice) {
+  #if defined(__sun)
+  return madvise((caddr_t)addr, length, advice);  // Solaris needs cast (issue #520)
+  #else
+  return madvise(addr, length, advice);
+  #endif
 }
 #endif
 
@@ -477,7 +488,7 @@ static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int pr
   }
   #elif defined(MAP_ALIGN)  // Solaris
   if (addr == NULL && try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0) {
-    void* p = mmap(try_alignment, size, protect_flags, flags | MAP_ALIGN, fd, 0);
+    void* p = mmap((void*)try_alignment, size, protect_flags, flags | MAP_ALIGN, fd, 0);  // addr parameter is the required alignment
     if (p!=MAP_FAILED) return p;
     // fall back to regular mmap
   }
@@ -589,7 +600,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
       // However, some systems only allow THP if called with explicit `madvise`, so
       // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
       if (allow_large && use_large_os_page(size, try_alignment)) {
-        if (madvise(p, size, MADV_HUGEPAGE) == 0) {
+        if (mi_madvise(p, size, MADV_HUGEPAGE) == 0) {
           *is_large = true; // possibly
         };
       }
@@ -598,7 +609,7 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
         struct memcntl_mha cmd = {0};
         cmd.mha_pagesize = large_os_page_size;
         cmd.mha_cmd = MHA_MAPSIZE_VA;
-        if (memcntl(p, size, MC_HAT_ADVISE, (caddr_t)&cmd, 0, 0) == 0) {
+        if (memcntl((caddr_t)p, size, MC_HAT_ADVISE, (caddr_t)&cmd, 0, 0) == 0) {
           *is_large = true;
         }
       }      
@@ -878,8 +889,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
 
   #if defined(_WIN32)
   if (commit) {
-    // if the memory was already committed, the call succeeds but it is not zero'd
-    // *is_zero = true;
+    // *is_zero = true;  // note: if the memory was already committed, the call succeeds but the memory is not zero'd
     void* p = VirtualAlloc(start, csize, MEM_COMMIT, PAGE_READWRITE);
     err = (p == start ? 0 : GetLastError());
   }
@@ -889,23 +899,40 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
   }
   #elif defined(__wasi__)
   // WebAssembly guests can't control memory protection
-  #elif defined(MAP_FIXED)
-  if (!commit) {
-    // use mmap with MAP_FIXED to discard the existing memory (and reduce commit charge)
-    void* p = mmap(start, csize, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), -1, 0);
-    if (p != start) { err = errno; }
-  }
-  else {
-    // for commit, just change the protection
+  #elif 0 && defined(MAP_FIXED) && !defined(__APPLE__)
+  // Linux: disabled for now as mmap fixed seems much more expensive than MADV_DONTNEED (and splits VMA's?)
+  if (commit) {
+    // commit: just change the protection
     err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
     if (err != 0) { err = errno; }
-    //#if defined(MADV_FREE_REUSE)
-    //  while ((err = madvise(start, csize, MADV_FREE_REUSE)) != 0 && errno == EAGAIN) { errno = 0; }
-    //#endif
+  } 
+  else {
+    // decommit: use mmap with MAP_FIXED to discard the existing memory (and reduce rss)
+    const int fd = mi_unix_mmap_fd();
+    void* p = mmap(start, csize, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), fd, 0);
+    if (p != start) { err = errno; }
   }
   #else
-  err = mprotect(start, csize, (commit ? (PROT_READ | PROT_WRITE) : PROT_NONE));
-  if (err != 0) { err = errno; }
+  // Linux, macOSX and others.
+  if (commit) {
+    // commit: ensure we can access the area    
+    err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
+    if (err != 0) { err = errno; }
+  } 
+  else {
+    #if defined(MADV_DONTNEED) && MI_DEBUG == 0 && MI_SECURE == 0
+    // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
+    // (on the other hand, MADV_FREE would be good enough.. it is just not reflected in the stats :-( )
+    err = madvise(start, csize, MADV_DONTNEED);
+    #else
+    // decommit: just disable access (also used in debug and secure mode to trap on illegal access)
+    err = mprotect(start, csize, PROT_NONE);
+    if (err != 0) { err = errno; }
+    #endif
+    //#if defined(MADV_FREE_REUSE)
+    //  while ((err = mi_madvise(start, csize, MADV_FREE_REUSE)) != 0 && errno == EAGAIN) { errno = 0; }
+    //#endif
+  }
   #endif
   if (err != 0) {
     _mi_warning_message("%s error: start: %p, csize: 0x%zx, err: %i\n", commit ? "commit" : "decommit", start, csize, err);
@@ -966,16 +993,16 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   static _Atomic(size_t) advice = ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
   int err;
-  while ((err = madvise(start, csize, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
+  while ((err = mi_madvise(start, csize, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
   if (err != 0 && errno == EINVAL && oadvice == MADV_FREE) {  
     // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
     mi_atomic_store_release(&advice, (size_t)MADV_DONTNEED);
-    err = madvise(start, csize, MADV_DONTNEED);
+    err = mi_madvise(start, csize, MADV_DONTNEED);
   }
 #elif defined(__wasi__)
   int err = 0;
 #else
-  int err = madvise(start, csize, MADV_DONTNEED);
+  int err = mi_madvise(start, csize, MADV_DONTNEED);
 #endif
   if (err != 0) {
     _mi_warning_message("madvise reset error: start: %p, csize: 0x%zx, errno: %i\n", start, csize, errno);

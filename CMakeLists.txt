@@ -231,7 +231,7 @@ endif()
 # -----------------------------------------------------------------------------
 
 # dynamic/shared library and symlinks always go to /usr/local/lib equivalent
-set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}") 
+set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}")
 
 # static libraries and object files, includes, and cmake config files
 # are either installed at top level, or use versioned directories for side-by-side installation (default)
@@ -337,6 +337,7 @@ if (MI_BUILD_STATIC)
   endif()
 
   install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_objdir} LIBRARY)
+  install(EXPORT mimalloc DESTINATION ${mi_install_cmakedir})
 endif()
 
 # install include files
@@ -359,7 +360,7 @@ if (MI_BUILD_OBJECT)
   )
 
   # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
-  # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_libdir})
+  # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_objdir})
 
   # the FILES expression can also be: $<TARGET_OBJECTS:mimalloc-obj>
   # but that fails cmake versions less than 3.10 so we leave it as is for now
@@ -373,21 +374,17 @@ endif()
 # -----------------------------------------------------------------------------
 
 if (MI_BUILD_TESTS)
-  add_executable(mimalloc-test-api test/test-api.c)
-  target_compile_definitions(mimalloc-test-api PRIVATE ${mi_defines})
-  target_compile_options(mimalloc-test-api PRIVATE ${mi_cflags})
-  target_include_directories(mimalloc-test-api PRIVATE include)
-  target_link_libraries(mimalloc-test-api PRIVATE mimalloc ${mi_libraries})
-
-  add_executable(mimalloc-test-stress test/test-stress.c)
-  target_compile_definitions(mimalloc-test-stress PRIVATE ${mi_defines})
-  target_compile_options(mimalloc-test-stress PRIVATE ${mi_cflags})
-  target_include_directories(mimalloc-test-stress PRIVATE include)
-  target_link_libraries(mimalloc-test-stress PRIVATE mimalloc ${mi_libraries})
-
   enable_testing()
-  add_test(test_api, mimalloc-test-api)
-  add_test(test_stress, mimalloc-test-stress)
+
+  foreach(TEST_NAME api api-fill stress)
+    add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
+    target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
+    target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
+    target_include_directories(mimalloc-test-${TEST_NAME} PRIVATE include)
+    target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE mimalloc ${mi_libraries})
+
+    add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
+  endforeach()
 endif()
 
 # -----------------------------------------------------------------------------
