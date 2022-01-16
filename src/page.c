@@ -587,14 +587,17 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld)
   // calculate the extend count
   const size_t bsize = (page->xblock_size < MI_HUGE_BLOCK_SIZE ? page->xblock_size : page_size);
   size_t extend = page->reserved - page->capacity;
-  size_t max_extend = (bsize >= MI_MAX_EXTEND_SIZE ? MI_MIN_EXTEND : MI_MAX_EXTEND_SIZE/(uint32_t)bsize);
-  if (max_extend < MI_MIN_EXTEND) max_extend = MI_MIN_EXTEND;
+  mi_assert_internal(extend > 0);
 
+  size_t max_extend = (bsize >= MI_MAX_EXTEND_SIZE ? MI_MIN_EXTEND : MI_MAX_EXTEND_SIZE/(uint32_t)bsize);
+  if (max_extend < MI_MIN_EXTEND) { max_extend = MI_MIN_EXTEND; }
+  mi_assert_internal(max_extend > 0);
+    
   if (extend > max_extend) {
     // ensure we don't touch memory beyond the page to reduce page commit.
     // the `lean` benchmark tests this. Going from 1 to 8 increases rss by 50%.
-    extend = (max_extend==0 ? 1 : max_extend);
-  }  
+    extend = max_extend;
+  }
 
   mi_assert_internal(extend > 0 && extend + page->capacity <= page->reserved);
   mi_assert_internal(extend < (1UL<<16));
