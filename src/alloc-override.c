@@ -77,7 +77,7 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
     MI_INTERPOSE_MI(valloc),
     MI_INTERPOSE_MI(malloc_size),
     MI_INTERPOSE_MI(malloc_good_size),
-    MI_INTERPOSE_MI(aligned_alloc),
+    //MI_INTERPOSE_MI(aligned_alloc),
     #ifdef MI_OSX_ZONE
     // we interpose malloc_default_zone in alloc-override-osx.c so we can use mi_free safely
     MI_INTERPOSE_MI(free),
