@@ -486,7 +486,7 @@ void mi_free(void* p) mi_attr_noexcept
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_block_t*)p;
 
-  if (mi_likely(tid == mi_atomic_load_relaxed(&segment->thread_id) && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
+  if (mi_likely(tid == mi_atomic_load_relaxed((_Atomic(mi_threadid_t)*)&segment->thread_id) && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     if (mi_unlikely(mi_check_is_double_free(page,block))) return;
     mi_check_padding(page, block);
