@@ -23,6 +23,7 @@ option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
+option(MI_SKIP_COLLECT_ON_EXIT, "Skip collecting memory on exit" OFF)
 
 include("cmake/mimalloc-config-version.cmake")
 
@@ -100,6 +101,10 @@ endif()
 if(MI_CHECK_FULL)
   message(STATUS "The MI_CHECK_FULL option is deprecated, use MI_DEBUG_FULL instead")
   set(MI_DEBUG_FULL "ON")
+endif()
+
+if (MI_SKIP_COLLECT_ON_EXIT)
+  list(APPEND mi_defines MI_SKIP_COLLECT_ON_EXIT=1)
 endif()
 
 if(MI_DEBUG_FULL)
