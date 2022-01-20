@@ -459,7 +459,8 @@ static _Atomic(size_t) mi_hist[MI_SIZE_BITS] = { 0 };
 
 void _mi_histogram_log(size_t size)
 {
-  size_t bucket = MI_SIZE_BITS - 1 - mi_clz(size);
+  if (mi_unlikely(size == 0)) return;
+  size_t bucket = mi_bsr(size);
   mi_atomic_increment_relaxed(mi_hist + bucket);
 }
 
