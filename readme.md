@@ -91,34 +91,7 @@ Note: the `v2.x` beta has a new algorithm for managing internal mimalloc pages t
 * 2021-01-31, `v1.7.0`: stable release 1.7: support explicit user provided memory regions, more precise statistics,
   improve macOS overriding, initial support for Apple M1, improved DragonFly support, faster memcpy on Windows, various small fixes.
 
-### Older Releases
-
-* 2020-09-24, `v1.6.7`: stable release 1.6: using standard C atomics, passing tsan testing, improved
-  handling of failing to commit on Windows, add [`mi_process_info`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc.h#L156) api call.
-* 2020-08-06, `v1.6.4`: stable release 1.6: improved error recovery in low-memory situations,
-  support for IllumOS and Haiku, NUMA support for Vista/XP, improved NUMA detection for AMD Ryzen, ubsan support.
-* 2020-05-05, `v1.6.3`: stable release 1.6: improved behavior in out-of-memory situations, improved malloc zones on macOS,
-  build PIC static libraries by default, add option to abort on out-of-memory, line buffered statistics.
-* 2020-04-20, `v1.6.2`: stable release 1.6: fix compilation on Android, MingW, Raspberry, and Conda,
-  stability fix for Windows 7, fix multiple mimalloc instances in one executable, fix `strnlen` overload,
-  fix aligned debug padding.
-* 2020-02-17, `v1.6.1`: stable release 1.6: minor updates (build with clang-cl, fix alignment issue for small objects).
-* 2020-02-09, `v1.6.0`: stable release 1.6: fixed potential memory leak, improved overriding
-  and thread local support on FreeBSD, NetBSD, DragonFly, and macOSX. New byte-precise
-  heap block overflow detection in debug mode (besides the double-free detection and free-list
-  corruption detection). Add `nodiscard` attribute to most allocation functions.
-  Enable `MIMALLOC_PAGE_RESET` by default. New reclamation strategy for abandoned heap pages
-  for better memory footprint.
-* 2020-02-09, `v1.5.0`: stable release 1.5: improved free performance, small bug fixes.
-* 2020-01-22, `v1.4.0`: stable release 1.4: improved performance for delayed OS page reset,
-more eager concurrent free, addition of STL allocator, fixed potential memory leak.
-* 2020-01-15, `v1.3.0`: stable release 1.3: bug fixes, improved randomness and [stronger
-free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396) in secure mode.
-* 2019-12-22, `v1.2.2`: stable release 1.2: minor updates.
-* 2019-11-22, `v1.2.0`: stable release 1.2: bug fixes, improved secure mode (free list corruption checks, double free mitigation). Improved dynamic overriding on Windows.
-* 2019-10-07, `v1.1.0`: stable release 1.1.
-* 2019-09-01, `v1.0.8`: pre-release 8: more robust windows dynamic overriding, initial huge page support.
-* 2019-08-10, `v1.0.6`: pre-release 6: various performance improvements.
+* [Older releases](#older-releases)
 
 Special thanks to:
 
@@ -650,6 +623,7 @@ see the differences in the _larsonN_, _mstressN_, and _xmalloc-testN_ benchmarks
 
 -->
 
+
 # References
 
 - \[1] Emery D. Berger, Kathryn S. McKinley, Robert D. Blumofe, and Paul R. Wilson.
@@ -687,7 +661,6 @@ see the differences in the _larsonN_, _mstressN_, and _xmalloc-testN_ benchmarks
   In Proceedings of the 2019 ACM SIGPLAN International Symposium on Memory Management, 122–135. ACM. 2019.
 -->
 
-
 # Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
@@ -697,3 +670,34 @@ the rights to use your contribution. For details, visit https://cla.microsoft.co
 When you submit a pull request, a CLA-bot will automatically determine whether you need to provide
 a CLA and decorate the PR appropriately (e.g., label, comment). Simply follow the instructions
 provided by the bot. You will only need to do this once across all repos using our CLA.
+
+
+# Older Releases
+
+* 2020-09-24, `v1.6.7`: stable release 1.6: using standard C atomics, passing tsan testing, improved
+  handling of failing to commit on Windows, add [`mi_process_info`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc.h#L156) api call.
+* 2020-08-06, `v1.6.4`: stable release 1.6: improved error recovery in low-memory situations,
+  support for IllumOS and Haiku, NUMA support for Vista/XP, improved NUMA detection for AMD Ryzen, ubsan support.
+* 2020-05-05, `v1.6.3`: stable release 1.6: improved behavior in out-of-memory situations, improved malloc zones on macOS,
+  build PIC static libraries by default, add option to abort on out-of-memory, line buffered statistics.
+* 2020-04-20, `v1.6.2`: stable release 1.6: fix compilation on Android, MingW, Raspberry, and Conda,
+  stability fix for Windows 7, fix multiple mimalloc instances in one executable, fix `strnlen` overload,
+  fix aligned debug padding.
+* 2020-02-17, `v1.6.1`: stable release 1.6: minor updates (build with clang-cl, fix alignment issue for small objects).
+* 2020-02-09, `v1.6.0`: stable release 1.6: fixed potential memory leak, improved overriding
+  and thread local support on FreeBSD, NetBSD, DragonFly, and macOSX. New byte-precise
+  heap block overflow detection in debug mode (besides the double-free detection and free-list
+  corruption detection). Add `nodiscard` attribute to most allocation functions.
+  Enable `MIMALLOC_PAGE_RESET` by default. New reclamation strategy for abandoned heap pages
+  for better memory footprint.
+* 2020-02-09, `v1.5.0`: stable release 1.5: improved free performance, small bug fixes.
+* 2020-01-22, `v1.4.0`: stable release 1.4: improved performance for delayed OS page reset,
+more eager concurrent free, addition of STL allocator, fixed potential memory leak.
+* 2020-01-15, `v1.3.0`: stable release 1.3: bug fixes, improved randomness and [stronger
+free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396) in secure mode.
+* 2019-12-22, `v1.2.2`: stable release 1.2: minor updates.
+* 2019-11-22, `v1.2.0`: stable release 1.2: bug fixes, improved secure mode (free list corruption checks, double free mitigation). Improved dynamic overriding on Windows.
+* 2019-10-07, `v1.1.0`: stable release 1.1.
+* 2019-09-01, `v1.0.8`: pre-release 8: more robust windows dynamic overriding, initial huge page support.
+* 2019-08-10, `v1.0.6`: pre-release 6: various performance improvements.
+
