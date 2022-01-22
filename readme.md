@@ -91,7 +91,7 @@ Note: the `v2.x` beta has a new algorithm for managing internal mimalloc pages t
 * 2021-01-31, `v1.7.0`: stable release 1.7: support explicit user provided memory regions, more precise statistics,
   improve macOS overriding, initial support for Apple M1, improved DragonFly support, faster memcpy on Windows, various small fixes.
 
-* [Older release notes](#older-releases)
+* [Older release notes](#older-release-notes)
 
 Special thanks to:
 
