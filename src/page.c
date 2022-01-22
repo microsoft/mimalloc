@@ -786,7 +786,7 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
 // that frees the block can free the whole page and segment directly.
 static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
   size_t block_size = _mi_os_good_alloc_size(size);
-  mi_assert_internal(_mi_bin(block_size) == MI_BIN_HUGE);
+  mi_assert_internal(mi_bin(block_size) == MI_BIN_HUGE);
   bool is_huge = (block_size > MI_LARGE_OBJ_SIZE_MAX);
   mi_page_queue_t* pq = (is_huge ? NULL : mi_page_queue(heap, block_size));
   mi_page_t* page = mi_page_fresh_alloc(heap, pq, block_size);
