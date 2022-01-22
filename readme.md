@@ -91,13 +91,13 @@ Note: the `v2.x` beta has a new algorithm for managing internal mimalloc pages t
 * 2021-01-31, `v1.7.0`: stable release 1.7: support explicit user provided memory regions, more precise statistics,
   improve macOS overriding, initial support for Apple M1, improved DragonFly support, faster memcpy on Windows, various small fixes.
 
-* [Older release notes](#older-releases)
+* [Older release notes](#older-release-notes)
 
 Special thanks to:
 
 * [David Carlier](https://devnexen.blogspot.com/) (@devnexen) for his many contributions, and making
   mimalloc work better on many less common operating systems, like Haiku, Dragonfly, etc.
-* Sam Gross ([@colesbury](https://github.com/colesbury)) for the [no GIL](https://github.com/colesbury/nogil) Python fork which 
+* [Sam Gross](https://github.com/colesbury) for the [no GIL](https://github.com/colesbury/nogil) Python fork which 
   uses mimalloc internally.
 * Mary Feofanova (@mary3000), Evgeniy Moiseenko, and Manuel Pöter (@mpoeter) for making mimalloc TSAN checkable, and finding
   memory model bugs using the [genMC] model checker.
