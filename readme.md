@@ -97,7 +97,7 @@ Special thanks to:
 
 * [David Carlier](https://devnexen.blogspot.com/) (@devnexen) for his many contributions, and making
   mimalloc work better on many less common operating systems, like Haiku, Dragonfly, etc.
-* Sam Gross ([@colesbury](https://github.com/colesbury)) for the [no GIL](https://github.com/colesbury/nogil) Python fork which 
+* [Sam Gross](https://github.com/colesbury) for the [no GIL](https://github.com/colesbury/nogil) Python fork which 
   uses mimalloc internally.
 * Mary Feofanova (@mary3000), Evgeniy Moiseenko, and Manuel Pöter (@mpoeter) for making mimalloc TSAN checkable, and finding
   memory model bugs using the [genMC] model checker.
