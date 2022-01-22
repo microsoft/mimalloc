@@ -141,6 +141,8 @@ mimalloc is used in various large scale low-latency services and programs, for e
 <a href="https://www.bing.com"><img align="left"  height="50" src="https://upload.wikimedia.org/wikipedia/commons/e/e9/Bing_logo.svg"></a>
 <a href="https://azure.microsoft.com/"><img align="left" height="50" src="https://upload.wikimedia.org/wikipedia/commons/a/a8/Microsoft_Azure_Logo.svg"></a>
 <a href="https://deathstrandingpc.505games.com"><img height="100" src="doc/ds-logo.jpg" style="border-radius=1ex;vertical-align:center"></a>
+<a href="https://docs.unrealengine.com/4.26/en-US/WhatsNew/Builds/ReleaseNotes/4_25/"><img height="100" src="doc/unreal-logo.svg" style="border-radius=1ex;vertical-align:center"></a>
+<a href="https://cab.spbu.ru/software/spades/"><img height="100" src="doc/spades-logo.png" style="border-radius=1ex;vertical-align:center"></a>
 
 # Building
 
