@@ -722,6 +722,7 @@ static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
         || (defined(__APPLE__)   && (defined(__x86_64__) || defined(__aarch64__))) \
         || (defined(__BIONIC__)  && (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))) \
         || (defined(__FreeBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
+        || (defined(__OpenBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
       )
 
 static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
