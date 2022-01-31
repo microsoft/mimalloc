@@ -478,7 +478,7 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 // Free a block 
 void mi_free(void* p) mi_attr_noexcept
 {
-  const mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
+  mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
   if (mi_unlikely(segment == NULL)) return; 
 
   mi_threadid_t tid = _mi_thread_id();
