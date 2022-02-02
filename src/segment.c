@@ -659,7 +659,8 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
 
     // initialize pages info
     for (size_t i = 0; i < capacity; i++) {
-      segment->pages[i].segment_idx = i;
+      mi_assert_internal(i <= 255);
+      segment->pages[i].segment_idx = (uint8_t)i;
       segment->pages[i].is_reset = false;
       segment->pages[i].is_committed = commit;
       segment->pages[i].is_zero_init = is_zero;

@@ -97,15 +97,15 @@ Special thanks to:
 
 * [David Carlier](https://devnexen.blogspot.com/) (@devnexen) for his many contributions, and making
   mimalloc work better on many less common operating systems, like Haiku, Dragonfly, etc.
-* [Sam Gross](https://github.com/colesbury) for the [no GIL](https://github.com/colesbury/nogil) Python fork which 
-  uses mimalloc internally.
 * Mary Feofanova (@mary3000), Evgeniy Moiseenko, and Manuel Pöter (@mpoeter) for making mimalloc TSAN checkable, and finding
   memory model bugs using the [genMC] model checker.
 * Weipeng Liu (@pongba), Zhuowei Li, Junhua Wang, and Jakub Szymanski, for their early support of mimalloc and deployment
   at large scale services, leading to many improvements in the mimalloc algorithms for large workloads.
 * Jason Gibson (@jasongibson) for exhaustive testing on large scale workloads and server environments, and finding complex bugs 
   in (early versions of) `mimalloc`.
-* Manuel Pöter (@mpoeter) and Sam Gross (@colesbury) for finding an ABA concurrency issue in abandoned segment reclamation.
+* Manuel Pöter (@mpoeter) and Sam Gross(@colesbury) for finding an ABA concurrency issue in abandoned segment reclamation. Sam also created the [no GIL](https://github.com/colesbury/nogil) Python fork which 
+  uses mimalloc internally.
+
 
 [genMC]: https://plv.mpi-sws.org/genmc/
 
