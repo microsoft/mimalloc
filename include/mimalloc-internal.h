@@ -110,6 +110,7 @@ void       _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi
 uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size); // page start for any page
 void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
 void       _mi_abandoned_await_readers(void);
+void       _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld);
 
 
 

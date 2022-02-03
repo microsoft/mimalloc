@@ -147,6 +147,9 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
+  // collect abandoned pages
+  _mi_abandoned_collect(heap, collect >= MI_FORCE, &heap->tld->segments);
+
   // collect segment local caches
   if (collect >= MI_FORCE) {
     _mi_segment_thread_collect(&heap->tld->segments);

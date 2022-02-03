@@ -1050,7 +1050,7 @@ void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
 Abandonment
 
 When threads terminate, they can leave segments with
-live blocks (reached through other threads). Such segments
+live blocks (reachable through other threads). Such segments
 are "abandoned" and will be reclaimed by other threads to
 reuse their pages and/or free them eventually
 
@@ -1065,11 +1065,11 @@ or decommitting segments that have a pending read operation.
 
 Note: the current implementation is one possible design;
 another way might be to keep track of abandoned segments
-in the regions. This would have the advantage of keeping
+in the arenas/segment_cache's. This would have the advantage of keeping
 all concurrent code in one place and not needing to deal
 with ABA issues. The drawback is that it is unclear how to
 scan abandoned segments efficiently in that case as they
-would be spread among all other segments in the regions.
+would be spread among all other segments in the arenas.
 ----------------------------------------------------------- */
 
 // Use the bottom 20-bits (on 64-bit) of the aligned segment pointers
@@ -1431,13 +1431,36 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
     }
     else {
       // otherwise, push on the visited list so it gets not looked at too quickly again
-      mi_segment_delayed_decommit(segment, true, tld->stats); // decommit if needed
+      mi_segment_delayed_decommit(segment, true /* force? */, tld->stats); // forced decommit if needed
       mi_abandoned_visited_push(segment);
     }
   }
   return NULL;
 }
 
+
+void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
+{
+  mi_segment_t* segment;
+  int max_tries = (force ? 16*1024 : 1024); // limit latency
+  if (force) {
+    mi_abandoned_visited_revisit(); 
+  }
+  while ((max_tries-- > 0) && ((segment = mi_abandoned_pop()) != NULL)) {
+    mi_segment_check_free(segment,0,0,tld); // try to free up pages (due to concurrent frees)
+    if (segment->used == 0) {
+      // free the segment (by forced reclaim) to make it available to other threads.
+      // note: we could in principle optimize this by skipping reclaim and directly
+      // freeing but that would violate some invariants temporarily)
+      mi_segment_reclaim(segment, heap, 0, NULL, tld);
+    }
+    else {
+      // otherwise, decommit if needed and push on the visited list 
+      mi_segment_delayed_decommit(segment, force, tld->stats); // forced decommit if needed
+      mi_abandoned_visited_push(segment);
+    }
+  }
+}
 
 /* -----------------------------------------------------------
    Reclaim or allocate
