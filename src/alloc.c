@@ -424,6 +424,8 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   const size_t avail = mi_padding_shrink(page, block, sizeof(mi_block_t)); // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
   #if (MI_DEBUG!=0)
   memset(block, MI_DEBUG_FREED, avail);
+  #else
+  MI_UNUSED(avail);
   #endif
 
   // huge page segments are always abandoned and can be freed immediately
@@ -552,13 +554,13 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 // Free a block 
 void mi_free(void* p) mi_attr_noexcept
 {
-  const mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
+  mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
   if (mi_unlikely(segment == NULL)) return; 
 
   mi_threadid_t tid = _mi_thread_id();
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_block_t*)p;
-
+  
   if (mi_likely(tid == mi_atomic_load_relaxed(&segment->thread_id) && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
     if (mi_unlikely(mi_check_is_double_free(page, block))) return;
