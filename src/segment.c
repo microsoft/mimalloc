@@ -569,8 +569,7 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
     mi_commit_mask_t cmask;
     mi_commit_mask_create_intersect(&segment->commit_mask, &mask, &cmask);  // only decommit what is committed; span_free may try to decommit more
     mi_commit_mask_set(&segment->decommit_mask, &cmask);
-    // segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
-    mi_msecs_t now = _mi_clock_now();
+    mi_msecs_t now = _mi_clock_now();    
     if (segment->decommit_expire == 0) {
       // no previous decommits, initialize now
       mi_assert_internal(mi_commit_mask_is_empty(&segment->decommit_mask));

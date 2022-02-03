@@ -118,6 +118,7 @@ static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, vo
 static mi_decl_noinline void mi_segment_cache_purge(bool force, mi_os_tld_t* tld)
 {
   MI_UNUSED(tld);
+  if (!mi_option_is_enabled(mi_option_allow_decommit)) return;
   mi_msecs_t now = _mi_clock_now();
   size_t purged = 0;
   const size_t max_visits = (force ? MI_CACHE_MAX /* visit all */ : MI_CACHE_FIELDS /* probe at most N (=16) slots */);
