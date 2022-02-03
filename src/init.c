@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2021, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2022, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -102,6 +102,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   false
 };
 
+
 // the thread-local default heap for allocation
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 
@@ -141,7 +142,7 @@ mi_stats_t _mi_stats_main = { MI_STATS_NULL };
 static void mi_heap_main_init(void) {
   if (_mi_heap_main.cookie == 0) {
     _mi_heap_main.thread_id = _mi_thread_id();
-    _mi_heap_main.cookie = _os_random_weak((uintptr_t)&mi_heap_main_init);
+    _mi_heap_main.cookie = _mi_os_random_weak((uintptr_t)&mi_heap_main_init);
     _mi_random_init(&_mi_heap_main.random);
     _mi_heap_main.keys[0] = _mi_heap_random_next(&_mi_heap_main);
     _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
@@ -274,12 +275,6 @@ static bool _mi_heap_done(mi_heap_t* heap) {
 
 static void _mi_thread_done(mi_heap_t* default_heap);
 
-#ifdef __wasi__
-// no pthreads in the WebAssembly Standard Interface
-#elif !defined(_WIN32)
-#define MI_USE_PTHREADS
-#endif
-
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
   // nothing to do as it is done in DllMain
 #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
@@ -299,7 +294,6 @@ static void _mi_thread_done(mi_heap_t* default_heap);
 #elif defined(MI_USE_PTHREADS)
   // use pthread local storage keys to detect thread ending
   // (and used with MI_TLS_PTHREADS for the default heap)
-  #include <pthread.h>
   pthread_key_t _mi_heap_default_key = (pthread_key_t)(-1);
   static void mi_pthread_done(void* value) {
     if (value!=NULL) _mi_thread_done((mi_heap_t*)value);
@@ -331,6 +325,12 @@ bool _mi_is_main_thread(void) {
   return (_mi_heap_main.thread_id==0 || _mi_heap_main.thread_id == _mi_thread_id());
 }
 
+static _Atomic(size_t) thread_count = ATOMIC_VAR_INIT(1);
+
+size_t  _mi_current_thread_count(void) {
+  return mi_atomic_load_relaxed(&thread_count);
+}
+
 // This is called from the `mi_malloc_generic`
 void mi_thread_init(void) mi_attr_noexcept
 {
@@ -343,6 +343,7 @@ void mi_thread_init(void) mi_attr_noexcept
   if (_mi_heap_init()) return;  // returns true if already initialized
 
   _mi_stat_increase(&_mi_stats_main.threads, 1);
+  mi_atomic_increment_relaxed(&thread_count);
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
@@ -351,6 +352,7 @@ void mi_thread_done(void) mi_attr_noexcept {
 }
 
 static void _mi_thread_done(mi_heap_t* heap) {
+  mi_atomic_decrement_relaxed(&thread_count);
   _mi_stat_decrease(&_mi_stats_main.threads, 1);
 
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local heaps...
@@ -441,10 +443,12 @@ static void mi_process_load(void) {
   mi_heap_main_init();
   #if defined(MI_TLS_RECURSE_GUARD)
   volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
-  UNUSED(dummy);
+  MI_UNUSED(dummy);
   #endif
   os_preloading = false;
-  atexit(&mi_process_done);
+  #if !(defined(_WIN32) && defined(MI_SHARED_LIB))  // use Dll process detach (see below) instead of atexit (issue #521)
+  atexit(&mi_process_done);  
+  #endif
   _mi_options_init();
   mi_process_init();
   //mi_stats_reset();-
@@ -478,10 +482,11 @@ static void mi_detect_cpu_features(void) {
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   if (_mi_process_is_initialized) return;
+  _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
   _mi_process_is_initialized = true;
   mi_process_setup_auto_thread_done();
 
-  _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
+  
   mi_detect_cpu_features();
   _mi_os_init();
   mi_heap_main_init();
@@ -490,15 +495,30 @@ void mi_process_init(void) mi_attr_noexcept {
   #endif
   _mi_verbose_message("secure level: %d\n", MI_SECURE);
   mi_thread_init();
+
+  #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+  // When building as a static lib the FLS cleanup happens to early for the main thread.
+  // To avoid this, set the FLS value for the main thread to NULL so the fls cleanup
+  // will not call _mi_thread_done on the (still executing) main thread. See issue #508.
+  FlsSetValue(mi_fls_key, NULL);
+  #endif
+
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages = mi_option_get(mi_option_reserve_huge_os_pages);
-    mi_reserve_huge_os_pages_interleave(pages, 0, pages*500);
+    long reserve_at = mi_option_get(mi_option_reserve_huge_os_pages_at);
+    if (reserve_at != -1) {
+      mi_reserve_huge_os_pages_at(pages, reserve_at, pages*500);
+    } else {
+      mi_reserve_huge_os_pages_interleave(pages, 0, pages*500);
+    }
   } 
   if (mi_option_is_enabled(mi_option_reserve_os_memory)) {
     long ksize = mi_option_get(mi_option_reserve_os_memory);
-    if (ksize > 0) mi_reserve_os_memory((size_t)ksize*KiB, true, true);
+    if (ksize > 0) {
+      mi_reserve_os_memory((size_t)ksize*MI_KiB, true, true);
+    }
   }
 }
 
@@ -512,8 +532,7 @@ static void mi_process_done(void) {
   process_done = true;
 
   #if defined(_WIN32) && !defined(MI_SHARED_LIB)
-  FlsSetValue(mi_fls_key, NULL);  // don't call main-thread callback
-  FlsFree(mi_fls_key);            // call thread-done on all threads to prevent dangling callback pointer if statically linked with a DLL; Issue #208
+  FlsFree(mi_fls_key);  // call thread-done on all threads (except the main thread) to prevent dangling callback pointer if statically linked with a DLL; Issue #208
   #endif
   
   #ifndef MI_SKIP_COLLECT_ON_EXIT
@@ -538,16 +557,39 @@ static void mi_process_done(void) {
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
   // Windows DLL: easy to hook into process_init and thread_done
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
-    UNUSED(reserved);
-    UNUSED(inst);
+    MI_UNUSED(reserved);
+    MI_UNUSED(inst);
     if (reason==DLL_PROCESS_ATTACH) {
       mi_process_load();
     }
-    else if (reason==DLL_THREAD_DETACH) {
-      if (!mi_is_redirected()) mi_thread_done();
+    else if (reason==DLL_PROCESS_DETACH) {
+      mi_process_done();
     }
+    else if (reason==DLL_THREAD_DETACH) {
+      if (!mi_is_redirected()) {
+        mi_thread_done();
+      }
+    }    
     return TRUE;
   }
+
+#elif defined(_MSC_VER)
+  // MSVC: use data section magic for static libraries
+  // See <https://www.codeguru.com/cpp/misc/misc/applicationcontrol/article.php/c6945/Running-Code-Before-and-After-Main.htm>
+  static int _mi_process_init(void) {
+    mi_process_load();
+    return 0;
+  }
+  typedef int(*_mi_crt_callback_t)(void);
+  #if defined(_M_X64) || defined(_M_ARM64)
+    __pragma(comment(linker, "/include:" "_mi_msvc_initu"))
+    #pragma section(".CRT$XIU", long, read)
+  #else
+    __pragma(comment(linker, "/include:" "__mi_msvc_initu"))
+  #endif
+  #pragma data_seg(".CRT$XIU")
+  mi_decl_externc _mi_crt_callback_t _mi_msvc_initu[] = { &_mi_process_init };
+  #pragma data_seg()
 
 #elif defined(__cplusplus)
   // C++: use static initialization to detect process start
@@ -562,24 +604,6 @@ static void mi_process_done(void) {
   static void __attribute__((constructor)) _mi_process_init(void) {
     mi_process_load();
   }
-
-#elif defined(_MSC_VER)
-  // MSVC: use data section magic for static libraries
-  // See <https://www.codeguru.com/cpp/misc/misc/applicationcontrol/article.php/c6945/Running-Code-Before-and-After-Main.htm>
-  static int _mi_process_init(void) {
-    mi_process_load();
-    return 0;
-  }
-  typedef int(*_crt_cb)(void);
-  #ifdef _M_X64
-    __pragma(comment(linker, "/include:" "_mi_msvc_initu"))
-    #pragma section(".CRT$XIU", long, read)
-  #else
-    __pragma(comment(linker, "/include:" "__mi_msvc_initu"))
-  #endif
-  #pragma data_seg(".CRT$XIU")
-  _crt_cb _mi_msvc_initu[] = { &_mi_process_init };
-  #pragma data_seg()
 
 #else
 #pragma message("define a way to call mi_process_load on your platform")

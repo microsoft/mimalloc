@@ -4,6 +4,10 @@ This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE   // for syscall() on Linux
+#endif
+
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
@@ -156,7 +160,8 @@ uintptr_t _mi_random_next(mi_random_ctx_t* ctx) {
 /* ----------------------------------------------------------------------------
 To initialize a fresh random context we rely on the OS:
 - Windows     : BCryptGenRandom (or RtlGenRandom)
-- osX,bsd,wasi: arc4random_buf
+- macOS       : CCRandomGenerateBytes, arc4random_buf
+- bsd,wasi    : arc4random_buf
 - Linux       : getrandom,/dev/urandom
 If we cannot get good randomness, we fall back to weak randomness based on a timer and ASLR.
 -----------------------------------------------------------------------------*/
@@ -164,7 +169,8 @@ If we cannot get good randomness, we fall back to weak randomness based on a tim
 #if defined(_WIN32)
 
 #if !defined(MI_USE_RTLGENRANDOM)
-// We prefer BCryptGenRandom over RtlGenRandom
+// We prefer to use BCryptGenRandom instead of RtlGenRandom but it can lead to a deadlock 
+// under the VS debugger when using dynamic overriding.
 #pragma comment (lib,"bcrypt.lib")
 #include <bcrypt.h>
 static bool os_random_buf(void* buf, size_t buf_len) {
@@ -186,16 +192,35 @@ static bool os_random_buf(void* buf, size_t buf_len) {
 }
 #endif
 
-#elif defined(ANDROID) || defined(XP_DARWIN) || defined(__APPLE__) || defined(__DragonFly__) || \
+#elif defined(__APPLE__)
+#include <AvailabilityMacros.h>
+#if defined(MAC_OS_X_VERSION_10_10) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_10
+#include <CommonCrypto/CommonRandom.h>
+#endif
+static bool os_random_buf(void* buf, size_t buf_len) {
+  #if defined(MAC_OS_X_VERSION_10_15) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_15
+    // We prefere CCRandomGenerateBytes as it returns an error code while arc4random_buf
+    // may fail silently on macOS. See PR #390, and <https://opensource.apple.com/source/Libc/Libc-1439.40.11/gen/FreeBSD/arc4random.c.auto.html>      
+    return (CCRandomGenerateBytes(buf, buf_len) == kCCSuccess);
+  #else
+    // fall back on older macOS
+    arc4random_buf(buf, buf_len);
+    return true;
+  #endif
+}
+
+#elif defined(__ANDROID__) || defined(__DragonFly__) || \
       defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
-      defined(__sun) || defined(__wasi__)
+      defined(__sun) // todo: what to use with __wasi__?
 #include <stdlib.h>
 static bool os_random_buf(void* buf, size_t buf_len) {
   arc4random_buf(buf, buf_len);
   return true;
 }
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__HAIKU__)
+#if defined(__linux__)
 #include <sys/syscall.h>
+#endif
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -214,7 +239,7 @@ static bool os_random_buf(void* buf, size_t buf_len) {
   if (mi_atomic_load_acquire(&no_getrandom)==0) {
     ssize_t ret = syscall(SYS_getrandom, buf, buf_len, GRND_NONBLOCK);
     if (ret >= 0) return (buf_len == (size_t)ret);
-    if (ret != ENOSYS) return false;
+    if (errno != ENOSYS) return false;
     mi_atomic_store_release(&no_getrandom, 1UL); // don't call again, and fall back to /dev/urandom
   }
 #endif
@@ -251,8 +276,8 @@ static bool os_random_buf(void* buf, size_t buf_len) {
 #include <time.h>
 #endif
 
-uintptr_t _os_random_weak(uintptr_t extra_seed) {
-  uintptr_t x = (uintptr_t)&_os_random_weak ^ extra_seed; // ASLR makes the address random
+uintptr_t _mi_os_random_weak(uintptr_t extra_seed) {
+  uintptr_t x = (uintptr_t)&_mi_os_random_weak ^ extra_seed; // ASLR makes the address random
   
   #if defined(_WIN32)
     LARGE_INTEGER pcount;
@@ -280,8 +305,10 @@ void _mi_random_init(mi_random_ctx_t* ctx) {
   if (!os_random_buf(key, sizeof(key))) {
     // if we fail to get random data from the OS, we fall back to a
     // weak random source based on the current time
+    #if !defined(__wasi__)
     _mi_warning_message("unable to use secure randomness\n");
-    uintptr_t x = _os_random_weak(0);
+    #endif
+    uintptr_t x = _mi_os_random_weak(0);
     for (size_t i = 0; i < 8; i++) {  // key is eight 32-bit words.
       x = _mi_random_shuffle(x);
       ((uint32_t*)key)[i] = (uint32_t)x;

@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2021, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2022, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 171   // major + 2 digits minor
+#define MI_MALLOC_VERSION 174   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -26,7 +26,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(__cplusplus) && (__cplusplus >= 201703)
   #define mi_decl_nodiscard    [[nodiscard]]
-#elif (__GNUC__ >= 4) || defined(__clang__)  // includes clang, icc, and clang-cl
+#elif (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)  // includes clang, icc, and clang-cl
   #define mi_decl_nodiscard    __attribute__((warn_unused_result))
 #elif (_MSC_VER >= 1700)
   #define mi_decl_nodiscard    _Check_return_
@@ -58,8 +58,12 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_alloc_size2(s1,s2)
   #define mi_attr_alloc_align(p)
 #elif defined(__GNUC__)                 // includes clang and icc
+  #if defined(MI_SHARED_LIB) && defined(MI_SHARED_LIB_EXPORT)
+    #define mi_decl_export              __attribute__((visibility("default")))
+  #else
+    #define mi_decl_export
+  #endif
   #define mi_cdecl                      // leads to warnings... __attribute__((cdecl))
-  #define mi_decl_export                __attribute__((visibility("default")))
   #define mi_decl_restrict
   #define mi_attr_malloc                __attribute__((malloc))
   #if (defined(__clang_major__) && (__clang_major__ < 4)) || (__GNUC__ < 5)
@@ -162,6 +166,7 @@ mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, s
 // Note that `alignment` always follows `size` for consistency with unaligned
 // allocation, but unfortunately this differs from `posix_memalign` and `aligned_alloc`.
 // -------------------------------------------------------------------------------------
+#define MI_ALIGNMENT_MAX   (1024*1024UL)    // maximum supported alignment is 1MiB
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_malloc_aligned(size_t size, size_t alignment) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_malloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
@@ -249,7 +254,7 @@ typedef struct mi_heap_area_s {
   void*  blocks;      // start of the area containing heap blocks
   size_t reserved;    // bytes reserved for this area (virtual)
   size_t committed;   // current available bytes for this area
-  size_t used;        // bytes in use by allocated blocks
+  size_t used;        // number of allocated blocks
   size_t block_size;  // size in bytes of each block
 } mi_heap_area_t;
 
@@ -266,7 +271,6 @@ mi_decl_export int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size
 
 mi_decl_export int  mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept;
 mi_decl_export bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept;
-
 
 // deprecated
 mi_decl_export int  mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
@@ -292,29 +296,30 @@ mi_decl_export int  mi_reserve_huge_os_pages(size_t pages, double max_secs, size
 
 
 // ------------------------------------------------------
-// Options, all `false` by default
+// Options
 // ------------------------------------------------------
 
 typedef enum mi_option_e {
   // stable options
-  mi_option_show_errors,
-  mi_option_show_stats,
-  mi_option_verbose,
-  // the following options are experimental
-  mi_option_eager_commit,
-  mi_option_eager_region_commit,
+  mi_option_show_errors,              // print error messages
+  mi_option_show_stats,               // print statistics on termination
+  mi_option_verbose,                  // print verbose messages
+  // the following options are experimental (see src/options.h)
+  mi_option_eager_commit,           
+  mi_option_eager_region_commit,    
   mi_option_reset_decommits,
-  mi_option_large_os_pages,         // implies eager commit
-  mi_option_reserve_huge_os_pages,
-  mi_option_reserve_os_memory,
-  mi_option_segment_cache,
-  mi_option_page_reset,
-  mi_option_abandoned_page_reset,
+  mi_option_large_os_pages,           // use large (2MiB) OS pages, implies eager commit
+  mi_option_reserve_huge_os_pages,    // reserve N huge OS pages (1GiB) at startup
+  mi_option_reserve_huge_os_pages_at, // reserve huge OS pages at a specific NUMA node
+  mi_option_reserve_os_memory,        // reserve specified amount of OS memory at startup
+  mi_option_segment_cache,             
+  mi_option_page_reset,               
+  mi_option_abandoned_page_reset,     
   mi_option_segment_reset,
   mi_option_eager_commit_delay,
   mi_option_reset_delay,
-  mi_option_use_numa_nodes,
-  mi_option_limit_os_alloc,
+  mi_option_use_numa_nodes,           // 0 = use available numa nodes, otherwise use at most N nodes.
+  mi_option_limit_os_alloc,           // 1 = do not use OS memory for allocation (but only reserved arenas)
   mi_option_os_tag,
   mi_option_max_errors,
   mi_option_max_warnings,
@@ -342,6 +347,7 @@ mi_decl_export void mi_option_set_default(mi_option_t option, long value);
 mi_decl_export void  mi_cfree(void* p) mi_attr_noexcept;
 mi_decl_export void* mi__expand(void* p, size_t newsize) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export size_t mi_malloc_size(const void* p)        mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export size_t mi_malloc_good_size(size_t size)     mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept;
 
 mi_decl_export int mi_posix_memalign(void** p, size_t alignment, size_t size)   mi_attr_noexcept;
@@ -351,6 +357,7 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_pvalloc(size_t size) 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2) mi_attr_alloc_align(1);
 
 mi_decl_nodiscard mi_decl_export void* mi_reallocarray(void* p, size_t count, size_t size) mi_attr_noexcept mi_attr_alloc_size2(2,3);
+mi_decl_nodiscard mi_decl_export int   mi_reallocarr(void* p, size_t count, size_t size) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export void* mi_aligned_recalloc(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export void* mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept;
 
@@ -383,6 +390,7 @@ mi_decl_nodiscard mi_decl_export void* mi_new_reallocn(void* p, size_t newcount,
 // ---------------------------------------------------------------------------------------------
 #ifdef __cplusplus
 
+#include <cstddef>     // std::size_t
 #include <cstdint>     // PTRDIFF_MAX
 #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
 #include <type_traits> // std::true_type

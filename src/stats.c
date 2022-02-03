@@ -133,25 +133,29 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
 // unit == 0: count as decimal
 // unit < 0 : count in binary
 static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* arg, const char* fmt) {
-  char buf[32];
+  char buf[32]; buf[0] = 0;  
   int  len = 32;
-  const char* suffix = (unit <= 0 ? " " : "b");
+  const char* suffix = (unit <= 0 ? " " : "B");
   const int64_t base = (unit == 0 ? 1000 : 1024);
   if (unit>0) n *= unit;
 
   const int64_t pos = (n < 0 ? -n : n);
   if (pos < base) {
-    snprintf(buf, len, "%d %s ", (int)n, suffix);
+    if (n!=1 || suffix[0] != 'B') {  // skip printing 1 B for the unit column
+      snprintf(buf, len, "%d %-3s", (int)n, (n==0 ? "" : suffix));
+    }
   }
   else {
-    int64_t divider = base;
-    const char* magnitude = "k";
-    if (pos >= divider*base) { divider *= base; magnitude = "m"; }
-    if (pos >= divider*base) { divider *= base; magnitude = "g"; }
+    int64_t divider = base;    
+    const char* magnitude = "K";
+    if (pos >= divider*base) { divider *= base; magnitude = "M"; }
+    if (pos >= divider*base) { divider *= base; magnitude = "G"; }
     const int64_t tens = (n / (divider/10));
     const long whole = (long)(tens/10);
     const long frac1 = (long)(tens%10);
-    snprintf(buf, len, "%ld.%ld %s%s", whole, (frac1 < 0 ? -frac1 : frac1), magnitude, suffix);
+    char unitdesc[8];
+    snprintf(unitdesc, 8, "%s%s%s", magnitude, (base==1024 ? "i" : ""), suffix);
+    snprintf(buf, len, "%ld.%ld %-3s", whole, (frac1 < 0 ? -frac1 : frac1), unitdesc);
   }
   _mi_fprintf(out, arg, (fmt==NULL ? "%11s" : fmt), buf);
 }
@@ -221,7 +225,7 @@ static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char*
 
 
 static void mi_print_header(mi_output_fun* out, void* arg ) {
-  _mi_fprintf(out, arg, "%10s: %10s %10s %10s %10s %10s %10s\n", "heap stats", "peak  ", "total  ", "freed  ", "current  ", "unit  ", "count  ");
+  _mi_fprintf(out, arg, "%10s: %10s %10s %10s %10s %10s %10s\n", "heap stats", "peak   ", "total   ", "freed   ", "current   ", "unit   ", "count   ");
 }
 
 #if MI_STAT>1
@@ -323,7 +327,7 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_counter_print(&stats->commit_calls, "commits", out, arg);
   mi_stat_print(&stats->threads, "threads", -1, out, arg);
   mi_stat_counter_print_avg(&stats->searches, "searches", out, arg);
-  _mi_fprintf(out, arg, "%10s: %7i\n", "numa nodes", _mi_os_numa_node_count());
+  _mi_fprintf(out, arg, "%10s: %7zu\n", "numa nodes", _mi_os_numa_node_count());
   
   mi_msecs_t elapsed;
   mi_msecs_t user_time;
@@ -412,10 +416,14 @@ mi_msecs_t _mi_clock_now(void) {
 }
 #else
 #include <time.h>
-#ifdef CLOCK_REALTIME
+#if defined(CLOCK_REALTIME) || defined(CLOCK_MONOTONIC)
 mi_msecs_t _mi_clock_now(void) {
   struct timespec t;
+  #ifdef CLOCK_MONOTONIC
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  #else  
   clock_gettime(CLOCK_REALTIME, &t);
+  #endif
   return ((mi_msecs_t)t.tv_sec * 1000) + ((mi_msecs_t)t.tv_nsec / 1000000);
 }
 #else
@@ -479,7 +487,7 @@ static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msec
   *page_faults    = (size_t)info.PageFaultCount;  
 }
 
-#elif defined(__unix__) || defined(__unix) || defined(unix) || defined(__APPLE__) || defined(__HAIKU__)
+#elif !defined(__wasi__) && (defined(__unix__) || defined(__unix) || defined(unix) || defined(__APPLE__) || defined(__HAIKU__))
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/resource.h>
@@ -520,6 +528,7 @@ static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msec
   while (get_next_area_info(tid.team, &c, &mem) == B_OK) {
     *peak_rss += mem.ram_size;
   }
+  *page_faults = 0;
 #elif defined(__APPLE__)
   *peak_rss = rusage.ru_maxrss;         // BSD reports in bytes
   struct mach_task_basic_info info;

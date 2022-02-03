@@ -20,7 +20,7 @@ which is sometimes needed for embedded devices or shared memory for example.
 
 The arena allocation needs to be thread safe and we use an atomic
 bitmap to allocate. The current implementation of the bitmap can
-only do this within a field (`uintptr_t`) so we can allocate at most
+only do this within a field (`size_t`) so we can allocate at most
 blocks of 2GiB (64*32MiB) and no object can cross the boundary. This
 can lead to fragmentation but fortunately most objects will be regions
 of 256MiB in practice.
@@ -62,18 +62,18 @@ typedef struct mi_arena_s {
   size_t   field_count;                   // number of bitmap fields (where `field_count * MI_BITMAP_FIELD_BITS >= block_count`)
   int      numa_node;                     // associated NUMA node
   bool     is_zero_init;                  // is the arena zero initialized?
-  bool     is_committed;                  // is the memory fully committed? (if so, block_committed == NULL)
+  bool     allow_decommit;                // is decommit allowed? if true, is_large should be false and blocks_committed != NULL
   bool     is_large;                      // large- or huge OS pages (always committed)
-  _Atomic(uintptr_t) search_idx;          // optimization to start the search for free blocks
+  _Atomic(size_t) search_idx;             // optimization to start the search for free blocks
   mi_bitmap_field_t* blocks_dirty;        // are the blocks potentially non-zero?
-  mi_bitmap_field_t* blocks_committed;    // if `!is_committed`, are the blocks committed?
+  mi_bitmap_field_t* blocks_committed;    // are the blocks committed? (can be NULL for memory that cannot be decommitted)
   mi_bitmap_field_t  blocks_inuse[1];     // in-place bitmap of in-use blocks (of size `field_count`)
 } mi_arena_t;
 
 
 // The available arenas
 static mi_decl_cache_align _Atomic(mi_arena_t*) mi_arenas[MI_MAX_ARENAS];
-static mi_decl_cache_align _Atomic(uintptr_t)   mi_arena_count; // = 0
+static mi_decl_cache_align _Atomic(size_t)      mi_arena_count; // = 0
 
 
 /* -----------------------------------------------------------
@@ -129,8 +129,8 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   *memid     = mi_arena_id_create(arena_index, bitmap_index);
   *is_zero   = _mi_bitmap_claim_across(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
   *large     = arena->is_large;
-  *is_pinned = (arena->is_large || arena->is_committed);
-  if (arena->is_committed) {
+  *is_pinned = (arena->is_large || !arena->allow_decommit);
+  if (arena->blocks_committed == NULL) {
     // always committed
     *commit = true;
   }
@@ -245,12 +245,13 @@ void _mi_arena_free(void* p, size_t size, size_t memid, bool all_committed, mi_s
       return;
     }
     // potentially decommit
-    if (arena->is_committed) {
-      mi_assert_internal(all_committed); 
+    if (!arena->allow_decommit || arena->blocks_committed == NULL) {
+      mi_assert_internal(all_committed); // note: may be not true as we may "pretend" to be not committed (in segment.c)
     }
     else {
       mi_assert_internal(arena->blocks_committed != NULL);
       _mi_os_decommit(p, blocks * MI_ARENA_BLOCK_SIZE, stats); // ok if this fails
+      // todo: use reset instead of decommit on windows?
       _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx);
     }
     // and make it available to others again 
@@ -271,7 +272,7 @@ static bool mi_arena_add(mi_arena_t* arena) {
   mi_assert_internal((uintptr_t)mi_atomic_load_ptr_relaxed(uint8_t,&arena->start) % MI_SEGMENT_ALIGN == 0);
   mi_assert_internal(arena->block_count > 0);
 
-  uintptr_t i = mi_atomic_increment_acq_rel(&mi_arena_count);
+  size_t i = mi_atomic_increment_acq_rel(&mi_arena_count);
   if (i >= MI_MAX_ARENAS) {
     mi_atomic_decrement_acq_rel(&mi_arena_count);
     return false;
@@ -282,12 +283,14 @@ static bool mi_arena_add(mi_arena_t* arena) {
 
 bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept
 {
+  if (size < MI_ARENA_BLOCK_SIZE) return false;
+
   if (is_large) {
     mi_assert_internal(is_committed);
     is_committed = true;
   }
   
-  const size_t bcount = mi_block_count_of_size(size);
+  const size_t bcount = size / MI_ARENA_BLOCK_SIZE; 
   const size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);
   const size_t bitmaps = (is_committed ? 2 : 3);
   const size_t asize  = sizeof(mi_arena_t) + (bitmaps*fields*sizeof(mi_bitmap_field_t));
@@ -300,12 +303,16 @@ bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_la
   arena->numa_node    = numa_node; // TODO: or get the current numa node if -1? (now it allows anyone to allocate on -1)
   arena->is_large     = is_large;
   arena->is_zero_init = is_zero;
-  arena->is_committed = is_committed;
+  arena->allow_decommit = !is_large && !is_committed; // only allow decommit for initially uncommitted memory
   arena->search_idx   = 0;
   arena->blocks_dirty = &arena->blocks_inuse[fields]; // just after inuse bitmap
-  arena->blocks_committed = (is_committed ? NULL : &arena->blocks_inuse[2*fields]); // just after dirty bitmap
+  arena->blocks_committed = (!arena->allow_decommit ? NULL : &arena->blocks_inuse[2*fields]); // just after dirty bitmap
   // the bitmaps are already zero initialized due to os_alloc
-  // just claim leftover blocks if needed
+  // initialize committed bitmap?
+  if (arena->blocks_committed != NULL && is_committed) {
+    memset((void*)arena->blocks_committed, 0xFF, fields*sizeof(mi_bitmap_field_t)); // cast to void* to avoid atomic warning
+  }
+  // and claim leftover blocks if needed (so we never allocate there)
   ptrdiff_t post = (fields * MI_BITMAP_FIELD_BITS) - bcount;
   mi_assert_internal(post >= 0);
   if (post > 0) {
@@ -321,7 +328,7 @@ bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_la
 // Reserve a range of regular OS memory
 int mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept 
 {
-  size = _mi_os_good_alloc_size(size);
+  size = _mi_align_up(size, MI_ARENA_BLOCK_SIZE); // at least one block
   bool large = allow_large;
   void* start = _mi_os_alloc_aligned(size, MI_SEGMENT_ALIGN, commit, &large, &_mi_stats_main);
   if (start==NULL) return ENOMEM;
@@ -330,7 +337,7 @@ int mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noe
     _mi_verbose_message("failed to reserve %zu k memory\n", _mi_divide_up(size,1024));
     return ENOMEM;
   }
-  _mi_verbose_message("reserved %zu kb memory%s\n", _mi_divide_up(size,1024), large ? " (in large os pages)" : "");
+  _mi_verbose_message("reserved %zu KiB memory%s\n", _mi_divide_up(size,1024), large ? " (in large os pages)" : "");
   return 0;
 }
 
@@ -347,10 +354,10 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
   size_t pages_reserved = 0;
   void* p = _mi_os_alloc_huge_os_pages(pages, numa_node, timeout_msecs, &pages_reserved, &hsize);
   if (p==NULL || pages_reserved==0) {
-    _mi_warning_message("failed to reserve %zu gb huge pages\n", pages);
+    _mi_warning_message("failed to reserve %zu GiB huge pages\n", pages);
     return ENOMEM;
   }
-  _mi_verbose_message("numa node %i: reserved %zu gb huge pages (of the %zu gb requested)\n", numa_node, pages_reserved, pages);
+  _mi_verbose_message("numa node %i: reserved %zu GiB huge pages (of the %zu GiB requested)\n", numa_node, pages_reserved, pages);
 
   if (!mi_manage_os_memory(p, hsize, true, true, true, numa_node)) {
     _mi_os_free_huge_pages(p, hsize, &_mi_stats_main);
@@ -389,7 +396,7 @@ int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t 
 }
 
 int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept {
-  UNUSED(max_secs);
+  MI_UNUSED(max_secs);
   _mi_warning_message("mi_reserve_huge_os_pages is deprecated: use mi_reserve_huge_os_pages_interleave/at instead\n");
   if (pages_reserved != NULL) *pages_reserved = 0;
   int err = mi_reserve_huge_os_pages_interleave(pages, 0, (size_t)(max_secs * 1000.0));
