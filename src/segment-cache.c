@@ -126,14 +126,14 @@ static mi_decl_noinline void mi_segment_cache_purge(bool force, mi_os_tld_t* tld
     if (idx >= MI_CACHE_MAX) idx = 0; // wrap
     mi_cache_slot_t* slot = &cache[idx];
     mi_msecs_t expire = mi_atomic_loadi64_relaxed(&slot->expire);
-    if (expire != 0 && now >= expire) {  // racy read
+    if (expire != 0 && (force || now >= expire)) {  // racy read
       // seems expired, first claim it from available
       purged++;
       mi_bitmap_index_t bitidx = mi_bitmap_index_create_from_bit(idx);
       if (_mi_bitmap_claim(cache_available, MI_CACHE_FIELDS, 1, bitidx, NULL)) {
         // was available, we claimed it
         expire = mi_atomic_loadi64_acquire(&slot->expire);
-        if (expire != 0 && now >= expire) {  // safe read
+        if (expire != 0 && (force || now >= expire)) {  // safe read
           // still expired, decommit it
           mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
           mi_assert_internal(!mi_commit_mask_is_empty(&slot->commit_mask) && _mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
