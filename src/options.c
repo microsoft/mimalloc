@@ -49,54 +49,50 @@ typedef struct mi_option_desc_s {
   mi_init_t   init;   // is it initialized yet? (from the environment)
   mi_option_t option; // for debugging: the option index should match the option
   const char* name;   // option name without `mimalloc_` prefix
+  const char* legacy_name; // potential legacy v1.x option name
 } mi_option_desc_t;
 
-#define MI_OPTION(opt)        mi_option_##opt, #opt
-#define MI_OPTION_DESC(opt)   {0, UNINIT, MI_OPTION(opt) }
+#define MI_OPTION(opt)                  mi_option_##opt, #opt, NULL
+#define MI_OPTION_LEGACY(opt,legacy)    mi_option_##opt, #opt, #legacy
 
 static mi_option_desc_t options[_mi_option_last] =
 {
   // stable options
-#if MI_DEBUG || defined(MI_SHOW_ERRORS)
+  #if MI_DEBUG || defined(MI_SHOW_ERRORS)
   { 1, UNINIT, MI_OPTION(show_errors) },
-#else
+  #else
   { 0, UNINIT, MI_OPTION(show_errors) },
-#endif
+  #endif
   { 0, UNINIT, MI_OPTION(show_stats) },
   { 0, UNINIT, MI_OPTION(verbose) },
 
-  // the following options are experimental and not all combinations make sense.
+  // Some of the following options are experimental and not all combinations are valid. Use with care.
   { 1, UNINIT, MI_OPTION(eager_commit) },        // commit per segment directly (8MiB)  (but see also `eager_commit_delay`)
-  #if defined(_WIN32) || (MI_INTPTR_SIZE <= 4)   // and other OS's without overcommit?
-  { 0, UNINIT, MI_OPTION(eager_region_commit) },
-  { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
-  #else
-  { 1, UNINIT, MI_OPTION(eager_region_commit) },
-  { 0, UNINIT, MI_OPTION(reset_decommits) },     // legacy; ignored now and reset always uses MADV_FREE/MADV_DONTNEED (issue #518)
-  #endif
+  { 0, UNINIT, MI_OPTION(deprecated_eager_region_commit) },
+  { 0, UNINIT, MI_OPTION(deprecated_reset_decommits) },
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },  // per 1GiB huge pages
   { -1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) }, // reserve huge pages at node N
   { 0, UNINIT, MI_OPTION(reserve_os_memory)     },
   { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
   { 0, UNINIT, MI_OPTION(page_reset) },          // reset page memory on free
-  { 0, UNINIT, MI_OPTION(abandoned_page_reset) },// reset free page memory when a thread terminates
-  { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
-#if defined(__NetBSD__)
+  { 0, UNINIT, MI_OPTION_LEGACY(abandoned_page_decommit, abandoned_page_reset) },// decommit free page memory when a thread terminates  
+  { 0, UNINIT, MI_OPTION(deprecated_segment_reset) },
+  #if defined(__NetBSD__)
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
-#elif defined(_WIN32)
+  #elif defined(_WIN32)
   { 4, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
-#else
+  #else
   { 1, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
-#endif
-  { 1,    UNINIT, MI_OPTION(allow_decommit) },    // decommit slices when no longer used (after reset_delay milli-seconds)
-  { 25,   UNINIT, MI_OPTION(reset_delay) },       // page reset delay in milli-seconds (= decommit)
-  { 500,  UNINIT, MI_OPTION(segment_decommit_delay) },// decommit delay in milli-seconds for freed segments
+  #endif
+  { 25,   UNINIT, MI_OPTION_LEGACY(decommit_delay, reset_delay) }, // page decommit delay in milli-seconds
   { 0,    UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes. 
   { 0,    UNINIT, MI_OPTION(limit_os_alloc) },    // 1 = do not use OS memory for allocation (but only reserved arenas)
   { 100,  UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
   { 16,   UNINIT, MI_OPTION(max_errors) },        // maximum errors that are output
-  { 16,   UNINIT, MI_OPTION(max_warnings) }       // maximum warnings that are output
+  { 16,   UNINIT, MI_OPTION(max_warnings) },      // maximum warnings that are output
+  { 1,    UNINIT, MI_OPTION(allow_decommit) },    // decommit slices when no longer used (after decommit_delay milli-seconds)
+  { 500,  UNINIT, MI_OPTION(segment_decommit_delay) } // decommit delay in milli-seconds for freed segments
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -526,11 +522,21 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
 
 static void mi_option_init(mi_option_desc_t* desc) {  
   // Read option value from the environment
+  char s[64+1];
   char buf[64+1];
   mi_strlcpy(buf, "mimalloc_", sizeof(buf));
   mi_strlcat(buf, desc->name, sizeof(buf));
-  char s[64+1];
-  if (mi_getenv(buf, s, sizeof(s))) {
+  bool found = mi_getenv(buf,s,sizeof(s));
+  if (!found && desc->legacy_name != NULL) {
+    mi_strlcpy(buf, "mimalloc_", sizeof(buf));
+    mi_strlcat(buf, desc->legacy_name, sizeof(buf));
+    found = mi_getenv(buf,s,sizeof(s));
+    if (found) {
+      _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name );
+    }    
+  }
+
+  if (found) {
     size_t len = strlen(s);
     if (len >= sizeof(buf)) len = sizeof(buf) - 1;
     for (size_t i = 0; i < len; i++) {

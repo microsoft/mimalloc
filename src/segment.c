@@ -538,7 +538,7 @@ static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
   }
   // increase expiration of reusing part of the delayed decommit
   if (commit && mi_commit_mask_any_set(&segment->decommit_mask, &mask)) {
-    segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
+    segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
   }
   // always undo delayed decommits
   mi_commit_mask_clear(&segment->decommit_mask, &mask);
@@ -554,7 +554,7 @@ static bool mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_
 
 static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
   if (!segment->allow_decommit) return;
-  if (mi_option_get(mi_option_reset_delay) == 0) {
+  if (mi_option_get(mi_option_decommit_delay) == 0) {
     mi_segment_commitx(segment, false, p, size, stats);
   }
   else {
@@ -569,21 +569,21 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
     mi_commit_mask_t cmask;
     mi_commit_mask_create_intersect(&segment->commit_mask, &mask, &cmask);  // only decommit what is committed; span_free may try to decommit more
     mi_commit_mask_set(&segment->decommit_mask, &cmask);
-    segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
+    segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
     mi_msecs_t now = _mi_clock_now();
     if (segment->decommit_expire == 0) {
       // no previous decommits, initialize now
       mi_assert_internal(mi_commit_mask_is_empty(&segment->decommit_mask));
-      segment->decommit_expire = now + mi_option_get(mi_option_reset_delay);
+      segment->decommit_expire = now + mi_option_get(mi_option_decommit_delay);
     }
     else if (segment->decommit_expire <= now) {
       // previous decommit mask already expired
       // mi_segment_delayed_decommit(segment, true, stats);
-      segment->decommit_expire = now + (mi_option_get(mi_option_reset_delay) / 8); // wait a tiny bit longer in case there is a series of free's
+      segment->decommit_expire = now + (mi_option_get(mi_option_decommit_delay) / 8); // wait a tiny bit longer in case there is a series of free's
     }
     else {
       // previous decommit mask is not yet expired
-      // segment->decommit_expire += 2; // = now + mi_option_get(mi_option_reset_delay);
+      // segment->decommit_expire += 2; // = now + mi_option_get(mi_option_decommit_delay);
     }
   }  
 }
@@ -877,7 +877,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
     segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_pinned && !segment->mem_is_large);    
     if (segment->allow_decommit) {
-      segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
+      segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
       segment->decommit_mask = decommit_mask;
       mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
       #if MI_DEBUG>2
@@ -1245,7 +1245,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   }
 
   // perform delayed decommits
-  mi_segment_delayed_decommit(segment, mi_option_is_enabled(mi_option_abandoned_page_reset) /* force? */, tld->stats);    
+  mi_segment_delayed_decommit(segment, mi_option_is_enabled(mi_option_abandoned_page_decommit) /* force? */, tld->stats);    
   
   // all pages in the segment are abandoned; add it to the abandoned list
   _mi_stat_increase(&tld->stats->segments_abandoned, 1);

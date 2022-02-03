@@ -811,9 +811,8 @@ typedef enum mi_option_e {
   mi_option_segment_cache,   ///< The number of segments per thread to keep cached.
   mi_option_page_reset,      ///< Reset page memory after \a mi_option_reset_delay milliseconds when it becomes free.
   mi_option_segment_reset,   ///< Experimental
-  mi_option_reset_delay,     ///< Delay in milli-seconds before resetting a page (100ms by default)
+  mi_option_decommit_delay,  ///< Delay in milli-seconds before decommitting currently unused reserved memory (25ms by default)
   mi_option_use_numa_nodes,  ///< Pretend there are at most N NUMA nodes
-  mi_option_reset_decommits, ///< Experimental
   mi_option_eager_commit_delay,  ///< Experimental
   mi_option_os_tag,          ///< OS tag to assign to mimalloc'd memory
   _mi_option_last
@@ -1068,7 +1067,7 @@ or via environment variables.
 - `MIMALLOC_PAGE_RESET=0`: by default, mimalloc will reset (or purge) OS pages when not in use to signal to the OS
    that the underlying physical memory can be reused. This can reduce memory fragmentation in long running (server)
    programs. By setting it to `0` no such page resets will be done which can improve performance for programs that are not long
-   running. As an alternative, the `MIMALLOC_RESET_DELAY=`<msecs> can be set higher (100ms by default) to make the page
+   running. As an alternative, the `MIMALLOC_DECOMMIT_DELAY=`<msecs> can be set higher (100ms by default) to make the page
    reset occur less frequently instead of turning it off completely.
 - `MIMALLOC_LARGE_OS_PAGES=1`: use large OS pages (2MiB) when available; for some workloads this can significantly
    improve performance. Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs

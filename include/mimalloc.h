@@ -306,27 +306,28 @@ typedef enum mi_option_e {
   mi_option_show_errors,
   mi_option_show_stats,
   mi_option_verbose,
-  // the following options are experimental
+  // some of the following options are experimental
+  // (deprecated options are kept for binary backward compatibility with v1.x versions)
   mi_option_eager_commit,
-  mi_option_eager_region_commit,
-  mi_option_reset_decommits,
-  mi_option_large_os_pages,         // implies eager commit
+  mi_option_deprecated_eager_region_commit,
+  mi_option_deprecated_reset_decommits,
+  mi_option_large_os_pages,           // implies eager commit
   mi_option_reserve_huge_os_pages,
   mi_option_reserve_huge_os_pages_at,
   mi_option_reserve_os_memory,
   mi_option_segment_cache,
   mi_option_page_reset,
-  mi_option_abandoned_page_reset,
-  mi_option_segment_reset,
+  mi_option_abandoned_page_decommit,
+  mi_option_deprecated_segment_reset,
   mi_option_eager_commit_delay,
-  mi_option_allow_decommit,
-  mi_option_reset_delay,
-  mi_option_segment_decommit_delay,
+  mi_option_decommit_delay,
   mi_option_use_numa_nodes,
   mi_option_limit_os_alloc,
   mi_option_os_tag,
   mi_option_max_errors,
   mi_option_max_warnings,
+  mi_option_allow_decommit,
+  mi_option_segment_decommit_delay,  
   _mi_option_last
 } mi_option_t;
 
