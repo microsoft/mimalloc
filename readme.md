@@ -97,15 +97,15 @@ Special thanks to:
 
 * [David Carlier](https://devnexen.blogspot.com/) (@devnexen) for his many contributions, and making
   mimalloc work better on many less common operating systems, like Haiku, Dragonfly, etc.
-* [Sam Gross](https://github.com/colesbury) for the [no GIL](https://github.com/colesbury/nogil) Python fork which 
-  uses mimalloc internally.
 * Mary Feofanova (@mary3000), Evgeniy Moiseenko, and Manuel Pöter (@mpoeter) for making mimalloc TSAN checkable, and finding
   memory model bugs using the [genMC] model checker.
 * Weipeng Liu (@pongba), Zhuowei Li, Junhua Wang, and Jakub Szymanski, for their early support of mimalloc and deployment
   at large scale services, leading to many improvements in the mimalloc algorithms for large workloads.
 * Jason Gibson (@jasongibson) for exhaustive testing on large scale workloads and server environments, and finding complex bugs 
   in (early versions of) `mimalloc`.
-* Manuel Pöter (@mpoeter) and Sam Gross (@colesbury) for finding an ABA concurrency issue in abandoned segment reclamation.
+* Manuel Pöter (@mpoeter) and Sam Gross(@colesbury) for finding an ABA concurrency issue in abandoned segment reclamation. Sam also created the [no GIL](https://github.com/colesbury/nogil) Python fork which 
+  uses mimalloc internally.
+
 
 [genMC]: https://plv.mpi-sws.org/genmc/
 
@@ -115,8 +115,8 @@ mimalloc is used in various large scale low-latency services and programs, for e
 
 <a href="https://www.bing.com"><img height="50" align="left" src="https://upload.wikimedia.org/wikipedia/commons/e/e9/Bing_logo.svg"></a>
 <a href="https://azure.microsoft.com/"><img height="50" align="left" src="https://upload.wikimedia.org/wikipedia/commons/a/a8/Microsoft_Azure_Logo.svg"></a>
-<a href="https://deathstrandingpc.505games.com"><img height="100" align="left"  src="doc/ds-logo.jpg"></a>
-<a href="https://docs.unrealengine.com/4.26/en-US/WhatsNew/Builds/ReleaseNotes/4_25/"><img height="100" align="left" src="doc/unreal-logo.svg"></a>
+<a href="https://deathstrandingpc.505games.com"><img height="100" src="doc/ds-logo.png"></a>
+<a href="https://docs.unrealengine.com/4.26/en-US/WhatsNew/Builds/ReleaseNotes/4_25/"><img height="100" src="doc/unreal-logo.svg"></a>
 <a href="https://cab.spbu.ru/software/spades/"><img height="100" src="doc/spades-logo.png"></a>
 
 
