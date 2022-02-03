@@ -26,6 +26,7 @@ option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clan
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version (deprecated)" OFF)
 option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
+option(MI_SKIP_COLLECT_ON_EXIT, "Skip collecting memory on exit" OFF)
 
 include(GNUInstallDirs)
 include("cmake/mimalloc-config-version.cmake")
@@ -115,6 +116,10 @@ endif()
 if(MI_CHECK_FULL)
   message(STATUS "The MI_CHECK_FULL option is deprecated, use MI_DEBUG_FULL instead")
   set(MI_DEBUG_FULL "ON")
+endif()
+
+if (MI_SKIP_COLLECT_ON_EXIT)
+  list(APPEND mi_defines MI_SKIP_COLLECT_ON_EXIT=1)
 endif()
 
 if(MI_DEBUG_FULL)
@@ -310,6 +315,7 @@ if(MI_BUILD_SHARED)
     add_custom_command(TARGET mimalloc POST_BUILD
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll" $<TARGET_FILE_DIR:mimalloc>
       COMMENT "Copy mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll to output directory")
+    install(FILES "$<TARGET_FILE_DIR:mimalloc>/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll" DESTINATION ${mi_install_libdir})
   endif()
 
   install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_libdir} LIBRARY)  

@@ -562,11 +562,13 @@ static void mi_process_done(void) {
   FlsFree(mi_fls_key);  // call thread-done on all threads (except the main thread) to prevent dangling callback pointer if statically linked with a DLL; Issue #208
   #endif
   
-  #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)  
-  // free all memory if possible on process exit. This is not needed for a stand-alone process
-  // but should be done if mimalloc is statically linked into another shared library which
-  // is repeatedly loaded/unloaded, see issue #281.
-  mi_collect(true /* force */ );
+  #ifndef MI_SKIP_COLLECT_ON_EXIT
+    #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)  
+    // free all memory if possible on process exit. This is not needed for a stand-alone process
+    // but should be done if mimalloc is statically linked into another shared library which
+    // is repeatedly loaded/unloaded, see issue #281.
+    mi_collect(true /* force */ );
+    #endif
   #endif
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
