@@ -316,7 +316,7 @@ typedef struct mi_segment_s {
   // layout like this to optimize access in `mi_free`
   size_t                 page_shift;     // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).
   _Atomic(mi_threadid_t) thread_id;      // unique id of the thread owning this segment
-  mi_page_kind_t       page_kind;        // kind of pages: small, large, or huge
+  mi_page_kind_t       page_kind;        // kind of pages: small, medium, large, or huge
   mi_page_t            pages[1];         // up to `MI_SMALL_PAGES_PER_SEGMENT` pages
 } mi_segment_t;
 
