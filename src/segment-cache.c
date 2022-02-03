@@ -115,13 +115,14 @@ static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, vo
 
 #define MI_MAX_PURGE_PER_PUSH  (4)
 
-static mi_decl_noinline void mi_segment_cache_purge(mi_os_tld_t* tld)
+static mi_decl_noinline void mi_segment_cache_purge(bool force, mi_os_tld_t* tld)
 {
   MI_UNUSED(tld);
   mi_msecs_t now = _mi_clock_now();
-  size_t idx = (_mi_random_shuffle((uintptr_t)now) % MI_CACHE_MAX);            // random start
   size_t purged = 0;
-  for (size_t visited = 0; visited < MI_CACHE_FIELDS; visited++,idx++) {  // probe just N slots
+  const size_t max_visits = (force ? MI_CACHE_MAX /* visit all */ : MI_CACHE_FIELDS /* probe at most N (=16) slots */);
+  size_t idx              = (force ? 0 : _mi_random_shuffle((uintptr_t)now) % MI_CACHE_MAX /* random start */ );
+  for (size_t visited = 0; visited < max_visits; visited++,idx++) {  // visit N slots
     if (idx >= MI_CACHE_MAX) idx = 0; // wrap
     mi_cache_slot_t* slot = &cache[idx];
     mi_msecs_t expire = mi_atomic_loadi64_relaxed(&slot->expire);
@@ -144,9 +145,13 @@ static mi_decl_noinline void mi_segment_cache_purge(mi_os_tld_t* tld)
         }
         _mi_bitmap_unclaim(cache_available, MI_CACHE_FIELDS, 1, bitidx); // make it available again for a pop
       }
-      if (purged > MI_MAX_PURGE_PER_PUSH) break;  // bound to no more than N purge tries per push
+      if (!force && purged > MI_MAX_PURGE_PER_PUSH) break;  // bound to no more than N purge tries per push
     }
   }
+}
+
+void _mi_segment_cache_collect(bool force, mi_os_tld_t* tld) {
+  mi_segment_cache_purge(force, tld );
 }
 
 mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* decommit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld)
@@ -167,7 +172,7 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
   }
 
   // purge expired entries
-  mi_segment_cache_purge(tld);
+  mi_segment_cache_purge(false /* force? */, tld);
 
   // find an available slot
   mi_bitmap_index_t bitidx;

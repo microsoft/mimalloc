@@ -147,10 +147,13 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
-  // collect segment caches
+  // collect segment local caches
   if (collect >= MI_FORCE) {
     _mi_segment_thread_collect(&heap->tld->segments);
   }
+
+  // decommit in global segment caches
+  _mi_segment_cache_collect( collect >= MI_FORCE, &heap->tld->os);  
 
   // collect regions on program-exit (or shared library unload)
   if (collect >= MI_FORCE && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
