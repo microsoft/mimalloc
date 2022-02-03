@@ -258,22 +258,37 @@ static _Atomic(size_t) warning_count; // = 0;  // when >= max_warning_count stop
 
 // When overriding malloc, we may recurse into mi_vfprintf if an allocation
 // inside the C runtime causes another message.
+// In some cases (like on macOS) the loader already allocates which
+// calls into mimalloc; if we then access thread locals (like `recurse`)
+// this may crash as the access may call _tlv_bootstrap that tries to 
+// (recursively) invoke malloc again to allocate space for the thread local
+// variables on demand. This is why we use a _mi_preloading test on such
+// platforms. However, C code generator may move the initial thread local address
+// load before the `if` and we therefore split it out in a separate funcion.
 static mi_decl_thread bool recurse = false;
+
+static mi_decl_noinline bool mi_recurse_enter_prim(void) {
+  if (recurse) return false;
+  recurse = true;
+  return true;
+}
+
+static mi_decl_noinline void mi_recurse_exit_prim(void) {
+  recurse = false;
+}
 
 static bool mi_recurse_enter(void) {
   #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
   if (_mi_preloading()) return true;
   #endif
-  if (recurse) return false;
-  recurse = true;
-  return true;
+  return mi_recurse_enter_prim();
 }
 
 static void mi_recurse_exit(void) {
   #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
   if (_mi_preloading()) return;
   #endif
-  recurse = false;
+  mi_recurse_exit_prim();
 }
 
 void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message) {
@@ -401,14 +416,25 @@ void _mi_error_message(int err, const char* fmt, ...) {
 // --------------------------------------------------------
 
 static void mi_strlcpy(char* dest, const char* src, size_t dest_size) {
-  dest[0] = 0;
-  strncpy(dest, src, dest_size - 1);
-  dest[dest_size - 1] = 0;
+  if (dest==NULL || src==NULL || dest_size == 0) return;
+  // copy until end of src, or when dest is (almost) full
+  while (*src != 0 && dest_size > 1) {
+    *dest++ = *src++;
+    dest_size--;
+  }
+  // always zero terminate
+  *dest = 0;
 }
 
 static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
-  strncat(dest, src, dest_size - 1);
-  dest[dest_size - 1] = 0;
+  if (dest==NULL || src==NULL || dest_size == 0) return;
+  // find end of string in the dest buffer
+  while (*dest != 0 && dest_size > 1) {
+    dest++;
+    dest_size--;
+  }
+  // and catenate
+  mi_strlcpy(dest, src, dest_size);
 }
 
 #ifdef MI_NO_GETENV
@@ -526,25 +552,25 @@ static void mi_option_init(mi_option_desc_t* desc) {
         else if (*end == 'M') { value *= MI_KiB; end++; }
         else if (*end == 'G') { value *= MI_MiB; end++; }
         else { value = (value + MI_KiB - 1) / MI_KiB; }
-        if (*end == 'B') { end++; }
+        if (end[0] == 'I' && end[1] == 'B') { end += 2; }
+        else if (*end == 'B') { end++; }
       }
       if (*end == 0) {
         desc->value = value;
         desc->init = INITIALIZED;
       }
       else {
-        /* _mi_warning_message() will itself call mi_option_get() for some options,
-         * so to avoid a possible infinite recursion it's important to mark the option as
-         * "initialized" first */
+        // set `init` first to avoid recursion through _mi_warning_message on mimalloc_verbose.
         desc->init = DEFAULTED;
-        if (desc->option == mi_option_verbose) {
-          /* Special case: if the 'mimalloc_verbose' env var has a bogus value we'd never know
-           * (since the value default to 'off') - so in that one case briefly set the option to 'on' */
+        if (desc->option == mi_option_verbose && desc->value == 0) {
+          // if the 'mimalloc_verbose' env var has a bogus value we'd never know
+          // (since the value defaults to 'off') so in that case briefly enable verbose
           desc->value = 1;
-        }
-        _mi_warning_message("environment option mimalloc_%s has an invalid value: %s\n", desc->name, buf);
-        if (desc->option == mi_option_verbose) {
+          _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name );
           desc->value = 0;
+        }
+        else {
+          _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name );
         }
       }
     }
