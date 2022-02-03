@@ -569,7 +569,7 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
     mi_commit_mask_t cmask;
     mi_commit_mask_create_intersect(&segment->commit_mask, &mask, &cmask);  // only decommit what is committed; span_free may try to decommit more
     mi_commit_mask_set(&segment->decommit_mask, &cmask);
-    segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
+    // segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
     mi_msecs_t now = _mi_clock_now();
     if (segment->decommit_expire == 0) {
       // no previous decommits, initialize now
@@ -582,8 +582,8 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
       segment->decommit_expire = now + (mi_option_get(mi_option_decommit_delay) / 8); // wait a tiny bit longer in case there is a series of free's
     }
     else {
-      // previous decommit mask is not yet expired
-      // segment->decommit_expire += 2; // = now + mi_option_get(mi_option_decommit_delay);
+      // previous decommit mask is not yet expired, increase the expiration by a bit.
+      segment->decommit_expire += (mi_option_get(mi_option_decommit_delay) / 8);
     }
   }  
 }
@@ -1431,7 +1431,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
     }
     else {
       // otherwise, push on the visited list so it gets not looked at too quickly again
-      mi_segment_delayed_decommit(segment, true /* force? */, tld->stats); // forced decommit if needed
+      mi_segment_delayed_decommit(segment, true /* force? */, tld->stats); // forced decommit if needed as we may not visit soon again
       mi_abandoned_visited_push(segment);
     }
   }
@@ -1456,7 +1456,8 @@ void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
     }
     else {
       // otherwise, decommit if needed and push on the visited list 
-      mi_segment_delayed_decommit(segment, force, tld->stats); // forced decommit if needed
+      // note: forced decommit can be expensive if many threads are destroyed/created as in mstress.
+      mi_segment_delayed_decommit(segment, force, tld->stats);
       mi_abandoned_visited_push(segment);
     }
   }
