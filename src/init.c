@@ -461,7 +461,7 @@ static void mi_allocator_done(void) {
 // Called once by the process loader
 static void mi_process_load(void) {
   mi_heap_main_init();
-  #if defined(MI_TLS_RECURSE_GUARD)
+  #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
   volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
   MI_UNUSED(dummy);
   #endif
