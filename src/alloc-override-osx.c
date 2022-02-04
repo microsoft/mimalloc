@@ -183,6 +183,10 @@ static boolean_t intro_zone_locked(malloc_zone_t* zone) {
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #endif
 
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wc99-extensions"
+#endif
+
 static malloc_introspection_t mi_introspect = {
   .enumerator = &intro_enumerator,
   .good_size = &intro_good_size,
@@ -213,7 +217,7 @@ static malloc_zone_t mi_malloc_zone = {
   .batch_free = &zone_batch_free,
   .introspect = &mi_introspect,  
 #if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
-  #if defined(MAC_OS_X_VERSION_10_7) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7)
+  #if defined(MAC_OS_X_VERSION_10_14) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_14)
   .version = 10,
   #else
   .version = 9,
@@ -222,7 +226,7 @@ static malloc_zone_t mi_malloc_zone = {
   .memalign = &zone_memalign,
   .free_definite_size = &zone_free_definite_size,
   .pressure_relief = &zone_pressure_relief,
-  #if defined(MAC_OS_X_VERSION_10_7) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7)
+  #if defined(MAC_OS_X_VERSION_10_14) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_14)
   .claimed_address = &zone_claimed_address,
   #endif
 #else

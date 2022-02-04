@@ -466,7 +466,9 @@ static void mi_process_load(void) {
   MI_UNUSED(dummy);
   #endif
   os_preloading = false;
-  atexit(&mi_process_done);
+  #if !(defined(_WIN32) && defined(MI_SHARED_LIB))  // use Dll process detach (see below) instead of atexit (issue #521)
+  atexit(&mi_process_done);  
+  #endif
   _mi_options_init();
   mi_process_init();
   //mi_stats_reset();-
@@ -553,11 +555,13 @@ static void mi_process_done(void) {
   FlsFree(mi_fls_key);  // call thread-done on all threads (except the main thread) to prevent dangling callback pointer if statically linked with a DLL; Issue #208
   #endif
   
-  #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)  
-  // free all memory if possible on process exit. This is not needed for a stand-alone process
-  // but should be done if mimalloc is statically linked into another shared library which
-  // is repeatedly loaded/unloaded, see issue #281.
-  mi_collect(true /* force */ );
+  #ifndef MI_SKIP_COLLECT_ON_EXIT
+    #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)  
+    // free all memory if possible on process exit. This is not needed for a stand-alone process
+    // but should be done if mimalloc is statically linked into another shared library which
+    // is repeatedly loaded/unloaded, see issue #281.
+    mi_collect(true /* force */ );
+    #endif
   #endif
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
@@ -578,9 +582,14 @@ static void mi_process_done(void) {
     if (reason==DLL_PROCESS_ATTACH) {
       mi_process_load();
     }
-    else if (reason==DLL_THREAD_DETACH) {
-      if (!mi_is_redirected()) mi_thread_done();
+    else if (reason==DLL_PROCESS_DETACH) {
+      mi_process_done();
     }
+    else if (reason==DLL_THREAD_DETACH) {
+      if (!mi_is_redirected()) {
+        mi_thread_done();
+      }
+    }    
     return TRUE;
   }
 
@@ -599,7 +608,7 @@ static void mi_process_done(void) {
     __pragma(comment(linker, "/include:" "__mi_msvc_initu"))
   #endif
   #pragma data_seg(".CRT$XIU")
-  extern "C" _mi_crt_callback_t _mi_msvc_initu[] = { &_mi_process_init };
+  mi_decl_externc _mi_crt_callback_t _mi_msvc_initu[] = { &_mi_process_init };
   #pragma data_seg()
 
 #elif defined(__cplusplus)

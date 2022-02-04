@@ -22,6 +22,7 @@ option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
 option(MI_DEBUG_TRACE       "Store allocation stack trace in each heap block to debug heap block overflows or corruption" OFF)
+option(MI_SKIP_COLLECT_ON_EXIT, "Skip collecting memory on program exit" OFF)
 
 # deprecated options
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
@@ -119,6 +120,11 @@ endif()
 if(MI_CHECK_FULL)
   message(STATUS "The MI_CHECK_FULL option is deprecated, use MI_DEBUG_FULL instead")
   set(MI_DEBUG_FULL "ON")
+endif()
+
+if (MI_SKIP_COLLECT_ON_EXIT)
+  message(STATUS "Skip collecting memory on program exit (MI_SKIP_COLLECT_ON_EXIT=ON)")
+  list(APPEND mi_defines MI_SKIP_COLLECT_ON_EXIT=1)
 endif()
 
 if(MI_DEBUG_FULL)
@@ -252,7 +258,7 @@ endif()
 # -----------------------------------------------------------------------------
 
 # dynamic/shared library and symlinks always go to /usr/local/lib equivalent
-set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}") 
+set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}")
 
 # static libraries and object files, includes, and cmake config files
 # are either installed at top level, or use versioned directories for side-by-side installation (default)
@@ -331,6 +337,7 @@ if(MI_BUILD_SHARED)
     add_custom_command(TARGET mimalloc POST_BUILD
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll" $<TARGET_FILE_DIR:mimalloc>
       COMMENT "Copy mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll to output directory")
+    install(FILES "$<TARGET_FILE_DIR:mimalloc>/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll" DESTINATION ${mi_install_libdir})
   endif()
 
   install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_libdir} LIBRARY)  
@@ -381,7 +388,7 @@ if (MI_BUILD_OBJECT)
   )
 
   # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
-  # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_libdir})
+  # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_objdir})
 
   # the FILES expression can also be: $<TARGET_OBJECTS:mimalloc-obj>
   # but that fails cmake versions less than 3.10 so we leave it as is for now

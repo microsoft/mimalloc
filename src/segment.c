@@ -538,7 +538,7 @@ static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, s
   }
   // increase expiration of reusing part of the delayed decommit
   if (commit && mi_commit_mask_any_set(&segment->decommit_mask, &mask)) {
-    segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
+    segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
   }
   // always undo delayed decommits
   mi_commit_mask_clear(&segment->decommit_mask, &mask);
@@ -554,7 +554,7 @@ static bool mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_
 
 static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
   if (!segment->allow_decommit) return;
-  if (mi_option_get(mi_option_reset_delay) == 0) {
+  if (mi_option_get(mi_option_decommit_delay) == 0) {
     mi_segment_commitx(segment, false, p, size, stats);
   }
   else {
@@ -569,21 +569,20 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
     mi_commit_mask_t cmask;
     mi_commit_mask_create_intersect(&segment->commit_mask, &mask, &cmask);  // only decommit what is committed; span_free may try to decommit more
     mi_commit_mask_set(&segment->decommit_mask, &cmask);
-    segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
-    mi_msecs_t now = _mi_clock_now();
+    mi_msecs_t now = _mi_clock_now();    
     if (segment->decommit_expire == 0) {
       // no previous decommits, initialize now
       mi_assert_internal(mi_commit_mask_is_empty(&segment->decommit_mask));
-      segment->decommit_expire = now + mi_option_get(mi_option_reset_delay);
+      segment->decommit_expire = now + mi_option_get(mi_option_decommit_delay);
     }
     else if (segment->decommit_expire <= now) {
       // previous decommit mask already expired
       // mi_segment_delayed_decommit(segment, true, stats);
-      segment->decommit_expire = now + (mi_option_get(mi_option_reset_delay) / 8); // wait a tiny bit longer in case there is a series of free's
+      segment->decommit_expire = now + (mi_option_get(mi_option_decommit_delay) / 8); // wait a tiny bit longer in case there is a series of free's
     }
     else {
-      // previous decommit mask is not yet expired
-      // segment->decommit_expire += 2; // = now + mi_option_get(mi_option_reset_delay);
+      // previous decommit mask is not yet expired, increase the expiration by a bit.
+      segment->decommit_expire += (mi_option_get(mi_option_decommit_delay) / 8);
     }
   }  
 }
@@ -877,7 +876,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
     segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_pinned && !segment->mem_is_large);    
     if (segment->allow_decommit) {
-      segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_reset_delay);
+      segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
       segment->decommit_mask = decommit_mask;
       mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
       #if MI_DEBUG>2
@@ -1050,7 +1049,7 @@ void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
 Abandonment
 
 When threads terminate, they can leave segments with
-live blocks (reached through other threads). Such segments
+live blocks (reachable through other threads). Such segments
 are "abandoned" and will be reclaimed by other threads to
 reuse their pages and/or free them eventually
 
@@ -1065,11 +1064,11 @@ or decommitting segments that have a pending read operation.
 
 Note: the current implementation is one possible design;
 another way might be to keep track of abandoned segments
-in the regions. This would have the advantage of keeping
+in the arenas/segment_cache's. This would have the advantage of keeping
 all concurrent code in one place and not needing to deal
 with ABA issues. The drawback is that it is unclear how to
 scan abandoned segments efficiently in that case as they
-would be spread among all other segments in the regions.
+would be spread among all other segments in the arenas.
 ----------------------------------------------------------- */
 
 // Use the bottom 20-bits (on 64-bit) of the aligned segment pointers
@@ -1245,7 +1244,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   }
 
   // perform delayed decommits
-  mi_segment_delayed_decommit(segment, mi_option_is_enabled(mi_option_abandoned_page_reset) /* force? */, tld->stats);    
+  mi_segment_delayed_decommit(segment, mi_option_is_enabled(mi_option_abandoned_page_decommit) /* force? */, tld->stats);    
   
   // all pages in the segment are abandoned; add it to the abandoned list
   _mi_stat_increase(&tld->stats->segments_abandoned, 1);
@@ -1431,13 +1430,37 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
     }
     else {
       // otherwise, push on the visited list so it gets not looked at too quickly again
-      mi_segment_delayed_decommit(segment, true, tld->stats); // decommit if needed
+      mi_segment_delayed_decommit(segment, true /* force? */, tld->stats); // forced decommit if needed as we may not visit soon again
       mi_abandoned_visited_push(segment);
     }
   }
   return NULL;
 }
 
+
+void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
+{
+  mi_segment_t* segment;
+  int max_tries = (force ? 16*1024 : 1024); // limit latency
+  if (force) {
+    mi_abandoned_visited_revisit(); 
+  }
+  while ((max_tries-- > 0) && ((segment = mi_abandoned_pop()) != NULL)) {
+    mi_segment_check_free(segment,0,0,tld); // try to free up pages (due to concurrent frees)
+    if (segment->used == 0) {
+      // free the segment (by forced reclaim) to make it available to other threads.
+      // note: we could in principle optimize this by skipping reclaim and directly
+      // freeing but that would violate some invariants temporarily)
+      mi_segment_reclaim(segment, heap, 0, NULL, tld);
+    }
+    else {
+      // otherwise, decommit if needed and push on the visited list 
+      // note: forced decommit can be expensive if many threads are destroyed/created as in mstress.
+      mi_segment_delayed_decommit(segment, force, tld->stats);
+      mi_abandoned_visited_push(segment);
+    }
+  }
+}
 
 /* -----------------------------------------------------------
    Reclaim or allocate

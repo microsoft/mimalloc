@@ -101,6 +101,7 @@ void       _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed,
 // "segment-cache.c"
 void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
 bool       _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* decommit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld);
+void       _mi_segment_cache_collect(bool force, mi_os_tld_t* tld);
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
 void       _mi_segment_map_freed_at(const mi_segment_t* segment);
 
@@ -115,6 +116,7 @@ void       _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi
 uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size); // page start for any page
 void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
 void       _mi_abandoned_await_readers(void);
+void       _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld);
 
 
 
@@ -818,6 +820,7 @@ static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
         || (defined(__APPLE__)   && (defined(__x86_64__) || defined(__aarch64__))) \
         || (defined(__BIONIC__)  && (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))) \
         || (defined(__FreeBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
+        || (defined(__OpenBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
       )
 
 static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
