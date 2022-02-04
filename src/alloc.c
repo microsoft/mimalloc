@@ -425,6 +425,8 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   const size_t avail = mi_padding_shrink(page, block, sizeof(mi_block_t)); // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
   #if (MI_DEBUG!=0)
   memset(block, MI_DEBUG_FREED, avail);
+  #else
+  MI_UNUSED(avail);
   #endif
 
   // huge page segments are always abandoned and can be freed immediately
