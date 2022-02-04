@@ -375,22 +375,31 @@ void _mi_stack_trace_capture(void** strace, size_t len, size_t skip) {
 void _mi_stack_trace_print(const char* msg, void** strace, size_t len, const mi_block_t* block, size_t bsize, size_t avail) {
   _mi_fprintf(NULL, NULL, "trace %s at %p of size %zu (%zub usable), allocated at:\n", 
                (msg==NULL ? "block" : msg), block, avail, bsize);
-  PSYMBOL_INFO info = (PSYMBOL_INFO)_malloca(sizeof(SYMBOL_INFO) + 256 * sizeof(TCHAR));
-  if (info==NULL) return;
-  memset(info, 0, sizeof(info));
-  info->MaxNameLen = 255;
-  info->SizeOfStruct = sizeof(SYMBOL_INFO);
-  HANDLE current_process = GetCurrentProcess();
-  if (!SymInitialize(current_process, NULL, TRUE)) return;
-  for (size_t i = 0; i < len && strace[i] != NULL; i++) {
-    if (SymFromAddr(current_process, (DWORD64)(strace[i]), 0, info)) {
-      _mi_fprintf(NULL, NULL, "  %2zu: %8p: %s\n", i, strace[i], info->Name);
-    }
-    else {
-      _mi_fprintf(NULL, NULL, "  %2zu: %8p: <unknown address: error: 0x%04x>\n", i, strace[i], GetLastError());
-    }
-  }  
-  SymCleanup(current_process);
+  uintptr_t uninit = 0;
+  for( size_t i = 0; i < MI_INTPTR_SIZE; i++ ) {
+    uninit = (uninit << 8) | MI_DEBUG_UNINIT;
+  }
+  if (strace == NULL || uninit == (uintptr_t)strace[0]) {
+    _mi_fprintf(NULL, NULL, "  (uninitialized trace)\n");
+  }
+  else {
+    PSYMBOL_INFO info = (PSYMBOL_INFO)_malloca(sizeof(SYMBOL_INFO) + 256 * sizeof(TCHAR));
+    if (info==NULL) return;
+    memset(info, 0, sizeof(info));
+    info->MaxNameLen = 255;
+    info->SizeOfStruct = sizeof(SYMBOL_INFO);
+    HANDLE current_process = GetCurrentProcess();
+    if (!SymInitialize(current_process, NULL, TRUE)) return;
+    for (size_t i = 0; i < len && strace[i] != NULL; i++) {
+      if (SymFromAddr(current_process, (DWORD64)(strace[i]), 0, info)) {
+        _mi_fprintf(NULL, NULL, "  %2zu: %8p: %s\n", i, strace[i], info->Name);
+      }
+      else {
+        _mi_fprintf(NULL, NULL, "  %2zu: %8p: <unknown address: error: 0x%04x>\n", i, strace[i], GetLastError());
+      }
+    }  
+    SymCleanup(current_process);
+  }
 }
 #elif (MI_DEBUG_TRACE > 0) && (defined(__linux__) || defined(__FreeBSD__) || defined(__APPLE__))
 #include <execinfo.h>
@@ -413,13 +422,22 @@ void _mi_stack_trace_capture(void** strace, size_t len, size_t skip) {
 void _mi_stack_trace_print(const char* msg, void** strace, size_t len, const mi_block_t* block, size_t bsize, size_t avail) {
   _mi_fprintf(NULL, NULL, "trace %s at %p of size %zu (%zub usable), allocated at:\n", 
                 (msg==NULL ? "block" : msg), block, avail, bsize);
-  while( len > 0 && strace[len-1] == NULL) { len--; }
-  if (len == 0) return;
-  char** names = backtrace_symbols(strace, len);
-  for (size_t i = 0; i < len && strace[i] != NULL; i++) {
-    _mi_fprintf(NULL, NULL, "  %2zu: %8p: %s\n", i, strace[i], (names == NULL || names[i] == NULL ? "<unknown>" : names[i]));
+  uintptr_t uninit = 0;
+  for( size_t i = 0; i < MI_INTPTR_SIZE; i++ ) {
+    uninit = (uninit << 8) | MI_DEBUG_UNINIT;
   }
-  // free(names);  // avoid potential recursion and leak the trace  
+  if (strace == NULL || uninit == (uintptr_t)strace[0]) {
+    _mi_fprintf(NULL, NULL, "  (uninitialized trace)\n");
+  }
+  else {                
+    while( len > 0 && strace[len-1] == NULL) { len--; }
+    if (len == 0) return;
+    char** names = backtrace_symbols(strace, len);
+    for (size_t i = 0; i < len && strace[i] != NULL; i++) {
+      _mi_fprintf(NULL, NULL, "  %2zu: %8p: %s\n", i, strace[i], (names == NULL || names[i] == NULL ? "<unknown>" : names[i]));
+    }
+    // free(names);  // avoid potential recursion and leak the trace  
+  }
 }
 #else 
 void _mi_stack_trace_capture(void** strace, size_t len, size_t skip) {

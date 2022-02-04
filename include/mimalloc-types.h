@@ -65,7 +65,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #if !defined(MI_DEBUG_TRACE_LEN)     
-#define MI_DEBUG_TRACE_LEN  (7)      // store up to N frames if tracing is enabled
+#define MI_DEBUG_TRACE_LEN  (8)      // store up to N frames if tracing is enabled
 #endif
 
 #if !defined(MI_PADDING_EXTRA)       // use extra padding bytes? (so a stack trace can be preserved or next block corruption prevented)
