@@ -470,17 +470,20 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
   if (p >= (uint8_t*)segment + segsize) return;
 
   size_t diff = (p - (uint8_t*)segment);
+  mi_assert_internal(diff + size <= segsize);
+
   size_t start;
   size_t end;
   if (conservative) {
+    // decommit conservative
     start = _mi_align_up(diff, MI_COMMIT_SIZE);
     end   = _mi_align_down(diff + size, MI_COMMIT_SIZE);
   }
   else {
+    // commit liberal
     start = _mi_align_down(diff, MI_COMMIT_SIZE);
-    end   = _mi_align_up(diff + size, MI_COMMIT_SIZE);
+    end   = _mi_align_up(diff + size, MI_MINIMAL_COMMIT_SIZE);
   }
-  mi_assert_internal(end <= segsize);
   if (end > segsize) {
     end = segsize;
   }
