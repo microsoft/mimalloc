@@ -328,6 +328,7 @@ typedef enum mi_option_e {
   mi_option_max_warnings,
   mi_option_allow_decommit,
   mi_option_segment_decommit_delay,  
+  mi_option_decommit_extend_delay,
   _mi_option_last
 } mi_option_t;
 

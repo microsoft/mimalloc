@@ -466,25 +466,35 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
   mi_assert_internal(segment->kind != MI_SEGMENT_HUGE);
   mi_commit_mask_create_empty(cm);
   if (size == 0 || size > MI_SEGMENT_SIZE || segment->kind == MI_SEGMENT_HUGE) return;
+  const size_t segstart = mi_segment_info_size(segment);
   const size_t segsize = mi_segment_size(segment);
   if (p >= (uint8_t*)segment + segsize) return;
 
-  size_t diff = (p - (uint8_t*)segment);
+  size_t pstart = (p - (uint8_t*)segment);
+  mi_assert_internal(pstart + size <= segsize);
+
   size_t start;
   size_t end;
   if (conservative) {
-    start = _mi_align_up(diff, MI_COMMIT_SIZE);
-    end   = _mi_align_down(diff + size, MI_COMMIT_SIZE);
+    // decommit conservative
+    start = _mi_align_up(pstart, MI_COMMIT_SIZE);
+    end   = _mi_align_down(pstart + size, MI_COMMIT_SIZE);
+    mi_assert_internal(start >= segstart);
+    mi_assert_internal(end <= segsize);
   }
   else {
-    start = _mi_align_down(diff, MI_COMMIT_SIZE);
-    end   = _mi_align_up(diff + size, MI_COMMIT_SIZE);
+    // commit liberal
+    start = _mi_align_down(pstart, MI_MINIMAL_COMMIT_SIZE);
+    end   = _mi_align_up(pstart + size, MI_MINIMAL_COMMIT_SIZE);
   }
-  mi_assert_internal(end <= segsize);
+  if (pstart >= segstart && start < segstart) {  // note: the mask is also calculated for an initial commit of the info area
+    start = segstart;
+  }
   if (end > segsize) {
     end = segsize;
   }
 
+  mi_assert_internal(start <= pstart && (pstart + size) <= end);
   mi_assert_internal(start % MI_COMMIT_SIZE==0 && end % MI_COMMIT_SIZE == 0);
   *start_p   = (uint8_t*)segment + start;
   *full_size = (end > start ? end - start : 0);
@@ -501,14 +511,19 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
   mi_commit_mask_create(bitidx, bitcount, cm);
 }
 
-#define MI_COMMIT_SIZE_BATCH  MiB
 
 static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, size_t size, mi_stats_t* stats) {    
   mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
 
-  //if (commit && size < MI_COMMIT_SIZE_BATCH && p + MI_COMMIT_SIZE_BATCH <= mi_segment_end(segment)) {
-  //  size = MI_COMMIT_SIZE_BATCH;
-  // }
+  // try to commit in at least MI_MINIMAL_COMMIT_SIZE sizes.
+  /*
+  if (commit && size > 0) {
+    const size_t csize = _mi_align_up(size, MI_MINIMAL_COMMIT_SIZE);
+    if (p + csize <= mi_segment_end(segment)) {
+      size = csize;
+    }
+  }
+  */
   // commit liberal, but decommit conservative
   uint8_t* start = NULL;
   size_t   full_size = 0;
@@ -566,23 +581,23 @@ static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_
     if (mi_commit_mask_is_empty(&mask) || full_size==0) return;
     
     // update delayed commit
+    mi_assert_internal(segment->decommit_expire > 0 || mi_commit_mask_is_empty(&segment->decommit_mask));      
     mi_commit_mask_t cmask;
     mi_commit_mask_create_intersect(&segment->commit_mask, &mask, &cmask);  // only decommit what is committed; span_free may try to decommit more
     mi_commit_mask_set(&segment->decommit_mask, &cmask);
     mi_msecs_t now = _mi_clock_now();    
     if (segment->decommit_expire == 0) {
       // no previous decommits, initialize now
-      mi_assert_internal(mi_commit_mask_is_empty(&segment->decommit_mask));
       segment->decommit_expire = now + mi_option_get(mi_option_decommit_delay);
     }
     else if (segment->decommit_expire <= now) {
       // previous decommit mask already expired
       // mi_segment_delayed_decommit(segment, true, stats);
-      segment->decommit_expire = now + (mi_option_get(mi_option_decommit_delay) / 8); // wait a tiny bit longer in case there is a series of free's
+      segment->decommit_expire = now + mi_option_get(mi_option_decommit_extend_delay); // (mi_option_get(mi_option_decommit_delay) / 8); // wait a tiny bit longer in case there is a series of free's
     }
     else {
       // previous decommit mask is not yet expired, increase the expiration by a bit.
-      segment->decommit_expire += (mi_option_get(mi_option_decommit_delay) / 8);
+      segment->decommit_expire += mi_option_get(mi_option_decommit_extend_delay);
     }
   }  
 }
@@ -606,7 +621,8 @@ static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_st
       mi_segment_commitx(segment, false, p, size, stats);
     }
   }
-  mi_commit_mask_foreach_end()  
+  mi_commit_mask_foreach_end()
+  mi_assert_internal(mi_commit_mask_is_empty(&segment->decommit_mask));
 }
 
 
@@ -808,8 +824,8 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   const size_t segment_size = segment_slices * MI_SEGMENT_SLICE_SIZE;
 
   // Commit eagerly only if not the first N lazy segments (to reduce impact of many threads that allocate just a little)
-  const bool eager_delay = (!_mi_os_has_overcommit() &&             // never delay on overcommit systems
-                            _mi_current_thread_count() > 2 &&       // do not delay for the first N threads
+  const bool eager_delay = (// !_mi_os_has_overcommit() &&             // never delay on overcommit systems
+                            _mi_current_thread_count() > 1 &&       // do not delay for the first N threads
                             tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager = !eager_delay && mi_option_is_enabled(mi_option_eager_commit);
   bool commit = eager || (required > 0); 
@@ -890,6 +906,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
       mi_assert_internal(mi_commit_mask_is_empty(&decommit_mask));
       segment->decommit_expire = 0;
       mi_commit_mask_create_empty( &segment->decommit_mask );
+      mi_assert_internal(mi_commit_mask_is_empty(&segment->decommit_mask));
     }
   }
   
