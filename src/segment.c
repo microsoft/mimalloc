@@ -487,7 +487,7 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
     start = _mi_align_down(pstart, MI_MINIMAL_COMMIT_SIZE);
     end   = _mi_align_up(pstart + size, MI_MINIMAL_COMMIT_SIZE);
   }
-  if (start < segstart) {
+  if (pstart >= segstart && start < segstart) {  // note: the mask is also calculated for an initial commit of the info area
     start = segstart;
   }
   if (end > segsize) {
