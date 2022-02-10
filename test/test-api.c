@@ -72,6 +72,10 @@ int main(void) {
   CHECK_BODY("calloc0",{
     result = (mi_usable_size(mi_calloc(0,1000)) <= 16);
   });
+  CHECK_BODY("malloc-large",{   // see PR #544.
+    void* p = mi_malloc(67108872);
+    mi_free(p);
+  });
 
   // ---------------------------------------------------
   // Extended
