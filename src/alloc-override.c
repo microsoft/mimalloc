@@ -248,6 +248,9 @@ void* reallocarray(void* p, size_t count, size_t size)  { return mi_reallocarray
 int   reallocarr(void* p, size_t count, size_t size)    { return mi_reallocarr(p, count, size); }
 void* memalign(size_t alignment, size_t size)           { return mi_memalign(alignment, size); }
 void* _aligned_malloc(size_t alignment, size_t size)    { return mi_aligned_alloc(alignment, size); }
+void* malloc_conceal(size_t size)                       { return mi_malloc_conceal(size); }
+void* calloc_conceal(size_t count, size_t size)         { return mi_calloc_conceal(count, size); }
+void  freezero(void* p, size_t size)                    { mi_freezero(p, size); }
 
 #if defined(__GLIBC__) && defined(__linux__)
   // forward __libc interface (needed for glibc-based Linux distributions)
