@@ -91,6 +91,10 @@ int main(void) {
   CHECK_BODY("malloc-null",{
     mi_free(NULL);
   });
+  CHECK_BODY("malloc-large",{
+    void *p = mi_malloc(67108872);
+    mi_free(p);
+  });
   CHECK_BODY("calloc-overflow",{
     // use (size_t)&mi_calloc to get some number without triggering compiler warnings
     result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);
