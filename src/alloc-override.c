@@ -16,6 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if defined(MI_MALLOC_OVERRIDE) && !(defined(_WIN32)) 
 
 #if defined(__APPLE__)
+#include <AvailabilityMacros.h>
 mi_decl_externc void   vfree(void* p);
 mi_decl_externc size_t malloc_size(const void* p);
 mi_decl_externc size_t malloc_good_size(size_t size);
@@ -77,7 +78,9 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
     MI_INTERPOSE_MI(valloc),
     MI_INTERPOSE_MI(malloc_size),
     MI_INTERPOSE_MI(malloc_good_size),
+    #if defined(MAC_OS_X_VERSION_10_15) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_15 
     MI_INTERPOSE_MI(aligned_alloc),
+    #endif
     #ifdef MI_OSX_ZONE
     // we interpose malloc_default_zone in alloc-override-osx.c so we can use mi_free safely
     MI_INTERPOSE_MI(free),
@@ -161,7 +164,9 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
   void operator delete[](void* p, std::align_val_t al) noexcept { mi_free_aligned(p, static_cast<size_t>(al)); }
   void operator delete  (void* p, std::size_t n, std::align_val_t al) noexcept { mi_free_size_aligned(p, n, static_cast<size_t>(al)); };
   void operator delete[](void* p, std::size_t n, std::align_val_t al) noexcept { mi_free_size_aligned(p, n, static_cast<size_t>(al)); };
-
+  void operator delete  (void* p, std::align_val_t al, const std::nothrow_t& tag) noexcept { mi_free_aligned(p, static_cast<size_t>(al)); }
+  void operator delete[](void* p, std::align_val_t al, const std::nothrow_t& tag) noexcept { mi_free_aligned(p, static_cast<size_t>(al)); }
+  
   void* operator new( std::size_t n, std::align_val_t al)   noexcept(false) { return mi_new_aligned(n, static_cast<size_t>(al)); }
   void* operator new[]( std::size_t n, std::align_val_t al) noexcept(false) { return mi_new_aligned(n, static_cast<size_t>(al)); }
   void* operator new  (std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_new_aligned_nothrow(n, static_cast<size_t>(al)); }
