@@ -530,7 +530,7 @@ static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
   xarea.area.reserved = page->reserved * bsize;
   xarea.area.committed = page->capacity * bsize;
   xarea.area.blocks = _mi_page_start(_mi_page_segment(page), page, NULL);
-  xarea.area.used = page->used;
+  xarea.area.used = page->used * bsize;
   xarea.area.block_size = bsize;
   return fun(heap, &xarea, arg);
 }
