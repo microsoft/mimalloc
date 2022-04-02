@@ -350,14 +350,18 @@ void _mi_verbose_message(const char* fmt, ...) {
 }
 
 static void mi_show_error_message(const char* fmt, va_list args) {
-  if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
-  if (mi_max_error_count >= 0 && (long)mi_atomic_increment_acq_rel(&error_count) > mi_max_error_count) return;
+  if (!mi_option_is_enabled(mi_option_verbose)) {
+    if (!mi_option_is_enabled(mi_option_show_errors)) return;
+    if (mi_max_error_count >= 0 && (long)mi_atomic_increment_acq_rel(&error_count) > mi_max_error_count) return;
+  }
   mi_vfprintf_thread(NULL, NULL, "mimalloc: error: ", fmt, args);
 }
 
 void _mi_warning_message(const char* fmt, ...) {
-  if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
-  if (mi_max_warning_count >= 0 && (long)mi_atomic_increment_acq_rel(&warning_count) > mi_max_warning_count) return;
+  if (!mi_option_is_enabled(mi_option_verbose)) {
+    if (!mi_option_is_enabled(mi_option_show_errors)) return;
+    if (mi_max_warning_count >= 0 && (long)mi_atomic_increment_acq_rel(&warning_count) > mi_max_warning_count) return;
+  }
   va_list args;
   va_start(args,fmt);
   mi_vfprintf_thread(NULL, NULL, "mimalloc: warning: ", fmt, args);
