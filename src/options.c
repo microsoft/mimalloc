@@ -19,8 +19,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 
-static size_t mi_max_error_count   = 16; // stop outputting errors after this
-static size_t mi_max_warning_count = 16; // stop outputting warnings after this
+static long mi_max_error_count   = 16; // stop outputting errors after this (use < 0 for no limit)
+static long mi_max_warning_count = 16; // stop outputting warnings after this (use < 0 for no limit)
 
 static void mi_add_stderr_output(void);
 
@@ -322,11 +322,22 @@ void _mi_fprintf( mi_output_fun* out, void* arg, const char* fmt, ... ) {
   va_end(args);
 }
 
+static void mi_vfprintf_thread(mi_output_fun* out, void* arg, const char* prefix, const char* fmt, va_list args) {
+  if (prefix != NULL && strlen(prefix) <= 32 && !_mi_is_main_thread()) {
+    char tprefix[64];
+    snprintf(tprefix, sizeof(tprefix), "%sthread 0x%zx: ", prefix, _mi_thread_id());
+    mi_vfprintf(out, arg, tprefix, fmt, args);
+  }
+  else {
+    mi_vfprintf(out, arg, prefix, fmt, args);
+  }
+}
+
 void _mi_trace_message(const char* fmt, ...) {
   if (mi_option_get(mi_option_verbose) <= 1) return;  // only with verbose level 2 or higher
   va_list args;
   va_start(args, fmt);
-  mi_vfprintf(NULL, NULL, "mimalloc: ", fmt, args);
+  mi_vfprintf_thread(NULL, NULL, "mimalloc: ", fmt, args);
   va_end(args);
 }
 
@@ -339,17 +350,21 @@ void _mi_verbose_message(const char* fmt, ...) {
 }
 
 static void mi_show_error_message(const char* fmt, va_list args) {
-  if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
-  if (mi_atomic_increment_acq_rel(&error_count) > mi_max_error_count) return;
-  mi_vfprintf(NULL, NULL, "mimalloc: error: ", fmt, args);
+  if (!mi_option_is_enabled(mi_option_verbose)) {
+    if (!mi_option_is_enabled(mi_option_show_errors)) return;
+    if (mi_max_error_count >= 0 && (long)mi_atomic_increment_acq_rel(&error_count) > mi_max_error_count) return;
+  }
+  mi_vfprintf_thread(NULL, NULL, "mimalloc: error: ", fmt, args);
 }
 
 void _mi_warning_message(const char* fmt, ...) {
-  if (!mi_option_is_enabled(mi_option_show_errors) && !mi_option_is_enabled(mi_option_verbose)) return;
-  if (mi_atomic_increment_acq_rel(&warning_count) > mi_max_warning_count) return;
+  if (!mi_option_is_enabled(mi_option_verbose)) {
+    if (!mi_option_is_enabled(mi_option_show_errors)) return;
+    if (mi_max_warning_count >= 0 && (long)mi_atomic_increment_acq_rel(&warning_count) > mi_max_warning_count) return;
+  }
   va_list args;
   va_start(args,fmt);
-  mi_vfprintf(NULL, NULL, "mimalloc: warning: ", fmt, args);
+  mi_vfprintf_thread(NULL, NULL, "mimalloc: warning: ", fmt, args);
   va_end(args);
 }
 
