@@ -45,6 +45,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #else
 #include <sys/mman.h>
 #endif
+#include <sys/prctl.h>
 #endif
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
@@ -1436,4 +1437,21 @@ int _mi_os_numa_node_get(mi_os_tld_t* tld) {
   size_t numa_node = mi_os_numa_nodex();
   if (numa_node >= numa_count) { numa_node = numa_node % numa_count; }
   return (int)numa_node;
+}
+
+bool _mi_os_alloc_named(void* p, size_t size, const char *name) {
+  mi_assert_internal(p != NULL);
+  mi_assert_internal(name != NULL);
+#if defined(__linux__)
+#if !defined(PR_SET_VMA)
+#define PR_SET_VMA 0x53564d41
+#define PR_SET_VMA_ANON_NAME 0
+#endif
+  return (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, (unsigned long)p, size, (unsigned long)name) == 0);
+#else
+  MI_UNUSED(p);
+  MI_UNUSED(size);
+  MI_UNUSED(name);
+  return false;
+#endif
 }

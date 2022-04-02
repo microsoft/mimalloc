@@ -78,6 +78,7 @@ void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocat
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
 size_t     _mi_os_good_alloc_size(size_t size);
 bool       _mi_os_has_overcommit(void);
+bool       _mi_os_alloc_named(void* p, size_t size, const char *name);
 
 // memory.c
 void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* id, mi_os_tld_t* tld);

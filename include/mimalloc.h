@@ -380,6 +380,8 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_new_n(size_t count, s
 mi_decl_nodiscard mi_decl_export void* mi_new_realloc(void* p, size_t newsize)                mi_attr_alloc_size(2);
 mi_decl_nodiscard mi_decl_export void* mi_new_reallocn(void* p, size_t newcount, size_t size) mi_attr_alloc_size2(2, 3);
 
+mi_decl_export bool mi_alloc_named(void* p, size_t size, const char *name);
+
 #ifdef __cplusplus
 }
 #endif
