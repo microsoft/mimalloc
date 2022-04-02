@@ -67,7 +67,8 @@ terms of the MIT license. A copy of the license can be found in the file
   On windows initializes support for aligned allocation and
   large OS pages (if MIMALLOC_LARGE_OS_PAGES is true).
 ----------------------------------------------------------- */
-bool    _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
+bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
+bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats);
 
 static void* mi_align_up_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
@@ -294,9 +295,23 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
   if (addr == NULL || size == 0) return true; // || _mi_os_is_huge_reserved(addr)
   bool err = false;
 #if defined(_WIN32)
+  DWORD errcode = 0;
   err = (VirtualFree(addr, 0, MEM_RELEASE) == 0);
-  if (err) {
-    _mi_warning_message("unable to release OS memory: error code 0x%x, addr: %p, size: %zu\n", GetLastError(), addr, size);
+  if (err) { errcode = GetLastError(); }
+  if (errcode == ERROR_INVALID_ADDRESS) {
+    // In mi_os_mem_alloc_aligned the fallback path may have returned a pointer inside
+    // the memory region returned by VirtualAlloc; in that case we need to free using
+    // the start of the region.
+    MEMORY_BASIC_INFORMATION info = { 0, 0 };
+    VirtualQuery(addr, &info, sizeof(info));
+    if (info.AllocationBase < addr) {
+      errcode = 0;
+      err = (VirtualFree(info.AllocationBase, 0, MEM_RELEASE) == 0);
+      if (err) { errcode = GetLastError(); }
+    }
+  }
+  if (errcode != 0) {
+    _mi_warning_message("unable to release OS memory: error code 0x%x, addr: %p, size: %zu\n", errcode, addr, size);
   }
 #elif defined(MI_USE_SBRK) || defined(__wasi__)
   err = false; // sbrk heap cannot be shrunk
@@ -728,46 +743,27 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
   // try first with a hint (this will be aligned directly on Win 10+ or BSD)
   void* p = mi_os_mem_alloc(size, alignment, commit, allow_large, is_large, stats);
   if (p == NULL) return NULL;
-
+  
   // if not aligned, free it, overallocate, and unmap around it
   if (((uintptr_t)p % alignment != 0)) {
-    _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (%zu bytes, address: %p, commit: %d, is_large: %d)\n", size, p, commit, *is_large);
     mi_os_mem_free(p, size, commit, stats);
+    _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (%zu bytes, address: %p, commit: %d, is_large: %d)\n", size, p, commit, *is_large);
     if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
     const size_t over_size = size + alignment;
 
 #if _WIN32
-    // over-allocate and than re-allocate exactly at an aligned address in there.
-    // this may fail due to threads allocating at the same time so we
-    // retry this at most 3 times before giving up.
-    // (we can not decommit around the overallocation on Windows, because we can only
-    //  free the original pointer, not one pointing inside the area)
-    int flags = MEM_RESERVE;
-    if (commit) flags |= MEM_COMMIT;
-    for (int tries = 0; tries < 3; tries++) {
-      // over-allocate to determine a virtual memory range
-      p = mi_os_mem_alloc(over_size, alignment, commit, false, is_large, stats);
-      if (p == NULL) return NULL; // error
-      if (((uintptr_t)p % alignment) == 0) {
-        // if p happens to be aligned, just decommit the left-over area
-        _mi_os_decommit((uint8_t*)p + size, over_size - size, stats);
-        break;
-      }
-      else {
-        // otherwise free and allocate at an aligned address in there
-        mi_os_mem_free(p, over_size, commit, stats);
-        void* aligned_p = mi_align_up_ptr(p, alignment);
-        p = mi_win_virtual_alloc(aligned_p, size, alignment, flags, false, allow_large, is_large);
-        if (p != NULL) {
-          _mi_stat_increase(&stats->reserved, size);
-          if (commit) { _mi_stat_increase(&stats->committed, size); }
-        }
-        if (p == aligned_p) break; // success!
-        if (p != NULL) { // should not happen?
-          mi_os_mem_free(p, size, commit, stats);
-          p = NULL;
-        }
-      }
+    // over-allocate uncommitted (virtual) memory
+    p = mi_os_mem_alloc(over_size, 0 /*alignment*/, false /* commit? */, false /* allow_large */, is_large, stats);
+    if (p == NULL) return NULL;
+    
+    // set p to the aligned part in the full region
+    // note: this is dangerous on Windows as VirtualFree needs the actual region pointer
+    // but in mi_os_mem_free we handle this (hopefully exceptional) situation.
+    p = mi_align_up_ptr(p, alignment);
+
+    // explicitly commit only the aligned part
+    if (commit) {
+      _mi_os_commit(p, size, NULL, stats);
     }
 #else
     // overallocate...
