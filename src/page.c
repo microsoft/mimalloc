@@ -252,7 +252,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   }
   mi_assert_internal(pq==NULL || _mi_page_segment(page)->kind != MI_SEGMENT_HUGE);
   mi_page_init(heap, page, block_size, heap->tld);
-  _mi_stat_increase(&heap->tld->stats.pages, 1);
+  mi_heap_stat_increase(heap, pages, 1);
   if (pq!=NULL) mi_page_queue_push(heap, pq, page); // huge pages use pq==NULL
   mi_assert_expensive(_mi_page_is_valid(page));
   return page;
@@ -705,7 +705,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
     page = next;
   } // for each page
 
-  mi_stat_counter_increase(heap->tld->stats.searches, count);
+  mi_heap_stat_counter_increase(heap, searches, count);
 
   if (page == NULL) {
     _mi_heap_collect_retired(heap, false); // perhaps make a page available?
@@ -806,12 +806,12 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
       mi_assert_internal(_mi_page_segment(page)->kind != MI_SEGMENT_HUGE);
     }
     if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
-      _mi_stat_increase(&heap->tld->stats.large, bsize);
-      _mi_stat_counter_increase(&heap->tld->stats.large_count, 1);
+      mi_heap_stat_increase(heap, large, bsize);
+      mi_heap_stat_counter_increase(heap, large_count, 1);
     }
     else {
-      _mi_stat_increase(&heap->tld->stats.huge, bsize);
-      _mi_stat_counter_increase(&heap->tld->stats.huge_count, 1);
+      mi_heap_stat_increase(heap, huge, bsize);
+      mi_heap_stat_counter_increase(heap, huge_count, 1);
     }
   }
   return page;
