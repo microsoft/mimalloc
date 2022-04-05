@@ -802,9 +802,11 @@ static bool mi_try_new_handler(bool nothrow) {
   #endif  
   if (h==NULL) {
     _mi_error_message(ENOMEM, "out of memory in 'new'");      
-    if (!nothrow) {
+#ifdef __EXCEPTIONS
       throw std::bad_alloc();
-    }
+#else 
+      abort();
+#endif
     return false;
   }
   else {
