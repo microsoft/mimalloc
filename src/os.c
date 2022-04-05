@@ -262,6 +262,24 @@ static void os_detect_overcommit(void) {
 #endif
 }
 
+static void os_detect_large_page_size() {
+#if defined(__FreeBSD__)
+  size_t ptr[4] = {0};
+  size_t len = sizeof(ptr) / sizeof(ptr[0]);
+  getpagesizes(ptr, len);
+
+  // large page size starts from the second offset at least
+  for (size_t i = 1; i < len; i++) {
+    if (!(ptr[i] % MI_MiB)) {
+      large_os_page_size = ptr[i];
+      break;
+    }
+  }
+#else
+  large_os_page_size = 2*MI_MiB;
+#endif
+}
+
 void _mi_os_init() {
   // get the page size
   long result = sysconf(_SC_PAGESIZE);
@@ -269,7 +287,7 @@ void _mi_os_init() {
     os_page_size = (size_t)result;
     os_alloc_granularity = os_page_size;
   }
-  large_os_page_size = 2*MI_MiB; // TODO: can we query the OS for this?
+  os_detect_large_page_size();
   os_detect_overcommit();
 }
 #endif
