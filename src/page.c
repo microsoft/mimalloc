@@ -371,12 +371,12 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   const size_t bsize = mi_page_block_size(page);
   if (bsize > MI_MEDIUM_OBJ_SIZE_MAX) {
     if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {      
-      _mi_stat_decrease(&heap->tld->stats.large, bsize);
+      mi_heap_stat_decrease(heap, large, bsize);
     }
     else {
       // not strictly necessary as we never get here for a huge page
       mi_assert_internal(false);
-      _mi_stat_decrease(&heap->tld->stats.huge, bsize);      
+      mi_heap_stat_decrease(heap, huge, bsize);      
     }
   }
 
