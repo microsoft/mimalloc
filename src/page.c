@@ -368,17 +368,6 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   mi_page_set_has_aligned(page, false);
 
   mi_heap_t* heap = mi_page_heap(page);
-  const size_t bsize = mi_page_block_size(page);
-  if (bsize > MI_MEDIUM_OBJ_SIZE_MAX) {
-    if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {      
-      mi_heap_stat_decrease(heap, large, bsize);
-    }
-    else {
-      // not strictly necessary as we never get here for a huge page
-      mi_assert_internal(false);
-      mi_heap_stat_decrease(heap, huge, bsize);      
-    }
-  }
 
   // remove from the page list
   // (no need to do _mi_heap_delayed_free first as all blocks are already free)
@@ -791,7 +780,7 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
   mi_page_queue_t* pq = (is_huge ? NULL : mi_page_queue(heap, block_size));
   mi_page_t* page = mi_page_fresh_alloc(heap, pq, block_size);
   if (page != NULL) {
-    const size_t bsize = mi_page_block_size(page);  // note: not `mi_page_usable_block_size` as `size` includes padding
+    const size_t bsize = mi_page_usable_block_size(page);  // note: includes padding
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(bsize >= size);
 
