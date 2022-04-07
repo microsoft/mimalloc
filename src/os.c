@@ -343,15 +343,8 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     if (hint != NULL) {
       void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
       if (p != NULL) return p;
-      // for robustness always fall through in case of an error
-      /*
-      DWORD err = GetLastError();
-      if (err != ERROR_INVALID_ADDRESS &&   // If linked with multiple instances, we may have tried to allocate at an already allocated area (#210)
-          err != ERROR_INVALID_PARAMETER) { // Windows7 instability (#230)
-        return NULL;
-      }
-      */
       _mi_warning_message("unable to allocate hinted aligned OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %zu, flags: 0x%x)\n", size, GetLastError(), hint, try_alignment, flags);
+      // fall through on error
     }
   } 
 #endif
