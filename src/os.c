@@ -333,7 +333,7 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
   if (addr == NULL) {
     void* hint = mi_os_get_aligned_hint(try_alignment,size);
     if (hint != NULL) {
-      void* p = NULL; // VirtualAlloc(hint, size, flags, PAGE_READWRITE);
+      void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
       if (p != NULL) return p;
       // for robustness always fall through in case of an error
       /*
