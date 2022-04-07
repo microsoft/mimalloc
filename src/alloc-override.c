@@ -94,15 +94,18 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
 
   #ifdef __cplusplus
   extern "C" {
-    void  _ZdlPv(void* p);   // delete
-    void  _ZdaPv(void* p);   // delete[]
-    void  _ZdlPvm(void* p, size_t n);  // delete
-    void  _ZdaPvm(void* p, size_t n);  // delete[]
-    void* _Znwm(size_t n);  // new
-    void* _Znam(size_t n);  // new[]
-    void* _ZnwmRKSt9nothrow_t(size_t n, mi_nothrow_t tag); // new nothrow
-    void* _ZnamRKSt9nothrow_t(size_t n, mi_nothrow_t tag); // new[] nothrow
-  }  
+  #endif
+  void  _ZdlPv(void* p);   // delete
+  void  _ZdaPv(void* p);   // delete[]
+  void  _ZdlPvm(void* p, size_t n);  // delete
+  void  _ZdaPvm(void* p, size_t n);  // delete[]
+  void* _Znwm(size_t n);  // new
+  void* _Znam(size_t n);  // new[]
+  void* _ZnwmRKSt9nothrow_t(size_t n, mi_nothrow_t tag); // new nothrow
+  void* _ZnamRKSt9nothrow_t(size_t n, mi_nothrow_t tag); // new[] nothrow
+  #ifdef __cplusplus
+  }
+  #endif
   __attribute__((used)) static struct mi_interpose_s _mi_cxx_interposes[]  __attribute__((section("__DATA, __interpose"))) =
   {
     MI_INTERPOSE_FUN(_ZdlPv,mi_free),
@@ -114,7 +117,6 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
     MI_INTERPOSE_FUN(_ZnwmRKSt9nothrow_t,mi_new_nothrow),
     MI_INTERPOSE_FUN(_ZnamRKSt9nothrow_t,mi_new_nothrow),
   };
-  #endif // __cplusplus
 
 #elif defined(_MSC_VER)
   // cannot override malloc unless using a dll.
