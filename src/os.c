@@ -341,7 +341,7 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
   if (addr == NULL) {
     void* hint = mi_os_get_aligned_hint(try_alignment,size);
     if (hint != NULL) {
-      void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
+      void* p = NULL; // VirtualAlloc(hint, size, flags, PAGE_READWRITE);
       if (p != NULL) return p;
       // for robustness always fall through in case of an error
       /*
@@ -351,7 +351,7 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
         return NULL;
       }
       */
-      _mi_warning_message("unable to allocate hinted aligned OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %d, flags: 0x%x)\n", size, GetLastError(), hint, try_alignment, flags);
+      _mi_warning_message("unable to allocate hinted aligned OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %zu, flags: 0x%x)\n", size, GetLastError(), hint, try_alignment, flags);
     }
   } 
 #endif
@@ -365,7 +365,7 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     param.Pointer = &reqs;
     void* p = (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
     if (p != NULL) return p;
-    _mi_warning_message("unable to allocate aligned OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %d, flags: 0x%x)\n", size, GetLastError(), addr, try_alignment, flags);
+    _mi_warning_message("unable to allocate aligned OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %zu, flags: 0x%x)\n", size, GetLastError(), addr, try_alignment, flags);
     // fall through on error
   }
 #endif
@@ -403,7 +403,7 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
     p = mi_win_virtual_allocx(addr, size, try_alignment, flags);
   }
   if (p == NULL) {
-    _mi_warning_message("unable to allocate OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %d, flags: 0x%x, large only: %d, allow large: %d)\n", size, GetLastError(), addr, try_alignment, flags, large_only, allow_large);
+    _mi_warning_message("unable to allocate OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %zu, flags: 0x%x, large only: %d, allow large: %d)\n", size, GetLastError(), addr, try_alignment, flags, large_only, allow_large);
   }
   return p;
 }
@@ -736,6 +736,7 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, boo
 static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, bool* is_large, mi_stats_t* stats) {
   mi_assert_internal(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0));
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
+  mi_assert_internal(is_large != NULL);
   if (!commit) allow_large = false;
   if (!(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0))) return NULL;
   size = _mi_align_up(size, _mi_os_page_size());
@@ -747,7 +748,7 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
   // if not aligned, free it, overallocate, and unmap around it
   if (((uintptr_t)p % alignment != 0)) {
     mi_os_mem_free(p, size, commit, stats);
-    _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (%zu bytes, address: %p, commit: %d, is_large: %d)\n", size, p, commit, *is_large);
+    _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (%zu bytes, address: %p, alignment: %zu, commit: %d)\n", size, p, alignment, commit);
     if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
     const size_t over_size = size + alignment;
 
