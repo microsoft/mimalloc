@@ -163,10 +163,22 @@ void mi_option_disable(mi_option_t option) {
 
 static void mi_out_stderr(const char* msg, void* arg) {
   MI_UNUSED(arg);
+  if (msg == NULL) return;
   #ifdef _WIN32
   // on windows with redirection, the C runtime cannot handle locale dependent output
   // after the main thread closes so we use direct console output.
-  if (!_mi_preloading()) { _cputs(msg); }
+  if (!_mi_preloading()) { 
+    // _cputs(msg);  // _cputs cannot be used at is aborts if it fails to lock the console
+    static HANDLE hcon = INVALID_HANDLE_VALUE;
+    if (hcon == INVALID_HANDLE_VALUE) {
+      hcon = GetStdHandle(STD_ERROR_HANDLE);
+    }
+    const size_t len = strlen(msg);
+    if (hcon != INVALID_HANDLE_VALUE && len > 0 && len < UINT32_MAX) {
+      DWORD written = 0;
+      WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
+    }
+  }
   #else
   fputs(msg, stderr);
   #endif
