@@ -178,10 +178,10 @@ static mi_thread_data_t* mi_thread_data_alloc(void) {
   // try to find thread metadata in the cache
   mi_thread_data_t* td;
   for (int i = 0; i < TD_CACHE_SIZE; i++) {
-    td = mi_atomic_load_ptr_relaxed(mi_thread_data_t*, &td_cache[i]);
+    td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
     if (td != NULL) {
-      mi_thread_data_t* expected = td;
-      if (mi_atomic_cas_weak_acq_rel(&td_cache[i], &expected, NULL)) {
+      td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL); 
+      if (td != NULL) {
         return td;
       }
     }
@@ -202,10 +202,10 @@ static mi_thread_data_t* mi_thread_data_alloc(void) {
 static void mi_thread_data_free( mi_thread_data_t* tdfree ) {
   // try to add the thread metadata to the cache
   for (int i = 0; i < TD_CACHE_SIZE; i++) {
-    mi_thread_data_t* td = mi_atomic_load_ptr_relaxed(mi_thread_data_t*, &td_cache[i]);
+    mi_thread_data_t* td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
     if (td == NULL) {
       mi_thread_data_t* expected = NULL;
-      if (mi_atomic_cas_weak_acq_rel(&td_cache[i], &expected, tdfree)) {
+      if (mi_atomic_cas_ptr_weak_acq_rel(mi_thread_data_t, &td_cache[i], &expected, tdfree)) {
         return;
       }
     }
@@ -217,10 +217,10 @@ static void mi_thread_data_free( mi_thread_data_t* tdfree ) {
 static void mi_thread_data_collect(void) {
   // free all thread metadata from the cache
   for (int i = 0; i < TD_CACHE_SIZE; i++) {
-    mi_thread_data_t* td = mi_atomic_load_ptr_relaxed(mi_thread_data_t*, &td_cache[i]);
+    mi_thread_data_t* td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
     if (td != NULL) {
-      mi_thread_data_t* expected = td;
-      if (mi_atomic_cas_weak_acq_rel(&td_cache[i], &expected, NULL)) {
+      td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL);
+      if (td != NULL) {
         _mi_os_free( td, sizeof(mi_thread_data_t), &_mi_stats_main );
       }
     }
