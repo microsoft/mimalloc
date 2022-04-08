@@ -188,6 +188,68 @@ typedef struct mi_thread_data_s {
   mi_tld_t   tld;
 } mi_thread_data_t;
 
+
+// Thread meta-data is allocated directly from the OS. For
+// some programs that do not use thread pools and allocate and
+// destroy many OS threads, this may causes too much overhead 
+// per thread so we maintain a small cache of recently freed metadata.
+
+#define TD_CACHE_SIZE (8)
+static _Atomic(mi_thread_data_t*) td_cache[TD_CACHE_SIZE];
+
+static mi_thread_data_t* mi_thread_data_alloc(void) {
+  // try to find thread metadata in the cache
+  mi_thread_data_t* td;
+  for (int i = 0; i < TD_CACHE_SIZE; i++) {
+    td = mi_atomic_load_ptr_relaxed(mi_thread_data_t*, &td_cache[i]);
+    if (td != NULL) {
+      mi_thread_data_t* expected = td;
+      if (mi_atomic_cas_weak_acq_rel(&td_cache[i], &expected, NULL)) {
+        return td;
+      }
+    }
+  }
+  // if that fails, allocate directly from the OS
+  td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main);
+  if (td == NULL) {
+    // if this fails, try once more. (issue #257)
+    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main);
+    if (td == NULL) {
+      // really out of memory
+      _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
+    }
+  }
+  return td;
+}
+
+static void mi_thread_data_free( mi_thread_data_t* tdfree ) {
+  // try to add the thread metadata to the cache
+  for (int i = 0; i < TD_CACHE_SIZE; i++) {
+    mi_thread_data_t* td = mi_atomic_load_ptr_relaxed(mi_thread_data_t*, &td_cache[i]);
+    if (td == NULL) {
+      mi_thread_data_t* expected = NULL;
+      if (mi_atomic_cas_weak_acq_rel(&td_cache[i], &expected, tdfree)) {
+        return;
+      }
+    }
+  }
+  // if that fails, just free it directly
+  _mi_os_free(tdfree, sizeof(mi_thread_data_t), &_mi_stats_main);
+}
+
+static void mi_thread_data_collect(void) {
+  // free all thread metadata from the cache
+  for (int i = 0; i < TD_CACHE_SIZE; i++) {
+    mi_thread_data_t* td = mi_atomic_load_ptr_relaxed(mi_thread_data_t*, &td_cache[i]);
+    if (td != NULL) {
+      mi_thread_data_t* expected = td;
+      if (mi_atomic_cas_weak_acq_rel(&td_cache[i], &expected, NULL)) {
+        _mi_os_free( td, sizeof(mi_thread_data_t), &_mi_stats_main );
+      }
+    }
+  }
+}
+
 // Initialize the thread local default heap, called from `mi_thread_init`
 static bool _mi_heap_init(void) {
   if (mi_heap_is_initialized(mi_get_default_heap())) return true;
@@ -200,16 +262,9 @@ static bool _mi_heap_init(void) {
   }
   else {
     // use `_mi_os_alloc` to allocate directly from the OS
-    mi_thread_data_t* td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main); // Todo: more efficient allocation?
-    if (td == NULL) {
-      // if this fails, try once more. (issue #257)
-      td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main);
-      if (td == NULL) {
-        // really out of memory
-        _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
-        return false;
-      }
-    }
+    mi_thread_data_t* td = mi_thread_data_alloc();
+    if (td == NULL) return false;
+
     // OS allocated so already zero initialized
     mi_tld_t*  tld = &td->tld;
     mi_heap_t* heap = &td->heap;
@@ -269,16 +324,17 @@ static bool _mi_heap_done(mi_heap_t* heap) {
     // as abondened: one may allocate it in one thread, but deallocate in another in which case
     // the count can be too large or negative. todo: perhaps not count huge segments? see issue #363
     // mi_assert_internal(heap->tld->segments.count == 0 || heap->thread_id != _mi_thread_id());
-    _mi_os_free(heap, sizeof(mi_thread_data_t), &_mi_stats_main);
+    mi_thread_data_free((mi_thread_data_t*)heap);
   }
-#if 0  
-  // never free the main thread even in debug mode; if a dll is linked statically with mimalloc,
-  // there may still be delete/free calls after the mi_fls_done is called. Issue #207
   else {
+    mi_thread_data_collect(); // free cached thread metadata  
+    #if 0  
+    // never free the main thread even in debug mode; if a dll is linked statically with mimalloc,
+    // there may still be delete/free calls after the mi_fls_done is called. Issue #207
     _mi_heap_destroy_pages(heap);
     mi_assert_internal(heap->tld->heap_backing == &_mi_heap_main);
+    #endif
   }
-#endif
   return false;
 }
 
