@@ -25,8 +25,8 @@ const mi_page_t _mi_page_empty = {
   0,       // used
   0,       // xblock_size
   NULL,    // local_free
-  ATOMIC_VAR_INIT(0), // xthread_free
-  ATOMIC_VAR_INIT(0), // xheap
+  MI_ATOMIC_VAR_INIT(0), // xthread_free
+  MI_ATOMIC_VAR_INIT(0), // xheap
   NULL, NULL
   #if MI_INTPTR_SIZE==8
   , { 0 }  // padding
@@ -106,7 +106,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
-  ATOMIC_VAR_INIT(NULL),
+  MI_ATOMIC_VAR_INIT(NULL),
   0,                // tid
   0,                // cookie
   { 0, 0 },         // keys
@@ -146,7 +146,7 @@ mi_heap_t _mi_heap_main = {
   &tld_main,
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
-  ATOMIC_VAR_INIT(NULL),
+  MI_ATOMIC_VAR_INIT(NULL),
   0,                // thread id
   0,                // initial cookie
   { 0, 0 },         // the key of the main heap can be fixed (unlike page keys that need to be secure!)
@@ -408,7 +408,7 @@ bool _mi_is_main_thread(void) {
   return (_mi_heap_main.thread_id==0 || _mi_heap_main.thread_id == _mi_thread_id());
 }
 
-static _Atomic(size_t) thread_count = ATOMIC_VAR_INIT(1);
+static _Atomic(size_t) thread_count = MI_ATOMIC_VAR_INIT(1);
 
 size_t  _mi_current_thread_count(void) {
   return mi_atomic_load_relaxed(&thread_count);
