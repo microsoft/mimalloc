@@ -108,7 +108,7 @@ bool _mi_os_has_overcommit(void) {
 }
 
 // OS (small) page size
-size_t _mi_os_page_size() {
+size_t _mi_os_page_size(void) {
   return os_page_size;
 }
 
@@ -160,7 +160,7 @@ static PGetCurrentProcessorNumberEx pGetCurrentProcessorNumberEx = NULL;
 static PGetNumaProcessorNodeEx      pGetNumaProcessorNodeEx = NULL;
 static PGetNumaNodeProcessorMaskEx  pGetNumaNodeProcessorMaskEx = NULL;
 
-static bool mi_win_enable_large_os_pages()
+static bool mi_win_enable_large_os_pages(void)
 {
   if (large_os_page_size > 0) return true;
 
@@ -231,7 +231,7 @@ void _mi_os_init(void)
   }
 }
 #elif defined(__wasi__)
-void _mi_os_init() {
+void _mi_os_init(void) {
   os_overcommit = false;
   os_page_size = 64*MI_KiB; // WebAssembly has a fixed page size: 64KiB
   os_alloc_granularity = 16;
@@ -262,7 +262,7 @@ static void os_detect_overcommit(void) {
 #endif
 }
 
-void _mi_os_init() {
+void _mi_os_init(void) {
   // get the page size
   long result = sysconf(_SC_PAGESIZE);
   if (result > 0) {
@@ -983,7 +983,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   if (p != start) return false;
 #else
 #if defined(MADV_FREE)
-  static _Atomic(size_t) advice = ATOMIC_VAR_INIT(MADV_FREE);
+  static _Atomic(size_t) advice = MI_ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
   int err;
   while ((err = mi_madvise(start, csize, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
@@ -1295,7 +1295,7 @@ void _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats) {
 Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
 #ifdef _WIN32  
-static size_t mi_os_numa_nodex() {
+static size_t mi_os_numa_nodex(void) {
   USHORT numa_node = 0;
   if (pGetCurrentProcessorNumberEx != NULL && pGetNumaProcessorNodeEx != NULL) {
     // Extended API is supported
