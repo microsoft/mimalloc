@@ -546,6 +546,7 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 #if (MI_DEBUG>0 || MI_SECURE>=4)
   if (mi_unlikely(_mi_ptr_cookie(segment) != segment->cookie)) {
     _mi_error_message(EINVAL, "%s: pointer does not point to a valid heap space: %p\n", msg, p);
+    return NULL;
   }
 #endif
   return segment;
