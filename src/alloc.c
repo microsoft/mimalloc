@@ -45,7 +45,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 
 #if (MI_STAT>0)
   const size_t bsize = mi_page_usable_block_size(page);
-  if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+  if (bsize <= MI_MEDIUM_OBJ_SIZE_MAX) {
     mi_heap_stat_increase(heap, normal, bsize);
     mi_heap_stat_counter_increase(heap, normal_count, 1);
 #if (MI_STAT>1)
@@ -372,20 +372,26 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 // only maintain stats for smaller objects if requested
 #if (MI_STAT>0)
 static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
-#if (MI_STAT < 2)  
+  #if (MI_STAT < 2)  
   MI_UNUSED(block);
-#endif
+  #endif
   mi_heap_t* const heap = mi_heap_get_default();
-  const size_t bsize = mi_page_usable_block_size(page);  
-#if (MI_STAT>1)
+  const size_t bsize = mi_page_usable_block_size(page);
+  #if (MI_STAT>1)
   const size_t usize = mi_page_usable_size_of(page, block);
   mi_heap_stat_decrease(heap, malloc, usize);
-#endif  
-  if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+  #endif  
+  if (bsize <= MI_MEDIUM_OBJ_SIZE_MAX) {
     mi_heap_stat_decrease(heap, normal, bsize);
-#if (MI_STAT > 1)
+    #if (MI_STAT > 1)
     mi_heap_stat_decrease(heap, normal_bins[_mi_bin(bsize)], 1);
-#endif
+    #endif
+  }
+  else if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+    mi_heap_stat_decrease(heap, large, bsize);
+  }
+  else {
+    mi_heap_stat_decrease(heap, huge, bsize);
   }
 }
 #else
@@ -547,6 +553,7 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 #if (MI_DEBUG>0 || MI_SECURE>=4)
   if (mi_unlikely(_mi_ptr_cookie(segment) != segment->cookie)) {
     _mi_error_message(EINVAL, "%s: pointer does not point to a valid heap space: %p\n", msg, p);
+    return NULL;
   }
 #endif
   return segment;

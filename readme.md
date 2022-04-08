@@ -12,8 +12,8 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.0.3` (beta, 2021-11-14).  
-Latest stable  tag: `v1.7.3` (2021-11-14).
+Latest release tag: `v2.0.5` (alpha, 2022-02-14).  
+Latest stable  tag: `v1.7.5` (2022-02-14).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -76,6 +76,12 @@ Enjoy!
 Note: the `v2.x` beta has a new algorithm for managing internal mimalloc pages that tends to use reduce memory usage
   and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
+
+* 2022-02-14, `v1.7.5`, `v2.0.5` (alpha): fix malloc override on
+  Windows 11, fix compilation with musl, potentially reduced
+  committed memory, add `bin/minject` for Windows, 
+  improved wasm support, faster aligned allocation,
+  various small fixes.
 
 * 2021-11-14, `v1.7.3`, `v2.0.3` (beta): improved WASM support, improved macOS support and performance (including
   M1), improved performance for v2 for large objects, Python integration improvements, more standard

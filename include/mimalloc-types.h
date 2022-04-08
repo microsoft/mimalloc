@@ -173,7 +173,6 @@ typedef int32_t  mi_ssize_t;
 #define MI_MEDIUM_OBJ_WSIZE_MAX           (MI_MEDIUM_OBJ_SIZE_MAX/MI_INTPTR_SIZE)   
 #define MI_LARGE_OBJ_SIZE_MAX             (MI_SEGMENT_SIZE/2)      // 32MiB on 64-bit
 #define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)
-#define MI_HUGE_OBJ_SIZE_MAX              (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)        // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)
@@ -189,7 +188,7 @@ typedef int32_t  mi_ssize_t;
 #define MI_MAX_SLICE_OFFSET               ((MI_ALIGNMENT_MAX / MI_SEGMENT_SLICE_SIZE) - 1)
 
 // Used as a special value to encode block sizes in 32 bits.
-#define MI_HUGE_BLOCK_SIZE                ((uint32_t)MI_HUGE_OBJ_SIZE_MAX)
+#define MI_HUGE_BLOCK_SIZE                ((uint32_t)(2*MI_GiB))
 
 // blocks up to this size are always allocated aligned
 #define MI_MAX_ALIGN_GUARANTEE            (8*MI_MAX_ALIGN_SIZE)  
