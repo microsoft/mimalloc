@@ -336,7 +336,7 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
   return !err;  
 }
 
-#if !(defined(__wasi__) || defined(MI_USE_SBRK) || defined(MAP_ALIGNED))
+#if !(defined(__wasi__) || defined(MI_USE_SBRK) || defined(MAP_ALIGNED) || MI_INTPTR_SIZE < 8)
 static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 #endif
 
@@ -688,7 +688,7 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   if (hint%try_alignment != 0) return NULL;
   return (void*)hint;
 }
-#elif defined(__wasi__) || defined(MI_USE_SBRK) || defined(MAP_ALIGNED)
+#elif defined(__wasi__) || defined(MI_USE_SBRK) || defined(MAP_ALIGNED) || (MI_INTPTR_SIZE < 8)
 // no need for mi_os_get_aligned_hint
 #else
 static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
