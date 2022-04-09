@@ -521,9 +521,6 @@ typedef struct mi_segments_tld_s {
   size_t              peak_count;   // peak number of segments
   size_t              current_size; // current size of all segments
   size_t              peak_size;    // peak size of all segments
-  size_t              cache_count;  // number of segments in the cache
-  size_t              cache_size;   // total size of all segments in the cache
-  mi_segment_t*       cache;        // (small) cache of segments
   mi_stats_t*         stats;        // points to tld stats
   mi_os_tld_t*        os;           // points to os stats
 } mi_segments_tld_t;

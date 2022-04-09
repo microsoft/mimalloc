@@ -110,17 +110,6 @@ static void mi_segment_insert_in_free_queue(mi_segment_t* segment, mi_segments_t
  Invariant checking
 ----------------------------------------------------------- */
 
-#if (MI_DEBUG>=2)
-static bool mi_segment_is_in_free_queue(const mi_segment_t* segment, mi_segments_tld_t* tld) {
-  mi_segment_queue_t* queue = mi_segment_free_queue(segment, tld);
-  bool in_queue = (queue!=NULL && (segment->next != NULL || segment->prev != NULL || queue->first == segment));
-  if (in_queue) {
-    mi_assert_expensive(mi_segment_queue_contains(queue, segment));
-  }
-  return in_queue;
-}
-#endif
-
 static size_t mi_segment_page_size(const mi_segment_t* segment) {
   if (segment->capacity > 1) {
     mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM);
@@ -483,64 +472,8 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   _mi_mem_free(segment, segment_size, segment->memid, fully_committed, any_reset, tld->os);
 }
 
-
-// The thread local segment cache is limited to be at most 1/8 of the peak size of segments in use,
-#define MI_SEGMENT_CACHE_FRACTION (8)
-
-// note: returned segment may be partially reset
-static mi_segment_t* mi_segment_cache_pop(size_t segment_size, mi_segments_tld_t* tld) {
-  if (segment_size != 0 && segment_size != MI_SEGMENT_SIZE) return NULL;
-  mi_segment_t* segment = tld->cache;
-  if (segment == NULL) return NULL;
-  tld->cache_count--;
-  tld->cache = segment->next;
-  segment->next = NULL;
-  mi_assert_internal(segment->segment_size == MI_SEGMENT_SIZE);
-  _mi_stat_decrease(&tld->stats->segments_cache, 1);
-  return segment;
-}
-
-static bool mi_segment_cache_full(mi_segments_tld_t* tld)
-{
-  // if (tld->count == 1 && tld->cache_count==0) return false; // always cache at least the final segment of a thread
-  size_t max_cache = mi_option_get(mi_option_segment_cache);
-  if (tld->cache_count < max_cache
-       && tld->cache_count < (1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION)) // at least allow a 1 element cache
-     ) {
-    return false;
-  }
-  // take the opportunity to reduce the segment cache if it is too large (now)
-  // TODO: this never happens as we check against peak usage, should we use current usage instead?
-  while (tld->cache_count > max_cache) { //(1 + (tld->peak_count / MI_SEGMENT_CACHE_FRACTION))) {
-    mi_segment_t* segment = mi_segment_cache_pop(0,tld);
-    mi_assert_internal(segment != NULL);
-    if (segment != NULL) mi_segment_os_free(segment, segment->segment_size, tld);
-  }
-  return true;
-}
-
-static bool mi_segment_cache_push(mi_segment_t* segment, mi_segments_tld_t* tld) {
-  mi_assert_internal(!mi_segment_is_in_free_queue(segment, tld));
-  mi_assert_internal(segment->next == NULL);
-  if (segment->segment_size != MI_SEGMENT_SIZE || mi_segment_cache_full(tld)) {
-    return false;
-  }
-  mi_assert_internal(segment->segment_size == MI_SEGMENT_SIZE);
-  segment->next = tld->cache;
-  tld->cache = segment;
-  tld->cache_count++;
-  _mi_stat_increase(&tld->stats->segments_cache,1);
-  return true;
-}
-
 // called by threads that are terminating to free cached segments
-void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
-  mi_segment_t* segment;
-  while ((segment = mi_segment_cache_pop(0,tld)) != NULL) {
-    mi_segment_os_free(segment, segment->segment_size, tld);
-  }
-  mi_assert_internal(tld->cache_count == 0);
-  mi_assert_internal(tld->cache == NULL);
+void _mi_segment_thread_collect(mi_segments_tld_t* tld) {  
 #if MI_DEBUG>=2
   if (!_mi_is_main_thread()) {
     mi_assert_internal(tld->pages_reset.first == NULL);
@@ -712,13 +645,8 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   mi_assert(segment->prev == NULL);
   _mi_stat_decrease(&tld->stats->page_committed, segment->segment_info_size);
 
-  if (!force && mi_segment_cache_push(segment, tld)) {
-    // it is put in our cache
-  }
-  else {
-    // otherwise return it to the OS
-    mi_segment_os_free(segment, segment->segment_size, tld);
-  }
+  // return it to the OS
+  mi_segment_os_free(segment, segment->segment_size, tld);
 }
 
 /* -----------------------------------------------------------
@@ -1217,15 +1145,10 @@ static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t block_s
 {
   mi_assert_internal(page_kind <= MI_PAGE_LARGE);
   mi_assert_internal(block_size < MI_HUGE_BLOCK_SIZE);
-  // 1. try to get a segment from our cache
-  mi_segment_t* segment = mi_segment_cache_pop(MI_SEGMENT_SIZE, tld);
-  if (segment != NULL) {
-    mi_segment_init(segment, 0, page_kind, page_shift, tld, os_tld);
-    return segment;
-  }
-  // 2. try to reclaim an abandoned segment
+  
+  // 1. try to reclaim an abandoned segment
   bool reclaimed;
-  segment = mi_segment_try_reclaim(heap, block_size, page_kind, &reclaimed, tld);
+  mi_segment_t* segment = mi_segment_try_reclaim(heap, block_size, page_kind, &reclaimed, tld);
   if (reclaimed) {
     // reclaimed the right page right into the heap
     mi_assert_internal(segment != NULL && segment->page_kind == page_kind && page_kind <= MI_PAGE_LARGE);
@@ -1235,7 +1158,7 @@ static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t block_s
     // reclaimed a segment with empty pages (of `page_kind`) in it
     return segment;
   }
-  // 3. otherwise allocate a fresh segment
+  // 2. otherwise allocate a fresh segment
   return mi_segment_alloc(0, page_kind, page_shift, tld, os_tld);
 }
 

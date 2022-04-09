@@ -78,7 +78,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },  // per 1GiB huge pages
   { -1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) }, // reserve huge pages at node N
   { 0, UNINIT, MI_OPTION(reserve_os_memory)     },
-  { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
+  { 0, UNINIT, MI_OPTION(deprecated_segment_cache) },  // cache N segments per thread
   { 1, UNINIT, MI_OPTION(page_reset) },          // reset page memory on free
   { 0, UNINIT, MI_OPTION(abandoned_page_reset) },// reset free page memory when a thread terminates
   { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
