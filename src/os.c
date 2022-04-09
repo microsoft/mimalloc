@@ -141,20 +141,41 @@ size_t _mi_os_good_alloc_size(size_t size) {
 // We use VirtualAlloc2 for aligned allocation, but it is only supported on Windows 10 and Windows Server 2016.
 // So, we need to look it up dynamically to run on older systems. (use __stdcall for 32-bit compatibility)
 // NtAllocateVirtualAllocEx is used for huge OS page allocation (1GiB)
-//
-// We hide MEM_EXTENDED_PARAMETER to compile with older SDK's.
+// We define a minimal MEM_EXTENDED_PARAMETER ourselves in order to be able to compile with older SDK's.
+typedef enum MI_MEM_EXTENDED_PARAMETER_TYPE_E {
+  MiMemExtendedParameterInvalidType = 0,
+  MiMemExtendedParameterAddressRequirements,
+  MiMemExtendedParameterNumaNode,
+  MiMemExtendedParameterPartitionHandle,
+  MiMemExtendedParameterUserPhysicalHandle,
+  MiMemExtendedParameterAttributeFlags,
+  MiMemExtendedParameterMax
+} MI_MEM_EXTENDED_PARAMETER_TYPE; 
+
+typedef struct DECLSPEC_ALIGN(8) MI_MEM_EXTENDED_PARAMETER_S {
+  struct { DWORD64 Type : 8; DWORD64 Reserved : 56; } Type;
+  union  { DWORD64 ULong64; PVOID Pointer; SIZE_T Size; HANDLE Handle; DWORD ULong; } Arg;
+} MI_MEM_EXTENDED_PARAMETER;
+
+typedef struct MI_MEM_ADDRESS_REQUIREMENTS_S {
+  PVOID  LowestStartingAddress;
+  PVOID  HighestEndingAddress;
+  SIZE_T Alignment;
+} MI_MEM_ADDRESS_REQUIREMENTS;
+
+#define MI_MEM_EXTENDED_PARAMETER_NONPAGED_HUGE   0x00000010
+
 #include <winternl.h>
-typedef PVOID    (__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, /* MEM_EXTENDED_PARAMETER* */ void*, ULONG);
-typedef NTSTATUS (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*, ULONG, ULONG, /* MEM_EXTENDED_PARAMETER* */ PVOID, ULONG);
+typedef PVOID    (__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MI_MEM_EXTENDED_PARAMETER*, ULONG);
+typedef NTSTATUS (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*, ULONG, ULONG, MI_MEM_EXTENDED_PARAMETER*, ULONG);
 static PVirtualAlloc2 pVirtualAlloc2 = NULL;
 static PNtAllocateVirtualMemoryEx pNtAllocateVirtualMemoryEx = NULL;
 
 // Similarly, GetNumaProcesorNodeEx is only supported since Windows 7
-#if (_WIN32_WINNT < 0x601)  // before Win7
-typedef struct _PROCESSOR_NUMBER { WORD Group; BYTE Number; BYTE Reserved; } PROCESSOR_NUMBER, *PPROCESSOR_NUMBER;
-#endif
-typedef VOID (__stdcall *PGetCurrentProcessorNumberEx)(PPROCESSOR_NUMBER ProcNumber);
-typedef BOOL (__stdcall *PGetNumaProcessorNodeEx)(PPROCESSOR_NUMBER Processor, PUSHORT NodeNumber);
+typedef struct MI_PROCESSOR_NUMBER_S { WORD Group; BYTE Number; BYTE Reserved; } MI_PROCESSOR_NUMBER;
+
+typedef VOID (__stdcall *PGetCurrentProcessorNumberEx)(MI_PROCESSOR_NUMBER* ProcNumber);
+typedef BOOL (__stdcall *PGetNumaProcessorNodeEx)(MI_PROCESSOR_NUMBER* Processor, PUSHORT NodeNumber);
 typedef BOOL (__stdcall* PGetNumaNodeProcessorMaskEx)(USHORT Node, PGROUP_AFFINITY ProcessorMask);
 static PGetCurrentProcessorNumberEx pGetCurrentProcessorNumberEx = NULL;
 static PGetNumaProcessorNodeEx      pGetNumaProcessorNodeEx = NULL;
@@ -348,20 +369,18 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     }
   } 
 #endif
-#if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
   // on modern Windows try use VirtualAlloc2 for aligned allocation
   if (try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
-    MEM_ADDRESS_REQUIREMENTS reqs = { 0, 0, 0 };
+    MI_MEM_ADDRESS_REQUIREMENTS reqs = { 0, 0, 0 };
     reqs.Alignment = try_alignment;
-    MEM_EXTENDED_PARAMETER param = { {0, 0}, {0} };
-    param.Type = MemExtendedParameterAddressRequirements;
-    param.Pointer = &reqs;
+    MI_MEM_EXTENDED_PARAMETER param = { {0, 0}, {0} };
+    param.Type.Type = MiMemExtendedParameterAddressRequirements;
+    param.Arg.Pointer = &reqs;
     void* p = (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
     if (p != NULL) return p;
     _mi_warning_message("unable to allocate aligned OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %zu, flags: 0x%x)\n", size, GetLastError(), addr, try_alignment, flags);
     // fall through on error
   }
-#endif
   // last resort
   return VirtualAlloc(addr, size, flags, PAGE_READWRITE);
 }
@@ -1109,21 +1128,17 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
 
   mi_win_enable_large_os_pages();
 
-  #if defined(MEM_EXTENDED_PARAMETER_TYPE_BITS)
-  MEM_EXTENDED_PARAMETER params[3] = { {{0,0},{0}},{{0,0},{0}},{{0,0},{0}} };
+  MI_MEM_EXTENDED_PARAMETER params[3] = { {{0,0},{0}},{{0,0},{0}},{{0,0},{0}} };
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
   static bool mi_huge_pages_available = true;
   if (pNtAllocateVirtualMemoryEx != NULL && mi_huge_pages_available) {
-    #ifndef MEM_EXTENDED_PARAMETER_NONPAGED_HUGE
-    #define MEM_EXTENDED_PARAMETER_NONPAGED_HUGE  (0x10)
-    #endif
-    params[0].Type = 5; // == MemExtendedParameterAttributeFlags;
-    params[0].ULong64 = MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
+    params[0].Type.Type = MiMemExtendedParameterAttributeFlags;
+    params[0].Arg.ULong64 = MI_MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
     ULONG param_count = 1;
     if (numa_node >= 0) {
       param_count++;
-      params[1].Type = MemExtendedParameterNumaNode;
-      params[1].ULong = (unsigned)numa_node;
+      params[1].Type.Type = MiMemExtendedParameterNumaNode;
+      params[1].Arg.ULong = (unsigned)numa_node;
     }
     SIZE_T psize = size;
     void* base = addr;
@@ -1139,13 +1154,11 @@ static void* mi_os_alloc_huge_os_pagesx(void* addr, size_t size, int numa_node)
   }
   // on modern Windows try use VirtualAlloc2 for numa aware large OS page allocation
   if (pVirtualAlloc2 != NULL && numa_node >= 0) {
-    params[0].Type = MemExtendedParameterNumaNode;
-    params[0].ULong = (unsigned)numa_node;
+    params[0].Type.Type = MiMemExtendedParameterNumaNode;
+    params[0].Arg.ULong = (unsigned)numa_node;
     return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, params, 1);
   }
-  #else
-    MI_UNUSED(numa_node);
-  #endif
+  
   // otherwise use regular virtual alloc on older windows
   return VirtualAlloc(addr, size, flags, PAGE_READWRITE);
 }
@@ -1299,7 +1312,7 @@ static size_t mi_os_numa_nodex(void) {
   USHORT numa_node = 0;
   if (pGetCurrentProcessorNumberEx != NULL && pGetNumaProcessorNodeEx != NULL) {
     // Extended API is supported
-    PROCESSOR_NUMBER pnum;
+    MI_PROCESSOR_NUMBER pnum;
     (*pGetCurrentProcessorNumberEx)(&pnum);
     USHORT nnode = 0;
     BOOL ok = (*pGetNumaProcessorNodeEx)(&pnum, &nnode);
