@@ -191,7 +191,10 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
     mi_assert_internal((segment->segment_info_size - os_psize) >= (sizeof(mi_segment_t) + ((segment->capacity - 1) * sizeof(mi_page_t))));
     mi_assert_internal(((uintptr_t)segment + segment->segment_info_size) % os_psize == 0);
     mi_segment_protect_range((uint8_t*)segment + segment->segment_info_size - os_psize, os_psize, protect);
-    if (MI_SECURE <= 1 || segment->capacity == 1) {
+    #if (MI_SECURE >= 2)
+    if (segment->capacity == 1) 
+    #endif 
+    {
       // and protect the last (or only) page too
       mi_assert_internal(MI_SECURE <= 1 || segment->page_kind >= MI_PAGE_LARGE);
       uint8_t* start = (uint8_t*)segment + segment->segment_size - os_psize;
@@ -207,6 +210,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
         mi_segment_protect_range(start, os_psize, protect);
       }
     }
+    #if (MI_SECURE >= 2)
     else {
       // or protect every page
       const size_t page_size = mi_segment_page_size(segment);
@@ -216,6 +220,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
         }
       }
     }
+    #endif  
   }
 }
 

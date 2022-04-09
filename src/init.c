@@ -458,7 +458,7 @@ bool _mi_preloading(void) {
   return os_preloading;
 }
 
-bool mi_is_redirected(void) mi_attr_noexcept {
+mi_decl_nodiscard bool mi_is_redirected(void) mi_attr_noexcept {
   return mi_redirected;
 }
 
