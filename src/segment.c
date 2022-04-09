@@ -110,6 +110,7 @@ static void mi_segment_insert_in_free_queue(mi_segment_t* segment, mi_segments_t
  Invariant checking
 ----------------------------------------------------------- */
 
+#if (MI_DEBUG >= 2) || (MI_SECURE >= 2)
 static size_t mi_segment_page_size(const mi_segment_t* segment) {
   if (segment->capacity > 1) {
     mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM);
@@ -120,7 +121,7 @@ static size_t mi_segment_page_size(const mi_segment_t* segment) {
     return segment->segment_size;
   }
 }
-
+#endif
 
 #if (MI_DEBUG>=2)
 static bool mi_pages_reset_contains(const mi_page_t* page, mi_segments_tld_t* tld) {
@@ -479,6 +480,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
 
 // called by threads that are terminating to free cached segments
 void _mi_segment_thread_collect(mi_segments_tld_t* tld) {  
+  MI_UNUSED_RELEASE(tld);
 #if MI_DEBUG>=2
   if (!_mi_is_main_thread()) {
     mi_assert_internal(tld->pages_reset.first == NULL);
