@@ -194,7 +194,12 @@ static void alloc_huge(void) {
 }
 
 static bool test_visit(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
-  printf("I'm visiting a block of size %zu, allocated size %zu\n", block_size, mi_usable_size(block));
+  if (block == NULL) {
+    printf("visiting an area with blocks of size %zu (including padding)\n", area->full_block_size);
+  }
+  else {
+    printf("  block of size %zu (allocated size is %zu)\n", block_size, mi_usable_size(block));
+  }
   return true;
 }
 
