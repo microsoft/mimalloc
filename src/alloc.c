@@ -727,7 +727,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
       const size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
       memset((uint8_t*)newp + start, 0, newsize - start);
     }
-    if (p != NULL) {
+    if (mi_likely(p != NULL)) {
       const size_t copysize = (newsize > size ? size : newsize);
       if (mi_likely(((uintptr_t)p % MI_INTPTR_SIZE) == 0)) {
         _mi_memcpy_aligned(newp, p, copysize);
@@ -735,7 +735,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
       else {
         _mi_memcpy(newp, p, copysize);
       }
-      mi_free(p); // only free the original pointer if successful    
+      mi_free(p); // only free the original pointer if successful
     }
   }
   return newp;

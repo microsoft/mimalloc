@@ -27,15 +27,15 @@ int main() {
   mi_version();
   mi_stats_reset();
   // detect double frees and heap corruption
-  // double_free1();
+  double_free1();
   // double_free2();
-  double_free3();
-  corrupt_free1();
+  // double_free3();
+  // corrupt_free1();
   // corrupt_free2();
   // block_overflow1();
   // block_overflow2();
   // test_aslr();
-  // invalid_free();
+  invalid_free();
   // test_reserved();
   // negative_stat();
   // alloc_huge();
