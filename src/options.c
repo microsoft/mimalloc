@@ -78,7 +78,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },  // per 1GiB huge pages
   { -1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) }, // reserve huge pages at node N
   { 0, UNINIT, MI_OPTION(reserve_os_memory)     },
-  { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
+  { 0, UNINIT, MI_OPTION(deprecated_segment_cache) },  // cache N segments per thread
   { 1, UNINIT, MI_OPTION(page_reset) },          // reset page memory on free
   { 0, UNINIT, MI_OPTION(abandoned_page_reset) },// reset free page memory when a thread terminates
   { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
@@ -116,6 +116,7 @@ void _mi_options_init(void) {
 
 mi_decl_nodiscard long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
+  if (option < 0 || option >= _mi_option_last) return 0;
   mi_option_desc_t* desc = &options[option];
   mi_assert(desc->option == option);  // index should match the option
   if (mi_unlikely(desc->init == UNINIT)) {
@@ -126,6 +127,7 @@ mi_decl_nodiscard long mi_option_get(mi_option_t option) {
 
 void mi_option_set(mi_option_t option, long value) {
   mi_assert(option >= 0 && option < _mi_option_last);
+  if (option < 0 || option >= _mi_option_last) return;
   mi_option_desc_t* desc = &options[option];
   mi_assert(desc->option == option);  // index should match the option
   desc->value = value;
@@ -134,6 +136,7 @@ void mi_option_set(mi_option_t option, long value) {
 
 void mi_option_set_default(mi_option_t option, long value) {
   mi_assert(option >= 0 && option < _mi_option_last);
+  if (option < 0 || option >= _mi_option_last) return;
   mi_option_desc_t* desc = &options[option];
   if (desc->init != INITIALIZED) {
     desc->value = value;

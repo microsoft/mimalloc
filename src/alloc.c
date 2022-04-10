@@ -165,7 +165,7 @@ mi_decl_restrict void* mi_zalloc_small(size_t size) mi_attr_noexcept {
   return p;
 }
 
-void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) {
+void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
   void* p = mi_heap_malloc(heap,size);
   if (zero && p != NULL) {
     _mi_block_zero_init(_mi_ptr_page(p),p,size);  // todo: can we avoid getting the page again?
@@ -606,20 +606,25 @@ bool _mi_free_delayed_block(mi_block_t* block) {
 }
 
 // Bytes available in a block
-static size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noexcept {
-  const mi_segment_t* const segment = mi_checked_ptr_segment(p,msg);
-  if (segment==NULL) return 0;
-  const mi_page_t* const page = _mi_segment_page_of(segment, p);
-  const mi_block_t* block = (const mi_block_t*)p;
-  if (mi_unlikely(mi_page_has_aligned(page))) {
-    block = _mi_page_ptr_unalign(segment, page, p);
-    size_t size = mi_page_usable_size_of(page, block);
-    ptrdiff_t const adjust = (uint8_t*)p - (uint8_t*)block;
-    mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);
-    return (size - adjust);
+mi_decl_noinline static size_t mi_page_usable_aligned_size_of(const mi_segment_t* segment, const mi_page_t* page, const void* p) mi_attr_noexcept {
+  const mi_block_t* block = _mi_page_ptr_unalign(segment, page, p);
+  const size_t size = mi_page_usable_size_of(page, block);
+  const ptrdiff_t adjust = (uint8_t*)p - (uint8_t*)block;
+  mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);
+  return (size - adjust);
+}
+
+static inline size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noexcept {
+  const mi_segment_t* const segment = mi_checked_ptr_segment(p, msg);
+  if (segment==NULL) return 0;  // also returns 0 if `p == NULL`
+  const mi_page_t* const page = _mi_segment_page_of(segment, p);  
+  if (mi_likely(!mi_page_has_aligned(page))) {
+    const mi_block_t* block = (const mi_block_t*)p;
+    return mi_page_usable_size_of(page, block);
   }
   else {
-    return mi_page_usable_size_of(page, block);
+    // split out to separate routine for improved code generation
+    return mi_page_usable_aligned_size_of(segment, page, p);
   }
 }
 
@@ -688,40 +693,49 @@ mi_decl_restrict void* mi_mallocn(size_t count, size_t size) mi_attr_noexcept {
   return mi_heap_mallocn(mi_get_default_heap(),count,size);
 }
 
-// Expand in place or fail
+// Expand (or shrink) in place (or fail)
 void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
+  #if MI_PADDING
+  // we do not shrink/expand with padding enabled 
+  MI_UNUSED(p); MI_UNUSED(newsize);
+  return NULL;
+  #else
   if (p == NULL) return NULL;
-  size_t size = _mi_usable_size(p,"mi_expand");
+  const size_t size = _mi_usable_size(p,"mi_expand");
   if (newsize > size) return NULL;
   return p; // it fits
+  #endif
 }
 
-void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) {
-  if (p == NULL) return _mi_heap_malloc_zero(heap,newsize,zero);
-  size_t size = _mi_usable_size(p,"mi_realloc");
-  if (newsize <= size && newsize >= (size / 2)) {
+void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept {
+  const size_t size = _mi_usable_size(p,"mi_realloc"); // also works if p == NULL
+  if (mi_unlikely(newsize <= size && newsize >= (size / 2))) {
+    // todo: adjust potential padding to reflect the new size?
     return p;  // reallocation still fits and not more than 50% waste
   }
   void* newp = mi_heap_malloc(heap,newsize);
   if (mi_likely(newp != NULL)) {
     if (zero && newsize > size) {
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
-      size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
+      const size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
       memset((uint8_t*)newp + start, 0, newsize - start);
     }
-    if (mi_likely((uintptr_t)p % MI_INTPTR_SIZE == 0)) {
-      _mi_memcpy_aligned(newp, p, (newsize > size ? size : newsize));
+    if (mi_likely(p != NULL)) {
+      const size_t copysize = (newsize > size ? size : newsize);
+      if (mi_likely(((uintptr_t)p % MI_INTPTR_SIZE) == 0)) {
+        _mi_memcpy_aligned(newp, p, copysize);
+      }
+      else {
+        _mi_memcpy(newp, p, copysize);
+      }
+      mi_free(p); // only free the original pointer if successful
     }
-    else {
-      _mi_memcpy(newp, p, (newsize > size ? size : newsize));
-    }
-    mi_free(p); // only free if successful
   }
   return newp;
 }
 
 void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
-  return _mi_heap_realloc_zero(heap, p, newsize, false);
+  return _mi_heap_realloc_zero(heap, p, newsize, false);  
 }
 
 void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {

@@ -256,6 +256,7 @@ typedef struct mi_heap_area_s {
   size_t committed;   // current available bytes for this area
   size_t used;        // number of allocated blocks
   size_t block_size;  // size in bytes of each block
+  size_t full_block_size; // size in bytes of a full block including padding and metadata.
 } mi_heap_area_t;
 
 typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
@@ -312,7 +313,7 @@ typedef enum mi_option_e {
   mi_option_reserve_huge_os_pages,    // reserve N huge OS pages (1GiB) at startup
   mi_option_reserve_huge_os_pages_at, // reserve huge OS pages at a specific NUMA node
   mi_option_reserve_os_memory,        // reserve specified amount of OS memory at startup
-  mi_option_segment_cache,             
+  mi_option_deprecated_segment_cache,             
   mi_option_page_reset,               
   mi_option_abandoned_page_reset,     
   mi_option_segment_reset,
