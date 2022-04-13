@@ -304,6 +304,7 @@ typedef enum mi_option_e {
   // stable options
   mi_option_show_errors,              // print error messages
   mi_option_show_stats,               // print statistics on termination
+  mi_option_show_histogram,           // print histogram
   mi_option_verbose,                  // print verbose messages
   // the following options are experimental (see src/options.h)
   mi_option_eager_commit,           

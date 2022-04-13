@@ -131,6 +131,8 @@ void       _mi_heap_set_default_direct(mi_heap_t* heap);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);
+void       _mi_histogram_log(size_t size);
+void       _mi_histogram_print(mi_output_fun* out);
 
 mi_msecs_t  _mi_clock_now(void);
 mi_msecs_t  _mi_clock_end(mi_msecs_t start);
