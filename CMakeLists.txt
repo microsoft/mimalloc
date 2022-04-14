@@ -73,7 +73,7 @@ endif()
 # Process options
 # -----------------------------------------------------------------------------
 
-if(CMAKE_C_COMPILER_ID MATCHES "Intel")
+if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
 endif()
 
