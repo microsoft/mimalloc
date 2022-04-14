@@ -419,16 +419,21 @@ void _mi_stack_trace_print(const char* msg, void** strace, size_t len, const mi_
     info->MaxNameLen = 255;
     info->SizeOfStruct = sizeof(SYMBOL_INFO);
     HANDLE current_process = GetCurrentProcess();
-    if (!SymInitialize(current_process, NULL, TRUE)) return;
+    bool initialized = (SymInitialize(current_process, NULL, TRUE) == TRUE);
     for (size_t i = 0; i < len && strace[i] != NULL; i++) {
-      if (SymFromAddr(current_process, (DWORD64)(strace[i]), 0, info)) {
+      if (!initialized) {
+        _mi_fprintf(NULL, NULL, "  %2zu: %8p: <unknown address>\n", i, strace[i]);
+      }
+      else if (SymFromAddr(current_process, (DWORD64)(strace[i]), 0, info)) {
         _mi_fprintf(NULL, NULL, "  %2zu: %8p: %s\n", i, strace[i], info->Name);
       }
       else {
         _mi_fprintf(NULL, NULL, "  %2zu: %8p: <unknown address: error: 0x%04x>\n", i, strace[i], GetLastError());
       }
     }  
-    SymCleanup(current_process);
+    if (initialized) {
+      SymCleanup(current_process);
+    }
   }
 }
 #elif (MI_DEBUG_TRACE > 0) && (defined(__linux__) || defined(__FreeBSD__) || defined(__APPLE__))
