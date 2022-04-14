@@ -780,10 +780,8 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
   mi_page_queue_t* pq = (is_huge ? NULL : mi_page_queue(heap, block_size));
   mi_page_t* page = mi_page_fresh_alloc(heap, pq, block_size);
   if (page != NULL) {
-    const size_t bsize = mi_page_usable_block_size(page);  // note: includes padding
     mi_assert_internal(mi_page_immediate_available(page));
-    mi_assert_internal(bsize >= size);
-
+    
     if (pq == NULL) {
       // huge pages are directly abandoned
       mi_assert_internal(_mi_page_segment(page)->kind == MI_SEGMENT_HUGE);
@@ -794,6 +792,8 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
     else {
       mi_assert_internal(_mi_page_segment(page)->kind != MI_SEGMENT_HUGE);
     }
+    
+    const size_t bsize = mi_page_usable_block_size(page);  // note: not `mi_page_block_size` to account for padding
     if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
       mi_heap_stat_increase(heap, large, bsize);
       mi_heap_stat_counter_increase(heap, large_count, 1);
