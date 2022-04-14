@@ -20,6 +20,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_CACHE_LINE          64
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
+#pragma warning(disable:26812)  // unscoped enum warning
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
