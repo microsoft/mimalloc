@@ -375,7 +375,7 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
     // the start of the region.
     MEMORY_BASIC_INFORMATION info = { 0, 0 };
     VirtualQuery(addr, &info, sizeof(info));
-    if (info.AllocationBase < addr) {
+    if (info.AllocationBase < addr && ((uint8_t*)addr - (uint8_t*)info.AllocationBase) < MI_SEGMENT_SIZE) {
       errcode = 0;
       err = (VirtualFree(info.AllocationBase, 0, MEM_RELEASE) == 0);
       if (err) { errcode = GetLastError(); }
@@ -411,7 +411,7 @@ static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment
     if (hint != NULL) {
       void* p = VirtualAlloc(hint, size, flags, PAGE_READWRITE);
       if (p != NULL) return p;
-      _mi_warning_message("unable to allocate hinted aligned OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %zu, flags: 0x%x)\n", size, GetLastError(), hint, try_alignment, flags);
+      _mi_verbose_message("warning: unable to allocate hinted aligned OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %zu, flags: 0x%x)\n", size, GetLastError(), hint, try_alignment, flags);
       // fall through on error
     }
   } 
