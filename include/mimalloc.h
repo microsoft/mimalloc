@@ -321,6 +321,7 @@ typedef enum mi_option_e {
   mi_option_reset_delay,
   mi_option_use_numa_nodes,           // 0 = use available numa nodes, otherwise use at most N nodes.
   mi_option_limit_os_alloc,           // 1 = do not use OS memory for allocation (but only reserved arenas)
+  mi_option_max_segment_reclaim,      
   mi_option_os_tag,
   mi_option_max_errors,
   mi_option_max_warnings,
@@ -335,6 +336,7 @@ mi_decl_export void mi_option_set_enabled(mi_option_t option, bool enable);
 mi_decl_export void mi_option_set_enabled_default(mi_option_t option, bool enable);
 
 mi_decl_nodiscard mi_decl_export long mi_option_get(mi_option_t option);
+mi_decl_nodiscard mi_decl_export long mi_option_get_clamp(mi_option_t option, long min, long max);
 mi_decl_export void mi_option_set(mi_option_t option, long value);
 mi_decl_export void mi_option_set_default(mi_option_t option, long value);
 
