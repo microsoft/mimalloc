@@ -67,9 +67,9 @@ Enjoy!
 
 ### Branches
 
-* `master`: latest stable release.
-* `dev`: development branch for mimalloc v1.
-* `dev-slice`: development branch for mimalloc v2.
+* `master`: latest stable release (based on `dev-slice`).
+* `dev`: development branch for mimalloc v1. Use this branch for submitting PR's.
+* `dev-slice`: development branch for mimalloc v2. This branch is downstream of `dev`.
 
 ### Releases
 
