@@ -90,11 +90,10 @@ static mi_option_desc_t options[_mi_option_last] =
   { 100, UNINIT, MI_OPTION(reset_delay) },       // reset delay in milli-seconds
   { 0,   UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes.
   { 0,   UNINIT, MI_OPTION(limit_os_alloc) },    // 1 = do not use OS memory for allocation (but only reserved arenas)
-  { 8,   UNINIT, MI_OPTION(max_segment_reclaim)},// max. number of segment reclaims from the abandoned segments per try.
   { 100, UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
   { 16,  UNINIT, MI_OPTION(max_errors) },        // maximum errors that are output
-  { 16,  UNINIT, MI_OPTION(max_warnings) }       // maximum warnings that are output
-
+  { 16,  UNINIT, MI_OPTION(max_warnings) },      // maximum warnings that are output
+  { 8,   UNINIT, MI_OPTION(max_segment_reclaim)} // max. number of segment reclaims from the abandoned segments per try.
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
