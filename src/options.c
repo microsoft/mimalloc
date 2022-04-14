@@ -94,7 +94,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 8,    UNINIT, MI_OPTION(max_segment_reclaim)},// max. number of segment reclaims from the abandoned segments per try.  
   { 1,    UNINIT, MI_OPTION(allow_decommit) },    // decommit slices when no longer used (after decommit_delay milli-seconds)
   { 500,  UNINIT, MI_OPTION(segment_decommit_delay) }, // decommit delay in milli-seconds for freed segments
-  { 2,    UNINIT, MI_OPTION(decommit_extend_delay) },
+  { 2,    UNINIT, MI_OPTION(decommit_extend_delay) }
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
