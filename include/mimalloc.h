@@ -327,6 +327,7 @@ typedef enum mi_option_e {
   mi_option_os_tag,
   mi_option_max_errors,
   mi_option_max_warnings,
+  mi_option_max_segment_reclaim,
   mi_option_allow_decommit,
   mi_option_segment_decommit_delay,  
   mi_option_decommit_extend_delay,
@@ -341,6 +342,7 @@ mi_decl_export void mi_option_set_enabled(mi_option_t option, bool enable);
 mi_decl_export void mi_option_set_enabled_default(mi_option_t option, bool enable);
 
 mi_decl_nodiscard mi_decl_export long mi_option_get(mi_option_t option);
+mi_decl_nodiscard mi_decl_export long mi_option_get_clamp(mi_option_t option, long min, long max);
 mi_decl_export void mi_option_set(mi_option_t option, long value);
 mi_decl_export void mi_option_set_default(mi_option_t option, long value);
 
