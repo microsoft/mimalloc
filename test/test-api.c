@@ -198,6 +198,12 @@ int main(void) {
     mi_free(q);
   };
 
+  CHECK_BODY("reallocarray-null-sizezero") {
+    void* p = mi_reallocarray(NULL,0,16);  // issue #574
+    result = (p != NULL && errno == 0);
+    mi_free(p);
+  };
+
   // ---------------------------------------------------
   // Heaps
   // ---------------------------------------------------

@@ -632,8 +632,11 @@ void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
 }
 
 void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept {
-  const size_t size = _mi_usable_size(p,"mi_realloc"); // also works if p == NULL
-  if (mi_unlikely(newsize <= size && newsize >= (size / 2))) {
+  // if p == NULL then behave as malloc.
+  // else if size == 0 then reallocate to a zero-sized block (and don't return NULL, just as mi_malloc(0)).
+  // (this means that returning NULL always indicates an error, and `p` will not have been freed in that case.)
+  const size_t size = _mi_usable_size(p,"mi_realloc"); // also works if p == NULL (with size 0)
+  if (mi_unlikely(newsize <= size && newsize >= (size / 2) && newsize > 0)) {  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
     // todo: adjust potential padding to reflect the new size?
     return p;  // reallocation still fits and not more than 50% waste
   }
