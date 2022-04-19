@@ -189,7 +189,7 @@ mi_heap_t* mi_heap_get_backing(void) {
   return bheap;
 }
 
-mi_heap_t* mi_heap_new(void) {
+mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);  // todo: OS allocate in secure mode?
   if (heap==NULL) return NULL;

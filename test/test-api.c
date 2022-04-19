@@ -57,7 +57,9 @@ int main(void) {
   // ---------------------------------------------------
 
   CHECK_BODY("malloc-zero",{
-    void* p = mi_malloc(0); mi_free(p);
+    void* p = mi_malloc(0); 
+    result = (p != NULL);
+    mi_free(p);
   });
   CHECK_BODY("malloc-nomem1",{
     result = (mi_malloc((size_t)PTRDIFF_MAX + (size_t)1) == NULL);
@@ -174,6 +176,21 @@ int main(void) {
     result = ok;
   });
   
+  // ---------------------------------------------------
+  // Reallocation
+  // ---------------------------------------------------
+  CHECK_BODYX("realloc-null1") {
+    void* p = mi_realloc(NULL,4);
+    result = (p != NULL);
+    mi_free(p);
+  };
+
+  CHECK_BODYX("realloc-null2") {
+    void* p = mi_realloc(NULL,0);  // <https://en.cppreference.com/w/c/memory/realloc> "If ptr is NULL, the behavior is the same as calling malloc(new_size)."
+    result = (p != NULL);
+    mi_free(p);
+  };
+
   // ---------------------------------------------------
   // Heaps
   // ---------------------------------------------------
