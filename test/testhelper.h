@@ -7,7 +7,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef TESTHELPER_H_
 #define TESTHELPER_H_
 
+#include <stdbool.h>
 #include <stdio.h>
+#include <errno.h>
 
 // ---------------------------------------------------------------------------
 // Test macros: CHECK(name,predicate) and CHECK_BODY(name,body)
@@ -18,7 +20,7 @@ static int failed = 0;
 static bool check_result(bool result, const char* testname, const char* fname, long lineno) {
   if (!(result)) {
     failed++; 
-    fprintf(stderr,"\n  FAILED: %s: %s:%d:\n", testname, fname, lineno);
+    fprintf(stderr,"\n  FAILED: %s: %s:%ld\n", testname, fname, lineno);
     /* exit(1); */ 
   } 
   else {    
@@ -30,6 +32,7 @@ static bool check_result(bool result, const char* testname, const char* fname, l
 
 #define CHECK_BODY(name) \
   fprintf(stderr,"test: %s...  ", name ); \
+  errno = 0; \
   for(bool done = false, result = true; !done; done = check_result(result,name,__FILE__,__LINE__))
 
 #define CHECK(name,expr)      CHECK_BODY(name){ result = (expr); }
