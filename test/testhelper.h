@@ -28,32 +28,11 @@ static bool check_result(bool result, const char* testname, const char* fname, l
   return true;
 }
 
-#define CHECK_BODYX(name) \
+#define CHECK_BODY(name) \
   fprintf(stderr,"test: %s...  ", name ); \
   for(bool done = false, result = true; !done; done = check_result(result,name,__FILE__,__LINE__))
 
-
-#define CHECK_BODY(name,body) \
- do { \
-  fprintf(stderr,"test: %s...  ", name ); \
-  bool result = true;                                     \
-  do { body } while(false);                               \
-  if (!(result)) {                                        \
-    failed++; \
-    fprintf(stderr,                                       \
-            "\n  FAILED: %s:%d:\n  %s\n",                 \
-            __FILE__,                                     \
-            __LINE__,                                     \
-            #body);                                       \
-    /* exit(1); */ \
-  } \
-  else { \
-    ok++;                               \
-    fprintf(stderr,"ok.\n");                    \
-  }                                             \
- } while (false)
-
-#define CHECK(name,expr)      CHECK_BODYX(name){ result = (expr); }
+#define CHECK(name,expr)      CHECK_BODY(name){ result = (expr); }
 
 // Print summary of test. Return value can be directly use as a return value for main().
 static inline int print_test_summary(void)
