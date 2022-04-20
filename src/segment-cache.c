@@ -283,7 +283,7 @@ static mi_segment_t* _mi_segment_of(const void* p) {
   size_t index = mi_segment_map_index_of(segment, &bitidx);
   // fast path: for any pointer to valid small/medium/large object or first MI_SEGMENT_SIZE in huge
   const uintptr_t mask = mi_atomic_load_relaxed(&mi_segment_map[index]);
-  if (mi_likely((mask & ((uintptr_t)1 << bitidx)) != 0)) {
+  if mi_likely((mask & ((uintptr_t)1 << bitidx)) != 0) {
     return segment; // yes, allocated by us
   }
   if (index==MI_SEGMENT_MAP_WSIZE) return NULL;
@@ -324,7 +324,7 @@ static mi_segment_t* _mi_segment_of(const void* p) {
   mi_assert_internal((void*)segment < p);
   bool cookie_ok = (_mi_ptr_cookie(segment) == segment->cookie);
   mi_assert_internal(cookie_ok);
-  if (mi_unlikely(!cookie_ok)) return NULL;
+  if mi_unlikely(!cookie_ok) return NULL;
   if (((uint8_t*)segment + mi_segment_size(segment)) <= (uint8_t*)p) return NULL; // outside the range
   mi_assert_internal(p >= (void*)segment && (uint8_t*)p < (uint8_t*)segment + mi_segment_size(segment));
   return segment;

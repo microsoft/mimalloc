@@ -119,7 +119,7 @@
       <PreprocessorDefinitions>MI_DEBUG=3;%(PreprocessorDefinitions);</PreprocessorDefinitions>
       <CompileAs>CompileAsCpp</CompileAs>
       <SupportJustMyCode>false</SupportJustMyCode>
-      <LanguageStandard>Default</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <PostBuildEvent>
       <Command>
@@ -179,7 +179,7 @@
       <InlineFunctionExpansion>Default</InlineFunctionExpansion>
       <CompileAs>CompileAsCpp</CompileAs>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <LanguageStandard>Default</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
