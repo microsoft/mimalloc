@@ -107,7 +107,7 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc_small(size_t si
 }
 
 // The main allocation function
-mi_decl_nodiscard extern inline void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
+extern inline void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
     return mi_heap_malloc_small_zero(heap, size, zero);
   }
