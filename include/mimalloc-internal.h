@@ -143,7 +143,7 @@ void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_att
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
-void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
+void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size); 
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
@@ -279,7 +279,9 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
     return false;
   }
   else if (mi_unlikely(mi_mul_overflow(count, size, total))) {
+    #if !defined(NDEBUG)
     _mi_error_message(EOVERFLOW, "allocation request is too large (%zu * %zu bytes)\n", count, size);
+    #endif
     *total = SIZE_MAX;
     return true;
   }
