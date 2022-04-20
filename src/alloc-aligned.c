@@ -105,8 +105,8 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_malloc_aligned(mi_heap_t* heap,
   if mi_likely(_mi_is_power_of_two(size) && size >= alignment && size <= MI_SMALL_SIZE_MAX)
   #else
   // with padding, we can only guarantee this for fixed alignments
-  if (mi_likely((alignment == sizeof(void*) || (alignment == MI_MAX_ALIGN_SIZE && size > (MI_MAX_ALIGN_SIZE/2)))
-                && size <= MI_SMALL_SIZE_MAX))
+  if mi_likely((alignment == sizeof(void*) || (alignment == MI_MAX_ALIGN_SIZE && size > (MI_MAX_ALIGN_SIZE/2)))
+                && size <= MI_SMALL_SIZE_MAX)
   #endif
   {
     // fast path for common alignment and size
