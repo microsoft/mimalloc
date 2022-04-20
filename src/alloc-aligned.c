@@ -79,10 +79,9 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
       #if MI_STAT>1
       mi_heap_stat_increase(heap, malloc, size);
       #endif
-      void* p = _mi_page_malloc(heap, page, padsize); // TODO: inline _mi_page_malloc
+      void* p = _mi_page_malloc(heap, page, padsize, zero); // TODO: inline _mi_page_malloc
       mi_assert_internal(p != NULL);
       mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
-      if (zero) { _mi_block_zero_init(page, p, size); }
       return p;
     }
   }

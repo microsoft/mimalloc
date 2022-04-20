@@ -106,7 +106,7 @@ void       _mi_abandoned_await_readers(void);
 
 
 // "page.c"
-void*      _mi_malloc_generic(mi_heap_t* heap, size_t size)  mi_attr_noexcept mi_attr_malloc;
+void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero)  mi_attr_noexcept mi_attr_malloc;
 
 void       _mi_page_retire(mi_page_t* page) mi_attr_noexcept;                  // free the page if there are no other pages with many free blocks
 void       _mi_page_unfull(mi_page_t* page);
@@ -138,12 +138,11 @@ mi_msecs_t  _mi_clock_end(mi_msecs_t start);
 mi_msecs_t  _mi_clock_start(void);
 
 // "alloc.c"
-void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept;  // called from `_mi_malloc_generic`
+void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept;  // called from `_mi_malloc_generic`
 void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
-void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size); 
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
@@ -267,8 +266,8 @@ static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
   #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
   *total = count * size;
-  return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
-    && size > 0 && (SIZE_MAX / size) < count);
+  // note: gcc/clang optimize this to directly check the overflow flag
+  return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW) && size > 0 && (SIZE_MAX / size) < count);
 }
 #endif
 
@@ -279,7 +278,7 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
     return false;
   }
   else if (mi_unlikely(mi_mul_overflow(count, size, total))) {
-    #if !defined(NDEBUG)
+    #if MI_DEBUG > 0
     _mi_error_message(EOVERFLOW, "allocation request is too large (%zu * %zu bytes)\n", count, size);
     #endif
     *total = SIZE_MAX;
@@ -925,13 +924,24 @@ static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
     __movsb((unsigned char*)dst, (const unsigned char*)src, n);
   }
   else {
-    memcpy(dst, src, n); // todo: use noinline?
+    memcpy(dst, src, n);
+  }
+}
+static inline void _mi_memzero(void* dst, size_t n) {
+  if (_mi_cpu_has_fsrm) {
+    __stosb((unsigned char*)dst, 0, n);
+  }
+  else {
+    memset(dst, 0, n);
   }
 }
 #else
 #include <string.h>
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
   memcpy(dst, src, n);
+}
+static inline void _mi_memzero(void* dst, size_t n) {
+  memset(dst, 0, n);
 }
 #endif
 
@@ -950,11 +960,22 @@ static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   const void* asrc = __builtin_assume_aligned(src, MI_INTPTR_SIZE);
   _mi_memcpy(adst, asrc, n);
 }
+
+static inline void _mi_memzero_aligned(void* dst, size_t n) {
+  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
+  void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
+  _mi_memzero(adst, n);
+}
 #else
 // Default fallback on `_mi_memcpy`
 static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
   _mi_memcpy(dst, src, n);
+}
+
+static inline void _mi_memzero_aligned(void* dst, size_t n) {
+  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
+  _mi_memzero(dst, n);
 }
 #endif
 
