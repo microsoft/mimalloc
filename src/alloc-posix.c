@@ -83,7 +83,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_pvalloc(size_t size) mi_attr_noexcep
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept {
-  if (mi_unlikely((size&(alignment-1)) != 0)) { // C11 requires alignment>0 && integral multiple, see <https://en.cppreference.com/w/c/memory/aligned_alloc>
+  if mi_unlikely((size&(alignment-1)) != 0) { // C11 requires alignment>0 && integral multiple, see <https://en.cppreference.com/w/c/memory/aligned_alloc>
     #if MI_DEBUG > 0
     _mi_error_message(EOVERFLOW, "(mi_)aligned_alloc requires the size to be an integral multiple of the alignment (size %zu, alignment %zu)\n", size, alignment);
     #endif
@@ -109,7 +109,7 @@ mi_decl_nodiscard int mi_reallocarr( void* p, size_t count, size_t size ) mi_att
   }
   void** op = (void**)p;  
   void* newp = mi_reallocarray(*op, count, size);
-  if (mi_unlikely(newp == NULL)) return errno;
+  if mi_unlikely(newp == NULL) { return errno; }
   *op = newp;
   return 0;
 }

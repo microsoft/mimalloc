@@ -283,7 +283,7 @@ bool _mi_bitmap_try_find_from_claim_across(mi_bitmap_t bitmap, const size_t bitm
 static size_t mi_bitmap_mask_across(mi_bitmap_index_t bitmap_idx, size_t bitmap_fields, size_t count, size_t* pre_mask, size_t* mid_mask, size_t* post_mask) {
   MI_UNUSED_RELEASE(bitmap_fields);
   const size_t bitidx = mi_bitmap_index_bit_in_field(bitmap_idx);
-  if (mi_likely(bitidx + count <= MI_BITMAP_FIELD_BITS)) {
+  if mi_likely(bitidx + count <= MI_BITMAP_FIELD_BITS) {
     *pre_mask = mi_bitmap_mask_(count, bitidx);
     *mid_mask = 0;
     *post_mask = 0;

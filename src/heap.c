@@ -410,7 +410,7 @@ static mi_heap_t* mi_heap_of_block(const void* p) {
   mi_segment_t* segment = _mi_ptr_segment(p);
   bool valid = (_mi_ptr_cookie(segment) == segment->cookie);
   mi_assert_internal(valid);
-  if (mi_unlikely(!valid)) return NULL;
+  if mi_unlikely(!valid) return NULL;
   return mi_page_heap(_mi_segment_page_of(segment,p));
 }
 
