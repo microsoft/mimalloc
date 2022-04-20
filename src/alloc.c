@@ -37,9 +37,9 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   page->free = mi_block_next(page, block);
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
 
-  // zero the block?
+  // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
-    mi_assert_internal(page->xblock_size != 0); // do not call with zero'ing for huge blocks
+    mi_assert_internal(page->xblock_size != 0); // do not call with zero'ing for huge blocks (see _mi_malloc_generic)
     const size_t zsize = (page->is_zero ? sizeof(block->next) : page->xblock_size);
     _mi_memzero_aligned(block, zsize);
   }
