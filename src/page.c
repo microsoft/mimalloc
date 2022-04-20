@@ -830,7 +830,7 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size) mi_attr_noexcept {
 
 // Generic allocation routine if the fast path (`alloc.c:mi_page_malloc`) does not succeed.
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
-void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
+void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept
 {
   mi_assert_internal(heap != NULL);
 
@@ -864,6 +864,15 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   mi_assert_internal(mi_page_immediate_available(page));
   mi_assert_internal(mi_page_block_size(page) >= size);
 
-  // and try again, this time succeeding! (i.e. this should never recurse)
-  return _mi_page_malloc(heap, page, size);
+  // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc)
+  if (mi_unlikely(zero && page->xblock_size == 0)) {
+    // note: we cannot call _mi_page_malloc with zeroing for huge blocks; we zero it afterwards in that case.
+    void* p = _mi_page_malloc(heap, page, size, false);
+    mi_assert_internal(p != NULL);
+    _mi_memzero_aligned(p, mi_page_usable_block_size(page));
+    return p;
+  }
+  else {
+    return _mi_page_malloc(heap, page, size, zero);
+  }
 }
