@@ -200,7 +200,7 @@ mi_heap_t* mi_heap_get_backing(void) {
   return bheap;
 }
 
-mi_heap_t* mi_heap_new(void) {
+mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);  // todo: OS allocate in secure mode?
   if (heap==NULL) return NULL;
@@ -421,7 +421,7 @@ static mi_heap_t* mi_heap_of_block(const void* p) {
   mi_segment_t* segment = _mi_ptr_segment(p);
   bool valid = (_mi_ptr_cookie(segment) == segment->cookie);
   mi_assert_internal(valid);
-  if (mi_unlikely(!valid)) return NULL;
+  if mi_unlikely(!valid) return NULL;
   return mi_page_heap(_mi_segment_page_of(segment,p));
 }
 
@@ -543,7 +543,7 @@ static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
   xarea.area.reserved = page->reserved * bsize;
   xarea.area.committed = page->capacity * bsize;
   xarea.area.blocks = _mi_page_start(_mi_page_segment(page), page, NULL);
-  xarea.area.used = page->used * bsize;
+  xarea.area.used = page->used;   // number of blocks in use (#553)
   xarea.area.block_size = ubsize;
   xarea.area.full_block_size = bsize;
   return fun(heap, &xarea, arg);

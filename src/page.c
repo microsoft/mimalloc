@@ -131,7 +131,7 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool overrid
     tfree = mi_atomic_load_acquire(&page->xthread_free); // note: must acquire as we can break/repeat this loop and not do a CAS;
     tfreex = mi_tf_set_delayed(tfree, delay);
     old_delay = mi_tf_delayed(tfree);
-    if (mi_unlikely(old_delay == MI_DELAYED_FREEING)) {
+    if mi_unlikely(old_delay == MI_DELAYED_FREEING) {
       mi_atomic_yield(); // delay until outstanding MI_DELAYED_FREEING are done.
       // tfree = mi_tf_set_delayed(tfree, MI_NO_DELAYED_FREE); // will cause CAS to busy fail
     }
@@ -199,7 +199,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
 
   // and the local free list
   if (page->local_free != NULL) {
-    if (mi_likely(page->free == NULL)) {
+    if mi_likely(page->free == NULL) {
       // usual case
       page->free = page->local_free;
       page->local_free = NULL;
@@ -403,7 +403,7 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   // how to check this efficiently though...
   // for now, we don't retire if it is the only page left of this size class.
   mi_page_queue_t* pq = mi_page_queue_of(page);
-  if (mi_likely(page->xblock_size <= MI_MAX_RETIRE_SIZE && !mi_page_is_in_full(page))) {
+  if mi_likely(page->xblock_size <= MI_MAX_RETIRE_SIZE && !mi_page_is_in_full(page)) {
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
       page->retire_expire = 1 + (page->xblock_size <= MI_SMALL_OBJ_SIZE_MAX ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);      
@@ -812,8 +812,8 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
 static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   // huge allocation?
   const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`  
-  if (mi_unlikely(req_size > (MI_MEDIUM_OBJ_SIZE_MAX - MI_PADDING_SIZE) )) {
-    if (mi_unlikely(req_size > PTRDIFF_MAX)) {  // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
+  if mi_unlikely(req_size > (MI_MEDIUM_OBJ_SIZE_MAX - MI_PADDING_SIZE)) {
+    if mi_unlikely(req_size > PTRDIFF_MAX) {  // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
       _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
       return NULL;
     }
@@ -830,15 +830,15 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size) mi_attr_noexcept {
 
 // Generic allocation routine if the fast path (`alloc.c:mi_page_malloc`) does not succeed.
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
-void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
+void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept
 {
   mi_assert_internal(heap != NULL);
 
   // initialize if necessary
-  if (mi_unlikely(!mi_heap_is_initialized(heap))) {
+  if mi_unlikely(!mi_heap_is_initialized(heap)) {
     mi_thread_init(); // calls `_mi_heap_init` in turn
     heap = mi_get_default_heap();
-    if (mi_unlikely(!mi_heap_is_initialized(heap))) { return NULL; }
+    if mi_unlikely(!mi_heap_is_initialized(heap)) { return NULL; }
   }
   mi_assert_internal(mi_heap_is_initialized(heap));
 
@@ -850,12 +850,12 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
 
   // find (or allocate) a page of the right size
   mi_page_t* page = mi_find_page(heap, size);
-  if (mi_unlikely(page == NULL)) { // first time out of memory, try to collect and retry the allocation once more
+  if mi_unlikely(page == NULL) { // first time out of memory, try to collect and retry the allocation once more
     mi_heap_collect(heap, true /* force */);
     page = mi_find_page(heap, size);
   }
 
-  if (mi_unlikely(page == NULL)) { // out of memory
+  if mi_unlikely(page == NULL) { // out of memory
     const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`  
     _mi_error_message(ENOMEM, "unable to allocate memory (%zu bytes)\n", req_size);
     return NULL;
@@ -864,6 +864,15 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size) mi_attr_noexcept
   mi_assert_internal(mi_page_immediate_available(page));
   mi_assert_internal(mi_page_block_size(page) >= size);
 
-  // and try again, this time succeeding! (i.e. this should never recurse)
-  return _mi_page_malloc(heap, page, size);
+  // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc)
+  if mi_unlikely(zero && page->xblock_size == 0) {
+    // note: we cannot call _mi_page_malloc with zeroing for huge blocks; we zero it afterwards in that case.
+    void* p = _mi_page_malloc(heap, page, size, false);
+    mi_assert_internal(p != NULL);
+    _mi_memzero_aligned(p, mi_page_usable_block_size(page));
+    return p;
+  }
+  else {
+    return _mi_page_malloc(heap, page, size, zero);
+  }
 }

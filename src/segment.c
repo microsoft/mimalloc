@@ -1149,8 +1149,8 @@ static mi_segment_t* mi_abandoned_pop(void) {
   // Check efficiently if it is empty (or if the visited list needs to be moved)
   mi_tagged_segment_t ts = mi_atomic_load_relaxed(&abandoned);
   segment = mi_tagged_segment_ptr(ts);
-  if (mi_likely(segment == NULL)) {
-    if (mi_likely(!mi_abandoned_visited_revisit())) { // try to swap in the visited list on NULL
+  if mi_likely(segment == NULL) {
+    if mi_likely(!mi_abandoned_visited_revisit()) { // try to swap in the visited list on NULL
       return NULL;
     }
   }

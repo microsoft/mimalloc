@@ -121,7 +121,7 @@ void       _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t*
 
 
 // "page.c"
-void*      _mi_malloc_generic(mi_heap_t* heap, size_t size)  mi_attr_noexcept mi_attr_malloc;
+void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero)  mi_attr_noexcept mi_attr_malloc;
 
 void       _mi_page_retire(mi_page_t* page) mi_attr_noexcept;                  // free the page if there are no other pages with many free blocks
 void       _mi_page_unfull(mi_page_t* page);
@@ -153,12 +153,11 @@ mi_msecs_t  _mi_clock_end(mi_msecs_t start);
 mi_msecs_t  _mi_clock_start(void);
 
 // "alloc.c"
-void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept;  // called from `_mi_malloc_generic`
+void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept;  // called from `_mi_malloc_generic`
 void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
-void        _mi_block_zero_init(const mi_page_t* page, void* p, size_t size);
 void        _mi_show_block_trace_with_predecessor(const mi_page_t* page, const mi_block_t* block, const char* msg);
 
 #if MI_DEBUG>1
@@ -171,8 +170,11 @@ bool        _mi_page_is_valid(mi_page_t* page);
 // ------------------------------------------------------
 
 #if defined(__GNUC__) || defined(__clang__)
-#define mi_unlikely(x)     __builtin_expect(!!(x),false)
-#define mi_likely(x)       __builtin_expect(!!(x),true)
+#define mi_unlikely(x)     (__builtin_expect(!!(x),false))
+#define mi_likely(x)       (__builtin_expect(!!(x),true))
+#elif (defined(__cplusplus) && (__cplusplus >= 202002L)) || (defined(_MSVC_LANG) && _MSVC_LANG >= 202002L)
+#define mi_unlikely(x)     (x) [[unlikely]]
+#define mi_likely(x)       (x) [[likely]]
 #else
 #define mi_unlikely(x)     (x)
 #define mi_likely(x)       (x)
@@ -296,8 +298,8 @@ static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
   #define MI_MUL_NO_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
   *total = count * size;
-  return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW)
-    && size > 0 && (SIZE_MAX / size) < count);
+  // note: gcc/clang optimize this to directly check the overflow flag
+  return ((size >= MI_MUL_NO_OVERFLOW || count >= MI_MUL_NO_OVERFLOW) && size > 0 && (SIZE_MAX / size) < count);
 }
 #endif
 
@@ -307,8 +309,10 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
     *total = size;
     return false;
   }
-  else if (mi_unlikely(mi_mul_overflow(count, size, total))) {
+  else if mi_unlikely(mi_mul_overflow(count, size, total)) {
+    #if MI_DEBUG > 0
     _mi_error_message(EOVERFLOW, "allocation request is too large (%zu * %zu bytes)\n", count, size);
+    #endif
     *total = SIZE_MAX;
     return true;
   }
@@ -379,7 +383,7 @@ extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate 
 static inline mi_heap_t* mi_get_default_heap(void) {
 #if defined(MI_TLS_SLOT)
   mi_heap_t* heap = (mi_heap_t*)mi_tls_slot(MI_TLS_SLOT);
-  if (mi_unlikely(heap == NULL)) {
+  if mi_unlikely(heap == NULL) {
     #ifdef __GNUC__
     __asm(""); // prevent conditional load of the address of _mi_heap_empty
     #endif
@@ -492,8 +496,8 @@ static inline mi_page_t* _mi_ptr_page(void* p) {
 // Get the block size of a page (special case for huge objects)
 static inline size_t mi_page_block_size(const mi_page_t* page) {
   const size_t bsize = page->xblock_size;
-  mi_assert_internal(bsize > 0);  
-  if (mi_likely(bsize < MI_HUGE_BLOCK_SIZE)) {
+  mi_assert_internal(bsize > 0);
+  if mi_likely(bsize < MI_HUGE_BLOCK_SIZE) {
     return bsize;
   }
   else {
@@ -656,11 +660,11 @@ static inline uintptr_t mi_rotr(uintptr_t x, uintptr_t shift) {
 
 static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
   void* p = (void*)(mi_rotr(x - keys[0], keys[0]) ^ keys[1]);
-  return (mi_unlikely(p==null) ? NULL : p);
+  return (p==null ? NULL : p);
 }
 
 static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const uintptr_t* keys) {
-  uintptr_t x = (uintptr_t)(mi_unlikely(p==NULL) ? null : p);
+  uintptr_t x = (uintptr_t)(p==NULL ? null : p);
   return mi_rotl(x ^ keys[1], keys[0]) + keys[0];
 }
 
@@ -687,7 +691,7 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   mi_block_t* next = mi_block_nextx(page,block,page->keys);
   // check for free list corruption: is `next` at least in the same page?
   // TODO: check if `next` is `page->block_size` aligned?
-  if (mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next))) {
+  if mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next)) {
     _mi_show_block_trace_with_predecessor(page, block, "free block");
     _mi_error_message(EFAULT, "corrupted free list entry of size %zu at %p: value 0x%zx\n", mi_page_block_size(page), block, (uintptr_t)next);
     next = NULL;
@@ -787,12 +791,12 @@ size_t _mi_os_numa_node_count_get(void);
 
 extern _Atomic(size_t) _mi_numa_node_count;
 static inline int _mi_os_numa_node(mi_os_tld_t* tld) {
-  if (mi_likely(mi_atomic_load_relaxed(&_mi_numa_node_count) == 1)) return 0;
+  if mi_likely(mi_atomic_load_relaxed(&_mi_numa_node_count) == 1) { return 0; }
   else return _mi_os_numa_node_get(tld);
 }
 static inline size_t _mi_os_numa_node_count(void) {
   const size_t count = mi_atomic_load_relaxed(&_mi_numa_node_count);
-  if (mi_likely(count>0)) return count;
+  if mi_likely(count > 0) { return count; }
   else return _mi_os_numa_node_count_get();
 }
 
@@ -1020,13 +1024,24 @@ static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
     __movsb((unsigned char*)dst, (const unsigned char*)src, n);
   }
   else {
-    memcpy(dst, src, n); // todo: use noinline?
+    memcpy(dst, src, n);
+  }
+}
+static inline void _mi_memzero(void* dst, size_t n) {
+  if (_mi_cpu_has_fsrm) {
+    __stosb((unsigned char*)dst, 0, n);
+  }
+  else {
+    memset(dst, 0, n);
   }
 }
 #else
 #include <string.h>
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
   memcpy(dst, src, n);
+}
+static inline void _mi_memzero(void* dst, size_t n) {
+  memset(dst, 0, n);
 }
 #endif
 
@@ -1045,11 +1060,22 @@ static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   const void* asrc = __builtin_assume_aligned(src, MI_INTPTR_SIZE);
   _mi_memcpy(adst, asrc, n);
 }
+
+static inline void _mi_memzero_aligned(void* dst, size_t n) {
+  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
+  void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
+  _mi_memzero(adst, n);
+}
 #else
 // Default fallback on `_mi_memcpy`
 static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
   _mi_memcpy(dst, src, n);
+}
+
+static inline void _mi_memzero_aligned(void* dst, size_t n) {
+  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
+  _mi_memzero(dst, n);
 }
 #endif
 

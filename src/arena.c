@@ -155,7 +155,7 @@ static mi_decl_noinline void* mi_arena_allocate(int numa_node, size_t size, size
   mi_assert_internal(alignment <= MI_SEGMENT_ALIGN);
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);  
   const size_t bcount = mi_block_count_of_size(size);
-  if (mi_likely(max_arena == 0)) return NULL;
+  if mi_likely(max_arena == 0) return NULL;
   mi_assert_internal(size <= bcount*MI_ARENA_BLOCK_SIZE);
 
   // try numa affine allocation

@@ -120,7 +120,7 @@ mi_decl_nodiscard long mi_option_get(mi_option_t option) {
   if (option < 0 || option >= _mi_option_last) return 0;
   mi_option_desc_t* desc = &options[option];
   mi_assert(desc->option == option);  // index should match the option
-  if (mi_unlikely(desc->init == UNINIT)) {
+  if mi_unlikely(desc->init == UNINIT) {
     mi_option_init(desc);
   }
   return desc->value;
