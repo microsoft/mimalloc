@@ -527,6 +527,25 @@ static void mi_detect_cpu_features(void) {
 }
 #endif
 
+#if defined(_WIN32) && (MI_DEBUG_TRACE > 0)
+#include <dbghelp.h>
+static void mi_debug_init(void) {
+  if (SymInitialize(GetCurrentProcess(), NULL, TRUE) != TRUE) {  // initialize here as it is single threaded.
+    _mi_warning_message("unable to initialize debug symbol information (error 0x%x)", GetLastError());
+  }
+}
+static void mi_debug_done(void) {
+  SymCleanup(GetCurrentProcess());
+}
+#else
+static void mi_debug_init(void) {
+  // nothing
+}
+static void mi_debug_done(void) {
+  // nothing
+}
+#endif
+
 // Initialize the process; called by thread_init or the process loader
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
@@ -543,6 +562,7 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_verbose_message("debug level : %d\n", MI_DEBUG);
   #endif
   _mi_verbose_message("secure level: %d\n", MI_SECURE);
+  mi_debug_init();
   mi_thread_init();
 
   #if defined(_WIN32) && !defined(MI_SHARED_LIB)
@@ -551,7 +571,7 @@ void mi_process_init(void) mi_attr_noexcept {
   // will not call _mi_thread_done on the (still executing) main thread. See issue #508.
   FlsSetValue(mi_fls_key, NULL);
   #endif
-
+ 
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
@@ -597,6 +617,7 @@ static void mi_process_done(void) {
     mi_stats_print(NULL);
   }
   mi_allocator_done();  
+  mi_debug_done();
   _mi_verbose_message("process done: 0x%zx\n", _mi_heap_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
 }
