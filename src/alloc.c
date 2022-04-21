@@ -633,7 +633,9 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
       memset((uint8_t*)newp + start, 0, newsize - start);
     }
     if mi_likely(p != NULL) {
-      _mi_memcpy_aligned(newp, p, (newsize > size ? size : newsize));
+      if mi_likely(_mi_is_aligned(p, sizeof(uintptr_t))) {  // a client may pass in an arbitrary pointer `p`..
+        _mi_memcpy_aligned(newp, p, (newsize > size ? size : newsize));
+      }
       mi_free(p); // only free the original pointer if successful
     }
   }
