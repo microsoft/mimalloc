@@ -256,6 +256,12 @@ static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
     return ((sz / alignment) * alignment);
   }
 }
+  
+// Is aligned?
+static inline bool _mi_is_aligned(void* p, size_t alignment) {
+  mi_assert_internal(alignment != 0);
+  return (((uintptr_t)p % alignment) == 0);
+}
 
 // Divide upwards: `s <= _mi_divide_up(s,d)*d < s+d`.
 static inline uintptr_t _mi_divide_up(uintptr_t size, size_t divider) {

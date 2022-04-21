@@ -124,9 +124,9 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc_small(size_t si
 }
 
 // The main allocation function
-extern inline mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  if mi_likely(size + MI_PADDING_SIZE <= MI_SMALL_SIZE_MAX + MI_PADDING_MINSIZE) {
-    return mi_heap_malloc_small(heap, size);
+extern inline void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
+  if mi_likely(size + MI_PADDING_SIZE <= MI_SMALL_SIZE_MAX + MI_PADDING_MINSIZE) {  
+    return mi_heap_malloc_small_zero(heap, size, zero);
   }
   else 
   {
@@ -236,7 +236,7 @@ static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, si
 static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
   size_t size;
   size_t wrong;
-  if (mi_unlikely(!mi_verify_padding(page,block,&size,&wrong))) {
+  if mi_unlikely(!mi_verify_padding(page,block,&size,&wrong)) {
     _mi_show_block_trace_with_predecessor(page, block, NULL);
     _mi_error_message(EFAULT, "buffer overflow in heap block %p of size %zu: write after %zu bytes\n", block, size, wrong );
   }
@@ -716,7 +716,9 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
       memset((uint8_t*)newp + start, 0, newsize - start);
     }
     if mi_likely(p != NULL) {
-      _mi_memcpy_aligned(newp, p, (newsize > size ? size : newsize));
+      if mi_likely(_mi_is_aligned(p, sizeof(uintptr_t))) {
+        _mi_memcpy_aligned(newp, p, (newsize > size ? size : newsize));
+      }
       mi_free(p); // only free the original pointer if successful
     }
   }
