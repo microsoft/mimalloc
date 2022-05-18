@@ -228,7 +228,7 @@ else()
   endif()  
   find_library(MI_LIBATOMIC atomic)
   if (MI_LIBATOMIC OR MI_USE_LIBATOMIC) 
-    list(APPEND mi_libraries atomic)
+    list(APPEND mi_libraries ${MI_LIBATOMIC})
   endif()
 endif()
 
