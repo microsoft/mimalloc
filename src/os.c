@@ -375,7 +375,7 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
     // the start of the region.
     MEMORY_BASIC_INFORMATION info = { 0, 0 };
     VirtualQuery(addr, &info, sizeof(info));
-    if (info.AllocationBase < addr && ((uint8_t*)addr - (uint8_t*)info.AllocationBase) < MI_SEGMENT_SIZE) {
+    if (info.AllocationBase < addr && ((uint8_t*)addr - (uint8_t*)info.AllocationBase) < (ptrdiff_t)MI_SEGMENT_SIZE) {
       errcode = 0;
       err = (VirtualFree(info.AllocationBase, 0, MEM_RELEASE) == 0);
       if (err) { errcode = GetLastError(); }
