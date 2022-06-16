@@ -475,7 +475,7 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
 // --------------------------------------------------------
 // Run functions on process init/done, and thread init/done
 // --------------------------------------------------------
-static void mi_process_done(void);
+static void mi_cdecl mi_process_done(void);
 
 static bool os_preloading = true;    // true until this module is initialized
 static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
@@ -506,8 +506,8 @@ mi_decl_export void _mi_redirect_entry(DWORD reason) {
     mi_thread_done();
   }
 }
-__declspec(dllimport) bool mi_allocator_init(const char** message);
-__declspec(dllimport) void mi_allocator_done(void);
+__declspec(dllimport) bool mi_cdecl mi_allocator_init(const char** message);
+__declspec(dllimport) void mi_cdecl mi_allocator_done(void);
 #ifdef __cplusplus
 }
 #endif
@@ -606,7 +606,7 @@ void mi_process_init(void) mi_attr_noexcept {
 }
 
 // Called when the process is done (through `at_exit`)
-static void mi_process_done(void) {
+static void mi_cdecl mi_process_done(void) {
   // only shutdown if we were initialized
   if (!_mi_process_is_initialized) return;
   // ensure we are called once
