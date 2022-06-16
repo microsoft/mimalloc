@@ -490,7 +490,7 @@ mi_decl_nodiscard bool mi_is_redirected(void) mi_attr_noexcept {
 }
 
 // Communicate with the redirection module on Windows
-#if defined(_WIN32) && defined(MI_SHARED_LIB)
+#if defined(_WIN32) && defined(MI_SHARED_LIB) && !defined(MI_DISABLE_REDIRECT)
 #ifdef __cplusplus
 extern "C" {
 #endif
