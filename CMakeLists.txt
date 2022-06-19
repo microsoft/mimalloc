@@ -217,18 +217,22 @@ endif()
 # extra needed libraries
 if(WIN32)
   list(APPEND mi_libraries psapi shell32 user32 advapi32 bcrypt)
+  set(pc_libraries "-lpsapi -lshell32 -luser32 -ladvapi32 -lbcrypt")
 else()
   find_library(MI_LIBPTHREAD pthread)
   if (MI_LIBPTHREAD)                      
     list(APPEND mi_libraries ${MI_LIBPTHREAD})
+    set(pc_libraries "-pthread")
   endif()
   find_library(MI_LIBRT rt)
   if(MI_LIBRT)
     list(APPEND mi_libraries ${MI_LIBRT})
-  endif()  
+    set(pc_libraries "${pc_libraries} -lrt")
+  endif()
   find_library(MI_LIBATOMIC atomic)
   if (MI_LIBATOMIC OR MI_USE_LIBATOMIC) 
     list(APPEND mi_libraries atomic)
+    set(pc_libraries "${pc_libraries} -latomic")
   endif()
 endif()
 
@@ -375,6 +379,15 @@ if (MI_BUILD_OBJECT)
           DESTINATION ${mi_install_objdir}
           RENAME ${mi_basename}${CMAKE_C_OUTPUT_EXTENSION} )
 endif()
+
+# pkg-config file support
+include("cmake/JoinPaths.cmake")
+join_paths(includedir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_INCLUDEDIR}")
+join_paths(libdir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_LIBDIR}")
+
+configure_file(mimalloc.pc.in mimalloc.pc @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mimalloc.pc"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig/")
 
 # -----------------------------------------------------------------------------
 # API surface testing
