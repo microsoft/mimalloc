@@ -22,6 +22,7 @@ option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
 option(MI_SKIP_COLLECT_ON_EXIT, "Skip collecting memory on program exit" OFF)
+option(MI_DISABLE_REDIRECT  "Do not use mimalloc-redirect on Windows (for shared libraries)" OFF)
 
 # deprecated options
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
@@ -184,6 +185,22 @@ if(MI_USE_CXX)
   endif()
 endif()
 
+if(NOT MI_DISABLE_REDIRECT)
+  if(MSVC AND MSVC_C_ARCHITECTURE_ID MATCHES "ARM")
+    set(MI_DISABLE_REDIRECT ON)
+    message(WARNING "Disabling redirection lib is required on ARM (MI_DISABLE_REDIRECT=ON)")
+  endif()
+endif()
+
+if (MI_DISABLE_REDIRECT)
+  if (NOT WIN32 OR NOT MI_SHARED_LIB)
+    message(WARNING "Disabling redirect only affects shared libraries on windows")
+  endif()
+
+  message(STATUS "Disabled mimalloc-redirect (MI_DISABLE_REDIRECT=ON)")
+  list(APPEND mi_defines MI_DISABLE_REDIRECT)
+endif()
+
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
   list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas -fvisibility=hidden)
@@ -304,15 +321,13 @@ if(MI_BUILD_SHARED)
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${mi_install_incdir}>
   )
-  if(WIN32)
-    # Until the redirect lib has a version for arm don't try to copy it
-    if(NOT MSVC_C_ARCHITECTURE_ID MATCHES "ARM")
-      # On windows copy the mimalloc redirection dll too.
-      if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-        set(MIMALLOC_REDIRECT_SUFFIX "32")
-      else()
-        set(MIMALLOC_REDIRECT_SUFFIX "")
-      endif()
+  if(WIN32 AND NOT MI_DISABLE_REDIRECT)
+    # On windows copy the mimalloc redirection dll too.
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+      set(MIMALLOC_REDIRECT_SUFFIX "32")
+    else()
+      set(MIMALLOC_REDIRECT_SUFFIX "")
+    endif()
 
       target_link_libraries(mimalloc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.lib)
       add_custom_command(TARGET mimalloc POST_BUILD
