@@ -186,6 +186,8 @@ if(MI_USE_CXX)
 endif()
 
 if(NOT MI_DISABLE_REDIRECT)
+  # When compiling for windows on arm the mimalloc-redirect library is not available
+  # as it has not been pre-compiled and the source is not yet available.
   if(MSVC AND MSVC_C_ARCHITECTURE_ID MATCHES "ARM")
     set(MI_DISABLE_REDIRECT ON)
     message(WARNING "Disabling redirection lib is required on ARM (MI_DISABLE_REDIRECT=ON)")
