@@ -336,7 +336,11 @@ static void* atomic_exchange_ptr(volatile void** p, void* newval) {
   return std::atomic_exchange((volatile std::atomic<void*>*)p, newval);
 }
 #else
+#if defined(MI_ATOMIC_FOR_GCC485)
+#include <gcc-4.8.5-atomic.h>
+#else
 #include <stdatomic.h>
+#endif
 static void* atomic_exchange_ptr(volatile void** p, void* newval) {
   return atomic_exchange((volatile _Atomic(void*)*)p, newval);
 }

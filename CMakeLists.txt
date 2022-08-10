@@ -22,6 +22,7 @@ option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
 option(MI_SKIP_COLLECT_ON_EXIT, "Skip collecting memory on program exit" OFF)
+option(MI_ATOMIC_FOR_GCC485 "Build with custom stdatomic.h for gcc-4.8.5" OFF)
 
 # deprecated options
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
@@ -141,6 +142,11 @@ endif()
 if(MI_SHOW_ERRORS)
   message(STATUS "Enable printing of error and warning messages by default (MI_SHOW_ERRORS=ON)")
   list(APPEND mi_defines MI_SHOW_ERRORS=1)
+endif()
+
+if(MI_ATOMIC_FOR_GCC485)
+  message(STATUS "Enable using cumstom stdatomic.h file for gcc 4.8.5 (MI_ATOMIC_FOR_GCC485=ON)")
+  list(APPEND mi_defines MI_ATOMIC_FOR_GCC485=1)
 endif()
 
 if(MI_DEBUG_TSAN)
