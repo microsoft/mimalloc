@@ -45,6 +45,10 @@ bool test_heap1(void);
 bool test_heap2(void);
 bool test_stl_allocator1(void);
 bool test_stl_allocator2(void);
+bool test_heap_stl_allocator1(void);
+bool test_heap_stl_allocator2(void);
+bool test_heap_stl_allocator3(void);
+bool test_heap_stl_allocator4(void);
 
 // ---------------------------------------------------------------------------
 // Main testing
@@ -193,6 +197,11 @@ int main(void) {
 
   CHECK("stl_allocator1", test_stl_allocator1());
   CHECK("stl_allocator2", test_stl_allocator2());
+  
+  CHECK("heap_stl_allocator1", test_heap_stl_allocator1());
+  CHECK("heap_stl_allocator2", test_heap_stl_allocator2());
+  CHECK("heap_stl_allocator3", test_heap_stl_allocator3());
+  CHECK("heap_stl_allocator3", test_heap_stl_allocator4());
 
   // ---------------------------------------------------
   // Done
@@ -243,6 +252,63 @@ bool test_stl_allocator2() {
   vec.push_back(some_struct());
   vec.pop_back();
   return vec.size() == 0;
+#else
+  return true;
+#endif
+}
+
+bool test_heap_stl_allocator1() {
+#if (__cplusplus >= 201103L) || (_MSC_VER > 1900)
+  mi_heap_stl_allocator<int> alloc;
+  std::vector<int, mi_heap_stl_allocator<int> > vec(alloc);
+  vec.push_back(1);
+  vec.pop_back();
+  return vec.size() == 0;
+#else
+  return true;
+#endif
+}
+
+bool test_heap_stl_allocator2() {
+#if (__cplusplus >= 201103L) || (_MSC_VER > 1900)
+  mi_heap_stl_allocator<some_struct> alloc;
+  std::vector<some_struct, mi_heap_stl_allocator<some_struct> > vec(alloc);
+  vec.push_back(some_struct());
+  vec.pop_back();
+  return vec.size() == 0;
+#else
+  return true;
+#endif
+}
+
+bool test_heap_stl_allocator3() {
+#if (__cplusplus >= 201103L) || (_MSC_VER > 1900)
+  mi_heap_stl_allocator<int> alloc;
+  alloc.disable_free();
+  std::vector<int, mi_heap_stl_allocator<int> > vec(alloc);
+  for (int i = 0; i < 1000; i++) {
+    vec.push_back(i);
+  }
+  return vec.size() == 1000;
+#else
+  return true;
+#endif
+}
+
+bool test_heap_stl_allocator4() {
+#if (__cplusplus >= 201103L) || (_MSC_VER > 1900)
+  mi_heap_stl_allocator<int> alloc;
+  alloc.disable_free();
+  std::vector<int, mi_heap_stl_allocator<int> > vec(alloc);
+  for (int i = 0; i < 100; i++) {
+    vec.push_back(i);
+  }
+  alloc.enable_free();
+  for (int i = 0; i < 1000; i++) {
+    vec.push_back(i);
+  }
+  alloc.collect();
+  return vec.size() == 1100;
 #else
   return true;
 #endif

@@ -932,3 +932,20 @@ void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
     return mi_new_realloc(p, total);
   }
 }
+
+mi_decl_restrict void* mi_heap_new_(size_t size, mi_heap_t *heap) {
+  void* p = mi_heap_malloc(heap, size);
+  if (mi_unlikely(p == NULL)) return mi_try_new(size,false);
+  return p;
+}
+
+mi_decl_restrict void* mi_heap_new_n(size_t count, size_t size, mi_heap_t *heap) {
+  size_t total;
+  if (mi_unlikely(mi_count_size_overflow(count, size, &total))) {
+    mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
+    return NULL;
+  }
+  else {
+    return mi_heap_new_(total, heap);
+  }
+}

@@ -127,6 +127,32 @@ static bool test_stl_allocator2() {
   return vec.size() == 0;
 }
 
+static bool test_heap_stl_allocator1() {
+#if (__cplusplus >= 201103L) || (_MSC_VER > 1900)
+  mi_heap_stl_allocator<int> alloc;
+  std::vector<int, mi_heap_stl_allocator<int> > vec(alloc);
+  vec.push_back(1);
+  vec.pop_back();
+  return vec.size() == 0;
+#else
+  return true;
+#endif
+}
+
+static bool test_heap_stl_allocator2() {
+#if (__cplusplus >= 201103L) || (_MSC_VER > 1900)
+  mi_heap_stl_allocator<some_struct> alloc;
+  std::vector<some_struct, mi_heap_stl_allocator<some_struct> > vec(alloc);
+  alloc.disable_free();
+  vec.push_back(some_struct());
+  vec.pop_back();
+  alloc.enable_free();
+  return vec.size() == 0;
+#else
+  return true;
+#endif
+}
+
 // issue 445
 static void strdup_test() {
 #ifdef _MSC_VER
