@@ -325,6 +325,7 @@ typedef enum mi_option_e {
   mi_option_max_errors,
   mi_option_max_warnings,
   mi_option_max_segment_reclaim,
+  mi_option_skip_recycle_if_busy,
   _mi_option_last
 } mi_option_t;
 

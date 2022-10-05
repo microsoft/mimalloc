@@ -1066,7 +1066,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       _mi_stat_decrease(&tld->stats->pages_abandoned, 1);
       // set the heap again and allow heap thread delayed free again.
       mi_page_set_heap(page, heap);
-      _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, true); // override never (after heap is set)
+      _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, true, false); // override never (after heap is set)
       // TODO: should we not collect again given that we just collected in `check_free`?
       _mi_page_free_collect(page, false); // ensure used count is up to date
       if (mi_page_all_free(page)) {

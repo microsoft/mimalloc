@@ -305,7 +305,7 @@ size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue
     // set the flag to delayed free (not overriding NEVER_DELAYED_FREE) which has as a
     // side effect that it spins until any DELAYED_FREEING is finished. This ensures
     // that after appending only the new heap will be used for delayed free operations.
-    _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, false);
+    _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, false, false);
     count++;
   }
 

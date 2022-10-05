@@ -108,7 +108,7 @@ static bool mi_heap_page_never_delayed_free(mi_heap_t* heap, mi_page_queue_t* pq
   MI_UNUSED(arg2);
   MI_UNUSED(heap);
   MI_UNUSED(pq);
-  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);
+  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false, false);
   return true; // don't break
 }
 
@@ -268,7 +268,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   MI_UNUSED(pq);
 
   // ensure no more thread_delayed_free will be added
-  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);
+  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false, false);
 
   // stats
   const size_t bsize = mi_page_block_size(page);
