@@ -330,7 +330,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* large, bool*
   }
   mi_assert_internal(!_mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx));
   
-  #if (MI_DEBUG>=2)
+  #if (MI_DEBUG>=2) && !MI_TRACK_ENABLED
   if (*commit) { ((uint8_t*)p)[0] = 0; }
   #endif
   
@@ -376,9 +376,9 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* l
 
   if (p != NULL) {
     mi_assert_internal((uintptr_t)p % alignment == 0);
-#if (MI_DEBUG>=2)
+    #if (MI_DEBUG>=2) && !MI_TRACK_ENABLED
     if (*commit) { ((uint8_t*)p)[0] = 0; } // ensure the memory is committed
-#endif
+    #endif
   }
   return p;
 }

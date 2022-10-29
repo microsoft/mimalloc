@@ -531,6 +531,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   // Try to get it from our thread local cache first
   if (segment != NULL) {
     // came from cache
+    mi_track_mem_defined(segment,info_size);  
     mi_assert_internal(segment->segment_size == segment_size);
     if (page_kind <= MI_PAGE_MEDIUM && segment->page_kind == page_kind && segment->segment_size == segment_size) {
       pages_still_good = true;
@@ -584,15 +585,15 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
         return NULL;  
       }
     }
+    mi_track_mem_undefined(segment,info_size);
     segment->memid = memid;
     segment->mem_is_pinned = (mem_large || is_pinned);
     segment->mem_is_committed = commit;    
     mi_segments_track_size((long)segment_size, tld);
   }  
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
-  mi_assert_internal(segment->mem_is_pinned ? segment->mem_is_committed : true);  
-  mi_track_mem_defined(segment,info_size);
-  
+  mi_assert_internal(segment->mem_is_pinned ? segment->mem_is_committed : true);    
+    
   mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);  // tsan
   if (!pages_still_good) {
     // zero the segment info (but not the `mem` fields)

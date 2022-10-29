@@ -16,17 +16,20 @@ int main(int argc, char** argv) {
   mi_free(r);
 
   // undefined access
-  // printf("undefined: %d\n", *q);
+  printf("undefined: %d\n", *q);
   
   *q = 42;
 
   // buffer overflow
-  // q[1] = 43;
+  q[1] = 43;
+
+  // buffer underflow
+  q[-1] = 44;
   
   mi(free)(q);
 
   // double free
-  // mi(free)(q);
+  mi(free)(q);
 
   // use after free
   printf("use-after-free: %d\n", *q);
