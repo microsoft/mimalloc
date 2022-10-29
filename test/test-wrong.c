@@ -11,7 +11,10 @@
 int main(int argc, char** argv) {
   int* p = mi(malloc)(3*sizeof(int));
   int* q = mi(malloc)(sizeof(int));
-  
+
+  int* r = mi_malloc_aligned(8,16);
+  mi_free(r);
+
   // undefined access
   // printf("undefined: %d\n", *q);
   
@@ -23,7 +26,7 @@ int main(int argc, char** argv) {
   mi(free)(q);
 
   // double free
-  mi(free)(q);
+  // mi(free)(q);
 
   // use after free
   printf("use-after-free: %d\n", *q);

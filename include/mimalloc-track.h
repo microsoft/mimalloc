@@ -17,6 +17,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_VALGRIND 1
 
 #if MI_VALGRIND
+
+#define MI_TRACK_ENABLED 1
+
 #include <valgrind/valgrind.h>
 #include <valgrind/memcheck.h>
 
@@ -28,6 +31,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_track_mem_noaccess(p,size)       VALGRIND_MAKE_MEM_NOACCESS(p,size)
 
 #else
+
+#define MI_TRACK_ENABLED 0
 
 #define mi_track_malloc(p,size,zero)  
 #define mi_track_resize(p,oldsize,newsize)  

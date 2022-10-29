@@ -931,7 +931,7 @@ static inline size_t mi_bsr(uintptr_t x) {
 // (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017). See also issue #201 and pr #253. 
 // ---------------------------------------------------------------------------------
 
-#if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
+#if !MI_TRACK_ENABLED && defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
 #include <intrin.h>
 #include <string.h>
 extern bool _mi_cpu_has_fsrm;

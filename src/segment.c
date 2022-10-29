@@ -476,6 +476,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
     fully_committed = false;
   }
   _mi_mem_free(segment, segment_size, segment->memid, fully_committed, any_reset, tld->os);
+  //mi_track_mem_noaccess(segment,segment_size);
 }
 
 // called by threads that are terminating to free cached segments
@@ -588,9 +589,11 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     segment->mem_is_pinned = (mem_large || is_pinned);
     segment->mem_is_committed = commit;    
     mi_segments_track_size((long)segment_size, tld);
-  }
+  }  
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
   mi_assert_internal(segment->mem_is_pinned ? segment->mem_is_committed : true);  
+  //mi_track_mem_defined(segment,info_size);
+  
   mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);  // tsan
   if (!pages_still_good) {
     // zero the segment info (but not the `mem` fields)
@@ -1208,7 +1211,7 @@ static mi_page_t* mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, mi_p
   mi_assert_internal(free_queue->first != NULL);
   mi_page_t* const page = mi_segment_page_alloc_in(free_queue->first, tld);
   mi_assert_internal(page != NULL);
-#if MI_DEBUG>=2
+#if MI_DEBUG>=2 && !MI_TRACK_ENABLED
   // verify it is committed
   _mi_segment_page_start(_mi_page_segment(page), page, sizeof(void*), NULL, NULL)[0] = 0;
 #endif
@@ -1232,7 +1235,7 @@ static mi_page_t* mi_segment_large_page_alloc(mi_heap_t* heap, size_t block_size
   if (segment == NULL) return NULL;
   mi_page_t* page = mi_segment_find_free(segment, tld);
   mi_assert_internal(page != NULL);
-#if MI_DEBUG>=2
+#if MI_DEBUG>=2 && !MI_TRACK_ENABLED
   _mi_segment_page_start(segment, page, sizeof(void*), NULL, NULL)[0] = 0;
 #endif
   return page;

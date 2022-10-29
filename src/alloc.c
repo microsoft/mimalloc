@@ -39,6 +39,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
 
   // allow use of the block internally 
+  // todo: can we optimize this call away for non-zero'd release mode?
   mi_track_mem_undefined(block,mi_page_block_size(page));
 
   // zero the block? note: we need to zero the full block size (issue #63)
@@ -77,6 +78,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
 #endif
 
+  // mark as no-access again
   mi_track_mem_noaccess(block,mi_page_block_size(page));
   return block;
 }
@@ -341,7 +343,7 @@ static void mi_stat_huge_free(const mi_page_t* page) {
 // Free
 // ------------------------------------------------------
 
-// multi-threaded free
+// multi-threaded free (or free in huge block)
 static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* block)
 {
   // The padding check may access the non-thread-owned page for the key values.
@@ -349,6 +351,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   mi_check_padding(page, block);
   mi_padding_shrink(page, block, sizeof(mi_block_t)); // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
   #if (MI_DEBUG!=0)
+  mi_track_mem_undefined(block, mi_page_block_size(page));  // note: check padding may set parts to noaccess
   memset(block, MI_DEBUG_FREED, mi_usable_size(block));
   #endif
 
@@ -408,6 +411,7 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
     if mi_unlikely(mi_check_is_double_free(page, block)) return;
     mi_check_padding(page, block);
     #if (MI_DEBUG!=0)
+    mi_track_mem_undefined(block, mi_page_block_size(page));  // note: check padding may set parts to noaccess
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
     #endif
     mi_block_set_next(page, block, page->local_free);
@@ -486,6 +490,10 @@ void mi_free(void* p) mi_attr_noexcept
   mi_threadid_t tid = _mi_thread_id();
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_block_t*)p;
+
+  #if MI_TRACK_ENABLED
+  const size_t track_bsize = mi_page_block_size(page);
+  #endif
   
   if mi_likely(tid == mi_atomic_load_relaxed(&segment->thread_id) && page->flags.full_aligned == 0) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
@@ -493,7 +501,7 @@ void mi_free(void* p) mi_attr_noexcept
     mi_check_padding(page, block);
     mi_stat_free(page, block);
     #if (MI_DEBUG!=0)
-    mi_track_mem_undefined(block,mi_page_block_size(page));
+    mi_track_mem_undefined(block,track_bsize);  // note: check padding may set parts to noaccess
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
     #endif
     mi_block_set_next(page, block, page->local_free);
@@ -505,10 +513,10 @@ void mi_free(void* p) mi_attr_noexcept
   else {
     // non-local, aligned blocks, or a full page; use the more generic path
     // note: recalc page in generic to improve code generation
-    mi_track_mem_undefined(block,mi_page_block_size(page));
+    mi_track_mem_undefined(block,track_bsize);
     mi_free_generic(segment, tid == segment->thread_id, p);
   }
-  mi_track_mem_noaccess(block,mi_page_block_size(page));
+  mi_track_mem_noaccess(block,track_bsize);  // cannot use mi_page_block_size as the segment might be deallocated by now
 }
 
 bool _mi_free_delayed_block(mi_block_t* block) {
@@ -641,10 +649,12 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
   // else if size == 0 then reallocate to a zero-sized block (and don't return NULL, just as mi_malloc(0)).
   // (this means that returning NULL always indicates an error, and `p` will not have been freed in that case.)
   const size_t size = _mi_usable_size(p,"mi_realloc"); // also works if p == NULL (with size 0)
+  #if !MI_TRACK_ENABLED
   if mi_unlikely(newsize <= size && newsize >= (size / 2) && newsize > 0) {  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
     // todo: adjust potential padding to reflect the new size?
     return p;  // reallocation still fits and not more than 50% waste
   }
+  #endif
   void* newp = mi_heap_malloc(heap,newsize);
   if mi_likely(newp != NULL) {
     if (zero && newsize > size) {
