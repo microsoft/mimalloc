@@ -12,6 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
 
+
 #include <string.h>  // memset, strlen
 #include <stdlib.h>  // malloc, exit
 
@@ -36,6 +37,9 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   page->used++;
   page->free = mi_block_next(page, block);
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
+
+  // allow use internally
+  MI_TRACK_MEM_UNDEFINED(block,mi_page_block_size(page));
 
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
@@ -73,6 +77,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
 #endif
 
+  MI_TRACK_MEM_NOACCESS(block,mi_page_block_size(page));
   return block;
 }
 
@@ -94,6 +99,7 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
     mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
   }
 #endif
+  MI_TRACK_ZALLOC(p,size,zero);
   return p;
 }
 
@@ -122,6 +128,7 @@ extern inline void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero
       mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
     }
     #endif
+    MI_TRACK_ZALLOC(p,size,zero);
     return p;
   }
 }
@@ -176,16 +183,19 @@ static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, con
   return false;
 }
 
+#define MI_TRACK_PAGE(page,access)  { size_t psize; void* pstart = _mi_page_start(_mi_page_segment(page),page,&psize); MI_TRACK_MEM_##access( pstart, psize); }
+
 static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
+  bool is_double_free = false;
   mi_block_t* n = mi_block_nextx(page, block, page->keys); // pretend it is freed, and get the decoded first field
   if (((uintptr_t)n & (MI_INTPTR_SIZE-1))==0 &&  // quick check: aligned pointer?
       (n==NULL || mi_is_in_same_page(block, n))) // quick check: in same page or NULL?
   {
     // Suspicous: decoded value a in block is in the same page (or NULL) -- maybe a double free?
     // (continue in separate function to improve code generation)
-    return mi_check_is_double_freex(page, block);
+    is_double_free = mi_check_is_double_freex(page, block);
   }
-  return false;
+  return is_double_free;
 }
 #else
 static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
@@ -203,8 +213,11 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
   *bsize = mi_page_usable_block_size(page);
   const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + *bsize);
+  MI_TRACK_MEM_DEFINED(padding,sizeof(*padding));
   *delta = padding->delta;
-  return ((uint32_t)mi_ptr_encode(page,block,page->keys) == padding->canary && *delta <= *bsize);
+  bool ok = ((uint32_t)mi_ptr_encode(page,block,page->keys) == padding->canary && *delta <= *bsize);
+  MI_TRACK_MEM_NOACCESS(padding,sizeof(*padding));
+  return ok;
 }
 
 // Return the exact usable size of a block.
@@ -212,7 +225,7 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
   size_t bsize;
   size_t delta;
   bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
-  mi_assert_internal(ok); mi_assert_internal(delta <= bsize);
+  mi_assert_internal(ok); mi_assert_internal(delta <= bsize);  
   return (ok ? bsize - delta : 0);
 }
 
@@ -226,13 +239,16 @@ static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, si
   *size = bsize - delta;
   uint8_t* fill = (uint8_t*)block + bsize - delta;
   const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // check at most the first N padding bytes
+  MI_TRACK_MEM_DEFINED(fill,maxpad);
   for (size_t i = 0; i < maxpad; i++) {
     if (fill[i] != MI_DEBUG_PADDING) {
       *wrong = bsize - delta + i;
-      return false;
+      ok = false;
+      break;
     }
   }
-  return true;
+  MI_TRACK_MEM_NOACCESS(fill,maxpad);
+  return ok;
 }
 
 static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
@@ -465,6 +481,7 @@ void mi_free(void* p) mi_attr_noexcept
 {
   mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
   if mi_unlikely(segment == NULL) return; 
+  MI_TRACK_FREE(p);
 
   mi_threadid_t tid = _mi_thread_id();
   mi_page_t* const page = _mi_segment_page_of(segment, p);
@@ -472,10 +489,11 @@ void mi_free(void* p) mi_attr_noexcept
   
   if mi_likely(tid == mi_atomic_load_relaxed(&segment->thread_id) && page->flags.full_aligned == 0) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
-    if mi_unlikely(mi_check_is_double_free(page,block)) return;
+    if mi_unlikely(mi_check_is_double_free(page,block)) return;      
     mi_check_padding(page, block);
     mi_stat_free(page, block);
     #if (MI_DEBUG!=0)
+    MI_TRACK_MEM_UNDEFINED(block,mi_page_block_size(page));
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
     #endif
     mi_block_set_next(page, block, page->local_free);
@@ -487,8 +505,10 @@ void mi_free(void* p) mi_attr_noexcept
   else {
     // non-local, aligned blocks, or a full page; use the more generic path
     // note: recalc page in generic to improve code generation
+    MI_TRACK_MEM_UNDEFINED(block,mi_page_block_size(page));
     mi_free_generic(segment, tid == segment->thread_id, p);
   }
+  MI_TRACK_MEM_NOACCESS(block,mi_page_block_size(page));
 }
 
 bool _mi_free_delayed_block(mi_block_t* block) {
