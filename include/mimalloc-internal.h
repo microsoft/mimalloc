@@ -626,7 +626,7 @@ static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const 
 }
 
 static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, const uintptr_t* keys ) {
-  MI_TRACK_MEM_DEFINED(block,sizeof(mi_block_t));
+  mi_track_mem_defined(block,sizeof(mi_block_t));
   mi_block_t* next;
   #ifdef MI_ENCODE_FREELIST
   next = (mi_block_t*)mi_ptr_decode(null, block->next, keys);
@@ -634,19 +634,19 @@ static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* bl
   MI_UNUSED(keys); MI_UNUSED(null);
   next = (mi_block_t*)block->next;
   #endif
-  MI_TRACK_MEM_NOACCESS(block,sizeof(mi_block_t));
+  mi_track_mem_noaccess(block,sizeof(mi_block_t));
   return next;  
 }
 
 static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, const uintptr_t* keys) {
-  MI_TRACK_MEM_UNDEFINED(block,sizeof(mi_block_t));
+  mi_track_mem_undefined(block,sizeof(mi_block_t));
   #ifdef MI_ENCODE_FREELIST
   block->next = mi_ptr_encode(null, next, keys);
   #else
   MI_UNUSED(keys); MI_UNUSED(null);
   block->next = (mi_encoded_t)next;
   #endif
-  MI_TRACK_MEM_NOACCESS(block,sizeof(mi_block_t));
+  mi_track_mem_noaccess(block,sizeof(mi_block_t));
 }
 
 static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t* block) {

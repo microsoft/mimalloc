@@ -20,21 +20,21 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <valgrind/valgrind.h>
 #include <valgrind/memcheck.h>
 
-#define MI_TRACK_ZALLOC(p,size,zero)    VALGRIND_MALLOCLIKE_BLOCK(p,size,0 /*red zone*/,zero)
-#define MI_TRACK_MALLOC(p,size)         MI_TRACK_ZALLOC(p,size,false)
-#define MI_TRACK_FREE(p)                VALGRIND_FREELIKE_BLOCK(p,0 /*red zone*/)
-#define MI_TRACK_MEM_DEFINED(p,size)    VALGRIND_MAKE_MEM_DEFINED(p,size)
-#define MI_TRACK_MEM_UNDEFINED(p,size)  VALGRIND_MAKE_MEM_UNDEFINED(p,size)
-#define MI_TRACK_MEM_NOACCESS(p,size)   VALGRIND_MAKE_MEM_NOACCESS(p,size)
+#define mi_track_malloc(p,size,zero)        VALGRIND_MALLOCLIKE_BLOCK(p,size,0 /*red zone*/,zero)
+#define mi_track_resize(p,oldsize,newsize)  VALGRIND_RESIZEINPLACE_BLOCK(p,oldsize,newsize,0 /*red zone*/)  
+#define mi_track_free(p)                    VALGRIND_FREELIKE_BLOCK(p,0 /*red zone*/)
+#define mi_track_mem_defined(p,size)        VALGRIND_MAKE_MEM_DEFINED(p,size)
+#define mi_track_mem_undefined(p,size)      VALGRIND_MAKE_MEM_UNDEFINED(p,size)
+#define mi_track_mem_noaccess(p,size)       VALGRIND_MAKE_MEM_NOACCESS(p,size)
 
 #else
 
-#define MI_TRACK_ZALLOC(p,size,zero)  
-#define MI_TRACK_MALLOC(p,size)        
-#define MI_TRACK_FREE(p)              
-#define MI_TRACK_MEM_DEFINED(p,size)  
-#define MI_TRACK_MEM_UNDEFINED(p,size)  
-#define MI_TRACK_MEM_NOACCESS(p,size)  
+#define mi_track_malloc(p,size,zero)  
+#define mi_track_resize(p,oldsize,newsize)  
+#define mi_track_free(p)              
+#define mi_track_mem_defined(p,size)  
+#define mi_track_mem_undefined(p,size)  
+#define mi_track_mem_noaccess(p,size)  
 
 #endif
 
