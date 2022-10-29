@@ -395,7 +395,7 @@ void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_re
   if (p==NULL) return;
   if (size==0) return;
   size = _mi_align_up(size, _mi_os_page_size());
-  
+
   size_t arena_memid = 0;
   mi_bitmap_index_t bit_idx;
   mem_region_t* region;
