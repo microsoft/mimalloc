@@ -30,7 +30,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define NDEBUG
 
 // Define MI_VALGRIND to enable valgrind support
-#define MI_VALGRIND 1
+// #define MI_VALGRIND 1
 
 // Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
 // #define MI_STAT 1
