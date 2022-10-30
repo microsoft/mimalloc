@@ -42,18 +42,20 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   // todo: can we optimize this call away for non-zero'd release mode?
   #if MI_TRACK_ENABLED
   const size_t track_bsize = mi_page_block_size(page);
-  if (zero) mi_track_mem_defined(block,track_bsize); else mi_track_mem_undefined(block,track_bsize);
+  mi_assert_internal(track_bsize >= size);
+  mi_track_mem_undefined(block,track_bsize - MI_PADDING_SIZE);
   #endif
 
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
     mi_assert_internal(page->xblock_size != 0); // do not call with zero'ing for huge blocks (see _mi_malloc_generic)
-    const size_t zsize = (page->is_zero ? sizeof(block->next) : page->xblock_size);
-    _mi_memzero_aligned(block, zsize);
+    const size_t zsize = (page->is_zero ? sizeof(block->next) + MI_PADDING_SIZE : page->xblock_size);
+    mi_assert(zsize <= track_bsize && zsize >= MI_PADDING_SIZE);
+    _mi_memzero_aligned(block, zsize - MI_PADDING_SIZE);    
   }
 
 #if (MI_DEBUG>0)
-  if (!page->is_zero && !zero) { memset(block, MI_DEBUG_UNINIT, size); }
+  if (!page->is_zero && !zero) { memset(block, MI_DEBUG_UNINIT, size - MI_PADDING_SIZE); }
 #elif (MI_SECURE!=0)
   if (!zero) { block->next = 0; } // don't leak internal data
 #endif
@@ -70,7 +72,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   }
 #endif
 
-#if (MI_PADDING > 0) && defined(MI_ENCODE_FREELIST)
+#if (MI_PADDING > 0) && defined(MI_ENCODE_FREELIST) && !MI_TRACK_ENABLED
   mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
   ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
   #if (MI_DEBUG>1)
@@ -85,7 +87,10 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 #endif
 
   // mark as no-access again
-  mi_track_mem_noaccess(block,track_bsize);
+  // mi_track_mem_noaccess(block, track_bsize);
+  // mi_track_resize(block,track_bsize,size - MI_PADDING_SIZE);  
+  // mi_track_free(block);
+  //mi_track_malloc(block,size - MI_PADDING_SIZE,zero);
   return block;
 }
 
@@ -217,7 +222,7 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 // Check for heap block overflow by setting up padding at the end of the block
 // ---------------------------------------------------------------------------
 
-#if (MI_PADDING>0) && defined(MI_ENCODE_FREELIST)
+#if (MI_PADDING>0) && defined(MI_ENCODE_FREELIST) && !MI_TRACK_ENABLED
 static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
   *bsize = mi_page_usable_block_size(page);
   const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + *bsize);
@@ -421,7 +426,7 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
     // owning thread can free a block directly
     if mi_unlikely(mi_check_is_double_free(page, block)) return;
     mi_check_padding(page, block);
-    #if (MI_DEBUG!=0)
+    #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
     mi_track_mem_undefined(block, mi_page_block_size(page));  // note: check padding may set parts to noaccess
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
     #endif
@@ -453,13 +458,11 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool local, void* p) mi_attr_noexcept {
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
-  //#if MI_TRACK_ENABLED
-  //const size_t track_bsize = mi_page_block_size(page);
-  //#endif
-  //mi_track_mem_defined(block,track_bsize);    
+  const size_t track_bsize = mi_page_block_size(page);
+  //mi_track_mem_defined(block,track_bsize);
   mi_stat_free(page, block);                 // stat_free may access the padding
-  _mi_free_block(page, local, block);
-  //mi_track_mem_noaccess(block,track_bsize);  // use track_bsize as the page may have been deallocated by now
+  _mi_free_block(page, local, block);  
+  //mi_track_mem_noaccess(block,track_bsize);
 }
 
 // Get the segment data belonging to a pointer

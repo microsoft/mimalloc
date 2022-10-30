@@ -20,7 +20,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <valgrind/valgrind.h>
 #include <valgrind/memcheck.h>
 
-#define mi_track_malloc(p,size,zero)        VALGRIND_MALLOCLIKE_BLOCK(p,size,MI_PADDING_SIZE /*red zone*/,(zero?1:0))
+#define mi_track_malloc(p,size,zero)        VALGRIND_MALLOCLIKE_BLOCK(p,size,MI_PADDING_SIZE /*red zone*/,zero)
 #define mi_track_resize(p,oldsize,newsize)  VALGRIND_RESIZEINPLACE_BLOCK(p,oldsize,newsize,MI_PADDING_SIZE /*red zone*/)  
 #define mi_track_free(p)                    VALGRIND_FREELIKE_BLOCK(p,MI_PADDING_SIZE /*red zone*/)
 #define mi_track_mem_defined(p,size)        VALGRIND_MAKE_MEM_DEFINED(p,size)

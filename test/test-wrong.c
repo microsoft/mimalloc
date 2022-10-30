@@ -10,13 +10,21 @@
 
 int main(int argc, char** argv) {
   int* p = mi(malloc)(3*sizeof(int));
-  int* q = mi(malloc)(sizeof(int));
-
+  
   int* r = mi_malloc_aligned(8,16);
   mi_free(r);
 
+  // illegal byte wise read
+  char* c = (char*)mi(malloc)(3);
+  printf("invalid byte: over: %d, under: %d\n", c[4], c[-1]);
+  mi(free)(c);
+
   // undefined access
+  int* q = mi(malloc)(sizeof(int));
   printf("undefined: %d\n", *q);
+
+  // illegal int read
+  printf("invalid: over: %d, under: %d\n", q[1], q[-1]);
   
   *q = 42;
 
@@ -28,6 +36,7 @@ int main(int argc, char** argv) {
   
   mi(free)(q);
 
+  
   // double free
   mi(free)(q);
 
