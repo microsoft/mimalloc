@@ -337,6 +337,38 @@ When _mimalloc_ is built using debug mode, various checks are done at runtime to
 - Double free's, and freeing invalid heap pointers are detected.
 - Corrupted free-lists and some forms of use-after-free are detected.
 
+## Valgrind
+
+Generally, we recommend using the standard allocator with the amazing [Valgrind] tool (and 
+also for other address sanitizers). 
+However, it is possible to build mimalloc with Valgrind support. This has a small performance 
+overhead but does allow detecting memory leaks and byte-precise buffer overflows directly on final 
+executables. To build with valgrind support, use the `MI_VALGRIND=ON` cmake option:
+
+```
+> cmake ../.. -DMI_VALGRIND=ON
+```
+
+This can also be combined with secure mode or debug mode. 
+You can then run your programs directly under the `valgrind <myprogram>` tool. 
+If you rely on overriding `malloc`/`free` by mimalloc (instead of using the `mi_malloc`/`mi_free` API directly), 
+you also need to tell `valgrind` to not intercept those calls itself, and use:
+
+```
+> MIMALLOC_SHOW_STATS=1 valgrind  --soname-synonyms=somalloc=*mimalloc* -- <myprogram>
+```
+
+By setting the `MIMALLOC_SHOW_STATS` environment variable you can check that mimalloc is indeed
+used and not the standard allocator. Even though the option is called `--soname-synonyms`[valgrind-soname], this also 
+works when overriding with a static library or object file. Unfortunately, it is not possible to
+dynamically override mimalloc using `LD_PRELOAD` together with `valgrind`.
+See also the `test/test-wrong.c` file to test with `valgrind`.
+
+Valgrind support is in its initial development -- please report any issues.
+
+[Valgrind]: https://valgrind.org/
+[valgrind-soname]: https://valgrind.org/docs/manual/manual-core.html#opt.soname-synonyms
+
 
 # Overriding Standard Malloc
 
