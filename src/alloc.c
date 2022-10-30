@@ -41,22 +41,17 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   // allow use of the block internally 
   // note: when tracking we need to avoid ever touching the MI_PADDING since
   // that is tracked by valgrind etc. as non-accessible (through the red-zone, see `mimalloc-track.h`)
-  #if MI_TRACK_ENABLED
-  const size_t track_bsize = mi_page_block_size(page);
-  mi_assert_internal(track_bsize >= size && track_bsize >= MI_PADDING_SIZE);
-  mi_track_mem_undefined(block,track_bsize - MI_PADDING_SIZE);
-  #endif
-
+  mi_track_mem_undefined(block, mi_page_usable_block_size(page));
+  
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
     mi_assert_internal(page->xblock_size != 0); // do not call with zero'ing for huge blocks (see _mi_malloc_generic)
     const size_t zsize = (page->is_zero ? sizeof(block->next) + MI_PADDING_SIZE : page->xblock_size);
-    mi_assert(zsize <= track_bsize && zsize >= MI_PADDING_SIZE);
     _mi_memzero_aligned(block, zsize - MI_PADDING_SIZE);    
   }
 
-#if (MI_DEBUG>0)
-  if (!page->is_zero && !zero) { memset(block, MI_DEBUG_UNINIT, size - MI_PADDING_SIZE); }
+#if (MI_DEBUG>0) && !MI_TRACK_ENABLED
+  if (!page->is_zero && !zero) { memset(block, MI_DEBUG_UNINIT, mi_page_usable_block_size(page)); }
 #elif (MI_SECURE!=0)
   if (!zero) { block->next = 0; } // don't leak internal data
 #endif
@@ -87,11 +82,6 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
 #endif
 
-  // mark as no-access again
-  // mi_track_mem_noaccess(block, track_bsize);
-  // mi_track_resize(block,track_bsize,size - MI_PADDING_SIZE);  
-  // mi_track_free(block);
-  //mi_track_malloc(block,size - MI_PADDING_SIZE,zero);
   return block;
 }
 
