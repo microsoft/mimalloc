@@ -362,6 +362,7 @@ By setting the `MIMALLOC_SHOW_STATS` environment variable you can check that mim
 used and not the standard allocator. Even though the option is called `--soname-synonyms`[valgrind-soname], this also 
 works when overriding with a static library or object file. Unfortunately, it is not possible to
 dynamically override mimalloc using `LD_PRELOAD` together with `valgrind`.
+See also the `test/test-wrong.c` file to test with `valgrind`.
 
 Valgrind support is in its initial development -- please report any issues.
 
