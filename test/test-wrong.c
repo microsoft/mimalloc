@@ -1,3 +1,25 @@
+/* ----------------------------------------------------------------------------
+Copyright (c) 2018-2020, Microsoft Research, Daan Leijen
+This is free software; you can redistribute it and/or modify it under the
+terms of the MIT license. A copy of the license can be found in the file
+"LICENSE" at the root of this distribution.
+-----------------------------------------------------------------------------*/
+
+/* test file for valgrind support.
+   Compile in an "out/debug" folder:
+
+   > cd out/debug
+   > cmake ../.. -DMI_VALGRIND=1
+   > make -j8
+
+   and then compile this file as: 
+
+   > gcc -g -o test-wrong -I../../include ../../test/test-wrong.c libmimalloc-valgrind-debug.a -lpthread
+
+   and test as:
+
+   > valgrind ./test-wrong
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include "mimalloc.h"
@@ -36,7 +58,6 @@ int main(int argc, char** argv) {
   
   mi(free)(q);
 
-  
   // double free
   mi(free)(q);
 
