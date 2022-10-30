@@ -364,7 +364,6 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   // The padding check may access the non-thread-owned page for the key values.
   // that is safe as these are constant and the page won't be freed (as the block is not freed yet).
   mi_check_padding(page, block);
-  mi_track_mem_defined(block, mi_page_block_size(page));    // ensure the padding can be accessed
   mi_padding_shrink(page, block, sizeof(mi_block_t));       // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
   #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED                    // note: when tracking, cannot use mi_usable_size with multi-threading
   memset(block, MI_DEBUG_FREED, mi_usable_size(block));
@@ -427,7 +426,6 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
     if mi_unlikely(mi_check_is_double_free(page, block)) return;
     mi_check_padding(page, block);
     #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
-    mi_track_mem_undefined(block, mi_page_block_size(page));  // note: check padding may set parts to noaccess
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
     #endif
     mi_block_set_next(page, block, page->local_free);
@@ -458,11 +456,9 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool local, void* p) mi_attr_noexcept {
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
-  const size_t track_bsize = mi_page_block_size(page);
-  //mi_track_mem_defined(block,track_bsize);
   mi_stat_free(page, block);                 // stat_free may access the padding
+  mi_track_free(p);
   _mi_free_block(page, local, block);  
-  //mi_track_mem_noaccess(block,track_bsize);
 }
 
 // Get the segment data belonging to a pointer
@@ -517,19 +513,18 @@ void mi_free(void* p) mi_attr_noexcept
     #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
     #endif
+    mi_track_free(p);
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
-    // mi_track_mem_noaccess(block,mi_page_block_size(page));
     if mi_unlikely(--page->used == 0) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))    
       _mi_page_retire(page);
-    }
+    }    
   }
   else {
     // non-local, aligned blocks, or a full page; use the more generic path
     // note: recalc page in generic to improve code generation
     mi_free_generic(segment, tid == segment->thread_id, p);
   }  
-  mi_track_free(p);
 }
 
 bool _mi_free_delayed_block(mi_block_t* block) {
