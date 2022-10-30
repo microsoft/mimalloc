@@ -39,10 +39,11 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
 
   // allow use of the block internally 
-  // todo: can we optimize this call away for non-zero'd release mode?
+  // note: when tracking we need to avoid ever touching the MI_PADDING since
+  // that is tracked by valgrind etc. as non-accessible (through the red-zone, see `mimalloc-track.h`)
   #if MI_TRACK_ENABLED
   const size_t track_bsize = mi_page_block_size(page);
-  mi_assert_internal(track_bsize >= size);
+  mi_assert_internal(track_bsize >= size && track_bsize >= MI_PADDING_SIZE);
   mi_track_mem_undefined(block,track_bsize - MI_PADDING_SIZE);
   #endif
 
