@@ -619,7 +619,9 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_page_set_heap(page, heap);
   page->xblock_size = (block_size < MI_HUGE_BLOCK_SIZE ? (uint32_t)block_size : MI_HUGE_BLOCK_SIZE); // initialize before _mi_segment_page_start
   size_t page_size;
-  _mi_segment_page_start(segment, page, &page_size);
+  const void* page_start = _mi_segment_page_start(segment, page, &page_size);
+  MI_UNUSED(page_start);
+  mi_track_mem_noaccess(page_start,page_size);
   mi_assert_internal(mi_page_block_size(page) <= page_size);
   mi_assert_internal(page_size <= page->slice_count*MI_SEGMENT_SLICE_SIZE);
   mi_assert_internal(page_size / block_size < (1L<<16));

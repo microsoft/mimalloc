@@ -817,6 +817,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
       if (!ok) return NULL; // failed to commit   
       mi_commit_mask_set(&commit_mask, &commit_needed_mask); 
     }
+    mi_track_mem_undefined(segment,commit_needed);
     segment->memid = memid;
     segment->mem_is_pinned = is_pinned;
     segment->mem_is_large = mem_large;

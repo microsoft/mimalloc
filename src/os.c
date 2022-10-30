@@ -986,7 +986,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
         else _mi_stat_decrease(&stats->reset, csize);
   if (!reset) return true; // nothing to do on unreset!
 
-  #if (MI_DEBUG>1)
+  #if (MI_DEBUG>1) && !MI_TRACK_ENABLED
   if (MI_SECURE==0) {
     memset(start, 0, csize); // pretend it is eagerly reset
   }

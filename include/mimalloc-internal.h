@@ -9,6 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MIMALLOC_INTERNAL_H
 
 #include "mimalloc-types.h"
+#include "mimalloc-track.h"
 
 #if (MI_DEBUG>0)
 #define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
@@ -668,21 +669,27 @@ static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const 
 }
 
 static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, const uintptr_t* keys ) {
+  mi_track_mem_defined(block,sizeof(mi_block_t));
+  mi_block_t* next;
   #ifdef MI_ENCODE_FREELIST
-  return (mi_block_t*)mi_ptr_decode(null, block->next, keys);
+  next = (mi_block_t*)mi_ptr_decode(null, block->next, keys);
   #else
   MI_UNUSED(keys); MI_UNUSED(null);
-  return (mi_block_t*)block->next;
+  next = (mi_block_t*)block->next;
   #endif
+  mi_track_mem_noaccess(block,sizeof(mi_block_t));
+  return next;  
 }
 
 static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, const uintptr_t* keys) {
+  mi_track_mem_undefined(block,sizeof(mi_block_t));
   #ifdef MI_ENCODE_FREELIST
   block->next = mi_ptr_encode(null, next, keys);
   #else
   MI_UNUSED(keys); MI_UNUSED(null);
   block->next = (mi_encoded_t)next;
   #endif
+  mi_track_mem_noaccess(block,sizeof(mi_block_t));
 }
 
 static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t* block) {
@@ -1013,7 +1020,7 @@ static inline size_t mi_bsr(uintptr_t x) {
 // (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017). See also issue #201 and pr #253. 
 // ---------------------------------------------------------------------------------
 
-#if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
+#if !MI_TRACK_ENABLED && defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
 #include <intrin.h>
 #include <string.h>
 extern bool _mi_cpu_has_fsrm;
