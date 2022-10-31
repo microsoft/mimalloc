@@ -350,7 +350,12 @@ executables. To build with valgrind support, use the `MI_VALGRIND=ON` cmake opti
 ```
 
 This can also be combined with secure mode or debug mode. 
-You can then run your programs directly under the `valgrind <myprogram>` tool. 
+You can then run your programs directly under valgrind:
+
+```
+> valgrind <myprogram>
+```
+
 If you rely on overriding `malloc`/`free` by mimalloc (instead of using the `mi_malloc`/`mi_free` API directly), 
 you also need to tell `valgrind` to not intercept those calls itself, and use:
 
