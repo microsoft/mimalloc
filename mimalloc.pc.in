@@ -3,8 +3,8 @@ libdir=@libdir_for_pc_file@
 includedir=@includedir_for_pc_file@
 
 Name: @PROJECT_NAME@
-Description: a compact general purpose allocator with excellent performance
-Version: @PROJECT_VERSION@
+Description: A compact general purpose allocator with excellent performance
+Version: @PACKAGE_VERSION@
 URL: https://github.com/microsoft/mimalloc/
 Libs: -L${libdir} -lmimalloc
 Libs.private: @pc_libraries@
