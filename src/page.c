@@ -123,7 +123,13 @@ bool _mi_page_is_valid(mi_page_t* page) {
 }
 #endif
 
-bool _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never) {
+void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never) {
+  while (!_mi_page_try_use_delayed_free(page, delay, override_never)) {
+    mi_atomic_yield();
+  }
+}
+
+bool _mi_page_try_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never) {
   mi_thread_free_t tfreex;
   mi_delayed_t     old_delay;
   mi_thread_free_t tfree;  
