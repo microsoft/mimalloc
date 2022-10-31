@@ -122,10 +122,11 @@ void       _mi_page_retire(mi_page_t* page) mi_attr_noexcept;                  /
 void       _mi_page_unfull(mi_page_t* page);
 void       _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force);   // free the page
 void       _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);            // abandon the page, to be picked up by another thread...
-void       _mi_heap_delayed_free(mi_heap_t* heap);
+void       _mi_heap_delayed_free_all(mi_heap_t* heap);
+bool       _mi_heap_delayed_free_partial(mi_heap_t* heap);
 void       _mi_heap_collect_retired(mi_heap_t* heap, bool force);
 
-void       _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never);
+bool       _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never);
 size_t     _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append);
 void       _mi_deferred_free(mi_heap_t* heap, bool force);
 
