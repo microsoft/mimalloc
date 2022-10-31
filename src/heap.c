@@ -136,9 +136,9 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
     mi_heap_visit_pages(heap, &mi_heap_page_never_delayed_free, NULL, NULL);
   }
 
-  // free thread delayed blocks.
+  // free all current thread delayed blocks.
   // (if abandoning, after this there are no more thread-delayed references into the pages.)
-  _mi_heap_delayed_free(heap);
+  _mi_heap_delayed_free_all(heap);
 
   // collect retired pages
   _mi_heap_collect_retired(heap, collect >= MI_FORCE);
@@ -339,7 +339,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   if (from==NULL || from->page_count == 0) return;
 
   // reduce the size of the delayed frees
-  _mi_heap_delayed_free(from);
+  _mi_heap_delayed_free_partial(from);
   
   // transfer all pages by appending the queues; this will set a new heap field 
   // so threads may do delayed frees in either heap for a while.
@@ -358,7 +358,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   // note: be careful here as the `heap` field in all those pages no longer point to `from`,
   // turns out to be ok as `_mi_heap_delayed_free` only visits the list and calls a 
   // the regular `_mi_free_delayed_block` which is safe.
-  _mi_heap_delayed_free(from);  
+  _mi_heap_delayed_free_all(from);  
   #if !defined(_MSC_VER) || (_MSC_VER > 1900) // somehow the following line gives an error in VS2015, issue #353
   mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_block_t,&from->thread_delayed_free) == NULL);
   #endif

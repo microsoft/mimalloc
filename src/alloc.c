@@ -518,6 +518,7 @@ void mi_free(void* p) mi_attr_noexcept
   }  
 }
 
+// return true if successful
 bool _mi_free_delayed_block(mi_block_t* block) {
   // get segment and page
   const mi_segment_t* const segment = _mi_ptr_segment(block);
@@ -530,7 +531,9 @@ bool _mi_free_delayed_block(mi_block_t* block) {
   // some blocks may end up in the page `thread_free` list with no blocks in the
   // heap `thread_delayed_free` list which may cause the page to be never freed!
   // (it would only be freed if we happen to scan it in `mi_page_queue_find_free_ex`)
-  _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, false /* dont overwrite never delayed */);
+  if (!_mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, false /* dont overwrite never delayed */)) {
+    return false;
+  }
 
   // collect all other non-local frees to ensure up-to-date `used` count
   _mi_page_free_collect(page, false);

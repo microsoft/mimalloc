@@ -122,15 +122,18 @@ bool _mi_page_is_valid(mi_page_t* page) {
 }
 #endif
 
-void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never) {
+bool _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never) {
   mi_thread_free_t tfreex;
   mi_delayed_t     old_delay;
   mi_thread_free_t tfree;  
+  size_t yield_count = 0;
   do {
     tfree = mi_atomic_load_acquire(&page->xthread_free); // note: must acquire as we can break/repeat this loop and not do a CAS;
     tfreex = mi_tf_set_delayed(tfree, delay);
     old_delay = mi_tf_delayed(tfree);
     if mi_unlikely(old_delay == MI_DELAYED_FREEING) {
+      if (yield_count >= 4) return false;  // give up after 4 tries
+      yield_count++;
       mi_atomic_yield(); // delay until outstanding MI_DELAYED_FREEING are done.
       // tfree = mi_tf_set_delayed(tfree, MI_NO_DELAYED_FREE); // will cause CAS to busy fail
     }
@@ -142,6 +145,8 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool overrid
     }
   } while ((old_delay == MI_DELAYED_FREEING) ||
            !mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
+
+  return true; // success
 }
 
 /* -----------------------------------------------------------
@@ -272,10 +277,18 @@ static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
    Do any delayed frees
    (put there by other threads if they deallocated in a full page)
 ----------------------------------------------------------- */
-void _mi_heap_delayed_free(mi_heap_t* heap) {
+void _mi_heap_delayed_free_all(mi_heap_t* heap) {
+  while (!_mi_heap_delayed_free_partial(heap)) {
+    mi_atomic_yield();
+  }
+}
+
+// returns true if all delayed frees were processed
+bool _mi_heap_delayed_free_partial(mi_heap_t* heap) {
   // take over the list (note: no atomic exchange since it is often NULL)
   mi_block_t* block = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
   while (block != NULL && !mi_atomic_cas_ptr_weak_acq_rel(mi_block_t, &heap->thread_delayed_free, &block, NULL)) { /* nothing */ };
+  bool all_freed = true;
 
   // and free them all
   while(block != NULL) {
@@ -283,7 +296,9 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
     // use internal free instead of regular one to keep stats etc correct
     if (!_mi_free_delayed_block(block)) {
       // we might already start delayed freeing while another thread has not yet
-      // reset the delayed_freeing flag; in that case delay it further by reinserting.
+      // reset the delayed_freeing flag; in that case delay it further by reinserting the current block
+      // into the delayed free list
+      all_freed = false;
       mi_block_t* dfree = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
       do {
         mi_block_set_nextx(heap, block, dfree, heap->keys);
@@ -291,6 +306,7 @@ void _mi_heap_delayed_free(mi_heap_t* heap) {
     }
     block = next;
   }
+  return all_freed;
 }
 
 /* -----------------------------------------------------------
@@ -832,8 +848,8 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexce
   // call potential deferred free routines
   _mi_deferred_free(heap, false);
 
-  // free delayed frees from other threads
-  _mi_heap_delayed_free(heap);
+  // free delayed frees from other threads (but skip contended ones)
+  _mi_heap_delayed_free_partial(heap);
 
   // find (or allocate) a page of the right size
   mi_page_t* page = mi_find_page(heap, size);
