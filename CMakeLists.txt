@@ -15,6 +15,7 @@ option(MI_USE_CXX           "Use the C++ compiler to compile the library (instea
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" ON) 
+option(MI_WIN_REDIRECT      "Use redirection module ('mimalloc-redirect') on Windows if compiling mimalloc as a DLL" ON)
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
 option(MI_BUILD_SHARED      "Build shared library" ON)
 option(MI_BUILD_STATIC      "Build static library" ON)
@@ -102,6 +103,19 @@ if(MI_OVERRIDE)
     if(MI_USE_CXX AND MI_OSX_INTERPOSE)
       message(STATUS "  WARNING: if dynamically overriding malloc/free, it is more reliable to build mimalloc as C code (use -DMI_USE_CXX=OFF)")
     endif()
+  endif()
+endif()
+
+if(WIN32)
+  if (MI_WIN_REDIRECT)
+    if (MSVC_C_ARCHITECTURE_ID MATCHES "ARM")
+      message(STATUS "Cannot use redirection on Windows ARM (MI_WIN_REDIRECT=OFF)")
+      set(MI_WIN_REDIRECT OFF)
+    endif()
+  endif()
+  if (NOT MI_WIN_REDIRECT)
+    # use a negative define for backward compatibility
+    list(APPEND mi_defines MI_WIN_NOREDIRECT=1)
   endif()
 endif()
 
@@ -323,8 +337,8 @@ if(MI_BUILD_SHARED)
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${mi_install_incdir}>
   )
-  if(WIN32)
-    # On windows copy the mimalloc redirection dll too.
+  if(WIN32 AND MI_WIN_REDIRECT)
+    # On windows, link and copy the mimalloc redirection dll too.
     if(CMAKE_SIZEOF_VOID_P EQUAL 4)
       set(MIMALLOC_REDIRECT_SUFFIX "32")
     else()
