@@ -648,12 +648,12 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
   // else if size == 0 then reallocate to a zero-sized block (and don't return NULL, just as mi_malloc(0)).
   // (this means that returning NULL always indicates an error, and `p` will not have been freed in that case.)
   const size_t size = _mi_usable_size(p,"mi_realloc"); // also works if p == NULL (with size 0)
-  #if !MI_TRACK_ENABLED
   if mi_unlikely(newsize <= size && newsize >= (size / 2) && newsize > 0) {  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
     // todo: adjust potential padding to reflect the new size?
+    mi_track_free(p);
+    mi_track_malloc(p,newsize,true);
     return p;  // reallocation still fits and not more than 50% waste
   }
-  #endif
   void* newp = mi_heap_malloc(heap,newsize);
   if mi_likely(newp != NULL) {
     if (zero && newsize > size) {
@@ -663,7 +663,9 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
     }
     if mi_likely(p != NULL) {
       if mi_likely(_mi_is_aligned(p, sizeof(uintptr_t))) {  // a client may pass in an arbitrary pointer `p`..
-        _mi_memcpy_aligned(newp, p, (newsize > size ? size : newsize));
+        const size_t copysize = (newsize > size ? size : newsize);
+        mi_track_mem_defined(p,copysize);  // _mi_useable_size may be too large for byte precise memory tracking..
+        _mi_memcpy_aligned(newp, p, copysize);
       }
       mi_free(p); // only free the original pointer if successful
     }

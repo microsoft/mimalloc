@@ -31,7 +31,8 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   }
 
   // otherwise over-allocate
-  void* p = _mi_heap_malloc_zero(heap, size + alignment - 1, zero);
+  const size_t oversize = size + alignment - 1;
+  void* p = _mi_heap_malloc_zero(heap, oversize, zero);
   if (p == NULL) return NULL;
 
   // .. and align within the allocation
@@ -42,10 +43,15 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   mi_assert_internal(((uintptr_t)aligned_p + offset) % alignment == 0);
   mi_assert_internal(p == _mi_page_ptr_unalign(_mi_ptr_segment(aligned_p), _mi_ptr_page(aligned_p), aligned_p));
 
+  #if MI_TRACK_ENABLED
   if (p != aligned_p) {
     mi_track_free(p);
     mi_track_malloc(aligned_p,size,zero);
   }
+  else {
+    mi_track_resize(aligned_p,oversize,size);
+  }
+  #endif
   return aligned_p;
 }
 
