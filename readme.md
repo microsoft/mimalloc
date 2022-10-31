@@ -364,7 +364,8 @@ you also need to tell `valgrind` to not intercept those calls itself, and use:
 ```
 
 By setting the `MIMALLOC_SHOW_STATS` environment variable you can check that mimalloc is indeed
-used and not the standard allocator. Even though the option is called `--soname-synonyms`[valgrind-soname], this also 
+used and not the standard allocator. Even though the [Valgrind option][valgrind-soname] 
+is called `--soname-synonyms`, this also 
 works when overriding with a static library or object file. Unfortunately, it is not possible to
 dynamically override mimalloc using `LD_PRELOAD` together with `valgrind`.
 See also the `test/test-wrong.c` file to test with `valgrind`.
