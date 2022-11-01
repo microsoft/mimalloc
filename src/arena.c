@@ -281,6 +281,15 @@ void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, b
   return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
 }
 
+void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
+  if (size != NULL) *size = 0;
+  size_t arena_index = mi_arena_id_index(arena_id);
+  if (arena_index >= MI_MAX_ARENAS) return NULL;
+  mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[arena_index]);
+  if (arena == NULL) return NULL;
+  if (size != NULL) *size = arena->block_count * MI_ARENA_BLOCK_SIZE;
+  return arena->start;
+}
 
 /* -----------------------------------------------------------
   Arena free
