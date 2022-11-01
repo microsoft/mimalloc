@@ -95,8 +95,9 @@ mi_arena_id_t _mi_arena_id_none(void) {
   return 0;
 }
 
-static bool mi_arena_id_suitable(mi_arena_id_t arena_id, bool exclusive, mi_arena_id_t req_arena_id) {
-  return (!exclusive || arena_id == req_arena_id);
+static bool mi_arena_id_is_suitable(mi_arena_id_t arena_id, bool exclusive, mi_arena_id_t req_arena_id) {
+  return ((!exclusive && req_arena_id == _mi_arena_id_none()) || 
+          (arena_id == req_arena_id));
 }
 
 
@@ -122,11 +123,11 @@ static bool mi_arena_memid_indices(size_t arena_memid, size_t* arena_index, mi_b
   return ((arena_memid & 0x80) != 0);
 }
 
-bool _mi_arena_memid_suitable(size_t arena_memid, mi_arena_id_t request_arena_id) {
+bool _mi_arena_memid_is_suitable(size_t arena_memid, mi_arena_id_t request_arena_id) {
   mi_assert_internal(arena_memid != MI_MEMID_OS);
   mi_arena_id_t id = (int)(arena_memid & 0x7F);
   bool exclusive = ((arena_memid & 0x80) != 0);
-  return mi_arena_id_suitable(id, exclusive, request_arena_id);
+  return mi_arena_id_is_suitable(id, exclusive, request_arena_id);
 }
 
 static size_t mi_block_count_of_size(size_t size) {
@@ -157,7 +158,7 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
 {
   MI_UNUSED(arena_index);
   mi_assert_internal(mi_arena_id_index(arena->id) == arena_index);
-  if (!mi_arena_id_suitable(arena->id, arena->exclusive, req_arena_id)) return NULL;
+  if (!mi_arena_id_is_suitable(arena->id, arena->exclusive, req_arena_id)) return NULL;
 
   mi_bitmap_index_t bitmap_index;
   if (!mi_arena_alloc(arena, needed_bcount, &bitmap_index)) return NULL;
@@ -263,6 +264,17 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool*
 void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t arena_id, size_t* memid, mi_os_tld_t* tld)
 {
   return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, commit, large, is_pinned, is_zero, arena_id, memid, tld);
+}
+
+
+void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
+  if (size != NULL) *size = 0;
+  size_t arena_index = mi_arena_id_index(arena_id);
+  if (arena_index >= MI_MAX_ARENAS) return NULL;
+  mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[arena_index]);
+  if (arena == NULL) return NULL;
+  if (size != NULL) *size = arena->block_count * MI_ARENA_BLOCK_SIZE;
+  return arena->start;
 }
 
 /* -----------------------------------------------------------
