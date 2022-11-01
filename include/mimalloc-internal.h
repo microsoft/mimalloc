@@ -89,9 +89,10 @@ size_t     _mi_os_good_alloc_size(size_t size);
 bool       _mi_os_has_overcommit(void);
 
 // arena.c
-void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
-void*      _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
+void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
+void*      _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
 void       _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, mi_os_tld_t* tld);
+mi_arena_id_t _mi_arena_id_none(void);
 
 // "segment-cache.c"
 void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld);

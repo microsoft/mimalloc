@@ -795,7 +795,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     size_t memid = 0;
     segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, &commit_mask, &decommit_mask, &mem_large, &is_pinned, &is_zero, &memid, os_tld);
     if (segment==NULL) {
-      segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_pinned, &is_zero, &memid, os_tld);
+      segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, MI_SEGMENT_SIZE, &commit, &mem_large, &is_pinned, &is_zero, _mi_arena_id_none(), &memid, os_tld);
       if (segment == NULL) return NULL;  // failed to allocate
       if (commit) {
         mi_commit_mask_create_full(&commit_mask);
