@@ -138,7 +138,11 @@ int main(void) {
     result = ok;
   };
   CHECK_BODY("malloc-aligned5") {
-    void* p = mi_malloc_aligned(4097,4096); size_t usable = mi_usable_size(p); result = usable >= 4097 && usable < 10000; mi_free(p);
+    void* p = mi_malloc_aligned(4097,4096); 
+    size_t usable = mi_usable_size(p); 
+    result = (usable >= 4097 && usable < 16000); 
+    printf("malloc_aligned5: usable size: %zi\n", usable);
+    mi_free(p);
   };
   CHECK_BODY("malloc-aligned6") {
     bool ok = true;
