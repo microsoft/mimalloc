@@ -93,9 +93,10 @@ void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, 
 void*      _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
 void       _mi_arena_free(void* p, size_t size, size_t memid, bool is_committed, mi_os_tld_t* tld);
 mi_arena_id_t _mi_arena_id_none(void);
+bool       _mi_arena_memid_is_suitable(size_t memid, mi_arena_id_t req_arena_id);
 
 // "segment-cache.c"
-void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
+void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
 bool       _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* decommit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld);
 void       _mi_segment_cache_collect(bool force, mi_os_tld_t* tld);
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
@@ -142,6 +143,7 @@ uint8_t    _mi_bin(size_t size);                // for stats
 void       _mi_heap_destroy_pages(mi_heap_t* heap);
 void       _mi_heap_collect_abandon(mi_heap_t* heap);
 void       _mi_heap_set_default_direct(mi_heap_t* heap);
+bool       _mi_heap_memid_is_suitable(mi_heap_t* heap, size_t memid);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);

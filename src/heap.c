@@ -200,13 +200,14 @@ mi_heap_t* mi_heap_get_backing(void) {
   return bheap;
 }
 
-mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
+mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena( mi_arena_id_t arena_id ) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);  // todo: OS allocate in secure mode?
   if (heap==NULL) return NULL;
   _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(mi_heap_t));
   heap->tld = bheap->tld;
   heap->thread_id = _mi_thread_id();
+  heap->arena_id = arena_id;
   _mi_random_split(&bheap->random, &heap->random);
   heap->cookie  = _mi_heap_random_next(heap) | 1;
   heap->keys[0] = _mi_heap_random_next(heap);
@@ -216,6 +217,14 @@ mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
   heap->next = heap->tld->heaps;
   heap->tld->heaps = heap;
   return heap;
+}
+
+mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
+  return mi_heap_new_in_arena(_mi_arena_id_none());
+}
+
+bool _mi_heap_memid_is_suitable(mi_heap_t* heap, size_t memid) {
+  return _mi_arena_memid_is_suitable(memid, heap->arena_id);
 }
 
 uintptr_t _mi_heap_random_next(mi_heap_t* heap) {

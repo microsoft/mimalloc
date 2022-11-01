@@ -438,6 +438,7 @@ struct mi_heap_s {
   mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
   _Atomic(mi_block_t*)  thread_delayed_free;
   mi_threadid_t         thread_id;                           // thread this heap belongs too
+  mi_arena_id_t         arena_id;                            // arena id if the heap belongs to a specific arena (or 0)  
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   uintptr_t             keys[2];                             // two random keys used to encode the `thread_delayed_free` list
   mi_random_ctx_t       random;                              // random number context used for secure allocation

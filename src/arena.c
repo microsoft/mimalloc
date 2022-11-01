@@ -97,8 +97,9 @@ mi_arena_id_t _mi_arena_id_none(void) {
   return 0;
 }
 
-static bool mi_arena_id_suitable(mi_arena_id_t arena_id, bool exclusive, mi_arena_id_t req_arena_id) {
-  return (!exclusive || arena_id == req_arena_id);
+static bool mi_arena_id_is_suitable(mi_arena_id_t arena_id, bool arena_is_exclusive, mi_arena_id_t req_arena_id) {
+  return ((!arena_is_exclusive && req_arena_id == _mi_arena_id_none()) ||
+          (arena_id == req_arena_id));
 }
 
 
@@ -117,18 +118,16 @@ static size_t mi_arena_memid_create(mi_arena_id_t id, bool exclusive, mi_bitmap_
 }
 
 static bool mi_arena_memid_indices(size_t arena_memid, size_t* arena_index, mi_bitmap_index_t* bitmap_index) {
-  mi_assert_internal(arena_memid != MI_MEMID_OS);
   *bitmap_index = (arena_memid >> 8);
   mi_arena_id_t id = (int)(arena_memid & 0x7F);
   *arena_index = mi_arena_id_index(id);
   return ((arena_memid & 0x80) != 0);
 }
 
-bool _mi_arena_memid_suitable(size_t arena_memid, mi_arena_id_t request_arena_id) {
-  mi_assert_internal(arena_memid != MI_MEMID_OS);
+bool _mi_arena_memid_is_suitable(size_t arena_memid, mi_arena_id_t request_arena_id) {
   mi_arena_id_t id = (int)(arena_memid & 0x7F);
   bool exclusive = ((arena_memid & 0x80) != 0);
-  return mi_arena_id_suitable(id, exclusive, request_arena_id);
+  return mi_arena_id_is_suitable(id, exclusive, request_arena_id);
 }
 
 static size_t mi_block_count_of_size(size_t size) {
@@ -159,7 +158,7 @@ static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t aren
 {
   MI_UNUSED(arena_index);
   mi_assert_internal(mi_arena_id_index(arena->id) == arena_index);
-  if (!mi_arena_id_suitable(arena->id, arena->exclusive, req_arena_id)) return NULL;
+  if (!mi_arena_id_is_suitable(arena->id, arena->exclusive, req_arena_id)) return NULL;
 
   mi_bitmap_index_t bitmap_index;
   if (!mi_arena_alloc(arena, needed_bcount, &bitmap_index)) return NULL;
@@ -266,7 +265,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool*
   }
 
   // finally, fall back to the OS
-  if (mi_option_is_enabled(mi_option_limit_os_alloc)) {
+  if (mi_option_is_enabled(mi_option_limit_os_alloc) || req_arena_id != _mi_arena_id_none()) {
     errno = ENOMEM;
     return NULL;
   }
@@ -281,6 +280,7 @@ void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, b
 {
   return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
 }
+
 
 /* -----------------------------------------------------------
   Arena free
