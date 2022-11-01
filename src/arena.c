@@ -48,7 +48,7 @@ bool  _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
 #define MI_SEGMENT_ALIGN      MI_SEGMENT_SIZE
 #define MI_ARENA_BLOCK_SIZE   (4*MI_SEGMENT_ALIGN)     // 32MiB
 #define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 16MiB
-#define MI_MAX_ARENAS         (64)                     // not more than 126 (since we use 8 bits in the memid and a signed 8-bit arena_id + 1)
+#define MI_MAX_ARENAS         (64)                     // not more than 126 (since we use 7 bits in the memid and an arena index + 1)
 
 // A memory arena descriptor
 typedef struct mi_arena_s {
@@ -80,7 +80,7 @@ static mi_decl_cache_align _Atomic(size_t)      mi_arena_count; // = 0
 ----------------------------------------------------------- */
 
 static size_t mi_arena_id_index(mi_arena_id_t id) {
-  return (size_t)(id < 0 ? MI_MAX_ARENAS : id - 1);
+  return (size_t)(id <= 0 ? MI_MAX_ARENAS : id - 1);
 }
 
 static mi_arena_id_t mi_arena_id_create(size_t arena_index) {
@@ -91,7 +91,7 @@ static mi_arena_id_t mi_arena_id_create(size_t arena_index) {
   return id;
 }
 
-static mi_arena_id_t mi_arena_id_none(void) {
+mi_arena_id_t _mi_arena_id_none(void) {
   return 0;
 }
 
@@ -338,7 +338,7 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id) {
 
 bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
-  if (arena_id != NULL) *arena_id = mi_arena_id_none();
+  if (arena_id != NULL) *arena_id = _mi_arena_id_none();
   if (size < MI_ARENA_BLOCK_SIZE) return false;
 
   if (is_large) {
@@ -353,7 +353,7 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
   mi_arena_t* arena   = (mi_arena_t*)_mi_os_alloc(asize, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
   if (arena == NULL) return false;
 
-  arena->id = mi_arena_id_none();
+  arena->id = _mi_arena_id_none();
   arena->exclusive = exclusive;
   arena->block_count = bcount;
   arena->field_count = fields;
@@ -386,7 +386,7 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
 // Reserve a range of regular OS memory
 int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept 
 {
-  if (arena_id != NULL) *arena_id = mi_arena_id_none();
+  if (arena_id != NULL) *arena_id = _mi_arena_id_none();
   size = _mi_align_up(size, MI_ARENA_BLOCK_SIZE); // at least one block
   bool large = allow_large;
   void* start = _mi_os_alloc_aligned(size, MI_SEGMENT_ALIGN, commit, &large, &_mi_stats_main);

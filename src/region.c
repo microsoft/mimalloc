@@ -49,9 +49,10 @@ bool    _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
 bool    _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 
 // arena.c
+mi_arena_id_t _mi_arena_id_none(void);
 void    _mi_arena_free(void* p, size_t size, size_t memid, bool all_committed, mi_stats_t* stats);
-void*   _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
-void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld);
+void*   _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
+void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
 
 
 
@@ -180,7 +181,7 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   bool is_zero = false;
   bool is_pinned = false;
   size_t arena_memid = 0;
-  void* const start = _mi_arena_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, &region_commit, &region_large, &is_pinned, &is_zero, &arena_memid, tld);
+  void* const start = _mi_arena_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, &region_commit, &region_large, &is_pinned, &is_zero, _mi_arena_id_none(),  & arena_memid, tld);
   if (start == NULL) return false;
   mi_assert_internal(!(region_large && !allow_large));
   mi_assert_internal(!region_large || region_commit);
@@ -370,7 +371,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* l
   }
   if (p == NULL) {
     // and otherwise fall back to the OS
-    p = _mi_arena_alloc_aligned(size, alignment, commit, large, is_pinned, is_zero, &arena_memid, tld);
+    p = _mi_arena_alloc_aligned(size, alignment, commit, large, is_pinned, is_zero, _mi_arena_id_none(),  & arena_memid, tld);
     *memid = mi_memid_create_from_arena(arena_memid);
   }
 
