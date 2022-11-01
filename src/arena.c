@@ -86,7 +86,7 @@ static size_t mi_arena_id_index(mi_arena_id_t id) {
 }
 
 static mi_arena_id_t mi_arena_id_create(size_t arena_index) {
-  mi_assert_internal(arena_index >= 0 && arena_index < MI_MAX_ARENAS);
+  mi_assert_internal(arena_index < MI_MAX_ARENAS);
   mi_assert_internal(MI_MAX_ARENAS <= 126);
   int id = (int)arena_index + 1;
   mi_assert_internal(id >= 1 && id <= 127);
