@@ -84,7 +84,7 @@ static size_t mi_arena_id_index(mi_arena_id_t id) {
 }
 
 static mi_arena_id_t mi_arena_id_create(size_t arena_index) {
-  mi_assert_internal(arena_index >= 0 && arena_index < MI_MAX_ARENAS);
+  mi_assert_internal(arena_index < MI_MAX_ARENAS);
   mi_assert_internal(MI_MAX_ARENAS <= 126);
   int id = (int)arena_index + 1;
   mi_assert_internal(id >= 1 && id <= 127);
@@ -95,8 +95,8 @@ mi_arena_id_t _mi_arena_id_none(void) {
   return 0;
 }
 
-static bool mi_arena_id_is_suitable(mi_arena_id_t arena_id, bool exclusive, mi_arena_id_t req_arena_id) {
-  return ((!exclusive && req_arena_id == _mi_arena_id_none()) || 
+static bool mi_arena_id_is_suitable(mi_arena_id_t arena_id, bool arena_is_exclusive, mi_arena_id_t req_arena_id) {
+  return ((!arena_is_exclusive && req_arena_id == _mi_arena_id_none()) || 
           (arena_id == req_arena_id));
 }
 
