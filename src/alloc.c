@@ -853,8 +853,8 @@ static bool mi_try_new_handler(bool nothrow) {
 #else
 typedef void (*std_new_handler_t)(void);
 
-#if (defined(__GNUC__) || defined(__clang__))
-std_new_handler_t __attribute((weak)) _ZSt15get_new_handlerv(void) {
+#if (defined(__GNUC__) || (defined(__clang__) && !defined(_MSC_VER)))  // exclude clang-cl, see issue #631
+std_new_handler_t __attribute__((weak)) _ZSt15get_new_handlerv(void) {
   return NULL;
 }
 static std_new_handler_t mi_get_new_handler(void) {
