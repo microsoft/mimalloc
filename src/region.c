@@ -376,7 +376,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, size_t align_offset, 
   }
 
   if (p != NULL) {
-    mi_assert_internal((uintptr_t)p % alignment == 0);
+    mi_assert_internal(((uintptr_t)p + align_offset) % alignment == 0);
     #if (MI_DEBUG>=2) && !MI_TRACK_ENABLED
     if (*commit) { ((uint8_t*)p)[0] = 0; } // ensure the memory is committed
     #endif
@@ -470,7 +470,7 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
         mi_atomic_store_release(&region->info, (size_t)0);
         if (start != NULL) { // && !_mi_os_is_huge_reserved(start)) {         
           _mi_abandoned_await_readers(); // ensure no pending reads
-          _mi_arena_free(start, MI_REGION_SIZE, 0, 0, arena_memid, (~commit == 0), tld->stats);
+          _mi_arena_free(start, MI_REGION_SIZE, MI_SEGMENT_ALIGN, 0, arena_memid, (~commit == 0), tld->stats);
         }
       }
     }

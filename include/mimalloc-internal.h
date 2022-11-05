@@ -147,6 +147,7 @@ mi_msecs_t  _mi_clock_start(void);
 // "alloc.c"
 void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept;  // called from `_mi_malloc_generic`
 void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
+void*       _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept;     // called from `_mi_heap_malloc_aligned`
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
@@ -426,7 +427,8 @@ static inline mi_page_t* _mi_get_free_small_page(size_t size) {
 // Segment that contains the pointer
 static inline mi_segment_t* _mi_ptr_segment(const void* p) {
   // mi_assert_internal(p != NULL);
-  return (mi_segment_t*)((uintptr_t)p & ~MI_SEGMENT_MASK);
+  if (p == NULL) return NULL;
+  return (mi_segment_t*)(((uintptr_t)p - 1) & ~MI_SEGMENT_MASK);
 }
 
 // Segment belonging to a page
@@ -440,7 +442,7 @@ static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
 static inline size_t _mi_segment_page_idx_of(const mi_segment_t* segment, const void* p) {
   // if (segment->page_size > MI_SEGMENT_SIZE) return &segment->pages[0];  // huge pages
   ptrdiff_t diff = (uint8_t*)p - (uint8_t*)segment;
-  mi_assert_internal(diff >= 0 && (size_t)diff < MI_SEGMENT_SIZE);
+  mi_assert_internal(diff >= 0 && (size_t)diff <= MI_SEGMENT_SIZE /* for huge alignment it can be equal */);
   size_t idx = (size_t)diff >> segment->page_shift;
   mi_assert_internal(idx < segment->capacity);
   mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM || idx == 0);

@@ -503,7 +503,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   // calculate needed sizes first
   size_t capacity;
   if (page_kind == MI_PAGE_HUGE) {
-    mi_assert_internal(page_shift == MI_SEGMENT_SHIFT && required > 0);
+    mi_assert_internal(page_shift == MI_SEGMENT_SHIFT + 1 && required > 0);
     capacity = 1;
   }
   else {
@@ -574,8 +574,9 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     size_t align_offset = 0;
     size_t alignment = MI_SEGMENT_SIZE;
     if (page_alignment > 0) {
-      align_offset = pre_size;
       alignment = page_alignment;
+      align_offset = _mi_align_up( pre_size, MI_SEGMENT_SIZE );
+      segment_size += (align_offset - pre_size);
     }
     segment = (mi_segment_t*)_mi_mem_alloc_aligned(segment_size, alignment, align_offset, &commit, &mem_large, &is_pinned, &is_zero, &memid, os_tld);
     if (segment == NULL) return NULL;  // failed to allocate
@@ -1251,14 +1252,23 @@ static mi_page_t* mi_segment_large_page_alloc(mi_heap_t* heap, size_t block_size
 
 static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 {
-  mi_segment_t* segment = mi_segment_alloc(size, MI_PAGE_HUGE, MI_SEGMENT_SHIFT, page_alignment, tld, os_tld);
+  mi_segment_t* segment = mi_segment_alloc(size, MI_PAGE_HUGE, MI_SEGMENT_SHIFT + 1, page_alignment, tld, os_tld);
   if (segment == NULL) return NULL;
   mi_assert_internal(mi_segment_page_size(segment) - segment->segment_info_size - (2*(MI_SECURE == 0 ? 0 : _mi_os_page_size())) >= size);
   segment->thread_id = 0; // huge pages are immediately abandoned
   mi_segments_track_size(-(long)segment->segment_size, tld);
   mi_page_t* page = mi_segment_find_free(segment, tld);
   mi_assert_internal(page != NULL);
-  mi_assert_internal(page_alignment == 0 || _mi_is_aligned(_mi_page_start(segment, page, NULL),page_alignment));
+#if MI_DEBUG > 3
+  if (page_alignment > 0) {
+    size_t psize;
+    size_t pre_size;
+    void* p = _mi_segment_page_start(segment, page, 0, &psize, &pre_size);
+    void* aligned_p = (void*)_mi_align_up((uintptr_t)p, page_alignment);
+    mi_assert_internal(page_alignment == 0 || _mi_is_aligned(aligned_p, page_alignment));
+    mi_assert_internal(page_alignment == 0 || psize - ((uint8_t*)aligned_p - (uint8_t*)p) >= size);
+  }
+#endif
   return page;
 }
 
@@ -1296,10 +1306,16 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
 
 mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
   mi_page_t* page;
-  if (page_alignment <= MI_ALIGNMENT_MAX) {
+  if mi_unlikely(page_alignment > MI_ALIGNMENT_MAX) {
+    mi_assert_internal(_mi_is_power_of_two(page_alignment));
+    mi_assert_internal(page_alignment >= MI_SEGMENT_SIZE);
+    //mi_assert_internal((MI_SEGMENT_SIZE % page_alignment) == 0);
+    if (page_alignment < MI_SEGMENT_SIZE) {
+      page_alignment = MI_SEGMENT_SIZE;      
+    }
     page = mi_segment_huge_page_alloc(block_size, page_alignment, tld, os_tld);
   }
-  if (block_size <= MI_SMALL_OBJ_SIZE_MAX) {
+  else if (block_size <= MI_SMALL_OBJ_SIZE_MAX) {
     page = mi_segment_small_page_alloc(heap, block_size, tld, os_tld);
   }
   else if (block_size <= MI_MEDIUM_OBJ_SIZE_MAX) {
