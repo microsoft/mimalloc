@@ -30,7 +30,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   mi_assert_internal(page->xblock_size==0||mi_page_block_size(page) >= size);
   mi_block_t* const block = page->free;
   if mi_unlikely(block == NULL) {
-    return _mi_malloc_generic(heap, size, zero); 
+    return _mi_malloc_generic(heap, size, zero, 0); 
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   // pop from the free list
@@ -117,14 +117,14 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc_small(size_t si
 }
 
 // The main allocation function
-extern inline void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
+static inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept {
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
     return mi_heap_malloc_small_zero(heap, size, zero);
   }
   else {
     mi_assert(heap!=NULL);
     mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id());   // heaps are thread local
-    void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE, zero);  // note: size can overflow but it is detected in malloc_generic
+    void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE, zero, huge_alignment);  // note: size can overflow but it is detected in malloc_generic
     mi_assert_internal(p == NULL || mi_usable_size(p) >= size);
     #if MI_STAT>1
     if (p != NULL) {
@@ -135,6 +135,10 @@ extern inline void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero
     mi_track_malloc(p,size,zero);
     return p;
   }
+}
+
+extern inline void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
+  return _mi_heap_malloc_zero_ex(heap, size, zero, 0);
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {

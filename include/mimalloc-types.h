@@ -301,6 +301,8 @@ typedef struct mi_segment_s {
   size_t               memid;            // id for the os-level memory manager
   bool                 mem_is_pinned;    // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)
   bool                 mem_is_committed; // `true` if the whole segment is eagerly committed  
+  size_t               mem_alignment;    // page alignment for huge pages (only used for alignment > MI_ALIGNMENT_MAX)
+  size_t               mem_align_offset; // offset for huge page alignment (only used for alignment > MI_ALIGNMENT_MAX)
 
   // segment fields
   _Atomic(struct mi_segment_s*) abandoned_next;

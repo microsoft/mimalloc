@@ -190,7 +190,7 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   return p;
 }
 
-void* _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_pinned, bool* is_zero,
+void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero,
                               mi_arena_id_t arena_id, size_t* memid, mi_os_tld_t* tld)
 {
   mi_assert_internal(commit != NULL && is_pinned != NULL && is_zero != NULL && memid != NULL && tld != NULL);
@@ -201,7 +201,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool*
 
   // try to allocate in an arena if the alignment is small enough
   // and the object is not too large or too small.
-  if (alignment <= MI_SEGMENT_ALIGN &&
+  if (alignment <= MI_SEGMENT_ALIGN && align_offset == 0 &&
       size >= MI_ARENA_MIN_OBJ_SIZE &&
       mi_atomic_load_relaxed(&mi_arena_count) > 0)
   {
@@ -256,14 +256,14 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool*
   }
   *is_zero = true;
   *memid   = MI_MEMID_OS;  
-  void* p = _mi_os_alloc_aligned(size, alignment, *commit, large, tld->stats);
+  void* p = _mi_os_alloc_aligned_offset(size, alignment, align_offset, *commit, large, tld->stats);
   if (p != NULL) *is_pinned = *large;
   return p;
 }
 
 void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t arena_id, size_t* memid, mi_os_tld_t* tld)
 {
-  return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, commit, large, is_pinned, is_zero, arena_id, memid, tld);
+  return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, 0, commit, large, is_pinned, is_zero, arena_id, memid, tld);
 }
 
 
@@ -281,16 +281,17 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
   Arena free
 ----------------------------------------------------------- */
 
-void _mi_arena_free(void* p, size_t size, size_t memid, bool all_committed, mi_stats_t* stats) {
+void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t memid, bool all_committed, mi_stats_t* stats) {
   mi_assert_internal(size > 0 && stats != NULL);
   if (p==NULL) return;
   if (size==0) return;
   if (memid == MI_MEMID_OS) {
     // was a direct OS allocation, pass through
-    _mi_os_free_ex(p, size, all_committed, stats);
+    _mi_os_free_aligned(p, size, alignment, align_offset, all_committed, stats);
   }
   else {
     // allocated in an arena
+    mi_assert_internal(align_offset == 0);
     size_t arena_idx;
     size_t bitmap_idx;
     mi_arena_memid_indices(memid, &arena_idx, &bitmap_idx);

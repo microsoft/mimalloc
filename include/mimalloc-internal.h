@@ -81,9 +81,13 @@ void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free th
 size_t     _mi_os_good_alloc_size(size_t size);
 bool       _mi_os_has_overcommit(void);
 
+void*      _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool* large, mi_stats_t* tld_stats);
+void       _mi_os_free_aligned(void* p, size_t size, size_t alignment, size_t align_offset, bool was_committed, mi_stats_t* tld_stats);
+
+
 // memory.c
-void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* id, mi_os_tld_t* tld);
-void       _mi_mem_free(void* p, size_t size, size_t id, bool fully_committed, bool any_reset, mi_os_tld_t* tld);
+void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, size_t offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* id, mi_os_tld_t* tld);
+void       _mi_mem_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t id, bool fully_committed, bool any_reset, mi_os_tld_t* tld);
 
 bool       _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld);
 bool       _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld);
@@ -94,7 +98,7 @@ bool       _mi_mem_unprotect(void* addr, size_t size);
 void        _mi_mem_collect(mi_os_tld_t* tld);
 
 // "segment.c"
-mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_wsize, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
+mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
 void       _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld);
 void       _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld);
 uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size, size_t* pre_size); // page start for any page
@@ -107,7 +111,7 @@ void       _mi_abandoned_await_readers(void);
 
 
 // "page.c"
-void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero)  mi_attr_noexcept mi_attr_malloc;
+void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment)  mi_attr_noexcept mi_attr_malloc;
 
 void       _mi_page_retire(mi_page_t* page) mi_attr_noexcept;                  // free the page if there are no other pages with many free blocks
 void       _mi_page_unfull(mi_page_t* page);

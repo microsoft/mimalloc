@@ -50,9 +50,9 @@ bool    _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
-void    _mi_arena_free(void* p, size_t size, size_t memid, bool all_committed, mi_stats_t* stats);
+void    _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t memid, bool all_committed, mi_stats_t* stats);
 void*   _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
-void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
+void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
 
 
 
@@ -181,7 +181,7 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   bool is_zero = false;
   bool is_pinned = false;
   size_t arena_memid = 0;
-  void* const start = _mi_arena_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, &region_commit, &region_large, &is_pinned, &is_zero, _mi_arena_id_none(),  & arena_memid, tld);
+  void* const start = _mi_arena_alloc_aligned(MI_REGION_SIZE, MI_SEGMENT_ALIGN, 0, &region_commit, &region_large, &is_pinned, &is_zero, _mi_arena_id_none(),  & arena_memid, tld);
   if (start == NULL) return false;
   mi_assert_internal(!(region_large && !allow_large));
   mi_assert_internal(!region_large || region_commit);
@@ -190,7 +190,7 @@ static bool mi_region_try_alloc_os(size_t blocks, bool commit, bool allow_large,
   const size_t idx = mi_atomic_increment_acq_rel(&regions_count);
   if (idx >= MI_REGION_MAX) {
     mi_atomic_decrement_acq_rel(&regions_count);
-    _mi_arena_free(start, MI_REGION_SIZE, arena_memid, region_commit, tld->stats);
+    _mi_arena_free(start, MI_REGION_SIZE, MI_SEGMENT_ALIGN, 0, arena_memid, region_commit, tld->stats);
     _mi_warning_message("maximum regions used: %zu GiB (perhaps recompile with a larger setting for MI_HEAP_REGION_MAX_SIZE)", _mi_divide_up(MI_HEAP_REGION_MAX_SIZE, MI_GiB));
     return false;
   }
@@ -347,7 +347,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* large, bool*
 
 // Allocate `size` memory aligned at `alignment`. Return non NULL on success, with a given memory `id`.
 // (`id` is abstract, but `id = idx*MI_REGION_MAP_BITS + bitidx`)
-void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
+void* _mi_mem_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* memid, mi_os_tld_t* tld)
 {
   mi_assert_internal(memid != NULL && tld != NULL);
   mi_assert_internal(size > 0);
@@ -363,7 +363,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* l
   void* p = NULL;
   size_t arena_memid;
   const size_t blocks = mi_region_block_count(size);
-  if (blocks <= MI_REGION_MAX_OBJ_BLOCKS && alignment <= MI_SEGMENT_ALIGN) {
+  if (blocks <= MI_REGION_MAX_OBJ_BLOCKS && alignment <= MI_SEGMENT_ALIGN && align_offset == 0) {
     p = mi_region_try_alloc(blocks, commit, large, is_pinned, is_zero, memid, tld);    
     if (p == NULL) {
       _mi_warning_message("unable to allocate from region: size %zu\n", size);
@@ -371,7 +371,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, bool* commit, bool* l
   }
   if (p == NULL) {
     // and otherwise fall back to the OS
-    p = _mi_arena_alloc_aligned(size, alignment, commit, large, is_pinned, is_zero, _mi_arena_id_none(),  & arena_memid, tld);
+    p = _mi_arena_alloc_aligned(size, alignment, align_offset, commit, large, is_pinned, is_zero, _mi_arena_id_none(),  & arena_memid, tld);
     *memid = mi_memid_create_from_arena(arena_memid);
   }
 
@@ -391,7 +391,7 @@ Free
 -----------------------------------------------------------------------------*/
 
 // Free previously allocated memory with a given id.
-void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_reset, mi_os_tld_t* tld) {
+void _mi_mem_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t id, bool full_commit, bool any_reset, mi_os_tld_t* tld) {
   mi_assert_internal(size > 0 && tld != NULL);
   if (p==NULL) return;
   if (size==0) return;
@@ -402,10 +402,11 @@ void _mi_mem_free(void* p, size_t size, size_t id, bool full_commit, bool any_re
   mem_region_t* region;
   if (mi_memid_is_arena(id,&region,&bit_idx,&arena_memid)) {
    // was a direct arena allocation, pass through
-    _mi_arena_free(p, size, arena_memid, full_commit, tld->stats);
+    _mi_arena_free(p, size, alignment, align_offset, arena_memid, full_commit, tld->stats);
   }
   else {
     // allocated in a region
+    mi_assert_internal(align_offset == 0);
     mi_assert_internal(size <= MI_REGION_MAX_OBJ_SIZE); if (size > MI_REGION_MAX_OBJ_SIZE) return;
     const size_t blocks = mi_region_block_count(size);
     mi_assert_internal(blocks + bit_idx <= MI_BITMAP_FIELD_BITS);
@@ -469,7 +470,7 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
         mi_atomic_store_release(&region->info, (size_t)0);
         if (start != NULL) { // && !_mi_os_is_huge_reserved(start)) {         
           _mi_abandoned_await_readers(); // ensure no pending reads
-          _mi_arena_free(start, MI_REGION_SIZE, arena_memid, (~commit == 0), tld->stats);
+          _mi_arena_free(start, MI_REGION_SIZE, 0, 0, arena_memid, (~commit == 0), tld->stats);
         }
       }
     }
