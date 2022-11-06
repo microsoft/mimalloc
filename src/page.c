@@ -262,7 +262,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   }
   // a fresh page was found, initialize it
   mi_assert_internal(pq==NULL || _mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
-  mi_page_init(heap, page, block_size, heap->tld);
+  mi_page_init(heap, page, (pq == NULL ? MI_HUGE_BLOCK_SIZE : block_size), heap->tld);
   mi_heap_stat_increase(heap, pages, 1);
   if (pq!=NULL) mi_page_queue_push(heap, pq, page); // huge pages use pq==NULL
   mi_assert_expensive(_mi_page_is_valid(page));
@@ -643,7 +643,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_track_mem_noaccess(page_start,page_size);
   page->xblock_size = (block_size < MI_HUGE_BLOCK_SIZE ? (uint32_t)block_size : MI_HUGE_BLOCK_SIZE);
   mi_assert_internal(page_size / block_size < (1L<<16));
-  page->reserved = (uint16_t)(page_size / block_size);
+  page->reserved = (block_size < MI_HUGE_BLOCK_SIZE ? (uint16_t)(page_size / block_size) : 1);
   #ifdef MI_ENCODE_FREELIST
   page->keys[0] = _mi_heap_random_next(heap);
   page->keys[1] = _mi_heap_random_next(heap);

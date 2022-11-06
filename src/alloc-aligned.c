@@ -29,22 +29,21 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
     mi_assert_internal(p == NULL || ((uintptr_t)p % alignment) == 0);
     return p;
   }
-  
+
   void* p;
   size_t oversize;
   if mi_unlikely(alignment > MI_ALIGNMENT_MAX) {
     // use OS allocation for very large alignment and allocate inside a huge page (dedicated segment with 1 page)
     if mi_unlikely(offset != 0) {
       // todo: cannot support offset alignment for very large alignments yet
-      #if MI_DEBUG > 0
+#if MI_DEBUG > 0
       _mi_error_message(EOVERFLOW, "aligned allocation with a very large alignment cannot be used with an alignment offset (size %zu, alignment %zu, offset %zu)\n", size, alignment, offset);
-      #endif
+#endif
       return NULL;
     }
-    oversize = size + MI_SEGMENT_SIZE - 1;
-    p = _mi_heap_malloc_zero_ex(heap, oversize, zero, alignment);
+    oversize = (size <= MI_SMALL_SIZE_MAX ? MI_SMALL_SIZE_MAX + 1 /* ensure we use generic malloc path */ : size);
+    p = _mi_heap_malloc_zero_ex(heap, oversize, zero, alignment); // the page block size should be large enough to align in the single huge page block
     if (p == NULL) return NULL;
-    //mi_assert_internal(_mi_is_aligned(p, alignment));    
   }
   else {
     // otherwise over-allocate
@@ -57,7 +56,8 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   uintptr_t adjust = alignment - (((uintptr_t)p + offset) & align_mask);
   mi_assert_internal(adjust <= alignment);
   void* aligned_p = (adjust == alignment ? p : (void*)((uintptr_t)p + adjust));
-  if (aligned_p != p) mi_page_set_has_aligned(_mi_ptr_page(p), true);
+  if (aligned_p != p) { mi_page_set_has_aligned(_mi_ptr_page(p), true);  }
+  mi_assert_internal(mi_page_usable_block_size(_mi_ptr_page(p)) >= adjust + size);
   mi_assert_internal(p == _mi_page_ptr_unalign(_mi_ptr_segment(aligned_p), _mi_ptr_page(aligned_p), aligned_p));
   mi_assert_internal(((uintptr_t)aligned_p + offset) % alignment == 0);
   
