@@ -470,8 +470,8 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
   }
 #endif
 
+  if mi_unlikely(p == NULL) return NULL;
   mi_segment_t* const segment = _mi_ptr_segment(p);
-  if mi_unlikely(segment == NULL) return NULL;  // checks also for (p==NULL)
 
 #if (MI_DEBUG>0)
   if mi_unlikely(!mi_is_in_heap_region(p)) {
