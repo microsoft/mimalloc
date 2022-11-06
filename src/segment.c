@@ -1275,7 +1275,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   // overallocate to accommodate large alignments.
   size_t psize;
   _mi_segment_page_start(segment, page, 0, &psize, NULL);
-  page->xblock_size = (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : psize);
+  page->xblock_size = (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
   return page;
 }
 
