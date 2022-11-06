@@ -403,12 +403,14 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
   if (page->segment_idx == 0 && block_size > 0 && segment->page_kind <= MI_PAGE_MEDIUM) {
     // for small and medium objects, ensure the page start is aligned with the block size (PR#66 by kickunderscore)
     size_t adjust = block_size - ((uintptr_t)p % block_size);
-    if (adjust < block_size) {
-      p += adjust;
-      psize -= adjust;
-      if (pre_size != NULL) *pre_size = adjust;
+    if (psize - adjust >= block_size) {
+      if (adjust < block_size) {      
+        p += adjust;
+        psize -= adjust;
+        if (pre_size != NULL) *pre_size = adjust;
+      }    
+      mi_assert_internal((uintptr_t)p % block_size == 0);
     }
-    mi_assert_internal((uintptr_t)p % block_size == 0);
   }
 
   if (page_size != NULL) *page_size = psize;
