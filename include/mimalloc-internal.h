@@ -481,11 +481,11 @@ static inline mi_slice_t* mi_slice_first(const mi_slice_t* slice) {
 
 // Get the page containing the pointer
 static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const void* p) {
+  mi_assert_internal(p > segment);
   ptrdiff_t diff = (uint8_t*)p - (uint8_t*)segment;
-  mi_assert_internal(diff >= 0 && diff <= (ptrdiff_t)MI_SEGMENT_SIZE /* can be equal for large alignment */);
-  if (diff == MI_SEGMENT_SIZE) diff--;
+  mi_assert_internal(diff > 0 && diff <= (ptrdiff_t)MI_SEGMENT_SIZE);
   size_t idx = (size_t)diff >> MI_SEGMENT_SLICE_SHIFT;
-  mi_assert_internal(idx < segment->slice_entries);
+  mi_assert_internal(idx <= segment->slice_entries);
   mi_slice_t* slice0 = (mi_slice_t*)&segment->slices[idx];
   mi_slice_t* slice = mi_slice_first(slice0);  // adjust to the block that holds the page data
   mi_assert_internal(slice->slice_offset == 0);

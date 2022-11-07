@@ -381,7 +381,7 @@ typedef struct mi_segment_s {
   mi_segment_kind_t kind;
   _Atomic(mi_threadid_t) thread_id;      // unique id of the thread owning this segment
   size_t            slice_entries;       // entries in the `slices` array, at most `MI_SLICES_PER_SEGMENT`
-  mi_slice_t        slices[MI_SLICES_PER_SEGMENT];
+  mi_slice_t        slices[MI_SLICES_PER_SEGMENT+1];  // one more for huge blocks with large alignment
 } mi_segment_t;
 
 
