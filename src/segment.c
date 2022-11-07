@@ -277,7 +277,7 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
       }
       // and the last entry as well (for coalescing)
       const mi_slice_t* last = slice + slice->slice_count - 1;
-      if (last > slice && last <= mi_segment_slices_end(segment)) {
+      if (last > slice && last < mi_segment_slices_end(segment)) {
         mi_assert_internal(last->slice_offset == (slice->slice_count-1)*sizeof(mi_slice_t));
         mi_assert_internal(last->slice_count == 0);
         mi_assert_internal(last->xblock_size == 1);
@@ -679,7 +679,7 @@ static void mi_segment_slice_split(mi_segment_t* segment, mi_slice_t* slice, siz
 // Note: may still return NULL if committing the memory failed
 static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_index, size_t slice_count, mi_segments_tld_t* tld) {
   mi_assert_internal(slice_index < segment->slice_entries);
-  mi_slice_t* slice = &segment->slices[slice_index];
+  mi_slice_t* const slice = &segment->slices[slice_index];
   mi_assert_internal(slice->xblock_size==0 || slice->xblock_size==1);
 
   // commit before changing the slice data
@@ -700,22 +700,21 @@ static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_i
   size_t extra = slice_count-1;
   if (extra > MI_MAX_SLICE_OFFSET) extra = MI_MAX_SLICE_OFFSET;
   if (slice_index + extra >= segment->slice_entries) extra = segment->slice_entries - slice_index - 1;  // huge objects may have more slices than avaiable entries in the segment->slices
-  slice++;
-  for (size_t i = 1; i <= extra; i++, slice++) {
-    slice->slice_offset = (uint32_t)(sizeof(mi_slice_t)*i);
-    slice->slice_count = 0;
-    slice->xblock_size = 1;
+  
+  mi_slice_t* slice_next = slice + 1;
+  for (size_t i = 1; i <= extra; i++, slice_next++) {
+    slice_next->slice_offset = (uint32_t)(sizeof(mi_slice_t)*i);
+    slice_next->slice_count = 0;
+    slice_next->xblock_size = 1;
   }
 
-  // and also for the last one (if not set already) (the last one is needed for coalescing)
+  // and also for the last one (if not set already) (the last one is needed for coalescing and for large alignments)
   // note: the cast is needed for ubsan since the index can be larger than MI_SLICES_PER_SEGMENT for huge allocations (see #543)
-  size_t slice_last_index = slice_index + slice_count - 1;
-  if (slice_last_index >= segment->slice_entries) { 
-    slice_last_index = segment->slice_entries; 
-  }
-  mi_slice_t* last = &((mi_slice_t*)segment->slices)[slice_last_index]; 
-  if (last <= mi_segment_slices_end(segment) && last >= slice) {
-    last->slice_offset = (uint32_t)(sizeof(mi_slice_t)*(slice_last_index - slice_index));
+  mi_slice_t* last = slice + slice_count - 1;
+  mi_slice_t* end = (mi_slice_t*)mi_segment_slices_end(segment);
+  if (last > end) last = end;
+  if (last > slice) {
+    last->slice_offset = (uint32_t)(sizeof(mi_slice_t) * (last - slice));
     last->slice_count = 0;
     last->xblock_size = 1;
   }

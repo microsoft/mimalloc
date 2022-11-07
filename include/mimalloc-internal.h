@@ -481,7 +481,7 @@ static inline mi_slice_t* mi_slice_first(const mi_slice_t* slice) {
 
 // Get the page containing the pointer
 static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const void* p) {
-  mi_assert_internal(p > segment);
+  mi_assert_internal(p > (void*)segment);
   ptrdiff_t diff = (uint8_t*)p - (uint8_t*)segment;
   mi_assert_internal(diff > 0 && diff <= (ptrdiff_t)MI_SEGMENT_SIZE);
   size_t idx = (size_t)diff >> MI_SEGMENT_SLICE_SHIFT;

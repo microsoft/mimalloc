@@ -177,10 +177,11 @@ int main(void) {
   };
   CHECK_BODY("malloc-aligned9") {
     bool ok = true;
-    for (int i = 0; i < 5 && ok; i++) {
+    for (int i = 0; i < 8 && ok; i++) {
       int n = (1 << i);
-      void* p = mi_malloc_aligned( 2*n*MI_ALIGNMENT_MAX, n*MI_ALIGNMENT_MAX);
-      ok = ((uintptr_t)p % (n*MI_ALIGNMENT_MAX)) == 0;
+      size_t align = n * (MI_ALIGNMENT_MAX / 8);
+      void* p = mi_malloc_aligned( 2*align, align);
+      ok = ((uintptr_t)p % align) == 0;
       mi_free(p);
     }
     result = ok;
