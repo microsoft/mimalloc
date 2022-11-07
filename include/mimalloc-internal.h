@@ -479,7 +479,7 @@ static inline mi_slice_t* mi_slice_first(const mi_slice_t* slice) {
   return start;
 }
 
-// Get the page containing the pointer
+// Get the page containing the pointer (performance critical as it is called in mi_free)
 static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const void* p) {
   mi_assert_internal(p > (void*)segment);
   ptrdiff_t diff = (uint8_t*)p - (uint8_t*)segment;
