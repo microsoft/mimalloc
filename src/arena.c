@@ -45,7 +45,6 @@ bool  _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
   Arena allocation
 ----------------------------------------------------------- */
 
-#define MI_SEGMENT_ALIGN      MI_SEGMENT_SIZE
 #define MI_ARENA_BLOCK_SIZE   (4*MI_SEGMENT_ALIGN)     // 32MiB
 #define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 16MiB
 #define MI_MAX_ARENAS         (64)                     // not more than 126 (since we use 7 bits in the memid and an arena index + 1)
@@ -190,8 +189,63 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   return p;
 }
 
+// allocate from an arena with fallback to the OS
+static mi_decl_noinline void* mi_arena_allocate(int numa_node, size_t size, size_t alignment, bool* commit, bool* large,
+                                                bool* is_pinned, bool* is_zero,
+                                                mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld )
+{
+  MI_UNUSED_RELEASE(alignment);
+  mi_assert_internal(alignment <= MI_SEGMENT_ALIGN);
+  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  const size_t bcount = mi_block_count_of_size(size);
+  if mi_likely(max_arena == 0) return NULL;
+  mi_assert_internal(size <= bcount * MI_ARENA_BLOCK_SIZE);
+
+  size_t arena_index = mi_arena_id_index(req_arena_id);
+  if (arena_index < MI_MAX_ARENAS) {
+    // try a specific arena if requested
+    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[arena_index]);
+    if ((arena != NULL) &&
+        (arena->numa_node < 0 || arena->numa_node == numa_node) && // numa local?
+        (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
+    {
+      void* p = mi_arena_alloc_from(arena, arena_index, bcount, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
+      mi_assert_internal((uintptr_t)p % alignment == 0);
+      if (p != NULL) return p;
+    }
+  }
+  else {
+    // try numa affine allocation
+    for (size_t i = 0; i < max_arena; i++) {
+      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+      if (arena == NULL) break; // end reached
+      if ((arena->numa_node < 0 || arena->numa_node == numa_node) && // numa local?
+          (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
+      {
+        void* p = mi_arena_alloc_from(arena, i, bcount, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
+        mi_assert_internal((uintptr_t)p % alignment == 0);
+        if (p != NULL) return p;
+      }
+    }
+
+    // try from another numa node instead..
+    for (size_t i = 0; i < max_arena; i++) {
+      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+      if (arena == NULL) break; // end reached
+      if ((arena->numa_node >= 0 && arena->numa_node != numa_node) && // not numa local!
+          (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
+      {
+        void* p = mi_arena_alloc_from(arena, i, bcount, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
+        mi_assert_internal((uintptr_t)p % alignment == 0);
+        if (p != NULL) return p;
+      }
+    }
+  }
+  return NULL;
+}
+
 void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero,
-                              mi_arena_id_t arena_id, size_t* memid, mi_os_tld_t* tld)
+                              mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld)
 {
   mi_assert_internal(commit != NULL && is_pinned != NULL && is_zero != NULL && memid != NULL && tld != NULL);
   mi_assert_internal(size > 0);
@@ -199,71 +253,31 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
   *is_zero = false;
   *is_pinned = false;
 
-  // try to allocate in an arena if the alignment is small enough
-  // and the object is not too large or too small.
-  if (alignment <= MI_SEGMENT_ALIGN && align_offset == 0 &&
-      size >= MI_ARENA_MIN_OBJ_SIZE &&
-      mi_atomic_load_relaxed(&mi_arena_count) > 0)
-  {
-    const size_t bcount = mi_block_count_of_size(size);
-    const int numa_node = _mi_os_numa_node(tld); // current numa node
-    mi_assert_internal(size <= bcount*MI_ARENA_BLOCK_SIZE);
+  bool default_large = false;
+  if (large == NULL) large = &default_large;   // ensure `large != NULL`
+  const int numa_node = _mi_os_numa_node(tld); // current numa node
 
-    // try specific arena if so requested
-    size_t arena_index = mi_arena_id_index(arena_id);
-    if (arena_index < MI_MAX_ARENAS) {
-      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[arena_index]);
-      if ((arena != NULL) && 
-          (arena->numa_node < 0 || arena->numa_node == numa_node) && // numa local?
-          (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
-      {
-        void* p = mi_arena_alloc_from(arena, arena_index, bcount, commit, large, is_pinned, is_zero, arena_id, memid, tld);
-        mi_assert_internal((uintptr_t)p % alignment == 0);
-        if (p != NULL) return p;
-      }
-    }
-    
-    // try numa affine allocation
-    for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
-      if (arena==NULL) break; // end reached
-      if ((arena->numa_node<0 || arena->numa_node==numa_node) && // numa local?
-          (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
-      {
-        void* p = mi_arena_alloc_from(arena, i, bcount, commit, large, is_pinned, is_zero, arena_id, memid, tld);
-        mi_assert_internal((uintptr_t)p % alignment == 0);
-        if (p != NULL) return p;
-      }
-    }
-    // try from another numa node instead..
-    for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
-      if (arena==NULL) break; // end reached
-      if ((arena->numa_node>=0 && arena->numa_node!=numa_node) && // not numa local!
-          (*large || !arena->is_large)) // large OS pages allowed, or arena is not large OS pages
-      {
-        void* p = mi_arena_alloc_from(arena, i, bcount, commit, large, is_pinned, is_zero, arena_id, memid, tld);
-        mi_assert_internal((uintptr_t)p % alignment == 0);
-        if (p != NULL) return p;
-      }
-    }
+  // try to allocate in an arena if the alignment is small enough and the object is not too small (as for heap meta data)
+  if (size >= MI_ARENA_MIN_OBJ_SIZE && alignment <= MI_SEGMENT_ALIGN && align_offset == 0) {
+    void* p = mi_arena_allocate(numa_node, size, alignment, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
+    if (p != NULL) return p;
   }
 
   // finally, fall back to the OS
-  if (mi_option_is_enabled(mi_option_limit_os_alloc)) {
+  if (mi_option_is_enabled(mi_option_limit_os_alloc) || req_arena_id != _mi_arena_id_none()) {
     errno = ENOMEM;
     return NULL;
   }
   *is_zero = true;
   *memid   = MI_MEMID_OS;  
   void* p = _mi_os_alloc_aligned_offset(size, alignment, align_offset, *commit, large, tld->stats);
-  if (p != NULL) *is_pinned = *large;
+  if (p != NULL) { *is_pinned = *large; }
   return p;
 }
 
-void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t arena_id, size_t* memid, mi_os_tld_t* tld)
+void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld)
 {
-  return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, 0, commit, large, is_pinned, is_zero, arena_id, memid, tld);
+  return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, 0, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
 }
 
 
