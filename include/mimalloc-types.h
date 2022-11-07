@@ -139,7 +139,8 @@ typedef int32_t  mi_ssize_t;
 
 // Derived constants
 #define MI_SEGMENT_SIZE                   (MI_ZU(1)<<MI_SEGMENT_SHIFT)
-#define MI_SEGMENT_MASK                   (MI_SEGMENT_SIZE - 1)
+#define MI_SEGMENT_ALIGN                  (MI_SEGMENT_SIZE)
+#define MI_SEGMENT_MASK                   (MI_SEGMENT_ALIGN - 1)
 
 #define MI_SMALL_PAGE_SIZE                (MI_ZU(1)<<MI_SMALL_PAGE_SHIFT)
 #define MI_MEDIUM_PAGE_SIZE               (MI_ZU(1)<<MI_MEDIUM_PAGE_SHIFT)
@@ -163,12 +164,12 @@ typedef int32_t  mi_ssize_t;
 #if (MI_LARGE_OBJ_WSIZE_MAX >= 655360)
 #error "mimalloc internal: define more bins"
 #endif
-#if (MI_ALIGNMENT_MAX > MI_SEGMENT_SIZE/2)
-#error "mimalloc internal: the max aligned boundary is too large for the segment size"
-#endif
 
 // Used as a special value to encode block sizes in 32 bits.
 #define MI_HUGE_BLOCK_SIZE   ((uint32_t)MI_HUGE_OBJ_SIZE_MAX)
+
+// Alignments over MI_ALIGNMENT_MAX are allocated in dedicated huge page segments 
+#define MI_ALIGNMENT_MAX   (MI_SEGMENT_SIZE >> 1)  
 
 
 // ------------------------------------------------------
