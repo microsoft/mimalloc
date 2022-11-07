@@ -65,8 +65,6 @@ void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offs
 #error "define the maximum heap space allowed for regions on this platform"
 #endif
 
-#define MI_SEGMENT_ALIGN          MI_SEGMENT_SIZE
-
 #define MI_REGION_MAX_BLOCKS      MI_BITMAP_FIELD_BITS
 #define MI_REGION_SIZE            (MI_SEGMENT_SIZE * MI_BITMAP_FIELD_BITS)    // 256MiB  (64MiB on 32 bits)
 #define MI_REGION_MAX             (MI_HEAP_REGION_MAX_SIZE / MI_REGION_SIZE)  // 1024  (48 on 32 bits)

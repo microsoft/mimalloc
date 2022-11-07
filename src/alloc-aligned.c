@@ -34,6 +34,8 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   size_t oversize;
   if mi_unlikely(alignment > MI_ALIGNMENT_MAX) {
     // use OS allocation for very large alignment and allocate inside a huge page (dedicated segment with 1 page)
+    // This can support alignments >= MI_SEGMENT_SIZE by ensuring the object can be aligned at a point in the 
+    // first (and single) page such that the segment info is `MI_SEGMENT_SIZE` bytes before it (so it can be found by aligning the pointer down)
     if mi_unlikely(offset != 0) {
       // todo: cannot support offset alignment for very large alignments yet
       #if MI_DEBUG > 0
