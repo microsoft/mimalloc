@@ -584,6 +584,7 @@ mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
 void* _mi_externs[] = {
   (void*)&_mi_page_malloc,
   (void*)&_mi_heap_malloc_zero,
+  (void*)&_mi_heap_malloc_zero_ex,
   (void*)&mi_malloc,
   (void*)&mi_malloc_small,
   (void*)&mi_zalloc_small,
