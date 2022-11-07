@@ -336,12 +336,14 @@ static size_t mi_segment_calculate_slices(size_t required, size_t* pre_size, siz
   size_t page_size = _mi_os_page_size();
   size_t isize     = _mi_align_up(sizeof(mi_segment_t), page_size);
   size_t guardsize = 0;
-
+  
   if (MI_SECURE>0) {
     // in secure mode, we set up a protected page in between the segment info
     // and the page data (and one at the end of the segment)
-    guardsize =  page_size;
-    required  = _mi_align_up(required, page_size);
+    guardsize = page_size;
+    if (required > 0) {
+      required = _mi_align_up(required, MI_SEGMENT_SLICE_SIZE) + page_size;
+    }
   }
 
   if (pre_size != NULL) *pre_size = isize;
@@ -802,21 +804,27 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, siz
     size_t memid = 0;
     size_t align_offset = 0;
     size_t alignment = MI_SEGMENT_SIZE;
-    size_t segment_size = segment_slices * MI_SEGMENT_SLICE_SIZE;
-
+    
     if (page_alignment > 0) {
       mi_assert_internal(huge_page != NULL);
       mi_assert_internal(page_alignment >= MI_SEGMENT_ALIGN);
       alignment = page_alignment;
       const size_t info_size = info_slices * MI_SEGMENT_SLICE_SIZE;
       align_offset = _mi_align_up( info_size, MI_SEGMENT_ALIGN );
-      segment_size += _mi_align_up(align_offset - info_size, MI_SEGMENT_SLICE_SIZE);
-      segment_slices = segment_size / MI_SEGMENT_SLICE_SIZE;
+      const size_t extra = align_offset - info_size;
+      // recalculate due to potential guard pages
+      segment_slices = mi_segment_calculate_slices(required + extra, &pre_size, &info_slices);
+      //segment_size += _mi_align_up(align_offset - info_size, MI_SEGMENT_SLICE_SIZE);
+      //segment_slices = segment_size / MI_SEGMENT_SLICE_SIZE;
     }
-    else {
+    const size_t segment_size = segment_slices * MI_SEGMENT_SLICE_SIZE;
+
+    // get from cache
+    if (page_alignment == 0) {
       segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, &commit_mask, &decommit_mask, &mem_large, &is_pinned, &is_zero, req_arena_id, &memid, os_tld);
     }
     
+    // get from OS
     if (segment==NULL) {
       segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, alignment, align_offset, &commit, &mem_large, &is_pinned, &is_zero, req_arena_id, &memid, os_tld);
       if (segment == NULL) return NULL;  // failed to allocate
