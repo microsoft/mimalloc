@@ -111,7 +111,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   0,                // cookie
   0,                // arena id
   { 0, 0 },         // keys
-  { {0}, {0}, 0 },
+  { {0}, {0}, 0, true },
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next
@@ -152,7 +152,7 @@ mi_heap_t _mi_heap_main = {
   0,                // initial cookie
   0,                // arena id
   { 0, 0 },         // the key of the main heap can be fixed (unlike page keys that need to be secure!)
-  { {0x846ca68b}, {0}, 0 },  // random
+  { {0x846ca68b}, {0}, 0, true },  // random
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
