@@ -60,6 +60,8 @@ void       _mi_error_message(int err, const char* fmt, ...);
 
 // random.c
 void       _mi_random_init(mi_random_ctx_t* ctx);
+void       _mi_random_init_weak(mi_random_ctx_t* ctx);
+void       _mi_random_reinit_if_weak(mi_random_ctx_t * ctx);
 void       _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* new_ctx);
 uintptr_t  _mi_random_next(mi_random_ctx_t* ctx);
 uintptr_t  _mi_heap_random_next(mi_heap_t* heap);
