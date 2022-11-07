@@ -168,7 +168,7 @@ If we cannot get good randomness, we fall back to weak randomness based on a tim
 
 #if defined(_WIN32)
 
-#if defined(MI_USE_RTLGENRANDOM) || defined(__cplusplus)
+#if defined(MI_USE_RTLGENRANDOM) // || defined(__cplusplus)
 // We prefer to use BCryptGenRandom instead of (the unofficial) RtlGenRandom but when using 
 // dynamic overriding, we observed it can raise an exception when compiled with C++, and 
 // sometimes deadlocks when also running under the VS debugger.
@@ -303,21 +303,39 @@ uintptr_t _mi_os_random_weak(uintptr_t extra_seed) {
   return x;
 }
 
-void _mi_random_init(mi_random_ctx_t* ctx) {
+static void mi_random_init_ex(mi_random_ctx_t* ctx, bool use_weak) {
   uint8_t key[32];
-  if (!os_random_buf(key, sizeof(key))) {
+  if (use_weak || !os_random_buf(key, sizeof(key))) {
     // if we fail to get random data from the OS, we fall back to a
     // weak random source based on the current time
     #if !defined(__wasi__)
-    _mi_warning_message("unable to use secure randomness\n");
+    if (!use_weak) { _mi_warning_message("unable to use secure randomness\n"); }
     #endif
     uintptr_t x = _mi_os_random_weak(0);
     for (size_t i = 0; i < 8; i++) {  // key is eight 32-bit words.
       x = _mi_random_shuffle(x);
       ((uint32_t*)key)[i] = (uint32_t)x;
     }
+    ctx->weak = true;
+  }
+  else {
+    ctx->weak = false;
   }
   chacha_init(ctx, key, (uintptr_t)ctx /*nonce*/ );
+}
+
+void _mi_random_init(mi_random_ctx_t* ctx) {
+  mi_random_init_ex(ctx, false);  
+}
+
+void _mi_random_init_weak(mi_random_ctx_t * ctx) {
+  mi_random_init_ex(ctx, true);
+}
+
+void _mi_random_reinit_if_weak(mi_random_ctx_t * ctx) {
+  if (ctx->weak) {
+    _mi_random_init(ctx);
+  }
 }
 
 /* --------------------------------------------------------
