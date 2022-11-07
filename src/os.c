@@ -839,13 +839,11 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* lar
 
 /* -----------------------------------------------------------
   OS aligned allocation with an offset. This is used
-  for large alignments > MI_SEGMENT_SIZE so we can align
-  the first page at an offset from the start of the segment.
-  As we may need to overallocate, we need to free such pointers
-  using `mi_free_aligned` to use the actual start of the 
-  memory region.
+  for large alignments > MI_ALIGNMENT_MAX. We use a large mimalloc
+  page where the object can be aligned at an offset from the start of the segment.
+  As we may need to overallocate, we need to free such pointers using `mi_free_aligned` 
+  to use the actual start of the memory region.
 ----------------------------------------------------------- */
-
 
 void* _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t offset, bool commit, bool* large, mi_stats_t* tld_stats) {
   mi_assert(offset <= MI_SEGMENT_SIZE);
@@ -853,15 +851,18 @@ void* _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t offset, 
   mi_assert((alignment % _mi_os_page_size()) == 0);
   if (offset > MI_SEGMENT_SIZE) return NULL;
   if (offset == 0) {
+    // regular aligned allocation
     return _mi_os_alloc_aligned(size, alignment, commit, large, tld_stats);
   }
   else {
+    // overallocate to align at an offset
     const size_t extra = _mi_align_up(offset, alignment) - offset;
     const size_t oversize = size + extra;
     void* start = _mi_os_alloc_aligned(oversize, alignment, commit, large, tld_stats);
     if (start == NULL) return NULL;
     void* p = (uint8_t*)start + extra;
     mi_assert(_mi_is_aligned((uint8_t*)p + offset, alignment));
+    // decommit the overallocation at the start
     if (commit && extra > _mi_os_page_size()) {
       _mi_os_decommit(start, extra, tld_stats);
     }

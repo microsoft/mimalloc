@@ -147,7 +147,7 @@ typedef int32_t  mi_ssize_t;
 // Derived constants
 #define MI_SEGMENT_SIZE                   (MI_ZU(1)<<MI_SEGMENT_SHIFT)
 #define MI_SEGMENT_ALIGN                  MI_SEGMENT_SIZE
-#define MI_SEGMENT_MASK                   (MI_SEGMENT_SIZE - 1)
+#define MI_SEGMENT_MASK                   (MI_SEGMENT_ALIGN - 1)
 #define MI_SEGMENT_SLICE_SIZE             (MI_ZU(1)<< MI_SEGMENT_SLICE_SHIFT)
 #define MI_SLICES_PER_SEGMENT             (MI_SEGMENT_SIZE / MI_SEGMENT_SLICE_SIZE) // 1024
 
@@ -166,12 +166,6 @@ typedef int32_t  mi_ssize_t;
 #if (MI_MEDIUM_OBJ_WSIZE_MAX >= 655360)
 #error "mimalloc internal: define more bins"
 #endif
-#if (MI_ALIGNMENT_MAX > MI_SEGMENT_SIZE/2)
-#error "mimalloc internal: the max aligned boundary is too large for the segment size"
-#endif
-#if (MI_ALIGNED_MAX % MI_SEGMENT_SLICE_SIZE != 0)
-#error "mimalloc internal: the max aligned boundary must be an integral multiple of the segment slice size"
-#endif
 
 // Maximum slice offset (15)
 #define MI_MAX_SLICE_OFFSET               ((MI_ALIGNMENT_MAX / MI_SEGMENT_SLICE_SIZE) - 1)
@@ -182,7 +176,8 @@ typedef int32_t  mi_ssize_t;
 // blocks up to this size are always allocated aligned
 #define MI_MAX_ALIGN_GUARANTEE            (8*MI_MAX_ALIGN_SIZE)  
 
-
+// Alignments over MI_ALIGNMENT_MAX are allocated in dedicated huge page segments 
+#define MI_ALIGNMENT_MAX                  (MI_SEGMENT_SIZE >> 1)  
 
 
 // ------------------------------------------------------

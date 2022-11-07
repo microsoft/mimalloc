@@ -449,6 +449,9 @@ static inline mi_page_t* _mi_get_free_small_page(size_t size) {
 }
 
 // Segment that contains the pointer
+// Large aligned blocks may be aligned at N*MI_SEGMENT_SIZE (inside a huge segment > MI_SEGMENT_SIZE),
+// and we need align "down" to the segment info which is `MI_SEGMENT_SIZE` bytes before it; 
+// therefore we align one byte before `p`.
 static inline mi_segment_t* _mi_ptr_segment(const void* p) {
   mi_assert_internal(p != NULL);
   return (mi_segment_t*)(((uintptr_t)p - 1) & ~MI_SEGMENT_MASK);

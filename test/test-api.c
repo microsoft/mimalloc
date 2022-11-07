@@ -34,7 +34,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 
 #include "mimalloc.h"
 // #include "mimalloc-internal.h"
-#include "mimalloc-types.h" // for MI_DEBUG
+#include "mimalloc-types.h" // for MI_DEBUG and MI_ALIGNMENT_MAX
 
 #include "testhelper.h"
 
