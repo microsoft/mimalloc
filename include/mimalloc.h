@@ -167,10 +167,12 @@ mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, s
 // Note that `alignment` always follows `size` for consistency with unaligned
 // allocation, but unfortunately this differs from `posix_memalign` and `aligned_alloc`.
 // -------------------------------------------------------------------------------------
+
+// The MI_ALIGNMENT_MAX is deprecated; any alignment is supported but alignments up to MI_ALIGNMENT_MAX may be cheaper.
 #if (INTPTR_MAX > INT32_MAX)
-#define MI_ALIGNMENT_MAX   (16*1024*1024UL)  // maximum supported alignment is 16MiB
+#define MI_ALIGNMENT_MAX   (32*1024*1024UL)  
 #else
-#define MI_ALIGNMENT_MAX   (1024*1024UL)     // maximum supported alignment for 32-bit systems is 1MiB
+#define MI_ALIGNMENT_MAX   (2*1024*1024UL)   
 #endif
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_malloc_aligned(size_t size, size_t alignment) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);

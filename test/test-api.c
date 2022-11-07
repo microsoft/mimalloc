@@ -161,10 +161,29 @@ int main(void) {
     result = ok;
   };
   CHECK_BODY("malloc-aligned7") {
-    void* p = mi_malloc_aligned(1024,MI_ALIGNMENT_MAX); mi_free(p);
-    };
+    void* p = mi_malloc_aligned(1024,MI_ALIGNMENT_MAX);
+    mi_free(p);
+    result = ((uintptr_t)p % MI_ALIGNMENT_MAX) == 0;
+  };
   CHECK_BODY("malloc-aligned8") {
-    void* p = mi_malloc_aligned(1024,2*MI_ALIGNMENT_MAX); mi_free(p);
+    bool ok = true;
+    for (int i = 0; i < 5 && ok; i++) {
+      int n = (1 << i);
+      void* p = mi_malloc_aligned(1024, n * MI_ALIGNMENT_MAX);
+      ok = ((uintptr_t)p % (n*MI_ALIGNMENT_MAX)) == 0;
+      mi_free(p);
+    }
+    result = ok;
+  };
+  CHECK_BODY("malloc-aligned9") {
+    bool ok = true;
+    for (int i = 0; i < 5 && ok; i++) {
+      int n = (1 << i);
+      void* p = mi_malloc_aligned( 2*n*MI_ALIGNMENT_MAX, n*MI_ALIGNMENT_MAX);
+      ok = ((uintptr_t)p % (n*MI_ALIGNMENT_MAX)) == 0;
+      mi_free(p);
+    }
+    result = ok;
   };
   CHECK_BODY("malloc-aligned-at1") {
     void* p = mi_malloc_aligned_at(48,32,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 32 == 0); mi_free(p);

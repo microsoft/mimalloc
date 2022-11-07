@@ -174,7 +174,8 @@ typedef int32_t  mi_ssize_t;
 #endif
 
 // Maximum slice offset (15)
-#define MI_MAX_SLICE_OFFSET               ((MI_ALIGNMENT_MAX / MI_SEGMENT_SLICE_SIZE) - 1)
+// #define MI_MAX_SLICE_OFFSET               ((MI_ALIGNMENT_MAX / MI_SEGMENT_SLICE_SIZE) - 1)
+#define MI_MAX_SLICE_OFFSET               ((MI_SEGMENT_SIZE / MI_SEGMENT_SLICE_SIZE))
 
 // Used as a special value to encode block sizes in 32 bits.
 #define MI_HUGE_BLOCK_SIZE                ((uint32_t)(2*MI_GiB))
@@ -355,6 +356,8 @@ typedef struct mi_segment_s {
   bool              mem_is_pinned;      // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)    
   bool              mem_is_large;       // in large/huge os pages?
   bool              mem_is_committed;   // `true` if the whole segment is eagerly committed
+  size_t            mem_alignment;      // page alignment for huge pages (only used for alignment > MI_ALIGNMENT_MAX)
+  size_t            mem_align_offset;   // offset for huge page alignment (only used for alignment > MI_ALIGNMENT_MAX)
 
   bool              allow_decommit;     
   mi_msecs_t        decommit_expire;
