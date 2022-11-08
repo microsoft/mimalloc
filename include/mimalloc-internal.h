@@ -94,6 +94,7 @@ void       _mi_mem_free(void* p, size_t size, size_t alignment, size_t align_off
 bool       _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld);
 bool       _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld);
 bool       _mi_mem_commit(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld);
+bool       _mi_mem_decommit(void* p, size_t size, mi_os_tld_t* tld);
 bool       _mi_mem_protect(void* addr, size_t size);
 bool       _mi_mem_unprotect(void* addr, size_t size);
 
@@ -483,6 +484,10 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
     _mi_segment_page_start(_mi_page_segment(page), page, bsize, &psize, NULL);
     return psize;
   }
+}
+
+static inline bool mi_page_is_huge(const mi_page_t* page) {
+  return (_mi_page_segment(page)->page_kind == MI_PAGE_HUGE);
 }
 
 // Get the usable block size of a page without fixed padding.
