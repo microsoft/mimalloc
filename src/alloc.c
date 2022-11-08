@@ -488,10 +488,16 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 
 #if (MI_DEBUG>0)
   if mi_unlikely(!mi_is_in_heap_region(p)) {
-    _mi_warning_message("%s: pointer might not point to a valid heap region: %p\n"
-      "(this may still be a valid very large allocation (over 64MiB))\n", msg, p);
-    if mi_likely(_mi_ptr_cookie(segment) == segment->cookie) {
-      _mi_warning_message("(yes, the previous pointer %p was valid after all)\n", p);
+  #if (MI_INTPTR_SIZE == 8 && defined(__linux__))
+    if (((uintptr_t)p >> 40) != 0x7F) { // linux tends to align large blocks above 0x7F000000000 (issue #640)
+  #else
+    {
+  #endif
+      _mi_warning_message("%s: pointer might not point to a valid heap region: %p\n"
+        "(this may still be a valid very large allocation (over 64MiB))\n", msg, p);
+      if mi_likely(_mi_ptr_cookie(segment) == segment->cookie) {
+        _mi_warning_message("(yes, the previous pointer %p was valid after all)\n", p);
+      }
     }
   }
 #endif
