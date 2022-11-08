@@ -522,6 +522,10 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
   }
 }
 
+static inline bool mi_page_is_huge(const mi_page_t* page) {
+  return (_mi_page_segment(page)->kind == MI_SEGMENT_HUGE);
+}
+
 // Get the usable block size of a page without fixed padding.
 // This may still include internal padding due to alignment and rounding up size classes.
 static inline size_t mi_page_usable_block_size(const mi_page_t* page) {

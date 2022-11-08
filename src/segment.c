@@ -1531,10 +1531,16 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   #if MI_DEBUG > 3
   if (page_alignment > 0) {
     size_t psize;
-    void* p = _mi_segment_page_start(segment, page, &psize);
-    void* aligned_p = (void*)_mi_align_up((uintptr_t)p, page_alignment);
-    mi_assert_internal(page_alignment == 0 || _mi_is_aligned(aligned_p, page_alignment));
-    mi_assert_internal(page_alignment == 0 || psize - ((uint8_t*)aligned_p - (uint8_t*)p) >= size);
+    uint8_t* p = _mi_segment_page_start(segment, page, &psize);
+    uint8_t* aligned_p = (uint8_t*)_mi_align_up((uintptr_t)p, page_alignment);
+    mi_assert_internal(_mi_is_aligned(aligned_p, page_alignment));
+    mi_assert_internal(psize - (aligned_p - p) >= size);
+    if (!segment->mem_is_pinned && page->is_committed) {
+       // decommit the part of the page that is unused; this can be quite large (close to MI_SEGMENT_SIZE)
+      uint8_t* decommit_start = p + sizeof(mi_block_t); // for the free list
+      ptrdiff_t decommit_size = aligned_p - decommit_start;
+      _mi_os_decommit(decommit_start, decommit_size, os_tld->stats);
+    }
   }
   #endif
   // for huge pages we initialize the xblock_size as we may

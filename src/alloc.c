@@ -51,7 +51,9 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   }
 
 #if (MI_DEBUG>0) && !MI_TRACK_ENABLED
-  if (!page->is_zero && !zero) { memset(block, MI_DEBUG_UNINIT, mi_page_usable_block_size(page)); }
+  if (!page->is_zero && !zero && !mi_page_is_huge(page)) { 
+    memset(block, MI_DEBUG_UNINIT, mi_page_usable_block_size(page)); 
+  }
 #elif (MI_SECURE!=0)
   if (!zero) { block->next = 0; } // don't leak internal data
 #endif
@@ -77,9 +79,11 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   #endif
   padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
   padding->delta  = (uint32_t)(delta);
-  uint8_t* fill = (uint8_t*)padding - delta;
-  const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
-  for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
+  if (!mi_page_is_huge(page)) {
+    uint8_t* fill = (uint8_t*)padding - delta;
+    const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
+    for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
+  }
 #endif
 
   return block;
@@ -250,17 +254,19 @@ static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, si
   if (!ok) return false;
   mi_assert_internal(bsize >= delta);
   *size = bsize - delta;
-  uint8_t* fill = (uint8_t*)block + bsize - delta;
-  const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // check at most the first N padding bytes
-  mi_track_mem_defined(fill,maxpad);
-  for (size_t i = 0; i < maxpad; i++) {
-    if (fill[i] != MI_DEBUG_PADDING) {
-      *wrong = bsize - delta + i;
-      ok = false;
-      break;
+  if (!mi_page_is_huge(page)) {
+    uint8_t* fill = (uint8_t*)block + bsize - delta;
+    const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // check at most the first N padding bytes
+    mi_track_mem_defined(fill, maxpad);
+    for (size_t i = 0; i < maxpad; i++) {
+      if (fill[i] != MI_DEBUG_PADDING) {
+        *wrong = bsize - delta + i;
+        ok = false;
+        break;
+      }
     }
+    mi_track_mem_noaccess(fill, maxpad);
   }
-  mi_track_mem_noaccess(fill,maxpad);
   return ok;
 }
 
@@ -367,10 +373,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   // that is safe as these are constant and the page won't be freed (as the block is not freed yet).
   mi_check_padding(page, block);
   mi_padding_shrink(page, block, sizeof(mi_block_t));       // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
-  #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED                    // note: when tracking, cannot use mi_usable_size with multi-threading
-  memset(block, MI_DEBUG_FREED, mi_usable_size(block));
-  #endif
-
+  
   // huge page segments are always abandoned and can be freed immediately
   mi_segment_t* segment = _mi_page_segment(page);
   if (segment->kind==MI_SEGMENT_HUGE) {
@@ -378,6 +381,10 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
     _mi_segment_huge_page_free(segment, page, block);
     return;
   }
+
+  #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED                    // note: when tracking, cannot use mi_usable_size with multi-threading
+  memset(block, MI_DEBUG_FREED, mi_usable_size(block));
+  #endif
 
   // Try to put the block on either the page-local thread free list, or the heap delayed free list.
   mi_thread_free_t tfreex;

@@ -44,7 +44,8 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
       return NULL;
     }
     oversize = (size <= MI_SMALL_SIZE_MAX ? MI_SMALL_SIZE_MAX + 1 /* ensure we use generic malloc path */ : size);
-    p = _mi_heap_malloc_zero_ex(heap, oversize, zero, alignment); // the page block size should be large enough to align in the single huge page block
+    p = _mi_heap_malloc_zero_ex(heap, oversize, false, alignment); // the page block size should be large enough to align in the single huge page block
+    // zero afterwards as only the area from the aligned_p may be committed!
     if (p == NULL) return NULL;    
   }
   else {
@@ -63,6 +64,13 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   mi_assert_internal(p == _mi_page_ptr_unalign(_mi_ptr_segment(aligned_p), _mi_ptr_page(aligned_p), aligned_p));
   mi_assert_internal(((uintptr_t)aligned_p + offset) % alignment == 0);
   mi_assert_internal(mi_page_usable_block_size(_mi_ptr_page(p)) >= adjust + size);
+
+  // now zero the block if needed
+  if (zero && alignment > MI_ALIGNMENT_MAX) {
+    const ptrdiff_t diff = (uint8_t*)aligned_p - (uint8_t*)p;
+    const ptrdiff_t zsize = mi_page_usable_block_size(_mi_ptr_page(p)) - diff - MI_PADDING_SIZE;
+    if (zsize > 0) { _mi_memzero(aligned_p, zsize); }
+  }
   
   #if MI_TRACK_ENABLED
   if (p != aligned_p) {
