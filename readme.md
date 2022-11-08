@@ -73,7 +73,7 @@ Enjoy!
 
 ### Releases
 
-Note: the `v2.x` version has a new algorithm for managing internal mimalloc pages that tends to use reduce memory usage
+Note: the `v2.x` version has a new algorithm for managing internal mimalloc pages that tends to reduce memory usage
   and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
 
