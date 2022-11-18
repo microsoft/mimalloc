@@ -32,7 +32,7 @@ int main() {
   // invalid_free();
   // test_reserved();
   // negative_stat();
-  test_heap_walk();
+  // test_heap_walk();
   // alloc_huge();
   
   void* p1 = malloc(78);

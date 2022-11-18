@@ -598,7 +598,7 @@ static void mi_cdecl mi_process_done(void) {
   #if defined(_WIN32) && !defined(MI_SHARED_LIB)
   FlsFree(mi_fls_key);  // call thread-done on all threads (except the main thread) to prevent dangling callback pointer if statically linked with a DLL; Issue #208
   #endif
-  
+
   #ifndef MI_SKIP_COLLECT_ON_EXIT
     #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)  
     // free all memory if possible on process exit. This is not needed for a stand-alone process
@@ -607,6 +607,11 @@ static void mi_cdecl mi_process_done(void) {
     mi_collect(true /* force */ );
     #endif
   #endif
+
+  if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
+    _mi_heap_destroy_all();                          // forcefully release all memory held by all heaps (of this thread only!)
+    _mi_mem_collect(&_mi_heap_main_get()->tld->os);  // release all regions
+  }
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
     mi_stats_print(NULL);

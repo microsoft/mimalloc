@@ -93,7 +93,8 @@ static mi_option_desc_t options[_mi_option_last] =
   { 100, UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
   { 16,  UNINIT, MI_OPTION(max_errors) },        // maximum errors that are output
   { 16,  UNINIT, MI_OPTION(max_warnings) },      // maximum warnings that are output
-  { 8,   UNINIT, MI_OPTION(max_segment_reclaim)} // max. number of segment reclaims from the abandoned segments per try.
+  { 8,   UNINIT, MI_OPTION(max_segment_reclaim)},// max. number of segment reclaims from the abandoned segments per try.
+  { 0,   UNINIT, MI_OPTION(destroy_on_exit)}     // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
