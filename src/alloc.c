@@ -462,12 +462,12 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 }
 
 
-static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool local, void* p) mi_attr_noexcept {
-  mi_page_t* const page = _mi_segment_page_of(segment, p);
+void mi_decl_noinline _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept {
+  //mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
   mi_stat_free(page, block);                 // stat_free may access the padding
   mi_track_free(p);
-  _mi_free_block(page, local, block);  
+  _mi_free_block(page, is_local, block);  
 }
 
 // Get the segment data belonging to a pointer
@@ -476,6 +476,8 @@ static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool l
 static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* msg) 
 {
   MI_UNUSED(msg);
+  mi_assert(p != NULL);
+
 #if (MI_DEBUG>0)
   if mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0) {
     _mi_error_message(EINVAL, "%s: invalid (unaligned) pointer: %p\n", msg, p);
@@ -483,8 +485,8 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
   }
 #endif
 
-  if mi_unlikely(p == NULL) return NULL;
   mi_segment_t* const segment = _mi_ptr_segment(p);
+  mi_assert_internal(segment != NULL);
 
 #if (MI_DEBUG>0)
   if mi_unlikely(!mi_is_in_heap_region(p)) {
@@ -507,38 +509,44 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
     return NULL;
   }
 #endif
+
   return segment;
 }
 
 // Free a block 
+// fast path written carefully to prevent spilling on the stack
 void mi_free(void* p) mi_attr_noexcept
 {
+  if mi_unlikely(p == NULL) return;
   mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
-  if mi_unlikely(segment == NULL) return; 
-
-  mi_threadid_t tid = _mi_thread_id();
-  mi_page_t* const page = _mi_segment_page_of(segment, p);
+  const bool          is_local= (_mi_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
+  mi_page_t* const    page    = _mi_segment_page_of(segment, p);
   
-  if mi_likely(tid == mi_atomic_load_relaxed(&segment->thread_id) && page->flags.full_aligned == 0) {  // the thread id matches and it is not a full page, nor has aligned blocks
-    // local, and not full or aligned
-    mi_block_t* block = (mi_block_t*)(p);
-    if mi_unlikely(mi_check_is_double_free(page,block)) return;
-    mi_check_padding(page, block);
-    mi_stat_free(page, block);
-    #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
-    memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
-    #endif
-    mi_track_free(p);
-    mi_block_set_next(page, block, page->local_free);
-    page->local_free = block;
-    if mi_unlikely(--page->used == 0) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))    
-      _mi_page_retire(page);
-    }    
+  if mi_likely(is_local) {                       // thread-local free?
+    if mi_likely(page->flags.full_aligned == 0)  // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
+    {  
+      mi_block_t* const block = (mi_block_t*)p;
+      if mi_unlikely(mi_check_is_double_free(page, block)) return;
+      mi_check_padding(page, block);
+      mi_stat_free(page, block);
+      #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
+      memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
+      #endif
+      mi_track_free(p);
+      mi_block_set_next(page, block, page->local_free);
+      page->local_free = block;
+      if mi_unlikely(--page->used == 0) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))    
+        _mi_page_retire(page);
+      }
+    }
+    else {
+      // page is full or contains (inner) aligned blocks; use generic path
+      _mi_free_generic(segment, page, true, p);
+    }
   }
   else {
-    // non-local, aligned blocks, or a full page; use the more generic path
-    // note: recalc page in generic to improve code generation
-    mi_free_generic(segment, tid == segment->thread_id, p);
+    // not thread-local; use generic path
+    _mi_free_generic(segment, page, false, p);
   }  
 }
 
@@ -577,8 +585,8 @@ mi_decl_noinline static size_t mi_page_usable_aligned_size_of(const mi_segment_t
 }
 
 static inline size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noexcept {
+  if (p == NULL) return 0;
   const mi_segment_t* const segment = mi_checked_ptr_segment(p, msg);
-  if (segment==NULL) return 0;  // also returns 0 if `p == NULL`
   const mi_page_t* const page = _mi_segment_page_of(segment, p);  
   if mi_likely(!mi_page_has_aligned(page)) {
     const mi_block_t* block = (const mi_block_t*)p;

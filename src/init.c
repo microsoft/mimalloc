@@ -19,12 +19,12 @@ const mi_page_t _mi_page_empty = {
   false,   // is_zero
   0,       // retire_expire
   NULL,    // free
-  #if MI_ENCODE_FREELIST
-  { 0, 0 },
-  #endif
   0,       // used
   0,       // xblock_size
   NULL,    // local_free
+  #if MI_ENCODE_FREELIST
+  { 0, 0 },
+  #endif
   MI_ATOMIC_VAR_INIT(0), // xthread_free
   MI_ATOMIC_VAR_INIT(0), // xheap
   NULL, NULL

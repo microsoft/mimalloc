@@ -279,13 +279,14 @@ typedef struct mi_page_s {
   uint8_t               retire_expire : 7;   // expiration count for retired blocks
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
+  uint32_t              used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
+  uint32_t              xblock_size;       // size available in each block (always `>0`) 
+  mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
+
   #ifdef MI_ENCODE_FREELIST
   uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`)
   #endif
-  uint32_t              used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
-  uint32_t              xblock_size;       // size available in each block (always `>0`) 
 
-  mi_block_t* local_free;                  // list of deferred free blocks by this thread (migrates to `free`)
   _Atomic(mi_thread_free_t) xthread_free;  // list of deferred free blocks freed by other threads
   _Atomic(uintptr_t)        xheap;
 
