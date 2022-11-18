@@ -408,7 +408,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
 }
 
 // Retire parameters
-#define MI_MAX_RETIRE_SIZE    MI_MEDIUM_OBJ_SIZE_MAX  
+#define MI_MAX_RETIRE_SIZE    (MI_MEDIUM_OBJ_SIZE_MAX)
 #define MI_RETIRE_CYCLES      (8)
 
 // Retire a page with no more used blocks
@@ -579,7 +579,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 #if (MI_SECURE>0)
 #define MI_MIN_EXTEND         (8*MI_SECURE) // extend at least by this many
 #else
-#define MI_MIN_EXTEND         (1)
+#define MI_MIN_EXTEND         (4)
 #endif
 
 // Extend the capacity (up to reserved) by initializing a free list
