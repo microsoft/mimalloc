@@ -608,6 +608,9 @@ static void mi_cdecl mi_process_done(void) {
     #endif
   #endif
 
+  // Forcefully release all retained memory; this can be dangerous in general if overriding regular malloc/free
+  // since after process_done there might still be other code running that calls `free` (like at_exit routines,
+  // or C-runtime termination code.
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
     _mi_heap_destroy_all();                          // forcefully release all memory held by all heaps (of this thread only!)
     _mi_mem_collect(&_mi_heap_main_get()->tld->os);  // release all regions
