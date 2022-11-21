@@ -82,6 +82,7 @@ void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocat
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
 size_t     _mi_os_good_alloc_size(size_t size);
 bool       _mi_os_has_overcommit(void);
+bool       _mi_os_alloc_named(void* p, size_t size, const char *name);
 
 void*      _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool* large, mi_stats_t* tld_stats);
 void       _mi_os_free_aligned(void* p, size_t size, size_t alignment, size_t align_offset, bool was_committed, mi_stats_t* tld_stats);

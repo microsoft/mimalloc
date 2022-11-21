@@ -893,3 +893,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
     return _mi_page_malloc(heap, page, size, zero);
   }
 }
+
+bool mi_alloc_named(void* p, size_t size, const char *name) {
+   return _mi_os_alloc_named(p, size, name);
+}

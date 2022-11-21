@@ -163,7 +163,6 @@ static bool mi_memid_is_arena(size_t id, mem_region_t** region, mi_bitmap_index_
   }
 }
 
-
 /* ----------------------------------------------------------------------------
   Allocate a region is allocated from the OS (or an arena)
 -----------------------------------------------------------------------------*/
