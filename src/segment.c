@@ -803,7 +803,7 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, siz
     bool is_pinned = false;
     size_t memid = 0;
     size_t align_offset = 0;
-    size_t alignment = MI_SEGMENT_SIZE;
+    size_t alignment = MI_SEGMENT_ALIGN;
     
     if (page_alignment > 0) {
       mi_assert_internal(huge_page != NULL);

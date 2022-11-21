@@ -347,7 +347,20 @@ void mi_heap_destroy(mi_heap_t* heap) {
   }
 }
 
-
+void _mi_heap_destroy_all(void) {
+  mi_heap_t* bheap = mi_heap_get_backing();
+  mi_heap_t* curr = bheap->tld->heaps;
+  while (curr != NULL) {
+    mi_heap_t* next = curr->next;
+    if (curr->no_reclaim) {
+      mi_heap_destroy(curr);
+    }
+    else {
+      _mi_heap_destroy_pages(curr);
+    }
+    curr = next;
+  }
+}
 
 /* -----------------------------------------------------------
   Safe Heap delete

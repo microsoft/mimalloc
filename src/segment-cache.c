@@ -45,7 +45,11 @@ static bool mi_cdecl mi_segment_cache_is_suitable(mi_bitmap_index_t bitidx, void
   return _mi_arena_memid_is_suitable(slot->memid, req_arena_id);
 }
 
-mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t _req_arena_id, size_t* memid, mi_os_tld_t* tld)
+mi_decl_noinline static void* mi_segment_cache_pop_ex(
+                              bool all_suitable,
+                              size_t size, mi_commit_mask_t* commit_mask, 
+                              mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, 
+                              mi_arena_id_t _req_arena_id, size_t* memid, mi_os_tld_t* tld)
 {
 #ifdef MI_CACHE_DISABLE
   return NULL;
@@ -66,8 +70,8 @@ mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* comm
   mi_bitmap_index_t bitidx = 0;
   bool claimed = false;
   mi_arena_id_t req_arena_id = _req_arena_id;
-  mi_bitmap_pred_fun_t pred_fun = &mi_segment_cache_is_suitable;  // cannot pass NULL as the arena may be exclusive itself; todo: do not put exclusive arenas in the cache?
-  
+  mi_bitmap_pred_fun_t pred_fun = (all_suitable ? NULL : &mi_segment_cache_is_suitable);  // cannot pass NULL as the arena may be exclusive itself; todo: do not put exclusive arenas in the cache?
+
   if (*large) {  // large allowed?
     claimed = _mi_bitmap_try_find_from_claim_pred(cache_available_large, MI_CACHE_FIELDS, start_field, 1, pred_fun, &req_arena_id, &bitidx);
     if (claimed) *large = true;
@@ -95,6 +99,12 @@ mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* comm
   _mi_bitmap_unclaim(cache_inuse, MI_CACHE_FIELDS, 1, bitidx);
   return p;
 #endif
+}
+
+
+mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t _req_arena_id, size_t* memid, mi_os_tld_t* tld)
+{
+  return mi_segment_cache_pop_ex(false, size, commit_mask, decommit_mask, large, is_pinned, is_zero, _req_arena_id, memid, tld);
 }
 
 static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, void* p, size_t total, mi_stats_t* stats)
@@ -161,6 +171,30 @@ static mi_decl_noinline void mi_segment_cache_purge(bool force, mi_os_tld_t* tld
 
 void _mi_segment_cache_collect(bool force, mi_os_tld_t* tld) {
   mi_segment_cache_purge(force, tld );
+}
+
+void _mi_segment_cache_free_all(mi_os_tld_t* tld) {
+  mi_commit_mask_t commit_mask;
+  mi_commit_mask_t decommit_mask;
+  bool is_pinned;
+  bool is_zero;
+  size_t memid;
+  const size_t size = MI_SEGMENT_SIZE;
+  // iterate twice: first large pages, then regular memory 
+  for (int i = 0; i < 2; i++) {
+    void* p;
+    do {
+      // keep popping and freeing the memory
+      bool large = (i == 0);  
+      p = mi_segment_cache_pop_ex(true /* all */, size, &commit_mask, &decommit_mask,
+                                  &large, &is_pinned, &is_zero, _mi_arena_id_none(), &memid, tld);
+      if (p != NULL) {
+        size_t csize = _mi_commit_mask_committed_size(&commit_mask, size);
+        if (csize > 0 && !is_pinned) _mi_stat_decrease(&_mi_stats_main.committed, csize);
+        _mi_arena_free(p, size, MI_SEGMENT_ALIGN, 0, memid, is_pinned /* pretend not committed to not double count decommits */, tld->stats);
+      }
+    } while (p != NULL);
+  }
 }
 
 mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* decommit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld)
