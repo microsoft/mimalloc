@@ -141,7 +141,7 @@ typedef int32_t  mi_ssize_t;
 #endif
 
 #define MI_SMALL_PAGE_SHIFT               (MI_SEGMENT_SLICE_SHIFT)       // 64KiB
-#define MI_MEDIUM_PAGE_SHIFT              ( 4 + MI_SMALL_PAGE_SHIFT)     // 512KiB
+#define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SMALL_PAGE_SHIFT)     // 512KiB
 
 
 // Derived constants
