@@ -506,7 +506,7 @@ template<class T> struct mi_heap_stl_allocator {
 
   void collect(bool force) { mi_heap_collect(this->heap.get(), force); }
 
-protected:
+// protected:
   std::shared_ptr<mi_heap_t> heap;
 
 private:
