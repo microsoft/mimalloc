@@ -388,7 +388,7 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   
   // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
   const size_t size = mi_segment_size(segment);
-  if (size != MI_SEGMENT_SIZE || segment->mem_align_offset != 0 || // only push regular segments on the cache
+  if (size != MI_SEGMENT_SIZE || segment->mem_align_offset != 0 || segment->kind == MI_SEGMENT_HUGE || // only push regular segments on the cache
        !_mi_segment_cache_push(segment, size, segment->memid, &segment->commit_mask, &segment->decommit_mask, segment->mem_is_large, segment->mem_is_pinned, tld->os)) 
   {
     const size_t csize = _mi_commit_mask_committed_size(&segment->commit_mask, size);
@@ -513,6 +513,11 @@ static bool mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_
   // note: assumes commit_mask is always full for huge segments as otherwise the commit mask bits can overflow
   if (mi_commit_mask_is_full(&segment->commit_mask) && mi_commit_mask_is_empty(&segment->decommit_mask)) return true; // fully committed
   return mi_segment_commitx(segment,true,p,size,stats);
+}
+
+static void mi_segment_decommit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
+  if (!segment->allow_decommit) return;
+  mi_segment_commitx(segment, false, p, size, stats);
 }
 
 static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
@@ -1523,18 +1528,21 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   if (segment == NULL || page==NULL) return NULL;
   mi_assert_internal(segment->used==1);
   mi_assert_internal(mi_page_block_size(page) >= size);  
+  #if MI_HUGE_PAGE_ABANDON
   segment->thread_id = 0; // huge segments are immediately abandoned
+  #endif  
+  
   if (page_alignment > 0) {
     size_t psize;
     uint8_t* p = _mi_segment_page_start(segment, page, &psize);
     uint8_t* aligned_p = (uint8_t*)_mi_align_up((uintptr_t)p, page_alignment);
     mi_assert_internal(_mi_is_aligned(aligned_p, page_alignment));
     mi_assert_internal(psize - (aligned_p - p) >= size);
-    if (!segment->mem_is_pinned && page->is_committed) {
-       // decommit the part of the page that is unused; this can be quite large (close to MI_SEGMENT_SIZE)
+    if (!segment->allow_decommit) {
+      // decommit the part of the page that is unused; this can be quite large (close to MI_SEGMENT_SIZE)
       uint8_t* decommit_start = p + sizeof(mi_block_t); // for the free list
       ptrdiff_t decommit_size = aligned_p - decommit_start;
-      _mi_os_decommit(decommit_start, decommit_size, os_tld->stats);
+      mi_segment_decommit(segment, decommit_start, decommit_size, &_mi_stats_main);      
     }
   }
   // for huge pages we initialize the xblock_size as we may
@@ -1545,6 +1553,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   return page;
 }
 
+#if MI_HUGE_PAGE_ABANDON
 // free huge block from another thread
 void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block_t* block) {
   // huge page segments are always abandoned and can be freed immediately by any thread
@@ -1571,6 +1580,24 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
   }
 #endif
 }
+
+#else 
+// reset memory of a huge block from another thread 
+void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_block_t* block) {
+  mi_assert_internal(segment->kind == MI_SEGMENT_HUGE);
+  mi_assert_internal(segment == _mi_page_segment(page));
+  mi_assert_internal(page->used == 1); // this is called just before the free
+  mi_assert_internal(page->free == NULL);
+  const size_t csize = mi_page_block_size(page) - sizeof(mi_block_t);
+  uint8_t* p = ( uint8_t*)block + sizeof(mi_block_t);
+  if (segment->allow_decommit) {
+    mi_segment_decommit(segment, p, csize, &_mi_stats_main);
+  }
+  else {
+    _mi_os_reset(p, csize, &_mi_stats_main);
+  }
+}
+#endif
 
 /* -----------------------------------------------------------
    Page allocation and free
