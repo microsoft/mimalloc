@@ -506,11 +506,6 @@ static bool mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_
   return mi_segment_commitx(segment,true,p,size,stats);
 }
 
-static void mi_segment_decommit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
-  if (!segment->allow_decommit) return;
-  mi_segment_commitx(segment, false, p, size, stats);
-}
-
 static void mi_segment_perhaps_decommit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
   if (!segment->allow_decommit) return;
   if (mi_option_get(mi_option_decommit_delay) == 0) {
@@ -1573,6 +1568,7 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
 #else 
 // reset memory of a huge block from another thread 
 void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_block_t* block) {
+  MI_UNUSED(page);
   mi_assert_internal(segment->kind == MI_SEGMENT_HUGE);
   mi_assert_internal(segment == _mi_page_segment(page));
   mi_assert_internal(page->used == 1); // this is called just before the free

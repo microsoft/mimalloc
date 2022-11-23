@@ -55,8 +55,8 @@ int main() {
    strdup_test();
   */
   test_stl_allocators();
-
   test_mt_shutdown();
+  
   //fail_aslr();
   bench_alloc_large();
   mi_stats_print(NULL);
@@ -254,6 +254,17 @@ static void heap_thread_free_huge() {
   }
 }
 
+static void heap_thread_free_huge_worker() {
+  mi_free(shared_p);
+}
+
+static void heap_thread_free_huge() {
+  for (int i = 0; i < 10; i++) {
+    shared_p = mi_malloc(1024 * 1024 * 1024);
+    auto t1 = std::thread(heap_thread_free_large_worker);
+    t1.join();
+  }
+}
 
 
 static void test_mt_shutdown()

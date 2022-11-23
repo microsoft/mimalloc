@@ -170,19 +170,23 @@ static void mi_print_count(int64_t n, int64_t unit, mi_output_fun* out, void* ar
           else mi_print_amount(n,0,out,arg);
 }
 
-static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg ) {
+static void mi_stat_print_ex(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg, const char* notok ) {
   _mi_fprintf(out, arg,"%10s:", msg);
-  if (unit>0) {
+  if (unit > 0) {
     mi_print_amount(stat->peak, unit, out, arg);
     mi_print_amount(stat->allocated, unit, out, arg);
     mi_print_amount(stat->freed, unit, out, arg);
     mi_print_amount(stat->current, unit, out, arg);
     mi_print_amount(unit, 1, out, arg);
     mi_print_count(stat->allocated, unit, out, arg);
-    if (stat->allocated > stat->freed)
-      _mi_fprintf(out, arg, "  not all freed!\n");
-    else
+    if (stat->allocated > stat->freed) {
+      _mi_fprintf(out, arg, "  ");
+      _mi_fprintf(out, arg, (notok == NULL ? "not all freed!" : notok));
+      _mi_fprintf(out, arg, "\n");
+    }
+    else {
       _mi_fprintf(out, arg, "  ok\n");
+    }
   }
   else if (unit<0) {
     mi_print_amount(stat->peak, -1, out, arg);
@@ -208,6 +212,10 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
     mi_print_amount(stat->current, 1, out, arg);
     _mi_fprintf(out, arg, "\n");
   }
+}
+
+static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg) {
+  mi_stat_print_ex(stat, msg, unit, out, arg, NULL);
 }
 
 static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg ) {
@@ -312,8 +320,8 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_print(&stats->malloc, "malloc req", 1, out, arg);
   _mi_fprintf(out, arg, "\n");
   #endif
-  mi_stat_print(&stats->reserved, "reserved", 1, out, arg);
-  mi_stat_print(&stats->committed, "committed", 1, out, arg);
+  mi_stat_print_ex(&stats->reserved, "reserved", 1, out, arg, "");
+  mi_stat_print_ex(&stats->committed, "committed", 1, out, arg, "");
   mi_stat_print(&stats->reset, "reset", 1, out, arg);
   mi_stat_print(&stats->page_committed, "touched", 1, out, arg);
   mi_stat_print(&stats->segments, "segments", -1, out, arg);
