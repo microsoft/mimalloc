@@ -91,7 +91,7 @@ static bool chance(size_t perc, random_t r) {
 
 static void* alloc_items(size_t items, random_t r) {
   if (chance(1, r)) {
-    if (chance(1, r) && allow_large_objects) items *= 10000;       // 0.01% giant
+    if (chance(1, r) && allow_large_objects) items *= 50000;       // 0.01% giant
     else if (chance(10, r) && allow_large_objects) items *= 1000;  // 0.1% huge
     else items *= 100;                                             // 1% large objects;
   }

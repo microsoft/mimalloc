@@ -395,9 +395,10 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
     #endif
   }
   
-
   #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED                    // note: when tracking, cannot use mi_usable_size with multi-threading
-  memset(block, MI_DEBUG_FREED, mi_usable_size(block));
+  if (segment->kind != MI_SEGMENT_HUGE) {                   // not for huge segments as we just reset the content
+    memset(block, MI_DEBUG_FREED, mi_usable_size(block));
+  }
   #endif
 
   // Try to put the block on either the page-local thread free list, or the heap delayed free list.
@@ -449,7 +450,9 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
     if mi_unlikely(mi_check_is_double_free(page, block)) return;
     mi_check_padding(page, block);
     #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
-    memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
+    if (!mi_page_is_huge(page)) {   // huge page content may be already decommitted
+      memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
+    }
     #endif
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;

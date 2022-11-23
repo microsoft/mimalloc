@@ -1522,25 +1522,23 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   #if MI_HUGE_PAGE_ABANDON
   segment->thread_id = 0; // huge segments are immediately abandoned
   #endif  
-  
-  if (page_alignment > 0) {
-    size_t psize;
-    uint8_t* p = _mi_segment_page_start(segment, page, &psize);
-    uint8_t* aligned_p = (uint8_t*)_mi_align_up((uintptr_t)p, page_alignment);
-    mi_assert_internal(_mi_is_aligned(aligned_p, page_alignment));
-    mi_assert_internal(psize - (aligned_p - p) >= size);
-    if (!segment->allow_decommit) {
-      // decommit the part of the page that is unused; this can be quite large (close to MI_SEGMENT_SIZE)
-      uint8_t* decommit_start = p + sizeof(mi_block_t); // for the free list
-      ptrdiff_t decommit_size = aligned_p - decommit_start;
-      mi_segment_decommit(segment, decommit_start, decommit_size, &_mi_stats_main);      
-    }
-  }
+
   // for huge pages we initialize the xblock_size as we may
   // overallocate to accommodate large alignments.
   size_t psize;
-  _mi_segment_page_start(segment, page, &psize);
+  uint8_t* start = _mi_segment_page_start(segment, page, &psize);
   page->xblock_size = (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
+  
+  // decommit the part of the prefix of a page that will not be used; this can be quite large (close to MI_SEGMENT_SIZE)
+  if (page_alignment > 0 && segment->allow_decommit) {
+    uint8_t* aligned_p = (uint8_t*)_mi_align_up((uintptr_t)start, page_alignment);
+    mi_assert_internal(_mi_is_aligned(aligned_p, page_alignment));
+    mi_assert_internal(psize - (aligned_p - start) >= size);      
+    uint8_t* decommit_start = start + sizeof(mi_block_t);              // for the free list
+    ptrdiff_t decommit_size = aligned_p - decommit_start;
+    _mi_os_decommit(decommit_start, decommit_size, &_mi_stats_main);   // note: cannot use segment_decommit on huge segments    
+  }
+  
   return page;
 }
 
@@ -1579,13 +1577,10 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
   mi_assert_internal(segment == _mi_page_segment(page));
   mi_assert_internal(page->used == 1); // this is called just before the free
   mi_assert_internal(page->free == NULL);
-  const size_t csize = mi_page_block_size(page) - sizeof(mi_block_t);
-  uint8_t* p = ( uint8_t*)block + sizeof(mi_block_t);
   if (segment->allow_decommit) {
-    mi_segment_decommit(segment, p, csize, &_mi_stats_main);
-  }
-  else {
-    _mi_os_reset(p, csize, &_mi_stats_main);
+    const size_t csize = mi_usable_size(block) - sizeof(mi_block_t);
+    uint8_t* p = (uint8_t*)block + sizeof(mi_block_t);
+    _mi_os_decommit(p, csize, &_mi_stats_main);  // note: cannot use segment_decommit on huge segments
   }
 }
 #endif
