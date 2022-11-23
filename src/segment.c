@@ -1261,7 +1261,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   mi_segments_track_size(-(long)segment->segment_size, tld);
   mi_page_t* page = mi_segment_find_free(segment, tld);
   mi_assert_internal(page != NULL);
-#if MI_DEBUG > 3
+
   if (page_alignment > 0) {
     size_t psize;
     size_t pre_size;
@@ -1276,7 +1276,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
       _mi_mem_decommit(decommit_start, decommit_size, os_tld);
     }
   }
-#endif
+
   // for huge pages we initialize the xblock_size as we may
   // overallocate to accommodate large alignments.
   size_t psize;
