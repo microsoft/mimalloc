@@ -474,9 +474,6 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
 // Adjust a block that was allocated aligned, to the actual start of the block in the page.
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
-  #if !MI_HUGE_PAGE_ABANDON
-  // if (segment->mem_align_offset != 0) return (mi_block_t*)p; // don't unalign blocks that have huge alignment
-  #endif
   const size_t diff   = (uint8_t*)p - _mi_page_start(segment, page, NULL);
   const size_t adjust = (diff % mi_page_block_size(page));
   return (mi_block_t*)((uintptr_t)p - adjust);
@@ -484,7 +481,6 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 
 
 void mi_decl_noinline _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept {
-  //mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
   mi_stat_free(page, block);                 // stat_free may access the padding
   mi_track_free(p);
