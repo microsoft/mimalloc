@@ -512,7 +512,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
 
   mi_segment_t* segment = (mi_segment_t*)_mi_mem_alloc_aligned(*segment_size, alignment, align_offset, commit, &mem_large, &is_pinned, is_zero, &memid, tld_os);
   if (segment == NULL) return NULL;  // failed to allocate
-  if (!commit) {
+  if (!(*commit)) {
     // ensure the initial info is committed
     mi_assert_internal(!mem_large && !is_pinned);
     bool commit_zero = false;
@@ -525,7 +525,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
     }
   }
 
-  mi_track_mem_undefined(segment, info_size);
+  mi_track_mem_undefined(segment, info_size);   MI_UNUSED(info_size);
   segment->memid = memid;
   segment->mem_is_pinned = (mem_large || is_pinned);
   segment->mem_is_committed = commit;
