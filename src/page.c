@@ -436,7 +436,7 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   // how to check this efficiently though...
   // for now, we don't retire if it is the only page left of this size class.
   mi_page_queue_t* pq = mi_page_queue_of(page);
-  if mi_likely(page->xblock_size <= MI_MAX_RETIRE_SIZE && !mi_page_is_in_full(page)) {
+  if mi_likely(page->xblock_size <= MI_MAX_RETIRE_SIZE && !mi_page_queue_is_special(pq)) {  // not too large && not full or huge queue?
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
       page->retire_expire = (page->xblock_size <= MI_SMALL_OBJ_SIZE_MAX ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
