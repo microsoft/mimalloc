@@ -496,11 +496,50 @@ void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
    Segment allocation
 ----------------------------------------------------------- */
 
-// Allocate a segment from the OS aligned to `MI_SEGMENT_SIZE` .
-static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_page_kind_t page_kind, size_t page_shift, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
+static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignment, size_t pre_size, size_t info_size,
+                                         size_t* segment_size, bool* is_zero, bool* commit, mi_segments_tld_t* tld, mi_os_tld_t* tld_os)
 {
-  // the segment parameter is non-null if it came from our cache
-  mi_assert_internal(segment==NULL || (required==0 && page_kind <= MI_PAGE_LARGE));
+  size_t memid;
+  bool   mem_large = (!eager_delayed && (MI_SECURE == 0)); // only allow large OS pages once we are no longer lazy
+  bool   is_pinned = false;
+  size_t align_offset = 0;
+  size_t alignment = MI_SEGMENT_SIZE;
+  if (page_alignment > 0) {
+    alignment = page_alignment;
+    align_offset = _mi_align_up(pre_size, MI_SEGMENT_SIZE);
+    *segment_size = *segment_size + (align_offset - pre_size);
+  }
+
+  mi_segment_t* segment = (mi_segment_t*)_mi_mem_alloc_aligned(*segment_size, alignment, align_offset, commit, &mem_large, &is_pinned, is_zero, &memid, tld_os);
+  if (segment == NULL) return NULL;  // failed to allocate
+  if (!commit) {
+    // ensure the initial info is committed
+    mi_assert_internal(!mem_large && !is_pinned);
+    bool commit_zero = false;
+    bool ok = _mi_mem_commit(segment, pre_size, &commit_zero, tld_os);
+    if (commit_zero) *is_zero = true;
+    if (!ok) {
+      // commit failed; we cannot touch the memory: free the segment directly and return `NULL`
+      _mi_mem_free(segment, *segment_size, alignment, align_offset, memid, false, false, tld_os);
+      return NULL;
+    }
+  }
+
+  mi_track_mem_undefined(segment, info_size);
+  segment->memid = memid;
+  segment->mem_is_pinned = (mem_large || is_pinned);
+  segment->mem_is_committed = commit;
+  segment->mem_alignment = alignment;
+  segment->mem_align_offset = align_offset;
+  mi_segments_track_size((long)(*segment_size), tld);
+  return segment;
+}
+
+// Allocate a segment from the OS aligned to `MI_SEGMENT_SIZE` .
+static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind, size_t page_shift, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
+{
+  // required is only > 0 for huge page allocations
+  mi_assert_internal((required > 0 && page_kind > MI_PAGE_LARGE)|| (required==0 && page_kind <= MI_PAGE_LARGE));
 
   // calculate needed sizes first
   size_t capacity;
@@ -527,105 +566,29 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
                               tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager  = !eager_delayed && mi_option_is_enabled(mi_option_eager_commit);
   bool commit = eager; // || (page_kind >= MI_PAGE_LARGE);
-  bool pages_still_good = false;
   bool is_zero = false;
-
-  // Try to get it from our thread local cache first
-  if (segment != NULL) {
-    // came from cache
-    mi_track_mem_defined(segment,info_size);  
-    mi_assert_internal(segment->segment_size == segment_size);
-    if (page_kind <= MI_PAGE_MEDIUM && segment->page_kind == page_kind && segment->segment_size == segment_size) {
-      pages_still_good = true;
-    }
-    else
-    {
-      if (MI_SECURE!=0) {
-        mi_assert_internal(!segment->mem_is_pinned);
-        mi_segment_protect(segment, false, tld->os); // reset protection if the page kind differs
-      }
-      // different page kinds; unreset any reset pages, and unprotect
-      // TODO: optimize cache pop to return fitting pages if possible?
-      for (size_t i = 0; i < segment->capacity; i++) {
-        mi_page_t* page = &segment->pages[i];
-        if (page->is_reset) {
-          if (!commit && mi_option_is_enabled(mi_option_reset_decommits)) {
-            page->is_reset = false;
-          }
-          else {
-            mi_page_unreset(segment, page, 0, tld);  // todo: only unreset the part that was reset? (instead of the full page)
-          }
-        }
-      }
-      // ensure the initial info is committed
-      if (segment->capacity < capacity) {
-        bool commit_zero = false;
-        bool ok = _mi_mem_commit(segment, pre_size, &commit_zero, tld->os);
-        if (commit_zero) is_zero = true;
-        if (!ok) {
-          return NULL;
-        }
-      }
-    }
-  }
-  else {
-    // Allocate the segment from the OS
-    size_t memid;
-    bool   mem_large = (!eager_delayed && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy
-    bool   is_pinned = false;
-    size_t align_offset = 0;
-    size_t alignment = MI_SEGMENT_SIZE;
-    if (page_alignment > 0) {
-      alignment = page_alignment;
-      align_offset = _mi_align_up( pre_size, MI_SEGMENT_SIZE );
-      segment_size += (align_offset - pre_size);
-    }
-    segment = (mi_segment_t*)_mi_mem_alloc_aligned(segment_size, alignment, align_offset, &commit, &mem_large, &is_pinned, &is_zero, &memid, os_tld);
-    if (segment == NULL) return NULL;  // failed to allocate
-    if (!commit) {
-      // ensure the initial info is committed
-      mi_assert_internal(!mem_large && !is_pinned);
-      bool commit_zero = false;
-      bool ok = _mi_mem_commit(segment, pre_size, &commit_zero, tld->os);
-      if (commit_zero) is_zero = true;
-      if (!ok) {
-        // commit failed; we cannot touch the memory: free the segment directly and return `NULL`
-        _mi_mem_free(segment, segment_size, alignment, align_offset, memid, false, false, os_tld);
-        return NULL;  
-      }
-    }
-    mi_track_mem_undefined(segment,info_size);
-    segment->memid = memid;
-    segment->mem_is_pinned = (mem_large || is_pinned);
-    segment->mem_is_committed = commit;    
-    segment->mem_alignment = alignment;
-    segment->mem_align_offset = align_offset;
-    mi_segments_track_size((long)segment_size, tld);
-  }  
+  
+  // Allocate the segment from the OS (segment_size can change due to alignment)
+  mi_segment_t* segment = mi_segment_os_alloc(eager_delayed, page_alignment, pre_size, info_size, &segment_size, &is_zero, &commit, tld, os_tld);
+  if (segment == NULL) return NULL;
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
   mi_assert_internal(segment->mem_is_pinned ? segment->mem_is_committed : true);    
     
   mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);  // tsan
-  if (!pages_still_good) {
-    // zero the segment info (but not the `mem` fields)
-    ptrdiff_t ofs = offsetof(mi_segment_t, next);
-    memset((uint8_t*)segment + ofs, 0, info_size - ofs);
+  
+  // zero the segment info (but not the `mem` fields)
+  ptrdiff_t ofs = offsetof(mi_segment_t, next);
+  memset((uint8_t*)segment + ofs, 0, info_size - ofs);
 
-    // initialize pages info
-    for (size_t i = 0; i < capacity; i++) {
-      mi_assert_internal(i <= 255);
-      segment->pages[i].segment_idx = (uint8_t)i;
-      segment->pages[i].is_reset = false;
-      segment->pages[i].is_committed = commit;
-      segment->pages[i].is_zero_init = is_zero;
-    }
+  // initialize pages info
+  for (size_t i = 0; i < capacity; i++) {
+    mi_assert_internal(i <= 255);
+    segment->pages[i].segment_idx = (uint8_t)i;
+    segment->pages[i].is_reset = false;
+    segment->pages[i].is_committed = commit;
+    segment->pages[i].is_zero_init = is_zero;
   }
-  else {
-    // zero the segment info but not the pages info (and mem fields)
-    ptrdiff_t ofs = offsetof(mi_segment_t, next);
-    memset((uint8_t*)segment + ofs, 0, offsetof(mi_segment_t,pages) - ofs);
-  }
-
+  
   // initialize
   segment->page_kind  = page_kind;
   segment->capacity   = capacity;
@@ -648,9 +611,6 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
   return segment;
 }
 
-static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind, size_t page_shift, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
-  return mi_segment_init(NULL, required, page_kind, page_shift, page_alignment, tld, os_tld);
-}
 
 static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
   MI_UNUSED(force);
