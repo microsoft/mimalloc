@@ -316,7 +316,7 @@ static uint8_t* _mi_segment_page_start_from_slice(const mi_segment_t* segment, c
   ptrdiff_t idx = slice - segment->slices;
   size_t psize = (size_t)slice->slice_count * MI_SEGMENT_SLICE_SIZE;
   // make the start not OS page aligned for smaller blocks to avoid page/cache effects
-  size_t start_offset = (xblock_size >= MI_INTPTR_SIZE && xblock_size <= 1024 ? MI_MAX_ALIGN_GUARANTEE : 0); 
+  size_t start_offset = (xblock_size >= MI_INTPTR_SIZE && xblock_size <= 1024 ? 3*MI_MAX_ALIGN_GUARANTEE : 0); 
   if (page_size != NULL) { *page_size = psize - start_offset; }
   return (uint8_t*)segment + ((idx*MI_SEGMENT_SLICE_SIZE) + start_offset);
 }
@@ -463,15 +463,6 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
 static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, size_t size, mi_stats_t* stats) {    
   mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
 
-  // try to commit in at least MI_MINIMAL_COMMIT_SIZE sizes.
-  /*
-  if (commit && size > 0) {
-    const size_t csize = _mi_align_up(size, MI_MINIMAL_COMMIT_SIZE);
-    if (p + csize <= mi_segment_end(segment)) {
-      size = csize;
-    }
-  }
-  */
   // commit liberal, but decommit conservative
   uint8_t* start = NULL;
   size_t   full_size = 0;
