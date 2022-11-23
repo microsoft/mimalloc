@@ -47,6 +47,7 @@ bool    _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 bool    _mi_os_decommit(void* p, size_t size, mi_stats_t* stats);
 bool    _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
 bool    _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
+bool    _mi_os_commit_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats);
 
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
@@ -481,11 +482,21 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
 -----------------------------------------------------------------------------*/
 
 bool _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld) {
-  return _mi_os_reset(p, size, tld->stats);
+  if (mi_option_is_enabled(mi_option_reset_decommits)) {
+    return _mi_os_decommit(p, size, tld->stats);
+  }
+  else {
+    return _mi_os_reset(p, size, tld->stats);
+  }
 }
 
 bool _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld) {
-  return _mi_os_unreset(p, size, is_zero, tld->stats);
+  if (mi_option_is_enabled(mi_option_reset_decommits)) {
+    return _mi_os_commit(p, size, is_zero, tld->stats);
+  }
+  else {
+    return _mi_os_unreset(p, size, is_zero, tld->stats);
+  }
 }
 
 bool _mi_mem_commit(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld) {

@@ -1007,7 +1007,7 @@ bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* tld_stats) {
   return mi_os_commitx(addr, size, false, true /* conservative */, &is_zero, stats);
 }
 
-static bool mi_os_commit_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {  
+bool _mi_os_commit_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {  
   return mi_os_commitx(addr, size, true, true /* conservative */, is_zero, stats);
 }
 
@@ -1072,24 +1072,14 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
 bool _mi_os_reset(void* addr, size_t size, mi_stats_t* tld_stats) {
   MI_UNUSED(tld_stats);
   mi_stats_t* stats = &_mi_stats_main;
-  if (mi_option_is_enabled(mi_option_reset_decommits)) {
-    return _mi_os_decommit(addr, size, stats);
-  }
-  else {
-    return mi_os_resetx(addr, size, true, stats);
-  }
+  return mi_os_resetx(addr, size, true, stats);
 }
 
 bool _mi_os_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats) {
   MI_UNUSED(tld_stats);
   mi_stats_t* stats = &_mi_stats_main;
-  if (mi_option_is_enabled(mi_option_reset_decommits)) {
-    return mi_os_commit_unreset(addr, size, is_zero, stats);  // re-commit it (conservatively!)
-  }
-  else {
-    *is_zero = false;
-    return mi_os_resetx(addr, size, false, stats);
-  }
+  *is_zero = false;
+  return mi_os_resetx(addr, size, false, stats);  
 }
 
 

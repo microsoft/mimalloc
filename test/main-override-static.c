@@ -205,7 +205,7 @@ static bool test_visit(const mi_heap_t* heap, const mi_heap_area_t* area, void* 
 
 static void test_heap_walk(void) {
   mi_heap_t* heap = mi_heap_new();
-  //mi_heap_malloc(heap, 2097152);
+  mi_heap_malloc(heap, 16*2097152);
   mi_heap_malloc(heap, 2067152);
   mi_heap_malloc(heap, 2097160);
   mi_heap_malloc(heap, 24576);

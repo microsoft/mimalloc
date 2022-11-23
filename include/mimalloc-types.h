@@ -71,6 +71,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 
+// We used to abandon huge pages but to eagerly deallocate if freed from another thread,
+// but that makes it not possible to visit them during a heap walk or include them in a
+// `mi_heap_destroy`. We therefore instead reset/decommit the huge blocks if freed from
+// another thread so most memory is available until it gets properly freed by the owning thread.
+// #define MI_HUGE_PAGE_ABANDON 1
+
+
 // ------------------------------------------------------
 // Platform specific values
 // ------------------------------------------------------

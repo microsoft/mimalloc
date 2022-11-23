@@ -334,6 +334,17 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
     mi_heap_stat_decrease(heap, normal_bins[_mi_bin(bsize)], 1);
 #endif
   }
+#if !MI_HUGE_PAGE_ABANDON
+  else {
+    const size_t bpsize = mi_page_block_size(page);
+    if (bpsize <= MI_HUGE_OBJ_SIZE_MAX) {
+      mi_heap_stat_decrease(heap, huge, bpsize);
+    }
+    else {
+      mi_heap_stat_decrease(heap, giant, bpsize);
+    }
+  }
+#endif
 }
 #else
 static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
@@ -341,6 +352,7 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
 }
 #endif
 
+#if MI_HUGE_PAGE_ABANDON 
 #if (MI_STAT>0)
 // maintain stats for huge objects
 static void mi_stat_huge_free(const mi_page_t* page) {
@@ -358,12 +370,13 @@ static void mi_stat_huge_free(const mi_page_t* page) {
   MI_UNUSED(page);
 }
 #endif
+#endif
 
 // ------------------------------------------------------
 // Free
 // ------------------------------------------------------
 
-// multi-threaded free (or free in huge block)
+// multi-threaded free (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
 static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* block)
 {
   // The padding check may access the non-thread-owned page for the key values.
@@ -371,13 +384,21 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   mi_check_padding(page, block);
   mi_padding_shrink(page, block, sizeof(mi_block_t));       // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
   
-  // huge page segments are always abandoned and can be freed immediately
   mi_segment_t* const segment = _mi_page_segment(page);
-  if (segment->page_kind==MI_PAGE_HUGE) {
+  if (segment->page_kind == MI_PAGE_HUGE) {
+    #if MI_HUGE_PAGE_ABANDON
+    // huge page segments are always abandoned and can be freed immediately
     mi_stat_huge_free(page);
     _mi_segment_huge_page_free(segment, page, block);
     return;
+    #else
+    // huge pages are special as they occupy the entire segment 
+    // as these are large we reset the memory occupied by the page so it is available to other threads
+    // (as the owning thread needs to actually free the memory later).
+    _mi_segment_huge_page_reset(segment, page, block);
+    #endif
   }
+  
 
   #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED                    // note: when tracking, cannot use mi_usable_size with multi-threading
   memset(block, MI_DEBUG_FREED, mi_usable_size(block));
@@ -453,6 +474,9 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
 // Adjust a block that was allocated aligned, to the actual start of the block in the page.
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
+  #if !MI_HUGE_PAGE_ABANDON
+  // if (segment->mem_align_offset != 0) return (mi_block_t*)p; // don't unalign blocks that have huge alignment
+  #endif
   const size_t diff   = (uint8_t*)p - _mi_page_start(segment, page, NULL);
   const size_t adjust = (diff % mi_page_block_size(page));
   return (mi_block_t*)((uintptr_t)p - adjust);
