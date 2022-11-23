@@ -133,14 +133,14 @@ static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, vo
 
 #define MI_MAX_PURGE_PER_PUSH  (4)
 
-static mi_decl_noinline void mi_segment_cache_purge(bool force, mi_os_tld_t* tld)
+static mi_decl_noinline void mi_segment_cache_purge(bool visit_all, bool force, mi_os_tld_t* tld)
 {
   MI_UNUSED(tld);
   if (!mi_option_is_enabled(mi_option_allow_decommit)) return;
   mi_msecs_t now = _mi_clock_now();
   size_t purged = 0;
-  const size_t max_visits = (force ? MI_CACHE_MAX /* visit all */ : MI_CACHE_FIELDS /* probe at most N (=16) slots */);
-  size_t idx              = (force ? 0 : _mi_random_shuffle((uintptr_t)now) % MI_CACHE_MAX /* random start */ );
+  const size_t max_visits = (visit_all ? MI_CACHE_MAX /* visit all */ : MI_CACHE_FIELDS /* probe at most N (=16) slots */);
+  size_t idx              = (visit_all ? 0 : _mi_random_shuffle((uintptr_t)now) % MI_CACHE_MAX /* random start */ );
   for (size_t visited = 0; visited < max_visits; visited++,idx++) {  // visit N slots
     if (idx >= MI_CACHE_MAX) idx = 0; // wrap
     mi_cache_slot_t* slot = &cache[idx];
@@ -164,13 +164,19 @@ static mi_decl_noinline void mi_segment_cache_purge(bool force, mi_os_tld_t* tld
         }
         _mi_bitmap_unclaim(cache_available, MI_CACHE_FIELDS, 1, bitidx); // make it available again for a pop
       }
-      if (!force && purged > MI_MAX_PURGE_PER_PUSH) break;  // bound to no more than N purge tries per push
+      if (!visit_all && purged > MI_MAX_PURGE_PER_PUSH) break;  // bound to no more than N purge tries per push
     }
   }
 }
 
 void _mi_segment_cache_collect(bool force, mi_os_tld_t* tld) {
-  mi_segment_cache_purge(force, tld );
+  if (force) {
+    // called on `mi_collect(true)` but not on thread termination    
+    _mi_segment_cache_free_all(tld);
+  }
+  else {
+    mi_segment_cache_purge(true /* visit all */, false /* don't force unexpired */, tld);
+  }
 }
 
 void _mi_segment_cache_free_all(mi_os_tld_t* tld) {
@@ -215,7 +221,7 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
   }
 
   // purge expired entries
-  mi_segment_cache_purge(false /* force? */, tld);
+  mi_segment_cache_purge(false /* limit purges to a constant N */, false /* don't force unexpired */, tld);
 
   // find an available slot
   mi_bitmap_index_t bitidx;
