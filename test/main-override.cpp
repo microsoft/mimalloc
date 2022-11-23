@@ -34,23 +34,26 @@ static void various_tests();
 static void test_mt_shutdown();
 static void fail_aslr();              // issue #372
 static void tsan_numa_test();         // issue #414
-static void strdup_test();     // issue #445
+static void strdup_test();            // issue #445
+static void heap_thread_free_huge();
 
 static void test_stl_allocators();
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
+
+  heap_thread_free_huge();
+  /*
   heap_thread_free_large();
   heap_no_delete();
   heap_late_free();
   padding_shrink();
   various_tests();
   tsan_numa_test();
-  strdup_test();
-
+  strdup_test();  
   test_stl_allocators();
-
   test_mt_shutdown();
+  */
   //fail_aslr();
   mi_stats_print(NULL);
   return 0;
@@ -235,6 +238,17 @@ static void heap_thread_free_large() {
   }
 }
 
+static void heap_thread_free_huge_worker() {
+  mi_free(shared_p);
+}
+
+static void heap_thread_free_huge() {
+  for (int i = 0; i < 10; i++) {
+    shared_p = mi_malloc(1024 * 1024 * 1024);
+    auto t1 = std::thread(heap_thread_free_large_worker);
+    t1.join();
+  }
+}
 
 
 static void test_mt_shutdown()
