@@ -771,11 +771,81 @@ static mi_page_t* mi_segments_page_find_and_allocate(size_t slice_count, mi_aren
    Segment allocation
 ----------------------------------------------------------- */
 
+static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment, bool eager_delay, mi_arena_id_t req_arena_id,
+                                          size_t* psegment_slices, size_t* ppre_size, size_t* pinfo_slices, 
+                                          mi_commit_mask_t* pcommit_mask, mi_commit_mask_t* pdecommit_mask,
+                                          bool* is_zero, bool* pcommit, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
+
+{
+  // Allocate the segment from the OS
+  bool mem_large = (!eager_delay && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy    
+  bool is_pinned = false;
+  size_t memid = 0;
+  size_t align_offset = 0;
+  size_t alignment = MI_SEGMENT_ALIGN;
+  
+  if (page_alignment > 0) {
+    // mi_assert_internal(huge_page != NULL);
+    mi_assert_internal(page_alignment >= MI_SEGMENT_ALIGN);
+    alignment = page_alignment;
+    const size_t info_size = (*pinfo_slices) * MI_SEGMENT_SLICE_SIZE;
+    align_offset = _mi_align_up( info_size, MI_SEGMENT_ALIGN );
+    const size_t extra = align_offset - info_size;
+    // recalculate due to potential guard pages
+    *psegment_slices = mi_segment_calculate_slices(required + extra, ppre_size, pinfo_slices);
+    //segment_size += _mi_align_up(align_offset - info_size, MI_SEGMENT_SLICE_SIZE);
+    //segment_slices = segment_size / MI_SEGMENT_SLICE_SIZE;
+  }
+  const size_t segment_size = (*psegment_slices) * MI_SEGMENT_SLICE_SIZE;
+  mi_segment_t* segment = NULL;
+
+  // get from cache?
+  if (page_alignment == 0) {
+    segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, pcommit_mask, pdecommit_mask, &mem_large, &is_pinned, is_zero, req_arena_id, &memid, os_tld);
+  }
+  
+  // get from OS
+  if (segment==NULL) {
+    segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, alignment, align_offset, pcommit, &mem_large, &is_pinned, is_zero, req_arena_id, &memid, os_tld);
+    if (segment == NULL) return NULL;  // failed to allocate
+    if (*pcommit) {
+      mi_commit_mask_create_full(pcommit_mask);
+    }
+    else {
+      mi_commit_mask_create_empty(pcommit_mask);
+    }
+  }    
+  mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
+
+  const size_t commit_needed = _mi_divide_up((*pinfo_slices)*MI_SEGMENT_SLICE_SIZE, MI_COMMIT_SIZE);
+  mi_assert_internal(commit_needed>0);
+  mi_commit_mask_t commit_needed_mask;
+  mi_commit_mask_create(0, commit_needed, &commit_needed_mask);
+  if (!mi_commit_mask_all_set(pcommit_mask, &commit_needed_mask)) {
+    // at least commit the info slices
+    mi_assert_internal(commit_needed*MI_COMMIT_SIZE >= (*pinfo_slices)*MI_SEGMENT_SLICE_SIZE);
+    bool ok = _mi_os_commit(segment, commit_needed*MI_COMMIT_SIZE, is_zero, tld->stats);
+    if (!ok) return NULL; // failed to commit 
+    mi_commit_mask_set(pcommit_mask, &commit_needed_mask); 
+  }
+  mi_track_mem_undefined(segment,commit_needed);
+  segment->memid = memid;
+  segment->mem_is_pinned = is_pinned;
+  segment->mem_is_large = mem_large;
+  segment->mem_is_committed = mi_commit_mask_is_full(pcommit_mask);
+  segment->mem_alignment = alignment;
+  segment->mem_align_offset = align_offset;
+  mi_segments_track_size((long)(segment_size), tld);
+  _mi_segment_map_allocated_at(segment);
+  return segment;
+}
+
+
 // Allocate a segment from the OS aligned to `MI_SEGMENT_SIZE` .
-static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, size_t page_alignment, mi_arena_id_t req_arena_id, mi_segments_tld_t* tld, mi_os_tld_t* os_tld, mi_page_t** huge_page)
+static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi_arena_id_t req_arena_id, mi_segments_tld_t* tld, mi_os_tld_t* os_tld, mi_page_t** huge_page)
 {
   mi_assert_internal((required==0 && huge_page==NULL) || (required>0 && huge_page != NULL));
-  mi_assert_internal((segment==NULL) || (segment!=NULL && required==0));
+  
   // calculate needed sizes first
   size_t info_slices;
   size_t pre_size;
@@ -786,114 +856,42 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, siz
                             _mi_current_thread_count() > 1 &&       // do not delay for the first N threads
                             tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager = !eager_delay && mi_option_is_enabled(mi_option_eager_commit);
-  bool commit = eager || (required > 0); 
-  
-  // Try to get from our cache first
-  bool is_zero = false;
-  const bool commit_info_still_good = (segment != NULL);
+  bool commit = eager || (required > 0);   
+  bool is_zero = false;  
+
   mi_commit_mask_t commit_mask;
   mi_commit_mask_t decommit_mask;
-  if (segment != NULL) {
-    commit_mask = segment->commit_mask;
-    decommit_mask = segment->decommit_mask;
-  }
-  else {
-    mi_commit_mask_create_empty(&commit_mask);
-    mi_commit_mask_create_empty(&decommit_mask);
-  }
-  if (segment==NULL) {
-    // Allocate the segment from the OS
-    bool mem_large = (!eager_delay && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy    
-    bool is_pinned = false;
-    size_t memid = 0;
-    size_t align_offset = 0;
-    size_t alignment = MI_SEGMENT_ALIGN;
-    
-    if (page_alignment > 0) {
-      mi_assert_internal(huge_page != NULL);
-      mi_assert_internal(page_alignment >= MI_SEGMENT_ALIGN);
-      alignment = page_alignment;
-      const size_t info_size = info_slices * MI_SEGMENT_SLICE_SIZE;
-      align_offset = _mi_align_up( info_size, MI_SEGMENT_ALIGN );
-      const size_t extra = align_offset - info_size;
-      // recalculate due to potential guard pages
-      segment_slices = mi_segment_calculate_slices(required + extra, &pre_size, &info_slices);
-      //segment_size += _mi_align_up(align_offset - info_size, MI_SEGMENT_SLICE_SIZE);
-      //segment_slices = segment_size / MI_SEGMENT_SLICE_SIZE;
-    }
-    const size_t segment_size = segment_slices * MI_SEGMENT_SLICE_SIZE;
+  mi_commit_mask_create_empty(&commit_mask);
+  mi_commit_mask_create_empty(&decommit_mask);
 
-    // get from cache
-    if (page_alignment == 0) {
-      segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, &commit_mask, &decommit_mask, &mem_large, &is_pinned, &is_zero, req_arena_id, &memid, os_tld);
-    }
-    
-    // get from OS
-    if (segment==NULL) {
-      segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, alignment, align_offset, &commit, &mem_large, &is_pinned, &is_zero, req_arena_id, &memid, os_tld);
-      if (segment == NULL) return NULL;  // failed to allocate
-      if (commit) {
-        mi_commit_mask_create_full(&commit_mask);
-      }
-      else {
-        mi_commit_mask_create_empty(&commit_mask);
-      }
-    }    
-    mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
-
-    const size_t commit_needed = _mi_divide_up(info_slices*MI_SEGMENT_SLICE_SIZE, MI_COMMIT_SIZE);
-    mi_assert_internal(commit_needed>0);
-    mi_commit_mask_t commit_needed_mask;
-    mi_commit_mask_create(0, commit_needed, &commit_needed_mask);
-    if (!mi_commit_mask_all_set(&commit_mask, &commit_needed_mask)) {
-      // at least commit the info slices
-      mi_assert_internal(commit_needed*MI_COMMIT_SIZE >= info_slices*MI_SEGMENT_SLICE_SIZE);
-      bool ok = _mi_os_commit(segment, commit_needed*MI_COMMIT_SIZE, &is_zero, tld->stats);
-      if (!ok) return NULL; // failed to commit 
-      mi_commit_mask_set(&commit_mask, &commit_needed_mask); 
-    }
-    mi_track_mem_undefined(segment,commit_needed);
-    segment->memid = memid;
-    segment->mem_is_pinned = is_pinned;
-    segment->mem_is_large = mem_large;
-    segment->mem_is_committed = mi_commit_mask_is_full(&commit_mask);
-    segment->mem_alignment = alignment;
-    segment->mem_align_offset = align_offset;
-    mi_segments_track_size((long)(segment_size), tld);
-    _mi_segment_map_allocated_at(segment);
-  }
-
-  // zero the segment info? -- not always needed as it is zero initialized from the OS 
+  // Allocate the segment from the OS  
+  mi_segment_t* segment = mi_segment_os_alloc(required, page_alignment, eager_delay, req_arena_id, 
+                                              &segment_slices, &pre_size, &info_slices, &commit_mask, &decommit_mask, 
+                                              &is_zero, &commit, tld, os_tld);
+  if (segment == NULL) return NULL;
+  
+  // zero the segment info? -- not always needed as it may be zero initialized from the OS 
   mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);  // tsan
   if (!is_zero) {
     ptrdiff_t ofs = offsetof(mi_segment_t, next);
     size_t    prefix = offsetof(mi_segment_t, slices) - ofs;
     memset((uint8_t*)segment+ofs, 0, prefix + sizeof(mi_slice_t)*(segment_slices+1));  // one more
   }
-
-  if (!commit_info_still_good) {
-    segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
-    segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_pinned && !segment->mem_is_large);    
-    if (segment->allow_decommit) {
-      segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
-      segment->decommit_mask = decommit_mask;
-      mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
-      #if MI_DEBUG>2
-      const size_t commit_needed = _mi_divide_up(info_slices*MI_SEGMENT_SLICE_SIZE, MI_COMMIT_SIZE);
-      mi_commit_mask_t commit_needed_mask;
-      mi_commit_mask_create(0, commit_needed, &commit_needed_mask);
-      mi_assert_internal(!mi_commit_mask_any_set(&segment->decommit_mask, &commit_needed_mask));
-      #endif
-    }    
-    else {
-      mi_assert_internal(mi_commit_mask_is_empty(&decommit_mask));
-      segment->decommit_expire = 0;
-      mi_commit_mask_create_empty( &segment->decommit_mask );
-      mi_assert_internal(mi_commit_mask_is_empty(&segment->decommit_mask));
-    }
-  }
   
-
+  segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
+  segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_pinned && !segment->mem_is_large);    
+  if (segment->allow_decommit) {
+    segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
+    segment->decommit_mask = decommit_mask;
+    mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
+    #if MI_DEBUG>2
+    const size_t commit_needed = _mi_divide_up(info_slices*MI_SEGMENT_SLICE_SIZE, MI_COMMIT_SIZE);
+    mi_commit_mask_t commit_needed_mask;
+    mi_commit_mask_create(0, commit_needed, &commit_needed_mask);
+    mi_assert_internal(!mi_commit_mask_any_set(&segment->decommit_mask, &commit_needed_mask));
+    #endif
+  }    
+  
   // initialize segment info
   const size_t slice_entries = (segment_slices > MI_SLICES_PER_SEGMENT ? MI_SLICES_PER_SEGMENT : segment_slices);
   segment->segment_slices = segment_slices;
@@ -942,12 +940,6 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, siz
 
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
   return segment;
-}
-
-
-// Allocate a segment from the OS aligned to `MI_SEGMENT_SIZE` .
-static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi_arena_id_t req_arena_id, mi_segments_tld_t* tld, mi_os_tld_t* os_tld, mi_page_t** huge_page) {
-  return mi_segment_init(NULL, required, page_alignment, req_arena_id, tld, os_tld, huge_page);
 }
 
 
@@ -1532,7 +1524,6 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   mi_assert_internal(segment->used==1);
   mi_assert_internal(mi_page_block_size(page) >= size);  
   segment->thread_id = 0; // huge segments are immediately abandoned
-  #if MI_DEBUG > 3
   if (page_alignment > 0) {
     size_t psize;
     uint8_t* p = _mi_segment_page_start(segment, page, &psize);
@@ -1546,7 +1537,6 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
       _mi_os_decommit(decommit_start, decommit_size, os_tld->stats);
     }
   }
-  #endif
   // for huge pages we initialize the xblock_size as we may
   // overallocate to accommodate large alignments.
   size_t psize;

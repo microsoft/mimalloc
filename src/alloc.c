@@ -91,7 +91,10 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 
 static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
   mi_assert(heap != NULL);
-  mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
+  #if MI_DEBUG 
+  const uintptr_t tid = _mi_thread_id();
+  mi_assert(heap->thread_id == 0 || heap->thread_id == tid); // heaps are thread local
+  #endif
   mi_assert(size <= MI_SMALL_SIZE_MAX);
 #if (MI_PADDING)
   if (size == 0) {
@@ -916,19 +919,45 @@ static bool mi_try_new_handler(bool nothrow) {
 }
 #endif
 
-static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow ) {
+static mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t size, bool nothrow ) {
   void* p = NULL;
   while(p == NULL && mi_try_new_handler(nothrow)) {
-    p = mi_malloc(size);
+    p = mi_heap_malloc(heap,size);
   }
   return p;
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
-  void* p = mi_malloc(size);
-  if mi_unlikely(p == NULL) return mi_try_new(size,false);
+static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
+  return mi_heap_try_new(mi_get_default_heap(), size, nothrow);
+}
+
+
+mi_decl_nodiscard mi_decl_restrict inline void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
+  void* p = mi_heap_malloc(heap,size);
+  if mi_unlikely(p == NULL) return mi_heap_try_new(heap, size, false);
   return p;
 }
+
+mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
+  return mi_heap_alloc_new(mi_get_default_heap(), size);
+}
+
+
+mi_decl_nodiscard mi_decl_restrict inline void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
+  size_t total;
+  if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
+    mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
+    return NULL;
+  }
+  else {
+    return mi_heap_alloc_new(heap,total);
+  }
+}
+
+mi_decl_nodiscard mi_decl_restrict void* mi_new_n(size_t count, size_t size) {
+  return mi_heap_alloc_new_n(mi_get_default_heap(), size, count);
+}
+
 
 mi_decl_nodiscard mi_decl_restrict void* mi_new_nothrow(size_t size) mi_attr_noexcept {
   void* p = mi_malloc(size);
@@ -952,17 +981,6 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new_aligned_nothrow(size_t size, siz
   }
   while(p == NULL && mi_try_new_handler(true));
   return p;
-}
-
-mi_decl_nodiscard mi_decl_restrict void* mi_new_n(size_t count, size_t size) {
-  size_t total;
-  if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
-    mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
-    return NULL;
-  }
-  else {
-    return mi_new(total);
-  }
 }
 
 mi_decl_nodiscard void* mi_new_realloc(void* p, size_t newsize) {
