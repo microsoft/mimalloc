@@ -91,7 +91,10 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 
 static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
   mi_assert(heap != NULL);
-  mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id()); // heaps are thread local
+  #if MI_DEBUG 
+  const uintptr_t tid = _mi_thread_id();
+  mi_assert(heap->thread_id == 0 || heap->thread_id == tid); // heaps are thread local
+  #endif
   mi_assert(size <= MI_SMALL_SIZE_MAX);
 #if (MI_PADDING)
   if (size == 0) {
