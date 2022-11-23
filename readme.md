@@ -27,6 +27,8 @@ It also has an easy way to override the default allocator in [Windows](#override
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for
   bounded worst-case times with reference counting).
+  Partly due to its simplicity, mimalloc has been ported to many systems (Windows, macOS, 
+  Linux, WASM, various BSD's, Haiku, MUSL, etc) and has excellent support for dynamic overriding.
 - __free list sharding__: instead of one big free list (per size class) we have
   many smaller lists per "mimalloc page" which reduces fragmentation and
   increases locality --
@@ -42,7 +44,7 @@ It also has an easy way to override the default allocator in [Windows](#override
   similar to randomized algorithms like skip lists where adding
   a random oracle removes the need for a more complex algorithm.
 - __eager page reset__: when a "page" becomes empty (with increased chance
-  due to free list sharding) the memory is marked to the OS as unused ("reset" or "purged")
+  due to free list sharding) the memory is marked to the OS as unused (reset or decommitted)
   reducing (real) memory pressure and fragmentation, especially in long running
   programs.
 - __secure__: _mimalloc_ can be built in secure mode, adding guard pages,
@@ -52,13 +54,12 @@ It also has an easy way to override the default allocator in [Windows](#override
 - __first-class heaps__: efficiently create and use multiple heaps to allocate across different regions.
   A heap can be destroyed at once instead of deallocating each object separately.  
 - __bounded__: it does not suffer from _blowup_ \[1\], has bounded worst-case allocation
-  times (_wcat_), bounded space overhead (~0.2% meta-data, with low internal fragmentation),
-  and has no internal points of contention using only atomic operations.
+  times (_wcat_) (upto OS primitives), bounded space overhead (~0.2% meta-data, with low 
+  internal fragmentation), and has no internal points of contention using only atomic operations.
 - __fast__: In our benchmarks (see [below](#performance)),
   _mimalloc_ outperforms other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
-  and often uses less memory. A nice property
-  is that it does consistently well over a wide range of benchmarks. There is also good huge OS page
-  support for larger server programs.
+  and often uses less memory. A nice property is that it does consistently well over a wide range 
+  of benchmarks. There is also good huge OS page support for larger server programs.
 
 The [documentation](https://microsoft.github.io/mimalloc) gives a full overview of the API.
 You can read more on the design of _mimalloc_ in the [technical report](https://www.microsoft.com/en-us/research/publication/mimalloc-free-list-sharding-in-action) which also has detailed benchmark results.   
