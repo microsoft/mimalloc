@@ -191,6 +191,20 @@ int main(void) {
     }
     result = ok;
   };
+  CHECK_BODY("malloc-aligned10") {
+    bool ok = true;
+    void* p[10+1];
+    int align;    
+    int j;
+    for(j = 0, align = 1; j <= 10 && ok; align *= 2, j++ ) {
+      p[j] = mi_malloc_aligned(43 + align, align);
+      ok = ((uintptr_t)p[j] % align) == 0;            
+    }
+    for ( ; j > 0; j--) {
+      mi_free(p[j-1]);
+    }
+    result = ok;
+  }
   CHECK_BODY("malloc-aligned-at1") {
     void* p = mi_malloc_aligned_at(48,32,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 32 == 0); mi_free(p);
   };
