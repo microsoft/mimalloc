@@ -56,9 +56,10 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   }
 
   // .. and align within the allocation
-  uintptr_t adjust = alignment - (((uintptr_t)p + offset) & align_mask);
-  mi_assert_internal(adjust <= alignment);
-  void* aligned_p = (adjust == alignment ? p : (void*)((uintptr_t)p + adjust));
+  const uintptr_t poffset = ((uintptr_t)p + offset) & align_mask;
+  const uintptr_t adjust  = (poffset == 0 ? 0 : alignment - poffset);
+  mi_assert_internal(adjust < alignment);
+  void* aligned_p = (void*)((uintptr_t)p + adjust);
   if (aligned_p != p) {
     mi_page_set_has_aligned(_mi_ptr_page(p), true);  
   }
