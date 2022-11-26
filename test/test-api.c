@@ -205,6 +205,12 @@ int main(void) {
     }
     result = ok;
   }
+  CHECK_BODY("malloc_aligned11") {
+    mi_heap_t* heap = mi_heap_new();
+    void* p = mi_heap_malloc_aligned(heap, 33554426, 8);
+    result = mi_heap_contains_block(heap, p);
+    mi_heap_destroy(heap);
+  }
   CHECK_BODY("malloc-aligned-at1") {
     void* p = mi_malloc_aligned_at(48,32,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 32 == 0); mi_free(p);
   };
