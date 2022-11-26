@@ -51,10 +51,16 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
   #define MI_FORWARD02(fun,x,y)   { fun(x,y); }
 #endif
 
+
 #if defined(__APPLE__) && defined(MI_SHARED_LIB_EXPORT) && defined(MI_OSX_INTERPOSE)    
   // define MI_OSX_IS_INTERPOSED as we should not provide forwarding definitions for 
   // functions that are interposed (or the interposing does not work)
   #define MI_OSX_IS_INTERPOSED
+
+  mi_decl_externc static size_t mi_malloc_size_checked(void *p) {
+    if (!mi_is_in_heap_region(p)) return 0;
+    return mi_usable_size(p);
+  }
 
   // use interposing so `DYLD_INSERT_LIBRARIES` works without `DYLD_FORCE_FLAT_NAMESPACE=1`
   // See: <https://books.google.com/books?id=K8vUkpOXhN4C&pg=PA73>
@@ -76,7 +82,7 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
     MI_INTERPOSE_MI(posix_memalign),
     MI_INTERPOSE_MI(reallocf),
     MI_INTERPOSE_MI(valloc),
-    MI_INTERPOSE_MI(malloc_size),
+    MI_INTERPOSE_FUN(malloc_size,mi_malloc_size_checked),
     MI_INTERPOSE_MI(malloc_good_size),
     #if defined(MAC_OS_X_VERSION_10_15) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_15 
     MI_INTERPOSE_MI(aligned_alloc),
