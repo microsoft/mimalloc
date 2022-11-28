@@ -28,8 +28,10 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_decl_nodiscard    [[nodiscard]]
 #elif (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)  // includes clang, icc, and clang-cl
   #define mi_decl_nodiscard    __attribute__((warn_unused_result))
+#elif defined(_HAS_NODISCARD)  
+  #define mi_decl_nodiscard    _NODISCARD
 #elif (_MSC_VER >= 1700)
-  #define mi_decl_nodiscard    _Check_return_
+  #define mi_decl_nodiscard    _Check_return_  
 #else
   #define mi_decl_nodiscard
 #endif
