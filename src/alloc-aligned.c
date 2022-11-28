@@ -80,7 +80,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   
   #if MI_TRACK_ENABLED
   if (p != aligned_p) {
-    mi_track_free(p);
+    mi_track_free_size(p, oversize);
     mi_track_malloc(aligned_p, size, zero);
   }
   else {

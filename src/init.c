@@ -558,6 +558,7 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_verbose_message("debug level : %d\n", MI_DEBUG);
   #endif
   _mi_verbose_message("secure level: %d\n", MI_SECURE);
+  _mi_verbose_message("mem tracking: %s\n", MI_TRACK_TOOL);
   mi_thread_init();
 
   #if defined(_WIN32) && !defined(MI_SHARED_LIB)

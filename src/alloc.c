@@ -697,7 +697,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
   const size_t size = _mi_usable_size(p,"mi_realloc"); // also works if p == NULL (with size 0)
   if mi_unlikely(newsize <= size && newsize >= (size / 2) && newsize > 0) {  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
     // todo: adjust potential padding to reflect the new size?
-    mi_track_free(p);
+    mi_track_free_size(p, size);
     mi_track_malloc(p,newsize,true);
     return p;  // reallocation still fits and not more than 50% waste
   }
