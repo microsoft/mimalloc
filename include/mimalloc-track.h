@@ -51,7 +51,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define mi_track_malloc(p,size,zero)  
 #define mi_track_resize(p,oldsize,newsize)  
-#define mi_track_free(p,size)          
+#define mi_track_free(p)          
 #define mi_track_free_size(p,_size)
 #define mi_track_mem_defined(p,size)  
 #define mi_track_mem_undefined(p,size)  
