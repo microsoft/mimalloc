@@ -534,7 +534,7 @@ template<class T> struct mi_heap_destroy_stl_allocator : public _mi_heap_stl_all
   template<class U> mi_heap_destroy_stl_allocator(const mi_heap_destroy_stl_allocator<U>& x) mi_attr_noexcept : _mi_heap_stl_allocator_common<T>(x) { }
 
   mi_heap_destroy_stl_allocator select_on_container_copy_construction() const { return *this; }
-  void deallocate(T* p, size_type) { /* do nothing as we destroy the heap on destruct. */ }
+  void deallocate(T*, size_type) { /* do nothing as we destroy the heap on destruct. */ }
   template<class U> struct rebind { typedef mi_heap_destroy_stl_allocator<U> other; };
 };
 
