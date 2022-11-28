@@ -31,9 +31,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 int main(int argc, char** argv) {
-  int* p = mi(malloc)(3*sizeof(int));
+  int* p = (int*)mi(malloc)(3*sizeof(int));
   
-  int* r = mi_malloc_aligned(8,16);
+  int* r = (int*)mi_malloc_aligned(8,16);
   mi_free(r);
 
   // illegal byte wise read
@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
   mi(free)(c);
 
   // undefined access
-  int* q = mi(malloc)(sizeof(int));
+  int* q = (int*)mi(malloc)(sizeof(int));
   printf("undefined: %d\n", *q);
 
   // illegal int read
