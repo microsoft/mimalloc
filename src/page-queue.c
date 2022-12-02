@@ -76,7 +76,7 @@ static inline uint8_t mi_bin(size_t size) {
     bin = MI_BIN_HUGE;
   }
   else {
-    #if defined(MI_ALIGN4W) 
+    #if defined(MI_ALIGN4W)
     if (wsize <= 16) { wsize = (wsize+3)&~3; } // round to 4x word sizes
     #endif
     wsize--;
@@ -303,7 +303,7 @@ size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue
   for (mi_page_t* page = append->first; page != NULL; page = page->next) {
     // inline `mi_page_set_heap` to avoid wrong assertion during absorption;
     // in this case it is ok to be delayed freeing since both "to" and "from" heap are still alive.
-    mi_atomic_store_release(&page->xheap, (uintptr_t)heap); 
+    mi_atomic_store_release(&page->xheap, (uintptr_t)heap);
     // set the flag to delayed free (not overriding NEVER_DELAYED_FREE) which has as a
     // side effect that it spins until any DELAYED_FREEING is finished. This ensures
     // that after appending only the new heap will be used for delayed free operations.

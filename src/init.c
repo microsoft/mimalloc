@@ -173,7 +173,7 @@ typedef struct mi_thread_data_s {
 
 // Thread meta-data is allocated directly from the OS. For
 // some programs that do not use thread pools and allocate and
-// destroy many OS threads, this may causes too much overhead 
+// destroy many OS threads, this may causes too much overhead
 // per thread so we maintain a small cache of recently freed metadata.
 
 #define TD_CACHE_SIZE (8)
@@ -185,7 +185,7 @@ static mi_thread_data_t* mi_thread_data_alloc(void) {
   for (int i = 0; i < TD_CACHE_SIZE; i++) {
     td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
     if (td != NULL) {
-      td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL); 
+      td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL);
       if (td != NULL) {
         return td;
       }
@@ -262,7 +262,7 @@ static bool _mi_heap_init(void) {
     tld->segments.stats = &tld->stats;
     tld->segments.os = &tld->os;
     tld->os.stats = &tld->stats;
-    _mi_heap_set_default_direct(heap);    
+    _mi_heap_set_default_direct(heap);
   }
   return false;
 }
@@ -295,9 +295,9 @@ static bool _mi_heap_done(mi_heap_t* heap) {
   if (heap != &_mi_heap_main) {
     _mi_heap_collect_abandon(heap);
   }
-  
+
   // merge stats
-  _mi_stats_done(&heap->tld->stats);  
+  _mi_stats_done(&heap->tld->stats);
 
   // free if not the main thread
   if (heap != &_mi_heap_main) {
@@ -305,8 +305,8 @@ static bool _mi_heap_done(mi_heap_t* heap) {
     mi_thread_data_free((mi_thread_data_t*)heap);
   }
   else {
-    mi_thread_data_collect(); // free cached thread metadata  
-    #if 0  
+    mi_thread_data_collect(); // free cached thread metadata
+    #if 0
     // never free the main thread even in debug mode; if a dll is linked statically with mimalloc,
     // there may still be delete/free calls after the mi_fls_done is called. Issue #207
     _mi_heap_destroy_pages(heap);
@@ -342,7 +342,7 @@ static void _mi_thread_done(mi_heap_t* default_heap);
   // use thread local storage keys to detect thread ending
   #include <windows.h>
   #include <fibersapi.h>
-  #if (_WIN32_WINNT < 0x600)  // before Windows Vista 
+  #if (_WIN32_WINNT < 0x600)  // before Windows Vista
   WINBASEAPI DWORD WINAPI FlsAlloc( _In_opt_ PFLS_CALLBACK_FUNCTION lpCallback );
   WINBASEAPI PVOID WINAPI FlsGetValue( _In_ DWORD dwFlsIndex );
   WINBASEAPI BOOL  WINAPI FlsSetValue( _In_ DWORD dwFlsIndex, _In_opt_ PVOID lpFlsData );
@@ -397,7 +397,7 @@ void mi_thread_init(void) mi_attr_noexcept
 {
   // ensure our process has started already
   mi_process_init();
-  
+
   // initialize the thread local default heap
   // (this will call `_mi_heap_set_default_direct` and thus set the
   //  fiber/pthread key to a non-zero value, ensuring `_mi_thread_done` is called)
@@ -418,7 +418,7 @@ static void _mi_thread_done(mi_heap_t* heap) {
 
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local heaps...
   if (heap->thread_id != _mi_thread_id()) return;
-  
+
   // abandon the thread local heap
   if (_mi_heap_done(heap)) return;  // returns true if already ran
 }
@@ -509,11 +509,11 @@ static void mi_process_load(void) {
   os_preloading = false;
   mi_assert_internal(_mi_is_main_thread());
   #if !(defined(_WIN32) && defined(MI_SHARED_LIB))  // use Dll process detach (see below) instead of atexit (issue #521)
-  atexit(&mi_process_done);  
+  atexit(&mi_process_done);
   #endif
   _mi_options_init();
   mi_process_setup_auto_thread_done();
-  mi_process_init();  
+  mi_process_init();
   if (mi_redirected) _mi_verbose_message("malloc is redirected.\n");
 
   // show message from the redirector (if present)
@@ -578,7 +578,7 @@ void mi_process_init(void) mi_attr_noexcept {
     } else {
       mi_reserve_huge_os_pages_interleave(pages, 0, pages*500);
     }
-  } 
+  }
   if (mi_option_is_enabled(mi_option_reserve_os_memory)) {
     long ksize = mi_option_get(mi_option_reserve_os_memory);
     if (ksize > 0) {
@@ -601,7 +601,7 @@ static void mi_cdecl mi_process_done(void) {
   #endif
 
   #ifndef MI_SKIP_COLLECT_ON_EXIT
-    #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)  
+    #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)
     // free all memory if possible on process exit. This is not needed for a stand-alone process
     // but should be done if mimalloc is statically linked into another shared library which
     // is repeatedly loaded/unloaded, see issue #281.
@@ -620,7 +620,7 @@ static void mi_cdecl mi_process_done(void) {
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
     mi_stats_print(NULL);
   }
-  mi_allocator_done();  
+  mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", _mi_heap_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
 }
@@ -642,7 +642,7 @@ static void mi_cdecl mi_process_done(void) {
       if (!mi_is_redirected()) {
         mi_thread_done();
       }
-    }    
+    }
     return TRUE;
   }
 

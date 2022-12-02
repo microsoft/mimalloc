@@ -169,8 +169,8 @@ If we cannot get good randomness, we fall back to weak randomness based on a tim
 #if defined(_WIN32)
 
 #if defined(MI_USE_RTLGENRANDOM) // || defined(__cplusplus)
-// We prefer to use BCryptGenRandom instead of (the unofficial) RtlGenRandom but when using 
-// dynamic overriding, we observed it can raise an exception when compiled with C++, and 
+// We prefer to use BCryptGenRandom instead of (the unofficial) RtlGenRandom but when using
+// dynamic overriding, we observed it can raise an exception when compiled with C++, and
 // sometimes deadlocks when also running under the VS debugger.
 // In contrast, issue #623 implies that on Windows Server 2019 we need to use BCryptGenRandom.
 // To be continued..
@@ -203,7 +203,7 @@ static bool os_random_buf(void* buf, size_t buf_len) {
 static bool os_random_buf(void* buf, size_t buf_len) {
   #if defined(MAC_OS_X_VERSION_10_15) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_15
     // We prefere CCRandomGenerateBytes as it returns an error code while arc4random_buf
-    // may fail silently on macOS. See PR #390, and <https://opensource.apple.com/source/Libc/Libc-1439.40.11/gen/FreeBSD/arc4random.c.auto.html>      
+    // may fail silently on macOS. See PR #390, and <https://opensource.apple.com/source/Libc/Libc-1439.40.11/gen/FreeBSD/arc4random.c.auto.html>
     return (CCRandomGenerateBytes(buf, buf_len) == kCCSuccess);
   #else
     // fall back on older macOS
@@ -281,7 +281,7 @@ static bool os_random_buf(void* buf, size_t buf_len) {
 
 uintptr_t _mi_os_random_weak(uintptr_t extra_seed) {
   uintptr_t x = (uintptr_t)&_mi_os_random_weak ^ extra_seed; // ASLR makes the address random
-  
+
   #if defined(_WIN32)
     LARGE_INTEGER pcount;
     QueryPerformanceCounter(&pcount);
@@ -325,7 +325,7 @@ static void mi_random_init_ex(mi_random_ctx_t* ctx, bool use_weak) {
 }
 
 void _mi_random_init(mi_random_ctx_t* ctx) {
-  mi_random_init_ex(ctx, false);  
+  mi_random_init_ex(ctx, false);
 }
 
 void _mi_random_init_weak(mi_random_ctx_t * ctx) {
