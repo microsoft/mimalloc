@@ -270,6 +270,13 @@ void* _aligned_malloc(size_t alignment, size_t size)    { return mi_aligned_allo
   int   __posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p,alignment,size); }
 #endif
 
+#if defined(__wasi__)
+  // forward libc interface expected by wasi-libc's musl
+  void* __libc_malloc(size_t size)                      MI_FORWARD1(mi_malloc,size)
+  void* __libc_calloc(size_t count, size_t size)        MI_FORWARD2(mi_calloc,count,size)
+  void  __libc_free(void* p)                            MI_FORWARD0(mi_free,p)
+#endif
+
 #ifdef __cplusplus
 }
 #endif
