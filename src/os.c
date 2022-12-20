@@ -1349,14 +1349,14 @@ static size_t mi_os_numa_nodex(void) {
     (*pGetCurrentProcessorNumberEx)(&pnum);
     USHORT nnode = 0;
     BOOL ok = (*pGetNumaProcessorNodeEx)(&pnum, &nnode);
-    if (ok) numa_node = nnode;
+    if (ok) { numa_node = nnode; }
   }
   else if (pGetNumaProcessorNode != NULL) {
     // Vista or earlier, use older API that is limited to 64 processors. Issue #277
     DWORD pnum = GetCurrentProcessorNumber();
     UCHAR nnode = 0;
     BOOL ok = pGetNumaProcessorNode((UCHAR)pnum, &nnode);
-    if (ok) numa_node = nnode;
+    if (ok) { numa_node = nnode; }
   }
   return numa_node;
 }
