@@ -57,7 +57,7 @@ int main(void) {
   // ---------------------------------------------------
 
   CHECK_BODY("malloc-zero") {
-    void* p = mi_malloc(0); 
+    void* p = mi_malloc(0);
     result = (p != NULL);
     mi_free(p);
   };
@@ -83,7 +83,7 @@ int main(void) {
 
   // ---------------------------------------------------
   // Extended
-  // ---------------------------------------------------  
+  // ---------------------------------------------------
   CHECK_BODY("posix_memalign1") {
     void* p = &p;
     int err = mi_posix_memalign(&p, sizeof(void*), 32);
@@ -122,7 +122,7 @@ int main(void) {
     void* p = mi_malloc_aligned(48,32); result = (p != NULL && (uintptr_t)(p) % 32 == 0); mi_free(p);
   };
   CHECK_BODY("malloc-aligned3") {
-    void* p1 = mi_malloc_aligned(48,32); bool result1 = (p1 != NULL && (uintptr_t)(p1) % 32 == 0); 
+    void* p1 = mi_malloc_aligned(48,32); bool result1 = (p1 != NULL && (uintptr_t)(p1) % 32 == 0);
     void* p2 = mi_malloc_aligned(48,32); bool result2 = (p2 != NULL && (uintptr_t)(p2) % 32 == 0);
     mi_free(p2);
     mi_free(p1);
@@ -138,9 +138,9 @@ int main(void) {
     result = ok;
   };
   CHECK_BODY("malloc-aligned5") {
-    void* p = mi_malloc_aligned(4097,4096); 
-    size_t usable = mi_usable_size(p); 
-    result = (usable >= 4097 && usable < 16000); 
+    void* p = mi_malloc_aligned(4097,4096);
+    size_t usable = mi_usable_size(p);
+    result = (usable >= 4097 && usable < 16000);
     printf("malloc_aligned5: usable size: %zi\n", usable);
     mi_free(p);
   };
@@ -187,18 +187,18 @@ int main(void) {
       }
       for (int j = 0; j < 8; j++) {
         mi_free(p[j]);
-      }      
+      }
     }
     result = ok;
   };
   CHECK_BODY("malloc-aligned10") {
     bool ok = true;
     void* p[10+1];
-    int align;    
+    int align;
     int j;
     for(j = 0, align = 1; j <= 10 && ok; align *= 2, j++ ) {
       p[j] = mi_malloc_aligned(43 + align, align);
-      ok = ((uintptr_t)p[j] % align) == 0;            
+      ok = ((uintptr_t)p[j] % align) == 0;
     }
     for ( ; j > 0; j--) {
       mi_free(p[j-1]);
@@ -216,7 +216,7 @@ int main(void) {
   };
   CHECK_BODY("malloc-aligned-at2") {
     void* p = mi_malloc_aligned_at(50,32,8); result = (p != NULL && ((uintptr_t)(p) + 8) % 32 == 0); mi_free(p);
-  };  
+  };
   CHECK_BODY("memalign1") {
     void* p;
     bool ok = true;
@@ -226,7 +226,7 @@ int main(void) {
     }
     result = ok;
   };
-  
+
   // ---------------------------------------------------
   // Reallocation
   // ---------------------------------------------------

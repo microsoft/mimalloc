@@ -50,7 +50,7 @@ int main() {
   padding_shrink();
   various_tests();
   tsan_numa_test();
-  strdup_test();  
+  strdup_test();
   test_stl_allocators();
   test_mt_shutdown();
   */
@@ -286,7 +286,7 @@ static void fail_aslr() {
 // issues #414
 static void dummy_worker() {
   void* p = mi_malloc(0);
-  mi_free(p);  
+  mi_free(p);
 }
 
 static void tsan_numa_test() {

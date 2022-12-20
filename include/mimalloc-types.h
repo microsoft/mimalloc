@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #ifdef _MSC_VER
 #pragma warning(disable:4214) // bitfield is not int
-#endif 
+#endif
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `sizeof(void*)`
@@ -67,7 +67,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
 #if (MI_SECURE>=3 || MI_DEBUG>=1)
-#define MI_ENCODE_FREELIST  1 
+#define MI_ENCODE_FREELIST  1
 #endif
 
 
@@ -175,8 +175,8 @@ typedef int32_t  mi_ssize_t;
 // Used as a special value to encode block sizes in 32 bits.
 #define MI_HUGE_BLOCK_SIZE   ((uint32_t)MI_HUGE_OBJ_SIZE_MAX)
 
-// Alignments over MI_ALIGNMENT_MAX are allocated in dedicated huge page segments 
-#define MI_ALIGNMENT_MAX   (MI_SEGMENT_SIZE >> 1)  
+// Alignments over MI_ALIGNMENT_MAX are allocated in dedicated huge page segments
+#define MI_ALIGNMENT_MAX   (MI_SEGMENT_SIZE >> 1)
 
 
 // ------------------------------------------------------
@@ -247,19 +247,19 @@ typedef uintptr_t mi_thread_free_t;
 // We don't count `freed` (as |free|) but use `used` to reduce
 // the number of memory accesses in the `mi_page_all_free` function(s).
 //
-// Notes: 
+// Notes:
 // - Access is optimized for `mi_free` and `mi_page_alloc` (in `alloc.c`)
 // - Using `uint16_t` does not seem to slow things down
 // - The size is 8 words on 64-bit which helps the page index calculations
-//   (and 10 words on 32-bit, and encoded free lists add 2 words. Sizes 10 
+//   (and 10 words on 32-bit, and encoded free lists add 2 words. Sizes 10
 //    and 12 are still good for address calculation)
-// - To limit the structure size, the `xblock_size` is 32-bits only; for 
+// - To limit the structure size, the `xblock_size` is 32-bits only; for
 //   blocks > MI_HUGE_BLOCK_SIZE the size is determined from the segment page size
 // - `thread_free` uses the bottom bits as a delayed-free flags to optimize
 //   concurrent frees where only the first concurrent free adds to the owning
 //   heap `thread_delayed_free` list (see `alloc.c:mi_free_block_mt`).
 //   The invariant is that no-delayed-free is only set if there is
-//   at least one block that will be added, or as already been added, to 
+//   at least one block that will be added, or as already been added, to
 //   the owning heap `thread_delayed_free` list. This guarantees that pages
 //   will be freed correctly even if only other threads free blocks.
 typedef struct mi_page_s {
@@ -279,7 +279,7 @@ typedef struct mi_page_s {
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   uint32_t              used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
-  uint32_t              xblock_size;       // size available in each block (always `>0`) 
+  uint32_t              xblock_size;       // size available in each block (always `>0`)
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
 
   #ifdef MI_ENCODE_FREELIST
@@ -288,7 +288,7 @@ typedef struct mi_page_s {
 
   _Atomic(mi_thread_free_t) xthread_free;  // list of deferred free blocks freed by other threads
   _Atomic(uintptr_t)        xheap;
-  
+
   struct mi_page_s*     next;              // next page owned by this thread with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by this thread with the same `block_size`
 } mi_page_t;
@@ -309,7 +309,7 @@ typedef struct mi_segment_s {
   // memory fields
   size_t               memid;            // id for the os-level memory manager
   bool                 mem_is_pinned;    // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)
-  bool                 mem_is_committed; // `true` if the whole segment is eagerly committed  
+  bool                 mem_is_committed; // `true` if the whole segment is eagerly committed
   size_t               mem_alignment;    // page alignment for huge pages (only used for alignment > MI_ALIGNMENT_MAX)
   size_t               mem_align_offset; // offset for huge page alignment (only used for alignment > MI_ALIGNMENT_MAX)
 

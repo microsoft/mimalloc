@@ -218,7 +218,7 @@ static void test_leak(void) {
 }
 #endif
 
-int main(int argc, char** argv) {  
+int main(int argc, char** argv) {
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
   if (argc >= 2) {
     char* end;
@@ -256,7 +256,7 @@ int main(int argc, char** argv) {
   mi_collect(true);
   #endif
   mi_stats_print(NULL);
-#endif  
+#endif
   //bench_end_program();
   return 0;
 }
