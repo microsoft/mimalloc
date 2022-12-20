@@ -786,7 +786,9 @@ mi_decl_nodiscard mi_decl_restrict char* mi_heap_strdup(mi_heap_t* heap, const c
   if (s == NULL) return NULL;
   size_t n = strlen(s);
   char* t = (char*)mi_heap_malloc(heap,n+1);
-  if (t != NULL) _mi_memcpy(t, s, n + 1);
+  if (t == NULL) return NULL;
+  _mi_memcpy(t, s, n);
+  t[n] = 0;
   return t;
 }
 
@@ -837,6 +839,7 @@ mi_decl_nodiscard mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const
 }
 #else
 #include <unistd.h>  // pathconf
+/*
 static size_t mi_path_max(void) {
   static size_t path_max = 0;
   if (path_max <= 0) {
@@ -847,20 +850,31 @@ static size_t mi_path_max(void) {
   }
   return path_max;
 }
-
+*/
 char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
   if (resolved_name != NULL) {
     return realpath(fname,resolved_name);
   }
   else {
-    size_t n  = mi_path_max();
+    char* rname = realpath(fname, NULL);
+    if (rname == NULL) return NULL;
+    char* result = mi_heap_strdup(heap, rname);
+    free(rname);  // use regular free! (which may be redirected to our free but that's ok)
+    return result;
+  }
+  /*
+    const size_t n  = mi_path_max();
     char* buf = (char*)mi_malloc(n+1);
-    if (buf==NULL) return NULL;
+    if (buf == NULL) {
+      errno = ENOMEM;
+      return NULL;
+    }
     char* rname  = realpath(fname,buf);
     char* result = mi_heap_strndup(heap,rname,n); // ok if `rname==NULL`
     mi_free(buf);
     return result;
   }
+  */
 }
 #endif
 
