@@ -28,6 +28,8 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_decl_nodiscard    [[nodiscard]]
 #elif (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)  // includes clang, icc, and clang-cl
   #define mi_decl_nodiscard    __attribute__((warn_unused_result))
+#elif defined(_HAS_NODISCARD)
+  #define mi_decl_nodiscard    _NODISCARD
 #elif (_MSC_VER >= 1700)
   #define mi_decl_nodiscard    _Check_return_
 #else
@@ -157,8 +159,8 @@ mi_decl_export void mi_thread_init(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
 
-mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, 
-                                    size_t* current_rss, size_t* peak_rss, 
+mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs,
+                                    size_t* current_rss, size_t* peak_rss,
                                     size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept;
 
 // -------------------------------------------------------------------------------------
@@ -316,16 +318,16 @@ typedef enum mi_option_e {
   mi_option_show_stats,               // print statistics on termination
   mi_option_verbose,                  // print verbose messages
   // the following options are experimental (see src/options.h)
-  mi_option_eager_commit,           
-  mi_option_eager_region_commit,    
+  mi_option_eager_commit,
+  mi_option_eager_region_commit,
   mi_option_reset_decommits,
   mi_option_large_os_pages,           // use large (2MiB) OS pages, implies eager commit
   mi_option_reserve_huge_os_pages,    // reserve N huge OS pages (1GiB) at startup
   mi_option_reserve_huge_os_pages_at, // reserve huge OS pages at a specific NUMA node
   mi_option_reserve_os_memory,        // reserve specified amount of OS memory at startup
-  mi_option_deprecated_segment_cache,             
-  mi_option_page_reset,               
-  mi_option_abandoned_page_reset,     
+  mi_option_deprecated_segment_cache,
+  mi_option_page_reset,
+  mi_option_abandoned_page_reset,
   mi_option_segment_reset,
   mi_option_eager_commit_delay,
   mi_option_reset_delay,
@@ -335,7 +337,7 @@ typedef enum mi_option_e {
   mi_option_max_errors,
   mi_option_max_warnings,
   mi_option_max_segment_reclaim,
-  mi_option_destroy_on_exit,          
+  mi_option_destroy_on_exit,
   _mi_option_last
 } mi_option_t;
 
@@ -422,7 +424,7 @@ template<class T> struct _mi_stl_allocator_common {
   typedef value_type const& const_reference;
   typedef value_type*       pointer;
   typedef value_type const* const_pointer;
-  
+
   #if ((__cplusplus >= 201103L) || (_MSC_VER > 1900))  // C++11
   using propagate_on_container_copy_assignment = std::true_type;
   using propagate_on_container_move_assignment = std::true_type;
@@ -523,14 +525,14 @@ template<class T1, class T2> bool operator==(const mi_heap_stl_allocator<T1>& x,
 template<class T1, class T2> bool operator!=(const mi_heap_stl_allocator<T1>& x, const mi_heap_stl_allocator<T2>& y) mi_attr_noexcept { return (!x.is_equal(y)); }
 
 
-// STL allocator allocation in a specific heap, where `free` does nothing and 
+// STL allocator allocation in a specific heap, where `free` does nothing and
 // the heap is destroyed in one go on destruction -- use with care!
 template<class T> struct mi_heap_destroy_stl_allocator : public _mi_heap_stl_allocator_common<T, true> {
   using typename _mi_heap_stl_allocator_common<T, true>::size_type;
   template<class U> mi_heap_destroy_stl_allocator(const mi_heap_destroy_stl_allocator<U>& x) mi_attr_noexcept : _mi_heap_stl_allocator_common<T, true>(x) { }
 
   mi_heap_destroy_stl_allocator select_on_container_copy_construction() const { return *this; }
-  void deallocate(T* p, size_type) { /* do nothing as we destroy the heap on destruct. */ }
+  void deallocate(T*, size_type) { /* do nothing as we destroy the heap on destruct. */ }
   template<class U> struct rebind { typedef mi_heap_destroy_stl_allocator<U> other; };
 };
 

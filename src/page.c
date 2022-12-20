@@ -112,7 +112,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
     mi_segment_t* segment = _mi_page_segment(page);
     mi_assert_internal(!_mi_process_is_initialized || segment->thread_id == mi_page_heap(page)->thread_id || segment->thread_id==0);
     #if MI_HUGE_PAGE_ABANDON
-    if (segment->page_kind != MI_PAGE_HUGE) 
+    if (segment->page_kind != MI_PAGE_HUGE)
     #endif
     {
       mi_page_queue_t* pq = mi_page_queue_of(page);
@@ -134,7 +134,7 @@ void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool overrid
 bool _mi_page_try_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never) {
   mi_thread_free_t tfreex;
   mi_delayed_t     old_delay;
-  mi_thread_free_t tfree;  
+  mi_thread_free_t tfree;
   size_t yield_count = 0;
   do {
     tfree = mi_atomic_load_acquire(&page->xthread_free); // note: must acquire as we can break/repeat this loop and not do a CAS;
@@ -262,7 +262,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   mi_assert_internal(pq != NULL);
   mi_assert_internal(mi_heap_contains_queue(heap, pq));
   mi_assert_internal(page_alignment > 0 || block_size > MI_LARGE_OBJ_SIZE_MAX || block_size == pq->block_size);
-  #endif  
+  #endif
   mi_page_t* page = _mi_segment_page_alloc(heap, block_size, page_alignment, &heap->tld->segments, &heap->tld->os);
   if (page == NULL) {
     // this may be out-of-memory, or an abandoned page was reclaimed (and in our queue)
@@ -413,7 +413,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   _mi_segment_page_free(page, force, segments_tld);
 }
 
-#define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX  
+#define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX
 #define MI_RETIRE_CYCLES      (8)
 
 // Retire a page with no more used blocks
@@ -603,7 +603,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld)
   if (page->capacity >= page->reserved) return;
 
   size_t page_size;
-  //uint8_t* page_start = 
+  //uint8_t* page_start =
   _mi_page_start(_mi_page_segment(page), page, &page_size);
   mi_stat_counter_increase(tld->stats.pages_extended, 1);
 
@@ -615,7 +615,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld)
   size_t max_extend = (bsize >= MI_MAX_EXTEND_SIZE ? MI_MIN_EXTEND : MI_MAX_EXTEND_SIZE/(uint32_t)bsize);
   if (max_extend < MI_MIN_EXTEND) { max_extend = MI_MIN_EXTEND; }
   mi_assert_internal(max_extend > 0);
-    
+
   if (extend > max_extend) {
     // ensure we don't touch memory beyond the page to reduce page commit.
     // the `lean` benchmark tests this. Going from 1 to 8 increases rss by 50%.
@@ -734,7 +734,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
     page = mi_page_fresh(heap, pq);
     if (page == NULL && first_try) {
       // out-of-memory _or_ an abandoned page with free blocks was reclaimed, try once again
-      page = mi_page_queue_find_free_ex(heap, pq, false);      
+      page = mi_page_queue_find_free_ex(heap, pq, false);
     }
   }
   else {
@@ -752,17 +752,17 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
   mi_page_queue_t* pq = mi_page_queue(heap,size);
   mi_page_t* page = pq->first;
   if (page != NULL) {
-   #if (MI_SECURE>=3) // in secure mode, we extend half the time to increase randomness      
+   #if (MI_SECURE>=3) // in secure mode, we extend half the time to increase randomness
     if (page->capacity < page->reserved && ((_mi_heap_random_next(heap) & 1) == 1)) {
       mi_page_extend_free(heap, page, heap->tld);
       mi_assert_internal(mi_page_immediate_available(page));
     }
-    else 
+    else
    #endif
     {
       _mi_page_free_collect(page,false);
     }
-    
+
     if (mi_page_immediate_available(page)) {
       page->retire_expire = 0;
       return page; // fast path
@@ -825,7 +825,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_a
     #if MI_HUGE_PAGE_ABANDON
     mi_assert_internal(_mi_page_segment(page)->thread_id==0); // abandoned, not in the huge queue
     mi_page_set_heap(page, NULL);
-    #endif    
+    #endif
 
     if (bsize > MI_HUGE_OBJ_SIZE_MAX) {
       mi_heap_stat_increase(heap, giant, bsize);
@@ -844,7 +844,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_a
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
 static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size, size_t huge_alignment) mi_attr_noexcept {
   // huge allocation?
-  const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`  
+  const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
   if mi_unlikely(req_size > (MI_LARGE_OBJ_SIZE_MAX - MI_PADDING_SIZE) || huge_alignment > 0) {
     if mi_unlikely(req_size > PTRDIFF_MAX) {  // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
       _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
@@ -863,7 +863,7 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size, size_t huge_alignme
 
 // Generic allocation routine if the fast path (`alloc.c:mi_page_malloc`) does not succeed.
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
-// The `huge_alignment` is normally 0 but is set to a multiple of MI_SEGMENT_SIZE for 
+// The `huge_alignment` is normally 0 but is set to a multiple of MI_SEGMENT_SIZE for
 // very large requested alignments in which case we use a huge segment.
 void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept
 {
@@ -891,7 +891,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   }
 
   if mi_unlikely(page == NULL) { // out of memory
-    const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`  
+    const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
     _mi_error_message(ENOMEM, "unable to allocate memory (%zu bytes)\n", req_size);
     return NULL;
   }

@@ -34,14 +34,14 @@ int main() {
   // negative_stat();
   // test_heap_walk();
   // alloc_huge();
-  
+
   void* p1 = malloc(78);
   void* p2 = malloc(24);
   free(p1);
   p1 = mi_malloc(8);
   char* s = strdup("hello\n");
   free(p2);
-  
+
   p2 = malloc(16);
   p1 = realloc(p1, 32);
   free(p1);
@@ -53,10 +53,10 @@ int main() {
   //free(p1);
   //p2 = malloc(32);
   //mi_free(p2);
-  
+
   //mi_collect(true);
   //mi_stats_print(NULL);
-  
+
   // test_process_info();
   return 0;
 }
@@ -153,7 +153,7 @@ static void test_process_info(void) {
   size_t peak_rss = 0;
   size_t current_commit = 0;
   size_t peak_commit = 0;
-  size_t page_faults = 0;  
+  size_t page_faults = 0;
   for (int i = 0; i < 100000; i++) {
     void* p = calloc(100,10);
     free(p);
@@ -185,7 +185,7 @@ static void negative_stat(void) {
   mi_stats_print_out(NULL, NULL);
   *p = 100;
   mi_free(p);
-  mi_stats_print_out(NULL, NULL);  
+  mi_stats_print_out(NULL, NULL);
 }
 
 static void alloc_huge(void) {
@@ -383,4 +383,3 @@ static void mi_bins(void) {
   }
 }
 #endif
-
