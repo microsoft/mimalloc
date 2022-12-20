@@ -193,21 +193,21 @@ static bool os_random_buf(void* buf, size_t buf_len) {
 #endif
 
 typedef LONG (NTAPI *PBCryptGenRandom)(HANDLE, PUCHAR, ULONG, ULONG);
-static PBCryptGenRandom pBCryptGenRandom = NULL;
-static int BCryptGenRandom_is_initialized = 0;
+static  PBCryptGenRandom pBCryptGenRandom = NULL;
 
 static bool os_random_buf(void* buf, size_t buf_len) {
-  if (!BCryptGenRandom_is_initialized) {
-    HINSTANCE  hDll;
-    hDll = LoadLibrary(TEXT("bcrypt.dll"));
+  if (pBCryptGenRandom == NULL) {
+    HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
       pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
     }
-    BCryptGenRandom_is_initialized = 1;
   }
-  if (!pBCryptGenRandom)
-    return 0;
-  return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
+  if (pBCryptGenRandom == NULL) {
+    return false;
+  }
+  else {
+    return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
+  }
 }
 #endif
 

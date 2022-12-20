@@ -489,7 +489,6 @@ typedef struct _PROCESS_MEMORY_COUNTERS {
 typedef PROCESS_MEMORY_COUNTERS* PPROCESS_MEMORY_COUNTERS;
 typedef BOOL (WINAPI *PGetProcessMemoryInfo)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
 static PGetProcessMemoryInfo pGetProcessMemoryInfo = NULL;
-static int GetProcessMemoryInfo_is_initialized = 0;
 
 static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
 {
@@ -501,26 +500,26 @@ static void mi_stat_process_info(mi_msecs_t* elapsed, mi_msecs_t* utime, mi_msec
   GetProcessTimes(GetCurrentProcess(), &ct, &et, &st, &ut);
   *utime = filetime_msecs(&ut);
   *stime = filetime_msecs(&st);
-  PROCESS_MEMORY_COUNTERS info;
-
-  if (!GetProcessMemoryInfo_is_initialized) {
-    HINSTANCE hDll;
-    hDll = LoadLibrary(TEXT("psapi.dll"));
+  
+  // load psapi on demand
+  if (pGetProcessMemoryInfo == NULL) {
+    HINSTANCE hDll = LoadLibrary(TEXT("psapi.dll"));
     if (hDll != NULL) {
       pGetProcessMemoryInfo = (PGetProcessMemoryInfo)(void (*)(void))GetProcAddress(hDll, "GetProcessMemoryInfo");
     }
-    GetProcessMemoryInfo_is_initialized = 1;
   }
-  if (pGetProcessMemoryInfo) {
+
+  // get process info
+  PROCESS_MEMORY_COUNTERS info;
+  memset(&info, 0, sizeof(info));
+  if (pGetProcessMemoryInfo != NULL) {
     pGetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
-    *current_rss    = (size_t)info.WorkingSetSize;
-    *peak_rss       = (size_t)info.PeakWorkingSetSize;
-    *current_commit = (size_t)info.PagefileUsage;
-    *peak_commit    = (size_t)info.PeakPagefileUsage;
-    *page_faults    = (size_t)info.PageFaultCount;
-  } else {
-    *current_rss = *peak_rss = *current_commit = *peak_commit = *page_faults = 0;
-  }
+  } 
+  *current_rss    = (size_t)info.WorkingSetSize;
+  *peak_rss       = (size_t)info.PeakWorkingSetSize;
+  *current_commit = (size_t)info.PagefileUsage;
+  *peak_commit    = (size_t)info.PeakPagefileUsage;
+  *page_faults    = (size_t)info.PageFaultCount;
 }
 
 #elif !defined(__wasi__) && (defined(__unix__) || defined(__unix) || defined(unix) || defined(__APPLE__) || defined(__HAIKU__))
