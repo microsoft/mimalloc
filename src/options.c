@@ -494,13 +494,6 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
   return false;
 }
 #else
-static inline int mi_strnicmp(const char* s, const char* t, size_t n) {
-  if (n==0) return 0;
-  for (; *s != 0 && *t != 0 && n > 0; s++, t++, n--) {
-    if (toupper(*s) != toupper(*t)) break;
-  }
-  return (n==0 ? 0 : *s - *t);
-}
 #if defined _WIN32
 // On Windows use GetEnvironmentVariable instead of getenv to work
 // reliably even when this is invoked before the C runtime is initialized.
@@ -526,6 +519,13 @@ static char** mi_get_environ(void) {
   return environ;
 }
 #endif
+static int mi_strnicmp(const char* s, const char* t, size_t n) {
+  if (n == 0) return 0;
+  for (; *s != 0 && *t != 0 && n > 0; s++, t++, n--) {
+    if (toupper(*s) != toupper(*t)) break;
+  }
+  return (n == 0 ? 0 : *s - *t);
+}
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
   if (name==NULL) return false;
   const size_t len = strlen(name);
