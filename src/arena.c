@@ -18,7 +18,7 @@ which is sometimes needed for embedded devices or shared memory for example.
 (We can also employ this with WASI or `sbrk` systems to reserve large arenas
  on demand and be able to reuse them efficiently).
 
-The arena allocation needs to be thread safe and we use an atomic bitmap to allocate. 
+The arena allocation needs to be thread safe and we use an atomic bitmap to allocate.
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
@@ -270,7 +270,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
     return NULL;
   }
   *is_zero = true;
-  *memid   = MI_MEMID_OS;  
+  *memid   = MI_MEMID_OS;
   void* p = _mi_os_alloc_aligned_offset(size, alignment, align_offset, *commit, large, tld->stats);
   if (p != NULL) { *is_pinned = *large; }
   return p;
@@ -333,7 +333,7 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
       _mi_os_decommit(p, blocks * MI_ARENA_BLOCK_SIZE, stats); // ok if this fails
       _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx);
     }
-    // and make it available to others again 
+    // and make it available to others again
     bool all_inuse = _mi_bitmap_unclaim_across(arena->blocks_inuse, arena->field_count, blocks, bitmap_idx);
     if (!all_inuse) {
       _mi_error_message(EAGAIN, "trying to free an already freed block: %p, size %zu\n", p, size);
@@ -372,8 +372,8 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
     mi_assert_internal(is_committed);
     is_committed = true;
   }
-  
-  const size_t bcount = size / MI_ARENA_BLOCK_SIZE; 
+
+  const size_t bcount = size / MI_ARENA_BLOCK_SIZE;
   const size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);
   const size_t bitmaps = (is_committed ? 2 : 3);
   const size_t asize  = sizeof(mi_arena_t) + (bitmaps*fields*sizeof(mi_bitmap_field_t));
@@ -411,7 +411,7 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
 }
 
 // Reserve a range of regular OS memory
-int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept 
+int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
   size = _mi_align_up(size, MI_ARENA_BLOCK_SIZE); // at least one block

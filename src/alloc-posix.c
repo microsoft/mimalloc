@@ -91,7 +91,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size
       #endif
       return NULL;
     }
-  */  
+  */
   // C11 also requires alignment to be a power-of-two (and > 0) which is checked in mi_malloc_aligned
   void* p = mi_malloc_aligned(size, alignment);
   mi_assert_internal(((uintptr_t)p % alignment) == 0);
@@ -110,7 +110,7 @@ mi_decl_nodiscard int mi_reallocarr( void* p, size_t count, size_t size ) mi_att
     errno = EINVAL;
     return EINVAL;
   }
-  void** op = (void**)p;  
+  void** op = (void**)p;
   void* newp = mi_reallocarray(*op, count, size);
   if mi_unlikely(newp == NULL) { return errno; }
   *op = newp;

@@ -13,7 +13,7 @@ trigger:
     include:
     - v*
 
-jobs:  
+jobs:
 - job:
   displayName: Windows
   pool:

@@ -28,10 +28,10 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_decl_nodiscard    [[nodiscard]]
 #elif (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)  // includes clang, icc, and clang-cl
   #define mi_decl_nodiscard    __attribute__((warn_unused_result))
-#elif defined(_HAS_NODISCARD)  
+#elif defined(_HAS_NODISCARD)
   #define mi_decl_nodiscard    _NODISCARD
 #elif (_MSC_VER >= 1700)
-  #define mi_decl_nodiscard    _Check_return_  
+  #define mi_decl_nodiscard    _Check_return_
 #else
   #define mi_decl_nodiscard
 #endif
@@ -160,8 +160,8 @@ mi_decl_export void mi_thread_init(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
 
-mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, 
-                                    size_t* current_rss, size_t* peak_rss, 
+mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs,
+                                    size_t* current_rss, size_t* peak_rss,
                                     size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept;
 
 // -------------------------------------------------------------------------------------
@@ -431,7 +431,7 @@ template<class T> struct _mi_stl_allocator_common {
   typedef value_type const& const_reference;
   typedef value_type*       pointer;
   typedef value_type const* const_pointer;
-  
+
   #if ((__cplusplus >= 201103L) || (_MSC_VER > 1900))  // C++11
   using propagate_on_container_copy_assignment = std::true_type;
   using propagate_on_container_move_assignment = std::true_type;
@@ -504,7 +504,7 @@ template<class T> struct _mi_heap_stl_allocator_common : public _mi_stl_allocato
 protected:
   std::shared_ptr<mi_heap_t> heap;
   template<class U> friend struct _mi_heap_stl_allocator_common;
-  
+
   _mi_heap_stl_allocator_common(bool destroy) {
     mi_heap_t* hp = mi_heap_new();
     this->heap.reset(hp, (destroy ? &heap_destroy : &heap_delete));  /* calls heap_delete/destroy when the refcount drops to zero */
@@ -533,7 +533,7 @@ template<class T1, class T2> bool operator==(const mi_heap_stl_allocator<T1>& x,
 template<class T1, class T2> bool operator!=(const mi_heap_stl_allocator<T1>& x, const mi_heap_stl_allocator<T2>& y) mi_attr_noexcept { return (!x.is_equal(y)); }
 
 
-// STL allocator allocation in a specific heap, where `free` does nothing and 
+// STL allocator allocation in a specific heap, where `free` does nothing and
 // the heap is destroyed in one go on destruction -- use with care!
 template<class T> struct mi_heap_destroy_stl_allocator : public _mi_heap_stl_allocator_common<T> {
   using typename _mi_heap_stl_allocator_common<T>::size_type;
