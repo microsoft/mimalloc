@@ -39,6 +39,7 @@ static void heap_thread_free_huge();
 
 static void test_stl_allocators();
 
+
 int main() {
   mi_stats_reset();  // ignore earlier allocations
 
