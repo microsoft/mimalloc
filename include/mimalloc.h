@@ -478,7 +478,7 @@ template<class T, bool destroy> struct _mi_heap_stl_allocator_common : public _m
   using typename _mi_stl_allocator_common<T>::value_type;
   using typename _mi_stl_allocator_common<T>::pointer;
 
-  _mi_heap_stl_allocator_common(mi_heap_t* hp) : heap(hp) { }    /* will not delete or destroy the passed in heap */
+  _mi_heap_stl_allocator_common(mi_heap_t* hp) : heap(hp) { }    /* will not delete nor destroy the passed in heap */
 
   #if (__cplusplus >= 201703L)  // C++17
   mi_decl_nodiscard T* allocate(size_type count) { return static_cast<T*>(mi_heap_alloc_new_n(this->heap.get(), count, sizeof(T))); }
@@ -513,7 +513,8 @@ private:
 // STL allocator allocation in a specific heap
 template<class T> struct mi_heap_stl_allocator : public _mi_heap_stl_allocator_common<T, false> {
   using typename _mi_heap_stl_allocator_common<T, false>::size_type;
-  mi_heap_stl_allocator(mi_heap_t* hp) : _mi_heap_stl_allocator_common<T, false>(hp) { }  /* no delete or destroy on the passed in heap */
+  mi_heap_stl_allocator() : _mi_heap_stl_allocator_common<T, false>() { } // creates fresh heap that is deleted when the destructor is called
+  mi_heap_stl_allocator(mi_heap_t* hp) : _mi_heap_stl_allocator_common<T, false>(hp) { }  // no delete nor destroy on the passed in heap 
   template<class U> mi_heap_stl_allocator(const mi_heap_stl_allocator<U>& x) mi_attr_noexcept : _mi_heap_stl_allocator_common<T, false>(x) { }
 
   mi_heap_stl_allocator select_on_container_copy_construction() const { return *this; }
@@ -529,6 +530,8 @@ template<class T1, class T2> bool operator!=(const mi_heap_stl_allocator<T1>& x,
 // the heap is destroyed in one go on destruction -- use with care!
 template<class T> struct mi_heap_destroy_stl_allocator : public _mi_heap_stl_allocator_common<T, true> {
   using typename _mi_heap_stl_allocator_common<T, true>::size_type;
+  mi_heap_destroy_stl_allocator() : _mi_heap_stl_allocator_common<T, true>() { } // creates fresh heap that is destroyed when the destructor is called
+  mi_heap_destroy_stl_allocator(mi_heap_t* hp) : _mi_heap_stl_allocator_common<T, true>(hp) { }  // no delete nor destroy on the passed in heap 
   template<class U> mi_heap_destroy_stl_allocator(const mi_heap_destroy_stl_allocator<U>& x) mi_attr_noexcept : _mi_heap_stl_allocator_common<T, true>(x) { }
 
   mi_heap_destroy_stl_allocator select_on_container_copy_construction() const { return *this; }
