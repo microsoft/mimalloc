@@ -180,20 +180,26 @@ static void mi_cdecl mi_out_stderr(const char* msg, void* arg) {
   if (!_mi_preloading()) {
     // _cputs(msg);  // _cputs cannot be used at is aborts if it fails to lock the console
     static HANDLE hcon = INVALID_HANDLE_VALUE;
-    static int write_to_console;
+    static bool hconIsConsole;
     if (hcon == INVALID_HANDLE_VALUE) {
       CONSOLE_SCREEN_BUFFER_INFO sbi;
       hcon = GetStdHandle(STD_ERROR_HANDLE);
-      write_to_console = GetConsoleScreenBufferInfo(hcon, &sbi) ? 1 : 0;
-    }
-    if (!write_to_console) {
-      fputs(msg, stderr);
-      return;
+      hconIsConsole = ((hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
     }
     const size_t len = strlen(msg);
-    if (hcon != INVALID_HANDLE_VALUE && len > 0 && len < UINT32_MAX) {
+    if (len > 0 && len < UINT32_MAX) {
       DWORD written = 0;
-      WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
+      if (hconIsConsole) {
+        WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
+      }
+      else if (hcon != INVALID_HANDLE_VALUE) {
+        // use direct write if stderr was redirected
+        WriteFile(hcon, msg, (DWORD)len, &written, NULL);
+      }
+      else {
+        // finally fall back to fputs after all
+        fputs(msg, stderr);
+      }
     }
   }
   #else
