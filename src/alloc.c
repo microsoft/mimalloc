@@ -620,25 +620,6 @@ mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
 
 
 // ------------------------------------------------------
-// ensure explicit external inline definitions are emitted!
-// ------------------------------------------------------
-
-#ifdef __cplusplus
-void* _mi_externs[] = {
-  (void*)&_mi_page_malloc,
-  (void*)&_mi_heap_malloc_zero,
-  (void*)&_mi_heap_malloc_zero_ex,
-  (void*)&mi_malloc,
-  (void*)&mi_malloc_small,
-  (void*)&mi_zalloc_small,
-  (void*)&mi_heap_malloc,
-  (void*)&mi_heap_zalloc,
-  (void*)&mi_heap_malloc_small
-};
-#endif
-
-
-// ------------------------------------------------------
 // Allocation extensions
 // ------------------------------------------------------
 
@@ -838,8 +819,8 @@ mi_decl_nodiscard mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const
   }
 }
 #else
-#include <unistd.h>  // pathconf
 /*
+#include <unistd.h>  // pathconf
 static size_t mi_path_max(void) {
   static size_t path_max = 0;
   if (path_max <= 0) {
@@ -959,7 +940,7 @@ static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
 }
 
 
-mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
+mi_decl_nodiscard mi_decl_restrict extern inline void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
   void* p = mi_heap_malloc(heap,size);
   if mi_unlikely(p == NULL) return mi_heap_try_new(heap, size, false);
   return p;
@@ -970,7 +951,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
 }
 
 
-mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
+mi_decl_nodiscard mi_decl_restrict extern inline void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
   size_t total;
   if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
     mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
@@ -1028,3 +1009,23 @@ mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
     return mi_new_realloc(p, total);
   }
 }
+
+// ------------------------------------------------------
+// ensure explicit external inline definitions are emitted!
+// ------------------------------------------------------
+
+#ifdef __cplusplus
+void* _mi_externs[] = {
+  (void*)&_mi_page_malloc,
+  (void*)&_mi_heap_malloc_zero,
+  (void*)&_mi_heap_malloc_zero_ex,
+  (void*)&mi_malloc,
+  (void*)&mi_malloc_small,
+  (void*)&mi_zalloc_small,
+  (void*)&mi_heap_malloc,
+  (void*)&mi_heap_zalloc,
+  (void*)&mi_heap_malloc_small,
+  (void*)&mi_heap_alloc_new,
+  (void*)&mi_heap_alloc_new_n
+};
+#endif
