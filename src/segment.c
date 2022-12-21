@@ -406,7 +406,7 @@ void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
 
 
 /* -----------------------------------------------------------
-   Span management
+   Commit/Decommit ranges
 ----------------------------------------------------------- */
 
 static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uint8_t* p, size_t size, uint8_t** start_p, size_t* full_size, mi_commit_mask_t* cm) {
@@ -569,6 +569,10 @@ static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_st
 }
 
 
+/* -----------------------------------------------------------
+   Span free
+----------------------------------------------------------- */
+
 static bool mi_segment_is_abandoned(mi_segment_t* segment) {
   return (segment->thread_id == 0);
 }
@@ -663,17 +667,10 @@ static mi_slice_t* mi_segment_span_free_coalesce(mi_slice_t* slice, mi_segments_
 }
 
 
-static void mi_segment_slice_split(mi_segment_t* segment, mi_slice_t* slice, size_t slice_count, bool allow_decommit, mi_segments_tld_t* tld) {
-  mi_assert_internal(_mi_ptr_segment(slice)==segment);
-  mi_assert_internal(slice->slice_count >= slice_count);
-  mi_assert_internal(slice->xblock_size > 0); // no more in free queue
-  if (slice->slice_count <= slice_count) return;
-  mi_assert_internal(segment->kind != MI_SEGMENT_HUGE);
-  size_t next_index = mi_slice_index(slice) + slice_count;
-  size_t next_count = slice->slice_count - slice_count;
-  mi_segment_span_free(segment, next_index, next_count, allow_decommit, tld);
-  slice->slice_count = (uint32_t)slice_count;
-}
+
+/* -----------------------------------------------------------
+   Page allocation
+----------------------------------------------------------- */
 
 // Note: may still return NULL if committing the memory failed
 static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_index, size_t slice_count, mi_segments_tld_t* tld) {
@@ -725,6 +722,18 @@ static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_i
   return page;
 }
 
+static void mi_segment_slice_split(mi_segment_t* segment, mi_slice_t* slice, size_t slice_count, mi_segments_tld_t* tld) {
+  mi_assert_internal(_mi_ptr_segment(slice) == segment);
+  mi_assert_internal(slice->slice_count >= slice_count);
+  mi_assert_internal(slice->xblock_size > 0); // no more in free queue
+  if (slice->slice_count <= slice_count) return;
+  mi_assert_internal(segment->kind != MI_SEGMENT_HUGE);
+  size_t next_index = mi_slice_index(slice) + slice_count;
+  size_t next_count = slice->slice_count - slice_count;
+  mi_segment_span_free(segment, next_index, next_count, false /* don't decommit left-over part */, tld);
+  slice->slice_count = (uint32_t)slice_count;
+}
+
 static mi_page_t* mi_segments_page_find_and_allocate(size_t slice_count, mi_arena_id_t req_arena_id, mi_segments_tld_t* tld) {
   mi_assert_internal(slice_count*MI_SEGMENT_SLICE_SIZE <= MI_LARGE_OBJ_SIZE_MAX);
   // search from best fit up
@@ -740,7 +749,7 @@ static mi_page_t* mi_segments_page_find_and_allocate(size_t slice_count, mi_aren
           mi_span_queue_delete(sq, slice);
 
           if (slice->slice_count > slice_count) {
-            mi_segment_slice_split(segment, slice, slice_count, false /* don't decommit */, tld);
+            mi_segment_slice_split(segment, slice, slice_count, tld);
           }
           mi_assert_internal(slice != NULL && slice->slice_count == slice_count && slice->xblock_size > 0);
           mi_page_t* page = mi_segment_span_allocate(segment, mi_slice_index(slice), slice->slice_count, tld);
