@@ -574,7 +574,7 @@ static bool mi_segment_is_abandoned(mi_segment_t* segment) {
 }
 
 // note: can be called on abandoned segments
-static void mi_segment_span_free(mi_segment_t* segment, size_t slice_index, size_t slice_count, mi_segments_tld_t* tld) {
+static void mi_segment_span_free(mi_segment_t* segment, size_t slice_index, size_t slice_count, bool allow_decommit, mi_segments_tld_t* tld) {
   mi_assert_internal(slice_index < segment->slice_entries);
   mi_span_queue_t* sq = (segment->kind == MI_SEGMENT_HUGE || mi_segment_is_abandoned(segment) 
                           ? NULL : mi_span_queue_for(slice_count,tld));
@@ -594,7 +594,9 @@ static void mi_segment_span_free(mi_segment_t* segment, size_t slice_index, size
   }
 
   // perhaps decommit
-  mi_segment_perhaps_decommit(segment,mi_slice_start(slice),slice_count*MI_SEGMENT_SLICE_SIZE,tld->stats);
+  if (allow_decommit) {
+    mi_segment_perhaps_decommit(segment, mi_slice_start(slice), slice_count * MI_SEGMENT_SLICE_SIZE, tld->stats);
+  }
   
   // and push it on the free page queue (if it was not a huge page)
   if (sq != NULL) mi_span_queue_push( sq, slice );
@@ -656,12 +658,12 @@ static mi_slice_t* mi_segment_span_free_coalesce(mi_slice_t* slice, mi_segments_
   }
 
   // and add the new free page
-  mi_segment_span_free(segment, mi_slice_index(slice), slice_count, tld);
+  mi_segment_span_free(segment, mi_slice_index(slice), slice_count, true, tld);
   return slice;
 }
 
 
-static void mi_segment_slice_split(mi_segment_t* segment, mi_slice_t* slice, size_t slice_count, mi_segments_tld_t* tld) {
+static void mi_segment_slice_split(mi_segment_t* segment, mi_slice_t* slice, size_t slice_count, bool allow_decommit, mi_segments_tld_t* tld) {
   mi_assert_internal(_mi_ptr_segment(slice)==segment);
   mi_assert_internal(slice->slice_count >= slice_count);
   mi_assert_internal(slice->xblock_size > 0); // no more in free queue
@@ -669,7 +671,7 @@ static void mi_segment_slice_split(mi_segment_t* segment, mi_slice_t* slice, siz
   mi_assert_internal(segment->kind != MI_SEGMENT_HUGE);
   size_t next_index = mi_slice_index(slice) + slice_count;
   size_t next_count = slice->slice_count - slice_count;
-  mi_segment_span_free(segment, next_index, next_count, tld);
+  mi_segment_span_free(segment, next_index, next_count, allow_decommit, tld);
   slice->slice_count = (uint32_t)slice_count;
 }
 
@@ -738,7 +740,7 @@ static mi_page_t* mi_segments_page_find_and_allocate(size_t slice_count, mi_aren
           mi_span_queue_delete(sq, slice);
 
           if (slice->slice_count > slice_count) {
-            mi_segment_slice_split(segment, slice, slice_count, tld);
+            mi_segment_slice_split(segment, slice, slice_count, false /* don't decommit */, tld);
           }
           mi_assert_internal(slice != NULL && slice->slice_count == slice_count && slice->xblock_size > 0);
           mi_page_t* page = mi_segment_span_allocate(segment, mi_slice_index(slice), slice->slice_count, tld);
@@ -872,7 +874,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
   segment->allow_decommit = (mi_option_is_enabled(mi_option_allow_decommit) && !segment->mem_is_pinned && !segment->mem_is_large);    
   if (segment->allow_decommit) {
-    segment->decommit_expire = _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
+    segment->decommit_expire = 0; // don't decommit just committed memory // _mi_clock_now() + mi_option_get(mi_option_decommit_delay);
     segment->decommit_mask = decommit_mask;
     mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
     #if MI_DEBUG>2
@@ -919,7 +921,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   // initialize initial free pages
   if (segment->kind == MI_SEGMENT_NORMAL) { // not a huge page
     mi_assert_internal(huge_page==NULL);
-    mi_segment_span_free(segment, info_slices, segment->slice_entries - info_slices, tld);
+    mi_segment_span_free(segment, info_slices, segment->slice_entries - info_slices, false /* don't decommit */, tld);
   }
   else {
     mi_assert_internal(huge_page!=NULL);
