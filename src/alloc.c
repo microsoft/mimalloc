@@ -814,8 +814,8 @@ mi_decl_nodiscard mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const
   }
 }
 #else
-#include <unistd.h>  // pathconf
 /*
+#include <unistd.h>  // pathconf
 static size_t mi_path_max(void) {
   static size_t path_max = 0;
   if (path_max <= 0) {
