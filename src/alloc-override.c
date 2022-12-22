@@ -22,8 +22,10 @@ mi_decl_externc size_t malloc_size(const void* p);
 mi_decl_externc size_t malloc_good_size(size_t size);
 #endif
 
+#if defined(MI_MALLOC_OVERRIDE_CXX)
 // helper definition for C override of C++ new
 typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
+#endif
 
 // ------------------------------------------------------
 // Override system malloc
@@ -92,6 +94,7 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
     #endif
   };
 
+  #if defined(MI_MALLOC_OVERRIDE_CXX)
   #ifdef __cplusplus
   extern "C" {
   #endif
@@ -117,6 +120,7 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
     MI_INTERPOSE_FUN(_ZnwmRKSt9nothrow_t,mi_new_nothrow),
     MI_INTERPOSE_FUN(_ZnamRKSt9nothrow_t,mi_new_nothrow),
   };
+  #endif
 
 #elif defined(_MSC_VER)
   // cannot override malloc unless using a dll.
@@ -138,7 +142,7 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
 // This is not really necessary as they usually call
 // malloc/free anyway, but it improves performance.
 // ------------------------------------------------------
-#ifdef __cplusplus
+#ifdef defined(MI_MALLOC_OVERRIDE_CXX) && __cplusplus
   // ------------------------------------------------------
   // With a C++ compiler we override the new/delete operators.
   // see <https://en.cppreference.com/w/cpp/memory/new/operator_new>
@@ -175,7 +179,7 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
   void* operator new[](std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_new_aligned_nothrow(n, static_cast<size_t>(al)); }
   #endif
 
-#elif (defined(__GNUC__) || defined(__clang__)) 
+#elif defined(MI_MALLOC_OVERRIDE_CXX) && (defined(__GNUC__) || defined(__clang__))
   // ------------------------------------------------------
   // Override by defining the mangled C++ names of the operators (as
   // used by GCC and CLang).
@@ -212,7 +216,7 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
   #else
     #error "define overloads for new/delete for this platform (just for performance, can be skipped)"
   #endif
-#endif // __cplusplus
+#endif // defined(MI_MALLOC_OVERRIDE_CXX) && __cplusplus
 
 // ------------------------------------------------------
 // Further Posix & Unix functions definitions
