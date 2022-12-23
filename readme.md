@@ -12,7 +12,7 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.0.9` (2022-12-23).
+Latest release tag: `v2.0.9` (2022-12-23).  
 Latest stable  tag: `v1.7.9` (2022-12-23).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
