@@ -45,6 +45,9 @@ int main() {
   char* s = strdup("hello\n");
   free(p2);
 
+  mi_heap_t* h = mi_heap_new();
+  mi_heap_set_default(h);
+
   p2 = malloc(16);
   p1 = realloc(p1, 32);
   free(p1);
@@ -61,6 +64,7 @@ int main() {
   //mi_stats_print(NULL);
 
   // test_process_info();
+  
   return 0;
 }
 
