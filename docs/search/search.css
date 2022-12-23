@@ -131,7 +131,7 @@ span.SelectionMark {
 a.SelectItem {
     display: block;
     outline-style: none;
-    color: #000000; 
+    color: #000000;
     text-decoration: none;
     padding-left:   6px;
     padding-right: 12px;
@@ -139,7 +139,7 @@ a.SelectItem {
 
 a.SelectItem:focus,
 a.SelectItem:active {
-    color: #000000; 
+    color: #000000;
     outline-style: none;
     text-decoration: none;
 }
@@ -173,7 +173,7 @@ iframe#MSearchResults {
 
 
 #SRIndex {
-    clear:both; 
+    clear:both;
     padding-bottom: 15px;
 }
 
@@ -192,7 +192,7 @@ body.SRPage {
 }
 
 .SRChildren {
-    padding-left: 3ex; padding-bottom: .5em 
+    padding-left: 3ex; padding-bottom: .5em
 }
 
 .SRPage .SRChildren {
@@ -200,7 +200,7 @@ body.SRPage {
 }
 
 .SRSymbol {
-    font-weight: bold; 
+    font-weight: bold;
     color: #121414;
     font-family: Arial, Verdana, sans-serif;
     text-decoration: none;
@@ -209,7 +209,7 @@ body.SRPage {
 
 a.SRScope {
     display: block;
-    color: #121414; 
+    color: #121414;
     font-family: Arial, Verdana, sans-serif;
     text-decoration: none;
     outline: none;
@@ -270,4 +270,3 @@ DIV.searchresults {
 .searchpages {
     margin-top: 10px;
 }
-

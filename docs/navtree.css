@@ -67,7 +67,7 @@
 
 #nav-tree {
   padding: 0px 0px;
-  background-color: #FAFAFF; 
+  background-color: #FAFAFF;
   font-size:14px;
   overflow:auto;
 }
@@ -143,4 +143,3 @@
   #nav-tree { display: none; }
   div.ui-resizable-handle { display: none; position: relative; }
 }
-
