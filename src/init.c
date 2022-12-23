@@ -350,7 +350,11 @@ static void _mi_thread_done(mi_heap_t* default_heap);
   #endif
   static DWORD mi_fls_key = (DWORD)(-1);
   static void NTAPI mi_fls_done(PVOID value) {
-    if (value!=NULL) _mi_thread_done((mi_heap_t*)value);
+    mi_heap_t* heap = (mi_heap_t*)value;
+    if (heap != NULL) {
+      _mi_thread_done(heap);
+      FlsSetValue(mi_fls_key, NULL);  // prevent recursion as _mi_thread_done may set it back to the main heap, issue #672
+    }
   }
 #elif defined(MI_USE_PTHREADS)
   // use pthread local storage keys to detect thread ending
