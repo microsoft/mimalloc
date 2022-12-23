@@ -12,8 +12,8 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the run-time systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.0.7` (2022-11-03).
-Latest stable  tag: `v1.7.7` (2022-11-03).
+Latest release tag: `v2.0.9` (2022-12-23).
+Latest stable  tag: `v1.7.9` (2022-12-23).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -77,6 +77,12 @@ Enjoy!
 Note: the `v2.x` version has a new algorithm for managing internal mimalloc pages that tends to use reduce memory usage
   and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
+
+* 2022-12-23, `v1.7.9`, `v2.0.9`: Supports building with asan and improved [Valgrind] support. Support abitrary large
+  alignments (in particular for `std::pmr` pools). 
+  Added C++ STL allocators attached to a specific heap (thanks @vmarkovtsev). 
+  Heap walks now visit all object (including huge objects). Support Windows nano server containers (by Johannes Schindelin,@dscho). 
+  Various small bug fixes.
 
 * 2022-11-03, `v1.7.7`, `v2.0.7`: Initial support for [Valgrind] for leak testing and heap block overflow detection. Initial
   support for attaching heaps to a speficic memory area (only in v2). Fix `realloc` behavior for zero size blocks, remove restriction to integral multiple of the alignment in `alloc_align`, improved aligned allocation performance, reduced contention with many threads on few processors (thank you @dposluns!), vs2022 support, support `pkg-config`, .
