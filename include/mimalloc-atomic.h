@@ -34,6 +34,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #define  MI_ATOMIC_VAR_INIT(x)  x
 #define  mi_atomic(name)        mi_atomic_##name
 #define  mi_memory_order(name)  mi_memory_order_##name
+#elif defined(MI_ATOMIC_FOR_GCC485)
+#include <gcc-4.8.5-atomic.h>
+#define  mi_atomic(name)        atomic_##name
+#define  mi_memory_order(name)  memory_order_##name
+#define  MI_ATOMIC_VAR_INIT(x)  x
 #else
 // Use C11 atomics
 #include <stdatomic.h>
