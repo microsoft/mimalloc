@@ -500,7 +500,7 @@ template<class T, bool destroy> struct _mi_heap_stl_allocator_common : public _m
   #endif
 
   void collect(bool force) { mi_heap_collect(this->heap.get(), force); }
-  template<class U> bool is_equal(const _mi_heap_stl_allocator_common<U, destroy>& x) const { return (this->heap == x.heap); }
+  template<class U, bool do_destroy = destroy> bool is_equal(const _mi_heap_stl_allocator_common<U, do_destroy>& x) const { return (this->heap == x.heap); }
 
 protected:
   std::shared_ptr<mi_heap_t> heap;
@@ -511,7 +511,7 @@ protected:
     this->heap.reset(hp, (destroy ? &heap_destroy : &heap_delete));  /* calls heap_delete/destroy when the refcount drops to zero */
   }
   _mi_heap_stl_allocator_common(const _mi_heap_stl_allocator_common& x) mi_attr_noexcept : heap(x.heap) { }
-  template<class U> _mi_heap_stl_allocator_common(const _mi_heap_stl_allocator_common<U, destroy>& x) mi_attr_noexcept : heap(x.heap) { }
+  template<class U, bool do_destroy = destroy> _mi_heap_stl_allocator_common(const _mi_heap_stl_allocator_common<U, do_destroy>& x) mi_attr_noexcept : heap(x.heap) { }
 
 private:
   static void heap_delete(mi_heap_t* hp)  { if (hp != NULL) { mi_heap_delete(hp); } }
