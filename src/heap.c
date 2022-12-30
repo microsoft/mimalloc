@@ -237,9 +237,6 @@ static void mi_heap_reset_pages(mi_heap_t* heap) {
   mi_assert_internal(mi_heap_is_initialized(heap));
   // TODO: copy full empty heap instead?
   memset(&heap->pages_free_direct, 0, sizeof(heap->pages_free_direct));
-#ifdef MI_MEDIUM_DIRECT
-  memset(&heap->pages_free_medium, 0, sizeof(heap->pages_free_medium));
-#endif
   _mi_memcpy_aligned(&heap->pages, &_mi_heap_empty.pages, sizeof(heap->pages));
   heap->thread_delayed_free = NULL;
   heap->page_count = 0;
