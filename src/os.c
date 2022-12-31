@@ -551,7 +551,6 @@ static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int pr
   if (addr == NULL && try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0) {
     size_t n = mi_bsr(try_alignment);
     if (((size_t)1 << n) == try_alignment && n >= 12 && n <= 30) {  // alignment is a power of 2 and 4096 <= alignment <= 1GiB
-      flags |= MAP_ALIGNED(n);
       void* p = mmap(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd, 0);
       if (p!=MAP_FAILED) return p;
       // fall back to regular mmap
