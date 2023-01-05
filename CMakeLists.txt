@@ -261,6 +261,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
   endif()
 endif()
 
+if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
+  SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
+  SET(CMAKE_INSTALL_INCLUDEDIR ~/config/non-packaged/headers)
+endif()
+
 if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
   list(APPEND mi_cflags /Zc:__cplusplus)
 endif()
