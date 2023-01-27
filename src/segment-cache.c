@@ -385,7 +385,15 @@ static bool  mi_is_valid_pointer(const void* p) {
 }
 
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
-  return mi_is_valid_pointer(p);
+  if mi_likely(mi_is_valid_pointer(p)) {
+    return true;
+  }
+
+  // when unable to allocate aligned OS memory directly, pointer cookie is same as segment cookie
+  mi_segment_t* const segment = _mi_ptr_segment(p);
+  if (segment == NULL) return false;
+
+  return (_mi_ptr_cookie(segment) == segment->cookie);
 }
 
 /*
