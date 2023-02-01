@@ -37,15 +37,16 @@ static void fail_aslr();              // issue #372
 static void tsan_numa_test();         // issue #414
 static void strdup_test();            // issue #445 
 static void bench_alloc_large(void);  // issue #xxx
+static void test_large_migrate(void); // issue #691
 static void heap_thread_free_huge();
 
 static void test_stl_allocators();
 
 
 int main() {
-  mi_stats_reset();  // ignore earlier allocations
-  heap_thread_free_huge();
+  mi_stats_reset();  // ignore earlier allocations  
   /*
+   heap_thread_free_huge();
    heap_thread_free_large();
    heap_no_delete();
    heap_late_free();
@@ -55,8 +56,9 @@ int main() {
    tsan_numa_test();
    strdup_test();
   */
-  test_stl_allocators();
-  test_mt_shutdown();
+  // test_stl_allocators();
+  // test_mt_shutdown();
+  test_large_migrate();
   
   //fail_aslr();
   bench_alloc_large();
@@ -169,6 +171,41 @@ static void test_stl_allocators() {
   test_stl_allocator4();
   test_stl_allocator5();
   test_stl_allocator6();
+}
+
+
+// issue #691
+static char* cptr;
+
+static void* thread1_allocate()
+{
+  cptr = mi_calloc_tp(char,22085632);
+  return NULL;
+}
+
+static void* thread2_free()
+{
+  assert(cptr);
+  mi_free(cptr);
+  cptr = NULL;
+  return NULL;
+}
+
+static void test_large_migrate(void) {
+  auto t1 = std::thread(thread1_allocate);
+  t1.join();
+  auto t2 = std::thread(thread2_free);
+  t2.join();
+  /*
+  pthread_t thread1, thread2;
+
+  pthread_create(&thread1, NULL, &thread1_allocate, NULL);
+  pthread_join(thread1, NULL);
+
+  pthread_create(&thread2, NULL, &thread2_free, NULL);
+  pthread_join(thread2, NULL);
+  */
+  return;
 }
 
 // issue 445

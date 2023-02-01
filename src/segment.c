@@ -632,7 +632,8 @@ static mi_slice_t* mi_segment_span_free_coalesce(mi_slice_t* slice, mi_segments_
 
   // for huge pages, just mark as free but don't add to the queues
   if (segment->kind == MI_SEGMENT_HUGE) {
-    mi_assert_internal(segment->used == 1);  // decreased right after this call in `mi_segment_page_clear`
+    // issue #691: segment->used can be 0 if the huge page block was freed while abandoned (reclaim will get here in that case)
+    mi_assert_internal((segment->used==0 && slice->xblock_size==0) || segment->used == 1);  // decreased right after this call in `mi_segment_page_clear`
     slice->xblock_size = 0;  // mark as free anyways
     // we should mark the last slice `xblock_size=0` now to maintain invariants but we skip it to 
     // avoid a possible cache miss (and the segment is about to be freed)
