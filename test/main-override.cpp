@@ -130,6 +130,7 @@ static bool test_stl_allocator2() {
   return vec.size() == 0;
 }
 
+#if MI_HAS_HEAP_STL_ALLOCATOR
 static bool test_stl_allocator3() {
   std::vector<int, mi_heap_stl_allocator<int> > vec;
   vec.push_back(1);
@@ -157,14 +158,17 @@ static bool test_stl_allocator6() {
   vec.pop_back();
   return vec.size() == 0;
 }
+#endif
 
 static void test_stl_allocators() {
   test_stl_allocator1();
   test_stl_allocator2();
+#if MI_HAS_HEAP_STL_ALLOCATOR
   test_stl_allocator3();
   test_stl_allocator4();
   test_stl_allocator5();
   test_stl_allocator6();
+#endif
 }
 
 // issue 445
