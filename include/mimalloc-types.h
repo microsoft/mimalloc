@@ -19,7 +19,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `sizeof(void*)`
 #ifndef MI_MAX_ALIGN_SIZE
-#define MI_MAX_ALIGN_SIZE  8   // sizeof(max_align_t)
+#define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 #endif
 
 // ------------------------------------------------------
