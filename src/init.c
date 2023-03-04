@@ -22,7 +22,7 @@ const mi_page_t _mi_page_empty = {
   0,       // used
   0,       // xblock_size
   NULL,    // local_free
-  #if MI_ENCODE_FREELIST
+  #if (MI_PADDING || MI_ENCODE_FREELIST)
   { 0, 0 },
   #endif
   MI_ATOMIC_VAR_INIT(0), // xthread_free

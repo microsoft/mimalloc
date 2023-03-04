@@ -162,6 +162,7 @@ void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
 void        _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept;  // for runtime integration
+void        _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);

@@ -51,7 +51,7 @@ bool test_stl_allocator2(void);
 // ---------------------------------------------------------------------------
 int main(void) {
   mi_option_disable(mi_option_verbose);
-
+  
   // ---------------------------------------------------
   // Malloc
   // ---------------------------------------------------
@@ -149,7 +149,8 @@ int main(void) {
     for (size_t align = 1; align <= MI_ALIGNMENT_MAX && ok; align *= 2) {
       void* ps[8];
       for (int i = 0; i < 8 && ok; i++) {
-        ps[i] = mi_malloc_aligned(align*13 /*size*/, align);
+        ps[i] = mi_malloc_aligned(align*13  // size
+                                 , align);
         if (ps[i] == NULL || (uintptr_t)(ps[i]) % align != 0) {
           ok = false;
         }

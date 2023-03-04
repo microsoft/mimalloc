@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 option(MI_SECURE            "Use full security mitigations (like guard pages, allocation randomization, double-free mitigation, and free-list corruption detection)" OFF)
 option(MI_DEBUG_FULL        "Use full internal heap invariant checking in DEBUG mode (expensive)" OFF)
-option(MI_PADDING           "Enable padding to detect heap block overflow (used only in DEBUG mode or with Valgrind)" ON)
+option(MI_PADDING           "Enable padding to detect heap block overflow (always on in DEBUG mode or with Valgrind)" OFF)
 option(MI_OVERRIDE          "Override the standard malloc interface (e.g. define entry points for malloc() etc)" ON)
 option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
 option(MI_SHOW_ERRORS       "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
@@ -186,9 +186,9 @@ if(MI_DEBUG_FULL)
   list(APPEND mi_defines MI_DEBUG=3)   # full invariant checking
 endif()
 
-if(NOT MI_PADDING)
-  message(STATUS "Disable padding of heap blocks in debug mode (MI_PADDING=OFF)")
-  list(APPEND mi_defines MI_PADDING=0)
+if(MI_PADDING)
+  message(STATUS "Enable padding of heap blocks explicitly (MI_PADDING=ON)")
+  list(APPEND mi_defines MI_PADDING=1)
 endif()
 
 if(MI_XMALLOC)
