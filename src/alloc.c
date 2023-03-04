@@ -922,7 +922,7 @@ static bool mi_try_new_handler(bool nothrow) {
 }
 #endif
 
-static mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t size, bool nothrow ) {
+mi_decl_export mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t size, bool nothrow ) {
   void* p = NULL;
   while(p == NULL && mi_try_new_handler(nothrow)) {
     p = mi_heap_malloc(heap,size);
@@ -935,7 +935,7 @@ static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
 }
 
 
-mi_decl_nodiscard mi_decl_restrict extern inline void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
   void* p = mi_heap_malloc(heap,size);
   if mi_unlikely(p == NULL) return mi_heap_try_new(heap, size, false);
   return p;
@@ -946,7 +946,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
 }
 
 
-mi_decl_nodiscard mi_decl_restrict extern inline void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
   size_t total;
   if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
     mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
@@ -1019,8 +1019,8 @@ void* _mi_externs[] = {
   (void*)&mi_zalloc_small,
   (void*)&mi_heap_malloc,
   (void*)&mi_heap_zalloc,
-  (void*)&mi_heap_malloc_small,
-  (void*)&mi_heap_alloc_new,
-  (void*)&mi_heap_alloc_new_n
+  (void*)&mi_heap_malloc_small
+  // (void*)&mi_heap_alloc_new,
+  // (void*)&mi_heap_alloc_new_n
 };
 #endif
