@@ -70,20 +70,22 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   }
 #endif
 
-#if (MI_PADDING > 0) && defined(MI_ENCODE_FREELIST) && !MI_TRACK_ENABLED
+#if MI_PADDING // && !MI_TRACK_ENABLED
   mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
   ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
-  #if (MI_DEBUG>1)
+  #if (MI_DEBUG>=2)
   mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
   mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
   #endif
   padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
   padding->delta  = (uint32_t)(delta);
+  #if MI_PADDING_CHECK
   if (!mi_page_is_huge(page)) {
     uint8_t* fill = (uint8_t*)padding - delta;
     const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
     for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
   }
+  #endif
 #endif
 
   return block;
@@ -96,21 +98,23 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   mi_assert(heap->thread_id == 0 || heap->thread_id == tid); // heaps are thread local
   #endif
   mi_assert(size <= MI_SMALL_SIZE_MAX);
-#if (MI_PADDING)
-  if (size == 0) {
-    size = sizeof(void*);
-  }
-#endif
+  #if (MI_PADDING)
+  if (size == 0) { size = sizeof(void*); }
+  #endif
   mi_page_t* page = _mi_heap_get_free_small_page(heap, size + MI_PADDING_SIZE);
   void* p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE, zero);
+  #if MI_PADDING
+  mi_assert_internal(p == NULL || mi_usable_size(p) == size);
+  #else
   mi_assert_internal(p == NULL || mi_usable_size(p) >= size);
-#if MI_STAT>1
+  #endif
+  #if MI_STAT>1
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_get_default_heap(); }
     mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
   }
-#endif
-  mi_track_malloc(p,size,zero);
+  #endif
+  if (p!=NULL) { mi_track_malloc(p,size,zero); }
   return p;
 }
 
@@ -133,14 +137,18 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
     mi_assert(heap!=NULL);
     mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id());   // heaps are thread local
     void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE, zero, huge_alignment);  // note: size can overflow but it is detected in malloc_generic
+    #if MI_PADDING
+    mi_assert_internal(p == NULL || mi_usable_size(p) == size);
+    #else
     mi_assert_internal(p == NULL || mi_usable_size(p) >= size);
+    #endif
     #if MI_STAT>1
     if (p != NULL) {
       if (!mi_heap_is_initialized(heap)) { heap = mi_get_default_heap(); }
       mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
     }
     #endif
-    mi_track_malloc(p,size,zero);
+    if (p!=NULL) { mi_track_malloc(p,size,zero); }
     return p;
   }
 }
@@ -225,7 +233,7 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 // Check for heap block overflow by setting up padding at the end of the block
 // ---------------------------------------------------------------------------
 
-#if (MI_PADDING>0) && defined(MI_ENCODE_FREELIST) && !MI_TRACK_ENABLED
+#if MI_PADDING // && !MI_TRACK_ENABLED
 static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
   *bsize = mi_page_usable_block_size(page);
   const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + *bsize);
@@ -248,6 +256,40 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
   mi_assert_internal(ok); mi_assert_internal(delta <= bsize);
   return (ok ? bsize - delta : 0);
 }
+
+// When a non-thread-local block is freed, it becomes part of the thread delayed free
+// list that is freed later by the owning heap. If the exact usable size is too small to
+// contain the pointer for the delayed list, then shrink the padding (by decreasing delta)
+// so it will later not trigger an overflow error in `mi_free_block`.
+void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
+  size_t bsize;
+  size_t delta;
+  bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
+  mi_assert_internal(ok);
+  if (!ok || (bsize - delta) >= min_size) return;  // usually already enough space
+  mi_assert_internal(bsize >= min_size);
+  if (bsize < min_size) return;  // should never happen
+  size_t new_delta = (bsize - min_size);
+  mi_assert_internal(new_delta < bsize);
+  mi_padding_t* padding = (mi_padding_t*)((uint8_t*)block + bsize);
+  mi_track_mem_defined(padding,sizeof(mi_padding_t));
+  padding->delta = (uint32_t)new_delta;
+  mi_track_mem_noaccess(padding,sizeof(mi_padding_t));
+}
+#else
+static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block) {
+  MI_UNUSED(block);
+  return mi_page_usable_block_size(page);
+}
+
+void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
+  MI_UNUSED(page);
+  MI_UNUSED(block);
+  MI_UNUSED(min_size);
+}
+#endif
+
+#if MI_PADDING && MI_PADDING_CHECK
 
 static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, size_t* size, size_t* wrong) {
   size_t bsize;
@@ -281,39 +323,13 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
   }
 }
 
-// When a non-thread-local block is freed, it becomes part of the thread delayed free
-// list that is freed later by the owning heap. If the exact usable size is too small to
-// contain the pointer for the delayed list, then shrink the padding (by decreasing delta)
-// so it will later not trigger an overflow error in `mi_free_block`.
-static void mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
-  size_t bsize;
-  size_t delta;
-  bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
-  mi_assert_internal(ok);
-  if (!ok || (bsize - delta) >= min_size) return;  // usually already enough space
-  mi_assert_internal(bsize >= min_size);
-  if (bsize < min_size) return;  // should never happen
-  size_t new_delta = (bsize - min_size);
-  mi_assert_internal(new_delta < bsize);
-  mi_padding_t* padding = (mi_padding_t*)((uint8_t*)block + bsize);
-  padding->delta = (uint32_t)new_delta;
-}
 #else
+
 static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(page);
   MI_UNUSED(block);
 }
 
-static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block) {
-  MI_UNUSED(block);
-  return mi_page_usable_block_size(page);
-}
-
-static void mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
-  MI_UNUSED(page);
-  MI_UNUSED(block);
-  MI_UNUSED(min_size);
-}
 #endif
 
 // only maintain stats for smaller objects if requested
@@ -377,7 +393,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   // The padding check may access the non-thread-owned page for the key values.
   // that is safe as these are constant and the page won't be freed (as the block is not freed yet).
   mi_check_padding(page, block);
-  mi_padding_shrink(page, block, sizeof(mi_block_t));       // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
+  _mi_padding_shrink(page, block, sizeof(mi_block_t));       // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
   
   // huge page segments are always abandoned and can be freed immediately
   mi_segment_t* segment = _mi_page_segment(page);
@@ -682,9 +698,10 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
   // (this means that returning NULL always indicates an error, and `p` will not have been freed in that case.)
   const size_t size = _mi_usable_size(p,"mi_realloc"); // also works if p == NULL (with size 0)
   if mi_unlikely(newsize <= size && newsize >= (size / 2) && newsize > 0) {  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
-    // todo: adjust potential padding to reflect the new size?
-    mi_track_free_size(p, size);
-    mi_track_malloc(p,newsize,true);
+    mi_assert_internal(p!=NULL);
+    // todo: do not track as the usable size is still the same in the free; adjust potential padding?
+    // mi_track_free(p);
+    // mi_track_malloc(p,newsize,true);
     return p;  // reallocation still fits and not more than 50% waste
   }
   void* newp = mi_heap_malloc(heap,newsize);
@@ -927,7 +944,7 @@ static bool mi_try_new_handler(bool nothrow) {
 }
 #endif
 
-static mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t size, bool nothrow ) {
+mi_decl_export mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t size, bool nothrow ) {
   void* p = NULL;
   while(p == NULL && mi_try_new_handler(nothrow)) {
     p = mi_heap_malloc(heap,size);
@@ -940,7 +957,7 @@ static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
 }
 
 
-mi_decl_nodiscard mi_decl_restrict extern inline void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
   void* p = mi_heap_malloc(heap,size);
   if mi_unlikely(p == NULL) return mi_heap_try_new(heap, size, false);
   return p;
@@ -951,7 +968,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
 }
 
 
-mi_decl_nodiscard mi_decl_restrict extern inline void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
   size_t total;
   if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
     mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
@@ -1024,8 +1041,8 @@ void* _mi_externs[] = {
   (void*)&mi_zalloc_small,
   (void*)&mi_heap_malloc,
   (void*)&mi_heap_zalloc,
-  (void*)&mi_heap_malloc_small,
-  (void*)&mi_heap_alloc_new,
-  (void*)&mi_heap_alloc_new_n
+  (void*)&mi_heap_malloc_small
+  // (void*)&mi_heap_alloc_new,
+  // (void*)&mi_heap_alloc_new_n
 };
 #endif

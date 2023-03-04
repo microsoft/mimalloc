@@ -244,6 +244,9 @@ int main(int argc, char** argv) {
   //printf("(reserve huge: %i\n)", res);
 
   //bench_start_program();
+#ifndef USE_STD_MALLOC
+  mi_stats_reset();
+#endif  
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
   srand(0x7feb352d);

@@ -58,9 +58,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Reserve extra padding at the end of each block to be more resilient against heap block overflows.
-// The padding can detect byte-precise buffer overflow on free.
-#if !defined(MI_PADDING) && (MI_DEBUG>=1 || MI_VALGRIND)
+// The padding can detect buffer overflow on free.
+#if !defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1 || MI_VALGRIND || MI_ASAN)
 #define MI_PADDING  1
+#endif
+
+// Check padding bytes; allows byte-precise buffer overflow detection
+#if !defined(MI_PADDING_CHECK) && MI_PADDING && (MI_SECURE>=3 || MI_DEBUG>=1)
+#define MI_PADDING_CHECK 1
 #endif
 
 
@@ -290,8 +295,8 @@ typedef struct mi_page_s {
   uint32_t              xblock_size;       // size available in each block (always `>0`)
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
 
-  #ifdef MI_ENCODE_FREELIST
-  uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`)
+  #if (MI_ENCODE_FREELIST || MI_PADDING)
+  uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
 
   _Atomic(mi_thread_free_t) xthread_free;  // list of deferred free blocks freed by other threads
