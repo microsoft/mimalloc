@@ -65,6 +65,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
     mi_page_set_has_aligned(page, true);
     _mi_padding_shrink(page, (mi_block_t*)p, adjust + size);
   }
+  // todo: expand padding if overallocated and p==aligned_p ?
 
   mi_assert_internal(mi_page_usable_block_size(_mi_ptr_page(p)) >= adjust + size);
   mi_assert_internal(p == _mi_page_ptr_unalign(_mi_ptr_segment(aligned_p), _mi_ptr_page(aligned_p), aligned_p));
@@ -82,9 +83,6 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   if (p != aligned_p) {
     mi_track_free(p);
     mi_track_malloc(aligned_p, size, zero);
-  }
-  else {
-    mi_track_resize(aligned_p, oversize, size);
   }
   #endif
   return aligned_p;

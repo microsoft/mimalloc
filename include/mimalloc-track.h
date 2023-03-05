@@ -8,11 +8,16 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_TRACK_H
 #define MIMALLOC_TRACK_H
 
-// ------------------------------------------------------
-// Track memory ranges with macros for tools like Valgrind
-// address sanitizer, or other memory checkers.
-// ------------------------------------------------------
+/* ------------------------------------------------------------------------------------------------------
+Track memory ranges with macros for tools like Valgrind
+address sanitizer, or other memory checkers.
 
+The macros are set up such that the size passed to `mi_track_free_size`
+matches the size of the allocation, or the newsize of a `mi_track_resize` (currently unused though).
+
+The `size` is either byte precise (and what the user requested) if `MI_PADDING` is enabled,
+or otherwise it is the full block size which may be larger than the original request.
+-------------------------------------------------------------------------------------------------------*/
 
 #if MI_VALGRIND
 

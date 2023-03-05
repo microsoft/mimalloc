@@ -497,7 +497,7 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 
 void mi_decl_noinline _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept {
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
-  mi_stat_free(page, block);                 // stat_free may access the padding
+  mi_stat_free(page, block);    // stat_free may access the padding
   mi_track_free(p);
   _mi_free_block(page, is_local, block);
 }
@@ -564,7 +564,7 @@ void mi_free(void* p) mi_attr_noexcept
       #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
       memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
       #endif
-      mi_track_free(p);
+      mi_track_free_size(p, mi_page_usable_size_of(page,block)); // faster then mi_usable_size as we already now the page and that p is unaligned
       mi_block_set_next(page, block, page->local_free);
       page->local_free = block;
       if mi_unlikely(--page->used == 0) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))

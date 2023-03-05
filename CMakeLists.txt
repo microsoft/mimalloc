@@ -370,7 +370,7 @@ if(MI_BUILD_SHARED)
   set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} SOVERSION ${mi_version_major} OUTPUT_NAME ${mi_basename} )
   target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
   target_compile_options(mimalloc PRIVATE ${mi_cflags})
-  target_link_libraries(mimalloc PRIVATE ${mi_libraries} -fsanitize=address)
+  target_link_libraries(mimalloc PRIVATE ${mi_libraries})
   target_include_directories(mimalloc PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${mi_install_incdir}>
