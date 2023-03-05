@@ -831,7 +831,7 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
     if (!ok) return NULL; // failed to commit 
     mi_commit_mask_set(pcommit_mask, &commit_needed_mask); 
   }
-  mi_track_mem_undefined(segment,commit_needed);
+  mi_track_mem_undefined(segment,commit_needed*MI_COMMIT_SIZE);
   segment->memid = memid;
   segment->mem_is_pinned = is_pinned;
   segment->mem_is_large = mem_large;

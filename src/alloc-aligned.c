@@ -65,13 +65,14 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
     mi_page_set_has_aligned(page, true);
     _mi_padding_shrink(page, (mi_block_t*)p, adjust + size);
   }
-  // todo: expand padding if overallocated and p==aligned_p ?
+  // todo: expand padding if overallocated ?
 
   mi_assert_internal(mi_page_usable_block_size(_mi_ptr_page(p)) >= adjust + size);
   mi_assert_internal(p == _mi_page_ptr_unalign(_mi_ptr_segment(aligned_p), _mi_ptr_page(aligned_p), aligned_p));
   mi_assert_internal(((uintptr_t)aligned_p + offset) % alignment == 0);
-  mi_assert_internal(mi_page_usable_block_size(_mi_ptr_page(p)) >= adjust + size);
-
+  mi_assert_internal(mi_usable_size(aligned_p)>=size);
+  mi_assert_internal(mi_usable_size(p) == mi_usable_size(aligned_p)+adjust);
+    
   // now zero the block if needed
   if (zero && alignment > MI_ALIGNMENT_MAX) {
     const ptrdiff_t diff = (uint8_t*)aligned_p - (uint8_t*)p;
@@ -81,8 +82,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
 
   #if MI_TRACK_ENABLED
   if (p != aligned_p) {
-    mi_track_free(p);
-    mi_track_malloc(aligned_p, size, zero);
+    mi_track_align(p,aligned_p,adjust,mi_usable_size(aligned_p));
   }
   #endif
   return aligned_p;

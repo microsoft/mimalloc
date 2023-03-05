@@ -102,19 +102,14 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   if (size == 0) { size = sizeof(void*); }
   #endif
   mi_page_t* page = _mi_heap_get_free_small_page(heap, size + MI_PADDING_SIZE);
-  void* p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE, zero);
-  #if MI_PADDING
-  mi_assert_internal(p == NULL || mi_usable_size(p) == size);
-  #else
-  mi_assert_internal(p == NULL || mi_usable_size(p) >= size);
-  #endif
+  void* const p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE, zero);  
+  mi_track_malloc(p,size,zero);
   #if MI_STAT>1
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_get_default_heap(); }
     mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
   }
   #endif
-  if (p!=NULL) { mi_track_malloc(p,size,zero); }
   return p;
 }
 
@@ -137,18 +132,13 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
     mi_assert(heap!=NULL);
     mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id());   // heaps are thread local
     void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE, zero, huge_alignment);  // note: size can overflow but it is detected in malloc_generic
-    #if MI_PADDING
-    mi_assert_internal(p == NULL || mi_usable_size(p) == size);
-    #else
-    mi_assert_internal(p == NULL || mi_usable_size(p) >= size);
-    #endif
+    mi_track_malloc(p,size,zero);
     #if MI_STAT>1
     if (p != NULL) {
       if (!mi_heap_is_initialized(heap)) { heap = mi_get_default_heap(); }
       mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
     }
     #endif
-    if (p!=NULL) { mi_track_malloc(p,size,zero); }
     return p;
   }
 }
@@ -498,7 +488,7 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 void mi_decl_noinline _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept {
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
   mi_stat_free(page, block);    // stat_free may access the padding
-  mi_track_free(p);
+  mi_track_free_size(block, mi_page_usable_size_of(page,block));
   _mi_free_block(page, is_local, block);
 }
 
@@ -564,7 +554,7 @@ void mi_free(void* p) mi_attr_noexcept
       #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
       memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
       #endif
-      mi_track_free_size(p, mi_page_usable_size_of(page,block)); // faster then mi_usable_size as we already now the page and that p is unaligned
+      mi_track_free_size(p, mi_page_usable_size_of(page,block)); // faster then mi_usable_size as we already know the page and that p is unaligned
       mi_block_set_next(page, block, page->local_free);
       page->local_free = block;
       if mi_unlikely(--page->used == 0) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))
@@ -700,8 +690,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
   if mi_unlikely(newsize <= size && newsize >= (size / 2) && newsize > 0) {  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
     mi_assert_internal(p!=NULL);
     // todo: do not track as the usable size is still the same in the free; adjust potential padding?
-    // mi_track_free(p);
-    // mi_track_malloc(p,newsize,true);
+    // mi_track_resize(p,size,newsize)
     return p;  // reallocation still fits and not more than 50% waste
   }
   void* newp = mi_heap_malloc(heap,newsize);
