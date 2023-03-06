@@ -24,8 +24,9 @@ uses the block start pointer and original size (corresponding to the `mi_track_m
 
 #if MI_VALGRIND
 
-#define MI_TRACK_ENABLED 1
-#define MI_TRACK_TOOL    "valgrind"
+#define MI_TRACK_ENABLED      1
+#define MI_TRACK_HEAP_DESTROY 1           // track free of individual blocks on heap_destroy
+#define MI_TRACK_TOOL         "valgrind"
 
 #include <valgrind/valgrind.h>
 #include <valgrind/memcheck.h>
@@ -39,8 +40,9 @@ uses the block start pointer and original size (corresponding to the `mi_track_m
 
 #elif MI_ASAN
 
-#define MI_TRACK_ENABLED 1
-#define MI_TRACK_TOOL    "asan"
+#define MI_TRACK_ENABLED      1
+#define MI_TRACK_HEAP_DESTROY 0
+#define MI_TRACK_TOOL         "asan"
 
 #include <sanitizer/asan_interface.h>
 
@@ -52,8 +54,9 @@ uses the block start pointer and original size (corresponding to the `mi_track_m
 
 #else
 
-#define MI_TRACK_ENABLED 0
-#define MI_TRACK_TOOL    "none"
+#define MI_TRACK_ENABLED      0
+#define MI_TRACK_HEAP_DESTROY 0 
+#define MI_TRACK_TOOL         "none"
 
 #define mi_track_malloc_size(p,reqsize,size,zero)
 #define mi_track_free_size(p,_size)
