@@ -78,7 +78,7 @@ Note: the `v2.x` version has a new algorithm for managing internal mimalloc page
   and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
 
-* 2022-12-23, `v1.7.9`, `v2.0.9`: Supports building with asan and improved [Valgrind] support. Support abitrary large
+* 2022-12-23, `v1.7.9`, `v2.0.9`: Supports building with [#asan] and improved [#Valgrind] support. Support abitrary large
   alignments (in particular for `std::pmr` pools). 
   Added C++ STL allocators attached to a specific heap (thanks @vmarkovtsev). 
   Heap walks now visit all object (including huge objects). Support Windows nano server containers (by Johannes Schindelin,@dscho). 
@@ -347,16 +347,19 @@ When _mimalloc_ is built using debug mode, various checks are done at runtime to
 - Double free's, and freeing invalid heap pointers are detected.
 - Corrupted free-lists and some forms of use-after-free are detected.
 
-## Valgrind
+## Tools
 
-Generally, we recommend using the standard allocator with the amazing [Valgrind] tool (and
-also for other address sanitizers).
-However, it is possible to build mimalloc with Valgrind support. This has a small performance
-overhead but does allow detecting memory leaks and byte-precise buffer overflows directly on final
-executables. To build with valgrind support, use the `MI_VALGRIND=ON` cmake option:
+Generally, we recommend using the standard allocator with memory tracking tools, but mimalloc
+can also be build to support the [address sanitizer][asan] or the excellent [Valgrind] tool. 
+This has a small performance overhead but does allow detecting memory leaks and byte-precise 
+buffer overflows directly on final executables. See also the `test/test-wrong.c` file to test with various tools.
+
+### Valgrind
+
+To build with valgrind support, use the `MI_TRACK_VALGRIND=ON` cmake option:
 
 ```
-> cmake ../.. -DMI_VALGRIND=ON
+> cmake ../.. -DMI_TRACK_VALGRIND=ON
 ```
 
 This can also be combined with secure mode or debug mode.
@@ -384,6 +387,35 @@ Valgrind support is in its initial development -- please report any issues.
 
 [Valgrind]: https://valgrind.org/
 [valgrind-soname]: https://valgrind.org/docs/manual/manual-core.html#opt.soname-synonyms
+
+### ASAN
+
+To build with the address sanitizer, use the `-DMI_TRACK_ASAN=ON` cmake option:
+
+```
+> cmake ../.. -DMI_TRACK_ASAN=ON
+```
+
+This can also be combined with secure mode or debug mode. 
+You can then run your programs as:'
+
+```
+> ASAN_OPTIONS=verbosity=1 <myprogram>
+```
+
+When you link a program with an address sanitizer build of mimalloc, you should
+generally compile that program too with the address sanitizer enabled. 
+For example, assuming you build mimalloc in `out/debug`:
+
+```
+clang -g -o test-wrong -Iinclude test/test-wrong.c out/debug/libmimalloc-asan-debug.a -lpthread -fsanitize=address -fsanitize-recover=address
+```
+
+Since the address sanitizer redirects the standard allocation functions, on some platforms (macOSX for example)
+it is required to compile mimalloc with `-DMI_OVERRIDE=OFF`.
+Adress sanitizer support is in its initial development -- please report any issues.
+
+[asan]: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
 
 # Overriding Standard Malloc
