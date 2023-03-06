@@ -74,20 +74,17 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   mi_assert_internal(mi_usable_size(p) == mi_usable_size(aligned_p)+adjust);
     
   // now zero the block if needed
-  if (zero && alignment > MI_ALIGNMENT_MAX) {
-    const ptrdiff_t diff = (uint8_t*)aligned_p - (uint8_t*)p;
-    ptrdiff_t zsize = mi_page_usable_block_size(_mi_ptr_page(p)) - diff - MI_PADDING_SIZE;
-    #if MI_PADDING
-    zsize -= MI_MAX_ALIGN_SIZE;
-    #endif
-    if (zsize > 0) { _mi_memzero(aligned_p, zsize); }
+  if (alignment > MI_ALIGNMENT_MAX) {
+    // for the tracker, on huge aligned allocations only from the start of the large block is defined
+    mi_track_mem_undefined(aligned_p, size);
+    if (zero) {
+      _mi_memzero(aligned_p, mi_usable_size(aligned_p));
+    }
   }
 
-  #if MI_TRACK_ENABLED
   if (p != aligned_p) {
     mi_track_align(p,aligned_p,adjust,mi_usable_size(aligned_p));
-  }
-  #endif
+  }  
   return aligned_p;
 }
 
