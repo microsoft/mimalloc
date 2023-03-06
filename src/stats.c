@@ -465,6 +465,7 @@ mi_msecs_t _mi_clock_end(mi_msecs_t start) {
 
 #if defined(_WIN32)
 #include <windows.h>
+#include <psapi.h>
 
 static mi_msecs_t filetime_msecs(const FILETIME* ftime) {
   ULARGE_INTEGER i;
@@ -474,19 +475,6 @@ static mi_msecs_t filetime_msecs(const FILETIME* ftime) {
   return msecs;
 }
 
-typedef struct _PROCESS_MEMORY_COUNTERS {
-  DWORD cb;
-  DWORD PageFaultCount;
-  SIZE_T PeakWorkingSetSize;
-  SIZE_T WorkingSetSize;
-  SIZE_T QuotaPeakPagedPoolUsage;
-  SIZE_T QuotaPagedPoolUsage;
-  SIZE_T QuotaPeakNonPagedPoolUsage;
-  SIZE_T QuotaNonPagedPoolUsage;
-  SIZE_T PagefileUsage;
-  SIZE_T PeakPagefileUsage;
-} PROCESS_MEMORY_COUNTERS;
-typedef PROCESS_MEMORY_COUNTERS* PPROCESS_MEMORY_COUNTERS;
 typedef BOOL (WINAPI *PGetProcessMemoryInfo)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
 static PGetProcessMemoryInfo pGetProcessMemoryInfo = NULL;
 
