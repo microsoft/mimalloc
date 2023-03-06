@@ -12,7 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
    Compile in an "out/debug" folder:
 
    > cd out/debug
-   > cmake ../.. -DMI_VALGRIND=1
+   > cmake ../.. -DMI_TRACK_VALGRIND=1
    > make -j8
 
    and then compile this file as:
@@ -29,7 +29,7 @@ terms of the MIT license. A copy of the license can be found in the file
    Compile in an "out/debug" folder:
 
    > cd out/debug
-   > cmake ../.. -DMI_ASAN=1
+   > cmake ../.. -DMI_TRACK_ASAN=1
    > make -j8
 
    and then compile this file as:
