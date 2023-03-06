@@ -311,11 +311,13 @@ void _mi_heap_destroy_pages(mi_heap_t* heap) {
   mi_heap_reset_pages(heap);
 }
 
+#if MI_TRACK_HEAP_DESTROY
 static bool mi_cdecl mi_heap_track_block_free(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
   MI_UNUSED(heap); MI_UNUSED(area);  MI_UNUSED(arg); MI_UNUSED(block_size);
   mi_track_free_size(block,mi_usable_size(block));
   return true;
 }
+#endif
 
 void mi_heap_destroy(mi_heap_t* heap) {
   mi_assert(heap != NULL);
