@@ -874,11 +874,18 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   if (segment == NULL) return NULL;
   
   // zero the segment info? -- not always needed as it may be zero initialized from the OS 
+  mi_track_mem_defined(segment, offsetof(mi_segment_t, next)); // needed for valgrind
   mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);  // tsan
-  if (!is_zero) {
+  {
     ptrdiff_t ofs = offsetof(mi_segment_t, next);
     size_t    prefix = offsetof(mi_segment_t, slices) - ofs;
-    memset((uint8_t*)segment+ofs, 0, prefix + sizeof(mi_slice_t)*(segment_slices+1));  // one more
+    size_t    zsize = prefix + sizeof(mi_slice_t) * (segment_slices + 1); // one more
+    if (!is_zero) {
+      memset((uint8_t*)segment + ofs, 0, zsize);
+    }
+    else {
+      mi_track_mem_defined((uint8_t*)segment + ofs, zsize);  // todo: somehow needed for valgrind?
+    }
   }
   
   segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
