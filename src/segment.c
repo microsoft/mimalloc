@@ -796,8 +796,6 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
     const size_t extra = align_offset - info_size;
     // recalculate due to potential guard pages
     *psegment_slices = mi_segment_calculate_slices(required + extra, ppre_size, pinfo_slices);
-    //segment_size += _mi_align_up(align_offset - info_size, MI_SEGMENT_SLICE_SIZE);
-    //segment_slices = segment_size / MI_SEGMENT_SLICE_SIZE;
   }
   const size_t segment_size = (*psegment_slices) * MI_SEGMENT_SLICE_SIZE;
   mi_segment_t* segment = NULL;
@@ -831,7 +829,10 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
     if (!ok) return NULL; // failed to commit 
     mi_commit_mask_set(pcommit_mask, &commit_needed_mask); 
   }
-  mi_track_mem_undefined(segment,commit_needed*MI_COMMIT_SIZE);
+  else if (*is_zero) {
+    // track zero initialization for valgrind
+    mi_track_mem_defined(segment, commit_needed * MI_COMMIT_SIZE);        
+  }
   segment->memid = memid;
   segment->mem_is_pinned = is_pinned;
   segment->mem_is_large = mem_large;
@@ -874,18 +875,14 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   if (segment == NULL) return NULL;
   
   // zero the segment info? -- not always needed as it may be zero initialized from the OS 
-  mi_track_mem_defined(segment, offsetof(mi_segment_t, next)); // needed for valgrind
   mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);  // tsan
   {
-    ptrdiff_t ofs = offsetof(mi_segment_t, next);
+    ptrdiff_t ofs    = offsetof(mi_segment_t, next);
     size_t    prefix = offsetof(mi_segment_t, slices) - ofs;
-    size_t    zsize = prefix + sizeof(mi_slice_t) * (segment_slices + 1); // one more
+    size_t    zsize  = prefix + (sizeof(mi_slice_t) * (segment_slices + 1)); // one more
     if (!is_zero) {
       memset((uint8_t*)segment + ofs, 0, zsize);
-    }
-    else {
-      mi_track_mem_defined((uint8_t*)segment + ofs, zsize);  // todo: somehow needed for valgrind?
-    }
+    }  
   }
   
   segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
