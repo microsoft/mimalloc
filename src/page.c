@@ -856,7 +856,7 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size, size_t huge_alignme
   }
   else {
     // otherwise find a page with free blocks in our size segregated queues
-    mi_assert_internal(size >= MI_PADDING_SIZE);
+    mi_assert_internal((ptrdiff_t)size >= MI_PADDING_SIZE);  // cast to signed to avoid error if there is no padding
     return mi_find_free_page(heap, size);
   }
 }
