@@ -188,6 +188,21 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #define __has_builtin(x)  0
 #endif
 
+#if __has_builtin(__builtin_memcpy_inline)
+#define _mi_memcpy_inline(x, y, s) __builtin_memcpy_inline(x, y, s)
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#define _mi_memcpy_inline(x, y, s) do { _Static_assert(__builtin_choose_expr(__builtin_constant_p(s), 1, 0), "`_mi_memcpy_inline` must be a constant integer"); memcpy(x, y, s); } while (0)
+#else
+#define _mi_memcpy_inline(x, y, s) memcpy(x, y, s)
+#endif
+
+#if __has_builtin(__builtin_memset_inline)
+#define _mi_memset_inline(x, y, s) __builtin_memset_inline(x, y, s)
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#define _mi_memset_inline(x, y, s) do { _Static_assert(__builtin_choose_expr(__builtin_constant_p(s), 1, 0), "`_mi_memset_inline` must be a constant integer"); memset(x, y, s); } while (0)
+#else
+#define _mi_memset_inline(x, y, s) memset(x, y, s)
+#endif
 
 /* -----------------------------------------------------------
   Error codes passed to `_mi_fatal_error`
@@ -1008,6 +1023,17 @@ static inline void _mi_memzero_aligned(void* dst, size_t n) {
   void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
   _mi_memzero(adst, n);
 }
+
+#define _mi_memcpy_inline_aligned(dst, src, n)                                                          \
+  mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0)); \
+  void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);                                           \
+  const void* asrc = __builtin_assume_aligned(src, MI_INTPTR_SIZE);                                     \
+  _mi_memcpy_inline(adst, asrc, n)
+
+#define _mi_memzero_inline_aligned(dst, n)                    \
+  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);   \
+  void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE); \
+  _mi_memzero_inline(adst, n)
 #else
 // Default fallback on `_mi_memcpy`
 static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
@@ -1019,6 +1045,9 @@ static inline void _mi_memzero_aligned(void* dst, size_t n) {
   mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
   _mi_memzero(dst, n);
 }
+
+#define _mi_memcpy_inline_aligned(dst, src, n)	_mi_memcpy_aligned(dst, src, n)
+#define _mi_memzero_inline_aligned(dst, n)	_mi_memzero_aligned(dst, n)
 #endif
 
 
