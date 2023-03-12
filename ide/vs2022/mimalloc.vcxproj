@@ -245,6 +245,7 @@
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc-atomic.h" />
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc-override.h" />
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc-types.h" />
+    <ClInclude Include="..\..\include\mimalloc-etw.h" />
     <ClInclude Include="..\..\include\mimalloc-new-delete.h" />
     <ClInclude Include="..\..\include\mimalloc-track.h" />
     <ClInclude Include="..\..\src\bitmap.h" />
