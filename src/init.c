@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit
 
+
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
   0, false, false, false, false,
@@ -549,6 +550,10 @@ void mi_process_init(void) mi_attr_noexcept {
       mi_reserve_os_memory((size_t)ksize*MI_KiB, true, true);
     }
   }
+
+#ifdef MI_ETW
+  EventRegistermicrosoft_windows_mimalloc();
+#endif
 }
 
 // Called when the process is done (through `at_exit`)
