@@ -17,7 +17,30 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_trace_message(...)
 #endif
 
-#define MI_CACHE_LINE          64
+// Determine system L1 cache line size at compile time for purposes of alignment.
+#ifndef MI_CACHE_LINE
+#if defined(__i386__) || defined(__x86_64__)
+#define MI_CACHE_LINE 64
+#elif defined(__aarch64__)
+// FIXME: read special register ctr_el0 to get L1 dcache size.
+#define MI_CACHE_LINE 64
+#elif defined(__arm__)
+// The cache line sizes for Arm depend on implementations, not architectures.
+// There are even implementations with cache line sizes configurable at boot time.
+#if __ARM_ARCH__ == 7
+#define MI_CACHE_LINE 64
+#else
+// TODO: list known Arm implementations
+#define MI_CACHE_LINE 32
+#endif
+#endif
+#endif
+
+#ifndef MI_CACHE_LINE
+// A reasonable default value
+#define MI_CACHE_LINE 64
+#endif
+
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
 #pragma warning(disable:26812)  // unscoped enum warning

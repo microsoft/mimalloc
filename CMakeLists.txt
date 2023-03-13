@@ -302,6 +302,30 @@ else()
 endif()
 
 # -----------------------------------------------------------------------------
+# Cache line size detection
+# -----------------------------------------------------------------------------
+if (CMAKE_CROSSCOMPILING)
+  message(STATUS "Cross-compiling - cache line size detection disabled")
+else()
+  if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64.*|AARCH64.*|arm64.*)")
+    if (APPLE)
+      execute_process(COMMAND sysctl -n hw.cachelinesize
+                      OUTPUT_VARIABLE L1_DCACHE_LINE_SIZE
+                      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    else()
+      if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+        execute_process(COMMAND getconf LEVEL1_DCACHE_LINESIZE
+                        OUTPUT_VARIABLE L1_DCACHE_LINE_SIZE
+                        OUTPUT_STRIP_TRAILING_WHITESPACE)
+      endif()
+    endif()
+  endif()
+endif()
+if (L1_DCACHE_LINE_SIZE)
+  list(APPEND mi_defines MI_CACHE_LINE=${L1_DCACHE_LINE_SIZE})
+endif()
+
+# -----------------------------------------------------------------------------
 # Install and output names
 # -----------------------------------------------------------------------------
 
