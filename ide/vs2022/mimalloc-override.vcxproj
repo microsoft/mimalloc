@@ -237,6 +237,7 @@
     <ClCompile Include="..\..\src\bitmap.c" />
     <ClCompile Include="..\..\src\heap.c" />
     <ClCompile Include="..\..\src\init.c" />
+    <ClCompile Include="..\..\src\prim\prim.c" />
     <ClCompile Include="..\..\src\region.c" />
     <ClCompile Include="..\..\src\options.c" />
     <ClCompile Include="..\..\src\os.c" />

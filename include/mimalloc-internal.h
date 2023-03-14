@@ -86,7 +86,9 @@ bool       _mi_os_reset(void* addr, size_t size, mi_stats_t* tld_stats);
 
 void*      _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool* large, mi_stats_t* tld_stats);
 void       _mi_os_free_aligned(void* p, size_t size, size_t alignment, size_t align_offset, bool was_committed, mi_stats_t* tld_stats);
-
+void*      _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
+bool       _mi_os_use_large_page(size_t size, size_t alignment);
+size_t     _mi_os_large_page_size(void);
 
 // memory.c
 void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, size_t offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* id, mi_os_tld_t* tld);
