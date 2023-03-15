@@ -23,9 +23,6 @@ int mi_version(void) mi_attr_noexcept {
   return MI_MALLOC_VERSION;
 }
 
-#ifdef _WIN32
-#include <conio.h>
-#endif
 
 // --------------------------------------------------------
 // Options
