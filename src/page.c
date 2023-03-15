@@ -103,6 +103,8 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   return true;
 }
 
+extern bool _mi_process_is_initialized;             // has mi_process_init been called?
+
 bool _mi_page_is_valid(mi_page_t* page) {
   mi_assert_internal(mi_page_is_valid_init(page));
   #if MI_SECURE
@@ -873,8 +875,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
 
   // initialize if necessary
   if mi_unlikely(!mi_heap_is_initialized(heap)) {
-    mi_thread_init(); // calls `_mi_heap_init` in turn
-    heap = mi_get_default_heap();
+    heap = mi_heap_get_default(); // calls mi_thread_init 
     if mi_unlikely(!mi_heap_is_initialized(heap)) { return NULL; }
   }
   mi_assert_internal(mi_heap_is_initialized(heap));

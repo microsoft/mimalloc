@@ -120,7 +120,7 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     uintptr_t init = MI_HINT_BASE;
     #if (MI_SECURE>0 || MI_DEBUG==0)       // security: randomize start of aligned allocations unless in debug mode
-    uintptr_t r = _mi_heap_random_next(mi_get_default_heap());
+    uintptr_t r = _mi_heap_random_next(mi_prim_get_default_heap());
     init = init + ((MI_SEGMENT_SIZE * ((r>>17) & 0xFFFFF)) % MI_HINT_AREA);  // (randomly 20 bits)*4MiB == 0 to 4TiB
     #endif
     uintptr_t expected = hint + size;
@@ -483,7 +483,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
       // Initialize the start address after the 32TiB area
       start = ((uintptr_t)32 << 40);  // 32TiB virtual start address
     #if (MI_SECURE>0 || MI_DEBUG==0)      // security: randomize start of huge pages unless in debug mode
-      uintptr_t r = _mi_heap_random_next(mi_get_default_heap());
+      uintptr_t r = _mi_heap_random_next(mi_prim_get_default_heap());
       start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x0FFF));  // (randomly 12bits)*1GiB == between 0 to 4TiB
     #endif
     }

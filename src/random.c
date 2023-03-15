@@ -168,6 +168,8 @@ If we cannot get good randomness, we fall back to weak randomness based on a tim
 
 #if defined(_WIN32)
 
+#include <windows.h>
+
 #if defined(MI_USE_RTLGENRANDOM) // || defined(__cplusplus)
 // We prefer to use BCryptGenRandom instead of (the unofficial) RtlGenRandom but when using
 // dynamic overriding, we observed it can raise an exception when compiled with C++, and

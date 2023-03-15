@@ -239,13 +239,13 @@ static void mi_thread_data_collect(void) {
 
 // Initialize the thread local default heap, called from `mi_thread_init`
 static bool _mi_heap_init(void) {
-  if (mi_heap_is_initialized(mi_get_default_heap())) return true;
+  if (mi_heap_is_initialized(mi_prim_get_default_heap())) return true;
   if (_mi_is_main_thread()) {
     // mi_assert_internal(_mi_heap_main.thread_id != 0);  // can happen on freeBSD where alloc is called before any initialization
     // the main heap is statically allocated
     mi_heap_main_init();
     _mi_heap_set_default_direct(&_mi_heap_main);
-    //mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_get_default_heap());
+    //mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_prim_get_default_heap());
   }
   else {
     // use `_mi_os_alloc` to allocate directly from the OS
@@ -418,7 +418,7 @@ void mi_thread_init(void) mi_attr_noexcept
 }
 
 void mi_thread_done(void) mi_attr_noexcept {
-  _mi_thread_done(mi_get_default_heap());
+  _mi_thread_done(mi_prim_get_default_heap());
 }
 
 static void _mi_thread_done(mi_heap_t* heap) {

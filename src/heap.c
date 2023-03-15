@@ -9,6 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
 #include "mimalloc-track.h"
+#include "prim/prim.h"  // mi_prim_get_default_heap
 
 #include <string.h>  // memset, memcpy
 
@@ -168,7 +169,7 @@ void mi_heap_collect(mi_heap_t* heap, bool force) mi_attr_noexcept {
 }
 
 void mi_collect(bool force) mi_attr_noexcept {
-  mi_heap_collect(mi_get_default_heap(), force);
+  mi_heap_collect(mi_prim_get_default_heap(), force);
 }
 
 
@@ -178,8 +179,13 @@ void mi_collect(bool force) mi_attr_noexcept {
 
 mi_heap_t* mi_heap_get_default(void) {
   mi_thread_init();
-  return mi_get_default_heap();
+  return mi_prim_get_default_heap();
 }
+
+static bool mi_heap_is_default(const mi_heap_t* heap) {
+  return (heap == mi_prim_get_default_heap());
+}
+
 
 mi_heap_t* mi_heap_get_backing(void) {
   mi_heap_t* heap = mi_heap_get_default();
@@ -418,7 +424,7 @@ mi_heap_t* mi_heap_set_default(mi_heap_t* heap) {
   mi_assert(mi_heap_is_initialized(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return NULL;
   mi_assert_expensive(mi_heap_is_valid(heap));
-  mi_heap_t* old = mi_get_default_heap();
+  mi_heap_t* old = mi_prim_get_default_heap();
   _mi_heap_set_default_direct(heap);
   return old;
 }
@@ -468,7 +474,7 @@ bool mi_heap_check_owned(mi_heap_t* heap, const void* p) {
 }
 
 bool mi_check_owned(const void* p) {
-  return mi_heap_check_owned(mi_get_default_heap(), p);
+  return mi_heap_check_owned(mi_prim_get_default_heap(), p);
 }
 
 /* -----------------------------------------------------------

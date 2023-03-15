@@ -7,8 +7,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
+#include "prim/prim.h"  // mi_prim_get_default_heap
 
-#include <string.h>  // memset
+#include <string.h>     // memset
 
 // ------------------------------------------------------
 // Aligned Allocation
@@ -187,27 +188,27 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_calloc_aligned(mi_heap_t* heap,
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_malloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heap_malloc_aligned_at(mi_get_default_heap(), size, alignment, offset);
+  return mi_heap_malloc_aligned_at(mi_prim_get_default_heap(), size, alignment, offset);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_malloc_aligned(size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_heap_malloc_aligned(mi_get_default_heap(), size, alignment);
+  return mi_heap_malloc_aligned(mi_prim_get_default_heap(), size, alignment);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heap_zalloc_aligned_at(mi_get_default_heap(), size, alignment, offset);
+  return mi_heap_zalloc_aligned_at(mi_prim_get_default_heap(), size, alignment, offset);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_aligned(size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_heap_zalloc_aligned(mi_get_default_heap(), size, alignment);
+  return mi_heap_zalloc_aligned(mi_prim_get_default_heap(), size, alignment);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_calloc_aligned_at(size_t count, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heap_calloc_aligned_at(mi_get_default_heap(), count, size, alignment, offset);
+  return mi_heap_calloc_aligned_at(mi_prim_get_default_heap(), count, size, alignment, offset);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_calloc_aligned(size_t count, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_heap_calloc_aligned(mi_get_default_heap(), count, size, alignment);
+  return mi_heap_calloc_aligned(mi_prim_get_default_heap(), count, size, alignment);
 }
 
 
@@ -282,25 +283,25 @@ mi_decl_nodiscard void* mi_heap_recalloc_aligned(mi_heap_t* heap, void* p, size_
 }
 
 mi_decl_nodiscard void* mi_realloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heap_realloc_aligned_at(mi_get_default_heap(), p, newsize, alignment, offset);
+  return mi_heap_realloc_aligned_at(mi_prim_get_default_heap(), p, newsize, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_realloc_aligned(void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_heap_realloc_aligned(mi_get_default_heap(), p, newsize, alignment);
+  return mi_heap_realloc_aligned(mi_prim_get_default_heap(), p, newsize, alignment);
 }
 
 mi_decl_nodiscard void* mi_rezalloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heap_rezalloc_aligned_at(mi_get_default_heap(), p, newsize, alignment, offset);
+  return mi_heap_rezalloc_aligned_at(mi_prim_get_default_heap(), p, newsize, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_rezalloc_aligned(void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_heap_rezalloc_aligned(mi_get_default_heap(), p, newsize, alignment);
+  return mi_heap_rezalloc_aligned(mi_prim_get_default_heap(), p, newsize, alignment);
 }
 
 mi_decl_nodiscard void* mi_recalloc_aligned_at(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_heap_recalloc_aligned_at(mi_get_default_heap(), p, newcount, size, alignment, offset);
+  return mi_heap_recalloc_aligned_at(mi_prim_get_default_heap(), p, newcount, size, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_recalloc_aligned(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_heap_recalloc_aligned(mi_get_default_heap(), p, newcount, size, alignment);
+  return mi_heap_recalloc_aligned(mi_prim_get_default_heap(), p, newcount, size, alignment);
 }
