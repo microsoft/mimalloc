@@ -243,3 +243,20 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   return false;
 }
+
+
+//----------------------------------------------------------------
+// Thread init/done
+//----------------------------------------------------------------
+
+void _mi_prim_thread_init_auto_done(void) {
+  // nothing
+}
+
+void _mi_prim_thread_done_auto_done(void) {
+  // nothing
+}
+
+void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
+  MI_UNUSED(heap);
+}

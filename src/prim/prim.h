@@ -76,6 +76,16 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size);
 // there is no strong randomization available.
 bool _mi_prim_random_buf(void* buf, size_t buf_len);
 
+// Called on the first thread start, and should ensure `_mi_thread_done` is called on thread termination.
+void _mi_prim_thread_init_auto_done(void);
+
+// Called on process exit and may take action to clean up resources associated with the thread auto done.
+void _mi_prim_thread_done_auto_done(void);
+
+// Called when the default heap for a thread changes
+void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
+
+
 //-------------------------------------------------------------------
 // Thread id
 // 

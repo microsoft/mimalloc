@@ -749,3 +749,51 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 }
 
 #endif
+
+
+//----------------------------------------------------------------
+// Thread init/done
+//----------------------------------------------------------------
+
+#if defined(MI_USE_PTHREADS)
+
+// use pthread local storage keys to detect thread ending
+// (and used with MI_TLS_PTHREADS for the default heap)
+pthread_key_t _mi_heap_default_key = (pthread_key_t)(-1);
+
+static void mi_pthread_done(void* value) {
+  if (value!=NULL) {
+    _mi_thread_done((mi_heap_t*)value);
+  }
+}
+
+void _mi_prim_thread_init_auto_done(void) {
+  mi_assert_internal(_mi_heap_default_key == (pthread_key_t)(-1));
+  pthread_key_create(&_mi_heap_default_key, &mi_pthread_done);
+}
+
+void _mi_prim_thread_done_auto_done(void) {
+  // nothing to do
+}
+
+void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
+  if (_mi_heap_default_key != (pthread_key_t)(-1)) {  // can happen during recursive invocation on freeBSD
+    pthread_setspecific(_mi_heap_default_key, heap);
+  }
+}
+
+#else 
+
+void _mi_prim_thread_init_auto_done(void) {
+  // nothing
+}
+
+void _mi_prim_thread_done_auto_done(void) {
+  // nothing
+}
+
+void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
+  MI_UNUSED(heap);
+}
+
+#endif

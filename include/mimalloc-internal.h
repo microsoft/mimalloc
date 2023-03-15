@@ -75,7 +75,8 @@ bool       _mi_is_main_thread(void);
 size_t     _mi_current_thread_count(void);
 bool       _mi_preloading(void);        // true while the C runtime is not ready
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
-mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing heap
+mi_heap_t* _mi_heap_main_get(void);     // statically allocated main backing heap
+void       _mi_thread_done(mi_heap_t* heap);
 
 // os.c
 size_t     _mi_os_page_size(void);
