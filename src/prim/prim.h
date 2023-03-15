@@ -72,6 +72,10 @@ void  _mi_prim_out_stderr( const char* msg );
 bool _mi_prim_getenv(const char* name, char* result, size_t result_size);
 
 
+// Fill a buffer with strong randomness; return `false` on error or if
+// there is no strong randomization available.
+bool _mi_prim_random_buf(void* buf, size_t buf_len);
+
 //-------------------------------------------------------------------
 // Thread id
 // 

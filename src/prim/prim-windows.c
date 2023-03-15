@@ -506,3 +506,45 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
   return (len > 0 && len < result_size);
 }
+
+
+
+//----------------------------------------------------------------
+// Random
+//----------------------------------------------------------------
+
+#if defined(MI_USE_RTLGENRANDOM) // || defined(__cplusplus)
+// We prefer to use BCryptGenRandom instead of (the unofficial) RtlGenRandom but when using
+// dynamic overriding, we observed it can raise an exception when compiled with C++, and
+// sometimes deadlocks when also running under the VS debugger.
+// In contrast, issue #623 implies that on Windows Server 2019 we need to use BCryptGenRandom.
+// To be continued..
+#pragma comment (lib,"advapi32.lib")
+#define RtlGenRandom  SystemFunction036
+mi_decl_externc BOOLEAN NTAPI RtlGenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
+
+bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+  return (RtlGenRandom(buf, (ULONG)buf_len) != 0);
+}
+
+#else
+
+#ifndef BCRYPT_USE_SYSTEM_PREFERRED_RNG
+#define BCRYPT_USE_SYSTEM_PREFERRED_RNG 0x00000002
+#endif
+
+typedef LONG (NTAPI *PBCryptGenRandom)(HANDLE, PUCHAR, ULONG, ULONG);
+static  PBCryptGenRandom pBCryptGenRandom = NULL;
+
+bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+  if (pBCryptGenRandom == NULL) {
+    HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
+    if (hDll != NULL) {
+      pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
+    }
+    if (pBCryptGenRandom == NULL) return false;
+  }
+  return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);  
+}
+
+#endif  // MI_USE_RTLGENRANDOM

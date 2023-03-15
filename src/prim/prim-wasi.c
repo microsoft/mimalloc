@@ -234,3 +234,12 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   _mi_strlcpy(result, s, result_size);
   return true;
 }
+
+
+//----------------------------------------------------------------
+// Random
+//----------------------------------------------------------------
+
+bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+  return false;
+}

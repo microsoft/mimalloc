@@ -6,7 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #ifndef _DEFAULT_SOURCE
-#define _DEFAULT_SOURCE   // ensure mmap flags are defined
+#define _DEFAULT_SOURCE   // ensure mmap flags and syscall are defined
 #endif
 
 #if defined(__sun)
@@ -661,3 +661,91 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   return true;
 }
 #endif  // !MI_USE_ENVIRON
+
+
+//----------------------------------------------------------------
+// Random
+//----------------------------------------------------------------
+
+#if defined(__APPLE__)
+
+#include <AvailabilityMacros.h>
+#if defined(MAC_OS_X_VERSION_10_10) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_10
+#include <CommonCrypto/CommonCryptoError.h>
+#include <CommonCrypto/CommonRandom.h>
+#endif
+bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+  #if defined(MAC_OS_X_VERSION_10_15) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_15
+    // We prefere CCRandomGenerateBytes as it returns an error code while arc4random_buf
+    // may fail silently on macOS. See PR #390, and <https://opensource.apple.com/source/Libc/Libc-1439.40.11/gen/FreeBSD/arc4random.c.auto.html>
+    return (CCRandomGenerateBytes(buf, buf_len) == kCCSuccess);
+  #else
+    // fall back on older macOS
+    arc4random_buf(buf, buf_len);
+    return true;
+  #endif
+}
+
+#elif defined(__ANDROID__) || defined(__DragonFly__) || \
+      defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
+      defined(__sun) 
+
+#include <stdlib.h>
+bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+  arc4random_buf(buf, buf_len);
+  return true;
+}
+
+#elif defined(__linux__) || defined(__HAIKU__)
+
+#if defined(__linux__)
+#include <sys/syscall.h>
+#endif
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+  // Modern Linux provides `getrandom` but different distributions either use `sys/random.h` or `linux/random.h`
+  // and for the latter the actual `getrandom` call is not always defined.
+  // (see <https://stackoverflow.com/questions/45237324/why-doesnt-getrandom-compile>)
+  // We therefore use a syscall directly and fall back dynamically to /dev/urandom when needed.
+  #ifdef SYS_getrandom
+    #ifndef GRND_NONBLOCK
+    #define GRND_NONBLOCK (1)
+    #endif
+    static _Atomic(uintptr_t) no_getrandom; // = 0
+    if (mi_atomic_load_acquire(&no_getrandom)==0) {
+      ssize_t ret = syscall(SYS_getrandom, buf, buf_len, GRND_NONBLOCK);
+      if (ret >= 0) return (buf_len == (size_t)ret);
+      if (errno != ENOSYS) return false;
+      mi_atomic_store_release(&no_getrandom, 1UL); // don't call again, and fall back to /dev/urandom
+    }
+  #endif
+  int flags = O_RDONLY;
+  #if defined(O_CLOEXEC)
+  flags |= O_CLOEXEC;
+  #endif
+  int fd = open("/dev/urandom", flags, 0);
+  if (fd < 0) return false;
+  size_t count = 0;
+  while(count < buf_len) {
+    ssize_t ret = read(fd, (char*)buf + count, buf_len - count);
+    if (ret<=0) {
+      if (errno!=EAGAIN && errno!=EINTR) break;
+    }
+    else {
+      count += ret;
+    }
+  }
+  close(fd);
+  return (count==buf_len);
+}
+
+#else
+
+bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+  return false;
+}
+
+#endif
