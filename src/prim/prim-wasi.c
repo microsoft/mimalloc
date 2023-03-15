@@ -152,3 +152,49 @@ size_t _mi_prim_numa_node(void) {
 size_t _mi_prim_numa_node_count(void) {
   return 1;
 }
+
+
+//----------------------------------------------------------------
+// Clock
+//----------------------------------------------------------------
+
+#include <time.h>
+
+#if defined(CLOCK_REALTIME) || defined(CLOCK_MONOTONIC)
+
+mi_msecs_t _mi_prim_clock_now(void) {
+  struct timespec t;
+  #ifdef CLOCK_MONOTONIC
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  #else
+  clock_gettime(CLOCK_REALTIME, &t);
+  #endif
+  return ((mi_msecs_t)t.tv_sec * 1000) + ((mi_msecs_t)t.tv_nsec / 1000000);
+}
+
+#else
+
+// low resolution timer
+mi_msecs_t _mi_prim_clock_now(void) {
+  return ((mi_msecs_t)clock() / ((mi_msecs_t)CLOCKS_PER_SEC / 1000));
+}
+
+#endif
+
+
+//----------------------------------------------------------------
+// Process info
+//----------------------------------------------------------------
+
+void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
+{
+  *peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.peak));
+  *current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.current));
+  *peak_rss    = *peak_commit;
+  *current_rss = *current_commit;
+  *page_faults = 0;
+  *utime = 0;
+  *stime = 0;
+}
+
+

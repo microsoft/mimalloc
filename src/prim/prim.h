@@ -58,6 +58,15 @@ size_t _mi_prim_numa_node(void);
 // Return the number of logical NUMA nodes
 size_t _mi_prim_numa_node_count(void);
 
+// High resolution clock
+mi_msecs_t _mi_prim_clock_now(void);
+
+// Return process information
+void  _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, 
+                             size_t* current_rss, size_t* peak_rss, 
+                             size_t* current_commit, size_t* peak_commit, size_t* page_faults);
+
+
 
 #endif  // MIMALLOC_PRIM_H
 

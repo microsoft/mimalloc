@@ -383,3 +383,75 @@ size_t _mi_prim_numa_node_count(void) {
   }
   return ((size_t)numa_max + 1);
 }
+
+
+//----------------------------------------------------------------
+// Clock
+//----------------------------------------------------------------
+
+static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
+  static LARGE_INTEGER mfreq; // = 0
+  if (mfreq.QuadPart == 0LL) {
+    LARGE_INTEGER f;
+    QueryPerformanceFrequency(&f);
+    mfreq.QuadPart = f.QuadPart/1000LL;
+    if (mfreq.QuadPart == 0) mfreq.QuadPart = 1;
+  }
+  return (mi_msecs_t)(t.QuadPart / mfreq.QuadPart);
+}
+
+mi_msecs_t _mi_prim_clock_now(void) {
+  LARGE_INTEGER t;
+  QueryPerformanceCounter(&t);
+  return mi_to_msecs(t);
+}
+
+
+//----------------------------------------------------------------
+// Process info
+//----------------------------------------------------------------
+
+#include <windows.h>
+#include <psapi.h>
+
+static mi_msecs_t filetime_msecs(const FILETIME* ftime) {
+  ULARGE_INTEGER i;
+  i.LowPart = ftime->dwLowDateTime;
+  i.HighPart = ftime->dwHighDateTime;
+  mi_msecs_t msecs = (i.QuadPart / 10000); // FILETIME is in 100 nano seconds
+  return msecs;
+}
+
+typedef BOOL (WINAPI *PGetProcessMemoryInfo)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
+static PGetProcessMemoryInfo pGetProcessMemoryInfo = NULL;
+
+void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
+{
+  FILETIME ct;
+  FILETIME ut;
+  FILETIME st;
+  FILETIME et;
+  GetProcessTimes(GetCurrentProcess(), &ct, &et, &st, &ut);
+  *utime = filetime_msecs(&ut);
+  *stime = filetime_msecs(&st);
+  
+  // load psapi on demand
+  if (pGetProcessMemoryInfo == NULL) {
+    HINSTANCE hDll = LoadLibrary(TEXT("psapi.dll"));
+    if (hDll != NULL) {
+      pGetProcessMemoryInfo = (PGetProcessMemoryInfo)(void (*)(void))GetProcAddress(hDll, "GetProcessMemoryInfo");
+    }
+  }
+
+  // get process info
+  PROCESS_MEMORY_COUNTERS info;
+  memset(&info, 0, sizeof(info));
+  if (pGetProcessMemoryInfo != NULL) {
+    pGetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
+  } 
+  *current_rss    = (size_t)info.WorkingSetSize;
+  *peak_rss       = (size_t)info.PeakWorkingSetSize;
+  *current_commit = (size_t)info.PagefileUsage;
+  *peak_commit    = (size_t)info.PeakPagefileUsage;
+  *page_faults    = (size_t)info.PageFaultCount;
+}
