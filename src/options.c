@@ -9,7 +9,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-atomic.h"
 #include "prim/prim.h"  // mi_prim_out_stderr
 
-#include <stdio.h>
+#include <stdio.h>      // FILE
+#include <stdlib.h>     // abort
 #include <stdarg.h>
 
 

@@ -504,7 +504,13 @@ mi_msecs_t _mi_prim_clock_now(void) {
 
 // low resolution timer
 mi_msecs_t _mi_prim_clock_now(void) {
-  return ((mi_msecs_t)clock() / ((mi_msecs_t)CLOCKS_PER_SEC / 1000));
+  #if !defined(CLOCKS_PER_SEC) || (CLOCKS_PER_SEC == 1000) || (CLOCKS_PER_SEC == 0)
+  return (mi_msecs_t)clock();  
+  #elif (CLOCKS_PER_SEC < 1000)
+  return (mi_msecs_t)clock() * (1000 / (mi_msecs_t)CLOCKS_PER_SEC);  
+  #else
+  return (mi_msecs_t)clock() / ((mi_msecs_t)CLOCKS_PER_SEC / 1000);
+  #endif
 }
 
 #endif

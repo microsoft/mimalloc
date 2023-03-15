@@ -408,6 +408,10 @@ mi_msecs_t _mi_prim_clock_now(void) {
 }
 
 
+//----------------------------------------------------------------
+// Process Info
+//----------------------------------------------------------------
+
 #include <windows.h>
 #include <psapi.h>
 
@@ -470,7 +474,7 @@ void _mi_prim_out_stderr( const char* msg )
       hcon = GetStdHandle(STD_ERROR_HANDLE);
       hconIsConsole = ((hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
     }
-    const size_t len = strlen(msg);
+    const size_t len = _mi_strlen(msg);
     if (len > 0 && len < UINT32_MAX) {
       DWORD written = 0;
       if (hconIsConsole) {

@@ -9,9 +9,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MIMALLOC_PRIM_H
 
 // note: on all primitive functions, we always get:
-// addr != NULL and page aligned
-// size > 0     and page aligned
-// 
+//  addr != NULL and page aligned
+//  size > 0     and page aligned
+
 
 // OS memory configuration
 typedef struct mi_os_mem_config_s {
@@ -26,12 +26,10 @@ typedef struct mi_os_mem_config_s {
 void  _mi_prim_mem_init( mi_os_mem_config_t* config );
 
 // Free OS memory
-// pre: addr != NULL, size > 0
 void  _mi_prim_free(void* addr, size_t size );
   
-// Allocate OS memory.
+// Allocate OS memory. Return NULL on error.
 // The `try_alignment` is just a hint and the returned pointer does not have to be aligned.
-// return NULL on error.
 // pre: !commit => !allow_large
 //      try_alignment >= _mi_os_page_size() and a power of 2
 void* _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large);
@@ -58,23 +56,20 @@ size_t _mi_prim_numa_node(void);
 // Return the number of logical NUMA nodes
 size_t _mi_prim_numa_node_count(void);
 
-// High resolution clock
+// Clock ticks
 mi_msecs_t _mi_prim_clock_now(void);
 
-// Return process information
+// Return process information (only for statistics)
 void  _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, 
                              size_t* current_rss, size_t* peak_rss, 
                              size_t* current_commit, size_t* peak_commit, size_t* page_faults);
 
-// Default stderr output. 
-// msg != NULL && strlen(msg) > 0
+// Default stderr output. (only for warnings etc. with verbose enabled)
+// msg != NULL && _mi_strlen(msg) > 0
 void  _mi_prim_out_stderr( const char* msg );
 
-// Get an environment variable.
+// Get an environment variable. (only for options)
 // name != NULL, result != NULL, result_size >= 64
 bool _mi_prim_getenv(const char* name, char* result, size_t result_size);
 
-
 #endif  // MIMALLOC_PRIM_H
-
-

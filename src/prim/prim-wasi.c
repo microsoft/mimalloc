@@ -110,7 +110,7 @@ static void* mi_prim_mem_grow(size_t size, size_t try_alignment) {
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
 void* _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large) {
-  MI_UNUSED(allow_large);
+  MI_UNUSED(allow_large); MI_UNUSED(commit);
   *is_large = false;
   return mi_prim_mem_grow(size, try_alignment);
 }
@@ -176,7 +176,13 @@ mi_msecs_t _mi_prim_clock_now(void) {
 
 // low resolution timer
 mi_msecs_t _mi_prim_clock_now(void) {
-  return ((mi_msecs_t)clock() / ((mi_msecs_t)CLOCKS_PER_SEC / 1000));
+  #if !defined(CLOCKS_PER_SEC) || (CLOCKS_PER_SEC == 1000) || (CLOCKS_PER_SEC == 0)
+  return (mi_msecs_t)clock();  
+  #elif (CLOCKS_PER_SEC < 1000)
+  return (mi_msecs_t)clock() * (1000 / (mi_msecs_t)CLOCKS_PER_SEC);  
+  #else
+  return (mi_msecs_t)clock() / ((mi_msecs_t)CLOCKS_PER_SEC / 1000);
+  #endif
 }
 
 #endif
