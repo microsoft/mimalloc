@@ -10,6 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-atomic.h"
 #include "prim.h"
 #include <string.h>  // strerror
+#include <stdio.h>   // fputs, stderr
 
 #ifdef _MSC_VER
 #pragma warning(disable:4996)  // strerror
@@ -407,10 +408,6 @@ mi_msecs_t _mi_prim_clock_now(void) {
 }
 
 
-//----------------------------------------------------------------
-// Process info
-//----------------------------------------------------------------
-
 #include <windows.h>
 #include <psapi.h>
 
@@ -454,4 +451,54 @@ void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current
   *current_commit = (size_t)info.PagefileUsage;
   *peak_commit    = (size_t)info.PeakPagefileUsage;
   *page_faults    = (size_t)info.PageFaultCount;
+}
+
+//----------------------------------------------------------------
+// Output
+//----------------------------------------------------------------
+
+void _mi_prim_out_stderr( const char* msg ) 
+{
+  // on windows with redirection, the C runtime cannot handle locale dependent output
+  // after the main thread closes so we use direct console output.
+  if (!_mi_preloading()) {
+    // _cputs(msg);  // _cputs cannot be used at is aborts if it fails to lock the console
+    static HANDLE hcon = INVALID_HANDLE_VALUE;
+    static bool hconIsConsole;
+    if (hcon == INVALID_HANDLE_VALUE) {
+      CONSOLE_SCREEN_BUFFER_INFO sbi;
+      hcon = GetStdHandle(STD_ERROR_HANDLE);
+      hconIsConsole = ((hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
+    }
+    const size_t len = strlen(msg);
+    if (len > 0 && len < UINT32_MAX) {
+      DWORD written = 0;
+      if (hconIsConsole) {
+        WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
+      }
+      else if (hcon != INVALID_HANDLE_VALUE) {
+        // use direct write if stderr was redirected
+        WriteFile(hcon, msg, (DWORD)len, &written, NULL);
+      }
+      else {
+        // finally fall back to fputs after all
+        fputs(msg, stderr);
+      }
+    }
+  }
+}
+
+
+//----------------------------------------------------------------
+// Environment
+//----------------------------------------------------------------
+
+// On Windows use GetEnvironmentVariable instead of getenv to work
+// reliably even when this is invoked before the C runtime is initialized.
+// i.e. when `_mi_preloading() == true`.
+// Note: on windows, environment names are not case sensitive.
+bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
+  result[0] = 0;
+  size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
+  return (len > 0 && len < result_size);
 }

@@ -197,4 +197,34 @@ void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current
   *stime = 0;
 }
 
+//----------------------------------------------------------------
+// Output
+//----------------------------------------------------------------
 
+void _mi_prim_out_stderr( const char* msg ) {
+  fputs(msg,stderr);
+}
+
+
+//----------------------------------------------------------------
+// Environment
+//----------------------------------------------------------------
+
+bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
+  // cannot call getenv() when still initializing the C runtime.
+  if (_mi_preloading()) return false;
+  const char* s = getenv(name);
+  if (s == NULL) {
+    // we check the upper case name too.
+    char buf[64+1];
+    size_t len = _mi_strnlen(name,sizeof(buf)-1);
+    for (size_t i = 0; i < len; i++) {
+      buf[i] = _mi_toupper(name[i]);
+    }
+    buf[len] = 0;
+    s = getenv(buf);
+  }
+  if (s == NULL || _mi_strnlen(s,result_size) >= result_size)  return false;
+  _mi_strlcpy(result, s, result_size);
+  return true;
+}

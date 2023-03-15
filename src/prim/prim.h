@@ -66,6 +66,13 @@ void  _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime,
                              size_t* current_rss, size_t* peak_rss, 
                              size_t* current_commit, size_t* peak_commit, size_t* page_faults);
 
+// Default stderr output. 
+// msg != NULL && strlen(msg) > 0
+void  _mi_prim_out_stderr( const char* msg );
+
+// Get an environment variable.
+// name != NULL, result != NULL, result_size >= 64
+bool _mi_prim_getenv(const char* name, char* result, size_t result_size);
 
 
 #endif  // MIMALLOC_PRIM_H

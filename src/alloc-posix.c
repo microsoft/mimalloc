@@ -149,7 +149,7 @@ int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
   else {
     *buf = mi_strdup(p);
     if (*buf==NULL) return ENOMEM;
-    if (size != NULL) *size = strlen(p);
+    if (size != NULL) *size = _mi_strlen(p);
   }
   return 0;
 }

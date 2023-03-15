@@ -589,3 +589,69 @@ void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current
 
 #endif
 
+
+//----------------------------------------------------------------
+// Output
+//----------------------------------------------------------------
+
+void _mi_prim_out_stderr( const char* msg ) {
+  fputs(msg,stderr);
+}
+
+
+//----------------------------------------------------------------
+// Environment
+//----------------------------------------------------------------
+
+#if !defined(MI_USE_ENVIRON) || (MI_USE_ENVIRON!=0)
+// On Posix systemsr use `environ` to acces environment variables
+// even before the C runtime is initialized.
+#if defined(__APPLE__) && defined(__has_include) && __has_include(<crt_externs.h>)
+#include <crt_externs.h>
+static char** mi_get_environ(void) {
+  return (*_NSGetEnviron());
+}
+#else
+extern char** environ;
+static char** mi_get_environ(void) {
+  return environ;
+}
+#endif
+bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
+  if (name==NULL) return false;
+  const size_t len = _mi_strlen(name);
+  if (len == 0) return false;
+  char** env = mi_get_environ();
+  if (env == NULL) return false;
+  // compare up to 256 entries
+  for (int i = 0; i < 256 && env[i] != NULL; i++) {
+    const char* s = env[i];
+    if (_mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
+      // found it
+      _mi_strlcpy(result, s + len + 1, result_size);
+      return true;
+    }
+  }
+  return false;
+}
+#else
+// fallback: use standard C `getenv` but this cannot be used while initializing the C runtime
+bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
+  // cannot call getenv() when still initializing the C runtime.
+  if (_mi_preloading()) return false;
+  const char* s = getenv(name);
+  if (s == NULL) {
+    // we check the upper case name too.
+    char buf[64+1];
+    size_t len = _mi_strnlen(name,sizeof(buf)-1);
+    for (size_t i = 0; i < len; i++) {
+      buf[i] = _mi_toupper(name[i]);
+    }
+    buf[len] = 0;
+    s = getenv(buf);
+  }
+  if (s == NULL || _mi_strnlen(s,result_size) >= result_size)  return false;
+  _mi_strlcpy(result, s, result_size);
+  return true;
+}
+#endif  // !MI_USE_ENVIRON
