@@ -6,6 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
+#include "prim/prim.h"
 
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit
@@ -129,6 +130,10 @@ mi_decl_cache_align static const mi_tld_t tld_empty = {
   { 0, tld_empty_stats }, // os
   { MI_STATS_NULL }       // stats
 };
+
+mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
+  return _mi_prim_thread_id();
+}
 
 // the thread-local default heap for allocation
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
@@ -259,13 +264,13 @@ static void mi_thread_data_collect(void) {
 
 // Initialize the thread local default heap, called from `mi_thread_init`
 static bool _mi_heap_init(void) {
-  if (mi_heap_is_initialized(mi_get_default_heap())) return true;
+  if (mi_heap_is_initialized(mi_prim_get_default_heap())) return true;
   if (_mi_is_main_thread()) {
     // mi_assert_internal(_mi_heap_main.thread_id != 0);  // can happen on freeBSD where alloc is called before any initialization
     // the main heap is statically allocated
     mi_heap_main_init();
     _mi_heap_set_default_direct(&_mi_heap_main);
-    //mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_get_default_heap());
+    //mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_prim_get_default_heap());
   }
   else {
     // use `_mi_os_alloc` to allocate directly from the OS
@@ -363,54 +368,12 @@ static bool _mi_heap_done(mi_heap_t* heap) {
 // to set up the thread local keys.
 // --------------------------------------------------------
 
-static void _mi_thread_done(mi_heap_t* default_heap);
-
-#if defined(_WIN32) && defined(MI_SHARED_LIB)
-  // nothing to do as it is done in DllMain
-#elif defined(_WIN32) && !defined(MI_SHARED_LIB)
-  // use thread local storage keys to detect thread ending
-  #include <windows.h>
-  #include <fibersapi.h>
-  #if (_WIN32_WINNT < 0x600)  // before Windows Vista
-  WINBASEAPI DWORD WINAPI FlsAlloc( _In_opt_ PFLS_CALLBACK_FUNCTION lpCallback );
-  WINBASEAPI PVOID WINAPI FlsGetValue( _In_ DWORD dwFlsIndex );
-  WINBASEAPI BOOL  WINAPI FlsSetValue( _In_ DWORD dwFlsIndex, _In_opt_ PVOID lpFlsData );
-  WINBASEAPI BOOL  WINAPI FlsFree(_In_ DWORD dwFlsIndex);
-  #endif
-  static DWORD mi_fls_key = (DWORD)(-1);
-  static void NTAPI mi_fls_done(PVOID value) {
-    mi_heap_t* heap = (mi_heap_t*)value;
-    if (heap != NULL) {
-      _mi_thread_done(heap);
-      FlsSetValue(mi_fls_key, NULL);  // prevent recursion as _mi_thread_done may set it back to the main heap, issue #672
-    }
-  }
-#elif defined(MI_USE_PTHREADS)
-  // use pthread local storage keys to detect thread ending
-  // (and used with MI_TLS_PTHREADS for the default heap)
-  pthread_key_t _mi_heap_default_key = (pthread_key_t)(-1);
-  static void mi_pthread_done(void* value) {
-    if (value!=NULL) _mi_thread_done((mi_heap_t*)value);
-  }
-#elif defined(__wasi__)
-// no pthreads in the WebAssembly Standard Interface
-#else
-  #pragma message("define a way to call mi_thread_done when a thread is done")
-#endif
-
 // Set up handlers so `mi_thread_done` is called automatically
 static void mi_process_setup_auto_thread_done(void) {
   static bool tls_initialized = false; // fine if it races
   if (tls_initialized) return;
   tls_initialized = true;
-  #if defined(_WIN32) && defined(MI_SHARED_LIB)
-    // nothing to do as it is done in DllMain
-  #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
-    mi_fls_key = FlsAlloc(&mi_fls_done);
-  #elif defined(MI_USE_PTHREADS)
-    mi_assert_internal(_mi_heap_default_key == (pthread_key_t)(-1));
-    pthread_key_create(&_mi_heap_default_key, &mi_pthread_done);
-  #endif
+  _mi_prim_thread_init_auto_done();
   _mi_heap_set_default_direct(&_mi_heap_main);
 }
 
@@ -442,13 +405,19 @@ void mi_thread_init(void) mi_attr_noexcept
 }
 
 void mi_thread_done(void) mi_attr_noexcept {
-  _mi_thread_done(mi_get_default_heap());
+  _mi_thread_done(NULL);
 }
 
-static void _mi_thread_done(mi_heap_t* heap) {
+void _mi_thread_done(mi_heap_t* heap) 
+{
   mi_atomic_decrement_relaxed(&thread_count);
   _mi_stat_decrease(&_mi_stats_main.threads, 1);
 
+  if (heap == NULL) { 
+    heap = mi_prim_get_default_heap(); 
+    if (heap == NULL) return;
+  }
+  
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local heaps...
   if (heap->thread_id != _mi_thread_id()) return;
 
@@ -470,16 +439,7 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
 
   // ensure the default heap is passed to `_mi_thread_done`
   // setting to a non-NULL value also ensures `mi_thread_done` is called.
-  #if defined(_WIN32) && defined(MI_SHARED_LIB)
-    // nothing to do as it is done in DllMain
-  #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
-    mi_assert_internal(mi_fls_key != 0);
-    FlsSetValue(mi_fls_key, heap);
-  #elif defined(MI_USE_PTHREADS)
-  if (_mi_heap_default_key != (pthread_key_t)(-1)) {  // can happen during recursive invocation on freeBSD
-    pthread_setspecific(_mi_heap_default_key, heap);
-  }
-  #endif
+  _mi_prim_thread_associate_default_heap(heap);    
 }
 
 
@@ -594,11 +554,11 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_verbose_message("mem tracking: %s\n", MI_TRACK_TOOL);
   mi_thread_init();
 
-  #if defined(_WIN32) && !defined(MI_SHARED_LIB)
-  // When building as a static lib the FLS cleanup happens to early for the main thread.
+  #if defined(_WIN32)
+  // On windows, when building as a static lib the FLS cleanup happens to early for the main thread.
   // To avoid this, set the FLS value for the main thread to NULL so the fls cleanup
   // will not call _mi_thread_done on the (still executing) main thread. See issue #508.
-  FlsSetValue(mi_fls_key, NULL);
+  _mi_prim_thread_associate_default_heap(NULL);
   #endif
 
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
@@ -629,10 +589,9 @@ static void mi_cdecl mi_process_done(void) {
   if (process_done) return;
   process_done = true;
 
-  #if defined(_WIN32) && !defined(MI_SHARED_LIB)
-  FlsFree(mi_fls_key);  // call thread-done on all threads (except the main thread) to prevent dangling callback pointer if statically linked with a DLL; Issue #208
-  #endif
-
+  // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
+  _mi_prim_thread_done_auto_done();
+  
   #ifndef MI_SKIP_COLLECT_ON_EXIT
     #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)
     // free all memory if possible on process exit. This is not needed for a stand-alone process

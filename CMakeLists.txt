@@ -50,7 +50,8 @@ set(mi_sources
     src/alloc-posix.c
     src/heap.c
     src/options.c
-    src/init.c)
+    src/init.c
+    src/prim/prim.c)
 
 set(mi_cflags "")
 set(mi_libraries "")

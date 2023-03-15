@@ -11,10 +11,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 #include "mimalloc-atomic.h"
+#include "prim/prim.h"   // _mi_prim_thread_id()
 
-
-#include <string.h>  // memset, strlen
-#include <stdlib.h>  // malloc, exit
+#include <string.h>      // memset, strlen (for mi_strdup)
+#include <stdlib.h>      // malloc, abort
 
 #define MI_IN_ALLOC_C
 #include "alloc-override.c"
@@ -106,7 +106,7 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   mi_track_malloc(p,size,zero);
   #if MI_STAT>1
   if (p != NULL) {
-    if (!mi_heap_is_initialized(heap)) { heap = mi_get_default_heap(); }
+    if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
     mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
   }
   #endif
@@ -119,7 +119,7 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_malloc_small(mi_h
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc_small(size_t size) mi_attr_noexcept {
-  return mi_heap_malloc_small(mi_get_default_heap(), size);
+  return mi_heap_malloc_small(mi_prim_get_default_heap(), size);
 }
 
 // The main allocation function
@@ -135,7 +135,7 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
     mi_track_malloc(p,size,zero);
     #if MI_STAT>1
     if (p != NULL) {
-      if (!mi_heap_is_initialized(heap)) { heap = mi_get_default_heap(); }
+      if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
       mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
     }
     #endif
@@ -152,12 +152,12 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_malloc(mi_heap_t*
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc(size_t size) mi_attr_noexcept {
-  return mi_heap_malloc(mi_get_default_heap(), size);
+  return mi_heap_malloc(mi_prim_get_default_heap(), size);
 }
 
 // zero initialized small block
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_small(size_t size) mi_attr_noexcept {
-  return mi_heap_malloc_small_zero(mi_get_default_heap(), size, true);
+  return mi_heap_malloc_small_zero(mi_prim_get_default_heap(), size, true);
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
@@ -165,7 +165,7 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_zalloc(mi_heap_t*
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc(size_t size) mi_attr_noexcept {
-  return mi_heap_zalloc(mi_get_default_heap(),size);
+  return mi_heap_zalloc(mi_prim_get_default_heap(),size);
 }
 
 
@@ -541,7 +541,7 @@ void mi_free(void* p) mi_attr_noexcept
 {
   if mi_unlikely(p == NULL) return;
   mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
-  const bool          is_local= (_mi_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
+  const bool          is_local= (_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
   mi_page_t* const    page    = _mi_segment_page_of(segment, p);
 
   if mi_likely(is_local) {                       // thread-local free?
@@ -654,7 +654,7 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_calloc(mi_heap_t*
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_calloc(size_t count, size_t size) mi_attr_noexcept {
-  return mi_heap_calloc(mi_get_default_heap(),count,size);
+  return mi_heap_calloc(mi_prim_get_default_heap(),count,size);
 }
 
 // Uninitialized `calloc`
@@ -665,7 +665,7 @@ mi_decl_nodiscard extern mi_decl_restrict void* mi_heap_mallocn(mi_heap_t* heap,
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_mallocn(size_t count, size_t size) mi_attr_noexcept {
-  return mi_heap_mallocn(mi_get_default_heap(),count,size);
+  return mi_heap_mallocn(mi_prim_get_default_heap(),count,size);
 }
 
 // Expand (or shrink) in place (or fail)
@@ -742,24 +742,24 @@ mi_decl_nodiscard void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t count,
 
 
 mi_decl_nodiscard void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
-  return mi_heap_realloc(mi_get_default_heap(),p,newsize);
+  return mi_heap_realloc(mi_prim_get_default_heap(),p,newsize);
 }
 
 mi_decl_nodiscard void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
-  return mi_heap_reallocn(mi_get_default_heap(),p,count,size);
+  return mi_heap_reallocn(mi_prim_get_default_heap(),p,count,size);
 }
 
 // Reallocate but free `p` on errors
 mi_decl_nodiscard void* mi_reallocf(void* p, size_t newsize) mi_attr_noexcept {
-  return mi_heap_reallocf(mi_get_default_heap(),p,newsize);
+  return mi_heap_reallocf(mi_prim_get_default_heap(),p,newsize);
 }
 
 mi_decl_nodiscard void* mi_rezalloc(void* p, size_t newsize) mi_attr_noexcept {
-  return mi_heap_rezalloc(mi_get_default_heap(), p, newsize);
+  return mi_heap_rezalloc(mi_prim_get_default_heap(), p, newsize);
 }
 
 mi_decl_nodiscard void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
-  return mi_heap_recalloc(mi_get_default_heap(), p, count, size);
+  return mi_heap_recalloc(mi_prim_get_default_heap(), p, count, size);
 }
 
 
@@ -780,7 +780,7 @@ mi_decl_nodiscard mi_decl_restrict char* mi_heap_strdup(mi_heap_t* heap, const c
 }
 
 mi_decl_nodiscard mi_decl_restrict char* mi_strdup(const char* s) mi_attr_noexcept {
-  return mi_heap_strdup(mi_get_default_heap(), s);
+  return mi_heap_strdup(mi_prim_get_default_heap(), s);
 }
 
 // `strndup` using mi_malloc
@@ -797,7 +797,7 @@ mi_decl_nodiscard mi_decl_restrict char* mi_heap_strndup(mi_heap_t* heap, const 
 }
 
 mi_decl_nodiscard mi_decl_restrict char* mi_strndup(const char* s, size_t n) mi_attr_noexcept {
-  return mi_heap_strndup(mi_get_default_heap(),s,n);
+  return mi_heap_strndup(mi_prim_get_default_heap(),s,n);
 }
 
 #ifndef __wasi__
@@ -866,7 +866,7 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
 #endif
 
 mi_decl_nodiscard mi_decl_restrict char* mi_realpath(const char* fname, char* resolved_name) mi_attr_noexcept {
-  return mi_heap_realpath(mi_get_default_heap(),fname,resolved_name);
+  return mi_heap_realpath(mi_prim_get_default_heap(),fname,resolved_name);
 }
 #endif
 
@@ -942,7 +942,7 @@ mi_decl_export mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t si
 }
 
 static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
-  return mi_heap_try_new(mi_get_default_heap(), size, nothrow);
+  return mi_heap_try_new(mi_prim_get_default_heap(), size, nothrow);
 }
 
 
@@ -953,7 +953,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
-  return mi_heap_alloc_new(mi_get_default_heap(), size);
+  return mi_heap_alloc_new(mi_prim_get_default_heap(), size);
 }
 
 
@@ -969,7 +969,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, si
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_new_n(size_t count, size_t size) {
-  return mi_heap_alloc_new_n(mi_get_default_heap(), size, count);
+  return mi_heap_alloc_new_n(mi_prim_get_default_heap(), size, count);
 }
 
 
