@@ -6,6 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
+#include "prim/prim.h"
 
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit
@@ -102,6 +103,10 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   false
 };
 
+
+mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
+  return _mi_prim_thread_id();
+}
 
 // the thread-local default heap for allocation
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
