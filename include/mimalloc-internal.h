@@ -792,6 +792,7 @@ static inline size_t mi_ctz(uintptr_t x) {
 #elif defined(_MSC_VER)
 
 #include <limits.h>       // LONG_MAX
+#include <intrin.h>       // BitScanReverse64
 #define MI_HAVE_FAST_BITSCAN
 static inline size_t mi_clz(uintptr_t x) {
   if (x==0) return MI_INTPTR_BITS;
