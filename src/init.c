@@ -399,7 +399,7 @@ void _mi_thread_done(mi_heap_t* heap)
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   mi_assert_internal(heap != NULL);
   #if defined(MI_TLS_SLOT)
-  mi_tls_slot_set(MI_TLS_SLOT,heap);
+  mi_prim_tls_slot_set(MI_TLS_SLOT,heap);
   #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
   *mi_tls_pthread_heap_slot() = heap;
   #elif defined(MI_TLS_PTHREAD)

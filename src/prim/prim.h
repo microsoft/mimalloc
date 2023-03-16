@@ -252,16 +252,20 @@ static inline mi_heap_t* mi_prim_get_default_heap(void) {
 
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
 
-static inline mi_heap_t* mi_prim_get_default_heap(void) {
-  mi_heap_t* heap;
+static inline mi_heap_t** mi_prim_tls_pthread_heap_slot(void) {
   pthread_t self = pthread_self();
   #if defined(__DragonFly__)
-  if (self==NULL) { heap = _mi_heap_main_get(); } else
+  if (self==NULL) return NULL;
   #endif
-  {
-    heap = *((mi_heap_t**)((uint8_t*)self + MI_TLS_PTHREAD_SLOT_OFS));
-  }
-  return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
+  return (mi_heap_t**)((uint8_t*)self + MI_TLS_PTHREAD_SLOT_OFS);
+}
+
+static inline mi_heap_t* mi_prim_get_default_heap(void) {
+  mi_heap_t** pheap = mi_prim_tls_pthread_heap_slot();
+  if mi_unlikely(pheap == NULL) return _mi_heap_main_get();
+  mi_heap_t* heap = *pheap;
+  if mi_unlikely(heap == NULL) return (mi_heap_t*)&_mi_heap_empty;
+  return heap;
 }
 
 #elif defined(MI_TLS_PTHREAD)
