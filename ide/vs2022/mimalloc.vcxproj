@@ -95,12 +95,12 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <ConformanceMode>true</ConformanceMode>
+      <ConformanceMode>Default</ConformanceMode>
       <AdditionalIncludeDirectories>../../include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>MI_DEBUG=3;%(PreprocessorDefinitions);</PreprocessorDefinitions>
       <CompileAs>CompileAsCpp</CompileAs>
       <SupportJustMyCode>false</SupportJustMyCode>
-      <LanguageStandard>Default</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Lib>
       <AdditionalLibraryDirectories>
@@ -114,7 +114,7 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <ConformanceMode>true</ConformanceMode>
+      <ConformanceMode>Default</ConformanceMode>
       <AdditionalIncludeDirectories>../../include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>MI_DEBUG=4;MI_SECURE=0;%(PreprocessorDefinitions);</PreprocessorDefinitions>
       <CompileAs>CompileAsCpp</CompileAs>
@@ -141,7 +141,7 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <ConformanceMode>true</ConformanceMode>
+      <ConformanceMode>Default</ConformanceMode>
       <AdditionalIncludeDirectories>../../include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);NDEBUG</PreprocessorDefinitions>
       <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
@@ -151,7 +151,7 @@
       <InlineFunctionExpansion>Default</InlineFunctionExpansion>
       <CompileAs>CompileAsCpp</CompileAs>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <LanguageStandard>Default</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -169,7 +169,7 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <ConformanceMode>true</ConformanceMode>
+      <ConformanceMode>Default</ConformanceMode>
       <AdditionalIncludeDirectories>../../include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);NDEBUG</PreprocessorDefinitions>
       <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
