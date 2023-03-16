@@ -22,10 +22,10 @@ typedef struct mi_os_mem_config_s {
 } mi_os_mem_config_t;
 
 // Initialize
-void  _mi_prim_mem_init( mi_os_mem_config_t* config );
+void _mi_prim_mem_init( mi_os_mem_config_t* config );
 
 // Free OS memory
-void  _mi_prim_free(void* addr, size_t size );
+void _mi_prim_free(void* addr, size_t size );
   
 // Allocate OS memory. Return NULL on error.
 // The `try_alignment` is just a hint and the returned pointer does not have to be aligned.
@@ -34,14 +34,14 @@ void  _mi_prim_free(void* addr, size_t size );
 void* _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large);
 
 // Commit memory. Returns error code or 0 on success.
-int   _mi_prim_commit(void* addr, size_t size, bool commit);
+int _mi_prim_commit(void* addr, size_t size, bool commit);
 
 // Reset memory. The range keeps being accessible but the content might be reset.
 // Returns error code or 0 on success.
-int   _mi_prim_reset(void* addr, size_t size);
+int _mi_prim_reset(void* addr, size_t size);
 
 // Protect memory. Returns error code or 0 on success.
-int   _mi_prim_protect(void* addr, size_t size, bool protect);
+int _mi_prim_protect(void* addr, size_t size, bool protect);
 
 // Allocate huge (1GiB) pages possibly associated with a NUMA node.
 // pre: size > 0  and a multiple of 1GiB.
@@ -59,13 +59,13 @@ size_t _mi_prim_numa_node_count(void);
 mi_msecs_t _mi_prim_clock_now(void);
 
 // Return process information (only for statistics)
-void  _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, 
+void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, 
                              size_t* current_rss, size_t* peak_rss, 
                              size_t* current_commit, size_t* peak_commit, size_t* page_faults);
 
 // Default stderr output. (only for warnings etc. with verbose enabled)
 // msg != NULL && _mi_strlen(msg) > 0
-void  _mi_prim_out_stderr( const char* msg );
+void _mi_prim_out_stderr( const char* msg );
 
 // Get an environment variable. (only for options)
 // name != NULL, result != NULL, result_size >= 64
