@@ -114,7 +114,7 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <ConformanceMode>true</ConformanceMode>
+      <ConformanceMode>Default</ConformanceMode>
       <AdditionalIncludeDirectories>../../include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>MI_DEBUG=3;%(PreprocessorDefinitions);</PreprocessorDefinitions>
       <CompileAs>CompileAsCpp</CompileAs>

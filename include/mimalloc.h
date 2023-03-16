@@ -470,13 +470,13 @@ template<class T1,class T2> bool operator==(const mi_stl_allocator<T1>& , const 
 template<class T1,class T2> bool operator!=(const mi_stl_allocator<T1>& , const mi_stl_allocator<T2>& ) mi_attr_noexcept { return false; }
 
 
-#if (__cplusplus >= 201103L) || (_MSC_VER >= 1920)  // C++11, at least vs2019
+#if (__cplusplus >= 201103L) || (_MSC_VER >= 1900)  // C++11
 #define MI_HAS_HEAP_STL_ALLOCATOR 1
 
 #include <memory>      // std::shared_ptr
 
 // Common base class for STL allocators in a specific heap
-template<class T, bool destroy> struct _mi_heap_stl_allocator_common : public _mi_stl_allocator_common<T> {
+template<class T, bool _mi_destroy> struct _mi_heap_stl_allocator_common : public _mi_stl_allocator_common<T> {
   using typename _mi_stl_allocator_common<T>::size_type;
   using typename _mi_stl_allocator_common<T>::value_type;
   using typename _mi_stl_allocator_common<T>::pointer;
@@ -495,7 +495,7 @@ template<class T, bool destroy> struct _mi_heap_stl_allocator_common : public _m
   #endif
 
   void collect(bool force) { mi_heap_collect(this->heap.get(), force); }
-  template<class U> bool is_equal(const _mi_heap_stl_allocator_common<U, destroy>& x) const { return (this->heap == x.heap); }
+  template<class U> bool is_equal(const _mi_heap_stl_allocator_common<U, _mi_destroy>& x) const { return (this->heap == x.heap); }
 
 protected:
   std::shared_ptr<mi_heap_t> heap;
@@ -503,10 +503,10 @@ protected:
   
   _mi_heap_stl_allocator_common() {
     mi_heap_t* hp = mi_heap_new();
-    this->heap.reset(hp, (destroy ? &heap_destroy : &heap_delete));  /* calls heap_delete/destroy when the refcount drops to zero */
+    this->heap.reset(hp, (_mi_destroy ? &heap_destroy : &heap_delete));  /* calls heap_delete/destroy when the refcount drops to zero */
   }
   _mi_heap_stl_allocator_common(const _mi_heap_stl_allocator_common& x) mi_attr_noexcept : heap(x.heap) { }
-  template<class U> _mi_heap_stl_allocator_common(const _mi_heap_stl_allocator_common<U, destroy>& x) mi_attr_noexcept : heap(x.heap) { }
+  template<class U> _mi_heap_stl_allocator_common(const _mi_heap_stl_allocator_common<U, _mi_destroy>& x) mi_attr_noexcept : heap(x.heap) { }
 
 private:
   static void heap_delete(mi_heap_t* hp)  { if (hp != NULL) { mi_heap_delete(hp); } }
