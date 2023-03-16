@@ -142,15 +142,20 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   Free memory
 -------------------------------------------------------------- */
 
-void _mi_os_free_ex(void* addr, size_t size, bool was_committed, mi_stats_t* tld_stats)
-{
+static void mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats_t* tld_stats) {
   MI_UNUSED(tld_stats);
-  mi_stats_t* stats = &_mi_stats_main;
+  mi_assert_internal((size % _mi_os_page_size()) == 0);
   if (addr == NULL || size == 0) return; // || _mi_os_is_huge_reserved(addr)
-  const size_t csize = _mi_os_good_alloc_size(size);
-  _mi_prim_free(addr, csize);
+  _mi_prim_free(addr, size);
+  mi_stats_t* stats = &_mi_stats_main;
   if (was_committed) { _mi_stat_decrease(&stats->committed, size); }
   _mi_stat_decrease(&stats->reserved, size);
+}
+
+
+void _mi_os_free_ex(void* addr, size_t size, bool was_committed, mi_stats_t* tld_stats) {
+  const size_t csize = _mi_os_good_alloc_size(size);
+  mi_os_mem_free(addr,csize,was_committed,tld_stats);
 }
 
 void  _mi_os_free(void* p, size_t size, mi_stats_t* tld_stats) {
@@ -205,7 +210,7 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
 
   // if not aligned, free it, overallocate, and unmap around it
   if (((uintptr_t)p % alignment != 0)) {
-    _mi_os_free_ex(p, size, commit, stats);
+    mi_os_mem_free(p, size, commit, stats);
     _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (%zu bytes, address: %p, alignment: %zu, commit: %d)\n", size, p, alignment, commit);
     if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
     const size_t over_size = size + alignment;
@@ -235,8 +240,8 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
       size_t mid_size = _mi_align_up(size, _mi_os_page_size());
       size_t post_size = over_size - pre_size - mid_size;
       mi_assert_internal(pre_size < over_size&& post_size < over_size&& mid_size >= size);
-      if (pre_size > 0)  _mi_os_free_ex(p, pre_size, commit, stats);
-      if (post_size > 0) _mi_os_free_ex((uint8_t*)aligned_p + mid_size, post_size, commit, stats);
+      if (pre_size > 0)  mi_os_mem_free(p, pre_size, commit, stats);
+      if (post_size > 0) mi_os_mem_free((uint8_t*)aligned_p + mid_size, post_size, commit, stats);
       // we can return the aligned pointer on `mmap` (and sbrk) systems
       p = aligned_p;
     }
