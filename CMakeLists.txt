@@ -167,7 +167,7 @@ if(MI_TRACK_ASAN)
 endif()
 
 if(MI_TRACK_ETW)
-  if NOT WIN32
+  if(NOT WIN32)
     set(MI_TRACK_ETW OFF)
     message(WARNING "Can only enable ETW support on Windows (MI_TRACK_ETW=OFF)")
   endif()
