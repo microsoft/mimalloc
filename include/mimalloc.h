@@ -186,6 +186,9 @@ mi_decl_nodiscard mi_decl_export void* mi_realloc_aligned_at(void* p, size_t new
 struct mi_heap_s;
 typedef struct mi_heap_s mi_heap_t;
 
+typedef void (mi_cdecl mi_local_deferred_free_fun)(mi_heap_t* heap,bool force,unsigned long long heartbeat,void* arg);
+
+
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new(void);
 mi_decl_export void       mi_heap_delete(mi_heap_t* heap);
 mi_decl_export void       mi_heap_destroy(mi_heap_t* heap);
@@ -193,7 +196,7 @@ mi_decl_export mi_heap_t* mi_heap_set_default(mi_heap_t* heap);
 mi_decl_export mi_heap_t* mi_heap_get_default(void);
 mi_decl_export mi_heap_t* mi_heap_get_backing(void);
 mi_decl_export void       mi_heap_collect(mi_heap_t* heap, bool force) mi_attr_noexcept;
-
+mi_decl_export void       mi_heap_register_deferred_free(mi_heap_t* heap,mi_local_deferred_free_fun* fun,void* arg);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2, 3);

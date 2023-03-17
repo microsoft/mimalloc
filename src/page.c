@@ -784,9 +784,16 @@ static _Atomic(void*) deferred_arg; // = NULL
 
 void _mi_deferred_free(mi_heap_t* heap, bool force) {
   heap->tld->heartbeat++;
-  if (deferred_free != NULL && !heap->tld->recurse) {
+  if (!heap->tld->recurse) {
     heap->tld->recurse = true;
-    deferred_free(force, heap->tld->heartbeat, mi_atomic_load_ptr_relaxed(void,&deferred_arg));
+    if (deferred_free != NULL) {
+      // first we invoke global deferred free function (if it is defined).
+      deferred_free(force, heap->tld->heartbeat, mi_atomic_load_ptr_relaxed(void,&deferred_arg));
+    }
+    if (heap->deferred_free != NULL) {
+      // invoke deferred free function that is defined to do deferred free on specific heap instance.  
+      (heap->deferred_free)(heap, force, heap->tld->heartbeat, heap->deferred_free_arg);
+    }
     heap->tld->recurse = false;
   }
 }

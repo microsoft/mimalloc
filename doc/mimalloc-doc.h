@@ -756,6 +756,34 @@ bool mi_heap_check_owned(mi_heap_t* heap, const void* p);
 /// @see mi_heap_get_default()
 bool mi_check_owned(const void* p);
 
+/// Type of deferred free functions.
+/// @param heap The heap.
+/// @param force If \a true all outstanding items should be freed.
+/// @param heartbeat A monotonically increasing count.
+/// @param arg Argument that was passed at registration to hold extra state.
+///
+/// @see mi_heap_register_deferred_free
+typedef void (mi_local_deferred_free_fun)(mi_heap_t* heap,bool force,unsigned long long heartbeat,void* arg);
+
+/// Register a deferred free function.
+/// @param heap The heap where deferred function should be registered.
+/// @param deferred_free Address of a deferred free-ing function or \a NULL to unregister.
+/// @param arg Argument that will be passed on to the deferred free function.
+///
+/// Some runtime systems (JSC through lazy sweeping, JikesRVM has 
+/// both lazy sweeping and deferred RC) use deferred free-ing, for example when using
+/// reference counting to limit the worst case free time.
+/// Such systems can register (re-entrant) deferred free function
+/// to free more memory on demand. When the \a force parameter is
+/// \a true all possible memory should be freed.
+/// The per-thread \a heartbeat parameter is monotonically increasing
+/// and guaranteed to be deterministic if the program allocates
+/// deterministically. The \a deferred_free function is guaranteed
+/// to be called deterministically after some number of allocations
+/// (regardless of freeing or available free memory).
+/// At most one \a deferred_free function can be active.
+void mi_heap_register_deferred_free(mi_heap_t* heap,mi_local_deferred_free_fun* deferred_free, void* arg);
+
 /// An area of heap space contains blocks of a single size.
 /// The bytes in freed blocks are `committed - used`.
 typedef struct mi_heap_area_s {
