@@ -32,6 +32,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define MI_TRACK_<tool> to enable tracking support
 // #define MI_TRACK_VALGRIND 1
 // #define MI_TRACK_ASAN     1
+#define MI_TRACK_ETW      1
 
 // Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
 // #define MI_STAT 1
@@ -60,7 +61,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Reserve extra padding at the end of each block to be more resilient against heap block overflows.
 // The padding can detect buffer overflow on free.
-#if !defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1 || MI_TRACK_VALGRIND || MI_TRACK_ASAN)
+#if !defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1 || (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW))
 #define MI_PADDING  1
 #endif
 

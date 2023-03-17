@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit
 
+
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
   0, false, false, false, false,
@@ -428,7 +429,7 @@ void _mi_thread_done(mi_heap_t* heap)
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   mi_assert_internal(heap != NULL);
   #if defined(MI_TLS_SLOT)
-  mi_tls_slot_set(MI_TLS_SLOT,heap);
+  mi_prim_tls_slot_set(MI_TLS_SLOT,heap);
   #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
   *mi_tls_pthread_heap_slot() = heap;
   #elif defined(MI_TLS_PTHREAD)
@@ -562,6 +563,7 @@ void mi_process_init(void) mi_attr_noexcept {
   #endif
 
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
+  mi_track_init();
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages = mi_option_get_clamp(mi_option_reserve_huge_os_pages, 0, 128*1024);
