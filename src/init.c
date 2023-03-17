@@ -534,6 +534,7 @@ void mi_process_init(void) mi_attr_noexcept {
   #endif
 
   mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
+  mi_track_init();
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages = mi_option_get_clamp(mi_option_reserve_huge_os_pages, 0, 128*1024);
@@ -550,10 +551,6 @@ void mi_process_init(void) mi_attr_noexcept {
       mi_reserve_os_memory((size_t)ksize*MI_KiB, true, true);
     }
   }
-
-#ifdef MI_ETW
-  EventRegistermicrosoft_windows_mimalloc();
-#endif
 }
 
 // Called when the process is done (through `at_exit`)

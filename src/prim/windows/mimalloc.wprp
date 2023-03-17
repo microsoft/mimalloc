@@ -29,7 +29,12 @@
         </SystemCollectorId>
         <EventCollectorId Value="Mimalloc_Collector">
           <EventProviders>
-            <EventProviderId Value="MimallocEventProvider" />
+            <EventProviderId Value="MimallocEventProvider" >
+              <Keywords>
+                <Keyword Value="100"/>
+                <Keyword Value="101"/>
+              </Keywords>
+            </EventProviderId>
           </EventProviders>
         </EventCollectorId>
       </Collectors>
