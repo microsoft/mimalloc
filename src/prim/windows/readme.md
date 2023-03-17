@@ -7,10 +7,10 @@
 - `etw.h` is generated from `etw.man` which contains the manifest for mimalloc events.
   (100 is an allocation, 101 is for a free)
 
-- `mimalloc.wprp` is a profile for the Windows Performance Recorder (WPR).
+- `etw-mimalloc.wprp` is a profile for the Windows Performance Recorder (WPR).
   In an admin prompt, you can use:
   ```
-  > wpr -start src\prim\windows\mimalloc.wprp -filemode
+  > wpr -start src\prim\windows\etw-mimalloc.wprp -filemode
   > <my mimalloc program>
   > wpr -stop test.etl
   ``` 
