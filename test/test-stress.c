@@ -7,7 +7,7 @@ terms of the MIT license.
 /* This is a stress test for the allocator, using multiple threads and
    transferring objects between threads. It tries to reflect real-world workloads:
    - allocation size is distributed linearly in powers of two
-   - with some fraction extra large (and some extra extra large)
+   - with some fraction extra large (and some extra, extra, large)
    - the allocations are initialized and read again at free
    - pointers transfer between threads
    - threads are terminated and recreated with some objects surviving in between
