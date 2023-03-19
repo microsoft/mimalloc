@@ -568,7 +568,7 @@ static void mi_detect_cpu_features(void) {
   // FSRM for fast rep movsb support (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017))
   int32_t cpu_info[4];
   __cpuid(cpu_info, 7);
-  _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https ://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+  _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
 }
 #else
 static void mi_detect_cpu_features(void) {
