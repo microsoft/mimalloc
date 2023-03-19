@@ -357,7 +357,7 @@ typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat, vo
 ///
 /// Some runtime systems use deferred free-ing, for example when using
 /// reference counting to limit the worst case free time.
-/// Such systems can register (re-entrant) deferred free function
+/// Such systems can register (reentrant) deferred free function
 /// to free more memory on demand. When the \a force parameter is
 /// \a true all possible memory should be freed.
 /// The per-thread \a heartbeat parameter is monotonically increasing

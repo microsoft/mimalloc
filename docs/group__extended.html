@@ -598,7 +598,7 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<p>Some runtime systems use deferred free-ing, for example when using reference counting to limit the worst case free time. Such systems can register (re-entrant) deferred free function to free more memory on demand. When the <em>force</em> parameter is <em>true</em> all possible memory should be freed. The per-thread <em>heartbeat</em> parameter is monotonically increasing and guaranteed to be deterministic if the program allocates deterministically. The <em>deferred_free</em> function is guaranteed to be called deterministically after some number of allocations (regardless of freeing or available free memory). At most one <em>deferred_free</em> function can be active. </p>
+<p>Some runtime systems use deferred free-ing, for example when using reference counting to limit the worst case free time. Such systems can register (reentrant) deferred free function to free more memory on demand. When the <em>force</em> parameter is <em>true</em> all possible memory should be freed. The per-thread <em>heartbeat</em> parameter is monotonically increasing and guaranteed to be deterministic if the program allocates deterministically. The <em>deferred_free</em> function is guaranteed to be called deterministically after some number of allocations (regardless of freeing or available free memory). At most one <em>deferred_free</em> function can be active. </p>
 
 </div>
 </div>
