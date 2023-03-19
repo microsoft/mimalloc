@@ -1276,6 +1276,6 @@ range of benchmarks.
 
 See the [Performance](https://github.com/microsoft/mimalloc#Performance)
 section in the _mimalloc_ repository for benchmark results,
-or the the technical report for detailed benchmark results.
+or the technical report for detailed benchmark results.
 
 */
