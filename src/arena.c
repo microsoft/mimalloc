@@ -316,12 +316,12 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
     const size_t blocks = mi_block_count_of_size(size);
     // checks
     if (arena == NULL) {
-      _mi_error_message(EINVAL, "trying to free from non-existent arena: %p, size %zu, memid: 0x%zx\n", p, size, memid);
+      _mi_error_message(EINVAL, "trying to free from nonexistent arena: %p, size %zu, memid: 0x%zx\n", p, size, memid);
       return;
     }
     mi_assert_internal(arena->field_count > mi_bitmap_index_field(bitmap_idx));
     if (arena->field_count <= mi_bitmap_index_field(bitmap_idx)) {
-      _mi_error_message(EINVAL, "trying to free from non-existent arena block: %p, size %zu, memid: 0x%zx\n", p, size, memid);
+      _mi_error_message(EINVAL, "trying to free from nonexistent arena block: %p, size %zu, memid: 0x%zx\n", p, size, memid);
       return;
     }
     // potentially decommit
