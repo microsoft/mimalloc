@@ -927,7 +927,7 @@ template<class T> struct mi_stl_allocator { }
 
 /*! \page build Building
 
-Checkout the sources from Github:
+Checkout the sources from GitHub:
 ```
 git clone https://github.com/microsoft/mimalloc
 ```
