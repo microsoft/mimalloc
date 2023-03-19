@@ -324,7 +324,7 @@ typedef enum mi_segment_kind_e {
 // A segment holds a commit mask where a bit is set if
 // the corresponding MI_COMMIT_SIZE area is committed.
 // The MI_COMMIT_SIZE must be a multiple of the slice
-// size. If it is equal we have the most fine grained 
+// size. If it is equal we have the most fine-grained 
 // decommit (but setting it higher can be more efficient).
 // The MI_MINIMAL_COMMIT_SIZE is the minimal amount that will
 // be committed in one go which can be set higher than
