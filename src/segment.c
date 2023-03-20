@@ -1356,7 +1356,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       _mi_page_free_collect(page, false); // ensure used count is up to date
       if (mi_page_all_free(page)) {
         // if everything free by now, free the page
-        slice = mi_segment_page_clear(page, tld);   // set slice again due to coalesceing
+        slice = mi_segment_page_clear(page, tld);   // set slice again due to coalescing
       }
       else {
         // otherwise reclaim it into the heap
@@ -1368,7 +1368,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
     }
     else {
       // the span is free, add it to our page queues
-      slice = mi_segment_span_free_coalesce(slice, tld); // set slice again due to coalesceing
+      slice = mi_segment_span_free_coalesce(slice, tld); // set slice again due to coalescing
     }
     mi_assert_internal(slice->slice_count>0 && slice->slice_offset==0);
     slice = slice + slice->slice_count;
