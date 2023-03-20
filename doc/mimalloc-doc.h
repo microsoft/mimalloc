@@ -441,7 +441,7 @@ bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_la
 /// @param pages The number of 1GiB pages to reserve.
 /// @param numa_nodes The number of nodes do evenly divide the pages over, or 0 for using the actual number of NUMA nodes.
 /// @param timeout_msecs Maximum number of milli-seconds to try reserving, or 0 for no timeout.
-/// @returns 0 if successfull, \a ENOMEM if running out of memory, or \a ETIMEDOUT if timed out.
+/// @returns 0 if successful, \a ENOMEM if running out of memory, or \a ETIMEDOUT if timed out.
 ///
 /// The reserved memory is used by mimalloc to satisfy allocations.
 /// May quit before \a timeout_msecs are expired if it estimates it will take more than
@@ -455,7 +455,7 @@ int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t 
 /// @param pages The number of 1GiB pages to reserve.
 /// @param numa_node The NUMA node where the memory is reserved (start at 0).
 /// @param timeout_msecs Maximum number of milli-seconds to try reserving, or 0 for no timeout.
-/// @returns 0 if successfull, \a ENOMEM if running out of memory, or \a ETIMEDOUT if timed out.
+/// @returns 0 if successful, \a ENOMEM if running out of memory, or \a ETIMEDOUT if timed out.
 ///
 /// The reserved memory is used by mimalloc to satisfy allocations.
 /// May quit before \a timeout_msecs are expired if it estimates it will take more than
