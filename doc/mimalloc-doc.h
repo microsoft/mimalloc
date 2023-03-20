@@ -558,7 +558,7 @@ mi_heap_t* mi_heap_new();
 
 /// Delete a previously allocated heap.
 /// This will release resources and migrate any
-/// still allocated blocks in this heap (efficienty)
+/// still allocated blocks in this heap (efficiency)
 /// to the default heap.
 ///
 /// If \a heap is the default heap, the default
