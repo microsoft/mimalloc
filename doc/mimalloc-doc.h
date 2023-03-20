@@ -468,7 +468,7 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
 /// Is the C runtime \a malloc API redirected?
 /// @returns \a true if all malloc API calls are redirected to mimalloc.
 ///
-/// Currenty only used on Windows.
+/// Currently only used on Windows.
 bool mi_is_redirected();
 
 /// Return process information (time and memory usage).
