@@ -31,15 +31,18 @@ static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void
   // visit all pages
   #if MI_DEBUG>1
   size_t total = heap->page_count;
-  #endif
   size_t count = 0;
+  #endif  
+
   for (size_t i = 0; i <= MI_BIN_FULL; i++) {
     mi_page_queue_t* pq = &heap->pages[i];
     mi_page_t* page = pq->first;
     while(page != NULL) {
       mi_page_t* next = page->next; // save next in case the page gets removed from the queue
       mi_assert_internal(mi_page_heap(page) == heap);
+      #if MI_DEBUG>1
       count++;
+      #endif
       if (!fn(heap, pq, page, arg1, arg2)) return false;
       page = next; // and continue
     }
@@ -536,9 +539,13 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
   uintptr_t free_map[MI_MAX_BLOCKS / sizeof(uintptr_t)];
   memset(free_map, 0, sizeof(free_map));
 
+  #if MI_DEBUG>1
   size_t free_count = 0;
+  #endif
   for (mi_block_t* block = page->free; block != NULL; block = mi_block_next(page,block)) {
+    #if MI_DEBUG>1
     free_count++;
+    #endif
     mi_assert_internal((uint8_t*)block >= pstart && (uint8_t*)block < (pstart + psize));
     size_t offset = (uint8_t*)block - pstart;
     mi_assert_internal(offset % bsize == 0);
@@ -551,7 +558,9 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
   mi_assert_internal(page->capacity == (free_count + page->used));
 
   // walk through all blocks skipping the free ones
+  #if MI_DEBUG>1
   size_t used_count = 0;
+  #endif
   for (size_t i = 0; i < page->capacity; i++) {
     size_t bitidx = (i / sizeof(uintptr_t));
     size_t bit = i - (bitidx * sizeof(uintptr_t));
@@ -560,7 +569,9 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
       i += (sizeof(uintptr_t) - 1); // skip a run of free blocks
     }
     else if ((m & ((uintptr_t)1 << bit)) == 0) {
+      #if MI_DEBUG>1
       used_count++;
+      #endif
       uint8_t* block = pstart + (i * bsize);
       if (!visitor(mi_page_heap(page), area, block, ubsize, arg)) return false;
     }
