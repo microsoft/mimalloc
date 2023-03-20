@@ -29,15 +29,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "init.c"
 #include "options.c"
 #include "os.c"
-<<<<<<< HEAD
-#include "page.c"
-#include "prim/prim.c"
-#include "random.c"
-=======
 #include "page.c"           // includes page-queue.c
 #include "random.c" 
-#include "region.c"
->>>>>>> dev-platform
 #include "segment.c"
 #include "segment-cache.c"
 #include "stats.c"
