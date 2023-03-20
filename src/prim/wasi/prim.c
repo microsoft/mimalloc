@@ -27,9 +27,10 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config ) {
 // Free
 //---------------------------------------------
 
-void _mi_prim_free(void* addr, size_t size ) {
+int _mi_prim_free(void* addr, size_t size ) {
   MI_UNUSED(addr); MI_UNUSED(size);
   // wasi heap cannot be shrunk
+  return 0;
 }
 
 
@@ -101,20 +102,23 @@ static void* mi_prim_mem_grow(size_t size, size_t try_alignment) {
       }
     }
   }
+  /*
   if (p == NULL) {
     _mi_warning_message("unable to allocate sbrk/wasm_memory_grow OS memory (%zu bytes, %zu alignment)\n", size, try_alignment);
     errno = ENOMEM;
     return NULL;
   }
-  mi_assert_internal( try_alignment == 0 || (uintptr_t)p % try_alignment == 0 );
+  */
+  mi_assert_internal( p == NULL || try_alignment == 0 || (uintptr_t)p % try_alignment == 0 );
   return p;
 }
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
-void* _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large) {
+int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, void** addr) {
   MI_UNUSED(allow_large); MI_UNUSED(commit);
   *is_large = false;
-  return mi_prim_mem_grow(size, try_alignment);
+  *addr = mi_prim_mem_grow(size, try_alignment);
+  return (*addr != NULL ? 0 : ENOMEM);
 }
 
 
@@ -142,9 +146,10 @@ int _mi_prim_protect(void* addr, size_t size, bool protect) {
 // Huge pages and NUMA nodes
 //---------------------------------------------
 
-void* _mi_prim_alloc_huge_os_pages(void* addr, size_t size, int numa_node) {
-  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(numa_node);
-  return NULL;
+int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, void** addr) {
+  MI_UNUSED(hint_addr); MI_UNUSED(size); MI_UNUSED(numa_node);
+  *addr = NULL;
+  return ENOSYS;
 }
 
 size_t _mi_prim_numa_node(void) {

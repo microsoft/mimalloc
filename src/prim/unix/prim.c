@@ -96,11 +96,9 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config ) {
 // free
 //---------------------------------------------
 
-void _mi_prim_free(void* addr, size_t size ) {
+int _mi_prim_free(void* addr, size_t size ) {
   bool err = (munmap(addr, size) == -1);
-  if (err) {
-    _mi_warning_message("unable to release OS memory: %s, addr: %p, size: %zu\n", strerror(errno), addr, size);
-  }
+  return (err ? errno : 0);
 }
 
 
@@ -118,19 +116,24 @@ static int unix_madvise(void* addr, size_t size, int advice) {
 
 static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
   MI_UNUSED(try_alignment);
+  void* p = NULL;
   #if defined(MAP_ALIGNED)  // BSD
   if (addr == NULL && try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0) {
     size_t n = mi_bsr(try_alignment);
     if (((size_t)1 << n) == try_alignment && n >= 12 && n <= 30) {  // alignment is a power of 2 and 4096 <= alignment <= 1GiB
       flags |= MAP_ALIGNED(n);
-      void* p = mmap(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd, 0);
+      p = mmap(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd, 0);
+      if (p==MAP_FAILED || !_mi_is_aligned(p,try_alignment)) { 
+        int err = errno;
+        _mi_warning_message("unable to directly request aligned OS memory (error: %d (0x%d), size: 0x%zx bytes, alignment: 0x%zx, hint address: %p)\n", err, err, size, try_alignment, hint);
+      }
       if (p!=MAP_FAILED) return p;
-      // fall back to regular mmap
+      // fall back to regular mmap      
     }
   }
   #elif defined(MAP_ALIGN)  // Solaris
   if (addr == NULL && try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0) {
-    void* p = mmap((void*)try_alignment, size, protect_flags, flags | MAP_ALIGN, fd, 0);  // addr parameter is the required alignment
+    p = mmap((void*)try_alignment, size, protect_flags, flags | MAP_ALIGN, fd, 0);  // addr parameter is the required alignment
     if (p!=MAP_FAILED) return p;
     // fall back to regular mmap
   }
@@ -140,14 +143,18 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
   if (addr == NULL) {
     void* hint = _mi_os_get_aligned_hint(try_alignment, size);
     if (hint != NULL) {
-      void* p = mmap(hint, size, protect_flags, flags, fd, 0);
+      p = mmap(hint, size, protect_flags, flags, fd, 0);
+      if (p==MAP_FAILED || !_mi_is_aligned(p,try_alignment)) { 
+        int err = errno;
+        _mi_warning_message("unable to directly request hinted aligned OS memory (error: %d (0x%d), size: 0x%zx bytes, alignment: 0x%zx, hint address: %p)\n", err, err, size, try_alignment, hint);
+      }
       if (p!=MAP_FAILED) return p;
-      // fall back to regular mmap
+      // fall back to regular mmap      
     }
   }
   #endif
   // regular mmap
-  void* p = mmap(addr, size, protect_flags, flags, fd, 0);
+  p = mmap(addr, size, protect_flags, flags, fd, 0);
   if (p!=MAP_FAILED) return p;
   // failed to allocate
   return NULL;
@@ -217,7 +224,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         #ifdef MAP_HUGE_1GB
         if (p == NULL && (lflags & MAP_HUGE_1GB) != 0) {
           mi_huge_pages_available = false; // don't try huge 1GiB pages again
-          _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (error %i)\n", errno);
+          _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
           lflags = ((lflags & ~MAP_HUGE_1GB) | MAP_HUGE_2MB);
           p = unix_mmap_prim(addr, size, try_alignment, protect_flags, lflags, lfd);
         }
@@ -258,20 +265,18 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       #endif
     }
   }
-  if (p == NULL) {
-    _mi_warning_message("unable to allocate OS memory (%zu bytes, error code: %i, address: %p, large only: %d, allow large: %d)\n", size, errno, addr, large_only, allow_large);
-  }
   return p;
 }
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
-void* _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large) {
+int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, void** addr) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(commit || !allow_large);
   mi_assert_internal(try_alignment > 0);
   
   int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
-  return unix_mmap(NULL, size, try_alignment, protect_flags, false, allow_large, is_large);
+  *addr = unix_mmap(NULL, size, try_alignment, protect_flags, false, allow_large, is_large);
+  return (*addr != NULL ? 0 : errno);
 }
 
 
@@ -379,28 +384,29 @@ static long mi_prim_mbind(void* start, unsigned long len, unsigned long mode, co
 }
 #endif
 
-void* _mi_prim_alloc_huge_os_pages(void* addr, size_t size, int numa_node) {
+int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, void** addr) {
   bool is_large = true;
-  void* p = unix_mmap(addr, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
-  if (p == NULL) return NULL;
-  if (numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) { // at most 64 nodes
+  *addr = unix_mmap(hint_addr, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
+  if (*addr != NULL && numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) { // at most 64 nodes
     unsigned long numa_mask = (1UL << numa_node);
     // TODO: does `mbind` work correctly for huge OS pages? should we
     // use `set_mempolicy` before calling mmap instead?
     // see: <https://lkml.org/lkml/2017/2/9/875>
-    long err = mi_prim_mbind(p, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
+    long err = mi_prim_mbind(*addr, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
     if (err != 0) {
-      _mi_warning_message("failed to bind huge (1GiB) pages to numa node %d: %s\n", numa_node, strerror(errno));
-    }
+      err = errno;
+      _mi_warning_message("failed to bind huge (1GiB) pages to numa node %d (error: %d (0x%d))\n", numa_node, err, err);
+    }    
   }
-  return p;
+  return (*addr != NULL ? 0 : errno);
 }
 
 #else
 
-void* _mi_prim_alloc_huge_os_pages(void* addr, size_t size, int numa_node) {
-  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(numa_node);
-  return NULL;
+int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, void** addr) {
+  MI_UNUSED(hint_addr); MI_UNUSED(size); MI_UNUSED(numa_node);
+  *addr = NULL;
+  return ENOMEM;
 }
 
 #endif

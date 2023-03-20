@@ -146,7 +146,10 @@ static void mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
   MI_UNUSED(tld_stats);
   mi_assert_internal((size % _mi_os_page_size()) == 0);
   if (addr == NULL || size == 0) return; // || _mi_os_is_huge_reserved(addr)
-  _mi_prim_free(addr, size);
+  int err = _mi_prim_free(addr, size);
+  if (err != 0) {
+    _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
+  }
   mi_stats_t* stats = &_mi_stats_main;
   if (was_committed) { _mi_stat_decrease(&stats->committed, size); }
   _mi_stat_decrease(&stats->reserved, size);
@@ -174,7 +177,11 @@ static void* mi_os_mem_alloc(size_t size, size_t try_alignment, bool commit, boo
   if (!commit) allow_large = false;
   if (try_alignment == 0) try_alignment = 1; // avoid 0 to ensure there will be no divide by zero when aligning
 
-  void* p = _mi_prim_alloc(size, try_alignment, commit, allow_large, is_large);
+  void* p = NULL; 
+  int err = _mi_prim_alloc(size, try_alignment, commit, allow_large, is_large, &p);
+  if (err != 0) {
+    _mi_warning_message("unable to allocate OS memory (error: %d (0x%x), size: 0x%zx bytes, align: 0x%zx, commit: %d, allow large: %d)\n", err, err, size, try_alignment, commit, allow_large);
+  }
   /*
   if (commit && allow_large) {
     p = _mi_os_try_alloc_from_huge_reserved(size, try_alignment);
@@ -211,7 +218,7 @@ static void* mi_os_mem_alloc_aligned(size_t size, size_t alignment, bool commit,
   // if not aligned, free it, overallocate, and unmap around it
   if (((uintptr_t)p % alignment != 0)) {
     mi_os_mem_free(p, size, commit, stats);
-    _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (%zu bytes, address: %p, alignment: %zu, commit: %d)\n", size, p, alignment, commit);
+    _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (size: 0x%zx bytes, address: %p, alignment: 0x%zx, commit: %d)\n", size, p, alignment, commit);
     if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
     const size_t over_size = size + alignment;
 
@@ -368,7 +375,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
 
   int err = _mi_prim_commit(start, csize, commit);  
   if (err != 0) {
-    _mi_warning_message("%s error: start: %p, csize: 0x%zx, err: %i\n", commit ? "commit" : "decommit", start, csize, err);
+    _mi_warning_message("cannot %s OS memory (error: %d (0x%d), address: %p, size: 0x%zx bytes)\n", commit ? "commit" : "decommit", err, err, start, csize);
   }
   mi_assert_internal(err == 0);
   return (err == 0);
@@ -412,7 +419,7 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
 
   int err = _mi_prim_reset(start, csize);
   if (err != 0) {
-    _mi_warning_message("madvise reset error: start: %p, csize: 0x%zx, errno: %i\n", start, csize, err);
+    _mi_warning_message("cannot reset OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
   return (err == 0);
 }
@@ -448,7 +455,7 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   */
   int err = _mi_prim_protect(start,csize,protect);
   if (err != 0) {
-    _mi_warning_message("mprotect error: start: %p, csize: 0x%zx, err: %i\n", start, csize, err);
+    _mi_warning_message("cannot %s OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", (protect ? "protect" : "unprotect"), err, err, start, csize);
   }
   return (err == 0);
 }
@@ -523,13 +530,17 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
   for (page = 0; page < pages; page++) {
     // allocate a page
     void* addr = start + (page * MI_HUGE_OS_PAGE_SIZE);
-    void* p = _mi_prim_alloc_huge_os_pages(addr, MI_HUGE_OS_PAGE_SIZE, numa_node);
+    void* p = NULL;
+    int err = _mi_prim_alloc_huge_os_pages(addr, MI_HUGE_OS_PAGE_SIZE, numa_node, &p);
+    if (err != 0) {
+      _mi_warning_message("unable to allocate huge OS page (error: %d (0x%d), address: %p, size: %zx bytes)", err, err, addr, MI_HUGE_OS_PAGE_SIZE);
+    }
 
     // Did we succeed at a contiguous address?
     if (p != addr) {
       // no success, issue a warning and break
       if (p != NULL) {
-        _mi_warning_message("could not allocate contiguous huge page %zu at %p\n", page, addr);
+        _mi_warning_message("could not allocate contiguous huge OS page %zu at %p\n", page, addr);
         _mi_os_free(p, MI_HUGE_OS_PAGE_SIZE, &_mi_stats_main);
       }
       break;
