@@ -959,7 +959,9 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   // Remove the free pages
   mi_slice_t* slice = &segment->slices[0];
   const mi_slice_t* end = mi_segment_slices_end(segment);
+  #if MI_DEBUG>1
   size_t page_count = 0;
+  #endif
   while (slice < end) {
     mi_assert_internal(slice->slice_count > 0);
     mi_assert_internal(slice->slice_offset == 0);
@@ -967,7 +969,9 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
     if (slice->xblock_size == 0 && segment->kind != MI_SEGMENT_HUGE) {
       mi_segment_span_remove_from_queue(slice, tld);
     }
+    #if MI_DEBUG>1
     page_count++;
+    #endif
     slice = slice + slice->slice_count;
   }
   mi_assert_internal(page_count == 2); // first page is allocated by the segment itself
