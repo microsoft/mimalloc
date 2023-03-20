@@ -194,16 +194,12 @@ mi_msecs_t _mi_prim_clock_now(void) {
 // Process info
 //----------------------------------------------------------------
 
-void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
+void _mi_prim_process_info(mi_process_info_t* pinfo)
 {
-  *peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.peak));
-  *current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.current));
-  *peak_rss    = *peak_commit;
-  *current_rss = *current_commit;
-  *page_faults = 0;
-  *utime = 0;
-  *stime = 0;
+  // use defaults
+  MI_UNUSED(pinfo);
 }
+
 
 //----------------------------------------------------------------
 // Output

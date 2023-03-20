@@ -541,19 +541,15 @@ static mi_msecs_t timeval_secs(const struct timeval* tv) {
   return ((mi_msecs_t)tv->tv_sec * 1000L) + ((mi_msecs_t)tv->tv_usec / 1000L);
 }
 
-void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
+void _mi_prim_process_info(mi_process_info_t* pinfo)
 {
   struct rusage rusage;
   getrusage(RUSAGE_SELF, &rusage);
-  *utime = timeval_secs(&rusage.ru_utime);
-  *stime = timeval_secs(&rusage.ru_stime);
+  pinfo->utime = timeval_secs(&rusage.ru_utime);
+  pinfo->stime = timeval_secs(&rusage.ru_stime);
 #if !defined(__HAIKU__)
-  *page_faults = rusage.ru_majflt;
-#endif
-  // estimate commit using our stats
-  *peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.peak));
-  *current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.current));
-  *current_rss    = *current_commit;  // estimate
+  pinfo->page_faults = rusage.ru_majflt;
+#endif  
 #if defined(__HAIKU__)
   // Haiku does not have (yet?) a way to
   // get these stats per process
@@ -562,19 +558,20 @@ void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current
   ssize_t c;
   get_thread_info(find_thread(0), &tid);
   while (get_next_area_info(tid.team, &c, &mem) == B_OK) {
-    *peak_rss += mem.ram_size;
+    pinfo->peak_rss += mem.ram_size;
   }
-  *page_faults = 0;
+  pinfo->page_faults = 0;
 #elif defined(__APPLE__)
-  *peak_rss = rusage.ru_maxrss;         // BSD reports in bytes
+  pinfo->peak_rss = rusage.ru_maxrss;         // BSD reports in bytes
   struct mach_task_basic_info info;
   mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;
   if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &infoCount) == KERN_SUCCESS) {
-    *current_rss = (size_t)info.resident_size;
+    pinfo->current_rss = (size_t)info.resident_size;
   }
 #else
-  *peak_rss = rusage.ru_maxrss * 1024;  // Linux reports in KiB
+  pinfo->peak_rss = rusage.ru_maxrss * 1024;  // Linux reports in KiB
 #endif
+  // use defaults for commit
 }
 
 #else
@@ -584,15 +581,10 @@ void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current
 #pragma message("define a way to get process info")
 #endif
 
-void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
+void _mi_prim_process_info(mi_process_info_t* pinfo)
 {
-  *peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.peak));
-  *current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.current));
-  *peak_rss    = *peak_commit;
-  *current_rss = *current_commit;
-  *page_faults = 0;
-  *utime = 0;
-  *stime = 0;
+  // use defaults
+  MI_UNUSED(pinfo);
 }
 
 #endif

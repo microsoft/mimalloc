@@ -430,21 +430,23 @@ mi_msecs_t _mi_clock_end(mi_msecs_t start) {
 
 mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept
 {
-  mi_msecs_t elapsed = _mi_clock_end(mi_process_start);
-  mi_msecs_t utime = 0;
-  mi_msecs_t stime = 0;
-  size_t current_rss0 = 0;
-  size_t peak_rss0 = 0;
-  size_t current_commit0 = 0;
-  size_t peak_commit0 = 0;
-  size_t page_faults0 = 0;
-  _mi_prim_process_info(&utime, &stime, &current_rss0, &peak_rss0, &current_commit0, &peak_commit0, &page_faults0);
-  if (elapsed_msecs!=NULL)  *elapsed_msecs  = (elapsed < 0 ? 0 : (elapsed < (mi_msecs_t)PTRDIFF_MAX ? (size_t)elapsed : PTRDIFF_MAX));
-  if (user_msecs!=NULL)     *user_msecs     = (utime < 0 ? 0 : (utime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)utime : PTRDIFF_MAX));
-  if (system_msecs!=NULL)   *system_msecs   = (stime < 0 ? 0 : (stime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)stime : PTRDIFF_MAX));
-  if (current_rss!=NULL)    *current_rss    = current_rss0;
-  if (peak_rss!=NULL)       *peak_rss       = peak_rss0;
-  if (current_commit!=NULL) *current_commit = current_commit0;
-  if (peak_commit!=NULL)    *peak_commit    = peak_commit0;
-  if (page_faults!=NULL)    *page_faults    = page_faults0;
+  mi_process_info_t pinfo = { 0 };
+  pinfo.elapsed = _mi_clock_end(mi_process_start);
+  pinfo.utime   = 0;
+  pinfo.stime   = 0;
+  pinfo.current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.current));
+  pinfo.peak_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&_mi_stats_main.committed.peak));
+  pinfo.current_rss = pinfo.current_commit;
+  pinfo.peak_rss    = pinfo.peak_commit;
+  pinfo.page_faults = 0;
+
+  _mi_prim_process_info(&pinfo);
+  if (elapsed_msecs!=NULL)  *elapsed_msecs  = (pinfo.elapsed < 0 ? 0 : (pinfo.elapsed < (mi_msecs_t)PTRDIFF_MAX ? (size_t)pinfo.elapsed : PTRDIFF_MAX));
+  if (user_msecs!=NULL)     *user_msecs     = (pinfo.utime < 0 ? 0 : (pinfo.utime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)pinfo.utime : PTRDIFF_MAX));
+  if (system_msecs!=NULL)   *system_msecs   = (pinfo.stime < 0 ? 0 : (pinfo.stime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)pinfo.stime : PTRDIFF_MAX));
+  if (current_rss!=NULL)    *current_rss    = pinfo.current_rss;
+  if (peak_rss!=NULL)       *peak_rss       = pinfo.peak_rss;
+  if (current_commit!=NULL) *current_commit = pinfo.current_commit;
+  if (peak_commit!=NULL)    *peak_commit    = pinfo.peak_commit;
+  if (page_faults!=NULL)    *page_faults    = pinfo.page_faults;
 }
