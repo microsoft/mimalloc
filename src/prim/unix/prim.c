@@ -629,8 +629,8 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   if (len == 0) return false;
   char** env = mi_get_environ();
   if (env == NULL) return false;
-  // compare up to 64K entries
-  for (int i = 0; i < 64*MI_KiB && env[i] != NULL; i++) {
+  // compare up to 10000 entries
+  for (int i = 0; i < 10000 && env[i] != NULL; i++) {
     const char* s = env[i];
     if (_mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
       // found it
