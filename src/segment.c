@@ -1048,7 +1048,7 @@ We maintain a global list of abandoned segments that are
 reclaimed on demand. Since this is shared among threads
 the implementation needs to avoid the A-B-A problem on
 popping abandoned segments: <https://en.wikipedia.org/wiki/ABA_problem>
-We use tagged pointers to avoid accidentially identifying
+We use tagged pointers to avoid accidentally identifying
 reused segments, much like stamped references in Java.
 Secondly, we maintain a reader counter to avoid resetting
 or decommitting segments that have a pending read operation.
