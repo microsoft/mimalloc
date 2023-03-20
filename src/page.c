@@ -699,12 +699,16 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
 static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try)
 {
   // search through the pages in "next fit" order
+  #if MI_STAT
   size_t count = 0;
+  #endif
   mi_page_t* page = pq->first;
   while (page != NULL)
   {
     mi_page_t* next = page->next; // remember next
+    #if MI_STAT    
     count++;
+    #endif
 
     // 0. collect freed blocks by us and other threads
     _mi_page_free_collect(page, false);
