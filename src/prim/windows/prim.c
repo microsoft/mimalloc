@@ -156,7 +156,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
 // Free
 //---------------------------------------------
 
-void _mi_prim_free(void* addr, size_t size ) {
+int _mi_prim_free(void* addr, size_t size ) {
   DWORD errcode = 0;
   bool err = (VirtualFree(addr, 0, MEM_RELEASE) == 0);
   if (err) { errcode = GetLastError(); }
@@ -172,9 +172,7 @@ void _mi_prim_free(void* addr, size_t size ) {
       if (err) { errcode = GetLastError(); }
     }
   }
-  if (errcode != 0) {
-    _mi_warning_message("unable to release OS memory: error code 0x%x, addr: %p, size: %zu\n", errcode, addr, size);
-  }
+  return (int)errcode;
 }
 
 
@@ -240,19 +238,18 @@ static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DW
     *is_large = ((flags&MEM_LARGE_PAGES) != 0);
     p = win_virtual_alloc_prim(addr, size, try_alignment, flags);
   }
-  if (p == NULL) {
-    _mi_warning_message("unable to allocate OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %zu, flags: 0x%x, large only: %d, allow large: %d)\n", size, GetLastError(), addr, try_alignment, flags, large_only, allow_large);
-  }
+  //if (p == NULL) { _mi_warning_message("unable to allocate OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %zu, flags: 0x%x, large only: %d, allow large: %d)\n", size, GetLastError(), addr, try_alignment, flags, large_only, allow_large); }
   return p;
 }
 
-void* _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large) {
+int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, void** addr) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(commit || !allow_large);
   mi_assert_internal(try_alignment > 0);
   int flags = MEM_RESERVE;
   if (commit) { flags |= MEM_COMMIT; }
-  return win_virtual_alloc(NULL, size, try_alignment, flags, false, allow_large, is_large);
+  *addr = win_virtual_alloc(NULL, size, try_alignment, flags, false, allow_large, is_large);
+  return (*addr != NULL ? 0 : (int)GetLastError());
 }
 
 
@@ -296,7 +293,7 @@ int _mi_prim_protect(void* addr, size_t size, bool protect) {
 // Huge page allocation
 //---------------------------------------------
 
-void* _mi_prim_alloc_huge_os_pages(void* addr, size_t size, int numa_node)
+static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int numa_node)
 {
   const DWORD flags = MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE;
 
@@ -315,7 +312,7 @@ void* _mi_prim_alloc_huge_os_pages(void* addr, size_t size, int numa_node)
       params[1].Arg.ULong = (unsigned)numa_node;
     }
     SIZE_T psize = size;
-    void* base = addr;
+    void* base = hint_addr;
     NTSTATUS err = (*pNtAllocateVirtualMemoryEx)(GetCurrentProcess(), &base, &psize, flags, PAGE_READWRITE, params, param_count);
     if (err == 0 && base != NULL) {
       return base;
@@ -330,11 +327,16 @@ void* _mi_prim_alloc_huge_os_pages(void* addr, size_t size, int numa_node)
   if (pVirtualAlloc2 != NULL && numa_node >= 0) {
     params[0].Type.Type = MiMemExtendedParameterNumaNode;
     params[0].Arg.ULong = (unsigned)numa_node;
-    return (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, params, 1);
+    return (*pVirtualAlloc2)(GetCurrentProcess(), hint_addr, size, flags, PAGE_READWRITE, params, 1);
   }
 
   // otherwise use regular virtual alloc on older windows
-  return VirtualAlloc(addr, size, flags, PAGE_READWRITE);
+  return VirtualAlloc(hint_addr, size, flags, PAGE_READWRITE);
+}
+
+int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, void** addr) {
+  *addr = _mi_prim_alloc_huge_os_pagesx(hint_addr,size,numa_node);
+  return (*addr != NULL ? 0 : (int)GetLastError());
 }
 
 
