@@ -137,7 +137,7 @@ Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p><code>mi_</code> prefixed implementations of various allocation functions that use C++ semantics on out-of-memory, generally calling <code>std::get_new_handler</code> and raising a <code>std::bad_alloc</code> exception on failure. </p>
-<p>Note: use the <code>mimalloc-new-delete.h</code> header to override the <em>new</em> and <em>delete</em> operators globally. The wrappers here are mostly for convience for library writers that need to interface with mimalloc from C++. </p>
+<p>Note: use the <code>mimalloc-new-delete.h</code> header to override the <em>new</em> and <em>delete</em> operators globally. The wrappers here are mostly for convenience for library writers that need to interface with mimalloc from C++. </p>
 <hr/><h2 class="groupheader">Data Structure Documentation</h2>
 <a name="structmi__stl__allocator" id="structmi__stl__allocator"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#structmi__stl__allocator">&#9670;&nbsp;</a></span>mi_stl_allocator</h2>
