@@ -409,15 +409,24 @@ void mi_thread_done(void) mi_attr_noexcept {
   _mi_thread_done(NULL);
 }
 
+#include <unistd.h>
+
 void _mi_thread_done(mi_heap_t* heap) 
 {
-  mi_atomic_decrement_relaxed(&thread_count);
-  _mi_stat_decrease(&_mi_stats_main.threads, 1);
-
+  // calling with NULL implies using the default heap
   if (heap == NULL) { 
     heap = mi_prim_get_default_heap(); 
     if (heap == NULL) return;
   }
+
+  // prevent re-entrancy through heap_done/heap_set_default_direct (issue #699)
+  if (!mi_heap_is_initialized(heap)) {
+    return; 
+  }
+
+  // adjust stats
+  mi_atomic_decrement_relaxed(&thread_count);
+  _mi_stat_decrease(&_mi_stats_main.threads, 1);
   
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local heaps...
   if (heap->thread_id != _mi_thread_id()) return;
