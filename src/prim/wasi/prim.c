@@ -8,9 +8,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // This file is included in `src/prim/prim.c`
 
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
-#include "../prim.h"
+#include "mimalloc/internal.h"
+#include "mimalloc/atomic.h"
+#include "mimalloc/prim.h"
 
 //---------------------------------------------
 // Initialize

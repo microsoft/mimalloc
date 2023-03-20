@@ -9,9 +9,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
-#include "prim/prim.h"   // _mi_prim_thread_id()
+#include "mimalloc/internal.h"
+#include "mimalloc/atomic.h"
+#include "mimalloc/prim.h"   // _mi_prim_thread_id()
 
 #include <string.h>      // memset, strlen (for mi_strdup)
 #include <stdlib.h>      // malloc, abort
@@ -40,7 +40,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 
   // allow use of the block internally
   // note: when tracking we need to avoid ever touching the MI_PADDING since
-  // that is tracked by valgrind etc. as non-accessible (through the red-zone, see `mimalloc-track.h`)
+  // that is tracked by valgrind etc. as non-accessible (through the red-zone, see `mimalloc/track.h`)
   mi_track_mem_undefined(block, mi_page_usable_block_size(page));
 
   // zero the block? note: we need to zero the full block size (issue #63)

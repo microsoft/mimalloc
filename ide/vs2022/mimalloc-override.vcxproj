@@ -209,15 +209,16 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="$(ProjectDir)..\..\include\mimalloc-internal.h" />
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc.h" />
-    <ClInclude Include="..\..\include\mimalloc-atomic.h" />
     <ClInclude Include="..\..\include\mimalloc-etw-gen.h" />
     <ClInclude Include="..\..\include\mimalloc-etw.h" />
     <ClInclude Include="..\..\include\mimalloc-new-delete.h" />
     <ClInclude Include="..\..\include\mimalloc-override.h" />
-    <ClInclude Include="..\..\include\mimalloc-track.h" />
-    <ClInclude Include="..\..\include\mimalloc-types.h" />
+    <ClInclude Include="..\..\include\mimalloc\atomic.h" />
+    <ClInclude Include="..\..\include\mimalloc\internal.h" />
+    <ClInclude Include="..\..\include\mimalloc\prim.h" />
+    <ClInclude Include="..\..\include\mimalloc\track.h" />
+    <ClInclude Include="..\..\include\mimalloc\types.h" />
     <ClInclude Include="..\..\src\bitmap.h" />
   </ItemGroup>
   <ItemGroup>
