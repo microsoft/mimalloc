@@ -36,14 +36,16 @@ static void fail_aslr();              // issue #372
 static void tsan_numa_test();         // issue #414
 static void strdup_test();            // issue #445
 static void heap_thread_free_huge();
+static void test_std_string();        // issue #697
 
 static void test_stl_allocators();
 
 
 int main() {
-  mi_stats_reset();  // ignore earlier allocations
-
-  heap_thread_free_huge();
+  // mi_stats_reset();  // ignore earlier allocations
+  
+  test_std_string();
+  // heap_thread_free_huge();
   /*
   heap_thread_free_large();
   heap_no_delete();
@@ -56,7 +58,7 @@ int main() {
   test_mt_shutdown();
   */
   //fail_aslr();
-  mi_stats_print(NULL);
+  // mi_stats_print(NULL);
   return 0;
 }
 
@@ -195,6 +197,13 @@ static void heap_no_delete() {
   t1.join();
 }
 
+
+// Issue #697
+static void test_std_string() {
+  std::string path = "/Users/xxxx/Library/Developer/Xcode/DerivedData/xxxxxxxxxx/Build/Intermediates.noindex/xxxxxxxxxxx/arm64/XX_lto.o/0.arm64.lto.o";
+  std::string path1 = "/Users/xxxx/Library/Developer/Xcode/DerivedData/xxxxxxxxxx/Build/Intermediates.noindex/xxxxxxxxxxx/arm64/XX_lto.o/1.arm64.lto.o";
+  std::cout << path + "\n>>>            " + path1 + "\n>>>            " << std::endl;
+}
 
 // Issue #204
 static volatile void* global_p;
