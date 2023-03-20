@@ -104,12 +104,13 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 
 
 //-------------------------------------------------------------------
-// Thread id
+// Thread id: `_mi_prim_thread_id()`
 // 
 // Getting the thread id should be performant as it is called in the
 // fast path of `_mi_free` and we specialize for various platforms as
 // inlined definitions. Regular code should call `init.c:_mi_thread_id()`.
-// We only require _mi_prim_thread_id() to return a unique id for each thread.
+// We only require _mi_prim_thread_id() to return a unique id
+// for each thread (unequal to zero).
 //-------------------------------------------------------------------
 
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept;
