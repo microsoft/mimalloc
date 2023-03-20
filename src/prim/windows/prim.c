@@ -428,15 +428,15 @@ static mi_msecs_t filetime_msecs(const FILETIME* ftime) {
 typedef BOOL (WINAPI *PGetProcessMemoryInfo)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
 static PGetProcessMemoryInfo pGetProcessMemoryInfo = NULL;
 
-void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults)
+void _mi_prim_process_info(mi_process_info_t* pinfo)
 {
   FILETIME ct;
   FILETIME ut;
   FILETIME st;
   FILETIME et;
   GetProcessTimes(GetCurrentProcess(), &ct, &et, &st, &ut);
-  *utime = filetime_msecs(&ut);
-  *stime = filetime_msecs(&st);
+  pinfo->utime = filetime_msecs(&ut);
+  pinfo->stime = filetime_msecs(&st);
   
   // load psapi on demand
   if (pGetProcessMemoryInfo == NULL) {
@@ -452,11 +452,11 @@ void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, size_t* current
   if (pGetProcessMemoryInfo != NULL) {
     pGetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
   } 
-  *current_rss    = (size_t)info.WorkingSetSize;
-  *peak_rss       = (size_t)info.PeakWorkingSetSize;
-  *current_commit = (size_t)info.PagefileUsage;
-  *peak_commit    = (size_t)info.PeakPagefileUsage;
-  *page_faults    = (size_t)info.PageFaultCount;
+  pinfo->current_rss    = (size_t)info.WorkingSetSize;
+  pinfo->peak_rss       = (size_t)info.PeakWorkingSetSize;
+  pinfo->current_commit = (size_t)info.PagefileUsage;
+  pinfo->peak_commit    = (size_t)info.PeakPagefileUsage;
+  pinfo->page_faults    = (size_t)info.PageFaultCount;
 }
 
 //----------------------------------------------------------------

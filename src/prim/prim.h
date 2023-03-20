@@ -59,9 +59,18 @@ size_t _mi_prim_numa_node_count(void);
 mi_msecs_t _mi_prim_clock_now(void);
 
 // Return process information (only for statistics)
-void _mi_prim_process_info(mi_msecs_t* utime, mi_msecs_t* stime, 
-                             size_t* current_rss, size_t* peak_rss, 
-                             size_t* current_commit, size_t* peak_commit, size_t* page_faults);
+typedef struct mi_process_info_s {
+  mi_msecs_t  elapsed;
+  mi_msecs_t  utime;
+  mi_msecs_t  stime; 
+  size_t      current_rss; 
+  size_t      peak_rss;  
+  size_t      current_commit;
+  size_t      peak_commit; 
+  size_t      page_faults;
+} mi_process_info_t;
+
+void _mi_prim_process_info(mi_process_info_t* pinfo);
 
 // Default stderr output. (only for warnings etc. with verbose enabled)
 // msg != NULL && _mi_strlen(msg) > 0
@@ -202,6 +211,7 @@ This is inlined here as it is on the fast path for allocation functions.
 On most platforms (Windows, Linux, FreeBSD, NetBSD, etc), this just returns a
 __thread local variable (`_mi_heap_default`). With the initial-exec TLS model this ensures
 that the storage will always be available (allocated on the thread stacks).
+
 On some platforms though we cannot use that when overriding `malloc` since the underlying
 TLS implementation (or the loader) will call itself `malloc` on a first access and recurse.
 We try to circumvent this in an efficient way:
