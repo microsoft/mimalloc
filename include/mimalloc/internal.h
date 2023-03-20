@@ -8,6 +8,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_INTERNAL_H
 #define MIMALLOC_INTERNAL_H
 
+
+// --------------------------------------------------------------------------
+// This file contains the interal API's of mimalloc and various utility
+// functions and macros.
+// --------------------------------------------------------------------------
+
 #include "mimalloc/types.h"
 #include "mimalloc/track.h"
 
