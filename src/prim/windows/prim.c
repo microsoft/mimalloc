@@ -8,9 +8,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // This file is included in `src/prim/prim.c`
 
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
-#include "../prim.h"
+#include "mimalloc/internal.h"
+#include "mimalloc/atomic.h"
+#include "mimalloc/prim.h"
 #include <string.h>  // strerror
 #include <stdio.h>   // fputs, stderr
 
@@ -157,6 +157,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
 //---------------------------------------------
 
 int _mi_prim_free(void* addr, size_t size ) {
+  MI_UNUSED(size);
   DWORD errcode = 0;
   bool err = (VirtualFree(addr, 0, MEM_RELEASE) == 0);
   if (err) { errcode = GetLastError(); }

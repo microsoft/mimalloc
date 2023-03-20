@@ -6,10 +6,9 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
-#include "mimalloc-track.h"
-#include "prim/prim.h"  // mi_prim_get_default_heap
+#include "mimalloc/internal.h"
+#include "mimalloc/atomic.h"
+#include "mimalloc/prim.h"  // mi_prim_get_default_heap
 
 #include <string.h>  // memset, memcpy
 

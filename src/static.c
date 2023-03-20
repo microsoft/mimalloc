@@ -14,17 +14,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
+#include "mimalloc/internal.h"
 
 // For a static override we create a single object file
 // containing the whole library. If it is linked first
 // it will override all the standard library allocation
 // functions (on Unix's).
-#include "alloc.c"
+#include "alloc.c"          // includes alloc-override.c
 #include "alloc-aligned.c"
-#if MI_OSX_ZONE
-#include "alloc-override-osx.c"
-#endif
 #include "alloc-posix.c"
 #include "arena.c"
 #include "bitmap.c"
@@ -32,9 +29,19 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "init.c"
 #include "options.c"
 #include "os.c"
+<<<<<<< HEAD
 #include "page.c"
 #include "prim/prim.c"
 #include "random.c"
+=======
+#include "page.c"           // includes page-queue.c
+#include "random.c" 
+#include "region.c"
+>>>>>>> dev-platform
 #include "segment.c"
 #include "segment-cache.c"
 #include "stats.c"
+#include "prim/prim.c"
+#if MI_OSX_ZONE
+#include "prim/osx/alloc-override-zone.c"
+#endif

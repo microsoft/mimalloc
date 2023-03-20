@@ -21,9 +21,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
-#include "../prim.h"
+#include "mimalloc/internal.h"
+#include "mimalloc/atomic.h"
+#include "mimalloc/prim.h"
 
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf

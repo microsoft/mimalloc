@@ -8,8 +8,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_INTERNAL_H
 #define MIMALLOC_INTERNAL_H
 
-#include "mimalloc-types.h"
-#include "mimalloc-track.h"
+
+// --------------------------------------------------------------------------
+// This file contains the interal API's of mimalloc and various utility
+// functions and macros.
+// --------------------------------------------------------------------------
+
+#include "mimalloc/types.h"
+#include "mimalloc/track.h"
 
 #if (MI_DEBUG>0)
 #define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
@@ -44,6 +50,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_externc
 #endif
 
+// pthreads
 #if !defined(_WIN32) && !defined(__wasi__)
 #define  MI_USE_PTHREADS
 #include <pthread.h>

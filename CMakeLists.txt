@@ -38,20 +38,20 @@ include(GNUInstallDirs)
 include("cmake/mimalloc-config-version.cmake")
 
 set(mi_sources
-    src/stats.c
-    src/random.c
-    src/os.c
-    src/bitmap.c
-    src/arena.c
-    src/segment-cache.c
-    src/segment.c
-    src/page.c
     src/alloc.c
     src/alloc-aligned.c
     src/alloc-posix.c
+    src/arena.c
+    src/bitmap.c
     src/heap.c
-    src/options.c
     src/init.c
+    src/options.c
+    src/os.c
+    src/page.c
+    src/random.c
+    src/segment.c
+    src/segment-cache.c
+    src/stats.c
     src/prim/prim.c)
 
 set(mi_cflags "")
@@ -92,7 +92,7 @@ if(MI_OVERRIDE)
     if(MI_OSX_ZONE)
       # use zone's on macOS
       message(STATUS "  Use malloc zone to override malloc (MI_OSX_ZONE=ON)")
-      list(APPEND mi_sources src/alloc-override-osx.c)
+      list(APPEND mi_sources src/prim/osx/alloc-override-zone.c)
       list(APPEND mi_defines MI_OSX_ZONE=1)
       if (NOT MI_OSX_INTERPOSE)
         message(STATUS "  WARNING: zone overriding usually also needs interpose (use -DMI_OSX_INTERPOSE=ON)")

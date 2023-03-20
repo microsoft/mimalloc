@@ -8,9 +8,20 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_TYPES_H
 #define MIMALLOC_TYPES_H
 
+// --------------------------------------------------------------------------
+// This file contains the main type definitions for mimalloc:
+// mi_heap_t      : all data for a thread-local heap, contains
+//                  lists of all managed heap pages.
+// mi_segment_t   : a larger chunk of memory (32GiB) from where pages
+//                  are allocated.
+// mi_page_t      : a mimalloc page (usually 64KiB or 512KiB) from
+//                  where objects are allocated.
+// --------------------------------------------------------------------------
+
+
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
-#include "mimalloc-atomic.h"  // _Atomic
+#include "mimalloc/atomic.h"  // _Atomic
 
 #ifdef _MSC_VER
 #pragma warning(disable:4214) // bitfield is not int

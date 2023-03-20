@@ -18,7 +18,7 @@ between the fields. (This is used in arena allocation)
 ---------------------------------------------------------------------------- */
 
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
+#include "mimalloc/internal.h"
 #include "bitmap.h"
 
 /* -----------------------------------------------------------

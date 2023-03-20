@@ -8,10 +8,17 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_PRIM_H
 #define MIMALLOC_PRIM_H
 
+
+// --------------------------------------------------------------------------
+// This file specifies the primitive portability API.
+// Each OS/host needs to implement these primitives, see `src/prim`
+// for implementations on Window, macOS, WASI, and Linux/Unix.
+//
 // note: on all primitive functions, we always get:
 //  addr != NULL and page aligned
 //  size > 0     and page aligned
 //  return value is an error code an int where 0 is success.
+// --------------------------------------------------------------------------
 
 // OS memory configuration
 typedef struct mi_os_mem_config_s {
