@@ -6,7 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
+#include "mimalloc/internal.h"
 
 #if defined(MI_MALLOC_OVERRIDE)
 
@@ -420,7 +420,7 @@ __attribute__((constructor(0)))
 #else
 __attribute__((constructor))      // seems not supported by g++-11 on the M1
 #endif
-static void _mi_macos_override_malloc() {
+static void _mi_macos_override_malloc(void) {
   malloc_zone_t* purgeable_zone = NULL;
 
   #if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
