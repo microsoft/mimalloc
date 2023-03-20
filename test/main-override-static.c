@@ -38,7 +38,7 @@ int main() {
   // alloc_huge();
   // test_heap_walk();
   // test_heap_arena();
-  test_align();
+  // test_align();
   
   void* p1 = malloc(78);
   void* p2 = malloc(24);
