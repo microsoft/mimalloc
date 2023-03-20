@@ -11,12 +11,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal.h"
 #include "mimalloc/atomic.h"
 #include "mimalloc/prim.h"
-#include <string.h>  // strerror
 #include <stdio.h>   // fputs, stderr
 
-#ifdef _MSC_VER
-#pragma warning(disable:4996)  // strerror
-#endif
 
 //---------------------------------------------
 // Dynamically bind Windows API points for portability
