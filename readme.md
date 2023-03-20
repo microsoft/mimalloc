@@ -79,7 +79,7 @@ Note: the `v2.x` version has a new algorithm for managing internal mimalloc page
   (see [below](#performance)); please report if you observe any significant performance regression.
 
 * 2022-12-23, `v1.7.9`, `v2.0.9`: Supports building with asan and improved [Valgrind](#valgrind) support. 
-  Support abitrary large alignments (in particular for `std::pmr` pools). 
+  Support arbitrary large alignments (in particular for `std::pmr` pools). 
   Added C++ STL allocators attached to a specific heap (thanks @vmarkovtsev). 
   Heap walks now visit all object (including huge objects). Support Windows nano server containers (by Johannes Schindelin,@dscho). Various small bug fixes.
 
