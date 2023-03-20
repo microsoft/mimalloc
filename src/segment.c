@@ -318,7 +318,11 @@ static uint8_t* _mi_segment_page_start_from_slice(const mi_segment_t* segment, c
   // make the start not OS page aligned for smaller blocks to avoid page/cache effects
   // note: the offset must always be an xblock_size multiple since we assume small allocations
   // are aligned (see `mi_heap_malloc_aligned`).
-  size_t start_offset = (xblock_size >= MI_INTPTR_SIZE && xblock_size <= 512 ? xblock_size : 0); 
+  size_t start_offset = 0;
+  if (xblock_size >= MI_INTPTR_SIZE) {
+    if (xblock_size <= 64) { start_offset = 3*xblock_size; }
+    else if (xblock_size <= 512) { start_offset = xblock_size; }
+  }
   if (page_size != NULL) { *page_size = psize - start_offset; }
   return (uint8_t*)segment + ((idx*MI_SEGMENT_SLICE_SIZE) + start_offset);
 }
