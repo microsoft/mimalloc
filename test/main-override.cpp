@@ -47,7 +47,7 @@ static void test_stl_allocators();
 int main() {
   // mi_stats_reset();  // ignore earlier allocations
   
-  test_std_string();
+  // test_std_string();
   // heap_thread_free_huge();
   /*
    heap_thread_free_huge();
@@ -65,6 +65,7 @@ int main() {
   // test_large_migrate();
   
   //fail_aslr();
+  // bench_alloc_large();
   // mi_stats_print(NULL);
   return 0;
 }
