@@ -433,7 +433,7 @@ static bool os_preloading = true;    // true until this module is initialized
 static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
 
 // Returns true if this module has not been initialized; Don't use C runtime routines until it returns false.
-bool _mi_preloading(void) {
+bool mi_decl_noinline _mi_preloading(void) {
   return os_preloading;
 }
 
@@ -476,9 +476,9 @@ static void mi_allocator_done(void) {
 // Called once by the process loader
 static void mi_process_load(void) {
   mi_heap_main_init();
-  #if defined(MI_TLS_RECURSE_GUARD)
+  #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
   volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
-  MI_UNUSED(dummy);
+  if (dummy == NULL) return;                    // use dummy or otherwise the access may get optimized away (issue #697)
   #endif
   os_preloading = false;
   mi_assert_internal(_mi_is_main_thread());
@@ -522,8 +522,8 @@ void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   static mi_atomic_once_t process_init;
   if (!mi_atomic_once(&process_init)) return;
-  _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
   _mi_process_is_initialized = true;
+  _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
   mi_process_setup_auto_thread_done();
 
   mi_detect_cpu_features();
