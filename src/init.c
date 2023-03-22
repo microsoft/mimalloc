@@ -409,8 +409,6 @@ void mi_thread_done(void) mi_attr_noexcept {
   _mi_thread_done(NULL);
 }
 
-#include <unistd.h>
-
 void _mi_thread_done(mi_heap_t* heap) 
 {
   // calling with NULL implies using the default heap
