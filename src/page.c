@@ -92,8 +92,10 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   }
   #endif
 
+  #if !MI_TSAN
   mi_block_t* tfree = mi_page_thread_free(page);
   mi_assert_internal(mi_page_list_is_valid(page, tfree));
+  #endif
   //size_t tfree_count = mi_page_list_count(page, tfree);
   //mi_assert_internal(tfree_count <= page->thread_freed + 1);
 

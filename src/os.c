@@ -364,7 +364,7 @@ static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservativ
 
   int err = _mi_prim_commit(start, csize, commit);  
   if (err != 0) {
-    _mi_warning_message("cannot %s OS memory (error: %d (0x%d), address: %p, size: 0x%zx bytes)\n", commit ? "commit" : "decommit", err, err, start, csize);
+    _mi_warning_message("cannot %s OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", commit ? "commit" : "decommit", err, err, start, csize);
   }
   mi_assert_internal(err == 0);
   return (err == 0);

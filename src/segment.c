@@ -809,7 +809,7 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
 
   // get from cache?
   if (page_alignment == 0) {
-    segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, pcommit_mask, pdecommit_mask, &mem_large, &is_pinned, is_zero, req_arena_id, &memid, os_tld);
+    segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, pcommit_mask, pdecommit_mask, mem_large, &mem_large, &is_pinned, is_zero, req_arena_id, &memid, os_tld);
   }
   
   // get from OS

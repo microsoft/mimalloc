@@ -115,7 +115,7 @@ mi_arena_id_t _mi_arena_id_none(void);
 bool       _mi_arena_memid_is_suitable(size_t memid, mi_arena_id_t req_arena_id);
 
 // "segment-cache.c"
-void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
+void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool large_allowed, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
 bool       _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* decommit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld);
 void       _mi_segment_cache_collect(bool force, mi_os_tld_t* tld);
 void       _mi_segment_cache_free_all(mi_os_tld_t* tld);
