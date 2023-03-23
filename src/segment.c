@@ -509,6 +509,7 @@ static bool mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_
   mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
   // note: assumes commit_mask is always full for huge segments as otherwise the commit mask bits can overflow
   if (mi_commit_mask_is_full(&segment->commit_mask) && mi_commit_mask_is_empty(&segment->decommit_mask)) return true; // fully committed
+  mi_assert_internal(segment->kind != MI_SEGMENT_HUGE);
   return mi_segment_commitx(segment,true,p,size,stats);
 }
 
@@ -904,6 +905,10 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
     mi_assert_internal(!mi_commit_mask_any_set(&segment->decommit_mask, &commit_needed_mask));
     #endif
   }    
+  else {
+    segment->decommit_expire = 0;
+    mi_commit_mask_create_empty( &segment->decommit_mask );
+  }
   
   // initialize segment info
   const size_t slice_entries = (segment_slices > MI_SLICES_PER_SEGMENT ? MI_SLICES_PER_SEGMENT : segment_slices);
