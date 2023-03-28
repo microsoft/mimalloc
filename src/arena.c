@@ -11,12 +11,10 @@ large blocks (>= MI_ARENA_BLOCK_SIZE, 32MiB).
 In contrast to the rest of mimalloc, the arenas are shared between
 threads and need to be accessed using atomic operations.
 
-Currently arenas are only used to for huge OS page (1GiB) reservations,
-otherwise it delegates to direct allocation from the OS.
-In the future, we can expose an API to manually add more kinds of arenas
-which is sometimes needed for embedded devices or shared memory for example.
-(We can also employ this with WASI or `sbrk` systems to reserve large arenas
- on demand and be able to reuse them efficiently).
+Arenas are used to for huge OS page (1GiB) reservations or for reserving
+OS memory upfront which can be improve performance or is sometimes needed
+on embedded devices. We can also employ this with WASI or `sbrk` systems 
+to reserve large arenas upfront and be able to reuse the memory more effectively.
 
 The arena allocation needs to be thread safe and we use an atomic bitmap to allocate.
 -----------------------------------------------------------------------------*/
