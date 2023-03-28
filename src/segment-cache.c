@@ -216,19 +216,26 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
   return false;
 #else
 
-  // only for normal segment blocks
+  // purge expired entries
+  mi_segment_cache_purge(false /* limit purges to a constant N */, false /* don't force unexpired */, tld);
+
+  // only cache normal segment blocks
   if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
+
+  // Also do not cache arena allocated segments that cannot be decommitted. (as arena allocation is fast)
+  // This is a common case with reserved huge OS pages.
+  // 
+  // (note: we could also allow segments that are already fully decommitted but that never happens
+  //  as the first slice is always committed (for the segment metadata))
+  if (!_mi_arena_is_os_allocated(memid) && is_pinned) return false;
 
   // numa node determines start field
   int numa_node = _mi_os_numa_node(NULL);
   size_t start_field = 0;
   if (numa_node > 0) {
-    start_field = (MI_CACHE_FIELDS / _mi_os_numa_node_count())*numa_node;
+    start_field = (MI_CACHE_FIELDS / _mi_os_numa_node_count()) * numa_node;
     if (start_field >= MI_CACHE_FIELDS) start_field = 0;
   }
-
-  // purge expired entries
-  mi_segment_cache_purge(false /* limit purges to a constant N */, false /* don't force unexpired */, tld);
 
   // find an available slot
   mi_bitmap_index_t bitidx;
