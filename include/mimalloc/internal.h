@@ -115,6 +115,8 @@ mi_arena_id_t _mi_arena_id_none(void);
 void       _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t memid, bool all_committed, mi_stats_t* stats);
 void*      _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
 void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
+bool       _mi_arena_memid_is_suitable(size_t arena_memid, mi_arena_id_t request_arena_id);
+bool       _mi_arena_is_os_allocated(size_t arena_memid);
 
 
 // memory.c

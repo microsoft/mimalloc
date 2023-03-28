@@ -127,6 +127,10 @@ bool _mi_arena_memid_is_suitable(size_t arena_memid, mi_arena_id_t request_arena
   return mi_arena_id_is_suitable(id, exclusive, request_arena_id);
 }
 
+bool _mi_arena_is_os_allocated(size_t arena_memid) {
+  return (arena_memid == MI_MEMID_OS);
+}
+
 static size_t mi_block_count_of_size(size_t size) {
   return _mi_divide_up(size, MI_ARENA_BLOCK_SIZE);
 }
