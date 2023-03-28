@@ -86,19 +86,36 @@ mi_heap_t* _mi_heap_main_get(void);     // statically allocated main backing hea
 void       _mi_thread_done(mi_heap_t* heap);
 
 // os.c
-size_t     _mi_os_page_size(void);
 void       _mi_os_init(void);                                      // called from process init
 void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocate thread local data
 void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
+size_t     _mi_os_page_size(void);
 size_t     _mi_os_good_alloc_size(size_t size);
 bool       _mi_os_has_overcommit(void);
-bool       _mi_os_reset(void* addr, size_t size, mi_stats_t* tld_stats);
 
+bool       _mi_os_reset(void* addr, size_t size, mi_stats_t* tld_stats);
+bool       _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
+bool       _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
+bool       _mi_os_protect(void* addr, size_t size);
+bool       _mi_os_unprotect(void* addr, size_t size);
+
+void*      _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_stats_t* stats);
 void*      _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool* large, mi_stats_t* tld_stats);
 void       _mi_os_free_aligned(void* p, size_t size, size_t alignment, size_t align_offset, bool was_committed, mi_stats_t* tld_stats);
 void*      _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 bool       _mi_os_use_large_page(size_t size, size_t alignment);
 size_t     _mi_os_large_page_size(void);
+
+void       _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats);
+void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize);
+void       _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats);
+
+// arena.c
+mi_arena_id_t _mi_arena_id_none(void);
+void       _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t memid, bool all_committed, mi_stats_t* stats);
+void*      _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
+void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
+
 
 // memory.c
 void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, size_t offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* id, mi_os_tld_t* tld);
@@ -128,8 +145,6 @@ void       _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, m
 void       _mi_segment_thread_collect(mi_segments_tld_t* tld);
 void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
 void       _mi_abandoned_await_readers(void);
-
-
 
 // "page.c"
 void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment)  mi_attr_noexcept mi_attr_malloc;
@@ -161,7 +176,6 @@ void       _mi_heap_destroy_all(void);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);
-
 mi_msecs_t  _mi_clock_now(void);
 mi_msecs_t  _mi_clock_end(mi_msecs_t start);
 mi_msecs_t  _mi_clock_start(void);
