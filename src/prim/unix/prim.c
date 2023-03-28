@@ -50,6 +50,51 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/sysctl.h>
 #endif
 
+#if !defined(__HAIKU__)
+  #define MI_HAS_SYSCALL_H
+  #include <sys/syscall.h>
+#endif
+
+//------------------------------------------------------------------------------------
+// Use syscalls for some primitives to allow for libraries that override open/read/close etc.
+// and do allocation themselves; using syscalls prevents recursion when mimalloc is 
+// still initializing (issue #713)
+//------------------------------------------------------------------------------------
+
+#if defined(MI_HAS_SYSCALL_H) && defined(SYS_open) && defined(SYS_close) && defined(SYS_read) && defined(SYS_access)
+
+static int mi_prim_open(const char* fpath, int open_flags) {
+  return syscall(SYS_open,fpath,open_flags,0);
+}
+static ssize_t mi_prim_read(int fd, void* buf, size_t bufsize) {
+  return syscall(SYS_read,fd,buf,bufsize);
+}
+static int mi_prim_close(int fd) {
+  return syscall(SYS_close,fd);
+}
+static int mi_prim_access(const char *fpath, int mode) {
+  return syscall(SYS_access,fpath,mode);
+}
+
+#else
+
+static int mi_prim_open(const char* fpath, int open_flags) {
+  return open(fpath,open_flags,mode);
+}
+static ssize_t mi_prim_read(int fd, void* buf, size_t bufsize) {
+  return read(fd,buf,bufsize);
+}
+static int mi_prim_close(int fd) {
+  return close(fd);
+}
+static int mi_prim_access(const char *fpath, int mode) {
+  return access(fpath,mode);
+}
+
+#endif
+
+
+
 //---------------------------------------------
 // init
 //---------------------------------------------
@@ -57,11 +102,11 @@ terms of the MIT license. A copy of the license can be found in the file
 static bool unix_detect_overcommit(void) {
   bool os_overcommit = true;
 #if defined(__linux__)
-  int fd = open("/proc/sys/vm/overcommit_memory", O_RDONLY);
+  int fd = mi_prim_open("/proc/sys/vm/overcommit_memory", O_RDONLY);
 	if (fd >= 0) {
     char buf[32];
-    ssize_t nread = read(fd, &buf, sizeof(buf));
-    close(fd);
+    ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+    mi_prim_close(fd);
     // <https://www.kernel.org/doc/Documentation/vm/overcommit-accounting>
     // 0: heuristic overcommit, 1: always overcommit, 2: never overcommit (ignore NORESERVE)
     if (nread >= 1) {
@@ -367,13 +412,11 @@ int _mi_prim_protect(void* start, size_t size, bool protect) {
 
 #if (MI_INTPTR_SIZE >= 8) && !defined(__HAIKU__)
 
-#include <sys/syscall.h>
-
 #ifndef MPOL_PREFERRED
 #define MPOL_PREFERRED 1
 #endif
 
-#if defined(SYS_mbind)
+#if defined(MI_HAS_SYSCALL_H) && defined(SYS_mbind)
 static long mi_prim_mbind(void* start, unsigned long len, unsigned long mode, const unsigned long* nmask, unsigned long maxnode, unsigned flags) {
   return syscall(SYS_mbind, start, len, mode, nmask, maxnode, flags);
 }
@@ -417,11 +460,10 @@ int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, vo
 
 #if defined(__linux__)
 
-#include <sys/syscall.h>  // getcpu
-#include <stdio.h>        // access
+#include <stdio.h>    // snprintf
 
 size_t _mi_prim_numa_node(void) {
-  #ifdef SYS_getcpu
+  #if defined(MI_HAS_SYSCALL_H) && defined(SYS_getcpu)
     unsigned long node = 0;
     unsigned long ncpu = 0;
     long err = syscall(SYS_getcpu, &ncpu, &node, NULL);
@@ -438,14 +480,14 @@ size_t _mi_prim_numa_node_count(void) {
   for(node = 0; node < 256; node++) {
     // enumerate node entries -- todo: it there a more efficient way to do this? (but ensure there is no allocation)
     snprintf(buf, 127, "/sys/devices/system/node/node%u", node + 1);
-    if (access(buf,R_OK) != 0) break;
+    if (mi_prim_access(buf,R_OK) != 0) break;
   }
   return (node+1);
 }
 
 #elif defined(__FreeBSD__) && __FreeBSD_version >= 1200000
 
-size_t mi_prim_numa_node(void) {
+size_t _mi_prim_numa_node(void) {
   domainset_t dom;
   size_t node;
   int policy;
@@ -568,14 +610,14 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   }
   pinfo->page_faults = 0;
 #elif defined(__APPLE__)
-  pinfo->peak_rss = rusage.ru_maxrss;         // BSD reports in bytes
+  pinfo->peak_rss = rusage.ru_maxrss;         // macos reports in bytes
   struct mach_task_basic_info info;
   mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;
   if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &infoCount) == KERN_SUCCESS) {
     pinfo->current_rss = (size_t)info.resident_size;
   }
 #else
-  pinfo->peak_rss = rusage.ru_maxrss * 1024;  // Linux reports in KiB
+  pinfo->peak_rss = rusage.ru_maxrss * 1024;  // Linux/BSD report in KiB
 #endif
   // use defaults for commit
 }
@@ -698,19 +740,17 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 
 #elif defined(__linux__) || defined(__HAIKU__)
 
-#if defined(__linux__)
-#include <sys/syscall.h>
-#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   // Modern Linux provides `getrandom` but different distributions either use `sys/random.h` or `linux/random.h`
   // and for the latter the actual `getrandom` call is not always defined.
   // (see <https://stackoverflow.com/questions/45237324/why-doesnt-getrandom-compile>)
   // We therefore use a syscall directly and fall back dynamically to /dev/urandom when needed.
-  #ifdef SYS_getrandom
+  #if defined(MI_HAS_SYSCALL_H) && defined(SYS_getrandom)
     #ifndef GRND_NONBLOCK
     #define GRND_NONBLOCK (1)
     #endif
@@ -726,11 +766,11 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   #if defined(O_CLOEXEC)
   flags |= O_CLOEXEC;
   #endif
-  int fd = open("/dev/urandom", flags, 0);
+  int fd = mi_prim_open("/dev/urandom", flags);
   if (fd < 0) return false;
   size_t count = 0;
   while(count < buf_len) {
-    ssize_t ret = read(fd, (char*)buf + count, buf_len - count);
+    ssize_t ret = mi_prim_read(fd, (char*)buf + count, buf_len - count);
     if (ret<=0) {
       if (errno!=EAGAIN && errno!=EINTR) break;
     }
@@ -738,7 +778,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
       count += ret;
     }
   }
-  close(fd);
+  mi_prim_close(fd);
   return (count==buf_len);
 }
 
