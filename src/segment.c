@@ -1182,7 +1182,7 @@ static mi_page_t* mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, mi_p
   mi_assert_internal(free_queue->first != NULL);
   mi_page_t* const page = mi_segment_page_alloc_in(free_queue->first, tld);
   mi_assert_internal(page != NULL);
-#if MI_DEBUG>=2 && !MI_TRACK_ENABLED
+#if MI_DEBUG>=2 && !MI_TRACK_ENABLED // && !MI_TSAN
   // verify it is committed
   _mi_segment_page_start(_mi_page_segment(page), page, sizeof(void*), NULL, NULL)[0] = 0;
 #endif
@@ -1206,7 +1206,7 @@ static mi_page_t* mi_segment_large_page_alloc(mi_heap_t* heap, size_t block_size
   if (segment == NULL) return NULL;
   mi_page_t* page = mi_segment_find_free(segment, tld);
   mi_assert_internal(page != NULL);
-#if MI_DEBUG>=2 && !MI_TRACK_ENABLED
+#if MI_DEBUG>=2 && !MI_TRACK_ENABLED // && !MI_TSAN
   _mi_segment_page_start(segment, page, sizeof(void*), NULL, NULL)[0] = 0;
 #endif
   return page;
