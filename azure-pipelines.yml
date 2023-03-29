@@ -98,6 +98,12 @@ jobs:
         CXX: clang++
         BuildType: debug-clang-cxx
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
+      Debug ASAN Clang:
+        CC: clang
+        CXX: clang++
+        BuildType: debug-asan-clang
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_TRACK_ASAN=ON
+      
   steps:
   - task: CMake@1
     inputs:
