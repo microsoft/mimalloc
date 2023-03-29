@@ -50,7 +50,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/sysctl.h>
 #endif
 
-#if !defined(__HAIKU__) && !defined(__APPLE__)
+#if !defined(__HAIKU__) && !defined(__APPLE__) && !defined(__CYGWIN__)
   #define MI_HAS_SYSCALL_H
   #include <sys/syscall.h>
 #endif
@@ -410,7 +410,7 @@ int _mi_prim_protect(void* start, size_t size, bool protect) {
 // Huge page allocation
 //---------------------------------------------
 
-#if (MI_INTPTR_SIZE >= 8) && !defined(__HAIKU__)
+#if (MI_INTPTR_SIZE >= 8) && !defined(__HAIKU__) && !defined(__CYGWIN__)
 
 #ifndef MPOL_PREFERRED
 #define MPOL_PREFERRED 1
