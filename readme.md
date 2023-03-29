@@ -9,18 +9,18 @@
 
 mimalloc (pronounced "me-malloc")
 is a general purpose allocator with excellent [performance](#performance) characteristics.
-Initially developed by Daan Leijen for the run-time systems of the
+Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.0.9` (2022-12-23).  
-Latest stable  tag: `v1.7.9` (2022-12-23).
+Latest release tag: `v2.1.0` (2023-03-29).
+Latest stable  tag: `v1.8.0` (2023-03-29).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
 ```
 > LD_PRELOAD=/usr/lib/libmimalloc.so  myprogram
 ```
-It also has an easy way to override the default allocator in [Windows](#override_on_windows). Notable aspects of the design include:
+It also includes a robust way to override the default allocator in [Windows](#override_on_windows). Notable aspects of the design include:
 
 - __small and consistent__: the library is about 8k LOC using simple and
   consistent data structures. This makes it very suitable
@@ -78,8 +78,12 @@ Note: the `v2.x` version has a new algorithm for managing internal mimalloc page
   and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
 
-* 2022-12-23, `v1.7.9`, `v2.0.9`: Supports building with asan and improved [Valgrind](#valgrind) support. 
-  Support abitrary large alignments (in particular for `std::pmr` pools). 
+* 2023-03-29, `v1.8.0`, `v2.1.0`: Improved support dynamic overriding on Windows 11. Improved tracing precision
+  with [#asan] and [#Valgrind], and added Windows event tracing [#ETW] (contributed by Xinglong He). Created an OS
+  abstraction layer to make it easier to port and separate platform dependent code (in `src/prim`). Fixed C++ STL compilation on older Microsoft C++ compilers, and various small bug fixes.
+
+* 2022-12-23, `v1.7.9`, `v2.0.9`: Supports building with [#asan] and improved [Valgrind](#valgrind support. Support abitrary large
+  alignments (in particular for `std::pmr` pools). 
   Added C++ STL allocators attached to a specific heap (thanks @vmarkovtsev). 
   Heap walks now visit all object (including huge objects). Support Windows nano server containers (by Johannes Schindelin,@dscho). Various small bug fixes.
 
@@ -346,16 +350,20 @@ When _mimalloc_ is built using debug mode, various checks are done at runtime to
 - Double free's, and freeing invalid heap pointers are detected.
 - Corrupted free-lists and some forms of use-after-free are detected.
 
-## Valgrind
+## Tools
 
-Generally, we recommend using the standard allocator with the amazing [Valgrind] tool (and
-also for other address sanitizers).
-However, it is possible to build mimalloc with Valgrind support. This has a small performance
-overhead but does allow detecting memory leaks and byte-precise buffer overflows directly on final
-executables. To build with valgrind support, use the `MI_VALGRIND=ON` cmake option:
+Generally, we recommend using the standard allocator with memory tracking tools, but mimalloc
+can also be build to support the [address sanitizer][asan] or the excellent [Valgrind] tool. 
+Moreover, it can be build to support Windows event tracing ([ETW]).
+This has a small performance overhead but does allow detecting memory leaks and byte-precise 
+buffer overflows directly on final executables. See also the `test/test-wrong.c` file to test with various tools.
+
+### Valgrind
+
+To build with valgrind support, use the `MI_TRACK_VALGRIND=ON` cmake option:
 
 ```
-> cmake ../.. -DMI_VALGRIND=ON
+> cmake ../.. -DMI_TRACK_VALGRIND=ON
 ```
 
 This can also be combined with secure mode or debug mode.
@@ -384,6 +392,53 @@ Valgrind support is in its initial development -- please report any issues.
 [Valgrind]: https://valgrind.org/
 [valgrind-soname]: https://valgrind.org/docs/manual/manual-core.html#opt.soname-synonyms
 
+### ASAN
+
+To build with the address sanitizer, use the `-DMI_TRACK_ASAN=ON` cmake option:
+
+```
+> cmake ../.. -DMI_TRACK_ASAN=ON
+```
+
+This can also be combined with secure mode or debug mode. 
+You can then run your programs as:'
+
+```
+> ASAN_OPTIONS=verbosity=1 <myprogram>
+```
+
+When you link a program with an address sanitizer build of mimalloc, you should
+generally compile that program too with the address sanitizer enabled. 
+For example, assuming you build mimalloc in `out/debug`:
+
+```
+clang -g -o test-wrong -Iinclude test/test-wrong.c out/debug/libmimalloc-asan-debug.a -lpthread -fsanitize=address -fsanitize-recover=address
+```
+
+Since the address sanitizer redirects the standard allocation functions, on some platforms (macOSX for example)
+it is required to compile mimalloc with `-DMI_OVERRIDE=OFF`.
+Adress sanitizer support is in its initial development -- please report any issues.
+
+[asan]: https://github.com/google/sanitizers/wiki/AddressSanitizer
+
+### ETW
+
+Event tracing for Windows ([ETW]) provides a high performance way to capture all allocations though
+mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACE_ETW=ON` cmake option. 
+
+You can then capture an allocation trace using the Windows performance recorder (WPR), using the 
+`src/prim/windows/etw-mimalloc.wprp` profile. In an admin prompt, you can use:
+```
+> wpr -start src\prim\windows\etw-mimalloc.wprp -filemode
+> <my_mimalloc_program>
+> wpr -stop <my_mimalloc_program>.etl
+``` 
+and then open `<my_mimalloc_program>.etl` in the Windows Performance Analyzer (WPA), or 
+use a tool like [TraceControl] that is specialized for analyzing mimalloc traces.
+
+[ETW]: https://learn.microsoft.com/en-us/windows-hardware/test/wpt/event-tracing-for-windows
+[TraceControl]: https://github.com/xinglonghe/TraceControl
+
 
 # Overriding Standard Malloc
 
@@ -393,7 +448,7 @@ Overriding the standard `malloc` (and `new`) can be done either _dynamically_ or
 
 This is the recommended way to override the standard malloc interface.
 
-### Override on Linux, BSD
+### Dynamic Override on Linux, BSD
 
 On these ELF-based systems we preload the mimalloc shared
 library so all calls to the standard `malloc` interface are
@@ -412,7 +467,7 @@ or run with the debug version to get detailed statistics:
 > env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram
 ```
 
-### Override on MacOS
+### Dynamic Override on MacOS
 
 On macOS we can also preload the mimalloc shared
 library so all calls to the standard `malloc` interface are
@@ -425,7 +480,7 @@ Note that certain security restrictions may apply when doing this from
 the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
 
 
-### Override on Windows
+### Dynamic Override on Windows
 
 <span id="override_on_windows">Overriding on Windows</span> is robust and has the
 particular advantage to be able to redirect all malloc/free calls that go through
@@ -458,13 +513,13 @@ Such patching can be done for example with [CFF Explorer](https://ntcore.com/?pa
 
 On Unix-like systems, you can also statically link with _mimalloc_ to override the standard
 malloc interface. The recommended way is to link the final program with the
-_mimalloc_ single object file (`mimalloc-override.o`). We use
+_mimalloc_ single object file (`mimalloc.o`). We use
 an object file instead of a library file as linkers give preference to
 that over archives to resolve symbols. To ensure that the standard
 malloc interface resolves to the _mimalloc_ library, link it as the first
 object file. For example:
 ```
-> gcc -o myprogram mimalloc-override.o  myfile1.c ...
+> gcc -o myprogram mimalloc.o  myfile1.c ...
 ```
 
 Another way to override statically that works on all platforms, is to

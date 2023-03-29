@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2021 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2023 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -273,6 +273,15 @@ static inline intptr_t mi_atomic_addi(_Atomic(intptr_t)*p, intptr_t add) {
 // Atomically subtract a signed value; returns the previous value.
 static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)*p, intptr_t sub) {
   return (intptr_t)mi_atomic_addi(p, -sub);
+}
+
+typedef _Atomic(uintptr_t) mi_atomic_once_t;
+
+// Returns true only on the first invocation
+static inline bool mi_atomic_once( mi_atomic_once_t* once ) {
+  if (mi_atomic_load_relaxed(once) != 0) return false;     // quick test 
+  uintptr_t expected = 0;
+  return mi_atomic_cas_strong_acq_rel(once, &expected, 1); // try to set to 1
 }
 
 // Yield

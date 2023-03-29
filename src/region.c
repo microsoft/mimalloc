@@ -32,30 +32,15 @@ Possible issues:
   do this better without adding too much complexity?
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
+#include "mimalloc/internal.h"
+#include "mimalloc/atomic.h"
 
 #include <string.h>  // memset
 
 #include "bitmap.h"
 
-// Internal raw OS interface
-size_t  _mi_os_large_page_size(void);
-bool    _mi_os_protect(void* addr, size_t size);
-bool    _mi_os_unprotect(void* addr, size_t size);
-bool    _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
-bool    _mi_os_decommit(void* p, size_t size, mi_stats_t* stats);
-bool    _mi_os_reset(void* p, size_t size, mi_stats_t* stats);
-bool    _mi_os_unreset(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
-bool    _mi_os_commit_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats);
-
-// arena.c
-mi_arena_id_t _mi_arena_id_none(void);
-void    _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t memid, bool all_committed, mi_stats_t* stats);
-void*   _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
-void*   _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
-
-
+// os.c
+bool _mi_os_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats);
 
 // Constants
 #if (MI_INTPTR_SIZE==8)
@@ -330,7 +315,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* large, bool*
   }
   mi_assert_internal(!_mi_bitmap_is_any_claimed(&region->reset, 1, blocks, bit_idx));
 
-  #if (MI_DEBUG>=2) && !MI_TRACK_ENABLED
+  #if (MI_DEBUG>=2) && !MI_TRACK_ENABLED  // && !MI_TSAN
   if (*commit) { ((uint8_t*)p)[0] = 0; }
   #endif
 
@@ -376,7 +361,7 @@ void* _mi_mem_alloc_aligned(size_t size, size_t alignment, size_t align_offset, 
 
   if (p != NULL) {
     mi_assert_internal(((uintptr_t)p + align_offset) % alignment == 0);
-    #if (MI_DEBUG>=2) && !MI_TRACK_ENABLED
+    #if (MI_DEBUG>=2) && !MI_TRACK_ENABLED  // && !MI_TSAN
     if (*commit) { ((uint8_t*)p)[0] = 0; } // ensure the memory is committed
     #endif
   }

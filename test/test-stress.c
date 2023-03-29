@@ -7,7 +7,7 @@ terms of the MIT license.
 /* This is a stress test for the allocator, using multiple threads and
    transferring objects between threads. It tries to reflect real-world workloads:
    - allocation size is distributed linearly in powers of two
-   - with some fraction extra large (and some extra extra large)
+   - with some fraction extra large (and some very large)
    - the allocations are initialized and read again at free
    - pointers transfer between threads
    - threads are terminated and recreated with some objects surviving in between
@@ -91,7 +91,7 @@ static bool chance(size_t perc, random_t r) {
 
 static void* alloc_items(size_t items, random_t r) {
   if (chance(1, r)) {
-    if (chance(1, r) && allow_large_objects) items *= 50000;       // 0.01% giant
+    if (chance(1, r) && allow_large_objects) items *= 10000;       // 0.01% giant
     else if (chance(10, r) && allow_large_objects) items *= 1000;  // 0.1% huge
     else items *= 100;                                             // 1% large objects;
   }
@@ -244,6 +244,9 @@ int main(int argc, char** argv) {
   //printf("(reserve huge: %i\n)", res);
 
   //bench_start_program();
+#ifndef USE_STD_MALLOC
+  mi_stats_reset();
+#endif  
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
   srand(0x7feb352d);

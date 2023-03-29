@@ -11,34 +11,21 @@ large blocks (>= MI_ARENA_MIN_BLOCK_SIZE, 4MiB).
 In contrast to the rest of mimalloc, the arenas are shared between
 threads and need to be accessed using atomic operations.
 
-Currently arenas are only used to for huge OS page (1GiB) reservations,
-or direct OS memory reservations -- otherwise it delegates to direct allocation from the OS.
-In the future, we can expose an API to manually add more kinds of arenas
-which is sometimes needed for embedded devices or shared memory for example.
-(We can also employ this with WASI or `sbrk` systems to reserve large arenas
- on demand and be able to reuse them efficiently).
+Arenas are used to for huge OS page (1GiB) reservations or for reserving
+OS memory upfront which can be improve performance or is sometimes needed
+on embedded devices. We can also employ this with WASI or `sbrk` systems 
+to reserve large arenas upfront and be able to reuse the memory more effectively.
 
 The arena allocation needs to be thread safe and we use an atomic bitmap to allocate.
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
+#include "mimalloc/internal.h"
+#include "mimalloc/atomic.h"
 
 #include <string.h>  // memset
 #include <errno.h> // ENOMEM
 
 #include "bitmap.h"  // atomic bitmap
-
-
-// os.c
-void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_stats_t* stats);
-void  _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats);
-
-void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize);
-void  _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats);
-
-bool  _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
-bool  _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
 
 
 /* -----------------------------------------------------------
@@ -128,6 +115,10 @@ bool _mi_arena_memid_is_suitable(size_t arena_memid, mi_arena_id_t request_arena
   mi_arena_id_t id = (int)(arena_memid & 0x7F);
   bool exclusive = ((arena_memid & 0x80) != 0);
   return mi_arena_id_is_suitable(id, exclusive, request_arena_id);
+}
+
+bool _mi_arena_is_os_allocated(size_t arena_memid) {
+  return (arena_memid == MI_MEMID_OS);
 }
 
 static size_t mi_block_count_of_size(size_t size) {

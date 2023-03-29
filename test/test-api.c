@@ -33,8 +33,8 @@ we therefore test the API over various inputs. Please add more tests :-)
 #endif
 
 #include "mimalloc.h"
-// #include "mimalloc-internal.h"
-#include "mimalloc-types.h" // for MI_DEBUG and MI_ALIGNMENT_MAX
+// #include "mimalloc/internal.h"
+#include "mimalloc/types.h" // for MI_DEBUG and MI_ALIGNMENT_MAX
 
 #include "testhelper.h"
 
@@ -51,7 +51,7 @@ bool test_stl_allocator2(void);
 // ---------------------------------------------------------------------------
 int main(void) {
   mi_option_disable(mi_option_verbose);
-
+  
   // ---------------------------------------------------
   // Malloc
   // ---------------------------------------------------
@@ -149,7 +149,8 @@ int main(void) {
     for (size_t align = 1; align <= MI_ALIGNMENT_MAX && ok; align *= 2) {
       void* ps[8];
       for (int i = 0; i < 8 && ok; i++) {
-        ps[i] = mi_malloc_aligned(align*5 /*size*/, align);
+        ps[i] = mi_malloc_aligned(align*13  // size
+                                 , align);
         if (ps[i] == NULL || (uintptr_t)(ps[i]) % align != 0) {
           ok = false;
         }

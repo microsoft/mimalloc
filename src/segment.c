@@ -5,8 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
+#include "mimalloc/internal.h"
+#include "mimalloc/atomic.h"
 
 #include <string.h>  // memset
 #include <stdio.h>
@@ -316,7 +316,13 @@ static uint8_t* _mi_segment_page_start_from_slice(const mi_segment_t* segment, c
   ptrdiff_t idx = slice - segment->slices;
   size_t psize = (size_t)slice->slice_count * MI_SEGMENT_SLICE_SIZE;
   // make the start not OS page aligned for smaller blocks to avoid page/cache effects
-  size_t start_offset = (xblock_size >= MI_INTPTR_SIZE && xblock_size <= 1024 ? 3*MI_MAX_ALIGN_GUARANTEE : 0); 
+  // note: the offset must always be an xblock_size multiple since we assume small allocations
+  // are aligned (see `mi_heap_malloc_aligned`).
+  size_t start_offset = 0;
+  if (xblock_size >= MI_INTPTR_SIZE) {
+    if (xblock_size <= 64) { start_offset = 3*xblock_size; }
+    else if (xblock_size <= 512) { start_offset = xblock_size; }
+  }
   if (page_size != NULL) { *page_size = psize - start_offset; }
   return (uint8_t*)segment + ((idx*MI_SEGMENT_SLICE_SIZE) + start_offset);
 }
@@ -391,8 +397,10 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   if (size != MI_SEGMENT_SIZE || segment->mem_align_offset != 0 || segment->kind == MI_SEGMENT_HUGE || // only push regular segments on the cache
        !_mi_segment_cache_push(segment, size, segment->memid, &segment->commit_mask, &segment->decommit_mask, segment->mem_is_large, segment->mem_is_pinned, tld->os)) 
   {
-    const size_t csize = _mi_commit_mask_committed_size(&segment->commit_mask, size);
-    if (csize > 0 && !segment->mem_is_pinned) _mi_stat_decrease(&_mi_stats_main.committed, csize);
+    if (!segment->mem_is_pinned) {
+      const size_t csize = _mi_commit_mask_committed_size(&segment->commit_mask, size);
+      if (csize > 0) { _mi_stat_decrease(&_mi_stats_main.committed, csize); }
+    }
     _mi_abandoned_await_readers();  // wait until safe to free
     _mi_arena_free(segment, mi_segment_size(segment), segment->mem_alignment, segment->mem_align_offset, segment->memid, segment->mem_is_pinned /* pretend not committed to not double count decommits */, tld->stats);
   }
@@ -503,6 +511,7 @@ static bool mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_
   mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->decommit_mask));
   // note: assumes commit_mask is always full for huge segments as otherwise the commit mask bits can overflow
   if (mi_commit_mask_is_full(&segment->commit_mask) && mi_commit_mask_is_empty(&segment->decommit_mask)) return true; // fully committed
+  mi_assert_internal(segment->kind != MI_SEGMENT_HUGE);
   return mi_segment_commitx(segment,true,p,size,stats);
 }
 
@@ -632,7 +641,8 @@ static mi_slice_t* mi_segment_span_free_coalesce(mi_slice_t* slice, mi_segments_
 
   // for huge pages, just mark as free but don't add to the queues
   if (segment->kind == MI_SEGMENT_HUGE) {
-    mi_assert_internal(segment->used == 1);  // decreased right after this call in `mi_segment_page_clear`
+    // issue #691: segment->used can be 0 if the huge page block was freed while abandoned (reclaim will get here in that case)
+    mi_assert_internal((segment->used==0 && slice->xblock_size==0) || segment->used == 1);  // decreased right after this call in `mi_segment_page_clear`
     slice->xblock_size = 0;  // mark as free anyways
     // we should mark the last slice `xblock_size=0` now to maintain invariants but we skip it to 
     // avoid a possible cache miss (and the segment is about to be freed)
@@ -795,15 +805,13 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
     const size_t extra = align_offset - info_size;
     // recalculate due to potential guard pages
     *psegment_slices = mi_segment_calculate_slices(required + extra, ppre_size, pinfo_slices);
-    //segment_size += _mi_align_up(align_offset - info_size, MI_SEGMENT_SLICE_SIZE);
-    //segment_slices = segment_size / MI_SEGMENT_SLICE_SIZE;
   }
   const size_t segment_size = (*psegment_slices) * MI_SEGMENT_SLICE_SIZE;
   mi_segment_t* segment = NULL;
 
   // get from cache?
   if (page_alignment == 0) {
-    segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, pcommit_mask, pdecommit_mask, &mem_large, &is_pinned, is_zero, req_arena_id, &memid, os_tld);
+    segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, pcommit_mask, pdecommit_mask, mem_large, &mem_large, &is_pinned, is_zero, req_arena_id, &memid, os_tld);
   }
   
   // get from OS
@@ -830,7 +838,10 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
     if (!ok) return NULL; // failed to commit 
     mi_commit_mask_set(pcommit_mask, &commit_needed_mask); 
   }
-  mi_track_mem_undefined(segment,commit_needed);
+  else if (*is_zero) {
+    // track zero initialization for valgrind
+    mi_track_mem_defined(segment, commit_needed * MI_COMMIT_SIZE);        
+  }
   segment->memid = memid;
   segment->mem_is_pinned = is_pinned;
   segment->mem_is_large = mem_large;
@@ -874,10 +885,13 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   
   // zero the segment info? -- not always needed as it may be zero initialized from the OS 
   mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);  // tsan
-  if (!is_zero) {
-    ptrdiff_t ofs = offsetof(mi_segment_t, next);
+  {
+    ptrdiff_t ofs    = offsetof(mi_segment_t, next);
     size_t    prefix = offsetof(mi_segment_t, slices) - ofs;
-    memset((uint8_t*)segment+ofs, 0, prefix + sizeof(mi_slice_t)*(segment_slices+1));  // one more
+    size_t    zsize  = prefix + (sizeof(mi_slice_t) * (segment_slices + 1)); // one more
+    if (!is_zero) {
+      memset((uint8_t*)segment + ofs, 0, zsize);
+    }  
   }
   
   segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
@@ -893,6 +907,10 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
     mi_assert_internal(!mi_commit_mask_any_set(&segment->decommit_mask, &commit_needed_mask));
     #endif
   }    
+  else {
+    segment->decommit_expire = 0;
+    mi_commit_mask_create_empty( &segment->decommit_mask );
+  }
   
   // initialize segment info
   const size_t slice_entries = (segment_slices > MI_SLICES_PER_SEGMENT ? MI_SLICES_PER_SEGMENT : segment_slices);
@@ -954,7 +972,9 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   // Remove the free pages
   mi_slice_t* slice = &segment->slices[0];
   const mi_slice_t* end = mi_segment_slices_end(segment);
+  #if MI_DEBUG>1
   size_t page_count = 0;
+  #endif
   while (slice < end) {
     mi_assert_internal(slice->slice_count > 0);
     mi_assert_internal(slice->slice_offset == 0);
@@ -962,7 +982,9 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
     if (slice->xblock_size == 0 && segment->kind != MI_SEGMENT_HUGE) {
       mi_segment_span_remove_from_queue(slice, tld);
     }
+    #if MI_DEBUG>1
     page_count++;
+    #endif
     slice = slice + slice->slice_count;
   }
   mi_assert_internal(page_count == 2); // first page is allocated by the segment itself
@@ -1048,7 +1070,7 @@ We maintain a global list of abandoned segments that are
 reclaimed on demand. Since this is shared among threads
 the implementation needs to avoid the A-B-A problem on
 popping abandoned segments: <https://en.wikipedia.org/wiki/ABA_problem>
-We use tagged pointers to avoid accidentially identifying
+We use tagged pointers to avoid accidentally identifying
 reused segments, much like stamped references in Java.
 Secondly, we maintain a reader counter to avoid resetting
 or decommitting segments that have a pending read operation.

@@ -11,10 +11,10 @@ terms of the MIT license. A copy of the license can be found in the file
   The full memory map of all segments is also implemented here.
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
+#include "mimalloc/internal.h"
+#include "mimalloc/atomic.h"
 
-#include "bitmap.h"  // atomic bitmap
+#include "./bitmap.h"  // atomic bitmap
 
 //#define MI_CACHE_DISABLE 1    // define to completely disable the segment cache
 
@@ -35,8 +35,8 @@ typedef struct mi_cache_slot_s {
 
 static mi_decl_cache_align mi_cache_slot_t cache[MI_CACHE_MAX];    // = 0
 
-static mi_decl_cache_align mi_bitmap_field_t cache_available[MI_CACHE_FIELDS] = { MI_CACHE_BITS_SET };        // zero bit = available!
-static mi_decl_cache_align mi_bitmap_field_t cache_available_large[MI_CACHE_FIELDS] = { MI_CACHE_BITS_SET };
+static mi_decl_cache_align mi_bitmap_field_t cache_unavailable[MI_CACHE_FIELDS] = { MI_CACHE_BITS_SET };        // zero bit = available!
+static mi_decl_cache_align mi_bitmap_field_t cache_unavailable_large[MI_CACHE_FIELDS] = { MI_CACHE_BITS_SET };
 static mi_decl_cache_align mi_bitmap_field_t cache_inuse[MI_CACHE_FIELDS];   // zero bit = free
 
 static bool mi_cdecl mi_segment_cache_is_suitable(mi_bitmap_index_t bitidx, void* arg) {
@@ -48,7 +48,8 @@ static bool mi_cdecl mi_segment_cache_is_suitable(mi_bitmap_index_t bitidx, void
 mi_decl_noinline static void* mi_segment_cache_pop_ex(
                               bool all_suitable,
                               size_t size, mi_commit_mask_t* commit_mask, 
-                              mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, 
+                              mi_commit_mask_t* decommit_mask, bool large_allowed,
+                              bool* large, bool* is_pinned, bool* is_zero, 
                               mi_arena_id_t _req_arena_id, size_t* memid, mi_os_tld_t* tld)
 {
 #ifdef MI_CACHE_DISABLE
@@ -66,22 +67,27 @@ mi_decl_noinline static void* mi_segment_cache_pop_ex(
     if (start_field >= MI_CACHE_FIELDS) start_field = 0;
   }
 
-  // find an available slot
+  // find an available slot and make it unavailable
   mi_bitmap_index_t bitidx = 0;
   bool claimed = false;
   mi_arena_id_t req_arena_id = _req_arena_id;
   mi_bitmap_pred_fun_t pred_fun = (all_suitable ? NULL : &mi_segment_cache_is_suitable);  // cannot pass NULL as the arena may be exclusive itself; todo: do not put exclusive arenas in the cache?
 
-  if (*large) {  // large allowed?
-    claimed = _mi_bitmap_try_find_from_claim_pred(cache_available_large, MI_CACHE_FIELDS, start_field, 1, pred_fun, &req_arena_id, &bitidx);
+  if (large_allowed) {  // large allowed?
+    claimed = _mi_bitmap_try_find_from_claim_pred(cache_unavailable_large, MI_CACHE_FIELDS, start_field, 1, pred_fun, &req_arena_id, &bitidx);
     if (claimed) *large = true;
   }
   if (!claimed) {
-    claimed = _mi_bitmap_try_find_from_claim_pred (cache_available, MI_CACHE_FIELDS, start_field, 1, pred_fun, &req_arena_id, &bitidx);
+    claimed = _mi_bitmap_try_find_from_claim_pred (cache_unavailable, MI_CACHE_FIELDS, start_field, 1, pred_fun, &req_arena_id, &bitidx);
     if (claimed) *large = false;
   }
 
   if (!claimed) return NULL;
+
+  // no longer available but still in-use
+  mi_assert_internal(_mi_bitmap_is_claimed(cache_unavailable, MI_CACHE_FIELDS, 1, bitidx));
+  mi_assert_internal(_mi_bitmap_is_claimed(cache_unavailable_large, MI_CACHE_FIELDS, 1, bitidx));
+  mi_assert_internal(_mi_bitmap_is_claimed(cache_inuse, MI_CACHE_FIELDS, 1, bitidx));
 
   // found a slot
   mi_cache_slot_t* slot = &cache[mi_bitmap_index_bit(bitidx)];
@@ -95,16 +101,15 @@ mi_decl_noinline static void* mi_segment_cache_pop_ex(
   mi_atomic_storei64_release(&slot->expire,(mi_msecs_t)0);
   
   // mark the slot as free again
-  mi_assert_internal(_mi_bitmap_is_claimed(cache_inuse, MI_CACHE_FIELDS, 1, bitidx));
   _mi_bitmap_unclaim(cache_inuse, MI_CACHE_FIELDS, 1, bitidx);
   return p;
 #endif
 }
 
 
-mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t _req_arena_id, size_t* memid, mi_os_tld_t* tld)
+mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool large_allowed, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t _req_arena_id, size_t* memid, mi_os_tld_t* tld)
 {
-  return mi_segment_cache_pop_ex(false, size, commit_mask, decommit_mask, large, is_pinned, is_zero, _req_arena_id, memid, tld);
+  return mi_segment_cache_pop_ex(false, size, commit_mask, decommit_mask, large_allowed, large, is_pinned, is_zero, _req_arena_id, memid, tld);
 }
 
 static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, void* p, size_t total, mi_stats_t* stats)
@@ -113,10 +118,11 @@ static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, vo
     // nothing
   }
   else if (mi_commit_mask_is_full(cmask)) {
+    // decommit the whole in one call
     _mi_os_decommit(p, total, stats);
   }
   else {
-    // todo: one call to decommit the whole at once?
+    // decommit parts
     mi_assert_internal((total%MI_COMMIT_MASK_BITS)==0);
     size_t part = total/MI_COMMIT_MASK_BITS;
     size_t idx;
@@ -148,21 +154,25 @@ static mi_decl_noinline void mi_segment_cache_purge(bool visit_all, bool force, 
     if (expire != 0 && (force || now >= expire)) {  // racy read
       // seems expired, first claim it from available
       purged++;
-      mi_bitmap_index_t bitidx = mi_bitmap_index_create_from_bit(idx);
-      if (_mi_bitmap_claim(cache_available, MI_CACHE_FIELDS, 1, bitidx, NULL)) {
-        // was available, we claimed it
+      mi_bitmap_index_t bitidx = mi_bitmap_index_create_from_bit(idx);      
+      if (_mi_bitmap_claim(cache_unavailable, MI_CACHE_FIELDS, 1, bitidx, NULL)) {  // no need to check large as those cannot be decommitted anyways
+        // it was available, we claimed it (and made it unavailable)
+        mi_assert_internal(_mi_bitmap_is_claimed(cache_unavailable, MI_CACHE_FIELDS, 1, bitidx));
+        mi_assert_internal(_mi_bitmap_is_claimed(cache_unavailable_large, MI_CACHE_FIELDS, 1, bitidx));
+        // we can now access it safely
         expire = mi_atomic_loadi64_acquire(&slot->expire);
         if (expire != 0 && (force || now >= expire)) {  // safe read
+          mi_assert_internal(_mi_bitmap_is_claimed(cache_inuse, MI_CACHE_FIELDS, 1, bitidx));
           // still expired, decommit it
           mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
-          mi_assert_internal(!mi_commit_mask_is_empty(&slot->commit_mask) && _mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
+          mi_assert_internal(!mi_commit_mask_is_empty(&slot->commit_mask));
           _mi_abandoned_await_readers();  // wait until safe to decommit
           // decommit committed parts
           // TODO: instead of decommit, we could also free to the OS?
           mi_commit_mask_decommit(&slot->commit_mask, slot->p, MI_SEGMENT_SIZE, tld->stats);
           mi_commit_mask_create_empty(&slot->decommit_mask);
         }
-        _mi_bitmap_unclaim(cache_available, MI_CACHE_FIELDS, 1, bitidx); // make it available again for a pop
+        _mi_bitmap_unclaim(cache_unavailable, MI_CACHE_FIELDS, 1, bitidx); // make it available again for a pop
       }
       if (!visit_all && purged > MI_MAX_PURGE_PER_PUSH) break;  // bound to no more than N purge tries per push
     }
@@ -184,23 +194,20 @@ void _mi_segment_cache_free_all(mi_os_tld_t* tld) {
   mi_commit_mask_t decommit_mask;
   bool is_pinned;
   bool is_zero;
+  bool is_large;
   size_t memid;
   const size_t size = MI_SEGMENT_SIZE;
-  // iterate twice: first large pages, then regular memory 
-  for (int i = 0; i < 2; i++) {
-    void* p;
-    do {
-      // keep popping and freeing the memory
-      bool large = (i == 0);  
-      p = mi_segment_cache_pop_ex(true /* all */, size, &commit_mask, &decommit_mask,
-                                  &large, &is_pinned, &is_zero, _mi_arena_id_none(), &memid, tld);
-      if (p != NULL) {
-        size_t csize = _mi_commit_mask_committed_size(&commit_mask, size);
-        if (csize > 0 && !is_pinned) _mi_stat_decrease(&_mi_stats_main.committed, csize);
-        _mi_arena_free(p, size, MI_SEGMENT_ALIGN, 0, memid, is_pinned /* pretend not committed to not double count decommits */, tld->stats);
-      }
-    } while (p != NULL);
-  }
+  void* p;
+  do {
+    // keep popping and freeing the memory
+    p = mi_segment_cache_pop_ex(true /* all */, size, &commit_mask, &decommit_mask,
+                                true /* allow large */, &is_large, &is_pinned, &is_zero, _mi_arena_id_none(), &memid, tld);
+    if (p != NULL) {
+      size_t csize = _mi_commit_mask_committed_size(&commit_mask, size);
+      if (csize > 0 && !is_pinned) { _mi_stat_decrease(&_mi_stats_main.committed, csize); }
+      _mi_arena_free(p, size, MI_SEGMENT_ALIGN, 0, memid, is_pinned /* pretend not committed to not double count decommits */, tld->stats);
+    }
+  } while (p != NULL);  
 }
 
 mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* decommit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld)
@@ -209,27 +216,34 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
   return false;
 #else
 
-  // only for normal segment blocks
+  // purge expired entries
+  mi_segment_cache_purge(false /* limit purges to a constant N */, false /* don't force unexpired */, tld);
+
+  // only cache normal segment blocks
   if (size != MI_SEGMENT_SIZE || ((uintptr_t)start % MI_SEGMENT_ALIGN) != 0) return false;
+
+  // Also do not cache arena allocated segments that cannot be decommitted. (as arena allocation is fast)
+  // This is a common case with reserved huge OS pages.
+  // 
+  // (note: we could also allow segments that are already fully decommitted but that never happens
+  //  as the first slice is always committed (for the segment metadata))
+  if (!_mi_arena_is_os_allocated(memid) && is_pinned) return false;
 
   // numa node determines start field
   int numa_node = _mi_os_numa_node(NULL);
   size_t start_field = 0;
   if (numa_node > 0) {
-    start_field = (MI_CACHE_FIELDS / _mi_os_numa_node_count())*numa_node;
+    start_field = (MI_CACHE_FIELDS / _mi_os_numa_node_count()) * numa_node;
     if (start_field >= MI_CACHE_FIELDS) start_field = 0;
   }
-
-  // purge expired entries
-  mi_segment_cache_purge(false /* limit purges to a constant N */, false /* don't force unexpired */, tld);
 
   // find an available slot
   mi_bitmap_index_t bitidx;
   bool claimed = _mi_bitmap_try_find_from_claim(cache_inuse, MI_CACHE_FIELDS, start_field, 1, &bitidx);
   if (!claimed) return false;
 
-  mi_assert_internal(_mi_bitmap_is_claimed(cache_available, MI_CACHE_FIELDS, 1, bitidx));
-  mi_assert_internal(_mi_bitmap_is_claimed(cache_available_large, MI_CACHE_FIELDS, 1, bitidx));
+  mi_assert_internal(_mi_bitmap_is_claimed(cache_unavailable, MI_CACHE_FIELDS, 1, bitidx));
+  mi_assert_internal(_mi_bitmap_is_claimed(cache_unavailable_large, MI_CACHE_FIELDS, 1, bitidx));
 #if MI_DEBUG>1
   if (is_pinned || is_large) {
     mi_assert_internal(mi_commit_mask_is_full(commit_mask));
@@ -257,7 +271,7 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
   }
 
   // make it available
-  _mi_bitmap_unclaim((is_large ? cache_available_large : cache_available), MI_CACHE_FIELDS, 1, bitidx);
+  _mi_bitmap_unclaim((is_large ? cache_unavailable_large : cache_unavailable), MI_CACHE_FIELDS, 1, bitidx);
   return true;
 #endif
 }
@@ -273,7 +287,7 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
 
 
 #if (MI_INTPTR_SIZE==8)
-#define MI_MAX_ADDRESS    ((size_t)20 << 40)  // 20TB
+#define MI_MAX_ADDRESS    ((size_t)40 << 40)  // 20TB
 #else
 #define MI_MAX_ADDRESS    ((size_t)2 << 30)   // 2Gb
 #endif

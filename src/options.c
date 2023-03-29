@@ -5,18 +5,13 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
+#include "mimalloc/internal.h"
+#include "mimalloc/atomic.h"
+#include "mimalloc/prim.h"  // mi_prim_out_stderr
 
-#include <stdio.h>
-#include <stdlib.h> // strtol
-#include <string.h> // strncpy, strncat, strlen, strstr
-#include <ctype.h>  // toupper
+#include <stdio.h>      // FILE
+#include <stdlib.h>     // abort
 #include <stdarg.h>
-
-#ifdef _MSC_VER
-#pragma warning(disable:4996)   // strncpy, strncat
-#endif
 
 
 static long mi_max_error_count   = 16; // stop outputting errors after this (use < 0 for no limit)
@@ -28,9 +23,6 @@ int mi_version(void) mi_attr_noexcept {
   return MI_MALLOC_VERSION;
 }
 
-#ifdef _WIN32
-#include <conio.h>
-#endif
 
 // --------------------------------------------------------
 // Options
@@ -171,41 +163,11 @@ void mi_option_disable(mi_option_t option) {
   mi_option_set_enabled(option,false);
 }
 
-
 static void mi_cdecl mi_out_stderr(const char* msg, void* arg) {
   MI_UNUSED(arg);
-  if (msg == NULL) return;
-  #ifdef _WIN32
-  // on windows with redirection, the C runtime cannot handle locale dependent output
-  // after the main thread closes so we use direct console output.
-  if (!_mi_preloading()) {
-    // _cputs(msg);  // _cputs cannot be used at is aborts if it fails to lock the console
-    static HANDLE hcon = INVALID_HANDLE_VALUE;
-    static bool hconIsConsole;
-    if (hcon == INVALID_HANDLE_VALUE) {
-      CONSOLE_SCREEN_BUFFER_INFO sbi;
-      hcon = GetStdHandle(STD_ERROR_HANDLE);
-      hconIsConsole = ((hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
-    }
-    const size_t len = strlen(msg);
-    if (len > 0 && len < UINT32_MAX) {
-      DWORD written = 0;
-      if (hconIsConsole) {
-        WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
-      }
-      else if (hcon != INVALID_HANDLE_VALUE) {
-        // use direct write if stderr was redirected
-        WriteFile(hcon, msg, (DWORD)len, &written, NULL);
-      }
-      else {
-        // finally fall back to fputs after all
-        fputs(msg, stderr);
-      }
-    }
+  if (msg != NULL && msg[0] != 0) {
+    _mi_prim_out_stderr(msg);
   }
-  #else
-  fputs(msg, stderr);
-  #endif
 }
 
 // Since an output function can be registered earliest in the `main`
@@ -222,7 +184,7 @@ static void mi_cdecl mi_out_buf(const char* msg, void* arg) {
   MI_UNUSED(arg);
   if (msg==NULL) return;
   if (mi_atomic_load_relaxed(&out_len)>=MI_MAX_DELAY_OUTPUT) return;
-  size_t n = strlen(msg);
+  size_t n = _mi_strlen(msg);
   if (n==0) return;
   // claim space
   size_t start = mi_atomic_add_acq_rel(&out_len, n);
@@ -314,7 +276,7 @@ static mi_decl_noinline void mi_recurse_exit_prim(void) {
 
 static bool mi_recurse_enter(void) {
   #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
-  if (_mi_preloading()) return true;
+  if (_mi_preloading()) return false;
   #endif
   return mi_recurse_enter_prim();
 }
@@ -359,7 +321,7 @@ void _mi_fprintf( mi_output_fun* out, void* arg, const char* fmt, ... ) {
 }
 
 static void mi_vfprintf_thread(mi_output_fun* out, void* arg, const char* prefix, const char* fmt, va_list args) {
-  if (prefix != NULL && strlen(prefix) <= 32 && !_mi_is_main_thread()) {
+  if (prefix != NULL && _mi_strnlen(prefix,33) <= 32 && !_mi_is_main_thread()) {
     char tprefix[64];
     snprintf(tprefix, sizeof(tprefix), "%sthread 0x%llx: ", prefix, (unsigned long long)_mi_thread_id());
     mi_vfprintf(out, arg, tprefix, fmt, args);
@@ -464,8 +426,20 @@ void _mi_error_message(int err, const char* fmt, ...) {
 // --------------------------------------------------------
 // Initialize options by checking the environment
 // --------------------------------------------------------
+char _mi_toupper(char c) {
+  if (c >= 'a' && c <= 'z') return (c - 'a' + 'A');
+                       else return c;
+}
 
-static void mi_strlcpy(char* dest, const char* src, size_t dest_size) {
+int _mi_strnicmp(const char* s, const char* t, size_t n) {
+  if (n == 0) return 0;
+  for (; *s != 0 && *t != 0 && n > 0; s++, t++, n--) {
+    if (_mi_toupper(*s) != _mi_toupper(*t)) break;
+  }
+  return (n == 0 ? 0 : *s - *t);
+}
+
+void _mi_strlcpy(char* dest, const char* src, size_t dest_size) {
   if (dest==NULL || src==NULL || dest_size == 0) return;
   // copy until end of src, or when dest is (almost) full
   while (*src != 0 && dest_size > 1) {
@@ -476,7 +450,7 @@ static void mi_strlcpy(char* dest, const char* src, size_t dest_size) {
   *dest = 0;
 }
 
-static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
+void _mi_strlcat(char* dest, const char* src, size_t dest_size) {
   if (dest==NULL || src==NULL || dest_size == 0) return;
   // find end of string in the dest buffer
   while (*dest != 0 && dest_size > 1) {
@@ -484,7 +458,21 @@ static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
     dest_size--;
   }
   // and catenate
-  mi_strlcpy(dest, src, dest_size);
+  _mi_strlcpy(dest, src, dest_size);
+}
+
+size_t _mi_strlen(const char* s) {
+  if (s==NULL) return 0;
+  size_t len = 0;
+  while(s[len] != 0) { len++; }
+  return len;
+}
+
+size_t _mi_strnlen(const char* s, size_t max_len) {
+  if (s==NULL) return 0;
+  size_t len = 0;
+  while(s[len] != 0 && len < max_len) { len++; }
+  return len;
 }
 
 #ifdef MI_NO_GETENV
@@ -495,93 +483,27 @@ static bool mi_getenv(const char* name, char* result, size_t result_size) {
   return false;
 }
 #else
-#if defined _WIN32
-// On Windows use GetEnvironmentVariable instead of getenv to work
-// reliably even when this is invoked before the C runtime is initialized.
-// i.e. when `_mi_preloading() == true`.
-// Note: on windows, environment names are not case sensitive.
-#include <windows.h>
 static bool mi_getenv(const char* name, char* result, size_t result_size) {
-  result[0] = 0;
-  size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
-  return (len > 0 && len < result_size);
-}
-#elif !defined(MI_USE_ENVIRON) || (MI_USE_ENVIRON!=0)
-// On Posix systemsr use `environ` to acces environment variables
-// even before the C runtime is initialized.
-#if defined(__APPLE__) && defined(__has_include) && __has_include(<crt_externs.h>)
-#include <crt_externs.h>
-static char** mi_get_environ(void) {
-  return (*_NSGetEnviron());
-}
-#else
-extern char** environ;
-static char** mi_get_environ(void) {
-  return environ;
+  if (name==NULL || result == NULL || result_size < 64) return false;
+  return _mi_prim_getenv(name,result,result_size);
 }
 #endif
-static int mi_strnicmp(const char* s, const char* t, size_t n) {
-  if (n == 0) return 0;
-  for (; *s != 0 && *t != 0 && n > 0; s++, t++, n--) {
-    if (toupper(*s) != toupper(*t)) break;
-  }
-  return (n == 0 ? 0 : *s - *t);
-}
-static bool mi_getenv(const char* name, char* result, size_t result_size) {
-  if (name==NULL) return false;
-  const size_t len = strlen(name);
-  if (len == 0) return false;
-  char** env = mi_get_environ();
-  if (env == NULL) return false;
-  // compare up to 256 entries
-  for (int i = 0; i < 256 && env[i] != NULL; i++) {
-    const char* s = env[i];
-    if (mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
-      // found it
-      mi_strlcpy(result, s + len + 1, result_size);
-      return true;
-    }
-  }
-  return false;
-}
-#else
-// fallback: use standard C `getenv` but this cannot be used while initializing the C runtime
-static bool mi_getenv(const char* name, char* result, size_t result_size) {
-  // cannot call getenv() when still initializing the C runtime.
-  if (_mi_preloading()) return false;
-  const char* s = getenv(name);
-  if (s == NULL) {
-    // we check the upper case name too.
-    char buf[64+1];
-    size_t len = strlen(name);
-    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
-    for (size_t i = 0; i < len; i++) {
-      buf[i] = toupper(name[i]);
-    }
-    buf[len] = 0;
-    s = getenv(buf);
-  }
-  if (s != NULL && strlen(s) < result_size) {
-    mi_strlcpy(result, s, result_size);
-    return true;
-  }
-  else {
-    return false;
-  }
-}
-#endif  // !MI_USE_ENVIRON
-#endif  // !MI_NO_GETENV
+
+// TODO: implement ourselves to reduce dependencies on the C runtime
+#include <stdlib.h> // strtol
+#include <string.h> // strstr
+
 
 static void mi_option_init(mi_option_desc_t* desc) {
   // Read option value from the environment
   char s[64+1];
   char buf[64+1];
-  mi_strlcpy(buf, "mimalloc_", sizeof(buf));
-  mi_strlcat(buf, desc->name, sizeof(buf));
+  _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
+  _mi_strlcat(buf, desc->name, sizeof(buf));
   bool found = mi_getenv(buf,s,sizeof(s));
   if (!found && desc->legacy_name != NULL) {
-    mi_strlcpy(buf, "mimalloc_", sizeof(buf));
-    mi_strlcat(buf, desc->legacy_name, sizeof(buf));
+    _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
+    _mi_strlcat(buf, desc->legacy_name, sizeof(buf));
     found = mi_getenv(buf,s,sizeof(s));
     if (found) {
       _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name );
@@ -589,10 +511,9 @@ static void mi_option_init(mi_option_desc_t* desc) {
   }
 
   if (found) {
-    size_t len = strlen(s);
-    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+    size_t len = _mi_strnlen(s,sizeof(buf)-1);
     for (size_t i = 0; i < len; i++) {
-      buf[i] = (char)toupper(s[i]);
+      buf[i] = _mi_toupper(s[i]);
     }
     buf[len] = 0;
     if (buf[0]==0 || strstr("1;TRUE;YES;ON", buf) != NULL) {

@@ -12,8 +12,8 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 #include "mimalloc.h"
-#include "mimalloc-internal.h"
-#include "mimalloc-atomic.h"
+#include "mimalloc/internal.h"
+#include "mimalloc/atomic.h"
 
 /* -----------------------------------------------------------
   Definition of page queues for each block size
@@ -92,16 +92,20 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   }
   #endif
 
+  #if !MI_TRACK_ENABLED && !MI_TSAN
   mi_block_t* tfree = mi_page_thread_free(page);
   mi_assert_internal(mi_page_list_is_valid(page, tfree));
   //size_t tfree_count = mi_page_list_count(page, tfree);
   //mi_assert_internal(tfree_count <= page->thread_freed + 1);
+  #endif
 
   size_t free_count = mi_page_list_count(page, page->free) + mi_page_list_count(page, page->local_free);
   mi_assert_internal(page->used + free_count == page->capacity);
 
   return true;
 }
+
+extern bool _mi_process_is_initialized;             // has mi_process_init been called?
 
 bool _mi_page_is_valid(mi_page_t* page) {
   mi_assert_internal(mi_page_is_valid_init(page));
@@ -663,7 +667,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
   mi_assert_internal(page->reserved > 0);
-  #ifdef MI_ENCODE_FREELIST
+  #if (MI_PADDING || MI_ENCODE_FREELIST)
   page->keys[0] = _mi_heap_random_next(heap);
   page->keys[1] = _mi_heap_random_next(heap);
   #endif
@@ -683,7 +687,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->prev == NULL);
   mi_assert_internal(page->retire_expire == 0);
   mi_assert_internal(!mi_page_has_aligned(page));
-  #if (MI_ENCODE_FREELIST)
+  #if (MI_PADDING || MI_ENCODE_FREELIST)
   mi_assert_internal(page->keys[0] != 0);
   mi_assert_internal(page->keys[1] != 0);
   #endif
@@ -703,12 +707,16 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
 static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try)
 {
   // search through the pages in "next fit" order
+  #if MI_STAT
   size_t count = 0;
+  #endif
   mi_page_t* page = pq->first;
   while (page != NULL)
   {
     mi_page_t* next = page->next; // remember next
+    #if MI_STAT    
     count++;
+    #endif
 
     // 0. collect freed blocks by us and other threads
     _mi_page_free_collect(page, false);
@@ -869,7 +877,9 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size, size_t huge_alignme
   }
   else {
     // otherwise find a page with free blocks in our size segregated queues
-    mi_assert_internal(size >= MI_PADDING_SIZE);
+    #if MI_PADDING
+    mi_assert_internal(size >= MI_PADDING_SIZE); 
+    #endif
     return mi_find_free_page(heap, size);
   }
 }
@@ -884,8 +894,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
 
   // initialize if necessary
   if mi_unlikely(!mi_heap_is_initialized(heap)) {
-    mi_thread_init(); // calls `_mi_heap_init` in turn
-    heap = mi_get_default_heap();
+    heap = mi_heap_get_default(); // calls mi_thread_init 
     if mi_unlikely(!mi_heap_is_initialized(heap)) { return NULL; }
   }
   mi_assert_internal(mi_heap_is_initialized(heap));

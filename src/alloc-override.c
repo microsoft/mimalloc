@@ -57,7 +57,7 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
   // functions that are interposed (or the interposing does not work)
   #define MI_OSX_IS_INTERPOSED
 
-  mi_decl_externc static size_t mi_malloc_size_checked(void *p) {
+  mi_decl_externc size_t mi_malloc_size_checked(void *p) {
     if (!mi_is_in_heap_region(p)) return 0;
     return mi_usable_size(p);
   }
