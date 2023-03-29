@@ -695,7 +695,7 @@ static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_i
   // set slice back pointers for the first MI_MAX_SLICE_OFFSET entries
   size_t extra = slice_count-1;
   if (extra > MI_MAX_SLICE_OFFSET) extra = MI_MAX_SLICE_OFFSET;
-  if (slice_index + extra >= segment->slice_entries) extra = segment->slice_entries - slice_index - 1;  // huge objects may have more slices than avaiable entries in the segment->slices
+  if (slice_index + extra >= segment->slice_entries) extra = segment->slice_entries - slice_index - 1;  // huge objects may have more slices than available entries in the segment->slices
   
   mi_slice_t* slice_next = slice + 1;
   for (size_t i = 1; i <= extra; i++, slice_next++) {
@@ -1048,7 +1048,7 @@ We maintain a global list of abandoned segments that are
 reclaimed on demand. Since this is shared among threads
 the implementation needs to avoid the A-B-A problem on
 popping abandoned segments: <https://en.wikipedia.org/wiki/ABA_problem>
-We use tagged pointers to avoid accidentially identifying
+We use tagged pointers to avoid accidentally identifying
 reused segments, much like stamped references in Java.
 Secondly, we maintain a reader counter to avoid resetting
 or decommitting segments that have a pending read operation.
@@ -1356,7 +1356,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       _mi_page_free_collect(page, false); // ensure used count is up to date
       if (mi_page_all_free(page)) {
         // if everything free by now, free the page
-        slice = mi_segment_page_clear(page, tld);   // set slice again due to coalesceing
+        slice = mi_segment_page_clear(page, tld);   // set slice again due to coalescing
       }
       else {
         // otherwise reclaim it into the heap
@@ -1368,7 +1368,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
     }
     else {
       // the span is free, add it to our page queues
-      slice = mi_segment_span_free_coalesce(slice, tld); // set slice again due to coalesceing
+      slice = mi_segment_span_free_coalesce(slice, tld); // set slice again due to coalescing
     }
     mi_assert_internal(slice->slice_count>0 && slice->slice_offset==0);
     slice = slice + slice->slice_count;

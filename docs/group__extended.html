@@ -387,7 +387,7 @@ Functions</h2></td></tr>
 
 <p>Is the C runtime <em>malloc</em> API redirected? </p>
 <dl class="section return"><dt>Returns</dt><dd><em>true</em> if all malloc API calls are redirected to mimalloc.</dd></dl>
-<p>Currenty only used on Windows. </p>
+<p>Currently only used on Windows. </p>
 
 </div>
 </div>
@@ -598,7 +598,7 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<p>Some runtime systems use deferred free-ing, for example when using reference counting to limit the worst case free time. Such systems can register (re-entrant) deferred free function to free more memory on demand. When the <em>force</em> parameter is <em>true</em> all possible memory should be freed. The per-thread <em>heartbeat</em> parameter is monotonically increasing and guaranteed to be deterministic if the program allocates deterministically. The <em>deferred_free</em> function is guaranteed to be called deterministically after some number of allocations (regardless of freeing or available free memory). At most one <em>deferred_free</em> function can be active. </p>
+<p>Some runtime systems use deferred free-ing, for example when using reference counting to limit the worst case free time. Such systems can register (reentrant) deferred free function to free more memory on demand. When the <em>force</em> parameter is <em>true</em> all possible memory should be freed. The per-thread <em>heartbeat</em> parameter is monotonically increasing and guaranteed to be deterministic if the program allocates deterministically. The <em>deferred_free</em> function is guaranteed to be called deterministically after some number of allocations (regardless of freeing or available free memory). At most one <em>deferred_free</em> function can be active. </p>
 
 </div>
 </div>
@@ -725,7 +725,7 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>0 if successfull, <em>ENOMEM</em> if running out of memory, or <em>ETIMEDOUT</em> if timed out.</dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>0 if successful, <em>ENOMEM</em> if running out of memory, or <em>ETIMEDOUT</em> if timed out.</dd></dl>
 <p>The reserved memory is used by mimalloc to satisfy allocations. May quit before <em>timeout_msecs</em> are expired if it estimates it will take more than 1.5 times <em>timeout_msecs</em>. The time limit is needed because on some operating systems it can take a long time to reserve contiguous memory if the physical memory is fragmented. </p>
 
 </div>
@@ -771,7 +771,7 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>0 if successfull, <em>ENOMEM</em> if running out of memory, or <em>ETIMEDOUT</em> if timed out.</dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>0 if successful, <em>ENOMEM</em> if running out of memory, or <em>ETIMEDOUT</em> if timed out.</dd></dl>
 <p>The reserved memory is used by mimalloc to satisfy allocations. May quit before <em>timeout_msecs</em> are expired if it estimates it will take more than 1.5 times <em>timeout_msecs</em>. The time limit is needed because on some operating systems it can take a long time to reserve contiguous memory if the physical memory is fragmented. </p>
 
 </div>

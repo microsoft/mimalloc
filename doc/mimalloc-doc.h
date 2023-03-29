@@ -357,7 +357,7 @@ typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat, vo
 ///
 /// Some runtime systems use deferred free-ing, for example when using
 /// reference counting to limit the worst case free time.
-/// Such systems can register (re-entrant) deferred free function
+/// Such systems can register (reentrant) deferred free function
 /// to free more memory on demand. When the \a force parameter is
 /// \a true all possible memory should be freed.
 /// The per-thread \a heartbeat parameter is monotonically increasing
@@ -441,7 +441,7 @@ bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_la
 /// @param pages The number of 1GiB pages to reserve.
 /// @param numa_nodes The number of nodes do evenly divide the pages over, or 0 for using the actual number of NUMA nodes.
 /// @param timeout_msecs Maximum number of milli-seconds to try reserving, or 0 for no timeout.
-/// @returns 0 if successfull, \a ENOMEM if running out of memory, or \a ETIMEDOUT if timed out.
+/// @returns 0 if successful, \a ENOMEM if running out of memory, or \a ETIMEDOUT if timed out.
 ///
 /// The reserved memory is used by mimalloc to satisfy allocations.
 /// May quit before \a timeout_msecs are expired if it estimates it will take more than
@@ -455,7 +455,7 @@ int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t 
 /// @param pages The number of 1GiB pages to reserve.
 /// @param numa_node The NUMA node where the memory is reserved (start at 0).
 /// @param timeout_msecs Maximum number of milli-seconds to try reserving, or 0 for no timeout.
-/// @returns 0 if successfull, \a ENOMEM if running out of memory, or \a ETIMEDOUT if timed out.
+/// @returns 0 if successful, \a ENOMEM if running out of memory, or \a ETIMEDOUT if timed out.
 ///
 /// The reserved memory is used by mimalloc to satisfy allocations.
 /// May quit before \a timeout_msecs are expired if it estimates it will take more than
@@ -468,7 +468,7 @@ int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msec
 /// Is the C runtime \a malloc API redirected?
 /// @returns \a true if all malloc API calls are redirected to mimalloc.
 ///
-/// Currenty only used on Windows.
+/// Currently only used on Windows.
 bool mi_is_redirected();
 
 /// Return process information (time and memory usage).
@@ -558,7 +558,7 @@ mi_heap_t* mi_heap_new();
 
 /// Delete a previously allocated heap.
 /// This will release resources and migrate any
-/// still allocated blocks in this heap (efficienty)
+/// still allocated blocks in this heap (efficiency)
 /// to the default heap.
 ///
 /// If \a heap is the default heap, the default
@@ -888,7 +888,7 @@ void mi_free_aligned(void* p, size_t alignment);
 ///
 ///  Note: use the `mimalloc-new-delete.h` header to override the \a new
 ///        and \a delete operators globally. The wrappers here are mostly
-///        for convience for library writers that need to interface with
+///        for convenience for library writers that need to interface with
 ///        mimalloc from C++.
 ///
 /// \{
@@ -927,7 +927,7 @@ template<class T> struct mi_stl_allocator { }
 
 /*! \page build Building
 
-Checkout the sources from Github:
+Checkout the sources from GitHub:
 ```
 git clone https://github.com/microsoft/mimalloc
 ```
@@ -1012,7 +1012,7 @@ to link with the static library. See `test\CMakeLists.txt` for an example.
 
 ### C++
 For best performance in C++ programs, it is also recommended to override the
-global `new` and `delete` operators. For convience, mimalloc provides
+global `new` and `delete` operators. For convenience, mimalloc provides
 [`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
 
 In C++, mimalloc also provides the `mi_stl_allocator` struct which implements the `std::allocator`
@@ -1276,6 +1276,6 @@ range of benchmarks.
 
 See the [Performance](https://github.com/microsoft/mimalloc#Performance)
 section in the _mimalloc_ repository for benchmark results,
-or the the technical report for detailed benchmark results.
+or the technical report for detailed benchmark results.
 
 */

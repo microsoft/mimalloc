@@ -328,7 +328,7 @@ static bool _mi_heap_done(mi_heap_t* heap) {
   // free if not the main thread
   if (heap != &_mi_heap_main) {
     // the following assertion does not always hold for huge segments as those are always treated
-    // as abondened: one may allocate it in one thread, but deallocate in another in which case
+    // as abandoned: one may allocate it in one thread, but deallocate in another in which case
     // the count can be too large or negative. todo: perhaps not count huge segments? see issue #363
     // mi_assert_internal(heap->tld->segments.count == 0 || heap->thread_id != _mi_thread_id());
     mi_thread_data_free((mi_thread_data_t*)heap);
@@ -568,7 +568,7 @@ static void mi_detect_cpu_features(void) {
   // FSRM for fast rep movsb support (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017))
   int32_t cpu_info[4];
   __cpuid(cpu_info, 7);
-  _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https ://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+  _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
 }
 #else
 static void mi_detect_cpu_features(void) {
