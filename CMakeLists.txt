@@ -25,7 +25,7 @@ option(MI_BUILD_OBJECT      "Build object library" ON)
 option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
-option(MI_SKIP_COLLECT_ON_EXIT, "Skip collecting memory on program exit" OFF)
+option(MI_SKIP_COLLECT_ON_EXIT "Skip collecting memory on program exit" OFF)
 option(MI_NO_PADDING        "Force no use of padding even in DEBUG mode etc." OFF)
 
 # deprecated options
@@ -261,6 +261,11 @@ if(MI_USE_CXX)
     list(APPEND mi_cflags -Kc++)
   endif()
 endif()
+
+if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
+   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
+   SET(CMAKE_INSTALL_INCLUDEDIR ~/config/non-packaged/headers)
+ endif()
 
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")

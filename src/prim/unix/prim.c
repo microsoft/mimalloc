@@ -50,7 +50,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/sysctl.h>
 #endif
 
-#if !defined(__HAIKU__) && !defined(__APPLE__)
+#if !defined(__HAIKU__) && !defined(__APPLE__) && !defined(__CYGWIN__)
   #define MI_HAS_SYSCALL_H
   #include <sys/syscall.h>
 #endif
@@ -166,7 +166,6 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
   if (addr == NULL && try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0) {
     size_t n = mi_bsr(try_alignment);
     if (((size_t)1 << n) == try_alignment && n >= 12 && n <= 30) {  // alignment is a power of 2 and 4096 <= alignment <= 1GiB
-      flags |= MAP_ALIGNED(n);
       p = mmap(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd, 0);
       if (p==MAP_FAILED || !_mi_is_aligned(p,try_alignment)) { 
         int err = errno;
@@ -410,7 +409,7 @@ int _mi_prim_protect(void* start, size_t size, bool protect) {
 // Huge page allocation
 //---------------------------------------------
 
-#if (MI_INTPTR_SIZE >= 8) && !defined(__HAIKU__)
+#if (MI_INTPTR_SIZE >= 8) && !defined(__HAIKU__) && !defined(__CYGWIN__)
 
 #ifndef MPOL_PREFERRED
 #define MPOL_PREFERRED 1
@@ -652,7 +651,7 @@ void _mi_prim_out_stderr( const char* msg ) {
 //----------------------------------------------------------------
 
 #if !defined(MI_USE_ENVIRON) || (MI_USE_ENVIRON!=0)
-// On Posix systemsr use `environ` to acces environment variables
+// On Posix systemsr use `environ` to access environment variables
 // even before the C runtime is initialized.
 #if defined(__APPLE__) && defined(__has_include) && __has_include(<crt_externs.h>)
 #include <crt_externs.h>
@@ -759,7 +758,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
       ssize_t ret = syscall(SYS_getrandom, buf, buf_len, GRND_NONBLOCK);
       if (ret >= 0) return (buf_len == (size_t)ret);
       if (errno != ENOSYS) return false;
-      mi_atomic_store_release(&no_getrandom, 1UL); // don't call again, and fall back to /dev/urandom
+      mi_atomic_store_release(&no_getrandom, (uintptr_t)1); // don't call again, and fall back to /dev/urandom
     }
   #endif
   int flags = O_RDONLY;
