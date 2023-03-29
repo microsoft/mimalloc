@@ -97,6 +97,10 @@ static void various_tests() {
   delete t;
   t = new (std::nothrow) Test(42);
   delete t;
+  auto tbuf = new unsigned char[sizeof(Test)];
+  t = new (tbuf) Test(42);
+  t->~Test();
+  delete tbuf;
 }
 
 class Static {
