@@ -170,7 +170,7 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
       p = mmap(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd, 0);
       if (p==MAP_FAILED || !_mi_is_aligned(p,try_alignment)) { 
         int err = errno;
-        _mi_warning_message("unable to directly request aligned OS memory (error: %d (0x%d), size: 0x%zx bytes, alignment: 0x%zx, hint address: %p)\n", err, err, size, try_alignment, hint);
+        _mi_warning_message("unable to directly request aligned OS memory (error: %d (0x%x), size: 0x%zx bytes, alignment: 0x%zx, hint address: %p)\n", err, err, size, try_alignment, hint);
       }
       if (p!=MAP_FAILED) return p;
       // fall back to regular mmap      
@@ -191,7 +191,7 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
       p = mmap(hint, size, protect_flags, flags, fd, 0);
       if (p==MAP_FAILED || !_mi_is_aligned(p,try_alignment)) { 
         int err = errno;
-        _mi_warning_message("unable to directly request hinted aligned OS memory (error: %d (0x%d), size: 0x%zx bytes, alignment: 0x%zx, hint address: %p)\n", err, err, size, try_alignment, hint);
+        _mi_warning_message("unable to directly request hinted aligned OS memory (error: %d (0x%x), size: 0x%zx bytes, alignment: 0x%zx, hint address: %p)\n", err, err, size, try_alignment, hint);
       }
       if (p!=MAP_FAILED) return p;
       // fall back to regular mmap      
@@ -438,7 +438,7 @@ int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, vo
     long err = mi_prim_mbind(*addr, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
     if (err != 0) {
       err = errno;
-      _mi_warning_message("failed to bind huge (1GiB) pages to numa node %d (error: %d (0x%d))\n", numa_node, err, err);
+      _mi_warning_message("failed to bind huge (1GiB) pages to numa node %d (error: %d (0x%x))\n", numa_node, err, err);
     }    
   }
   return (*addr != NULL ? 0 : errno);
