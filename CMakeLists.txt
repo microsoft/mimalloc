@@ -262,6 +262,11 @@ if(MI_USE_CXX)
   endif()
 endif()
 
+if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
+   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
+   SET(CMAKE_INSTALL_INCLUDEDIR ~/config/non-packaged/headers)
+ endif()
+
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
   list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas -fvisibility=hidden)
