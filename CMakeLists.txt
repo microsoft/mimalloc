@@ -458,10 +458,12 @@ if (MI_BUILD_OBJECT)
   )
 
   # Copy the generated object file (`static.o`) to the output directory (as `mimalloc.o`)
-  set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}")
-  set(mimalloc-obj-out    "${CMAKE_CURRENT_BINARY_DIR}/${mi_basename}${CMAKE_C_OUTPUT_EXTENSION}")
-  add_custom_command(OUTPUT ${mimalloc-obj-out} DEPENDS mimalloc-obj COMMAND "${CMAKE_COMMAND}" -E copy "${mimalloc-obj-static}" "${mimalloc-obj-out}")
-  add_custom_target(mimalloc-obj-target ALL DEPENDS ${mimalloc-obj-out})      
+  if(NOT WIN32)
+    set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}")
+    set(mimalloc-obj-out    "${CMAKE_CURRENT_BINARY_DIR}/${mi_basename}${CMAKE_C_OUTPUT_EXTENSION}")
+    add_custom_command(OUTPUT ${mimalloc-obj-out} DEPENDS mimalloc-obj COMMAND "${CMAKE_COMMAND}" -E copy "${mimalloc-obj-static}" "${mimalloc-obj-out}")
+    add_custom_target(mimalloc-obj-target ALL DEPENDS ${mimalloc-obj-out})      
+  endif()
 
   # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
   # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_objdir})
