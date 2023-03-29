@@ -652,7 +652,7 @@ void _mi_prim_out_stderr( const char* msg ) {
 //----------------------------------------------------------------
 
 #if !defined(MI_USE_ENVIRON) || (MI_USE_ENVIRON!=0)
-// On Posix systemsr use `environ` to acces environment variables
+// On Posix systemsr use `environ` to access environment variables
 // even before the C runtime is initialized.
 #if defined(__APPLE__) && defined(__has_include) && __has_include(<crt_externs.h>)
 #include <crt_externs.h>
