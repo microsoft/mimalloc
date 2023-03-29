@@ -50,7 +50,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
     _mi_memzero_aligned(block, zsize - MI_PADDING_SIZE);
   }
 
-#if (MI_DEBUG>0) && !MI_TRACK_ENABLED
+#if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
   if (!page->is_zero && !zero && !mi_page_is_huge(page)) {
     memset(block, MI_DEBUG_UNINIT, mi_page_usable_block_size(page));
   }
@@ -401,7 +401,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
     #endif
   }
   
-  #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED                    // note: when tracking, cannot use mi_usable_size with multi-threading
+  #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED && !MI_TSAN        // note: when tracking, cannot use mi_usable_size with multi-threading
   if (segment->kind != MI_SEGMENT_HUGE) {                   // not for huge segments as we just reset the content
     memset(block, MI_DEBUG_FREED, mi_usable_size(block));
   }
@@ -455,7 +455,7 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
     // owning thread can free a block directly
     if mi_unlikely(mi_check_is_double_free(page, block)) return;
     mi_check_padding(page, block);
-    #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
+    #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED && !MI_TSAN
     if (!mi_page_is_huge(page)) {   // huge page content may be already decommitted
       memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
     }
@@ -551,7 +551,7 @@ void mi_free(void* p) mi_attr_noexcept
       if mi_unlikely(mi_check_is_double_free(page, block)) return;
       mi_check_padding(page, block);
       mi_stat_free(page, block);
-      #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
+      #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED  && !MI_TSAN
       memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
       #endif
       mi_track_free_size(p, mi_page_usable_size_of(page,block)); // faster then mi_usable_size as we already know the page and that p is unaligned
