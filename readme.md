@@ -9,7 +9,7 @@
 
 mimalloc (pronounced "me-malloc")
 is a general purpose allocator with excellent [performance](#performance) characteristics.
-Initially developed by Daan Leijen for the run-time systems of the
+Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
 Latest release tag: `v2.1.0` (2023-03-29).
