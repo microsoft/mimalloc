@@ -191,6 +191,28 @@ static void* mi_arena_alloc_from(mi_arena_t* arena, size_t arena_index, size_t n
   return p;
 }
 
+// allocate in a speficic arena
+static void* mi_arena_alloc_in(mi_arena_id_t arena_id, int numa_node, size_t size, size_t alignment, 
+                               bool* commit, bool* large, bool* is_pinned, bool* is_zero,
+                               mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld ) 
+{
+  MI_UNUSED_RELEASE(alignment);
+  mi_assert_internal(alignment <= MI_SEGMENT_ALIGN);
+  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  const size_t bcount = mi_block_count_of_size(size);  
+  const size_t arena_index = mi_arena_id_index(arena_id);
+  mi_assert_internal(arena_index < max_arena);
+  mi_assert_internal(size <= bcount * MI_ARENA_BLOCK_SIZE);
+  if (arena_index >= max_arena) return NULL;
+
+  mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[arena_index]);
+  if (arena == NULL) return NULL;
+  if (arena->numa_node >= 0 && arena->numa_node != numa_node) return NULL;
+  if (!(*large) && arena->is_large) return NULL;
+  return mi_arena_alloc_from(arena, arena_index, bcount, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
+}
+
+
 // allocate from an arena with fallback to the OS
 static mi_decl_noinline void* mi_arena_allocate(int numa_node, size_t size, size_t alignment, bool* commit, bool* large,
                                                 bool* is_pinned, bool* is_zero,
@@ -263,6 +285,20 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
   if (size >= MI_ARENA_MIN_OBJ_SIZE && alignment <= MI_SEGMENT_ALIGN && align_offset == 0) {
     void* p = mi_arena_allocate(numa_node, size, alignment, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
     if (p != NULL) return p;
+
+    // otherwise, try to first eagerly reserve a new arena 
+    size_t eager_reserve = mi_option_get_size(mi_option_eager_reserve);
+    eager_reserve = _mi_align_up(eager_reserve, MI_ARENA_BLOCK_SIZE);
+    if (eager_reserve > 0 && eager_reserve >= size &&                    // eager reserve enabled and large enough?
+        req_arena_id == _mi_arena_id_none() &&                           // not exclusive?
+        mi_atomic_load_relaxed(&mi_arena_count) < 3*(MI_MAX_ARENAS/4) )  // not too many arenas already?        
+    {      
+      mi_arena_id_t arena_id = 0;
+      if (mi_reserve_os_memory_ex(eager_reserve, false /* commit */, *large /* allow large*/, false /* exclusive */, &arena_id) == 0) {
+         p = mi_arena_alloc_in(arena_id, numa_node, size, alignment, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);        
+         if (p != NULL) return p;
+      }
+    }
   }
 
   // finally, fall back to the OS

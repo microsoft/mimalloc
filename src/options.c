@@ -86,7 +86,8 @@ static mi_option_desc_t options[_mi_option_last] =
   { 16,  UNINIT, MI_OPTION(max_errors) },        // maximum errors that are output
   { 16,  UNINIT, MI_OPTION(max_warnings) },      // maximum warnings that are output
   { 8,   UNINIT, MI_OPTION(max_segment_reclaim)},// max. number of segment reclaims from the abandoned segments per try.
-  { 0,   UNINIT, MI_OPTION(destroy_on_exit)}     // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
+  { 0,   UNINIT, MI_OPTION(destroy_on_exit)},    // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
+  { 0,   UNINIT, MI_OPTION(eager_reserve) }      // reserve memory N KiB at a time (slower in v1.x due to regions)
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -122,6 +123,12 @@ mi_decl_nodiscard long mi_option_get(mi_option_t option) {
 mi_decl_nodiscard long mi_option_get_clamp(mi_option_t option, long min, long max) {
   long x = mi_option_get(option);
   return (x < min ? min : (x > max ? max : x));
+}
+
+mi_decl_nodiscard size_t mi_option_get_size(mi_option_t option) {
+  mi_assert_internal(option == mi_option_reserve_os_memory || option == mi_option_eager_reserve);
+  long x = mi_option_get(option);
+  return (x < 0 ? 0 : (size_t)x * MI_KiB);
 }
 
 void mi_option_set(mi_option_t option, long value) {
@@ -517,7 +524,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
     else {
       char* end = buf;
       long value = strtol(buf, &end, 10);
-      if (desc->option == mi_option_reserve_os_memory) {
+      if (desc->option == mi_option_reserve_os_memory || desc->option == mi_option_eager_reserve) {
         // this option is interpreted in KiB to prevent overflow of `long`
         if (*end == 'K') { end++; }
         else if (*end == 'M') { value *= MI_KiB; end++; }
