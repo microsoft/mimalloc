@@ -391,7 +391,7 @@ int _mi_prim_reset(void* start, size_t size) {
     err = unix_madvise(start, size, MADV_DONTNEED);
   }
   #else
-  int err = unix_madvise(start, csize, MADV_DONTNEED);
+  int err = unix_madvise(start, size, MADV_DONTNEED);
   #endif
   return err;
 }
