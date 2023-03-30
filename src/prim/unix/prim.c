@@ -79,7 +79,7 @@ static int mi_prim_access(const char *fpath, int mode) {
 #elif !defined(__APPLE__)  // avoid unused warnings
 
 static int mi_prim_open(const char* fpath, int open_flags) {
-  return open(fpath,open_flags,mode);
+  return open(fpath,open_flags);
 }
 static ssize_t mi_prim_read(int fd, void* buf, size_t bufsize) {
   return read(fd,buf,bufsize);
@@ -391,7 +391,7 @@ int _mi_prim_reset(void* start, size_t size) {
     err = unix_madvise(start, size, MADV_DONTNEED);
   }
   #else
-  int err = unix_madvise(start, csize, MADV_DONTNEED);
+  int err = unix_madvise(start, size, MADV_DONTNEED);
   #endif
   return err;
 }
