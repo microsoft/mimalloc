@@ -113,6 +113,10 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 // for each thread (unequal to zero).
 //-------------------------------------------------------------------
 
+// defined in `init.c`; do not use these directly
+extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
+extern bool _mi_process_is_initialized;             // has mi_process_init been called?
+
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept;
 
 #if defined(_WIN32)
@@ -229,10 +233,6 @@ We try to circumvent this in an efficient way:
 - OpenBSD: we use an unused slot from the pthread block (MI_TLS_PTHREAD_SLOT_OFS).
 - DragonFly: defaults are working but seem slow compared to freeBSD (see PR #323)
 ------------------------------------------------------------------------------------------- */
-
-// defined in `init.c`; do not use these directly
-extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
-extern bool _mi_process_is_initialized;             // has mi_process_init been called?
 
 static inline mi_heap_t* mi_prim_get_default_heap(void);
 
