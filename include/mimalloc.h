@@ -339,7 +339,8 @@ typedef enum mi_option_e {
   mi_option_max_warnings,
   mi_option_max_segment_reclaim,
   mi_option_destroy_on_exit,
-  mi_option_eager_reserve,
+  mi_option_arena_reserve,
+  mi_option_arena_purge_delay,
   _mi_option_last
 } mi_option_t;
 
