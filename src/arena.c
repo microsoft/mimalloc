@@ -27,18 +27,6 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 
 #include "bitmap.h"  // atomic bitmap
 
-
-// os.c
-void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_stats_t* stats);
-void  _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats);
-void  _mi_os_free(void* p, size_t size, mi_stats_t* stats);
-
-void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize);
-void  _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats);
-
-bool  _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
-bool  _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
-
 /* -----------------------------------------------------------
   Arena allocation
 ----------------------------------------------------------- */
