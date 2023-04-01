@@ -16,7 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "./bitmap.h"  // atomic bitmap
 
-//#define MI_CACHE_DISABLE 1    // define to completely disable the segment cache
+// #define MI_CACHE_DISABLE 1    // define to completely disable the segment cache
 
 #define MI_CACHE_FIELDS     (16)
 #define MI_CACHE_MAX        (MI_BITMAP_FIELD_BITS*MI_CACHE_FIELDS)       // 1024 on 64-bit

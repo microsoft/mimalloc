@@ -11,7 +11,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memset
 #include <stdio.h>
 
-#define MI_PAGE_HUGE_ALIGN  (256*1024)
+#define MI_USE_SEGMENT_CACHE 0
+#define MI_PAGE_HUGE_ALIGN   (256*1024)
 
 static void mi_segment_delayed_decommit(mi_segment_t* segment, bool force, mi_stats_t* stats);
 
@@ -394,8 +395,10 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   
   // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
   const size_t size = mi_segment_size(segment);
-  if (size != MI_SEGMENT_SIZE || segment->mem_align_offset != 0 || segment->kind == MI_SEGMENT_HUGE || // only push regular segments on the cache
-       !_mi_segment_cache_push(segment, size, segment->memid, &segment->commit_mask, &segment->decommit_mask, segment->mem_is_large, segment->mem_is_pinned, tld->os)) 
+#if MI_USE_SEGMENT_CACHE  
+  if (size != MI_SEGMENT_SIZE || segment->mem_align_offset != 0 || segment->kind == MI_SEGMENT_HUGE // only push regular segments on the cache
+     || !_mi_segment_cache_push(segment, size, segment->memid, &segment->commit_mask, &segment->decommit_mask, segment->mem_is_large, segment->mem_is_pinned, tld->os)) 
+#endif       
   {
     if (!segment->mem_is_pinned) {
       const size_t csize = _mi_commit_mask_committed_size(&segment->commit_mask, size);
@@ -809,10 +812,14 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
   const size_t segment_size = (*psegment_slices) * MI_SEGMENT_SLICE_SIZE;
   mi_segment_t* segment = NULL;
 
+  #if MI_USE_SEGMENT_CACHE  
   // get from cache?
   if (page_alignment == 0) {
     segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, pcommit_mask, pdecommit_mask, mem_large, &mem_large, &is_pinned, is_zero, req_arena_id, &memid, os_tld);
   }
+  #else
+  MI_UNUSED(pdecommit_mask);
+  #endif
   
   // get from OS
   if (segment==NULL) {
