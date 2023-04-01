@@ -287,14 +287,15 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
     if (p != NULL) return p;
 
     // otherwise, try to first eagerly reserve a new arena 
-    size_t eager_reserve = mi_option_get_size(mi_option_arena_reserve);
-    eager_reserve = _mi_align_up(eager_reserve, MI_ARENA_BLOCK_SIZE);
-    if (eager_reserve > 0 && eager_reserve >= size &&                    // eager reserve enabled and large enough?
+    size_t arena_reserve = mi_option_get_size(mi_option_arena_reserve);
+    arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_BLOCK_SIZE);
+    if (arena_reserve > 0 && arena_reserve >= size &&                    // eager reserve enabled and large enough?
         req_arena_id == _mi_arena_id_none() &&                           // not exclusive?
         mi_atomic_load_relaxed(&mi_arena_count) < 3*(MI_MAX_ARENAS/4) )  // not too many arenas already?        
     {      
       mi_arena_id_t arena_id = 0;
-      if (mi_reserve_os_memory_ex(eager_reserve, false /* commit */, *large /* allow large*/, false /* exclusive */, &arena_id) == 0) {
+      const bool arena_commit = _mi_os_has_overcommit();
+      if (mi_reserve_os_memory_ex(arena_reserve, arena_commit /* commit */, *large /* allow large*/, false /* exclusive */, &arena_id) == 0) {
          p = mi_arena_alloc_in(arena_id, numa_node, size, alignment, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);        
          if (p != NULL) return p;
       }
@@ -383,7 +384,7 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t bitmap_idx, size_t
   }
 }
 
-// return true if the full range was purged
+// return true if the full range was purged.
 static bool mi_arena_purge_range(mi_arena_t* arena, size_t idx, size_t startidx, size_t bitlen, size_t purge, mi_stats_t* stats) {
   const size_t endidx = startidx + bitlen;
   size_t bitidx = startidx;
@@ -401,12 +402,12 @@ static bool mi_arena_purge_range(mi_arena_t* arena, size_t idx, size_t startidx,
         all_purged = true;
       }
     }
-    bitidx += (count+1);
+    bitidx += (count+1); // +1 to skip the zero bit (or end)
   }
   return all_purged;
 }
 
-// returns true if anything was decommitted
+// returns true if anything was purged
 static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force, mi_stats_t* stats) 
 {
   if (!arena->allow_decommit || arena->blocks_purge == NULL) return false;
@@ -425,35 +426,33 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force, mi
     if (purge != 0) {
       size_t bitidx = 0;
       while (bitidx < MI_BITMAP_FIELD_BITS) {
-        size_t bitlen = 1;
-        if ((purge & ((size_t)1 << bitidx)) != 0) {
-          while ((bitidx + bitlen < MI_BITMAP_FIELD_BITS) &&
-            ((purge & ((size_t)1 << (bitidx + bitlen))) != 0)) { bitlen++; }
-          // found range of purgeable blocks 
-          // try to claim the longest range of corresponding in_use bits
-          const mi_bitmap_index_t bitmap_index = mi_bitmap_index_create(i, bitidx);
-          while( bitlen > 0 ) {
-            if (_mi_bitmap_try_claim(arena->blocks_inuse, arena->field_count, bitlen, bitmap_index)) {
-              break;
-            }
-            bitlen--;
-          }
-          // claimed count bits at in_use
-          if (bitlen > 0) {
-            // read purge again now that we have the in_use bits
-            purge = mi_atomic_load_acquire(&arena->blocks_purge[i]);
-            if (!mi_arena_purge_range(arena, i, bitidx, bitlen, purge, stats)) {
-              full_purge = false;
-            }
-            any_purged = true;
-          }
-          else {
-            bitlen = 1;  // make progress
-          }
+        // find length 1 bit range
+        size_t bitlen = 0;
+        while (bitidx + bitlen < MI_BITMAP_FIELD_BITS && (purge & ((size_t)1 << (bitidx + bitlen))) != 0) {
+          bitlen++;
         }
-        bitidx += bitlen;
-      }
-    }
+        // try to claim the longest range of corresponding in_use bits
+        const mi_bitmap_index_t bitmap_index = mi_bitmap_index_create(i, bitidx);
+        while( bitlen > 0 ) {
+          if (_mi_bitmap_try_claim(arena->blocks_inuse, arena->field_count, bitlen, bitmap_index)) {
+            break;
+          }
+          bitlen--;
+        }
+        // claimed count bits at in_use
+        if (bitlen > 0) {
+          // read purge again now that we have the in_use bits
+          purge = mi_atomic_load_acquire(&arena->blocks_purge[i]);
+          if (!mi_arena_purge_range(arena, i, bitidx, bitlen, purge, stats)) {
+            full_purge = false;
+          }
+          any_purged = true;
+          // release claimed in_use bits again
+          _mi_bitmap_unclaim(arena->blocks_inuse, arena->field_count, bitlen, bitmap_index);
+        }
+        bitidx += (bitlen+1);  // +1 to skip the zero (or end)
+      } // while bitidx
+    } // purge != 0
   }
   return any_purged;
 }
@@ -532,8 +531,16 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
       return;
     };
   }
+
+  // purge expired decommits
+  mi_arenas_try_purge(false, false, stats);
 }
 
+
+void _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats) {
+  MI_UNUSED(free_arenas); // todo
+  mi_arenas_try_purge(force_decommit, true, stats);
+}
 
 /* -----------------------------------------------------------
   Add an arena.
@@ -566,7 +573,7 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
     is_committed = true;
   }
 
-  const bool allow_decommit = !is_large && !is_committed; // only allow decommit for initially uncommitted memory
+  const bool allow_decommit = !is_large; // && !is_committed; // only allow decommit for initially uncommitted memory
 
   const size_t bcount = size / MI_ARENA_BLOCK_SIZE;
   const size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);

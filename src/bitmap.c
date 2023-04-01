@@ -118,7 +118,7 @@ bool _mi_bitmap_try_find_claim(mi_bitmap_t bitmap, const size_t bitmap_fields, c
 
 // Set `count` bits at `bitmap_idx` to 0 atomically
 // Returns `true` if all `count` bits were 1 previously.
-bool mi_bitmap_unclaim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx) {
+bool _mi_bitmap_unclaim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx) {
   const size_t idx = mi_bitmap_index_field(bitmap_idx);
   const size_t bitidx = mi_bitmap_index_bit_in_field(bitmap_idx);
   const size_t mask = mi_bitmap_mask_(count, bitidx);
@@ -152,6 +152,20 @@ static bool mi_bitmap_is_claimedx(mi_bitmap_t bitmap, size_t bitmap_fields, size
   if (any_ones != NULL) *any_ones = ((field & mask) != 0);
   return ((field & mask) == mask);
 }
+
+// Try to set `count` bits at `bitmap_idx` from 0 to 1 atomically. 
+// Returns `true` if successful when all previous `count` bits were 0.
+bool _mi_bitmap_try_claim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx) {
+  const size_t idx = mi_bitmap_index_field(bitmap_idx);
+  const size_t bitidx = mi_bitmap_index_bit_in_field(bitmap_idx);
+  const size_t mask = mi_bitmap_mask_(count, bitidx);
+  mi_assert_internal(bitmap_fields > idx); MI_UNUSED(bitmap_fields);
+  size_t expected = 0;
+  if (mi_atomic_cas_strong_acq_rel(&bitmap[idx], &expected, mask)) return true;
+  if ((expected & mask) != 0) return false;
+  return mi_atomic_cas_strong_acq_rel(&bitmap[idx], &expected, expected | mask);
+}
+
 
 bool _mi_bitmap_is_claimed(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx) {
   return mi_bitmap_is_claimedx(bitmap, bitmap_fields, count, bitmap_idx, NULL);

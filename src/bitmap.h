@@ -69,7 +69,7 @@ bool _mi_bitmap_try_find_from_claim(mi_bitmap_t bitmap, const size_t bitmap_fiel
 
 // Set `count` bits at `bitmap_idx` to 0 atomically
 // Returns `true` if all `count` bits were 1 previously.
-bool mi_bitmap_unclaim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx);
+bool _mi_bitmap_unclaim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx);
 
 // Try to set `count` bits at `bitmap_idx` from 0 to 1 atomically. 
 // Returns `true` if successful when all previous `count` bits were 0.

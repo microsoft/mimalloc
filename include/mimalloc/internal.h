@@ -117,7 +117,7 @@ void*      _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinn
 void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
 bool       _mi_arena_memid_is_suitable(size_t arena_memid, mi_arena_id_t request_arena_id);
 bool       _mi_arena_is_os_allocated(size_t arena_memid);
-
+void       _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats);
 
 // memory.c
 void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, size_t offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* id, mi_os_tld_t* tld);

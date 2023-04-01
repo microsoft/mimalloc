@@ -591,6 +591,7 @@ static void mi_cdecl mi_process_done(void) {
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
     _mi_heap_destroy_all();                          // forcefully release all memory held by all heaps (of this thread only!)
     _mi_mem_collect(&_mi_heap_main_get()->tld->os);  // release all regions
+    _mi_arena_collect(true,true,&_mi_heap_main_get()->tld->stats);
   }
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
