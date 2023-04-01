@@ -325,7 +325,7 @@ typedef enum mi_option_e {
   // (deprecated options are kept for binary backward compatibility with v1.x versions)
   mi_option_eager_commit,
   mi_option_deprecated_eager_region_commit,
-  mi_option_deprecated_reset_decommits,
+  mi_option_reset_decommits,
   mi_option_large_os_pages,           // use large (2MiB) OS pages, implies eager commit
   mi_option_reserve_huge_os_pages,    // reserve N huge OS pages (1GiB) at startup
   mi_option_reserve_huge_os_pages_at, // reserve huge OS pages at a specific NUMA node
@@ -346,7 +346,8 @@ typedef enum mi_option_e {
   mi_option_segment_decommit_delay,  
   mi_option_decommit_extend_delay,
   mi_option_destroy_on_exit,
-  mi_option_eager_reserve,
+  mi_option_arena_reserve,
+  mi_option_arena_purge_delay,
   _mi_option_last
 } mi_option_t;
 

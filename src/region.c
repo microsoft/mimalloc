@@ -289,7 +289,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* large, bool*
       bool commit_zero = false;
       if (!_mi_mem_commit(p, blocks * MI_SEGMENT_SIZE, &commit_zero, tld)) {
         // failed to commit! unclaim and return
-        mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
+        _mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
         return NULL;
       }
       if (commit_zero) *is_zero = true;
@@ -306,7 +306,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* large, bool*
     // some blocks are still reset
     mi_assert_internal(!info.x.is_large && !info.x.is_pinned);
     mi_assert_internal(!mi_option_is_enabled(mi_option_eager_commit) || *commit || mi_option_get(mi_option_eager_commit_delay) > 0);
-    mi_bitmap_unclaim(&region->reset, 1, blocks, bit_idx);
+    _mi_bitmap_unclaim(&region->reset, 1, blocks, bit_idx);
     if (*commit || !mi_option_is_enabled(mi_option_reset_decommits)) { // only if needed
       bool reset_zero = false;
       _mi_mem_unreset(p, blocks * MI_SEGMENT_SIZE, &reset_zero, tld);
@@ -426,7 +426,7 @@ void _mi_mem_free(void* p, size_t size, size_t alignment, size_t align_offset, s
     }
 
     // and unclaim
-    bool all_unclaimed = mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
+    bool all_unclaimed = _mi_bitmap_unclaim(&region->in_use, 1, blocks, bit_idx);
     mi_assert_internal(all_unclaimed); MI_UNUSED(all_unclaimed);
   }
 }
