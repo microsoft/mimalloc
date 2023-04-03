@@ -383,7 +383,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(mi_page_thread_free_flag(page)==MI_NEVER_DELAYED_FREE);
   mi_page_set_heap(page, NULL);
 
-#if MI_DEBUG>1
+#if (MI_DEBUG>1) && !MI_TRACK_ENABLED
   // check there are no references left..
   for (mi_block_t* block = (mi_block_t*)pheap->thread_delayed_free; block != NULL; block = mi_block_nextx(pheap, block, pheap->keys)) {
     mi_assert_internal(_mi_ptr_page(block) != page);
