@@ -37,6 +37,7 @@ const mi_page_t _mi_page_empty = {
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
 
+#if (MI_SMALL_WSIZE_MAX==128)
 #if (MI_PADDING>0) && (MI_INTPTR_SIZE >= 8)
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY(), MI_PAGE_EMPTY() }
 #elif (MI_PADDING>0)
@@ -44,7 +45,9 @@ const mi_page_t _mi_page_empty = {
 #else
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY() }
 #endif
-
+#else
+#error "define right initialization sizes corresponding to MI_SMALL_WSIZE_MAX"
+#endif
 
 // Empty page queues for every bin
 #define QNULL(sz)  { NULL, NULL, (sz)*sizeof(uintptr_t) }
