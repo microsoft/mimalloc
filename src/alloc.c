@@ -75,8 +75,8 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
   #if (MI_DEBUG>=2)
   mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
-  mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
   #endif
+  mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
   padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
   padding->delta  = (uint32_t)(delta);
   #if MI_PADDING_CHECK
@@ -406,7 +406,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   }
 
 
-  #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
+  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
   memset(block, MI_DEBUG_FREED, mi_usable_size(block));
   #endif
 
@@ -458,7 +458,7 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
     // owning thread can free a block directly
     if mi_unlikely(mi_check_is_double_free(page, block)) return;
     mi_check_padding(page, block);
-    #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED  && !MI_TSAN
+    #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
     #endif
     mi_block_set_next(page, block, page->local_free);
@@ -546,7 +546,7 @@ void mi_free(void* p) mi_attr_noexcept
       if mi_unlikely(mi_check_is_double_free(page, block)) return;
       mi_check_padding(page, block);
       mi_stat_free(page, block);
-      #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED  && !MI_TSAN
+      #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
       memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
       #endif
       mi_track_free_size(p, mi_page_usable_size_of(page,block)); // faster then mi_usable_size as we already know the page and that p is unaligned
