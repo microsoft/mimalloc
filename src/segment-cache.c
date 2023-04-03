@@ -29,7 +29,7 @@ typedef struct mi_cache_slot_s {
   size_t              memid;
   bool                is_pinned;
   mi_commit_mask_t    commit_mask;
-  mi_commit_mask_t    decommit_mask;
+  mi_commit_mask_t    purge_mask;
   _Atomic(mi_msecs_t) expire;
 } mi_cache_slot_t;
 
@@ -48,7 +48,7 @@ static bool mi_cdecl mi_segment_cache_is_suitable(mi_bitmap_index_t bitidx, void
 mi_decl_noinline static void* mi_segment_cache_pop_ex(
                               bool all_suitable,
                               size_t size, mi_commit_mask_t* commit_mask, 
-                              mi_commit_mask_t* decommit_mask, bool large_allowed,
+                              mi_commit_mask_t* purge_mask, bool large_allowed,
                               bool* large, bool* is_pinned, bool* is_zero, 
                               mi_arena_id_t _req_arena_id, size_t* memid, mi_os_tld_t* tld)
 {
@@ -96,7 +96,7 @@ mi_decl_noinline static void* mi_segment_cache_pop_ex(
   *is_pinned = slot->is_pinned;
   *is_zero = false;
   *commit_mask = slot->commit_mask;     
-  *decommit_mask = slot->decommit_mask;
+  *purge_mask = slot->purge_mask;
   slot->p = NULL;
   mi_atomic_storei64_release(&slot->expire,(mi_msecs_t)0);
   
@@ -107,9 +107,9 @@ mi_decl_noinline static void* mi_segment_cache_pop_ex(
 }
 
 
-mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool large_allowed, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t _req_arena_id, size_t* memid, mi_os_tld_t* tld)
+mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* purge_mask, bool large_allowed, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t _req_arena_id, size_t* memid, mi_os_tld_t* tld)
 {
-  return mi_segment_cache_pop_ex(false, size, commit_mask, decommit_mask, large_allowed, large, is_pinned, is_zero, _req_arena_id, memid, tld);
+  return mi_segment_cache_pop_ex(false, size, commit_mask, purge_mask, large_allowed, large, is_pinned, is_zero, _req_arena_id, memid, tld);
 }
 
 static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, void* p, size_t total, mi_stats_t* stats)
@@ -142,7 +142,7 @@ static mi_decl_noinline void mi_commit_mask_decommit(mi_commit_mask_t* cmask, vo
 static mi_decl_noinline void mi_segment_cache_purge(bool visit_all, bool force, mi_os_tld_t* tld)
 {
   MI_UNUSED(tld);
-  if (!mi_option_is_enabled(mi_option_allow_decommit)) return;
+  if (!mi_option_is_enabled(mi_option_allow_purge)) return;
   mi_msecs_t now = _mi_clock_now();
   size_t purged = 0;
   const size_t max_visits = (visit_all ? MI_CACHE_MAX /* visit all */ : MI_CACHE_FIELDS /* probe at most N (=16) slots */);
@@ -170,7 +170,7 @@ static mi_decl_noinline void mi_segment_cache_purge(bool visit_all, bool force, 
           // decommit committed parts
           // TODO: instead of decommit, we could also free to the OS?
           mi_commit_mask_decommit(&slot->commit_mask, slot->p, MI_SEGMENT_SIZE, tld->stats);
-          mi_commit_mask_create_empty(&slot->decommit_mask);
+          mi_commit_mask_create_empty(&slot->purge_mask);
         }
         _mi_bitmap_unclaim(cache_unavailable, MI_CACHE_FIELDS, 1, bitidx); // make it available again for a pop
       }
@@ -191,7 +191,7 @@ void _mi_segment_cache_collect(bool force, mi_os_tld_t* tld) {
 
 void _mi_segment_cache_free_all(mi_os_tld_t* tld) {
   mi_commit_mask_t commit_mask;
-  mi_commit_mask_t decommit_mask;
+  mi_commit_mask_t purge_mask;
   bool is_pinned;
   bool is_zero;
   bool is_large;
@@ -200,7 +200,7 @@ void _mi_segment_cache_free_all(mi_os_tld_t* tld) {
   void* p;
   do {
     // keep popping and freeing the memory
-    p = mi_segment_cache_pop_ex(true /* all */, size, &commit_mask, &decommit_mask,
+    p = mi_segment_cache_pop_ex(true /* all */, size, &commit_mask, &purge_mask,
                                 true /* allow large */, &is_large, &is_pinned, &is_zero, _mi_arena_id_none(), &memid, tld);
     if (p != NULL) {
       size_t csize = _mi_commit_mask_committed_size(&commit_mask, size);
@@ -210,7 +210,7 @@ void _mi_segment_cache_free_all(mi_os_tld_t* tld) {
   } while (p != NULL);  
 }
 
-mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* decommit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld)
+mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* purge_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld)
 {
 #ifdef MI_CACHE_DISABLE
   return false;
@@ -257,13 +257,13 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
   slot->is_pinned = is_pinned;
   mi_atomic_storei64_relaxed(&slot->expire,(mi_msecs_t)0);
   slot->commit_mask = *commit_mask;
-  slot->decommit_mask = *decommit_mask;
-  if (!mi_commit_mask_is_empty(commit_mask) && !is_large && !is_pinned && mi_option_is_enabled(mi_option_allow_decommit)) {
-    long delay = mi_option_get(mi_option_segment_decommit_delay);
+  slot->purge_mask = *purge_mask;
+  if (!mi_commit_mask_is_empty(commit_mask) && !is_large && !is_pinned && mi_option_is_enabled(mi_option_allow_purge)) {
+    long delay = mi_option_get(mi_option_arena_purge_delay);
     if (delay == 0) {
       _mi_abandoned_await_readers(); // wait until safe to decommit
       mi_commit_mask_decommit(&slot->commit_mask, start, MI_SEGMENT_SIZE, tld->stats);
-      mi_commit_mask_create_empty(&slot->decommit_mask);
+      mi_commit_mask_create_empty(&slot->purge_mask);
     }
     else {
       mi_atomic_storei64_release(&slot->expire, _mi_clock_now() + delay);

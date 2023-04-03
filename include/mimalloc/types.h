@@ -350,7 +350,7 @@ typedef enum mi_segment_kind_e {
 // is still tracked in fine-grained MI_COMMIT_SIZE chunks)
 // ------------------------------------------------------
 
-#define MI_MINIMAL_COMMIT_SIZE      (16*MI_SEGMENT_SLICE_SIZE)           // 1MiB
+#define MI_MINIMAL_COMMIT_SIZE      (1*MI_SEGMENT_SLICE_SIZE)            // 1MiB
 #define MI_COMMIT_SIZE              (MI_SEGMENT_SLICE_SIZE)              // 64KiB
 #define MI_COMMIT_MASK_BITS         (MI_SEGMENT_SIZE / MI_COMMIT_SIZE)  
 #define MI_COMMIT_MASK_FIELD_BITS    MI_SIZE_BITS
@@ -379,9 +379,10 @@ typedef struct mi_segment_s {
   size_t            mem_alignment;      // page alignment for huge pages (only used for alignment > MI_ALIGNMENT_MAX)
   size_t            mem_align_offset;   // offset for huge page alignment (only used for alignment > MI_ALIGNMENT_MAX)
 
-  bool              allow_decommit;     
-  mi_msecs_t        decommit_expire;
-  mi_commit_mask_t  decommit_mask;
+  bool              allow_decommit;
+  bool              allow_purge;
+  mi_msecs_t        purge_expire;
+  mi_commit_mask_t  purge_mask;
   mi_commit_mask_t  commit_mask;
 
   _Atomic(struct mi_segment_s*) abandoned_next;

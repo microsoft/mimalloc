@@ -297,7 +297,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
         mi_atomic_load_relaxed(&mi_arena_count) < 3*(MI_MAX_ARENAS/4) )  // not too many arenas already?        
     {      
       mi_arena_id_t arena_id = 0;
-      const bool arena_commit = _mi_os_has_overcommit();
+      const bool arena_commit = _mi_os_has_overcommit() || mi_option_is_enabled(mi_option_eager_arena_commit);
       if (mi_reserve_os_memory_ex(arena_reserve, arena_commit /* commit */, *large /* allow large*/, false /* exclusive */, &arena_id) == 0) {
          p = mi_arena_alloc_in(arena_id, numa_node, size, alignment, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);        
          if (p != NULL) return p;
@@ -336,20 +336,6 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
   Arena purge
 ----------------------------------------------------------- */
 
-// either resets or decommits memory, returns true if the memory was decommitted.
-static bool mi_os_purge(void* p, size_t size, mi_stats_t* stats) {
-  if (mi_option_is_enabled(mi_option_reset_decommits) &&   // should decommit?
-      !_mi_preloading())                                   // don't decommit during preloading (unsafe)
-  {
-    _mi_os_decommit(p, size, stats);
-    return true;  // decommitted
-  }
-  else {
-    _mi_os_reset(p, size, stats);
-    return false;  // not decommitted
-  }
-}
-
 // reset or decommit in an arena and update the committed/decommit bitmaps
 static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks, mi_stats_t* stats) {
   mi_assert_internal(arena->blocks_committed != NULL);
@@ -357,7 +343,7 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks, 
   mi_assert_internal(arena->allow_decommit);
   const size_t size = blocks * MI_ARENA_BLOCK_SIZE;
   void* const p = arena->start + (mi_bitmap_index_bit(bitmap_idx) * MI_ARENA_BLOCK_SIZE);
-  const bool decommitted = mi_os_purge(p, size, stats);
+  const bool decommitted = _mi_os_purge(p, size, stats);
   // clear the purged blocks
   _mi_bitmap_unclaim_across(arena->blocks_purge, arena->field_count, blocks, bitmap_idx);
   // update committed bitmap
@@ -369,6 +355,8 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks, 
 // Schedule a purge. This is usually delayed to avoid repeated decommit/commit calls.
 static void mi_arena_schedule_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks, mi_stats_t* stats) {
   mi_assert_internal(arena->blocks_purge != NULL);
+  if (!mi_option_is_enabled(mi_option_allow_purge)) return;
+
   const long delay = mi_option_get(mi_option_arena_purge_delay);
   if (_mi_preloading() || delay == 0) {
     // decommit directly
@@ -468,7 +456,8 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force, mi
 
 static void mi_arenas_try_purge( bool force, bool visit_all, mi_stats_t* stats ) {
   const long delay = mi_option_get(mi_option_arena_purge_delay);
-  if (_mi_preloading() || delay == 0 /* || !mi_option_is_enabled(mi_option_allow_decommit) */) return;  // nothing will be scheduled
+  if (_mi_preloading() || delay == 0 || !mi_option_is_enabled(mi_option_allow_purge)) return;  // nothing will be scheduled
+
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   if (max_arena == 0) return;
 

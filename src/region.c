@@ -307,7 +307,7 @@ static void* mi_region_try_alloc(size_t blocks, bool* commit, bool* large, bool*
     mi_assert_internal(!info.x.is_large && !info.x.is_pinned);
     mi_assert_internal(!mi_option_is_enabled(mi_option_eager_commit) || *commit || mi_option_get(mi_option_eager_commit_delay) > 0);
     _mi_bitmap_unclaim(&region->reset, 1, blocks, bit_idx);
-    if (*commit || !mi_option_is_enabled(mi_option_reset_decommits)) { // only if needed
+    if (*commit || !mi_option_is_enabled(mi_option_purge_decommits)) { // only if needed
       bool reset_zero = false;
       _mi_mem_unreset(p, blocks * MI_SEGMENT_SIZE, &reset_zero, tld);
       if (reset_zero) *is_zero = true;
@@ -415,7 +415,7 @@ void _mi_mem_free(void* p, size_t size, size_t alignment, size_t align_offset, s
     // reset the blocks to reduce the working set.
     if (!info.x.is_large && !info.x.is_pinned && mi_option_is_enabled(mi_option_segment_reset)
        && (mi_option_is_enabled(mi_option_eager_commit) ||
-           mi_option_is_enabled(mi_option_reset_decommits))) // cannot reset halfway committed segments, use only `option_page_reset` instead
+           mi_option_is_enabled(mi_option_purge_decommits))) // cannot reset halfway committed segments, use only `option_page_reset` instead
     {
       bool any_unreset;
       _mi_bitmap_claim(&region->reset, 1, blocks, bit_idx, &any_unreset);
@@ -467,7 +467,7 @@ void _mi_mem_collect(mi_os_tld_t* tld) {
 -----------------------------------------------------------------------------*/
 
 bool _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld) {
-  if (mi_option_is_enabled(mi_option_reset_decommits)) {
+  if (mi_option_is_enabled(mi_option_purge_decommits)) {
     return _mi_os_decommit(p, size, tld->stats);
   }
   else {
@@ -476,7 +476,7 @@ bool _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld) {
 }
 
 bool _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld) {
-  if (mi_option_is_enabled(mi_option_reset_decommits)) {
+  if (mi_option_is_enabled(mi_option_purge_decommits)) {
     return _mi_os_commit(p, size, is_zero, tld->stats);
   }
   else {

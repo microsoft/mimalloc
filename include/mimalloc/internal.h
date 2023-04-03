@@ -93,6 +93,7 @@ size_t     _mi_os_page_size(void);
 size_t     _mi_os_good_alloc_size(size_t size);
 bool       _mi_os_has_overcommit(void);
 
+bool       _mi_os_purge(void* p, size_t size, mi_stats_t* stats);
 bool       _mi_os_reset(void* addr, size_t size, mi_stats_t* tld_stats);
 bool       _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
 bool       _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
@@ -120,8 +121,8 @@ bool       _mi_arena_is_os_allocated(size_t arena_memid);
 void       _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats);
 
 // "segment-cache.c"
-void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* decommit_mask, bool large_allowed, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
-bool       _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* decommit_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld);
+void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* purge_mask, bool large_allowed, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
+bool       _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* purge_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld);
 void       _mi_segment_cache_collect(bool force, mi_os_tld_t* tld);
 void       _mi_segment_cache_free_all(mi_os_tld_t* tld);
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
