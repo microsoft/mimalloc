@@ -400,12 +400,18 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
      || !_mi_segment_cache_push(segment, size, segment->memid, &segment->commit_mask, &segment->decommit_mask, segment->mem_is_large, segment->mem_is_pinned, tld->os)) 
 #endif       
   {
-    if (!segment->mem_is_pinned) {
+    // if not all committed, an arena may decommit the whole area, but that double counts
+    // the already decommitted parts; adjust for that in the stats.
+    if (!mi_commit_mask_is_full(&segment->commit_mask)) {
       const size_t csize = _mi_commit_mask_committed_size(&segment->commit_mask, size);
-      if (csize > 0) { _mi_stat_decrease(&_mi_stats_main.committed, csize); }
+      mi_assert_internal(size > csize);
+      if (size > csize) {
+        _mi_stat_increase(&_mi_stats_main.committed, size - csize); 
+      }
     }
     _mi_abandoned_await_readers();  // wait until safe to free
-    _mi_arena_free(segment, mi_segment_size(segment), segment->mem_alignment, segment->mem_align_offset, segment->memid, segment->mem_is_pinned /* pretend not committed to not double count decommits */, tld->stats);
+    _mi_arena_free(segment, mi_segment_size(segment), segment->mem_alignment, segment->mem_align_offset, segment->memid, 
+                            mi_commit_mask_is_full(&segment->commit_mask) /* all committed? */, tld->stats);
   }
 }
 

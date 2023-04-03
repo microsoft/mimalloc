@@ -133,7 +133,7 @@ static bool mi_arena_alloc(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* 
 {
   size_t idx = 0; // mi_atomic_load_relaxed(&arena->search_idx);  // start from last search; ok to be relaxed as the exact start does not matter
   if (_mi_bitmap_try_find_from_claim_across(arena->blocks_inuse, arena->field_count, idx, blocks, bitmap_idx)) {
-    mi_atomic_store_relaxed(&arena->search_idx, mi_bitmap_index_field(*bitmap_idx));  // start search from found location next time around
+    mi_atomic_store_relaxed(&arena->search_idx, mi_bitmap_index_field(*bitmap_idx));  // start search from found location next time around    
     return true;
   };
   return false;
@@ -189,6 +189,8 @@ static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t aren
     // no need to commit, but check if already fully committed
     *commit = _mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
   }
+  
+  mi_track_mem_undefined(p,needed_bcount*MI_ARENA_BLOCK_SIZE);
   return p;
 }
 
@@ -300,7 +302,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
          p = mi_arena_alloc_in(arena_id, numa_node, size, alignment, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);        
          if (p != NULL) return p;
       }
-    }
+    }    
   }
 
   // finally, fall back to the OS
@@ -356,10 +358,11 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks, 
   const size_t size = blocks * MI_ARENA_BLOCK_SIZE;
   void* const p = arena->start + (mi_bitmap_index_bit(bitmap_idx) * MI_ARENA_BLOCK_SIZE);
   const bool decommitted = mi_os_purge(p, size, stats);
+  // clear the purged blocks
+  _mi_bitmap_unclaim_across(arena->blocks_purge, arena->field_count, blocks, bitmap_idx);
   // update committed bitmap
   if (decommitted) {
     _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx);
-    _mi_bitmap_unclaim_across(arena->blocks_purge, arena->field_count, blocks, bitmap_idx);
   }
 }
 
@@ -520,14 +523,19 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
       _mi_error_message(EINVAL, "trying to free from non-existent arena block: %p, size %zu, memid: 0x%zx\n", p, size, memid);
       return;
     }
-    
+
     // potentially decommit
     if (!arena->allow_decommit || arena->blocks_committed == NULL) {
-      mi_assert_internal(all_committed); // note: may be not true as we may "pretend" to be not committed (in segment.c)
+      mi_assert_internal(all_committed);
     }
     else {
       mi_assert_internal(arena->blocks_committed != NULL);
       mi_assert_internal(arena->blocks_purge != NULL);
+      if (!all_committed) {
+        // assume the entire range as no longer committed
+        _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx);
+      }
+      // (delay) purge the entire range
       mi_arena_schedule_purge(arena, bitmap_idx, blocks, stats);      
     }
     

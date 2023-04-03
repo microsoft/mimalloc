@@ -380,7 +380,8 @@ int _mi_prim_commit(void* start, size_t size, bool commit) {
 }
 
 int _mi_prim_reset(void* start, size_t size) {
-  #if defined(MADV_FREE)
+  // note: disable the use of MADV_FREE since it leads to confusing stats :-(
+  #if 0 // defined(MADV_FREE)
   static _Atomic(size_t) advice = MI_ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
   int err;

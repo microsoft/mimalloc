@@ -411,6 +411,9 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   if (err != 0) {
     _mi_warning_message("cannot reset OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
+  else {
+    mi_track_mem_undefined(start, csize);
+  }
   return (err == 0);
 }
 
