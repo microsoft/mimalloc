@@ -179,6 +179,7 @@ void       _mi_heap_destroy_pages(mi_heap_t* heap);
 void       _mi_heap_collect_abandon(mi_heap_t* heap);
 void       _mi_heap_set_default_direct(mi_heap_t* heap);
 void       _mi_heap_destroy_all(void);
+bool       _mi_heap_memid_is_suitable(mi_heap_t* heap, size_t memid);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);
