@@ -305,9 +305,10 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
     {      
       mi_arena_id_t arena_id = 0;
 
-      bool arena_commit = _mi_os_has_overcommit();
-      if (mi_option_get(mi_option_arena_eager_commit) == 1) { arena_commit = true; } 
-      else if (mi_option_get(mi_option_arena_eager_commit) == 0) { arena_commit = false; } 
+      // commit eagerly?
+      bool arena_commit = false;
+      if (mi_option_get(mi_option_arena_eager_commit) == 2)      { arena_commit = _mi_os_has_overcommit(); }
+      else if (mi_option_get(mi_option_arena_eager_commit) == 1) { arena_commit = true; }
 
       if (mi_reserve_os_memory_ex(arena_reserve, arena_commit /* commit */, *large /* allow large*/, false /* exclusive */, &arena_id) == 0) {
          p = mi_arena_alloc_in(arena_id, numa_node, size, alignment, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);        
