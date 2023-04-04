@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_USE_SEGMENT_CACHE 0
 #define MI_PAGE_HUGE_ALIGN   (256*1024)
 
-static void mi_segment_delayed_purge(mi_segment_t* segment, bool force, mi_stats_t* stats);
+static void mi_segment_try_purge(mi_segment_t* segment, bool force, mi_stats_t* stats);
 
 
 // -------------------------------------------------------------------
@@ -391,7 +391,7 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   }
 
   // purge delayed decommits now? (no, leave it to the arena)
-  // mi_segment_delayed_purge(segment,true,tld->stats);
+  // mi_segment_try_purge(segment,true,tld->stats);
   
   // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
   const size_t size = mi_segment_size(segment);
@@ -476,49 +476,32 @@ static void mi_segment_commit_mask(mi_segment_t* segment, bool conservative, uin
   mi_commit_mask_create(bitidx, bitcount, cm);
 }
 
-
-static bool mi_segment_commitx(mi_segment_t* segment, bool commit, uint8_t* p, size_t size, mi_stats_t* stats) {    
+static bool mi_segment_commit(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
   mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->purge_mask));
 
-  // commit liberal, but decommit conservative
+  // commit liberal
   uint8_t* start = NULL;
   size_t   full_size = 0;
   mi_commit_mask_t mask;
-  mi_segment_commit_mask(segment, !commit/*conservative*/, p, size, &start, &full_size, &mask);
-  if (mi_commit_mask_is_empty(&mask) || full_size==0) return true;
+  mi_segment_commit_mask(segment, false /* conservative? */, p, size, &start, &full_size, &mask);
+  if (mi_commit_mask_is_empty(&mask) || full_size == 0) return true;
 
-  if (commit && !mi_commit_mask_all_set(&segment->commit_mask, &mask)) {
+  if (!mi_commit_mask_all_set(&segment->commit_mask, &mask)) {
     // committing
     bool is_zero = false;
     mi_commit_mask_t cmask;
     mi_commit_mask_create_intersect(&segment->commit_mask, &mask, &cmask);
     _mi_stat_decrease(&_mi_stats_main.committed, _mi_commit_mask_committed_size(&cmask, MI_SEGMENT_SIZE)); // adjust for overlap
-    if (!_mi_os_commit(start,full_size,&is_zero,stats)) return false;    
-    mi_commit_mask_set(&segment->commit_mask, &mask);     
+    if (!_mi_os_commit(start, full_size, &is_zero, stats)) return false;
+    mi_commit_mask_set(&segment->commit_mask, &mask);
   }
-  else if (!commit && mi_commit_mask_any_set(&segment->commit_mask, &mask)) {
-    // purging
-    mi_assert_internal((void*)start != (void*)segment);
-    if (mi_option_is_enabled(mi_option_allow_purge)) {
-      if (segment->allow_decommit) { 
-        const bool decommitted = _mi_os_purge(start, full_size, stats);  // reset or decommit
-        if (decommitted) {
-          mi_commit_mask_t cmask;
-          mi_commit_mask_create_intersect(&segment->commit_mask, &mask, &cmask);
-          _mi_stat_increase(&_mi_stats_main.committed, full_size - _mi_commit_mask_committed_size(&cmask, MI_SEGMENT_SIZE)); // adjust for double counting 
-          mi_commit_mask_clear(&segment->commit_mask, &mask);
-        }
-      }
-      else if (segment->allow_purge) {
-        _mi_os_reset(start, full_size, stats);
-      }
-    }
-  }
-  // increase expiration of reusing part of the delayed decommit
-  if (commit && mi_commit_mask_any_set(&segment->purge_mask, &mask)) {
+  
+  // increase purge expiration when using part of delayed purges -- we assume more allocations are coming soon.
+  if (mi_commit_mask_any_set(&segment->purge_mask, &mask)) {
     segment->purge_expire = _mi_clock_now() + mi_option_get(mi_option_purge_delay);
   }
-  // always undo delayed purges
+
+  // always clear any delayed purges in our range (as they are either committed now)
   mi_commit_mask_clear(&segment->purge_mask, &mask);
   return true;
 }
@@ -528,13 +511,43 @@ static bool mi_segment_ensure_committed(mi_segment_t* segment, uint8_t* p, size_
   // note: assumes commit_mask is always full for huge segments as otherwise the commit mask bits can overflow
   if (mi_commit_mask_is_full(&segment->commit_mask) && mi_commit_mask_is_empty(&segment->purge_mask)) return true; // fully committed
   mi_assert_internal(segment->kind != MI_SEGMENT_HUGE);
-  return mi_segment_commitx(segment,true,p,size,stats);
+  return mi_segment_commit(segment, p, size, stats);
+}
+
+static bool mi_segment_purge(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {    
+  mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->purge_mask));
+  if (!segment->allow_purge) return true;
+
+  // purge conservative
+  uint8_t* start = NULL;
+  size_t   full_size = 0;
+  mi_commit_mask_t mask;
+  mi_segment_commit_mask(segment, true /* conservative? */, p, size, &start, &full_size, &mask);
+  if (mi_commit_mask_is_empty(&mask) || full_size==0) return true;
+
+  if (mi_commit_mask_any_set(&segment->commit_mask, &mask)) {
+    // purging
+    mi_assert_internal((void*)start != (void*)segment);
+    mi_assert_internal(segment->allow_decommit);
+    const bool decommitted = _mi_os_purge(start, full_size, stats);  // reset or decommit
+    if (decommitted) {
+      mi_commit_mask_t cmask;
+      mi_commit_mask_create_intersect(&segment->commit_mask, &mask, &cmask);
+      _mi_stat_increase(&_mi_stats_main.committed, full_size - _mi_commit_mask_committed_size(&cmask, MI_SEGMENT_SIZE)); // adjust for double counting 
+      mi_commit_mask_clear(&segment->commit_mask, &mask);
+    }        
+  }
+  
+  // always clear any scheduled purges in our range
+  mi_commit_mask_clear(&segment->purge_mask, &mask);
+  return true;
 }
 
 static void mi_segment_schedule_purge(mi_segment_t* segment, uint8_t* p, size_t size, mi_stats_t* stats) {
   if (!segment->allow_purge) return;
+
   if (mi_option_get(mi_option_purge_delay) == 0) {
-    mi_segment_commitx(segment, false, p, size, stats);
+    mi_segment_purge(segment, p, size, stats);
   }
   else {
     // register for future purge in the purge mask
@@ -551,26 +564,26 @@ static void mi_segment_schedule_purge(mi_segment_t* segment, uint8_t* p, size_t 
     mi_commit_mask_set(&segment->purge_mask, &cmask);
     mi_msecs_t now = _mi_clock_now();    
     if (segment->purge_expire == 0) {
-      // no previous decommits, initialize now
+      // no previous purgess, initialize now
       segment->purge_expire = now + mi_option_get(mi_option_purge_delay);
     }
     else if (segment->purge_expire <= now) {
-      // previous decommit mask already expired
+      // previous purge mask already expired
       if (segment->purge_expire + mi_option_get(mi_option_purge_extend_delay) <= now) {
-        mi_segment_delayed_purge(segment, true, stats);
+        mi_segment_try_purge(segment, true, stats);
       }
       else {
         segment->purge_expire = now + mi_option_get(mi_option_purge_extend_delay); // (mi_option_get(mi_option_purge_delay) / 8); // wait a tiny bit longer in case there is a series of free's
       }
     }
     else {
-      // previous decommit mask is not yet expired, increase the expiration by a bit.
+      // previous purge mask is not yet expired, increase the expiration by a bit.
       segment->purge_expire += mi_option_get(mi_option_purge_extend_delay);
     }
   }  
 }
 
-static void mi_segment_delayed_purge(mi_segment_t* segment, bool force, mi_stats_t* stats) {
+static void mi_segment_try_purge(mi_segment_t* segment, bool force, mi_stats_t* stats) {
   if (!segment->allow_purge || mi_commit_mask_is_empty(&segment->purge_mask)) return;
   mi_msecs_t now = _mi_clock_now();
   if (!force && now < segment->purge_expire) return;
@@ -586,7 +599,7 @@ static void mi_segment_delayed_purge(mi_segment_t* segment, bool force, mi_stats
     if (count > 0) {
       uint8_t* p = (uint8_t*)segment + (idx*MI_COMMIT_SIZE);
       size_t size = count * MI_COMMIT_SIZE;
-      mi_segment_commitx(segment, false, p, size, stats);
+      mi_segment_purge(segment, p, size, stats);
     }
   }
   mi_commit_mask_foreach_end()
@@ -916,7 +929,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   
   segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
   segment->allow_decommit = !segment->mem_is_pinned && !segment->mem_is_large;
-  segment->allow_purge = mi_option_is_enabled(mi_option_allow_purge) && segment->allow_decommit;
+  segment->allow_purge = segment->allow_decommit && mi_option_is_enabled(mi_option_allow_purge);
   if (segment->allow_purge) {
     segment->purge_expire = 0; // don't decommit just committed memory // _mi_clock_now() + mi_option_get(mi_option_purge_delay);
     segment->purge_mask = purge_mask;
@@ -1278,7 +1291,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   }
 
   // perform delayed decommits (forcing is much slower on mstress)
-  mi_segment_delayed_purge(segment, mi_option_is_enabled(mi_option_abandoned_page_purge) /* force? */, tld->stats);    
+  mi_segment_try_purge(segment, mi_option_is_enabled(mi_option_abandoned_page_purge) /* force? */, tld->stats);    
   
   // all pages in the segment are abandoned; add it to the abandoned list
   _mi_stat_increase(&tld->stats->segments_abandoned, 1);
@@ -1467,7 +1480,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
     }
     else {
       // otherwise, push on the visited list so it gets not looked at too quickly again
-      mi_segment_delayed_purge(segment, true /* force? */, tld->stats); // force purge if needed as we may not visit soon again
+      mi_segment_try_purge(segment, true /* force? */, tld->stats); // force purge if needed as we may not visit soon again
       mi_abandoned_visited_push(segment);
     }
   }
@@ -1493,7 +1506,7 @@ void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
     else {
       // otherwise, purge if needed and push on the visited list 
       // note: forced purge can be expensive if many threads are destroyed/created as in mstress.
-      mi_segment_delayed_purge(segment, force, tld->stats);
+      mi_segment_try_purge(segment, force, tld->stats);
       mi_abandoned_visited_push(segment);
     }
   }
@@ -1551,7 +1564,7 @@ static mi_page_t* mi_segments_page_alloc(mi_heap_t* heap, mi_page_kind_t page_ki
   }
   mi_assert_internal(page != NULL && page->slice_count*MI_SEGMENT_SLICE_SIZE == page_size);
   mi_assert_internal(_mi_ptr_segment(page)->thread_id == _mi_thread_id());
-  mi_segment_delayed_purge(_mi_ptr_segment(page), false, tld->stats);
+  mi_segment_try_purge(_mi_ptr_segment(page), false, tld->stats);
   return page;
 }
 

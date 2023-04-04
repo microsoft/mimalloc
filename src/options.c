@@ -61,7 +61,7 @@ static mi_option_desc_t options[_mi_option_last] =
   // Some of the following options are experimental and not all combinations are valid. Use with care.
   { 1, UNINIT, MI_OPTION(eager_commit) },        // commit per segment directly (8MiB)  (but see also `eager_commit_delay`)
   { 2, UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) },
-  { 0, UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },
+  { 1, UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },  // per 1GiB huge pages
   { -1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) }, // reserve huge pages at node N
@@ -72,8 +72,6 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(deprecated_segment_reset) },
   #if defined(__NetBSD__)
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
-  #elif defined(_WIN32)
-  { 4, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
   #else
   { 1, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
   #endif

@@ -163,7 +163,7 @@ static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t aren
 
   // none of the claimed blocks should be scheduled for a decommit
   if (arena->blocks_purge != NULL) {
-    // this is thread safe as a potential purge only decommits parts that are not yet claimed as used (in `in_use`).
+    // this is thread safe as a potential purge only decommits parts that are not yet claimed as used (in `blocks_inuse`).
     _mi_bitmap_unclaim_across(arena->blocks_purge, arena->field_count, needed_bcount, bitmap_index);
   }
 
@@ -176,7 +176,7 @@ static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t aren
     *commit = true;
   }
   else if (*commit) {
-    // arena not committed as a whole, but commit requested: ensure commit now
+    // commit requested, but the range may not be committed as a whole: ensure it is committed now
     bool any_uncommitted;
     _mi_bitmap_claim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted);
     if (any_uncommitted) {
@@ -294,7 +294,8 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
     arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_BLOCK_SIZE);
     if (arena_reserve > 0 && arena_reserve >= size &&                    // eager reserve enabled and large enough?
         req_arena_id == _mi_arena_id_none() &&                           // not exclusive?
-        mi_atomic_load_relaxed(&mi_arena_count) < 3*(MI_MAX_ARENAS/4) )  // not too many arenas already?        
+        mi_atomic_load_relaxed(&mi_arena_count) < 3*(MI_MAX_ARENAS/4) && // not too many arenas already?        
+        !_mi_preloading() )                                              // and not before main runs
     {      
       mi_arena_id_t arena_id = 0;
 

@@ -111,7 +111,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   mi_stat_counter_add(&stats->pages_extended, &src->pages_extended, 1);
   mi_stat_counter_add(&stats->mmap_calls, &src->mmap_calls, 1);
   mi_stat_counter_add(&stats->commit_calls, &src->commit_calls, 1);
-
+  
   mi_stat_counter_add(&stats->page_no_retire, &src->page_no_retire, 1);
   mi_stat_counter_add(&stats->searches, &src->searches, 1);
   mi_stat_counter_add(&stats->normal_count, &src->normal_count, 1);
@@ -331,7 +331,7 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_counter_print(&stats->pages_extended, "-extended", out, arg);
   mi_stat_counter_print(&stats->page_no_retire, "-noretire", out, arg);
   mi_stat_counter_print(&stats->mmap_calls, "mmaps", out, arg);
-  mi_stat_counter_print(&stats->commit_calls, "commits", out, arg);
+  mi_stat_counter_print(&stats->commit_calls, "commits", out, arg);  
   mi_stat_print(&stats->threads, "threads", -1, out, arg);
   mi_stat_counter_print_avg(&stats->searches, "searches", out, arg);
   _mi_fprintf(out, arg, "%10s: %7zu\n", "numa nodes", _mi_os_numa_node_count());

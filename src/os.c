@@ -437,7 +437,10 @@ bool _mi_os_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stat
 */
 
 // either resets or decommits memory, returns true if the memory was decommitted.
-bool _mi_os_purge(void* p, size_t size, mi_stats_t* stats) {
+bool _mi_os_purge(void* p, size_t size, mi_stats_t* stats) 
+{
+  if (!mi_option_is_enabled(mi_option_allow_purge)) return false;
+
   if (mi_option_is_enabled(mi_option_purge_decommits) &&   // should decommit?
       !_mi_preloading())                                   // don't decommit during preloading (unsafe)
   {
