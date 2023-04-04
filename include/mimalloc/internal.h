@@ -98,6 +98,7 @@ bool       _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats)
 bool       _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
 bool       _mi_os_protect(void* addr, size_t size);
 bool       _mi_os_unprotect(void* addr, size_t size);
+bool       _mi_os_purge(void* p, size_t size, mi_stats_t* stats);
 
 void*      _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_stats_t* stats);
 void*      _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool* large, mi_stats_t* tld_stats);

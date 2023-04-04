@@ -87,8 +87,9 @@ static mi_option_desc_t options[_mi_option_last] =
   { 16,  UNINIT, MI_OPTION(max_warnings) },      // maximum warnings that are output
   { 8,   UNINIT, MI_OPTION(max_segment_reclaim)},// max. number of segment reclaims from the abandoned segments per try.
   { 0,   UNINIT, MI_OPTION(destroy_on_exit)},    // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
-  { 0,   UNINIT, MI_OPTION(arena_reserve) },     // reserve memory N KiB at a time (slower in v1.x due to regions)
-  { 500, UNINIT, MI_OPTION(arena_purge_delay) }  // reset/decommit delay in milli-seconds for arena allocation
+  { 0,   UNINIT, MI_OPTION(arena_reserve) },     // reserve memory N KiB at a time (disable for now in v1.x due to regions)
+  { 500, UNINIT, MI_OPTION(arena_purge_delay) }, // reset/decommit delay in milli-seconds for arena allocation
+  { 1,   UNINIT, MI_OPTION(allow_purge) }        // allow decommit/reset to free (physical) memory back to the OS
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
