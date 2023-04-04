@@ -342,22 +342,6 @@ static void unix_mprotect_hint(int err) {
 
 
 int _mi_prim_commit(void* start, size_t size, bool commit) {
-  /*
-  #if 0 && defined(MAP_FIXED) && !defined(__APPLE__)
-  // Linux: disabled for now as mmap fixed seems much more expensive than MADV_DONTNEED (and splits VMA's?)
-  if (commit) {
-    // commit: just change the protection
-    err = mprotect(start, csize, (PROT_READ | PROT_WRITE));
-    if (err != 0) { err = errno; }
-  }
-  else {
-    // decommit: use mmap with MAP_FIXED to discard the existing memory (and reduce rss)
-    const int fd = mi_unix_mmap_fd();
-    void* p = mmap(start, csize, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), fd, 0);
-    if (p != start) { err = errno; }
-  }
-  #else
-  */
   int err = 0;
   if (commit) {
     // commit: ensure we can access the area

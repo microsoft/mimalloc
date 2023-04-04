@@ -182,7 +182,7 @@ static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t aren
     if (any_uncommitted) {
       bool commit_zero;
       _mi_os_commit(p, needed_bcount * MI_ARENA_BLOCK_SIZE, &commit_zero, tld->stats);
-      if (commit_zero) *is_zero = true;
+      if (commit_zero) { *is_zero = true; }
     }
   }
   else {
@@ -190,7 +190,7 @@ static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t aren
     *commit = _mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
   }
   
-  mi_track_mem_undefined(p,needed_bcount*MI_ARENA_BLOCK_SIZE);
+  // mi_track_mem_undefined(p,needed_bcount*MI_ARENA_BLOCK_SIZE);
   return p;
 }
 
@@ -297,7 +297,11 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
         mi_atomic_load_relaxed(&mi_arena_count) < 3*(MI_MAX_ARENAS/4) )  // not too many arenas already?        
     {      
       mi_arena_id_t arena_id = 0;
-      const bool arena_commit = _mi_os_has_overcommit() || mi_option_is_enabled(mi_option_eager_arena_commit);
+
+      bool arena_commit = _mi_os_has_overcommit();
+      if (mi_option_get(mi_option_eager_arena_commit) == 1) { arena_commit = true; } 
+      else if (mi_option_get(mi_option_eager_arena_commit) == 0) { arena_commit = false; } 
+
       if (mi_reserve_os_memory_ex(arena_reserve, arena_commit /* commit */, *large /* allow large*/, false /* exclusive */, &arena_id) == 0) {
          p = mi_arena_alloc_in(arena_id, numa_node, size, alignment, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);        
          if (p != NULL) return p;
@@ -513,6 +517,9 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
       return;
     }
 
+    // need to set all memory to undefined as some parts may still be marked as no_access (like padding etc.)
+    mi_track_mem_undefined(p,size);
+
     // potentially decommit
     if (!arena->allow_decommit || arena->blocks_committed == NULL) {
       mi_assert_internal(all_committed);
@@ -523,6 +530,7 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
       if (!all_committed) {
         // assume the entire range as no longer committed
         _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx);
+        mi_track_mem_noaccess(p,size);
       }
       // (delay) purge the entire range
       mi_arena_schedule_purge(arena, bitmap_idx, blocks, stats);      

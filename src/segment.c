@@ -756,7 +756,7 @@ static void mi_segment_slice_split(mi_segment_t* segment, mi_slice_t* slice, siz
   mi_assert_internal(segment->kind != MI_SEGMENT_HUGE);
   size_t next_index = mi_slice_index(slice) + slice_count;
   size_t next_count = slice->slice_count - slice_count;
-  mi_segment_span_free(segment, next_index, next_count, false /* don't decommit left-over part */, tld);
+  mi_segment_span_free(segment, next_index, next_count, false /* don't purge left-over part */, tld);
   slice->slice_count = (uint32_t)slice_count;
 }
 
@@ -915,7 +915,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   }
   
   segment->commit_mask = commit_mask; // on lazy commit, the initial part is always committed
-  segment->allow_decommit = !segment->mem_is_pinned && !segment->mem_is_large;    
+  segment->allow_decommit = !segment->mem_is_pinned && !segment->mem_is_large;
   segment->allow_purge = mi_option_is_enabled(mi_option_allow_purge) && segment->allow_decommit;
   if (segment->allow_purge) {
     segment->purge_expire = 0; // don't decommit just committed memory // _mi_clock_now() + mi_option_get(mi_option_purge_delay);
@@ -969,7 +969,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   // initialize initial free pages
   if (segment->kind == MI_SEGMENT_NORMAL) { // not a huge page
     mi_assert_internal(huge_page==NULL);
-    mi_segment_span_free(segment, info_slices, segment->slice_entries - info_slices, false /* don't decommit */, tld);
+    mi_segment_span_free(segment, info_slices, segment->slice_entries - info_slices, false /* don't purge */, tld);
   }
   else {
     mi_assert_internal(huge_page!=NULL);
@@ -1585,7 +1585,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
     mi_assert_internal(psize - (aligned_p - start) >= size);      
     uint8_t* decommit_start = start + sizeof(mi_block_t);              // for the free list
     ptrdiff_t decommit_size = aligned_p - decommit_start;
-    _mi_os_decommit(decommit_start, decommit_size, &_mi_stats_main);   // note: cannot use segment_decommit on huge segments    
+    _mi_os_reset(decommit_start, decommit_size, &_mi_stats_main);   // note: cannot use segment_decommit on huge segments    
   }
   
   return page;
@@ -1630,7 +1630,7 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
   if (segment->allow_decommit) {
     const size_t csize = mi_usable_size(block) - sizeof(mi_block_t);
     uint8_t* p = (uint8_t*)block + sizeof(mi_block_t);
-    _mi_os_decommit(p, csize, &_mi_stats_main);  // note: cannot use segment_decommit on huge segments
+    _mi_os_reset(p, csize, &_mi_stats_main);  // note: cannot use segment_decommit on huge segments
   }
 }
 #endif
