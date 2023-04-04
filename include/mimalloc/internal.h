@@ -121,20 +121,9 @@ bool       _mi_arena_is_os_allocated(size_t arena_memid);
 void       _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats);
 bool       _mi_arena_contains(const void* p);
 
-/*
-// memory.c
-void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, size_t offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* id, mi_os_tld_t* tld);
-void       _mi_mem_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t id, bool fully_committed, bool any_reset, mi_os_tld_t* tld);
-
-bool       _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld);
-bool       _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld);
-bool       _mi_mem_commit(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld);
-bool       _mi_mem_decommit(void* p, size_t size, mi_os_tld_t* tld);
-bool       _mi_mem_protect(void* addr, size_t size);
-bool       _mi_mem_unprotect(void* addr, size_t size);
-
-void        _mi_mem_collect(mi_os_tld_t* tld);
-*/
+// "segment-map.c"
+void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
+void       _mi_segment_map_freed_at(const mi_segment_t* segment);
 
 // "segment.c"
 mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
@@ -460,6 +449,10 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
   return mi_page_block_size(page) - MI_PADDING_SIZE;
 }
 
+// size of a segment
+static inline size_t mi_segment_size(mi_segment_t* segment) {
+  return segment->segment_size;
+}
 
 // Thread free access
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {

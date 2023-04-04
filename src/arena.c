@@ -574,9 +574,6 @@ bool _mi_arena_contains(const void* p) {
   return false;
 }
 
-mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
-  return _mi_arena_contains(p);  // todo: extend to track os allocated memory as well
-}
 
 /* -----------------------------------------------------------
   Add an arena.

@@ -424,7 +424,7 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
   return p;
 }
 
-static size_t mi_segment_size(size_t capacity, size_t required, size_t* pre_size, size_t* info_size)
+static size_t mi_segment_calculate_sizes(size_t capacity, size_t required, size_t* pre_size, size_t* info_size)
 {
   const size_t minsize   = sizeof(mi_segment_t) + ((capacity - 1) * sizeof(mi_page_t)) + 16 /* padding */;
   size_t guardsize = 0;
@@ -466,6 +466,7 @@ static void mi_segments_track_size(long segment_size, mi_segments_tld_t* tld) {
 
 static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_segments_tld_t* tld) {
   segment->thread_id = 0;
+  _mi_segment_map_freed_at(segment);
   mi_segments_track_size(-((long)segment_size),tld);
   if (MI_SECURE != 0) {
     mi_assert_internal(!segment->mem_is_pinned);
@@ -540,6 +541,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
   segment->mem_alignment = alignment;
   segment->mem_align_offset = align_offset;
   mi_segments_track_size((long)(*segment_size), tld);
+  _mi_segment_map_allocated_at(segment);
   return segment;
 }
 
@@ -565,7 +567,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   }
   size_t info_size;
   size_t pre_size;
-  size_t segment_size = mi_segment_size(capacity, required, &pre_size, &info_size);
+  size_t segment_size = mi_segment_calculate_sizes(capacity, required, &pre_size, &info_size);
   mi_assert_internal(segment_size >= required);
 
   // Initialize parameters
@@ -1199,7 +1201,6 @@ static mi_page_t* mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, mi_p
     // possibly allocate or reclaim a fresh segment
     mi_segment_t* const segment = mi_segment_reclaim_or_alloc(heap, block_size, kind, page_shift, tld, os_tld);
     if (segment == NULL) return NULL;  // return NULL if out-of-memory (or reclaimed)
-    mi_assert_internal(free_queue->first == segment);
     mi_assert_internal(segment->page_kind==kind);
     mi_assert_internal(segment->used < segment->capacity);
     mi_assert_internal(_mi_arena_memid_is_suitable(segment->memid, heap->arena_id));
