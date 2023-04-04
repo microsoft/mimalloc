@@ -313,12 +313,13 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
 }
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, void** addr) {
+int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(commit || !allow_large);
   mi_assert_internal(try_alignment > 0);
   
-  int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
+  *is_zero = true;
+  int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);  
   *addr = unix_mmap(NULL, size, try_alignment, protect_flags, false, allow_large, is_large);
   return (*addr != NULL ? 0 : errno);
 }
@@ -348,16 +349,16 @@ int _mi_prim_commit(void* start, size_t size) {
   return err;
 }
 
-int _mi_prim_decommit(void* start, size_t size, bool* decommitted) {
+int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   int err = 0;
   #if defined(MADV_DONTNEED) && !MI_DEBUG && !MI_SECURE
     // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
     // (on the other hand, MADV_FREE would be good enough.. it is just not reflected in the stats :-( )
-    *decommitted = false;
+    *needs_recommit = false;
     err = unix_madvise(start, size, MADV_DONTNEED);
   #else
     // decommit: just disable access (also used in debug and secure mode to trap on illegal access)
-    *decommitted = true;  // needs recommit to reuse the memory
+    *needs_recommit = true;  // needs recommit to reuse the memory
     err = mprotect(start, size, PROT_NONE);
     if (err != 0) { err = errno; }
   #endif
@@ -413,8 +414,9 @@ static long mi_prim_mbind(void* start, unsigned long len, unsigned long mode, co
 }
 #endif
 
-int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, void** addr) {
+int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bool* is_zero, void** addr) {
   bool is_large = true;
+  *is_zero = true;
   *addr = unix_mmap(hint_addr, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
   if (*addr != NULL && numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) { // at most 64 nodes
     unsigned long numa_mask = (1UL << numa_node);
@@ -432,8 +434,9 @@ int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, vo
 
 #else
 
-int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, void** addr) {
+int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bool* is_zero, void** addr) {
   MI_UNUSED(hint_addr); MI_UNUSED(size); MI_UNUSED(numa_node);
+  *is_zero = true;
   *addr = NULL;
   return ENOMEM;
 }

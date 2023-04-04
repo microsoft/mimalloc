@@ -86,9 +86,9 @@ mi_heap_t* _mi_heap_main_get(void);     // statically allocated main backing hea
 void       _mi_thread_done(mi_heap_t* heap);
 
 // os.c
-void       _mi_os_init(void);                                      // called from process init
-void*      _mi_os_alloc(size_t size, mi_stats_t* stats);           // to allocate thread local data
-void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);   // to free thread local data
+void       _mi_os_init(void);                                            // called from process init
+void*      _mi_os_alloc(size_t size, bool* is_zero, mi_stats_t* stats);  // to allocate thread local data
+void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);         // to free thread local data
 size_t     _mi_os_page_size(void);
 size_t     _mi_os_good_alloc_size(size_t size);
 bool       _mi_os_has_overcommit(void);
@@ -101,15 +101,15 @@ bool       _mi_os_protect(void* addr, size_t size);
 bool       _mi_os_unprotect(void* addr, size_t size);
 bool       _mi_os_purge(void* p, size_t size, mi_stats_t* stats);
 
-void*      _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, mi_stats_t* stats);
-void*      _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool* large, mi_stats_t* tld_stats);
+void*      _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, bool* is_zero, mi_stats_t* stats);
+void*      _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool* large, bool* is_zero, mi_stats_t* tld_stats);
 void       _mi_os_free_aligned(void* p, size_t size, size_t alignment, size_t align_offset, bool was_committed, mi_stats_t* tld_stats);
 void*      _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 bool       _mi_os_use_large_page(size_t size, size_t alignment);
 size_t     _mi_os_large_page_size(void);
 
 void       _mi_os_free_ex(void* p, size_t size, bool was_committed, mi_stats_t* stats);
-void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize);
+void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, bool* is_zero);
 void       _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats);
 
 // arena.c
@@ -120,12 +120,15 @@ void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_o
 bool       _mi_arena_memid_is_suitable(size_t arena_memid, mi_arena_id_t request_arena_id);
 bool       _mi_arena_is_os_allocated(size_t arena_memid);
 void       _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats);
+bool       _mi_arena_contains(const void* p);
 
 // "segment-cache.c"
 void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* purge_mask, bool large_allowed, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
 bool       _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* purge_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld);
 void       _mi_segment_cache_collect(bool force, mi_os_tld_t* tld);
 void       _mi_segment_cache_free_all(mi_os_tld_t* tld);
+
+// "segment-map.c"
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
 void       _mi_segment_map_freed_at(const mi_segment_t* segment);
 
@@ -175,6 +178,7 @@ void       _mi_heap_collect_abandon(mi_heap_t* heap);
 void       _mi_heap_set_default_direct(mi_heap_t* heap);
 bool       _mi_heap_memid_is_suitable(mi_heap_t* heap, size_t memid);
 void       _mi_heap_destroy_all(void);
+bool       _mi_heap_memid_is_suitable(mi_heap_t* heap, size_t memid);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);

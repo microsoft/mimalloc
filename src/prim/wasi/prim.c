@@ -114,9 +114,10 @@ static void* mi_prim_mem_grow(size_t size, size_t try_alignment) {
 }
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, void** addr) {
+int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
   MI_UNUSED(allow_large); MI_UNUSED(commit);
   *is_large = false;
+  *is_zero = false;
   *addr = mi_prim_mem_grow(size, try_alignment);
   return (*addr != NULL ? 0 : ENOMEM);
 }
@@ -131,9 +132,9 @@ int _mi_prim_commit(void* addr, size_t size) {
   return 0;
 }
 
-int _mi_prim_decommit(void* addr, size_t size, bool* decommitted) {
+int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {
   MI_UNUSED(addr); MI_UNUSED(size);
-  *decommitted = false;
+  *needs_recommit = false;
   return 0;
 }
 
@@ -152,8 +153,9 @@ int _mi_prim_protect(void* addr, size_t size, bool protect) {
 // Huge pages and NUMA nodes
 //---------------------------------------------
 
-int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, void** addr) {
+int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bool* is_zero, void** addr) {
   MI_UNUSED(hint_addr); MI_UNUSED(size); MI_UNUSED(numa_node);
+  *is_zero = true;
   *addr = NULL;
   return ENOSYS;
 }
