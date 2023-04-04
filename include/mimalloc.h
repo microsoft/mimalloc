@@ -324,7 +324,7 @@ typedef enum mi_option_e {
   // some of the following options are experimental
   // (deprecated options are kept for binary backward compatibility with v1.x versions)
   mi_option_eager_commit,
-  mi_option_eager_arena_commit,
+  mi_option_arena_eager_commit,
   mi_option_purge_decommits,
   mi_option_large_os_pages,           // use large (2MiB) OS pages, implies eager commit
   mi_option_reserve_huge_os_pages,    // reserve N huge OS pages (1GiB) at startup
