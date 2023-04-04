@@ -200,10 +200,10 @@ static mi_thread_data_t* mi_thread_data_alloc(void) {
     }
   }
   // if that fails, allocate directly from the OS
-  td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main);
+  td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), NULL, &_mi_stats_main);
   if (td == NULL) {
     // if this fails, try once more. (issue #257)
-    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main);
+    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), NULL, &_mi_stats_main);
     if (td == NULL) {
       // really out of memory
       _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));

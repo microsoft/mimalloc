@@ -239,10 +239,11 @@ static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DW
   return p;
 }
 
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, void** addr) {
+int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(commit || !allow_large);
   mi_assert_internal(try_alignment > 0);
+  *is_zero = true;
   int flags = MEM_RESERVE;
   if (commit) { flags |= MEM_COMMIT; }
   *addr = win_virtual_alloc(NULL, size, try_alignment, flags, false, allow_large, is_large);
@@ -331,7 +332,8 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
   return VirtualAlloc(hint_addr, size, flags, PAGE_READWRITE);
 }
 
-int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, void** addr) {
+int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bool* is_zero, void** addr) {
+  *is_zero = true;
   *addr = _mi_prim_alloc_huge_os_pagesx(hint_addr,size,numa_node);
   return (*addr != NULL ? 0 : (int)GetLastError());
 }

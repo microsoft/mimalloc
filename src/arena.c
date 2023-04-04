@@ -322,9 +322,9 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
     errno = ENOMEM;
     return NULL;
   }
-  *is_zero = true;
+  
   *memid   = MI_MEMID_OS;
-  void* p = _mi_os_alloc_aligned_offset(size, alignment, align_offset, *commit, large, tld->stats);
+  void* p = _mi_os_alloc_aligned_offset(size, alignment, align_offset, *commit, large, is_zero, tld->stats);
   if (p != NULL) { *is_pinned = *large; }
   return p;
 }
@@ -612,8 +612,9 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
   const size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);
   const size_t bitmaps = (allow_decommit ? 4 : 2);
   const size_t asize  = sizeof(mi_arena_t) + (bitmaps*fields*sizeof(mi_bitmap_field_t));
-  mi_arena_t* arena   = (mi_arena_t*)_mi_os_alloc(asize, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
+  mi_arena_t* arena   = (mi_arena_t*)_mi_os_alloc(asize, NULL, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
   if (arena == NULL) return false;
+  _mi_memzero(arena, asize);
 
   // already zero'd due to os_alloc
   // _mi_memzero(arena, asize);
@@ -654,9 +655,10 @@ int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exc
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
   size = _mi_align_up(size, MI_ARENA_BLOCK_SIZE); // at least one block
   bool large = allow_large;
-  void* start = _mi_os_alloc_aligned(size, MI_SEGMENT_ALIGN, commit, &large, &_mi_stats_main);
+  bool is_zero;
+  void* start = _mi_os_alloc_aligned(size, MI_SEGMENT_ALIGN, commit, &large, &is_zero, &_mi_stats_main);
   if (start==NULL) return ENOMEM;
-  if (!mi_manage_os_memory_ex(start, size, (large || commit), large, true, -1, exclusive, arena_id)) {
+  if (!mi_manage_os_memory_ex(start, size, (large || commit), large, is_zero, -1, exclusive, arena_id)) {
     _mi_os_free_ex(start, size, commit, &_mi_stats_main);
     _mi_verbose_message("failed to reserve %zu k memory\n", _mi_divide_up(size,1024));
     return ENOMEM;
@@ -718,14 +720,15 @@ int mi_reserve_huge_os_pages_at_ex(size_t pages, int numa_node, size_t timeout_m
   if (numa_node >= 0) numa_node = numa_node % _mi_os_numa_node_count();
   size_t hsize = 0;
   size_t pages_reserved = 0;
-  void* p = _mi_os_alloc_huge_os_pages(pages, numa_node, timeout_msecs, &pages_reserved, &hsize);
+  bool   is_zero = false;
+  void* p = _mi_os_alloc_huge_os_pages(pages, numa_node, timeout_msecs, &pages_reserved, &hsize, &is_zero);
   if (p==NULL || pages_reserved==0) {
     _mi_warning_message("failed to reserve %zu GiB huge pages\n", pages);
     return ENOMEM;
   }
   _mi_verbose_message("numa node %i: reserved %zu GiB huge pages (of the %zu GiB requested)\n", numa_node, pages_reserved, pages);
 
-  if (!mi_manage_os_memory_ex(p, hsize, true, true, true, numa_node, exclusive, arena_id)) {
+  if (!mi_manage_os_memory_ex(p, hsize, true, true, is_zero, numa_node, exclusive, arena_id)) {
     _mi_os_free_huge_pages(p, hsize, &_mi_stats_main);
     return ENOMEM;
   }

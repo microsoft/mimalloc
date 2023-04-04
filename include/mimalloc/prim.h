@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Each OS/host needs to implement these primitives, see `src/prim`
 // for implementations on Window, macOS, WASI, and Linux/Unix.
 //
-// note: on all primitive functions, we always get:
+// note: on all primitive functions, we always have result parameters != NUL, and:
 //  addr != NULL and page aligned
 //  size > 0     and page aligned
 //  return value is an error code an int where 0 is success.
@@ -39,9 +39,10 @@ int _mi_prim_free(void* addr, size_t size );
 // The `try_alignment` is just a hint and the returned pointer does not have to be aligned.
 // If `commit` is false, the virtual memory range only needs to be reserved (with no access) 
 // which will later be committed explicitly using `_mi_prim_commit`.
+// `is_zero` is set to true if the memory was zero initialized (as on most OS's)
 // pre: !commit => !allow_large
 //      try_alignment >= _mi_os_page_size() and a power of 2
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, void** addr);
+int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr);
 
 // Commit memory. Returns error code or 0 on success.
 // For example, on Linux this would make the memory PROT_READ|PROT_WRITE.
@@ -61,10 +62,10 @@ int _mi_prim_reset(void* addr, size_t size);
 int _mi_prim_protect(void* addr, size_t size, bool protect);
 
 // Allocate huge (1GiB) pages possibly associated with a NUMA node.
+// `is_zero` is set to true if the memory was zero initialized (as on most OS's)
 // pre: size > 0  and a multiple of 1GiB.
-//      addr is either NULL or an address hint.
 //      numa_node is either negative (don't care), or a numa node number.
-int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, void** addr);
+int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bool* is_zero, void** addr);
 
 // Return the current NUMA node
 size_t _mi_prim_numa_node(void);
