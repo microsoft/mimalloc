@@ -257,11 +257,8 @@
     </ClCompile>
     <ClCompile Include="..\..\src\page.c" />
     <ClCompile Include="..\..\src\random.c" />
-<<<<<<< HEAD
     <ClCompile Include="..\..\src\segment-cache.c" />
-=======
     <ClCompile Include="..\..\src\segment-map.c" />
->>>>>>> dev-reset
     <ClCompile Include="..\..\src\segment.c" />
     <ClCompile Include="..\..\src\stats.c" />
   </ItemGroup>
