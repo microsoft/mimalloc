@@ -37,12 +37,21 @@ int _mi_prim_free(void* addr, size_t size );
   
 // Allocate OS memory. Return NULL on error.
 // The `try_alignment` is just a hint and the returned pointer does not have to be aligned.
+// If `commit` is false, the virtual memory range only needs to be reserved (with no access) 
+// which will later be committed explicitly using `_mi_prim_commit`.
 // pre: !commit => !allow_large
 //      try_alignment >= _mi_os_page_size() and a power of 2
 int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, void** addr);
 
 // Commit memory. Returns error code or 0 on success.
-int _mi_prim_commit(void* addr, size_t size, bool commit);
+// For example, on Linux this would make the memory PROT_READ|PROT_WRITE.
+int _mi_prim_commit(void* addr, size_t size);
+
+// Decommit memory. Returns error code or 0 on success. The `decommitted` result is true
+// if the memory would need to be re-committed. For example, on Windows this is always true,
+// but on Linux we could use MADV_DONTNEED to decommit which does not need a recommit.
+// pre: decommitted != NULL
+int _mi_prim_decommit(void* addr, size_t size, bool* decommitted);
 
 // Reset memory. The range keeps being accessible but the content might be reset.
 // Returns error code or 0 on success.

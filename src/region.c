@@ -480,7 +480,8 @@ bool _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld) {
     return _mi_os_commit(p, size, is_zero, tld->stats);
   }
   else {
-    return _mi_os_unreset(p, size, is_zero, tld->stats);
+    // return _mi_os_unreset(p, size, is_zero, tld->stats);
+    return true;
   }
 }
 

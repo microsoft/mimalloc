@@ -340,32 +340,34 @@ static void unix_mprotect_hint(int err) {
   #endif
 }
 
-
-int _mi_prim_commit(void* start, size_t size, bool commit) {
-  int err = 0;
-  if (commit) {
-    // commit: ensure we can access the area
-    err = mprotect(start, size, (PROT_READ | PROT_WRITE));
-    if (err != 0) { err = errno; }
-  }
-  else {
-    #if defined(MADV_DONTNEED) && MI_DEBUG == 0 && MI_SECURE == 0
-    // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
-    // (on the other hand, MADV_FREE would be good enough.. it is just not reflected in the stats :-( )
-    err = unix_madvise(start, size, MADV_DONTNEED);
-    #else
-    // decommit: just disable access (also used in debug and secure mode to trap on illegal access)
-    err = mprotect(start, size, PROT_NONE);
-    if (err != 0) { err = errno; }
-    #endif    
-  }
+int _mi_prim_commit(void* start, size_t size) {
+  // commit: ensure we can access the area
+  int err = mprotect(start, size, (PROT_READ | PROT_WRITE));
+  if (err != 0) { err = errno; }  
   unix_mprotect_hint(err);
   return err;
 }
 
+int _mi_prim_decommit(void* start, size_t size, bool* decommitted) {
+  int err = 0;
+  #if defined(MADV_DONTNEED) && !MI_DEBUG && !MI_SECURE
+    // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
+    // (on the other hand, MADV_FREE would be good enough.. it is just not reflected in the stats :-( )
+    *decommitted = false;
+    err = unix_madvise(start, size, MADV_DONTNEED);
+  #else
+    // decommit: just disable access (also used in debug and secure mode to trap on illegal access)
+    *decommitted = true;  // needs recommit to reuse the memory
+    err = mprotect(start, size, PROT_NONE);
+    if (err != 0) { err = errno; }
+  #endif
+  return err;
+}
+
 int _mi_prim_reset(void* start, size_t size) {
-  // note: disable the use of MADV_FREE since it leads to confusing stats :-(
-  #if 0 // defined(MADV_FREE)
+  // We always use MADV_DONTNEED even if it may be a bit more expensive as this
+  // guarantees that we see the actual rss reflected in tools like `top`.
+  #if 0 && defined(MADV_FREE)
   static _Atomic(size_t) advice = MI_ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
   int err;
