@@ -356,60 +356,64 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
   return mi_os_page_align_areax(true, addr, size, newsize);
 }
 
-// Commit/Decommit memory.
-// Usually commit is aligned liberal, while decommit is aligned conservative.
-// (but not for the reset version where we want commit to be conservative as well)
-static bool mi_os_commitx(void* addr, size_t size, bool commit, bool conservative, bool* is_zero, mi_stats_t* stats) {
-  // page align in the range, commit liberally, decommit conservative
+bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats) {
+  MI_UNUSED(tld_stats);
+  mi_stats_t* stats = &_mi_stats_main;  
   if (is_zero != NULL) { *is_zero = false; }
-  size_t csize;
-  void* start = mi_os_page_align_areax(conservative, addr, size, &csize);
-  if (csize == 0) return true;  // || _mi_os_is_huge_reserved(addr))
-  if (commit) {
-    _mi_stat_increase(&stats->committed, size);  // use size for precise commit vs. decommit
-    _mi_stat_counter_increase(&stats->commit_calls, 1);
-  }
-  else {
-    _mi_stat_decrease(&stats->committed, size);
-  }
+  _mi_stat_increase(&stats->committed, size);  // use size for precise commit vs. decommit
+  _mi_stat_counter_increase(&stats->commit_calls, 1);
 
-  int err = _mi_prim_commit(start, csize, commit);  
+  // page align range
+  size_t csize;
+  void* start = mi_os_page_align_areax(false /* conservative? */, addr, size, &csize);
+  if (csize == 0) return true;
+
+  // commit  
+  int err = _mi_prim_commit(start, csize); 
   if (err != 0) {
-    _mi_warning_message("cannot %s OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", commit ? "commit" : "decommit", err, err, start, csize);
+    _mi_warning_message("cannot commit OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
   mi_assert_internal(err == 0);
   return (err == 0);
 }
 
-bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats) {
+static bool mi_os_decommit_ex(void* addr, size_t size, bool* decommitted, mi_stats_t* tld_stats) {
   MI_UNUSED(tld_stats);
   mi_stats_t* stats = &_mi_stats_main;
-  return mi_os_commitx(addr, size, true, false /* liberal */, is_zero, stats);
+  mi_assert_internal(decommitted!=NULL);
+  _mi_stat_decrease(&stats->committed, size);
+
+  // page align
+  size_t csize;
+  void* start = mi_os_page_align_area_conservative(addr, size, &csize);
+  if (csize == 0) return true; 
+
+  // decommit
+  *decommitted = true;
+  int err = _mi_prim_decommit(start,csize,decommitted);  
+  if (err != 0) {
+    _mi_warning_message("cannot decommit OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
+  }
+  mi_assert_internal(err == 0);
+  return (err == 0);
 }
 
 bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* tld_stats) {
-  MI_UNUSED(tld_stats);
-  mi_stats_t* stats = &_mi_stats_main;
-  bool is_zero;
-  return mi_os_commitx(addr, size, false, true /* conservative */, &is_zero, stats);
+  bool decommitted = true;
+  return mi_os_decommit_ex(addr, size, &decommitted, tld_stats);
 }
 
-bool _mi_os_commit_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {
-  return mi_os_commitx(addr, size, true, true /* conservative */, is_zero, stats);
-}
 
 // Signal to the OS that the address range is no longer in use
 // but may be used later again. This will release physical memory
 // pages and reduce swapping while keeping the memory committed.
 // We page align to a conservative area inside the range to reset.
-static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats) {
+bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) { 
   // page align conservatively within the range
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return true;  // || _mi_os_is_huge_reserved(addr)
-  if (reset) _mi_stat_increase(&stats->reset, csize);
-        else _mi_stat_decrease(&stats->reset, csize);
-  if (!reset) return true; // nothing to do on unreset!
+  _mi_stat_increase(&stats->reset, csize);
 
   #if (MI_DEBUG>1) && !MI_SECURE && !MI_TRACK_ENABLED // && !MI_TSAN
   memset(start, 0, csize); // pretend it is eagerly reset
@@ -422,25 +426,9 @@ static bool mi_os_resetx(void* addr, size_t size, bool reset, mi_stats_t* stats)
   return (err == 0);
 }
 
-// Signal to the OS that the address range is no longer in use
-// but may be used later again. This will release physical memory
-// pages and reduce swapping while keeping the memory committed.
-// We page align to a conservative area inside the range to reset.
-bool _mi_os_reset(void* addr, size_t size, mi_stats_t* tld_stats) {
-  MI_UNUSED(tld_stats);
-  mi_stats_t* stats = &_mi_stats_main;
-  return mi_os_resetx(addr, size, true, stats);
-}
 
-bool _mi_os_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats) {
-  MI_UNUSED(tld_stats);
-  mi_stats_t* stats = &_mi_stats_main;
-  *is_zero = false;
-  return mi_os_resetx(addr, size, false, stats);
-}
-
-
-// either resets or decommits memory, returns true if the memory was decommitted.
+// either resets or decommits memory, returns true if the memory was decommitted 
+// (in the sense that it needs to be re-committed if the memory is re-used later on).
 bool _mi_os_purge(void* p, size_t size, mi_stats_t* stats)
 {
   if (!mi_option_is_enabled(mi_option_allow_purge)) return false;
@@ -448,8 +436,9 @@ bool _mi_os_purge(void* p, size_t size, mi_stats_t* stats)
   if (mi_option_is_enabled(mi_option_purge_decommits) &&   // should decommit?
     !_mi_preloading())                                   // don't decommit during preloading (unsafe)
   {
-    _mi_os_decommit(p, size, stats);
-    return true;  // decommitted
+    bool decommitted;
+    mi_os_decommit_ex(p, size, &decommitted, stats);
+    return decommitted;   
   }
   else {
     _mi_os_reset(p, size, stats);

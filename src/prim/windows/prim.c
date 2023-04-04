@@ -257,15 +257,15 @@ int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_la
 #pragma warning(disable:6250)   // suppress warning calling VirtualFree without MEM_RELEASE (for decommit)
 #endif
 
-int _mi_prim_commit(void* addr, size_t size, bool commit) {
-  if (commit) {
-    void* p = VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE);
-    return (p == addr ? 0 : (int)GetLastError());
-  }
-  else {
-    BOOL ok = VirtualFree(addr, size, MEM_DECOMMIT);
-    return (ok ? 0 : (int)GetLastError());  
-  }
+int _mi_prim_commit(void* addr, size_t size) {
+  void* p = VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE);
+  return (p == addr ? 0 : (int)GetLastError());  
+}
+
+int _mi_prim_decommit(void* addr, size_t size, bool* decommitted) {  
+  BOOL ok = VirtualFree(addr, size, MEM_DECOMMIT);
+  *decommitted = true;  // for safetly, assume always decommitted even in the case of an error.
+  return (ok ? 0 : (int)GetLastError());
 }
 
 int _mi_prim_reset(void* addr, size_t size) {
