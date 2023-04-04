@@ -484,6 +484,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
     fully_committed = false;
   }
   
+  _mi_abandoned_await_readers(); // prevent ABA issue if concurrent readers try to access our memory (that might be purged)
   _mi_arena_free(segment, segment_size, segment->mem_alignment, segment->mem_align_offset, segment->memid, fully_committed, tld->stats);
 }
 
