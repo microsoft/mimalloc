@@ -262,9 +262,9 @@ int _mi_prim_commit(void* addr, size_t size) {
   return (p == addr ? 0 : (int)GetLastError());  
 }
 
-int _mi_prim_decommit(void* addr, size_t size, bool* decommitted) {  
+int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {  
   BOOL ok = VirtualFree(addr, size, MEM_DECOMMIT);
-  *decommitted = true;  // for safetly, assume always decommitted even in the case of an error.
+  *needs_recommit = true;  // for safetly, assume always decommitted even in the case of an error.
   return (ok ? 0 : (int)GetLastError());
 }
 

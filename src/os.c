@@ -377,10 +377,10 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats
   return (err == 0);
 }
 
-static bool mi_os_decommit_ex(void* addr, size_t size, bool* decommitted, mi_stats_t* tld_stats) {
+static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit, mi_stats_t* tld_stats) {
   MI_UNUSED(tld_stats);
   mi_stats_t* stats = &_mi_stats_main;
-  mi_assert_internal(decommitted!=NULL);
+  mi_assert_internal(needs_recommit!=NULL);
   _mi_stat_decrease(&stats->committed, size);
 
   // page align
@@ -389,8 +389,8 @@ static bool mi_os_decommit_ex(void* addr, size_t size, bool* decommitted, mi_sta
   if (csize == 0) return true; 
 
   // decommit
-  *decommitted = true;
-  int err = _mi_prim_decommit(start,csize,decommitted);  
+  *needs_recommit = true;
+  int err = _mi_prim_decommit(start,csize,needs_recommit);  
   if (err != 0) {
     _mi_warning_message("cannot decommit OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
@@ -399,8 +399,8 @@ static bool mi_os_decommit_ex(void* addr, size_t size, bool* decommitted, mi_sta
 }
 
 bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* tld_stats) {
-  bool decommitted = true;
-  return mi_os_decommit_ex(addr, size, &decommitted, tld_stats);
+  bool needs_recommit;
+  return mi_os_decommit_ex(addr, size, &needs_recommit, tld_stats);
 }
 
 
@@ -427,18 +427,18 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
 }
 
 
-// either resets or decommits memory, returns true if the memory was decommitted 
-// (in the sense that it needs to be re-committed if the memory is re-used later on).
+// either resets or decommits memory, returns true if the memory needs 
+// to be recommitted if it is to be re-used later on.
 bool _mi_os_purge(void* p, size_t size, mi_stats_t* stats)
 {
   if (!mi_option_is_enabled(mi_option_allow_purge)) return false;
 
   if (mi_option_is_enabled(mi_option_purge_decommits) &&   // should decommit?
-    !_mi_preloading())                                   // don't decommit during preloading (unsafe)
+    !_mi_preloading())                                     // don't decommit during preloading (unsafe)
   {
-    bool decommitted;
-    mi_os_decommit_ex(p, size, &decommitted, stats);
-    return decommitted;   
+    bool needs_recommit;
+    mi_os_decommit_ex(p, size, &needs_recommit, stats);
+    return needs_recommit;   
   }
   else {
     _mi_os_reset(p, size, stats);

@@ -47,11 +47,11 @@ int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_la
 // For example, on Linux this would make the memory PROT_READ|PROT_WRITE.
 int _mi_prim_commit(void* addr, size_t size);
 
-// Decommit memory. Returns error code or 0 on success. The `decommitted` result is true
+// Decommit memory. Returns error code or 0 on success. The `needs_recommit` result is true
 // if the memory would need to be re-committed. For example, on Windows this is always true,
 // but on Linux we could use MADV_DONTNEED to decommit which does not need a recommit.
-// pre: decommitted != NULL
-int _mi_prim_decommit(void* addr, size_t size, bool* decommitted);
+// pre: needs_recommit != NULL
+int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit);
 
 // Reset memory. The range keeps being accessible but the content might be reset.
 // Returns error code or 0 on success.

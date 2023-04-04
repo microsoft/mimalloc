@@ -131,9 +131,9 @@ int _mi_prim_commit(void* addr, size_t size) {
   return 0;
 }
 
-int _mi_prim_decommit(void* addr, size_t size, bool* decommitted) {
+int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {
   MI_UNUSED(addr); MI_UNUSED(size);
-  *decommitted = false;
+  *needs_recommit = false;
   return 0;
 }
 
