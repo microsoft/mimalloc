@@ -318,12 +318,12 @@ mi_decl_export int  mi_reserve_huge_os_pages(size_t pages, double max_secs, size
 
 typedef enum mi_option_e {
   // stable options
-  mi_option_show_errors,
-  mi_option_show_stats,
-  mi_option_verbose,
-  // some of the following options are experimental
+  mi_option_show_errors,              // print error messages
+  mi_option_show_stats,               // print statistics on termination
+  mi_option_verbose,                  // print verbose messages
+  // the following options are experimental (see src/options.h)
   // (deprecated options are kept for binary backward compatibility with v1.x versions)
-  mi_option_eager_commit,
+  mi_option_segment_eager_commit,
   mi_option_arena_eager_commit,
   mi_option_purge_decommits,
   mi_option_large_os_pages,           // use large (2MiB) OS pages, implies eager commit
@@ -342,13 +342,18 @@ typedef enum mi_option_e {
   mi_option_max_errors,
   mi_option_max_warnings,
   mi_option_max_segment_reclaim,
-  mi_option_allow_purge,
   mi_option_deprecated_segment_decommit_delay,  
   mi_option_purge_extend_delay,
   mi_option_destroy_on_exit,
   mi_option_arena_reserve,
   mi_option_arena_purge_delay,
-  _mi_option_last
+  mi_option_allow_purge,
+  _mi_option_last,
+  // legacy options
+  mi_option_eager_commit = mi_option_segment_eager_commit,
+  mi_option_eager_region_commit = mi_option_arena_eager_commit,
+  mi_option_reset_decommits = mi_option_purge_decommits,
+  mi_option_reset_delay = mi_option_purge_delay
 } mi_option_t;
 
 

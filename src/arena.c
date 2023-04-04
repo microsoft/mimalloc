@@ -1,3 +1,5 @@
+
+
 /* ----------------------------------------------------------------------------
 Copyright (c) 2019-2022, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
@@ -190,7 +192,7 @@ static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t aren
     *commit = _mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
   }
   
-  // mi_track_mem_undefined(p,needed_bcount*MI_ARENA_BLOCK_SIZE);
+  mi_track_mem_undefined(p,needed_bcount*MI_ARENA_BLOCK_SIZE); // todo: should not be needed?
   return p;
 }
 
@@ -752,3 +754,4 @@ int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserv
   if (err==0 && pages_reserved!=NULL) *pages_reserved = pages;
   return err;
 }
+
