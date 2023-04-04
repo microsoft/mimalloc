@@ -119,7 +119,9 @@ void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_o
 bool       _mi_arena_memid_is_suitable(size_t arena_memid, mi_arena_id_t request_arena_id);
 bool       _mi_arena_is_os_allocated(size_t arena_memid);
 void       _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats);
+bool       _mi_arena_contains(const void* p);
 
+/*
 // memory.c
 void*      _mi_mem_alloc_aligned(size_t size, size_t alignment, size_t offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, size_t* id, mi_os_tld_t* tld);
 void       _mi_mem_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t id, bool fully_committed, bool any_reset, mi_os_tld_t* tld);
@@ -132,6 +134,7 @@ bool       _mi_mem_protect(void* addr, size_t size);
 bool       _mi_mem_unprotect(void* addr, size_t size);
 
 void        _mi_mem_collect(mi_os_tld_t* tld);
+*/
 
 // "segment.c"
 mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);

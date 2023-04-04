@@ -31,7 +31,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "os.c"
 #include "page.c"           // includes page-queue.c
 #include "random.c" 
-#include "region.c"
 #include "segment.c"
 #include "stats.c"
 #include "prim/prim.c"

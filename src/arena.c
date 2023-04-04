@@ -128,6 +128,10 @@ static size_t mi_block_count_of_size(size_t size) {
   return _mi_divide_up(size, MI_ARENA_BLOCK_SIZE);
 }
 
+static size_t mi_arena_block_size(size_t bcount) {
+  return (bcount * MI_ARENA_BLOCK_SIZE);
+}
+
 /* -----------------------------------------------------------
   Thread safe allocation in an arena
 ----------------------------------------------------------- */
@@ -158,7 +162,7 @@ static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t aren
   if (!mi_arena_alloc(arena, needed_bcount, &bitmap_index)) return NULL;
 
   // claimed it! 
-  void* p    = arena->start + (mi_bitmap_index_bit(bitmap_index)*MI_ARENA_BLOCK_SIZE);
+  void* p    = arena->start + mi_arena_block_size(mi_bitmap_index_bit(bitmap_index));
   *memid     = mi_arena_memid_create(arena->id, arena->exclusive, bitmap_index);
   *large     = arena->is_large;
   *is_pinned = (arena->is_large || !arena->allow_decommit);
@@ -183,7 +187,7 @@ static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t aren
     _mi_bitmap_claim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted);
     if (any_uncommitted) {
       bool commit_zero;
-      _mi_os_commit(p, needed_bcount * MI_ARENA_BLOCK_SIZE, &commit_zero, tld->stats);
+      _mi_os_commit(p, mi_arena_block_size(needed_bcount), &commit_zero, tld->stats);
       if (commit_zero) { *is_zero = true; }
     }
   }
@@ -192,7 +196,7 @@ static mi_decl_noinline void* mi_arena_alloc_from(mi_arena_t* arena, size_t aren
     *commit = _mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
   }
   
-  // mi_track_mem_undefined(p,needed_bcount*MI_ARENA_BLOCK_SIZE);
+  // mi_track_mem_undefined(p,mi_arena_block_size(needed_bcount));
   return p;
 }
 
@@ -207,7 +211,7 @@ static void* mi_arena_alloc_in(mi_arena_id_t arena_id, int numa_node, size_t siz
   const size_t bcount = mi_block_count_of_size(size);  
   const size_t arena_index = mi_arena_id_index(arena_id);
   mi_assert_internal(arena_index < max_arena);
-  mi_assert_internal(size <= bcount * MI_ARENA_BLOCK_SIZE);
+  mi_assert_internal(size <= mi_arena_block_size(bcount));
   if (arena_index >= max_arena) return NULL;
 
   mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[arena_index]);
@@ -228,7 +232,7 @@ static mi_decl_noinline void* mi_arena_allocate(int numa_node, size_t size, size
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   const size_t bcount = mi_block_count_of_size(size);
   if mi_likely(max_arena == 0) return NULL;
-  mi_assert_internal(size <= bcount * MI_ARENA_BLOCK_SIZE);
+  mi_assert_internal(size <= mi_arena_block_size(bcount));
 
   size_t arena_index = mi_arena_id_index(req_arena_id);
   if (arena_index < MI_MAX_ARENAS) {
@@ -335,7 +339,7 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
   if (arena_index >= MI_MAX_ARENAS) return NULL;
   mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[arena_index]);
   if (arena == NULL) return NULL;
-  if (size != NULL) *size = arena->block_count * MI_ARENA_BLOCK_SIZE;
+  if (size != NULL) { *size = mi_arena_block_size(arena->block_count); }
   return arena->start;
 }
 
@@ -348,8 +352,8 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks, 
   mi_assert_internal(arena->blocks_committed != NULL);
   mi_assert_internal(arena->blocks_purge != NULL);
   mi_assert_internal(arena->allow_decommit);
-  const size_t size = blocks * MI_ARENA_BLOCK_SIZE;
-  void* const p = arena->start + (mi_bitmap_index_bit(bitmap_idx) * MI_ARENA_BLOCK_SIZE);
+  const size_t size = mi_arena_block_size(blocks);
+  void* const p = arena->start + mi_arena_block_size(mi_bitmap_index_bit(bitmap_idx));
   const bool decommitted = _mi_os_purge(p, size, stats);
   // clear the purged blocks
   _mi_bitmap_unclaim_across(arena->blocks_purge, arena->field_count, blocks, bitmap_idx);
@@ -555,6 +559,22 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
 void _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats) {
   MI_UNUSED(free_arenas); // todo
   mi_arenas_try_purge(force_decommit, true, stats);
+}
+
+
+bool _mi_arena_contains(const void* p) {
+  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  for (size_t i = 0; i < max_arena; i++) {
+    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+    if (arena->start <= (const uint8_t*)p && arena->start + mi_arena_block_size(arena->block_count) > (const uint8_t*)p) { 
+      return true;      
+    }
+  }
+  return false;
+}
+
+mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
+  return _mi_arena_contains(p);  // todo: extend to track os allocated memory as well
 }
 
 /* -----------------------------------------------------------

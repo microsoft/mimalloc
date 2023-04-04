@@ -177,10 +177,10 @@ static bool mi_page_not_in_queue(const mi_page_t* page, mi_segments_tld_t* tld) 
 
 static void mi_segment_protect_range(void* p, size_t size, bool protect) {
   if (protect) {
-    _mi_mem_protect(p, size);
+    _mi_os_protect(p, size);
   }
   else {
-    _mi_mem_unprotect(p, size);
+    _mi_os_unprotect(p, size);
   }
 }
 
@@ -202,7 +202,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
       if (protect && !segment->mem_is_committed) {
         if (protect) {
           // ensure secure page is committed
-          if (_mi_mem_commit(start, os_psize, NULL, tld)) {  // if this fails that is ok (as it is an unaccessible page)
+          if (_mi_os_commit(start, os_psize, NULL, tld->stats)) {  // if this fails that is ok (as it is an unaccessible page)
             mi_segment_protect_range(start, os_psize, protect);
           }
         }
@@ -238,26 +238,29 @@ static void mi_page_reset(mi_segment_t* segment, mi_page_t* page, size_t size, m
   page->is_reset = true;
   mi_assert_internal(size <= psize);
   size_t reset_size = ((size == 0 || size > psize) ? psize : size);
-  if (reset_size > 0) _mi_mem_reset(start, reset_size, tld->os);
+  if (reset_size > 0) { _mi_os_reset(start, reset_size, tld->stats); }
 }
 
 static bool mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size, mi_segments_tld_t* tld)
 {
+  MI_UNUSED(size);  MI_UNUSED(tld);
   mi_assert_internal(page->is_reset);
   mi_assert_internal(page->is_committed);
   mi_assert_internal(!segment->mem_is_pinned);
   if (segment->mem_is_pinned || !page->is_committed || !page->is_reset) return true;
   page->is_reset = false;
+  /*
   size_t psize;
   uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
   size_t unreset_size = (size == 0 || size > psize ? psize : size);
-  bool is_zero = false;
-  bool ok = true;
-  if (unreset_size > 0) {
-    ok = _mi_mem_unreset(start, unreset_size, &is_zero, tld->os);
-  }
-  if (is_zero) page->is_zero_init = true;
-  return ok;
+  */
+  // bool is_zero = false;
+  // bool ok = true;
+  // if (unreset_size > 0) {
+  //   ok = _mi_mem_unreset(start, unreset_size, &is_zero, tld->os);
+  // }
+  // if (is_zero) page->is_zero_init = true;
+  return true;
 }
 
 
@@ -477,7 +480,8 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   if (any_reset && mi_option_is_enabled(mi_option_reset_decommits)) {
     fully_committed = false;
   }
-  _mi_mem_free(segment, segment_size, segment->mem_alignment, segment->mem_align_offset, segment->memid, fully_committed, any_reset, tld->os);
+  
+  _mi_arena_free(segment, segment_size, segment->mem_alignment, segment->mem_align_offset, segment->memid, fully_committed, tld->stats);
 }
 
 // called by threads that are terminating to free cached segments
@@ -510,17 +514,18 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
     *segment_size = *segment_size + (align_offset - pre_size);
   }
 
-  mi_segment_t* segment = (mi_segment_t*)_mi_mem_alloc_aligned(*segment_size, alignment, align_offset, commit, &mem_large, &is_pinned, is_zero, &memid, tld_os);
+  // mi_segment_t* segment = (mi_segment_t*)_mi_mem_alloc_aligned(*segment_size, alignment, align_offset, commit, &mem_large, &is_pinned, is_zero, &memid, tld_os);
+  mi_segment_t* segment = (mi_segment_t*)_mi_arena_alloc_aligned(*segment_size, alignment, align_offset, commit, &mem_large, &is_pinned, is_zero, _mi_arena_id_none(), &memid, tld_os);
   if (segment == NULL) return NULL;  // failed to allocate
   if (!(*commit)) {
     // ensure the initial info is committed
     mi_assert_internal(!mem_large && !is_pinned);
     bool commit_zero = false;
-    bool ok = _mi_mem_commit(segment, pre_size, &commit_zero, tld_os);
-    if (commit_zero) *is_zero = true;
+    bool ok = _mi_os_commit(segment, pre_size, &commit_zero, tld_os->stats);
+    if (commit_zero) { *is_zero = true; }
     if (!ok) {
       // commit failed; we cannot touch the memory: free the segment directly and return `NULL`
-      _mi_mem_free(segment, *segment_size, alignment, align_offset, memid, false, false, tld_os);
+      _mi_arena_free(segment, *segment_size, alignment, align_offset, memid, false, tld_os->stats);
       return NULL;
     }
   }
@@ -651,7 +656,7 @@ static bool mi_segment_page_claim(mi_segment_t* segment, mi_page_t* page, mi_seg
     uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
     bool is_zero = false;
     const size_t gsize = (MI_SECURE >= 2 ? _mi_os_page_size() : 0);
-    bool ok = _mi_mem_commit(start, psize + gsize, &is_zero, tld->os);
+    bool ok = _mi_os_commit(start, psize + gsize, &is_zero, tld->stats);
     if (!ok) return false; // failed to commit!
     if (gsize > 0) { mi_segment_protect_range(start + psize, gsize, true); }
     if (is_zero) { page->is_zero_init = true; }

@@ -49,7 +49,6 @@ set(mi_sources
     src/os.c
     src/page.c
     src/random.c
-    src/region.c
     src/segment.c
     src/stats.c
     src/prim/prim.c)
