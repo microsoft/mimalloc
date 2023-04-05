@@ -275,7 +275,7 @@ static bool mi_page_unreset(mi_segment_t* segment, mi_page_t* page, size_t size,
 // against overflow, we use substraction to check for expiry which work
 // as long as the reset delay is under (2^30 - 1) milliseconds (~12 days)
 static void mi_page_reset_set_expire(mi_page_t* page) {
-  uint32_t expire = (uint32_t)_mi_clock_now() + mi_option_get(mi_option_reset_delay);
+  uint32_t expire = (uint32_t)_mi_clock_now() + mi_option_get(mi_option_purge_delay);
   page->used = expire;
 }
 
@@ -292,7 +292,7 @@ static void mi_pages_reset_add(mi_segment_t* segment, mi_page_t* page, mi_segmen
   if (!mi_option_is_enabled(mi_option_page_reset)) return;
   if (segment->mem_is_pinned || page->segment_in_use || !page->is_committed || page->is_reset) return;
 
-  if (mi_option_get(mi_option_reset_delay) == 0) {
+  if (mi_option_get(mi_option_purge_delay) == 0) {
     // reset immediately?
     mi_page_reset(segment, page, 0, tld);
   }
@@ -480,9 +480,13 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
     if (!page->is_committed) { fully_committed = false; }
     if (page->is_reset)      { any_reset = true; }
   }
+  // TODO: for now, pages always reset but we can purge instead allowing for pages to be decommitted.
+  MI_UNUSED(any_reset);
+  /*
   if (any_reset && mi_option_is_enabled(mi_option_reset_decommits)) {
     fully_committed = false;
   }
+  */
   
   _mi_abandoned_await_readers(); // prevent ABA issue if concurrent readers try to access our memory (that might be purged)
   _mi_arena_free(segment, segment_size, segment->mem_alignment, segment->mem_align_offset, segment->memid, fully_committed, tld->stats);

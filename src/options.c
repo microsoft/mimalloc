@@ -59,38 +59,39 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(verbose) },
 
   // the following options are experimental and not all combinations make sense.
-  { 1, UNINIT, MI_OPTION_LEGACY(segment_eager_commit,eager_commit) },      // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
+  { 1, UNINIT, MI_OPTION(eager_commit) },               // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
   { 2, UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
   { 1, UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },        // purge decommits memory (instead of reset) (note: on linux this uses MADV_DONTNEED for decommit)
-  { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
-  { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },  // per 1GiB huge pages
-  { -1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) }, // reserve huge pages at node N
+  { 0, UNINIT, MI_OPTION_LEGACY(allow_large_os_pages,large_os_pages) },    // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
+  { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },      // per 1GiB huge pages
+  {-1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) },   // reserve huge pages at node N
   { 0, UNINIT, MI_OPTION(reserve_os_memory)     },
-  { 0, UNINIT, MI_OPTION(deprecated_segment_cache) },  // cache N segments per thread
-  { 0, UNINIT, MI_OPTION(page_reset) },          // reset page memory on free
-  { 0, UNINIT, MI_OPTION(abandoned_page_reset) },// reset free page memory when a thread terminates
-  { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
+  { 0, UNINIT, MI_OPTION(deprecated_segment_cache) },   // cache N segments per thread
+  { 0, UNINIT, MI_OPTION(page_reset) },                 // reset page memory on free
+  { 0, UNINIT, MI_OPTION(abandoned_page_reset) },       // reset free page memory when a thread terminates
+  { 0, UNINIT, MI_OPTION(deprecated_segment_reset) },   // reset segment memory on free (needs eager commit)
 #if defined(__NetBSD__)
-  { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
+  { 0, UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed
 #else
-  { 1, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
+  { 1, UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
 #endif
-  { 10,  UNINIT, MI_OPTION(reset_delay) },       // reset delay in milli-seconds
-  { 0,   UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes.
-  { 0,   UNINIT, MI_OPTION(limit_os_alloc) },    // 1 = do not use OS memory for allocation (but only reserved arenas)
-  { 100, UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
-  { 16,  UNINIT, MI_OPTION(max_errors) },        // maximum errors that are output
-  { 16,  UNINIT, MI_OPTION(max_warnings) },      // maximum warnings that are output
-  { 8,   UNINIT, MI_OPTION(max_segment_reclaim)},// max. number of segment reclaims from the abandoned segments per try.
-  { 0,   UNINIT, MI_OPTION(destroy_on_exit)},    // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
+  { 10,  UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
+  { 0,   UNINIT, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.
+  { 0,   UNINIT, MI_OPTION(limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)
+  { 100, UNINIT, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose
+  { 16,  UNINIT, MI_OPTION(max_errors) },               // maximum errors that are output
+  { 16,  UNINIT, MI_OPTION(max_warnings) },             // maximum warnings that are output
+  { 8,   UNINIT, MI_OPTION(max_segment_reclaim)},       // max. number of segment reclaims from the abandoned segments per try.
+  { 0,   UNINIT, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
   #if (MI_INTPTR_SIZE>4)
-  { 1024L * 1024L, UNINIT, MI_OPTION(arena_reserve) }, // reserve memory N KiB at a time
+  { 1024L * 1024L, UNINIT, MI_OPTION(arena_reserve) },  // reserve memory N KiB at a time
   #else
   {  128L * 1024L, UNINIT, MI_OPTION(arena_reserve) },
   #endif
 
-  { 100, UNINIT, MI_OPTION(arena_purge_delay) }, // reset/decommit delay in milli-seconds for arena allocation
-  { 1,   UNINIT, MI_OPTION(allow_purge) }        // allow decommit/reset to free (physical) memory back to the OS
+  { 100, UNINIT, MI_OPTION(arena_purge_delay) },        // reset/decommit delay in milli-seconds for arena allocation
+  { 1,   UNINIT, MI_OPTION(allow_purge) },              // allow decommit/reset to free (physical) memory back to the OS
+  { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
