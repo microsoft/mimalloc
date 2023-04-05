@@ -423,7 +423,7 @@ static bool mi_arena_purge_range(mi_arena_t* arena, size_t idx, size_t startidx,
   bool all_purged = false;
   while (bitidx < endidx) {
     size_t count = 0;
-    while (bitidx + count < endidx && (purge & ((size_t)1 << (bitidx + count))) == 1) {
+    while (bitidx + count < endidx && (purge & ((size_t)1 << (bitidx + count))) != 0) {
       count++;
     }
     if (count > 0) {
