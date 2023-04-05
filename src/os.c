@@ -46,7 +46,7 @@ size_t _mi_os_large_page_size(void) {
 
 bool _mi_os_use_large_page(size_t size, size_t alignment) {
   // if we have access, check the size and alignment requirements
-  if (mi_os_mem_config.large_page_size == 0 || !mi_option_is_enabled(mi_option_large_os_pages)) return false;
+  if (mi_os_mem_config.large_page_size == 0 || !mi_option_is_enabled(mi_option_allow_large_os_pages)) return false;
   return ((size % mi_os_mem_config.large_page_size) == 0 && (alignment % mi_os_mem_config.large_page_size) == 0);
 }
 
@@ -411,6 +411,7 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return true;  // || _mi_os_is_huge_reserved(addr)
   _mi_stat_increase(&stats->reset, csize);
+  _mi_stat_counter_increase(&stats->reset_calls, 1);
 
   #if (MI_DEBUG>1) && !MI_SECURE && !MI_TRACK_ENABLED // && !MI_TSAN
   memset(start, 0, csize); // pretend it is eagerly reset
@@ -429,9 +430,11 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
 
 // either resets or decommits memory, returns true if the memory needs 
 // to be recommitted if it is to be re-used later on.
-bool _mi_os_purge(void* p, size_t size, mi_stats_t* stats)
+bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset, mi_stats_t* stats)
 {
   if (!mi_option_is_enabled(mi_option_allow_purge)) return false;
+  _mi_stat_counter_increase(&stats->purge_calls, 1);
+  _mi_stat_increase(&stats->purged, size);
 
   if (mi_option_is_enabled(mi_option_purge_decommits) &&   // should decommit?
       !_mi_preloading())                                   // don't decommit during preloading (unsafe)
@@ -441,11 +444,18 @@ bool _mi_os_purge(void* p, size_t size, mi_stats_t* stats)
     return needs_recommit;   
   }
   else {
-    _mi_os_reset(p, size, stats);
+    if (allow_reset) {  // this can sometimes be not allowed if the range is not fully committed
+      _mi_os_reset(p, size, stats);
+    }
     return false;  // not decommitted
   }
 }
 
+// either resets or decommits memory, returns true if the memory needs 
+// to be recommitted if it is to be re-used later on.
+bool _mi_os_purge(void* p, size_t size, mi_stats_t * stats) {
+  return _mi_os_purge_ex(p, size, true, stats);
+}
 
 // Protect a region in memory to be not accessible.
 static  bool mi_os_protectx(void* addr, size_t size, bool protect) {

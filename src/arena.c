@@ -384,11 +384,24 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks, 
   mi_assert_internal(arena->allow_decommit);
   const size_t size = mi_arena_block_size(blocks);
   void* const p = arena->start + mi_arena_block_size(mi_bitmap_index_bit(bitmap_idx));
-  const bool decommitted = _mi_os_purge(p, size, stats);
+  bool needs_recommit;
+  if (_mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx)) {
+    // all blocks are committed, we can purge freely
+    needs_recommit = _mi_os_purge(p, size, stats);
+  }
+  else {
+    // some blocks are not committed -- this can happen when a partially committed block is freed 
+    // in `_mi_arena_free` and it is conservatively marked as uncommitted but still scheduled for a purge
+    // we need to ensure we do not try to reset, and also not count the decommit stats (as it was already adjusted)
+    mi_assert_internal(mi_option_is_enabled(mi_option_purge_decommits));
+    needs_recommit = _mi_os_purge_ex(p, size, false /* allow reset? */, stats);
+    _mi_stat_increase(&stats->committed, size);
+  }
+  
   // clear the purged blocks
   _mi_bitmap_unclaim_across(arena->blocks_purge, arena->field_count, blocks, bitmap_idx);
   // update committed bitmap
-  if (decommitted) {
+  if (needs_recommit) {
     _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx);
   }
 }
@@ -525,13 +538,20 @@ static void mi_arenas_try_purge( bool force, bool visit_all, mi_stats_t* stats )
   Arena free
 ----------------------------------------------------------- */
 
-void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t memid, bool all_committed, mi_stats_t* stats) {
+void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t memid, size_t committed_size, mi_stats_t* stats) {
   mi_assert_internal(size > 0 && stats != NULL);
+  mi_assert_internal(committed_size <= size);
   if (p==NULL) return;
   if (size==0) return;
+  const bool all_committed = (committed_size == size);
+  
 
   if (memid == MI_MEMID_OS) {
     // was a direct OS allocation, pass through
+    if (!all_committed && committed_size > 0) {
+      // if partially committed, adjust the committed stats
+      _mi_stat_decrease(&stats->committed, committed_size);
+    }
     _mi_os_free_aligned(p, size, alignment, align_offset, all_committed, stats);
   }
   else {
@@ -566,10 +586,19 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
     else {
       mi_assert_internal(arena->blocks_committed != NULL);
       mi_assert_internal(arena->blocks_purge != NULL);
+      
       if (!all_committed) {
-        // assume the entire range as no longer committed
+        // mark the entire range as no longer committed (so we recommit the full range when re-using)
         _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx);
         mi_track_mem_noaccess(p,size);
+        if (committed_size > 0) {
+          // if partially committed, adjust the committed stats (is it will be recommitted when re-using)
+          // in the delayed purge, we now need to not count a decommit if the range is not marked as committed.
+          _mi_stat_decrease(&stats->committed, committed_size);
+        }
+        // note: if not all committed, it may be that the purge will reset/decommit the entire range
+        // that contains already decommitted parts. Since purge consistently uses reset or decommit that
+        // works (as we should never reset decommitted parts).
       }
       // (delay) purge the entire range
       mi_arena_schedule_purge(arena, bitmap_idx, blocks, stats);      

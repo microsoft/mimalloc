@@ -322,11 +322,10 @@ typedef enum mi_option_e {
   mi_option_show_stats,               // print statistics on termination
   mi_option_verbose,                  // print verbose messages
   // the following options are experimental (see src/options.h)
-  // (deprecated options are kept for binary backward compatibility with v1.x versions)
-  mi_option_segment_eager_commit,
+  mi_option_eager_commit,
   mi_option_arena_eager_commit,
   mi_option_purge_decommits,
-  mi_option_large_os_pages,           // use large (2MiB) OS pages, implies eager commit
+  mi_option_allow_large_os_pages,     // enable large (2MiB) OS pages, implies eager commit
   mi_option_reserve_huge_os_pages,    // reserve N huge OS pages (1GiB) at startup
   mi_option_reserve_huge_os_pages_at, // reserve huge OS pages at a specific NUMA node
   mi_option_reserve_os_memory,        // reserve specified amount of OS memory at startup
@@ -349,10 +348,11 @@ typedef enum mi_option_e {
   mi_option_purge_extend_delay,
   _mi_option_last,
   // legacy options
-  mi_option_eager_commit = mi_option_segment_eager_commit,
+  mi_option_large_os_pages = mi_option_allow_large_os_pages,
   mi_option_eager_region_commit = mi_option_arena_eager_commit,
   mi_option_reset_decommits = mi_option_purge_decommits,
-  mi_option_reset_delay = mi_option_purge_delay
+  mi_option_reset_delay = mi_option_purge_delay,
+  mi_option_abandoned_page_reset = mi_option_abandoned_page_purge
 } mi_option_t;
 
 

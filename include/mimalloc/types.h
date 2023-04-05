@@ -541,6 +541,7 @@ typedef struct mi_stats_s {
   mi_stat_count_t reserved;
   mi_stat_count_t committed;
   mi_stat_count_t reset;
+  mi_stat_count_t purged;
   mi_stat_count_t page_committed;
   mi_stat_count_t segments_abandoned;
   mi_stat_count_t pages_abandoned;
@@ -553,6 +554,8 @@ typedef struct mi_stats_s {
   mi_stat_counter_t pages_extended;
   mi_stat_counter_t mmap_calls;
   mi_stat_counter_t commit_calls;
+  mi_stat_counter_t reset_calls;
+  mi_stat_counter_t purge_calls;
   mi_stat_counter_t page_no_retire;
   mi_stat_counter_t searches;
   mi_stat_counter_t normal_count;

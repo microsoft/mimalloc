@@ -400,6 +400,8 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
      || !_mi_segment_cache_push(segment, size, segment->memid, &segment->commit_mask, &segment->purge_mask, segment->mem_is_large, segment->mem_is_pinned, tld->os)) 
 #endif       
   {
+    const size_t csize = _mi_commit_mask_committed_size(&segment->commit_mask, size);
+    /*
     // if not all committed, an arena may decommit the whole area, but that double counts
     // the already decommitted parts; adjust for that in the stats.
     if (!mi_commit_mask_is_full(&segment->commit_mask)) {
@@ -409,9 +411,9 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
         _mi_stat_increase(&_mi_stats_main.committed, size - csize); 
       }
     }
+    */
     _mi_abandoned_await_readers();  // wait until safe to free
-    _mi_arena_free(segment, mi_segment_size(segment), segment->mem_alignment, segment->mem_align_offset, segment->memid, 
-                            mi_commit_mask_is_full(&segment->commit_mask) /* all committed? */, tld->stats);
+    _mi_arena_free(segment, mi_segment_size(segment), segment->mem_alignment, segment->mem_align_offset, segment->memid, csize, tld->stats);
   }
 }
 
