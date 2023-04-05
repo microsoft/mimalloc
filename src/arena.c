@@ -53,10 +53,10 @@ typedef struct mi_arena_s {
   bool     is_large;                      // large- or huge OS pages (always committed)
   bool     is_huge_alloc;                 // huge OS pages allocated by `_mi_os_alloc_huge_pages`
   _Atomic(size_t) search_idx;             // optimization to start the search for free blocks
-  _Atomic(mi_msecs_t) purge_expire;    // expiration time when blocks should be decommitted from `blocks_decommit`.  
+  _Atomic(mi_msecs_t) purge_expire;       // expiration time when blocks should be decommitted from `blocks_decommit`.  
   mi_bitmap_field_t* blocks_dirty;        // are the blocks potentially non-zero?
   mi_bitmap_field_t* blocks_committed;    // are the blocks committed? (can be NULL for memory that cannot be decommitted)
-  mi_bitmap_field_t* blocks_purge;     // blocks that can be (reset) decommitted. (can be NULL for memory that cannot be (reset) decommitted)  
+  mi_bitmap_field_t* blocks_purge;        // blocks that can be (reset) decommitted. (can be NULL for memory that cannot be (reset) decommitted)  
   mi_bitmap_field_t  blocks_inuse[1];     // in-place bitmap of in-use blocks (of size `field_count`)
 } mi_arena_t;
 
@@ -248,7 +248,7 @@ static mi_decl_noinline void* mi_arenas_alloc(int numa_node, size_t size, size_t
   size_t arena_index = mi_arena_id_index(req_arena_id);
   if (arena_index < MI_MAX_ARENAS && arena_index < max_arena) {
     // try a specific arena if requested
-    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[arena_index]);
+    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_index]);
     if ((arena != NULL) &&
         // (arena->numa_node < 0 || arena->numa_node == numa_node) && // numa local?
         (*large || !arena->is_large)) // large OS pages allowed, or the arena does not consist of large OS pages
@@ -261,7 +261,7 @@ static mi_decl_noinline void* mi_arenas_alloc(int numa_node, size_t size, size_t
   else {
     // try numa affine allocation
     for (size_t i = 0; i < max_arena; i++) {
-      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+      mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
       if (arena != NULL &&
           (arena->numa_node < 0 || arena->numa_node == numa_node) && // numa local?
           (*large || !arena->is_large)) // large OS pages allowed, or the arena does not consist of large OS pages
@@ -274,7 +274,7 @@ static mi_decl_noinline void* mi_arenas_alloc(int numa_node, size_t size, size_t
 
     // try from another numa node instead..
     for (size_t i = 0; i < max_arena; i++) {
-      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+      mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
       if (arena != NULL &&
           (arena->numa_node >= 0 && arena->numa_node != numa_node) && // not numa local!
           (*large || !arena->is_large)) // large OS pages allowed, or the arena does not consist of large OS pages
@@ -294,7 +294,7 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   if (_mi_preloading()) return false;
   if (req_arena_id != _mi_arena_id_none()) return false;
 
-  const size_t arena_count = mi_atomic_load_relaxed(&mi_arena_count);
+  const size_t arena_count = mi_atomic_load_acquire(&mi_arena_count);
   if (arena_count > (MI_MAX_ARENAS - 4)) return false;
 
   size_t arena_reserve = mi_option_get_size(mi_option_arena_reserve);
@@ -366,7 +366,7 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
   if (size != NULL) *size = 0;
   size_t arena_index = mi_arena_id_index(arena_id);
   if (arena_index >= MI_MAX_ARENAS) return NULL;
-  mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[arena_index]);
+  mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_index]);
   if (arena == NULL) return NULL;
   if (size != NULL) { *size = mi_arena_block_size(arena->block_count); }
   return arena->start;
@@ -512,7 +512,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all, mi_stats_t* stats )
   const long delay = mi_option_get(mi_option_arena_purge_delay);
   if (_mi_preloading() || delay == 0 || !mi_option_is_enabled(mi_option_allow_purge)) return;  // nothing will be scheduled
 
-  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  const size_t max_arena = mi_atomic_load_acquire(&mi_arena_count);
   if (max_arena == 0) return;
 
   // allow only one thread to purge at a time
@@ -522,7 +522,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all, mi_stats_t* stats )
     mi_msecs_t now = _mi_clock_now();
     size_t max_purge_count = (visit_all ? max_arena : 1);
     for (size_t i = 0; i < max_arena; i++) {
-      mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+      mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
       if (arena != NULL) {
         if (mi_arena_try_purge(arena, now, force, stats)) {
           if (max_purge_count <= 1) break;
@@ -561,7 +561,7 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
     size_t bitmap_idx;
     mi_arena_memid_indices(memid, &arena_idx, &bitmap_idx);
     mi_assert_internal(arena_idx < MI_MAX_ARENAS);
-    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t,&mi_arenas[arena_idx]);
+    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t,&mi_arenas[arena_idx]);
     mi_assert_internal(arena != NULL);
     const size_t blocks = mi_block_count_of_size(size);
     
@@ -622,7 +622,7 @@ static void mi_arenas_destroy(void) {
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   size_t new_max_arena = 0;
   for (size_t i = 0; i < max_arena; i++) {
-    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
     if (arena != NULL) {
       if (arena->owned && arena->start != NULL) {
         mi_atomic_store_ptr_release(mi_arena_t, &mi_arenas[i], NULL);
@@ -657,7 +657,7 @@ void _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats)
 bool _mi_arena_contains(const void* p) {
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   for (size_t i = 0; i < max_arena; i++) {
-    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
     if (arena != NULL && arena->start <= (const uint8_t*)p && arena->start + mi_arena_block_size(arena->block_count) > (const uint8_t*)p) { 
       return true;      
     }
@@ -730,6 +730,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_committed,
   if (arena->blocks_committed != NULL && is_committed) {
     memset((void*)arena->blocks_committed, 0xFF, fields*sizeof(mi_bitmap_field_t)); // cast to void* to avoid atomic warning
   }
+  
   // and claim leftover blocks if needed (so we never allocate there)
   ptrdiff_t post = (fields * MI_BITMAP_FIELD_BITS) - bcount;
   mi_assert_internal(post >= 0);
@@ -738,7 +739,6 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_committed,
     mi_bitmap_index_t postidx = mi_bitmap_index_create(fields - 1, MI_BITMAP_FIELD_BITS - post);
     _mi_bitmap_claim(arena->blocks_inuse, fields, post, postidx, NULL);
   }
-
   return mi_arena_add(arena, arena_id);
 
 }

@@ -686,6 +686,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
     mi_assert_internal(p!=NULL);
     // todo: do not track as the usable size is still the same in the free; adjust potential padding?
     // mi_track_resize(p,size,newsize)
+    // if (newsize < size) { mi_track_mem_noaccess((uint8_t*)p + newsize, size - newsize); }
     return p;  // reallocation still fits and not more than 50% waste
   }
   void* newp = mi_heap_malloc(heap,newsize);
