@@ -1,7 +1,5 @@
-
-
 /* ----------------------------------------------------------------------------
-Copyright (c) 2019-2022, Microsoft Research, Daan Leijen
+Copyright (c) 2019-2023, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -25,7 +23,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 #include "mimalloc/atomic.h"
 
 #include <string.h>  // memset
-#include <errno.h> // ENOMEM
+#include <errno.h>   // ENOMEM
 
 #include "bitmap.h"  // atomic bitmap
 
@@ -38,7 +36,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 typedef uintptr_t mi_block_info_t;
 #define MI_ARENA_BLOCK_SIZE   (MI_SEGMENT_SIZE)        // 64MiB  (must be at least MI_SEGMENT_ALIGN)
 #define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 32MiB
-#define MI_MAX_ARENAS         (64)                     // not more than 126 (since we use 7 bits in the memid and an arena index + 1)
+#define MI_MAX_ARENAS         (112)                    // not more than 126 (since we use 7 bits in the memid and an arena index + 1)
 
 // A memory arena descriptor
 typedef struct mi_arena_s {
@@ -277,6 +275,35 @@ static mi_decl_noinline void* mi_arena_allocate(int numa_node, size_t size, size
   return NULL;
 }
 
+// try to reserve a fresh arena
+static bool mi_arena_reserve(size_t size, bool allow_large, mi_arena_id_t req_arena_id, mi_arena_id_t *arena_id)
+{
+  if (_mi_preloading()) return false;
+  if (req_arena_id != _mi_arena_id_none()) return false;
+
+  const size_t arena_count = mi_atomic_load_relaxed(&mi_arena_count);
+  if (arena_count > (MI_MAX_ARENAS - 4)) return false;
+
+  size_t arena_reserve = mi_option_get_size(mi_option_arena_reserve);
+  if (arena_reserve == 0) return false;
+
+  if (!_mi_os_has_virtual_reserve()) { 
+    arena_reserve = arena_reserve/4;  // be conservative if virtual reserve is not supported (for some embedded systems for example)
+  }
+  arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_BLOCK_SIZE);
+  if (arena_count >= 8 && arena_count <= 128) {
+    arena_reserve = (1<<(arena_count/8)) * arena_reserve;  // scale up the arena sizes exponentially
+  }    
+  if (arena_reserve < size) return false;
+      
+  // commit eagerly?
+  bool arena_commit = false;
+  if (mi_option_get(mi_option_arena_eager_commit) == 2)      { arena_commit = _mi_os_has_overcommit(); }
+  else if (mi_option_get(mi_option_arena_eager_commit) == 1) { arena_commit = true; }
+
+  return (mi_reserve_os_memory_ex(arena_reserve, arena_commit, allow_large, false /* exclusive */, arena_id) == 0);
+}    
+
 void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero,
                               mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld)
 {
@@ -296,24 +323,11 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
     if (p != NULL) return p;
 
     // otherwise, try to first eagerly reserve a new arena 
-    size_t arena_reserve = mi_option_get_size(mi_option_arena_reserve);
-    arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_BLOCK_SIZE);
-    if (arena_reserve > 0 && arena_reserve >= size &&                    // eager reserve enabled and large enough?
-        req_arena_id == _mi_arena_id_none() &&                           // not exclusive?
-        mi_atomic_load_relaxed(&mi_arena_count) < 3*(MI_MAX_ARENAS/4) && // not too many arenas already?        
-        !_mi_preloading() )                                              // and not before main runs
-    {      
-      mi_arena_id_t arena_id = 0;
-
-      // commit eagerly?
-      bool arena_commit = false;
-      if (mi_option_get(mi_option_arena_eager_commit) == 2)      { arena_commit = _mi_os_has_overcommit(); }
-      else if (mi_option_get(mi_option_arena_eager_commit) == 1) { arena_commit = true; }
-
-      if (mi_reserve_os_memory_ex(arena_reserve, arena_commit /* commit */, *large /* allow large*/, false /* exclusive */, &arena_id) == 0) {
-         p = mi_arena_alloc_in(arena_id, numa_node, size, alignment, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);        
-         if (p != NULL) return p;
-      }
+    mi_arena_id_t arena_id = 0;
+    if (mi_arena_reserve(size,*large,req_arena_id,&arena_id)) { 
+      // and try allocate in there
+      p = mi_arena_alloc_in(arena_id, numa_node, size, alignment, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);        
+      if (p != NULL) return p;
     }    
   }
 
@@ -334,6 +348,7 @@ void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, b
   return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, 0, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
 }
 
+
 void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
   if (size != NULL) *size = 0;
   size_t arena_index = mi_arena_id_index(arena_id);
@@ -343,6 +358,7 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
   if (size != NULL) { *size = mi_arena_block_size(arena->block_count); }
   return arena->start;
 }
+
 
 /* -----------------------------------------------------------
   Arena purge

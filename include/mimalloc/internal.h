@@ -92,6 +92,7 @@ void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);         // to f
 size_t     _mi_os_page_size(void);
 size_t     _mi_os_good_alloc_size(size_t size);
 bool       _mi_os_has_overcommit(void);
+bool       _mi_os_has_virtual_reserve(void);
 
 bool       _mi_os_reset(void* addr, size_t size, mi_stats_t* tld_stats);
 bool       _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
