@@ -575,7 +575,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   const bool eager_delayed = (page_kind <= MI_PAGE_MEDIUM &&          // don't delay for large objects
                               // !_mi_os_has_overcommit() &&          // never delay on overcommit systems
                               _mi_current_thread_count() > 1 &&       // do not delay for the first N threads
-                              tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
+                              tld->peak_count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager  = !eager_delayed && mi_option_is_enabled(mi_option_eager_commit);
   bool commit = eager; // || (page_kind >= MI_PAGE_LARGE);
   bool is_zero = false;
