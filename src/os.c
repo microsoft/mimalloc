@@ -438,7 +438,7 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
 
 // either resets or decommits memory, returns true if the memory needs 
 // to be recommitted if it is to be re-used later on.
-bool _mi_os_purge(void* p, size_t size, mi_stats_t* stats)
+bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset, mi_stats_t* stats)
 {
   if (!mi_option_is_enabled(mi_option_allow_purge)) return false;
   _mi_stat_counter_increase(&stats->purge_calls, 1);
@@ -452,11 +452,18 @@ bool _mi_os_purge(void* p, size_t size, mi_stats_t* stats)
     return needs_recommit;   
   }
   else {
-    _mi_os_reset(p, size, stats);
+    if (allow_reset) {  // this can sometimes be not allowed if the range is not fully committed
+      _mi_os_reset(p, size, stats);
+    }
     return false;  // not decommitted
   }
 }
 
+// either resets or decommits memory, returns true if the memory needs 
+// to be recommitted if it is to be re-used later on.
+bool _mi_os_purge(void* p, size_t size, mi_stats_t * stats) {
+  return _mi_os_purge_ex(p, size, true, stats);
+}
 
 
 // Protect a region in memory to be not accessible.

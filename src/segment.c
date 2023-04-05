@@ -373,10 +373,14 @@ static void mi_reset_delayed(mi_segments_tld_t* tld) {
  Segment size calculations
 ----------------------------------------------------------- */
 
+static size_t mi_segment_raw_page_size(const mi_segment_t* segment) {
+  return (segment->page_kind == MI_PAGE_HUGE ? segment->segment_size : (size_t)1 << segment->page_shift);
+}
+
 // Raw start of the page available memory; can be used on uninitialized pages (only `segment_idx` must be set)
 // The raw start is not taking aligned block allocation into consideration.
 static uint8_t* mi_segment_raw_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size) {
-  size_t   psize = (segment->page_kind == MI_PAGE_HUGE ? segment->segment_size : (size_t)1 << segment->page_shift);
+  size_t   psize = mi_segment_raw_page_size(segment);
   uint8_t* p = (uint8_t*)segment + page->segment_idx * psize;
 
   if (page->segment_idx == 0) {
@@ -475,13 +479,19 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
 
   bool any_reset = false;
   bool fully_committed = true;
+  size_t committed = 0;
+  const size_t page_size = mi_segment_raw_page_size(segment);
   for (size_t i = 0; i < segment->capacity; i++) {
     mi_page_t* page = &segment->pages[i];
+    if (page->is_committed)  { committed += page_size;  }
     if (!page->is_committed) { fully_committed = false; }
     if (page->is_reset)      { any_reset = true; }
   }
-  // TODO: for now, pages always reset but we can purge instead allowing for pages to be decommitted.
   MI_UNUSED(any_reset);
+  MI_UNUSED(fully_committed);
+  mi_assert_internal((fully_committed && committed == segment_size) || (!fully_committed && committed < segment_size));
+  
+  // TODO: for now, pages always reset but we can purge instead allowing for pages to be decommitted.
   /*
   if (any_reset && mi_option_is_enabled(mi_option_reset_decommits)) {
     fully_committed = false;
@@ -489,7 +499,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   */
   
   _mi_abandoned_await_readers(); // prevent ABA issue if concurrent readers try to access our memory (that might be purged)
-  _mi_arena_free(segment, segment_size, segment->mem_alignment, segment->mem_align_offset, segment->memid, fully_committed, tld->stats);
+  _mi_arena_free(segment, segment_size, segment->mem_alignment, segment->mem_align_offset, segment->memid, committed, tld->stats);
 }
 
 // called by threads that are terminating to free cached segments
