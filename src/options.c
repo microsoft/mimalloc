@@ -60,8 +60,8 @@ static mi_option_desc_t options[_mi_option_last] =
 
   // the following options are experimental and not all combinations make sense.
   { 1, UNINIT, MI_OPTION_LEGACY(segment_eager_commit,eager_commit) },      // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
-  { 2, UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) },
-  { 1, UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },        // purge decommits memory (instead of reset)  
+  { 2, UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
+  { 1, UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },        // purge decommits memory (instead of reset) (note: on linux this uses MADV_DONTNEED for decommit)
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },  // per 1GiB huge pages
   { -1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) }, // reserve huge pages at node N
@@ -74,7 +74,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
   #else
   { 1, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
-#endif
+  #endif
   { 10,   UNINIT, MI_OPTION_LEGACY(purge_delay, reset_delay) }, // page decommit delay in milli-seconds
   { 0,   UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes.
   { 0,   UNINIT, MI_OPTION(limit_os_alloc) },    // 1 = do not use OS memory for allocation (but only reserved arenas)

@@ -21,12 +21,18 @@ static mi_os_mem_config_t mi_os_mem_config = {
   0,      // large page size (usually 2MiB)
   4096,   // allocation granularity
   true,   // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
-  false   // must free whole? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
+  false,  // must free whole? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
+  true    // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
 };
 
 bool _mi_os_has_overcommit(void) {
   return mi_os_mem_config.has_overcommit;
 }
+
+bool _mi_os_has_virtual_reserve(void) { 
+  return mi_os_mem_config.has_virtual_reserve;
+}
+
 
 // OS (small) page size
 size_t _mi_os_page_size(void) {

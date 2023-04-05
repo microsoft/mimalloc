@@ -169,7 +169,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // collect regions on program-exit (or shared library unload)
   if (force && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
-    _mi_arena_collect(false,true /* force purge */,&heap->tld->stats);
+    _mi_arena_collect(false /* destroy arenas */, true /* force purge */, &heap->tld->stats);
   }
 }
 

@@ -22,11 +22,12 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // OS memory configuration
 typedef struct mi_os_mem_config_s {
-  size_t  page_size;          // 4KiB
-  size_t  large_page_size;    // 2MiB
-  size_t  alloc_granularity;  // smallest allocation size (on Windows 64KiB)
-  bool    has_overcommit;     // can we reserve more memory than can be actually committed?
-  bool    must_free_whole;    // must allocated blocks free as a whole (false for mmap, true for VirtualAlloc)
+  size_t  page_size;            // 4KiB
+  size_t  large_page_size;      // 2MiB
+  size_t  alloc_granularity;    // smallest allocation size (on Windows 64KiB)
+  bool    has_overcommit;       // can we reserve more memory than can be actually committed?
+  bool    must_free_whole;      // must allocated blocks free as a whole (false for mmap, true for VirtualAlloc)
+  bool    has_virtual_reserve;  // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
 } mi_os_mem_config_t;
 
 // Initialize

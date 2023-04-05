@@ -623,7 +623,7 @@ static void mi_cdecl mi_process_done(void) {
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
     _mi_heap_destroy_all();                          // forcefully release all memory held by all heaps (of this thread only!)
     _mi_segment_cache_free_all(&_mi_heap_main_get()->tld->os);  // release all cached segments
-    _mi_arena_collect(true /* free arenas */,true,&_mi_heap_main_get()->tld->stats);
+    _mi_arena_collect(true /* destroy (owned) arenas */, true /* purge the rest */, &_mi_heap_main_get()->tld->stats);
   }
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
