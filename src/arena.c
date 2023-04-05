@@ -42,13 +42,16 @@ typedef uintptr_t mi_block_info_t;
 typedef struct mi_arena_s {
   mi_arena_id_t id;                       // arena id; 0 for non-specific
   bool     exclusive;                     // only allow allocations if specifically for this arena
+  bool     owned;                         // if true, the arena will be released when the process exits if `mi_option_destroy_on_exit` is set.
   _Atomic(uint8_t*) start;                // the start of the memory area
   size_t   block_count;                   // size of the area in arena blocks (of `MI_ARENA_BLOCK_SIZE`)
   size_t   field_count;                   // number of bitmap fields (where `field_count * MI_BITMAP_FIELD_BITS >= block_count`)
+  size_t   meta_size;                     // size of the arena structure itself including the bitmaps
   int      numa_node;                     // associated NUMA node
   bool     is_zero_init;                  // is the arena zero initialized?
   bool     allow_decommit;                // is decommit allowed? if true, is_large should be false and blocks_committed != NULL
   bool     is_large;                      // large- or huge OS pages (always committed)
+  bool     is_huge_alloc;                 // huge OS pages allocated by `_mi_os_alloc_huge_pages`
   _Atomic(size_t) search_idx;             // optimization to start the search for free blocks
   _Atomic(mi_msecs_t) purge_expire;    // expiration time when blocks should be decommitted from `blocks_decommit`.  
   mi_bitmap_field_t* blocks_dirty;        // are the blocks potentially non-zero?
@@ -62,6 +65,8 @@ typedef struct mi_arena_s {
 static mi_decl_cache_align _Atomic(mi_arena_t*) mi_arenas[MI_MAX_ARENAS];
 static mi_decl_cache_align _Atomic(size_t)      mi_arena_count; // = 0
 
+
+static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_committed, bool is_large, bool is_huge_alloc, bool is_zero, int numa_node, bool exclusive, bool owned, mi_arena_id_t* arena_id) mi_attr_noexcept;
 
 /* -----------------------------------------------------------
   Arena id's
@@ -129,6 +134,12 @@ static size_t mi_block_count_of_size(size_t size) {
 static size_t mi_arena_block_size(size_t bcount) {
   return (bcount * MI_ARENA_BLOCK_SIZE);
 }
+
+static size_t mi_arena_size(mi_arena_t* arena) {
+  return mi_arena_block_size(arena->block_count);
+}
+
+
 
 /* -----------------------------------------------------------
   Thread safe allocation in an arena
@@ -251,8 +262,8 @@ static mi_decl_noinline void* mi_arenas_alloc(int numa_node, size_t size, size_t
     // try numa affine allocation
     for (size_t i = 0; i < max_arena; i++) {
       mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
-      if (arena == NULL) break; // end reached
-      if ((arena->numa_node < 0 || arena->numa_node == numa_node) && // numa local?
+      if (arena != NULL &&
+          (arena->numa_node < 0 || arena->numa_node == numa_node) && // numa local?
           (*large || !arena->is_large)) // large OS pages allowed, or the arena does not consist of large OS pages
       {
         void* p = mi_arena_alloc_at(arena, i, bcount, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
@@ -264,8 +275,8 @@ static mi_decl_noinline void* mi_arenas_alloc(int numa_node, size_t size, size_t
     // try from another numa node instead..
     for (size_t i = 0; i < max_arena; i++) {
       mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
-      if (arena == NULL) break; // end reached
-      if ((arena->numa_node >= 0 && arena->numa_node != numa_node) && // not numa local!
+      if (arena != NULL &&
+          (arena->numa_node >= 0 && arena->numa_node != numa_node) && // not numa local!
           (*large || !arena->is_large)) // large OS pages allowed, or the arena does not consist of large OS pages
       {
         void* p = mi_arena_alloc_at(arena, i, bcount, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
@@ -294,7 +305,7 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   }
   arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_BLOCK_SIZE);
   if (arena_count >= 8 && arena_count <= 128) {
-    arena_reserve = (1<<(arena_count/8)) * arena_reserve;  // scale up the arena sizes exponentially
+    arena_reserve = ((size_t)1<<(arena_count/8)) * arena_reserve;  // scale up the arena sizes exponentially
   }    
   if (arena_reserve < req_size) return false;  // should be able to at least handle the current allocation size
       
@@ -499,9 +510,11 @@ static void mi_arenas_try_purge( bool force, bool visit_all, mi_stats_t* stats )
     size_t max_purge_count = (visit_all ? max_arena : 1);
     for (size_t i = 0; i < max_arena; i++) {
       mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
-      if (mi_arena_try_purge(arena, now, force, stats)) {
-        if (max_purge_count <= 1) break;
-        max_purge_count--;
+      if (arena != NULL) {
+        if (mi_arena_try_purge(arena, now, force, stats)) {
+          if (max_purge_count <= 1) break;
+          max_purge_count--;
+        }
       }
     }
   }  
@@ -574,10 +587,41 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
   mi_arenas_try_purge(false, false, stats);
 }
 
+// destroy owned arenas; this is unsafe and should only be done using `mi_option_destroy_on_exit`
+// for dynamic libraries that are unloaded and need to release all their allocated memory.
+static void mi_arenas_destroy(void) {
+  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  size_t new_max_arena = 0;
+  for (size_t i = 0; i < max_arena; i++) {
+    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+    if (arena != NULL) {
+      if (arena->owned && arena->start != NULL) {
+        mi_atomic_store_ptr_release(mi_arena_t, &mi_arenas[i], NULL);
+        if (arena->is_huge_alloc) { 
+          _mi_os_free_huge_pages(arena->start, mi_arena_size(arena), &_mi_stats_main); 
+        }
+        else {
+          _mi_os_free(arena->start, mi_arena_size(arena), &_mi_stats_main); 
+        }
+        _mi_os_free(arena, arena->meta_size, &_mi_stats_main);
+      }
+      else {
+        new_max_arena = i;
+      }
+    }
+  }
+
+  // try to lower the max arena.
+  size_t expected = max_arena;
+  mi_atomic_cas_strong_acq_rel(&mi_arena_count, &expected, new_max_arena);
+}
+
 
 void _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats) {
-  MI_UNUSED(free_arenas); // todo
-  mi_arenas_try_purge(force_decommit, true, stats);
+  if (free_arenas) {
+    mi_arenas_destroy();
+  }
+  mi_arenas_try_purge(force_decommit, true, stats);  
 }
 
 
@@ -585,7 +629,7 @@ bool _mi_arena_contains(const void* p) {
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   for (size_t i = 0; i < max_arena; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
-    if (arena->start <= (const uint8_t*)p && arena->start + mi_arena_block_size(arena->block_count) > (const uint8_t*)p) { 
+    if (arena != NULL && arena->start <= (const uint8_t*)p && arena->start + mi_arena_block_size(arena->block_count) > (const uint8_t*)p) { 
       return true;      
     }
   }
@@ -601,20 +645,20 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id) {
   mi_assert_internal(arena != NULL);
   mi_assert_internal((uintptr_t)mi_atomic_load_ptr_relaxed(uint8_t,&arena->start) % MI_SEGMENT_ALIGN == 0);
   mi_assert_internal(arena->block_count > 0);
-  if (arena_id != NULL) *arena_id = -1;
+  if (arena_id != NULL) { *arena_id = -1; }
 
   size_t i = mi_atomic_increment_acq_rel(&mi_arena_count);
   if (i >= MI_MAX_ARENAS) {
     mi_atomic_decrement_acq_rel(&mi_arena_count);
     return false;
   }
-  mi_atomic_store_ptr_release(mi_arena_t,&mi_arenas[i], arena);
   arena->id = mi_arena_id_create(i);
-  if (arena_id != NULL) *arena_id = arena->id;
+  mi_atomic_store_ptr_release(mi_arena_t,&mi_arenas[i], arena);
+  if (arena_id != NULL) { *arena_id = arena->id; }
   return true;
 }
 
-bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept
+static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_committed, bool is_large, bool is_huge_alloc, bool is_zero, int numa_node, bool exclusive, bool owned, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
   if (size < MI_ARENA_BLOCK_SIZE) return false;
@@ -638,11 +682,14 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
   // _mi_memzero(arena, asize);
   arena->id = _mi_arena_id_none();
   arena->exclusive = exclusive;
+  arena->owned = owned;
+  arena->meta_size = asize;
   arena->block_count = bcount;
   arena->field_count = fields;
   arena->start = (uint8_t*)start;
   arena->numa_node    = numa_node; // TODO: or get the current numa node if -1? (now it allows anyone to allocate on -1)
   arena->is_large     = is_large;
+  arena->is_huge_alloc= is_huge_alloc;
   arena->is_zero_init = is_zero;
   arena->allow_decommit = allow_decommit; 
   arena->purge_expire = 0;
@@ -667,8 +714,13 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
 
 }
 
+bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
+  return mi_manage_os_memory_ex2(start,size,is_committed,is_large,false,is_zero,numa_node,exclusive,false /* not owned */, arena_id);
+}
+
+
 // Reserve a range of regular OS memory
-int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept
+static int mi_reserve_os_memory_ex2(size_t size, bool commit, bool allow_large, bool exclusive, bool owned, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
   size = _mi_align_up(size, MI_ARENA_BLOCK_SIZE); // at least one block
@@ -676,7 +728,7 @@ int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exc
   bool is_zero;
   void* start = _mi_os_alloc_aligned(size, MI_SEGMENT_ALIGN, commit, &large, &is_zero, &_mi_stats_main);
   if (start==NULL) return ENOMEM;
-  if (!mi_manage_os_memory_ex(start, size, (large || commit), large, is_zero, -1, exclusive, arena_id)) {
+  if (!mi_manage_os_memory_ex2(start, size, (large || commit), large, false, is_zero, -1, exclusive, owned, arena_id)) {
     _mi_os_free_ex(start, size, commit, &_mi_stats_main);
     _mi_verbose_message("failed to reserve %zu k memory\n", _mi_divide_up(size,1024));
     return ENOMEM;
@@ -685,10 +737,18 @@ int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exc
   return 0;
 }
 
-bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept {
-  return mi_manage_os_memory_ex(start, size, is_committed, is_large, is_zero, numa_node, false, NULL);
+// Reserve a range of regular OS memory
+int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
+  return mi_reserve_os_memory_ex2(size,commit,allow_large,exclusive,true /*owned*/, arena_id);
 }
 
+
+// Manage a range of regular OS memory
+bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept {
+  return mi_manage_os_memory_ex(start, size, is_committed, is_large, is_zero, numa_node, false /* exclusive? */, NULL);
+}
+
+// Reserve a range of regular OS memory
 int mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept {
   return mi_reserve_os_memory_ex(size, commit, allow_large, false, NULL);
 }
@@ -746,7 +806,7 @@ int mi_reserve_huge_os_pages_at_ex(size_t pages, int numa_node, size_t timeout_m
   }
   _mi_verbose_message("numa node %i: reserved %zu GiB huge pages (of the %zu GiB requested)\n", numa_node, pages_reserved, pages);
 
-  if (!mi_manage_os_memory_ex(p, hsize, true, true, is_zero, numa_node, exclusive, arena_id)) {
+  if (!mi_manage_os_memory_ex2(p, hsize, true, true, true, is_zero, numa_node, exclusive, true /* owned */, arena_id)) {
     _mi_os_free_huge_pages(p, hsize, &_mi_stats_main);
     return ENOMEM;
   }
