@@ -291,8 +291,7 @@ typedef uintptr_t mi_thread_free_t;
 typedef struct mi_page_s {
   // "owned" by the segment
   uint32_t              slice_count;       // slices in this page (0 if not a page)
-  uint32_t              slice_offset;      // distance from the actual page data slice (0 if a page)
-  uint8_t               is_reset : 1;      // `true` if the page memory was reset
+  uint32_t              slice_offset;      // distance from the actual page data slice (0 if a page)  
   uint8_t               is_committed : 1;  // `true` if the page virtual memory is committed
   uint8_t               is_zero_init : 1;  // `true` if the page was zero initialized
 

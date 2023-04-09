@@ -165,6 +165,11 @@ mi_decl_nodiscard mi_decl_restrict inline void* mi_heap_malloc_aligned(mi_heap_t
   }
 }
 
+// ensure a definition is emitted
+#if defined(__cplusplus)
+static void* _mi_heap_malloc_aligned = (void*)&mi_heap_malloc_aligned;
+#endif
+
 // ------------------------------------------------------
 // Aligned Allocation
 // ------------------------------------------------------

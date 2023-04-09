@@ -330,7 +330,7 @@ typedef enum mi_option_e {
   mi_option_reserve_huge_os_pages_at, // reserve huge OS pages at a specific NUMA node
   mi_option_reserve_os_memory,        // reserve specified amount of OS memory at startup
   mi_option_deprecated_segment_cache,
-  mi_option_page_reset,
+  mi_option_deprecated_page_reset,
   mi_option_abandoned_page_purge,
   mi_option_deprecated_segment_reset,
   mi_option_eager_commit_delay,
@@ -343,7 +343,7 @@ typedef enum mi_option_e {
   mi_option_max_segment_reclaim,
   mi_option_destroy_on_exit,
   mi_option_arena_reserve,
-  mi_option_arena_purge_delay,
+  mi_option_arena_purge_mult,
   mi_option_allow_purge,
   mi_option_purge_extend_delay,
   _mi_option_last,

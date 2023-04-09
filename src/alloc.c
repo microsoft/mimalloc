@@ -1031,7 +1031,7 @@ void* _mi_externs[] = {
   (void*)&mi_zalloc_small,
   (void*)&mi_heap_malloc,
   (void*)&mi_heap_zalloc,
-  (void*)&mi_heap_malloc_small
+  (void*)&mi_heap_malloc_small,
   // (void*)&mi_heap_alloc_new,
   // (void*)&mi_heap_alloc_new_n
 };

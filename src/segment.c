@@ -757,7 +757,6 @@ static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_i
   }
   
   // and initialize the page
-  page->is_reset = false;
   page->is_committed = true;
   segment->used++;
   return page;
@@ -1051,10 +1050,9 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
   _mi_stat_decrease(&tld->stats->pages, 1);
 
   // reset the page memory to reduce memory pressure?
-  if (!segment->mem_is_pinned && !page->is_reset && mi_option_is_enabled(mi_option_page_reset)) {
+  if (segment->allow_decommit && mi_option_is_enabled(mi_option_deprecated_page_reset)) {
     size_t psize;
-    uint8_t* start = _mi_page_start(segment, page, &psize);
-    page->is_reset = true;
+    uint8_t* start = _mi_page_start(segment, page, &psize);    
     _mi_os_reset(start, psize, tld->stats);
   }
 

@@ -255,7 +255,7 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   #if MI_HUGE_PAGE_ABANDON
   mi_assert_internal(_mi_page_segment(page)->kind != MI_SEGMENT_HUGE);
   #endif
-  mi_assert_internal(!page->is_reset);
+  
   // TODO: push on full queue immediately if it is full?
   mi_page_queue_t* pq = mi_page_queue(heap, mi_page_block_size(page));
   mi_page_queue_push(heap, pq, page);

@@ -411,7 +411,7 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t bitmap_idx, size_t
   mi_assert_internal(arena->blocks_purge != NULL);
   if (!mi_option_is_enabled(mi_option_allow_purge)) return;
 
-  const long delay = mi_option_get(mi_option_arena_purge_delay);
+  const long delay = mi_option_get(mi_option_purge_delay) * mi_option_get(mi_option_arena_purge_mult);
   if (_mi_preloading() || delay == 0) {
     // decommit directly
     mi_arena_purge(arena, bitmap_idx, blocks, stats);    
@@ -501,7 +501,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force, mi
   }
   // if not fully purged, make sure to purge again in the future
   if (!full_purge) {
-    const long delay = mi_option_get(mi_option_arena_purge_delay);
+    const long delay = mi_option_get(mi_option_purge_delay) * mi_option_get(mi_option_arena_purge_mult);
     mi_msecs_t expected = 0;
     mi_atomic_cas_strong_acq_rel(&arena->purge_expire,&expected,_mi_clock_now() + delay);
   }
@@ -509,7 +509,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force, mi
 }
 
 static void mi_arenas_try_purge( bool force, bool visit_all, mi_stats_t* stats ) {
-  const long delay = mi_option_get(mi_option_arena_purge_delay);
+  const long delay = mi_option_get(mi_option_purge_delay) * mi_option_get(mi_option_arena_purge_mult);
   if (_mi_preloading() || delay == 0 || !mi_option_is_enabled(mi_option_allow_purge)) return;  // nothing will be scheduled
 
   const size_t max_arena = mi_atomic_load_acquire(&mi_arena_count);
