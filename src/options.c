@@ -67,8 +67,8 @@ static mi_option_desc_t options[_mi_option_last] =
   {-1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) },   // reserve huge pages at node N
   { 0, UNINIT, MI_OPTION(reserve_os_memory)     },
   { 0, UNINIT, MI_OPTION(deprecated_segment_cache) },   // cache N segments per thread
-  { 0, UNINIT, MI_OPTION(page_reset) },                 // reset page memory on free
-  { 0, UNINIT, MI_OPTION(abandoned_page_reset) },       // reset free page memory when a thread terminates
+  { 0, UNINIT, MI_OPTION(deprecated_page_reset) },      // reset page memory on free
+  { 0, UNINIT, MI_OPTION(abandoned_page_purge) },       // purge free page memory when a thread terminates
   { 0, UNINIT, MI_OPTION(deprecated_segment_reset) },   // reset segment memory on free (needs eager commit)
 #if defined(__NetBSD__)
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed
@@ -89,7 +89,7 @@ static mi_option_desc_t options[_mi_option_last] =
   {  128L * 1024L, UNINIT, MI_OPTION(arena_reserve) },
   #endif
 
-  { 100, UNINIT, MI_OPTION(arena_purge_delay) },        // reset/decommit delay in milli-seconds for arena allocation
+  { 10,  UNINIT, MI_OPTION(arena_purge_mult) },        // purge delay multiplier for arena's
   { 1,   UNINIT, MI_OPTION(allow_purge) },              // allow decommit/reset to free (physical) memory back to the OS
   { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
 };

@@ -284,7 +284,6 @@ typedef struct mi_page_s {
   // "owned" by the segment
   uint8_t               segment_idx;       // index in the segment `pages` array, `page == &segment->pages[page->segment_idx]`
   uint8_t               segment_in_use:1;  // `true` if the segment allocated this page
-  uint8_t               is_reset:1;        // `true` if the page memory was reset
   uint8_t               is_committed:1;    // `true` if the page virtual memory is committed
   uint8_t               is_zero_init:1;    // `true` if the page was zero initialized
 
@@ -327,9 +326,13 @@ typedef struct mi_segment_s {
   // memory fields
   size_t               memid;            // id for the os-level memory manager
   bool                 mem_is_pinned;    // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)
+  bool                 mem_is_large;     // `true` if the memory is in OS large or huge pages. (`is_pinned` will be true)
   bool                 mem_is_committed; // `true` if the whole segment is eagerly committed
   size_t               mem_alignment;    // page alignment for huge pages (only used for alignment > MI_ALIGNMENT_MAX)
   size_t               mem_align_offset; // offset for huge page alignment (only used for alignment > MI_ALIGNMENT_MAX)
+
+  bool                 allow_decommit;
+  bool                 allow_purge;
 
   // segment fields
   _Atomic(struct mi_segment_s*) abandoned_next;
@@ -553,7 +556,7 @@ typedef struct mi_os_tld_s {
 typedef struct mi_segments_tld_s {
   mi_segment_queue_t  small_free;   // queue of segments with free small pages
   mi_segment_queue_t  medium_free;  // queue of segments with free medium pages
-  mi_page_queue_t     pages_reset;  // queue of freed pages that can be reset
+  mi_page_queue_t     pages_purge;  // queue of freed pages that are delay purged
   size_t              count;        // current number of segments;
   size_t              peak_count;   // peak number of segments
   size_t              current_size; // current size of all segments
