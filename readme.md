@@ -518,7 +518,7 @@ Adress sanitizer support is in its initial development -- please report any issu
 ### ETW
 
 Event tracing for Windows ([ETW]) provides a high performance way to capture all allocations though
-mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACE_ETW=ON` cmake option. 
+mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACK_ETW=ON` cmake option. 
 
 You can then capture an allocation trace using the Windows performance recorder (WPR), using the 
 `src/prim/windows/etw-mimalloc.wprp` profile. In an admin prompt, you can use:
