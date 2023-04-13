@@ -355,8 +355,8 @@ static void mi_pages_try_purge(mi_segments_tld_t* tld) {
   mi_page_t* page = pq->last;
   while (page != NULL && mi_page_purge_is_expired(page,now)) {
     mi_page_t* const prev = page->prev; // save previous field
+    mi_page_purge_remove(page, tld);    // remove from the list to maintain invariant for mi_page_purge
     mi_page_purge(_mi_page_segment(page), page, tld);
-    page->prev = page->next = NULL;
     page = prev;
   }
   // discard the reset pages from the queue
