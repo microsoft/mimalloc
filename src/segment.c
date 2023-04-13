@@ -11,7 +11,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memset
 #include <stdio.h>
 
-#define MI_USE_SEGMENT_CACHE 0
 #define MI_PAGE_HUGE_ALIGN   (256*1024)
 
 static void mi_segment_try_purge(mi_segment_t* segment, bool force, mi_stats_t* stats);
@@ -393,28 +392,11 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   // purge delayed decommits now? (no, leave it to the arena)
   // mi_segment_try_purge(segment,true,tld->stats);
   
-  // _mi_os_free(segment, mi_segment_size(segment), /*segment->memid,*/ tld->stats);
   const size_t size = mi_segment_size(segment);
-#if MI_USE_SEGMENT_CACHE  
-  if (size != MI_SEGMENT_SIZE || segment->mem_align_offset != 0 || segment->kind == MI_SEGMENT_HUGE // only push regular segments on the cache
-     || !_mi_segment_cache_push(segment, size, segment->memid, &segment->commit_mask, &segment->purge_mask, segment->mem_is_large, segment->mem_is_pinned, tld->os)) 
-#endif       
-  {
-    const size_t csize = _mi_commit_mask_committed_size(&segment->commit_mask, size);
-    /*
-    // if not all committed, an arena may decommit the whole area, but that double counts
-    // the already decommitted parts; adjust for that in the stats.
-    if (!mi_commit_mask_is_full(&segment->commit_mask)) {
-      const size_t csize = _mi_commit_mask_committed_size(&segment->commit_mask, size);
-      mi_assert_internal(size > csize);
-      if (size > csize) {
-        _mi_stat_increase(&_mi_stats_main.committed, size - csize); 
-      }
-    }
-    */
-    _mi_abandoned_await_readers();  // wait until safe to free
-    _mi_arena_free(segment, mi_segment_size(segment), segment->mem_alignment, segment->mem_align_offset, segment->memid, csize, tld->stats);
-  }
+  const size_t csize = _mi_commit_mask_committed_size(&segment->commit_mask, size);
+
+  _mi_abandoned_await_readers();  // wait until safe to free
+  _mi_arena_free(segment, mi_segment_size(segment), segment->mem_alignment, segment->mem_align_offset, segment->memid, csize, tld->stats);
 }
 
 // called by threads that are terminating 
@@ -819,6 +801,7 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
                                           bool* is_zero, bool* pcommit, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 
 {
+  MI_UNUSED(ppurge_mask);
   mi_memid_t memid;
   bool   mem_large = (!eager_delayed && (MI_SECURE == 0)); // only allow large OS pages once we are no longer lazy
   bool   is_pinned = false;
@@ -837,15 +820,6 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
   }
   const size_t segment_size = (*psegment_slices) * MI_SEGMENT_SLICE_SIZE;
   mi_segment_t* segment = NULL;
-
-  #if MI_USE_SEGMENT_CACHE  
-  // get from cache?
-  if (page_alignment == 0) {
-    segment = (mi_segment_t*)_mi_segment_cache_pop(segment_size, pcommit_mask, ppurge_mask, mem_large, &mem_large, &is_pinned, is_zero, req_arena_id, &memid, os_tld);
-  }
-  #else
-  MI_UNUSED(ppurge_mask);
-  #endif
   
   // get from OS
   if (segment==NULL) {
