@@ -232,7 +232,7 @@ mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
   return mi_heap_new_in_arena(_mi_arena_id_none());
 }
 
-bool _mi_heap_memid_is_suitable(mi_heap_t* heap, size_t memid) {
+bool _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid) {
   return _mi_arena_memid_is_suitable(memid, heap->arena_id);
 }
 

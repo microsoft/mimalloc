@@ -26,7 +26,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 typedef struct mi_cache_slot_s {
   void*               p;
-  size_t              memid;
+  mi_memid_t          memid;
   bool                is_pinned;
   mi_commit_mask_t    commit_mask;
   mi_commit_mask_t    purge_mask;
@@ -50,7 +50,7 @@ mi_decl_noinline static void* mi_segment_cache_pop_ex(
                               size_t size, mi_commit_mask_t* commit_mask, 
                               mi_commit_mask_t* purge_mask, bool large_allowed,
                               bool* large, bool* is_pinned, bool* is_zero, 
-                              mi_arena_id_t _req_arena_id, size_t* memid, mi_os_tld_t* tld)
+                              mi_arena_id_t _req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld)
 {
 #ifdef MI_CACHE_DISABLE
   return NULL;
@@ -107,7 +107,7 @@ mi_decl_noinline static void* mi_segment_cache_pop_ex(
 }
 
 
-mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* purge_mask, bool large_allowed, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t _req_arena_id, size_t* memid, mi_os_tld_t* tld)
+mi_decl_noinline void* _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* purge_mask, bool large_allowed, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t _req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld)
 {
   return mi_segment_cache_pop_ex(false, size, commit_mask, purge_mask, large_allowed, large, is_pinned, is_zero, _req_arena_id, memid, tld);
 }
@@ -195,7 +195,7 @@ void _mi_segment_cache_free_all(mi_os_tld_t* tld) {
   bool is_pinned;
   bool is_zero;
   bool is_large;
-  size_t memid;
+  mi_memid_t memid;
   const size_t size = MI_SEGMENT_SIZE;
   void* p;
   do {
@@ -210,7 +210,7 @@ void _mi_segment_cache_free_all(mi_os_tld_t* tld) {
   } while (p != NULL);  
 }
 
-mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* purge_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld)
+mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, mi_memid_t memid, const mi_commit_mask_t* commit_mask, const mi_commit_mask_t* purge_mask, bool is_large, bool is_pinned, mi_os_tld_t* tld)
 {
 #ifdef MI_CACHE_DISABLE
   return false;
@@ -227,7 +227,7 @@ mi_decl_noinline bool _mi_segment_cache_push(void* start, size_t size, size_t me
   // 
   // (note: we could also allow segments that are already fully decommitted but that never happens
   //  as the first slice is always committed (for the segment metadata))
-  if (!_mi_arena_is_os_allocated(memid) && is_pinned) return false;
+  if (!_mi_arena_memid_is_os_allocated(memid) && is_pinned) return false;
 
   // numa node determines start field
   int numa_node = _mi_os_numa_node(NULL);

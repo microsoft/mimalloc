@@ -813,16 +813,15 @@ static mi_page_t* mi_segments_page_find_and_allocate(size_t slice_count, mi_aren
    Segment allocation
 ----------------------------------------------------------- */
 
-static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment, bool eager_delay, mi_arena_id_t req_arena_id,
+static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment, bool eager_delayed, mi_arena_id_t req_arena_id,
                                           size_t* psegment_slices, size_t* ppre_size, size_t* pinfo_slices, 
                                           mi_commit_mask_t* pcommit_mask, mi_commit_mask_t* ppurge_mask,
                                           bool* is_zero, bool* pcommit, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 
 {
-  // Allocate the segment from the OS
-  bool mem_large = (!eager_delay && (MI_SECURE==0)); // only allow large OS pages once we are no longer lazy    
-  bool is_pinned = false;
-  size_t memid = 0;
+  mi_memid_t memid;
+  bool   mem_large = (!eager_delayed && (MI_SECURE == 0)); // only allow large OS pages once we are no longer lazy
+  bool   is_pinned = false;
   size_t align_offset = 0;
   size_t alignment = MI_SEGMENT_ALIGN;
   
@@ -1399,7 +1398,6 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
     if (mi_slice_is_used(slice)) {
       // in use: reclaim the page in our heap
       mi_page_t* page = mi_slice_to_page(slice);
-      mi_assert_internal(!page->is_reset);
       mi_assert_internal(page->is_committed);
       mi_assert_internal(mi_page_thread_free_flag(page)==MI_NEVER_DELAYED_FREE);
       mi_assert_internal(mi_page_heap(page) == NULL);

@@ -367,11 +367,27 @@ typedef mi_page_t  mi_slice_t;
 typedef int64_t    mi_msecs_t;
 
 
+// Memory can reside in arena's, direct OS allocated, or statically allocated. The memid keeps track of this.
+typedef enum mi_memkind_e {
+  MI_MEM_NONE,
+  MI_MEM_OS,
+  MI_MEM_STATIC,
+  MI_MEM_ARENA
+} mi_memkind_t;
+
+typedef struct mi_memid_s {
+  size_t        arena_idx;          
+  mi_arena_id_t arena_id;           
+  bool          arena_is_exclusive;
+  mi_memkind_t  memkind;
+} mi_memid_t;
+
+
 // Segments are large allocated memory blocks (8mb on 64 bit) from
 // the OS. Inside segments we allocated fixed size _pages_ that
 // contain blocks.
 typedef struct mi_segment_s {
-  size_t            memid;              // memory id for arena allocation
+  mi_memid_t        memid;              // memory id for arena allocation
   bool              mem_is_pinned;      // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)    
   bool              mem_is_large;       // in large/huge os pages?
   bool              mem_is_committed;   // `true` if the whole segment is eagerly committed
