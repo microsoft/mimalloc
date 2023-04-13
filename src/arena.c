@@ -194,7 +194,7 @@ static void* mi_arena_static_zalloc(size_t size, size_t alignment, mi_memid_t* m
   return p;
 }
 
-void* _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* stats) {
+static void* mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* stats) {
   *memid = mi_arena_memid_none();
 
   // try static
@@ -216,7 +216,7 @@ void* _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* stats) {
   return NULL;
 }
 
-void _mi_arena_meta_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats) {
+static void mi_arena_meta_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats) {
   if (memid.memkind == MI_MEM_OS) {
     _mi_os_free(p, size, stats);
   }
@@ -717,7 +717,7 @@ static void mi_arenas_destroy(void) {
         else {
           _mi_os_free(arena->start, mi_arena_size(arena), &_mi_stats_main); 
         }
-        _mi_arena_meta_free(arena, arena->meta_size, arena->meta_memid, &_mi_stats_main);        
+        mi_arena_meta_free(arena, arena->meta_size, arena->meta_memid, &_mi_stats_main);        
       }
       else {
         new_max_arena = i;
@@ -789,7 +789,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_committed,
   const size_t bitmaps = (allow_decommit ? 4 : 2);
   const size_t asize  = sizeof(mi_arena_t) + (bitmaps*fields*sizeof(mi_bitmap_field_t));
   mi_memid_t meta_memid;
-  mi_arena_t* arena   = (mi_arena_t*)_mi_arena_meta_zalloc(asize, &meta_memid, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
+  mi_arena_t* arena   = (mi_arena_t*)mi_arena_meta_zalloc(asize, &meta_memid, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
   if (arena == NULL) return false;
   
   // already zero'd due to os_alloc

@@ -121,8 +121,6 @@ void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_o
 bool       _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id);
 void       _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats);
 bool       _mi_arena_contains(const void* p);
-void*      _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);
-void       _mi_arena_meta_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats);
 
 // "segment-map.c"
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
