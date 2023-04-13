@@ -115,11 +115,12 @@ void       _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats);
 
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
-void       _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t memid, size_t committed, mi_stats_t* stats);
-void*      _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
-void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld);
-bool       _mi_arena_memid_is_suitable(size_t arena_memid, mi_arena_id_t request_arena_id);
-bool       _mi_arena_is_os_allocated(size_t arena_memid);
+void       _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset, mi_memid_t memid, size_t committed, mi_stats_t* stats);
+void*      _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld);
+void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld);
+bool       _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id);
+bool       _mi_arena_memid_is_os_allocated(mi_memid_t memid);
+bool       _mi_arena_memid_is_static_allocated(mi_memid_t memid);
 void       _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats);
 bool       _mi_arena_contains(const void* p);
 
@@ -170,7 +171,7 @@ void       _mi_heap_destroy_pages(mi_heap_t* heap);
 void       _mi_heap_collect_abandon(mi_heap_t* heap);
 void       _mi_heap_set_default_direct(mi_heap_t* heap);
 void       _mi_heap_destroy_all(void);
-bool       _mi_heap_memid_is_suitable(mi_heap_t* heap, size_t memid);
+bool       _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);

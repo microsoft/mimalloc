@@ -70,7 +70,6 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_committed,
 
 /* -----------------------------------------------------------
   Arena id's
-  0 is used for non-arena's (like OS memory)
   id = arena_index + 1
 ----------------------------------------------------------- */
 
@@ -80,10 +79,7 @@ static size_t mi_arena_id_index(mi_arena_id_t id) {
 
 static mi_arena_id_t mi_arena_id_create(size_t arena_index) {
   mi_assert_internal(arena_index < MI_MAX_ARENAS);
-  mi_assert_internal(MI_MAX_ARENAS <= 126);
-  int id = (int)arena_index + 1;
-  mi_assert_internal(id >= 1 && id <= 127);
-  return id;
+  return (int)arena_index + 1;
 }
 
 mi_arena_id_t _mi_arena_id_none(void) {
@@ -95,36 +91,67 @@ static bool mi_arena_id_is_suitable(mi_arena_id_t arena_id, bool arena_is_exclus
           (arena_id == req_arena_id));
 }
 
-
 /* -----------------------------------------------------------
-  Arena allocations get a memory id where the lower 8 bits are
-  the arena id, and the upper bits the block index.
+  memory id's
 ----------------------------------------------------------- */
 
-// Use `0` as a special id for direct OS allocated memory.
-#define MI_MEMID_OS   0
-
-static size_t mi_arena_memid_create(mi_arena_id_t id, bool exclusive, mi_bitmap_index_t bitmap_index) {
-  mi_assert_internal(((bitmap_index << 8) >> 8) == bitmap_index); // no overflow?
-  mi_assert_internal(id >= 0 && id <= 0x7F);
-  return ((bitmap_index << 8) | ((uint8_t)id & 0x7F) | (exclusive ? 0x80 : 0));
+static mi_memid_t mi_arena_memid_none(void) {
+  mi_memid_t memid;
+  memid.memkind = MI_MEM_NONE;
+  memid.arena_id = 0;
+  memid.arena_idx = 0;
+  memid.arena_is_exclusive = false;
+  return memid;
 }
 
-static bool mi_arena_memid_indices(size_t arena_memid, size_t* arena_index, mi_bitmap_index_t* bitmap_index) {
-  *bitmap_index = (arena_memid >> 8);
-  mi_arena_id_t id = (int)(arena_memid & 0x7F);
-  *arena_index = mi_arena_id_index(id);
-  return ((arena_memid & 0x80) != 0);
+static mi_memid_t mi_arena_memid_os(void) {
+  mi_memid_t memid = mi_arena_memid_none();
+  memid.memkind = MI_MEM_OS;
+  return memid;
 }
 
-bool _mi_arena_memid_is_suitable(size_t arena_memid, mi_arena_id_t request_arena_id) {
-  mi_arena_id_t id = (int)(arena_memid & 0x7F);
-  bool exclusive = ((arena_memid & 0x80) != 0);
-  return mi_arena_id_is_suitable(id, exclusive, request_arena_id);
+/*
+static mi_memid_t mi_arena_memid_static(void) {
+  mi_memid_t memid = mi_arena_memid_none();
+  memid.memkind = MI_MEM_STATIC;
+  return memid;
+}
+*/
+
+bool _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id) {
+  // note: works also for OS and STATIC memory with a zero arena_id.
+  return mi_arena_id_is_suitable(memid.arena_id, memid.arena_is_exclusive, request_arena_id);
 }
 
-bool _mi_arena_is_os_allocated(size_t arena_memid) {
-  return (arena_memid == MI_MEMID_OS);
+bool _mi_arena_memid_is_os_allocated(mi_memid_t memid) {
+  return (memid.memkind == MI_MEM_OS);
+}
+
+bool _mi_arena_is_static_allocated(mi_memid_t memid) {
+  return (memid.memkind == MI_MEM_STATIC);
+}
+
+
+
+/* -----------------------------------------------------------
+  Arena allocations get a (currently) 16-bit memory id where the 
+  lower 8 bits are the arena id, and the upper bits the block index.
+----------------------------------------------------------- */
+
+static mi_memid_t mi_arena_memid_create(mi_arena_id_t id, bool is_exclusive, mi_bitmap_index_t bitmap_index) {
+  mi_memid_t memid;
+  memid.memkind = MI_MEM_ARENA;
+  memid.arena_id = id;
+  memid.arena_idx = bitmap_index;
+  memid.arena_is_exclusive = is_exclusive;
+  return memid;
+}
+
+static bool mi_arena_memid_indices(mi_memid_t memid, size_t* arena_index, mi_bitmap_index_t* bitmap_index) {
+  mi_assert_internal(memid.memkind == MI_MEM_ARENA);
+  *arena_index = mi_arena_id_index(memid.arena_id);
+  *bitmap_index = memid.arena_idx;
+  return memid.arena_is_exclusive;
 }
 
 static size_t mi_block_count_of_size(size_t size) {
@@ -163,7 +190,7 @@ static bool mi_arena_try_claim(mi_arena_t* arena, size_t blocks, mi_bitmap_index
 
 static mi_decl_noinline void* mi_arena_alloc_at(mi_arena_t* arena, size_t arena_index, size_t needed_bcount,
                                                    bool* commit, bool* large, bool* is_pinned, bool* is_zero, 
-                                                   mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld)
+                                                   mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld)
 {
   MI_UNUSED(arena_index);
   mi_assert_internal(mi_arena_id_index(arena->id) == arena_index);
@@ -214,7 +241,7 @@ static mi_decl_noinline void* mi_arena_alloc_at(mi_arena_t* arena, size_t arena_
 // allocate in a speficic arena
 static void* mi_arena_alloc_at_id(mi_arena_id_t arena_id, int numa_node, size_t size, size_t alignment, 
                                   bool* commit, bool* large, bool* is_pinned, bool* is_zero,
-                                  mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld ) 
+                                  mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld ) 
 {
   MI_UNUSED_RELEASE(alignment);
   mi_assert_internal(alignment <= MI_SEGMENT_ALIGN);
@@ -236,7 +263,7 @@ static void* mi_arena_alloc_at_id(mi_arena_id_t arena_id, int numa_node, size_t 
 // allocate from an arena with fallback to the OS
 static mi_decl_noinline void* mi_arenas_alloc(int numa_node, size_t size, size_t alignment, bool* commit, bool* large,
                                                 bool* is_pinned, bool* is_zero,
-                                                mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld )
+                                                mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld )
 {
   MI_UNUSED(alignment);
   mi_assert_internal(alignment <= MI_SEGMENT_ALIGN);
@@ -317,12 +344,13 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   return (mi_reserve_os_memory_ex(arena_reserve, arena_commit, allow_large, false /* exclusive */, arena_id) == 0);
 }    
 
+
 void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero,
-                              mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld)
+                              mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld)
 {
   mi_assert_internal(commit != NULL && is_pinned != NULL && is_zero != NULL && memid != NULL && tld != NULL);
   mi_assert_internal(size > 0);
-  *memid   = MI_MEMID_OS;
+  *memid = mi_arena_memid_none();
   *is_zero = false;
   *is_pinned = false;
 
@@ -350,13 +378,13 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
     return NULL;
   }
   
-  *memid   = MI_MEMID_OS;
+  *memid   = mi_arena_memid_os();
   void* p = _mi_os_alloc_aligned_offset(size, alignment, align_offset, *commit, large, is_zero, tld->stats);
   if (p != NULL) { *is_pinned = *large; }
   return p;
 }
 
-void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, size_t* memid, mi_os_tld_t* tld)
+void* _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld)
 {
   return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, 0, commit, large, is_pinned, is_zero, req_arena_id, memid, tld);
 }
@@ -538,7 +566,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all, mi_stats_t* stats )
   Arena free
 ----------------------------------------------------------- */
 
-void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset, size_t memid, size_t committed_size, mi_stats_t* stats) {
+void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset, mi_memid_t memid, size_t committed_size, mi_stats_t* stats) {
   mi_assert_internal(size > 0 && stats != NULL);
   mi_assert_internal(committed_size <= size);
   if (p==NULL) return;
@@ -546,7 +574,7 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
   const bool all_committed = (committed_size == size);
   
 
-  if (memid == MI_MEMID_OS) {
+  if (_mi_arena_memid_is_os_allocated(memid)) {
     // was a direct OS allocation, pass through
     if (!all_committed && committed_size > 0) {
       // if partially committed, adjust the committed stats

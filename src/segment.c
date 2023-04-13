@@ -513,7 +513,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
                                          size_t pre_size, size_t info_size,
                                          size_t* segment_size, bool* is_zero, bool* commit, mi_segments_tld_t* tld, mi_os_tld_t* tld_os)
 {
-  size_t memid;
+  mi_memid_t memid;
   bool   mem_large = (!eager_delayed && (MI_SECURE == 0)); // only allow large OS pages once we are no longer lazy
   bool   is_pinned = false;
   size_t align_offset = 0;

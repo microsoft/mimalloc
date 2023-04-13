@@ -319,12 +319,29 @@ typedef enum mi_page_kind_e {
   MI_PAGE_HUGE      // huge blocks (>512KiB) are put into a single page in a segment of the exact size (but still 2MiB aligned)
 } mi_page_kind_t;
 
+
+// Memory can reside in arena's, direct OS allocated, or statically allocated. The memid keeps track of this.
+typedef enum mi_memkind_e {
+  MI_MEM_NONE,
+  MI_MEM_OS,
+  MI_MEM_STATIC,
+  MI_MEM_ARENA
+} mi_memkind_t;
+
+typedef struct mi_memid_s {
+  size_t        arena_idx;          
+  mi_arena_id_t arena_id;           
+  bool          arena_is_exclusive;
+  mi_memkind_t  memkind;
+} mi_memid_t;
+
+
 // Segments are large allocated memory blocks (2MiB on 64 bit) from
 // the OS. Inside segments we allocated fixed size _pages_ that
 // contain blocks.
 typedef struct mi_segment_s {
   // memory fields
-  size_t               memid;            // id for the os-level memory manager
+  mi_memid_t           memid;            // id for the os-level memory manager
   bool                 mem_is_pinned;    // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)
   bool                 mem_is_large;     // `true` if the memory is in OS large or huge pages. (`is_pinned` will be true)
   bool                 mem_is_committed; // `true` if the whole segment is eagerly committed
