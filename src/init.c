@@ -177,6 +177,7 @@ mi_heap_t* _mi_heap_main_get(void) {
 typedef struct mi_thread_data_s {
   mi_heap_t  heap;  // must come first due to cast in `_mi_heap_done`
   mi_tld_t   tld;
+  mi_memid_t memid;
 } mi_thread_data_t;
 
 
@@ -188,27 +189,34 @@ typedef struct mi_thread_data_s {
 #define TD_CACHE_SIZE (8)
 static _Atomic(mi_thread_data_t*) td_cache[TD_CACHE_SIZE];
 
-static mi_thread_data_t* mi_thread_data_alloc(void) {
+static mi_thread_data_t* mi_thread_data_zalloc(void) {
   // try to find thread metadata in the cache
   mi_thread_data_t* td;
   for (int i = 0; i < TD_CACHE_SIZE; i++) {
     td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
     if (td != NULL) {
+      // found cached allocation, try use it
       td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL);
       if (td != NULL) {
+        _mi_memzero(td, sizeof(*td));
         return td;
       }
     }
   }
-  // if that fails, allocate directly from the OS
-  td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), NULL, &_mi_stats_main);
+
+  // if that fails, allocate as meta data
+  mi_memid_t memid;
+  td = (mi_thread_data_t*)_mi_arena_meta_zalloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
   if (td == NULL) {
     // if this fails, try once more. (issue #257)
-    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), NULL, &_mi_stats_main);
+    td = (mi_thread_data_t*)_mi_arena_meta_zalloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
     if (td == NULL) {
       // really out of memory
       _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
     }
+  }
+  if (td != NULL) {
+    td->memid = memid;
   }
   return td;
 }
@@ -225,7 +233,7 @@ static void mi_thread_data_free( mi_thread_data_t* tdfree ) {
     }
   }
   // if that fails, just free it directly
-  _mi_os_free(tdfree, sizeof(mi_thread_data_t), &_mi_stats_main);
+  _mi_arena_meta_free(tdfree, sizeof(mi_thread_data_t), tdfree->memid,  &_mi_stats_main);
 }
 
 static void mi_thread_data_collect(void) {
@@ -253,10 +261,9 @@ static bool _mi_heap_init(void) {
   }
   else {
     // use `_mi_os_alloc` to allocate directly from the OS
-    mi_thread_data_t* td = mi_thread_data_alloc();
+    mi_thread_data_t* td = mi_thread_data_zalloc();
     if (td == NULL) return false;
 
-    // OS allocated so already zero initialized
     mi_tld_t*  tld = &td->tld;
     mi_heap_t* heap = &td->heap;
     _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(*heap));

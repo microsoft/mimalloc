@@ -47,6 +47,7 @@ typedef struct mi_arena_s {
   size_t   block_count;                   // size of the area in arena blocks (of `MI_ARENA_BLOCK_SIZE`)
   size_t   field_count;                   // number of bitmap fields (where `field_count * MI_BITMAP_FIELD_BITS >= block_count`)
   size_t   meta_size;                     // size of the arena structure itself including the bitmaps
+  mi_memid_t meta_memid;                  // memid of the arena structure itself (OS or static allocation)
   int      numa_node;                     // associated NUMA node
   bool     is_zero_init;                  // is the arena zero initialized?
   bool     allow_decommit;                // is decommit allowed? if true, is_large should be false and blocks_committed != NULL
@@ -110,27 +111,17 @@ static mi_memid_t mi_arena_memid_os(void) {
   return memid;
 }
 
-/*
 static mi_memid_t mi_arena_memid_static(void) {
   mi_memid_t memid = mi_arena_memid_none();
   memid.memkind = MI_MEM_STATIC;
   return memid;
 }
-*/
+
 
 bool _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id) {
   // note: works also for OS and STATIC memory with a zero arena_id.
   return mi_arena_id_is_suitable(memid.arena_id, memid.arena_is_exclusive, request_arena_id);
 }
-
-bool _mi_arena_memid_is_os_allocated(mi_memid_t memid) {
-  return (memid.memkind == MI_MEM_OS);
-}
-
-bool _mi_arena_is_static_allocated(mi_memid_t memid) {
-  return (memid.memkind == MI_MEM_STATIC);
-}
-
 
 
 /* -----------------------------------------------------------
@@ -166,6 +157,70 @@ static size_t mi_arena_size(mi_arena_t* arena) {
   return mi_arena_block_size(arena->block_count);
 }
 
+
+/* -----------------------------------------------------------
+  Special static area for mimalloc internal structures
+  to avoid OS calls (for example, for the arena and thread
+  metadata)
+----------------------------------------------------------- */
+
+#define MI_ARENA_STATIC_MAX  (MI_INTPTR_SIZE*8*MI_KiB)  // 64 KiB on 64-bit
+
+static uint8_t mi_arena_static[MI_ARENA_STATIC_MAX];
+static _Atomic(size_t) mi_arena_static_top;
+
+static void* mi_arena_static_zalloc(size_t size, size_t alignment, mi_memid_t* memid) {
+  *memid = mi_arena_memid_static();
+  if (size == 0 || size > MI_ARENA_STATIC_MAX) return NULL;
+  if (mi_atomic_load_relaxed(&mi_arena_static_top) >= MI_ARENA_STATIC_MAX) return NULL;
+
+  // try to claim space
+  if (alignment == 0) { alignment = 1; }
+  const size_t oversize = size + alignment - 1;
+  if (oversize > MI_ARENA_STATIC_MAX) return NULL;
+  const size_t oldtop = mi_atomic_add_acq_rel(&mi_arena_static_top, oversize);
+  size_t top = oldtop + oversize;
+  if (top > MI_ARENA_STATIC_MAX) {
+    // try to roll back, ok if this fails
+    mi_atomic_cas_strong_acq_rel(&mi_arena_static_top, &top, oldtop);
+    return NULL;
+  }
+
+  // success
+  *memid = mi_arena_memid_static();
+  const size_t start = _mi_align_up(oldtop, alignment);
+  uint8_t* const p = &mi_arena_static[start];
+  _mi_memzero(p, size);
+  return p;
+}
+
+void* _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* stats) {
+  *memid = mi_arena_memid_none();
+
+  // try static
+  void* p = mi_arena_static_zalloc(size, MI_ALIGNMENT_MAX, memid);
+  if (p != NULL) {
+    *memid = mi_arena_memid_static();
+    return p;
+  }
+
+  // or fall back to the OS
+  bool is_zero = false;
+  p = _mi_os_alloc(size, &is_zero, stats);
+  if (p != NULL) {
+    *memid = mi_arena_memid_os();
+    if (!is_zero) { _mi_memzero(p, size); }
+    return p;
+  }
+
+  return NULL;
+}
+
+void _mi_arena_meta_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats) {
+  if (memid.memkind == MI_MEM_OS) {
+    _mi_os_free(p, size, stats);
+  }
+}
 
 
 /* -----------------------------------------------------------
@@ -573,8 +628,10 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
   if (size==0) return;
   const bool all_committed = (committed_size == size);
   
-
-  if (_mi_arena_memid_is_os_allocated(memid)) {
+  if (memid.memkind == MI_MEM_STATIC) {
+    // nothing to do
+  }
+  else if (memid.memkind == MI_MEM_OS) {
     // was a direct OS allocation, pass through
     if (!all_committed && committed_size > 0) {
       // if partially committed, adjust the committed stats
@@ -660,7 +717,7 @@ static void mi_arenas_destroy(void) {
         else {
           _mi_os_free(arena->start, mi_arena_size(arena), &_mi_stats_main); 
         }
-        _mi_os_free(arena, arena->meta_size, &_mi_stats_main);
+        _mi_arena_meta_free(arena, arena->meta_size, arena->meta_memid, &_mi_stats_main);        
       }
       else {
         new_max_arena = i;
@@ -731,16 +788,17 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_committed,
   const size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);
   const size_t bitmaps = (allow_decommit ? 4 : 2);
   const size_t asize  = sizeof(mi_arena_t) + (bitmaps*fields*sizeof(mi_bitmap_field_t));
-  mi_arena_t* arena   = (mi_arena_t*)_mi_os_alloc(asize, NULL, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
+  mi_memid_t meta_memid;
+  mi_arena_t* arena   = (mi_arena_t*)_mi_arena_meta_zalloc(asize, &meta_memid, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
   if (arena == NULL) return false;
-  _mi_memzero(arena, asize);
-
+  
   // already zero'd due to os_alloc
   // _mi_memzero(arena, asize);
   arena->id = _mi_arena_id_none();
   arena->exclusive = exclusive;
   arena->owned = owned;
   arena->meta_size = asize;
+  arena->meta_memid = meta_memid;
   arena->block_count = bcount;
   arena->field_count = fields;
   arena->start = (uint8_t*)start;
