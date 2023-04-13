@@ -217,32 +217,34 @@ static _Atomic(mi_thread_data_t*) td_cache[TD_CACHE_SIZE];
 
 static mi_thread_data_t* mi_thread_data_zalloc(void) {
   // try to find thread metadata in the cache
-  mi_thread_data_t* td;
+  bool is_zero = false;
+  mi_thread_data_t* td = NULL;
   for (int i = 0; i < TD_CACHE_SIZE; i++) {
     td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
     if (td != NULL) {
       // found cached allocation, try use it
       td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL);
       if (td != NULL) {
-        _mi_memzero(td, sizeof(*td));
-        return td;
+        break;
       }
     }
   }
 
   // if that fails, allocate as meta data
-  mi_memid_t memid;
-  td = (mi_thread_data_t*)_mi_arena_meta_zalloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
   if (td == NULL) {
-    // if this fails, try once more. (issue #257)
-    td = (mi_thread_data_t*)_mi_arena_meta_zalloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
+    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &is_zero, &_mi_stats_main);
     if (td == NULL) {
-      // really out of memory
-      _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
+      // if this fails, try once more. (issue #257)
+      td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &is_zero, &_mi_stats_main);
+      if (td == NULL) {
+        // really out of memory
+        _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
+      }
     }
   }
-  if (td != NULL) {
-    td->memid = memid;
+  
+  if (td != NULL && !is_zero) {
+    _mi_memzero(td, sizeof(*td));
   }
   return td;
 }
@@ -259,7 +261,7 @@ static void mi_thread_data_free( mi_thread_data_t* tdfree ) {
     }
   }
   // if that fails, just free it directly
-  _mi_arena_meta_free(tdfree, sizeof(mi_thread_data_t), tdfree->memid,  &_mi_stats_main);
+  _mi_os_free(tdfree, sizeof(mi_thread_data_t), &_mi_stats_main);
 }
 
 static void mi_thread_data_collect(void) {

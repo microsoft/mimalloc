@@ -123,8 +123,6 @@ bool       _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_a
 bool       _mi_arena_memid_is_os_allocated(mi_memid_t memid);
 void       _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats);
 bool       _mi_arena_contains(const void* p);
-void*      _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);
-void       _mi_arena_meta_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats);
 
 // "segment-cache.c"
 void*      _mi_segment_cache_pop(size_t size, mi_commit_mask_t* commit_mask, mi_commit_mask_t* purge_mask, bool large_allowed, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld);
