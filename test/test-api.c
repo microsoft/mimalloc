@@ -286,7 +286,7 @@ int main(void) {
 // Larger test functions
 // ---------------------------------------------------
 
-bool test_heap1() {
+bool test_heap1(void) {
   mi_heap_t* heap = mi_heap_new();
   int* p1 = mi_heap_malloc_tp(heap,int);
   int* p2 = mi_heap_malloc_tp(heap,int);
@@ -295,7 +295,7 @@ bool test_heap1() {
   return true;
 }
 
-bool test_heap2() {
+bool test_heap2(void) {
   mi_heap_t* heap = mi_heap_new();
   int* p1 = mi_heap_malloc_tp(heap,int);
   int* p2 = mi_heap_malloc_tp(heap,int);
@@ -306,7 +306,7 @@ bool test_heap2() {
   return true;
 }
 
-bool test_stl_allocator1() {
+bool test_stl_allocator1(void) {
 #ifdef __cplusplus
   std::vector<int, mi_stl_allocator<int> > vec;
   vec.push_back(1);
@@ -319,7 +319,7 @@ bool test_stl_allocator1() {
 
 struct some_struct  { int i; int j; double z; };
 
-bool test_stl_allocator2() {
+bool test_stl_allocator2(void) {
 #ifdef __cplusplus
   std::vector<some_struct, mi_stl_allocator<some_struct> > vec;
   vec.push_back(some_struct());
