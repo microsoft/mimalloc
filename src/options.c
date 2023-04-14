@@ -241,7 +241,7 @@ void mi_register_output(mi_output_fun* out, void* arg) mi_attr_noexcept {
 }
 
 // add stderr to the delayed output after the module is loaded
-static void mi_add_stderr_output() {
+static void mi_add_stderr_output(void) {
   mi_assert_internal(mi_out_default == NULL);
   mi_out_buf_flush(&mi_out_stderr, false, NULL); // flush current contents to stderr
   mi_out_default = &mi_out_buf_stderr;           // and add stderr to the delayed output
