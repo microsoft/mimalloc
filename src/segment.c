@@ -842,7 +842,7 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
 
   mi_track_mem_undefined(segment, (*pinfo_slices) * MI_SEGMENT_SLICE_SIZE); // todo: should not be necessary?
   segment->memid = memid;
-  segment->allow_decommit = !memid.is_pinned && !memid.is_large;
+  segment->allow_decommit = !memid.is_pinned;
   segment->allow_purge = segment->allow_decommit && mi_option_is_enabled(mi_option_allow_purge);
   segment->segment_size = segment_size;
   segment->commit_mask = commit_mask;
