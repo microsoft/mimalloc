@@ -201,7 +201,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
       // and protect the last (or only) page too
       mi_assert_internal(MI_SECURE <= 1 || segment->page_kind >= MI_PAGE_LARGE);
       uint8_t* start = (uint8_t*)segment + segment->segment_size - os_psize;
-      if (protect && !segment->mem_is_committed) {
+      if (protect && !segment->memid.was_committed) {
         if (protect) {
           // ensure secure page is committed
           if (_mi_os_commit(start, os_psize, NULL, tld->stats)) {  // if this fails that is ok (as it is an unaccessible page)
@@ -331,7 +331,7 @@ static void mi_page_purge_remove(mi_page_t* page, mi_segments_tld_t* tld) {
 }
 
 static void mi_segment_remove_all_purges(mi_segment_t* segment, bool force_purge, mi_segments_tld_t* tld) {
-  if (segment->mem_is_pinned) return; // never reset in huge OS pages
+  if (segment->memid.is_pinned) return; // never reset in huge OS pages
   for (size_t i = 0; i < segment->capacity; i++) {
     mi_page_t* page = &segment->pages[i];
     if (!page->segment_in_use) {
@@ -474,23 +474,23 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   _mi_segment_map_freed_at(segment);
   mi_segments_track_size(-((long)segment_size),tld);
   if (MI_SECURE != 0) {
-    mi_assert_internal(!segment->mem_is_pinned);
+    mi_assert_internal(!segment->memid.is_pinned);
     mi_segment_protect(segment, false, tld->os); // ensure no more guard pages are set
   }
 
   bool fully_committed = true;
-  size_t committed = 0;
+  size_t committed_size = 0;
   const size_t page_size = mi_segment_raw_page_size(segment);
   for (size_t i = 0; i < segment->capacity; i++) {
     mi_page_t* page = &segment->pages[i];
-    if (page->is_committed)  { committed += page_size;  }
+    if (page->is_committed)  { committed_size += page_size;  }
     if (!page->is_committed) { fully_committed = false; }    
   }
   MI_UNUSED(fully_committed);
-  mi_assert_internal((fully_committed && committed == segment_size) || (!fully_committed && committed < segment_size));
+  mi_assert_internal((fully_committed && committed_size == segment_size) || (!fully_committed && committed_size < segment_size));
     
   _mi_abandoned_await_readers(); // prevent ABA issue if concurrent readers try to access our memory (that might be purged)
-  _mi_arena_free(segment, segment_size, segment->mem_alignment, segment->mem_align_offset, segment->memid, committed, tld->stats);
+  _mi_arena_free(segment, segment_size, committed_size, segment->memid, tld->stats);
 }
 
 // called by threads that are terminating to free cached segments
@@ -509,47 +509,42 @@ void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
    Segment allocation
 ----------------------------------------------------------- */
 
-static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignment, mi_arena_id_t req_arena_id, 
-                                         size_t pre_size, size_t info_size,
-                                         size_t* segment_size, bool* is_zero, bool* commit, mi_segments_tld_t* tld, mi_os_tld_t* tld_os)
+static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignment, mi_arena_id_t req_arena_id,
+                                         size_t pre_size, size_t info_size, bool commit, size_t segment_size,
+                                         mi_segments_tld_t* tld, mi_os_tld_t* tld_os)
 {
   mi_memid_t memid;
-  bool   mem_large = (!eager_delayed && (MI_SECURE == 0)); // only allow large OS pages once we are no longer lazy
-  bool   is_pinned = false;
+  bool   allow_large = (!eager_delayed && (MI_SECURE == 0)); // only allow large OS pages once we are no longer lazy
   size_t align_offset = 0;
   size_t alignment = MI_SEGMENT_SIZE;
   if (page_alignment > 0) {
     alignment = page_alignment;
     align_offset = _mi_align_up(pre_size, MI_SEGMENT_SIZE);
-    *segment_size = *segment_size + (align_offset - pre_size);
+    segment_size = segment_size + (align_offset - pre_size);  // adjust the segment size
   }
 
-  // mi_segment_t* segment = (mi_segment_t*)_mi_mem_alloc_aligned(*segment_size, alignment, align_offset, commit, &mem_large, &is_pinned, is_zero, &memid, tld_os);
-  mi_segment_t* segment = (mi_segment_t*)_mi_arena_alloc_aligned(*segment_size, alignment, align_offset, commit, &mem_large, &is_pinned, is_zero, req_arena_id, &memid, tld_os);
-  if (segment == NULL) return NULL;  // failed to allocate
-  if (!(*commit)) {
+  mi_segment_t* segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, alignment, align_offset, commit, allow_large, req_arena_id, &memid, tld_os);
+  if (segment == NULL) {
+    return NULL;  // failed to allocate
+  }
+
+  if (!memid.was_committed) {
     // ensure the initial info is committed
-    mi_assert_internal(!mem_large && !is_pinned);
-    bool commit_zero = false;
-    bool ok = _mi_os_commit(segment, pre_size, &commit_zero, tld_os->stats);
-    if (commit_zero) { *is_zero = true; }
+    mi_assert_internal(!memid.is_large && !memid.is_pinned);
+    bool ok = _mi_os_commit(segment, pre_size, NULL, tld_os->stats);
     if (!ok) {
       // commit failed; we cannot touch the memory: free the segment directly and return `NULL`
-      _mi_arena_free(segment, *segment_size, alignment, align_offset, memid, false, tld_os->stats);
+      _mi_arena_free(segment, segment_size, 0, memid, tld_os->stats);
       return NULL;
     }
   }
 
-  mi_track_mem_undefined(segment, info_size);   MI_UNUSED(info_size);
+  mi_track_mem_undefined(segment, info_size); MI_UNUSED(info_size);
   segment->memid = memid;
-  segment->mem_is_pinned = is_pinned;
-  segment->mem_is_large = mem_large;
-  segment->mem_is_committed = commit;
-  segment->mem_alignment = alignment;
-  segment->mem_align_offset = align_offset;
-  segment->allow_decommit = !segment->mem_is_pinned && !segment->mem_is_large;
+  segment->allow_decommit = !memid.is_pinned && !memid.is_large;
   segment->allow_purge = segment->allow_decommit && mi_option_is_enabled(mi_option_allow_purge);
-  mi_segments_track_size((long)(*segment_size), tld);
+  segment->segment_size = segment_size;
+  mi_segments_track_size((long)(segment_size), tld);
   _mi_segment_map_allocated_at(segment);
   return segment;
 }
@@ -576,8 +571,8 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   }
   size_t info_size;
   size_t pre_size;
-  size_t segment_size = mi_segment_calculate_sizes(capacity, required, &pre_size, &info_size);
-  mi_assert_internal(segment_size >= required);
+  const size_t init_segment_size = mi_segment_calculate_sizes(capacity, required, &pre_size, &info_size);
+  mi_assert_internal(init_segment_size >= required);
 
   // Initialize parameters
   const bool eager_delayed = (page_kind <= MI_PAGE_MEDIUM &&          // don't delay for large objects
@@ -585,39 +580,36 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
                               _mi_current_thread_count() > 1 &&       // do not delay for the first N threads
                               tld->peak_count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager  = !eager_delayed && mi_option_is_enabled(mi_option_eager_commit);
-  bool commit = eager; // || (page_kind >= MI_PAGE_LARGE);
-  bool is_zero = false;
-
+  const bool init_commit = eager; // || (page_kind >= MI_PAGE_LARGE);
+  
   // Allocate the segment from the OS (segment_size can change due to alignment)
-  mi_segment_t* segment = mi_segment_os_alloc(eager_delayed, page_alignment, req_arena_id, pre_size, info_size, &segment_size, &is_zero, &commit, tld, os_tld);
+  mi_segment_t* segment = mi_segment_os_alloc(eager_delayed, page_alignment, req_arena_id, pre_size, info_size, init_commit, init_segment_size, tld, os_tld);
   if (segment == NULL) return NULL;
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
-  mi_assert_internal(segment->mem_is_pinned ? segment->mem_is_committed : true);
+  mi_assert_internal(segment->memid.is_pinned ? segment->memid.was_committed : true);
 
   mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);  // tsan
 
   // zero the segment info (but not the `mem` fields)
   ptrdiff_t ofs = offsetof(mi_segment_t, next);
-  memset((uint8_t*)segment + ofs, 0, info_size - ofs);
+  _mi_memzero((uint8_t*)segment + ofs, info_size - ofs);
 
   // initialize pages info
   for (size_t i = 0; i < capacity; i++) {
     mi_assert_internal(i <= 255);
     segment->pages[i].segment_idx = (uint8_t)i;
-    segment->pages[i].is_committed = commit;
-    segment->pages[i].is_zero_init = is_zero;
+    segment->pages[i].is_committed = segment->memid.was_committed;
+    segment->pages[i].is_zero_init = segment->memid.was_zero;
   }
 
   // initialize
   segment->page_kind  = page_kind;
   segment->capacity   = capacity;
   segment->page_shift = page_shift;
-  segment->segment_size = segment_size;
   segment->segment_info_size = pre_size;
   segment->thread_id  = _mi_thread_id();
   segment->cookie = _mi_ptr_cookie(segment);
-  // _mi_stat_increase(&tld->stats->page_committed, segment->segment_info_size);
-
+  
   // set protection
   mi_segment_protect(segment, true, tld->os);
 
@@ -626,7 +618,6 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
     mi_segment_insert_in_free_queue(segment, tld);
   }
 
-  //fprintf(stderr,"mimalloc: alloc segment at %p\n", (void*)segment);
   return segment;
 }
 
