@@ -369,16 +369,33 @@ typedef int64_t    mi_msecs_t;
 
 // Memory can reside in arena's, direct OS allocated, or statically allocated. The memid keeps track of this.
 typedef enum mi_memkind_e {
-  MI_MEM_NONE,
-  MI_MEM_OS,
-  MI_MEM_STATIC,
-  MI_MEM_ARENA
+  MI_MEM_NONE,      // not allocated
+  MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
+  MI_MEM_STATIC,    // allocated in a static area and should not be freed (for arena meta data for example)
+  MI_MEM_OS,        // allocated from the OS
+  MI_MEM_ARENA      // allocated from an arena (the usual case)
 } mi_memkind_t;
 
+typedef struct mi_memid_os_info {
+  size_t        alignment;      // allocated with the given alignment
+  size_t        align_offset;   // the offset that was aligned (used only for huge aligned pages)
+} mi_memid_os_info_t;
+
+typedef struct mi_memid_arena_info {
+  size_t        block_index;    // index in the arena
+  mi_arena_id_t id;             // arena id (>= 1)
+  bool          is_exclusive;   // the arena can only be used for specific arena allocations
+} mi_memid_arena_info_t;
+
 typedef struct mi_memid_s {
-  size_t        arena_idx;          
-  mi_arena_id_t arena_id;           
-  bool          arena_is_exclusive;
+  union {
+    mi_memid_os_info_t    os;   // only used for MI_MEM_OS
+    mi_memid_arena_info_t arena;// only used for MI_MEM_ARENA
+  } mem;
+  bool          is_pinned;      // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large OS pages)
+  bool          is_large;       // `true` if the memory is in OS large (2MiB) or huge (1GiB) pages. (`is_pinned` will be true)
+  bool          was_committed;  // `true` if the memory was originally allocated as committed
+  bool          was_zero;       // `true` if the memory was originally zero initialized
   mi_memkind_t  memkind;
 } mi_memid_t;
 
@@ -387,15 +404,13 @@ typedef struct mi_memid_s {
 // the OS. Inside segments we allocated fixed size _pages_ that
 // contain blocks.
 typedef struct mi_segment_s {
+  // constant fields
   mi_memid_t        memid;              // memory id for arena allocation
-  bool              mem_is_pinned;      // `true` if we cannot decommit/reset/protect in this memory (i.e. when allocated using large OS pages)    
-  bool              mem_is_large;       // in large/huge os pages?
-  bool              mem_is_committed;   // `true` if the whole segment is eagerly committed
-  size_t            mem_alignment;      // page alignment for huge pages (only used for alignment > MI_ALIGNMENT_MAX)
-  size_t            mem_align_offset;   // offset for huge page alignment (only used for alignment > MI_ALIGNMENT_MAX)
-
   bool              allow_decommit;
   bool              allow_purge;
+  size_t            segment_size;
+
+  // segment fields
   mi_msecs_t        purge_expire;
   mi_commit_mask_t  purge_mask;
   mi_commit_mask_t  commit_mask;

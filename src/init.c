@@ -203,7 +203,6 @@ mi_heap_t* _mi_heap_main_get(void) {
 typedef struct mi_thread_data_s {
   mi_heap_t  heap;  // must come first due to cast in `_mi_heap_done`
   mi_tld_t   tld;
-  mi_memid_t memid;
 } mi_thread_data_t;
 
 
@@ -212,7 +211,7 @@ typedef struct mi_thread_data_s {
 // destroy many OS threads, this may causes too much overhead
 // per thread so we maintain a small cache of recently freed metadata.
 
-#define TD_CACHE_SIZE (8)
+#define TD_CACHE_SIZE (16)
 static _Atomic(mi_thread_data_t*) td_cache[TD_CACHE_SIZE];
 
 static mi_thread_data_t* mi_thread_data_zalloc(void) {
@@ -264,7 +263,7 @@ static void mi_thread_data_free( mi_thread_data_t* tdfree ) {
   _mi_os_free(tdfree, sizeof(mi_thread_data_t), &_mi_stats_main);
 }
 
-static void mi_thread_data_collect(void) {
+void _mi_thread_data_collect(void) {
   // free all thread metadata from the cache
   for (int i = 0; i < TD_CACHE_SIZE; i++) {
     mi_thread_data_t* td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
@@ -353,7 +352,6 @@ static bool _mi_heap_done(mi_heap_t* heap) {
     mi_thread_data_free((mi_thread_data_t*)heap);
   }
   else {
-    mi_thread_data_collect(); // free cached thread metadata
     #if 0
     // never free the main thread even in debug mode; if a dll is linked statically with mimalloc,
     // there may still be delete/free calls after the mi_fls_done is called. Issue #207
@@ -619,7 +617,7 @@ static void mi_cdecl mi_process_done(void) {
   _mi_prim_thread_done_auto_done();
   
   #ifndef MI_SKIP_COLLECT_ON_EXIT
-    #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)
+    #if (MI_DEBUG || !defined(MI_SHARED_LIB))
     // free all memory if possible on process exit. This is not needed for a stand-alone process
     // but should be done if mimalloc is statically linked into another shared library which
     // is repeatedly loaded/unloaded, see issue #281.
@@ -631,8 +629,9 @@ static void mi_cdecl mi_process_done(void) {
   // since after process_done there might still be other code running that calls `free` (like at_exit routines,
   // or C-runtime termination code.
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
-    _mi_heap_destroy_all();                          // forcefully release all memory held by all heaps (of this thread only!)
-    _mi_arena_collect(true /* destroy (owned) arenas */, true /* purge the rest */, &_mi_heap_main_get()->tld->stats);
+    mi_collect(true /* force */);
+    _mi_heap_unsafe_destroy_all();     // forcefully release all memory held by all heaps (of this thread only!)
+    _mi_arena_unsafe_destroy_all(& _mi_heap_main_get()->tld->stats);
   }
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {

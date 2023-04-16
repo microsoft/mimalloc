@@ -154,8 +154,8 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
-  // collect abandoned segments (in particular, decommit expired parts of segments in the abandoned segment list)
-  // note: forced decommit can be quite expensive if many threads are created/destroyed so we do not force on abandonment
+  // collect abandoned segments (in particular, purge expired parts of segments in the abandoned segment list)
+  // note: forced purge can be quite expensive if many threads are created/destroyed so we do not force on abandonment
   _mi_abandoned_collect(heap, collect == MI_FORCE /* force? */, &heap->tld->segments);
 
   // collect segment local caches
@@ -165,7 +165,8 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // collect regions on program-exit (or shared library unload)
   if (force && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
-    _mi_arena_collect(false /* destroy arenas */, true /* force purge */, &heap->tld->stats);
+    _mi_thread_data_collect();  // collect thread data cache
+    _mi_arena_collect(true /* force purge */, &heap->tld->stats);
   }
 }
 
@@ -361,7 +362,8 @@ void mi_heap_destroy(mi_heap_t* heap) {
   }
 }
 
-void _mi_heap_destroy_all(void) {
+// forcefully destroy all heaps in the current thread
+void _mi_heap_unsafe_destroy_all(void) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* curr = bheap->tld->heaps;
   while (curr != NULL) {
