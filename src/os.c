@@ -275,23 +275,19 @@ void* _mi_os_alloc(size_t size, bool* is_zero, mi_stats_t* tld_stats) {
   return p;
 }
 
-void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, bool* is_zero, mi_stats_t* tld_stats)
+void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* tld_stats)
 {
   MI_UNUSED(&_mi_os_get_aligned_hint); // suppress unused warnings
   MI_UNUSED(tld_stats);
   if (size == 0) return NULL;
   size = _mi_os_good_alloc_size(size);
   alignment = _mi_align_up(alignment, _mi_os_page_size());
-  bool allow_large = false;
-  if (large != NULL) {
-    allow_large = *large;
-    *large = false;
-  }
-  bool is_largex = false;
-  bool is_zerox = false;
-  void* p = mi_os_mem_alloc_aligned(size, alignment, commit, allow_large, &is_largex, &is_zerox, &_mi_stats_main /*tld->stats*/ );
-  if (large != NULL) { *large = is_largex; }
-  if (is_zero != NULL) { *is_zero = is_zerox; }
+  
+  bool os_is_large = false;
+  bool os_is_zero  = false;
+  void* p = mi_os_mem_alloc_aligned(size, alignment, commit, allow_large, &os_is_large, &os_is_zero, &_mi_stats_main /*tld->stats*/ );
+  if (is_large != NULL) { *is_large = os_is_large; }
+  if (is_zero != NULL)  { *is_zero = os_is_zero; }
   return p;
 }
 
@@ -303,20 +299,20 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* lar
   to use the actual start of the memory region.
 ----------------------------------------------------------- */
 
-void* _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t offset, bool commit, bool* large, bool* is_zero, mi_stats_t* tld_stats) {
+void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offset, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* tld_stats) {
   mi_assert(offset <= MI_SEGMENT_SIZE);
   mi_assert(offset <= size);
   mi_assert((alignment % _mi_os_page_size()) == 0);
   if (offset > MI_SEGMENT_SIZE) return NULL;
   if (offset == 0) {
     // regular aligned allocation
-    return _mi_os_alloc_aligned(size, alignment, commit, large, is_zero, tld_stats);
+    return _mi_os_alloc_aligned(size, alignment, commit, allow_large, is_large, is_zero, tld_stats);
   }
   else {
     // overallocate to align at an offset
     const size_t extra = _mi_align_up(offset, alignment) - offset;
     const size_t oversize = size + extra;
-    void* start = _mi_os_alloc_aligned(oversize, alignment, commit, large, is_zero, tld_stats);
+    void* start = _mi_os_alloc_aligned(oversize, alignment, commit, allow_large, is_large, is_zero, tld_stats);
     if (start == NULL) return NULL;
     void* p = (uint8_t*)start + extra;
     mi_assert(_mi_is_aligned((uint8_t*)p + offset, alignment));
@@ -328,7 +324,7 @@ void* _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t offset, 
   }
 }
 
-void _mi_os_free_aligned(void* p, size_t size, size_t alignment, size_t align_offset, bool was_committed, mi_stats_t* tld_stats) {
+void _mi_os_free_aligned_at_offset(void* p, size_t size, size_t alignment, size_t align_offset, bool was_committed, mi_stats_t* tld_stats) {
   mi_assert(align_offset <= MI_SEGMENT_SIZE);
   const size_t extra = _mi_align_up(align_offset, alignment) - align_offset;
   void* start = (uint8_t*)p - extra;

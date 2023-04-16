@@ -50,9 +50,9 @@ typedef struct mi_arena_s {
   mi_memid_t meta_memid;                  // memid of the arena structure itself (OS or static allocation)
   int      numa_node;                     // associated NUMA node
   bool     is_zero_init;                  // is the arena zero initialized?
-  bool     allow_decommit;                // is decommit allowed? if true, is_large should be false and blocks_committed != NULL
   bool     is_large;                      // large- or huge OS pages (always committed)
   bool     is_huge_alloc;                 // huge OS pages allocated by `_mi_os_alloc_huge_pages`
+  bool     allow_decommit;                // is decommit allowed? if true, is_large should be false and blocks_committed != NULL
   _Atomic(size_t) search_idx;             // optimization to start the search for free blocks
   _Atomic(mi_msecs_t) purge_expire;       // expiration time when blocks should be decommitted from `blocks_decommit`.  
   mi_bitmap_field_t* blocks_dirty;        // are the blocks potentially non-zero?
@@ -256,7 +256,6 @@ static mi_decl_noinline void* mi_arena_alloc_at(mi_arena_t* arena, size_t arena_
   // claimed it! 
   void* p = arena->start + mi_arena_block_size(mi_bitmap_index_bit(bitmap_index));
   *memid = mi_memid_create_arena(arena->id, arena->exclusive, bitmap_index);
-  memid->is_large = arena->is_large;
   memid->is_pinned = (arena->is_large || !arena->allow_decommit);
 
   // none of the claimed blocks should be scheduled for a decommit
@@ -434,13 +433,12 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
   }
    
   // finally, fall back to the OS
-  bool os_large = allow_large;
+  bool os_is_large = false;
   bool os_is_zero = false;
-  void* p = _mi_os_alloc_aligned_offset(size, alignment, align_offset, commit, &os_large, &os_is_zero, tld->stats);
+  void* p = _mi_os_alloc_aligned_at_offset(size, alignment, align_offset, commit, allow_large, &os_is_large, &os_is_zero, tld->stats);
   if (p != NULL) { 
     *memid = mi_memid_create_os(commit);
-    memid->is_large = os_large;
-    memid->is_pinned = os_large;
+    memid->is_pinned = os_is_large;
     memid->was_zero = os_is_zero;
     memid->mem.os.alignment = alignment;
     memid->mem.os.align_offset = align_offset;
@@ -644,7 +642,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
       _mi_stat_decrease(&stats->committed, committed_size);
     }
     if (memid.mem.os.align_offset != 0) {
-      _mi_os_free_aligned(p, size, memid.mem.os.alignment, memid.mem.os.align_offset, all_committed, stats);
+      _mi_os_free_aligned_at_offset(p, size, memid.mem.os.alignment, memid.mem.os.align_offset, all_committed, stats);
     }
     else {
       _mi_os_free(p, size, stats);
@@ -857,16 +855,16 @@ static int mi_reserve_os_memory_ex2(size_t size, bool commit, bool allow_large, 
 {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
   size = _mi_align_up(size, MI_ARENA_BLOCK_SIZE); // at least one block
-  bool large = allow_large;
-  bool is_zero;
-  void* start = _mi_os_alloc_aligned(size, MI_SEGMENT_ALIGN, commit, &large, &is_zero, &_mi_stats_main);
+  bool is_large = false;
+  bool is_zero = false;
+  void* start = _mi_os_alloc_aligned(size, MI_SEGMENT_ALIGN, commit, allow_large, &is_large, &is_zero, &_mi_stats_main);
   if (start==NULL) return ENOMEM;
-  if (!mi_manage_os_memory_ex2(start, size, (large || commit), large, false, is_zero, -1, exclusive, owned, arena_id)) {
+  if (!mi_manage_os_memory_ex2(start, size, (is_large || commit), is_large, false, is_zero, -1, exclusive, owned, arena_id)) {
     _mi_os_free_ex(start, size, commit, &_mi_stats_main);
     _mi_verbose_message("failed to reserve %zu k memory\n", _mi_divide_up(size,1024));
     return ENOMEM;
   }
-  _mi_verbose_message("reserved %zu KiB memory%s\n", _mi_divide_up(size,1024), large ? " (in large os pages)" : "");
+  _mi_verbose_message("reserved %zu KiB memory%s\n", _mi_divide_up(size,1024), is_large ? " (in large os pages)" : "");
   return 0;
 }
 

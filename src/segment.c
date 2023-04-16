@@ -530,7 +530,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
 
   if (!memid.was_committed) {
     // ensure the initial info is committed
-    mi_assert_internal(!memid.is_large && !memid.is_pinned);
+    mi_assert_internal(!memid.is_pinned);
     bool ok = _mi_os_commit(segment, pre_size, NULL, tld_os->stats);
     if (!ok) {
       // commit failed; we cannot touch the memory: free the segment directly and return `NULL`
@@ -541,7 +541,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
 
   mi_track_mem_undefined(segment, info_size); MI_UNUSED(info_size);
   segment->memid = memid;
-  segment->allow_decommit = !memid.is_pinned && !memid.is_large;
+  segment->allow_decommit = !memid.is_pinned;
   segment->allow_purge = segment->allow_decommit && mi_option_is_enabled(mi_option_allow_purge);
   segment->segment_size = segment_size;
   mi_segments_track_size((long)(segment_size), tld);

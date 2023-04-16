@@ -103,9 +103,9 @@ bool       _mi_os_unprotect(void* addr, size_t size);
 bool       _mi_os_purge(void* p, size_t size, mi_stats_t* stats);
 bool       _mi_os_purge_ex(void* p, size_t size, bool allow_reset, mi_stats_t* stats);
 
-void*      _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool* large, bool* is_zero, mi_stats_t* stats);
-void*      _mi_os_alloc_aligned_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool* large, bool* is_zero, mi_stats_t* tld_stats);
-void       _mi_os_free_aligned(void* p, size_t size, size_t alignment, size_t align_offset, bool was_committed, mi_stats_t* tld_stats);
+void*      _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* stats);
+void*      _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* tld_stats);
+void       _mi_os_free_aligned_at_offset(void* p, size_t size, size_t alignment, size_t align_offset, bool was_committed, mi_stats_t* tld_stats);
 void*      _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 bool       _mi_os_use_large_page(size_t size, size_t alignment);
 size_t     _mi_os_large_page_size(void);

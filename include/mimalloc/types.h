@@ -312,6 +312,10 @@ typedef struct mi_page_s {
 
 
 
+// ------------------------------------------------------
+// Mimalloc segments contain mimalloc pages
+// ------------------------------------------------------
+
 typedef enum mi_page_kind_e {
   MI_PAGE_SMALL,    // small blocks go into 64KiB pages inside a segment
   MI_PAGE_MEDIUM,   // medium blocks go into 512KiB pages inside a segment
@@ -346,7 +350,6 @@ typedef struct mi_memid_s {
     mi_memid_arena_info_t arena;// only used for MI_MEM_ARENA
   } mem;
   bool          is_pinned;      // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large OS pages)
-  bool          is_large;       // `true` if the memory is in OS large (2MiB) or huge (1GiB) pages. (`is_pinned` will be true)
   bool          was_committed;  // `true` if the memory was originally allocated as committed
   bool          was_zero;       // `true` if the memory was originally zero initialized
   mi_memkind_t  memkind;
