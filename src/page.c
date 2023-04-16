@@ -418,7 +418,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
 }
 
 #define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX
-#define MI_RETIRE_CYCLES      (8)
+#define MI_RETIRE_CYCLES      (16)
 
 // Retire a page with no more used blocks
 // Important to not retire too quickly though as new
