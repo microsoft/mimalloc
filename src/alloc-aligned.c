@@ -79,7 +79,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
     // for the tracker, on huge aligned allocations only from the start of the large block is defined
     mi_track_mem_undefined(aligned_p, size);
     if (zero) {
-      _mi_memzero(aligned_p, mi_usable_size(aligned_p));
+      _mi_memzero_aligned(aligned_p, mi_usable_size(aligned_p));
     }
   }
 
