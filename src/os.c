@@ -599,7 +599,7 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
 
 // free every huge page in a range individually (as we allocated per page)
 // note: needed with VirtualAlloc but could potentially be done in one go on mmap'd systems.
-void _mi_os_free_huge_pages(void* p, size_t size, mi_stats_t* stats) {
+void _mi_os_free_huge_os_pages(void* p, size_t size, mi_stats_t* stats) {
   if (p==NULL || size==0) return;
   uint8_t* base = (uint8_t*)p;
   while (size >= MI_HUGE_OS_PAGE_SIZE) {

@@ -96,22 +96,19 @@ static bool mi_arena_id_is_suitable(mi_arena_id_t arena_id, bool arena_is_exclus
   memory id's
 ----------------------------------------------------------- */
 
-static mi_memid_t mi_memid_none(void) {
-  mi_memid_t memid;
-  _mi_memzero(&memid, sizeof(memid));
-  memid.memkind = MI_MEM_NONE;
-  return memid;
-}
-
 static mi_memid_t mi_memid_create(mi_memkind_t memkind) {
-  mi_memid_t memid = mi_memid_none();
+  mi_memid_t memid;
+  _mi_memzero_var(memid);
   memid.memkind = memkind;
   return memid;
 }
 
+static mi_memid_t mi_memid_none(void) {
+  return mi_memid_create(MI_MEM_NONE);
+}
+
 static mi_memid_t mi_memid_create_os(bool committed) {
-  mi_memid_t memid = mi_memid_none();
-  memid.memkind = MI_MEM_OS;
+  mi_memid_t memid = mi_memid_create(MI_MEM_OS);
   memid.was_committed = committed;
   return memid;
 }
@@ -163,11 +160,10 @@ static bool mi_arena_memid_indices(mi_memid_t memid, size_t* arena_index, mi_bit
 
 /* -----------------------------------------------------------
   Special static area for mimalloc internal structures
-  to avoid OS calls (for example, for the arena and thread
-  metadata)
+  to avoid OS calls (for example, for the arena metadata)
 ----------------------------------------------------------- */
 
-#define MI_ARENA_STATIC_MAX  (MI_INTPTR_SIZE*8*MI_KiB)  // 64 KiB on 64-bit
+#define MI_ARENA_STATIC_MAX  (MI_INTPTR_SIZE*MI_KiB)  // 8 KiB on 64-bit
 
 static uint8_t mi_arena_static[MI_ARENA_STATIC_MAX];
 static _Atomic(size_t) mi_arena_static_top;
@@ -209,7 +205,7 @@ static void* mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* st
   p = _mi_os_alloc(size, &is_zero, stats);
   if (p != NULL) {
     *memid = mi_memid_create_os(true);
-    if (!is_zero) { _mi_memzero(p, size); }
+    if (!is_zero) { _mi_memzero_aligned(p, size); }
     return p;
   }
 
@@ -724,7 +720,7 @@ static void mi_arenas_unsafe_destroy(void) {
       if (arena->owned && arena->start != NULL) {
         mi_atomic_store_ptr_release(mi_arena_t, &mi_arenas[i], NULL);
         if (arena->is_huge_alloc) { 
-          _mi_os_free_huge_pages(arena->start, mi_arena_size(arena), &_mi_stats_main); 
+          _mi_os_free_huge_os_pages(arena->start, mi_arena_size(arena), &_mi_stats_main); 
         }
         else {
           _mi_os_free(arena->start, mi_arena_size(arena), &_mi_stats_main); 
@@ -938,7 +934,7 @@ int mi_reserve_huge_os_pages_at_ex(size_t pages, int numa_node, size_t timeout_m
   _mi_verbose_message("numa node %i: reserved %zu GiB huge pages (of the %zu GiB requested)\n", numa_node, pages_reserved, pages);
 
   if (!mi_manage_os_memory_ex2(p, hsize, true, true, true, is_zero, numa_node, exclusive, true /* owned */, arena_id)) {
-    _mi_os_free_huge_pages(p, hsize, &_mi_stats_main);
+    _mi_os_free_huge_os_pages(p, hsize, &_mi_stats_main);
     return ENOMEM;
   }
   return 0;
