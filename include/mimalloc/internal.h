@@ -80,10 +80,11 @@ extern mi_decl_cache_align mi_stats_t       _mi_stats_main;
 extern mi_decl_cache_align const mi_page_t  _mi_page_empty;
 bool       _mi_is_main_thread(void);
 size_t     _mi_current_thread_count(void);
-bool       _mi_preloading(void);        // true while the C runtime is not ready
+bool       _mi_preloading(void);           // true while the C runtime is not initialized yet
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
-mi_heap_t* _mi_heap_main_get(void);     // statically allocated main backing heap
+mi_heap_t*    _mi_heap_main_get(void);     // statically allocated main backing heap
 void       _mi_thread_done(mi_heap_t* heap);
+void       _mi_thread_data_collect(void);
 
 // os.c
 void       _mi_os_init(void);                                            // called from process init
@@ -119,8 +120,9 @@ void       _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_o
 void*      _mi_arena_alloc(size_t size, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld);
 void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool* commit, bool* large, bool* is_pinned, bool* is_zero, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld);
 bool       _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id);
-void       _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats);
 bool       _mi_arena_contains(const void* p);
+void       _mi_arena_collect(bool force_purge, mi_stats_t* stats);
+void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 
 // "segment-map.c"
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
@@ -168,8 +170,8 @@ uint8_t    _mi_bin(size_t size);                // for stats
 void       _mi_heap_destroy_pages(mi_heap_t* heap);
 void       _mi_heap_collect_abandon(mi_heap_t* heap);
 void       _mi_heap_set_default_direct(mi_heap_t* heap);
-void       _mi_heap_destroy_all(void);
 bool       _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid);
+void       _mi_heap_unsafe_destroy_all(void);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);

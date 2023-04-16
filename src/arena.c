@@ -703,7 +703,7 @@ void _mi_arena_free(void* p, size_t size, size_t alignment, size_t align_offset,
 
 // destroy owned arenas; this is unsafe and should only be done using `mi_option_destroy_on_exit`
 // for dynamic libraries that are unloaded and need to release all their allocated memory.
-static void mi_arenas_destroy(void) {
+static void mi_arenas_unsafe_destroy(void) {
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   size_t new_max_arena = 0;
   for (size_t i = 0; i < max_arena; i++) {
@@ -730,15 +730,19 @@ static void mi_arenas_destroy(void) {
   mi_atomic_cas_strong_acq_rel(&mi_arena_count, &expected, new_max_arena);
 }
 
-
-void _mi_arena_collect(bool free_arenas, bool force_decommit, mi_stats_t* stats) {
-  if (free_arenas) {
-    mi_arenas_destroy();
-  }
-  mi_arenas_try_purge(force_decommit, true, stats);  
+// Purge the arenas; if `force_purge` is true, amenable parts are purged even if not yet expired
+void _mi_arena_collect(bool force_purge, mi_stats_t* stats) {
+  mi_arenas_try_purge(force_purge, true /* visit all */, stats);
 }
 
+// destroy owned arenas; this is unsafe and should only be done using `mi_option_destroy_on_exit`
+// for dynamic libraries that are unloaded and need to release all their allocated memory.
+void _mi_arena_unsafe_destroy_all(mi_stats_t* stats) {
+  mi_arenas_unsafe_destroy();
+  _mi_arena_collect(true /* force purge */, stats);  // purge non-owned arenas  
+}
 
+// Is a pointer inside any of our arenas?
 bool _mi_arena_contains(const void* p) {
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   for (size_t i = 0; i < max_arena; i++) {

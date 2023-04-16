@@ -151,14 +151,15 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
-  // collect segment caches
+  // collect segment and thread caches
   if (collect >= MI_FORCE) {
     _mi_segment_thread_collect(&heap->tld->segments);
   }
 
-  // collect regions on program-exit (or shared library unload)
+  // collect arenas on program-exit (or shared library unload)
   if (collect >= MI_FORCE && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
-    _mi_arena_collect(false /* destroy arenas */, true /* force purge */, &heap->tld->stats);
+    _mi_thread_data_collect();  // collect thread data cache
+    _mi_arena_collect(true /* force purge */, &heap->tld->stats);
   }
 }
 
@@ -354,7 +355,8 @@ void mi_heap_destroy(mi_heap_t* heap) {
   }
 }
 
-void _mi_heap_destroy_all(void) {
+// forcefully destroy all heaps in the current thread
+void _mi_heap_unsafe_destroy_all(void) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* curr = bheap->tld->heaps;
   while (curr != NULL) {
