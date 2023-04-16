@@ -281,7 +281,7 @@ typedef _Atomic(uintptr_t) mi_atomic_once_t;
 static inline bool mi_atomic_once( mi_atomic_once_t* once ) {
   if (mi_atomic_load_relaxed(once) != 0) return false;     // quick test 
   uintptr_t expected = 0;
-  return mi_atomic_cas_strong_acq_rel(once, &expected, 1); // try to set to 1
+  return mi_atomic_cas_strong_acq_rel(once, &expected, 1UL); // try to set to 1
 }
 
 typedef _Atomic(uintptr_t) mi_atomic_guard_t;
