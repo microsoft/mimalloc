@@ -93,21 +93,13 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
 static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t size, const size_t alignment, const size_t offset, const bool zero) mi_attr_noexcept
 {
   // note: we don't require `size > offset`, we just guarantee that the address at offset is aligned regardless of the allocated size.
-  mi_assert(alignment > 0);
   if mi_unlikely(alignment == 0 || !_mi_is_power_of_two(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
     #if MI_DEBUG > 0
     _mi_error_message(EOVERFLOW, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu)\n", size, alignment);
     #endif
     return NULL;
   }
-  /*
-  if mi_unlikely(alignment > MI_ALIGNMENT_MAX) {  // we cannot align at a boundary larger than this (or otherwise we cannot find segment headers)
-    #if MI_DEBUG > 0
-    _mi_error_message(EOVERFLOW, "aligned allocation has a maximum alignment of %zu (size %zu, alignment %zu)\n", MI_ALIGNMENT_MAX, size, alignment);
-    #endif
-    return NULL;
-  }
-  */
+
   if mi_unlikely(size > PTRDIFF_MAX) {          // we don't allocate more than PTRDIFF_MAX (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
     #if MI_DEBUG > 0
     _mi_error_message(EOVERFLOW, "aligned allocation request is too large (size %zu, alignment %zu)\n", size, alignment);
@@ -146,10 +138,10 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_malloc_aligned_at(mi_heap_t* he
   return mi_heap_malloc_zero_aligned_at(heap, size, alignment, offset, false);
 }
 
-mi_decl_nodiscard mi_decl_restrict inline void* mi_heap_malloc_aligned(mi_heap_t* heap, size_t size, size_t alignment) mi_attr_noexcept {
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_malloc_aligned(mi_heap_t* heap, size_t size, size_t alignment) mi_attr_noexcept {
+  if mi_unlikely(alignment == 0 || !_mi_is_power_of_two(alignment)) return NULL;
   #if !MI_PADDING
   // without padding, any small sized allocation is naturally aligned (see also `_mi_segment_page_start`)
-  if mi_unlikely(!_mi_is_power_of_two(alignment)) return NULL;
   if mi_likely(_mi_is_power_of_two(size) && size >= alignment && size <= MI_SMALL_SIZE_MAX)
   #else
   // with padding, we can only guarantee this for fixed alignments
