@@ -58,6 +58,7 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
   if (p == NULL) return EINVAL;
   if ((alignment % sizeof(void*)) != 0) return EINVAL;                 // natural alignment
   // it is also required that alignment is a power of 2 and > 0; this is checked in `mi_malloc_aligned`
+  if (alignment==0 || !_mi_is_power_of_two(alignment)) return EINVAL;  // not a power of 2
   void* q = mi_malloc_aligned(size, alignment);
   if (q==NULL && size != 0) return ENOMEM;
   mi_assert_internal(((uintptr_t)q % alignment) == 0);
