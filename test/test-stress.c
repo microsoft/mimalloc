@@ -26,7 +26,12 @@ terms of the MIT license.
 // argument defaults
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 25;      // scaling factor
+
+#if defined(MI_TSAN)
+static int ITER    = 10;      // N full iterations destructing and re-creating all threads (on tsan reduce for azure pipeline limits)
+#else
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
+#endif
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int SCALE   = 100;  // scaling factor

@@ -113,11 +113,13 @@ static inline void mi_atomic_maxi64_relaxed(volatile int64_t* p, int64_t x) {
 }
 
 // Used by timers
-#define mi_atomic_loadi64_acquire(p)    mi_atomic(load_explicit)(p,mi_memory_order(acquire))
-#define mi_atomic_loadi64_relaxed(p)    mi_atomic(load_explicit)(p,mi_memory_order(relaxed))
-#define mi_atomic_storei64_release(p,x) mi_atomic(store_explicit)(p,x,mi_memory_order(release))
-#define mi_atomic_storei64_relaxed(p,x) mi_atomic(store_explicit)(p,x,mi_memory_order(relaxed))
+#define mi_atomic_loadi64_acquire(p)            mi_atomic(load_explicit)(p,mi_memory_order(acquire))
+#define mi_atomic_loadi64_relaxed(p)            mi_atomic(load_explicit)(p,mi_memory_order(relaxed))
+#define mi_atomic_storei64_release(p,x)         mi_atomic(store_explicit)(p,x,mi_memory_order(release))
+#define mi_atomic_storei64_relaxed(p,x)         mi_atomic(store_explicit)(p,x,mi_memory_order(relaxed))
 
+#define mi_atomic_casi64_strong_acq_rel(p,e,d)  mi_atomic_cas_strong_acq_rel(p,e,d)
+#define mi_atomic_addi64_acq_rel(p,i)           mi_atomic_add_acq_rel(p,i)
 
 
 #elif defined(_MSC_VER)
@@ -245,6 +247,21 @@ static inline void mi_atomic_maxi64_relaxed(volatile _Atomic(int64_t)*p, int64_t
   } while (current < x && _InterlockedCompareExchange64(p, x, current) != current);
 }
 
+static inline void mi_atomic_addi64_acq_rel(volatile _Atomic(int64_t*)p, int64_t i) {
+  mi_atomic_addi64_relaxed(p, i);
+}
+
+static inline bool mi_atomic_casi64_strong_acq_rel(volatile _Atomic(int64_t*)p, int64_t* exp, int64_t des) {
+  int64_t read = _InterlockedCompareExchange64(p, des, *exp);
+  if (read == *exp) {
+    return true;
+  }
+  else {
+    *exp = read;
+    return false;
+  }
+}
+
 // The pointer macros cast to `uintptr_t`.
 #define mi_atomic_load_ptr_acquire(tp,p)                (tp*)mi_atomic_load_acquire((_Atomic(uintptr_t)*)(p))
 #define mi_atomic_load_ptr_relaxed(tp,p)                (tp*)mi_atomic_load_relaxed((_Atomic(uintptr_t)*)(p))
@@ -290,8 +307,8 @@ typedef _Atomic(uintptr_t) mi_atomic_guard_t;
 #define mi_atomic_guard(guard) \
   uintptr_t _mi_guard_expected = 0; \
   for(bool _mi_guard_once = true; \
-      _mi_guard_once && mi_atomic_cas_strong_acq_rel(guard,&_mi_guard_expected,1); \
-      (mi_atomic_store_release(guard,0), _mi_guard_once = false) )
+      _mi_guard_once && mi_atomic_cas_strong_acq_rel(guard,&_mi_guard_expected,(uintptr_t)1); \
+      (mi_atomic_store_release(guard,(uintptr_t)0), _mi_guard_once = false) )
 
 
 
