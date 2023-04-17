@@ -290,8 +290,8 @@ typedef _Atomic(uintptr_t) mi_atomic_guard_t;
 #define mi_atomic_guard(guard) \
   uintptr_t _mi_guard_expected = 0; \
   for(bool _mi_guard_once = true; \
-      _mi_guard_once && mi_atomic_cas_strong_acq_rel(guard,&_mi_guard_expected,1); \
-      (mi_atomic_store_release(guard,0), _mi_guard_once = false) )
+      _mi_guard_once && mi_atomic_cas_strong_acq_rel(guard,&_mi_guard_expected,(uintptr_t)1); \
+      (mi_atomic_store_release(guard,(uintptr_t)0), _mi_guard_once = false) )
 
 
 
