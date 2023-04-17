@@ -91,5 +91,8 @@
     <ClCompile Include="..\..\src\prim\prim.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\segment-map.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
