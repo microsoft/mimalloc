@@ -529,6 +529,9 @@ static void mi_detect_cpu_features(void) {
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   static mi_atomic_once_t process_init;
+	#if _MSC_VER < 1920
+	mi_heap_main_init(); // vs2017 can dynamically re-initialize _mi_heap_main
+	#endif
   if (!mi_atomic_once(&process_init)) return;
   _mi_process_is_initialized = true;
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());

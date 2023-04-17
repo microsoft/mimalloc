@@ -239,7 +239,6 @@
     <ClCompile Include="..\..\src\heap.c" />
     <ClCompile Include="..\..\src\init.c" />
     <ClCompile Include="..\..\src\prim\prim.c" />
-    <ClCompile Include="..\..\src\region.c" />
     <ClCompile Include="..\..\src\options.c" />
     <ClCompile Include="..\..\src\os.c" />
     <ClCompile Include="..\..\src\page-queue.c">
@@ -250,6 +249,7 @@
     </ClCompile>
     <ClCompile Include="..\..\src\page.c" />
     <ClCompile Include="..\..\src\random.c" />
+    <ClCompile Include="..\..\src\segment-map.c" />
     <ClCompile Include="..\..\src\segment.c" />
     <ClCompile Include="..\..\src\stats.c" />
   </ItemGroup>
