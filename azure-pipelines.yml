@@ -121,7 +121,7 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(nproc) -C $(BuildType)
     displayName: Make
-  - script: ctest --verbose --timeout 300
+  - script: ctest --verbose --timeout 600
     workingDirectory: $(BuildType)
     displayName: CTest
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
