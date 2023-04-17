@@ -605,11 +605,19 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   pinfo->page_faults = 0;
 #elif defined(__APPLE__)
   pinfo->peak_rss = rusage.ru_maxrss;         // macos reports in bytes
+  #ifdef MACH_TASK_BASIC_INFO
   struct mach_task_basic_info info;
   mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;
   if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &infoCount) == KERN_SUCCESS) {
     pinfo->current_rss = (size_t)info.resident_size;
   }
+  #else
+  struct task_basic_info info;
+  mach_msg_type_number_t infoCount = TASK_BASIC_INFO_COUNT;
+  if (task_info(mach_task_self(), TASK_BASIC_INFO, (task_info_t)&info, &infoCount) == KERN_SUCCESS) {
+    pinfo->current_rss = (size_t)info.resident_size;
+  }
+  #endif
 #else
   pinfo->peak_rss = rusage.ru_maxrss * 1024;  // Linux/BSD report in KiB
 #endif
