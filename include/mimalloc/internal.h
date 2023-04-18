@@ -88,9 +88,9 @@ void       _mi_thread_data_collect(void);
 
 // os.c
 void       _mi_os_init(void);                                            // called from process init
-void*      _mi_os_alloc(size_t size, bool* is_zero, mi_stats_t* stats);  
-void       _mi_os_free(void* p, size_t size, mi_stats_t* stats);
-void       _mi_os_free_ex(void* p, size_t size, bool is_committed, mi_stats_t* stats);
+void*      _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);  
+void       _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats);
+void       _mi_os_free_ex(void* p, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* stats);
 
 size_t     _mi_os_page_size(void);
 size_t     _mi_os_good_alloc_size(size_t size);
@@ -105,16 +105,14 @@ bool       _mi_os_unprotect(void* addr, size_t size);
 bool       _mi_os_purge(void* p, size_t size, mi_stats_t* stats);
 bool       _mi_os_purge_ex(void* p, size_t size, bool allow_reset, mi_stats_t* stats);
 
-void*      _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* stats);
-void*      _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* tld_stats);
-void       _mi_os_free_aligned_at_offset(void* p, size_t size, size_t alignment, size_t align_offset, bool was_committed, mi_stats_t* tld_stats);
+void*      _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid, mi_stats_t* stats);
+void*      _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid, mi_stats_t* tld_stats);
 
 void*      _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 bool       _mi_os_use_large_page(size_t size, size_t alignment);
 size_t     _mi_os_large_page_size(void);
 
-void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, bool* is_zero);
-void       _mi_os_free_huge_os_pages(void* p, size_t size, mi_stats_t* stats);
+void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
 
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
@@ -267,6 +265,10 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #define MI_INIT128(x) MI_INIT64(x),MI_INIT64(x)
 #define MI_INIT256(x) MI_INIT128(x),MI_INIT128(x)
 
+
+#include <string.h>
+// initialize a local variable to zero; use memset as compilers optimize constant sized memset's
+#define _mi_memzero_var(x)  memset(&x,0,sizeof(x))
 
 // Is `x` a power of two? (0 is considered a power of two)
 static inline bool _mi_is_power_of_two(uintptr_t x) {
@@ -653,6 +655,30 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
   #endif
 }
 
+
+/* -----------------------------------------------------------
+  memory id's
+----------------------------------------------------------- */
+
+static inline mi_memid_t _mi_memid_create(mi_memkind_t memkind) {
+  mi_memid_t memid;
+  _mi_memzero_var(memid);
+  memid.memkind = memkind;
+  return memid;
+}
+
+static inline mi_memid_t _mi_memid_none(void) {
+  return _mi_memid_create(MI_MEM_NONE);
+}
+
+static inline mi_memid_t _mi_memid_create_os(bool committed, bool is_zero) {
+  mi_memid_t memid = _mi_memid_create(MI_MEM_OS);
+  memid.was_committed = committed;
+  memid.was_zero = is_zero;
+  return memid;
+}
+
+
 // -------------------------------------------------------------------
 // Fast "random" shuffle
 // -------------------------------------------------------------------
@@ -812,7 +838,6 @@ static inline size_t mi_bsr(uintptr_t x) {
 
 #if !MI_TRACK_ENABLED && defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
 #include <intrin.h>
-#include <string.h>
 extern bool _mi_cpu_has_fsrm;
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
   if (_mi_cpu_has_fsrm) {
@@ -831,7 +856,6 @@ static inline void _mi_memzero(void* dst, size_t n) {
   }
 }
 #else
-#include <string.h>
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
   memcpy(dst, src, n);
 }
@@ -840,9 +864,6 @@ static inline void _mi_memzero(void* dst, size_t n) {
 }
 #endif
 
-// initialize a local variable to zero; use memset as compilers optimize constant sized memset's
-#define _mi_memzero_var(x)  memset(&x,0,sizeof(x))
-
 // -------------------------------------------------------------------------------
 // The `_mi_memcpy_aligned` can be used if the pointers are machine-word aligned
 // This is used for example in `mi_realloc`.
@@ -850,7 +871,6 @@ static inline void _mi_memzero(void* dst, size_t n) {
 
 #if (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)
 // On GCC/CLang we provide a hint that the pointers are word aligned.
-#include <string.h>
 static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
   void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);

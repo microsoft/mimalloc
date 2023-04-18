@@ -330,12 +330,17 @@ typedef enum mi_memkind_e {
   MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
   MI_MEM_STATIC,    // allocated in a static area and should not be freed (for arena meta data for example)
   MI_MEM_OS,        // allocated from the OS
+  MI_MEM_OS_HUGE,   // allocated as huge os pages
+  MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
   MI_MEM_ARENA      // allocated from an arena (the usual case)
 } mi_memkind_t;
 
+static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
+  return (memkind >= MI_MEM_OS && memkind <= MI_MEM_OS_REMAP);
+}
+
 typedef struct mi_memid_os_info {
-  size_t        alignment;      // allocated with the given alignment
-  size_t        align_offset;   // the offset that was aligned (used only for huge aligned pages)
+  void*         base;           // actual base address of the block (used for offset aligned allocations)
 } mi_memid_os_info_t;
 
 typedef struct mi_memid_arena_info {
