@@ -38,8 +38,8 @@ static int ITER    = 50;      // N full iterations destructing and re-creating a
 
 #define STRESS   // undefine for leak test
 
-static bool   allow_large_objects = true;    // allow very large objects?
-static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
+static bool   allow_large_objects = false;    // allow very large objects? (set to `true` if SCALE>100)
+static size_t use_one_size = 0;               // use single object size of `N * sizeof(uintptr_t)`?
 
 
 // #define USE_STD_MALLOC
@@ -244,7 +244,10 @@ int main(int argc, char** argv) {
     long n = (strtol(argv[3], &end, 10));
     if (n > 0) ITER = n;
   }
-  printf("Using %d threads with a %d%% load-per-thread and %d iterations\n", THREADS, SCALE, ITER);
+  if (SCALE > 100) {
+    allow_large_objects = true;
+  }
+  printf("Using %d threads with a %d%% load-per-thread and %d iterations %s\n", THREADS, SCALE, ITER, (allow_large_objects ? "(allow large objects)" : ""));
   //mi_reserve_os_memory(1024*1024*1024ULL, false, true);
   //int res = mi_reserve_huge_os_pages(4,1);
   //printf("(reserve huge: %i\n)", res);
