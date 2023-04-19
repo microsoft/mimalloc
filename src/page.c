@@ -84,7 +84,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_list_is_valid(page,page->local_free));
 
   #if MI_DEBUG>3 // generally too expensive to check this
-  if (page->is_zero) {
+  if (page->free_is_zero) {
     const size_t ubsize = mi_page_usable_block_size(page);
     for(mi_block_t* block = page->free; block != NULL; block = mi_block_next(page,block)) {
       mi_assert_expensive(mi_mem_is_zero(block + 1, ubsize - sizeof(mi_block_t)));
@@ -221,7 +221,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
       // usual case
       page->free = page->local_free;
       page->local_free = NULL;
-      page->is_zero = false;
+      page->free_is_zero = false;
     }
     else if (force) {
       // append -- only on shutdown (force) as this is a linear operation
@@ -233,7 +233,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
       mi_block_set_next(page, tail, page->free);
       page->free = page->local_free;
       page->local_free = NULL;
-      page->is_zero = false;
+      page->free_is_zero = false;
     }
   }
 
@@ -666,13 +666,14 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   page->keys[0] = _mi_heap_random_next(heap);
   page->keys[1] = _mi_heap_random_next(heap);
   #endif
-  page->is_zero = page->is_zero_init;
-  #if MI_DEBUG>1
+  page->free_is_zero = page->is_zero_init;
+  #if MI_DEBUG>2
   if (page->is_zero_init) {
-    mi_assert(mi_mem_is_zero(page_start, page_size));
+    mi_track_mem_defined(page_start, page_size);
+    mi_assert_expensive(mi_mem_is_zero(page_start, page_size));
   }
   #endif
-
+  
   mi_assert_internal(page->is_committed);
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);

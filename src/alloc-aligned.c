@@ -227,7 +227,7 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
     if (newp != NULL) {
       if (zero && newsize > size) {
         const mi_page_t* page = _mi_ptr_page(newp);
-        if (page->is_zero) {
+        if (page->free_is_zero) {
           // already zero initialized
           mi_assert_expensive(mi_mem_is_zero(newp,newsize));
         }
