@@ -46,12 +46,17 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
     mi_assert_internal(page->xblock_size != 0); // do not call with zero'ing for huge blocks (see _mi_malloc_generic)
-    const size_t zsize = (page->is_zero ? sizeof(block->next) + MI_PADDING_SIZE : page->xblock_size);
-    _mi_memzero_aligned(block, zsize - MI_PADDING_SIZE);
+    if (page->is_zero) {
+      block->next = 0;
+    }
+    else {
+      mi_assert_internal(page->xblock_size >= MI_PADDING_SIZE);
+      _mi_memzero_aligned(block, page->xblock_size - MI_PADDING_SIZE);
+    }
   }
 
 #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
-  if (!page->is_zero && !zero && !mi_page_is_huge(page)) {
+  if (!zero && !mi_page_is_huge(page)) {
     memset(block, MI_DEBUG_UNINIT, mi_page_usable_block_size(page));
   }
 #elif (MI_SECURE!=0)
@@ -110,6 +115,7 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
     mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
   }
   #endif
+  if (zero && p != NULL) { mi_assert_internal(mi_mem_is_zero(p, size)); }
   return p;
 }
 
@@ -139,6 +145,7 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
       mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
     }
     #endif
+    if (zero && p != NULL) { mi_assert_internal(mi_mem_is_zero(p, size)); }
     return p;
   }
 }

@@ -998,7 +998,7 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
   // zero the page data, but not the segment fields
   page->is_zero_init = false;
   ptrdiff_t ofs = offsetof(mi_page_t, capacity);
-  memset((uint8_t*)page + ofs, 0, sizeof(*page) - ofs);
+  _mi_memzero((uint8_t*)page + ofs, sizeof(*page) - ofs);
   page->xblock_size = 1;
 
   // and free it

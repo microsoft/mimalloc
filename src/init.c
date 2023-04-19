@@ -203,6 +203,7 @@ mi_heap_t* _mi_heap_main_get(void) {
 typedef struct mi_thread_data_s {
   mi_heap_t  heap;  // must come first due to cast in `_mi_heap_done`
   mi_tld_t   tld;
+  mi_memid_t memid;
 } mi_thread_data_t;
 
 
@@ -231,14 +232,19 @@ static mi_thread_data_t* mi_thread_data_zalloc(void) {
 
   // if that fails, allocate as meta data
   if (td == NULL) {
-    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &is_zero, &_mi_stats_main);
+    mi_memid_t memid;
+    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
     if (td == NULL) {
       // if this fails, try once more. (issue #257)
-      td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &is_zero, &_mi_stats_main);
+      td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
       if (td == NULL) {
         // really out of memory
         _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
       }
+    }
+    if (td != NULL) {
+      td->memid = memid;
+      is_zero = memid.was_zero;
     }
   }
   
@@ -260,7 +266,7 @@ static void mi_thread_data_free( mi_thread_data_t* tdfree ) {
     }
   }
   // if that fails, just free it directly
-  _mi_os_free(tdfree, sizeof(mi_thread_data_t), &_mi_stats_main);
+  _mi_os_free(tdfree, sizeof(mi_thread_data_t), tdfree->memid, &_mi_stats_main);
 }
 
 void _mi_thread_data_collect(void) {
@@ -270,7 +276,7 @@ void _mi_thread_data_collect(void) {
     if (td != NULL) {
       td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL);
       if (td != NULL) {
-        _mi_os_free( td, sizeof(mi_thread_data_t), &_mi_stats_main );
+        _mi_os_free(td, sizeof(mi_thread_data_t), td->memid, &_mi_stats_main);
       }
     }
   }

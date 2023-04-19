@@ -125,7 +125,7 @@ static mi_segment_t* _mi_segment_of(const void* p) {
 
 // Is this a valid pointer in our heap?
 static bool  mi_is_valid_pointer(const void* p) {
-  return (_mi_segment_of(p) != NULL);
+  return ((_mi_segment_of(p) != NULL) || (_mi_arena_contains(p)));
 }
 
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
