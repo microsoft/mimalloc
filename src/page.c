@@ -639,11 +639,6 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld)
   // enable the new free list
   page->capacity += (uint16_t)extend;
   mi_stat_increase(tld->stats.page_committed, extend * bsize);
-
-  // extension into zero initialized memory preserves the zero'd free list
-  if (!page->is_zero_init) {
-    page->is_zero = false;
-  }
   mi_assert_expensive(mi_page_is_valid_init(page));
 }
 
@@ -667,12 +662,12 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   page->keys[0] = _mi_heap_random_next(heap);
   page->keys[1] = _mi_heap_random_next(heap);
   #endif
-  #if MI_DEBUG > 0
-  page->is_zero = false; // ensure in debug mode we initialize with MI_DEBUG_UNINIT, see issue #501
-  #else
   page->is_zero = page->is_zero_init;
+  #if MI_DEBUG>1
+  if (page->is_zero_init) {
+    mi_mem_is_zero(page_start, page_size);
+  }
   #endif
-
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->used == 0);

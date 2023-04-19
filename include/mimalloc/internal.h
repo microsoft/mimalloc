@@ -300,7 +300,7 @@ static inline uintptr_t _mi_divide_up(uintptr_t size, size_t divider) {
 }
 
 // Is memory zero initialized?
-static inline bool mi_mem_is_zero(void* p, size_t size) {
+static inline bool mi_mem_is_zero(const void* p, size_t size) {
   for (size_t i = 0; i < size; i++) {
     if (((uint8_t*)p)[i] != 0) return false;
   }

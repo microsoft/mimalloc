@@ -20,6 +20,7 @@ terms of the MIT license.
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <assert.h>
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
@@ -106,6 +107,7 @@ static void* alloc_items(size_t items, random_t r) {
   uintptr_t* p = (uintptr_t*)custom_calloc(items,sizeof(uintptr_t));
   if (p != NULL) {
     for (uintptr_t i = 0; i < items; i++) {
+      assert(p[i] == 0);
       p[i] = (items - i) ^ cookie;
     }
   }

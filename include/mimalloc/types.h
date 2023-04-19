@@ -285,7 +285,7 @@ typedef struct mi_page_s {
   uint8_t               segment_idx;       // index in the segment `pages` array, `page == &segment->pages[page->segment_idx]`
   uint8_t               segment_in_use:1;  // `true` if the segment allocated this page
   uint8_t               is_committed:1;    // `true` if the page virtual memory is committed
-  uint8_t               is_zero_init:1;    // `true` if the page was zero initialized
+  uint8_t               is_zero_init:1;    // `true` if the page was initially zero initialized
 
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
