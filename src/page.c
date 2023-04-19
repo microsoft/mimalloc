@@ -663,7 +663,12 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   page->keys[1] = _mi_heap_random_next(heap);
   #endif
   page->free_is_zero = page->is_zero_init;
-  mi_assert_expensive(!page->is_zero_init || mi_mem_is_zero(page_start, page_size));
+  #if MI_DEBUG>2
+  if (page->is_zero_init) {
+    mi_track_mem_defined(page_start, page_size);
+    mi_assert_expensive(!page->is_zero_init || mi_mem_is_zero(page_start, page_size));
+  }
+  #endif
   
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);

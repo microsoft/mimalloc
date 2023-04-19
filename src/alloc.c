@@ -46,11 +46,12 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
     mi_assert_internal(page->xblock_size != 0); // do not call with zero'ing for huge blocks (see _mi_malloc_generic)
+    mi_assert_internal(page->xblock_size >= MI_PADDING_SIZE);
     if (page->free_is_zero) {
       block->next = 0;
+      mi_track_mem_defined(block, page->xblock_size - MI_PADDING_SIZE);
     }
     else {
-      mi_assert_internal(page->xblock_size >= MI_PADDING_SIZE);
       _mi_memzero_aligned(block, page->xblock_size - MI_PADDING_SIZE);
     }
   }
