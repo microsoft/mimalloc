@@ -261,7 +261,7 @@ int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_la
 
 int _mi_prim_commit(void* addr, size_t size) {
   void* p = VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE);
-  return (p == addr ? 0 : (int)GetLastError());  
+  return (p != NULL ? 0 : (int)GetLastError());  
 }
 
 int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {  
@@ -274,11 +274,11 @@ int _mi_prim_reset(void* addr, size_t size) {
   void* p = VirtualAlloc(addr, size, MEM_RESET, PAGE_READWRITE);
   mi_assert_internal(p == addr);
   #if 1
-  if (p == addr && addr != NULL) {
+  if (p != NULL) {
     VirtualUnlock(addr,size); // VirtualUnlock after MEM_RESET removes the memory from the working set
   }
   #endif
-  return (p == addr ? 0 : (int)GetLastError());
+  return (p != NULL ? 0 : (int)GetLastError());
 }
 
 int _mi_prim_protect(void* addr, size_t size, bool protect) {
