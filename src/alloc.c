@@ -707,14 +707,12 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
     if (zero && newsize > size) {
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
       const size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
-      memset((uint8_t*)newp + start, 0, newsize - start);
+      _mi_memzero((uint8_t*)newp + start, newsize - start);
     }
     if mi_likely(p != NULL) {
-      if mi_likely(_mi_is_aligned(p, sizeof(uintptr_t))) {  // a client may pass in an arbitrary pointer `p`..
-        const size_t copysize = (newsize > size ? size : newsize);
-        mi_track_mem_defined(p,copysize);  // _mi_useable_size may be too large for byte precise memory tracking..
-        _mi_memcpy_aligned(newp, p, copysize);
-      }
+      const size_t copysize = (newsize > size ? size : newsize);
+      mi_track_mem_defined(p,copysize);  // _mi_useable_size may be too large for byte precise memory tracking..
+      _mi_memcpy(newp, p, copysize);
       mi_free(p); // only free the original pointer if successful
     }
   }

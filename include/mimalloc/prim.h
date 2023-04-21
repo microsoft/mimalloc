@@ -47,7 +47,8 @@ int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_la
 
 // Commit memory. Returns error code or 0 on success.
 // For example, on Linux this would make the memory PROT_READ|PROT_WRITE.
-int _mi_prim_commit(void* addr, size_t size);
+// `is_zero` is set to true if the memory was zero initialized (e.g. on Windows)
+int _mi_prim_commit(void* addr, size_t size, bool* is_zero);
 
 // Decommit memory. Returns error code or 0 on success. The `needs_recommit` result is true
 // if the memory would need to be re-committed. For example, on Windows this is always true,

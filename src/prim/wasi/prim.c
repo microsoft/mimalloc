@@ -128,8 +128,9 @@ int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_la
 // Commit/Reset/Protect
 //---------------------------------------------
 
-int _mi_prim_commit(void* addr, size_t size) {
+int _mi_prim_commit(void* addr, size_t size, bool* is_zero) {
   MI_UNUSED(addr); MI_UNUSED(size); 
+  *is_zero = false;
   return 0;
 }
 

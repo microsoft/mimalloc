@@ -394,12 +394,17 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats
   if (csize == 0) return true;
 
   // commit  
-  int err = _mi_prim_commit(start, csize); 
+  bool os_is_zero = false;
+  int err = _mi_prim_commit(start, csize, &os_is_zero); 
   if (err != 0) {
     _mi_warning_message("cannot commit OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
+    return false;
   }
-  mi_assert_internal(err == 0);
-  return (err == 0);
+  if (os_is_zero && is_zero != NULL) { 
+    *is_zero = true;
+    mi_assert_expensive(mi_mem_is_zero(start, csize));
+  } 
+  return true;
 }
 
 static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit, mi_stats_t* tld_stats) {

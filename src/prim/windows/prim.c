@@ -259,14 +259,26 @@ int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_la
 #pragma warning(disable:6250)   // suppress warning calling VirtualFree without MEM_RELEASE (for decommit)
 #endif
 
-int _mi_prim_commit(void* addr, size_t size) {
+int _mi_prim_commit(void* addr, size_t size, bool* is_zero) {
+  *is_zero = false;
+  /*
+  // zero'ing only happens on an initial commit... but checking upfront seems expensive..
+  _MEMORY_BASIC_INFORMATION meminfo; _mi_memzero_var(meminfo);
+  if (VirtualQuery(addr, &meminfo, size) > 0) {
+    if ((meminfo.State & MEM_COMMIT) == 0) {
+      *is_zero = true;
+    }
+  }
+  */
+  // commit
   void* p = VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE);
-  return (p == addr ? 0 : (int)GetLastError());  
+  if (p == NULL) return (int)GetLastError();
+  return 0;
 }
 
 int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {  
   BOOL ok = VirtualFree(addr, size, MEM_DECOMMIT);
-  *needs_recommit = true;  // for safetly, assume always decommitted even in the case of an error.
+  *needs_recommit = true;  // for safety, assume always decommitted even in the case of an error.
   return (ok ? 0 : (int)GetLastError());
 }
 
@@ -274,11 +286,11 @@ int _mi_prim_reset(void* addr, size_t size) {
   void* p = VirtualAlloc(addr, size, MEM_RESET, PAGE_READWRITE);
   mi_assert_internal(p == addr);
   #if 1
-  if (p == addr && addr != NULL) {
+  if (p != NULL) {
     VirtualUnlock(addr,size); // VirtualUnlock after MEM_RESET removes the memory from the working set
   }
   #endif
-  return (p == addr ? 0 : (int)GetLastError());
+  return (p != NULL ? 0 : (int)GetLastError());
 }
 
 int _mi_prim_protect(void* addr, size_t size, bool protect) {
