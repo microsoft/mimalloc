@@ -1273,9 +1273,12 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
   mi_assert_internal(page->used == 1); // this is called just before the free
   mi_assert_internal(page->free == NULL);
   if (segment->allow_decommit && page->is_committed) {
-    const size_t usize = mi_usable_size(block) - sizeof(mi_block_t);
-    uint8_t* p = (uint8_t*)block + sizeof(mi_block_t);
-    _mi_os_reset(p, usize, &_mi_stats_main);
+    size_t usize = mi_usable_size(block);
+    if (usize > sizeof(mi_block_t)) { 
+      usize = usize - sizeof(mi_block_t);
+      uint8_t* p = (uint8_t*)block + sizeof(mi_block_t);
+      _mi_os_reset(p, usize, &_mi_stats_main);
+    }
   }
 }
 #endif
