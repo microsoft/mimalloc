@@ -79,7 +79,7 @@ defined, undefined, or not accessible at all:
 // windows event tracing
 
 #define MI_TRACK_ENABLED      1
-#define MI_TRACK_HEAP_DESTROY 0
+#define MI_TRACK_HEAP_DESTROY 1
 #define MI_TRACK_TOOL         "ETW"
 
 #define WIN32_LEAN_AND_MEAN
