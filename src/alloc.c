@@ -37,6 +37,11 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   page->used++;
   page->free = mi_block_next(page, block);
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
+  #if MI_DEBUG>3
+  if (page->free_is_zero) {
+    mi_assert_expensive(mi_mem_is_zero(block+1,size - sizeof(*block)));
+  }
+  #endif
 
   // allow use of the block internally
   // note: when tracking we need to avoid ever touching the MI_PADDING since
@@ -53,7 +58,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
     }
     else {
       _mi_memzero_aligned(block, page->xblock_size - MI_PADDING_SIZE);
-    }
+    }    
   }
 
 #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
@@ -116,7 +121,11 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
     mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
   }
   #endif
-  if (zero && p != NULL) { mi_assert_internal(mi_mem_is_zero(p, size)); }
+  #if MI_DEBUG>3
+  if (p != NULL && zero) {
+    mi_assert_expensive(mi_mem_is_zero(p, size));
+  }
+  #endif
   return p;
 }
 
@@ -146,7 +155,11 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
       mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
     }
     #endif
-    if (zero && p != NULL) { mi_assert_internal(mi_mem_is_zero(p, size)); }
+    #if MI_DEBUG>3
+    if (p != NULL && zero) {
+      mi_assert_expensive(mi_mem_is_zero(p, size));
+    }
+    #endif
     return p;
   }
 }
@@ -708,6 +721,9 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
       const size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
       _mi_memzero((uint8_t*)newp + start, newsize - start);
+    }
+    else if (newsize == 0) {
+      ((uint8_t*)newp)[0] = 0; // work around for applications that expect zero-reallocation to be zero initialized (issue #725)
     }
     if mi_likely(p != NULL) {
       const size_t copysize = (newsize > size ? size : newsize);
