@@ -46,6 +46,14 @@ bool test_heap2(void);
 bool test_stl_allocator1(void);
 bool test_stl_allocator2(void);
 
+bool mem_is_zero(uint8_t* p, size_t size) {
+  if (p==NULL) return false;
+  for (size_t i = 0; i < size; ++i) {
+    if (p[i] != 0) return false;
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Main testing
 // ---------------------------------------------------------------------------
@@ -231,6 +239,21 @@ int main(void) {
       ok = (p != NULL && (uintptr_t)(p) % 16 == 0); mi_free(p);
     }
     result = ok;
+  };
+  CHECK_BODY("zalloc-aligned-small1") {
+    size_t zalloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_zalloc_aligned(zalloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result = mem_is_zero(p, zalloc_size);
+    mi_free(p);
+  };
+  CHECK_BODY("rezalloc_aligned-small1") {
+    size_t zalloc_size = MI_SMALL_SIZE_MAX / 2;
+    uint8_t* p = (uint8_t*)mi_zalloc_aligned(zalloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result = mem_is_zero(p, zalloc_size);
+    zalloc_size *= 3;
+    p = (uint8_t*)mi_rezalloc_aligned(p, zalloc_size, MI_MAX_ALIGN_SIZE * 2);
+    result = result && mem_is_zero(p, zalloc_size);
+    mi_free(p);
   };
 
   // ---------------------------------------------------

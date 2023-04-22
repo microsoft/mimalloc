@@ -218,19 +218,13 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
     return p;  // reallocation still fits, is aligned and not more than 50% waste
   }
   else {
+    // note: we don't zero allocate upfront so we only zero initialize the expanded part
     void* newp = mi_heap_malloc_aligned_at(heap,newsize,alignment,offset);
     if (newp != NULL) {
       if (zero && newsize > size) {
-        const mi_page_t* page = _mi_ptr_page(newp);
-        if (page->free_is_zero) {
-          // already zero initialized
-          mi_assert_expensive(mi_mem_is_zero(newp,newsize));
-        }
-        else {
-          // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
-          size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
-          memset((uint8_t*)newp + start, 0, newsize - start);
-        }
+        // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
+        size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
+        _mi_memzero((uint8_t*)newp + start, newsize - start);
       }
       _mi_memcpy_aligned(newp, p, (newsize > size ? size : newsize));
       mi_free(p); // only free if successful

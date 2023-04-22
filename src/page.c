@@ -66,6 +66,14 @@ static bool mi_page_list_is_valid(mi_page_t* page, mi_block_t* p) {
     if (p < start || p >= end) return false;
     p = mi_block_next(page, p);
   }
+#if MI_DEBUG>3 // generally too expensive to check this
+  if (page->free_is_zero) {
+    const size_t ubsize = mi_page_usable_block_size(page);
+    for (mi_block_t* block = page->free; block != NULL; block = mi_block_next(page, block)) {
+      mi_assert_expensive(mi_mem_is_zero(block + 1, ubsize - sizeof(mi_block_t)));
+    }
+  }
+#endif
   return true;
 }
 
