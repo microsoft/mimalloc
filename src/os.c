@@ -465,14 +465,14 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
 // to be recommitted if it is to be re-used later on.
 bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset, mi_stats_t* stats)
 {
-  if (!mi_option_is_enabled(mi_option_allow_purge)) return false;
+  if (mi_option_get(mi_option_purge_delay) < 0) return false;  // is purging allowed?
   _mi_stat_counter_increase(&stats->purge_calls, 1);
   _mi_stat_increase(&stats->purged, size);
 
   if (mi_option_is_enabled(mi_option_purge_decommits) &&   // should decommit?
       !_mi_preloading())                                   // don't decommit during preloading (unsafe)
   {
-    bool needs_recommit;
+    bool needs_recommit = true;
     mi_os_decommit_ex(p, size, &needs_recommit, stats);
     return needs_recommit;   
   }
@@ -480,7 +480,7 @@ bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset, mi_stats_t* stats)
     if (allow_reset) {  // this can sometimes be not allowed if the range is not fully committed
       _mi_os_reset(p, size, stats);
     }
-    return false;  // not decommitted
+    return false;  // needs no recommit
   }
 }
 
