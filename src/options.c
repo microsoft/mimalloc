@@ -90,7 +90,6 @@ static mi_option_desc_t options[_mi_option_last] =
   #endif
 
   { 10,  UNINIT, MI_OPTION(arena_purge_mult) },        // purge delay multiplier for arena's
-  { 1,   UNINIT, MI_OPTION(allow_purge) },              // allow decommit/reset to free (physical) memory back to the OS
   { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
 };
 

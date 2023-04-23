@@ -347,7 +347,7 @@ static void mi_segment_remove_all_purges(mi_segment_t* segment, bool force_purge
 }
 
 static void mi_pages_try_purge(mi_segments_tld_t* tld) {
-  if (!mi_option_is_enabled(mi_option_allow_purge)) return;
+  if (mi_option_get(mi_option_purge_delay) < 0) return;  // purging is not allowed
 
   mi_msecs_t now = _mi_clock_now();
   mi_page_queue_t* pq = &tld->pages_purge;
@@ -542,7 +542,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
   mi_track_mem_undefined(segment, info_size); MI_UNUSED(info_size);
   segment->memid = memid;
   segment->allow_decommit = !memid.is_pinned;
-  segment->allow_purge = segment->allow_decommit && mi_option_is_enabled(mi_option_allow_purge);
+  segment->allow_purge = segment->allow_decommit && (mi_option_get(mi_option_purge_delay) >= 0);
   segment->segment_size = segment_size;
   mi_segments_track_size((long)(segment_size), tld);
   _mi_segment_map_allocated_at(segment);

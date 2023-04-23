@@ -422,6 +422,7 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
 ----------------------------------------------------------- */
 
 static long mi_arena_purge_delay(void) {
+  // <0 = no purging allowed, 0=immediate purging, >0=milli-second delay
   return (mi_option_get(mi_option_purge_delay) * mi_option_get(mi_option_arena_purge_mult));
 }
 
@@ -460,9 +461,9 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks, 
 // Note: assumes we (still) own the area as we may purge immediately
 static void mi_arena_schedule_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks, mi_stats_t* stats) {
   mi_assert_internal(arena->blocks_purge != NULL);
-  if (!mi_option_is_enabled(mi_option_allow_purge)) return;
-
   const long delay = mi_arena_purge_delay();
+  if (delay < 0) return;  // is purging allowed at all?
+
   if (_mi_preloading() || delay == 0) {
     // decommit directly
     mi_arena_purge(arena, bitmap_idx, blocks, stats);    
@@ -563,7 +564,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force, mi
 }
 
 static void mi_arenas_try_purge( bool force, bool visit_all, mi_stats_t* stats ) {
-  if (_mi_preloading() || !mi_option_is_enabled(mi_option_allow_purge) || mi_arena_purge_delay() == 0) return;  // nothing will be scheduled
+  if (_mi_preloading() || mi_arena_purge_delay() <= 0) return;  // nothing will be scheduled
 
   const size_t max_arena = mi_atomic_load_acquire(&mi_arena_count);
   if (max_arena == 0) return;
