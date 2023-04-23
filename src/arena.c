@@ -300,14 +300,14 @@ static mi_decl_noinline void* mi_arenas_alloc(int numa_node, size_t size, size_t
   if mi_likely(max_arena == 0) return NULL;
   mi_assert_internal(size <= mi_arena_block_size(bcount));
 
-  size_t arena_index = mi_arena_id_index(req_arena_id);
-  if (arena_index < MI_MAX_ARENAS && arena_index < max_arena) {
+  if (req_arena_id != _mi_arena_id_none()) {
     // try a specific arena if requested 
-    void* p = mi_arena_alloc_at_id(req_arena_id, true, numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);
-    if (p != NULL) return p;  
+    if (mi_arena_id_index(req_arena_id) < max_arena) {
+      void* p = mi_arena_alloc_at_id(req_arena_id, true, numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);
+      if (p != NULL) return p;
+    }
   }
   else {
-    mi_assert_internal(req_arena_id == _mi_arena_id_none());
     // try numa affine allocation
     for (size_t i = 0; i < max_arena; i++) {    
       void* p = mi_arena_alloc_at_id(mi_arena_id_create(i), true, numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);
@@ -373,6 +373,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
     mi_arena_id_t arena_id = 0;
     if (mi_arena_reserve(size,allow_large,req_arena_id,&arena_id)) { 
       // and try allocate in there
+      mi_assert_internal(req_arena_id == _mi_arena_id_none());
       p = mi_arena_alloc_at_id(arena_id, true, numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);        
       if (p != NULL) return p;
     }    
