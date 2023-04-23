@@ -264,7 +264,6 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
     memid->was_committed = _mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);    
   }
   
-  mi_track_mem_undefined(p, mi_arena_block_size(needed_bcount)); // todo: should not be needed?
   return p;
 }
 
