@@ -209,12 +209,11 @@ static bool mi_arena_try_claim(mi_arena_t* arena, size_t blocks, mi_bitmap_index
   Arena Allocation
 ----------------------------------------------------------- */
 
-static mi_decl_noinline void* mi_arena_alloc_at(mi_arena_t* arena, size_t arena_index, size_t needed_bcount,
-  bool commit, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld)
+static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t arena_index, size_t needed_bcount,
+                                                    bool commit, mi_memid_t* memid, mi_os_tld_t* tld)
 {
   MI_UNUSED(arena_index);
   mi_assert_internal(mi_arena_id_index(arena->id) == arena_index);
-  if (!mi_arena_id_is_suitable(arena->id, arena->exclusive, req_arena_id)) return NULL;
 
   mi_bitmap_index_t bitmap_index;
   if (!mi_arena_try_claim(arena, needed_bcount, &bitmap_index)) return NULL;
@@ -263,24 +262,29 @@ static mi_decl_noinline void* mi_arena_alloc_at(mi_arena_t* arena, size_t arena_
 }
 
 // allocate in a speficic arena
-static void* mi_arena_alloc_at_id(mi_arena_id_t arena_id, int numa_node, size_t size, size_t alignment, 
-                                  bool commit, bool allow_large,
-                                  mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld ) 
+static void* mi_arena_alloc_at_id(mi_arena_id_t arena_id, bool match_numa_node, int numa_node, size_t size, size_t alignment, 
+                                  bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld ) 
 {
   MI_UNUSED_RELEASE(alignment);
   mi_assert_internal(alignment <= MI_SEGMENT_ALIGN);
-  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   const size_t bcount = mi_block_count_of_size(size);  
   const size_t arena_index = mi_arena_id_index(arena_id);
-  mi_assert_internal(arena_index < max_arena);
+  mi_assert_internal(arena_index < mi_atomic_load_relaxed(&mi_arena_count));
   mi_assert_internal(size <= mi_arena_block_size(bcount));
-  if (arena_index >= max_arena) return NULL;
-
-  mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[arena_index]);
+  
+  // Check arena suitability
+  mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_index]);
   if (arena == NULL) return NULL;
-  if (arena->numa_node >= 0 && arena->numa_node != numa_node) return NULL;
   if (!allow_large && arena->is_large) return NULL;
-  return mi_arena_alloc_at(arena, arena_index, bcount, commit, req_arena_id, memid, tld);
+  if (!mi_arena_id_is_suitable(arena->id, arena->exclusive, req_arena_id)) return NULL;    
+  const bool numa_suitable = (numa_node < 0 || arena->numa_node < 0 || arena->numa_node == numa_node || req_arena_id != _mi_arena_id_none());
+  if (match_numa_node) { if (!numa_suitable) return NULL; }
+                  else { if (numa_suitable) return NULL; }
+
+  // try to allocate
+  void* p = mi_arena_try_alloc_at(arena, arena_index, bcount, commit, memid, tld);
+  mi_assert_internal(p == NULL || _mi_is_aligned(p, alignment));
+  return p;
 }
 
 
@@ -298,40 +302,22 @@ static mi_decl_noinline void* mi_arenas_alloc(int numa_node, size_t size, size_t
 
   size_t arena_index = mi_arena_id_index(req_arena_id);
   if (arena_index < MI_MAX_ARENAS && arena_index < max_arena) {
-    // try a specific arena if requested
-    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_index]);
-    if ((arena != NULL) &&
-        // (arena->numa_node < 0 || arena->numa_node == numa_node) && // numa local?
-        (allow_large || !arena->is_large)) // large OS pages allowed, or the arena does not consist of large OS pages
-    {
-      void* p = mi_arena_alloc_at(arena, arena_index, bcount, commit, req_arena_id, memid, tld);
-      mi_assert_internal((uintptr_t)p % alignment == 0);
-      if (p != NULL) return p;
-    }
+    // try a specific arena if requested 
+    void* p = mi_arena_alloc_at_id(req_arena_id, true, numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);
+    if (p != NULL) return p;  
   }
   else {
+    mi_assert_internal(req_arena_id == _mi_arena_id_none());
     // try numa affine allocation
-    for (size_t i = 0; i < max_arena; i++) {
-      mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
-      if (arena != NULL &&
-          (arena->numa_node < 0 || arena->numa_node == numa_node) && // numa local?
-          (allow_large || !arena->is_large)) // large OS pages allowed, or the arena does not consist of large OS pages
-      {
-        void* p = mi_arena_alloc_at(arena, i, bcount, commit, req_arena_id, memid, tld);
-        mi_assert_internal((uintptr_t)p % alignment == 0);
-        if (p != NULL) return p;
-      }
+    for (size_t i = 0; i < max_arena; i++) {    
+      void* p = mi_arena_alloc_at_id(mi_arena_id_create(i), true, numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);
+      if (p != NULL) return p;
     }
 
     // try from another numa node instead..
-    for (size_t i = 0; i < max_arena; i++) {
-      mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
-      if (arena != NULL &&
-          (arena->numa_node >= 0 && arena->numa_node != numa_node) && // not numa local!
-          (allow_large || !arena->is_large)) // large OS pages allowed, or the arena does not consist of large OS pages
-      {
-        void* p = mi_arena_alloc_at(arena, i, bcount, commit, req_arena_id, memid, tld);
-        mi_assert_internal((uintptr_t)p % alignment == 0);
+    if (numa_node >= 0) {  // if numa_node was < 0 (no specific affinity requested), all arena's have been tried already
+      for (size_t i = 0; i < max_arena; i++) {
+        void* p = mi_arena_alloc_at_id(mi_arena_id_create(i), false /* only proceed if not numa local */, numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);
         if (p != NULL) return p;
       }
     }
@@ -339,10 +325,10 @@ static mi_decl_noinline void* mi_arenas_alloc(int numa_node, size_t size, size_t
   return NULL;
 }
 
-// try to reserve a fresh arena
+// try to reserve a fresh arena space
 static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t req_arena_id, mi_arena_id_t *arena_id)
 {
-  if (_mi_preloading()) return false;
+  if (_mi_preloading()) return false;  // use OS only while pre loading
   if (req_arena_id != _mi_arena_id_none()) return false;
 
   const size_t arena_count = mi_atomic_load_acquire(&mi_arena_count);
@@ -387,7 +373,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
     mi_arena_id_t arena_id = 0;
     if (mi_arena_reserve(size,allow_large,req_arena_id,&arena_id)) { 
       // and try allocate in there
-      p = mi_arena_alloc_at_id(arena_id, numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);        
+      p = mi_arena_alloc_at_id(arena_id, true, numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);        
       if (p != NULL) return p;
     }    
   }
