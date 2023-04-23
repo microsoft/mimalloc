@@ -149,7 +149,7 @@ static _Atomic(size_t) mi_arena_static_top;
 static void* mi_arena_static_zalloc(size_t size, size_t alignment, mi_memid_t* memid) {
   *memid = _mi_memid_none();
   if (size == 0 || size > MI_ARENA_STATIC_MAX) return NULL;
-  if (mi_atomic_load_relaxed(&mi_arena_static_top) >= MI_ARENA_STATIC_MAX) return NULL;
+  if ((mi_atomic_load_relaxed(&mi_arena_static_top) + size) > MI_ARENA_STATIC_MAX) return NULL;
 
   // try to claim space
   if (alignment == 0) { alignment = 1; }
