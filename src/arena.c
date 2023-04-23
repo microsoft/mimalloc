@@ -305,10 +305,8 @@ static mi_decl_noinline void* mi_arena_try_alloc(int numa_node, size_t size, siz
   MI_UNUSED(alignment);
   mi_assert_internal(alignment <= MI_SEGMENT_ALIGN);
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
-  const size_t bcount = mi_block_count_of_size(size);
   if mi_likely(max_arena == 0) return NULL;
-  mi_assert_internal(size <= mi_arena_block_size(bcount));
-
+  
   if (req_arena_id != _mi_arena_id_none()) {
     // try a specific arena if requested 
     if (mi_arena_id_index(req_arena_id) < max_arena) {
