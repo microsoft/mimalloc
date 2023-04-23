@@ -840,7 +840,6 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
   }
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
 
-  mi_track_mem_undefined(segment, (*pinfo_slices) * MI_SEGMENT_SLICE_SIZE); // todo: should not be necessary?
   segment->memid = memid;
   segment->allow_decommit = !memid.is_pinned;
   segment->allow_purge = segment->allow_decommit && (mi_option_get(mi_option_purge_delay) >= 0);
