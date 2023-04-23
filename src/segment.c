@@ -539,7 +539,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
     }
   }
 
-  mi_track_mem_undefined(segment, info_size); MI_UNUSED(info_size);
+  MI_UNUSED(info_size);
   segment->memid = memid;
   segment->allow_decommit = !memid.is_pinned;
   segment->allow_purge = segment->allow_decommit && (mi_option_get(mi_option_purge_delay) >= 0);

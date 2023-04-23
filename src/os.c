@@ -204,8 +204,8 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
   mi_assert_internal(is_zero != NULL);
   mi_assert_internal(is_large != NULL);
   if (size == 0) return NULL;
-  if (!commit) allow_large = false;
-  if (try_alignment == 0) try_alignment = 1; // avoid 0 to ensure there will be no divide by zero when aligning
+  if (!commit) { allow_large = false; }
+  if (try_alignment == 0) { try_alignment = 1; } // avoid 0 to ensure there will be no divide by zero when aligning
 
   *is_zero = false;
   void* p = NULL; 
@@ -216,7 +216,10 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
   mi_stat_counter_increase(stats->mmap_calls, 1);
   if (p != NULL) {
     _mi_stat_increase(&stats->reserved, size);
-    if (commit) { _mi_stat_increase(&stats->committed, size); }
+    if (commit) { 
+      _mi_stat_increase(&stats->committed, size); 
+      mi_track_mem_defined(p,size); // seems needed for asan (or `mimalloc-test-api` fails)
+    }
   }
   return p;
 }
@@ -276,8 +279,8 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       size_t mid_size = _mi_align_up(size, _mi_os_page_size());
       size_t post_size = over_size - pre_size - mid_size;
       mi_assert_internal(pre_size < over_size&& post_size < over_size&& mid_size >= size);
-      if (pre_size > 0)  mi_os_prim_free(p, pre_size, commit, stats);
-      if (post_size > 0) mi_os_prim_free((uint8_t*)aligned_p + mid_size, post_size, commit, stats);
+      if (pre_size > 0)  { mi_os_prim_free(p, pre_size, commit, stats); }
+      if (post_size > 0) { mi_os_prim_free((uint8_t*)aligned_p + mid_size, post_size, commit, stats); }
       // we can return the aligned pointer on `mmap` (and sbrk) systems
       p = aligned_p;
       *base = aligned_p; // since we freed the pre part, `*base == p`.
