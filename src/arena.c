@@ -370,7 +370,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
   // try to allocate in an arena if the alignment is small enough and the object is not too small (as for heap meta data)
   if (size >= MI_ARENA_MIN_OBJ_SIZE && alignment <= MI_SEGMENT_ALIGN && align_offset == 0) {
     void* p = mi_arena_try_alloc(numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);
-    if (p != NULL) return p;
+    if (p != NULL) return p;    
 
     // otherwise, try to first eagerly reserve a new arena 
     if (req_arena_id == _mi_arena_id_none()) {
@@ -396,7 +396,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
   }
   else {
     return _mi_os_alloc_aligned(size, alignment, commit, allow_large, memid, tld->stats);
-  }
+  }  
 }
 
 void* _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld)

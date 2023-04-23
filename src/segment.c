@@ -536,9 +536,9 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
       // commit failed; we cannot touch the memory: free the segment directly and return `NULL`
       _mi_arena_free(segment, segment_size, 0, memid, tld_os->stats);
       return NULL;
-    }
+    }    
   }
-
+  
   MI_UNUSED(info_size);
   segment->memid = memid;
   segment->allow_decommit = !memid.is_pinned;
