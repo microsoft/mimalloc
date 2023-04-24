@@ -15,7 +15,7 @@ There are four requirements to make the overriding work robustly:
     (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
     for an example on how to use this. 
 
-3. The [`mimalloc-redirect.dll`](bin) (or `mimalloc-redirect32.dll`) must be put
+3. The [`mimalloc-redirect.dll`](../bin) (or `mimalloc-redirect32.dll`) must be put
    in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency of that DLL).
    The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
    mimalloc functions (which reside in `mimalloc-override.dll`).
@@ -25,7 +25,7 @@ There are four requirements to make the overriding work robustly:
 
 For best performance on Windows with C++, it
 is also recommended to also override the `new`/`delete` operations (by including
-[`mimalloc-new-delete.h`](include/mimalloc-new-delete.h) 
+[`mimalloc-new-delete.h`](../include/mimalloc-new-delete.h) 
 a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
