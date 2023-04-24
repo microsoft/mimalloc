@@ -285,9 +285,9 @@ int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {
 int _mi_prim_reset(void* addr, size_t size) {
   void* p = VirtualAlloc(addr, size, MEM_RESET, PAGE_READWRITE);
   mi_assert_internal(p == addr);
-  #if 1
+  #if 0
   if (p != NULL) {
-    VirtualUnlock(addr,size); // VirtualUnlock after MEM_RESET removes the memory from the working set
+    VirtualUnlock(addr,size); // VirtualUnlock after MEM_RESET removes the memory directly from the working set
   }
   #endif
   return (p != NULL ? 0 : (int)GetLastError());

@@ -387,9 +387,11 @@ int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
 }
 
 int _mi_prim_reset(void* start, size_t size) {
-  // We always use MADV_DONTNEED if possible even if it may be a bit more expensive as MADV_FREE
-  // as this guarantees that we see the actual rss reflected in tools like `top`.
-  #if 0 && defined(MADV_FREE)
+  // We try to use `MADV_FREE` as that is the fastest. A drawback though is that it 
+  // will not reduce the `rss` stats in tools like `top` even though the memory is available
+  // to other processes. With the default `MIMALLOC_PURGE_DECOMMITS=1` we ensure that by 
+  // default `MADV_DONTNEED` is used though.
+  #if defined(MADV_FREE)
   static _Atomic(size_t) advice = MI_ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
   int err;

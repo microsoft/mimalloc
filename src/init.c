@@ -244,7 +244,7 @@ static mi_thread_data_t* mi_thread_data_zalloc(void) {
     }
     if (td != NULL) {
       td->memid = memid;
-      is_zero = memid.was_zero;
+      is_zero = memid.initially_zero;
     }
   }
   

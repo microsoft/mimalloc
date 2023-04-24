@@ -824,7 +824,7 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
 
   // ensure metadata part of the segment is committed  
   mi_commit_mask_t commit_mask; 
-  if (memid.was_committed) { 
+  if (memid.initially_committed) { 
     mi_commit_mask_create_full(&commit_mask);  
   }
   else { 
@@ -878,7 +878,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   if (segment == NULL) return NULL;
   
   // zero the segment info? -- not always needed as it may be zero initialized from the OS   
-  if (!segment->memid.was_zero) {
+  if (!segment->memid.initially_zero) {
     ptrdiff_t ofs    = offsetof(mi_segment_t, next);
     size_t    prefix = offsetof(mi_segment_t, slices) - ofs;
     size_t    zsize  = prefix + (sizeof(mi_slice_t) * (segment_slices + 1)); // one more  

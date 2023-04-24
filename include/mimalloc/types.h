@@ -387,24 +387,24 @@ static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
 }
 
 typedef struct mi_memid_os_info {
-  void*         base;           // actual base address of the block (used for offset aligned allocations)
-  size_t        alignment;      // alignment at allocation
+  void*         base;               // actual base address of the block (used for offset aligned allocations)
+  size_t        alignment;          // alignment at allocation
 } mi_memid_os_info_t;
 
 typedef struct mi_memid_arena_info {
-  size_t        block_index;    // index in the arena
-  mi_arena_id_t id;             // arena id (>= 1)
-  bool          is_exclusive;   // the arena can only be used for specific arena allocations
+  size_t        block_index;        // index in the arena
+  mi_arena_id_t id;                 // arena id (>= 1)
+  bool          is_exclusive;       // the arena can only be used for specific arena allocations
 } mi_memid_arena_info_t;
 
 typedef struct mi_memid_s {
   union {
-    mi_memid_os_info_t    os;   // only used for MI_MEM_OS
-    mi_memid_arena_info_t arena;// only used for MI_MEM_ARENA
+    mi_memid_os_info_t    os;       // only used for MI_MEM_OS
+    mi_memid_arena_info_t arena;    // only used for MI_MEM_ARENA
   } mem;
-  bool          is_pinned;      // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large OS pages)
-  bool          was_committed;  // `true` if the memory was originally allocated as committed
-  bool          was_zero;       // `true` if the memory was originally zero initialized
+  bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large OS pages)
+  bool          initially_committed;// `true` if the memory was originally allocated as committed
+  bool          initially_zero;     // `true` if the memory was originally zero initialized
   mi_memkind_t  memkind;
 } mi_memid_t;
 
