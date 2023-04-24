@@ -235,7 +235,7 @@
     </ClCompile>
     <ClCompile Include="..\..\src\page.c" />
     <ClCompile Include="..\..\src\random.c" />
-    <ClCompile Include="..\..\src\segment-cache.c" />
+    <ClCompile Include="..\..\src\segment-map.c" />
     <ClCompile Include="..\..\src\segment.c" />
     <ClCompile Include="..\..\src\os.c" />
     <ClCompile Include="..\..\src\stats.c" />
@@ -243,7 +243,6 @@
   <ItemGroup>
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc.h" />
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc-override.h" />
-    <ClInclude Include="..\..\include\mimalloc-etw.h" />
     <ClInclude Include="..\..\include\mimalloc-new-delete.h" />
     <ClInclude Include="..\..\include\mimalloc\atomic.h" />
     <ClInclude Include="..\..\include\mimalloc\internal.h" />

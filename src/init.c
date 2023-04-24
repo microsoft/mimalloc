@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
-  0, false, false, false, false,
+  0, false, false, false,
   0,       // capacity
   0,       // reserved capacity
   { 0 },   // flags
@@ -37,6 +37,7 @@ const mi_page_t _mi_page_empty = {
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
 
+#if (MI_SMALL_WSIZE_MAX==128)
 #if (MI_PADDING>0) && (MI_INTPTR_SIZE >= 8)
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY(), MI_PAGE_EMPTY() }
 #elif (MI_PADDING>0)
@@ -44,7 +45,9 @@ const mi_page_t _mi_page_empty = {
 #else
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT128(MI_PAGE_EMPTY), MI_PAGE_EMPTY() }
 #endif
-
+#else
+#error "define right initialization sizes corresponding to MI_SMALL_WSIZE_MAX"
+#endif
 
 // Empty page queues for every bin
 #define QNULL(sz)  { NULL, NULL, (sz)*sizeof(uintptr_t) }
@@ -79,8 +82,9 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 },     \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } \
+  MI_STAT_COUNT_NULL(), \
+  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
+  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 
 
@@ -199,6 +203,7 @@ mi_heap_t* _mi_heap_main_get(void) {
 typedef struct mi_thread_data_s {
   mi_heap_t  heap;  // must come first due to cast in `_mi_heap_done`
   mi_tld_t   tld;
+  mi_memid_t memid;
 } mi_thread_data_t;
 
 
@@ -207,30 +212,44 @@ typedef struct mi_thread_data_s {
 // destroy many OS threads, this may causes too much overhead
 // per thread so we maintain a small cache of recently freed metadata.
 
-#define TD_CACHE_SIZE (8)
+#define TD_CACHE_SIZE (16)
 static _Atomic(mi_thread_data_t*) td_cache[TD_CACHE_SIZE];
 
-static mi_thread_data_t* mi_thread_data_alloc(void) {
+static mi_thread_data_t* mi_thread_data_zalloc(void) {
   // try to find thread metadata in the cache
-  mi_thread_data_t* td;
+  bool is_zero = false;
+  mi_thread_data_t* td = NULL;
   for (int i = 0; i < TD_CACHE_SIZE; i++) {
     td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
     if (td != NULL) {
+      // found cached allocation, try use it
       td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL);
       if (td != NULL) {
-        return td;
+        break;
       }
     }
   }
-  // if that fails, allocate directly from the OS
-  td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main);
+
+  // if that fails, allocate as meta data
   if (td == NULL) {
-    // if this fails, try once more. (issue #257)
-    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &_mi_stats_main);
+    mi_memid_t memid;
+    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
     if (td == NULL) {
-      // really out of memory
-      _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
+      // if this fails, try once more. (issue #257)
+      td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
+      if (td == NULL) {
+        // really out of memory
+        _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
+      }
     }
+    if (td != NULL) {
+      td->memid = memid;
+      is_zero = memid.initially_zero;
+    }
+  }
+  
+  if (td != NULL && !is_zero) {
+    _mi_memzero_aligned(td, sizeof(*td));
   }
   return td;
 }
@@ -247,17 +266,17 @@ static void mi_thread_data_free( mi_thread_data_t* tdfree ) {
     }
   }
   // if that fails, just free it directly
-  _mi_os_free(tdfree, sizeof(mi_thread_data_t), &_mi_stats_main);
+  _mi_os_free(tdfree, sizeof(mi_thread_data_t), tdfree->memid, &_mi_stats_main);
 }
 
-static void mi_thread_data_collect(void) {
+void _mi_thread_data_collect(void) {
   // free all thread metadata from the cache
   for (int i = 0; i < TD_CACHE_SIZE; i++) {
     mi_thread_data_t* td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
     if (td != NULL) {
       td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL);
       if (td != NULL) {
-        _mi_os_free( td, sizeof(mi_thread_data_t), &_mi_stats_main );
+        _mi_os_free(td, sizeof(mi_thread_data_t), td->memid, &_mi_stats_main);
       }
     }
   }
@@ -275,10 +294,9 @@ static bool _mi_heap_init(void) {
   }
   else {
     // use `_mi_os_alloc` to allocate directly from the OS
-    mi_thread_data_t* td = mi_thread_data_alloc();
+    mi_thread_data_t* td = mi_thread_data_zalloc();
     if (td == NULL) return false;
 
-    // OS allocated so already zero initialized
     mi_tld_t*  tld = &td->tld;
     mi_heap_t* heap = &td->heap;
     _mi_memcpy_aligned(tld, &tld_empty, sizeof(*tld));
@@ -340,7 +358,6 @@ static bool _mi_heap_done(mi_heap_t* heap) {
     mi_thread_data_free((mi_thread_data_t*)heap);
   }
   else {
-    mi_thread_data_collect(); // free cached thread metadata
     #if 0
     // never free the main thread even in debug mode; if a dll is linked statically with mimalloc,
     // there may still be delete/free calls after the mi_fls_done is called. Issue #207
@@ -548,6 +565,9 @@ static void mi_detect_cpu_features(void) {
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   static mi_atomic_once_t process_init;
+	#if _MSC_VER < 1920
+	mi_heap_main_init(); // vs2017 can dynamically re-initialize _mi_heap_main
+	#endif
   if (!mi_atomic_once(&process_init)) return;
   _mi_process_is_initialized = true;
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
@@ -606,7 +626,7 @@ static void mi_cdecl mi_process_done(void) {
   _mi_prim_thread_done_auto_done();
   
   #ifndef MI_SKIP_COLLECT_ON_EXIT
-    #if (MI_DEBUG != 0) || !defined(MI_SHARED_LIB)
+    #if (MI_DEBUG || !defined(MI_SHARED_LIB))
     // free all memory if possible on process exit. This is not needed for a stand-alone process
     // but should be done if mimalloc is statically linked into another shared library which
     // is repeatedly loaded/unloaded, see issue #281.
@@ -618,8 +638,9 @@ static void mi_cdecl mi_process_done(void) {
   // since after process_done there might still be other code running that calls `free` (like at_exit routines,
   // or C-runtime termination code.
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
-    _mi_heap_destroy_all();                          // forcefully release all memory held by all heaps (of this thread only!)
-    _mi_segment_cache_free_all(&_mi_heap_main_get()->tld->os);  // release all cached segments
+    mi_collect(true /* force */);
+    _mi_heap_unsafe_destroy_all();     // forcefully release all memory held by all heaps (of this thread only!)
+    _mi_arena_unsafe_destroy_all(& _mi_heap_main_get()->tld->stats);
   }
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {

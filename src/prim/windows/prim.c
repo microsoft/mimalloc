@@ -113,6 +113,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
 {
   config->has_overcommit = false;
   config->must_free_whole = true;
+  config->has_virtual_reserve = true;
   // get the page size
   SYSTEM_INFO si;
   GetSystemInfo(&si);
@@ -142,7 +143,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     pGetNumaProcessorNode = (PGetNumaProcessorNode)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNode");
     FreeLibrary(hDll);
   }
-  if (mi_option_is_enabled(mi_option_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
+  if (mi_option_is_enabled(mi_option_allow_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     win_enable_large_os_pages(&config->large_page_size);
   }
 }
@@ -239,10 +240,11 @@ static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DW
   return p;
 }
 
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, void** addr) {
+int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(commit || !allow_large);
   mi_assert_internal(try_alignment > 0);
+  *is_zero = true;
   int flags = MEM_RESERVE;
   if (commit) { flags |= MEM_COMMIT; }
   *addr = win_virtual_alloc(NULL, size, try_alignment, flags, false, allow_large, is_large);
@@ -257,26 +259,38 @@ int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_la
 #pragma warning(disable:6250)   // suppress warning calling VirtualFree without MEM_RELEASE (for decommit)
 #endif
 
-int _mi_prim_commit(void* addr, size_t size, bool commit) {
-  if (commit) {
-    void* p = VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE);
-    return (p == addr ? 0 : (int)GetLastError());
+int _mi_prim_commit(void* addr, size_t size, bool* is_zero) {
+  *is_zero = false;
+  /*
+  // zero'ing only happens on an initial commit... but checking upfront seems expensive..
+  _MEMORY_BASIC_INFORMATION meminfo; _mi_memzero_var(meminfo);
+  if (VirtualQuery(addr, &meminfo, size) > 0) {
+    if ((meminfo.State & MEM_COMMIT) == 0) {
+      *is_zero = true;
+    }
   }
-  else {
-    BOOL ok = VirtualFree(addr, size, MEM_DECOMMIT);
-    return (ok ? 0 : (int)GetLastError());  
-  }
+  */
+  // commit
+  void* p = VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE);
+  if (p == NULL) return (int)GetLastError();
+  return 0;
+}
+
+int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {  
+  BOOL ok = VirtualFree(addr, size, MEM_DECOMMIT);
+  *needs_recommit = true;  // for safety, assume always decommitted even in the case of an error.
+  return (ok ? 0 : (int)GetLastError());
 }
 
 int _mi_prim_reset(void* addr, size_t size) {
   void* p = VirtualAlloc(addr, size, MEM_RESET, PAGE_READWRITE);
   mi_assert_internal(p == addr);
-  #if 1
-  if (p == addr && addr != NULL) {
-    VirtualUnlock(addr,size); // VirtualUnlock after MEM_RESET removes the memory from the working set
+  #if 0
+  if (p != NULL) {
+    VirtualUnlock(addr,size); // VirtualUnlock after MEM_RESET removes the memory directly from the working set
   }
   #endif
-  return (p == addr ? 0 : (int)GetLastError());
+  return (p != NULL ? 0 : (int)GetLastError());
 }
 
 int _mi_prim_protect(void* addr, size_t size, bool protect) {
@@ -331,7 +345,8 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
   return VirtualAlloc(hint_addr, size, flags, PAGE_READWRITE);
 }
 
-int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, void** addr) {
+int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bool* is_zero, void** addr) {
+  *is_zero = true;
   *addr = _mi_prim_alloc_huge_os_pagesx(hint_addr,size,numa_node);
   return (*addr != NULL ? 0 : (int)GetLastError());
 }

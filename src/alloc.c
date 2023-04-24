@@ -37,6 +37,11 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   page->used++;
   page->free = mi_block_next(page, block);
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
+  #if MI_DEBUG>3
+  if (page->free_is_zero) {
+    mi_assert_expensive(mi_mem_is_zero(block+1,size - sizeof(*block)));
+  }
+  #endif
 
   // allow use of the block internally
   // note: when tracking we need to avoid ever touching the MI_PADDING since
@@ -46,12 +51,18 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
     mi_assert_internal(page->xblock_size != 0); // do not call with zero'ing for huge blocks (see _mi_malloc_generic)
-    const size_t zsize = (page->is_zero ? sizeof(block->next) + MI_PADDING_SIZE : page->xblock_size);
-    _mi_memzero_aligned(block, zsize - MI_PADDING_SIZE);
+    mi_assert_internal(page->xblock_size >= MI_PADDING_SIZE);
+    if (page->free_is_zero) {
+      block->next = 0;
+      mi_track_mem_defined(block, page->xblock_size - MI_PADDING_SIZE);
+    }
+    else {
+      _mi_memzero_aligned(block, page->xblock_size - MI_PADDING_SIZE);
+    }    
   }
 
 #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
-  if (!page->is_zero && !zero && !mi_page_is_huge(page)) {
+  if (!zero && !mi_page_is_huge(page)) {
     memset(block, MI_DEBUG_UNINIT, mi_page_usable_block_size(page));
   }
 #elif (MI_SECURE!=0)
@@ -110,6 +121,11 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
     mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
   }
   #endif
+  #if MI_DEBUG>3
+  if (p != NULL && zero) {
+    mi_assert_expensive(mi_mem_is_zero(p, size));
+  }
+  #endif
   return p;
 }
 
@@ -137,6 +153,11 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
     if (p != NULL) {
       if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
       mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
+    }
+    #endif
+    #if MI_DEBUG>3
+    if (p != NULL && zero) {
+      mi_assert_expensive(mi_mem_is_zero(p, size));
     }
     #endif
     return p;
@@ -691,6 +712,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
     mi_assert_internal(p!=NULL);
     // todo: do not track as the usable size is still the same in the free; adjust potential padding?
     // mi_track_resize(p,size,newsize)
+    // if (newsize < size) { mi_track_mem_noaccess((uint8_t*)p + newsize, size - newsize); }
     return p;  // reallocation still fits and not more than 50% waste
   }
   void* newp = mi_heap_malloc(heap,newsize);
@@ -698,14 +720,15 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
     if (zero && newsize > size) {
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
       const size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
-      memset((uint8_t*)newp + start, 0, newsize - start);
+      _mi_memzero((uint8_t*)newp + start, newsize - start);
+    }
+    else if (newsize == 0) {
+      ((uint8_t*)newp)[0] = 0; // work around for applications that expect zero-reallocation to be zero initialized (issue #725)
     }
     if mi_likely(p != NULL) {
-      if mi_likely(_mi_is_aligned(p, sizeof(uintptr_t))) {  // a client may pass in an arbitrary pointer `p`..
-        const size_t copysize = (newsize > size ? size : newsize);
-        mi_track_mem_defined(p,copysize);  // _mi_useable_size may be too large for byte precise memory tracking..
-        _mi_memcpy_aligned(newp, p, copysize);
-      }
+      const size_t copysize = (newsize > size ? size : newsize);
+      mi_track_mem_defined(p,copysize);  // _mi_useable_size may be too large for byte precise memory tracking..
+      _mi_memcpy(newp, p, copysize);
       mi_free(p); // only free the original pointer if successful
     }
   }
@@ -1030,7 +1053,7 @@ void* _mi_externs[] = {
   (void*)&mi_zalloc_small,
   (void*)&mi_heap_malloc,
   (void*)&mi_heap_zalloc,
-  (void*)&mi_heap_malloc_small
+  (void*)&mi_heap_malloc_small,
   // (void*)&mi_heap_alloc_new,
   // (void*)&mi_heap_alloc_new_n
 };

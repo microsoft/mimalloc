@@ -20,31 +20,37 @@ terms of the MIT license.
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <assert.h>
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
 // argument defaults
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 25;      // scaling factor
+
+#if defined(MI_TSAN)
+static int ITER    = 10;      // N full iterations destructing and re-creating all threads (on tsan reduce for azure pipeline limits)
+#else
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
+#endif
 
 // static int THREADS = 8;    // more repeatable if THREADS <= #processors
 // static int SCALE   = 100;  // scaling factor
 
 #define STRESS   // undefine for leak test
 
-static bool   allow_large_objects = true;    // allow very large objects?
-static size_t use_one_size = 0;              // use single object size of `N * sizeof(uintptr_t)`?
+static bool   allow_large_objects = true;     // allow very large objects? (set to `true` if SCALE>100)
+static size_t use_one_size = 0;               // use single object size of `N * sizeof(uintptr_t)`?
 
 
 // #define USE_STD_MALLOC
 #ifdef USE_STD_MALLOC
-#define custom_calloc(n,s)    malloc(n*s)
+#define custom_calloc(n,s)    calloc(n,s)
 #define custom_realloc(p,s)   realloc(p,s)
 #define custom_free(p)        free(p)
 #else
 #include <mimalloc.h>
-#define custom_calloc(n,s)    mi_malloc(n*s)
+#define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
 #endif
@@ -101,6 +107,7 @@ static void* alloc_items(size_t items, random_t r) {
   uintptr_t* p = (uintptr_t*)custom_calloc(items,sizeof(uintptr_t));
   if (p != NULL) {
     for (uintptr_t i = 0; i < items; i++) {
+      assert(p[i] == 0);
       p[i] = (items - i) ^ cookie;
     }
   }
@@ -222,6 +229,10 @@ static void test_leak(void) {
 #endif
 
 int main(int argc, char** argv) {
+  #ifndef USE_STD_MALLOC
+    mi_stats_reset();
+  #endif  
+
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
   if (argc >= 2) {
     char* end;
@@ -238,15 +249,15 @@ int main(int argc, char** argv) {
     long n = (strtol(argv[3], &end, 10));
     if (n > 0) ITER = n;
   }
-  printf("Using %d threads with a %d%% load-per-thread and %d iterations\n", THREADS, SCALE, ITER);
+  if (SCALE > 100) {
+    allow_large_objects = true;
+  }
+  printf("Using %d threads with a %d%% load-per-thread and %d iterations %s\n", THREADS, SCALE, ITER, (allow_large_objects ? "(allow large objects)" : ""));
   //mi_reserve_os_memory(1024*1024*1024ULL, false, true);
   //int res = mi_reserve_huge_os_pages(4,1);
   //printf("(reserve huge: %i\n)", res);
 
   //bench_start_program();
-#ifndef USE_STD_MALLOC
-  mi_stats_reset();
-#endif  
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
   srand(0x7feb352d);

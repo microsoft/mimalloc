@@ -50,7 +50,7 @@ set(mi_sources
     src/page.c
     src/random.c
     src/segment.c
-    src/segment-cache.c
+    src/segment-map.c
     src/stats.c
     src/prim/prim.c)
 

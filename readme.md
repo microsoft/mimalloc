@@ -12,8 +12,8 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.1.1` (2023-04-03).
-Latest stable  tag: `v1.8.1` (2023-04-03).
+Latest release tag: `v2.1.2` (2023-04-24).
+Latest stable  tag: `v1.8.2` (2023-04-24).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -43,7 +43,7 @@ It also includes a robust way to override the default allocator in [Windows](#ov
   and the chance of contending on a single location will be low -- this is quite
   similar to randomized algorithms like skip lists where adding
   a random oracle removes the need for a more complex algorithm.
-- __eager page reset__: when a "page" becomes empty (with increased chance
+- __eager page purging__: when a "page" becomes empty (with increased chance
   due to free list sharding) the memory is marked to the OS as unused (reset or decommitted)
   reducing (real) memory pressure and fragmentation, especially in long running
   programs.
@@ -78,6 +78,10 @@ Note: the `v2.x` version has a new algorithm for managing internal mimalloc page
   and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
 
+* 2023-04-24, `v1.8.2`, `v2.1.2`: Fixes build issues on freeBSD, musl, and C17 (UE 5.1.1). Reduce code size/complexity 
+  by removing regions and segment-cache's and only use arenas with improved memory purging -- this may improve memory
+  usage as well for larger services. Renamed options for consistency. Improved Valgrind and ASAN checking.
+  
 * 2023-04-03, `v1.8.1`, `v2.1.1`: Fixes build issues on some platforms.
 
 * 2023-03-29, `v1.8.0`, `v2.1.0`: Improved support dynamic overriding on Windows 11. Improved tracing precision
@@ -103,20 +107,6 @@ Note: the `v2.x` version has a new algorithm for managing internal mimalloc page
   committed memory, add `bin/minject` for Windows,
   improved wasm support, faster aligned allocation,
   various small fixes.
-
-* 2021-11-14, `v1.7.3`, `v2.0.3` (beta): improved WASM support, improved macOS support and performance (including
-  M1), improved performance for v2 for large objects, Python integration improvements, more standard
-  installation directories, various small fixes.
-
-* 2021-06-17, `v1.7.2`, `v2.0.2` (beta): support M1, better installation layout on Linux, fix
-  thread_id on Android, prefer 2-6TiB area for aligned allocation to work better on pre-windows 8, various small fixes.
-
-* 2021-04-06, `v1.7.1`, `v2.0.1` (beta): fix bug in arena allocation for huge pages, improved aslr on large allocations, initial M1 support (still experimental).
-
-* 2021-01-31, `v2.0.0`: beta release 2.0: new slice algorithm for managing internal mimalloc pages.
-
-* 2021-01-31, `v1.7.0`: stable release 1.7: support explicit user provided memory regions, more precise statistics,
-  improve macOS overriding, initial support for Apple M1, improved DragonFly support, faster memcpy on Windows, various small fixes.
 
 * [Older release notes](#older-release-notes)
 
@@ -279,43 +269,48 @@ completely and redirect all calls to the _mimalloc_ library instead .
 
 ## Environment Options
 
-You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)),
-or via environment variables:
+You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)), or via environment variables:
 
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
 - `MIMALLOC_VERBOSE=1`: show verbose messages.
 - `MIMALLOC_SHOW_ERRORS=1`: show error and warning messages.
-- `MIMALLOC_PAGE_RESET=0`: by default, mimalloc will reset (or purge) OS pages that are not in use, to signal to the OS
-   that the underlying physical memory can be reused. This can reduce memory fragmentation in long running (server)
-   programs. By setting it to `0` this will no longer be done which can improve performance for batch-like programs.
-   As an alternative, the `MIMALLOC_RESET_DELAY=`<msecs> can be set higher (100ms by default) to make the page
-   reset occur less frequently instead of turning it off completely.
+
+Advanced options:
+
+- `MIMALLOC_PURGE_DELAY=N`: the delay in `N` milli-seconds (by default `10`) after which mimalloc will purge 
+   OS pages that are not in use. This signals to the OS that the underlying physical memory can be reused which 
+   can reduce memory fragmentation especially in long running (server) programs. Setting `N` to `0` purges immediately when
+   a page becomes unused which can improve memory usage but also decreases performance. Setting `N` to a higher
+   value like `100` can improve performance (sometimes by a lot) at the cost of potentially using more memory at times.
+   Setting it to `-1` disables purging completely.   
+- `MIMALLOC_ARENA_EAGER_COMMIT=1`: turns on eager commit for the large arenas (usually 1GiB) from which mimalloc 
+   allocates segments and pages. This is by default 
+   only enabled on overcommit systems (e.g. Linux) but enabling it explicitly on other systems (like Windows or macOS)
+   may improve performance. Note that eager commit only increases the commit but not the actual the peak resident set 
+   (rss) so it is generally ok to enable this.
+
+Further options for large workloads and services:
+
 - `MIMALLOC_USE_NUMA_NODES=N`: pretend there are at most `N` NUMA nodes. If not set, the actual NUMA nodes are detected
    at runtime. Setting `N` to 1 may avoid problems in some virtual environments. Also, setting it to a lower number than
    the actual NUMA nodes is fine and will only cause threads to potentially allocate more memory across actual NUMA
    nodes (but this can happen in any case as NUMA local allocation is always a best effort but not guaranteed).
-- `MIMALLOC_LARGE_OS_PAGES=1`: use large OS pages (2MiB) when available; for some workloads this can significantly
+- `MIMALLOC_ALLOW_LARGE_OS_PAGES=1`: use large OS pages (2MiB) when available; for some workloads this can significantly
    improve performance. Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
    to explicitly allow large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
    the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
-   can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead whenever possible).
-   <!--
-   - `MIMALLOC_EAGER_REGION_COMMIT=1`: on Windows, commit large (256MiB) regions eagerly. On Windows, these regions
-   show in the working set even though usually just a small part is committed to physical memory. This is why it
-   turned off by default on Windows as it looks not good in the task manager. However, turning it on has no
-   real drawbacks and may improve performance by a little.
-   -->
-- `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where N is the number of 1GiB _huge_ OS pages. This reserves the huge pages at
+   can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead whenever possible).   
+- `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where `N` is the number of 1GiB _huge_ OS pages. This reserves the huge pages at
    startup and sometimes this can give a large (latency) performance improvement on big workloads.
-   Usually it is better to not use
-   `MIMALLOC_LARGE_OS_PAGES` in combination with this setting. Just like large OS pages, use with care as reserving
+   Usually it is better to not use `MIMALLOC_ALLOW_LARGE_OS_PAGES=1` in combination with this setting. Just like large 
+   OS pages, use with care as reserving
    contiguous physical memory can take a long time when memory is fragmented (but reserving the huge pages is done at
    startup only once).
    Note that we usually need to explicitly enable huge OS pages (as on [Windows][windows-huge] and [Linux][linux-huge])).
    With huge OS pages, it may be beneficial to set the setting
    `MIMALLOC_EAGER_COMMIT_DELAY=N` (`N` is 1 by default) to delay the initial `N` segments (of 4MiB)
    of a thread to not allocate in the huge OS pages; this prevents threads that are short lived
-   and allocate just a little to take up space in the huge OS page area (which cannot be reset).
+   and allocate just a little to take up space in the huge OS page area (which cannot be purged).
    The huge pages are usually allocated evenly among NUMA nodes.
    We can use `MIMALLOC_RESERVE_HUGE_OS_PAGES_AT=N` where `N` is the numa node (starting at 0) to allocate all
    the huge pages at a specific numa node instead.
@@ -517,7 +512,7 @@ Adress sanitizer support is in its initial development -- please report any issu
 ### ETW
 
 Event tracing for Windows ([ETW]) provides a high performance way to capture all allocations though
-mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACE_ETW=ON` cmake option. 
+mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACK_ETW=ON` cmake option. 
 
 You can then capture an allocation trace using the Windows performance recorder (WPR), using the 
 `src/prim/windows/etw-mimalloc.wprp` profile. In an admin prompt, you can use:
@@ -793,6 +788,16 @@ provided by the bot. You will only need to do this once across all repos using o
 
 # Older Release Notes
 
+* 2021-11-14, `v1.7.3`, `v2.0.3` (beta): improved WASM support, improved macOS support and performance (including
+  M1), improved performance for v2 for large objects, Python integration improvements, more standard
+  installation directories, various small fixes.
+* 2021-06-17, `v1.7.2`, `v2.0.2` (beta): support M1, better installation layout on Linux, fix
+  thread_id on Android, prefer 2-6TiB area for aligned allocation to work better on pre-windows 8, various small fixes.
+* 2021-04-06, `v1.7.1`, `v2.0.1` (beta): fix bug in arena allocation for huge pages, improved aslr on large allocations, initial M1 support (still experimental).
+* 2021-01-31, `v2.0.0`: beta release 2.0: new slice algorithm for managing internal mimalloc pages.
+* 2021-01-31, `v1.7.0`: stable release 1.7: support explicit user provided memory regions, more precise statistics,
+  improve macOS overriding, initial support for Apple M1, improved DragonFly support, faster memcpy on Windows, various small fixes.
+
 * 2020-09-24, `v1.6.7`: stable release 1.6: using standard C atomics, passing tsan testing, improved
   handling of failing to commit on Windows, add [`mi_process_info`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc.h#L156) api call.
 * 2020-08-06, `v1.6.4`: stable release 1.6: improved error recovery in low-memory situations,
@@ -814,6 +819,7 @@ provided by the bot. You will only need to do this once across all repos using o
 more eager concurrent free, addition of STL allocator, fixed potential memory leak.
 * 2020-01-15, `v1.3.0`: stable release 1.3: bug fixes, improved randomness and [stronger
 free list encoding](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396) in secure mode.
+
 * 2019-12-22, `v1.2.2`: stable release 1.2: minor updates.
 * 2019-11-22, `v1.2.0`: stable release 1.2: bug fixes, improved secure mode (free list corruption checks, double free mitigation). Improved dynamic overriding on Windows.
 * 2019-10-07, `v1.1.0`: stable release 1.1.

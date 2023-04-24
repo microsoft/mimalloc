@@ -154,8 +154,8 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
-  // collect abandoned segments (in particular, decommit expired parts of segments in the abandoned segment list)
-  // note: forced decommit can be quite expensive if many threads are created/destroyed so we do not force on abandonment
+  // collect abandoned segments (in particular, purge expired parts of segments in the abandoned segment list)
+  // note: forced purge can be quite expensive if many threads are created/destroyed so we do not force on abandonment
   _mi_abandoned_collect(heap, collect == MI_FORCE /* force? */, &heap->tld->segments);
 
   // collect segment local caches
@@ -163,13 +163,10 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
     _mi_segment_thread_collect(&heap->tld->segments);
   }
 
-  // decommit in global segment caches
-  // note: forced decommit can be quite expensive if many threads are created/destroyed so we do not force on abandonment
-  _mi_segment_cache_collect( collect == MI_FORCE, &heap->tld->os);  
-
   // collect regions on program-exit (or shared library unload)
   if (force && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
-    //_mi_mem_collect(&heap->tld->os);
+    _mi_thread_data_collect();  // collect thread data cache
+    _mi_arena_collect(true /* force purge */, &heap->tld->stats);
   }
 }
 
@@ -209,16 +206,16 @@ mi_heap_t* mi_heap_get_backing(void) {
   return bheap;
 }
 
-mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena( mi_arena_id_t arena_id ) {
+mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);  // todo: OS allocate in secure mode?
-  if (heap==NULL) return NULL;
+  if (heap == NULL) return NULL;
   _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(mi_heap_t));
   heap->tld = bheap->tld;
   heap->thread_id = _mi_thread_id();
   heap->arena_id = arena_id;
   _mi_random_split(&bheap->random, &heap->random);
-  heap->cookie  = _mi_heap_random_next(heap) | 1;
+  heap->cookie = _mi_heap_random_next(heap) | 1;
   heap->keys[0] = _mi_heap_random_next(heap);
   heap->keys[1] = _mi_heap_random_next(heap);
   heap->no_reclaim = true;  // don't reclaim abandoned pages or otherwise destroy is unsafe
@@ -232,7 +229,7 @@ mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
   return mi_heap_new_in_arena(_mi_arena_id_none());
 }
 
-bool _mi_heap_memid_is_suitable(mi_heap_t* heap, size_t memid) {
+bool _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid) {
   return _mi_arena_memid_is_suitable(memid, heap->arena_id);
 }
 
@@ -365,7 +362,8 @@ void mi_heap_destroy(mi_heap_t* heap) {
   }
 }
 
-void _mi_heap_destroy_all(void) {
+// forcefully destroy all heaps in the current thread
+void _mi_heap_unsafe_destroy_all(void) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* curr = bheap->tld->heaps;
   while (curr != NULL) {

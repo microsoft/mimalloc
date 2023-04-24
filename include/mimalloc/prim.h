@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Each OS/host needs to implement these primitives, see `src/prim`
 // for implementations on Window, macOS, WASI, and Linux/Unix.
 //
-// note: on all primitive functions, we always get:
+// note: on all primitive functions, we always have result parameters != NUL, and:
 //  addr != NULL and page aligned
 //  size > 0     and page aligned
 //  return value is an error code an int where 0 is success.
@@ -22,11 +22,12 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // OS memory configuration
 typedef struct mi_os_mem_config_s {
-  size_t  page_size;          // 4KiB
-  size_t  large_page_size;    // 2MiB
-  size_t  alloc_granularity;  // smallest allocation size (on Windows 64KiB)
-  bool    has_overcommit;     // can we reserve more memory than can be actually committed?
-  bool    must_free_whole;    // must allocated blocks free as a whole (false for mmap, true for VirtualAlloc)
+  size_t  page_size;            // 4KiB
+  size_t  large_page_size;      // 2MiB
+  size_t  alloc_granularity;    // smallest allocation size (on Windows 64KiB)
+  bool    has_overcommit;       // can we reserve more memory than can be actually committed?
+  bool    must_free_whole;      // must allocated blocks be freed as a whole (false for mmap, true for VirtualAlloc)
+  bool    has_virtual_reserve;  // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
 } mi_os_mem_config_t;
 
 // Initialize
@@ -37,12 +38,23 @@ int _mi_prim_free(void* addr, size_t size );
   
 // Allocate OS memory. Return NULL on error.
 // The `try_alignment` is just a hint and the returned pointer does not have to be aligned.
+// If `commit` is false, the virtual memory range only needs to be reserved (with no access) 
+// which will later be committed explicitly using `_mi_prim_commit`.
+// `is_zero` is set to true if the memory was zero initialized (as on most OS's)
 // pre: !commit => !allow_large
 //      try_alignment >= _mi_os_page_size() and a power of 2
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, void** addr);
+int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr);
 
 // Commit memory. Returns error code or 0 on success.
-int _mi_prim_commit(void* addr, size_t size, bool commit);
+// For example, on Linux this would make the memory PROT_READ|PROT_WRITE.
+// `is_zero` is set to true if the memory was zero initialized (e.g. on Windows)
+int _mi_prim_commit(void* addr, size_t size, bool* is_zero);
+
+// Decommit memory. Returns error code or 0 on success. The `needs_recommit` result is true
+// if the memory would need to be re-committed. For example, on Windows this is always true,
+// but on Linux we could use MADV_DONTNEED to decommit which does not need a recommit.
+// pre: needs_recommit != NULL
+int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit);
 
 // Reset memory. The range keeps being accessible but the content might be reset.
 // Returns error code or 0 on success.
@@ -52,10 +64,10 @@ int _mi_prim_reset(void* addr, size_t size);
 int _mi_prim_protect(void* addr, size_t size, bool protect);
 
 // Allocate huge (1GiB) pages possibly associated with a NUMA node.
+// `is_zero` is set to true if the memory was zero initialized (as on most OS's)
 // pre: size > 0  and a multiple of 1GiB.
-//      addr is either NULL or an address hint.
 //      numa_node is either negative (don't care), or a numa node number.
-int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, void** addr);
+int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bool* is_zero, void** addr);
 
 // Return the current NUMA node
 size_t _mi_prim_numa_node(void);

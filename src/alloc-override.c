@@ -245,11 +245,13 @@ extern "C" {
   int    posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
 
   // `aligned_alloc` is only available when __USE_ISOC11 is defined.
+  // Note: it seems __USE_ISOC11 is not defined in musl (and perhaps other libc's) so we only check
+  // for it if using glibc.
   // Note: Conda has a custom glibc where `aligned_alloc` is declared `static inline` and we cannot
   // override it, but both _ISOC11_SOURCE and __USE_ISOC11 are undefined in Conda GCC7 or GCC9.
   // Fortunately, in the case where `aligned_alloc` is declared as `static inline` it
   // uses internally `memalign`, `posix_memalign`, or `_aligned_malloc` so we  can avoid overriding it ourselves.
-  #if __USE_ISOC11
+  #if !defined(__GLIBC__) || __USE_ISOC11
   void* aligned_alloc(size_t alignment, size_t size) { return mi_aligned_alloc(alignment, size); }
   #endif
 #endif

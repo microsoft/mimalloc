@@ -32,7 +32,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "page.c"           // includes page-queue.c
 #include "random.c" 
 #include "segment.c"
-#include "segment-cache.c"
+#include "segment-map.c"
 #include "stats.c"
 #include "prim/prim.c"
 #if MI_OSX_ZONE
