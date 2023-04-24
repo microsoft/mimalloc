@@ -673,8 +673,8 @@ static inline mi_memid_t _mi_memid_none(void) {
 
 static inline mi_memid_t _mi_memid_create_os(bool committed, bool is_zero, bool is_large) {
   mi_memid_t memid = _mi_memid_create(MI_MEM_OS);
-  memid.was_committed = committed;
-  memid.was_zero = is_zero;
+  memid.initially_committed = committed;
+  memid.initially_zero = is_zero;
   memid.is_pinned = is_large;
   return memid;
 }

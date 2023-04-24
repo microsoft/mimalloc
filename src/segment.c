@@ -201,7 +201,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
       // and protect the last (or only) page too
       mi_assert_internal(MI_SECURE <= 1 || segment->page_kind >= MI_PAGE_LARGE);
       uint8_t* start = (uint8_t*)segment + segment->segment_size - os_psize;
-      if (protect && !segment->memid.was_committed) {
+      if (protect && !segment->memid.initially_committed) {
         if (protect) {
           // ensure secure page is committed
           if (_mi_os_commit(start, os_psize, NULL, tld->stats)) {  // if this fails that is ok (as it is an unaccessible page)
@@ -528,7 +528,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
     return NULL;  // failed to allocate
   }
 
-  if (!memid.was_committed) {
+  if (!memid.initially_committed) {
     // ensure the initial info is committed
     mi_assert_internal(!memid.is_pinned);
     bool ok = _mi_os_commit(segment, pre_size, NULL, tld_os->stats);
@@ -586,7 +586,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   mi_segment_t* segment = mi_segment_os_alloc(eager_delayed, page_alignment, req_arena_id, pre_size, info_size, init_commit, init_segment_size, tld, os_tld);
   if (segment == NULL) return NULL;
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
-  mi_assert_internal(segment->memid.is_pinned ? segment->memid.was_committed : true);
+  mi_assert_internal(segment->memid.is_pinned ? segment->memid.initially_committed : true);
 
   mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);  // tsan
 
@@ -598,8 +598,8 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   for (size_t i = 0; i < capacity; i++) {
     mi_assert_internal(i <= 255);
     segment->pages[i].segment_idx = (uint8_t)i;
-    segment->pages[i].is_committed = segment->memid.was_committed;
-    segment->pages[i].is_zero_init = segment->memid.was_zero;
+    segment->pages[i].is_committed = segment->memid.initially_committed;
+    segment->pages[i].is_zero_init = segment->memid.initially_zero;
   }
 
   // initialize

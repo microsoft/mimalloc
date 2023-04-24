@@ -234,31 +234,31 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
   }
 
   // set the dirty bits (todo: no need for an atomic op here?)
-  memid->was_zero = _mi_bitmap_claim_across(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
+  memid->initially_zero = _mi_bitmap_claim_across(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
 
   // set commit state
   if (arena->blocks_committed == NULL) {
     // always committed
-    memid->was_committed = true;
+    memid->initially_committed = true;
   }
   else if (commit) {
     // commit requested, but the range may not be committed as a whole: ensure it is committed now
-    memid->was_committed = true;
+    memid->initially_committed = true;
     bool any_uncommitted;
     _mi_bitmap_claim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted);
     if (any_uncommitted) {
       bool commit_zero = false;
       if (!_mi_os_commit(p, mi_arena_block_size(needed_bcount), &commit_zero, tld->stats)) {
-        memid->was_committed = false;
+        memid->initially_committed = false;
       }
       else {
-        if (commit_zero) { memid->was_zero = true; }
+        if (commit_zero) { memid->initially_zero = true; }
       }
     }
   }
   else {
     // no need to commit, but check if already fully committed
-    memid->was_committed = _mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
+    memid->initially_committed = _mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
   }
   
   return p;
@@ -747,7 +747,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   if (size < MI_ARENA_BLOCK_SIZE) return false;
 
   if (is_large) {
-    mi_assert_internal(memid.was_committed && memid.is_pinned);
+    mi_assert_internal(memid.initially_committed && memid.is_pinned);
   }
 
   const size_t bcount = size / MI_ARENA_BLOCK_SIZE;
@@ -776,7 +776,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   arena->blocks_committed = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[2*fields]); // just after dirty bitmap
   arena->blocks_purge  = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[3*fields]); // just after committed bitmap  
   // initialize committed bitmap?
-  if (arena->blocks_committed != NULL && arena->memid.was_committed) {
+  if (arena->blocks_committed != NULL && arena->memid.initially_committed) {
     memset((void*)arena->blocks_committed, 0xFF, fields*sizeof(mi_bitmap_field_t)); // cast to void* to avoid atomic warning
   }
   
@@ -794,8 +794,8 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
 
 bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
   mi_memid_t memid = _mi_memid_create(MI_MEM_EXTERNAL);
-  memid.was_committed = is_committed;
-  memid.was_zero = is_zero;
+  memid.initially_committed = is_committed;
+  memid.initially_zero = is_zero;
   memid.is_pinned = is_large;
   return mi_manage_os_memory_ex2(start,size,is_large,numa_node,exclusive,memid, arena_id);
 }
