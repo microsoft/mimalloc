@@ -234,7 +234,9 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
   }
 
   // set the dirty bits (todo: no need for an atomic op here?)
-  memid->initially_zero = _mi_bitmap_claim_across(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
+  if (arena->memid.initially_zero && arena->blocks_dirty != NULL) {
+    memid->initially_zero = _mi_bitmap_claim_across(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
+  }
 
   // set commit state
   if (arena->blocks_committed == NULL) {
