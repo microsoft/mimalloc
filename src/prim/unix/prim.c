@@ -209,27 +209,32 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
   return NULL;
 }
 
+static int unix_mmap_fd(void) {
+  #if defined(VM_MAKE_TAG)
+  // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
+  int os_tag = (int)mi_option_get(mi_option_os_tag);
+  if (os_tag < 100 || os_tag > 255) { os_tag = 100; }
+  return VM_MAKE_TAG(os_tag);
+  #else
+  return -1;
+  #endif
+}
+
 static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protect_flags, bool large_only, bool allow_large, bool* is_large) {
-  void* p = NULL;
   #if !defined(MAP_ANONYMOUS)
   #define MAP_ANONYMOUS  MAP_ANON
   #endif
   #if !defined(MAP_NORESERVE)
   #define MAP_NORESERVE  0
   #endif
+  void* p = NULL;
+  const int fd = unix_mmap_fd();
   int flags = MAP_PRIVATE | MAP_ANONYMOUS;
-  int fd = -1;
   if (_mi_os_has_overcommit()) {
     flags |= MAP_NORESERVE;
   }
   #if defined(PROT_MAX)
   protect_flags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
-  #endif
-  #if defined(VM_MAKE_TAG)
-  // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
-  int os_tag = (int)mi_option_get(mi_option_os_tag);
-  if (os_tag < 100 || os_tag > 255) { os_tag = 100; }
-  fd = VM_MAKE_TAG(os_tag);
   #endif
   // huge page allocation
   if ((large_only || _mi_os_use_large_page(size, try_alignment)) && allow_large) {
@@ -359,21 +364,21 @@ int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   int err = 0;
   #if defined(MADV_DONTNEED) && !MI_DEBUG && !MI_SECURE
     // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
-    // (on the other hand, MADV_FREE would be good enough.. it is just not reflected in the stats :-( )
     *needs_recommit = false;
-    err = unix_madvise(start, size, MADV_DONTNEED);
+    err = unix_madvise(start, size, MADV_DONTNEED);    
   #else
-    // decommit: just disable access (also used in debug and secure mode to trap on illegal access)
-    *needs_recommit = true;  // needs recommit to reuse the memory
-    err = mprotect(start, size, PROT_NONE);
-    if (err != 0) { err = errno; }
+    // decommit: use mmap with MAP_FIXED and PROT_NONE to discard the existing memory (and reduce rss)
+    *needs_recommit = true;
+    const int fd = unix_mmap_fd();
+    void* p = mmap(start, size, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), fd, 0);
+    if (p != start) { err = errno; }    
   #endif
   return err;
 }
 
 int _mi_prim_reset(void* start, size_t size) {
-  // We always use MADV_DONTNEED even if it may be a bit more expensive as this
-  // guarantees that we see the actual rss reflected in tools like `top`.
+  // We always use MADV_DONTNEED if possible even if it may be a bit more expensive as MADV_FREE
+  // as this guarantees that we see the actual rss reflected in tools like `top`.
   #if 0 && defined(MADV_FREE)
   static _Atomic(size_t) advice = MI_ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
