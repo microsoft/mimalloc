@@ -402,18 +402,15 @@ on large programs that include other 3rd party components.
 There are four requirements to make the overriding work robustly:
 
 1. Use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
-
 2. Link your program explicitly with `mimalloc-override.dll` library.
    To ensure the `mimalloc-override.dll` is loaded at run-time it is easiest to insert some
     call to the mimalloc API in the `main` function, like `mi_version()`
     (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
     for an example on how to use this. 
-
 3. The `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) must be put
    in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency of that DLL).
    The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
    mimalloc functions (which reside in `mimalloc-override.dll`).
-
 4. Ensure the `mimalloc-override.dll` comes as early as possible in the import
    list of the final executable (so it can intercept all potential allocations).
 
