@@ -357,26 +357,36 @@ static void unix_mprotect_hint(int err) {
 
 int _mi_prim_commit(void* start, size_t size, bool* is_zero) {
   // commit: ensure we can access the area
-  *is_zero = false;
+  // note: we may think that *is_zero can be true since the memory
+  // was either from mmap PROT_NONE, or from decommit MADV_DONTNEED, but
+  // we sometimes call commit on a range with still partially committed
+  // memory and `mprotect` does not zero the range.
+  *is_zero = false;  
   int err = mprotect(start, size, (PROT_READ | PROT_WRITE));
-  if (err != 0) { err = errno; }  
-  unix_mprotect_hint(err);
+  if (err != 0) { 
+    err = errno; 
+    unix_mprotect_hint(err);
+  }
   return err;
 }
 
 int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
-  int err = 0;
-  #if defined(MADV_DONTNEED) && !MI_DEBUG && !MI_SECURE
-    // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
+  int err = 0;  
+  // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
+  err = unix_madvise(start, size, MADV_DONTNEED);    
+  #if !MI_DEBUG && !MI_SECURE
     *needs_recommit = false;
-    err = unix_madvise(start, size, MADV_DONTNEED);    
   #else
-    // decommit: use mmap with MAP_FIXED and PROT_NONE to discard the existing memory (and reduce rss)
     *needs_recommit = true;
-    const int fd = unix_mmap_fd();
-    void* p = mmap(start, size, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), fd, 0);
-    if (p != start) { err = errno; }    
+    mprotect(start, size, PROT_NONE);
   #endif
+  /*
+  // decommit: use mmap with MAP_FIXED and PROT_NONE to discard the existing memory (and reduce rss)
+  *needs_recommit = true;
+  const int fd = unix_mmap_fd();
+  void* p = mmap(start, size, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), fd, 0);
+  if (p != start) { err = errno; }    
+  */
   return err;
 }
 
