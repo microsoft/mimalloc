@@ -29,6 +29,8 @@ It also includes a robust way to override the default allocator in [Windows](#ov
   bounded worst-case times with reference counting).
   Partly due to its simplicity, mimalloc has been ported to many systems (Windows, macOS,
   Linux, WASM, various BSD's, Haiku, MUSL, etc) and has excellent support for dynamic overriding.
+  At the same time, it is an industrial strength allocator that runs (very) large scale
+  distributed services on thousands of machines with excellent worst case latencies.
 - __free list sharding__: instead of one big free list (per size class) we have
   many smaller lists per "mimalloc page" which reduces fragmentation and
   increases locality --
@@ -439,7 +441,7 @@ This is provided by [`mimalloc-override.h`](https://github.com/microsoft/mimallo
 under your control or otherwise mixing of pointers from different heaps may occur!
 
 
-## Tools
+# Tools
 
 Generally, we recommend using the standard allocator with memory tracking tools, but mimalloc
 can also be build to support the [address sanitizer][asan] or the excellent [Valgrind] tool. 
@@ -447,7 +449,7 @@ Moreover, it can be build to support Windows event tracing ([ETW]).
 This has a small performance overhead but does allow detecting memory leaks and byte-precise 
 buffer overflows directly on final executables. See also the `test/test-wrong.c` file to test with various tools.
 
-### Valgrind
+## Valgrind
 
 To build with [valgrind] support, use the `MI_TRACK_VALGRIND=ON` cmake option:
 
@@ -481,7 +483,7 @@ Valgrind support is in its initial development -- please report any issues.
 [Valgrind]: https://valgrind.org/
 [valgrind-soname]: https://valgrind.org/docs/manual/manual-core.html#opt.soname-synonyms
 
-### ASAN
+## ASAN
 
 To build with the address sanitizer, use the `-DMI_TRACK_ASAN=ON` cmake option:
 
@@ -510,7 +512,7 @@ Adress sanitizer support is in its initial development -- please report any issu
 
 [asan]: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
-### ETW
+## ETW
 
 Event tracing for Windows ([ETW]) provides a high performance way to capture all allocations though
 mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACK_ETW=ON` cmake option. 
