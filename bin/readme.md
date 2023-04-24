@@ -15,7 +15,7 @@ There are four requirements to make the overriding work robustly:
     (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
     for an example on how to use this. 
 
-3. The [`mimalloc-redirect.dll`](../bin) (or `mimalloc-redirect32.dll`) must be put
+3. The `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) must be put
    in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency of that DLL).
    The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
    mimalloc functions (which reside in `mimalloc-override.dll`).
@@ -38,7 +38,6 @@ ensure the the DLL comes first in the import table of the final executable.
 In many cases though we can patch existing executables without any recompilation
 if they are linked with the dynamic C runtime (`ucrtbase.dll`) -- just put the `mimalloc-override.dll`
 into the import table (and put `mimalloc-redirect.dll` in the same folder)
-Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388) or
-the [`minject`](bin) program.
+Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388).
 
 The `minject` program can also do this from the command line, use `minject --help` for options.
