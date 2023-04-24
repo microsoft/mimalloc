@@ -155,7 +155,6 @@ static void mi_os_prim_free(void* addr, size_t size, bool still_committed, mi_st
   mi_assert_internal((size % _mi_os_page_size()) == 0);
   if (addr == NULL || size == 0) return; // || _mi_os_is_huge_reserved(addr)
   int err = _mi_prim_free(addr, size);
-  mi_track_mem_noaccess(addr,size);
   if (err != 0) {
     _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
@@ -220,12 +219,11 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
     if (commit) { 
       _mi_stat_increase(&stats->committed, size); 
       // seems needed for asan (or `mimalloc-test-api` fails)
-      if (*is_zero) { mi_track_mem_defined(p,size); }   
+      #ifdef MI_TRACK_ASAN
+      if (*is_zero) { mi_track_mem_defined(p,size); }
                else { mi_track_mem_undefined(p,size); }
-    }
-    else {
-      mi_track_mem_noaccess(p,size);
-    }
+      #endif
+    }    
   }
   return p;
 }
@@ -425,8 +423,10 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats
     mi_assert_expensive(mi_mem_is_zero(start, csize));
   }
   // note: the following seems required for asan (otherwise `mimalloc-test-stress` fails)
+  #ifdef MI_TRACK_ASAN
   if (os_is_zero) { mi_track_mem_defined(start,csize); }
-             else { mi_track_mem_undefined(start,csize); }
+             else { mi_track_mem_undefined(start,csize); } 
+  #endif
   return true;
 }
 
@@ -448,7 +448,6 @@ static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit, mi_
     _mi_warning_message("cannot decommit OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
   mi_assert_internal(err == 0);
-  mi_track_mem_noaccess(start,csize);
   return (err == 0);
 }
 
@@ -478,7 +477,6 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
   if (err != 0) {
     _mi_warning_message("cannot reset OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
-  mi_track_mem_undefined(start,csize);
   return (err == 0);
 }
 
@@ -528,8 +526,6 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   if (err != 0) {
     _mi_warning_message("cannot %s OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", (protect ? "protect" : "unprotect"), err, err, start, csize);
   }
-  if (protect) { mi_track_mem_noaccess(start,csize); }
-          else { mi_track_mem_undefined(start,csize); }
   return (err == 0);
 }
 
@@ -652,8 +648,9 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
     *memid = _mi_memid_create_os(true /* is committed */, all_zero, true /* is_large */);
     memid->memkind = MI_MEM_OS_HUGE;
     mi_assert(memid->is_pinned);
+    #ifdef MI_TRACK_ASAN
     if (all_zero) { mi_track_mem_defined(start,size); }
-             else { mi_track_mem_undefined(start,size); }
+    #endif
   }
   return (page == 0 ? NULL : start);
 }
