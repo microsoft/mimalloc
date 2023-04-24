@@ -877,18 +877,13 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
                                               &segment_slices, &pre_size, &info_slices, commit, tld, os_tld);
   if (segment == NULL) return NULL;
   
-  // zero the segment info? -- not always needed as it may be zero initialized from the OS 
-  ptrdiff_t ofs    = offsetof(mi_segment_t, next);
-  size_t    prefix = offsetof(mi_segment_t, slices) - ofs;
-  size_t    zsize  = prefix + (sizeof(mi_slice_t) * (segment_slices + 1)); // one more  
+  // zero the segment info? -- not always needed as it may be zero initialized from the OS   
   if (!segment->memid.was_zero) {
+    ptrdiff_t ofs    = offsetof(mi_segment_t, next);
+    size_t    prefix = offsetof(mi_segment_t, slices) - ofs;
+    size_t    zsize  = prefix + (sizeof(mi_slice_t) * (segment_slices + 1)); // one more  
     _mi_memzero((uint8_t*)segment + ofs, zsize);
   }
-  else {
-    mi_track_mem_defined((uint8_t*)segment + ofs,zsize);
-    mi_assert(mi_mem_is_zero((uint8_t*)segment + ofs, zsize));
-  }
-
   
   // initialize the rest of the segment info
   const size_t slice_entries = (segment_slices > MI_SLICES_PER_SEGMENT ? MI_SLICES_PER_SEGMENT : segment_slices);
