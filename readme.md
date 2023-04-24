@@ -407,7 +407,7 @@ There are four requirements to make the overriding work robustly:
     call to the mimalloc API in the `main` function, like `mi_version()`
     (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
     for an example on how to use this. 
-3. The `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) must be put
+3. The [`mimalloc-redirect.dll`](bin) (or `mimalloc-redirect32.dll`) must be put
    in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency of that DLL).
    The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
    mimalloc functions (which reside in `mimalloc-override.dll`).
