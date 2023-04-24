@@ -37,6 +37,6 @@ ensure the the DLL comes first in the import table of the final executable.
 We can in many cases though patch existing executables without any recompilation
 if they are linked with the dynamic C runtime (`ucrtbase.dll`) -- just put the `mimalloc-override.dll`
 into the import table (and put `mimalloc-redirect.dll` in the same folder)
-Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388)).
+Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388).
 
 The `minject` program can also do this from the command line, use `minject --help` for options.

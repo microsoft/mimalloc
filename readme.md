@@ -394,32 +394,44 @@ the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-i
 
 ### Dynamic Override on Windows
 
-<span id="override_on_windows">Overriding on Windows</span> is robust and has the
-particular advantage to be able to redirect all malloc/free calls that go through
+<span id="override_on_windows">Dynamically overriding on mimalloc on Windows</span> 
+is robust and has the particular advantage to be able to redirect all malloc/free calls that go through
 the (dynamic) C runtime allocator, including those from other DLL's or libraries.
+As it intercepts all allocation calls on a low level, it can be used reliably 
+on large programs that include other 3rd party components.
+There are four requirements to make the overriding work robustly:
 
-The overriding on Windows requires that you link your program explicitly with
-the mimalloc DLL and use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
-Also, the `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) must be put
-in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency).
-The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
-mimalloc (in `mimalloc-override.dll`).
+1. Use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
 
-To ensure the mimalloc DLL is loaded at run-time it is easiest to insert some
-call to the mimalloc API in the `main` function, like `mi_version()`
-(or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
-for an example on how to use this. For best performance on Windows with C++, it
+2. Link your program explicitly with `mimalloc-override.dll` library.
+   To ensure the `mimalloc-override.dll` is loaded at run-time it is easiest to insert some
+    call to the mimalloc API in the `main` function, like `mi_version()`
+    (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
+    for an example on how to use this. 
+
+3. The `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) must be put
+   in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency of that DLL).
+   The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
+   mimalloc functions (which reside in `mimalloc-override.dll`).
+
+4. Ensure the `mimalloc-override.dll` comes as early as possible in the import
+   list of the final executable (so it can intercept all potential allocations).
+
+For best performance on Windows with C++, it
 is also recommended to also override the `new`/`delete` operations (by including
-[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) a single(!) source file in your project).
+[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) 
+a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
 overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully redirected.
 
-(Note: in principle, it is possible to even patch existing executables without any recompilation
+We cannot always re-link an executable with `mimalloc-override.dll`, and similarly, we cannot always
+ensure the the DLL comes first in the import table of the final executable.
+In many cases though we can patch existing executables without any recompilation
 if they are linked with the dynamic C runtime (`ucrtbase.dll`) -- just put the `mimalloc-override.dll`
 into the import table (and put `mimalloc-redirect.dll` in the same folder)
-Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388)).
-
+Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388) or
+the [`minject`](bin) program.
 
 ## Static override
 
