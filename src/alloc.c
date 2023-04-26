@@ -780,7 +780,56 @@ mi_decl_nodiscard void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_
   return mi_heap_recalloc(mi_prim_get_default_heap(), p, count, size);
 }
 
+// ------------------------------------------------------
+// remap
+// ------------------------------------------------------
 
+static void* mi_heap_malloc_zero_remappable(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
+  return _mi_heap_malloc_zero_ex(heap, size, zero, MI_PAGE_ALIGN_REMAPPABLE);
+}
+
+mi_decl_nodiscard void* mi_heap_malloc_remappable(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_heap_malloc_zero_remappable(heap, size, false);
+}
+
+mi_decl_nodiscard void* mi_heap_zalloc_remappable(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_heap_malloc_zero_remappable(heap, size, true);
+}
+
+mi_decl_nodiscard void* mi_malloc_remappable(size_t size) mi_attr_noexcept {
+  return mi_heap_malloc_remappable(mi_prim_get_default_heap(), size);
+}
+
+mi_decl_nodiscard void* mi_zalloc_remappable(size_t size) mi_attr_noexcept {
+  return mi_heap_zalloc_remappable(mi_prim_get_default_heap(), size);
+}
+
+mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept {
+  if (p == NULL) return mi_malloc(newsize);
+
+  mi_segment_t* segment = mi_checked_ptr_segment(p, "mi_remap");
+  mi_assert_internal(segment != NULL);
+  mi_page_t* const page = _mi_segment_page_of(segment, p);
+  const size_t bsize = mi_page_usable_block_size(page);
+  if (bsize >= newsize) {
+    // TODO: adjust padding
+    return p;
+  }
+
+  mi_heap_t* heap = mi_prim_get_default_heap();
+  if (segment->thread_id == heap->thread_id &&
+      segment->memid.memkind == MI_MEM_OS_REMAP) 
+  {
+    mi_heap_t* heap = mi_prim_get_default_heap();
+    mi_block_t* block = _mi_segment_huge_page_remap(segment, page, (mi_block_t*)p, newsize, &heap->tld->segments);
+    if (block != NULL) {
+      // TODO: adjust padding?
+      return block;
+    }
+  }
+  _mi_warning_message("unable to remap block, fall back to reallocation (address: %p from %zu bytes to %zu bytes)\n", p, 0, newsize);
+  return mi_realloc(p, newsize);
+}
 
 // ------------------------------------------------------
 // strdup, strndup, and realpath

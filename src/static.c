@@ -5,8 +5,12 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #ifndef _DEFAULT_SOURCE
-#define _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE   // ensure mmap is defined
 #endif
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE       // ensure mremap is defined
+#endif
+
 #if defined(__sun)
 // same remarks as os.c for the static's context.
 #undef _XOPEN_SOURCE

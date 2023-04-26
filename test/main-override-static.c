@@ -18,11 +18,14 @@ static void test_reserved(void);
 static void negative_stat(void);
 static void alloc_huge(void);
 static void test_heap_walk(void);
-
+static void test_remap(void);
 
 int main() {
   mi_version();
   mi_stats_reset();
+
+  test_remap();
+
   // detect double frees and heap corruption
   // double_free1();
   // double_free2();
@@ -214,6 +217,20 @@ static void test_heap_walk(void) {
   mi_heap_malloc(heap, 2097160);
   mi_heap_malloc(heap, 24576);
   mi_heap_visit_blocks(heap, true, &test_visit, NULL);
+}
+
+
+static void test_remap(void) {
+  size_t size = 64 * 1024 * 1024;
+  size_t inc  = 1024 * 1024;
+  uint8_t* p = (uint8_t*)mi_malloc_remappable(size);
+  memset(p, 1, size);
+  for (int i = 2; i < 100; i++) {
+    p = mi_remap(p, size + inc);
+    memset(p + size, i, inc);
+    size += inc;
+  }
+  mi_free(p);
 }
 
 // ----------------------------

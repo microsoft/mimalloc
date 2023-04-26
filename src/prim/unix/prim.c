@@ -11,6 +11,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #define _DEFAULT_SOURCE   // ensure mmap flags and syscall are defined
 #endif
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE       // ensure mremap is defined
+#endif
+
 #if defined(__sun)
 // illumos provides new mman.h api when any of these are defined
 // otherwise the old api based on caddr_t which predates the void pointers one.
@@ -861,3 +865,41 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
 }
 
 #endif
+
+
+
+
+//----------------------------------------------------------------
+// Remappable memory
+//----------------------------------------------------------------
+
+int _mi_prim_alloc_remappable(size_t size, size_t future_reserve, bool* is_pinned, bool* is_zero, void** addr, void** remap_info ) {
+  #if !defined(MREMAP_MAYMOVE)
+    MI_UNUSED(size); MI_UNUSED(future_reserve); MI_UNUSED(is_pinned); MI_UNUSED(is_zero); MI_UNUSED(addr); MI_UNUSED(remap_info);
+    return EINVAL;
+  #else
+    MI_UNUSED(future_reserve);
+    *remap_info = NULL;
+    return _mi_prim_alloc(size,1,true /* commit? */, true /* allow_large */, is_pinned /* is_large? */, is_zero, addr);
+  #endif
+}
+
+int _mi_prim_realloc_remappable(void* addr, size_t size, size_t newsize, bool* extend_is_zero, void** newaddr, void** remap_info ) {
+  #if !defined(MREMAP_MAYMOVE)
+    MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(newsize); MI_UNUSED(extend_is_zero); MI_UNUSED(newaddr); MI_UNUSED(remap_info);
+    return EINVAL;
+  #else
+    mi_assert_internal(*remap_info == NULL); MI_UNUSED(remap_info);  
+    void* p = mremap(addr,size,newsize,MREMAP_MAYMOVE);
+    if (p == MAP_FAILED) { return errno; }
+    *extend_is_zero = true;
+    *newaddr = p;
+    return 0;
+  #endif
+}
+
+int _mi_prim_free_remappable(void* addr, size_t size, void* remap_info ) {
+  MI_UNUSED(remap_info);
+  mi_assert_internal(remap_info == NULL);
+  return _mi_prim_free(addr,size);
+}

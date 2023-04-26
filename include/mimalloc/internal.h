@@ -56,6 +56,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <pthread.h>
 #endif
 
+#define MI_PAGE_ALIGN_REMAPPABLE (1)
+
 // "options.c"
 void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
 void       _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
@@ -114,6 +116,10 @@ size_t     _mi_os_large_page_size(void);
 
 void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
 
+void*      _mi_os_alloc_remappable(size_t size, size_t future_reserve, size_t alignment, mi_memid_t* memid, mi_stats_t* stats);
+void*      _mi_os_realloc(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats);
+
+
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
 void       _mi_arena_free(void* p, size_t size, size_t still_committed_size, mi_memid_t memid, mi_stats_t* stats);
@@ -143,6 +149,8 @@ void       _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, m
 void       _mi_segment_thread_collect(mi_segments_tld_t* tld);
 void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
 void       _mi_abandoned_await_readers(void);
+
+mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, mi_block_t* block, size_t newsize, mi_segments_tld_t* tld);
 
 // "page.c"
 void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment)  mi_attr_noexcept mi_attr_malloc;
@@ -671,8 +679,11 @@ static inline mi_memid_t _mi_memid_none(void) {
   return _mi_memid_create(MI_MEM_NONE);
 }
 
-static inline mi_memid_t _mi_memid_create_os(bool committed, bool is_zero, bool is_large) {
+static inline mi_memid_t _mi_memid_create_os(void* base, size_t size, size_t alignment, bool committed, bool is_zero, bool is_large) {
   mi_memid_t memid = _mi_memid_create(MI_MEM_OS);
+  memid.mem.os.base = base;
+  memid.mem.os.size = size;
+  memid.mem.os.alignment = alignment;
   memid.initially_committed = committed;
   memid.initially_zero = is_zero;
   memid.is_pinned = is_large;

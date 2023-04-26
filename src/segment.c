@@ -517,13 +517,19 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
   bool   allow_large = (!eager_delayed && (MI_SECURE == 0)); // only allow large OS pages once we are no longer lazy
   size_t align_offset = 0;
   size_t alignment = MI_SEGMENT_SIZE;
-  if (page_alignment > 0) {
+  if (page_alignment > MI_PAGE_ALIGN_REMAPPABLE) {
     alignment = page_alignment;
     align_offset = _mi_align_up(pre_size, MI_SEGMENT_SIZE);
     segment_size = segment_size + (align_offset - pre_size);  // adjust the segment size
   }
 
-  mi_segment_t* segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, alignment, align_offset, commit, allow_large, req_arena_id, &memid, tld_os);
+  mi_segment_t* segment = NULL;
+  if (page_alignment == MI_PAGE_ALIGN_REMAPPABLE) {
+    segment = (mi_segment_t*)_mi_os_alloc_remappable(segment_size, 0, alignment, &memid, tld_os->stats);
+  }
+  else {
+    segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, alignment, align_offset, commit, allow_large, req_arena_id, &memid, tld_os);
+  }
   if (segment == NULL) {
     return NULL;  // failed to allocate
   }
@@ -1224,7 +1230,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   page->xblock_size = (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
 
   // reset the part of the page that will not be used; this can be quite large (close to MI_SEGMENT_SIZE)
-  if (page_alignment > 0 && segment->allow_decommit && page->is_committed) {
+  if (page_alignment > MI_PAGE_ALIGN_REMAPPABLE && segment->allow_decommit && page->is_committed) {
     uint8_t* aligned_p = (uint8_t*)_mi_align_up((uintptr_t)start, page_alignment);
     mi_assert_internal(_mi_is_aligned(aligned_p, page_alignment));
     mi_assert_internal(psize - (aligned_p - start) >= size);
@@ -1283,17 +1289,52 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
 }
 #endif
 
+mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, mi_block_t* block, size_t newsize, mi_segments_tld_t* tld) {
+  mi_assert_internal(segment == _mi_page_segment(page));
+  mi_assert_internal(page->used == 1);
+  mi_assert_internal(page->free == NULL);
+  mi_assert_internal(page->local_free == NULL);
+  mi_assert_internal(mi_page_thread_free(page) == NULL);
+  mi_assert_internal(segment->next == NULL && segment->prev == NULL);
+  mi_assert_internal(page->next == NULL && page->prev == NULL);
+  const size_t bsize = mi_page_block_size(page);
+  const size_t newssize = _mi_align_up(_mi_align_up(newsize, _mi_os_page_size()) + (mi_segment_size(segment) - bsize), MI_SEGMENT_SIZE);
+  mi_memid_t memid = segment->memid;
+  const ptrdiff_t block_ofs = (uint8_t*)block - (uint8_t*)segment;
+
+  mi_segment_protect(segment, false, tld->os);
+  if (segment->allow_decommit && !page->is_committed) {  // TODO: always commit fully regardless of the page?
+    _mi_os_commit(segment, mi_segment_size(segment), NULL, tld->stats);
+    page->is_committed = true;
+  }
+  mi_segment_t* newsegment = (mi_segment_t*)_mi_os_realloc(segment, mi_segment_size(segment), newssize, &memid, tld->stats);
+  if (newsegment == NULL) {
+    mi_segment_protect(segment, true, tld->os);
+    return NULL;
+  }
+  else {
+    newsegment->memid = memid;
+    newsegment->segment_size = newssize;
+    newsegment->cookie = _mi_ptr_cookie(newsegment);
+    mi_segment_protect(newsegment, true, tld->os);
+  }
+
+  mi_block_t* newblock = (mi_block_t*)((uint8_t*)newsegment + block_ofs);
+  mi_assert_internal(_mi_ptr_segment(newblock) == newsegment);
+  mi_page_t* newpage = _mi_ptr_page(newblock);
+  mi_assert_internal(mi_page_block_size(newpage) >= newsize); MI_UNUSED(newpage);
+  return newblock;
+}
+
 /* -----------------------------------------------------------
    Page allocation
 ----------------------------------------------------------- */
 
 mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
   mi_page_t* page;
-  if mi_unlikely(page_alignment > MI_ALIGNMENT_MAX) {
-    mi_assert_internal(_mi_is_power_of_two(page_alignment));
-    mi_assert_internal(page_alignment >= MI_SEGMENT_SIZE);
-    //mi_assert_internal((MI_SEGMENT_SIZE % page_alignment) == 0);
-    if (page_alignment < MI_SEGMENT_SIZE) { page_alignment = MI_SEGMENT_SIZE; }
+  if mi_unlikely(page_alignment > 0) {
+    mi_assert_internal(page_alignment == MI_PAGE_ALIGN_REMAPPABLE || (_mi_is_power_of_two(page_alignment) && page_alignment >= MI_SEGMENT_SIZE));
+    if (page_alignment != MI_PAGE_ALIGN_REMAPPABLE && page_alignment < MI_SEGMENT_SIZE) { page_alignment = MI_SEGMENT_SIZE; }
     page = mi_segment_huge_page_alloc(block_size, page_alignment, heap->arena_id, tld, os_tld);
   }
   else if (block_size <= MI_SMALL_OBJ_SIZE_MAX) {

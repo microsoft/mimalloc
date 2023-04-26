@@ -620,3 +620,24 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
 }
 
 #endif
+
+
+
+//----------------------------------------------------------------
+// Remappable memory
+//----------------------------------------------------------------
+
+int _mi_prim_alloc_remappable(size_t size, size_t future_reserve, bool* is_pinned, bool* is_zero, void** addr, void** remap_info ) {
+  MI_UNUSED(size); MI_UNUSED(future_reserve); MI_UNUSED(is_pinned); MI_UNUSED(is_zero); MI_UNUSED(addr); MI_UNUSED(remap_info);
+  return EINVAL;
+}
+
+int _mi_prim_realloc_remappable(void* addr, size_t size, size_t newsize, bool* extend_is_zero, void** newaddr, void** remap_info ) {
+  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(newsize); MI_UNUSED(extend_is_zero); MI_UNUSED(newaddr); MI_UNUSED(remap_info);
+  return EINVAL;
+}
+
+int _mi_prim_free_remappable(void* addr, size_t size, void* remap_info ) {
+  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(remap_info);
+  return EINVAL;
+}

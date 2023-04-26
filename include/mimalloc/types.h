@@ -341,7 +341,9 @@ static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
 
 typedef struct mi_memid_os_info {
   void*         base;               // actual base address of the block (used for offset aligned allocations)
-  size_t        alignment;          // alignment at allocation
+  size_t        size;               // allocated size (the full extent from base)
+  size_t        alignment;          // requested alignment at allocation (may be offset aligned, so base may not be aligned at this value)
+  void*         prim_info;          // potential OS dependent information (used for remappable memory on Windows)
 } mi_memid_os_info_t;
 
 typedef struct mi_memid_arena_info {

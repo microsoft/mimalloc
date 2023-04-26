@@ -243,6 +243,17 @@ mi_decl_nodiscard mi_decl_export void* mi_heap_recalloc_aligned_at(mi_heap_t* he
 
 
 // ------------------------------------------------------
+// Remappable memory (uses `mremap` if possible)
+// ------------------------------------------------------
+
+mi_decl_nodiscard mi_decl_export void* mi_malloc_remappable(size_t size) mi_attr_noexcept mi_attr_alloc_size(1);
+mi_decl_nodiscard mi_decl_export void* mi_zalloc_remappable(size_t size) mi_attr_noexcept mi_attr_alloc_size(1);
+mi_decl_nodiscard mi_decl_export void* mi_remap(void* p, size_t newsize) mi_attr_noexcept mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export void* mi_heap_malloc_remappable(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export void* mi_heap_zalloc_remappable(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_alloc_size(2);
+
+
+// ------------------------------------------------------
 // Analysis
 // ------------------------------------------------------
 

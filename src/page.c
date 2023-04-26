@@ -814,11 +814,10 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
   General allocation
 ----------------------------------------------------------- */
 
-// A huge page is allocated directly without being in a queue.
-// Because huge pages contain just one block, and the segment contains
-// just that page, we always treat them as abandoned and any thread
-// that frees the block can free the whole page and segment directly.
-// Huge pages are also use if the requested alignment is very large (> MI_ALIGNMENT_MAX).
+// A huge page always occupies a single segment.
+// It is used for large allocations, (very) large alignments (> MI_ALIGNMENT_MAX), or remappable blocks.
+// When a huge page is freed from another thread, it is immediately reset to reduce memory pressure.
+// We use a page_alignment of 1 for remappable memory.
 static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_alignment) {
   size_t block_size = _mi_os_good_alloc_size(size);
   mi_assert_internal(mi_bin(block_size) == MI_BIN_HUGE || page_alignment > 0);
@@ -918,7 +917,9 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
     // note: we cannot call _mi_page_malloc with zeroing for huge blocks; we zero it afterwards in that case.
     void* p = _mi_page_malloc(heap, page, size, false);
     mi_assert_internal(p != NULL);
-    _mi_memzero_aligned(p, mi_page_usable_block_size(page));
+    if (!page->free_is_zero) {
+      _mi_memzero_aligned(p, mi_page_usable_block_size(page));
+    }
     return p;
   }
   else {
