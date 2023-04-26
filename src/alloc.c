@@ -24,6 +24,30 @@ terms of the MIT license. A copy of the license can be found in the file
 // Allocation
 // ------------------------------------------------------
 
+#if MI_PADDING
+static void mi_padding_init(mi_page_t* page, mi_block_t* block, size_t size /* block size minus MI_PADDING_SIZE */) {
+  mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
+  ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - size);
+  #if (MI_DEBUG>=2)
+    mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size + delta));
+  #endif
+  mi_track_mem_defined(padding, sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
+  padding->canary = (uint32_t)(mi_ptr_encode(page, block, page->keys));
+  padding->delta = (uint32_t)(delta);
+  #if MI_PADDING_CHECK
+  if (!mi_page_is_huge(page)) {
+    uint8_t* fill = (uint8_t*)padding - delta;
+    const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
+    for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
+  }
+  #endif
+}
+#else
+static void mi_padding_init(mi_page_t* page, mi_block_t* block, size_t size) {
+  MI_UNUSED(page); MI_UNUSED(block); MI_UNUSED(size);
+}
+#endif
+
 // Fast allocation in a page: just pop from the free list.
 // Fall back to generic allocation only if the list is empty.
 extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept {
@@ -81,24 +105,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   }
 #endif
 
-#if MI_PADDING // && !MI_TRACK_ENABLED
-  mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
-  ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
-  #if (MI_DEBUG>=2)
-  mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
-  #endif
-  mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
-  padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
-  padding->delta  = (uint32_t)(delta);
-  #if MI_PADDING_CHECK
-  if (!mi_page_is_huge(page)) {
-    uint8_t* fill = (uint8_t*)padding - delta;
-    const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
-    for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
-  }
-  #endif
-#endif
-
+  mi_padding_init(page, block, size - MI_PADDING_SIZE);
   return block;
 }
 
@@ -807,12 +814,14 @@ mi_decl_nodiscard void* mi_zalloc_remappable(size_t size) mi_attr_noexcept {
 mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept {
   if (p == NULL) return mi_malloc(newsize);
 
+  const size_t padsize = newsize + MI_PADDING_SIZE;
   mi_segment_t* segment = mi_checked_ptr_segment(p, "mi_remap");
   mi_assert_internal(segment != NULL);
-  mi_page_t* const page = _mi_segment_page_of(segment, p);
+  mi_page_t* page = _mi_segment_page_of(segment, p);  
+  mi_block_t* block = _mi_page_ptr_unalign(segment, page, p);
   const size_t bsize = mi_page_usable_block_size(page);
-  if (bsize >= newsize) {
-    // TODO: adjust padding
+  if (bsize >= padsize) {
+    mi_padding_init(page, block, newsize);
     return p;
   }
 
@@ -820,14 +829,22 @@ mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept {
   if (segment->thread_id == heap->thread_id &&
       segment->memid.memkind == MI_MEM_OS_REMAP) 
   {
-    mi_heap_t* heap = mi_prim_get_default_heap();
-    mi_block_t* block = _mi_segment_huge_page_remap(segment, page, (mi_block_t*)p, newsize, &heap->tld->segments);
-    if (block != NULL) {
-      // TODO: adjust padding?
+    mi_assert_internal((void*)block == p);
+    _mi_heap_huge_page_detach(heap, page);
+    block = _mi_segment_huge_page_remap(segment, page, block, padsize, &heap->tld->segments);
+    if (block != NULL) {     
+      segment = mi_checked_ptr_segment(block, "mi_remap");
+      page = _mi_segment_page_of(segment, block);
+      mi_padding_init(page, block, newsize);
+      _mi_heap_huge_page_attach(heap, page);
       return block;
     }
+    else {
+      _mi_heap_huge_page_attach(heap, page);
+    }
   }
-  _mi_warning_message("unable to remap block, fall back to reallocation (address: %p from %zu bytes to %zu bytes)\n", p, 0, newsize);
+  _mi_warning_message("unable to remap block, fall back to reallocation (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
+
   return mi_realloc(p, newsize);
 }
 

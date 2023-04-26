@@ -403,6 +403,27 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   _mi_segment_page_abandon(page,segments_tld);
 }
 
+// Detach a huge page (used for remapping)
+void _mi_heap_huge_page_detach(mi_heap_t* heap, mi_page_t* page) {
+  mi_assert_internal(mi_page_heap(page) == heap);
+  #if !MI_HUGE_PAGE_ABANDON
+  mi_page_queue_t* pq = mi_page_queue_of(page);
+  mi_assert_internal(mi_page_queue_is_huge(pq));
+  mi_page_queue_remove(pq, page);
+  #endif
+}
+
+// (re)attach a huge page
+void _mi_heap_huge_page_attach(mi_heap_t* heap, mi_page_t* page) {
+  mi_assert_internal(mi_page_heap(page) == heap);
+#if !MI_HUGE_PAGE_ABANDON
+  mi_page_queue_t* pq = mi_page_queue(heap, MI_HUGE_OBJ_SIZE_MAX); // not block_size as that can be low if the page_alignment > 0
+  mi_assert_internal(mi_page_queue_is_huge(pq));
+  mi_page_queue_push(heap, pq, page);
+#endif  
+}
+
+
 
 // Free a page with no more free blocks
 void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {

@@ -229,6 +229,7 @@ static void test_remap(void) {
     p = mi_remap(p, size + inc);
     memset(p + size, i, inc);
     size += inc;
+    printf("%3d: increased to size %zu\n", i, size);
   }
   mi_free(p);
 }

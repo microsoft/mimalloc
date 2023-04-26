@@ -1317,6 +1317,8 @@ mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, 
     newsegment->segment_size = newssize;
     newsegment->cookie = _mi_ptr_cookie(newsegment);
     mi_segment_protect(newsegment, true, tld->os);
+    _mi_segment_map_freed_at(segment);
+    _mi_segment_map_allocated_at(newsegment);
   }
 
   mi_block_t* newblock = (mi_block_t*)((uint8_t*)newsegment + block_ofs);

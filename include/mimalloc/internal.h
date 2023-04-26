@@ -174,6 +174,9 @@ void       _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback fro
 size_t     _mi_bin_size(uint8_t bin);           // for stats
 uint8_t    _mi_bin(size_t size);                // for stats
 
+void       _mi_heap_huge_page_attach(mi_heap_t* heap, mi_page_t* page);
+void       _mi_heap_huge_page_detach(mi_heap_t* heap, mi_page_t* page);
+
 // "heap.c"
 void       _mi_heap_destroy_pages(mi_heap_t* heap);
 void       _mi_heap_collect_abandon(mi_heap_t* heap);
