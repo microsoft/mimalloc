@@ -61,7 +61,7 @@ int main() {
   //mi_free(p2);
 
   //mi_collect(true);
-  //mi_stats_print(NULL);
+  mi_stats_print(NULL);
 
   // test_process_info();
   

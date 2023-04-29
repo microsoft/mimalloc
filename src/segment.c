@@ -525,7 +525,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
 
   mi_segment_t* segment = NULL;
   if (page_alignment == MI_PAGE_ALIGN_REMAPPABLE) {
-    segment = (mi_segment_t*)_mi_os_alloc_remappable(segment_size, 0, alignment, &memid, tld_os->stats);
+    segment = (mi_segment_t*)_mi_os_alloc_remappable(segment_size, alignment, &memid, tld_os->stats);
   }
   else {
     segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, alignment, align_offset, commit, allow_large, req_arena_id, &memid, tld_os);
@@ -1303,14 +1303,14 @@ mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, 
   const size_t newssize = _mi_align_up(_mi_align_up(newsize, _mi_os_page_size()) + (mi_segment_size(segment) - bsize), MI_SEGMENT_SIZE);
   mi_memid_t memid = segment->memid;
   const ptrdiff_t block_ofs = (uint8_t*)block - (uint8_t*)segment;
-
+  const uintptr_t cookie = segment->cookie;
   mi_segment_protect(segment, false, tld->os);
   mi_segment_t* newsegment = (mi_segment_t*)_mi_os_remap(segment, mi_segment_size(segment), newssize, &memid, tld->stats);
   if (newsegment == NULL) {
     mi_segment_protect(segment, true, tld->os);
     return NULL;
   }
-  
+  mi_assert_internal(cookie == newsegment->cookie);
   newsegment->memid = memid;
   newsegment->segment_size = newssize;
   newsegment->cookie = _mi_ptr_cookie(newsegment);

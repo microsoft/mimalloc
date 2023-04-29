@@ -72,15 +72,16 @@ int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bo
 
 // Allocate remappable memory that can be used with `_mi_prim_remap`.
 // Return `EINVAL` if this is not supported.
-// The returned memory is always committed.
+// The returned memory is always committed and aligned at `alignment`.
 // If `is_pinned` is `true` the memory cannot be decommitted or reset.
 // The `remap_info` argument can be used to store OS specific information that is passed to `_mi_prim_remap` and `_mi_prim_free_remappable`.
-int _mi_prim_alloc_remappable(size_t size, size_t future_reserve, bool* is_pinned, bool* is_zero, void** addr, void** remap_info );
+int _mi_prim_alloc_remappable(size_t size, size_t alignment, bool* is_pinned, bool* is_zero, void** addr, void** remap_info );
 
 // Remap remappable memory. Return `EINVAL` if this is not supported.
+// If remapped, the alignment should be preserved.
 // pre: `addr != NULL` and previously allocated using `_mi_prim_remap` or `_mi_prim_alloc_remappable`.
 //      `newsize > 0`, `size > 0`, `alignment > 0`, `allow_large != NULL`, `newaddr != NULL`.
-int _mi_prim_remap(void* addr, size_t size, size_t newsize, bool* extend_is_zero, void** newaddr, void** remap_info );
+int _mi_prim_remap(void* addr, size_t size, size_t newsize, size_t alignment, bool* extend_is_zero, void** newaddr, void** remap_info );
 
 // Free remappable memory. Return `EINVAL` if this is not supported.
 // pre: `addr != NULL` and previously allocated using `_mi_prim_remap` or `_mi_prim_alloc_remappable`.

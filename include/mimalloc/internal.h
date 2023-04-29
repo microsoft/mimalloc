@@ -116,7 +116,7 @@ size_t     _mi_os_large_page_size(void);
 
 void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
 
-void*      _mi_os_alloc_remappable(size_t size, size_t future_reserve, size_t alignment, mi_memid_t* memid, mi_stats_t* stats);
+void*      _mi_os_alloc_remappable(size_t size, size_t alignment, mi_memid_t* memid, mi_stats_t* stats);
 void*      _mi_os_remap(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats);
 
 
@@ -302,6 +302,11 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   else {
     return (((sz + mask)/alignment)*alignment);
   }
+}
+
+// Align upwards for a pointer
+static inline void* _mi_align_up_ptr(void* p, size_t alignment) {
+  return (void*)_mi_align_up((uintptr_t)p, alignment);
 }
 
 // Divide upwards: `s <= _mi_divide_up(s,d)*d < s+d`.
