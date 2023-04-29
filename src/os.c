@@ -50,7 +50,7 @@ bool _mi_os_use_large_page(size_t size, size_t alignment) {
   return ((size % mi_os_mem_config.large_page_size) == 0 && (alignment % mi_os_mem_config.large_page_size) == 0);
 }
 
-static size_t mi_os_alloc_size(size_t size) {
+static size_t mi_os_get_alloc_size(size_t size) {
   return _mi_align_up(size, mi_os_mem_config.alloc_granularity);
 }
 
@@ -164,7 +164,7 @@ static void mi_os_prim_free(void* addr, size_t size, bool still_committed, mi_st
   if (addr == NULL || size == 0) return; // || _mi_os_is_huge_reserved(addr)
   int err = _mi_prim_free(addr, size);
   if (err != 0) {
-    _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
+    _mi_warning_message("unable to free OS memory (error: %d (0x%02x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
   mi_stats_t* stats = &_mi_stats_main;
   if (still_committed) { _mi_stat_decrease(&stats->committed, size); }
@@ -177,7 +177,7 @@ static void mi_os_prim_free_remappable(void* addr, size_t size, bool still_commi
   if (addr == NULL || size == 0) return; // || _mi_os_is_huge_reserved(addr)
   int err = _mi_prim_free_remappable(addr, size, remap_info);
   if (err != 0) {
-    _mi_warning_message("unable to free remappable OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
+    _mi_warning_message("unable to free remappable OS memory (error: %d (0x%02x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
   mi_stats_t* stats = &_mi_stats_main;
   if (still_committed) { _mi_stat_decrease(&stats->committed, size); }
@@ -186,7 +186,7 @@ static void mi_os_prim_free_remappable(void* addr, size_t size, bool still_commi
 
 void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* tld_stats) {
   if (mi_memkind_is_os(memid.memkind)) {
-    size_t csize = mi_os_alloc_size(size);
+    size_t csize = mi_os_get_alloc_size(size);
     void* base = addr;
     // different base? (due to alignment)
     if (memid.mem.os.base != NULL) {
@@ -225,7 +225,7 @@ void  _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* tld_stats)
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
 static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* stats) {
-  mi_assert_internal(size > 0 && size == mi_os_alloc_size(size));
+  mi_assert_internal(size > 0 && size == mi_os_get_alloc_size(size));
   mi_assert_internal(is_zero != NULL);
   mi_assert_internal(is_large != NULL);
   if (size == 0) return NULL;
@@ -236,7 +236,7 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
   void* p = NULL; 
   int err = _mi_prim_alloc(size, try_alignment, commit, allow_large, is_large, is_zero, &p);
   if (err != 0) {
-    _mi_warning_message("unable to allocate OS memory (error: %d (0x%x), size: 0x%zx bytes, align: 0x%zx, commit: %d, allow large: %d)\n", err, err, size, try_alignment, commit, allow_large);
+    _mi_warning_message("unable to allocate OS memory (error: %d (0x%02x), size: 0x%zx bytes, align: 0x%zx, commit: %d, allow large: %d)\n", err, err, size, try_alignment, commit, allow_large);
   }
   mi_stat_counter_increase(stats->mmap_calls, 1);
   if (p != NULL) {
@@ -255,7 +255,8 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
 
 static void* mi_os_align_within(void* base, size_t over_size, size_t alignment, size_t size, bool committed, bool is_pinned, mi_stats_t* stats)
 {
-  //mi_assert_internal((size + alignment - 1) <= over_size);
+  mi_assert_internal(alignment >= _mi_os_page_size());
+  mi_assert_internal((size + alignment - 1) <= over_size);
   void* p = mi_align_up_ptr(base, alignment);
   mi_assert_internal((uintptr_t)p + size <= (uintptr_t)base + over_size);
   if (!is_pinned) {
@@ -263,6 +264,12 @@ static void* mi_os_align_within(void* base, size_t over_size, size_t alignment, 
     size_t mid_size = _mi_align_up(size, _mi_os_page_size());
     size_t post_size = over_size - pre_size - mid_size;
     mi_assert_internal(pre_size < over_size && post_size < over_size && mid_size >= size);
+    // decommit the pre- and post part (if needed)
+    if (committed) {
+      if (pre_size > 0) { _mi_os_decommit(base, pre_size, stats); }
+      if (post_size > 0) { _mi_os_decommit((uint8_t*)p + mid_size, post_size, stats); }
+    }
+    /*
     if (mi_os_mem_config.must_free_whole) { 
       // decommit the pre- and post part (if needed)
       if (committed) {
@@ -271,10 +278,12 @@ static void* mi_os_align_within(void* base, size_t over_size, size_t alignment, 
       }
     }
     else {
+      // TODO: we can only free parts if we also return an adjusted base and fullsize.
       // free the pre- and post part
       if (pre_size > 0)  { mi_os_prim_free(base, pre_size, committed, stats); }
       if (post_size > 0) { mi_os_prim_free((uint8_t*)p + mid_size, post_size, committed, stats); }
     }
+    */
   }
   mi_assert_internal(_mi_is_aligned(p, alignment));
   return p;
@@ -284,13 +293,13 @@ static void* mi_os_align_within(void* base, size_t over_size, size_t alignment, 
 // This function guarantees the allocated memory is aligned.
 static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** base, size_t* fullsize, mi_stats_t* stats) {
   mi_assert_internal(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0));
-  mi_assert_internal(size > 0 && size == mi_os_alloc_size(size));
+  mi_assert_internal(size > 0 && size == mi_os_get_alloc_size(size));
   mi_assert_internal(is_large != NULL);
   mi_assert_internal(is_zero != NULL);
   mi_assert_internal(base != NULL);
   if (!commit) allow_large = false;
   if (!(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0))) return NULL;
-  size = mi_os_alloc_size(size);
+  size = mi_os_get_alloc_size(size);
 
   // try first with a hint (this will be aligned directly on Win 10+ or BSD)
   void* p = mi_os_prim_alloc(size, alignment, commit, allow_large, is_large, is_zero, stats);
@@ -313,7 +322,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
     if (p == NULL) return NULL;
     *base = p;
     *fullsize = oversize;
-    return mi_os_align_within(base, oversize, alignment, size, commit, *is_large, stats);
+    return mi_os_align_within(p, oversize, alignment, size, commit, *is_large, stats);
   }
 
   mi_assert_internal(p == NULL || (p != NULL && *base != NULL && ((uintptr_t)p % alignment) == 0));
@@ -381,7 +390,7 @@ void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offse
   else {
     // overallocate to align at an offset
     const size_t extra = _mi_align_up(offset, alignment) - offset;
-    const size_t oversize = mi_os_alloc_size(size + extra);
+    const size_t oversize = mi_os_get_alloc_size(size + extra);
     void* const start = _mi_os_alloc_aligned(oversize, alignment, commit, allow_large, memid, tld_stats);
     if (start == NULL) return NULL;
 
@@ -405,7 +414,7 @@ void* _mi_os_alloc_remappable(size_t size, size_t future_reserve, size_t alignme
   mi_assert_internal(memid != NULL);
   *memid = _mi_memid_none();
   if (alignment == 0) { alignment = 1;  }
-  const size_t oversize = mi_os_alloc_size(size + alignment - 1);
+  const size_t oversize = mi_os_get_alloc_size(size + alignment - 1);
   if (future_reserve < oversize) { future_reserve = oversize; }
   bool os_is_pinned = true;
   bool os_is_zero = false;
@@ -422,7 +431,7 @@ void* _mi_os_alloc_remappable(size_t size, size_t future_reserve, size_t alignme
   return mi_os_align_within(base,oversize,alignment,size,true,memid->is_pinned,stats);
 }
 
-void* _mi_os_realloc(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats) {
+void* _mi_os_remap(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats) {
   mi_assert_internal(size > 0);
   mi_assert_internal(newsize > 0);
   mi_assert_internal(p != NULL && memid != NULL);
@@ -430,12 +439,16 @@ void* _mi_os_realloc(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi
   if (p == NULL) return NULL;
   if (!mi_memkind_is_os(memid->memkind)) return NULL;
 
-  newsize = mi_os_alloc_size(newsize);
-  const size_t oversize = newsize + memid->mem.os.alignment - 1;
+  newsize = mi_os_get_alloc_size(newsize);
+  const size_t oversize = mi_os_get_alloc_size(newsize + memid->mem.os.alignment - 1);
 
   if (memid->memkind == MI_MEM_OS_REMAP) {
     bool extend_is_zero = false;
     void* newp = NULL;
+    if (!memid->is_pinned || !memid->initially_committed) {
+      // if parts may have been decommitted, ensure it is committed now (or we get EFAULT from mremap)
+      _mi_os_commit(memid->mem.os.base, memid->mem.os.size, NULL, stats);
+    }
     int err = _mi_prim_realloc_remappable(memid->mem.os.base, memid->mem.os.size, oversize, &extend_is_zero, &newp, &memid->mem.os.prim_info);
     if (err == 0 && newp != NULL) {
       memid->initially_committed = true;      
@@ -444,13 +457,13 @@ void* _mi_os_realloc(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi
       return mi_os_align_within(newp, oversize, memid->mem.os.alignment, newsize, memid->initially_committed, memid->is_pinned, stats);
     }
     else {
-      _mi_warning_message("failed to remap OS re-allocation (error %d (0x%x) at %p of size %zu to size %zu)\n", err, err, p, size, newsize);
+      _mi_warning_message("failed to remap OS memory (error %d (0x%02x) at %p of %zu bytes to %zu bytes)\n", err, err, p, size, newsize);
     }
   }
   
-  // fall back to regular realloc
+  // fall back to copy (but in remappable memory if possible)
   mi_memid_t newmemid = _mi_memid_none();
-  void* newp = _mi_os_alloc_aligned(newsize, memid->mem.os.alignment, memid->initially_committed, true /* allow large? */, &newmemid, stats);
+  void* newp = _mi_os_alloc_remappable(newsize, 0, memid->mem.os.alignment, &newmemid, stats);
   if (newp == NULL) return NULL;
 
   size_t csize = (size > newsize ? newsize : size);
@@ -505,7 +518,7 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats
   bool os_is_zero = false;
   int err = _mi_prim_commit(start, csize, &os_is_zero); 
   if (err != 0) {
-    _mi_warning_message("cannot commit OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
+    _mi_warning_message("cannot commit OS memory (error: %d (0x%02x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
     return false;
   }
   if (os_is_zero && is_zero != NULL) { 
@@ -535,7 +548,7 @@ static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit, mi_
   *needs_recommit = true;
   int err = _mi_prim_decommit(start,csize,needs_recommit);  
   if (err != 0) {
-    _mi_warning_message("cannot decommit OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
+    _mi_warning_message("cannot decommit OS memory (error: %d (0x%02x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
   mi_assert_internal(err == 0);
   return (err == 0);
@@ -565,7 +578,7 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* stats) {
 
   int err = _mi_prim_reset(start, csize);
   if (err != 0) {
-    _mi_warning_message("cannot reset OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
+    _mi_warning_message("cannot reset OS memory (error: %d (0x%02x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
   return (err == 0);
 }
@@ -614,7 +627,7 @@ static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
   */
   int err = _mi_prim_protect(start,csize,protect);
   if (err != 0) {
-    _mi_warning_message("cannot %s OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", (protect ? "protect" : "unprotect"), err, err, start, csize);
+    _mi_warning_message("cannot %s OS memory (error: %d (0x%02x), address: %p, size: 0x%zx bytes)\n", (protect ? "protect" : "unprotect"), err, err, start, csize);
   }
   return (err == 0);
 }
@@ -696,7 +709,7 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
     int err = _mi_prim_alloc_huge_os_pages(addr, MI_HUGE_OS_PAGE_SIZE, numa_node, &is_zero, &p);
     if (!is_zero) { all_zero = false;  }
     if (err != 0) {
-      _mi_warning_message("unable to allocate huge OS page (error: %d (0x%x), address: %p, size: %zx bytes)\n", err, err, addr, MI_HUGE_OS_PAGE_SIZE);
+      _mi_warning_message("unable to allocate huge OS page (error: %d (0x%02x), address: %p, size: %zx bytes)\n", err, err, addr, MI_HUGE_OS_PAGE_SIZE);
       break;
     }
 

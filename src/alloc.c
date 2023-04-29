@@ -814,25 +814,33 @@ mi_decl_nodiscard void* mi_zalloc_remappable(size_t size) mi_attr_noexcept {
 mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept {
   if (p == NULL) return mi_malloc(newsize);
 
-  const size_t padsize = newsize + MI_PADDING_SIZE;
   mi_segment_t* segment = mi_checked_ptr_segment(p, "mi_remap");
+  const mi_threadid_t tid = _mi_prim_thread_id();
+  if (segment->thread_id != tid) {
+    _mi_warning_message("cannot remap memory from a different thread (address %p, newsize %zu bytes)\n", p, newsize);
+    return mi_realloc(p, newsize);
+  }
+
+  const size_t padsize = newsize + MI_PADDING_SIZE;
   mi_assert_internal(segment != NULL);
   mi_page_t* page = _mi_segment_page_of(segment, p);  
   mi_block_t* block = _mi_page_ptr_unalign(segment, page, p);
   const size_t bsize = mi_page_usable_block_size(page);
-  if (bsize >= padsize) {
+  if (bsize >= padsize && 9*(bsize/10) <= padsize) {  // if smaller and not more than 10% waste, keep it
+    _mi_verbose_message("remapping in the same block (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
     mi_padding_init(page, block, newsize);
     return p;
   }
 
-  mi_heap_t* heap = mi_prim_get_default_heap();
-  if (segment->thread_id == heap->thread_id &&
-      segment->memid.memkind == MI_MEM_OS_REMAP) 
-  {
-    mi_assert_internal((void*)block == p);
+  if (segment->memid.memkind == MI_MEM_OS_REMAP) {
+    // we can remap
+    mi_heap_t* heap = mi_prim_get_default_heap();
+    mi_assert_internal((void*)block == p);        
+    mi_assert_internal(heap->thread_id == tid);
     _mi_heap_huge_page_detach(heap, page);
     block = _mi_segment_huge_page_remap(segment, page, block, padsize, &heap->tld->segments);
     if (block != NULL) {     
+      // succes! re-establish the pointers to the potentially relocated memory
       segment = mi_checked_ptr_segment(block, "mi_remap");
       page = _mi_segment_page_of(segment, block);
       mi_padding_init(page, block, newsize);
@@ -840,11 +848,14 @@ mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept {
       return block;
     }
     else {
+      _mi_verbose_message("unable to remap memory, huge remap (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
       _mi_heap_huge_page_attach(heap, page);
     }
   }
-  _mi_warning_message("unable to remap block, fall back to reallocation (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
-
+  else {
+    _mi_verbose_message("unable to remap memory, not remappable (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
+  }
+  _mi_warning_message("unable to remap memory, fall back to reallocation (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
   return mi_realloc(p, newsize);
 }
 

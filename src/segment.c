@@ -1290,6 +1290,7 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
 #endif
 
 mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, mi_block_t* block, size_t newsize, mi_segments_tld_t* tld) {
+  // assert there are no pointers into the segment/page/block anymore
   mi_assert_internal(segment == _mi_page_segment(page));
   mi_assert_internal(page->used == 1);
   mi_assert_internal(page->free == NULL);
@@ -1297,30 +1298,26 @@ mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, 
   mi_assert_internal(mi_page_thread_free(page) == NULL);
   mi_assert_internal(segment->next == NULL && segment->prev == NULL);
   mi_assert_internal(page->next == NULL && page->prev == NULL);
+
   const size_t bsize = mi_page_block_size(page);
   const size_t newssize = _mi_align_up(_mi_align_up(newsize, _mi_os_page_size()) + (mi_segment_size(segment) - bsize), MI_SEGMENT_SIZE);
   mi_memid_t memid = segment->memid;
   const ptrdiff_t block_ofs = (uint8_t*)block - (uint8_t*)segment;
 
   mi_segment_protect(segment, false, tld->os);
-  if (segment->allow_decommit && !page->is_committed) {  // TODO: always commit fully regardless of the page?
-    _mi_os_commit(segment, mi_segment_size(segment), NULL, tld->stats);
-    page->is_committed = true;
-  }
-  mi_segment_t* newsegment = (mi_segment_t*)_mi_os_realloc(segment, mi_segment_size(segment), newssize, &memid, tld->stats);
+  mi_segment_t* newsegment = (mi_segment_t*)_mi_os_remap(segment, mi_segment_size(segment), newssize, &memid, tld->stats);
   if (newsegment == NULL) {
     mi_segment_protect(segment, true, tld->os);
     return NULL;
   }
-  else {
-    newsegment->memid = memid;
-    newsegment->segment_size = newssize;
-    newsegment->cookie = _mi_ptr_cookie(newsegment);
-    mi_segment_protect(newsegment, true, tld->os);
-    _mi_segment_map_freed_at(segment);
-    _mi_segment_map_allocated_at(newsegment);
-  }
-
+  
+  newsegment->memid = memid;
+  newsegment->segment_size = newssize;
+  newsegment->cookie = _mi_ptr_cookie(newsegment);
+  mi_segment_protect(newsegment, true, tld->os);
+  _mi_segment_map_freed_at(segment);
+  _mi_segment_map_allocated_at(newsegment);
+  
   mi_block_t* newblock = (mi_block_t*)((uint8_t*)newsegment + block_ofs);
   mi_assert_internal(_mi_ptr_segment(newblock) == newsegment);
   mi_page_t* newpage = _mi_ptr_page(newblock);

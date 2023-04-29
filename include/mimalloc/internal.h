@@ -117,7 +117,7 @@ size_t     _mi_os_large_page_size(void);
 void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
 
 void*      _mi_os_alloc_remappable(size_t size, size_t future_reserve, size_t alignment, mi_memid_t* memid, mi_stats_t* stats);
-void*      _mi_os_realloc(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats);
+void*      _mi_os_remap(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats);
 
 
 // arena.c

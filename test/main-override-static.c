@@ -221,8 +221,9 @@ static void test_heap_walk(void) {
 
 
 static void test_remap(void) {
-  size_t size = 64 * 1024 * 1024;
-  size_t inc  = 1024 * 1024;
+  const size_t size0 = 64 * 1024 * 1024;
+  const size_t inc   = 1024 * 1024;
+  size_t size = size0;
   uint8_t* p = (uint8_t*)mi_malloc_remappable(size);
   memset(p, 1, size);
   for (int i = 2; i < 100; i++) {
@@ -230,6 +231,13 @@ static void test_remap(void) {
     memset(p + size, i, inc);
     size += inc;
     printf("%3d: increased to size %zu\n", i, size);
+  }
+  for (int i = 1; i < 100; i++) {
+    size_t idx = size0 + ((i - 1) * inc) - 1;
+    uint8_t v = p[idx];
+    if (v != i) {
+      printf("error: corrupted memory in remap: i=%d, index=0x%zx, value=%u \n", i, idx,v);
+    };
   }
   mi_free(p);
 }
