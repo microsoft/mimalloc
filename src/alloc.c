@@ -541,10 +541,9 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 
 #if (MI_DEBUG>0)
   if mi_unlikely(!mi_is_in_heap_region(p)) {
-    _mi_warning_message("%s: pointer might not point to a valid heap region: %p\n"
-      "(this may still be a valid very large allocation (over 64MiB))\n", msg, p);
+    _mi_trace_message("%s: pointer might not point to a valid heap region: %p\n" "(this may still be a valid very large allocation (over 64MiB))\n", msg, p);
     if mi_likely(_mi_ptr_cookie(segment) == segment->cookie) {
-      _mi_warning_message("(yes, the previous pointer %p was valid after all)\n", p);
+      _mi_trace_message("(yes, the previous pointer %p was valid after all)\n", p);
     }
   }
 #endif
@@ -827,7 +826,7 @@ mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept {
   mi_block_t* block = _mi_page_ptr_unalign(segment, page, p);
   const size_t bsize = mi_page_usable_block_size(page);
   if (bsize >= padsize && 9*(bsize/10) <= padsize) {  // if smaller and not more than 10% waste, keep it
-    _mi_verbose_message("remapping in the same block (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
+    //_mi_verbose_message("remapping in the same block (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
     mi_padding_init(page, block, newsize);
     return p;
   }

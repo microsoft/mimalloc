@@ -884,7 +884,7 @@ int _mi_prim_alloc_remappable(size_t size, size_t future_reserve, bool* is_pinne
   #endif
 }
 
-int _mi_prim_realloc_remappable(void* addr, size_t size, size_t newsize, bool* extend_is_zero, void** newaddr, void** remap_info ) {
+int _mi_prim_remap(void* addr, size_t size, size_t newsize, bool* extend_is_zero, void** newaddr, void** remap_info ) {
   #if !defined(MREMAP_MAYMOVE)
     MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(newsize); MI_UNUSED(extend_is_zero); MI_UNUSED(newaddr); MI_UNUSED(remap_info);
     return EINVAL;

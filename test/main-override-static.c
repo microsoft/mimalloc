@@ -237,6 +237,7 @@ static void test_remap(void) {
     uint8_t v = p[idx];
     if (v != i) {
       printf("error: corrupted memory in remap: i=%d, index=0x%zx, value=%u \n", i, idx,v);
+      abort();
     };
   }
   mi_free(p);
