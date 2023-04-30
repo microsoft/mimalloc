@@ -811,12 +811,12 @@ mi_decl_nodiscard void* mi_zalloc_remappable(size_t size) mi_attr_noexcept {
 }
 
 mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept {
-  if (p == NULL) return mi_malloc(newsize);
+  if (p == NULL) return mi_malloc_remappable(newsize);
 
   mi_segment_t* segment = mi_checked_ptr_segment(p, "mi_remap");
   const mi_threadid_t tid = _mi_prim_thread_id();
   if (segment->thread_id != tid) {
-    _mi_warning_message("cannot remap memory from a different thread (address %p, newsize %zu bytes)\n", p, newsize);
+    _mi_warning_message("cannot remap memory from a different thread (address: %p, newsize: %zu bytes)\n", p, newsize);
     return mi_realloc(p, newsize);
   }
 
@@ -831,8 +831,8 @@ mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept {
     return p;
   }
 
+  // remappable memory?
   if (segment->memid.memkind == MI_MEM_OS_REMAP) {
-    // we can remap
     mi_heap_t* heap = mi_prim_get_default_heap();
     mi_assert_internal((void*)block == p);        
     mi_assert_internal(heap->thread_id == tid);
@@ -847,14 +847,14 @@ mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept {
       return block;
     }
     else {
-      _mi_verbose_message("unable to remap memory, huge remap (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
+      _mi_verbose_message("unable to remap memory, huge remap (address: %p, from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
       _mi_heap_huge_page_attach(heap, page);
     }
   }
   else {
-    _mi_verbose_message("unable to remap memory, not remappable (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
+    _mi_verbose_message("unable to remap memory, not remappable (address: %p, from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
   }
-  _mi_warning_message("unable to remap memory, fall back to reallocation (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
+  _mi_warning_message("unable to remap memory, fall back to reallocation (address: %p, from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
   return mi_realloc(p, newsize);
 }
 
