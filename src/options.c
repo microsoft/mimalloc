@@ -114,7 +114,7 @@ void _mi_options_init(void) {
 
 mi_decl_nodiscard long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
-  if (option < 0 || option >= _mi_option_last) return 0;
+  if (option >= _mi_option_last) return 0;
   mi_option_desc_t* desc = &options[option];
   mi_assert(desc->option == option);  // index should match the option
   if mi_unlikely(desc->init == UNINIT) {
@@ -136,7 +136,7 @@ mi_decl_nodiscard size_t mi_option_get_size(mi_option_t option) {
 
 void mi_option_set(mi_option_t option, long value) {
   mi_assert(option >= 0 && option < _mi_option_last);
-  if (option < 0 || option >= _mi_option_last) return;
+  if (option >= _mi_option_last) return;
   mi_option_desc_t* desc = &options[option];
   mi_assert(desc->option == option);  // index should match the option
   desc->value = value;
@@ -145,7 +145,7 @@ void mi_option_set(mi_option_t option, long value) {
 
 void mi_option_set_default(mi_option_t option, long value) {
   mi_assert(option >= 0 && option < _mi_option_last);
-  if (option < 0 || option >= _mi_option_last) return;
+  if (option >= _mi_option_last) return;
   mi_option_desc_t* desc = &options[option];
   if (desc->init != INITIALIZED) {
     desc->value = value;
