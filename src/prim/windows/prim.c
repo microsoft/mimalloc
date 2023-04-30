@@ -178,7 +178,7 @@ int _mi_prim_free(void* addr, size_t size ) {
 // VirtualAlloc
 //---------------------------------------------
 
-static void* win_virtual_alloc_prim(void* addr, size_t size, size_t try_alignment, DWORD flags) {
+static void* mi_win_virtual_alloc_prim(void* addr, size_t size, size_t try_alignment, DWORD flags) {
   #if (MI_INTPTR_SIZE >= 8)
   // on 64-bit systems, try to use the virtual address area after 2TiB for 4MiB aligned allocations
   if (addr == NULL) {
@@ -207,7 +207,7 @@ static void* win_virtual_alloc_prim(void* addr, size_t size, size_t try_alignmen
   return VirtualAlloc(addr, size, flags, PAGE_READWRITE);
 }
 
-static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DWORD flags, bool large_only, bool allow_large, bool* is_large) {
+static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DWORD flags, bool large_only, bool allow_large, bool* is_large) {
   mi_assert_internal(!(large_only && !allow_large));
   static _Atomic(size_t) large_page_try_ok; // = 0;
   void* p = NULL;
@@ -223,7 +223,7 @@ static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DW
     else {
       // large OS pages must always reserve and commit.
       *is_large = true;
-      p = win_virtual_alloc_prim(addr, size, try_alignment, flags | MEM_LARGE_PAGES);
+      p = mi_win_virtual_alloc_prim(addr, size, try_alignment, flags | MEM_LARGE_PAGES);
       if (large_only) return p;
       // fall back to non-large page allocation on error (`p == NULL`).
       if (p == NULL) {
@@ -234,7 +234,7 @@ static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DW
   // Fall back to regular page allocation
   if (p == NULL) {
     *is_large = ((flags&MEM_LARGE_PAGES) != 0);
-    p = win_virtual_alloc_prim(addr, size, try_alignment, flags);
+    p = mi_win_virtual_alloc_prim(addr, size, try_alignment, flags);
   }
   //if (p == NULL) { _mi_warning_message("unable to allocate OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %zu, flags: 0x%x, large only: %d, allow large: %d)\n", size, GetLastError(), addr, try_alignment, flags, large_only, allow_large); }
   return p;
@@ -247,7 +247,7 @@ int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_la
   *is_zero = true;
   int flags = MEM_RESERVE;
   if (commit) { flags |= MEM_COMMIT; }
-  *addr = win_virtual_alloc(NULL, size, try_alignment, flags, false, allow_large, is_large);
+  *addr = mi_win_virtual_alloc(NULL, size, try_alignment, flags, false, allow_large, is_large);
   return (*addr != NULL ? 0 : (int)GetLastError());
 }
 
@@ -627,28 +627,16 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
 // Remappable memory
 //----------------------------------------------------------------
 
+// tracks allocated physical memory backing a virtual address range
 typedef struct mi_win_remap_info_s {
-  void*     base;            // base of the virtual address space
-  size_t    base_pages;      // total virtual alloc'd pages from `base`
-  size_t    alignment;       // alignment: _mi_align_up_ptr(mapped_base,alignment) maps to the first physical page (= `mapped_base`)
   size_t    page_count;      // allocated physical pages (with info in page_info)
   size_t    page_reserved;   // available entries in page_info
   ULONG_PTR page_info[1];
 } mi_win_remap_info_t;
 
 
-static void* mi_win_mapped_base(mi_win_remap_info_t* rinfo) {
-  return _mi_align_up_ptr(rinfo->base, rinfo->alignment);
-}
-
-static size_t mi_win_mapped_pages(mi_win_remap_info_t* rinfo) {
-  const size_t presize = (uint8_t*)mi_win_mapped_base(rinfo) - (uint8_t*)rinfo->base;
-  return (rinfo->base_pages - _mi_divide_up(presize, _mi_os_page_size()));
-}
-
-
 // allocate remap info
-static mi_win_remap_info_t* mi_win_alloc_remap_info(size_t page_count, size_t alignment) {
+static mi_win_remap_info_t* mi_win_alloc_remap_info(size_t page_count) {
   const size_t remap_info_size = _mi_align_up(sizeof(mi_win_remap_info_t) + (page_count * sizeof(ULONG_PTR)), _mi_os_page_size());
   mi_win_remap_info_t* rinfo = NULL;
   bool os_is_zero = false;
@@ -656,29 +644,22 @@ static mi_win_remap_info_t* mi_win_alloc_remap_info(size_t page_count, size_t al
   int err = _mi_prim_alloc(remap_info_size, 1, true, false, &os_is_large, &os_is_zero, (void**)&rinfo);
   if (err != 0) return NULL;
   if (!os_is_zero) { _mi_memzero_aligned(rinfo, remap_info_size); }
-  rinfo->base = NULL;
-  rinfo->base_pages = 0;
-  rinfo->alignment = alignment;
   rinfo->page_count = 0;
   rinfo->page_reserved = (remap_info_size - offsetof(mi_win_remap_info_t, page_info)) / sizeof(ULONG_PTR);
   return rinfo;
 }
 
 // reallocate remap info
-static mi_win_remap_info_t* mi_win_realloc_remap_info(mi_win_remap_info_t* rinfo, size_t newpage_count, size_t alignment) {
+static mi_win_remap_info_t* mi_win_realloc_remap_info(mi_win_remap_info_t* rinfo, size_t newpage_count) {
   if (rinfo == NULL) {
-    return mi_win_alloc_remap_info(newpage_count,alignment);
+    return mi_win_alloc_remap_info(newpage_count);
   }
   else if (rinfo->page_reserved >= newpage_count) {
-    mi_assert_internal(alignment <= rinfo->alignment);
     return rinfo; // still fits
   }
   else {
-    mi_assert_internal(alignment <= rinfo->alignment);
-    mi_win_remap_info_t* newrinfo = mi_win_alloc_remap_info(newpage_count,rinfo->alignment);
+    mi_win_remap_info_t* newrinfo = mi_win_alloc_remap_info(newpage_count);
     if (newrinfo == NULL) return NULL;
-    newrinfo->base = rinfo->base;
-    newrinfo->base_pages = rinfo->base_pages;
     newrinfo->page_count = rinfo->page_count;
     _mi_memcpy(newrinfo->page_info, rinfo->page_info, rinfo->page_count * sizeof(ULONG_PTR));
     _mi_prim_free(rinfo, sizeof(mi_win_remap_info_t) + ((rinfo->page_reserved - 1) * sizeof(ULONG_PTR)));
@@ -686,14 +667,32 @@ static mi_win_remap_info_t* mi_win_realloc_remap_info(mi_win_remap_info_t* rinfo
   }
 }
 
+// free meta info and the managed physical pages
+static int mi_win_free_remap_info(mi_win_remap_info_t* rinfo) {
+  int err = 0;
+  if (rinfo == NULL) return 0;
+  if (rinfo->page_count > 0) {
+    size_t req_pages = rinfo->page_count;
+    if (!FreeUserPhysicalPages(GetCurrentProcess(), &req_pages, &rinfo->page_info[0])) {
+      err = (int)GetLastError();
+    }
+    rinfo->page_count = 0;
+  }
+  if (!VirtualFree(rinfo, 0, MEM_RELEASE)) {
+    err = (int)GetLastError();
+  }
+  return err;
+}
+
 // ensure enough physical pages are allocated
-static int mi_win_ensure_physical_pages(mi_win_remap_info_t** prinfo, size_t newpage_count, size_t alignment) {
+static int mi_win_ensure_physical_pages(mi_win_remap_info_t** prinfo, size_t newpage_count) 
+{
   // ensure meta data is large enough
-  mi_win_remap_info_t* rinfo = mi_win_realloc_remap_info(*prinfo, newpage_count, alignment);
+  mi_win_remap_info_t* rinfo = mi_win_realloc_remap_info(*prinfo, newpage_count);
   if (rinfo == NULL) return ENOMEM;
   *prinfo = rinfo;
 
-  // allocate physical pages
+  // allocate physical pages; todo: allow shrinking?
   if (newpage_count > rinfo->page_count) {
     mi_assert_internal(rinfo->page_reserved >= newpage_count);
     const size_t extra_pages = newpage_count - rinfo->page_count;
@@ -702,133 +701,101 @@ static int mi_win_ensure_physical_pages(mi_win_remap_info_t** prinfo, size_t new
       return (int)GetLastError();
     }
     rinfo->page_count += req_pages;
-    if (req_pages < extra_pages) return ENOMEM;
+    if (req_pages < extra_pages) {
+      return ENOMEM;
+    }
   }
   return 0;
 }
 
-
-
-static int mi_win_remap_virtual_pages(mi_win_remap_info_t* rinfo, size_t newpage_count) {
+// Remap physical memory to another virtual address range
+static int mi_win_remap_virtual_pages(mi_win_remap_info_t* rinfo, void* oldaddr, size_t oldpage_count, void* newaddr, size_t newpage_count) {
   mi_assert_internal(rinfo != NULL && rinfo->page_count >= newpage_count);
-  if (mi_win_mapped_pages(rinfo) >= newpage_count) return 0; // still good? should we shrink the mapping?
-
-  
-  if (rinfo->base != NULL) {
-    printf("remap existing remap\n");
-  }
-
-  // we can now free the original virtual range ?
-  if (rinfo->base != NULL) {
-    if (!VirtualFree(rinfo->base, 0, MEM_RELEASE)) {
-     return (int)GetLastError();
-   }
-  }
-  
+ 
   // unmap the old range
-  /*if (rinfo->mapped_base != NULL) {
-    if (!MapUserPhysicalPages(rinfo->mapped_base, rinfo->mapped_pages, NULL)) {
+  if (oldaddr != NULL) {
+    if (!MapUserPhysicalPages(oldaddr, oldpage_count, NULL)) {
       return (int)GetLastError();
     }
-  }*/
-
-  // allocate new virtual address range
-  const size_t newsize = _mi_align_up( newpage_count * _mi_os_page_size() + rinfo->alignment - 1, _mi_os_page_size());
-  void* newbase = VirtualAlloc(NULL, newsize, MEM_RESERVE | MEM_PHYSICAL, PAGE_READWRITE);
-  if (newbase == NULL) {
-    // todo: remap old range?
-    return (int)GetLastError();
-  }
-  if (rinfo->base != newbase) {
-    printf("different base %p vs previous %p\n", newbase, rinfo->base);
   }
 
-  // find the aligned point where we map to our physical pages
-  rinfo->base = newbase;
-  rinfo->base_pages = _mi_divide_up(newsize, _mi_os_page_size());
-  mi_assert_internal(mi_win_mapped_pages(rinfo) >= newpage_count);
-
-  // and remap it 
-  if (!MapUserPhysicalPages(mi_win_mapped_base(rinfo), newpage_count, &rinfo->page_info[0])) {
-    // todo: remap old range?
+  // and remap the virtual addresses from newbase
+  if (!MapUserPhysicalPages(newaddr, newpage_count, &rinfo->page_info[0])) {
+    // if this fails that would be very bad as we already unmapped the old range..
+    // todo: try to remap old range?
     int err = (int)GetLastError();
-    VirtualFree(newbase, 0, MEM_RELEASE);
+    VirtualFree(newaddr, 0, MEM_RELEASE);
     return err;
   }
 
   return 0;
 }
 
-static int mi_win_remap(mi_win_remap_info_t** prinfo, size_t newsize, size_t alignment) {
-  size_t newpage_count = _mi_divide_up(newsize, _mi_os_page_size());
-  int err = mi_win_ensure_physical_pages(prinfo, newpage_count, alignment);
-  if (err != 0) return err;
-  err = mi_win_remap_virtual_pages(*prinfo, newpage_count);
-  if (err != 0) return err;
+// Reserve a virtual address range to be mapped to physical memory later
+int _mi_prim_remap_reserve(size_t size, bool* is_pinned, void** base, void** remap_info) {
+  if (!mi_win_enable_large_os_pages(NULL)) return EINVAL;
+  mi_assert_internal((size % _mi_os_page_size()) == 0);
+  size = _mi_align_up(size, _mi_os_page_size());
+  mi_win_remap_info_t** prinfo = (mi_win_remap_info_t**)remap_info;
+  *prinfo = NULL;
+  *is_pinned = true;
+  *base = NULL;
+  void* p = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_PHYSICAL, PAGE_READWRITE);
+  if (p == NULL) { return (int)GetLastError(); }
+  *base = p;
   return 0;
 }
 
-static int mi_win_free_remap_info(mi_win_remap_info_t* rinfo) {
+// Remap to a new virtual address range
+int _mi_prim_remap_to(void* base, void* addr, size_t size, void* newaddr, size_t newsize, bool* extend_is_zero, void** remap_info, void** new_remap_info) 
+{
+  *extend_is_zero = false; // todo: can we assume zero's ?
+  mi_win_remap_info_t**prinfo = (mi_win_remap_info_t**)remap_info;
+  mi_win_remap_info_t** pnewrinfo = (mi_win_remap_info_t**)new_remap_info;
+  mi_assert_internal(base <= addr);
+  mi_assert_internal(*pnewrinfo == NULL);
+  mi_assert_internal((size % _mi_os_page_size()) == 0);
+  mi_assert_internal((newsize % _mi_os_page_size()) == 0);
+  size = _mi_align_up(size, _mi_os_page_size());
+  newsize = _mi_align_up(newsize, _mi_os_page_size());
+
+  size_t oldpage_count = _mi_divide_up(size, _mi_os_page_size());
+  size_t newpage_count = _mi_divide_up(newsize, _mi_os_page_size());  
+
+  int err = mi_win_ensure_physical_pages(prinfo, newpage_count);
+  if (err != 0) { return err; }
+  
+  err = mi_win_remap_virtual_pages(*prinfo, addr, oldpage_count, newaddr, newpage_count);
+  if (err != 0) { return err; }
+
+  // release old virtual range
+  if (base != NULL) {
+    if (!VirtualFree(base, 0, MEM_RELEASE)) {
+      err = (int)GetLastError();
+      _mi_warning_message("unable to release virtual address range on remap (error %d (0x%02x), address: %p)\n", err, err, base);
+    }
+  }
+
+  *pnewrinfo = *prinfo;
+  *prinfo = NULL;
+  return 0;
+}
+
+// Free remappable memory
+int _mi_prim_remap_free(void* base, size_t size, void* remap_info) {
+  MI_UNUSED(size);
   int err = 0;
-  if (rinfo == NULL) return 0;
-  if (rinfo->base != NULL) {
-    if (!VirtualFree(rinfo->base, 0, MEM_RELEASE)) {
+  // release virtual address range
+  if (base != NULL) {
+    if (!VirtualFree(base, 0, MEM_RELEASE)) {
       err = (int)GetLastError();
     }
-    rinfo->base = NULL;
-    rinfo->base_pages = 0;
   }
-  if (rinfo->page_count > 0) {
-    size_t req_pages = rinfo->page_count;
-    if (!FreeUserPhysicalPages(GetCurrentProcess(), &req_pages, &rinfo->page_info[0])) {
-      err = (int)GetLastError();
-    }
-    rinfo->page_count = 0;
+  // release backing physical pages
+  mi_win_remap_info_t* rinfo = (mi_win_remap_info_t*)remap_info;
+  if (rinfo != NULL) {
+    err = mi_win_free_remap_info(rinfo);
   }
-  VirtualFree(rinfo, 0, MEM_RELEASE);
   return err;
 }
 
-int _mi_prim_alloc_remappable(size_t size, size_t alignment, bool* is_pinned, bool* is_zero, void** addr, void** remap_info ) {
-  // MI_UNUSED(size); MI_UNUSED(alignment); MI_UNUSED(is_pinned); MI_UNUSED(is_zero); MI_UNUSED(addr); MI_UNUSED(remap_info);
-  // return EINVAL;
-  // return _mi_prim_alloc(size, 1, true, true, is_pinned, is_zero, addr);
-
-  if (!mi_win_enable_large_os_pages(NULL)) return EINVAL;
-  
-  mi_win_remap_info_t* rinfo = NULL;
-  int err = mi_win_remap(&rinfo, size, alignment);
-  if (err != 0) {
-    if (rinfo != NULL) { mi_win_free_remap_info(rinfo); }
-    return err;
-  }
-  *is_pinned  = true;
-  *is_zero    = true;
-  *addr       = mi_win_mapped_base(rinfo);
-  *remap_info = rinfo;
-  return 0;
-}
-
-int _mi_prim_remap(void* addr, size_t size, size_t newsize, size_t alignment, bool* extend_is_zero, void** newaddr, void** remap_info ) {
-  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(newsize); MI_UNUSED(extend_is_zero); MI_UNUSED(newaddr); MI_UNUSED(remap_info);
-  // return EINVAL;
-  mi_win_remap_info_t** prinfo = (mi_win_remap_info_t**)remap_info;
-  mi_assert_internal(*prinfo != NULL);
-  mi_assert_internal(mi_win_mapped_base(*prinfo) == addr);
-  mi_assert_internal((*prinfo)->alignment == alignment);
-  int err = mi_win_remap(prinfo, newsize, alignment);
-  if (err != 0) return err;
-  *extend_is_zero = false;
-  *newaddr = mi_win_mapped_base(*prinfo);
-  return 0;
-}
-
-int _mi_prim_free_remappable(void* addr, size_t size, void* remap_info ) {
-  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(remap_info);
-  // return _mi_prim_free(addr, size);
-  // return EINVAL;
-  mi_win_remap_info_t* rinfo = (mi_win_remap_info_t*)remap_info;
-  mi_assert_internal(rinfo != NULL);
-  mi_assert_internal(mi_win_mapped_base(rinfo) == addr);
-  return mi_win_free_remap_info(rinfo);
-}

@@ -171,7 +171,7 @@ static void mi_os_prim_free_remappable(void* addr, size_t size, bool still_commi
   MI_UNUSED(tld_stats);
   mi_assert_internal((size % _mi_os_page_size()) == 0);
   if (addr == NULL || size == 0) return; // || _mi_os_is_huge_reserved(addr)
-  int err = _mi_prim_free_remappable(addr, size, remap_info);
+  int err = _mi_prim_remap_free(addr, size, remap_info);
   if (err != 0) {
     _mi_warning_message("unable to free remappable OS memory (error: %d (0x%02x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
@@ -392,73 +392,73 @@ void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offse
 ----------------------------------------------------------- */
 
 void* _mi_os_alloc_remappable(size_t size, size_t alignment, mi_memid_t* memid, mi_stats_t* stats) {
-  mi_assert_internal(size > 0);
-  mi_assert_internal(memid != NULL);
-  *memid = _mi_memid_none();
-  if (alignment == 0) { alignment = 1;  }
-  size = mi_os_get_alloc_size(size);
-  bool os_is_pinned = true;
-  bool os_is_zero = false;
-  void* base = NULL;
-  void* remap_info = NULL;
-  int err = _mi_prim_alloc_remappable(size, alignment, &os_is_pinned, &os_is_zero, &base, &remap_info);
-  if (err != 0 || base == NULL) {
-    // fall back to regular allocation
-    return _mi_os_alloc_aligned(size, alignment, true /* commit */, true /* allow_large */, memid, stats);
+  if (alignment < _mi_os_page_size()) { 
+    alignment = _mi_os_page_size();
   }
-  mi_assert_internal(_mi_is_aligned(base, alignment));
-  *memid = _mi_memid_create_os(base, size, alignment, true, os_is_zero, os_is_pinned);
-  memid->memkind = MI_MEM_OS_REMAP; 
-  memid->mem.os.prim_info = remap_info;
-  return base;
+  *memid = _mi_memid_none();
+  memid->mem.os.alignment = alignment;
+  return _mi_os_remap(NULL, 0, size, memid, stats);
 }
 
 void* _mi_os_remap(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats) {
-  mi_assert_internal(size > 0);
-  mi_assert_internal(newsize > 0);
-  mi_assert_internal(p != NULL && memid != NULL);
-  mi_assert_internal(mi_memkind_is_os(memid->memkind));
-  if (p == NULL) return NULL;
-  if (!mi_memkind_is_os(memid->memkind)) return NULL;
-
+  mi_assert_internal(memid != NULL);
+  mi_assert_internal((memid->memkind == MI_MEM_NONE && p == NULL && size == 0) || (memid->memkind == MI_MEM_OS_REMAP && p != NULL && size > 0));
   newsize = mi_os_get_alloc_size(newsize);
-  
-  if (memid->memkind == MI_MEM_OS_REMAP) {
-    bool extend_is_zero = false;
-    void* newp = NULL;
-    if (!memid->is_pinned || !memid->initially_committed) {
-      // if parts may have been decommitted, ensure it is committed now (or we get EFAULT from mremap)
-      _mi_os_commit(memid->mem.os.base, memid->mem.os.size, NULL, stats);
+
+  // reserve virtual range 
+  const size_t alignment = memid->mem.os.alignment;   
+  mi_assert_internal(alignment >= _mi_os_page_size());
+  const size_t oversize = mi_os_get_alloc_size(newsize + alignment - 1);
+  bool os_is_pinned = false;
+  void* base = NULL;
+  void* remap_info = NULL;
+  int err = _mi_prim_remap_reserve(oversize, &os_is_pinned, &base, &remap_info);
+  if (err != 0) {
+    // fall back to regular allocation
+    if (err != EINVAL) {  // EINVAL means not supported
+      _mi_warning_message("failed to reserve remap OS memory (error %d (0x%02x) at %p of %zu bytes to %zu bytes)\n", err, err, p, 0, size);
     }
-    const size_t alignment = memid->mem.os.alignment;
-    void* prim_info = memid->mem.os.prim_info;
-    int err = _mi_prim_remap(memid->mem.os.base, memid->mem.os.size, newsize, alignment, &extend_is_zero, &newp, &prim_info);
-    if (err == 0 && newp != NULL) {
-      mi_assert_internal(_mi_is_aligned(newp, alignment));
-      *memid = _mi_memid_create_os(newp, newsize, alignment, true /* committed */, false /* iszero */, memid->is_pinned /* is pinned */);
-      memid->mem.os.prim_info = prim_info;
-      memid->memkind = MI_MEM_OS_REMAP;
-      return newp;
-    }
-    else {
-      _mi_warning_message("failed to remap OS memory (error %d (0x%02x) at %p of %zu bytes to %zu bytes)\n", err, err, p, size, newsize);
-    }
-  }
-  
-  // fall back to copy (but in remappable memory if possible)
-  mi_memid_t newmemid = _mi_memid_none();
-  void* newp = _mi_os_alloc_remappable(newsize, memid->mem.os.alignment, &newmemid, stats);
-  if (newp == NULL) {
-    newp = _mi_os_alloc_aligned(newsize, memid->mem.os.alignment, true /* commit */, false /* allow_large */, &newmemid, stats);
-    if (newp == NULL) return NULL;
+    return NULL;
   }
 
-  size_t csize = (size > newsize ? newsize : size);
-  _mi_memcpy_aligned(newp, p, csize);
-  _mi_os_free(p, size, *memid, stats);
+  // create an aligned pointer within
+  mi_memid_t newmemid = _mi_memid_create_os(base, oversize, 1, false /* commit */, false /* iszero */, os_is_pinned);
+  newmemid.memkind = MI_MEM_OS_REMAP;
+  newmemid.mem.os.prim_info = remap_info;
+  void* newp = mi_os_align_within(&newmemid, alignment, newsize, stats);
+
+  // now map the new virtual adress range to physical memory
+  // this also releases the old virtual memory range (if there is no error)
+  bool extend_is_zero = false;
+  err = _mi_prim_remap_to(memid->mem.os.base, p, size, newp, newsize, &extend_is_zero, &memid->mem.os.prim_info, &newmemid.mem.os.prim_info);
+  if (err != 0) {
+    _mi_warning_message("failed to remap OS memory (error %d (0x%02x) at %p of %zu bytes to %zu bytes)\n", err, err, p, 0, size);
+    _mi_prim_remap_free(newmemid.mem.os.base, newmemid.mem.os.size, newmemid.mem.os.prim_info);
+    return NULL;
+  }
+
+  newmemid.initially_committed = true;
+  if (p == NULL && extend_is_zero) {
+    newmemid.initially_zero = true;
+  }
   *memid = newmemid;
   return newp;
 }
+  
+//  // fall back to copy (but in remappable memory if possible)
+//  mi_memid_t newmemid = _mi_memid_none();
+//  void* newp = _mi_os_alloc_remappable(newsize, memid->mem.os.alignment, &newmemid, stats);
+//  if (newp == NULL) {
+//    newp = _mi_os_alloc_aligned(newsize, memid->mem.os.alignment, true /* commit */, false /* allow_large */, &newmemid, stats);
+//    if (newp == NULL) return NULL;
+//  }
+//
+//  size_t csize = (size > newsize ? newsize : size);
+//  _mi_memcpy_aligned(newp, p, csize);
+//  _mi_os_free(p, size, *memid, stats);
+//  *memid = newmemid;
+//  return newp;
+//}
 
 
 /* -----------------------------------------------------------

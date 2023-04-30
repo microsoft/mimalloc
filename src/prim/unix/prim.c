@@ -873,74 +873,39 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
 // Remappable memory
 //----------------------------------------------------------------
 
-static int mi_unix_alloc_aligned(size_t size, size_t alignment, bool commit, bool* is_pinned, bool* is_zero, void** addr)
-{  
-  mi_assert_internal(alignment <= 1 || (alignment >= _mi_os_page_size()));
-  *addr = NULL;
-  void* base = NULL;
-  int err = _mi_prim_alloc(size,alignment,commit,false /*allow large*/, is_pinned, is_zero, &base);
+int _mi_prim_remap_reserve(size_t size, bool* is_pinned, void** base, void** remap_info) {
+  mi_assert_internal((size%_mi_os_page_size()) == 0);
+  *remap_info = NULL;
+  bool is_zero = false;
+  int err = _mi_prim_alloc(size, 1, false /* commit */, false /*allow large*/, is_pinned, &is_zero, base);
   if (err != 0) return err;
-  if (_mi_is_aligned(base,alignment)) {
-    *addr = base;
-    return 0;
-  }
-  _mi_prim_free(base,size);
-  const size_t oversize = _mi_align_up( _mi_align_up(size,alignment), _mi_os_page_size());
-  err = _mi_prim_alloc(oversize,alignment,commit,false,is_pinned,is_zero,&base);
-  if (err != 0) return err;
-  mi_assert_internal(!(*is_pinned));
-  if (!(*is_pinned)) {
-    void* p = _mi_align_up_ptr(base,alignment);
-    *addr = p;      
-    size_t pre_size = (uint8_t*)p - (uint8_t*)base;
-    size_t mid_size = _mi_align_up(size,_mi_os_page_size());
-    size_t post_size = oversize - pre_size - mid_size;
-    mi_assert_internal(pre_size < oversize && post_size < oversize && mid_size >= size);
-    if (pre_size > 0)  { _mi_prim_free(base, pre_size); }
-    if (post_size > 0) { _mi_prim_free((uint8_t*)p + mid_size, post_size); }
-    return 0;
+  return 0;
+}
+
+int _mi_prim_remap_to(void* base, void* addr, size_t size, void* newaddr, size_t newsize, bool* extend_is_zero, void** remap_info, void** new_remap_info) 
+{
+  mi_assert_internal(base <= addr);
+  mi_assert_internal((size % _mi_os_page_size()) == 0);
+  mi_assert_internal((newsize % _mi_os_page_size()) == 0);  
+  *new_remap_info = NULL;
+  *remap_info = NULL;
+  *extend_is_zero = false; // todo: can we assume zero'd?
+  int err = 0;
+  if (addr == NULL) {
+    err = _mi_prim_commit(newaddr, newsize, extend_is_zero);
   }
   else {
-    _mi_prim_free(base,oversize);
-    return EINVAL;
-  }
-}
-
-int _mi_prim_alloc_remappable(size_t size, size_t alignment, bool* is_pinned, bool* is_zero, void** addr, void** remap_info ) {
-  #if !defined(MREMAP_MAYMOVE)
-    MI_UNUSED(size); MI_UNUSED(alignment); MI_UNUSED(is_pinned); MI_UNUSED(is_zero); MI_UNUSED(addr); MI_UNUSED(remap_info);
-    return EINVAL;
-  #else
-    *remap_info = NULL;
-    return mi_unix_alloc_aligned(size, alignment, true, is_pinned, is_zero, addr);
-  #endif
-}
-
-int _mi_prim_remap(void* addr, size_t size, size_t newsize, size_t alignment, bool* extend_is_zero, void** newaddr, void** remap_info ) {
-  #if !defined(MREMAP_MAYMOVE) || !defined(MREMAP_FIXED)
-    MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(newsize); MI_UNUSED(alignment); MI_UNUSED(extend_is_zero); MI_UNUSED(newaddr); MI_UNUSED(remap_info);
-    return EINVAL;
-  #else
-    mi_assert_internal(*remap_info == NULL); MI_UNUSED(remap_info);
-    void* p = NULL; 
-    bool is_pinned = false;
-    // don't commit yet, mremap will take over the virtual rang completely due to MREMAP_FIXED
-    int err = mi_unix_alloc_aligned(size, alignment, false, &is_pinned, extend_is_zero, &p);
-    if (err != 0) return err;
-    void* res = mremap(addr, size, newsize, MREMAP_MAYMOVE | MREMAP_FIXED, p);
-    if (res == MAP_FAILED || res != p) { 
-      err = errno;
-      _mi_prim_free(p,size);
-      return err; 
+    void* p = mremap(addr, size, newsize, (MREMAP_MAYMOVE | MREMAP_FIXED), newaddr);
+    if (p == MAP_FAILED || newaddr != p) {
+      p = NULL;
+      err = errno; 
     }
-    *extend_is_zero = true;
-    *newaddr = p;
-    return 0;
-  #endif
+  }  
+  return err;
 }
 
-int _mi_prim_free_remappable(void* addr, size_t size, void* remap_info ) {
+int _mi_prim_remap_free(void* base, size_t size, void* remap_info) {
   MI_UNUSED(remap_info);
-  mi_assert_internal(remap_info == NULL);
-  return _mi_prim_free(addr,size);
+  mi_assert_internal((size % _mi_os_page_size()) == 0);
+  return _mi_prim_free(base,size);
 }

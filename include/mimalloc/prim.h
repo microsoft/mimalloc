@@ -70,22 +70,23 @@ int _mi_prim_protect(void* addr, size_t size, bool protect);
 int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bool* is_zero, void** addr);
 
 
-// Allocate remappable memory that can be used with `_mi_prim_remap`.
+// Reserve a pure virtual address range that can be used with `_mi_prim_remap_to`.
 // Return `EINVAL` if this is not supported.
-// The returned memory is always committed and aligned at `alignment`.
-// If `is_pinned` is `true` the memory cannot be decommitted or reset.
-// The `remap_info` argument can be used to store OS specific information that is passed to `_mi_prim_remap` and `_mi_prim_free_remappable`.
-int _mi_prim_alloc_remappable(size_t size, size_t alignment, bool* is_pinned, bool* is_zero, void** addr, void** remap_info );
+// If `is_pinned` is set to `true`, the memory cannot be decommitted or reset.
+// The `remap_info` argument can be used to store OS specific information that is passed to `_mi_prim_remap_to` and `_mi_prim_remap_free`.
+int _mi_prim_remap_reserve(size_t size, bool* is_pinned, void** addr, void** remap_info );
 
-// Remap remappable memory. Return `EINVAL` if this is not supported.
-// If remapped, the alignment should be preserved.
-// pre: `addr != NULL` and previously allocated using `_mi_prim_remap` or `_mi_prim_alloc_remappable`.
-//      `newsize > 0`, `size > 0`, `alignment > 0`, `allow_large != NULL`, `newaddr != NULL`.
-int _mi_prim_remap(void* addr, size_t size, size_t newsize, size_t alignment, bool* extend_is_zero, void** newaddr, void** remap_info );
+// Remap remappable memory from `addr` to `newaddr` with the new `newsize`. Return `EINVAL` if this is not supported.
+// Both `addr` (if not NULL) and `newaddr` are inside ranges returned from `_mi_prim_remap_reserve`.
+// The `addr` can be NULL to allocate freshly. The `base` pointer is always `<= addr` and if `base != addr`,
+// then it was the pointer returned from `_mi_prim_remap_reserve`. 
+// This is used to ensure we can remap _aligned_ addresses (`addr` and `newaddr`).
+// pre: `newsize > 0`, `size > 0`, `newaddr != NULL`, `extend_zero != NULL`, `remap_info != NULL`.
+int _mi_prim_remap_to(void* base, void* addr, size_t size, void* newaddr, size_t newsize, bool* extend_is_zero, void** remap_info, void** new_remap_info );
 
 // Free remappable memory. Return `EINVAL` if this is not supported.
-// pre: `addr != NULL` and previously allocated using `_mi_prim_remap` or `_mi_prim_alloc_remappable`.
-int _mi_prim_free_remappable(void* addr, size_t size, void* remap_info );
+// pre: `addr != NULL`
+int _mi_prim_remap_free(void* addr, size_t size, void* remap_info );
 
 
 // Return the current NUMA node
