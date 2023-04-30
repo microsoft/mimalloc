@@ -28,6 +28,7 @@ typedef struct mi_os_mem_config_s {
   bool    has_overcommit;       // can we reserve more memory than can be actually committed?
   bool    must_free_whole;      // must allocated blocks be freed as a whole (false for mmap, true for VirtualAlloc)
   bool    has_virtual_reserve;  // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
+  bool    has_remap;            // able to remap memory to different virtual addresses? 
 } mi_os_mem_config_t;
 
 // Initialize

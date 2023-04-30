@@ -64,19 +64,20 @@ static PGetNumaNodeProcessorMaskEx  pGetNumaNodeProcessorMaskEx = NULL;
 static PGetNumaProcessorNode        pGetNumaProcessorNode = NULL;
 
 //---------------------------------------------
-// Enable large page support dynamically (if possible)
+// Get lock memory permission dynamically (if possible)
+// To use large pages on Windows, or remappable memory, we first need access permission
+// Set "Lock pages in memory" permission in the group policy editor
+// <https://devblogs.microsoft.com/oldnewthing/20110128-00/?p=11643>  
 //---------------------------------------------
 
-static bool mi_win_enable_large_os_pages(size_t* large_page_size)
+static bool mi_win_get_lock_memory_privilege(void)
 {
-  static bool large_initialized = false;
-  if (large_initialized) return (_mi_os_large_page_size() > 0);
-  large_initialized = true;
+  static bool lock_memory_initialized = false;
+  static int lock_memory_err = 0;
+  if (lock_memory_initialized) return (lock_memory_err == 0);
+  lock_memory_initialized = true;
 
-  // Try to see if large OS pages are supported
-  // To use large pages on Windows, we first need access permission
-  // Set "Lock pages in memory" permission in the group policy editor
-  // <https://devblogs.microsoft.com/oldnewthing/20110128-00/?p=11643>
+  // Try to see if we have permission can lock memory
   unsigned long err = 0;
   HANDLE token = NULL;
   BOOL ok = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token);
@@ -89,17 +90,15 @@ static bool mi_win_enable_large_os_pages(size_t* large_page_size)
       ok = AdjustTokenPrivileges(token, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
       if (ok) {
         err = GetLastError();
-        ok = (err == ERROR_SUCCESS);
-        if (ok && large_page_size != NULL) {
-          *large_page_size = GetLargePageMinimum();
-        }
+        ok = (err == ERROR_SUCCESS);        
       }
     }
     CloseHandle(token);
   }
   if (!ok) {
-    if (err == 0) err = GetLastError();
-    _mi_warning_message("cannot acquire the lock memory privilege (needed for large OS page or remap support), error %lu\n", err);
+    if (err == 0) { err = GetLastError(); }
+    lock_memory_err = (int)err;
+    _mi_warning_message("cannot acquire the lock memory privilege (needed for large OS page or remap support), error %lu (0x%04lx)\n", err);
   }
   return (ok!=0);
 }
@@ -143,9 +142,12 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     pGetNumaProcessorNode = (PGetNumaProcessorNode)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNode");
     FreeLibrary(hDll);
   }
-  if (mi_option_is_enabled(mi_option_allow_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
-    mi_win_enable_large_os_pages(&config->large_page_size);
-  }
+  // if (mi_option_is_enabled(mi_option_allow_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
+  if (mi_win_get_lock_memory_privilege()) {
+    config->large_page_size = GetLargePageMinimum();
+    config->has_remap = true;
+  };
+  // }
 }
 
 
@@ -308,7 +310,7 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
 {
   const DWORD flags = MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE;
 
-  if (!mi_win_enable_large_os_pages(NULL)) return NULL;
+  if (!mi_win_get_lock_memory_privilege()) return NULL;
 
   MI_MEM_EXTENDED_PARAMETER params[3] = { {{0,0},{0}},{{0,0},{0}},{{0,0},{0}} };
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
@@ -733,7 +735,7 @@ static int mi_win_remap_virtual_pages(mi_win_remap_info_t* rinfo, void* oldaddr,
 
 // Reserve a virtual address range to be mapped to physical memory later
 int _mi_prim_remap_reserve(size_t size, bool* is_pinned, void** base, void** remap_info) {
-  if (!mi_win_enable_large_os_pages(NULL)) return EINVAL;
+  if (!mi_win_get_lock_memory_privilege()) return EINVAL;
   mi_assert_internal((size % _mi_os_page_size()) == 0);
   size = _mi_align_up(size, _mi_os_page_size());
   mi_win_remap_info_t** prinfo = (mi_win_remap_info_t**)remap_info;

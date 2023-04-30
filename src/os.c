@@ -22,7 +22,8 @@ static mi_os_mem_config_t mi_os_mem_config = {
   4096,   // allocation granularity
   true,   // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
   false,  // must free whole? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
-  true    // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
+  true,   // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
+  false   // support virtual memory remapping?
 };
 
 bool _mi_os_has_overcommit(void) {
@@ -400,14 +401,34 @@ void* _mi_os_alloc_remappable(size_t size, size_t alignment, mi_memid_t* memid, 
   return _mi_os_remap(NULL, 0, size, memid, stats);
 }
 
+static void* mi_os_remap_copy(void* p, size_t size, size_t newsize, size_t alignment, mi_memid_t* memid, mi_stats_t* stats) {
+  mi_memid_t newmemid = _mi_memid_none();
+  void* newp = _mi_os_alloc_aligned(newsize, alignment, true /* commit */, false /* allow_large */, &newmemid, stats);
+  if (newp == NULL) return NULL;
+  
+  const size_t csize = (size > newsize ? newsize : size);
+  if (csize > 0) {
+    _mi_memcpy_aligned(newp, p, csize);
+    _mi_os_free(p, size, *memid, stats);
+  }
+  
+  *memid = newmemid;
+  return newp;
+}
+
 void* _mi_os_remap(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats) {
   mi_assert_internal(memid != NULL);
   mi_assert_internal((memid->memkind == MI_MEM_NONE && p == NULL && size == 0) || (memid->memkind == MI_MEM_OS_REMAP && p != NULL && size > 0));
   newsize = mi_os_get_alloc_size(newsize);
+  const size_t alignment = memid->mem.os.alignment;
+  mi_assert_internal(alignment >= _mi_os_page_size());
+
+  // supported?
+  if (!mi_os_mem_config.has_remap || (p!=NULL && memid->memkind != MI_MEM_OS_REMAP)) {
+    return mi_os_remap_copy(p, size, newsize, alignment, memid, stats);
+  }
 
   // reserve virtual range 
-  const size_t alignment = memid->mem.os.alignment;   
-  mi_assert_internal(alignment >= _mi_os_page_size());
   const size_t oversize = mi_os_get_alloc_size(newsize + alignment - 1);
   bool os_is_pinned = false;
   void* base = NULL;
@@ -415,10 +436,13 @@ void* _mi_os_remap(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_s
   int err = _mi_prim_remap_reserve(oversize, &os_is_pinned, &base, &remap_info);
   if (err != 0) {
     // fall back to regular allocation
-    if (err != EINVAL) {  // EINVAL means not supported
+    if (err == EINVAL) {  // EINVAL means not supported
+      mi_os_mem_config.has_remap = false;
+    }
+    else {
       _mi_warning_message("failed to reserve remap OS memory (error %d (0x%02x) at %p of %zu bytes to %zu bytes)\n", err, err, p, 0, size);
     }
-    return NULL;
+    return mi_os_remap_copy(p, size, newsize, alignment, memid, stats);
   }
 
   // create an aligned pointer within
@@ -434,7 +458,7 @@ void* _mi_os_remap(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_s
   if (err != 0) {
     _mi_warning_message("failed to remap OS memory (error %d (0x%02x) at %p of %zu bytes to %zu bytes)\n", err, err, p, 0, size);
     _mi_prim_remap_free(newmemid.mem.os.base, newmemid.mem.os.size, newmemid.mem.os.prim_info);
-    return NULL;
+    return mi_os_remap_copy(p, size, newsize, alignment, memid, stats);
   }
 
   newmemid.initially_committed = true;
@@ -444,21 +468,6 @@ void* _mi_os_remap(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_s
   *memid = newmemid;
   return newp;
 }
-  
-//  // fall back to copy (but in remappable memory if possible)
-//  mi_memid_t newmemid = _mi_memid_none();
-//  void* newp = _mi_os_alloc_remappable(newsize, memid->mem.os.alignment, &newmemid, stats);
-//  if (newp == NULL) {
-//    newp = _mi_os_alloc_aligned(newsize, memid->mem.os.alignment, true /* commit */, false /* allow_large */, &newmemid, stats);
-//    if (newp == NULL) return NULL;
-//  }
-//
-//  size_t csize = (size > newsize ? newsize : size);
-//  _mi_memcpy_aligned(newp, p, csize);
-//  _mi_os_free(p, size, *memid, stats);
-//  *memid = newmemid;
-//  return newp;
-//}
 
 
 /* -----------------------------------------------------------

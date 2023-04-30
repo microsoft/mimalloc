@@ -139,6 +139,9 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config ) {
   config->has_overcommit = unix_detect_overcommit();
   config->must_free_whole = false;    // mmap can free in parts
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
+  #if defined(MREMAP_MAYMOVE) && defined(MREMAP_FIXED)
+  config->has_remap = true;
+  #endif
 }
 
 
@@ -850,7 +853,7 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
   }
 }
 
-#else 
+#else // no pthreads
 
 void _mi_prim_thread_init_auto_done(void) {
   // nothing
@@ -867,12 +870,11 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
 #endif
 
 
-
-
 //----------------------------------------------------------------
 // Remappable memory
 //----------------------------------------------------------------
 
+#if defined(MREMAP_MAYMOVE) && defined(MREMAP_FIXED)
 int _mi_prim_remap_reserve(size_t size, bool* is_pinned, void** base, void** remap_info) {
   mi_assert_internal((size%_mi_os_page_size()) == 0);
   *remap_info = NULL;
@@ -909,3 +911,21 @@ int _mi_prim_remap_free(void* base, size_t size, void* remap_info) {
   mi_assert_internal((size % _mi_os_page_size()) == 0);
   return _mi_prim_free(base,size);
 }
+
+#else // no mremap
+int _mi_prim_remap_reserve(size_t size, bool* is_pinned, void** base, void** remap_info) {
+  MI_UNUSED(size); MI_UNUSED(is_pinned); MI_UNUSED(base); MI_UNUSED(remap_info);
+  return EINVAL;
+}
+
+int _mi_prim_remap_to(void* base, void* addr, size_t size, void* newaddr, size_t newsize, bool* extend_is_zero, void** remap_info, void** new_remap_info) {
+  MI_UNUSED(base); MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(newaddr); MI_UNUSED(newsize); MI_UNUSED(extend_is_zero); MI_UNUSED(remap_info); MI_UNUSED(new_remap_info);
+  return EINVAL;
+}
+
+int _mi_prim_remap_free(void* base, size_t size, void* remap_info) {
+  MI_UNUSED(base); MI_UNUSED(size); MI_UNUSED(remap_info);
+  return EINVAL;
+}
+#endif
+

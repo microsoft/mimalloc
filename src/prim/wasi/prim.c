@@ -22,6 +22,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config ) {
   config->has_overcommit = false;  
   config->must_free_whole = true;
   config->has_virtual_reserve = false;
+  config->has_remap = false;
 }
 
 //---------------------------------------------
