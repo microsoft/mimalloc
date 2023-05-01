@@ -912,7 +912,8 @@ int _mi_prim_remap_free(void* base, size_t size, void* remap_info) {
   return _mi_prim_free(base,size);
 }
 
-#else // no mremap
+#else // no mremap (e.g. macOS)
+
 int _mi_prim_remap_reserve(size_t size, bool* is_pinned, void** base, void** remap_info) {
   MI_UNUSED(size); MI_UNUSED(is_pinned); MI_UNUSED(base); MI_UNUSED(remap_info);
   return EINVAL;
@@ -927,5 +928,6 @@ int _mi_prim_remap_free(void* base, size_t size, void* remap_info) {
   MI_UNUSED(base); MI_UNUSED(size); MI_UNUSED(remap_info);
   return EINVAL;
 }
+
 #endif
 

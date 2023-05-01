@@ -331,6 +331,7 @@ typedef enum mi_memkind_e {
   MI_MEM_STATIC,    // allocated in a static area and should not be freed (for arena meta data for example)
   MI_MEM_OS,        // allocated from the OS
   MI_MEM_OS_HUGE,   // allocated as huge os pages
+  MI_MEM_OS_EXPAND, // allocated in an expandable area
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
   MI_MEM_ARENA      // allocated from an arena (the usual case)
 } mi_memkind_t;

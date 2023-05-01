@@ -119,6 +119,9 @@ void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t ma
 void*      _mi_os_alloc_remappable(size_t size, size_t alignment, mi_memid_t* memid, mi_stats_t* stats);
 void*      _mi_os_remap(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats);
 
+void*      _mi_os_alloc_expandable(size_t size, size_t alignment, size_t future_reserve, mi_memid_t* memid, mi_stats_t* stats);
+bool       _mi_os_expand(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats);
+
 
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
@@ -687,14 +690,14 @@ static inline mi_memid_t _mi_memid_none(void) {
   return _mi_memid_create(MI_MEM_NONE);
 }
 
-static inline mi_memid_t _mi_memid_create_os(void* base, size_t size, size_t alignment, bool committed, bool is_zero, bool is_large) {
+static inline mi_memid_t _mi_memid_create_os(void* base, size_t size, size_t alignment, bool committed, bool is_large_or_pinned, bool is_zero ) {
   mi_memid_t memid = _mi_memid_create(MI_MEM_OS);
   memid.mem.os.base = base;
   memid.mem.os.size = size;
   memid.mem.os.alignment = alignment;
   memid.initially_committed = committed;
   memid.initially_zero = is_zero;
-  memid.is_pinned = is_large;
+  memid.is_pinned = is_large_or_pinned;
   return memid;
 }
 
