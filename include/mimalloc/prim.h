@@ -42,9 +42,10 @@ int _mi_prim_free(void* addr, size_t size );
 // If `commit` is false, the virtual memory range only needs to be reserved (with no access) 
 // which will later be committed explicitly using `_mi_prim_commit`.
 // `is_zero` is set to true if the memory was zero initialized (as on most OS's)
+// The `hint` address is either `NULL` or a preferred allocation address but can be ignored.
 // pre: !commit => !allow_large
 //      try_alignment >= _mi_os_page_size() and a power of 2
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr);
+int _mi_prim_alloc(void* hint, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr);
 
 // Commit memory. Returns error code or 0 on success.
 // For example, on Linux this would make the memory PROT_READ|PROT_WRITE.

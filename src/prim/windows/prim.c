@@ -242,14 +242,14 @@ static void* mi_win_virtual_alloc(void* addr, size_t size, size_t try_alignment,
   return p;
 }
 
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
+int _mi_prim_alloc(void* hint, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(commit || !allow_large);
   mi_assert_internal(try_alignment > 0);
   *is_zero = true;
   int flags = MEM_RESERVE;
   if (commit) { flags |= MEM_COMMIT; }
-  *addr = mi_win_virtual_alloc(NULL, size, try_alignment, flags, false, allow_large, is_large);
+  *addr = mi_win_virtual_alloc(hint, size, try_alignment, flags, false, allow_large, is_large);
   return (*addr != NULL ? 0 : (int)GetLastError());
 }
 
@@ -643,7 +643,7 @@ static mi_win_remap_info_t* mi_win_alloc_remap_info(size_t page_count) {
   mi_win_remap_info_t* rinfo = NULL;
   bool os_is_zero = false;
   bool os_is_large = false;
-  int err = _mi_prim_alloc(remap_info_size, 1, true, false, &os_is_large, &os_is_zero, (void**)&rinfo);
+  int err = _mi_prim_alloc(NULL, remap_info_size, 1, true, false, &os_is_large, &os_is_zero, (void**)&rinfo);
   if (err != 0) return NULL;
   if (!os_is_zero) { _mi_memzero_aligned(rinfo, remap_info_size); }
   rinfo->page_count = 0;

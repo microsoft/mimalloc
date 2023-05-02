@@ -116,8 +116,8 @@ static void* mi_prim_mem_grow(size_t size, size_t try_alignment) {
 }
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
-  MI_UNUSED(allow_large); MI_UNUSED(commit);
+int _mi_prim_alloc(void* hint, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
+  MI_UNUSED(hint); MI_UNUSED(allow_large); MI_UNUSED(commit);
   *is_large = false;
   *is_zero = false;
   *addr = mi_prim_mem_grow(size, try_alignment);

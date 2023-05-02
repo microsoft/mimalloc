@@ -174,7 +174,12 @@ static void mi_os_prim_free_remappable(void* addr, size_t size, bool still_commi
   if (addr == NULL || size == 0) return; // || _mi_os_is_huge_reserved(addr)
   int err = _mi_prim_remap_free(addr, size, remap_info);
   if (err != 0) {
-    _mi_warning_message("unable to free remappable OS memory (error: %d (0x%02x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
+    if (err == EINVAL && remap_info == NULL) {
+      err = _mi_prim_free(addr,size);
+    }
+    if (err != 0) {
+     _mi_warning_message("unable to free remappable OS memory (error: %d (0x%02x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
+    }
   }
   mi_stats_t* stats = &_mi_stats_main;
   if (still_committed) { _mi_stat_decrease(&stats->committed, size); }
@@ -222,7 +227,8 @@ void  _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* tld_stats)
 -------------------------------------------------------------- */
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
-static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* stats) {
+// also `hint` is just a hint for a preferred address but may be ignored
+static void* mi_os_prim_alloc_at(void* hint, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* stats) {
   mi_assert_internal(size > 0 && size == mi_os_get_alloc_size(size));
   mi_assert_internal(is_zero != NULL);
   mi_assert_internal(is_large != NULL);
@@ -232,7 +238,7 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
 
   *is_zero = false;
   void* p = NULL; 
-  int err = _mi_prim_alloc(size, try_alignment, commit, allow_large, is_large, is_zero, &p);
+  int err = _mi_prim_alloc(hint, size, try_alignment, commit, allow_large, is_large, is_zero, &p);
   if (err != 0) {
     _mi_warning_message("unable to allocate OS memory (error: %d (0x%02x), size: 0x%zx bytes, align: 0x%zx, commit: %d, allow large: %d)\n", err, err, size, try_alignment, commit, allow_large);
   }
@@ -250,6 +256,11 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
   }
   return p;
 }
+
+static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* stats) {
+  return mi_os_prim_alloc_at(NULL, size, try_alignment, commit, allow_large, is_large, is_zero, stats);
+}
+
 
 // aligns within an already allocated area; may modify `memid` with a new base and size.
 static void* mi_os_align_within(mi_memid_t* memid, size_t alignment, size_t size, mi_stats_t* stats)
@@ -436,13 +447,43 @@ void* _mi_os_alloc_remappable(size_t size, size_t alignment, mi_memid_t* memid, 
   return _mi_os_remap(NULL, 0, size, memid, stats);
 }
 
+// fallback if OS remap is not supported
 static void* mi_os_remap_copy(void* p, size_t size, size_t newsize, size_t alignment, mi_memid_t* memid, mi_stats_t* stats) {
   mi_memid_t newmemid = _mi_memid_none();
+  newsize = mi_os_get_alloc_size(newsize);
+
+  // first try to expand the existing virtual range "in-place"    
+  if (p != NULL && size > 0 && newsize > size && !mi_os_mem_config.must_free_whole && !memid->is_pinned && memid->mem.os.prim_info == NULL) 
+  {
+    void* expand = (uint8_t*)p + size;
+    size_t extra = newsize - size;
+    bool os_is_large = false;
+    bool os_is_zero = false;
+    void* newp = mi_os_prim_alloc_at(expand, extra, 1, false /* commit? */, false, &os_is_large, &os_is_zero, stats);
+    if (newp == expand) {
+      // success! we expanded the virtual address space in-place
+      if (_mi_os_commit(newp, extra, &os_is_zero, stats)) {
+        _mi_verbose_message("expanded in place (address: %p, from %zu bytes to %zu bytes\n", p, size, newsize);
+        memid->is_pinned = os_is_large;
+        memid->mem.os.size += newsize;
+        return p;
+      }
+    }
+    
+    // failed, free reserved space and fall back to a copy
+    if (newp != NULL) {
+      mi_os_prim_free(newp, extra, false, stats);
+    }
+  }
+
+  // copy into a fresh area
   void* newp = _mi_os_alloc_aligned(newsize, alignment, true /* commit */, false /* allow_large */, &newmemid, stats);
   if (newp == NULL) return NULL;
+  newmemid.memkind = MI_MEM_OS_REMAP;
   
   const size_t csize = (size > newsize ? newsize : size);
-  if (csize > 0) {
+  if (p != NULL && csize > 0) {
+    _mi_warning_message("unable to remap OS memory, fall back to reallocation (address: %p, from %zu bytes to %zu bytes)\n", p, size, newsize);
     _mi_memcpy_aligned(newp, p, csize);
     _mi_os_free(p, size, *memid, stats);
   }
@@ -453,7 +494,8 @@ static void* mi_os_remap_copy(void* p, size_t size, size_t newsize, size_t align
 
 void* _mi_os_remap(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats) {
   mi_assert_internal(memid != NULL);
-  mi_assert_internal((memid->memkind == MI_MEM_NONE && p == NULL && size == 0) || (memid->memkind == MI_MEM_OS_REMAP && p != NULL && size > 0));
+  mi_assert_internal((memid->memkind == MI_MEM_NONE && p == NULL && size == 0) || 
+                     (memid->memkind == MI_MEM_OS_REMAP && p != NULL && size > 0));
   newsize = mi_os_get_alloc_size(newsize);
   const size_t alignment = memid->mem.os.alignment;
   mi_assert_internal(alignment >= _mi_os_page_size());

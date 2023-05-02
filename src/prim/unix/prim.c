@@ -103,7 +103,7 @@ static int mi_prim_access(const char *fpath, int mode) {
 // init
 //---------------------------------------------
 
-static bool unix_detect_overcommit(void) {
+static bool mi_unix_detect_overcommit(void) {
   bool os_overcommit = true;
 #if defined(__linux__)
   int fd = mi_prim_open("/proc/sys/vm/overcommit_memory", O_RDONLY);
@@ -136,7 +136,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config ) {
     config->alloc_granularity = (size_t)psize;
   }
   config->large_page_size = 2*MI_MiB; // TODO: can we query the OS for this?
-  config->has_overcommit = unix_detect_overcommit();
+  config->has_overcommit = mi_unix_detect_overcommit();
   config->must_free_whole = false;    // mmap can free in parts
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
   #if defined(MREMAP_MAYMOVE) && defined(MREMAP_FIXED)
@@ -159,7 +159,7 @@ int _mi_prim_free(void* addr, size_t size ) {
 // mmap
 //---------------------------------------------
 
-static int unix_madvise(void* addr, size_t size, int advice) {
+static int mi_unix_madvise(void* addr, size_t size, int advice) {
   #if defined(__sun)
   return madvise((caddr_t)addr, size, advice);  // Solaris needs cast (issue #520)
   #else
@@ -167,7 +167,7 @@ static int unix_madvise(void* addr, size_t size, int advice) {
   #endif
 }
 
-static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
+static void* mi_unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
   MI_UNUSED(try_alignment);
   void* p = NULL;
   #if defined(MAP_ALIGNED)  // BSD
@@ -216,7 +216,7 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
   return NULL;
 }
 
-static int unix_mmap_fd(void) {
+static int mi_unix_mmap_fd(void) {
   #if defined(VM_MAKE_TAG)
   // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
   int os_tag = (int)mi_option_get(mi_option_os_tag);
@@ -227,7 +227,7 @@ static int unix_mmap_fd(void) {
   #endif
 }
 
-static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protect_flags, bool large_only, bool allow_large, bool* is_large) {
+static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int protect_flags, bool large_only, bool allow_large, bool* is_large) {
   #if !defined(MAP_ANONYMOUS)
   #define MAP_ANONYMOUS  MAP_ANON
   #endif
@@ -235,7 +235,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   #define MAP_NORESERVE  0
   #endif
   void* p = NULL;
-  const int fd = unix_mmap_fd();
+  const int fd = mi_unix_mmap_fd();
   int flags = MAP_PRIVATE | MAP_ANONYMOUS;
   if (_mi_os_has_overcommit()) {
     flags |= MAP_NORESERVE;
@@ -281,13 +281,13 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       if (large_only || lflags != flags) {
         // try large OS page allocation
         *is_large = true;
-        p = unix_mmap_prim(addr, size, try_alignment, protect_flags, lflags, lfd);
+        p = mi_unix_mmap_prim(addr, size, try_alignment, protect_flags, lflags, lfd);
         #ifdef MAP_HUGE_1GB
         if (p == NULL && (lflags & MAP_HUGE_1GB) != 0) {
           mi_huge_pages_available = false; // don't try huge 1GiB pages again
           _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
           lflags = ((lflags & ~MAP_HUGE_1GB) | MAP_HUGE_2MB);
-          p = unix_mmap_prim(addr, size, try_alignment, protect_flags, lflags, lfd);
+          p = mi_unix_mmap_prim(addr, size, try_alignment, protect_flags, lflags, lfd);
         }
         #endif
         if (large_only) return p;
@@ -300,7 +300,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   // regular allocation
   if (p == NULL) {
     *is_large = false;
-    p = unix_mmap_prim(addr, size, try_alignment, protect_flags, flags, fd);
+    p = mi_unix_mmap_prim(addr, size, try_alignment, protect_flags, flags, fd);
     if (p != NULL) {
       #if defined(MADV_HUGEPAGE)
       // Many Linux systems don't allow MAP_HUGETLB but they support instead
@@ -310,7 +310,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       // However, some systems only allow THP if called with explicit `madvise`, so
       // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
       if (allow_large && _mi_os_use_large_page(size, try_alignment)) {
-        if (unix_madvise(p, size, MADV_HUGEPAGE) == 0) {
+        if (mi_unix_madvise(p, size, MADV_HUGEPAGE) == 0) {
           *is_large = true; // possibly
         };
       }
@@ -330,14 +330,14 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
 }
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
+int _mi_prim_alloc(void* hint, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(commit || !allow_large);
   mi_assert_internal(try_alignment > 0);
   
   *is_zero = true;
   int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);  
-  *addr = unix_mmap(NULL, size, try_alignment, protect_flags, false, allow_large, is_large);
+  *addr = mi_unix_mmap(hint, size, try_alignment, protect_flags, false, allow_large, is_large);
   return (*addr != NULL ? 0 : errno);
 }
 
@@ -346,7 +346,7 @@ int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_la
 // Commit/Reset
 //---------------------------------------------
 
-static void unix_mprotect_hint(int err) {
+static void mi_unix_mprotect_hint(int err) {
   #if defined(__linux__) && (MI_SECURE>=2) // guard page around every mimalloc page
   if (err == ENOMEM) {
     _mi_warning_message("The next warning may be caused by a low memory map limit.\n"
@@ -372,7 +372,7 @@ int _mi_prim_commit(void* start, size_t size, bool* is_zero) {
   int err = mprotect(start, size, (PROT_READ | PROT_WRITE));
   if (err != 0) { 
     err = errno; 
-    unix_mprotect_hint(err);
+    mi_unix_mprotect_hint(err);
   }
   return err;
 }
@@ -380,7 +380,7 @@ int _mi_prim_commit(void* start, size_t size, bool* is_zero) {
 int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   int err = 0;  
   // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
-  err = unix_madvise(start, size, MADV_DONTNEED);    
+  err = mi_unix_madvise(start, size, MADV_DONTNEED);    
   #if !MI_DEBUG && !MI_SECURE
     *needs_recommit = false;
   #else
@@ -390,7 +390,7 @@ int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   /*
   // decommit: use mmap with MAP_FIXED and PROT_NONE to discard the existing memory (and reduce rss)
   *needs_recommit = true;
-  const int fd = unix_mmap_fd();
+  const int fd = mi_unix_mmap_fd();
   void* p = mmap(start, size, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), fd, 0);
   if (p != start) { err = errno; }    
   */
@@ -406,14 +406,14 @@ int _mi_prim_reset(void* start, size_t size) {
   static _Atomic(size_t) advice = MI_ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
   int err;
-  while ((err = unix_madvise(start, size, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
+  while ((err = mi_unix_madvise(start, size, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
   if (err != 0 && errno == EINVAL && oadvice == MADV_FREE) {
     // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
     mi_atomic_store_release(&advice, (size_t)MADV_DONTNEED);
-    err = unix_madvise(start, size, MADV_DONTNEED);
+    err = mi_unix_madvise(start, size, MADV_DONTNEED);
   }
   #else
-  int err = unix_madvise(start, size, MADV_DONTNEED);
+  int err = mi_unix_madvise(start, size, MADV_DONTNEED);
   #endif
   return err;
 }
@@ -421,7 +421,7 @@ int _mi_prim_reset(void* start, size_t size) {
 int _mi_prim_protect(void* start, size_t size, bool protect) {
   int err = mprotect(start, size, protect ? PROT_NONE : (PROT_READ | PROT_WRITE));
   if (err != 0) { err = errno; }  
-  unix_mprotect_hint(err);
+  mi_unix_mprotect_hint(err);
   return err;
 }
 
@@ -451,7 +451,7 @@ static long mi_prim_mbind(void* start, unsigned long len, unsigned long mode, co
 int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bool* is_zero, void** addr) {
   bool is_large = true;
   *is_zero = true;
-  *addr = unix_mmap(hint_addr, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
+  *addr = mi_unix_mmap(hint_addr, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
   if (*addr != NULL && numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) { // at most 64 nodes
     unsigned long numa_mask = (1UL << numa_node);
     // TODO: does `mbind` work correctly for huge OS pages? should we
@@ -874,12 +874,12 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
 // Remappable memory
 //----------------------------------------------------------------
 
-#if defined(MREMAP_MAYMOVE) && defined(MREMAP_FIXED)
+#if defined(xMREMAP_MAYMOVE) && defined(MREMAP_FIXED)
 int _mi_prim_remap_reserve(size_t size, bool* is_pinned, void** base, void** remap_info) {
   mi_assert_internal((size%_mi_os_page_size()) == 0);
   *remap_info = NULL;
   bool is_zero = false;
-  int err = _mi_prim_alloc(size, 1, false /* commit */, false /*allow large*/, is_pinned, &is_zero, base);
+  int err = _mi_prim_alloc(NULL, size, 1, false /* commit */, false /*allow large*/, is_pinned, &is_zero, base);
   if (err != 0) return err;
   return 0;
 }
