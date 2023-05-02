@@ -7,6 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
 #include "mimalloc/atomic.h"
+#include "mimalloc/prim.h"
 
 #include <string.h>  // memset
 #include <stdio.h>
@@ -517,19 +518,26 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
   bool   allow_large = (!eager_delayed && (MI_SECURE == 0)); // only allow large OS pages once we are no longer lazy
   size_t align_offset = 0;
   size_t alignment = MI_SEGMENT_SIZE;
-  if (page_alignment > MI_PAGE_ALIGN_REMAPPABLE) {
+  if (page_alignment >= MI_ALIGN_HUGE) {
     alignment = page_alignment;
     align_offset = _mi_align_up(pre_size, MI_SEGMENT_SIZE);
     segment_size = segment_size + (align_offset - pre_size);  // adjust the segment size
   }
 
   mi_segment_t* segment = NULL;
-  if (page_alignment == MI_PAGE_ALIGN_REMAPPABLE) {
+  if (page_alignment == MI_ALIGN_REMAP) {
     segment = (mi_segment_t*)_mi_os_alloc_remappable(segment_size, alignment, &memid, tld_os->stats);
   }
+  else if (page_alignment >= MI_ALIGN_EXPAND_MIN && page_alignment <= MI_ALIGN_EXPAND_MAX) {
+    size_t future_reserve = (page_alignment - MI_ALIGN_EXPAND_MIN + 1) * MI_EXPAND_INCREMENT;
+    if (future_reserve < 2 * segment_size) { future_reserve = 2 * segment_size;  }
+    segment = (mi_segment_t*)_mi_os_alloc_expandable(segment_size, alignment, future_reserve, &memid, tld_os->stats);
+  } 
   else {
+    mi_assert_internal(page_alignment == 0 || page_alignment >= MI_ALIGN_HUGE);
     segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, alignment, align_offset, commit, allow_large, req_arena_id, &memid, tld_os);
   }
+  
   if (segment == NULL) {
     return NULL;  // failed to allocate
   }
@@ -1230,7 +1238,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   page->xblock_size = (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
 
   // reset the part of the page that will not be used; this can be quite large (close to MI_SEGMENT_SIZE)
-  if (page_alignment > MI_PAGE_ALIGN_REMAPPABLE && segment->allow_decommit && page->is_committed) {
+  if (page_alignment >= MI_ALIGN_HUGE && segment->allow_decommit && page->is_committed) {
     uint8_t* aligned_p = (uint8_t*)_mi_align_up((uintptr_t)start, page_alignment);
     mi_assert_internal(_mi_is_aligned(aligned_p, page_alignment));
     mi_assert_internal(psize - (aligned_p - start) >= size);
@@ -1299,15 +1307,21 @@ mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, 
   mi_assert_internal(segment->next == NULL && segment->prev == NULL);
   mi_assert_internal(page->next == NULL && page->prev == NULL);
 
+  mi_heap_t* heap = mi_page_heap(page);
+  mi_assert_internal(heap->thread_id == _mi_prim_thread_id());
+
   const size_t bsize = mi_page_block_size(page);
   const size_t newssize = _mi_align_up(_mi_align_up(newsize, _mi_os_page_size()) + (mi_segment_size(segment) - bsize), MI_SEGMENT_SIZE);
   mi_memid_t memid = segment->memid;
   const ptrdiff_t block_ofs = (uint8_t*)block - (uint8_t*)segment;
   const uintptr_t cookie = segment->cookie;
+  _mi_heap_huge_page_detach(heap, page);
   mi_segment_protect(segment, false, tld->os);
   mi_segment_t* newsegment = (mi_segment_t*)_mi_os_remap(segment, mi_segment_size(segment), newssize, &memid, tld->stats);
   if (newsegment == NULL) {
+    // failed to remap: roll back
     mi_segment_protect(segment, true, tld->os);
+    _mi_heap_huge_page_attach(heap, page);
     return NULL;
   }
   mi_assert_internal(cookie == newsegment->cookie);
@@ -1321,7 +1335,8 @@ mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, 
   mi_block_t* newblock = (mi_block_t*)((uint8_t*)newsegment + block_ofs);
   mi_assert_internal(_mi_ptr_segment(newblock) == newsegment);
   mi_page_t* newpage = _mi_ptr_page(newblock);
-  mi_assert_internal(mi_page_block_size(newpage) >= newsize); MI_UNUSED(newpage);
+  mi_assert_internal(mi_page_block_size(newpage) >= newsize);
+  _mi_heap_huge_page_attach(heap, newpage);
   return newblock;
 }
 
@@ -1332,8 +1347,8 @@ mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, 
 mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
   mi_page_t* page;
   if mi_unlikely(page_alignment > 0) {
-    mi_assert_internal(page_alignment == MI_PAGE_ALIGN_REMAPPABLE || (_mi_is_power_of_two(page_alignment) && page_alignment >= MI_SEGMENT_SIZE));
-    if (page_alignment != MI_PAGE_ALIGN_REMAPPABLE && page_alignment < MI_SEGMENT_SIZE) { page_alignment = MI_SEGMENT_SIZE; }
+    mi_assert_internal(page_alignment <= MI_ALIGN_REMAP || (_mi_is_power_of_two(page_alignment) && page_alignment >= MI_ALIGN_HUGE));
+    if (page_alignment >= MI_ALIGN_HUGE && page_alignment < MI_SEGMENT_SIZE) { page_alignment = MI_SEGMENT_SIZE; }
     page = mi_segment_huge_page_alloc(block_size, page_alignment, heap->arena_id, tld, os_tld);
   }
   else if (block_size <= MI_SMALL_OBJ_SIZE_MAX) {

@@ -874,7 +874,7 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
 // Remappable memory
 //----------------------------------------------------------------
 
-#if defined(xMREMAP_MAYMOVE) && defined(MREMAP_FIXED)
+#if defined(MREMAP_MAYMOVE) && defined(MREMAP_FIXED)
 int _mi_prim_remap_reserve(size_t size, bool* is_pinned, void** base, void** remap_info) {
   mi_assert_internal((size%_mi_os_page_size()) == 0);
   *remap_info = NULL;

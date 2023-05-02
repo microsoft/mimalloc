@@ -33,7 +33,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
 
   void* p;
   size_t oversize;
-  if mi_unlikely(alignment > MI_ALIGNMENT_MAX) {
+  if mi_unlikely(alignment >= MI_ALIGN_HUGE) {
     // use OS allocation for very large alignment and allocate inside a huge page (dedicated segment with 1 page)
     // This can support alignments >= MI_SEGMENT_SIZE by ensuring the object can be aligned at a point in the
     // first (and single) page such that the segment info is `MI_SEGMENT_SIZE` bytes before it (so it can be found by aligning the pointer down)
@@ -75,8 +75,8 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   mi_assert_internal(mi_usable_size(p) == mi_usable_size(aligned_p)+adjust);
     
   // now zero the block if needed
-  if (alignment > MI_ALIGNMENT_MAX) {
-    // for the tracker, on huge aligned allocations only from the start of the large block is defined
+  if (alignment >= MI_ALIGN_HUGE) {
+    // for the tracker, on huge aligned allocations only the memory from the start of the large block is defined
     mi_track_mem_undefined(aligned_p, size);
     if (zero) {
       _mi_memzero_aligned(aligned_p, mi_usable_size(aligned_p));

@@ -56,8 +56,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <pthread.h>
 #endif
 
-#define MI_PAGE_ALIGN_REMAPPABLE (1)
-
 // "options.c"
 void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
 void       _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);

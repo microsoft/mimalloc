@@ -791,7 +791,7 @@ mi_decl_nodiscard void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_
 // ------------------------------------------------------
 
 static void* mi_heap_malloc_zero_remappable(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
-  return _mi_heap_malloc_zero_ex(heap, size, zero, MI_PAGE_ALIGN_REMAPPABLE);
+  return _mi_heap_malloc_zero_ex(heap, size, zero, MI_ALIGN_REMAP);
 }
 
 mi_decl_nodiscard void* mi_heap_malloc_remappable(mi_heap_t* heap, size_t size) mi_attr_noexcept {
@@ -836,19 +836,16 @@ mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept {
     mi_heap_t* heap = mi_prim_get_default_heap();
     mi_assert_internal((void*)block == p);        
     mi_assert_internal(heap->thread_id == tid);
-    _mi_heap_huge_page_detach(heap, page);
     block = _mi_segment_huge_page_remap(segment, page, block, padsize, &heap->tld->segments);
     if (block != NULL) {     
       // succes! re-establish the pointers to the potentially relocated memory
       segment = mi_checked_ptr_segment(block, "mi_remap");
       page = _mi_segment_page_of(segment, block);
       mi_padding_init(page, block, newsize);
-      _mi_heap_huge_page_attach(heap, page);
       return block;
     }
     else {
       _mi_verbose_message("unable to remap memory, huge remap (address: %p, from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
-      _mi_heap_huge_page_attach(heap, page);
     }
   }
   else {

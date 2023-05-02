@@ -194,7 +194,13 @@ typedef int32_t  mi_ssize_t;
 #define MI_HUGE_BLOCK_SIZE   ((uint32_t)MI_HUGE_OBJ_SIZE_MAX)
 
 // Alignments over MI_ALIGNMENT_MAX are allocated in dedicated huge page segments
-#define MI_ALIGNMENT_MAX   (MI_SEGMENT_SIZE >> 1)
+#define MI_ALIGN_HUGE        (MI_SEGMENT_SIZE >> 1)
+
+// We use special alignments internally to allocate remappable and expandable memory
+#define MI_ALIGN_REMAP       (MI_ALIGN_HUGE - 1)
+#define MI_ALIGN_EXPAND_MAX  (MI_ALIGN_HUGE - 2)
+#define MI_ALIGN_EXPAND_MIN  (1)
+#define MI_EXPAND_INCREMENT  (MI_MiB)
 
 
 // ------------------------------------------------------
