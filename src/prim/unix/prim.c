@@ -886,7 +886,7 @@ int _mi_prim_remap_reserve(size_t size, bool* is_pinned, void** base, void** rem
 
 int _mi_prim_remap_to(void* base, void* addr, size_t size, void* newaddr, size_t newsize, bool* extend_is_zero, void** remap_info, void** new_remap_info) 
 {
-  mi_assert_internal(base <= addr);
+  mi_assert_internal(base <= addr); MI_UNUSED_RELEASE(base);
   mi_assert_internal((size % _mi_os_page_size()) == 0);
   mi_assert_internal((newsize % _mi_os_page_size()) == 0);  
   *new_remap_info = NULL;
