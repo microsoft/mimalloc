@@ -704,6 +704,9 @@ void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
   #endif
 }
 
+
+static void* mi_heap_try_remap_zero(mi_heap_t* heap, mi_segment_t* segment, void* p, size_t size, size_t newsize, bool zero);
+
 void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept {
   // if p == NULL then behave as malloc.
   // else if size == 0 then reallocate to a zero-sized block (and don't return NULL, just as mi_malloc(0)).
@@ -716,7 +719,22 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
     // if (newsize < size) { mi_track_mem_noaccess((uint8_t*)p + newsize, size - newsize); }
     return p;  // reallocation still fits and not more than 50% waste
   }
-  void* newp = mi_heap_malloc(heap,newsize);
+  // use OS remap for large reallocations
+  mi_segment_t* const segment = mi_checked_ptr_segment(p, "mi_realloc");
+  const size_t remap_threshold = mi_option_get_size(mi_option_remap_threshold);
+  const bool use_remap = (segment->memid.memkind == MI_MEM_OS_REMAP) || (remap_threshold > 0 && newsize >= remap_threshold);
+  if mi_unlikely(use_remap) {
+    void* newp = mi_heap_try_remap_zero(heap, segment, p, size, newsize, zero);
+    if (newp != NULL) return newp;
+  }
+  // otherwise copy into a new area
+  void* newp;
+  if mi_unlikely(use_remap) {
+    newp = mi_heap_malloc_remappable(heap, newsize);
+  }
+  else {
+    newp = mi_heap_malloc(heap, newsize);
+  }
   if mi_likely(newp != NULL) {
     if (zero && newsize > size) {
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
@@ -810,50 +828,72 @@ mi_decl_nodiscard void* mi_zalloc_remappable(size_t size) mi_attr_noexcept {
   return mi_heap_zalloc_remappable(mi_prim_get_default_heap(), size);
 }
 
-mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept {
-  if (p == NULL) return mi_malloc_remappable(newsize);
-
-  mi_segment_t* segment = mi_checked_ptr_segment(p, "mi_remap");
+// remap is as realloc but issues warnings if the memory is not remappable
+mi_decl_nodiscard void* mi_remap(void* p, size_t newsize) mi_attr_noexcept 
+{
+  mi_heap_t* const heap = mi_prim_get_default_heap();
+  mi_segment_t* const segment = mi_checked_ptr_segment(p, "mi_remap");
   const mi_threadid_t tid = _mi_prim_thread_id();
+  mi_assert(heap->thread_id == tid);
   if (segment->thread_id != tid) {
     _mi_warning_message("cannot remap memory from a different thread (address: %p, newsize: %zu bytes)\n", p, newsize);
-    return mi_realloc(p, newsize);
+  }
+  else if (segment->memid.memkind != MI_MEM_OS_REMAP) {
+    _mi_warning_message("cannot remap non-remappable memory (address: %p, newsize: %zu bytes)\n", p, newsize);
+  }
+  return _mi_heap_realloc_zero(heap, p, newsize, false);
+}
+
+// called from `mi_realloc`
+static void* mi_heap_try_remap_zero(mi_heap_t* heap, mi_segment_t* segment, void* p, size_t size, size_t newsize, bool zero)
+{
+  if (newsize == 0) return NULL;
+  if (p == NULL) {
+    return mi_heap_malloc_zero_remappable(heap, newsize, zero);
   }
 
+  // we can only remap from an owning thread
+  const mi_threadid_t tid = _mi_prim_thread_id();
+  mi_assert(heap->thread_id == tid);
+  if (segment->thread_id != tid) return NULL;
+
+  // remappable memory?
+  if (segment->memid.memkind != MI_MEM_OS_REMAP) return NULL;
+
+  // check size
   const size_t padsize = newsize + MI_PADDING_SIZE;
   mi_assert_internal(segment != NULL);
   mi_page_t* page = _mi_segment_page_of(segment, p);  
   mi_block_t* block = _mi_page_ptr_unalign(segment, page, p);
   const size_t bsize = mi_page_usable_block_size(page);
   if (bsize >= padsize && 9*(bsize/10) <= padsize) {  // if smaller and not more than 10% waste, keep it
-    //_mi_verbose_message("remapping in the same block (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
+    _mi_verbose_message("remapping in the same block (address: %p from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
     mi_padding_init(page, block, newsize);
     return p;
   }
 
-  // remappable memory?
-  if (segment->memid.memkind == MI_MEM_OS_REMAP) {
-    mi_heap_t* heap = mi_prim_get_default_heap();
-    mi_assert_internal((void*)block == p);        
-    mi_assert_internal(heap->thread_id == tid);
-    block = _mi_segment_huge_page_remap(segment, page, block, padsize, &heap->tld->segments);
-    if (block != NULL) {     
-      // succes! re-establish the pointers to the potentially relocated memory
-      segment = mi_checked_ptr_segment(block, "mi_remap");
-      page = _mi_segment_page_of(segment, block);
-      mi_padding_init(page, block, newsize);
-      return block;
+  // try to use OS remap
+  mi_assert_internal((void*)block == p);        
+  block = _mi_segment_huge_page_remap(segment, page, block, padsize, &heap->tld->segments);
+  if (block != NULL) {     
+    // succes! re-establish the pointers to the potentially relocated memory
+    _mi_verbose_message("used remap (address: %p to %zu bytes)\n", p, newsize);
+    segment = mi_checked_ptr_segment(block, "mi_remap");
+    page = _mi_segment_page_of(segment, block);
+    mi_padding_init(page, block, newsize);
+    if (zero) {
+      // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
+      const size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
+      _mi_memzero((uint8_t*)p + start, newsize - start);
     }
-    else {
-      _mi_verbose_message("unable to remap memory, huge remap (address: %p, from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
-    }
+    return block;
   }
-  else {
-    _mi_verbose_message("unable to remap memory, not remappable (address: %p, from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
-  }
+  
   _mi_warning_message("unable to remap memory, fall back to reallocation (address: %p, from %zu bytes to %zu bytes)\n", p, mi_usable_size(p), newsize);
-  return mi_realloc(p, newsize);
+  return NULL;
 }
+
+
 
 // ------------------------------------------------------
 // strdup, strndup, and realpath

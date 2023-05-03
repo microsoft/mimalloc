@@ -353,6 +353,7 @@ typedef enum mi_option_e {
   mi_option_arena_reserve,            // initial memory size in KiB for arena reservation (1GiB on 64-bit)
   mi_option_arena_purge_mult,         
   mi_option_purge_extend_delay,
+  mi_option_remap_threshold,          // size in KiB after which realloc uses OS in-place remap; use 0 to disable
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,

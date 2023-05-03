@@ -1297,7 +1297,30 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
 }
 #endif
 
-mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, mi_block_t* block, size_t newsize, mi_segments_tld_t* tld) {
+
+mi_block_t* _mi_segment_huge_page_expand(mi_segment_t* segment, mi_page_t* page, mi_block_t* block, size_t newsize, mi_segments_tld_t* tld) 
+{
+  mi_assert_internal(segment == _mi_page_segment(page));
+  mi_assert_internal(page->used == 1);
+
+  const size_t bsize = mi_page_block_size(page);
+  const size_t newssize = _mi_align_up(_mi_align_up(newsize, _mi_os_page_size()) + (mi_segment_size(segment) - bsize), MI_SEGMENT_SIZE);
+  if (!_mi_os_expand(segment, mi_segment_size(segment), newssize, &segment->memid, tld->stats)) {
+    // failed to expand
+    return NULL;
+  }
+  // adjust segment and page size
+  segment->segment_size = newssize;
+  size_t psize = 0;
+  _mi_segment_page_start(segment, page, 0, &psize, NULL);
+  mi_assert_internal(psize >= newsize);
+  page->xblock_size = (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
+  return block;
+}
+
+
+mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, mi_block_t* block, size_t newsize, mi_segments_tld_t* tld) 
+{
   // assert there are no pointers into the segment/page/block anymore
   mi_assert_internal(segment == _mi_page_segment(page));
   mi_assert_internal(page->used == 1);
@@ -1305,7 +1328,6 @@ mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, 
   mi_assert_internal(page->local_free == NULL);
   mi_assert_internal(mi_page_thread_free(page) == NULL);
   mi_assert_internal(segment->next == NULL && segment->prev == NULL);
-  mi_assert_internal(page->next == NULL && page->prev == NULL);
 
   mi_heap_t* heap = mi_page_heap(page);
   mi_assert_internal(heap->thread_id == _mi_prim_thread_id());
@@ -1314,7 +1336,9 @@ mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, 
   const size_t newssize = _mi_align_up(_mi_align_up(newsize, _mi_os_page_size()) + (mi_segment_size(segment) - bsize), MI_SEGMENT_SIZE);
   mi_memid_t memid = segment->memid;
   const ptrdiff_t block_ofs = (uint8_t*)block - (uint8_t*)segment;
+  #if MI_DEBUG>1
   const uintptr_t cookie = segment->cookie;
+  #endif
   _mi_heap_huge_page_detach(heap, page);
   mi_segment_protect(segment, false, tld->os);
   mi_segment_t* newsegment = (mi_segment_t*)_mi_os_remap(segment, mi_segment_size(segment), newssize, &memid, tld->stats);
@@ -1334,8 +1358,14 @@ mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, 
   
   mi_block_t* newblock = (mi_block_t*)((uint8_t*)newsegment + block_ofs);
   mi_assert_internal(_mi_ptr_segment(newblock) == newsegment);
+  
   mi_page_t* newpage = _mi_ptr_page(newblock);
+  size_t psize = 0;
+  _mi_segment_page_start(newsegment, newpage, 0, &psize, NULL);
+  mi_assert_internal(psize >= newsize);
+  newpage->xblock_size = (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
   mi_assert_internal(mi_page_block_size(newpage) >= newsize);
+
   _mi_heap_huge_page_attach(heap, newpage);
   return newblock;
 }

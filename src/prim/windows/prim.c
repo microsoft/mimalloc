@@ -686,12 +686,27 @@ static int mi_win_free_remap_info(mi_win_remap_info_t* rinfo) {
   return err;
 }
 
+// release physical pages that are no longer needed
+static void mi_win_shrink_physical_pages(mi_win_remap_info_t* rinfo, size_t newpage_count)
+{
+  if (rinfo == NULL || rinfo->page_count <= newpage_count) return;
+  ULONG_PTR fpages = rinfo->page_count - newpage_count;
+  if (!FreeUserPhysicalPages(GetCurrentProcess(), &fpages, &rinfo->page_info[newpage_count])) {
+    int err = (int)GetLastError();
+    _mi_warning_message("unable to release physical memory on remap (error %d (0x%02x))\n", err, err);
+  }
+  rinfo->page_count = newpage_count;
+}
+
 // ensure enough physical pages are allocated
 static int mi_win_ensure_physical_pages(mi_win_remap_info_t** prinfo, size_t newpage_count) 
 {
   // ensure meta data is large enough
-  mi_win_remap_info_t* rinfo = mi_win_realloc_remap_info(*prinfo, newpage_count);
-  if (rinfo == NULL) return ENOMEM;
+  mi_win_remap_info_t* rinfo = *prinfo;
+  if (rinfo == NULL || newpage_count > rinfo->page_count) {
+    rinfo = mi_win_realloc_remap_info(*prinfo, newpage_count);
+    if (rinfo == NULL) return ENOMEM;
+  }  
   *prinfo = rinfo;
 
   // allocate physical pages; todo: allow shrinking?
@@ -713,7 +728,7 @@ static int mi_win_ensure_physical_pages(mi_win_remap_info_t** prinfo, size_t new
 // Remap physical memory to another virtual address range
 static int mi_win_remap_virtual_pages(mi_win_remap_info_t* rinfo, void* oldaddr, size_t oldpage_count, void* newaddr, size_t newpage_count) {
   mi_assert_internal(rinfo != NULL && rinfo->page_count >= newpage_count);
- 
+
   // unmap the old range
   if (oldaddr != NULL) {
     if (!MapUserPhysicalPages(oldaddr, oldpage_count, NULL)) {
@@ -763,10 +778,12 @@ int _mi_prim_remap_to(void* base, void* addr, size_t size, void* newaddr, size_t
 
   size_t oldpage_count = _mi_divide_up(size, _mi_os_page_size());
   size_t newpage_count = _mi_divide_up(newsize, _mi_os_page_size());  
-
+  
+  // ensure we have enough physical memory for the new range
   int err = mi_win_ensure_physical_pages(prinfo, newpage_count);
   if (err != 0) { return err; }
-  
+
+  // remap the physical memory to the new virtual range
   err = mi_win_remap_virtual_pages(*prinfo, addr, oldpage_count, newaddr, newpage_count);
   if (err != 0) { return err; }
 
@@ -778,6 +795,9 @@ int _mi_prim_remap_to(void* base, void* addr, size_t size, void* newaddr, size_t
     }
   }
 
+  // perhaps release physical pages that are no longer needed
+  mi_win_shrink_physical_pages(*prinfo, newpage_count);
+  
   *pnewrinfo = *prinfo;
   *prinfo = NULL;
   return 0;

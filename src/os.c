@@ -450,13 +450,16 @@ void* _mi_os_alloc_remappable(size_t size, size_t alignment, mi_memid_t* memid, 
 // fallback if OS remap is not supported
 static void* mi_os_remap_copy(void* p, size_t size, size_t newsize, size_t alignment, mi_memid_t* memid, mi_stats_t* stats) {
   mi_memid_t newmemid = _mi_memid_none();
+  if (newsize == 0) return NULL;
   newsize = mi_os_get_alloc_size(newsize);
 
   // first try to expand the existing virtual range "in-place"    
-  if (p != NULL && size > 0 && newsize > size && !mi_os_mem_config.must_free_whole && !memid->is_pinned && memid->mem.os.prim_info == NULL) 
+  if (p != NULL && size > 0 && newsize > size && 
+      !mi_os_mem_config.must_free_whole && !memid->is_pinned && memid->mem.os.prim_info == NULL) 
   {
     void* expand = (uint8_t*)p + size;
     size_t extra = newsize - size;
+    mi_assert_internal(extra > 0 && (extra %  _mi_os_page_size()) == 0);
     bool os_is_large = false;
     bool os_is_zero = false;
     void* newp = mi_os_prim_alloc_at(expand, extra, 1, false /* commit? */, false, &os_is_large, &os_is_zero, stats);
@@ -475,8 +478,19 @@ static void* mi_os_remap_copy(void* p, size_t size, size_t newsize, size_t align
       mi_os_prim_free(newp, extra, false, stats);
     }
   }
+  else if (p != NULL && newsize > 0 && newsize < size && 
+           !mi_os_mem_config.must_free_whole && !memid->is_pinned && memid->mem.os.prim_info == NULL)
+  {
+     // we can shrink in-place by free-ing the upper part
+     void* shrink = (uint8_t*)p + newsize;
+     size_t extra = size - newsize;
+     mi_assert_internal(extra > 0 && (extra %  _mi_os_page_size()) == 0);
+     mi_os_prim_free(shrink, extra, true, stats);
+     _mi_verbose_message("shrunk OS memory in place (address: %p, from %zu bytes to %zu bytes\n", p, size, newsize);
+     return p;     
+  }
 
-  // copy into a fresh area
+  // otherwise: copy into a fresh area
   void* newp = _mi_os_alloc_aligned(newsize, alignment, true /* commit */, false /* allow_large */, &newmemid, stats);
   if (newp == NULL) return NULL;
   newmemid.memkind = MI_MEM_OS_REMAP;

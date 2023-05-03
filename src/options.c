@@ -91,7 +91,12 @@ static mi_option_desc_t options[_mi_option_last] =
 
   { 10,  UNINIT, MI_OPTION(arena_purge_mult) },        // purge delay multiplier for arena's
   { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
+  { 0, UNINIT, MI_OPTION(remap_threshold) },       // size in KiB after which realloc starts using OS remap (0 to disable auto remap)
 };
+
+static bool mi_option_is_size_in_kib(mi_option_t option) {
+  return (option == mi_option_reserve_os_memory || option == mi_option_arena_reserve || option == mi_option_remap_threshold);
+}
 
 static void mi_option_init(mi_option_desc_t* desc);
 
@@ -129,7 +134,7 @@ mi_decl_nodiscard long mi_option_get_clamp(mi_option_t option, long min, long ma
 }
 
 mi_decl_nodiscard size_t mi_option_get_size(mi_option_t option) {
-  mi_assert_internal(option == mi_option_reserve_os_memory || option == mi_option_arena_reserve);
+  mi_assert_internal(mi_option_is_size_in_kib(option));
   long x = mi_option_get(option);
   return (x < 0 ? 0 : (size_t)x * MI_KiB);
 }
@@ -536,7 +541,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
     else {
       char* end = buf;
       long value = strtol(buf, &end, 10);
-      if (desc->option == mi_option_reserve_os_memory || desc->option == mi_option_arena_reserve) {
+      if (mi_option_is_size_in_kib(desc->option)) {
         // this option is interpreted in KiB to prevent overflow of `long`
         if (*end == 'K') { end++; }
         else if (*end == 'M') { value *= MI_KiB; end++; }

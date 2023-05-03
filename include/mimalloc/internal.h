@@ -152,6 +152,7 @@ void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
 void       _mi_abandoned_await_readers(void);
 
 mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, mi_block_t* block, size_t newsize, mi_segments_tld_t* tld);
+mi_block_t* _mi_segment_huge_page_expand(mi_segment_t* segment, mi_page_t* page, mi_block_t* block, size_t newsize, mi_segments_tld_t* tld);
 
 // "page.c"
 void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment)  mi_attr_noexcept mi_attr_malloc;

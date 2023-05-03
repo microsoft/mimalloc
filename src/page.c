@@ -405,7 +405,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
 
 // Detach a huge page (used for remapping)
 void _mi_heap_huge_page_detach(mi_heap_t* heap, mi_page_t* page) {
-  mi_assert_internal(mi_page_heap(page) == heap);
+  mi_assert_internal(mi_page_heap(page) == heap); MI_UNUSED(heap);
   #if !MI_HUGE_PAGE_ABANDON
   mi_page_queue_t* pq = mi_page_queue_of(page);
   mi_assert_internal(mi_page_queue_is_huge(pq));
