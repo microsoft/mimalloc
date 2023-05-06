@@ -91,7 +91,7 @@ static mi_option_desc_t options[_mi_option_last] =
 
   { 10,  UNINIT, MI_OPTION(arena_purge_mult) },        // purge delay multiplier for arena's
   { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
-  { 0, UNINIT, MI_OPTION(remap_threshold) },       // size in KiB after which realloc starts using OS remap (0 to disable auto remap)
+  { 0,   UNINIT, MI_OPTION(remap_threshold) },         // size in KiB after which realloc starts using OS remap (0 to disable auto remap)
 };
 
 static bool mi_option_is_size_in_kib(mi_option_t option) {

@@ -709,6 +709,8 @@ static void* mi_heap_try_remap_zero(mi_heap_t* heap, mi_segment_t* segment, void
 
 void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept {
   // if p == NULL then behave as malloc.
+  if mi_unlikely(p==NULL) return _mi_heap_malloc_zero(heap,newsize,zero);
+
   // else if size == 0 then reallocate to a zero-sized block (and don't return NULL, just as mi_malloc(0)).
   // (this means that returning NULL always indicates an error, and `p` will not have been freed in that case.)
   const size_t size = _mi_usable_size(p,"mi_realloc"); // also works if p == NULL (with size 0)
