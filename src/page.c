@@ -129,7 +129,13 @@ bool _mi_page_is_valid(mi_page_t* page) {
     {
       mi_page_queue_t* pq = mi_page_queue_of(page);
       mi_assert_internal(mi_page_queue_contains(pq, page));
-      mi_assert_internal(pq->block_size==mi_page_block_size(page) || mi_page_block_size(page) > MI_LARGE_OBJ_SIZE_MAX || mi_page_is_in_full(page));
+      if (mi_segment_is_huge(segment)) {
+        mi_assert_internal(mi_page_queue_is_huge(pq) || mi_page_queue_is_full(pq));
+      }
+      else {
+        mi_assert_internal(pq->block_size == mi_page_block_size(page) || mi_page_is_in_full(page));
+        mi_assert_internal(mi_page_block_size(page) <= MI_LARGE_OBJ_SIZE_MAX);
+      }
       mi_assert_internal(mi_heap_contains_queue(mi_page_heap(page),pq));
     }
   }
@@ -283,12 +289,13 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   #if MI_HUGE_PAGE_ABANDON
   mi_assert_internal(pq==NULL || _mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
   #endif
-  mi_assert_internal(pq!=NULL || page->xblock_size != 0);
-  mi_assert_internal(pq!=NULL || mi_page_block_size(page) >= block_size);
+
   // a fresh page was found, initialize it
-  const size_t full_block_size = ((pq == NULL || mi_page_queue_is_huge(pq)) ? mi_page_block_size(page) : block_size); // see also: mi_segment_huge_page_alloc
-  mi_assert_internal(full_block_size >= block_size);
-  mi_page_init(heap, page, full_block_size, heap->tld);
+  const size_t xblock_size = ((pq == NULL || mi_page_is_huge(page)) ? MI_HUGE_BLOCK_SIZE : block_size);   
+  //((pq == NULL || mi_page_queue_is_huge(pq)) ? mi_page_block_size(page) : block_size); // see also: mi_segment_huge_page_alloc
+  //mi_assert_internal(xblock_size >= block_size);
+  mi_page_init(heap, page, xblock_size, heap->tld);
+  mi_assert_internal(mi_page_block_size(page) >= block_size);
   mi_heap_stat_increase(heap, pages, 1);
   if (pq != NULL) { mi_page_queue_push(heap, pq, page); }
   mi_assert_expensive(_mi_page_is_valid(page));
@@ -683,9 +690,16 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   const void*  page_start = _mi_segment_page_start(segment, page, block_size, &page_size, NULL);
   MI_UNUSED(page_start);
   mi_track_mem_noaccess(page_start,page_size);
-  page->xblock_size = (block_size < MI_HUGE_BLOCK_SIZE ? (uint32_t)block_size : MI_HUGE_BLOCK_SIZE);
-  mi_assert_internal(page_size / block_size < (1L<<16));
-  page->reserved = (uint16_t)(page_size / block_size);
+  if (segment->page_kind == MI_PAGE_HUGE) {
+    page->xblock_size = MI_HUGE_BLOCK_SIZE;
+    page->reserved = 1;
+  }
+  else {
+    mi_assert_internal(block_size < MI_HUGE_BLOCK_SIZE);
+    page->xblock_size = (uint32_t)block_size;
+    mi_assert_internal(page_size / block_size < (1L << 16));
+    page->reserved = (uint16_t)(page_size / block_size);
+  }
   mi_assert_internal(page->reserved > 0);
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   page->keys[0] = _mi_heap_random_next(heap);
@@ -848,7 +862,7 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_a
   mi_page_queue_t* pq = mi_page_queue(heap, MI_HUGE_OBJ_SIZE_MAX); // not block_size as that can be low if the page_alignment > 0
   mi_assert_internal(mi_page_queue_is_huge(pq));
   #endif
-  mi_page_t* page = mi_page_fresh_alloc(heap, pq, block_size,page_alignment);
+  mi_page_t* page = mi_page_fresh_alloc(heap, pq, block_size, page_alignment);
   if (page != NULL) {
     const size_t bsize = mi_page_block_size(page);  // note: not `mi_page_usable_block_size` as `size` includes padding already
     mi_assert_internal(bsize >= size);
@@ -934,11 +948,15 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   mi_assert_internal(mi_page_block_size(page) >= size);
 
   // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc)
-  if mi_unlikely(zero && page->xblock_size == 0) {
+  if mi_unlikely(zero && mi_page_is_huge(page)) {
     // note: we cannot call _mi_page_malloc with zeroing for huge blocks; we zero it afterwards in that case.
     void* p = _mi_page_malloc(heap, page, size, false);
     mi_assert_internal(p != NULL);
-    if (!page->free_is_zero) {
+    if (page->free_is_zero) {
+      ((mi_block_t*)p)->next = 0;
+      mi_track_mem_defined(p, mi_page_usable_block_size(page));
+    }
+    else {
       _mi_memzero_aligned(p, mi_page_usable_block_size(page));
     }
     return p;

@@ -231,9 +231,9 @@ static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_
   #if MI_HUGE_PAGE_ABANDON
   mi_assert_internal(_mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
   #endif
-  mi_assert_internal(page->xblock_size == queue->block_size ||
-                      (page->xblock_size > MI_LARGE_OBJ_SIZE_MAX && mi_page_queue_is_huge(queue)) ||
-                        (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
+  mi_assert_internal((page->xblock_size == queue->block_size) ||
+                     (mi_page_queue_is_huge(queue)) || // not: && page->xblock_size > MI_LARGE_OBJ_SIZE_MAX since it could be due to page alignment
+                     (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)) );
 
   mi_page_set_in_full(page, mi_page_queue_is_full(queue));
   // mi_atomic_store_ptr_release(mi_atomic_cast(void*, &page->heap), heap);

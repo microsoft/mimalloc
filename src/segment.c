@@ -1235,7 +1235,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   // overallocate to accommodate large alignments.
   size_t psize;
   uint8_t* start = _mi_segment_page_start(segment, page, 0, &psize, NULL);
-  page->xblock_size = (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
+  page->xblock_size = MI_HUGE_BLOCK_SIZE; // ensure it goes into the huge page queue; (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
 
   // reset the part of the page that will not be used; this can be quite large (close to MI_SEGMENT_SIZE)
   if (page_alignment >= MI_ALIGN_HUGE && segment->allow_decommit && page->is_committed) {
@@ -1314,7 +1314,7 @@ mi_block_t* _mi_segment_huge_page_expand(mi_segment_t* segment, mi_page_t* page,
   size_t psize = 0;
   _mi_segment_page_start(segment, page, 0, &psize, NULL);
   mi_assert_internal(psize >= newsize);
-  page->xblock_size = (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
+  page->xblock_size = MI_HUGE_BLOCK_SIZE; // (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
   return block;
 }
 
@@ -1363,7 +1363,7 @@ mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, 
   size_t psize = 0;
   _mi_segment_page_start(newsegment, newpage, 0, &psize, NULL);
   mi_assert_internal(psize >= newsize);
-  newpage->xblock_size = (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
+  newpage->xblock_size = MI_HUGE_BLOCK_SIZE; // (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
   mi_assert_internal(mi_page_block_size(newpage) >= newsize);
 
   _mi_heap_huge_page_attach(heap, newpage);

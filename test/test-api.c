@@ -27,6 +27,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include <stdbool.h>
 #include <stdint.h>
 #include <errno.h>
+#include <string.h>
 
 #ifdef __cplusplus
 #include <vector>
@@ -59,6 +60,7 @@ bool mem_is_zero(uint8_t* p, size_t size) {
 // ---------------------------------------------------------------------------
 int main(void) {
   mi_option_disable(mi_option_verbose);
+  mi_option_set(mi_option_remap_threshold, 100 /* in kib */);
   
   // ---------------------------------------------------
   // Malloc
@@ -281,6 +283,15 @@ int main(void) {
   CHECK_BODY("reallocarray-null-sizezero") {
     void* p = mi_reallocarray(NULL,0,16);  // issue #574
     result = (p != NULL && errno == 0);
+    mi_free(p);
+  };
+
+  CHECK_BODY("reallo-huge") {          // By Jason Gibson
+    int* p = (int*)mi_malloc(356);
+    p = (int*)mi_realloc(p, 583);
+    memset(p, '\0', 580);
+    p = (int*)mi_realloc(p, 1500705);
+    p = (int*)mi_realloc(p, 3000711);
     mi_free(p);
   };
 

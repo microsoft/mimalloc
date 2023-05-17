@@ -450,22 +450,30 @@ static inline mi_page_t* _mi_ptr_page(void* p) {
   return _mi_segment_page_of(_mi_ptr_segment(p), p);
 }
 
+static inline bool mi_segment_is_huge(const mi_segment_t* segment) {
+  return (segment->page_kind == MI_PAGE_HUGE);
+}
+
+static inline bool mi_page_is_huge(const mi_page_t* page) {
+  bool huge = mi_segment_is_huge(_mi_page_segment(page));
+  mi_assert_internal((huge && page->xblock_size == MI_HUGE_BLOCK_SIZE) || (!huge && page->xblock_size <= MI_LARGE_OBJ_SIZE_MAX));
+  return huge;
+}
+
 // Get the block size of a page (special case for huge objects)
 static inline size_t mi_page_block_size(const mi_page_t* page) {
   const size_t bsize = page->xblock_size;
   mi_assert_internal(bsize > 0);
   if mi_likely(bsize < MI_HUGE_BLOCK_SIZE) {
+    mi_assert_internal(bsize <= MI_LARGE_OBJ_SIZE_MAX);
     return bsize;
   }
   else {
+    mi_assert_internal(mi_page_is_huge(page));
     size_t psize;
     _mi_segment_page_start(_mi_page_segment(page), page, bsize, &psize, NULL);
     return psize;
   }
-}
-
-static inline bool mi_page_is_huge(const mi_page_t* page) {
-  return (_mi_page_segment(page)->page_kind == MI_PAGE_HUGE);
 }
 
 // Get the usable block size of a page without fixed padding.
