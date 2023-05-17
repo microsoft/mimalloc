@@ -27,6 +27,7 @@ Optional:
 
   #define mi_track_align(p,alignedp,offset,size)
   #define mi_track_resize(p,oldsize,newsize)
+  #define mi_track_realloc(p,oldsize,newp,newsize)
   #define mi_track_init()
 
 The `mi_track_align` is called right after a `mi_track_malloc` for aligned pointers in a block.
@@ -106,7 +107,11 @@ defined, undefined, or not accessible at all:
 // Utility definitions
 
 #ifndef mi_track_resize
-#define mi_track_resize(p,oldsize,newsize)      mi_track_free_size(p,oldsize); mi_track_malloc(p,newsize,false)
+#define mi_track_resize(p,oldsize,newsize)        mi_track_free_size(p,oldsize); mi_track_malloc(p,newsize,false)
+#endif
+
+#ifndef mi_track_realloc
+#define mi_track_realloc(p,oldsize,newp,newsize)  mi_track_free_size(p,oldsize); mi_track_malloc(newp,newsize,false)
 #endif
 
 #ifndef mi_track_align

@@ -51,7 +51,7 @@ static void mi_padding_init(mi_page_t* page, mi_block_t* block, size_t size) {
 // Fast allocation in a page: just pop from the free list.
 // Fall back to generic allocation only if the list is empty.
 extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept {
-  mi_assert_internal(page->xblock_size==0||mi_page_block_size(page) >= size);
+  mi_assert_internal(page->xblock_size == 0 || mi_page_block_size(page) >= size);
   mi_block_t* const block = page->free;
   if mi_unlikely(block == NULL) {
     return _mi_malloc_generic(heap, size, zero, 0);
@@ -883,6 +883,7 @@ static void* mi_heap_try_remap_zero(mi_heap_t* heap, mi_segment_t* segment, void
     segment = mi_checked_ptr_segment(block, "mi_remap");
     page = _mi_segment_page_of(segment, block);
     mi_padding_init(page, block, newsize);
+    mi_track_realloc(p, size, block, newsize);
     if (zero) {
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
       const size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
