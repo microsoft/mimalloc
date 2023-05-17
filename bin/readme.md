@@ -40,4 +40,32 @@ if they are linked with the dynamic C runtime (`ucrtbase.dll`) -- just put the `
 into the import table (and put `mimalloc-redirect.dll` in the same folder)
 Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388).
 
-The `minject` program can also do this from the command line, use `minject --help` for options.
+The `minject` program can also do this from the command line, use `minject --help` for options:
+
+```
+> minject --help
+
+minject:
+  Injects the mimalloc dll into the import table of a 64-bit executable,
+  and/or ensures that it comes first in het import table.
+
+usage:
+  > minject [options] <exe>
+
+options:
+  -h   --help        show this help
+  -v   --verbose     be verbose
+  -l   --list        only list imported modules
+  -i   --inplace     update the exe in-place (make sure there is a backup!)
+  -f   --force       always overwrite without prompting
+       --postfix=<p> use <p> as a postfix to the mimalloc dll (default is 'override')
+                     e.g. use --postfix=override-debug to link with mimalloc-override-debug.dll
+
+notes:
+  Without '--inplace' an injected <exe> is generated with the same name ending in '-mi'.
+  Ensure 'mimalloc-redirect.dll' is in the same folder as the mimalloc dll.
+
+examples:
+  > minject --list myprogram.exe
+  > minject --force --inplace myprogram.exe
+```  
