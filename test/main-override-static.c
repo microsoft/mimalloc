@@ -20,12 +20,14 @@ static void alloc_huge(void);
 static void test_heap_walk(void);
 static void test_remap(bool start_remappable);
 static void test_remap2(void);
+static void test_remap3(void);
 
 int main() {
   mi_version();
   mi_stats_reset();
 
-  test_remap2();
+  //test_remap2();
+  test_remap3();
   //test_remap(true);
   
   // detect double frees and heap corruption
@@ -221,13 +223,28 @@ static void test_heap_walk(void) {
   mi_heap_visit_blocks(heap, true, &test_visit, NULL);
 }
 
-static void test_remap2(void) {
+static void test_remap2(void) {     // By Jason Gibson
   int* p = (int*)mi_malloc(356);
   p = (int*)mi_realloc(p, 583);
   memset(p, '\0', 580);
   p = (int*)mi_realloc(p, 1500705);
   p = (int*)mi_realloc(p, 3000711);
   mi_free(p);
+}
+
+static void test_remap3(void) {    // by Jason Gibson
+  int* x = (int*)mi_malloc(438);
+  x = (int*)mi_realloc(x, 1500705);
+
+  x = (int*)mi_realloc(x, 3000711);
+  x = (int*)mi_realloc(x, 6000723);
+  x = (int*)mi_realloc(x, 10500741);
+  x = (int*)mi_realloc(x, 16500765);
+  x = (int*)mi_realloc(x, 25500801);
+  x = (int*)mi_realloc(x, 39000855);
+  x = (int*)mi_realloc(x, 60000939);
+
+  mi_free(x);
 }
 
 static void test_remap(bool start_remappable) {

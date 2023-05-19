@@ -552,6 +552,7 @@ void* _mi_os_remap(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_s
     return mi_os_remap_copy(p, size, newsize, alignment, memid, stats);
   }
 
+  mi_track_mem_defined(newp, size);
   newmemid.initially_committed = true;
   if (p == NULL && extend_is_zero) {
     newmemid.initially_zero = true;
