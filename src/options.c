@@ -435,68 +435,6 @@ void _mi_error_message(int err, const char* fmt, ...) {
 // --------------------------------------------------------
 // Initialize options by checking the environment
 // --------------------------------------------------------
-char _mi_toupper(char c) {
-  if (c >= 'a' && c <= 'z') return (c - 'a' + 'A');
-                       else return c;
-}
-
-int _mi_strnicmp(const char* s, const char* t, size_t n) {
-  if (n == 0) return 0;
-  for (; *s != 0 && *t != 0 && n > 0; s++, t++, n--) {
-    if (_mi_toupper(*s) != _mi_toupper(*t)) break;
-  }
-  return (n == 0 ? 0 : *s - *t);
-}
-
-void _mi_strlcpy(char* dest, const char* src, size_t dest_size) {
-  if (dest==NULL || src==NULL || dest_size == 0) return;
-  // copy until end of src, or when dest is (almost) full
-  while (*src != 0 && dest_size > 1) {
-    *dest++ = *src++;
-    dest_size--;
-  }
-  // always zero terminate
-  *dest = 0;
-}
-
-void _mi_strlcat(char* dest, const char* src, size_t dest_size) {
-  if (dest==NULL || src==NULL || dest_size == 0) return;
-  // find end of string in the dest buffer
-  while (*dest != 0 && dest_size > 1) {
-    dest++;
-    dest_size--;
-  }
-  // and catenate
-  _mi_strlcpy(dest, src, dest_size);
-}
-
-size_t _mi_strlen(const char* s) {
-  if (s==NULL) return 0;
-  size_t len = 0;
-  while(s[len] != 0) { len++; }
-  return len;
-}
-
-size_t _mi_strnlen(const char* s, size_t max_len) {
-  if (s==NULL) return 0;
-  size_t len = 0;
-  while(s[len] != 0 && len < max_len) { len++; }
-  return len;
-}
-
-#ifdef MI_NO_GETENV
-static bool mi_getenv(const char* name, char* result, size_t result_size) {
-  MI_UNUSED(name);
-  MI_UNUSED(result);
-  MI_UNUSED(result_size);
-  return false;
-}
-#else
-static bool mi_getenv(const char* name, char* result, size_t result_size) {
-  if (name==NULL || result == NULL || result_size < 64) return false;
-  return _mi_prim_getenv(name,result,result_size);
-}
-#endif
 
 // TODO: implement ourselves to reduce dependencies on the C runtime
 #include <stdlib.h> // strtol
@@ -509,11 +447,11 @@ static void mi_option_init(mi_option_desc_t* desc) {
   char buf[64+1];
   _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
   _mi_strlcat(buf, desc->name, sizeof(buf));
-  bool found = mi_getenv(buf, s, sizeof(s));
+  bool found = _mi_getenv(buf, s, sizeof(s));
   if (!found && desc->legacy_name != NULL) {
     _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
     _mi_strlcat(buf, desc->legacy_name, sizeof(buf));
-    found = mi_getenv(buf, s, sizeof(s));
+    found = _mi_getenv(buf, s, sizeof(s));
     if (found) {
       _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name);
     }

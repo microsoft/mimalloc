@@ -45,6 +45,7 @@ set(mi_sources
     src/bitmap.c
     src/heap.c
     src/init.c
+    src/libc.c
     src/options.c
     src/os.c
     src/page.c
