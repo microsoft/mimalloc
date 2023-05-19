@@ -80,7 +80,16 @@ bool _mi_getenv(const char* name, char* result, size_t result_size) {
 #endif
 
 // --------------------------------------------------------
-// Define our own limited `_vsnprintf` 
+// Define our own limited `_mi_vsnprintf` and `_mi_snprintf`
+// This is mostly to avoid calling these when libc is not yet
+// initialized (and to reduce dependencies)
+// 
+// format:      d i, p x u, s
+// prec:        z l
+// width:       10
+// align-left:  -
+// fill:        0
+// plus:        +
 // --------------------------------------------------------
 
 static void mi_outc(char c, char** out, char* end) {
@@ -208,16 +217,18 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
       }
       else if (c == 'i' || c == 'd') {
         // signed
-        long x = va_arg(args, long);
+        intptr_t x = 0;
+        if (numtype == 'z') x = va_arg(args, intptr_t );
+                       else x = va_arg(args, long);
         char pre = 0;
         if (x < 0) {
           pre = '-';
-          x = -x;
+          if (x > INTPTR_MIN) { x = -x; }
         }
         else if (numplus != 0) {
           pre = numplus;
         }
-        mi_out_num((size_t)x, 10, pre, &out, end);
+        mi_out_num((uintptr_t)x, 10, pre, &out, end);
       }
       else if (c >= ' ' && c < '~') {
         mi_outc(c, &out, end);
