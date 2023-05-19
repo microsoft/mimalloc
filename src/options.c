@@ -9,9 +9,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/atomic.h"
 #include "mimalloc/prim.h"  // mi_prim_out_stderr
 
-#include <stdio.h>      // FILE
+#include <stdio.h>      // stdin/stdout
 #include <stdlib.h>     // abort
-#include <stdarg.h>
+
 
 
 static long mi_max_error_count   = 16; // stop outputting errors after this (use < 0 for no limit)
@@ -312,12 +312,12 @@ void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* me
 }
 
 // Define our own limited `fprintf` that avoids memory allocation.
-// We do this using `snprintf` with a limited buffer.
+// We do this using `_mi_vsnprintf` with a limited buffer.
 static void mi_vfprintf( mi_output_fun* out, void* arg, const char* prefix, const char* fmt, va_list args ) {
   char buf[512];
   if (fmt==NULL) return;
   if (!mi_recurse_enter()) return;
-  vsnprintf(buf,sizeof(buf)-1,fmt,args);
+  _mi_vsnprintf(buf, sizeof(buf)-1, fmt, args);
   mi_recurse_exit();
   _mi_fputs(out,arg,prefix,buf);
 }
@@ -332,7 +332,7 @@ void _mi_fprintf( mi_output_fun* out, void* arg, const char* fmt, ... ) {
 static void mi_vfprintf_thread(mi_output_fun* out, void* arg, const char* prefix, const char* fmt, va_list args) {
   if (prefix != NULL && _mi_strnlen(prefix,33) <= 32 && !_mi_is_main_thread()) {
     char tprefix[64];
-    snprintf(tprefix, sizeof(tprefix), "%sthread 0x%llx: ", prefix, (unsigned long long)_mi_thread_id());
+    _mi_snprintf(tprefix, sizeof(tprefix), "%sthread 0x%zx: ", prefix, (size_t)_mi_thread_id());
     mi_vfprintf(out, arg, tprefix, fmt, args);
   }
   else {

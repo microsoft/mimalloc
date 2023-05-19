@@ -476,8 +476,6 @@ int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bo
 
 #if defined(__linux__)
 
-#include <stdio.h>    // snprintf
-
 size_t _mi_prim_numa_node(void) {
   #if defined(MI_HAS_SYSCALL_H) && defined(SYS_getcpu)
     unsigned long node = 0;
@@ -495,7 +493,7 @@ size_t _mi_prim_numa_node_count(void) {
   unsigned node = 0;
   for(node = 0; node < 256; node++) {
     // enumerate node entries -- todo: it there a more efficient way to do this? (but ensure there is no allocation)
-    snprintf(buf, 127, "/sys/devices/system/node/node%u", node + 1);
+    _mi_snprintf(buf, 127, "/sys/devices/system/node/node%u", node + 1);
     if (mi_prim_access(buf,R_OK) != 0) break;
   }
   return (node+1);
