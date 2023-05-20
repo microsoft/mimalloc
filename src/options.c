@@ -94,6 +94,10 @@ static mi_option_desc_t options[_mi_option_last] =
 
 static void mi_option_init(mi_option_desc_t* desc);
 
+static bool mi_option_has_size_in_kib(mi_option_t option) {
+  return (option == mi_option_reserve_os_memory || option == mi_option_arena_reserve);
+}
+
 void _mi_options_init(void) {
   // called on process load; should not be called before the CRT is initialized!
   // (e.g. do not call this from process_init as that may run before CRT initialization)
@@ -104,7 +108,7 @@ void _mi_options_init(void) {
     // if (option != mi_option_verbose)
     {
       mi_option_desc_t* desc = &options[option];
-      _mi_verbose_message("option '%s': %ld\n", desc->name, desc->value);
+      _mi_verbose_message("option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : ""));
     }
   }
   mi_max_error_count = mi_option_get(mi_option_max_errors);
@@ -128,7 +132,7 @@ mi_decl_nodiscard long mi_option_get_clamp(mi_option_t option, long min, long ma
 }
 
 mi_decl_nodiscard size_t mi_option_get_size(mi_option_t option) {
-  mi_assert_internal(option == mi_option_reserve_os_memory || option == mi_option_arena_reserve);
+  mi_assert_internal(mi_option_has_size_in_kib(option));
   long x = mi_option_get(option);
   return (x < 0 ? 0 : (size_t)x * MI_KiB);
 }
