@@ -172,7 +172,7 @@ static void* mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* st
   *memid = _mi_memid_none();
 
   // try static
-  void* p = mi_arena_static_zalloc(size, MI_ALIGNMENT_MAX, memid);
+  void* p = mi_arena_static_zalloc(size, MI_MAX_ALIGN_SIZE, memid);
   if (p != NULL) return p;
 
   // or fall back to the OS
