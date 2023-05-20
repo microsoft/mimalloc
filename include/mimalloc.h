@@ -256,6 +256,17 @@ mi_decl_nodiscard mi_decl_export void* mi_heap_zalloc_remappable(mi_heap_t* heap
 
 // mi_decl_nodiscard mi_decl_export void* mi_remap(void* p, size_t newsize) mi_attr_noexcept mi_attr_alloc_size(2);
 
+// ------------------------------------------------------
+// Expandable memory reserves a virtual address range of `max_expand_size` (capped at 1TiB)
+// and commits this on-demand through `mi_realloc` and `mi_expand`. Both of those will 
+// expand inplace for blocks allocated as expandable up to `max_expand_size`.
+// ------------------------------------------------------
+
+mi_decl_nodiscard void* mi_heap_malloc_expandable(mi_heap_t* heap, size_t size, size_t max_expand_size) mi_attr_noexcept;
+mi_decl_nodiscard void* mi_heap_zalloc_expandable(mi_heap_t* heap, size_t size, size_t max_expand_size) mi_attr_noexcept;
+mi_decl_nodiscard void* mi_malloc_expandable(size_t size, size_t max_expand_size) mi_attr_noexcept;
+mi_decl_nodiscard void* mi_zalloc_expandable(size_t size, size_t max_expand_size) mi_attr_noexcept;
+
 
 // ------------------------------------------------------
 // Analysis

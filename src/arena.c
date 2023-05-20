@@ -812,7 +812,7 @@ int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exc
   const bool is_large = memid.is_pinned; // todo: use separate is_large field?
   if (!mi_manage_os_memory_ex2(start, size, is_large, -1 /* numa node */, exclusive, memid, arena_id)) {
     _mi_os_free_ex(start, size, commit, memid, &_mi_stats_main);
-    _mi_verbose_message("failed to reserve %zu k memory\n", _mi_divide_up(size, 1024));
+    _mi_verbose_message("failed to reserve %zu KiB memory\n", _mi_divide_up(size, 1024));
     return ENOMEM;
   }
   _mi_verbose_message("reserved %zu KiB memory%s\n", _mi_divide_up(size, 1024), is_large ? " (in large os pages)" : "");

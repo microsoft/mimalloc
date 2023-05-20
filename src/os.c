@@ -421,11 +421,15 @@ bool  _mi_os_expand(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_
   if (p == NULL) return false;
   if (memid->memkind != MI_MEM_OS_EXPAND) return false;
   if (newsize > size) {
-    mi_assert(memid->mem.os.size <= newsize);
-    return _mi_os_commit((uint8_t*)p + size, newsize - size, NULL, stats);
+    if (memid->mem.os.size < newsize) {
+      return false;
+    }
+    else {
+      return _mi_os_commit((uint8_t*)p + size, newsize - size, NULL, stats);
+    }
   }
   else if (newsize < size) {
-    mi_assert(memid->mem.os.size <= size);    
+    mi_assert(memid->mem.os.size >= size);    
     return _mi_os_decommit((uint8_t*)p + newsize, size - newsize, stats);
   }
   else {

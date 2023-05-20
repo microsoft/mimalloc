@@ -21,14 +21,16 @@ static void test_heap_walk(void);
 static void test_remap(bool start_remappable);
 static void test_remap2(void);
 static void test_remap3(void);
+static void test_expandable(bool use_realloc);
 
 int main() {
   mi_version();
   mi_stats_reset();
 
   //test_remap2();
-  test_remap3();
-  //test_remap(true);
+  //test_remap3();
+  //test_remap(false);
+  test_expandable(true);
   
   // detect double frees and heap corruption
   // double_free1();
@@ -247,15 +249,21 @@ static void test_remap3(void) {    // by Jason Gibson
   mi_free(x);
 }
 
-static void test_remap(bool start_remappable) {
+static void test_remap_expand(bool start_remappable, bool start_expandable, bool use_expand) {
   const size_t iterN = 100;
   const size_t size0 = 64 * 1024 * 1024;
   const size_t inc   = 1024 * 1024;
+  const size_t expand_size = size0 + 2 * inc; // (iterN * inc);
   size_t size = size0;
-  uint8_t* p = (uint8_t*)(start_remappable ? mi_malloc_remappable(size) : mi_malloc(size));
+  uint8_t* p = (uint8_t*)(start_remappable ? mi_malloc_remappable(size) : (start_expandable ? mi_malloc_expandable(size, expand_size) : mi_malloc(size)));
   memset(p, 1, size);
   for (int i = 2; i < iterN; i++) {
-    p = mi_realloc(p, size + inc);
+    void* newp = (use_expand ? mi_expand(p, size + inc) : mi_realloc(p, size + inc));
+    if (use_expand && newp != p) {
+      printf("error: could not expand in place: i=%i, size %zu\n", i, size + inc);
+      abort();
+    }
+    p = newp;
     memset(p + size, i, inc);
     size += inc;
     printf("%3d: increased to size %zu\n", i, size);
@@ -269,6 +277,14 @@ static void test_remap(bool start_remappable) {
     };
   }
   mi_free(p);
+}
+
+static void test_remap(bool start_remappable) {
+  test_remap_expand(start_remappable, false, false);
+}
+
+static void test_expandable(bool use_realloc) {
+  test_remap_expand(false, true, !use_realloc);
 }
 
 
