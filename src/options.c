@@ -332,7 +332,7 @@ void _mi_fprintf( mi_output_fun* out, void* arg, const char* fmt, ... ) {
 static void mi_vfprintf_thread(mi_output_fun* out, void* arg, const char* prefix, const char* fmt, va_list args) {
   if (prefix != NULL && _mi_strnlen(prefix,33) <= 32 && !_mi_is_main_thread()) {
     char tprefix[64];
-    _mi_snprintf(tprefix, sizeof(tprefix), "%sthread 0x%zx: ", prefix, (size_t)_mi_thread_id());
+    _mi_snprintf(tprefix, sizeof(tprefix), "%sthread 0x%tx: ", prefix, (uintptr_t)_mi_thread_id());
     mi_vfprintf(out, arg, tprefix, fmt, args);
   }
   else {

@@ -85,7 +85,7 @@ bool _mi_getenv(const char* name, char* result, size_t result_size) {
 // initialized (and to reduce dependencies)
 // 
 // format:      d i, p x u, s
-// prec:        z l
+// prec:        z l ll L
 // width:       10
 // align-left:  -
 // fill:        0
@@ -171,7 +171,9 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
     char c;
     MI_NEXTC();
     if (c != '%') {
-      mi_outc(c,&out,end);
+      if ((c >= ' ' && c <= '~') || c=='\n' || c=='\r' || c=='\t') { // output visible ascii or standard control only
+        mi_outc(c, &out, end);
+      }
     }
     else {
       MI_NEXTC();
@@ -190,9 +192,13 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
         }
         if (c == 0) break;  // extra check due to while
       }      
-      if (c == 'z' || c == 'l') { numtype = c; MI_NEXTC(); }
+      if (c == 'z' || c == 't' || c == 'L') { numtype = c; MI_NEXTC(); }
+      else if (c == 'l') {
+        numtype = c; MI_NEXTC();
+        if (c == 'l') { numtype = 'L'; MI_NEXTC(); }
+      }
 
-      char* const start = out;
+      char* start = out;
       if (c == 's') {
         // string
         const char* s = va_arg(args, const char*);
@@ -202,24 +208,31 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
         // unsigned
         uintptr_t x = 0;
         if (c == 'x' || c == 'u') {
-          if (numtype == 'z') x = va_arg(args, size_t);
-                         else x = va_arg(args, unsigned long);
+          if (numtype == 'z')       x = va_arg(args, size_t);
+          else if (numtype == 't')  x = va_arg(args, uintptr_t); // unsigned ptrdiff_t
+          else if (numtype == 'L')  x = va_arg(args, unsigned long long);
+                               else x = va_arg(args, unsigned long);
         }
         else if (c == 'p') {
           x = va_arg(args, uintptr_t);
           mi_outs("0x", &out, end);
-          if (width == 0) {
-            width = 2 * sizeof(void*);
-            fill = '0';
-          }
+          start = out;
+          width = (width >= 2 ? width - 2 : 0);
+        }
+        if (width == 0 && (c == 'x' || c == 'p')) {
+          if (c == 'p')   { width = 2 * (x <= UINT32_MAX ? 4 : ((x >> 16) <= UINT32_MAX ? 6 : sizeof(void*))); }
+          if (width == 0) { width = 2; }
+          fill = '0';
         }
         mi_out_num(x, (c == 'x' || c == 'p' ? 16 : 10), numplus, &out, end);
       }
       else if (c == 'i' || c == 'd') {
         // signed
         intptr_t x = 0;
-        if (numtype == 'z') x = va_arg(args, intptr_t );
-                       else x = va_arg(args, long);
+        if (numtype == 'z')       x = va_arg(args, intptr_t );
+        else if (numtype == 't')  x = va_arg(args, ptrdiff_t);
+        else if (numtype == 'L')  x = va_arg(args, long long);
+                             else x = va_arg(args, long);
         char pre = 0;
         if (x < 0) {
           pre = '-';
@@ -230,7 +243,9 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
         }
         mi_out_num((uintptr_t)x, 10, pre, &out, end);
       }
-      else if (c >= ' ' && c < '~') {
+      else if (c >= ' ' && c <= '~') {
+        // unknown format
+        mi_outc('%', &out, end);
         mi_outc(c, &out, end);
       }
 

@@ -145,7 +145,7 @@ static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* 
   const int64_t pos = (n < 0 ? -n : n);
   if (pos < base) {
     if (n!=1 || suffix[0] != 'B') {  // skip printing 1 B for the unit column
-      _mi_snprintf(buf, len, "%d   %-3s", (int)n, (n==0 ? "" : suffix));
+      _mi_snprintf(buf, len, "%lld   %-3s", (long long)n, (n==0 ? "" : suffix));
     }
   }
   else {
