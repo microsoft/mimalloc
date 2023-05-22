@@ -260,7 +260,10 @@ extern "C" {
 void  cfree(void* p)                                    { mi_free(p); }
 void* pvalloc(size_t size)                              { return mi_pvalloc(size); }
 void* reallocarray(void* p, size_t count, size_t size)  { return mi_reallocarray(p, count, size); }
-int   reallocarr(void* p, size_t count, size_t size)    { return mi_reallocarr(p, count, size); }
+// reallocarr is defined weak as it may result in duplicated symbols errors if linked against other
+// libraries like libedit which have defined a configure-time replacement for reallocarr on systems
+// where the default libc doesn't provide this symbol (ie Linux using glibc).
+__attribute__((weak)) int reallocarr(void* p, size_t count, size_t size)    { return mi_reallocarr(p, count, size); }
 void* memalign(size_t alignment, size_t size)           { return mi_memalign(alignment, size); }
 void* _aligned_malloc(size_t alignment, size_t size)    { return mi_aligned_alloc(alignment, size); }
 
