@@ -8,6 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // This file is included in `src/prim/prim.c`
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
