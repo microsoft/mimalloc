@@ -40,6 +40,7 @@ int _mi_prim_free(void* addr, size_t size ) {
 //---------------------------------------------
 
 #if defined(MI_USE_SBRK)
+  #include <unistd.h>
   static void* mi_memory_grow( size_t size ) {
     void* p = sbrk(size);
     if (p == (void*)(-1)) return NULL;
