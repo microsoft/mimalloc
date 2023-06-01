@@ -115,6 +115,8 @@ size_t     _mi_os_large_page_size(void);
 
 void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
 
+void*      mi_align_up_ptr(void* p, size_t alignment);
+
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
 void       _mi_arena_free(void* p, size_t size, size_t still_committed_size, mi_memid_t memid, mi_stats_t* stats);
