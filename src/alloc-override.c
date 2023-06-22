@@ -129,10 +129,12 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
   // we just override new/delete which does work in a static library.
 #else
   // On all other systems forward to our API
-  mi_decl_export void* malloc(size_t size)              MI_FORWARD1(mi_malloc, size)
-  mi_decl_export void* calloc(size_t size, size_t n)    MI_FORWARD2(mi_calloc, size, n)
-  mi_decl_export void* realloc(void* p, size_t newsize) MI_FORWARD2(mi_realloc, p, newsize)
-  mi_decl_export void  free(void* p)                    MI_FORWARD0(mi_free, p)
+  mi_decl_export void* malloc(size_t size)                MI_FORWARD1(mi_malloc, size)
+  mi_decl_export void* calloc(size_t size, size_t n)      MI_FORWARD2(mi_calloc, size, n)
+  mi_decl_export void* realloc(void* p, size_t newsize)   MI_FORWARD2(mi_realloc, p, newsize)
+  mi_decl_export char* strdup(const char* str)            MI_FORWARD1(mi_strdup, str)
+  mi_decl_export char* strndup(const char* str, size_t n) MI_FORWARD2(mi_strndup, str, n)
+  mi_decl_export void  free(void* p)                      MI_FORWARD0(mi_free, p)
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__APPLE__)
