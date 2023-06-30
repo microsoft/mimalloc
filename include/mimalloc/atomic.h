@@ -23,8 +23,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #define  _Atomic(tp)            std::atomic<tp>
 #define  mi_atomic(name)        std::atomic_##name
 #define  mi_memory_order(name)  std::memory_order_##name
-#if !defined(ATOMIC_VAR_INIT) || (__cplusplus >= 202002L) // c++20, see issue #571
- #define MI_ATOMIC_VAR_INIT(x)  x
+#if (__cplusplus >= 202002L)    // c++20, see issue #571
+#define MI_ATOMIC_VAR_INIT(x)  x
+#elif !defined(ATOMIC_VAR_INIT)
+#define MI_ATOMIC_VAR_INIT(x)  x
 #else
  #define MI_ATOMIC_VAR_INIT(x)  ATOMIC_VAR_INIT(x)
 #endif
