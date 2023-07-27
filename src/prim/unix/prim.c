@@ -276,7 +276,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         *is_large = true;
         p = unix_mmap_prim(addr, size, try_alignment, protect_flags, lflags, lfd);
         #ifdef MAP_HUGE_1GB
-        if (p == NULL && (lflags & MAP_HUGE_1GB) != 0) {
+        if (p == NULL && (lflags & MAP_HUGE_1GB) == MAP_HUGE_1GB) {
           mi_huge_pages_available = false; // don't try huge 1GiB pages again
           _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
           lflags = ((lflags & ~MAP_HUGE_1GB) | MAP_HUGE_2MB);
