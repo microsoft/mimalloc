@@ -833,7 +833,7 @@ void _mi_prim_thread_init_auto_done(void) {
 }
 
 void _mi_prim_thread_done_auto_done(void) {
-  // nothing to do
+  pthread_key_delete(_mi_heap_default_key);
 }
 
 void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
