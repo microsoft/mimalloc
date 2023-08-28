@@ -40,10 +40,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_cache_align
 #endif
 
-#if defined(__EMSCRIPTEN__) && !defined(__wasi__)
-#define __wasi__
-#endif
-
 #if defined(__cplusplus)
 #define mi_decl_externc       extern "C"
 #else
@@ -51,7 +47,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // pthreads
-#if !defined(_WIN32) && !defined(__wasi__)
+#if !defined(_WIN32) && !defined(__wasm__)
 #define  MI_USE_PTHREADS
 #include <pthread.h>
 #endif
@@ -88,7 +84,7 @@ void       _mi_thread_data_collect(void);
 
 // os.c
 void       _mi_os_init(void);                                            // called from process init
-void*      _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);  
+void*      _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);
 void       _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats);
 void       _mi_os_free_ex(void* p, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* stats);
 
@@ -427,7 +423,7 @@ static inline mi_slice_t* mi_page_to_slice(mi_page_t* p) {
 
 // Segment belonging to a page
 static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
-  mi_segment_t* segment = _mi_ptr_segment(page); 
+  mi_segment_t* segment = _mi_ptr_segment(page);
   mi_assert_internal(segment == NULL || ((mi_slice_t*)page >= segment->slices && (mi_slice_t*)page < segment->slices + segment->slice_entries));
   return segment;
 }
@@ -729,12 +725,12 @@ size_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, size_t* idx);
 
 #define mi_commit_mask_foreach(cm,idx,count) \
   idx = 0; \
-  while ((count = _mi_commit_mask_next_run(cm,&idx)) > 0) { 
-        
+  while ((count = _mi_commit_mask_next_run(cm,&idx)) > 0) {
+
 #define mi_commit_mask_foreach_end() \
     idx += count; \
   }
-      
+
 
 
 /* -----------------------------------------------------------

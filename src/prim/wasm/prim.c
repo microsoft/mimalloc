@@ -19,7 +19,7 @@ terms of the MIT license. A copy of the license can be found in the file
 void _mi_prim_mem_init( mi_os_mem_config_t* config ) {
   config->page_size = 64*MI_KiB; // WebAssembly has a fixed page size: 64KiB
   config->alloc_granularity = 16;
-  config->has_overcommit = false;  
+  config->has_overcommit = false;
   config->must_free_whole = true;
   config->has_virtual_reserve = false;
 }
@@ -30,7 +30,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config ) {
 
 int _mi_prim_free(void* addr, size_t size ) {
   MI_UNUSED(addr); MI_UNUSED(size);
-  // wasi heap cannot be shrunk
+  // wasm linear memory cannot be shrunk
   return 0;
 }
 
@@ -43,12 +43,12 @@ int _mi_prim_free(void* addr, size_t size ) {
   static void* mi_memory_grow( size_t size ) {
     void* p = sbrk(size);
     if (p == (void*)(-1)) return NULL;
-    #if !defined(__wasi__) // on wasi this is always zero initialized already (?)
+    #if !defined(__wasm__) // on wasm this is always zero initialized already.
     memset(p,0,size);
     #endif
     return p;
   }
-#elif defined(__wasi__)
+#elif defined(__wasm__)
   static void* mi_memory_grow( size_t size ) {
     size_t base = (size > 0 ? __builtin_wasm_memory_grow(0,_mi_divide_up(size, _mi_os_page_size()))
                             : __builtin_wasm_memory_size(0));
@@ -129,7 +129,7 @@ int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_la
 //---------------------------------------------
 
 int _mi_prim_commit(void* addr, size_t size, bool* is_zero) {
-  MI_UNUSED(addr); MI_UNUSED(size); 
+  MI_UNUSED(addr); MI_UNUSED(size);
   *is_zero = false;
   return 0;
 }
@@ -194,9 +194,9 @@ mi_msecs_t _mi_prim_clock_now(void) {
 // low resolution timer
 mi_msecs_t _mi_prim_clock_now(void) {
   #if !defined(CLOCKS_PER_SEC) || (CLOCKS_PER_SEC == 1000) || (CLOCKS_PER_SEC == 0)
-  return (mi_msecs_t)clock();  
+  return (mi_msecs_t)clock();
   #elif (CLOCKS_PER_SEC < 1000)
-  return (mi_msecs_t)clock() * (1000 / (mi_msecs_t)CLOCKS_PER_SEC);  
+  return (mi_msecs_t)clock() * (1000 / (mi_msecs_t)CLOCKS_PER_SEC);
   #else
   return (mi_msecs_t)clock() / ((mi_msecs_t)CLOCKS_PER_SEC / 1000);
   #endif

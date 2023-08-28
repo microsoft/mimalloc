@@ -160,7 +160,7 @@ If we cannot get good randomness, we fall back to weak randomness based on a tim
 
 uintptr_t _mi_os_random_weak(uintptr_t extra_seed) {
   uintptr_t x = (uintptr_t)&_mi_os_random_weak ^ extra_seed; // ASLR makes the address random
-  x ^= _mi_prim_clock_now();  
+  x ^= _mi_prim_clock_now();
   // and do a few randomization steps
   uintptr_t max = ((x ^ (x >> 17)) & 0x0F) + 1;
   for (uintptr_t i = 0; i < max; i++) {
@@ -175,7 +175,7 @@ static void mi_random_init_ex(mi_random_ctx_t* ctx, bool use_weak) {
   if (use_weak || !_mi_prim_random_buf(key, sizeof(key))) {
     // if we fail to get random data from the OS, we fall back to a
     // weak random source based on the current time
-    #if !defined(__wasi__)
+    #if !defined(__wasm__)
     if (!use_weak) { _mi_warning_message("unable to use secure randomness\n"); }
     #endif
     uintptr_t x = _mi_os_random_weak(0);
