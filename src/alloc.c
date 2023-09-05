@@ -913,9 +913,13 @@ static bool mi_try_new_handler(bool nothrow) {
   #endif
   if (h==NULL) {
     _mi_error_message(ENOMEM, "out of memory in 'new'");
+    #if defined(_CPPUNWIND) || defined(__cpp_exceptions)
     if (!nothrow) {
       throw std::bad_alloc();
     }
+    #else
+    (void)nothrow;
+    #endif
     return false;
   }
   else {
