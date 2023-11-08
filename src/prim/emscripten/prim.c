@@ -12,11 +12,42 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/atomic.h"
 #include "mimalloc/prim.h"
 
+// Design
+// ======
+//
+// mimalloc is built on top of emmalloc. emmalloc is a minimal allocator on top
+// of sbrk. The reason for having three layers here is that we want mimalloc to
+// be able to allocate and release system memory properly, the same way it would
+// when using VirtualAlloc on Windows or mmap on POSIX, and sbrk is too limited.
+// Specifically, sbrk can only go up and down, and not "skip" over regions, and
+// so we end up either never freeing memory to the system, or we can get stuck
+// with holes.
+//
+// Atm wasm generally does *not* free memory back the system: once grown, we do
+// not shrink back down (https://github.com/WebAssembly/design/issues/1397).
+// However, that is expected to improve
+// (https://github.com/WebAssembly/memory-control/blob/main/proposals/memory-control/Overview.md)
+// and so we do not want to bake those limitations in here.
+//
+// Even without that issue, we want our system allocator to handle holes, that
+// is, it should merge freed regions and allow allocating new content there of
+// the full size, etc., so that we do not waste space. That means that the
+// system allocator really does need to handle the general problem of allocating
+// and freeing variable-sized chunks of memory in a random order, like malloc/
+// free do. And so it makes sense to layer mimalloc on top of such an
+// implementation.
+//
+// emmalloc makes sense for the lower level because it is small and simple while
+// still fully handling merging of holes etc. It is not the most efficient
+// allocator, but our assumption is that mimalloc needs to be fast while the
+// system allocator underneath it is called much less frequently.
+//
+
 //---------------------------------------------
 // init
 //---------------------------------------------
 
-void _mi_prim_mem_init( mi_os_mem_config_t* config ) {
+void _mi_prim_mem_init( mi_os_mem_config_t* config) {
   config->page_size = 64*MI_KiB; // WebAssembly has a fixed page size: 64KiB
   config->alloc_granularity = 16;
   config->has_overcommit = false;
@@ -24,16 +55,9 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config ) {
   config->has_virtual_reserve = false;
 }
 
-//---------------------------------------------
-// Free, Allocation: We use emmalloc as the
-// "system allocator". That is a small
-// allocator that still has the ability to
-// properly return memory to the OS.
-//---------------------------------------------
-
 extern void emmalloc_free(void*);
 
-int _mi_prim_free(void* addr, size_t size ) {
+int _mi_prim_free(void* addr, size_t size) {
   MI_UNUSED(size);
   emmalloc_free(addr);
   return 0;
@@ -55,8 +79,10 @@ int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_la
   //       scribble, and then down), but we could assert on that perhaps.
   *is_zero = false;
   // emmalloc has some limitations on alignment size.
-  // TODO: why does emmalloc ask for an align of 4MB? that ends up allocating
-  //       8, which wastes quite a lot for us in wasm.
+  // TODO: Why does mimalloc ask for an align of 4MB? that ends up allocating
+  //       8, which wastes quite a lot for us in wasm. If that is unavoidable,
+  //       we may want to improve emmalloc to support such alignment. See also
+  //       https://github.com/emscripten-core/emscripten/issues/20645
   #define MIN_EMMALLOC_ALIGN           8
   #define MAX_EMMALLOC_ALIGN (1024*1024)
   if (try_alignment < MIN_EMMALLOC_ALIGN) {
@@ -149,7 +175,7 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
 
 #include <emscripten/console.h>
 
-void _mi_prim_out_stderr( const char* msg ) {
+void _mi_prim_out_stderr( const char* msg) {
   emscripten_console_error(msg);
 }
 
@@ -172,9 +198,8 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
 //----------------------------------------------------------------
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
-  MI_UNUSED(buf);
-  MI_UNUSED(buf_len);
-  return false;
+  int err = getentropy(buf, buf_len);
+  return !err;
 }
 
 
