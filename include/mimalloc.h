@@ -164,6 +164,12 @@ mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, s
                                     size_t* current_rss, size_t* peak_rss,
                                     size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept;
 
+typedef size_t mi_threadid_t;
+
+mi_decl_export mi_threadid_t mi_override_thread(mi_threadid_t override_id);
+mi_decl_nodiscard mi_decl_export mi_threadid_t mi_thread_id(void);
+mi_decl_export void mi_restore_default_thread_id(void);
+
 // -------------------------------------------------------------------------------------
 // Aligned allocation
 // Note that `alignment` always follows `size` for consistency with unaligned

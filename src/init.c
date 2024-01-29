@@ -136,10 +136,23 @@ mi_decl_cache_align static const mi_tld_t tld_empty = {
   { MI_STATS_NULL }       // stats
 };
 
+mi_decl_thread mi_threadid_t _mi_override_thread_id = 0;
+mi_decl_thread bool _mi_use_override_thread_id = false;
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
+  if (_mi_use_override_thread_id)
+    return _mi_override_thread_id;
   return _mi_prim_thread_id();
 }
+mi_threadid_t mi_override_thread(mi_threadid_t override_id) {
+  mi_threadid_t prev_id = _mi_thread_id();
+  _mi_use_override_thread_id = true;
+  _mi_override_thread_id = override_id;
+  return prev_id;
+}
 
+void mi_restore_default_thread_id(void) { _mi_use_override_thread_id = false; }
+
+mi_threadid_t mi_thread_id(void) { return _mi_thread_id(); }
 // the thread-local default heap for allocation
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 
