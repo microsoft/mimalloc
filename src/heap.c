@@ -314,6 +314,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   }
   mi_heap_stat_decrease(heap, malloc, bsize * inuse);  // todo: off for aligned blocks...
 #endif
+  heap->allocated -= page->used * mi_page_usable_block_size(page);
 
   /// pretend it is all free now
   mi_assert_internal(mi_page_thread_free(page) == NULL);

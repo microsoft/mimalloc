@@ -109,20 +109,22 @@ const mi_page_t _mi_page_empty = {
 // --------------------------------------------------------
 
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
-  NULL,
-  MI_SMALL_PAGES_EMPTY,
-  MI_PAGE_QUEUES_EMPTY,
-  MI_ATOMIC_VAR_INIT(NULL),
-  0,                // tid
-  0,                // cookie
-  0,                // arena id
-  { 0, 0 },         // keys
-  { {0}, {0}, 0, true }, // random
-  0,                // page count
-  MI_BIN_FULL, 0,   // page retired min/max
-  NULL,             // next
-  false
-};
+    NULL,
+    MI_SMALL_PAGES_EMPTY,
+    MI_PAGE_QUEUES_EMPTY,
+    MI_ATOMIC_VAR_INIT(NULL),
+    0,                   // tid
+    0,                   // cookie
+    0,                   // arena id
+    {0, 0},              // keys
+    {{0}, {0}, 0, true}, // random
+    0,                   // page count
+    MI_BIN_FULL,
+    0,    // page retired min/max
+    NULL, // next
+    false,
+    0,
+    0};
 
 #define tld_empty_stats  ((mi_stats_t*)((uint8_t*)&tld_empty + offsetof(mi_tld_t,stats)))
 #define tld_empty_os     ((mi_os_tld_t*)((uint8_t*)&tld_empty + offsetof(mi_tld_t,os)))
@@ -166,21 +168,23 @@ static mi_tld_t tld_main = {
   { MI_STATS_NULL }       // stats
 };
 
-mi_heap_t _mi_heap_main = {
-  &tld_main,
-  MI_SMALL_PAGES_EMPTY,
-  MI_PAGE_QUEUES_EMPTY,
-  MI_ATOMIC_VAR_INIT(NULL),
-  0,                // thread id
-  0,                // initial cookie
-  0,                // arena id
-  { 0, 0 },         // the key of the main heap can be fixed (unlike page keys that need to be secure!)
-  { {0x846ca68b}, {0}, 0, true },  // random
-  0,                // page count
-  MI_BIN_FULL, 0,   // page retired min/max
-  NULL,             // next heap
-  false             // can reclaim
-};
+mi_heap_t _mi_heap_main = {&tld_main,
+                           MI_SMALL_PAGES_EMPTY,
+                           MI_PAGE_QUEUES_EMPTY,
+                           MI_ATOMIC_VAR_INIT(NULL),
+                           0,      // thread id
+                           0,      // initial cookie
+                           0,      // arena id
+                           {0, 0}, // the key of the main heap can be fixed
+                                   // (unlike page keys that need to be secure!)
+                           {{0x846ca68b}, {0}, 0, true}, // random
+                           0,                            // page count
+                           MI_BIN_FULL,
+                           0,     // page retired min/max
+                           NULL,  // next heap
+                           false, // can reclaim
+                           0,
+                           0};
 
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 

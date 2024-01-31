@@ -35,6 +35,7 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   // pop from the free list
   page->used++;
+  heap->allocated += mi_page_usable_block_size(page);
   page->free = mi_block_next(page, block);
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
   #if MI_DEBUG>3
@@ -349,17 +350,17 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   #if (MI_STAT < 2)  
   MI_UNUSED(block);
   #endif
-  mi_heap_t* const heap = mi_heap_get_default();
+  mi_heap_t *const heap = mi_heap_get_default();
   const size_t bsize = mi_page_usable_block_size(page);
-  #if (MI_STAT>1)
+#if (MI_STAT > 1)
   const size_t usize = mi_page_usable_size_of(page, block);
   mi_heap_stat_decrease(heap, malloc, usize);
-  #endif  
+#endif
   if (bsize <= MI_MEDIUM_OBJ_SIZE_MAX) {
     mi_heap_stat_decrease(heap, normal, bsize);
-    #if (MI_STAT > 1)
+#if (MI_STAT > 1)
     mi_heap_stat_decrease(heap, normal_bins[_mi_bin(bsize)], 1);
-    #endif
+#endif
   }
   else if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
     mi_heap_stat_decrease(heap, large, bsize);
@@ -484,6 +485,8 @@ static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block
     mi_block_set_next(page, block, page->local_free);
     page->local_free = block;
     page->used--;
+    mi_heap_t *heap = mi_heap_get_default();
+    heap->allocated -= mi_page_usable_block_size(page);
     if mi_unlikely(mi_page_all_free(page)) {
       _mi_page_retire(page);
     }
@@ -579,6 +582,7 @@ void mi_free(void* p) mi_attr_noexcept
       mi_track_free_size(p, mi_page_usable_size_of(page,block)); // faster then mi_usable_size as we already know the page and that p is unaligned
       mi_block_set_next(page, block, page->local_free);
       page->local_free = block;
+      mi_heap_get_default()->allocated -= mi_page_usable_block_size(page);
       if mi_unlikely(--page->used == 0) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))
         _mi_page_retire(page);
       }

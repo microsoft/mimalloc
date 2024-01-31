@@ -413,17 +413,10 @@ void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
   _mi_stats_print(mi_stats_get_default(), out, arg);
 }
 
-void mi_thread_stats(int64_t *allocated, int64_t *committed,
-                     int64_t *reserved) mi_attr_noexcept {
-  mi_stats_t *stat = mi_stats_get_default();
-  if (stat != NULL) {
-    *reserved = stat->reserved.current;
-    *committed = stat->page_committed.current;
-    *allocated = 1;
-    *allocated += stat->normal.current;
-    *allocated += stat->large.current;
-    *allocated += stat->huge.current;
-  }
+void mi_thread_stats(int64_t *allocated, int64_t *committed) mi_attr_noexcept {
+  mi_heap_t *heap = mi_heap_get_default();
+  *committed = heap->committed;
+  *allocated = heap->allocated;
 }
 
 // ----------------------------------------------------------------

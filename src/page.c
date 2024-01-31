@@ -213,6 +213,10 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
 
   // update counts now
   page->used -= count;
+  mi_heap_t *heap = mi_page_heap(page);
+  if (heap) {
+    heap->allocated -= (count * mi_page_usable_block_size(page));
+  }
 }
 
 void _mi_page_free_collect(mi_page_t* page, bool force) {
@@ -648,6 +652,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld)
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;
+  heap->committed += (extend * bsize);
   mi_stat_increase(tld->stats.page_committed, extend * bsize);
   mi_assert_expensive(mi_page_is_valid_init(page));
 }

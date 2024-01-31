@@ -45,8 +45,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_TRACK_ASAN     1
 // #define MI_TRACK_ETW      1
 
-// Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
-#define MI_STAT 1
+// Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed
+// statistics (but costs some performance). #define MI_STAT 1
 
 // Define MI_SECURE to enable security mitigations
 // #define MI_SECURE 1  // guard page around metadata
@@ -512,6 +512,8 @@ struct mi_heap_s {
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
+  uint64_t allocated;
+  uint64_t committed;
 };
 
 

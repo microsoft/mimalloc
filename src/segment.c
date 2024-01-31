@@ -895,6 +895,8 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   segment->kind = (required == 0 ? MI_SEGMENT_NORMAL : MI_SEGMENT_HUGE);
 
   // _mi_memzero(segment->slices, sizeof(mi_slice_t)*(info_slices+1));
+  mi_heap_t *heap = mi_heap_get_default();
+  heap->committed += mi_segment_info_size(segment);
   _mi_stat_increase(&tld->stats->page_committed, mi_segment_info_size(segment));
 
   // set up guard pages
@@ -963,6 +965,10 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   mi_assert_internal(page_count == 2); // first page is allocated by the segment itself
 
   // stats
+  if (segment->thread_id != 0) {
+    mi_heap_t *heap = mi_heap_get_default();
+    heap->committed -= mi_segment_info_size(segment);
+  }
   _mi_stat_decrease(&tld->stats->page_committed, mi_segment_info_size(segment));
 
   // return it to the OS
@@ -984,6 +990,10 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
   mi_assert_internal(segment->used > 0);
   
   size_t inuse = page->capacity * mi_page_block_size(page);
+  if (segment->thread_id != 0) {
+    mi_heap_t *heap = mi_heap_get_default();
+    heap->committed -= inuse;
+  }
   _mi_stat_decrease(&tld->stats->page_committed, inuse);
   _mi_stat_decrease(&tld->stats->pages, 1);
 
@@ -1557,6 +1567,7 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
     mi_block_set_next(page, block, page->free);
     page->free = block;
     page->used--;
+    heap->allocated -= mi_page_usable_block_size(page);
     page->is_zero = false;
     mi_assert(page->used == 0);
     mi_tld_t* tld = heap->tld;
