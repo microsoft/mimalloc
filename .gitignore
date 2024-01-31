@@ -5,5 +5,8 @@ ide/vs20??/*.vcxproj.filters
 ide/vs20??/.vs
 ide/vs20??/VTune*
 out/
+bld/
+.cache*
+compile_commands.json
 docs/
 *.zip

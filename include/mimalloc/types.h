@@ -46,7 +46,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_TRACK_ETW      1
 
 // Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
-// #define MI_STAT 1
+#define MI_STAT 1
 
 // Define MI_SECURE to enable security mitigations
 // #define MI_SECURE 1  // guard page around metadata

@@ -562,7 +562,8 @@ void mi_free(void* p) mi_attr_noexcept
 {
   if mi_unlikely(p == NULL) return;
   mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
-  const bool          is_local= (_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
+  const bool is_local =
+      (_mi_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
   mi_page_t* const    page    = _mi_segment_page_of(segment, p);
 
   if mi_likely(is_local) {                       // thread-local free?
