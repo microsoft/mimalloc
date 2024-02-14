@@ -206,7 +206,9 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 }
 
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
-  #if defined(__BIONIC__)
+  #if defined(__aarch64__) || defined(__arm__)
+    return (uintptr_t)__builtin_thread_pointer();
+  #elif defined(__BIONIC__)
     // issue #384, #495: on the Bionic libc (Android), slot 1 is the thread id
     // see: https://github.com/aosp-mirror/platform_bionic/blob/c44b1d0676ded732df4b3b21c5f798eacae93228/libc/platform/bionic/tls_defines.h#L86
     return (uintptr_t)mi_prim_tls_slot(1);
