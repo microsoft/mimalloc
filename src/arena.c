@@ -774,7 +774,7 @@ void _mi_arena_segment_mark_abandoned(mi_memid_t memid)
 // reclaim abandoned segments 
 mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_id_t* previous_id, size_t* previous_idx ) 
 {
-  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  const int max_arena = (int)mi_atomic_load_relaxed(&mi_arena_count);
   int arena_idx = *previous_id;
   size_t field_idx = mi_bitmap_index_field(*previous_idx);
   size_t bit_idx = mi_bitmap_index_bit_in_field(*previous_idx) + 1;
