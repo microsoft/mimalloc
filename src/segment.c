@@ -239,7 +239,7 @@ static void mi_page_purge(mi_segment_t* segment, mi_page_t* page, mi_segments_tl
   mi_assert_internal(page->used == 0);
   mi_assert_expensive(!mi_pages_purge_contains(page, tld));
   size_t psize;
-  void* start = mi_segment_raw_page_start(segment, page, &psize);  
+  void* start = mi_segment_raw_page_start(segment, page, &psize);
   const bool needs_recommit = _mi_os_purge(start, psize, tld->stats);
   if (needs_recommit) { page->is_committed = false; }
   page->used = 0;
@@ -249,7 +249,7 @@ static bool mi_page_ensure_committed(mi_segment_t* segment, mi_page_t* page, mi_
   if (page->is_committed) return true;
   mi_assert_internal(segment->allow_decommit);
   mi_assert_expensive(!mi_pages_purge_contains(page, tld));
-  
+
   size_t psize;
   uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
   bool is_zero = false;
@@ -259,8 +259,8 @@ static bool mi_page_ensure_committed(mi_segment_t* segment, mi_page_t* page, mi_
   page->is_committed = true;
   page->used = 0;
   page->is_zero_init = is_zero;
-  if (gsize > 0) { 
-    mi_segment_protect_range(start + psize, gsize, true); 
+  if (gsize > 0) {
+    mi_segment_protect_range(start + psize, gsize, true);
   }
   return true;
 }
@@ -296,7 +296,7 @@ static void mi_segment_schedule_purge(mi_segment_t* segment, mi_page_t* page, mi
     // purge immediately?
     mi_page_purge(segment, page, tld);
   }
-  else {
+  else if (mi_option_get(mi_option_purge_delay) > 0) {   // no purging if the delay is negative
     // otherwise push on the delayed page reset queue
     mi_page_queue_t* pq = &tld->pages_purge;
     // push on top
@@ -484,11 +484,11 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   for (size_t i = 0; i < segment->capacity; i++) {
     mi_page_t* page = &segment->pages[i];
     if (page->is_committed)  { committed_size += page_size;  }
-    if (!page->is_committed) { fully_committed = false; }    
+    if (!page->is_committed) { fully_committed = false; }
   }
   MI_UNUSED(fully_committed);
   mi_assert_internal((fully_committed && committed_size == segment_size) || (!fully_committed && committed_size < segment_size));
-    
+
   _mi_abandoned_await_readers(); // prevent ABA issue if concurrent readers try to access our memory (that might be purged)
   _mi_arena_free(segment, segment_size, committed_size, segment->memid, tld->stats);
 }
@@ -536,9 +536,9 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
       // commit failed; we cannot touch the memory: free the segment directly and return `NULL`
       _mi_arena_free(segment, segment_size, 0, memid, tld_os->stats);
       return NULL;
-    }    
+    }
   }
-  
+
   MI_UNUSED(info_size);
   segment->memid = memid;
   segment->allow_decommit = !memid.is_pinned;
@@ -581,7 +581,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
                               tld->peak_count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager  = !eager_delayed && mi_option_is_enabled(mi_option_eager_commit);
   const bool init_commit = eager; // || (page_kind >= MI_PAGE_LARGE);
-  
+
   // Allocate the segment from the OS (segment_size can change due to alignment)
   mi_segment_t* segment = mi_segment_os_alloc(eager_delayed, page_alignment, req_arena_id, pre_size, info_size, init_commit, init_segment_size, tld, os_tld);
   if (segment == NULL) return NULL;
@@ -609,7 +609,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   segment->segment_info_size = pre_size;
   segment->thread_id  = _mi_thread_id();
   segment->cookie = _mi_ptr_cookie(segment);
-  
+
   // set protection
   mi_segment_protect(segment, true, tld->os);
 
@@ -628,7 +628,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   // don't purge as we are freeing now
   mi_segment_remove_all_purges(segment, false /* don't force as we are about to free */, tld);
   mi_segment_remove_from_free_queue(segment, tld);
-  
+
   mi_assert_expensive(!mi_segment_queue_contains(&tld->small_free, segment));
   mi_assert_expensive(!mi_segment_queue_contains(&tld->medium_free, segment));
   mi_assert(segment->next == NULL);
@@ -655,10 +655,10 @@ static bool mi_segment_page_claim(mi_segment_t* segment, mi_page_t* page, mi_seg
 
   // check commit
   if (!mi_page_ensure_committed(segment, page, tld)) return false;
-  
+
   // set in-use before doing unreset to prevent delayed reset
   page->segment_in_use = true;
-  segment->used++;  
+  segment->used++;
   mi_assert_internal(page->segment_in_use && page->is_committed && page->used==0 && !mi_pages_purge_contains(page,tld));
   mi_assert_internal(segment->used <= segment->capacity);
   if (segment->used == segment->capacity && segment->page_kind <= MI_PAGE_MEDIUM) {
@@ -1134,7 +1134,7 @@ static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t block_s
 
 static mi_page_t* mi_segment_find_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(mi_segment_has_free(segment));
-  mi_assert_expensive(mi_segment_is_valid(segment, tld));  
+  mi_assert_expensive(mi_segment_is_valid(segment, tld));
   for (size_t i = 0; i < segment->capacity; i++) {  // TODO: use a bitmap instead of search?
     mi_page_t* page = &segment->pages[i];
     if (!page->segment_in_use) {
@@ -1274,7 +1274,7 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
   mi_assert_internal(page->free == NULL);
   if (segment->allow_decommit && page->is_committed) {
     size_t usize = mi_usable_size(block);
-    if (usize > sizeof(mi_block_t)) { 
+    if (usize > sizeof(mi_block_t)) {
       usize = usize - sizeof(mi_block_t);
       uint8_t* p = (uint8_t*)block + sizeof(mi_block_t);
       _mi_os_reset(p, usize, &_mi_stats_main);
