@@ -373,7 +373,6 @@ typedef struct mi_segment_s {
   size_t               segment_size;     // for huge pages this may be different from `MI_SEGMENT_SIZE`
   
   // segment fields
-  _Atomic(struct mi_segment_s*) abandoned_next;
   struct mi_segment_s* next;             // must be the first segment field after abandoned_next -- see `segment.c:segment_init`
   struct mi_segment_s* prev;
 

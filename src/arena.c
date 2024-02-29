@@ -55,6 +55,7 @@ typedef struct mi_arena_s {
   mi_bitmap_field_t* blocks_dirty;        // are the blocks potentially non-zero?
   mi_bitmap_field_t* blocks_committed;    // are the blocks committed? (can be NULL for memory that cannot be decommitted)
   mi_bitmap_field_t* blocks_purge;        // blocks that can be (reset) decommitted. (can be NULL for memory that cannot be (reset) decommitted)
+  mi_bitmap_field_t* blocks_abandoned;    // blocks that start with an abandoned segment. (This crosses API's but it is convenient to have here)
   mi_bitmap_field_t  blocks_inuse[1];     // in-place bitmap of in-use blocks (of size `field_count`)
 } mi_arena_t;
 
@@ -727,6 +728,89 @@ bool _mi_arena_contains(const void* p) {
   return false;
 }
 
+/* -----------------------------------------------------------
+  Abandoned blocks/segments.
+  This is used to atomically abandon/reclaim segments 
+  (and crosses the arena API but it is convenient to have here).
+  Abandoned segments still have live blocks; they get reclaimed
+  when a thread frees in it, or when a thread needs a fresh
+  segment; these threads scan the abandoned segments through
+  the arena bitmaps.
+----------------------------------------------------------- */
+
+// reclaim a specific abandoned segment; `true` on success.
+bool _mi_arena_segment_clear_abandoned(mi_memid_t memid ) 
+{
+  if (memid.memkind != MI_MEM_ARENA) return true;  // not in an arena, consider it un-abandoned
+  size_t arena_idx;
+  size_t bitmap_idx;
+  mi_arena_memid_indices(memid, &arena_idx, &bitmap_idx);
+  mi_assert_internal(arena_idx < MI_MAX_ARENAS);
+  mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
+  mi_assert_internal(arena != NULL);
+  bool was_abandoned = _mi_bitmap_unclaim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx);
+  mi_assert_internal(was_abandoned);
+  mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
+  mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
+  return was_abandoned;
+}
+
+// mark a specific segment as abandoned
+void _mi_arena_segment_mark_abandoned(mi_memid_t memid) 
+{
+  if (memid.memkind != MI_MEM_ARENA) return;  // not in an arena
+  size_t arena_idx;
+  size_t bitmap_idx;
+  mi_arena_memid_indices(memid, &arena_idx, &bitmap_idx);
+  mi_assert_internal(arena_idx < MI_MAX_ARENAS);
+  mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
+  mi_assert_internal(arena != NULL);
+  const bool was_unset = _mi_bitmap_claim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx, NULL);
+  mi_assert_internal(was_unset);
+  mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
+}
+
+// reclaim abandoned segments 
+mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_id_t* previous_id, size_t* previous_idx ) 
+{
+  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  int arena_idx = *previous_id;
+  size_t field_idx = mi_bitmap_index_field(*previous_idx);
+  size_t bit_idx = mi_bitmap_index_bit_in_field(*previous_idx) + 1;
+  // visit arena's (from previous)
+  for( ; arena_idx < max_arena; arena_idx++, field_idx = 0, bit_idx = 0) {
+    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
+    if (arena != NULL) {
+      // visit the abandoned fields (starting at previous_idx)
+      for ( ; field_idx < arena->field_count; field_idx++, bit_idx = 0) {
+        mi_bitmap_field_t field = mi_atomic_load_relaxed(&arena->blocks_abandoned[field_idx]);
+        if mi_unlikely(field != 0) { // skip zero fields quickly
+          // visit each set bit in the field  (todo: maybe use `ctz` here?)
+          for ( ; bit_idx < MI_BITMAP_FIELD_BITS; bit_idx++) {
+            // pre-check if the bit is set
+            mi_bitmap_field_t mask = ((mi_bitmap_field_t)1 << bit_idx);
+            if mi_unlikely((field & mask) == mask) {
+              mi_bitmap_index_t bitmap_idx = mi_bitmap_index_create(field_idx, bit_idx);
+              // try to reclaim it atomically
+              if (_mi_bitmap_unclaim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx)) {
+                *previous_idx = bitmap_idx;
+                *previous_id = arena_idx;
+                mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
+                //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
+                return (mi_segment_t*)mi_arena_block_start(arena, bitmap_idx);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  // no more found
+  *previous_idx = 0;
+  *previous_id = 0;
+  return NULL;
+}
+
 
 /* -----------------------------------------------------------
   Add an arena.
@@ -760,13 +844,13 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
 
   const size_t bcount = size / MI_ARENA_BLOCK_SIZE;
   const size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);
-  const size_t bitmaps = (memid.is_pinned ? 2 : 4);
+  const size_t bitmaps = (memid.is_pinned ? 3 : 5);
   const size_t asize  = sizeof(mi_arena_t) + (bitmaps*fields*sizeof(mi_bitmap_field_t));
   mi_memid_t meta_memid;
   mi_arena_t* arena   = (mi_arena_t*)mi_arena_meta_zalloc(asize, &meta_memid, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
   if (arena == NULL) return false;
 
-  // already zero'd due to os_alloc
+  // already zero'd due to zalloc
   // _mi_memzero(arena, asize);
   arena->id = _mi_arena_id_none();
   arena->memid = memid;
@@ -780,9 +864,11 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   arena->is_large     = is_large;
   arena->purge_expire = 0;
   arena->search_idx   = 0;
-  arena->blocks_dirty = &arena->blocks_inuse[fields]; // just after inuse bitmap
-  arena->blocks_committed = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[2*fields]); // just after dirty bitmap
-  arena->blocks_purge  = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[3*fields]); // just after committed bitmap
+  // consequetive bitmaps
+  arena->blocks_dirty     = &arena->blocks_inuse[fields];     // just after inuse bitmap
+  arena->blocks_abandoned = &arena->blocks_inuse[2 * fields]; // just after dirty bitmap
+  arena->blocks_committed = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[3*fields]); // just after abandonde bitmap
+  arena->blocks_purge     = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[4*fields]); // just after committed bitmap
   // initialize committed bitmap?
   if (arena->blocks_committed != NULL && arena->memid.initially_committed) {
     memset((void*)arena->blocks_committed, 0xFF, fields*sizeof(mi_bitmap_field_t)); // cast to void* to avoid atomic warning

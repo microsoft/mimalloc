@@ -124,6 +124,10 @@ bool       _mi_arena_contains(const void* p);
 void       _mi_arena_collect(bool force_purge, mi_stats_t* stats);
 void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 
+bool          _mi_arena_segment_clear_abandoned(mi_memid_t memid);
+void          _mi_arena_segment_mark_abandoned(mi_memid_t memid);
+mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_id_t* current_id, size_t* current_idx);
+
 // "segment-map.c"
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
 void       _mi_segment_map_freed_at(const mi_segment_t* segment);

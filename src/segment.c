@@ -587,9 +587,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   if (segment == NULL) return NULL;
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
   mi_assert_internal(segment->memid.is_pinned ? segment->memid.initially_committed : true);
-
-  mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);  // tsan
-
+  
   // zero the segment info (but not the `mem` fields)
   ptrdiff_t ofs = offsetof(mi_segment_t, next);
   _mi_memzero((uint8_t*)segment + ofs, info_size - ofs);
@@ -743,171 +741,25 @@ Abandonment
 When threads terminate, they can leave segments with
 live blocks (reached through other threads). Such segments
 are "abandoned" and will be reclaimed by other threads to
-reuse their pages and/or free them eventually
+reuse their pages and/or free them eventually. The 
+`thread_id` of such segments is 0.
 
-We maintain a global list of abandoned segments that are
-reclaimed on demand. Since this is shared among threads
-the implementation needs to avoid the A-B-A problem on
-popping abandoned segments: <https://en.wikipedia.org/wiki/ABA_problem>
-We use tagged pointers to avoid accidentally identifying
-reused segments, much like stamped references in Java.
-Secondly, we maintain a reader counter to avoid resetting
-or decommitting segments that have a pending read operation.
+When a block is freed in an abandoned segment, the segment
+is reclaimed into that thread. 
 
-Note: the current implementation is one possible design;
-another way might be to keep track of abandoned segments
-in the regions. This would have the advantage of keeping
-all concurrent code in one place and not needing to deal
-with ABA issues. The drawback is that it is unclear how to
-scan abandoned segments efficiently in that case as they
-would be spread among all other segments in the regions.
+Moreover, if threads are looking for a fresh segment, they
+will first consider abondoned segments -- these can be found
+by scanning the arena memory 
+(segments outside arena memoryare only reclaimed by a free). 
 ----------------------------------------------------------- */
 
-// Use the bottom 20-bits (on 64-bit) of the aligned segment pointers
-// to put in a tag that increments on update to avoid the A-B-A problem.
-#define MI_TAGGED_MASK   MI_SEGMENT_MASK
-typedef uintptr_t        mi_tagged_segment_t;
+// Maintain these for debug purposes
+static mi_decl_cache_align _Atomic(size_t)abandoned_count;
 
-static mi_segment_t* mi_tagged_segment_ptr(mi_tagged_segment_t ts) {
-  return (mi_segment_t*)(ts & ~MI_TAGGED_MASK);
-}
 
-static mi_tagged_segment_t mi_tagged_segment(mi_segment_t* segment, mi_tagged_segment_t ts) {
-  mi_assert_internal(((uintptr_t)segment & MI_TAGGED_MASK) == 0);
-  uintptr_t tag = ((ts & MI_TAGGED_MASK) + 1) & MI_TAGGED_MASK;
-  return ((uintptr_t)segment | tag);
-}
-
-// This is a list of visited abandoned pages that were full at the time.
-// this list migrates to `abandoned` when that becomes NULL. The use of
-// this list reduces contention and the rate at which segments are visited.
-static mi_decl_cache_align _Atomic(mi_segment_t*)       abandoned_visited; // = NULL
-
-// The abandoned page list (tagged as it supports pop)
-static mi_decl_cache_align _Atomic(mi_tagged_segment_t) abandoned;         // = NULL
-
-// Maintain these for debug purposes (these counts may be a bit off)
-static mi_decl_cache_align _Atomic(size_t)           abandoned_count;
-static mi_decl_cache_align _Atomic(size_t)           abandoned_visited_count;
-
-// We also maintain a count of current readers of the abandoned list
-// in order to prevent resetting/decommitting segment memory if it might
-// still be read.
-static mi_decl_cache_align _Atomic(size_t)           abandoned_readers; // = 0
-
-// Push on the visited list
-static void mi_abandoned_visited_push(mi_segment_t* segment) {
-  mi_assert_internal(segment->thread_id == 0);
-  mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_segment_t,&segment->abandoned_next) == NULL);
-  mi_assert_internal(segment->next == NULL && segment->prev == NULL);
-  mi_assert_internal(segment->used > 0);
-  mi_segment_t* anext = mi_atomic_load_ptr_relaxed(mi_segment_t, &abandoned_visited);
-  do {
-    mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, anext);
-  } while (!mi_atomic_cas_ptr_weak_release(mi_segment_t, &abandoned_visited, &anext, segment));
-  mi_atomic_increment_relaxed(&abandoned_visited_count);
-}
-
-// Move the visited list to the abandoned list.
-static bool mi_abandoned_visited_revisit(void)
-{
-  // quick check if the visited list is empty
-  if (mi_atomic_load_ptr_relaxed(mi_segment_t, &abandoned_visited) == NULL) return false;
-
-  // grab the whole visited list
-  mi_segment_t* first = mi_atomic_exchange_ptr_acq_rel(mi_segment_t, &abandoned_visited, NULL);
-  if (first == NULL) return false;
-
-  // first try to swap directly if the abandoned list happens to be NULL
-  mi_tagged_segment_t afirst;
-  mi_tagged_segment_t ts = mi_atomic_load_relaxed(&abandoned);
-  if (mi_tagged_segment_ptr(ts)==NULL) {
-    size_t count = mi_atomic_load_relaxed(&abandoned_visited_count);
-    afirst = mi_tagged_segment(first, ts);
-    if (mi_atomic_cas_strong_acq_rel(&abandoned, &ts, afirst)) {
-      mi_atomic_add_relaxed(&abandoned_count, count);
-      mi_atomic_sub_relaxed(&abandoned_visited_count, count);
-      return true;
-    }
-  }
-
-  // find the last element of the visited list: O(n)
-  mi_segment_t* last = first;
-  mi_segment_t* next;
-  while ((next = mi_atomic_load_ptr_relaxed(mi_segment_t, &last->abandoned_next)) != NULL) {
-    last = next;
-  }
-
-  // and atomically prepend to the abandoned list
-  // (no need to increase the readers as we don't access the abandoned segments)
-  mi_tagged_segment_t anext = mi_atomic_load_relaxed(&abandoned);
-  size_t count;
-  do {
-    count = mi_atomic_load_relaxed(&abandoned_visited_count);
-    mi_atomic_store_ptr_release(mi_segment_t, &last->abandoned_next, mi_tagged_segment_ptr(anext));
-    afirst = mi_tagged_segment(first, anext);
-  } while (!mi_atomic_cas_weak_release(&abandoned, &anext, afirst));
-  mi_atomic_add_relaxed(&abandoned_count, count);
-  mi_atomic_sub_relaxed(&abandoned_visited_count, count);
-  return true;
-}
-
-// Push on the abandoned list.
-static void mi_abandoned_push(mi_segment_t* segment) {
-  mi_assert_internal(segment->thread_id == 0);
-  mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_segment_t, &segment->abandoned_next) == NULL);
-  mi_assert_internal(segment->next == NULL && segment->prev == NULL);
-  mi_assert_internal(segment->used > 0);
-  mi_tagged_segment_t next;
-  mi_tagged_segment_t ts = mi_atomic_load_relaxed(&abandoned);
-  do {
-    mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, mi_tagged_segment_ptr(ts));
-    next = mi_tagged_segment(segment, ts);
-  } while (!mi_atomic_cas_weak_release(&abandoned, &ts, next));
-  mi_atomic_increment_relaxed(&abandoned_count);
-}
-
-// Wait until there are no more pending reads on segments that used to be in the abandoned list
+// legacy: Wait until there are no more pending reads on segments that used to be in the abandoned list
 void _mi_abandoned_await_readers(void) {
-  size_t n;
-  do {
-    n = mi_atomic_load_acquire(&abandoned_readers);
-    if (n != 0) mi_atomic_yield();
-  } while (n != 0);
-}
-
-// Pop from the abandoned list
-static mi_segment_t* mi_abandoned_pop(void) {
-  mi_segment_t* segment;
-  // Check efficiently if it is empty (or if the visited list needs to be moved)
-  mi_tagged_segment_t ts = mi_atomic_load_relaxed(&abandoned);
-  segment = mi_tagged_segment_ptr(ts);
-  if mi_likely(segment == NULL) {
-    if mi_likely(!mi_abandoned_visited_revisit()) { // try to swap in the visited list on NULL
-      return NULL;
-    }
-  }
-
-  // Do a pop. We use a reader count to prevent
-  // a segment to be decommitted while a read is still pending,
-  // and a tagged pointer to prevent A-B-A link corruption.
-  // (this is called from `region.c:_mi_mem_free` for example)
-  mi_atomic_increment_relaxed(&abandoned_readers);  // ensure no segment gets decommitted
-  mi_tagged_segment_t next = 0;
-  ts = mi_atomic_load_acquire(&abandoned);
-  do {
-    segment = mi_tagged_segment_ptr(ts);
-    if (segment != NULL) {
-      mi_segment_t* anext = mi_atomic_load_ptr_relaxed(mi_segment_t, &segment->abandoned_next);
-      next = mi_tagged_segment(anext, ts); // note: reads the segment's `abandoned_next` field so should not be decommitted
-    }
-  } while (segment != NULL && !mi_atomic_cas_weak_acq_rel(&abandoned, &ts, next));
-  mi_atomic_decrement_relaxed(&abandoned_readers);  // release reader lock
-  if (segment != NULL) {
-    mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);
-    mi_atomic_decrement_relaxed(&abandoned_count);
-  }
-  return segment;
+  // nothing needed 
 }
 
 /* -----------------------------------------------------------
@@ -917,7 +769,6 @@ static mi_segment_t* mi_abandoned_pop(void) {
 static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(segment->used == segment->abandoned);
   mi_assert_internal(segment->used > 0);
-  mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_segment_t, &segment->abandoned_next) == NULL);
   mi_assert_expensive(mi_segment_is_valid(segment, tld));
 
   // remove the segment from the free page queue if needed
@@ -931,8 +782,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_segments_track_size(-((long)segment->segment_size), tld);
   segment->thread_id = 0;
   segment->abandoned_visits = 0;
-  mi_atomic_store_ptr_release(mi_segment_t, &segment->abandoned_next, NULL);
-  mi_abandoned_push(segment);
+  _mi_arena_segment_mark_abandoned(segment->memid); mi_atomic_increment_relaxed(&abandoned_count);
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
@@ -995,7 +845,6 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t block_size, bool
 // Reclaim a segment; returns NULL if the segment was freed
 // set `right_page_reclaimed` to `true` if it reclaimed a page of the right `block_size` that was not full.
 static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, size_t requested_block_size, bool* right_page_reclaimed, mi_segments_tld_t* tld) {
-  mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_segment_t, &segment->abandoned_next) == NULL);
   if (right_page_reclaimed != NULL) { *right_page_reclaimed = false; }
 
   segment->thread_id = _mi_thread_id();
@@ -1056,7 +905,10 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
 
 void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
   mi_segment_t* segment;
-  while ((segment = mi_abandoned_pop()) != NULL) {
+  mi_arena_id_t current_id = 0;
+  size_t        current_idx = 0;
+  while ((segment = _mi_arena_segment_clear_abandoned_next(&current_id, &current_idx)) != NULL) {
+    mi_atomic_decrement_relaxed(&abandoned_count);
     mi_segment_reclaim(segment, heap, 0, NULL, tld);
   }
 }
@@ -1065,8 +917,12 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
 {
   *reclaimed = false;
   mi_segment_t* segment;
-  long max_tries = mi_option_get_clamp(mi_option_max_segment_reclaim, 8, 1024);     // limit the work to bound allocation times
-  while ((max_tries-- > 0) && ((segment = mi_abandoned_pop()) != NULL)) {
+  mi_arena_id_t current_id = 0;
+  size_t        current_idx = 0;
+  long max_tries = mi_option_get_clamp(mi_option_max_segment_reclaim, 0, 1024);     // limit the work to bound allocation times
+  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current_id, &current_idx)) != NULL)) 
+  {
+    mi_atomic_decrement_relaxed(&abandoned_count);
     segment->abandoned_visits++;
     // todo: an arena exclusive heap will potentially visit many abandoned unsuitable segments
     // and push them into the visited list and use many tries. Perhaps we can skip non-suitable ones in a better way?
@@ -1092,9 +948,10 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
       mi_segment_reclaim(segment, heap, 0, NULL, tld);
     }
     else {
-      // otherwise, push on the visited list so it gets not looked at too quickly again
+      // otherwise, mark it back as abandoned
       // todo: reset delayed pages in the segment?
-      mi_abandoned_visited_push(segment);
+      mi_atomic_increment_relaxed(&abandoned_count);
+      _mi_arena_segment_mark_abandoned(segment->memid);
     }
   }
   return NULL;
