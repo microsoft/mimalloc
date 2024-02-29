@@ -749,9 +749,9 @@ bool _mi_arena_segment_clear_abandoned(mi_memid_t memid )
   mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
   mi_assert_internal(arena != NULL);
   bool was_abandoned = _mi_bitmap_unclaim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx);
-  mi_assert_internal(was_abandoned);
-  mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
-  mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
+  // mi_assert_internal(was_abandoned);
+  mi_assert_internal(!was_abandoned || _mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
+  //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
   return was_abandoned;
 }
 
@@ -766,6 +766,7 @@ void _mi_arena_segment_mark_abandoned(mi_memid_t memid)
   mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
   mi_assert_internal(arena != NULL);
   const bool was_unset = _mi_bitmap_claim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx, NULL);
+  MI_UNUSED_RELEASE(was_unset);
   mi_assert_internal(was_unset);
   mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
 }

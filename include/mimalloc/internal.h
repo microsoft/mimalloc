@@ -147,6 +147,7 @@ void       _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, m
 void       _mi_segment_thread_collect(mi_segments_tld_t* tld);
 void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
 void       _mi_abandoned_await_readers(void);
+bool       _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment);
 
 // "page.c"
 void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment)  mi_attr_noexcept mi_attr_malloc;
