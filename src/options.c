@@ -81,7 +81,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 100, UNINIT, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose
   { 16,  UNINIT, MI_OPTION(max_errors) },               // maximum errors that are output
   { 16,  UNINIT, MI_OPTION(max_warnings) },             // maximum warnings that are output
-  { 8,   UNINIT, MI_OPTION(max_segment_reclaim)},       // max. number of segment reclaims from the abandoned segments per try.
+  { 16,  UNINIT, MI_OPTION(max_segment_reclaim)},       // max. number of segment reclaims from the abandoned segments per try.
   { 0,   UNINIT, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
   #if (MI_INTPTR_SIZE>4)
   { 1024L * 1024L, UNINIT, MI_OPTION(arena_reserve) },  // reserve memory N KiB at a time
@@ -90,6 +90,7 @@ static mi_option_desc_t options[_mi_option_last] =
   #endif
   { 10,  UNINIT, MI_OPTION(arena_purge_mult) },        // purge delay multiplier for arena's
   { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
+  { 1,   UNINIT, MI_OPTION(abandoned_reclaim_on_free) }, // reclaim an abandoned segment on a free
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

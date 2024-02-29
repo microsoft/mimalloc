@@ -88,7 +88,7 @@ void       _mi_thread_data_collect(void);
 
 // os.c
 void       _mi_os_init(void);                                            // called from process init
-void*      _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);  
+void*      _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);
 void       _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats);
 void       _mi_os_free_ex(void* p, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* stats);
 
@@ -125,6 +125,10 @@ bool       _mi_arena_contains(const void* p);
 void       _mi_arena_collect(bool force_purge, mi_stats_t* stats);
 void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 
+bool          _mi_arena_segment_clear_abandoned(mi_memid_t memid);
+void          _mi_arena_segment_mark_abandoned(mi_memid_t memid);
+mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_id_t* current_id, size_t* current_idx);
+
 // "segment-map.c"
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
 void       _mi_segment_map_freed_at(const mi_segment_t* segment);
@@ -146,6 +150,7 @@ uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* 
 void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
 void       _mi_abandoned_await_readers(void);
 void       _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld);
+bool       _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment);
 
 // "page.c"
 void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment)  mi_attr_noexcept mi_attr_malloc;
@@ -427,7 +432,7 @@ static inline mi_slice_t* mi_page_to_slice(mi_page_t* p) {
 
 // Segment belonging to a page
 static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
-  mi_segment_t* segment = _mi_ptr_segment(page); 
+  mi_segment_t* segment = _mi_ptr_segment(page);
   mi_assert_internal(segment == NULL || ((mi_slice_t*)page >= segment->slices && (mi_slice_t*)page < segment->slices + segment->slice_entries));
   return segment;
 }
@@ -729,12 +734,12 @@ size_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, size_t* idx);
 
 #define mi_commit_mask_foreach(cm,idx,count) \
   idx = 0; \
-  while ((count = _mi_commit_mask_next_run(cm,&idx)) > 0) { 
-        
+  while ((count = _mi_commit_mask_next_run(cm,&idx)) > 0) {
+
 #define mi_commit_mask_foreach_end() \
     idx += count; \
   }
-      
+
 
 
 /* -----------------------------------------------------------
