@@ -162,6 +162,7 @@ static void* mi_arena_static_zalloc(size_t size, size_t alignment, mi_memid_t* m
 
   // success
   *memid = _mi_memid_create(MI_MEM_STATIC);
+  memid->initially_zero = true;
   const size_t start = _mi_align_up(oldtop, alignment);
   uint8_t* const p = &mi_arena_static[start];
   _mi_memzero(p, size);
@@ -179,8 +180,10 @@ static void* mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* st
   p = _mi_os_alloc(size, memid, stats);
   if (p == NULL) return NULL;
 
+  // zero the OS memory if needed
   if (!memid->initially_zero) {
     _mi_memzero_aligned(p, size);
+    memid->initially_zero = true;
   }
   return p;
 }
