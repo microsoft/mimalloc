@@ -412,7 +412,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
       mi_atomic_load_relaxed(&segment->thread_id) == 0) 
   {
     // the segment is abandoned, try to reclaim it into our heap
-    if (_mi_segment_attempt_reclaim(mi_prim_get_default_heap(), segment)) {
+    if (_mi_segment_attempt_reclaim(mi_heap_get_default(), segment)) {
       mi_assert_internal(_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
       mi_free(block);  // recursively free as now it will be a local free in our heap
       return;
