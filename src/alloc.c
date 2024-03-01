@@ -408,7 +408,10 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
 {
   // first see if the segment was abandoned and we can reclaim it
   mi_segment_t* const segment = _mi_page_segment(page);
-  if (mi_option_is_enabled(mi_option_abandoned_reclaim_on_free) &&
+  if (mi_option_is_enabled(mi_option_abandoned_reclaim_on_free) && 
+      #if MI_HUGE_PAGE_ABANDON
+      segment->page_kind != MI_PAGE_HUGE && 
+      #endif
       mi_atomic_load_relaxed(&segment->thread_id) == 0) 
   {
     // the segment is abandoned, try to reclaim it into our heap

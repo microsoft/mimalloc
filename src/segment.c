@@ -867,7 +867,6 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       // set the heap again and allow heap thread delayed free again.
       mi_page_set_heap(page, heap);
       _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, true); // override never (after heap is set)
-      // TODO: should we not collect again given that we just collected in `check_free`?
       _mi_page_free_collect(page, false); // ensure used count is up to date
       if (mi_page_all_free(page)) {
         // if everything free already, clear the page directly
@@ -906,8 +905,9 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
 bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
   if (mi_atomic_load_relaxed(&segment->thread_id) != 0) return false;  // it is not abandoned  
   if (_mi_arena_segment_clear_abandoned(segment->memid)) {  // atomically unabandon
+    mi_atomic_decrement_relaxed(&abandoned_count);
     mi_segment_t* res = mi_segment_reclaim(segment, heap, 0, NULL, &heap->tld->segments);
-    mi_assert_internal(res != NULL);
+    mi_assert_internal(res == segment);
     return (res != NULL);
   }
   return false;

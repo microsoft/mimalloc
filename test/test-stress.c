@@ -291,13 +291,14 @@ static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
   thread_entry_fun = fun;
   DWORD* tids = (DWORD*)custom_calloc(nthreads,sizeof(DWORD));
   HANDLE* thandles = (HANDLE*)custom_calloc(nthreads,sizeof(HANDLE));
-  for (uintptr_t i = 0; i < nthreads; i++) {
+  for (uintptr_t i = 1; i < nthreads; i++) {
     thandles[i] = CreateThread(0, 8*1024, &thread_entry, (void*)(i), 0, &tids[i]);
   }
-  for (size_t i = 0; i < nthreads; i++) {
+  fun(0); // run the main thread as well
+  for (size_t i = 1; i < nthreads; i++) {
     WaitForSingleObject(thandles[i], INFINITE);
   }
-  for (size_t i = 0; i < nthreads; i++) {
+  for (size_t i = 1; i < nthreads; i++) {
     CloseHandle(thandles[i]);
   }
   custom_free(tids);
@@ -325,10 +326,11 @@ static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
   pthread_t* threads = (pthread_t*)custom_calloc(nthreads,sizeof(pthread_t));
   memset(threads, 0, sizeof(pthread_t) * nthreads);
   //pthread_setconcurrency(nthreads);
-  for (size_t i = 0; i < nthreads; i++) {
+  for (size_t i = 1; i < nthreads; i++) {
     pthread_create(&threads[i], NULL, &thread_entry, (void*)i);
   }
-  for (size_t i = 0; i < nthreads; i++) {
+  fun(0); // run the main thread as well
+  for (size_t i = 1; i < nthreads; i++) {
     pthread_join(threads[i], NULL);
   }
   custom_free(threads);
