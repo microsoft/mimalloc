@@ -1042,10 +1042,6 @@ When a block is freed in an abandoned segment, the segment
 is reclaimed into that thread.
 ----------------------------------------------------------- */
 
-// Maintain these for debug purposes
-static mi_decl_cache_align _Atomic(size_t)abandoned_count;
-
-
 // legacy: Wait until there are no more pending reads on segments that used to be in the abandoned list
 void _mi_abandoned_await_readers(void) {
   // nothing needed
@@ -1082,7 +1078,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_segments_track_size(-((long)mi_segment_size(segment)), tld);
   segment->thread_id = 0;
   segment->abandoned_visits = 1;   // from 0 to 1 to signify it is abandoned
-  _mi_arena_segment_mark_abandoned(segment->memid); mi_atomic_increment_relaxed(&abandoned_count);
+  _mi_arena_segment_mark_abandoned(segment->memid);
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
@@ -1226,7 +1222,6 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
 bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
   if (mi_atomic_load_relaxed(&segment->thread_id) != 0) return false;  // it is not abandoned
   if (_mi_arena_segment_clear_abandoned(segment->memid)) {  // atomically unabandon
-    mi_atomic_decrement_relaxed(&abandoned_count);
     mi_segment_t* res = mi_segment_reclaim(segment, heap, 0, NULL, &heap->tld->segments);
     mi_assert_internal(res == segment);
     return (res != NULL);
@@ -1236,24 +1231,20 @@ bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
 
 void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
   mi_segment_t* segment;
-  mi_arena_id_t current_id = 0;
-  size_t        current_idx = 0;
-  while ((segment = _mi_arena_segment_clear_abandoned_next(&current_id, &current_idx)) != NULL) {
-    mi_atomic_decrement_relaxed(&abandoned_count);
+  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, &current);
+  while ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL) {
     mi_segment_reclaim(segment, heap, 0, NULL, tld);
   }
 }
 
 static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slices, size_t block_size, bool* reclaimed, mi_segments_tld_t* tld)
 {
-  *reclaimed = false;
+  *reclaimed = false;  
   mi_segment_t* segment;
-  mi_arena_id_t current_id = 0;
-  size_t        current_idx = 0;
+  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap,&current);
   long max_tries = mi_option_get_clamp(mi_option_max_segment_reclaim, 0, 1024);     // limit the work to bound allocation times
-  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current_id, &current_idx)) != NULL))
+  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL)) 
   {
-    mi_atomic_decrement_relaxed(&abandoned_count);
     segment->abandoned_visits++;
     // todo: an arena exclusive heap will potentially visit many abandoned unsuitable segments
     // and push them into the visited list and use many tries. Perhaps we can skip non-suitable ones in a better way?
@@ -1280,7 +1271,6 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
     else {
       // otherwise, push on the visited list so it gets not looked at too quickly again
       mi_segment_try_purge(segment, false /* true force? */, tld->stats); // force purge if needed as we may not visit soon again
-      mi_atomic_increment_relaxed(&abandoned_count);
       _mi_arena_segment_mark_abandoned(segment->memid);
     }
   }
@@ -1291,11 +1281,9 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
 void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
 {
   mi_segment_t* segment;
-  mi_arena_id_t current_id = 0;
-  size_t        current_idx = 0;
+  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, &current);
   int max_tries = (force ? 16*1024 : 1024); // limit latency  
-  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current_id,&current_idx)) != NULL)) {
-    mi_atomic_decrement_relaxed(&abandoned_count);
+  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL)) {
     mi_segment_check_free(segment,0,0,tld); // try to free up pages (due to concurrent frees)
     if (segment->used == 0) {
       // free the segment (by forced reclaim) to make it available to other threads.
@@ -1307,7 +1295,6 @@ void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
       // otherwise, purge if needed and push on the visited list
       // note: forced purge can be expensive if many threads are destroyed/created as in mstress.
       mi_segment_try_purge(segment, force, tld->stats);
-      mi_atomic_increment_relaxed(&abandoned_count);
       _mi_arena_segment_mark_abandoned(segment->memid);
     }
   }

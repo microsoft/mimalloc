@@ -125,9 +125,16 @@ bool       _mi_arena_contains(const void* p);
 void       _mi_arena_collect(bool force_purge, mi_stats_t* stats);
 void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 
-bool          _mi_arena_segment_clear_abandoned(mi_memid_t memid);
-void          _mi_arena_segment_mark_abandoned(mi_memid_t memid);
-mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_id_t* current_id, size_t* current_idx);
+bool       _mi_arena_segment_clear_abandoned(mi_memid_t memid);
+void       _mi_arena_segment_mark_abandoned(mi_memid_t memid);
+
+typedef struct mi_arena_field_cursor_s { // abstract
+  mi_arena_id_t  start;   
+  int            count;   
+  size_t         bitmap_idx;
+} mi_arena_field_cursor_t;
+void          _mi_arena_field_cursor_init(mi_heap_t* heap, mi_arena_field_cursor_t* current);
+mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* previous);
 
 // "segment-map.c"
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);

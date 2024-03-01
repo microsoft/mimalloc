@@ -741,6 +741,9 @@ bool _mi_arena_contains(const void* p) {
   the arena bitmaps.
 ----------------------------------------------------------- */
 
+// Maintain these for debug purposes
+static mi_decl_cache_align _Atomic(size_t)abandoned_count;
+
 // reclaim a specific abandoned segment; `true` on success.
 bool _mi_arena_segment_clear_abandoned(mi_memid_t memid ) 
 {
@@ -751,11 +754,12 @@ bool _mi_arena_segment_clear_abandoned(mi_memid_t memid )
   mi_assert_internal(arena_idx < MI_MAX_ARENAS);
   mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
   mi_assert_internal(arena != NULL);
-  bool was_abandoned = _mi_bitmap_unclaim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx);
-  // mi_assert_internal(was_abandoned);
-  mi_assert_internal(!was_abandoned || _mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
+  bool was_marked = _mi_bitmap_unclaim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx);
+  if (was_marked) { mi_atomic_decrement_relaxed(&abandoned_count); }
+  // mi_assert_internal(was_marked);
+  mi_assert_internal(!was_marked || _mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
   //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
-  return was_abandoned;
+  return was_marked;
 }
 
 // mark a specific segment as abandoned
@@ -768,21 +772,33 @@ void _mi_arena_segment_mark_abandoned(mi_memid_t memid)
   mi_assert_internal(arena_idx < MI_MAX_ARENAS);
   mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
   mi_assert_internal(arena != NULL);
-  const bool was_unset = _mi_bitmap_claim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx, NULL);
-  MI_UNUSED_RELEASE(was_unset);
-  mi_assert_internal(was_unset);
+  const bool was_unmarked = _mi_bitmap_claim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx, NULL);
+  if (was_unmarked) { mi_atomic_increment_relaxed(&abandoned_count); }
+  mi_assert_internal(was_unmarked);
   mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
 }
 
+// start a cursor at a randomized arena
+void _mi_arena_field_cursor_init(mi_heap_t* heap, mi_arena_field_cursor_t* current) {
+  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  current->start = (max_arena == 0 ? 0 : (mi_arena_id_t)( _mi_heap_random_next(heap) % max_arena));
+  current->count = 0;
+  current->bitmap_idx = 0;  
+}
+
 // reclaim abandoned segments 
-mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_id_t* previous_id, size_t* previous_idx ) 
+mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* previous ) 
 {
   const int max_arena = (int)mi_atomic_load_relaxed(&mi_arena_count);
-  int arena_idx = *previous_id;
-  size_t field_idx = mi_bitmap_index_field(*previous_idx);
-  size_t bit_idx = mi_bitmap_index_bit_in_field(*previous_idx) + 1;
+  if (max_arena <= 0 || mi_atomic_load_relaxed(&abandoned_count) == 0) return NULL;
+
+  int count = previous->count;
+  size_t field_idx = mi_bitmap_index_field(previous->bitmap_idx);
+  size_t bit_idx = mi_bitmap_index_bit_in_field(previous->bitmap_idx) + 1;
   // visit arena's (from previous)
-  for( ; arena_idx < max_arena; arena_idx++, field_idx = 0, bit_idx = 0) {
+  for (; count < max_arena; count++, field_idx = 0, bit_idx = 0) {
+    mi_arena_id_t arena_idx = previous->start + count;
+    if (arena_idx >= max_arena) { arena_idx = arena_idx % max_arena; } // wrap around
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
     if (arena != NULL) {
       // visit the abandoned fields (starting at previous_idx)
@@ -797,8 +813,9 @@ mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_id_t* previous_id,
               mi_bitmap_index_t bitmap_idx = mi_bitmap_index_create(field_idx, bit_idx);
               // try to reclaim it atomically
               if (_mi_bitmap_unclaim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx)) {
-                *previous_idx = bitmap_idx;
-                *previous_id = arena_idx;
+                mi_atomic_decrement_relaxed(&abandoned_count);
+                previous->bitmap_idx = bitmap_idx;
+                previous->count = count;
                 mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
                 //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
                 return (mi_segment_t*)mi_arena_block_start(arena, bitmap_idx);
@@ -810,8 +827,8 @@ mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_id_t* previous_id,
     }
   }
   // no more found
-  *previous_idx = 0;
-  *previous_id = 0;
+  previous->bitmap_idx = 0;
+  previous->count = 0;
   return NULL;
 }
 
