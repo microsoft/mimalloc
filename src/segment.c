@@ -910,22 +910,19 @@ bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
 
 void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
   mi_segment_t* segment;
-  mi_arena_id_t current_id = 0;
-  size_t        current_idx = 0;
-  while ((segment = _mi_arena_segment_clear_abandoned_next(&current_id, &current_idx)) != NULL) {
+  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, &current);
+  while ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL) {
     mi_segment_reclaim(segment, heap, 0, NULL, tld);
   }
 }
 
 static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, bool* reclaimed, mi_segments_tld_t* tld)
 {
-  *reclaimed = false;
-  
+  *reclaimed = false;  
   mi_segment_t* segment;
-  mi_arena_id_t current_id = 0;
-  size_t        current_idx = 0;
+  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap,&current);
   long max_tries = mi_option_get_clamp(mi_option_max_segment_reclaim, 0, 1024);     // limit the work to bound allocation times
-  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current_id, &current_idx)) != NULL)) 
+  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL)) 
   {
     segment->abandoned_visits++;
     // todo: an arena exclusive heap will potentially visit many abandoned unsuitable segments
