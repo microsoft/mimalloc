@@ -753,10 +753,6 @@ by scanning the arena memory
 (segments outside arena memoryare only reclaimed by a free). 
 ----------------------------------------------------------- */
 
-// Maintain these for debug purposes
-static mi_decl_cache_align _Atomic(size_t)abandoned_count;
-
-
 // legacy: Wait until there are no more pending reads on segments that used to be in the abandoned list
 void _mi_abandoned_await_readers(void) {
   // nothing needed 
@@ -782,7 +778,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_segments_track_size(-((long)segment->segment_size), tld);
   segment->thread_id = 0;
   segment->abandoned_visits = 0;
-  _mi_arena_segment_mark_abandoned(segment->memid); mi_atomic_increment_relaxed(&abandoned_count);
+  _mi_arena_segment_mark_abandoned(segment->memid);
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
@@ -905,7 +901,6 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
 bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
   if (mi_atomic_load_relaxed(&segment->thread_id) != 0) return false;  // it is not abandoned  
   if (_mi_arena_segment_clear_abandoned(segment->memid)) {  // atomically unabandon
-    mi_atomic_decrement_relaxed(&abandoned_count);
     mi_segment_t* res = mi_segment_reclaim(segment, heap, 0, NULL, &heap->tld->segments);
     mi_assert_internal(res == segment);
     return (res != NULL);
@@ -918,7 +913,6 @@ void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
   mi_arena_id_t current_id = 0;
   size_t        current_idx = 0;
   while ((segment = _mi_arena_segment_clear_abandoned_next(&current_id, &current_idx)) != NULL) {
-    mi_atomic_decrement_relaxed(&abandoned_count);
     mi_segment_reclaim(segment, heap, 0, NULL, tld);
   }
 }
@@ -926,15 +920,13 @@ void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
 static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, bool* reclaimed, mi_segments_tld_t* tld)
 {
   *reclaimed = false;
-  if (mi_atomic_load_relaxed(&abandoned_count) == 0) return NULL;
-
+  
   mi_segment_t* segment;
   mi_arena_id_t current_id = 0;
   size_t        current_idx = 0;
   long max_tries = mi_option_get_clamp(mi_option_max_segment_reclaim, 0, 1024);     // limit the work to bound allocation times
   while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current_id, &current_idx)) != NULL)) 
   {
-    mi_atomic_decrement_relaxed(&abandoned_count);
     segment->abandoned_visits++;
     // todo: an arena exclusive heap will potentially visit many abandoned unsuitable segments
     // and push them into the visited list and use many tries. Perhaps we can skip non-suitable ones in a better way?
@@ -962,7 +954,6 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
     else {
       // otherwise, mark it back as abandoned
       // todo: reset delayed pages in the segment?
-      mi_atomic_increment_relaxed(&abandoned_count);
       _mi_arena_segment_mark_abandoned(segment->memid);
     }
   }
