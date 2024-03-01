@@ -733,13 +733,17 @@ bool _mi_arena_contains(const void* p) {
   This is used to atomically abandon/reclaim segments 
   (and crosses the arena API but it is convenient to have here).
   Abandoned segments still have live blocks; they get reclaimed
-  when a thread frees in it, or when a thread needs a fresh
+  when a thread frees a block in it, or when a thread needs a fresh
   segment; these threads scan the abandoned segments through
   the arena bitmaps.
 ----------------------------------------------------------- */
 
-// Maintain these for debug purposes
+// Maintain a count of all abandoned segments
 static mi_decl_cache_align _Atomic(size_t)abandoned_count;
+
+size_t _mi_arena_segment_abandoned_count(void) {
+  return mi_atomic_load_relaxed(&abandoned_count);
+}
 
 // reclaim a specific abandoned segment; `true` on success.
 bool _mi_arena_segment_clear_abandoned(mi_memid_t memid ) 
@@ -885,7 +889,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   // consequetive bitmaps
   arena->blocks_dirty     = &arena->blocks_inuse[fields];     // just after inuse bitmap
   arena->blocks_abandoned = &arena->blocks_inuse[2 * fields]; // just after dirty bitmap
-  arena->blocks_committed = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[3*fields]); // just after abandonde bitmap
+  arena->blocks_committed = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[3*fields]); // just after abandoned bitmap
   arena->blocks_purge     = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[4*fields]); // just after committed bitmap
   // initialize committed bitmap?
   if (arena->blocks_committed != NULL && arena->memid.initially_committed) {
