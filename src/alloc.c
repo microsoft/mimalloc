@@ -404,10 +404,14 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   // first see if the segment was abandoned and we can reclaim it
   mi_segment_t* const segment = _mi_page_segment(page);
   if (mi_option_is_enabled(mi_option_abandoned_reclaim_on_free) &&
+      #if MI_HUGE_PAGE_ABANDON
+      segment->page_kind != MI_PAGE_HUGE &&
+      #endif
       mi_atomic_load_relaxed(&segment->thread_id) == 0)
   {
     // the segment is abandoned, try to reclaim it into our heap
-    if (_mi_segment_attempt_reclaim(mi_prim_get_default_heap(), segment)) {
+    mi_heap_t* heap = mi_heap_get_default();
+    if (heap->tld != NULL && _mi_segment_attempt_reclaim(heap, segment)) {
       mi_assert_internal(_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
       mi_free(block);  // recursively free as now it will be a local free in our heap
       return;
@@ -419,7 +423,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   mi_check_padding(page, block);
   _mi_padding_shrink(page, block, sizeof(mi_block_t));       // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
 
-  // huge page segments are always abandoned and can be freed immediately  
+  // huge page segments are always abandoned and can be freed immediately
   if (segment->kind == MI_SEGMENT_HUGE) {
     #if MI_HUGE_PAGE_ABANDON
     // huge page segments are always abandoned and can be freed immediately

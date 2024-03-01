@@ -1226,8 +1226,9 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
 bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
   if (mi_atomic_load_relaxed(&segment->thread_id) != 0) return false;  // it is not abandoned
   if (_mi_arena_segment_clear_abandoned(segment->memid)) {  // atomically unabandon
+    mi_atomic_decrement_relaxed(&abandoned_count);
     mi_segment_t* res = mi_segment_reclaim(segment, heap, 0, NULL, &heap->tld->segments);
-    mi_assert_internal(res != NULL);
+    mi_assert_internal(res == segment);
     return (res != NULL);
   }
   return false;
