@@ -1026,6 +1026,10 @@ void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
     // only abandoned pages; remove from free list and abandon
     mi_segment_abandon(segment,tld);
   }
+  else {
+    // perform delayed purges
+    mi_segment_try_purge(segment, false /* force? */, tld->stats);
+  }
 }
 
 
@@ -1239,17 +1243,17 @@ void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
 
 static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slices, size_t block_size, bool* reclaimed, mi_segments_tld_t* tld)
 {
-  *reclaimed = false;  
+  *reclaimed = false;
   mi_segment_t* segment;
   mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap,&current);
-  
+
   // limit the tries to 10% (default) of the abandoned segments with at least 8 tries, and at most 1024.
   const size_t perc = (size_t)mi_option_get_clamp(mi_option_max_segment_reclaim, 0, 100);
   if (perc <= 0) return NULL;
   const size_t abandoned_count = _mi_arena_segment_abandoned_count();
   const size_t relative_count = (abandoned_count > 10000 ? (abandoned_count / 100) * perc : (abandoned_count * perc) / 100); // avoid overflow
   long max_tries = (long)(relative_count < 8 ? 8 : (relative_count > 1024 ? 1024 : relative_count));
-  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL)) 
+  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL))
   {
     segment->abandoned_visits++;
     // todo: an arena exclusive heap will potentially visit many abandoned unsuitable segments
@@ -1288,7 +1292,7 @@ void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
 {
   mi_segment_t* segment;
   mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, &current);
-  int max_tries = (force ? 16*1024 : 1024); // limit latency  
+  int max_tries = (force ? 16*1024 : 1024); // limit latency
   while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL)) {
     mi_segment_check_free(segment,0,0,tld); // try to free up pages (due to concurrent frees)
     if (segment->used == 0) {
