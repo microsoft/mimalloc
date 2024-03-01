@@ -926,6 +926,8 @@ void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
 static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, bool* reclaimed, mi_segments_tld_t* tld)
 {
   *reclaimed = false;
+  if (mi_atomic_load_relaxed(&abandoned_count) == 0) return NULL;
+
   mi_segment_t* segment;
   mi_arena_id_t current_id = 0;
   size_t        current_idx = 0;
