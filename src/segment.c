@@ -1242,7 +1242,13 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
   *reclaimed = false;  
   mi_segment_t* segment;
   mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap,&current);
-  long max_tries = mi_option_get_clamp(mi_option_max_segment_reclaim, 0, 1024);     // limit the work to bound allocation times
+  
+  // limit the tries to 10% (default) of the abandoned segments with at least 8 tries, and at most 1024.
+  const size_t perc = (size_t)mi_option_get_clamp(mi_option_max_segment_reclaim, 0, 100);
+  if (perc <= 0) return NULL;
+  const size_t abandoned_count = _mi_arena_segment_abandoned_count();
+  const size_t relative_count = (abandoned_count > 10000 ? (abandoned_count / 100) * perc : (abandoned_count * perc) / 100); // avoid overflow
+  long max_tries = (long)(relative_count < 8 ? 8 : (relative_count > 1024 ? 1024 : relative_count));
   while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL)) 
   {
     segment->abandoned_visits++;
