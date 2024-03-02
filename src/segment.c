@@ -767,18 +767,21 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(segment->used > 0);
   mi_assert_expensive(mi_segment_is_valid(segment, tld));
 
-  // remove the segment from the free page queue if needed
+  // Potentially force purge. Only abandoned segments in arena memory can be
+  // reclaimed without a free so if a segment is not from an arena we force purge here to be conservative.
   mi_pages_try_purge(tld);
-  mi_segment_remove_all_purges(segment, mi_option_is_enabled(mi_option_abandoned_page_purge), tld);
+  const bool force_purge = (segment->memid.memkind != MI_MEM_ARENA) ||  mi_option_is_enabled(mi_option_abandoned_page_purge);
+  mi_segment_remove_all_purges(segment, force_purge, tld);
+
+  // remove the segment from the free page queue if needed
   mi_segment_remove_from_free_queue(segment, tld);
   mi_assert_internal(segment->next == NULL && segment->prev == NULL);
 
   // all pages in the segment are abandoned; add it to the abandoned list
   _mi_stat_increase(&tld->stats->segments_abandoned, 1);
   mi_segments_track_size(-((long)segment->segment_size), tld);
-  segment->thread_id = 0;
   segment->abandoned_visits = 0;
-  _mi_arena_segment_mark_abandoned(segment->memid);
+  _mi_arena_segment_mark_abandoned(segment);
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
@@ -842,8 +845,7 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t block_size, bool
 // set `right_page_reclaimed` to `true` if it reclaimed a page of the right `block_size` that was not full.
 static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, size_t requested_block_size, bool* right_page_reclaimed, mi_segments_tld_t* tld) {
   if (right_page_reclaimed != NULL) { *right_page_reclaimed = false; }
-
-  segment->thread_id = _mi_thread_id();
+  mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == _mi_thread_id());
   segment->abandoned_visits = 0;
   mi_segments_track_size((long)segment->segment_size, tld);
   mi_assert_internal(segment->next == NULL && segment->prev == NULL);
@@ -900,7 +902,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
 // attempt to reclaim a particular segment (called from multi threaded free `alloc.c:mi_free_block_mt`)
 bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
   if (mi_atomic_load_relaxed(&segment->thread_id) != 0) return false;  // it is not abandoned  
-  if (_mi_arena_segment_clear_abandoned(segment->memid)) {  // atomically unabandon
+  if (_mi_arena_segment_clear_abandoned(segment)) {  // atomically unabandon
     mi_segment_t* res = mi_segment_reclaim(segment, heap, 0, NULL, &heap->tld->segments);
     mi_assert_internal(res == segment);
     return (res != NULL);
@@ -916,18 +918,22 @@ void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
   }
 }
 
-static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, bool* reclaimed, mi_segments_tld_t* tld)
-{
-  *reclaimed = false;  
-  mi_segment_t* segment;
-  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap,&current);
-  
+static long mi_segment_get_reclaim_tries(void) {
   // limit the tries to 10% (default) of the abandoned segments with at least 8 tries, and at most 1024.
   const size_t perc = (size_t)mi_option_get_clamp(mi_option_max_segment_reclaim, 0, 100);
   if (perc <= 0) return NULL;
   const size_t abandoned_count = _mi_arena_segment_abandoned_count();
   const size_t relative_count = (abandoned_count > 10000 ? (abandoned_count / 100) * perc : (abandoned_count * perc) / 100); // avoid overflow
   long max_tries = (long)(relative_count < 8 ? 8 : (relative_count > 1024 ? 1024 : relative_count));
+  return max_tries;
+}
+
+static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, bool* reclaimed, mi_segments_tld_t* tld)
+{
+  *reclaimed = false;  
+  mi_segment_t* segment;
+  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap,&current);
+  long max_tries = mi_segment_get_reclaim_tries();
   while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL)) 
   {
     segment->abandoned_visits++;
@@ -957,7 +963,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
     else {
       // otherwise, mark it back as abandoned
       // todo: reset delayed pages in the segment?
-      _mi_arena_segment_mark_abandoned(segment->memid);
+      _mi_arena_segment_mark_abandoned(segment);
     }
   }
   return NULL;
