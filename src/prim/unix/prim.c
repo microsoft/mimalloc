@@ -51,7 +51,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/sysctl.h>
 #endif
 
-#if !defined(__HAIKU__) && !defined(__APPLE__) && !defined(__CYGWIN__) && !defined(__OpenBSD__)
+#if !defined(__HAIKU__) && !defined(__APPLE__) && !defined(__CYGWIN__) && !defined(__OpenBSD__) && !defined(__sun)
   #define MI_HAS_SYSCALL_H
   #include <sys/syscall.h>
 #endif
@@ -79,7 +79,7 @@ static int mi_prim_access(const char *fpath, int mode) {
   return syscall(SYS_access,fpath,mode);
 }
 
-#elif (!defined(__APPLE__) || MAC_OS_X_VERSION_MIN_REQUIRED < 1070)  // avoid unused warnings on macOS
+#elif (!defined(__APPLE__) || MAC_OS_X_VERSION_MIN_REQUIRED < 1070) && !defined(__sun) // avoid unused warnings on macOS and Solaris
 
 static int mi_prim_open(const char* fpath, int open_flags) {
   return open(fpath,open_flags);
