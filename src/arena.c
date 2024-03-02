@@ -754,7 +754,8 @@ bool _mi_arena_segment_clear_abandoned(mi_segment_t* segment )
   if (segment->memid.memkind != MI_MEM_ARENA) {
     // not in an arena, consider it un-abandoned now.
     // but we need to still claim it atomically -- we use the thread_id for that.
-    if (mi_atomic_cas_strong_acq_rel(&segment->thread_id, 0, _mi_thread_id())) {
+    size_t expected = 0;
+    if (mi_atomic_cas_strong_acq_rel(&segment->thread_id, &expected, _mi_thread_id())) {
       mi_atomic_decrement_relaxed(&abandoned_count);
       return true;
     }
