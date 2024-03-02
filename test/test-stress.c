@@ -267,7 +267,8 @@ int main(int argc, char** argv) {
 
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
-  mi_collect(true);
+  // mi_collect(true);
+  mi_debug_show_arenas(true,true,true);
   #endif
   mi_stats_print(NULL);
 #endif
