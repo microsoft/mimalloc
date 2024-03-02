@@ -213,11 +213,12 @@ static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
 }
 
 #elif defined(__has_builtin) && __has_builtin(__builtin_thread_pointer) && \
+      (!defined(__APPLE__)) && /* on apple (M1) the wrong register is read (tpidr_el0 instead of tpidrro_el0) so fall back to TLS slot assembly (<https://github.com/microsoft/mimalloc/issues/343#issuecomment-763272369>)*/ \
       (!defined(__clang_major__) || __clang_major__ >= 14)  // older clang versions emit bad code; fall back to using the TLS slot (<https://lore.kernel.org/linux-arm-kernel/202110280952.352F66D8@keescook/T/>)
 
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
   // Works on most Unix based platforms
-  return (uintptr_t)__builtin_thread_pointer();
+  return (uintptr_t)__builtin_thread_pointer();  
 }
 
 #elif defined(MI_HAS_TLS_SLOT)
