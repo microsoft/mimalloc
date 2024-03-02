@@ -27,10 +27,10 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf
-
+#include <fcntl.h>     // open, close, read, access
+  
 #if defined(__linux__)
   #include <features.h>
-  #include <fcntl.h>
   #if defined(__GLIBC__)
   #include <linux/mman.h> // linux mmap flags
   #else
@@ -51,7 +51,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/sysctl.h>
 #endif
 
-#if !defined(__HAIKU__) && !defined(__APPLE__) && !defined(__CYGWIN__)
+#if !defined(__HAIKU__) && !defined(__APPLE__) && !defined(__CYGWIN__) && !defined(__OpenBSD__)
   #define MI_HAS_SYSCALL_H
   #include <sys/syscall.h>
 #endif
@@ -80,8 +80,6 @@ static int mi_prim_access(const char *fpath, int mode) {
 }
 
 #elif (!defined(__APPLE__) || MAC_OS_X_VERSION_MIN_REQUIRED < 1070)  // avoid unused warnings on macOS
-
-#include <fcntl.h>
 
 static int mi_prim_open(const char* fpath, int open_flags) {
   return open(fpath,open_flags);
@@ -761,7 +759,6 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <errno.h>
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
