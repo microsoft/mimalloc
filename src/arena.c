@@ -749,17 +749,32 @@ size_t _mi_arena_segment_abandoned_count(void) {
 }
 
 // reclaim a specific abandoned segment; `true` on success.
-bool _mi_arena_segment_clear_abandoned(mi_memid_t memid ) 
+bool _mi_arena_segment_clear_abandoned(mi_segment_t* segment ) 
 {
-  if (memid.memkind != MI_MEM_ARENA) return true;  // not in an arena, consider it un-abandoned
+  if (segment->memid.memkind != MI_MEM_ARENA) {
+    // not in an arena, consider it un-abandoned now.
+    // but we need to still claim it atomically -- we use the thread_id for that.
+    if (mi_atomic_cas_strong_acq_rel(&segment->thread_id, 0, _mi_thread_id())) {
+      mi_atomic_decrement_relaxed(&abandoned_count);
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+  // arena segment: use the blocks_abandoned bitmap.
   size_t arena_idx;
   size_t bitmap_idx;
-  mi_arena_memid_indices(memid, &arena_idx, &bitmap_idx);
+  mi_arena_memid_indices(segment->memid, &arena_idx, &bitmap_idx);
   mi_assert_internal(arena_idx < MI_MAX_ARENAS);
   mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
   mi_assert_internal(arena != NULL);
   bool was_marked = _mi_bitmap_unclaim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx);
-  if (was_marked) { mi_atomic_decrement_relaxed(&abandoned_count); }
+  if (was_marked) { 
+    mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == 0);
+    mi_atomic_decrement_relaxed(&abandoned_count); 
+    mi_atomic_store_release(&segment->thread_id, _mi_thread_id());
+  }
   // mi_assert_internal(was_marked);
   mi_assert_internal(!was_marked || _mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
   //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
@@ -767,12 +782,18 @@ bool _mi_arena_segment_clear_abandoned(mi_memid_t memid )
 }
 
 // mark a specific segment as abandoned
-void _mi_arena_segment_mark_abandoned(mi_memid_t memid) 
+void _mi_arena_segment_mark_abandoned(mi_segment_t* segment) 
 {
-  if (memid.memkind != MI_MEM_ARENA) return;  // not in an arena
+  mi_atomic_store_release(&segment->thread_id, 0);
+  mi_assert_internal(segment->used == segment->abandoned);
+  if (segment->memid.memkind != MI_MEM_ARENA) {
+    // not in an arena; count it as abandoned and return
+    mi_atomic_increment_relaxed(&abandoned_count);
+    return;
+  }
   size_t arena_idx;
   size_t bitmap_idx;
-  mi_arena_memid_indices(memid, &arena_idx, &bitmap_idx);
+  mi_arena_memid_indices(segment->memid, &arena_idx, &bitmap_idx);
   mi_assert_internal(arena_idx < MI_MAX_ARENAS);
   mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
   mi_assert_internal(arena != NULL);
@@ -821,8 +842,11 @@ mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* pr
                 previous->bitmap_idx = bitmap_idx;
                 previous->count = count;
                 mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
+                mi_segment_t* segment = (mi_segment_t*)mi_arena_block_start(arena, bitmap_idx);
+                mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == 0);
+                mi_atomic_store_release(&segment->thread_id, _mi_thread_id());
                 //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
-                return (mi_segment_t*)mi_arena_block_start(arena, bitmap_idx);
+                return segment;
               }
             }
           }
