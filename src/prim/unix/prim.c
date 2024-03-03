@@ -45,6 +45,9 @@ terms of the MIT license. A copy of the license can be found in the file
   #if !TARGET_IOS_IPHONE && !TARGET_IOS_SIMULATOR
   #include <mach/vm_statistics.h>
   #endif
+  #if !defined(MAC_OS_X_VERSION_10_7)
+  #define MAC_OS_X_VERSION_10_7   1070
+  #endif
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
   #include <sys/param.h>
   #if __FreeBSD_version >= 1200000
@@ -83,7 +86,7 @@ static int mi_prim_access(const char *fpath, int mode) {
 }
 
 #elif !defined(__sun) && \
-      (!defined(__APPLE__) || (defined(MAC_OS_X_VERSION_10_7) && (MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_7)))  // avoid unused warnings on macOS and Solaris
+      (!defined(__APPLE__) || (MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_7))  // avoid unused warnings on macOS and Solaris
 
 static int mi_prim_open(const char* fpath, int open_flags) {
   return open(fpath,open_flags);
@@ -759,7 +762,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 #elif defined(__ANDROID__) || defined(__DragonFly__) || \
       defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
       defined(__sun) || \
-      (defined(__APPLE__) && defined(MAC_OS_X_VERSION_10_7) && (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_7))
+      (defined(__APPLE__) && (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_7))
 
 #include <stdlib.h>
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
