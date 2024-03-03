@@ -1166,7 +1166,6 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t slices_needed, s
 // Reclaim an abandoned segment; returns NULL if the segment was freed
 // set `right_page_reclaimed` to `true` if it reclaimed a page of the right `block_size` that was not full.
 static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, size_t requested_block_size, bool* right_page_reclaimed, mi_segments_tld_t* tld) {
-  mi_assert_expensive(mi_segment_is_valid(segment, tld));
   if (right_page_reclaimed != NULL) { *right_page_reclaimed = false; }
   // can be 0 still with abandoned_next, or already a thread id for segments outside an arena that are reclaimed on a free.
   mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == 0 || mi_atomic_load_relaxed(&segment->thread_id) == _mi_thread_id());
@@ -1216,6 +1215,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
   }
 
   mi_assert(segment->abandoned == 0);
+  mi_assert_expensive(mi_segment_is_valid(segment, tld));
   if (segment->used == 0) {  // due to page_clear
     mi_assert_internal(right_page_reclaimed == NULL || !(*right_page_reclaimed));
     mi_segment_free(segment, false, tld);
