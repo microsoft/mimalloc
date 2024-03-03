@@ -28,6 +28,7 @@ option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clan
 option(MI_SKIP_COLLECT_ON_EXIT "Skip collecting memory on program exit" OFF)
 option(MI_NO_PADDING        "Force no use of padding even in DEBUG mode etc." OFF)
 option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
+option(MI_NO_THP            "Disable transparent huge pages support on Linux/Android for the mimalloc process only" OFF)
 
 # deprecated options
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
@@ -128,7 +129,7 @@ endif()
 
 if(MI_SECURE)
   message(STATUS "Set full secure build (MI_SECURE=ON)")
-  list(APPEND mi_defines MI_SECURE=4)  
+  list(APPEND mi_defines MI_SECURE=4)
 endif()
 
 if(MI_TRACK_VALGRIND)
@@ -247,7 +248,7 @@ if(MI_DEBUG_UBSAN)
       message(WARNING "Can only use undefined-behavior sanitizer with clang++ (MI_DEBUG_UBSAN=ON but ignored)")
     endif()
   else()
-    message(WARNING "Can only use thread sanitizer with a debug build (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
+    message(WARNING "Can only use undefined-behavior sanitizer with a debug build (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
   endif()
 endif()
 
@@ -263,10 +264,18 @@ if(MI_USE_CXX)
   endif()
 endif()
 
-if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
-   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
-   SET(CMAKE_INSTALL_INCLUDEDIR ~/config/non-packaged/headers)
- endif()
+if(CMAKE_SYSTEM_NAME MATCHES "Linux|Android")
+  if(MI_NO_THP)
+    message(STATUS "Disable transparent huge pages support (MI_NO_THP=ON)")
+    list(APPEND mi_defines MI_NO_THP=1)
+  endif()
+endif()
+
+# On Haiku use `-DCMAKE_INSTALL_PREFIX` instead, issue #788
+# if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
+#   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
+#   SET(CMAKE_INSTALL_INCLUDEDIR ~/config/non-packaged/headers)
+# endif()
 
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
@@ -468,7 +477,7 @@ if (MI_BUILD_OBJECT)
     set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}")
     set(mimalloc-obj-out    "${CMAKE_CURRENT_BINARY_DIR}/${mi_basename}${CMAKE_C_OUTPUT_EXTENSION}")
     add_custom_command(OUTPUT ${mimalloc-obj-out} DEPENDS mimalloc-obj COMMAND "${CMAKE_COMMAND}" -E copy "${mimalloc-obj-static}" "${mimalloc-obj-out}")
-    add_custom_target(mimalloc-obj-target ALL DEPENDS ${mimalloc-obj-out})      
+    add_custom_target(mimalloc-obj-target ALL DEPENDS ${mimalloc-obj-out})
   endif()
 
   # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
