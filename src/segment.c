@@ -1168,7 +1168,9 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t slices_needed, s
 static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, size_t requested_block_size, bool* right_page_reclaimed, mi_segments_tld_t* tld) {
   mi_assert_expensive(mi_segment_is_valid(segment, tld));
   if (right_page_reclaimed != NULL) { *right_page_reclaimed = false; }
-  mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == _mi_thread_id());
+  // can be 0 still with abandoned_next, or already a thread id for segments outside an arena that are reclaimed on a free.
+  mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == 0 || mi_atomic_load_relaxed(&segment->thread_id) == _mi_thread_id());
+  mi_atomic_store_release(&segment->thread_id, _mi_thread_id());
   segment->abandoned_visits = 0;
   mi_segments_track_size((long)mi_segment_size(segment), tld);
   mi_assert_internal(segment->next == NULL);
