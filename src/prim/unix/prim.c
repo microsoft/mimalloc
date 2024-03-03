@@ -82,7 +82,8 @@ static int mi_prim_access(const char *fpath, int mode) {
   return syscall(SYS_access,fpath,mode);
 }
 
-#elif (!defined(__APPLE__) || MAC_OS_X_VERSION_MIN_REQUIRED < 1070) && !defined(__sun) // avoid unused warnings on macOS and Solaris
+#elif !defined(__sun) && \
+      (!defined(__APPLE__) || (defined(MAC_OS_X_VERSION_10_7) && (MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_7)))  // avoid unused warnings on macOS and Solaris
 
 static int mi_prim_open(const char* fpath, int open_flags) {
   return open(fpath,open_flags);
@@ -749,7 +750,7 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
 // Random
 //----------------------------------------------------------------
 
-#if defined(MAC_OS_X_VERSION_10_15) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_15 && MAC_OS_X_VERSION_MIN_REQUIRED >= 1070
+#if defined(__APPLE__) && defined(MAC_OS_X_VERSION_10_15) && (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_15)
 #include <CommonCrypto/CommonCryptoError.h>
 #include <CommonCrypto/CommonRandom.h>
 
@@ -762,7 +763,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 #elif defined(__ANDROID__) || defined(__DragonFly__) || \
       defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
       defined(__sun) || \
-      (defined(MAC_OS_X_VERSION_10_10) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_10 && MAC_OS_X_VERSION_MIN_REQUIRED >= 1070)
+      (defined(__APPLE__) && defined(MAC_OS_X_VERSION_10_7) && (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_7))
 
 #include <stdlib.h>
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
@@ -770,7 +771,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   return true;
 }
 
-#elif defined(__APPLE__) || defined(__linux__) || defined(__HAIKU__)   // for old apple versions < 1070 (issue #829)
+#elif defined(__APPLE__) || defined(__linux__) || defined(__HAIKU__)   // also for old apple versions < 10.7 (issue #829)
 
 #include <sys/types.h>
 #include <sys/stat.h>
