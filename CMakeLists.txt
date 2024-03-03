@@ -28,6 +28,7 @@ option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clan
 option(MI_SKIP_COLLECT_ON_EXIT "Skip collecting memory on program exit" OFF)
 option(MI_NO_PADDING        "Force no use of padding even in DEBUG mode etc." OFF)
 option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
+option(MI_NO_THP            "Force disable transparent huge pages support on Linux/Android process wise only" OFF)
 
 # deprecated options
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
@@ -260,6 +261,13 @@ if(MI_USE_CXX)
   endif()
   if(CMAKE_CXX_COMPILER_ID MATCHES "Intel" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM")
     list(APPEND mi_cflags -Kc++)
+  endif()
+endif()
+
+if(CMAKE_SYSTEM_NAME MATCHES "Linux|Android")
+  if(MI_NO_THP)
+    message(STATUS "Disable transparent huge pages support (MI_NO_THP=ON)")
+    list(APPEND mi_defines MI_NO_THP=1)
   endif()
 endif()
 

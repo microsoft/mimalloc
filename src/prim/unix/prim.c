@@ -31,6 +31,7 @@ terms of the MIT license. A copy of the license can be found in the file
   
 #if defined(__linux__)
   #include <features.h>
+  #include <sys/prctl.h>
   #if defined(__GLIBC__)
   #include <linux/mman.h> // linux mmap flags
   #else
@@ -128,6 +129,20 @@ static bool unix_detect_overcommit(void) {
   return os_overcommit;
 }
 
+void unix_set_thp(void) {
+#if defined(__linux__) || defined(__ANDROID__)
+#if MI_NO_THP
+  int val;
+  if (prctl(PR_GET_THP_DISABLE, &val, 0, 0, 0) != 0) {
+    // Most likely since distros often come with always/madvise settings.
+    val = 1;
+    // Disabling only for mimalloc process rather than touching system wide settings
+    (void)prctl(PR_SET_THP_DISABLE, &val, 0, 0, 0);
+  }
+#endif
+#endif
+}
+
 void _mi_prim_mem_init( mi_os_mem_config_t* config ) {
   long psize = sysconf(_SC_PAGESIZE);
   if (psize > 0) {
@@ -138,6 +153,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config ) {
   config->has_overcommit = unix_detect_overcommit();
   config->must_free_whole = false;    // mmap can free in parts
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
+  unix_set_thp();
 }
 
 
