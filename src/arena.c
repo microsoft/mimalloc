@@ -457,7 +457,7 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks, 
     // and also undo the decommit stats (as it was already adjusted)
     mi_assert_internal(mi_option_is_enabled(mi_option_purge_decommits));
     needs_recommit = _mi_os_purge_ex(p, size, false /* allow reset? */, stats);
-    _mi_stat_increase(&stats->committed, size);
+    if (needs_recommit) { _mi_stat_increase(&_mi_stats_main.committed, size); }
   }
 
   // clear the purged blocks
@@ -614,7 +614,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
     // was a direct OS allocation, pass through
     if (!all_committed && committed_size > 0) {
       // if partially committed, adjust the committed stats (as `_mi_os_free` will increase decommit by the full size)
-      _mi_stat_decrease(&stats->committed, committed_size);
+      _mi_stat_decrease(&_mi_stats_main.committed, committed_size);
     }
     _mi_os_free(p, size, memid, stats);
   }
@@ -657,7 +657,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
         if (committed_size > 0) {
           // if partially committed, adjust the committed stats (is it will be recommitted when re-using)
           // in the delayed purge, we now need to not count a decommit if the range is not marked as committed.
-          _mi_stat_decrease(&stats->committed, committed_size);
+          _mi_stat_decrease(&_mi_stats_main.committed, committed_size);
         }
         // note: if not all committed, it may be that the purge will reset/decommit the entire range
         // that contains already decommitted parts. Since purge consistently uses reset or decommit that
@@ -879,7 +879,7 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id, mi_stats_t*
     mi_atomic_decrement_acq_rel(&mi_arena_count);
     return false;
   }
-  mi_stat_counter_increase(stats->arena_count,1);
+  _mi_stat_counter_increase(&stats->arena_count,1);
   arena->id = mi_arena_id_create(i);
   mi_atomic_store_ptr_release(mi_arena_t,&mi_arenas[i], arena);
   if (arena_id != NULL) { *arena_id = arena->id; }
