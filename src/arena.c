@@ -832,12 +832,12 @@ mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* pr
     if (arena != NULL) {
       // visit the abandoned fields (starting at previous_idx)
       for ( ; field_idx < arena->field_count; field_idx++, bit_idx = 0) {
-        mi_bitmap_field_t field = mi_atomic_load_relaxed(&arena->blocks_abandoned[field_idx]);
+        size_t field = mi_atomic_load_relaxed(&arena->blocks_abandoned[field_idx]);
         if mi_unlikely(field != 0) { // skip zero fields quickly
           // visit each set bit in the field  (todo: maybe use `ctz` here?)
           for ( ; bit_idx < MI_BITMAP_FIELD_BITS; bit_idx++) {
             // pre-check if the bit is set
-            mi_bitmap_field_t mask = ((mi_bitmap_field_t)1 << bit_idx);
+            size_t mask = ((size_t)1 << bit_idx);
             if mi_unlikely((field & mask) == mask) {
               mi_bitmap_index_t bitmap_idx = mi_bitmap_index_create(field_idx, bit_idx);
               // try to reclaim it atomically
