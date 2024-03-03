@@ -207,10 +207,10 @@ static void* mi_arena_block_start(mi_arena_t* arena, mi_bitmap_index_t bindex) {
 ----------------------------------------------------------- */
 
 // claim the `blocks_inuse` bits
-static bool mi_arena_try_claim(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* bitmap_idx)
+static bool mi_arena_try_claim(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* bitmap_idx, mi_stats_t* stats)
 {
   size_t idx = 0; // mi_atomic_load_relaxed(&arena->search_idx);  // start from last search; ok to be relaxed as the exact start does not matter
-  if (_mi_bitmap_try_find_from_claim_across(arena->blocks_inuse, arena->field_count, idx, blocks, bitmap_idx)) {
+  if (_mi_bitmap_try_find_from_claim_across(arena->blocks_inuse, arena->field_count, idx, blocks, bitmap_idx, stats)) {
     mi_atomic_store_relaxed(&arena->search_idx, mi_bitmap_index_field(*bitmap_idx));  // start search from found location next time around
     return true;
   };
@@ -229,7 +229,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
   mi_assert_internal(mi_arena_id_index(arena->id) == arena_index);
 
   mi_bitmap_index_t bitmap_index;
-  if (!mi_arena_try_claim(arena, needed_bcount, &bitmap_index)) return NULL;
+  if (!mi_arena_try_claim(arena, needed_bcount, &bitmap_index, tld->stats)) return NULL;
 
   // claimed it!
   void* p = mi_arena_block_start(arena, bitmap_index);
@@ -735,7 +735,7 @@ bool _mi_arena_contains(const void* p) {
   Add an arena.
 ----------------------------------------------------------- */
 
-static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id) {
+static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id, mi_stats_t* stats) {
   mi_assert_internal(arena != NULL);
   mi_assert_internal((uintptr_t)mi_atomic_load_ptr_relaxed(uint8_t,&arena->start) % MI_SEGMENT_ALIGN == 0);
   mi_assert_internal(arena->block_count > 0);
@@ -746,6 +746,7 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id) {
     mi_atomic_decrement_acq_rel(&mi_arena_count);
     return false;
   }
+  mi_stat_counter_increase(stats->arena_count,1);
   arena->id = mi_arena_id_create(i);
   mi_atomic_store_ptr_release(mi_arena_t,&mi_arenas[i], arena);
   if (arena_id != NULL) { *arena_id = arena->id; }
@@ -799,7 +800,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
     mi_bitmap_index_t postidx = mi_bitmap_index_create(fields - 1, MI_BITMAP_FIELD_BITS - post);
     _mi_bitmap_claim(arena->blocks_inuse, fields, post, postidx, NULL);
   }
-  return mi_arena_add(arena, arena_id);
+  return mi_arena_add(arena, arena_id, &_mi_stats_main);
 
 }
 
