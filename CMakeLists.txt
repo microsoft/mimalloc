@@ -263,10 +263,11 @@ if(MI_USE_CXX)
   endif()
 endif()
 
-if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
-   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
-   SET(CMAKE_INSTALL_INCLUDEDIR ~/config/non-packaged/headers)
- endif()
+# On Haiku use `-DCMAKE_INSTALL_PREFIX` instead, issue #788
+# if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
+#   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
+#   SET(CMAKE_INSTALL_INCLUDEDIR ~/config/non-packaged/headers)
+# endif()
 
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
