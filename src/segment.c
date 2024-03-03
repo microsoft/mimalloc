@@ -836,7 +836,7 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
     if (!_mi_os_commit(segment, commit_needed*MI_COMMIT_SIZE, NULL, tld->stats)) {
       _mi_arena_free(segment,segment_size,0,memid,tld->stats);
       return NULL;
-    }    
+    }
   }
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
 

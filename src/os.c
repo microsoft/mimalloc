@@ -73,14 +73,6 @@ void _mi_os_init(void) {
 bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
 bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats);
 
-static void* mi_align_up_ptr(void* p, size_t alignment) {
-  return (void*)_mi_align_up((uintptr_t)p, alignment);
-}
-
-static void* mi_align_down_ptr(void* p, size_t alignment) {
-  return (void*)_mi_align_down((uintptr_t)p, alignment);
-}
-
 
 /* -----------------------------------------------------------
   aligned hinting

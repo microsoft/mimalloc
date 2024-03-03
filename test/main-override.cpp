@@ -108,7 +108,7 @@ static void various_tests() {
   auto tbuf = new unsigned char[sizeof(Test)];
   t = new (tbuf) Test(42);
   t->~Test();
-  delete tbuf;
+  delete[] tbuf;
 }
 
 class Static {
