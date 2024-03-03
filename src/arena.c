@@ -211,10 +211,10 @@ static void* mi_arena_block_start(mi_arena_t* arena, mi_bitmap_index_t bindex) {
 ----------------------------------------------------------- */
 
 // claim the `blocks_inuse` bits
-static bool mi_arena_try_claim(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* bitmap_idx)
+static bool mi_arena_try_claim(mi_arena_t* arena, size_t blocks, mi_bitmap_index_t* bitmap_idx, mi_stats_t* stats)
 {
   size_t idx = 0; // mi_atomic_load_relaxed(&arena->search_idx);  // start from last search; ok to be relaxed as the exact start does not matter
-  if (_mi_bitmap_try_find_from_claim_across(arena->blocks_inuse, arena->field_count, idx, blocks, bitmap_idx)) {
+  if (_mi_bitmap_try_find_from_claim_across(arena->blocks_inuse, arena->field_count, idx, blocks, bitmap_idx, stats)) {
     mi_atomic_store_relaxed(&arena->search_idx, mi_bitmap_index_field(*bitmap_idx));  // start search from found location next time around
     return true;
   };
@@ -233,7 +233,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
   mi_assert_internal(mi_arena_id_index(arena->id) == arena_index);
 
   mi_bitmap_index_t bitmap_index;
-  if (!mi_arena_try_claim(arena, needed_bcount, &bitmap_index)) return NULL;
+  if (!mi_arena_try_claim(arena, needed_bcount, &bitmap_index, tld->stats)) return NULL;
 
   // claimed it!
   void* p = mi_arena_block_start(arena, bitmap_index);
@@ -460,7 +460,7 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks, 
     // and also undo the decommit stats (as it was already adjusted)
     mi_assert_internal(mi_option_is_enabled(mi_option_purge_decommits));
     needs_recommit = _mi_os_purge_ex(p, size, false /* allow reset? */, stats);
-    _mi_stat_increase(&stats->committed, size);
+    if (needs_recommit) { _mi_stat_increase(&_mi_stats_main.committed, size); }
   }
 
   // clear the purged blocks
@@ -617,7 +617,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
     // was a direct OS allocation, pass through
     if (!all_committed && committed_size > 0) {
       // if partially committed, adjust the committed stats (as `_mi_os_free` will increase decommit by the full size)
-      _mi_stat_decrease(&stats->committed, committed_size);
+      _mi_stat_decrease(&_mi_stats_main.committed, committed_size);
     }
     _mi_os_free(p, size, memid, stats);
   }
@@ -660,7 +660,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
         if (committed_size > 0) {
           // if partially committed, adjust the committed stats (is it will be recommitted when re-using)
           // in the delayed purge, we now need to not count a decommit if the range is not marked as committed.
-          _mi_stat_decrease(&stats->committed, committed_size);
+          _mi_stat_decrease(&_mi_stats_main.committed, committed_size);
         }
         // note: if not all committed, it may be that the purge will reset/decommit the entire range
         // that contains already decommitted parts. Since purge consistently uses reset or decommit that
@@ -871,7 +871,7 @@ mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* pr
   Add an arena.
 ----------------------------------------------------------- */
 
-static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id) {
+static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id, mi_stats_t* stats) {
   mi_assert_internal(arena != NULL);
   mi_assert_internal((uintptr_t)mi_atomic_load_ptr_relaxed(uint8_t,&arena->start) % MI_SEGMENT_ALIGN == 0);
   mi_assert_internal(arena->block_count > 0);
@@ -882,6 +882,7 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id) {
     mi_atomic_decrement_acq_rel(&mi_arena_count);
     return false;
   }
+  _mi_stat_counter_increase(&stats->arena_count,1);
   arena->id = mi_arena_id_create(i);
   mi_atomic_store_ptr_release(mi_arena_t,&mi_arenas[i], arena);
   if (arena_id != NULL) { *arena_id = arena->id; }
@@ -937,7 +938,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
     mi_bitmap_index_t postidx = mi_bitmap_index_create(fields - 1, MI_BITMAP_FIELD_BITS - post);
     _mi_bitmap_claim(arena->blocks_inuse, fields, post, postidx, NULL);
   }
-  return mi_arena_add(arena, arena_id);
+  return mi_arena_add(arena, arena_id, &_mi_stats_main);
 
 }
 
