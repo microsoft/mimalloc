@@ -134,7 +134,7 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 // However, we do still use it with older clang compilers and Apple OS (as we use TLS slot for the default heap there).
 #if defined(__GNUC__) && ( \
            (defined(__GLIBC__)   && (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))) \
-        || (defined(__APPLE__)   && (defined(__x86_64__) || defined(__aarch64__))) \
+        || (defined(__APPLE__)   && (defined(__x86_64__) || defined(__aarch64__) || defined(__POWERPC__))) \
         || (defined(__BIONIC__)  && (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))) \
         || (defined(__FreeBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
         || (defined(__OpenBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
@@ -165,6 +165,9 @@ static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
     __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
     #endif
     res = tcb[slot];
+  #elif defined(__APPLE__) && defined(__POWERPC__) // ppc, issue #781
+    MI_UNUSED(ofs);
+    res = pthread_getspecific(slot);
   #endif
   return res;
 }
@@ -192,6 +195,9 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
     __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
     #endif
     tcb[slot] = value;
+  #elif defined(__APPLE__) && defined(__POWERPC__) // ppc, issue #781
+    MI_UNUSED(ofs);
+    pthread_setspecific(slot, value);    
   #endif
 }
 
