@@ -27,10 +27,10 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf
-
+#include <fcntl.h>     // open, close, read, access
+  
 #if defined(__linux__)
   #include <features.h>
-  #include <fcntl.h>
   #include <sys/prctl.h>
   #if defined(__GLIBC__)
   #include <linux/mman.h> // linux mmap flags
@@ -38,6 +38,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/mman.h>
   #endif
 #elif defined(__APPLE__)
+  #include <AvailabilityMacros.h>
   #include <TargetConditionals.h>
   #if !TARGET_IOS_IPHONE && !TARGET_IOS_SIMULATOR
   #include <mach/vm_statistics.h>
@@ -51,16 +52,18 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/sysctl.h>
 #endif
 
-#if !defined(__HAIKU__) && !defined(__APPLE__) && !defined(__CYGWIN__)
+#if !defined(__HAIKU__) && !defined(__APPLE__) && !defined(__CYGWIN__) && !defined(__OpenBSD__) && !defined(__sun)
   #define MI_HAS_SYSCALL_H
   #include <sys/syscall.h>
 #endif
+
 
 //------------------------------------------------------------------------------------
 // Use syscalls for some primitives to allow for libraries that override open/read/close etc.
 // and do allocation themselves; using syscalls prevents recursion when mimalloc is 
 // still initializing (issue #713)
 //------------------------------------------------------------------------------------
+
 
 #if defined(MI_HAS_SYSCALL_H) && defined(SYS_open) && defined(SYS_close) && defined(SYS_read) && defined(SYS_access)
 
@@ -77,7 +80,7 @@ static int mi_prim_access(const char *fpath, int mode) {
   return syscall(SYS_access,fpath,mode);
 }
 
-#elif !defined(__APPLE__)  // avoid unused warnings
+#elif (!defined(__APPLE__) || MAC_OS_X_VERSION_MIN_REQUIRED < 1070) && !defined(__sun) // avoid unused warnings on macOS and Solaris
 
 static int mi_prim_open(const char* fpath, int open_flags) {
   return open(fpath,open_flags);
@@ -292,7 +295,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         *is_large = true;
         p = unix_mmap_prim(addr, size, try_alignment, protect_flags, lflags, lfd);
         #ifdef MAP_HUGE_1GB
-        if (p == NULL && (lflags & MAP_HUGE_1GB) != 0) {
+        if (p == NULL && (lflags & MAP_HUGE_1GB) == MAP_HUGE_1GB) {
           mi_huge_pages_available = false; // don't try huge 1GiB pages again
           _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
           lflags = ((lflags & ~MAP_HUGE_1GB) | MAP_HUGE_2MB);
@@ -326,7 +329,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       #elif defined(__sun)
       if (allow_large && _mi_os_use_large_page(size, try_alignment)) {
         struct memcntl_mha cmd = {0};
-        cmd.mha_pagesize = large_os_page_size;
+        cmd.mha_pagesize = _mi_os_large_page_size();
         cmd.mha_cmd = MHA_MAPSIZE_VA;
         if (memcntl((caddr_t)p, size, MC_HAT_ADVISE, (caddr_t)&cmd, 0, 0) == 0) {
           *is_large = true;
@@ -747,28 +750,20 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
 // Random
 //----------------------------------------------------------------
 
-#if defined(__APPLE__)
-
-#include <AvailabilityMacros.h>
-#if defined(MAC_OS_X_VERSION_10_10) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_10
+#if defined(MAC_OS_X_VERSION_10_15) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_15 && MAC_OS_X_VERSION_MIN_REQUIRED >= 1070
 #include <CommonCrypto/CommonCryptoError.h>
 #include <CommonCrypto/CommonRandom.h>
-#endif
+
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
-  #if defined(MAC_OS_X_VERSION_10_15) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_15
-    // We prefere CCRandomGenerateBytes as it returns an error code while arc4random_buf
-    // may fail silently on macOS. See PR #390, and <https://opensource.apple.com/source/Libc/Libc-1439.40.11/gen/FreeBSD/arc4random.c.auto.html>
-    return (CCRandomGenerateBytes(buf, buf_len) == kCCSuccess);
-  #else
-    // fall back on older macOS
-    arc4random_buf(buf, buf_len);
-    return true;
-  #endif
+  // We prefere CCRandomGenerateBytes as it returns an error code while arc4random_buf
+  // may fail silently on macOS. See PR #390, and <https://opensource.apple.com/source/Libc/Libc-1439.40.11/gen/FreeBSD/arc4random.c.auto.html>
+  return (CCRandomGenerateBytes(buf, buf_len) == kCCSuccess);  
 }
 
 #elif defined(__ANDROID__) || defined(__DragonFly__) || \
       defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
-      defined(__sun) 
+      defined(__sun) || \
+      (defined(MAC_OS_X_VERSION_10_10) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_10 && MAC_OS_X_VERSION_MIN_REQUIRED >= 1070)
 
 #include <stdlib.h>
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
@@ -776,11 +771,10 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   return true;
 }
 
-#elif defined(__linux__) || defined(__HAIKU__)
+#elif defined(__APPLE__) || defined(__linux__) || defined(__HAIKU__)   // for old apple versions < 1070 (issue #829)
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <errno.h>
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
@@ -851,7 +845,9 @@ void _mi_prim_thread_init_auto_done(void) {
 }
 
 void _mi_prim_thread_done_auto_done(void) {
-  // nothing to do
+  if (_mi_heap_default_key != (pthread_key_t)(-1)) {  // do not leak the key, see issue #809
+    pthread_key_delete(_mi_heap_default_key);
+  }
 }
 
 void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {

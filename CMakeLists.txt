@@ -129,7 +129,7 @@ endif()
 
 if(MI_SECURE)
   message(STATUS "Set full secure build (MI_SECURE=ON)")
-  list(APPEND mi_defines MI_SECURE=4)  
+  list(APPEND mi_defines MI_SECURE=4)
 endif()
 
 if(MI_TRACK_VALGRIND)
@@ -271,11 +271,11 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux|Android")
   endif()
 endif()
 
-
-if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
-   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
-   SET(CMAKE_INSTALL_INCLUDEDIR ~/config/non-packaged/headers)
- endif()
+# On Haiku use `-DCMAKE_INSTALL_PREFIX` instead, issue #788
+# if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
+#   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
+#   SET(CMAKE_INSTALL_INCLUDEDIR ~/config/non-packaged/headers)
+# endif()
 
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
@@ -477,7 +477,7 @@ if (MI_BUILD_OBJECT)
     set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}")
     set(mimalloc-obj-out    "${CMAKE_CURRENT_BINARY_DIR}/${mi_basename}${CMAKE_C_OUTPUT_EXTENSION}")
     add_custom_command(OUTPUT ${mimalloc-obj-out} DEPENDS mimalloc-obj COMMAND "${CMAKE_COMMAND}" -E copy "${mimalloc-obj-static}" "${mimalloc-obj-out}")
-    add_custom_target(mimalloc-obj-target ALL DEPENDS ${mimalloc-obj-out})      
+    add_custom_target(mimalloc-obj-target ALL DEPENDS ${mimalloc-obj-out})
   endif()
 
   # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
