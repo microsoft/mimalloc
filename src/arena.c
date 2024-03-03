@@ -163,6 +163,7 @@ static void* mi_arena_static_zalloc(size_t size, size_t alignment, mi_memid_t* m
 
   // success
   *memid = _mi_memid_create(MI_MEM_STATIC);
+  memid->initially_zero = true;
   const size_t start = _mi_align_up(oldtop, alignment);
   uint8_t* const p = &mi_arena_static[start];
   _mi_memzero(p, size);
@@ -180,8 +181,10 @@ static void* mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* st
   p = _mi_os_alloc(size, memid, stats);
   if (p == NULL) return NULL;
 
+  // zero the OS memory if needed
   if (!memid->initially_zero) {
     _mi_memzero_aligned(p, size);
+    memid->initially_zero = true;
   }
   return p;
 }
@@ -480,7 +483,7 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t bitmap_idx, size_t
     // schedule decommit
     mi_msecs_t expire = mi_atomic_loadi64_relaxed(&arena->purge_expire);
     if (expire != 0) {
-      mi_atomic_addi64_acq_rel(&arena->purge_expire, delay/10);  // add smallish extra delay
+      mi_atomic_addi64_acq_rel(&arena->purge_expire, (mi_msecs_t)(delay/10));  // add smallish extra delay
     }
     else {
       mi_atomic_storei64_release(&arena->purge_expire, _mi_clock_now() + delay);
@@ -524,7 +527,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force, mi
   if (!force && expire > now) return false;
 
   // reset expire (if not already set concurrently)
-  mi_atomic_casi64_strong_acq_rel(&arena->purge_expire, &expire, 0);
+  mi_atomic_casi64_strong_acq_rel(&arena->purge_expire, &expire, (mi_msecs_t)0);
 
   // potential purges scheduled, walk through the bitmap
   bool any_purged = false;
