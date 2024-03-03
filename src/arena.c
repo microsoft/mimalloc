@@ -746,7 +746,7 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id, mi_stats_t*
     mi_atomic_decrement_acq_rel(&mi_arena_count);
     return false;
   }
-  mi_stat_counter_increase(stats->arena_count,1);
+  _mi_stat_counter_increase(&stats->arena_count,1);
   arena->id = mi_arena_id_create(i);
   mi_atomic_store_ptr_release(mi_arena_t,&mi_arenas[i], arena);
   if (arena_id != NULL) { *arena_id = arena->id; }
