@@ -600,6 +600,9 @@ typedef struct mi_stats_s {
   mi_stat_counter_t normal_count;
   mi_stat_counter_t huge_count;
   mi_stat_counter_t large_count;
+  mi_stat_counter_t arena_count;
+  mi_stat_counter_t arena_crossover_count;
+  mi_stat_counter_t arena_rollback_count;
 #if MI_STAT>1
   mi_stat_count_t normal_bins[MI_BIN_HUGE+1];
 #endif
