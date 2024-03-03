@@ -425,7 +425,7 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   #if defined(MI_TLS_SLOT)
   mi_prim_tls_slot_set(MI_TLS_SLOT,heap);
   #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
-  *mi_tls_pthread_heap_slot() = heap;
+  *mi_prim_tls_pthread_heap_slot() = heap;
   #elif defined(MI_TLS_PTHREAD)
   // we use _mi_heap_default_key
   #else
