@@ -473,6 +473,11 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   segment->thread_id = 0;
   _mi_segment_map_freed_at(segment);
   mi_segments_track_size(-((long)segment_size),tld);
+  if (segment->was_reclaimed) {
+    tld->reclaim_count--;
+    segment->was_reclaimed = false;
+  }
+
   if (MI_SECURE != 0) {
     mi_assert_internal(!segment->memid.is_pinned);
     mi_segment_protect(segment, false, tld->os); // ensure no more guard pages are set
@@ -488,7 +493,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   }
   MI_UNUSED(fully_committed);
   mi_assert_internal((fully_committed && committed_size == segment_size) || (!fully_committed && committed_size < segment_size));
-
+  
   _mi_abandoned_await_readers(); // prevent ABA issue if concurrent readers try to access our memory (that might be purged)
   _mi_arena_free(segment, segment_size, committed_size, segment->memid, tld->stats);
 }
@@ -781,6 +786,10 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   _mi_stat_increase(&tld->stats->segments_abandoned, 1);
   mi_segments_track_size(-((long)segment->segment_size), tld);
   segment->abandoned_visits = 0;
+  if (segment->was_reclaimed) {
+    tld->reclaim_count--;
+    segment->was_reclaimed = false;
+  }
   _mi_arena_segment_mark_abandoned(segment);
 }
 
@@ -849,6 +858,8 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
   mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == 0 || mi_atomic_load_relaxed(&segment->thread_id) == _mi_thread_id());
   mi_atomic_store_release(&segment->thread_id, _mi_thread_id());
   segment->abandoned_visits = 0;
+  segment->was_reclaimed = true;
+  tld->reclaim_count++;
   mi_segments_track_size((long)segment->segment_size, tld);
   mi_assert_internal(segment->next == NULL && segment->prev == NULL);
   mi_assert_expensive(mi_segment_is_valid(segment, tld));
@@ -904,8 +915,11 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
 // attempt to reclaim a particular segment (called from multi threaded free `alloc.c:mi_free_block_mt`)
 bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
   if (mi_atomic_load_relaxed(&segment->thread_id) != 0) return false;  // it is not abandoned  
+  // don't reclaim more from a free than half the current segments
+  // this is to prevent a pure free-ing thread to start owning too many segments
+  if (heap->tld->segments.reclaim_count * 2 > heap->tld->segments.count) return false;  
   if (_mi_arena_segment_clear_abandoned(segment)) {  // atomically unabandon
-    mi_segment_t* res = mi_segment_reclaim(segment, heap, 0, NULL, &heap->tld->segments);
+    mi_segment_t* res = mi_segment_reclaim(segment, heap, 0, NULL, &heap->tld->segments);    
     mi_assert_internal(res == segment);
     return (res != NULL);
   }

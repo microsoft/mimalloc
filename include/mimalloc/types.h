@@ -375,6 +375,7 @@ typedef struct mi_segment_s {
   // segment fields
   struct mi_segment_s* next;             // must be the first segment field after abandoned_next -- see `segment.c:segment_init`
   struct mi_segment_s* prev;
+  bool                 was_reclaimed;    // true if it was reclaimed (used to limit on-free reclamation)
 
   size_t               abandoned;        // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
   size_t               abandoned_visits; // count how often this segment is visited in the abandoned list (to force reclaim if it is too long)
@@ -600,6 +601,7 @@ typedef struct mi_segments_tld_s {
   size_t              peak_count;   // peak number of segments
   size_t              current_size; // current size of all segments
   size_t              peak_size;    // peak size of all segments
+  size_t              reclaim_count;// number of reclaimed (abandoned) segments
   mi_stats_t*         stats;        // points to tld stats
   mi_os_tld_t*        os;           // points to os stats
 } mi_segments_tld_t;
