@@ -1262,8 +1262,8 @@ static long mi_segment_get_reclaim_tries(void) {
   // limit the tries to 10% (default) of the abandoned segments with at least 8 tries, and at most 1024.
   const size_t perc = (size_t)mi_option_get_clamp(mi_option_max_segment_reclaim, 0, 100);
   if (perc <= 0) return 0;
-  const size_t abandoned_count = _mi_arena_segment_abandoned_count();
-  const size_t relative_count = (abandoned_count > 10000 ? (abandoned_count / 100) * perc : (abandoned_count * perc) / 100); // avoid overflow
+  const size_t total_count = _mi_arena_segment_abandoned_count();
+  const size_t relative_count = (total_count > 10000 ? (total_count / 100) * perc : (total_count * perc) / 100); // avoid overflow
   long max_tries = (long)(relative_count < 8 ? 8 : (relative_count > 1024 ? 1024 : relative_count));
   return max_tries;
 }
