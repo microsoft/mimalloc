@@ -303,7 +303,7 @@ typedef struct mi_page_s {
   uint8_t               retire_expire : 7; // expiration count for retired blocks
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
-  uint32_t              used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
+  uint32_t              used;              // number of blocks in use (including blocks in `thread_free`)
   uint32_t              xblock_size;       // size available in each block (always `>0`)
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
 
