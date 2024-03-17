@@ -26,7 +26,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Fast allocation in a page: just pop from the free list.
 // Fall back to generic allocation only if the list is empty.
-extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept {
+// Note: in release mode the (inlined) routine is about 7 instructions with a single test.
+extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept 
+{
   mi_assert_internal(page->xblock_size==0||mi_page_block_size(page) >= size);
   mi_block_t* const block = page->free;
   if mi_unlikely(block == NULL) {
@@ -61,43 +63,43 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
     }    
   }
 
-#if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
+  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
   if (!zero && !mi_page_is_huge(page)) {
     memset(block, MI_DEBUG_UNINIT, mi_page_usable_block_size(page));
   }
-#elif (MI_SECURE!=0)
+  #elif (MI_SECURE!=0)
   if (!zero) { block->next = 0; } // don't leak internal data
-#endif
+  #endif
 
-#if (MI_STAT>0)
+  #if (MI_STAT>0)
   const size_t bsize = mi_page_usable_block_size(page);
   if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
     mi_heap_stat_increase(heap, normal, bsize);
     mi_heap_stat_counter_increase(heap, normal_count, 1);
-#if (MI_STAT>1)
+    #if (MI_STAT>1)
     const size_t bin = _mi_bin(bsize);
     mi_heap_stat_increase(heap, normal_bins[bin], 1);
-#endif
+    #endif
   }
-#endif
+  #endif
 
-#if MI_PADDING // && !MI_TRACK_ENABLED
+  #if MI_PADDING // && !MI_TRACK_ENABLED
   mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
   ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
-  #if (MI_DEBUG>=2)
-  mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
-  #endif
+    #if (MI_DEBUG>=2)
+    mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
+    #endif
   mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
   padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
   padding->delta  = (uint32_t)(delta);
-  #if MI_PADDING_CHECK
-  if (!mi_page_is_huge(page)) {
-    uint8_t* fill = (uint8_t*)padding - delta;
-    const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
-    for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
-  }
+    #if MI_PADDING_CHECK
+    if (!mi_page_is_huge(page)) {
+      uint8_t* fill = (uint8_t*)padding - delta;
+      const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
+      for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
+    }
+    #endif
   #endif
-#endif
 
   return block;
 }
@@ -112,9 +114,11 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   #if (MI_PADDING)
   if (size == 0) { size = sizeof(void*); }
   #endif
+  
   mi_page_t* page = _mi_heap_get_free_small_page(heap, size + MI_PADDING_SIZE);
   void* const p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE, zero);  
   mi_track_malloc(p,size,zero);
+
   #if MI_STAT>1
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
@@ -403,114 +407,30 @@ static void mi_stat_huge_free(const mi_page_t* page) {
 // Free
 // ------------------------------------------------------
 
-// multi-threaded free (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
-static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* block)
+// forward declaration of multi-threaded free (`_mt`) (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
+static mi_decl_noinline void mi_free_block_mt(mi_segment_t* segment, mi_page_t* page, mi_block_t* block);
+
+// regular free of a (thread local) block pointer
+// fast path written carefully to prevent spilling on the stack
+static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool check_full)
 {
-  // first see if the segment was abandoned and we can reclaim it
-  mi_segment_t* const segment = _mi_page_segment(page);
-  if (mi_option_is_enabled(mi_option_abandoned_reclaim_on_free) && 
-      #if MI_HUGE_PAGE_ABANDON
-      segment->page_kind != MI_PAGE_HUGE && 
-      #endif
-      mi_atomic_load_relaxed(&segment->thread_id) == 0) 
-  {
-    // the segment is abandoned, try to reclaim it into our heap
-    if (_mi_segment_attempt_reclaim(mi_heap_get_default(), segment)) {
-      mi_assert_internal(_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
-      mi_free(block);  // recursively free as now it will be a local free in our heap
-      return;
-    }
-  }
-  
-  // The padding check may access the non-thread-owned page for the key values.
-  // that is safe as these are constant and the page won't be freed (as the block is not freed yet).
+  // owning thread can free a block directly
+  if mi_unlikely(mi_check_is_double_free(page, block)) return;
   mi_check_padding(page, block);
-  _mi_padding_shrink(page, block, sizeof(mi_block_t));       // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
-
-  if (segment->page_kind == MI_PAGE_HUGE) {
-    #if MI_HUGE_PAGE_ABANDON
-    // huge page segments are always abandoned and can be freed immediately
-    mi_stat_huge_free(page);
-    _mi_segment_huge_page_free(segment, page, block);
-    return;
-    #else
-    // huge pages are special as they occupy the entire segment
-    // as these are large we reset the memory occupied by the page so it is available to other threads
-    // (as the owning thread needs to actually free the memory later).
-    _mi_segment_huge_page_reset(segment, page, block);
-    #endif
-  }  
-  
-  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
-  memset(block, MI_DEBUG_FREED, mi_usable_size(block));
+  mi_stat_free(page, block);
+  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
+  memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
   #endif
-
-  // Try to put the block on either the page-local thread free list, or the heap delayed free list.
-  mi_thread_free_t tfreex;
-  bool use_delayed;
-  mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
-  do {
-    use_delayed = (mi_tf_delayed(tfree) == MI_USE_DELAYED_FREE);
-    if mi_unlikely(use_delayed) {
-      // unlikely: this only happens on the first concurrent free in a page that is in the full list
-      tfreex = mi_tf_set_delayed(tfree,MI_DELAYED_FREEING);
-    }
-    else {
-      // usual: directly add to page thread_free list
-      mi_block_set_next(page, block, mi_tf_block(tfree));
-      tfreex = mi_tf_set_block(tfree,block);
-    }
-  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
-
-  if mi_unlikely(use_delayed) {
-    // racy read on `heap`, but ok because MI_DELAYED_FREEING is set (see `mi_heap_delete` and `mi_heap_collect_abandon`)
-    mi_heap_t* const heap = (mi_heap_t*)(mi_atomic_load_acquire(&page->xheap)); //mi_page_heap(page);
-    mi_assert_internal(heap != NULL);
-    if (heap != NULL) {
-      // add to the delayed free list of this heap. (do this atomically as the lock only protects heap memory validity)
-      mi_block_t* dfree = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
-      do {
-        mi_block_set_nextx(heap,block,dfree, heap->keys);
-      } while (!mi_atomic_cas_ptr_weak_release(mi_block_t,&heap->thread_delayed_free, &dfree, block));
-    }
-
-    // and reset the MI_DELAYED_FREEING flag
-    tfree = mi_atomic_load_relaxed(&page->xthread_free);
-    do {
-      tfreex = tfree;
-      mi_assert_internal(mi_tf_delayed(tfree) == MI_DELAYED_FREEING);
-      tfreex = mi_tf_set_delayed(tfree,MI_NO_DELAYED_FREE);
-    } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
+  mi_track_free_size(p, mi_page_usable_size_of(page,block)); // faster then mi_usable_size as we already know the page and that p is unaligned
+  mi_block_set_next(page, block, page->local_free);
+  page->local_free = block;
+  if mi_unlikely(--page->used == 0) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))
+    _mi_page_retire(page);
   }
+  else if mi_unlikely(check_full && mi_page_is_in_full(page)) {
+    _mi_page_unfull(page);
+  }  
 }
-
-// regular free
-static inline void _mi_free_block(mi_page_t* page, bool local, mi_block_t* block)
-{
-  // and push it on the free list
-  //const size_t bsize = mi_page_block_size(page);
-  if mi_likely(local) {
-    // owning thread can free a block directly
-    if mi_unlikely(mi_check_is_double_free(page, block)) return;
-    mi_check_padding(page, block);
-    #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
-    memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
-    #endif
-    mi_block_set_next(page, block, page->local_free);
-    page->local_free = block;
-    page->used--;
-    if mi_unlikely(mi_page_all_free(page)) {
-      _mi_page_retire(page);
-    }
-    else if mi_unlikely(mi_page_is_in_full(page)) {
-      _mi_page_unfull(page);
-    }
-  }
-  else {
-    _mi_free_block_mt(page,block);
-  }
-}
-
 
 // Adjust a block that was allocated aligned, to the actual start of the block in the page.
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p) {
@@ -520,17 +440,27 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
   return (mi_block_t*)((uintptr_t)p - adjust);
 }
 
-
-void mi_decl_noinline _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept {
+// free a local pointer
+static void mi_decl_noinline mi_free_generic_local(const mi_segment_t* segment, mi_page_t* page, void* p) mi_attr_noexcept {
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
-  mi_stat_free(page, block);    // stat_free may access the padding
-  mi_track_free_size(block, mi_page_usable_size_of(page,block));
-  _mi_free_block(page, is_local, block);
+  mi_free_block_local(page, block, true);
+}
+
+// free a pointer owned by another thread
+static void mi_decl_noinline mi_free_generic_mt(const mi_segment_t* segment, mi_page_t* page, void* p) mi_attr_noexcept {
+  mi_block_t* const block = _mi_page_ptr_unalign(segment, page, p); // don't check `has_aligned` flag to avoid a race (issue #865)
+  mi_free_block_mt(segment, page, block);
+}
+
+// generic free (for runtime integration)
+void mi_decl_noinline _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept {
+  if (is_local) mi_free_generic_local(segment,page,p);
+           else mi_free_generic_mt(segment,page,p);
 }
 
 // Get the segment data belonging to a pointer
-// This is just a single `and` in assembly but does further checks in debug mode
-// (and secure mode) if this was a valid pointer.
+// This is just a single `and` in release mode but does further checks in debug mode
+// (and secure mode) to see if this was a valid pointer.
 static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* msg)
 {
   MI_UNUSED(msg);
@@ -566,7 +496,7 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 }
 
 // Free a block
-// fast path written carefully to prevent spilling on the stack
+// Fast path written carefully to prevent register spilling on the stack
 void mi_free(void* p) mi_attr_noexcept
 {
   if mi_unlikely(p == NULL) return;
@@ -574,31 +504,20 @@ void mi_free(void* p) mi_attr_noexcept
   const bool          is_local= (_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
   mi_page_t* const    page    = _mi_segment_page_of(segment, p);
 
-  if mi_likely(is_local) {                       // thread-local free?
-    if mi_likely(page->flags.full_aligned == 0)  // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
-    {
+  if mi_likely(is_local) {                        // thread-local free?
+    if mi_likely(page->flags.full_aligned == 0) { // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
+      // thread-local, aligned, and not a full page
       mi_block_t* const block = (mi_block_t*)p;
-      if mi_unlikely(mi_check_is_double_free(page, block)) return;
-      mi_check_padding(page, block);
-      mi_stat_free(page, block);
-      #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
-      memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
-      #endif
-      mi_track_free_size(p, mi_page_usable_size_of(page,block)); // faster then mi_usable_size as we already know the page and that p is unaligned
-      mi_block_set_next(page, block, page->local_free);
-      page->local_free = block;
-      if mi_unlikely(--page->used == 0) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))
-        _mi_page_retire(page);
-      }
+      mi_free_block_local(page,block,false /* no need to check if the page is full */);
     }
     else {
       // page is full or contains (inner) aligned blocks; use generic path
-      _mi_free_generic(segment, page, true, p);
+      mi_free_generic_local(segment, page, p);
     }
   }
   else {
     // not thread-local; use generic path
-    _mi_free_generic(segment, page, false, p);
+    mi_free_generic_mt(segment, page, p);
   }
 }
 
@@ -623,9 +542,117 @@ bool _mi_free_delayed_block(mi_block_t* block) {
   _mi_page_free_collect(page, false);
 
   // and free the block (possibly freeing the page as well since used is updated)
-  _mi_free_block(page, true, block);
+  mi_free_block_local(page, block, true);
   return true;
 }
+
+// ------------------------------------------------------
+// Multi-threaded Free (`_mt`)
+// ------------------------------------------------------
+
+// Push a block that is owned by another thread on its page-local thread free
+// list or it's heap delayed free list. Such blocks are later collected by
+// the owning thread in `_mi_free_delayed_block`.
+static void mi_decl_noinline mi_free_block_delayed_mt( mi_page_t* page, mi_block_t* block )
+{
+  // Try to put the block on either the page-local thread free list, 
+  // or the heap delayed free list (if this is the first non-local free in that page)
+  mi_thread_free_t tfreex;
+  bool use_delayed;
+  mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
+  do {
+    use_delayed = (mi_tf_delayed(tfree) == MI_USE_DELAYED_FREE);
+    if mi_unlikely(use_delayed) {
+      // unlikely: this only happens on the first concurrent free in a page that is in the full list
+      tfreex = mi_tf_set_delayed(tfree,MI_DELAYED_FREEING);
+    }
+    else {
+      // usual: directly add to page thread_free list
+      mi_block_set_next(page, block, mi_tf_block(tfree));
+      tfreex = mi_tf_set_block(tfree,block);
+    }
+  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
+
+  // If this was the first non-local free, we need to push it on the heap delayed free list instead
+  if mi_unlikely(use_delayed) {
+    // racy read on `heap`, but ok because MI_DELAYED_FREEING is set (see `mi_heap_delete` and `mi_heap_collect_abandon`)
+    mi_heap_t* const heap = (mi_heap_t*)(mi_atomic_load_acquire(&page->xheap)); //mi_page_heap(page);
+    mi_assert_internal(heap != NULL);
+    if (heap != NULL) {
+      // add to the delayed free list of this heap. (do this atomically as the lock only protects heap memory validity)
+      mi_block_t* dfree = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
+      do {
+        mi_block_set_nextx(heap,block,dfree, heap->keys);
+      } while (!mi_atomic_cas_ptr_weak_release(mi_block_t,&heap->thread_delayed_free, &dfree, block));
+    }
+
+    // and reset the MI_DELAYED_FREEING flag
+    tfree = mi_atomic_load_relaxed(&page->xthread_free);
+    do {
+      tfreex = tfree;
+      mi_assert_internal(mi_tf_delayed(tfree) == MI_DELAYED_FREEING);
+      tfreex = mi_tf_set_delayed(tfree,MI_NO_DELAYED_FREE);
+    } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
+  }
+}
+
+// Multi-threaded free (`_mt`) (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
+static mi_decl_noinline void mi_free_block_mt(mi_segment_t* segment, mi_page_t* page, mi_block_t* block)
+{
+  // first see if the segment was abandoned and if we can reclaim it into our thread
+  if (mi_option_is_enabled(mi_option_abandoned_reclaim_on_free) && 
+      #if MI_HUGE_PAGE_ABANDON
+      segment->page_kind != MI_PAGE_HUGE && 
+      #endif
+      mi_atomic_load_relaxed(&segment->thread_id) == 0) 
+  {
+    // the segment is abandoned, try to reclaim it into our heap
+    if (_mi_segment_attempt_reclaim(mi_heap_get_default(), segment)) {
+      mi_assert_internal(_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
+      mi_free(block);  // recursively free as now it will be a local free in our heap
+      return;
+    }
+  }
+
+  // The padding check may access the non-thread-owned page for the key values.
+  // that is safe as these are constant and the page won't be freed (as the block is not freed yet).
+  mi_check_padding(page, block);
+  
+  // adjust stats (after padding check and potential recursive `mi_free` above)
+  mi_stat_free(page, block);    // stat_free may access the padding
+  mi_track_free_size(block, mi_page_usable_size_of(page,block));
+ 
+  // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
+  _mi_padding_shrink(page, block, sizeof(mi_block_t));       
+
+  if (segment->page_kind == MI_PAGE_HUGE) {
+    #if MI_HUGE_PAGE_ABANDON
+    // huge page segments are always abandoned and can be freed immediately
+    mi_stat_huge_free(page);
+    _mi_segment_huge_page_free(segment, page, block);
+    return;
+    #else
+    // huge pages are special as they occupy the entire segment
+    // as these are large we reset the memory occupied by the page so it is available to other threads
+    // (as the owning thread needs to actually free the memory later).
+    _mi_segment_huge_page_reset(segment, page, block);
+    #endif
+  }
+  else {
+    #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
+    memset(block, MI_DEBUG_FREED, mi_usable_size(block));
+    #endif
+  }
+  
+  // and finally free the actual block by pushing it on the owning heap
+  // thread_delayed free list (or heap delayed free list)
+  mi_free_block_delayed_mt(page,block);
+}
+
+
+// ------------------------------------------------------
+// Usable size
+// ------------------------------------------------------
 
 // Bytes available in a block
 mi_decl_noinline static size_t mi_page_usable_aligned_size_of(const mi_segment_t* segment, const mi_page_t* page, const void* p) mi_attr_noexcept {
