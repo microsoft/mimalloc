@@ -238,7 +238,9 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   mi_track_free_size(p, mi_page_usable_size_of(page,block)); // faster then mi_usable_size as we already know the page and that p is unaligned
   mi_block_set_next(page, block, page->local_free);
   page->local_free = block;
-  if mi_unlikely(--page->used == 0) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))
+  const uint32_t used = page->used - 1;
+  page->used = used;
+  if mi_unlikely(used == 0) {   // generates better code than: --page->used == 0
     _mi_page_retire(page);
   }
   else if mi_unlikely(check_full && mi_page_is_in_full(page)) {
