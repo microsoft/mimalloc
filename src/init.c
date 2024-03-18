@@ -21,9 +21,11 @@ const mi_page_t _mi_page_empty = {
   false,   // is_zero
   0,       // retire_expire
   NULL,    // free
-  0,       // used
-  0,       // xblock_size
   NULL,    // local_free
+  0,       // used
+  0,       // block size shift
+  0,       // block offset adj
+  0,       // xblock_size
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   { 0, 0 },
   #endif
@@ -93,8 +95,6 @@ const mi_page_t _mi_page_empty = {
 
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,
-  MI_SMALL_PAGES_EMPTY,
-  MI_PAGE_QUEUES_EMPTY,
   MI_ATOMIC_VAR_INIT(NULL),
   0,                // tid
   0,                // cookie
@@ -104,7 +104,9 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next
-  false
+  false,
+  MI_SMALL_PAGES_EMPTY,
+  MI_PAGE_QUEUES_EMPTY
 };
 
 
@@ -130,8 +132,6 @@ static mi_tld_t tld_main = {
 
 mi_heap_t _mi_heap_main = {
   &tld_main,
-  MI_SMALL_PAGES_EMPTY,
-  MI_PAGE_QUEUES_EMPTY,
   MI_ATOMIC_VAR_INIT(NULL),
   0,                // thread id
   0,                // initial cookie
@@ -141,7 +141,9 @@ mi_heap_t _mi_heap_main = {
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
-  false             // can reclaim
+  false,            // can reclaim
+  MI_SMALL_PAGES_EMPTY,
+  MI_PAGE_QUEUES_EMPTY
 };
 
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.

@@ -249,25 +249,30 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 // Adjust a block that was allocated aligned, to the actual start of the block in the page.
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
-  const size_t diff   = (uint8_t*)p - _mi_page_start(segment, page, NULL);
-  const size_t adjust = (diff % mi_page_block_size(page));
+  const size_t diff = (mi_likely(page->block_offset_adj != 0) 
+                        ? (uint8_t*)p - (uint8_t*)page - 8*(page->block_offset_adj-1)
+                        : (uint8_t*)p - _mi_page_start(segment, page, NULL));
+                      
+  const size_t adjust = (mi_likely(page->block_size_shift != 0) 
+                          ? diff & (((size_t)1 << page->block_size_shift) - 1)
+                          : diff % mi_page_block_size(page));
   return (mi_block_t*)((uintptr_t)p - adjust);
 }
 
 // free a local pointer
-static void mi_decl_noinline mi_free_generic_local(const mi_segment_t* segment, mi_page_t* page, void* p) mi_attr_noexcept {
+static void mi_decl_noinline mi_free_generic_local(mi_segment_t* segment, mi_page_t* page, void* p) mi_attr_noexcept {
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
   mi_free_block_local(page, block, true);
 }
 
 // free a pointer owned by another thread
-static void mi_decl_noinline mi_free_generic_mt(const mi_segment_t* segment, mi_page_t* page, void* p) mi_attr_noexcept {
+static void mi_decl_noinline mi_free_generic_mt(mi_segment_t* segment, mi_page_t* page, void* p) mi_attr_noexcept {
   mi_block_t* const block = _mi_page_ptr_unalign(segment, page, p); // don't check `has_aligned` flag to avoid a race (issue #865)
   mi_free_block_mt(segment, page, block);
 }
 
 // generic free (for runtime integration)
-void mi_decl_noinline _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept {
+void mi_decl_noinline _mi_free_generic(mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept {
   if (is_local) mi_free_generic_local(segment,page,p);
            else mi_free_generic_mt(segment,page,p);
 }
@@ -469,7 +474,7 @@ static mi_decl_noinline void mi_free_block_mt(mi_segment_t* segment, mi_page_t* 
 // ------------------------------------------------------
 
 // Bytes available in a block
-mi_decl_noinline static size_t mi_page_usable_aligned_size_of(const mi_segment_t* segment, const mi_page_t* page, const void* p) mi_attr_noexcept {
+static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_segment_t* segment, const mi_page_t* page, const void* p) mi_attr_noexcept {
   const mi_block_t* block = _mi_page_ptr_unalign(segment, page, p);
   const size_t size = mi_page_usable_size_of(page, block);
   const ptrdiff_t adjust = (uint8_t*)p - (uint8_t*)block;

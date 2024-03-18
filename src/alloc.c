@@ -37,8 +37,8 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   // pop from the free list
-  page->used++;
   page->free = mi_block_next(page, block);
+  page->used++;
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
   #if MI_DEBUG>3
   if (page->free_is_zero) {

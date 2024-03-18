@@ -660,7 +660,6 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_page_set_heap(page, heap);
   size_t page_size;
   const void*  page_start = _mi_segment_page_start(segment, page, block_size, &page_size, NULL);
-  MI_UNUSED(page_start);
   mi_track_mem_noaccess(page_start,page_size);
   page->xblock_size = (block_size < MI_HUGE_BLOCK_SIZE ? (uint32_t)block_size : MI_HUGE_BLOCK_SIZE);
   mi_assert_internal(page_size / block_size < (1L<<16));
@@ -677,6 +676,15 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
     mi_assert_expensive(!page->is_zero_init || mi_mem_is_zero(page_start, page_size));
   }
   #endif
+  if (_mi_is_power_of_two(block_size) && block_size > 0) {
+    page->block_size_shift = (uint32_t)(mi_ctz((uintptr_t)block_size));
+  }
+  const ptrdiff_t start_offset = (uint8_t*)page_start - (uint8_t*)page;
+  const ptrdiff_t start_adjust = start_offset % block_size;
+  if (start_offset >= 0 && (start_adjust % 8) == 0 && (start_adjust/8) < 255) {
+    page->block_offset_adj = (uint8_t)((start_adjust/8) + 1);
+  }
+  
   
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);
@@ -690,6 +698,8 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->keys[0] != 0);
   mi_assert_internal(page->keys[1] != 0);
   #endif
+  mi_assert_internal(page->block_size_shift == 0 || (block_size == (1UL << page->block_size_shift)));
+  mi_assert_internal(page->block_offset_adj == 0 || (((uint8_t*)page_start - (uint8_t*)page - 8*(page->block_offset_adj-1))) % block_size == 0);
   mi_assert_expensive(mi_page_is_valid_init(page));
 
   // initialize an initial free list
