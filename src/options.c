@@ -91,7 +91,7 @@ static mi_option_desc_t options[_mi_option_last] =
 
   { 10,  UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
   { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
-  { 1,   UNINIT, MI_OPTION(abandoned_reclaim_on_free) }, // reclaim an abandoned segment on a free
+  { 0,   UNINIT, MI_OPTION(abandoned_reclaim_on_free) }, // reclaim an abandoned segment on a free
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
