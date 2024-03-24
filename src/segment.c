@@ -1189,7 +1189,7 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
 
 mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
   mi_page_t* page;
-  if mi_unlikely(page_alignment > MI_ALIGNMENT_MAX) {
+  if mi_unlikely(page_alignment > MI_BLOCK_ALIGNMENT_MAX) {
     mi_assert_internal(_mi_is_power_of_two(page_alignment));
     mi_assert_internal(page_alignment >= MI_SEGMENT_SIZE);
     //mi_assert_internal((MI_SEGMENT_SIZE % page_alignment) == 0);

@@ -193,8 +193,8 @@ typedef int32_t  mi_ssize_t;
 // Used as a special value to encode block sizes in 32 bits.
 #define MI_HUGE_BLOCK_SIZE   ((uint32_t)MI_HUGE_OBJ_SIZE_MAX)
 
-// Alignments over MI_ALIGNMENT_MAX are allocated in dedicated huge page segments
-#define MI_ALIGNMENT_MAX   (MI_SEGMENT_SIZE >> 1)
+// Alignments over MI_BLOCK_ALIGNMENT_MAX are allocated in dedicated huge page segments
+#define MI_BLOCK_ALIGNMENT_MAX   (MI_SEGMENT_SIZE >> 1)
 
 
 // ------------------------------------------------------

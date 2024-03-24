@@ -831,7 +831,7 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
 // Because huge pages contain just one block, and the segment contains
 // just that page, we always treat them as abandoned and any thread
 // that frees the block can free the whole page and segment directly.
-// Huge pages are also use if the requested alignment is very large (> MI_ALIGNMENT_MAX).
+// Huge pages are also use if the requested alignment is very large (> MI_BLOCK_ALIGNMENT_MAX).
 static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_alignment) {
   size_t block_size = _mi_os_good_alloc_size(size);
   mi_assert_internal(mi_bin(block_size) == MI_BIN_HUGE || page_alignment > 0);
