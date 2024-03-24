@@ -25,7 +25,7 @@ static void   mi_stat_free(const mi_page_t* page, const mi_block_t* block);
 // ------------------------------------------------------
 
 // forward declaration of multi-threaded free (`_mt`) (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
-static mi_decl_noinline void mi_free_block_mt(mi_segment_t* segment, mi_page_t* page, mi_block_t* block);
+static mi_decl_noinline void mi_free_block_mt(mi_page_t* page, mi_segment_t* segment, mi_block_t* block);
 
 // regular free of a (thread local) block pointer
 // fast path written carefully to prevent spilling on the stack
@@ -77,7 +77,7 @@ static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, mi_segment_t
 // free a pointer owned by another thread (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, mi_segment_t* segment, void* p) mi_attr_noexcept {
   mi_block_t* const block = _mi_page_ptr_unalign(page, p); // don't check `has_aligned` flag to avoid a race (issue #865)
-  mi_free_block_mt(segment, page, block);
+  mi_free_block_mt(page, segment, block);
 }
 
 // generic free (for runtime integration)
@@ -230,7 +230,7 @@ static void mi_stat_huge_free(const mi_page_t* page);
 #endif
 
 // Multi-threaded free (`_mt`) (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
-static void mi_decl_noinline mi_free_block_mt(mi_segment_t* segment, mi_page_t* page, mi_block_t* block)
+static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_segment_t* segment, mi_block_t* block)
 {
   // first see if the segment was abandoned and if we can reclaim it into our thread
   if (mi_option_is_enabled(mi_option_abandoned_reclaim_on_free) &&
