@@ -746,8 +746,10 @@ void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
     }
     else if (segment->used + 1 == segment->capacity) {
       mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM); // for now we only support small and medium pages
-      // move back to segments  free list
-      mi_segment_insert_in_free_queue(segment,tld);
+      if (segment->page_kind <= MI_PAGE_MEDIUM) {
+        // move back to segments  free list
+        mi_segment_insert_in_free_queue(segment,tld);
+      }
     }
   }
 }
