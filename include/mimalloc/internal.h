@@ -30,7 +30,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
-#define mi_decl_weak            
+#define mi_decl_weak
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
@@ -40,7 +40,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_cache_align
-#define mi_decl_weak           
+#define mi_decl_weak
 #endif
 
 #if defined(__EMSCRIPTEN__) && !defined(__wasi__)
@@ -133,8 +133,8 @@ void       _mi_arena_segment_mark_abandoned(mi_segment_t* segment);
 size_t     _mi_arena_segment_abandoned_count(void);
 
 typedef struct mi_arena_field_cursor_s { // abstract
-  mi_arena_id_t  start;   
-  int            count;   
+  mi_arena_id_t  start;
+  int            count;
   size_t         bitmap_idx;
 } mi_arena_field_cursor_t;
 void          _mi_arena_field_cursor_init(mi_heap_t* heap, mi_arena_field_cursor_t* current);
@@ -205,7 +205,7 @@ void*       _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool zero, siz
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
-void        _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept;  // for runtime integration
+void        _mi_free_generic(mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept;  // for runtime integration
 void        _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
 
 // "libc.c"

@@ -168,7 +168,7 @@ void* mi_expand(void* p, size_t newsize);
 /// @returns A pointer to a block of \a count * \a size bytes, or \a NULL
 /// if out of memory or if \a count * \a size overflows.
 ///
-/// If there is no overflow, it behaves exactly like `mi_malloc(p,count*size)`.
+/// If there is no overflow, it behaves exactly like `mi_malloc(count*size)`.
 /// @see mi_calloc()
 /// @see mi_zallocn()
 void* mi_mallocn(size_t count, size_t size);

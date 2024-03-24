@@ -281,7 +281,7 @@ typedef uintptr_t mi_thread_free_t;
 //    and 12 are still good for address calculation)
 // - To limit the structure size, the `xblock_size` is 32-bits only; for
 //   blocks > MI_HUGE_BLOCK_SIZE the size is determined from the segment page size
-// - `thread_free` uses the bottom bits as a delayed-free flags to optimize
+// - `xthread_free` uses the bottom bits as a delayed-free flags to optimize
 //   concurrent frees where only the first concurrent free adds to the owning
 //   heap `thread_delayed_free` list (see `alloc.c:mi_free_block_mt`).
 //   The invariant is that no-delayed-free is only set if there is
@@ -303,9 +303,11 @@ typedef struct mi_page_s {
   uint8_t               retire_expire : 7; // expiration count for retired blocks
 
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
-  uint32_t              used;              // number of blocks in use (including blocks in `local_free` and `thread_free`)
-  uint32_t              xblock_size;       // size available in each block (always `>0`)
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
+  uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
+  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
+  uint8_t               block_offset_adj;  // if not zero, then `(mi_page_start(_,page,_) - (uint8_t*)page - MI_MAX_ALIGN_SIZE*(block_offset_adj-1)) % block_size == 0)` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
+  uint32_t              xblock_size;       // size available in each block (always `>0`)
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`) or padding canary
@@ -498,8 +500,6 @@ typedef struct mi_padding_s {
 // A heap owns a set of pages.
 struct mi_heap_s {
   mi_tld_t*             tld;
-  mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
-  mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
   _Atomic(mi_block_t*)  thread_delayed_free;
   mi_threadid_t         thread_id;                           // thread this heap belongs too
   mi_arena_id_t         arena_id;                            // arena id if the heap belongs to a specific arena (or 0)
@@ -511,6 +511,8 @@ struct mi_heap_s {
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
+  mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
+  mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
 };
 
 

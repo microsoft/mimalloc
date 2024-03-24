@@ -1048,6 +1048,11 @@ reuse their pages and/or free them eventually. The
 
 When a block is freed in an abandoned segment, the segment
 is reclaimed into that thread.
+
+Moreover, if threads are looking for a fresh segment, they
+will first consider abondoned segments -- these can be found
+by scanning the arena memory
+(segments outside arena memoryare only reclaimed by a free).
 ----------------------------------------------------------- */
 
 // legacy: Wait until there are no more pending reads on segments that used to be in the abandoned list
