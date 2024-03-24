@@ -30,7 +30,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Note: in release mode the (inlined) routine is about 7 instructions with a single test.
 extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept 
 {
-  mi_assert_internal(page->xblock_size==0||mi_page_block_size(page) >= size);
+  mi_assert_internal(page->block_size == 0 /* empty heap */ || mi_page_block_size(page) >= size);
   mi_block_t* const block = page->free;
   if mi_unlikely(block == NULL) {
     return _mi_malloc_generic(heap, size, zero, 0);
@@ -53,14 +53,14 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
 
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
-    mi_assert_internal(page->xblock_size != 0); // do not call with zero'ing for huge blocks (see _mi_malloc_generic)
-    mi_assert_internal(page->xblock_size >= MI_PADDING_SIZE);
+    mi_assert_internal(page->block_size != 0); // do not call with zero'ing for huge blocks (see _mi_malloc_generic)
+    mi_assert_internal(page->block_size >= MI_PADDING_SIZE);
     if (page->free_is_zero) {
       block->next = 0;
-      mi_track_mem_defined(block, page->xblock_size - MI_PADDING_SIZE);
+      mi_track_mem_defined(block, page->block_size - MI_PADDING_SIZE);
     }
     else {
-      _mi_memzero_aligned(block, page->xblock_size - MI_PADDING_SIZE);
+      _mi_memzero_aligned(block, page->block_size - MI_PADDING_SIZE);
     }    
   }
 

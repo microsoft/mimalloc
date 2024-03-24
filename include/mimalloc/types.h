@@ -181,7 +181,6 @@ typedef int32_t  mi_ssize_t;
 #define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/4)  // 128KiB
 #define MI_LARGE_OBJ_SIZE_MAX             (MI_LARGE_PAGE_SIZE/2)   // 2MiB
 #define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)
-#define MI_HUGE_OBJ_SIZE_MAX              (2*MI_INTPTR_SIZE*MI_SEGMENT_SIZE)        // (must match MI_REGION_MAX_ALLOC_SIZE in memory.c)
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)
@@ -189,9 +188,6 @@ typedef int32_t  mi_ssize_t;
 #if (MI_LARGE_OBJ_WSIZE_MAX >= 655360)
 #error "mimalloc internal: define more bins"
 #endif
-
-// Used as a special value to encode block sizes in 32 bits.
-#define MI_HUGE_BLOCK_SIZE   ((uint32_t)MI_HUGE_OBJ_SIZE_MAX)
 
 // Alignments over MI_BLOCK_ALIGNMENT_MAX are allocated in dedicated huge page segments
 #define MI_BLOCK_ALIGNMENT_MAX   (MI_SEGMENT_SIZE >> 1)
@@ -258,7 +254,6 @@ typedef uintptr_t mi_thread_free_t;
 // implement a monotonic heartbeat. The `thread_free` list is needed for
 // avoiding atomic operations in the common case.
 //
-//
 // `used - |thread_free|` == actual blocks that are in use (alive)
 // `used - |thread_free| + |free| + |local_free| == capacity`
 //
@@ -266,16 +261,13 @@ typedef uintptr_t mi_thread_free_t;
 // the number of memory accesses in the `mi_page_all_free` function(s).
 //
 // Notes:
-// - Access is optimized for `mi_free` and `mi_page_alloc` (in `alloc.c`)
+// - Access is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
 // - Using `uint16_t` does not seem to slow things down
-// - The size is 8 words on 64-bit which helps the page index calculations
-//   (and 10 words on 32-bit, and encoded free lists add 2 words. Sizes 10
-//    and 12 are still good for address calculation)
-// - To limit the structure size, the `xblock_size` is 32-bits only; for
-//   blocks > MI_HUGE_BLOCK_SIZE the size is determined from the segment page size
+// - The size is 10 words on 64-bit which helps the page index calculations
+//   (and 14 words on 32-bit, and encoded free lists add 2 words)
 // - `xthread_free` uses the bottom bits as a delayed-free flags to optimize
 //   concurrent frees where only the first concurrent free adds to the owning
-//   heap `thread_delayed_free` list (see `alloc.c:mi_free_block_mt`).
+//   heap `thread_delayed_free` list (see `free.c:mi_free_block_mt`).
 //   The invariant is that no-delayed-free is only set if there is
 //   at least one block that will be added, or as already been added, to
 //   the owning heap `thread_delayed_free` list. This guarantees that pages
@@ -290,16 +282,16 @@ typedef struct mi_page_s {
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
   uint16_t              reserved;          // number of blocks reserved in memory
+  uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
   mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (8 bits)
+  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
   uint8_t               free_is_zero:1;    // `true` if the blocks in the free list are zero initialized
   uint8_t               retire_expire:7;   // expiration count for retired blocks
-
+                                           // padding
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
-  uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
-  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
-  uint8_t               block_offset_adj;  // if not zero, then `(mi_page_start(_,page,_) - (uint8_t*)page - MI_MAX_ALIGN_SIZE*(block_offset_adj-1)) % block_size == 0)` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
-  uint32_t              xblock_size;       // size available in each block (always `>0`)
+  size_t                block_size;        // size available in each block (always `>0`)
+  uint8_t*              page_start;        // start of the page area containing the blocks
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`) or padding canary
@@ -310,6 +302,10 @@ typedef struct mi_page_s {
 
   struct mi_page_s*     next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by the heap with the same `block_size`
+
+  #if MI_INTPTR_SIZE==4                    // pad to 14 words on 32-bit
+  void* padding[1];
+  #endif
 } mi_page_t;
 
 
@@ -548,7 +544,6 @@ typedef struct mi_stats_s {
   mi_stat_counter_t searches;
   mi_stat_counter_t normal_count;
   mi_stat_counter_t huge_count;
-  mi_stat_counter_t giant_count;
   mi_stat_counter_t arena_count;
   mi_stat_counter_t arena_crossover_count;
   mi_stat_counter_t arena_rollback_count;

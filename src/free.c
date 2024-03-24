@@ -55,14 +55,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
 
-  size_t diff;
-  if mi_likely(page->block_offset_adj != 0) {
-    diff = (uint8_t*)p - (uint8_t*)page - (MI_MAX_ALIGN_SIZE*(page->block_offset_adj - 1));
-  }
-  else {
-    diff = (uint8_t*)p - _mi_page_start(segment, page, NULL);
-  }
-
+  size_t diff = (uint8_t*)p - page->page_start;
   size_t adjust;
   if mi_likely(page->block_size_shift != 0) {
     adjust = diff & (((size_t)1 << page->block_size_shift) - 1);
@@ -519,12 +512,7 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
 #if !MI_HUGE_PAGE_ABANDON
   else {
     const size_t bpsize = mi_page_block_size(page);
-    if (bpsize <= MI_HUGE_OBJ_SIZE_MAX) {
-      mi_heap_stat_decrease(heap, huge, bpsize);
-    }
-    else {
-      mi_heap_stat_decrease(heap, giant, bpsize);
-    }
+    mi_heap_stat_decrease(heap, huge, bpsize);
   }
 #endif
 }

@@ -412,13 +412,13 @@ static uint8_t* mi_segment_raw_page_start(const mi_segment_t* segment, const mi_
 #endif
 
   if (page_size != NULL) *page_size = psize;
-  mi_assert_internal(page->xblock_size == 0 || _mi_ptr_page(p) == page);
+  mi_assert_internal(page->block_size == 0 || _mi_ptr_page(p) == page);
   mi_assert_internal(_mi_ptr_segment(p) == segment);
   return p;
 }
 
 // Start of the page available memory; can be used on uninitialized pages (only `segment_idx` must be set)
-uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size, size_t* pre_size)
+static uint8_t* mi_segment_page_start_ex(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size, size_t* pre_size)
 {
   size_t   psize;
   uint8_t* p = mi_segment_raw_page_start(segment, page, &psize);
@@ -437,9 +437,13 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
   }
 
   if (page_size != NULL) *page_size = psize;
-  mi_assert_internal(page->xblock_size==0 || _mi_ptr_page(p) == page);
+  mi_assert_internal(_mi_ptr_page(p) == page);
   mi_assert_internal(_mi_ptr_segment(p) == segment);
   return p;
+}
+
+uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size, size_t* pre_size) {
+  return mi_segment_page_start_ex(segment, page, mi_page_block_size(page), page_size, pre_size);
 }
 
 static size_t mi_segment_calculate_sizes(size_t capacity, size_t required, size_t* pre_size, size_t* info_size)
@@ -707,15 +711,19 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_seg
   page->is_zero_init = false;
   page->segment_in_use = false;
 
-  // zero the page data, but not the segment fields and capacity, and block_size (for page size calculations)
-  uint32_t block_size = page->xblock_size;
+  // zero the page data, but not the segment fields and capacity, page start, and block_size (for page size calculations)
+  size_t block_size = page->block_size;
+  uint8_t block_size_shift = page->block_size_shift;
+  uint8_t* page_start = page->page_start;
   uint16_t capacity = page->capacity;
   uint16_t reserved = page->reserved;
   ptrdiff_t ofs = offsetof(mi_page_t,capacity);
   _mi_memzero((uint8_t*)page + ofs, sizeof(*page) - ofs);
   page->capacity = capacity;
   page->reserved = reserved;
-  page->xblock_size = block_size;
+  page->block_size = block_size;
+  page->block_size_shift = block_size_shift;
+  page->page_start = page_start;
   segment->used--;
 
   // schedule purge
@@ -831,7 +839,6 @@ void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
 // Possibly clear pages and check if free space is available
 static bool mi_segment_check_free(mi_segment_t* segment, size_t block_size, bool* all_pages_free)
 {
-  mi_assert_internal(block_size < MI_HUGE_BLOCK_SIZE);
   bool has_page = false;
   size_t pages_used = 0;
   size_t pages_used_empty = 0;
@@ -847,7 +854,7 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t block_size, bool
         pages_used_empty++;
         has_page = true;
       }
-      else if (page->xblock_size == block_size && mi_page_has_any_available(page)) {
+      else if (mi_page_block_size(page) == block_size && mi_page_has_any_available(page)) {
         // a page has available free blocks of the right size
         has_page = true;
       }
@@ -901,7 +908,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       else {
         // otherwise reclaim it into the heap
         _mi_page_reclaim(heap, page);
-        if (requested_block_size == page->xblock_size && mi_page_has_any_available(page)) {
+        if (requested_block_size == mi_page_block_size(page) && mi_page_has_any_available(page)) {
           if (right_page_reclaimed != NULL) { *right_page_reclaimed = true; }
         }
       }
@@ -1008,7 +1015,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
 static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, size_t page_shift, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 {
   mi_assert_internal(page_kind <= MI_PAGE_LARGE);
-  mi_assert_internal(block_size < MI_HUGE_BLOCK_SIZE);
+  mi_assert_internal(block_size <= MI_LARGE_OBJ_SIZE_MAX);
 
   // 1. try to reclaim an abandoned segment
   bool reclaimed;
@@ -1077,7 +1084,7 @@ static mi_page_t* mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, mi_p
   mi_assert_internal(page != NULL);
   #if MI_DEBUG>=2 && !MI_TRACK_ENABLED // && !MI_TSAN
   // verify it is committed
-  _mi_segment_page_start(_mi_page_segment(page), page, sizeof(void*), NULL, NULL)[0] = 0;
+  mi_segment_page_start_ex(_mi_page_segment(page), page, sizeof(void*), NULL, NULL)[0] = 0;
   #endif
   return page;
 }
@@ -1100,7 +1107,7 @@ static mi_page_t* mi_segment_large_page_alloc(mi_heap_t* heap, size_t block_size
   mi_page_t* page = mi_segment_find_free(segment, tld);
   mi_assert_internal(page != NULL);
 #if MI_DEBUG>=2 && !MI_TRACK_ENABLED // && !MI_TSAN
-  _mi_segment_page_start(segment, page, sizeof(void*), NULL, NULL)[0] = 0;
+  mi_segment_page_start_ex(segment, page, sizeof(void*), NULL, NULL)[0] = 0;
 #endif
   return page;
 }
@@ -1117,11 +1124,11 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   mi_page_t* page = mi_segment_find_free(segment, tld);
   mi_assert_internal(page != NULL);
 
-  // for huge pages we initialize the xblock_size as we may
+  // for huge pages we initialize the block_size as we may
   // overallocate to accommodate large alignments.
   size_t psize;
-  uint8_t* start = _mi_segment_page_start(segment, page, 0, &psize, NULL);
-  page->xblock_size = (psize > MI_HUGE_BLOCK_SIZE ? MI_HUGE_BLOCK_SIZE : (uint32_t)psize);
+  uint8_t* start = mi_segment_page_start_ex(segment, page, 0, &psize, NULL);
+  page->block_size = psize;
 
   // reset the part of the page that will not be used; this can be quite large (close to MI_SEGMENT_SIZE)
   if (page_alignment > 0 && segment->allow_decommit && page->is_committed) {
