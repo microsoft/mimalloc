@@ -84,6 +84,17 @@ endif()
 # Process options
 # -----------------------------------------------------------------------------
 
+# put -Wall early so other warnings can be disabled selectively
+if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
+  list(APPEND mi_cflags -Wall -Wextra -Wpedantic)
+endif()
+if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+    list(APPEND mi_cflags -Wall -Wextra)
+endif()
+if(CMAKE_C_COMPILER_ID MATCHES "Intel")
+    list(APPEND mi_cflags -Wall)
+endif()
+
 if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
 endif()
@@ -186,6 +197,10 @@ endif()
 if(MI_SEE_ASM)
   message(STATUS "Generate assembly listings (MI_SEE_ASM=ON)")
   list(APPEND mi_cflags -save-temps)
+  if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
+    message(STATUS "No GNU Line marker")
+    list(APPEND mi_cflags -Wno-gnu-line-marker)
+  endif()
 endif()
 
 if(MI_CHECK_FULL)
@@ -279,17 +294,17 @@ endif()
 
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
-  list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas -fvisibility=hidden)
+  list(APPEND mi_cflags -Wno-unknown-pragmas -fvisibility=hidden)
   if(NOT MI_USE_CXX)
     list(APPEND mi_cflags -Wstrict-prototypes)
   endif()
   if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
-    list(APPEND mi_cflags -Wpedantic -Wno-static-in-inline)
+    list(APPEND mi_cflags -Wno-static-in-inline)
   endif()
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "Intel")
-  list(APPEND mi_cflags -Wall -fvisibility=hidden)
+  list(APPEND mi_cflags -fvisibility=hidden)
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")

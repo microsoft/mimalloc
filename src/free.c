@@ -100,7 +100,6 @@ void mi_decl_noinline _mi_free_generic(mi_segment_t* segment, mi_page_t* page, b
 static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* msg)
 {
   MI_UNUSED(msg);
-  mi_assert(p != NULL);
 
 #if (MI_DEBUG>0)
   if mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0) {
@@ -110,7 +109,7 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 #endif
 
   mi_segment_t* const segment = _mi_ptr_segment(p);
-  mi_assert_internal(segment != NULL);
+  if mi_unlikely(segment==NULL) return segment;
 
 #if (MI_DEBUG>0)
   if mi_unlikely(!mi_is_in_heap_region(p)) {
@@ -141,10 +140,11 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 // Fast path written carefully to prevent register spilling on the stack
 void mi_free(void* p) mi_attr_noexcept
 {
-  if mi_unlikely(p == NULL) return;
   mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
-  const bool          is_local= (_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
-  mi_page_t* const    page    = _mi_segment_page_of(segment, p);
+  if mi_unlikely(segment==NULL) return;
+
+  const bool is_local = (_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
+  mi_page_t* const page = _mi_segment_page_of(segment, p);
 
   if mi_likely(is_local) {                        // thread-local free?
     if mi_likely(page->flags.full_aligned == 0) { // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
@@ -166,6 +166,7 @@ void mi_free(void* p) mi_attr_noexcept
 // return true if successful
 bool _mi_free_delayed_block(mi_block_t* block) {
   // get segment and page
+  mi_assert_internal(block!=NULL);
   const mi_segment_t* const segment = _mi_ptr_segment(block);
   mi_assert_internal(_mi_ptr_cookie(segment) == segment->cookie);
   mi_assert_internal(_mi_thread_id() == segment->thread_id);
@@ -310,8 +311,8 @@ static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_segment_t
 }
 
 static inline size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noexcept {
-  if (p == NULL) return 0;
   const mi_segment_t* const segment = mi_checked_ptr_segment(p, msg);
+  if mi_unlikely(segment==NULL) return 0;
   const mi_page_t* const page = _mi_segment_page_of(segment, p);
   if mi_likely(!mi_page_has_aligned(page)) {
     const mi_block_t* block = (const mi_block_t*)p;
