@@ -297,8 +297,8 @@ typedef struct mi_page_s {
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
-  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift == block_size)` (used for fast path in `free.c:_mi_page_ptr_unalign`)
-  uint8_t               block_offset_adj;  // if not zero, then `(page_start - (uint8_t*)page - 8*(block_offset_adj-1)) % block_size == 0)` (used for fast path in `free.c:_mi_page_ptr_unalign`)
+  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
+  uint8_t               block_offset_adj;  // if not zero, then `(mi_page_start(_,page,_) - (uint8_t*)page - MI_MAX_ALIGN_SIZE*(block_offset_adj-1)) % block_size == 0)` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
   uint32_t              xblock_size;       // size available in each block (always `>0`)
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)

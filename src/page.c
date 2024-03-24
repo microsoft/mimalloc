@@ -682,8 +682,10 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   if (block_size > 0) {
     const ptrdiff_t start_offset = (uint8_t*)page_start - (uint8_t*)page;
     const ptrdiff_t start_adjust = start_offset % block_size;
-    if (start_offset >= 0 && (start_adjust % 8) == 0 && (start_adjust/8) < 255) {
-      page->block_offset_adj = (uint8_t)((start_adjust/8) + 1);
+    if (start_offset >= 0 && (start_adjust % MI_MAX_ALIGN_SIZE) == 0 && (start_adjust / MI_MAX_ALIGN_SIZE) < 255) {
+      const ptrdiff_t adjust = (start_adjust / MI_MAX_ALIGN_SIZE);
+      mi_assert_internal(adjust + 1 == (uint8_t)(adjust + 1));
+      page->block_offset_adj = (uint8_t)(adjust + 1);
     }
   }
 
@@ -700,7 +702,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_assert_internal(page->keys[1] != 0);
   #endif
   mi_assert_internal(page->block_size_shift == 0 || (block_size == (1UL << page->block_size_shift)));
-  mi_assert_internal(page->block_offset_adj == 0 || (((uint8_t*)page_start - (uint8_t*)page - 8*(page->block_offset_adj-1))) % block_size == 0);
+  mi_assert_internal(page->block_offset_adj == 0 || (((uint8_t*)page_start - (uint8_t*)page - MI_MAX_ALIGN_SIZE*(page->block_offset_adj-1))) % block_size == 0);
   mi_assert_expensive(mi_page_is_valid_init(page));
 
   // initialize an initial free list
