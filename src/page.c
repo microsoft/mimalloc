@@ -261,7 +261,7 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   #if MI_HUGE_PAGE_ABANDON
   mi_assert_internal(_mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
   #endif
-  
+
   // TODO: push on full queue immediately if it is full?
   mi_page_queue_t* pq = mi_page_queue(heap, mi_page_block_size(page));
   mi_page_queue_push(heap, pq, page);
@@ -676,16 +676,17 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
     mi_assert_expensive(!page->is_zero_init || mi_mem_is_zero(page_start, page_size));
   }
   #endif
-  if (_mi_is_power_of_two(block_size) && block_size > 0) {
+  if (block_size > 0 && _mi_is_power_of_two(block_size)) {
     page->block_size_shift = (uint8_t)(mi_ctz((uintptr_t)block_size));
   }
-  const ptrdiff_t start_offset = (uint8_t*)page_start - (uint8_t*)page;
-  const ptrdiff_t start_adjust = start_offset % block_size;
-  if (start_offset >= 0 && (start_adjust % 8) == 0 && (start_adjust/8) < 255) {
-    page->block_offset_adj = (uint8_t)((start_adjust/8) + 1);
+  if (block_size > 0) {
+    const ptrdiff_t start_offset = (uint8_t*)page_start - (uint8_t*)page;
+    const ptrdiff_t start_adjust = start_offset % block_size;
+    if (start_offset >= 0 && (start_adjust % 8) == 0 && (start_adjust/8) < 255) {
+      page->block_offset_adj = (uint8_t)((start_adjust/8) + 1);
+    }
   }
-  
-  
+
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->used == 0);
@@ -723,7 +724,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   while (page != NULL)
   {
     mi_page_t* next = page->next; // remember next
-    #if MI_STAT    
+    #if MI_STAT
     count++;
     #endif
 
@@ -880,7 +881,7 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size, size_t huge_alignme
   else {
     // otherwise find a page with free blocks in our size segregated queues
     #if MI_PADDING
-    mi_assert_internal(size >= MI_PADDING_SIZE); 
+    mi_assert_internal(size >= MI_PADDING_SIZE);
     #endif
     return mi_find_free_page(heap, size);
   }
@@ -896,7 +897,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
 
   // initialize if necessary
   if mi_unlikely(!mi_heap_is_initialized(heap)) {
-    heap = mi_heap_get_default(); // calls mi_thread_init 
+    heap = mi_heap_get_default(); // calls mi_thread_init
     if mi_unlikely(!mi_heap_is_initialized(heap)) { return NULL; }
   }
   mi_assert_internal(mi_heap_is_initialized(heap));

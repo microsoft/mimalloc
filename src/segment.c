@@ -237,12 +237,12 @@ static void mi_page_purge(mi_segment_t* segment, mi_page_t* page, mi_segments_tl
   mi_assert_internal(!page->segment_in_use);
   if (!segment->allow_purge) return;
   mi_assert_internal(page->used == 0);
+  mi_assert_internal(page->free == NULL);
   mi_assert_expensive(!mi_pages_purge_contains(page, tld));
   size_t psize;
   void* start = mi_segment_raw_page_start(segment, page, &psize);
   const bool needs_recommit = _mi_os_purge(start, psize, tld->stats);
   if (needs_recommit) { page->is_committed = false; }
-  page->used = 0;
 }
 
 static bool mi_page_ensure_committed(mi_segment_t* segment, mi_page_t* page, mi_segments_tld_t* tld) {
@@ -258,6 +258,7 @@ static bool mi_page_ensure_committed(mi_segment_t* segment, mi_page_t* page, mi_
   if (!ok) return false; // failed to commit!
   page->is_committed = true;
   page->used = 0;
+  page->free = NULL;
   page->is_zero_init = is_zero;
   if (gsize > 0) {
     mi_segment_protect_range(start + psize, gsize, true);
@@ -270,18 +271,30 @@ static bool mi_page_ensure_committed(mi_segment_t* segment, mi_page_t* page, mi_
   The free page queue
 ----------------------------------------------------------- */
 
-// we re-use the `used` field for the expiration counter. Since this is a
-// a 32-bit field while the clock is always 64-bit we need to guard
-// against overflow, we use substraction to check for expiry which work
+// we re-use the `free` field for the expiration counter. Since this is a
+// a pointer size field while the clock is always 64-bit we need to guard
+// against overflow, we use substraction to check for expiry which works
 // as long as the reset delay is under (2^30 - 1) milliseconds (~12 days)
-static void mi_page_purge_set_expire(mi_page_t* page) {
-  mi_assert_internal(page->used == 0);
-  uint32_t expire = (uint32_t)_mi_clock_now() + mi_option_get(mi_option_purge_delay);
-  page->used = expire;
+static uint32_t mi_page_get_expire( mi_page_t* page ) {
+  return (uint32_t)((uintptr_t)page->free);
 }
 
+static void mi_page_set_expire( mi_page_t* page, uint32_t expire ) {
+  page->free = (mi_block_t*)((uintptr_t)expire);
+}
+
+static void mi_page_purge_set_expire(mi_page_t* page) {
+  mi_assert_internal(mi_page_get_expire(page)==0);
+  uint32_t expire = (uint32_t)_mi_clock_now() + mi_option_get(mi_option_purge_delay);
+  mi_page_set_expire(page, expire);
+}
+
+// we re-use the `free` field for the expiration counter. Since this is a
+// a pointer size field while the clock is always 64-bit we need to guard
+// against overflow, we use substraction to check for expiry which work
+// as long as the reset delay is under (2^30 - 1) milliseconds (~12 days)
 static bool mi_page_purge_is_expired(mi_page_t* page, mi_msecs_t now) {
-  int32_t expire = (int32_t)(page->used);
+  int32_t expire = (int32_t)mi_page_get_expire(page);
   return (((int32_t)now - expire) >= 0);
 }
 
@@ -320,14 +333,14 @@ static void mi_page_purge_remove(mi_page_t* page, mi_segments_tld_t* tld) {
   mi_page_queue_t* pq = &tld->pages_purge;
   mi_assert_internal(pq!=NULL);
   mi_assert_internal(!page->segment_in_use);
-  mi_assert_internal(page->used != 0);
+  mi_assert_internal(mi_page_get_expire(page) != 0);
   mi_assert_internal(mi_pages_purge_contains(page, tld));
   if (page->prev != NULL) page->prev->next = page->next;
   if (page->next != NULL) page->next->prev = page->prev;
   if (page == pq->last)  pq->last = page->prev;
   if (page == pq->first) pq->first = page->next;
   page->next = page->prev = NULL;
-  page->used = 0;
+  mi_page_set_expire(page,0);
 }
 
 static void mi_segment_remove_all_purges(mi_segment_t* segment, bool force_purge, mi_segments_tld_t* tld) {
@@ -493,7 +506,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   }
   MI_UNUSED(fully_committed);
   mi_assert_internal((fully_committed && committed_size == segment_size) || (!fully_committed && committed_size < segment_size));
-  
+
   _mi_abandoned_await_readers(); // prevent ABA issue if concurrent readers try to access our memory (that might be purged)
   _mi_arena_free(segment, segment_size, committed_size, segment->memid, tld->stats);
 }
@@ -592,7 +605,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   if (segment == NULL) return NULL;
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
   mi_assert_internal(segment->memid.is_pinned ? segment->memid.initially_committed : true);
-  
+
   // zero the segment info (but not the `mem` fields)
   ptrdiff_t ofs = offsetof(mi_segment_t, next);
   _mi_memzero((uint8_t*)segment + ofs, info_size - ofs);
@@ -746,21 +759,21 @@ Abandonment
 When threads terminate, they can leave segments with
 live blocks (reached through other threads). Such segments
 are "abandoned" and will be reclaimed by other threads to
-reuse their pages and/or free them eventually. The 
+reuse their pages and/or free them eventually. The
 `thread_id` of such segments is 0.
 
 When a block is freed in an abandoned segment, the segment
-is reclaimed into that thread. 
+is reclaimed into that thread.
 
 Moreover, if threads are looking for a fresh segment, they
 will first consider abondoned segments -- these can be found
-by scanning the arena memory 
-(segments outside arena memoryare only reclaimed by a free). 
+by scanning the arena memory
+(segments outside arena memoryare only reclaimed by a free).
 ----------------------------------------------------------- */
 
 // legacy: Wait until there are no more pending reads on segments that used to be in the abandoned list
 void _mi_abandoned_await_readers(void) {
-  // nothing needed 
+  // nothing needed
 }
 
 /* -----------------------------------------------------------
@@ -914,12 +927,12 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
 
 // attempt to reclaim a particular segment (called from multi threaded free `alloc.c:mi_free_block_mt`)
 bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
-  if (mi_atomic_load_relaxed(&segment->thread_id) != 0) return false;  // it is not abandoned  
+  if (mi_atomic_load_relaxed(&segment->thread_id) != 0) return false;  // it is not abandoned
   // don't reclaim more from a free than half the current segments
   // this is to prevent a pure free-ing thread to start owning too many segments
-  if (heap->tld->segments.reclaim_count * 2 > heap->tld->segments.count) return false;  
+  if (heap->tld->segments.reclaim_count * 2 > heap->tld->segments.count) return false;
   if (_mi_arena_segment_clear_abandoned(segment)) {  // atomically unabandon
-    mi_segment_t* res = mi_segment_reclaim(segment, heap, 0, NULL, &heap->tld->segments);    
+    mi_segment_t* res = mi_segment_reclaim(segment, heap, 0, NULL, &heap->tld->segments);
     mi_assert_internal(res == segment);
     return (res != NULL);
   }
@@ -946,11 +959,11 @@ static long mi_segment_get_reclaim_tries(void) {
 
 static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, bool* reclaimed, mi_segments_tld_t* tld)
 {
-  *reclaimed = false;  
+  *reclaimed = false;
   mi_segment_t* segment;
   mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap,&current);
   long max_tries = mi_segment_get_reclaim_tries();
-  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL)) 
+  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL))
   {
     segment->abandoned_visits++;
     // todo: an arena exclusive heap will potentially visit many abandoned unsuitable segments

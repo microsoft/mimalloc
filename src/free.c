@@ -57,7 +57,7 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 
   size_t diff;
   if mi_likely(page->block_offset_adj != 0) {
-    diff = (uint8_t*)p - (uint8_t*)page - 8 * (page->block_offset_adj - 1);
+    diff = (uint8_t*)p - (uint8_t*)page - (8*(page->block_offset_adj - 1));
   }
   else {
     diff = (uint8_t*)p - _mi_page_start(segment, page, NULL);
