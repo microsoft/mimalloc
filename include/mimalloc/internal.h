@@ -416,13 +416,19 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
 // Large aligned blocks may be aligned at N*MI_SEGMENT_SIZE (inside a huge segment > MI_SEGMENT_SIZE),
 // and we need align "down" to the segment info which is `MI_SEGMENT_SIZE` bytes before it;
 // therefore we align one byte before `p`.
+// We check for NULL afterwards on 64-bit systems to improve codegen for `mi_free`.
 static inline mi_segment_t* _mi_ptr_segment(const void* p) {
-  mi_assert_internal(p != NULL);
-  return (mi_segment_t*)(((uintptr_t)p - 1) & ~MI_SEGMENT_MASK);
+  mi_segment_t* const segment = (mi_segment_t*)(((uintptr_t)p - 1) & ~MI_SEGMENT_MASK);
+  #if MI_INTPTR_SIZE <= 4
+  return (p==NULL ? NULL : segment);
+  #else
+  return ((intptr_t)segment <= 0 ? NULL : segment);
+  #endif
 }
 
 // Segment belonging to a page
 static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
+  mi_assert_internal(page!=NULL);
   mi_segment_t* segment = _mi_ptr_segment(page);
   mi_assert_internal(segment == NULL || page == &segment->pages[page->segment_idx]);
   return segment;
@@ -454,6 +460,7 @@ static inline uint8_t* _mi_page_start(const mi_segment_t* segment, const mi_page
 
 // Get the page containing the pointer
 static inline mi_page_t* _mi_ptr_page(void* p) {
+  mi_assert_internal(p!=NULL);
   return _mi_segment_page_of(_mi_ptr_segment(p), p);
 }
 
