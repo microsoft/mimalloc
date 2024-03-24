@@ -192,8 +192,8 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   if (head == NULL) return;
 
   // find the tail -- also to get a proper count (without data races)
-  uint32_t max_count = page->capacity; // cannot collect more than capacity
-  uint32_t count = 1;
+  size_t max_count = page->capacity; // cannot collect more than capacity
+  size_t count = 1;
   mi_block_t* tail = head;
   mi_block_t* next;
   while ((next = mi_block_next(page,tail)) != NULL && count <= max_count) {
@@ -211,7 +211,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   page->local_free = head;
 
   // update counts now
-  page->used -= count;
+  page->used -= (uint16_t)count;
 }
 
 void _mi_page_free_collect(mi_page_t* page, bool force) {
@@ -677,7 +677,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   }
   #endif
   if (_mi_is_power_of_two(block_size) && block_size > 0) {
-    page->block_size_shift = (uint32_t)(mi_ctz((uintptr_t)block_size));
+    page->block_size_shift = (uint8_t)(mi_ctz((uintptr_t)block_size));
   }
   const ptrdiff_t start_offset = (uint8_t*)page_start - (uint8_t*)page;
   const ptrdiff_t start_adjust = start_offset % block_size;

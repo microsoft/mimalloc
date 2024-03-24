@@ -300,14 +300,14 @@ typedef struct mi_page_s {
   uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift == block_size)` (used for fast path in `free.c:_mi_page_ptr_unalign`)
   uint8_t               block_offset_adj;  // if not zero, then `(page_start - (uint8_t*)page - 8*(block_offset_adj-1)) % block_size == 0)` (used for fast path in `free.c:_mi_page_ptr_unalign`)
   uint32_t              xblock_size;       // size available in each block (always `>0`)
-  
+
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`) or padding canary
-  #endif             
+  #endif
 
   _Atomic(mi_thread_free_t) xthread_free;  // list of deferred free blocks freed by other threads
   _Atomic(uintptr_t)        xheap;
-  
+
   struct mi_page_s*     next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by the heap with the same `block_size`
 } mi_page_t;
@@ -373,7 +373,7 @@ typedef struct mi_segment_s {
   bool                 allow_decommit;
   bool                 allow_purge;
   size_t               segment_size;     // for huge pages this may be different from `MI_SEGMENT_SIZE`
-  
+
   // segment fields
   struct mi_segment_s* next;             // must be the first segment field after abandoned_next -- see `segment.c:segment_init`
   struct mi_segment_s* prev;
@@ -450,7 +450,7 @@ struct mi_heap_s {
   mi_tld_t*             tld;
   _Atomic(mi_block_t*)  thread_delayed_free;
   mi_threadid_t         thread_id;                           // thread this heap belongs too
-  mi_arena_id_t         arena_id;                            // arena id if the heap belongs to a specific arena (or 0)  
+  mi_arena_id_t         arena_id;                            // arena id if the heap belongs to a specific arena (or 0)
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   uintptr_t             keys[2];                             // two random keys used to encode the `thread_delayed_free` list
   mi_random_ctx_t       random;                              // random number context used for secure allocation
@@ -460,7 +460,7 @@ struct mi_heap_s {
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
-  mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")  
+  mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
 };
 
 
