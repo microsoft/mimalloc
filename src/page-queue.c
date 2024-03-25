@@ -141,7 +141,7 @@ static bool mi_heap_contains_queue(const mi_heap_t* heap, const mi_page_queue_t*
 }
 #endif
 
-static inline bool mi_page_is_large_or_huge(mi_page_t* page) {
+static inline bool mi_page_is_large_or_huge(const mi_page_t* page) {
   return (mi_page_block_size(page) > MI_MEDIUM_OBJ_SIZE_MAX || mi_page_is_huge(page));
 }
 
