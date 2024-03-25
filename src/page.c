@@ -673,8 +673,8 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   page->free_is_zero = page->is_zero_init;
   #if MI_DEBUG>2
   if (page->is_zero_init) {
-    mi_track_mem_defined(page_start, page_size);
-    mi_assert_expensive(!page->is_zero_init || mi_mem_is_zero(page->page_start, page_size));
+    mi_track_mem_defined(page->page_start, page_size);
+    mi_assert_expensive(mi_mem_is_zero(page->page_start, page_size));
   }
   #endif
   if (block_size > 0 && _mi_is_power_of_two(block_size)) {
