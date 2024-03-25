@@ -142,6 +142,7 @@ static bool mi_segment_is_valid(const mi_segment_t* segment, mi_segments_tld_t* 
   mi_assert_internal(_mi_ptr_cookie(segment) == segment->cookie);
   mi_assert_internal(segment->used <= segment->capacity);
   mi_assert_internal(segment->abandoned <= segment->used);
+  mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM || segment->capacity == 1);
   size_t nfree = 0;
   for (size_t i = 0; i < segment->capacity; i++) {
     const mi_page_t* const page = &segment->pages[i];
@@ -151,6 +152,7 @@ static bool mi_segment_is_valid(const mi_segment_t* segment, mi_segments_tld_t* 
     if (page->segment_in_use) {
       mi_assert_expensive(!mi_pages_purge_contains(page, tld));
     }
+    if (segment->page_kind == MI_PAGE_HUGE) mi_assert_internal(page->is_huge);
   }
   mi_assert_internal(nfree + segment->used == segment->capacity);
   // mi_assert_internal(segment->thread_id == _mi_thread_id() || (segment->thread_id==0)); // or 0
@@ -615,11 +617,13 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   _mi_memzero((uint8_t*)segment + ofs, info_size - ofs);
 
   // initialize pages info
+  const bool is_huge = (page_kind == MI_PAGE_HUGE);
   for (size_t i = 0; i < capacity; i++) {
     mi_assert_internal(i <= 255);
     segment->pages[i].segment_idx = (uint8_t)i;
     segment->pages[i].is_committed = segment->memid.initially_committed;
     segment->pages[i].is_zero_init = segment->memid.initially_zero;
+    segment->pages[i].is_huge = is_huge;
   }
 
   // initialize
@@ -753,7 +757,7 @@ void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
       mi_segment_abandon(segment,tld);
     }
     else if (segment->used + 1 == segment->capacity) {
-      mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM); // for now we only support small and medium pages
+      mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM); // large and huge pages are always the single page in a segment
       if (segment->page_kind <= MI_PAGE_MEDIUM) {
         // move back to segments  free list
         mi_segment_insert_in_free_queue(segment,tld);
@@ -1123,13 +1127,14 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   #endif
   mi_page_t* page = mi_segment_find_free(segment, tld);
   mi_assert_internal(page != NULL);
+  mi_assert_internal(page->is_huge);
 
   // for huge pages we initialize the block_size as we may
   // overallocate to accommodate large alignments.
   size_t psize;
   uint8_t* start = mi_segment_page_start_ex(segment, page, 0, &psize, NULL);
   page->block_size = psize;
-
+  
   // reset the part of the page that will not be used; this can be quite large (close to MI_SEGMENT_SIZE)
   if (page_alignment > 0 && segment->allow_decommit && page->is_committed) {
     uint8_t* aligned_p = (uint8_t*)_mi_align_up((uintptr_t)start, page_alignment);

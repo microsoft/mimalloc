@@ -1,5 +1,5 @@
 /*----------------------------------------------------------------------------
-Copyright (c) 2018-2020, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2024, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -82,7 +82,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(page->used <= page->capacity);
   mi_assert_internal(page->capacity <= page->reserved);
 
-  const size_t bsize = mi_page_block_size(page);
+  // const size_t bsize = mi_page_block_size(page);
   mi_segment_t* segment = _mi_page_segment(page);
   uint8_t* start = mi_page_start(page);
   mi_assert_internal(start == _mi_segment_page_start(segment,page,NULL,NULL));
@@ -448,8 +448,7 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   // for now, we don't retire if it is the only page left of this size class.
   mi_page_queue_t* pq = mi_page_queue_of(page);
   const size_t bsize = mi_page_block_size(page);
-  if mi_likely(bsize < MI_MAX_RETIRE_SIZE) {  // not too large && not full or huge queue?
-    mi_assert_internal(!mi_page_queue_is_special(pq));
+  if mi_likely( /* bsize < MI_MAX_RETIRE_SIZE && */ !mi_page_queue_is_special(pq)) {  // not full or huge queue?
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
       page->retire_expire = (bsize <= MI_SMALL_OBJ_SIZE_MAX ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
@@ -662,7 +661,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   page->block_size = block_size;
   size_t page_size;
   page->page_start = _mi_segment_page_start(segment, page, &page_size, NULL);
-  mi_track_mem_noaccess(page->page_start,page_size);  
+  mi_track_mem_noaccess(page->page_start,page_size);
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
   mi_assert_internal(page->reserved > 0);
@@ -821,7 +820,7 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
   General allocation
 ----------------------------------------------------------- */
 
-// Huge pages contain just one block, and the segment contains just that page. 
+// Huge pages contain just one block, and the segment contains just that page.
 // Huge pages are also use if the requested alignment is very large (> MI_BLOCK_ALIGNMENT_MAX)
 // so their size is not always `> MI_LARGE_OBJ_SIZE_MAX`.
 static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_alignment) {
@@ -830,15 +829,15 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_a
   #if MI_HUGE_PAGE_ABANDON
   mi_page_queue_t* pq = NULL;
   #else
-  mi_page_queue_t* pq = mi_page_queue(heap, block_size); 
-  // mi_assert_internal(mi_page_queue_is_huge(pq));
+  mi_page_queue_t* pq = mi_page_queue(heap, MI_LARGE_OBJ_SIZE_MAX+1);  // always in the huge queue regardless of the block size
+  mi_assert_internal(mi_page_queue_is_huge(pq));
   #endif
   mi_page_t* page = mi_page_fresh_alloc(heap, pq, block_size, page_alignment);
-  if (page != NULL) {    
+  if (page != NULL) {
     mi_assert_internal(mi_page_block_size(page) >= size);
     mi_assert_internal(mi_page_immediate_available(page));
-    mi_assert_internal(_mi_page_segment(page)->page_kind==MI_PAGE_HUGE);
     mi_assert_internal(mi_page_is_huge(page));
+    mi_assert_internal(_mi_page_segment(page)->page_kind == MI_PAGE_HUGE);
     mi_assert_internal(_mi_page_segment(page)->used==1);
     #if MI_HUGE_PAGE_ABANDON
     mi_assert_internal(_mi_page_segment(page)->thread_id==0); // abandoned, not in the huge queue
