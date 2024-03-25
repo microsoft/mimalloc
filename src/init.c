@@ -14,18 +14,19 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
-  0, false, false, false,
+  0, 
+  false, false, false, false,
   0,       // capacity
   0,       // reserved capacity
+  0,       // used
   { 0 },   // flags
+  0,       // block size shift
   false,   // is_zero
   0,       // retire_expire
   NULL,    // free
   NULL,    // local_free
-  0,       // used
-  0,       // block size shift
-  0,       // block offset adj
-  0,       // xblock_size
+  0,       // block_size
+  NULL,    // page_start
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   { 0, 0 },
   #endif
@@ -86,8 +87,9 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
-  { 0, 0 }, { 0, 0 }, { 0, 0 } \
+  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
+  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
+  { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 
 

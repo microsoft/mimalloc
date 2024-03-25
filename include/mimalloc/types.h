@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2023, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2024, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -193,16 +193,13 @@ typedef int32_t  mi_ssize_t;
 #endif
 
 // Maximum slice offset (15)
-#define MI_MAX_SLICE_OFFSET               ((MI_ALIGNMENT_MAX / MI_SEGMENT_SLICE_SIZE) - 1)
-
-// Used as a special value to encode block sizes in 32 bits.
-#define MI_HUGE_BLOCK_SIZE                ((uint32_t)(2*MI_GiB))
+#define MI_MAX_SLICE_OFFSET               ((MI_BLOCK_ALIGNMENT_MAX / MI_SEGMENT_SLICE_SIZE) - 1)
 
 // blocks up to this size are always allocated aligned
 #define MI_MAX_ALIGN_GUARANTEE            (8*MI_MAX_ALIGN_SIZE)
 
-// Alignments over MI_ALIGNMENT_MAX are allocated in dedicated huge page segments
-#define MI_ALIGNMENT_MAX                  (MI_SEGMENT_SIZE >> 1)
+// Alignments over MI_BLOCK_ALIGNMENT_MAX are allocated in dedicated huge page segments
+#define MI_BLOCK_ALIGNMENT_MAX            (MI_SEGMENT_SIZE >> 1)
 
 
 // ------------------------------------------------------
@@ -266,7 +263,6 @@ typedef uintptr_t mi_thread_free_t;
 // implement a monotonic heartbeat. The `thread_free` list is needed for
 // avoiding atomic operations in the common case.
 //
-//
 // `used - |thread_free|` == actual blocks that are in use (alive)
 // `used - |thread_free| + |free| + |local_free| == capacity`
 //
@@ -274,16 +270,13 @@ typedef uintptr_t mi_thread_free_t;
 // the number of memory accesses in the `mi_page_all_free` function(s).
 //
 // Notes:
-// - Access is optimized for `mi_free` and `mi_page_alloc` (in `alloc.c`)
+// - Access is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
 // - Using `uint16_t` does not seem to slow things down
-// - The size is 8 words on 64-bit which helps the page index calculations
-//   (and 10 words on 32-bit, and encoded free lists add 2 words. Sizes 10
-//    and 12 are still good for address calculation)
-// - To limit the structure size, the `xblock_size` is 32-bits only; for
-//   blocks > MI_HUGE_BLOCK_SIZE the size is determined from the segment page size
+// - The size is 12 words on 64-bit which helps the page index calculations
+//   (and 14 words on 32-bit, and encoded free lists add 2 words)
 // - `xthread_free` uses the bottom bits as a delayed-free flags to optimize
 //   concurrent frees where only the first concurrent free adds to the owning
-//   heap `thread_delayed_free` list (see `alloc.c:mi_free_block_mt`).
+//   heap `thread_delayed_free` list (see `free.c:mi_free_block_mt`).
 //   The invariant is that no-delayed-free is only set if there is
 //   at least one block that will be added, or as already been added, to
 //   the owning heap `thread_delayed_free` list. This guarantees that pages
@@ -294,20 +287,21 @@ typedef struct mi_page_s {
   uint32_t              slice_offset;      // distance from the actual page data slice (0 if a page)
   uint8_t               is_committed : 1;  // `true` if the page virtual memory is committed
   uint8_t               is_zero_init : 1;  // `true` if the page was initially zero initialized
-
+  uint8_t               is_huge:1;         // `true` if the page is in a huge segment
+                                           // padding
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
   uint16_t              reserved;          // number of blocks reserved in memory
+  uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
   mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (8 bits)
-  uint8_t               free_is_zero : 1;  // `true` if the blocks in the free list are zero initialized
-  uint8_t               retire_expire : 7; // expiration count for retired blocks
-
+  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
+  uint8_t               free_is_zero:1;    // `true` if the blocks in the free list are zero initialized
+  uint8_t               retire_expire:7;   // expiration count for retired blocks
+                                           // padding
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
-  uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
-  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
-  uint8_t               block_offset_adj;  // if not zero, then `(mi_page_start(_,page,_) - (uint8_t*)page - MI_MAX_ALIGN_SIZE*(block_offset_adj-1)) % block_size == 0)` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
-  uint32_t              xblock_size;       // size available in each block (always `>0`)
+  size_t                block_size;        // size available in each block (always `>0`)
+  uint8_t*              page_start;        // start of the page area containing the blocks
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`) or padding canary
@@ -319,10 +313,8 @@ typedef struct mi_page_s {
   struct mi_page_s*     next;              // next page owned by this thread with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by this thread with the same `block_size`
 
-  // 64-bit 9 words, 32-bit 12 words, (+2 for secure)
-  #if MI_INTPTR_SIZE==8
-  uintptr_t padding[1];
-  #endif
+  // 64-bit 11 words, 32-bit 13 words, (+2 for secure)
+  void* padding[1];
 } mi_page_t;
 
 

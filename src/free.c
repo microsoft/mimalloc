@@ -25,22 +25,22 @@ static void   mi_stat_free(const mi_page_t* page, const mi_block_t* block);
 // ------------------------------------------------------
 
 // forward declaration of multi-threaded free (`_mt`) (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
-static mi_decl_noinline void mi_free_block_mt(mi_segment_t* segment, mi_page_t* page, mi_block_t* block);
+static mi_decl_noinline void mi_free_block_mt(mi_page_t* page, mi_segment_t* segment, mi_block_t* block);
 
 // regular free of a (thread local) block pointer
 // fast path written carefully to prevent spilling on the stack
-static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool check_full)
+static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool track_stats, bool check_full)
 {
   // checks
   if mi_unlikely(mi_check_is_double_free(page, block)) return;
   mi_check_padding(page, block);
-  mi_stat_free(page, block);
+  if (track_stats) { mi_stat_free(page, block); }
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
   if (!mi_page_is_huge(page)) {   // huge page content may be already decommitted
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
   }
   #endif
-  mi_track_free_size(p, mi_page_usable_size_of(page,block)); // faster then mi_usable_size as we already know the page and that p is unaligned
+  if (track_stats) { mi_track_free_size(p, mi_page_usable_size_of(page, block)); } // faster then mi_usable_size as we already know the page and that p is unaligned
 
   // actual free: push on the local free list
   mi_block_set_next(page, block, page->local_free);
@@ -54,17 +54,10 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 }
 
 // Adjust a block that was allocated aligned, to the actual start of the block in the page.
-mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p) {
+mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
 
-  size_t diff;
-  if mi_likely(page->block_offset_adj != 0) {
-    diff = (uint8_t*)p - (uint8_t*)page - (MI_MAX_ALIGN_SIZE*(page->block_offset_adj - 1));
-  }
-  else {
-    diff = (uint8_t*)p - _mi_page_start(segment, page, NULL);
-  }
-
+  size_t diff = (uint8_t*)p - page->page_start;
   size_t adjust;
   if mi_likely(page->block_size_shift != 0) {
     adjust = diff & (((size_t)1 << page->block_size_shift) - 1);
@@ -78,14 +71,15 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 
 // free a local pointer  (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, mi_segment_t* segment, void* p) mi_attr_noexcept {
-  mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
-  mi_free_block_local(page, block, true);
+  MI_UNUSED(segment);
+  mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(page, p) : (mi_block_t*)p);
+  mi_free_block_local(page, block, true, true);
 }
 
 // free a pointer owned by another thread (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, mi_segment_t* segment, void* p) mi_attr_noexcept {
-  mi_block_t* const block = _mi_page_ptr_unalign(segment, page, p); // don't check `has_aligned` flag to avoid a race (issue #865)
-  mi_free_block_mt(segment, page, block);
+  mi_block_t* const block = _mi_page_ptr_unalign(page, p); // don't check `has_aligned` flag to avoid a race (issue #865)
+  mi_free_block_mt(page, segment, block);
 }
 
 // generic free (for runtime integration)
@@ -150,7 +144,7 @@ void mi_free(void* p) mi_attr_noexcept
     if mi_likely(page->flags.full_aligned == 0) { // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
       // thread-local, aligned, and not a full page
       mi_block_t* const block = (mi_block_t*)p;
-      mi_free_block_local(page, block, false /* no need to check if the page is full */);
+      mi_free_block_local(page, block, true, false /* no need to check if the page is full */);
     }
     else {
       // page is full or contains (inner) aligned blocks; use generic path
@@ -185,7 +179,7 @@ bool _mi_free_delayed_block(mi_block_t* block) {
   _mi_page_free_collect(page, false);
 
   // and free the block (possibly freeing the page as well since used is updated)
-  mi_free_block_local(page, block, true);
+  mi_free_block_local(page, block, false /* stats have already been adjusted */, true);
   return true;
 }
 
@@ -244,7 +238,7 @@ static void mi_stat_huge_free(const mi_page_t* page);
 #endif
 
 // Multi-threaded free (`_mt`) (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
-static void mi_decl_noinline mi_free_block_mt(mi_segment_t* segment, mi_page_t* page, mi_block_t* block)
+static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_segment_t* segment, mi_block_t* block)
 {
   // first see if the segment was abandoned and if we can reclaim it into our thread
   if (mi_option_is_enabled(mi_option_abandoned_reclaim_on_free) &&
@@ -302,8 +296,8 @@ static void mi_decl_noinline mi_free_block_mt(mi_segment_t* segment, mi_page_t* 
 // ------------------------------------------------------
 
 // Bytes available in a block
-static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_segment_t* segment, const mi_page_t* page, const void* p) mi_attr_noexcept {
-  const mi_block_t* block = _mi_page_ptr_unalign(segment, page, p);
+static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_page_t* page, const void* p) mi_attr_noexcept {
+  const mi_block_t* block = _mi_page_ptr_unalign(page, p);
   const size_t size = mi_page_usable_size_of(page, block);
   const ptrdiff_t adjust = (uint8_t*)p - (uint8_t*)block;
   mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);
@@ -320,7 +314,7 @@ static inline size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noe
   }
   else {
     // split out to separate routine for improved code generation
-    return mi_page_usable_aligned_size_of(segment, page, p);
+    return mi_page_usable_aligned_size_of(page, p);
   }
 }
 
