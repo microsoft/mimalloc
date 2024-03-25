@@ -17,8 +17,8 @@ terms of the MIT license. A copy of the license can be found in the file
 //                  which pages are allocated.
 // mi_page_t      : a "mimalloc" page (usually 64KiB or 512KiB) from
 //                  where objects are allocated.
-//                  Note: we always explicitly use "OS page" to refer to OS pages
-//                  and just use "page" to refer to mimalloc pages (`mi_page_t`)
+//                  Note: we write "OS page" for OS memory pages while
+//                  using plain "page" for mimalloc pages (`mi_page_t`).
 // --------------------------------------------------------------------------
 
 
@@ -92,10 +92,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 
-// We used to abandon huge pages but to eagerly deallocate if freed from another thread,
-// but that makes it not possible to visit them during a heap walk or include them in a
-// `mi_heap_destroy`. We therefore instead reset/decommit the huge blocks if freed from
-// another thread so most memory is available until it gets properly freed by the owning thread.
+// We used to abandon huge pages in order to eagerly deallocate it if freed from another thread.
+// Unfortunately, that makes it not possible to visit them during a heap walk or include them in a
+// `mi_heap_destroy`. We therefore instead reset/decommit the huge blocks nowadays if freed from
+// another thread so the memory becomes "virtually" available (and eventually gets properly freed by
+// the owning thread).
 // #define MI_HUGE_PAGE_ABANDON 1
 
 
@@ -227,7 +228,7 @@ typedef enum mi_delayed_e {
   MI_USE_DELAYED_FREE   = 0, // push on the owning heap thread delayed list
   MI_DELAYED_FREEING    = 1, // temporary: another thread is accessing the owning heap
   MI_NO_DELAYED_FREE    = 2, // optimize: push on page local thread free queue if another block is already in the heap thread delayed free list
-  MI_NEVER_DELAYED_FREE = 3  // sticky, only resets on page reclaim
+  MI_NEVER_DELAYED_FREE = 3  // sticky: used for abondoned pages without a owning heap; this only resets on page reclaim
 } mi_delayed_t;
 
 
@@ -329,10 +330,10 @@ typedef struct mi_page_s {
 
 typedef enum mi_page_kind_e {
   MI_PAGE_SMALL,    // small blocks go into 64KiB pages inside a segment
-  MI_PAGE_MEDIUM,   // medium blocks go into medium pages inside a segment
-  MI_PAGE_LARGE,    // larger blocks go into a page of just one block
-  MI_PAGE_HUGE,     // huge blocks (> `MI_LARGE_OBJ_SIZE_MAX) or with alignment `> MI_BLOCK_ALIGNMENT_MAX`
-                    // are put into a single page in a single `MI_SEGMENT_HUGE` segment.
+  MI_PAGE_MEDIUM,   // medium blocks go into 512KiB pages inside a segment
+  MI_PAGE_LARGE,    // larger blocks go into a single page spanning a whole segment
+  MI_PAGE_HUGE      // a huge page is a single page in a segment of variable size
+                    // used for blocks `> MI_LARGE_OBJ_SIZE_MAX` or an aligment `> MI_BLOCK_ALIGNMENT_MAX`.
 } mi_page_kind_t;
 
 typedef enum mi_segment_kind_e {
@@ -370,13 +371,17 @@ typedef mi_page_t  mi_slice_t;
 typedef int64_t    mi_msecs_t;
 
 
+// ---------------------------------------------------------------
+// a memory id tracks the provenance of arena/OS allocated memory
+// ---------------------------------------------------------------
+
 // Memory can reside in arena's, direct OS allocated, or statically allocated. The memid keeps track of this.
 typedef enum mi_memkind_e {
   MI_MEM_NONE,      // not allocated
   MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
   MI_MEM_STATIC,    // allocated in a static area and should not be freed (for arena meta data for example)
   MI_MEM_OS,        // allocated from the OS
-  MI_MEM_OS_HUGE,   // allocated as huge os pages
+  MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
   MI_MEM_ARENA      // allocated from an arena (the usual case)
 } mi_memkind_t;
@@ -393,7 +398,7 @@ typedef struct mi_memid_os_info {
 typedef struct mi_memid_arena_info {
   size_t        block_index;        // index in the arena
   mi_arena_id_t id;                 // arena id (>= 1)
-  bool          is_exclusive;       // the arena can only be used for specific arena allocations
+  bool          is_exclusive;       // this arena can only be used for specific arena allocations
 } mi_memid_arena_info_t;
 
 typedef struct mi_memid_s {
@@ -401,13 +406,14 @@ typedef struct mi_memid_s {
     mi_memid_os_info_t    os;       // only used for MI_MEM_OS
     mi_memid_arena_info_t arena;    // only used for MI_MEM_ARENA
   } mem;
-  bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large OS pages)
+  bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)
   bool          initially_committed;// `true` if the memory was originally allocated as committed
   bool          initially_zero;     // `true` if the memory was originally zero initialized
   mi_memkind_t  memkind;
 } mi_memid_t;
 
 
+// -----------------------------------------------------------------------------------------
 // Segments are large allocated memory blocks (8mb on 64 bit) from arenas or the OS.
 //
 // Inside segments we allocated fixed size mimalloc pages (`mi_page_t`) that contain blocks.
@@ -633,6 +639,7 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 #define mi_heap_stat_counter_increase(heap,stat,amount)  mi_stat_counter_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_increase(heap,stat,amount)  mi_stat_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_decrease(heap,stat,amount)  mi_stat_decrease( (heap)->tld->stats.stat, amount)
+
 
 // ------------------------------------------------------
 // Thread Local data

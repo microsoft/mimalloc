@@ -84,7 +84,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
 
   uint8_t* start = mi_page_start(page);
   mi_assert_internal(start == _mi_segment_page_start(_mi_page_segment(page), page, NULL));
-  //const size_t bsize = mi_page_block_size(page);
+  mi_assert_internal(page->is_huge == (_mi_page_segment(page)->kind == MI_SEGMENT_HUGE));
   //mi_assert_internal(start + page->capacity*page->block_size == page->top);
 
   mi_assert_internal(mi_page_list_is_valid(page,page->free));

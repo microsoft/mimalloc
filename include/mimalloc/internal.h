@@ -490,7 +490,7 @@ static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const 
 // Quick page start for initialized pages
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
   mi_assert_internal(page->page_start != NULL);
-  mi_assert_expensive( _mi_segment_page_start(_mi_page_segment(page), page, NULL) == page->page_start);
+  mi_assert_expensive(_mi_segment_page_start(_mi_page_segment(page),page,NULL) == page->page_start);
   return page->page_start;
 }
 
