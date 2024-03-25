@@ -52,6 +52,9 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 }
 
 // Adjust a block that was allocated aligned, to the actual start of the block in the page.
+// note: this can be called from `mi_free_generic_mt` where a non-owning thread accesses the 
+// `page_start` and `block_size` fields; however these are constant and the page won't be 
+// deallocated (as the block we are freeing keeps it alive) and thus safe to read concurrently.
 mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
 
