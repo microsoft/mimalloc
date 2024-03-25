@@ -40,7 +40,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
   }
   #endif
-  if (track_stats) { mi_track_free_size(p, mi_page_usable_size_of(page, block)); } // faster then mi_usable_size as we already know the page and that p is unaligned
+  if (track_stats) { mi_track_free_size(block, mi_page_usable_size_of(page, block)); } // faster then mi_usable_size as we already know the page and that p is unaligned
 
   // actual free: push on the local free list
   mi_block_set_next(page, block, page->local_free);
