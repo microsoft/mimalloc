@@ -292,14 +292,15 @@ typedef struct mi_page_s {
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
   uint16_t              reserved;          // number of blocks reserved in memory
-  uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
   mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (8 bits)
-  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
   uint8_t               free_is_zero:1;    // `true` if the blocks in the free list are zero initialized
   uint8_t               retire_expire:7;   // expiration count for retired blocks
-                                           // padding
+
   mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
+  uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
+  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
+                                           // padding
   size_t                block_size;        // size available in each block (always `>0`)
   uint8_t*              page_start;        // start of the page area containing the blocks
 
