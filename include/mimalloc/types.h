@@ -13,9 +13,12 @@ terms of the MIT license. A copy of the license can be found in the file
 // mi_heap_t      : all data for a thread-local heap, contains
 //                  lists of all managed heap pages.
 // mi_segment_t   : a larger chunk of memory (32GiB) from where pages
-//                  are allocated.
-// mi_page_t      : a mimalloc page (usually 64KiB or 512KiB) from
+//                  are allocated. A segment is divided in slices (64KiB) from
+//                  which pages are allocated.
+// mi_page_t      : a "mimalloc" page (usually 64KiB or 512KiB) from
 //                  where objects are allocated.
+//                  Note: we always explicitly use "OS page" to refer to OS pages
+//                  and just use "page" to refer to mimalloc pages (`mi_page_t`)
 // --------------------------------------------------------------------------
 
 
@@ -192,14 +195,14 @@ typedef int32_t  mi_ssize_t;
 #error "mimalloc internal: define more bins"
 #endif
 
-// Maximum slice offset (15)
-#define MI_MAX_SLICE_OFFSET               ((MI_BLOCK_ALIGNMENT_MAX / MI_SEGMENT_SLICE_SIZE) - 1)
-
 // blocks up to this size are always allocated aligned
 #define MI_MAX_ALIGN_GUARANTEE            (8*MI_MAX_ALIGN_SIZE)
 
 // Alignments over MI_BLOCK_ALIGNMENT_MAX are allocated in dedicated huge page segments
 #define MI_BLOCK_ALIGNMENT_MAX            (MI_SEGMENT_SIZE >> 1)
+
+// Maximum slice count (255) for which we can find the page for interior pointers
+#define MI_MAX_SLICE_OFFSET_COUNT         ((MI_BLOCK_ALIGNMENT_MAX / MI_SEGMENT_SLICE_SIZE) - 1)
 
 
 // ------------------------------------------------------
@@ -285,9 +288,9 @@ typedef struct mi_page_s {
   // "owned" by the segment
   uint32_t              slice_count;       // slices in this page (0 if not a page)
   uint32_t              slice_offset;      // distance from the actual page data slice (0 if a page)
-  uint8_t               is_committed : 1;  // `true` if the page virtual memory is committed
-  uint8_t               is_zero_init : 1;  // `true` if the page was initially zero initialized
-  uint8_t               is_huge:1;         // `true` if the page is in a huge segment
+  uint8_t               is_committed:1;    // `true` if the page virtual memory is committed
+  uint8_t               is_zero_init:1;    // `true` if the page was initially zero initialized
+  uint8_t               is_huge:1;         // `true` if the page is in a huge segment (`segment->kind == MI_SEGMENT_HUGE`)
                                            // padding
   // layout like this to optimize access in `mi_malloc` and `mi_free`
   uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
@@ -328,12 +331,13 @@ typedef enum mi_page_kind_e {
   MI_PAGE_SMALL,    // small blocks go into 64KiB pages inside a segment
   MI_PAGE_MEDIUM,   // medium blocks go into medium pages inside a segment
   MI_PAGE_LARGE,    // larger blocks go into a page of just one block
-  MI_PAGE_HUGE,     // huge blocks (> 16 MiB) are put into a single page in a single segment.
+  MI_PAGE_HUGE,     // huge blocks (> `MI_LARGE_OBJ_SIZE_MAX) or with alignment `> MI_BLOCK_ALIGNMENT_MAX`
+                    // are put into a single page in a single `MI_SEGMENT_HUGE` segment.
 } mi_page_kind_t;
 
 typedef enum mi_segment_kind_e {
   MI_SEGMENT_NORMAL, // MI_SEGMENT_SIZE size with pages inside.
-  MI_SEGMENT_HUGE,   // > MI_LARGE_SIZE_MAX segment with just one huge page inside.
+  MI_SEGMENT_HUGE,   // segment with just one huge page inside.
 } mi_segment_kind_t;
 
 // ------------------------------------------------------
@@ -404,39 +408,48 @@ typedef struct mi_memid_s {
 } mi_memid_t;
 
 
-// Segments are large allocated memory blocks (8mb on 64 bit) from
-// the OS. Inside segments we allocated fixed size _pages_ that
-// contain blocks.
+// Segments are large allocated memory blocks (8mb on 64 bit) from arenas or the OS.
+//
+// Inside segments we allocated fixed size mimalloc pages (`mi_page_t`) that contain blocks.
+// The start of a segment is this structure with a fixed number of slice entries (`slices`)
+// usually followed by a guard OS page and the actual allocation area with pages.
+// While a page is not allocated, we view it's data as a `mi_slice_t` (instead of a `mi_page_t`).
+// Of any free area, the first slice has the info and `slice_offset == 0`; for any subsequent
+// slices part of the area, the `slice_offset` is the byte offset back to the first slice
+// (so we can quickly find the page info on a free, `internal.h:_mi_segment_page_of`).
+// For slices, the `block_size` field is repurposed to signify if a slice is used (`1`) or not (`0`).
+// Small and medium pages use a fixed amount of slices to reduce slice fragmentation, while
+// large and huge pages span a variable amount of slices.
 typedef struct mi_segment_s {
   // constant fields
-  mi_memid_t        memid;              // memory id for arena allocation
-  bool              allow_decommit;
-  bool              allow_purge;
+  mi_memid_t        memid;              // memory id for arena/OS allocation
+  bool              allow_decommit;     // can we decommmit the memory
+  bool              allow_purge;        // can we purge the memory (reset or decommit)
   size_t            segment_size;
 
   // segment fields
-  mi_msecs_t        purge_expire;
-  mi_commit_mask_t  purge_mask;
-  mi_commit_mask_t  commit_mask;
+  mi_msecs_t        purge_expire;       // purge slices in the `purge_mask` after this time
+  mi_commit_mask_t  purge_mask;         // slices that can be purged
+  mi_commit_mask_t  commit_mask;        // slices that are currently committed
 
   // from here is zero initialized
   struct mi_segment_s* next;            // the list of freed segments in the cache (must be first field, see `segment.c:mi_segment_init`)
   bool              was_reclaimed;      // true if it was reclaimed (used to limit on-free reclamation)
 
   size_t            abandoned;          // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
-  size_t            abandoned_visits;   // count how often this segment is visited in the abandoned list (to force reclaim it it is too long)
+  size_t            abandoned_visits;   // count how often this segment is visited during abondoned reclamation (to force reclaim if it takes too long)
   size_t            used;               // count of pages in use
   uintptr_t         cookie;             // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
 
   size_t            segment_slices;      // for huge segments this may be different from `MI_SLICES_PER_SEGMENT`
-  size_t            segment_info_slices; // initial slices we are using segment info and possible guard pages.
+  size_t            segment_info_slices; // initial count of slices that we are using for segment info and possible guard pages.
 
   // layout like this to optimize access in `mi_free`
   mi_segment_kind_t kind;
   size_t            slice_entries;       // entries in the `slices` array, at most `MI_SLICES_PER_SEGMENT`
   _Atomic(mi_threadid_t) thread_id;      // unique id of the thread owning this segment
 
-  mi_slice_t        slices[MI_SLICES_PER_SEGMENT+1];  // one more for huge blocks with large alignment
+  mi_slice_t        slices[MI_SLICES_PER_SEGMENT+1];  // one extra final entry for huge blocks with large alignment
 } mi_segment_t;
 
 

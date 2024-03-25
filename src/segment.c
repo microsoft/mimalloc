@@ -11,7 +11,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memset
 #include <stdio.h>
 
-#define MI_PAGE_HUGE_ALIGN   (256*1024)
+// -------------------------------------------------------------------
+// Segments
+// mimalloc pages reside in segments. See `mi_segment_valid` for invariants.
+// -------------------------------------------------------------------
+
 
 static void mi_segment_try_purge(mi_segment_t* segment, bool force, mi_stats_t* stats);
 
@@ -146,10 +150,6 @@ size_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, size_t* idx) {
 
 /* --------------------------------------------------------------------------------
   Segment allocation
-
-  If a  thread ends, it "abandons" pages with used blocks
-  and there is an abandoned segment list whose segments can
-  be reclaimed by still running threads, much like work-stealing.
 -------------------------------------------------------------------------------- */
 
 
@@ -268,10 +268,10 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
     mi_assert_internal(slice->slice_offset == 0);
     size_t index = mi_slice_index(slice);
     size_t maxindex = (index + slice->slice_count >= segment->slice_entries ? segment->slice_entries : index + slice->slice_count) - 1;
-    if (mi_slice_is_used(slice)) { // a page in use, we need at least MAX_SLICE_OFFSET valid back offsets
+    if (mi_slice_is_used(slice)) { // a page in use, we need at least MAX_SLICE_OFFSET_COUNT valid back offsets
       used_count++;
-      if (segment->kind == MI_SEGMENT_HUGE) { mi_assert_internal(slice->is_huge); }
-      for (size_t i = 0; i <= MI_MAX_SLICE_OFFSET && index + i <= maxindex; i++) {
+      mi_assert_internal(slice->is_huge == (segment->kind == MI_SEGMENT_HUGE));
+      for (size_t i = 0; i <= MI_MAX_SLICE_OFFSET_COUNT && index + i <= maxindex; i++) {
         mi_assert_internal(segment->slices[index + i].slice_offset == i*sizeof(mi_slice_t));
         mi_assert_internal(i==0 || segment->slices[index + i].slice_count == 0);
         mi_assert_internal(i==0 || segment->slices[index + i].block_size == 1);
@@ -720,9 +720,9 @@ static mi_page_t* mi_segment_span_allocate(mi_segment_t* segment, size_t slice_i
   mi_page_t*  page = mi_slice_to_page(slice);
   mi_assert_internal(mi_page_block_size(page) == bsize);
 
-  // set slice back pointers for the first MI_MAX_SLICE_OFFSET entries
+  // set slice back pointers for the first MI_MAX_SLICE_OFFSET_COUNT entries
   size_t extra = slice_count-1;
-  if (extra > MI_MAX_SLICE_OFFSET) extra = MI_MAX_SLICE_OFFSET;
+  if (extra > MI_MAX_SLICE_OFFSET_COUNT) extra = MI_MAX_SLICE_OFFSET_COUNT;
   if (slice_index + extra >= segment->slice_entries) extra = segment->slice_entries - slice_index - 1;  // huge objects may have more slices than avaiable entries in the segment->slices
 
   mi_slice_t* slice_next = slice + 1;
