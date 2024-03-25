@@ -73,7 +73,7 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, mi_segment_t* segment, void* p) mi_attr_noexcept {
   MI_UNUSED(segment);
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(page, p) : (mi_block_t*)p);
-  mi_free_block_local(page, block, true, true);
+  mi_free_block_local(page, block, true /* track stats */, true /* check for a full page */);
 }
 
 // free a pointer owned by another thread (page parameter comes first for better codegen)
@@ -144,7 +144,7 @@ void mi_free(void* p) mi_attr_noexcept
     if mi_likely(page->flags.full_aligned == 0) { // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
       // thread-local, aligned, and not a full page
       mi_block_t* const block = (mi_block_t*)p;
-      mi_free_block_local(page, block, true, false /* no need to check if the page is full */);
+      mi_free_block_local(page, block, true /* track stats */, false /* no need to check if the page is full */);
     }
     else {
       // page is full or contains (inner) aligned blocks; use generic path
@@ -175,11 +175,11 @@ bool _mi_free_delayed_block(mi_block_t* block) {
     return false;
   }
 
-  // collect all other non-local frees to ensure up-to-date `used` count
+  // collect all other non-local frees (move from `thread_free` to `free`) to ensure up-to-date `used` count
   _mi_page_free_collect(page, false);
 
-  // and free the block (possibly freeing the page as well since used is updated)
-  mi_free_block_local(page, block, false /* stats have already been adjusted */, true);
+  // and free the block (possibly freeing the page as well since `used` is updated)
+  mi_free_block_local(page, block, false /* stats have already been adjusted */, true /* check for a full page */);
   return true;
 }
 
@@ -233,10 +233,6 @@ static void mi_decl_noinline mi_free_block_delayed_mt( mi_page_t* page, mi_block
   }
 }
 
-#if MI_HUGE_PAGE_ABANDON
-static void mi_stat_huge_free(const mi_page_t* page);
-#endif
-
 // Multi-threaded free (`_mt`) (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
 static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_segment_t* segment, mi_block_t* block)
 {
@@ -259,7 +255,7 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_segment_t* seg
   // that is safe as these are constant and the page won't be freed (as the block is not freed yet).
   mi_check_padding(page, block);
 
-  // adjust stats (after padding check and potential recursive `mi_free` above)
+  // adjust stats (after padding check and potentially recursive `mi_free` above)
   mi_stat_free(page, block);    // stat_free may access the padding
   mi_track_free_size(block, mi_page_usable_size_of(page,block));
 
@@ -269,7 +265,6 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_segment_t* seg
   if (segment->kind == MI_SEGMENT_HUGE) {
     #if MI_HUGE_PAGE_ABANDON
     // huge page segments are always abandoned and can be freed immediately
-    mi_stat_huge_free(page);
     _mi_segment_huge_page_free(segment, page, block);
     return;
     #else
@@ -529,24 +524,4 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
 static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(page); MI_UNUSED(block);
 }
-#endif
-
-#if MI_HUGE_PAGE_ABANDON
-#if (MI_STAT>0)
-// maintain stats for huge objects
-static void mi_stat_huge_free(const mi_page_t* page) {
-  mi_heap_t* const heap = mi_heap_get_default();
-  const size_t bsize = mi_page_block_size(page); // to match stats in `page.c:mi_page_huge_alloc`
-  if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
-    mi_heap_stat_decrease(heap, large, bsize);
-  }
-  else {
-    mi_heap_stat_decrease(heap, huge, bsize);
-  }
-}
-#else
-static void mi_stat_huge_free(const mi_page_t* page) {
-  MI_UNUSED(page);
-}
-#endif
 #endif

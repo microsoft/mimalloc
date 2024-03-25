@@ -1448,7 +1448,7 @@ void _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block
     mi_block_set_next(page, block, page->free);
     page->free = block;
     page->used--;
-    page->is_zero = false;
+    page->is_zero_init = false;
     mi_assert(page->used == 0);
     mi_tld_t* tld = heap->tld;
     _mi_segment_page_free(page, true, &tld->segments);
