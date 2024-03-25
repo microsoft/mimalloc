@@ -508,7 +508,7 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
   const size_t bsize = mi_page_block_size(page);
   const size_t ubsize = mi_page_usable_block_size(page); // without padding
   size_t   psize;
-  uint8_t* pstart = _mi_segment_page_start(_mi_page_segment(page), page, &psize, NULL);
+  uint8_t* pstart = _mi_segment_page_start(_mi_page_segment(page), page, &psize);
 
   if (page->capacity == 1) {
     // optimize page with one block

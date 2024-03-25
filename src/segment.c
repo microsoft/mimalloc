@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2020, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2024, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -25,14 +25,15 @@ static uint8_t* mi_segment_raw_page_start(const mi_segment_t* segment, const mi_
   - small pages (64KiB), 64 in one segment
   - medium pages (512KiB), 8 in one segment
   - large pages (4MiB), 1 in one segment
-  - huge blocks > MI_LARGE_OBJ_SIZE_MAX become large segment with 1 page
+  - huge segments have 1 page in one segment that can be larger than `MI_SEGMENT_SIZE`.
+    it is used for blocks `> MI_LARGE_OBJ_SIZE_MAX` or with alignment `> MI_BLOCK_ALIGNMENT_MAX`.
 
-  In any case the memory for a segment is virtual and usually committed on demand.
+  The memory for a segment is usually committed on demand.
   (i.e. we are careful to not touch the memory until we actually allocate a block there)
 
-  If a  thread ends, it "abandons" pages with used blocks
-  and there is an abandoned segment list whose segments can
-  be reclaimed by still running threads, much like work-stealing.
+  If a  thread ends, it "abandons" pages that still contain live blocks.
+  Such segments are abondoned and these can be reclaimed by still running threads,
+  (much like work-stealing).
 -------------------------------------------------------------------------------- */
 
 
@@ -142,7 +143,7 @@ static bool mi_segment_is_valid(const mi_segment_t* segment, mi_segments_tld_t* 
   mi_assert_internal(_mi_ptr_cookie(segment) == segment->cookie);
   mi_assert_internal(segment->used <= segment->capacity);
   mi_assert_internal(segment->abandoned <= segment->used);
-  mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM || segment->capacity == 1);
+  mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM || segment->capacity == 1); // one large or huge page per segment
   size_t nfree = 0;
   for (size_t i = 0; i < segment->capacity; i++) {
     const mi_page_t* const page = &segment->pages[i];
@@ -152,7 +153,7 @@ static bool mi_segment_is_valid(const mi_segment_t* segment, mi_segments_tld_t* 
     if (page->segment_in_use) {
       mi_assert_expensive(!mi_pages_purge_contains(page, tld));
     }
-    if (segment->page_kind == MI_PAGE_HUGE) mi_assert_internal(page->is_huge);
+    mi_assert_internal(page->is_huge == (segment->page_kind == MI_PAGE_HUGE));
   }
   mi_assert_internal(nfree + segment->used == segment->capacity);
   // mi_assert_internal(segment->thread_id == _mi_thread_id() || (segment->thread_id==0)); // or 0
@@ -420,11 +421,11 @@ static uint8_t* mi_segment_raw_page_start(const mi_segment_t* segment, const mi_
 }
 
 // Start of the page available memory; can be used on uninitialized pages (only `segment_idx` must be set)
-static uint8_t* mi_segment_page_start_ex(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size, size_t* pre_size)
+uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size)
 {
   size_t   psize;
   uint8_t* p = mi_segment_raw_page_start(segment, page, &psize);
-  if (pre_size != NULL) *pre_size = 0;
+  const size_t block_size = mi_page_block_size(page);
   if (page->segment_idx == 0 && block_size > 0 && segment->page_kind <= MI_PAGE_MEDIUM) {
     // for small and medium objects, ensure the page start is aligned with the block size (PR#66 by kickunderscore)
     size_t adjust = block_size - ((uintptr_t)p % block_size);
@@ -432,7 +433,7 @@ static uint8_t* mi_segment_page_start_ex(const mi_segment_t* segment, const mi_p
       if (adjust < block_size) {
         p += adjust;
         psize -= adjust;
-        if (pre_size != NULL) *pre_size = adjust;
+        // if (pre_size != NULL) *pre_size = adjust;
       }
       mi_assert_internal((uintptr_t)p % block_size == 0);
     }
@@ -444,9 +445,6 @@ static uint8_t* mi_segment_page_start_ex(const mi_segment_t* segment, const mi_p
   return p;
 }
 
-uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size, size_t* pre_size) {
-  return mi_segment_page_start_ex(segment, page, mi_page_block_size(page), page_size, pre_size);
-}
 
 static size_t mi_segment_calculate_sizes(size_t capacity, size_t required, size_t* pre_size, size_t* info_size)
 {
@@ -961,26 +959,31 @@ void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
 }
 
 static long mi_segment_get_reclaim_tries(void) {
-  // limit the tries to 10% (default) of the abandoned segments with at least 8 tries, and at most 1024.
+  // limit the tries to 10% (default) of the abandoned segments with at least 8 and at most 1024 tries.
   const size_t perc = (size_t)mi_option_get_clamp(mi_option_max_segment_reclaim, 0, 100);
   if (perc <= 0) return 0;
   const size_t total_count = _mi_arena_segment_abandoned_count();
+  if (total_count == 0) return 0;
   const size_t relative_count = (total_count > 10000 ? (total_count / 100) * perc : (total_count * perc) / 100); // avoid overflow
-  long max_tries = (long)(relative_count < 8 ? 8 : (relative_count > 1024 ? 1024 : relative_count));
+  long max_tries = (long)(relative_count <= 1 ? 1 : (relative_count > 1024 ? 1024 : relative_count));
+  if (max_tries < 8 && total_count > 8) { max_tries = 8;  }
   return max_tries;
 }
 
 static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, bool* reclaimed, mi_segments_tld_t* tld)
 {
   *reclaimed = false;
-  mi_segment_t* segment;
-  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap,&current);
   long max_tries = mi_segment_get_reclaim_tries();
+  if (max_tries <= 0) return NULL;
+
+  mi_segment_t* segment;
+  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, &current);
   while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL))
   {
     segment->abandoned_visits++;
-    // todo: an arena exclusive heap will potentially visit many abandoned unsuitable segments
-    // and push them into the visited list and use many tries. Perhaps we can skip non-suitable ones in a better way?
+    // todo: should we respect numa affinity for abondoned reclaim? perhaps only for the first visit?
+    // todo: an arena exclusive heap will potentially visit many abandoned unsuitable segments and use many tries
+    // Perhaps we can skip non-suitable ones in a better way?
     bool is_suitable = _mi_heap_memid_is_suitable(heap, segment->memid);
     bool all_pages_free;
     bool has_page = mi_segment_check_free(segment,block_size,&all_pages_free); // try to free up pages (due to concurrent frees)
@@ -1088,7 +1091,7 @@ static mi_page_t* mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, mi_p
   mi_assert_internal(page != NULL);
   #if MI_DEBUG>=2 && !MI_TRACK_ENABLED // && !MI_TSAN
   // verify it is committed
-  mi_segment_page_start_ex(_mi_page_segment(page), page, sizeof(void*), NULL, NULL)[0] = 0;
+  mi_segment_raw_page_start(_mi_page_segment(page), page, NULL)[0] = 0;
   #endif
   return page;
 }
@@ -1111,7 +1114,7 @@ static mi_page_t* mi_segment_large_page_alloc(mi_heap_t* heap, size_t block_size
   mi_page_t* page = mi_segment_find_free(segment, tld);
   mi_assert_internal(page != NULL);
 #if MI_DEBUG>=2 && !MI_TRACK_ENABLED // && !MI_TSAN
-  mi_segment_page_start_ex(segment, page, sizeof(void*), NULL, NULL)[0] = 0;
+  mi_segment_raw_page_start(segment, page, NULL)[0] = 0;
 #endif
   return page;
 }
@@ -1132,9 +1135,9 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   // for huge pages we initialize the block_size as we may
   // overallocate to accommodate large alignments.
   size_t psize;
-  uint8_t* start = mi_segment_page_start_ex(segment, page, 0, &psize, NULL);
+  uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
   page->block_size = psize;
-  
+
   // reset the part of the page that will not be used; this can be quite large (close to MI_SEGMENT_SIZE)
   if (page_alignment > 0 && segment->allow_decommit && page->is_committed) {
     uint8_t* aligned_p = (uint8_t*)_mi_align_up((uintptr_t)start, page_alignment);

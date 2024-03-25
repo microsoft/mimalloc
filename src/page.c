@@ -59,7 +59,7 @@ static inline uint8_t* mi_page_area(const mi_page_t* page) {
 
 static bool mi_page_list_is_valid(mi_page_t* page, mi_block_t* p) {
   size_t psize;
-  uint8_t* page_area = _mi_segment_page_start(_mi_page_segment(page), page, &psize, NULL);
+  uint8_t* page_area = _mi_segment_page_start(_mi_page_segment(page), page, &psize);
   mi_block_t* start = (mi_block_t*)page_area;
   mi_block_t* end   = (mi_block_t*)(page_area + psize);
   while(p != NULL) {
@@ -85,7 +85,8 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   // const size_t bsize = mi_page_block_size(page);
   mi_segment_t* segment = _mi_page_segment(page);
   uint8_t* start = mi_page_start(page);
-  mi_assert_internal(start == _mi_segment_page_start(segment,page,NULL,NULL));
+  mi_assert_internal(start == _mi_segment_page_start(segment,page,NULL));
+  mi_assert_internal(page->is_huge == (segment->page_kind == MI_PAGE_HUGE));
   //mi_assert_internal(start + page->capacity*page->block_size == page->top);
 
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
@@ -616,7 +617,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld)
 
   size_t page_size;
   //uint8_t* page_start =
-  _mi_segment_page_start(_mi_page_segment(page), page, &page_size, NULL);
+  _mi_segment_page_start(_mi_page_segment(page), page, &page_size);
   mi_stat_counter_increase(tld->stats.pages_extended, 1);
 
   // calculate the extend count
@@ -660,7 +661,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   mi_page_set_heap(page, heap);
   page->block_size = block_size;
   size_t page_size;
-  page->page_start = _mi_segment_page_start(segment, page, &page_size, NULL);
+  page->page_start = _mi_segment_page_start(segment, page, &page_size);
   mi_track_mem_noaccess(page->page_start,page_size);
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);

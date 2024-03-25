@@ -147,7 +147,7 @@ void       _mi_segment_map_freed_at(const mi_segment_t* segment);
 mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
 void       _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld);
 void       _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld);
-uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size, size_t* pre_size); // page start for any page
+uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size);
 
 #if MI_HUGE_PAGE_ABANDON
 void       _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block_t* block);
@@ -454,6 +454,7 @@ static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const 
 // Quick page start for initialized pages
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
   mi_assert_internal(page->page_start != NULL);
+  mi_assert_expensive(_mi_segment_page_start(_mi_page_segment(page),page,NULL) == page->page_start);
   return page->page_start;
 }
 
@@ -466,7 +467,7 @@ static inline mi_page_t* _mi_ptr_page(void* p) {
 // Get the block size of a page (special case for huge objects)
 static inline size_t mi_page_block_size(const mi_page_t* page) {
   mi_assert_internal(page->block_size > 0);
-  return page->block_size;  
+  return page->block_size;
 }
 
 static inline bool mi_page_is_huge(const mi_page_t* page) {
