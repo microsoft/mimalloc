@@ -46,6 +46,11 @@ bool test_heap2(void);
 bool test_stl_allocator1(void);
 bool test_stl_allocator2(void);
 
+bool test_stl_heap_allocator1(void);
+bool test_stl_heap_allocator2(void);
+bool test_stl_heap_allocator3(void);
+bool test_stl_heap_allocator4(void);
+
 bool mem_is_zero(uint8_t* p, size_t size) {
   if (p==NULL) return false;
   for (size_t i = 0; i < size; ++i) {
@@ -304,6 +309,11 @@ int main(void) {
   CHECK("stl_allocator1", test_stl_allocator1());
   CHECK("stl_allocator2", test_stl_allocator2());
 
+	CHECK("stl_heap_allocator1", test_stl_heap_allocator1());
+	CHECK("stl_heap_allocator2", test_stl_heap_allocator2());
+	CHECK("stl_heap_allocator3", test_stl_heap_allocator3());
+	CHECK("stl_heap_allocator4", test_stl_heap_allocator4());
+
   // ---------------------------------------------------
   // Done
   // ---------------------------------------------------[]
@@ -353,6 +363,64 @@ bool test_stl_allocator2(void) {
   vec.push_back(some_struct());
   vec.pop_back();
   return vec.size() == 0;
+#else
+  return true;
+#endif
+}
+
+bool test_stl_heap_allocator1(void) {
+#ifdef __cplusplus
+  std::vector<some_struct, mi_heap_stl_allocator<some_struct> > vec;
+  vec.push_back(some_struct());
+  vec.pop_back();
+  return vec.size() == 0;
+#else
+  return true;
+#endif
+}
+
+bool test_stl_heap_allocator2(void) {
+#ifdef __cplusplus
+  std::vector<some_struct, mi_heap_destroy_stl_allocator<some_struct> > vec;
+  vec.push_back(some_struct());
+  vec.pop_back();
+  return vec.size() == 0;
+#else
+  return true;
+#endif
+}
+
+bool test_stl_heap_allocator3(void) {
+#ifdef __cplusplus
+	mi_heap_t* heap = mi_heap_new();
+	bool good = false;
+	{
+		mi_heap_stl_allocator<some_struct> myAlloc(heap);
+		std::vector<some_struct, mi_heap_stl_allocator<some_struct> > vec(myAlloc);
+		vec.push_back(some_struct());
+		vec.pop_back();
+		good = vec.size() == 0;
+	}
+	mi_heap_delete(heap);
+  return good;
+#else
+  return true;
+#endif
+}
+
+bool test_stl_heap_allocator4(void) {
+#ifdef __cplusplus
+	mi_heap_t* heap = mi_heap_new();
+	bool good = false;
+	{
+		mi_heap_destroy_stl_allocator<some_struct> myAlloc(heap);
+		std::vector<some_struct, mi_heap_destroy_stl_allocator<some_struct> > vec(myAlloc);
+		vec.push_back(some_struct());
+		vec.pop_back();
+		good = vec.size() == 0;
+	}
+	mi_heap_destroy(heap);
+  return good;
 #else
   return true;
 #endif

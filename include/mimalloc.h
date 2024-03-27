@@ -487,6 +487,7 @@ template<class T1,class T2> bool operator!=(const mi_stl_allocator<T1>& , const 
 #define MI_HAS_HEAP_STL_ALLOCATOR 1
 
 #include <memory>      // std::shared_ptr
+#include "mimalloc/types.h"
 
 // Common base class for STL allocators in a specific heap
 template<class T, bool _mi_destroy> struct _mi_heap_stl_allocator_common : public _mi_stl_allocator_common<T> {
@@ -494,7 +495,7 @@ template<class T, bool _mi_destroy> struct _mi_heap_stl_allocator_common : publi
   using typename _mi_stl_allocator_common<T>::value_type;
   using typename _mi_stl_allocator_common<T>::pointer;
 
-  _mi_heap_stl_allocator_common(mi_heap_t* hp) : heap(hp) { }    /* will not delete nor destroy the passed in heap */
+  _mi_heap_stl_allocator_common(mi_heap_t* hp) : heap(hp, [](mi_heap_t*) {}) {}    /* will not delete nor destroy the passed in heap */
 
   #if (__cplusplus >= 201703L)  // C++17
   mi_decl_nodiscard T* allocate(size_type count) { return static_cast<T*>(mi_heap_alloc_new_n(this->heap.get(), count, sizeof(T))); }
