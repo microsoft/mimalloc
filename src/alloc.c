@@ -396,7 +396,8 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
     char* rname = realpath(fname, NULL);
     if (rname == NULL) return NULL;
     char* result = mi_heap_strdup(heap, rname);
-    free(rname);  // use regular free! (which may be redirected to our free but that's ok)
+    mi_cfree(rname);  // use checked free (which may be redirected to our free but that's ok)
+    // note: with ASAN realpath is intercepted and mi_cfree may leak the returned pointer :-(
     return result;
   }
   /*
