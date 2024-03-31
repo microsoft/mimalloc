@@ -168,7 +168,7 @@ void* mi_expand(void* p, size_t newsize);
 /// @returns A pointer to a block of \a count * \a size bytes, or \a NULL
 /// if out of memory or if \a count * \a size overflows.
 ///
-/// If there is no overflow, it behaves exactly like `mi_malloc(p,count*size)`.
+/// If there is no overflow, it behaves exactly like `mi_malloc(count*size)`.
 /// @see mi_calloc()
 /// @see mi_zallocn()
 void* mi_mallocn(size_t count, size_t size);
@@ -499,11 +499,11 @@ void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_m
 /// \{
 
 /// The maximum supported alignment size (currently 1MiB).
-#define MI_ALIGNMENT_MAX   (1024*1024UL)
+#define MI_BLOCK_ALIGNMENT_MAX   (1024*1024UL)
 
 /// Allocate \a size bytes aligned by \a alignment.
 /// @param size  number of bytes to allocate.
-/// @param alignment  the minimal alignment of the allocated memory. Must be less than #MI_ALIGNMENT_MAX.
+/// @param alignment  the minimal alignment of the allocated memory. Must be less than #MI_BLOCK_ALIGNMENT_MAX.
 /// @returns pointer to the allocated memory or \a NULL if out of memory.
 /// The returned pointer is aligned by \a alignment, i.e.
 /// `(uintptr_t)p % alignment == 0`.

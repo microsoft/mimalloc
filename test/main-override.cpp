@@ -379,7 +379,7 @@ static void bench_alloc_large(void) {
   static constexpr size_t kMaxBufferSize = 25 * 1024 * 1024;
   std::unique_ptr<char[]> buffers[kNumBuffers];
 
-  std::random_device rd;
+  std::random_device rd;  (void)rd;
   std::mt19937 gen(42); //rd());
   std::uniform_int_distribution<> size_distribution(kMinBufferSize, kMaxBufferSize);
   std::uniform_int_distribution<> buf_number_distribution(0, kNumBuffers - 1);

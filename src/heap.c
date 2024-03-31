@@ -32,7 +32,7 @@ static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void
   #if MI_DEBUG>1
   size_t total = heap->page_count;
   size_t count = 0;
-  #endif  
+  #endif
 
   for (size_t i = 0; i <= MI_BIN_FULL; i++) {
     mi_page_queue_t* pq = &heap->pages[i];
@@ -120,11 +120,11 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 {
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
 
-  const bool force = collect >= MI_FORCE;  
+  const bool force = collect >= MI_FORCE;
   _mi_deferred_free(heap, force);
 
-  // note: never reclaim on collect but leave it to threads that need storage to reclaim 
-  const bool force_main = 
+  // note: never reclaim on collect but leave it to threads that need storage to reclaim
+  const bool force_main =
     #ifdef NDEBUG
       collect == MI_FORCE
     #else
@@ -474,8 +474,7 @@ static bool mi_heap_page_check_owned(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
   MI_UNUSED(heap);
   MI_UNUSED(pq);
   bool* found = (bool*)vfound;
-  mi_segment_t* segment = _mi_page_segment(page);
-  void* start = _mi_page_start(segment, page, NULL);
+  void* start = mi_page_start(page);
   void* end   = (uint8_t*)start + (page->capacity * mi_page_block_size(page));
   *found = (p >= start && p < end);
   return (!*found); // continue if not found
@@ -521,7 +520,7 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
   const size_t bsize = mi_page_block_size(page);
   const size_t ubsize = mi_page_usable_block_size(page); // without padding
   size_t   psize;
-  uint8_t* pstart = _mi_page_start(_mi_page_segment(page), page, &psize);
+  uint8_t* pstart = _mi_segment_page_start(_mi_page_segment(page), page, &psize);
 
   if (page->capacity == 1) {
     // optimize page with one block
@@ -588,7 +587,7 @@ static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
   xarea.page = page;
   xarea.area.reserved = page->reserved * bsize;
   xarea.area.committed = page->capacity * bsize;
-  xarea.area.blocks = _mi_page_start(_mi_page_segment(page), page, NULL);
+  xarea.area.blocks = mi_page_start(page);
   xarea.area.used = page->used;   // number of blocks in use (#553)
   xarea.area.block_size = ubsize;
   xarea.area.full_block_size = bsize;
