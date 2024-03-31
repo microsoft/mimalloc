@@ -488,7 +488,6 @@ template<class T1,class T2> bool operator!=(const mi_stl_allocator<T1>& , const 
 #define MI_HAS_HEAP_STL_ALLOCATOR 1
 
 #include <memory>      // std::shared_ptr
-#include "mimalloc/types.h"
 
 // Common base class for STL allocators in a specific heap
 template<class T, bool _mi_destroy> struct _mi_heap_stl_allocator_common : public _mi_stl_allocator_common<T> {
