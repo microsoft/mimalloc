@@ -42,8 +42,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #elif defined(__APPLE__)
   #include <AvailabilityMacros.h>
   #include <TargetConditionals.h>
-  #if !TARGET_IOS_IPHONE && !TARGET_IOS_SIMULATOR
-  #include <mach/vm_statistics.h>
+  #if !defined(TARGET_OS_OSX) || TARGET_OS_OSX   // see issue #879, used to be (!TARGET_IOS_IPHONE && !TARGET_IOS_SIMULATOR)
+  #include <mach/vm_statistics.h>    // VM_MAKE_TAG, VM_FLAGS_SUPERPAGE_SIZE_2MB, etc.
   #endif
   #if !defined(MAC_OS_X_VERSION_10_7)
   #define MAC_OS_X_VERSION_10_7   1070
