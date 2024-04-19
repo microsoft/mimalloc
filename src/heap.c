@@ -120,7 +120,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 {
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
 
-  const bool force = collect >= MI_FORCE;
+  const bool force = (collect >= MI_FORCE);
   _mi_deferred_free(heap, force);
 
   // note: never reclaim on collect but leave it to threads that need storage to reclaim
@@ -163,11 +163,13 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
     _mi_segment_thread_collect(&heap->tld->segments);
   }
 
-  // collect regions on program-exit (or shared library unload)
+  // if forced, collect thread data cache on program-exit (or shared library unload)
   if (force && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
     _mi_thread_data_collect();  // collect thread data cache
-    _mi_arena_collect(true /* force purge */, &heap->tld->stats);
   }
+  
+  // collect arenas
+  _mi_arena_collect(force /* force purge? */, &heap->tld->stats);  
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
