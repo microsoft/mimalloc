@@ -404,13 +404,6 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   _mi_arena_free(segment, mi_segment_size(segment), csize, segment->memid, tld->stats);
 }
 
-// called by threads that are terminating
-void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
-  MI_UNUSED(tld);
-  // nothing to do
-}
-
-
 /* -----------------------------------------------------------
    Commit/Decommit ranges
 ----------------------------------------------------------- */
@@ -573,7 +566,7 @@ static void mi_segment_schedule_purge(mi_segment_t* segment, uint8_t* p, size_t 
 }
 
 static void mi_segment_try_purge(mi_segment_t* segment, bool force, mi_stats_t* stats) {
-  if (!segment->allow_purge || mi_commit_mask_is_empty(&segment->purge_mask)) return;
+  if (!segment->allow_purge || segment->purge_expire == 0 || mi_commit_mask_is_empty(&segment->purge_mask)) return;
   mi_msecs_t now = _mi_clock_now();
   if (!force && now < segment->purge_expire) return;
 
@@ -595,6 +588,12 @@ static void mi_segment_try_purge(mi_segment_t* segment, bool force, mi_stats_t* 
   mi_assert_internal(mi_commit_mask_is_empty(&segment->purge_mask));
 }
 
+// called from `mi_heap_collect_ex`
+// this can be called per-page so it is important that try_purge has fast exit path
+void _mi_segment_collect(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
+  MI_UNUSED(force); MI_UNUSED(tld);
+  mi_segment_try_purge(segment, force, tld->stats);
+}
 
 /* -----------------------------------------------------------
    Span free

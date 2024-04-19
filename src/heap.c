@@ -104,6 +104,10 @@ static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t
     // still used blocks but the thread is done; abandon the page
     _mi_page_abandon(page, pq);
   }
+  if (collect == MI_FORCE) {
+    mi_segment_t* segment = _mi_page_segment(page);
+    _mi_segment_collect(segment, true /* force? */, &heap->tld->segments);
+  }
   return true; // don't break
 }
 
@@ -157,12 +161,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   // collect abandoned segments (in particular, purge expired parts of segments in the abandoned segment list)
   // note: forced purge can be quite expensive if many threads are created/destroyed so we do not force on abandonment
   _mi_abandoned_collect(heap, collect == MI_FORCE /* force? */, &heap->tld->segments);
-
-  // collect segment local caches
-  if (force) {
-    _mi_segment_thread_collect(&heap->tld->segments);
-  }
-
+  
   // if forced, collect thread data cache on program-exit (or shared library unload)
   if (force && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
     _mi_thread_data_collect();  // collect thread data cache
