@@ -591,7 +591,6 @@ static void mi_segment_try_purge(mi_segment_t* segment, bool force, mi_stats_t* 
 // called from `mi_heap_collect_ex`
 // this can be called per-page so it is important that try_purge has fast exit path
 void _mi_segment_collect(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
-  MI_UNUSED(force); MI_UNUSED(tld);
   mi_segment_try_purge(segment, force, tld->stats);
 }
 

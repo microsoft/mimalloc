@@ -125,7 +125,7 @@ void*      _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_
 void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld);
 bool       _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id);
 bool       _mi_arena_contains(const void* p);
-void       _mi_arena_collect(bool force_purge, mi_stats_t* stats);
+void       _mi_arenas_collect(bool force_purge, mi_stats_t* stats);
 void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 
 bool       _mi_arena_segment_clear_abandoned(mi_segment_t* segment);
