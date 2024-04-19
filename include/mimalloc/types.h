@@ -195,6 +195,8 @@ typedef int32_t  mi_ssize_t;
 // Alignments over MI_BLOCK_ALIGNMENT_MAX are allocated in dedicated huge page segments
 #define MI_BLOCK_ALIGNMENT_MAX   (MI_SEGMENT_SIZE >> 1)
 
+// we never allocate more than PTRDIFF_MAX (see also <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
+#define MI_MAX_ALLOC_SIZE   PTRDIFF_MAX
 
 // ------------------------------------------------------
 // Mimalloc pages contain allocated blocks
