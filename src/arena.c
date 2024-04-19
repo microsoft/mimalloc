@@ -709,7 +709,7 @@ static void mi_arenas_unsafe_destroy(void) {
 
 // Purge the arenas; if `force_purge` is true, amenable parts are purged even if not yet expired
 void _mi_arena_collect(bool force_purge, mi_stats_t* stats) {
-  mi_arenas_try_purge(force_purge, true /* visit all */, stats);
+  mi_arenas_try_purge(force_purge, force_purge /* visit all? */, stats);
 }
 
 // destroy owned arenas; this is unsafe and should only be done using `mi_option_destroy_on_exit`

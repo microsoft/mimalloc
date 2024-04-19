@@ -121,6 +121,8 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
   _mi_deferred_free(heap, collect >= MI_FORCE);
 
+  const bool force = (collect >= MI_FORCE);
+
   // note: never reclaim on collect but leave it to threads that need storage to reclaim
   if (
   #ifdef NDEBUG
@@ -145,22 +147,24 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   _mi_heap_delayed_free_all(heap);
 
   // collect retired pages
-  _mi_heap_collect_retired(heap, collect >= MI_FORCE);
+  _mi_heap_collect_retired(heap, force);
 
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
   // collect segment and thread caches
-  if (collect >= MI_FORCE) {
+  if (force) {
     _mi_segment_thread_collect(&heap->tld->segments);
   }
 
-  // collect arenas on program-exit (or shared library unload)
-  if (collect >= MI_FORCE && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
+  // if forced, collect thread data cache on program-exit (or shared library unload)
+  if (force && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
     _mi_thread_data_collect();  // collect thread data cache
-    _mi_arena_collect(true /* force purge */, &heap->tld->stats);
   }
+  
+  // collect arenas
+  _mi_arena_collect(force /* force purge? */, &heap->tld->stats);  
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
