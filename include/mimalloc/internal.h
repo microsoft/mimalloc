@@ -155,7 +155,7 @@ void       _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi
 void       _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_block_t* block);
 #endif
 
-void       _mi_segment_collect(bool force, mi_segments_tld_t* tld);
+void       _mi_segment_collect(mi_segment_t* segment, bool force, mi_segments_tld_t* tld);
 void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
 void       _mi_abandoned_await_readers(void);
 bool       _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment);

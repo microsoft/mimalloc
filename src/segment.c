@@ -515,15 +515,9 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   _mi_arena_free(segment, segment_size, committed_size, segment->memid, tld->stats);
 }
 
-// called by threads that are terminating to free cached segments
-void _mi_segment_collect(bool force, mi_segments_tld_t* tld) {
-  MI_UNUSED(force); MI_UNUSED(tld);
-#if MI_DEBUG>=2
-  if (!_mi_is_main_thread()) {
-    mi_assert_internal(tld->pages_purge.first == NULL);
-    mi_assert_internal(tld->pages_purge.last == NULL);
-  }
-#endif
+// called from `heap_collect`. This can be called per-page.
+void _mi_segment_collect(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
+  MI_UNUSED(segment); MI_UNUSED(force); MI_UNUSED(tld);
 }
 
 
