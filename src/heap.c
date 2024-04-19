@@ -104,10 +104,6 @@ static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t
     // still used blocks but the thread is done; abandon the page
     _mi_page_abandon(page, pq);
   }
-  if (collect == MI_FORCE) {
-    mi_segment_t* segment = _mi_page_segment(page);
-    _mi_segment_collect(segment, true /* force? */, &heap->tld->segments);
-  }
   return true; // don't break
 }
 
@@ -157,13 +153,16 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
+  // collect segments (purge pages, this can be expensive so don't force on abandonment)
+  _mi_segments_collect(collect == MI_FORCE, &heap->tld->segments);
+
   // if forced, collect thread data cache on program-exit (or shared library unload)
   if (force && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
     _mi_thread_data_collect();  // collect thread data cache
   }
   
   // collect arenas (this is program wide so don't force purges on abandonment of threads)
-  _mi_arena_collect(collect == MI_FORCE /* force purge? */, &heap->tld->stats);  
+  _mi_arenas_collect(collect == MI_FORCE /* force purge? */, &heap->tld->stats);  
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {

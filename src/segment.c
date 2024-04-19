@@ -362,14 +362,14 @@ static void mi_segment_remove_all_purges(mi_segment_t* segment, bool force_purge
   }
 }
 
-static void mi_pages_try_purge(mi_segments_tld_t* tld) {
+static void mi_pages_try_purge(bool force, mi_segments_tld_t* tld) {
   if (mi_option_get(mi_option_purge_delay) < 0) return;  // purging is not allowed
 
   mi_msecs_t now = _mi_clock_now();
   mi_page_queue_t* pq = &tld->pages_purge;
   // from oldest up to the first that has not expired yet
   mi_page_t* page = pq->last;
-  while (page != NULL && mi_page_purge_is_expired(page,now)) {
+  while (page != NULL && (force || mi_page_purge_is_expired(page,now))) {
     mi_page_t* const prev = page->prev; // save previous field
     mi_page_purge_remove(page, tld);    // remove from the list to maintain invariant for mi_page_purge
     mi_page_purge(_mi_page_segment(page), page, tld);
@@ -515,9 +515,9 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   _mi_arena_free(segment, segment_size, committed_size, segment->memid, tld->stats);
 }
 
-// called from `heap_collect`. This can be called per-page.
-void _mi_segment_collect(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
-  MI_UNUSED(segment); MI_UNUSED(force); MI_UNUSED(tld);
+// called from `heap_collect`. 
+void _mi_segments_collect(bool force, mi_segments_tld_t* tld) {
+  mi_pages_try_purge(force,tld);
 }
 
 
@@ -734,7 +734,7 @@ void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
   mi_assert(page != NULL);
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
-  mi_pages_try_purge(tld);
+  mi_pages_try_purge(false /*force?*/, tld);
 
   // mark it as free now
   mi_segment_page_clear(segment, page, tld);
@@ -793,7 +793,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
 
   // Potentially force purge. Only abandoned segments in arena memory can be
   // reclaimed without a free so if a segment is not from an arena we force purge here to be conservative.
-  mi_pages_try_purge(tld);
+  mi_pages_try_purge(false /*force?*/,tld);
   const bool force_purge = (segment->memid.memkind != MI_MEM_ARENA) ||  mi_option_is_enabled(mi_option_abandoned_page_purge);
   mi_segment_remove_all_purges(segment, force_purge, tld);
 

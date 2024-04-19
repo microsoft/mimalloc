@@ -708,7 +708,7 @@ static void mi_arenas_unsafe_destroy(void) {
 }
 
 // Purge the arenas; if `force_purge` is true, amenable parts are purged even if not yet expired
-void _mi_arena_collect(bool force_purge, mi_stats_t* stats) {
+void _mi_arenas_collect(bool force_purge, mi_stats_t* stats) {
   mi_arenas_try_purge(force_purge, force_purge /* visit all? */, stats);
 }
 
@@ -716,7 +716,7 @@ void _mi_arena_collect(bool force_purge, mi_stats_t* stats) {
 // for dynamic libraries that are unloaded and need to release all their allocated memory.
 void _mi_arena_unsafe_destroy_all(mi_stats_t* stats) {
   mi_arenas_unsafe_destroy();
-  _mi_arena_collect(true /* force purge */, stats);  // purge non-owned arenas
+  _mi_arenas_collect(true /* force purge */, stats);  // purge non-owned arenas
 }
 
 // Is a pointer inside any of our arenas?
