@@ -77,7 +77,9 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
     MI_INTERPOSE_MI(calloc),
     MI_INTERPOSE_MI(realloc),
     MI_INTERPOSE_MI(strdup),
+    #if defined(MAC_OS_X_VERSION_10_7) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
     MI_INTERPOSE_MI(strndup),
+    #endif
     MI_INTERPOSE_MI(realpath),
     MI_INTERPOSE_MI(posix_memalign),
     MI_INTERPOSE_MI(reallocf),
@@ -128,11 +130,16 @@ typedef struct mi_nothrow_s { int _tag; } mi_nothrow_t;
   // cannot override malloc unless using a dll.
   // we just override new/delete which does work in a static library.
 #else
-  // On all other systems forward to our API
+  // On all other systems forward allocation primitives to our API
   mi_decl_export void* malloc(size_t size)              MI_FORWARD1(mi_malloc, size)
   mi_decl_export void* calloc(size_t size, size_t n)    MI_FORWARD2(mi_calloc, size, n)
   mi_decl_export void* realloc(void* p, size_t newsize) MI_FORWARD2(mi_realloc, p, newsize)
-  mi_decl_export void  free(void* p)                    MI_FORWARD0(mi_free, p)
+  mi_decl_export void  free(void* p)                    MI_FORWARD0(mi_free, p)  
+  // In principle we do not need to forward `strdup`/`strndup` but on some systems these do not use `malloc` internally (but a more primitive call)
+  mi_decl_export char* strdup(const char* str)             MI_FORWARD1(mi_strdup, str)
+  #if !defined(__APPLE__) || (defined(MAC_OS_X_VERSION_10_7) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7)
+  mi_decl_export char* strndup(const char* str, size_t n)  MI_FORWARD2(mi_strndup, str, n)   
+  #endif
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__APPLE__)
