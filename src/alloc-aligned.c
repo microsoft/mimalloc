@@ -159,7 +159,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_malloc_aligned(mi_heap_t* heap,
 
 // ensure a definition is emitted
 #if defined(__cplusplus)
-static void* _mi_heap_malloc_aligned = (void*)&mi_heap_malloc_aligned;
+void* _mi_extern_heap_malloc_aligned = (void*)&mi_heap_malloc_aligned;
 #endif
 
 // ------------------------------------------------------
