@@ -154,9 +154,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
   // collect segment and thread caches
-  if (force) {
-    _mi_segment_thread_collect(&heap->tld->segments);
-  }
+  _mi_segment_collect(force, &heap->tld->segments);
 
   // if forced, collect thread data cache on program-exit (or shared library unload)
   if (force && _mi_is_main_thread() && mi_heap_is_backing(heap)) {

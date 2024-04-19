@@ -516,8 +516,8 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
 }
 
 // called by threads that are terminating to free cached segments
-void _mi_segment_thread_collect(mi_segments_tld_t* tld) {
-  MI_UNUSED(tld);
+void _mi_segment_collect(bool force, mi_segments_tld_t* tld) {
+  MI_UNUSED(force); MI_UNUSED(tld);
 #if MI_DEBUG>=2
   if (!_mi_is_main_thread()) {
     mi_assert_internal(tld->pages_purge.first == NULL);
