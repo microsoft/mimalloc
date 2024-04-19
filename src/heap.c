@@ -119,9 +119,9 @@ static bool mi_heap_page_never_delayed_free(mi_heap_t* heap, mi_page_queue_t* pq
 static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 {
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
-  _mi_deferred_free(heap, collect >= MI_FORCE);
 
   const bool force = (collect >= MI_FORCE);
+  _mi_deferred_free(heap, force);
 
   // note: never reclaim on collect but leave it to threads that need storage to reclaim
   if (
@@ -163,8 +163,8 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
     _mi_thread_data_collect();  // collect thread data cache
   }
   
-  // collect arenas
-  _mi_arena_collect(force /* force purge? */, &heap->tld->stats);  
+  // collect arenas (this is program wide so don't force purges on abandonment of threads)
+  _mi_arena_collect(collect == MI_FORCE /* force purge? */, &heap->tld->stats);  
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
