@@ -168,8 +168,8 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
     _mi_thread_data_collect();  // collect thread data cache
   }
   
-  // collect arenas
-  _mi_arena_collect(force /* force purge? */, &heap->tld->stats);  
+  // collect arenas (this is program wide so don't force purges on abandonment of threads)
+  _mi_arena_collect(collect == MI_FORCE /* force purge? */, &heap->tld->stats);  
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
