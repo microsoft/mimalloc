@@ -295,11 +295,13 @@ int main(void) {
   // ---------------------------------------------------
   // various
   // ---------------------------------------------------
+  #if !defined(MI_TRACK_ASAN)   // realpath may leak with ASAN enabled (as the ASAN allocator intercepts it)
   CHECK_BODY("realpath") {
     char* s = mi_realpath( ".", NULL );
     // printf("realpath: %s\n",s);
     mi_free(s);
   };
+  #endif
 
   CHECK("stl_allocator1", test_stl_allocator1());
   CHECK("stl_allocator2", test_stl_allocator2());
