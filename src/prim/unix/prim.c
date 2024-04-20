@@ -148,13 +148,20 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
 
   // disable transparent huge pages for this process?
-  #if defined(MI_NO_THP) && (defined(__linux__) || defined(__ANDROID__))
-  int val = 0;
-  if (prctl(PR_GET_THP_DISABLE, &val, 0, 0, 0) != 0) {
-    // Most likely since distros often come with always/madvise settings.
-    val = 1;
-    // Disabling only for mimalloc process rather than touching system wide settings
-    (void)prctl(PR_SET_THP_DISABLE, &val, 0, 0, 0);
+  #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
+  #if defined(MI_NO_THP)
+  if (true)
+  #else
+  if (!mi_option_is_enabled(mi_option_allow_large_os_pages)) // disable THP also if large OS pages are not allowed in the options
+  #endif
+  {
+    int val = 0;
+    if (prctl(PR_GET_THP_DISABLE, &val, 0, 0, 0) != 0) {
+      // Most likely since distros often come with always/madvise settings.
+      val = 1;
+      // Disabling only for mimalloc process rather than touching system wide settings
+      (void)prctl(PR_SET_THP_DISABLE, &val, 0, 0, 0);
+    }
   }
   #endif
 }
