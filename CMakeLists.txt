@@ -19,6 +19,7 @@ option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS"
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" ON)
 option(MI_WIN_REDIRECT      "Use redirection module ('mimalloc-redirect') on Windows if compiling mimalloc as a DLL" ON)
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
+option(MI_LIBC_MUSL         "Set this when linking with musl libc" OFF)
 option(MI_BUILD_SHARED      "Build shared library" ON)
 option(MI_BUILD_STATIC      "Build static library" ON)
 option(MI_BUILD_OBJECT      "Build object library" ON)
@@ -284,6 +285,12 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux|Android")
     message(STATUS "Disable transparent huge pages support (MI_NO_THP=ON)")
     list(APPEND mi_defines MI_NO_THP=1)
   endif()
+endif()
+
+if(MI_LIBC_MUSL)
+  message(STATUS "Assume using musl libc (MI_LIBC_MUSL=ON) (this implies MI_LOCAL_DYNAMIC_TLS=ON)")
+  set(MI_LOCAL_DYNAMIC_TLS "ON")
+  list(APPEND mi_defines MI_LIBC_MUSL=1)
 endif()
 
 # On Haiku use `-DCMAKE_INSTALL_PREFIX` instead, issue #788
