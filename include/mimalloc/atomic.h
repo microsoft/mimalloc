@@ -133,7 +133,9 @@ static inline void mi_atomic_maxi64_relaxed(volatile int64_t* p, int64_t x) {
 #elif defined(_MSC_VER)
 
 // MSVC C compilation wrapper that uses Interlocked operations to model C11 atomics.
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <intrin.h>
 #ifdef _WIN64
@@ -327,7 +329,9 @@ static inline void mi_atomic_yield(void) {
   std::this_thread::yield();
 }
 #elif defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 static inline void mi_atomic_yield(void) {
   YieldProcessor();
