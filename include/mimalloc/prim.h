@@ -203,12 +203,23 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 
 #endif
 
+// Do we have __builtin_thread_pointer? (do not make this a compound test as it fails on older gcc's, see issue #851)
+#if defined(__has_builtin)
+#if __has_builtin(__builtin_thread_pointer)
+#define MI_HAS_BUILTIN_THREAD_POINTER  1
+#endif
+#elif defined(__GNUC__) && (__GNUC__ >= 7) && defined(__aarch64__)  // special case aarch64 for older gcc versions (issue #851)
+#define MI_HAS_BUILTIN_THREAD_POINTER  1
+#endif
+
+
 // defined in `init.c`; do not use these directly
 extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
 extern bool _mi_process_is_initialized;             // has mi_process_init been called?
 
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept;
 
+// Get a unique id for the current thread.
 #if defined(_WIN32)
 
 #define WIN32_LEAN_AND_MEAN
@@ -218,7 +229,7 @@ static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
   return (uintptr_t)NtCurrentTeb();
 }
 
-#elif defined(__has_builtin) && __has_builtin(__builtin_thread_pointer) && \
+#elif MI_HAS_BUILTIN_THREAD_POINTER && \
       (!defined(__APPLE__)) && /* on apple (M1) the wrong register is read (tpidr_el0 instead of tpidrro_el0) so fall back to TLS slot assembly (<https://github.com/microsoft/mimalloc/issues/343#issuecomment-763272369>)*/ \
       (!defined(__clang_major__) || __clang_major__ >= 14)  // older clang versions emit bad code; fall back to using the TLS slot (<https://lore.kernel.org/linux-arm-kernel/202110280952.352F66D8@keescook/T/>)
 
