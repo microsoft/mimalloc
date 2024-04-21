@@ -222,7 +222,9 @@ static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept;
 // Get a unique id for the current thread.
 #if defined(_WIN32)
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
   // Windows: works on Intel and ARM in both 32- and 64-bit
