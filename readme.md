@@ -12,8 +12,8 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.1.4` (2024-04-22).
-Latest stable  tag: `v1.8.4` (2024-04-22).
+Latest release tag: `v2.1.4` (2024-04-22).  
+Latest v1 tag: `v1.8.4` (2024-04-22).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -72,11 +72,13 @@ Enjoy!
 
 * `master`: latest stable release (based on `dev-slice`).
 * `dev`: development branch for mimalloc v1. Use this branch for submitting PR's.
-* `dev-slice`: development branch for mimalloc v2. This branch is downstream of `dev`.
+* `dev-slice`: development branch for mimalloc v2. This branch is downstream of `dev` (and is essentially equal to `dev` except for
+`src/segment.c`)
 
 ### Releases
 
-Note: the `v2.x` version has a new algorithm for managing internal mimalloc pages that tends to use reduce memory usage
+Note: the `v2.x` version has a different algorithm for managing internal mimalloc pages (as slices) that tends to use reduce 
+memory usage
   and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
 
