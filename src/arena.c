@@ -356,7 +356,7 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   if (arena_reserve == 0) return false;
 
   if (!_mi_os_has_virtual_reserve()) {
-    arena_reserve = arena_reserve/4;  // be conservative if virtual reserve is not supported (for some embedded systems for example)
+    arena_reserve = arena_reserve/4;  // be conservative if virtual reserve is not supported (for WASM for example)
   }
   arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_BLOCK_SIZE);
   if (arena_count >= 8 && arena_count <= 128) {
@@ -369,7 +369,7 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   if (mi_option_get(mi_option_arena_eager_commit) == 2)      { arena_commit = _mi_os_has_overcommit(); }
   else if (mi_option_get(mi_option_arena_eager_commit) == 1) { arena_commit = true; }
 
-  return (mi_reserve_os_memory_ex(arena_reserve, arena_commit, allow_large, false /* exclusive */, arena_id) == 0);
+  return (mi_reserve_os_memory_ex(arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id) == 0);
 }
 
 
@@ -383,24 +383,26 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
   const int numa_node = _mi_os_numa_node(tld); // current numa node
 
   // try to allocate in an arena if the alignment is small enough and the object is not too small (as for heap meta data)
-  if (size >= MI_ARENA_MIN_OBJ_SIZE && alignment <= MI_SEGMENT_ALIGN && align_offset == 0) {
-    void* p = mi_arena_try_alloc(numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);
-    if (p != NULL) return p;
+  if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) || req_arena_id != _mi_arena_id_none()) {  // is arena allocation allowed?
+    if (size >= MI_ARENA_MIN_OBJ_SIZE && alignment <= MI_SEGMENT_ALIGN && align_offset == 0) {
+      void* p = mi_arena_try_alloc(numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);
+      if (p != NULL) return p;
 
-    // otherwise, try to first eagerly reserve a new arena
-    if (req_arena_id == _mi_arena_id_none()) {
-      mi_arena_id_t arena_id = 0;
-      if (mi_arena_reserve(size, allow_large, req_arena_id, &arena_id)) {
-        // and try allocate in there
-        mi_assert_internal(req_arena_id == _mi_arena_id_none());
-        p = mi_arena_try_alloc_at_id(arena_id, true, numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);
-        if (p != NULL) return p;
+      // otherwise, try to first eagerly reserve a new arena
+      if (req_arena_id == _mi_arena_id_none()) {
+        mi_arena_id_t arena_id = 0;
+        if (mi_arena_reserve(size, allow_large, req_arena_id, &arena_id)) {
+          // and try allocate in there
+          mi_assert_internal(req_arena_id == _mi_arena_id_none());
+          p = mi_arena_try_alloc_at_id(arena_id, true, numa_node, size, alignment, commit, allow_large, req_arena_id, memid, tld);
+          if (p != NULL) return p;
+        }
       }
     }
   }
 
   // if we cannot use OS allocation, return NULL
-  if (mi_option_is_enabled(mi_option_limit_os_alloc) || req_arena_id != _mi_arena_id_none()) {
+  if (mi_option_is_enabled(mi_option_disallow_os_alloc) || req_arena_id != _mi_arena_id_none()) {
     errno = ENOMEM;
     return NULL;
   }

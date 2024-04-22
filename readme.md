@@ -80,6 +80,16 @@ Note: the `v2.x` version has a new algorithm for managing internal mimalloc page
   and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
 
+* 2024-04-22, `v1.8.4`, `v2.1.4`: Fixes various bugs and build issues. Add `MI_LIBC_MUSL` cmake flag for musl builds.
+  Free-ing code is refactored into a separate module (`free.c`). Mimalloc page info is simplified with the block size
+  directly available (and new `block_size_shift` to improve aligned block free-ing). 
+  New approach to collection of abandoned segments: When
+  a thread terminates the segments it owns are abandoned (containing still live objects) and these can be
+  reclaimed by other threads. We no longer use a list of abandoned segments but this is now done using bitmaps in arena's 
+  which is more concurrent (and more aggressive). Abandoned memory can now also be reclaimed if a thread frees an object in
+  an abandoned page (which can be disabled using `mi_option_abandoned_reclaim_on_free`). The option `mi_option_max_segment_reclaim`
+  gives a maximum percentage of abandoned segments that can be reclaimed per try (=10%).
+
 * 2023-04-24, `v1.8.2`, `v2.1.2`: Fixes build issues on freeBSD, musl, and C17 (UE 5.1.1). Reduce code size/complexity 
   by removing regions and segment-cache's and only use arenas with improved memory purging -- this may improve memory
   usage as well for larger services. Renamed options for consistency. Improved Valgrind and ASAN checking.
@@ -144,7 +154,7 @@ mimalloc is used in various large scale low-latency services and programs, for e
 
 ## Windows
 
-Open `ide/vs2019/mimalloc.sln` in Visual Studio 2019 and build.
+Open `ide/vs2022/mimalloc.sln` in Visual Studio 2022 and build.
 The `mimalloc` project builds a static library (in `out/msvc-x64`), while the
 `mimalloc-override` project builds a DLL for overriding malloc
 in the entire program.
@@ -280,17 +290,23 @@ You can set further options either programmatically (using [`mi_option_set`](htt
 
 Advanced options:
 
+- `MIMALLOC_ARENA_EAGER_COMMIT=2`: turns on eager commit for the large arenas (usually 1GiB) from which mimalloc 
+   allocates segments and pages. Set this to 2 (default) to 
+   only enable this on overcommit systems (e.g. Linux). Set this to 1 to enable explicitly on other systems 
+   as well (like Windows or macOS) which may improve performance (as the whole arena is committed at once). 
+   Note that eager commit only increases the commit but not the actual the peak resident set 
+   (rss) so it is generally ok to enable this.
 - `MIMALLOC_PURGE_DELAY=N`: the delay in `N` milli-seconds (by default `10`) after which mimalloc will purge 
    OS pages that are not in use. This signals to the OS that the underlying physical memory can be reused which 
    can reduce memory fragmentation especially in long running (server) programs. Setting `N` to `0` purges immediately when
    a page becomes unused which can improve memory usage but also decreases performance. Setting `N` to a higher
    value like `100` can improve performance (sometimes by a lot) at the cost of potentially using more memory at times.
-   Setting it to `-1` disables purging completely.   
-- `MIMALLOC_ARENA_EAGER_COMMIT=1`: turns on eager commit for the large arenas (usually 1GiB) from which mimalloc 
-   allocates segments and pages. This is by default 
-   only enabled on overcommit systems (e.g. Linux) but enabling it explicitly on other systems (like Windows or macOS)
-   may improve performance. Note that eager commit only increases the commit but not the actual the peak resident set 
-   (rss) so it is generally ok to enable this.
+   Setting it to `-1` disables purging completely.
+- `MIMALLOC_PURGE_DECOMMITS=1`: By default "purging" memory means unused memory is decommitted (`MEM_DECOMMIT` on Windows,
+   `MADV_DONTNEED` (which decresease rss immediately) on `mmap` systems). Set this to 0 to instead "reset" unused
+   memory on a purge (`MEM_RESET` on Windows, generally `MADV_FREE` (which does not decrease rss immediately) on `mmap` systems).
+   Mimalloc generally does not "free" OS memory but only "purges" OS memory, in other words, it tries to keep virtual 
+   address ranges and decommits within those ranges (to make the underlying physical memory available to other processes).
 
 Further options for large workloads and services:
 
@@ -298,9 +314,10 @@ Further options for large workloads and services:
    at runtime. Setting `N` to 1 may avoid problems in some virtual environments. Also, setting it to a lower number than
    the actual NUMA nodes is fine and will only cause threads to potentially allocate more memory across actual NUMA
    nodes (but this can happen in any case as NUMA local allocation is always a best effort but not guaranteed).
-- `MIMALLOC_ALLOW_LARGE_OS_PAGES=1`: use large OS pages (2MiB) when available; for some workloads this can significantly
-   improve performance. Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
-   to explicitly allow large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
+- `MIMALLOC_ALLOW_LARGE_OS_PAGES=1`: use large OS pages (2 or 4MiB) when available; for some workloads this can significantly
+   improve performance. When this option is disabled, it also disables transparent huge pages (THP) for the process 
+   (on Linux and Android). Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
+   to explicitly give permissions for large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
    the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
    can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead whenever possible).   
 - `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where `N` is the number of 1GiB _huge_ OS pages. This reserves the huge pages at
@@ -309,11 +326,12 @@ Further options for large workloads and services:
    OS pages, use with care as reserving
    contiguous physical memory can take a long time when memory is fragmented (but reserving the huge pages is done at
    startup only once).
-   Note that we usually need to explicitly enable huge OS pages (as on [Windows][windows-huge] and [Linux][linux-huge])).
+   Note that we usually need to explicitly give permission for huge OS pages (as on [Windows][windows-huge] and [Linux][linux-huge])).
    With huge OS pages, it may be beneficial to set the setting
    `MIMALLOC_EAGER_COMMIT_DELAY=N` (`N` is 1 by default) to delay the initial `N` segments (of 4MiB)
    of a thread to not allocate in the huge OS pages; this prevents threads that are short lived
-   and allocate just a little to take up space in the huge OS page area (which cannot be purged).
+   and allocate just a little to take up space in the huge OS page area (which cannot be purged as huge OS pages are pinned
+   to physical memory).
    The huge pages are usually allocated evenly among NUMA nodes.
    We can use `MIMALLOC_RESERVE_HUGE_OS_PAGES_AT=N` where `N` is the numa node (starting at 0) to allocate all
    the huge pages at a specific numa node instead.

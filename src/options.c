@@ -65,7 +65,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION_LEGACY(allow_large_os_pages,large_os_pages) },    // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },      // per 1GiB huge pages
   {-1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) },   // reserve huge pages at node N
-  { 0, UNINIT, MI_OPTION(reserve_os_memory)     },
+  { 0, UNINIT, MI_OPTION(reserve_os_memory)     },      // reserve OS memory in advance
   { 0, UNINIT, MI_OPTION(deprecated_segment_cache) },   // cache N segments per thread
   { 0, UNINIT, MI_OPTION(deprecated_page_reset) },      // reset page memory on free
   { 0, UNINIT, MI_OPTION_LEGACY(abandoned_page_purge,abandoned_page_reset) },       // reset free page memory when a thread terminates
@@ -77,7 +77,7 @@ static mi_option_desc_t options[_mi_option_last] =
 #endif
   { 10,  UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
   { 0,   UNINIT, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.
-  { 0,   UNINIT, MI_OPTION(limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)
+  { 0,   UNINIT, MI_OPTION_LEGACY(disallow_os_alloc,limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)
   { 100, UNINIT, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose
   { 16,  UNINIT, MI_OPTION(max_errors) },               // maximum errors that are output
   { 16,  UNINIT, MI_OPTION(max_warnings) },             // maximum warnings that are output
@@ -90,7 +90,8 @@ static mi_option_desc_t options[_mi_option_last] =
   #endif
   { 10,  UNINIT, MI_OPTION(arena_purge_mult) },        // purge delay multiplier for arena's
   { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
-  { 1,   UNINIT, MI_OPTION(abandoned_reclaim_on_free) }, // reclaim an abandoned segment on a free
+  { 1,   UNINIT, MI_OPTION(abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
+  { 0,   UNINIT, MI_OPTION(disallow_arena_alloc) },     // 1 = do not use arena's for allocation (except if using specific arena id's)
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
