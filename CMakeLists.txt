@@ -19,6 +19,7 @@ option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS"
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" ON)
 option(MI_WIN_REDIRECT      "Use redirection module ('mimalloc-redirect') on Windows if compiling mimalloc as a DLL" ON)
 option(MI_LOCAL_DYNAMIC_TLS "Use slightly slower, dlopen-compatible TLS mechanism (Unix)" OFF)
+option(MI_LIBC_MUSL         "Set this when linking with musl libc" OFF)
 option(MI_BUILD_SHARED      "Build shared library" ON)
 option(MI_BUILD_STATIC      "Build static library" ON)
 option(MI_BUILD_OBJECT      "Build object library" ON)
@@ -27,10 +28,11 @@ option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
 option(MI_SKIP_COLLECT_ON_EXIT "Skip collecting memory on program exit" OFF)
 option(MI_NO_PADDING        "Force no use of padding even in DEBUG mode etc." OFF)
+option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
+option(MI_NO_THP            "Disable transparent huge pages support on Linux/Android for the mimalloc process only" OFF)
 
 # deprecated options
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
-option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version (deprecated)" OFF)
 option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
 
 include(CheckIncludeFiles)
@@ -45,6 +47,7 @@ set(mi_sources
     src/bitmap.c
     src/heap.c
     src/init.c
+    src/libc.c
     src/options.c
     src/os.c
     src/page.c
@@ -81,6 +84,17 @@ endif()
 # -----------------------------------------------------------------------------
 # Process options
 # -----------------------------------------------------------------------------
+
+# put -Wall early so other warnings can be disabled selectively
+if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
+  list(APPEND mi_cflags -Wall -Wextra -Wpedantic)
+endif()
+if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+    list(APPEND mi_cflags -Wall -Wextra)
+endif()
+if(CMAKE_C_COMPILER_ID MATCHES "Intel")
+    list(APPEND mi_cflags -Wall)
+endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
@@ -127,7 +141,7 @@ endif()
 
 if(MI_SECURE)
   message(STATUS "Set full secure build (MI_SECURE=ON)")
-  list(APPEND mi_defines MI_SECURE=4)  
+  list(APPEND mi_defines MI_SECURE=4)
 endif()
 
 if(MI_TRACK_VALGRIND)
@@ -184,6 +198,10 @@ endif()
 if(MI_SEE_ASM)
   message(STATUS "Generate assembly listings (MI_SEE_ASM=ON)")
   list(APPEND mi_cflags -save-temps)
+  if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
+    message(STATUS "No GNU Line marker")
+    list(APPEND mi_cflags -Wno-gnu-line-marker)
+  endif()
 endif()
 
 if(MI_CHECK_FULL)
@@ -246,7 +264,7 @@ if(MI_DEBUG_UBSAN)
       message(WARNING "Can only use undefined-behavior sanitizer with clang++ (MI_DEBUG_UBSAN=ON but ignored)")
     endif()
   else()
-    message(WARNING "Can only use thread sanitizer with a debug build (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
+    message(WARNING "Can only use undefined-behavior sanitizer with a debug build (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
   endif()
 endif()
 
@@ -262,24 +280,38 @@ if(MI_USE_CXX)
   endif()
 endif()
 
-if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
-   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
-   SET(CMAKE_INSTALL_INCLUDEDIR ~/config/non-packaged/headers)
- endif()
+if(CMAKE_SYSTEM_NAME MATCHES "Linux|Android")
+  if(MI_NO_THP)
+    message(STATUS "Disable transparent huge pages support (MI_NO_THP=ON)")
+    list(APPEND mi_defines MI_NO_THP=1)
+  endif()
+endif()
+
+if(MI_LIBC_MUSL)
+  message(STATUS "Assume using musl libc (MI_LIBC_MUSL=ON) (this implies MI_LOCAL_DYNAMIC_TLS=ON)")
+  set(MI_LOCAL_DYNAMIC_TLS "ON")
+  list(APPEND mi_defines MI_LIBC_MUSL=1)
+endif()
+
+# On Haiku use `-DCMAKE_INSTALL_PREFIX` instead, issue #788
+# if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
+#   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
+#   SET(CMAKE_INSTALL_INCLUDEDIR ~/config/non-packaged/headers)
+# endif()
 
 # Compiler flags
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
-  list(APPEND mi_cflags -Wall -Wextra -Wno-unknown-pragmas -fvisibility=hidden)
+  list(APPEND mi_cflags -Wno-unknown-pragmas -fvisibility=hidden)
   if(NOT MI_USE_CXX)
     list(APPEND mi_cflags -Wstrict-prototypes)
   endif()
   if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
-    list(APPEND mi_cflags -Wpedantic -Wno-static-in-inline)
+    list(APPEND mi_cflags -Wno-static-in-inline)
   endif()
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "Intel")
-  list(APPEND mi_cflags -Wall -fvisibility=hidden)
+  list(APPEND mi_cflags -fvisibility=hidden)
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
@@ -467,7 +499,7 @@ if (MI_BUILD_OBJECT)
     set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}")
     set(mimalloc-obj-out    "${CMAKE_CURRENT_BINARY_DIR}/${mi_basename}${CMAKE_C_OUTPUT_EXTENSION}")
     add_custom_command(OUTPUT ${mimalloc-obj-out} DEPENDS mimalloc-obj COMMAND "${CMAKE_COMMAND}" -E copy "${mimalloc-obj-static}" "${mimalloc-obj-out}")
-    add_custom_target(mimalloc-obj-target ALL DEPENDS ${mimalloc-obj-out})      
+    add_custom_target(mimalloc-obj-target ALL DEPENDS ${mimalloc-obj-out})
   endif()
 
   # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(

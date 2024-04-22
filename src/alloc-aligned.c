@@ -33,7 +33,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
 
   void* p;
   size_t oversize;
-  if mi_unlikely(alignment > MI_ALIGNMENT_MAX) {
+  if mi_unlikely(alignment > MI_BLOCK_ALIGNMENT_MAX) {
     // use OS allocation for very large alignment and allocate inside a huge page (dedicated segment with 1 page)
     // This can support alignments >= MI_SEGMENT_SIZE by ensuring the object can be aligned at a point in the
     // first (and single) page such that the segment info is `MI_SEGMENT_SIZE` bytes before it (so it can be found by aligning the pointer down)
@@ -47,7 +47,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
     oversize = (size <= MI_SMALL_SIZE_MAX ? MI_SMALL_SIZE_MAX + 1 /* ensure we use generic malloc path */ : size);
     p = _mi_heap_malloc_zero_ex(heap, oversize, false, alignment); // the page block size should be large enough to align in the single huge page block
     // zero afterwards as only the area from the aligned_p may be committed!
-    if (p == NULL) return NULL;    
+    if (p == NULL) return NULL;
   }
   else {
     // otherwise over-allocate
@@ -69,13 +69,13 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   // todo: expand padding if overallocated ?
 
   mi_assert_internal(mi_page_usable_block_size(_mi_ptr_page(p)) >= adjust + size);
-  mi_assert_internal(p == _mi_page_ptr_unalign(_mi_ptr_segment(aligned_p), _mi_ptr_page(aligned_p), aligned_p));
+  mi_assert_internal(p == _mi_page_ptr_unalign(_mi_ptr_page(aligned_p), aligned_p));
   mi_assert_internal(((uintptr_t)aligned_p + offset) % alignment == 0);
   mi_assert_internal(mi_usable_size(aligned_p)>=size);
   mi_assert_internal(mi_usable_size(p) == mi_usable_size(aligned_p)+adjust);
-    
+
   // now zero the block if needed
-  if (alignment > MI_ALIGNMENT_MAX) {
+  if (alignment > MI_BLOCK_ALIGNMENT_MAX) {
     // for the tracker, on huge aligned allocations only from the start of the large block is defined
     mi_track_mem_undefined(aligned_p, size);
     if (zero) {
@@ -85,7 +85,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
 
   if (p != aligned_p) {
     mi_track_align(p,aligned_p,adjust,mi_usable_size(aligned_p));
-  }  
+  }
   return aligned_p;
 }
 
@@ -159,7 +159,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_malloc_aligned(mi_heap_t* heap,
 
 // ensure a definition is emitted
 #if defined(__cplusplus)
-static void* _mi_heap_malloc_aligned = (void*)&mi_heap_malloc_aligned;
+void* _mi_extern_heap_malloc_aligned = (void*)&mi_heap_malloc_aligned;
 #endif
 
 // ------------------------------------------------------
