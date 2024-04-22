@@ -12,8 +12,8 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.1.2` (2023-04-24).
-Latest stable  tag: `v1.8.2` (2023-04-24).
+Latest release tag: `v2.1.4` (2024-04-22).
+Latest stable  tag: `v1.8.4` (2024-04-22).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
