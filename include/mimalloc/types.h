@@ -85,7 +85,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
 #if (MI_SECURE>=3 || MI_DEBUG>=1)
-#define MI_ENCODE_FREELIST  1
+//#define MI_ENCODE_FREELIST  1
 #endif
 
 
