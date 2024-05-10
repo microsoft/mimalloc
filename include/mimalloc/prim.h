@@ -130,8 +130,9 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 // If you test on another platform and it works please send a PR :-)
 // see also https://akkadia.org/drepper/tls.pdf for more info on the TLS register.
 //
-// Note: on most platforms this is not actually used anymore as we prefer `__builtin_thread_pointer()` nowadays.
-// However, we do still use it with older clang compilers and Apple OS (as we use TLS slot for the default heap there).
+// Note: we would like to prefer `__builtin_thread_pointer()` nowadays instead of using assembly,
+// but unfortunately we can not detect support reliably (see issue #883)
+// We also use it on Apple OS as we use a TLS slot for the default heap there.
 #if defined(__GNUC__) && ( \
            (defined(__GLIBC__)   && (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))) \
         || (defined(__APPLE__)   && (defined(__x86_64__) || defined(__aarch64__) || defined(__POWERPC__))) \
