@@ -58,6 +58,9 @@ set(mi_sources
     src/prim/prim.c)
 
 set(mi_cflags "")
+set(mi_cflags_static "")            # extra flags for a static library build
+set(mi_cflags_dynamic "")           # extra flags for a shared-object library build
+set(mi_defines "")                   
 set(mi_libraries "")
 
 # -----------------------------------------------------------------------------
@@ -288,8 +291,7 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux|Android")
 endif()
 
 if(MI_LIBC_MUSL)
-  message(STATUS "Assume using musl libc (MI_LIBC_MUSL=ON) (this implies MI_LOCAL_DYNAMIC_TLS=ON)")
-  set(MI_LOCAL_DYNAMIC_TLS "ON")
+  message(STATUS "Assume using musl libc (MI_LIBC_MUSL=ON)")
   list(APPEND mi_defines MI_LIBC_MUSL=1)
 endif()
 
@@ -318,7 +320,14 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
   if(MI_LOCAL_DYNAMIC_TLS)
     list(APPEND mi_cflags -ftls-model=local-dynamic)
   else()
-    list(APPEND mi_cflags -ftls-model=initial-exec)
+    if(MI_LIBC_MUSL)
+      # with musl we use local-dynamic for the static build, see issue #644
+      list(APPEND mi_cflags_static  -ftls-model=local-dynamic)
+      list(APPEND mi_cflags_dynamic -ftls-model=initial-exec)
+      message(STATUS "Use local dynamic TLS for the static build (since MI_LIBC_MUSL=ON)")
+    else()
+      list(APPEND mi_cflags -ftls-model=initial-exec)    
+    endif()
   endif()
   if(MI_OVERRIDE)
     list(APPEND mi_cflags -fno-builtin-malloc)
@@ -426,7 +435,7 @@ if(MI_BUILD_SHARED)
   add_library(mimalloc SHARED ${mi_sources})
   set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} SOVERSION ${mi_version_major} OUTPUT_NAME ${mi_basename} )
   target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
-  target_compile_options(mimalloc PRIVATE ${mi_cflags})
+  target_compile_options(mimalloc PRIVATE ${mi_cflags} ${mi_cflags_dynamic})
   target_link_libraries(mimalloc PRIVATE ${mi_libraries})
   target_include_directories(mimalloc PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -456,7 +465,7 @@ if (MI_BUILD_STATIC)
   add_library(mimalloc-static STATIC ${mi_sources})
   set_property(TARGET mimalloc-static PROPERTY POSITION_INDEPENDENT_CODE ON)
   target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
-  target_compile_options(mimalloc-static PRIVATE ${mi_cflags})
+  target_compile_options(mimalloc-static PRIVATE ${mi_cflags} ${mi_cflags_static})
   target_link_libraries(mimalloc-static PRIVATE ${mi_libraries})
   target_include_directories(mimalloc-static PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -488,7 +497,7 @@ if (MI_BUILD_OBJECT)
   add_library(mimalloc-obj OBJECT src/static.c)
   set_property(TARGET mimalloc-obj PROPERTY POSITION_INDEPENDENT_CODE ON)
   target_compile_definitions(mimalloc-obj PRIVATE ${mi_defines})
-  target_compile_options(mimalloc-obj PRIVATE ${mi_cflags})
+  target_compile_options(mimalloc-obj PRIVATE ${mi_cflags} ${mi_cflags_static})
   target_include_directories(mimalloc-obj PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${mi_install_incdir}>
