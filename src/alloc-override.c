@@ -136,8 +136,11 @@ typedef void* mi_nothrow_t;
   mi_decl_export void* realloc(void* p, size_t newsize) MI_FORWARD2(mi_realloc, p, newsize)
   mi_decl_export void  free(void* p)                    MI_FORWARD0(mi_free, p)  
   // In principle we do not need to forward `strdup`/`strndup` but on some systems these do not use `malloc` internally (but a more primitive call)
+  // We only override if `strdup` is not a macro (as on some older libc's, see issue #885)
+  #if !defined(strdup)
   mi_decl_export char* strdup(const char* str)             MI_FORWARD1(mi_strdup, str)
-  #if !defined(__APPLE__) || (defined(MAC_OS_X_VERSION_10_7) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7)
+  #endif
+  #if !defined(strndup) && (!defined(__APPLE__) || (defined(MAC_OS_X_VERSION_10_7) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7))
   mi_decl_export char* strndup(const char* str, size_t n)  MI_FORWARD2(mi_strndup, str, n)   
   #endif
 #endif
