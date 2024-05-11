@@ -30,14 +30,17 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
+#define mi_decl_weak
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
 #define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
+#define mi_decl_weak            __attribute__((weak))
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_cache_align
+#define mi_decl_weak
 #endif
 
 #if defined(__EMSCRIPTEN__) && !defined(__wasi__)
@@ -88,7 +91,7 @@ void       _mi_thread_data_collect(void);
 
 // os.c
 void       _mi_os_init(void);                                            // called from process init
-void*      _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);  
+void*      _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);
 void       _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats);
 void       _mi_os_free_ex(void* p, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* stats);
 
@@ -128,8 +131,20 @@ void*      _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_
 void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld);
 bool       _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id);
 bool       _mi_arena_contains(const void* p);
-void       _mi_arena_collect(bool force_purge, mi_stats_t* stats);
+void       _mi_arenas_collect(bool force_purge, mi_stats_t* stats);
 void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
+
+bool       _mi_arena_segment_clear_abandoned(mi_segment_t* segment);
+void       _mi_arena_segment_mark_abandoned(mi_segment_t* segment);
+size_t     _mi_arena_segment_abandoned_count(void);
+
+typedef struct mi_arena_field_cursor_s { // abstract
+  mi_arena_id_t  start;
+  int            count;
+  size_t         bitmap_idx;
+} mi_arena_field_cursor_t;
+void          _mi_arena_field_cursor_init(mi_heap_t* heap, mi_arena_field_cursor_t* current);
+mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* previous);
 
 // "segment-map.c"
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
@@ -139,7 +154,7 @@ void       _mi_segment_map_freed_at(const mi_segment_t* segment);
 mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld);
 void       _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld);
 void       _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld);
-uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t block_size, size_t* page_size, size_t* pre_size); // page start for any page
+uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size);
 
 #if MI_HUGE_PAGE_ABANDON
 void       _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block_t* block);
@@ -147,9 +162,10 @@ void       _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi
 void       _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_block_t* block);
 #endif
 
-void       _mi_segment_thread_collect(mi_segments_tld_t* tld);
+void       _mi_segments_collect(bool force, mi_segments_tld_t* tld);
 void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
 void       _mi_abandoned_await_readers(void);
+bool       _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment);
 
 mi_block_t* _mi_segment_huge_page_remap(mi_segment_t* segment, mi_page_t* page, mi_block_t* block, size_t newsize, mi_segments_tld_t* tld);
 mi_block_t* _mi_segment_huge_page_expand(mi_segment_t* segment, mi_page_t* page, mi_block_t* block, size_t newsize, mi_segments_tld_t* tld);
@@ -193,13 +209,15 @@ mi_msecs_t  _mi_clock_end(mi_msecs_t start);
 mi_msecs_t  _mi_clock_start(void);
 
 // "alloc.c"
-void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept;  // called from `_mi_malloc_generic`
+void*       _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept;  // called from `_mi_malloc_generic`
+void*       _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept;                  // called from `_mi_heap_malloc_aligned`
+void*       _mi_page_malloc_zeroed(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept;           // called from `_mi_heap_malloc_aligned`
 void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
 void*       _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept;     // called from `_mi_heap_malloc_aligned`
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
-mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
+mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
-void        _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept;  // for runtime integration
+void        _mi_free_generic(mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept;  // for runtime integration
 void        _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
 
 // "libc.c"
@@ -412,13 +430,19 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
 // Large aligned blocks may be aligned at N*MI_SEGMENT_SIZE (inside a huge segment > MI_SEGMENT_SIZE),
 // and we need align "down" to the segment info which is `MI_SEGMENT_SIZE` bytes before it;
 // therefore we align one byte before `p`.
+// We check for NULL afterwards on 64-bit systems to improve codegen for `mi_free`.
 static inline mi_segment_t* _mi_ptr_segment(const void* p) {
-  mi_assert_internal(p != NULL);
-  return (mi_segment_t*)(((uintptr_t)p - 1) & ~MI_SEGMENT_MASK);
+  mi_segment_t* const segment = (mi_segment_t*)(((uintptr_t)p - 1) & ~MI_SEGMENT_MASK);
+  #if MI_INTPTR_SIZE <= 4
+  return (p==NULL ? NULL : segment);
+  #else
+  return ((intptr_t)segment <= 0 ? NULL : segment);
+  #endif
 }
 
 // Segment belonging to a page
 static inline mi_segment_t* _mi_page_segment(const mi_page_t* page) {
+  mi_assert_internal(page!=NULL);
   mi_segment_t* segment = _mi_ptr_segment(page);
   mi_assert_internal(segment == NULL || page == &segment->pages[page->segment_idx]);
   return segment;
@@ -442,14 +466,15 @@ static inline mi_page_t* _mi_segment_page_of(const mi_segment_t* segment, const 
 }
 
 // Quick page start for initialized pages
-static inline uint8_t* _mi_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size) {
-  const size_t bsize = page->xblock_size;
-  mi_assert_internal(bsize > 0 && (bsize%sizeof(void*)) == 0);
-  return _mi_segment_page_start(segment, page, bsize, page_size, NULL);
+static inline uint8_t* mi_page_start(const mi_page_t* page) {
+  mi_assert_internal(page->page_start != NULL);
+  mi_assert_expensive(_mi_segment_page_start(_mi_page_segment(page),page,NULL) == page->page_start);
+  return page->page_start;
 }
 
 // Get the page containing the pointer
 static inline mi_page_t* _mi_ptr_page(void* p) {
+  mi_assert_internal(p!=NULL);
   return _mi_segment_page_of(_mi_ptr_segment(p), p);
 }
 
@@ -457,26 +482,16 @@ static inline bool mi_segment_is_huge(const mi_segment_t* segment) {
   return (segment->page_kind == MI_PAGE_HUGE);
 }
 
-static inline bool mi_page_is_huge(const mi_page_t* page) {
-  bool huge = mi_segment_is_huge(_mi_page_segment(page));
-  mi_assert_internal((huge && page->xblock_size == MI_HUGE_BLOCK_SIZE) || (!huge && page->xblock_size <= MI_LARGE_OBJ_SIZE_MAX));
-  return huge;
-}
-
 // Get the block size of a page (special case for huge objects)
 static inline size_t mi_page_block_size(const mi_page_t* page) {
-  const size_t bsize = page->xblock_size;
-  mi_assert_internal(bsize > 0);
-  if mi_likely(bsize < MI_HUGE_BLOCK_SIZE) {
-    mi_assert_internal(bsize <= MI_LARGE_OBJ_SIZE_MAX);
-    return bsize;
-  }
-  else {
-    mi_assert_internal(mi_page_is_huge(page));
-    size_t psize;
-    _mi_segment_page_start(_mi_page_segment(page), page, bsize, &psize, NULL);
-    return psize;
-  }
+  mi_assert_internal(page->block_size > 0);
+  return page->block_size;
+}
+
+static inline bool mi_page_is_huge(const mi_page_t* page) {
+  mi_assert_internal((page->is_huge && _mi_page_segment(page)->page_kind == MI_PAGE_HUGE) ||
+                     (!page->is_huge && _mi_page_segment(page)->page_kind != MI_PAGE_HUGE));
+  return page->is_huge;
 }
 
 // Get the usable block size of a page without fixed padding.

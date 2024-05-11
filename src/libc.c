@@ -210,7 +210,7 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
         if (c == 'x' || c == 'u') {
           if (numtype == 'z')       x = va_arg(args, size_t);
           else if (numtype == 't')  x = va_arg(args, uintptr_t); // unsigned ptrdiff_t
-          else if (numtype == 'L')  x = va_arg(args, unsigned long long);
+          else if (numtype == 'L')  x = (uintptr_t)va_arg(args, unsigned long long);
                                else x = va_arg(args, unsigned long);
         }
         else if (c == 'p') {
@@ -231,7 +231,7 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
         intptr_t x = 0;
         if (numtype == 'z')       x = va_arg(args, intptr_t );
         else if (numtype == 't')  x = va_arg(args, ptrdiff_t);
-        else if (numtype == 'L')  x = va_arg(args, long long);
+        else if (numtype == 'L')  x = (intptr_t)va_arg(args, long long);
                              else x = va_arg(args, long);
         char pre = 0;
         if (x < 0) {

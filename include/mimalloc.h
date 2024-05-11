@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 182   // major + 2 digits minor
+#define MI_MALLOC_VERSION 185   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -300,6 +300,8 @@ mi_decl_export int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size
 mi_decl_export int  mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept;
 mi_decl_export bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept;
 
+mi_decl_export void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge) mi_attr_noexcept;
+
 // Experimental: heaps associated with specific memory arena's
 typedef int mi_arena_id_t;
 mi_decl_export void* mi_arena_area(mi_arena_id_t arena_id, size_t* size);
@@ -341,41 +343,44 @@ mi_decl_export int  mi_reserve_huge_os_pages(size_t pages, double max_secs, size
 
 typedef enum mi_option_e {
   // stable options
-  mi_option_show_errors,              // print error messages
-  mi_option_show_stats,               // print statistics on termination
-  mi_option_verbose,                  // print verbose messages
-  // the following options are experimental (see src/options.h)
-  mi_option_eager_commit,             // eager commit segments? (after `eager_commit_delay` segments) (=1)
-  mi_option_arena_eager_commit,       // eager commit arenas? Use 2 to enable just on overcommit systems (=2)
-  mi_option_purge_decommits,          // should a memory purge decommit (or only reset) (=1)
-  mi_option_allow_large_os_pages,     // allow large (2MiB) OS pages, implies eager commit
-  mi_option_reserve_huge_os_pages,    // reserve N huge OS pages (1GiB/page) at startup
-  mi_option_reserve_huge_os_pages_at, // reserve huge OS pages at a specific NUMA node
-  mi_option_reserve_os_memory,        // reserve specified amount of OS memory in an arena at startup
+  mi_option_show_errors,                // print error messages
+  mi_option_show_stats,                 // print statistics on termination
+  mi_option_verbose,                    // print verbose messages
+  // advanced options
+  mi_option_eager_commit,               // eager commit segments? (after `eager_commit_delay` segments) (=1)
+  mi_option_arena_eager_commit,         // eager commit arenas? Use 2 to enable just on overcommit systems (=2)
+  mi_option_purge_decommits,            // should a memory purge decommit? (=1). Set to 0 to use memory reset on a purge (instead of decommit)
+  mi_option_allow_large_os_pages,       // allow large (2 or 4 MiB) OS pages, implies eager commit. If false, also disables THP for the process.
+  mi_option_reserve_huge_os_pages,      // reserve N huge OS pages (1GiB pages) at startup
+  mi_option_reserve_huge_os_pages_at,   // reserve huge OS pages at a specific NUMA node
+  mi_option_reserve_os_memory,          // reserve specified amount of OS memory in an arena at startup
   mi_option_deprecated_segment_cache,
   mi_option_deprecated_page_reset,
-  mi_option_abandoned_page_purge,     // immediately purge delayed purges on thread termination
+  mi_option_abandoned_page_purge,       // immediately purge delayed purges on thread termination
   mi_option_deprecated_segment_reset, 
-  mi_option_eager_commit_delay,       
-  mi_option_purge_delay,              // memory purging is delayed by N milli seconds; use 0 for immediate purging or -1 for no purging at all.
-  mi_option_use_numa_nodes,           // 0 = use all available numa nodes, otherwise use at most N nodes.
-  mi_option_limit_os_alloc,           // 1 = do not use OS memory for allocation (but only programmatically reserved arenas)
-  mi_option_os_tag,                   // tag used for OS logging (macOS only for now)
-  mi_option_max_errors,               // issue at most N error messages
-  mi_option_max_warnings,             // issue at most N warning messages
-  mi_option_max_segment_reclaim,      
-  mi_option_destroy_on_exit,          // if set, release all memory on exit; sometimes used for dynamic unloading but can be unsafe.
-  mi_option_arena_reserve,            // initial memory size in KiB for arena reservation (1GiB on 64-bit)
-  mi_option_arena_purge_mult,         
+  mi_option_eager_commit_delay,         // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
+  mi_option_purge_delay,                // memory purging is delayed by N milli seconds; use 0 for immediate purging or -1 for no purging at all. (=10)
+  mi_option_use_numa_nodes,             // 0 = use all available numa nodes, otherwise use at most N nodes.
+  mi_option_disallow_os_alloc,          // 1 = do not use OS memory for allocation (but only programmatically reserved arenas)
+  mi_option_os_tag,                     // tag used for OS logging (macOS only for now) (=100)
+  mi_option_max_errors,                 // issue at most N error messages
+  mi_option_max_warnings,               // issue at most N warning messages
+  mi_option_max_segment_reclaim,        // max. percentage of the abandoned segments can be reclaimed per try (=10%)
+  mi_option_destroy_on_exit,            // if set, release all memory on exit; sometimes used for dynamic unloading but can be unsafe
+  mi_option_arena_reserve,              // initial memory size in KiB for arena reservation (= 1 GiB on 64-bit)
+  mi_option_arena_purge_mult,           // multiplier for `purge_delay` for the purging delay for arenas (=10)
   mi_option_purge_extend_delay,
-  mi_option_remap_threshold,          // size in KiB after which realloc uses OS in-place remap; use 0 to disable
+  mi_option_abandoned_reclaim_on_free,  // allow to reclaim an abandoned segment on a free (=1)
+  mi_option_disallow_arena_alloc,       // 1 = do not use arena's for allocation (except if using specific arena id's)
+  mi_option_remap_threshold,            // size in KiB after which realloc uses OS in-place remap; use 0 to disable
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,
   mi_option_eager_region_commit = mi_option_arena_eager_commit,
   mi_option_reset_decommits = mi_option_purge_decommits,
   mi_option_reset_delay = mi_option_purge_delay,
-  mi_option_abandoned_page_reset = mi_option_abandoned_page_purge
+  mi_option_abandoned_page_reset = mi_option_abandoned_page_purge,
+  mi_option_limit_os_alloc = mi_option_disallow_os_alloc
 } mi_option_t;
 
 
@@ -518,7 +523,7 @@ template<class T, bool _mi_destroy> struct _mi_heap_stl_allocator_common : publi
   using typename _mi_stl_allocator_common<T>::value_type;
   using typename _mi_stl_allocator_common<T>::pointer;
 
-  _mi_heap_stl_allocator_common(mi_heap_t* hp) : heap(hp) { }    /* will not delete nor destroy the passed in heap */
+  _mi_heap_stl_allocator_common(mi_heap_t* hp) : heap(hp, [](mi_heap_t*) {}) {}    /* will not delete nor destroy the passed in heap */
 
   #if (__cplusplus >= 201703L)  // C++17
   mi_decl_nodiscard T* allocate(size_type count) { return static_cast<T*>(mi_heap_alloc_new_n(this->heap.get(), count, sizeof(T))); }
