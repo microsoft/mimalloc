@@ -214,7 +214,7 @@ typedef int32_t  mi_ssize_t;
 
 // we never allocate more than PTRDIFF_MAX (see also <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
 // on 64-bit+ systems we also limit the maximum allocation size such that the slice count fits in 32-bits. (issue #877)
-#if PTRDIFF_MAX >= (MI_SEGMENT_SLIZE_SIZE * UINT32_MAX)
+#if (PTRDIFF_MAX > INT32_MAX) && (PTRDIFF_MAX >= (MI_SEGMENT_SLIZE_SIZE * UINT32_MAX))
 #define MI_MAX_ALLOC_SIZE   (MI_SEGMENT_SLICE_SIZE * (UINT32_MAX-1))
 #else
 #define MI_MAX_ALLOC_SIZE   PTRDIFF_MAX
