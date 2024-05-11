@@ -113,6 +113,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_overcommit = false;
   config->must_free_whole = true;
   config->has_virtual_reserve = true;
+  config->has_remap = false;
   // get the page size
   SYSTEM_INFO si;
   GetSystemInfo(&si);

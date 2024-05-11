@@ -403,6 +403,11 @@ void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offse
 ----------------------------------------------------------- */
 
 void* _mi_os_alloc_expandable(size_t size, size_t alignment, size_t future_reserve, mi_memid_t* memid, mi_stats_t* stats) {
+  if (!mi_os_mem_config.has_virtual_reserve) {
+    // don't allocate expandable if the OS does not support virtual reservation
+    return _mi_os_alloc_aligned(size, alignment, false, false, memid, stats);
+  }
+
   size = mi_os_get_alloc_size(size);
   if (future_reserve < 2*size) { future_reserve = 2*size; }
   void* p = _mi_os_alloc_aligned(future_reserve, alignment, false, false, memid, stats);
@@ -415,9 +420,56 @@ void* _mi_os_alloc_expandable(size_t size, size_t alignment, size_t future_reser
   return p;
 }
 
+static bool mi_os_try_expand_inplace( void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats) {
+  // try to expand the existing virtual range "in-place"    
+  if (p != NULL && size > 0 && newsize > size && 
+      !mi_os_mem_config.must_free_whole && !memid->is_pinned && memid->mem.os.prim_info == NULL) 
+  {
+    void* expand = (uint8_t*)p + size;
+    size_t extra = newsize - size;
+    mi_assert_internal(extra > 0 && (extra %  _mi_os_page_size()) == 0);
+    bool os_is_large = false;
+    bool os_is_zero = false;
+    void* newp = mi_os_prim_alloc_at(expand, extra, 1, false /* commit? */, false /* allow large */, &os_is_large, &os_is_zero, stats);
+    if (newp == expand) {
+      // success! we expanded the virtual address space in-place
+      if (_mi_os_commit(newp, extra, &os_is_zero, stats)) {
+        _mi_verbose_message("expanded in place (address: %p, from %zu bytes to %zu bytes\n", p, size, newsize);
+        memid->is_pinned = os_is_large;
+        memid->mem.os.size += extra;
+        return true;
+      }
+    }
+    
+    // failed, free reserved space 
+    if (newp != NULL) {
+      mi_os_prim_free(newp, extra, false, stats);
+    }
+    return false;
+  }
+  else if (p != NULL && newsize > 0 && newsize < size && 
+           !mi_os_mem_config.must_free_whole && !memid->is_pinned && memid->mem.os.prim_info == NULL)
+  {
+     // we can shrink in-place by free-ing the upper part
+     void* shrink = (uint8_t*)p + newsize;
+     size_t extra = size - newsize;
+     mi_assert_internal(extra > 0 && (extra %  _mi_os_page_size()) == 0);
+     mi_os_prim_free(shrink, extra, true, stats);
+     _mi_verbose_message("shrunk OS memory in place (address: %p, from %zu bytes to %zu bytes\n", p, size, newsize);
+     memid->mem.os.size -= extra;     
+     return true;     
+  }
+  else {
+    return false;
+  }
+}
+
 bool  _mi_os_expand(void* p, size_t size, size_t newsize, mi_memid_t* memid, mi_stats_t* stats) {
   if (p == NULL) return false;
-  if (memid->memkind != MI_MEM_OS_EXPAND) return false;
+  if (memid->memkind != MI_MEM_OS_EXPAND) {
+    return mi_os_try_expand_inplace(p,size,newsize,memid,stats);
+  }
+  // expandable memory
   if (newsize > size) {
     if (memid->mem.os.size < newsize) {
       return false;
@@ -456,42 +508,10 @@ static void* mi_os_remap_copy(void* p, size_t size, size_t newsize, size_t align
   newsize = mi_os_get_alloc_size(newsize);
 
   // first try to expand the existing virtual range "in-place"    
-  if (p != NULL && size > 0 && newsize > size && 
-      !mi_os_mem_config.must_free_whole && !memid->is_pinned && memid->mem.os.prim_info == NULL) 
-  {
-    void* expand = (uint8_t*)p + size;
-    size_t extra = newsize - size;
-    mi_assert_internal(extra > 0 && (extra %  _mi_os_page_size()) == 0);
-    bool os_is_large = false;
-    bool os_is_zero = false;
-    void* newp = mi_os_prim_alloc_at(expand, extra, 1, false /* commit? */, false, &os_is_large, &os_is_zero, stats);
-    if (newp == expand) {
-      // success! we expanded the virtual address space in-place
-      if (_mi_os_commit(newp, extra, &os_is_zero, stats)) {
-        _mi_verbose_message("expanded in place (address: %p, from %zu bytes to %zu bytes\n", p, size, newsize);
-        memid->is_pinned = os_is_large;
-        memid->mem.os.size += newsize;
-        return p;
-      }
-    }
-    
-    // failed, free reserved space and fall back to a copy
-    if (newp != NULL) {
-      mi_os_prim_free(newp, extra, false, stats);
-    }
+  if (mi_os_try_expand_inplace(p,size,newsize,memid,stats)) {
+    return p;
   }
-  else if (p != NULL && newsize > 0 && newsize < size && 
-           !mi_os_mem_config.must_free_whole && !memid->is_pinned && memid->mem.os.prim_info == NULL)
-  {
-     // we can shrink in-place by free-ing the upper part
-     void* shrink = (uint8_t*)p + newsize;
-     size_t extra = size - newsize;
-     mi_assert_internal(extra > 0 && (extra %  _mi_os_page_size()) == 0);
-     mi_os_prim_free(shrink, extra, true, stats);
-     _mi_verbose_message("shrunk OS memory in place (address: %p, from %zu bytes to %zu bytes\n", p, size, newsize);
-     return p;     
-  }
-
+  
   // otherwise: copy into a fresh area
   void* newp = _mi_os_alloc_aligned(newsize, alignment, true /* commit */, false /* allow_large */, &newmemid, stats);
   if (newp == NULL) return NULL;

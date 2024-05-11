@@ -53,6 +53,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config) {
   config->has_overcommit = false;
   config->must_free_whole = true;
   config->has_virtual_reserve = false;
+  config->has_remap = false;
 }
 
 extern void emmalloc_free(void*);
@@ -71,8 +72,8 @@ int _mi_prim_free(void* addr, size_t size) {
 extern void* emmalloc_memalign(size_t alignment, size_t size);
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
-  MI_UNUSED(try_alignment); MI_UNUSED(allow_large); MI_UNUSED(commit);
+int _mi_prim_alloc(void* hint, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
+  MI_UNUSED(hint); MI_UNUSED(allow_large); MI_UNUSED(commit);
   *is_large = false;
   // TODO: Track the highest address ever seen; first uses of it are zeroes.
   //       That assumes no one else uses sbrk but us (they could go up,
