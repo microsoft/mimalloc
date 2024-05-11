@@ -203,8 +203,8 @@ typedef int32_t  mi_ssize_t;
 #error "mimalloc internal: define more bins"
 #endif
 
-// blocks up to this size are always allocated aligned
-#define MI_MAX_ALIGN_GUARANTEE            (8*MI_MAX_ALIGN_SIZE)
+// Maximum block size for which blocks are guaranteed to be block size aligned. (see `segment.c:_mi_segment_page_start`)
+#define MI_MAX_ALIGN_GUARANTEE            (MI_MEDIUM_OBJ_SIZE_MAX)
 
 // Alignments over MI_BLOCK_ALIGNMENT_MAX are allocated in dedicated huge page segments
 #define MI_BLOCK_ALIGNMENT_MAX            (MI_SEGMENT_SIZE >> 1)

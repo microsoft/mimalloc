@@ -232,15 +232,20 @@ int main(void) {
   }
   CHECK_BODY("mimalloc-aligned13") {
     bool ok = true;
-    for( size_t size = 1; size <= MI_SMALL_SIZE_MAX && ok; size++ ) {
+    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size++ ) {
       for(size_t align = 1; align <= size && ok; align *= 2 ) {
-        void* p = mi_malloc_aligned(size,align);
-        ok = (p != NULL && ((uintptr_t)p % align) == 0);
-        mi_free(p);       
+        void* p[10];
+        for(int i = 0; i < 10 && ok; i++) {
+          p[i] = mi_malloc_aligned(size,align);;
+          ok = (p[i] != NULL && ((uintptr_t)(p[i]) % align) == 0);
+        }
+        for(int i = 0; i < 10 && ok; i++) {
+          mi_free(p[i]);
+        }       
         /*
         if (ok && align <= size && ((size + MI_PADDING_SIZE) & (align-1)) == 0) {
           size_t bsize = mi_good_size(size);
-          ok = (align <= bsize && ((bsize + MI_PADDING_SIZE) & (align-1)) == 0);
+          ok = (align <= bsize && (bsize & (align-1)) == 0);
         }
         */
       }
