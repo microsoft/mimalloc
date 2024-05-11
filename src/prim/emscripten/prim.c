@@ -68,7 +68,7 @@ int _mi_prim_free(void* addr, size_t size) {
 // Allocation
 //---------------------------------------------
 
-extern void* emmalloc_memalign(size_t, size_t);
+extern void* emmalloc_memalign(size_t alignment, size_t size);
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
 int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
