@@ -24,26 +24,11 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
   return (bsize <= MI_MAX_ALIGN_GUARANTEE && (bsize & (alignment-1)) == 0);
 }
 
-// Fallback primitive aligned allocation -- split out for better codegen
-static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t* const heap, const size_t size, const size_t alignment, const size_t offset, const bool zero) mi_attr_noexcept
+// Fallback aligned allocation that over-allocates -- split out for better codegen
+static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t* const heap, const size_t size, const size_t alignment, const size_t offset, const bool zero) mi_attr_noexcept
 {
   mi_assert_internal(size <= (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE));
   mi_assert_internal(alignment != 0 && _mi_is_power_of_two(alignment));
-
-  // use regular allocation if it is guaranteed to fit the alignment constraints.
-  if (offset == 0 && mi_malloc_is_naturally_aligned(size,alignment)) {
-    void* p = _mi_heap_malloc_zero(heap, size, zero);
-    mi_assert_internal(p == NULL || ((uintptr_t)p % alignment) == 0);
-    const bool is_aligned_or_null = (((uintptr_t)p) & (alignment-1))==0;  
-    if mi_likely(is_aligned_or_null) {
-      return p;
-    }
-    else {
-      // this should never happen if the `mi_malloc_is_naturally_aligned` check is correct..
-      mi_assert(false);
-      mi_free(p); 
-    }
-  }
 
   void* p;
   size_t oversize;
@@ -104,6 +89,39 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_fallback(mi_heap_t*
   return aligned_p;
 }
 
+// Generic primitive aligned allocation -- split out for better codegen
+static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_generic(mi_heap_t* const heap, const size_t size, const size_t alignment, const size_t offset, const bool zero) mi_attr_noexcept
+{
+  mi_assert_internal(alignment != 0 && _mi_is_power_of_two(alignment));
+  // we don't allocate more than MI_MAX_ALLOC_SIZE (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
+  if mi_unlikely(size > (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE)) { 
+    #if MI_DEBUG > 0
+    _mi_error_message(EOVERFLOW, "aligned allocation request is too large (size %zu, alignment %zu)\n", size, alignment);
+    #endif
+    return NULL;
+  }
+  
+  // use regular allocation if it is guaranteed to fit the alignment constraints.
+  // this is important to try as the fast path in `mi_heap_malloc_zero_aligned` only works when there exist
+  // a page with the right block size, and if we always use the over-alloc fallback that would never happen.
+  if (offset == 0 && mi_malloc_is_naturally_aligned(size,alignment)) {
+    void* p = _mi_heap_malloc_zero(heap, size, zero);
+    mi_assert_internal(p == NULL || ((uintptr_t)p % alignment) == 0);
+    const bool is_aligned_or_null = (((uintptr_t)p) & (alignment-1))==0;  
+    if mi_likely(is_aligned_or_null) {
+      return p;
+    }
+    else {
+      // this should never happen if the `mi_malloc_is_naturally_aligned` check is correct..
+      mi_assert(false);
+      mi_free(p); 
+    }
+  }
+
+  // fall back to over-allocation
+  return mi_heap_malloc_zero_aligned_at_overalloc(heap,size,alignment,offset,zero);
+}
+
 // Primitive aligned allocation
 static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t size, const size_t alignment, const size_t offset, const bool zero) mi_attr_noexcept
 {
@@ -136,14 +154,8 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
     }
   }
 
-  // fallback
-  if mi_unlikely(size > (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE)) { // we don't allocate more than MI_MAX_ALLOC_SIZE (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
-    #if MI_DEBUG > 0
-    _mi_error_message(EOVERFLOW, "aligned allocation request is too large (size %zu, alignment %zu)\n", size, alignment);
-    #endif
-    return NULL;
-  }
-  return mi_heap_malloc_zero_aligned_at_fallback(heap, size, alignment, offset, zero);
+  // fallback to generic aligned allocation
+  return mi_heap_malloc_zero_aligned_at_generic(heap, size, alignment, offset, zero);
 }
 
 
