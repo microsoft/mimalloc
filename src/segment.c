@@ -426,15 +426,13 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
   size_t   psize;
   uint8_t* p = mi_segment_raw_page_start(segment, page, &psize);
   const size_t block_size = mi_page_block_size(page);
-  if (page->segment_idx == 0 && block_size > 0 && segment->page_kind <= MI_PAGE_MEDIUM) {
+  if (/*page->segment_idx == 0 &&*/ block_size > 0 && block_size <= MI_MAX_ALIGN_GUARANTEE) {
     // for small and medium objects, ensure the page start is aligned with the block size (PR#66 by kickunderscore)
+    mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM);
     size_t adjust = block_size - ((uintptr_t)p % block_size);
-    if (psize - adjust >= block_size) {
-      if (adjust < block_size) {
-        p += adjust;
-        psize -= adjust;
-        // if (pre_size != NULL) *pre_size = adjust;
-      }
+    if (adjust < block_size && psize >= block_size + adjust) {
+      p += adjust;
+      psize -= adjust;
       mi_assert_internal((uintptr_t)p % block_size == 0);
     }
   }
