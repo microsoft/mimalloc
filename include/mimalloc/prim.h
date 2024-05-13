@@ -14,17 +14,17 @@ terms of the MIT license. A copy of the license can be found in the file
 // Each OS/host needs to implement these primitives, see `src/prim`
 // for implementations on Window, macOS, WASI, and Linux/Unix.
 //
-// note: on all primitive functions, we always have result parameters != NUL, and:
+// note: on all primitive functions, we always have result parameters != NULL, and:
 //  addr != NULL and page aligned
 //  size > 0     and page aligned
-//  return value is an error code an int where 0 is success.
+//  the return value is an error code as an `int` where 0 is success
 // --------------------------------------------------------------------------
 
 // OS memory configuration
 typedef struct mi_os_mem_config_s {
-  size_t  page_size;            // 4KiB
-  size_t  large_page_size;      // 2MiB
-  size_t  alloc_granularity;    // smallest allocation size (on Windows 64KiB)
+  size_t  page_size;            // default to 4KiB
+  size_t  large_page_size;      // 0 if not supported, usually 2MiB (4MiB on Windows)
+  size_t  alloc_granularity;    // smallest allocation size (usually 4KiB, on Windows 64KiB)
   bool    has_overcommit;       // can we reserve more memory than can be actually committed?
   bool    must_free_whole;      // must allocated blocks be freed as a whole (false for mmap, true for VirtualAlloc)
   bool    has_virtual_reserve;  // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
