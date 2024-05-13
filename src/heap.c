@@ -95,6 +95,11 @@ static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t
   mi_assert_internal(mi_heap_page_is_valid(heap, pq, page, NULL, NULL));
   mi_collect_t collect = *((mi_collect_t*)arg_collect);
   _mi_page_free_collect(page, collect >= MI_FORCE);
+  if (collect == MI_FORCE) {
+    // note: call before a potential `_mi_page_free` as the segment may be freed if this was the last used page in that segment.
+    mi_segment_t* segment = _mi_page_segment(page);
+    _mi_segment_collect(segment, true /* force? */, &heap->tld->segments);
+  }
   if (mi_page_all_free(page)) {
     // no more used blocks, free the page.
     // note: this will free retired pages as well.
@@ -103,10 +108,6 @@ static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t
   else if (collect == MI_ABANDON) {
     // still used blocks but the thread is done; abandon the page
     _mi_page_abandon(page, pq);
-  }
-  if (collect == MI_FORCE) {
-    mi_segment_t* segment = _mi_page_segment(page);
-    _mi_segment_collect(segment, true /* force? */, &heap->tld->segments);
   }
   return true; // don't break
 }
