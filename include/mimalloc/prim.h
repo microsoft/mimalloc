@@ -14,17 +14,17 @@ terms of the MIT license. A copy of the license can be found in the file
 // Each OS/host needs to implement these primitives, see `src/prim`
 // for implementations on Window, macOS, WASI, and Linux/Unix.
 //
-// note: on all primitive functions, we always have result parameters != NUL, and:
+// note: on all primitive functions, we always have result parameters != NULL, and:
 //  addr != NULL and page aligned
 //  size > 0     and page aligned
-//  return value is an error code an int where 0 is success.
+//  the return value is an error code as an `int` where 0 is success
 // --------------------------------------------------------------------------
 
 // OS memory configuration
 typedef struct mi_os_mem_config_s {
-  size_t  page_size;            // 4KiB
-  size_t  large_page_size;      // 2MiB
-  size_t  alloc_granularity;    // smallest allocation size (on Windows 64KiB)
+  size_t  page_size;            // default to 4KiB
+  size_t  large_page_size;      // 0 if not supported, usually 2MiB (4MiB on Windows)
+  size_t  alloc_granularity;    // smallest allocation size (usually 4KiB, on Windows 64KiB)
   bool    has_overcommit;       // can we reserve more memory than can be actually committed?
   bool    must_free_whole;      // must allocated blocks be freed as a whole (false for mmap, true for VirtualAlloc)
   bool    has_virtual_reserve;  // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
@@ -130,8 +130,9 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 // If you test on another platform and it works please send a PR :-)
 // see also https://akkadia.org/drepper/tls.pdf for more info on the TLS register.
 //
-// Note: on most platforms this is not actually used anymore as we prefer `__builtin_thread_pointer()` nowadays.
-// However, we do still use it with older clang compilers and Apple OS (as we use TLS slot for the default heap there).
+// Note: we would like to prefer `__builtin_thread_pointer()` nowadays instead of using assembly,
+// but unfortunately we can not detect support reliably (see issue #883)
+// We also use it on Apple OS as we use a TLS slot for the default heap there.
 #if defined(__GNUC__) && ( \
            (defined(__GLIBC__)   && (defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__))) \
         || (defined(__APPLE__)   && (defined(__x86_64__) || defined(__aarch64__) || defined(__POWERPC__))) \
@@ -203,13 +204,14 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 
 #endif
 
-// Do we have __builtin_thread_pointer? (do not make this a compound test as it fails on older gcc's, see issue #851)
-#if defined(__has_builtin)
-#if __has_builtin(__builtin_thread_pointer)
-#define MI_HAS_BUILTIN_THREAD_POINTER  1
-#endif
-#elif defined(__GNUC__) && (__GNUC__ >= 7) && defined(__aarch64__)  // special case aarch64 for older gcc versions (issue #851)
-#define MI_HAS_BUILTIN_THREAD_POINTER  1
+// Do we have __builtin_thread_pointer? This would be the preferred way to get a unique thread id
+// but unfortunately, it seems we cannot test for this reliably at this time (see issue #883)
+// Nevertheless, it seems needed on older graviton platforms (see issue #851).
+// For now, we only enable this for specific platforms.
+#if defined(__GNUC__) && (__GNUC__ >= 7) && defined(__aarch64__) /* special case aarch64 for older gcc versions (issue #851) */ \
+    && !defined(__APPLE__)  /* on apple (M1) the wrong register is read (tpidr_el0 instead of tpidrro_el0) so fall back to TLS slot assembly (<https://github.com/microsoft/mimalloc/issues/343#issuecomment-763272369>)*/ \
+    && (!defined(__clang_major__) || __clang_major__ >= 14)  /* older clang versions emit bad code; fall back to using the TLS slot (<https://lore.kernel.org/linux-arm-kernel/202110280952.352F66D8@keescook/T/>) */
+#define MI_USE_BUILTIN_THREAD_POINTER  1
 #endif
 
 
@@ -231,12 +233,10 @@ static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
   return (uintptr_t)NtCurrentTeb();
 }
 
-#elif MI_HAS_BUILTIN_THREAD_POINTER && \
-      (!defined(__APPLE__)) && /* on apple (M1) the wrong register is read (tpidr_el0 instead of tpidrro_el0) so fall back to TLS slot assembly (<https://github.com/microsoft/mimalloc/issues/343#issuecomment-763272369>)*/ \
-      (!defined(__clang_major__) || __clang_major__ >= 14)  // older clang versions emit bad code; fall back to using the TLS slot (<https://lore.kernel.org/linux-arm-kernel/202110280952.352F66D8@keescook/T/>)
+#elif MI_USE_BUILTIN_THREAD_POINTER 
 
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
-  // Works on most Unix based platforms
+  // Works on most Unix based platforms with recent compilers
   return (uintptr_t)__builtin_thread_pointer();  
 }
 

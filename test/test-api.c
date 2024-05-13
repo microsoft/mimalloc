@@ -230,6 +230,28 @@ int main(void) {
     result = (((uintptr_t)p % 0x100) == 0); // #602
     mi_free(p);
   }
+  CHECK_BODY("mimalloc-aligned13") {
+    bool ok = true;
+    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size++ ) {
+      for(size_t align = 1; align <= size && ok; align *= 2 ) {
+        void* p[10];
+        for(int i = 0; i < 10 && ok; i++) {
+          p[i] = mi_malloc_aligned(size,align);;
+          ok = (p[i] != NULL && ((uintptr_t)(p[i]) % align) == 0);
+        }
+        for(int i = 0; i < 10 && ok; i++) {
+          mi_free(p[i]);
+        }       
+        /*
+        if (ok && align <= size && ((size + MI_PADDING_SIZE) & (align-1)) == 0) {
+          size_t bsize = mi_good_size(size);
+          ok = (align <= bsize && (bsize & (align-1)) == 0);
+        }
+        */
+      }
+    }
+    result = ok;
+  }
   CHECK_BODY("malloc-aligned-at1") {
     void* p = mi_malloc_aligned_at(48,32,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 32 == 0); mi_free(p);
   };

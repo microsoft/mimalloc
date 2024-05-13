@@ -28,7 +28,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Fast allocation in a page: just pop from the free list.
 // Fall back to generic allocation only if the list is empty.
 // Note: in release mode the (inlined) routine is about 7 instructions with a single test.
-extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept
+extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept 
 {
   mi_assert_internal(page->block_size == 0 /* empty heap */ || mi_page_block_size(page) >= size);
   mi_block_t* const block = page->free;
@@ -85,14 +85,14 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   #endif
 
   #if MI_PADDING // && !MI_TRACK_ENABLED
-  mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
-  ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
+    mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
+    ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
     #if (MI_DEBUG>=2)
     mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
     #endif
-  mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
-  padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
-  padding->delta  = (uint32_t)(delta);
+    mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
+    padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
+    padding->delta  = (uint32_t)(delta);
     #if MI_PADDING_CHECK
     if (!mi_page_is_huge(page)) {
       uint8_t* fill = (uint8_t*)padding - delta;
@@ -103,6 +103,14 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   #endif
 
   return block;
+}
+
+// extra entries for improved efficiency in `alloc-aligned.c`.
+extern void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept {
+  return _mi_page_malloc_zero(heap,page,size,false);
+}
+extern void* _mi_page_malloc_zeroed(mi_heap_t* heap, mi_page_t* page, size_t size) mi_attr_noexcept {
+  return _mi_page_malloc_zero(heap,page,size,true);
 }
 
 static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
@@ -117,7 +125,7 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   #endif
 
   mi_page_t* page = _mi_heap_get_free_small_page(heap, size + MI_PADDING_SIZE);
-  void* const p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE, zero);
+  void* const p = _mi_page_malloc_zero(heap, page, size + MI_PADDING_SIZE, zero);  
   mi_track_malloc(p,size,zero);
 
   #if MI_STAT>1
@@ -321,11 +329,11 @@ mi_decl_nodiscard void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_
 // `strdup` using mi_malloc
 mi_decl_nodiscard mi_decl_restrict char* mi_heap_strdup(mi_heap_t* heap, const char* s) mi_attr_noexcept {
   if (s == NULL) return NULL;
-  size_t n = strlen(s);
-  char* t = (char*)mi_heap_malloc(heap,n+1);
+  size_t len = _mi_strlen(s);
+  char* t = (char*)mi_heap_malloc(heap,len+1);
   if (t == NULL) return NULL;
-  _mi_memcpy(t, s, n);
-  t[n] = 0;
+  _mi_memcpy(t, s, len);
+  t[len] = 0;
   return t;
 }
 
@@ -336,13 +344,11 @@ mi_decl_nodiscard mi_decl_restrict char* mi_strdup(const char* s) mi_attr_noexce
 // `strndup` using mi_malloc
 mi_decl_nodiscard mi_decl_restrict char* mi_heap_strndup(mi_heap_t* heap, const char* s, size_t n) mi_attr_noexcept {
   if (s == NULL) return NULL;
-  const char* end = (const char*)memchr(s, 0, n);  // find end of string in the first `n` characters (returns NULL if not found)
-  const size_t m = (end != NULL ? (size_t)(end - s) : n);  // `m` is the minimum of `n` or the end-of-string
-  mi_assert_internal(m <= n);
-  char* t = (char*)mi_heap_malloc(heap, m+1);
+  const size_t len = _mi_strnlen(s,n);  // len <= n
+  char* t = (char*)mi_heap_malloc(heap, len+1);
   if (t == NULL) return NULL;
-  _mi_memcpy(t, s, m);
-  t[m] = 0;
+  _mi_memcpy(t, s, len);
+  t[len] = 0;
   return t;
 }
 

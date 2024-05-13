@@ -113,10 +113,10 @@ size_t _mi_bin_size(uint8_t bin) {
 // Good size for allocation
 size_t mi_good_size(size_t size) mi_attr_noexcept {
   if (size <= MI_MEDIUM_OBJ_SIZE_MAX) {
-    return _mi_bin_size(mi_bin(size));
+    return _mi_bin_size(mi_bin(size + MI_PADDING_SIZE));
   }
   else {
-    return _mi_align_up(size,_mi_os_page_size());
+    return _mi_align_up(size + MI_PADDING_SIZE,_mi_os_page_size());
   }
 }
 

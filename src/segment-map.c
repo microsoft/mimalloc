@@ -16,7 +16,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal.h"
 #include "mimalloc/atomic.h"
 
-#if (MI_INTPTR_SIZE==8)
+#if (MI_INTPTR_SIZE>=8) && MI_TRACK_ASAN
+#define MI_MAX_ADDRESS    ((size_t)140 << 40) // 140TB (see issue #881)
+#elif (MI_INTPTR_SIZE >= 8)
 #define MI_MAX_ADDRESS    ((size_t)40 << 40)  // 40TB (to include huge page areas)
 #else
 #define MI_MAX_ADDRESS    ((size_t)2 << 30)   // 2Gb

@@ -312,20 +312,28 @@ static size_t mi_segment_info_size(mi_segment_t* segment) {
   return segment->segment_info_slices * MI_SEGMENT_SLICE_SIZE;
 }
 
-static uint8_t* _mi_segment_page_start_from_slice(const mi_segment_t* segment, const mi_slice_t* slice, size_t xblock_size, size_t* page_size)
+static uint8_t* _mi_segment_page_start_from_slice(const mi_segment_t* segment, const mi_slice_t* slice, size_t block_size, size_t* page_size)
 {
-  ptrdiff_t idx = slice - segment->slices;
-  size_t psize = (size_t)slice->slice_count * MI_SEGMENT_SLICE_SIZE;
+  const ptrdiff_t idx = slice - segment->slices;
+  const size_t psize = (size_t)slice->slice_count * MI_SEGMENT_SLICE_SIZE;
+  uint8_t* const pstart = (uint8_t*)segment + (idx*MI_SEGMENT_SLICE_SIZE);
   // make the start not OS page aligned for smaller blocks to avoid page/cache effects
-  // note: the offset must always be an xblock_size multiple since we assume small allocations
+  // note: the offset must always be a block_size multiple since we assume small allocations
   // are aligned (see `mi_heap_malloc_aligned`).
   size_t start_offset = 0;
-  if (xblock_size >= MI_INTPTR_SIZE) {
-    if (xblock_size <= 64) { start_offset = 3*xblock_size; }
-    else if (xblock_size <= 512) { start_offset = xblock_size; }
+  if (block_size > 0 && block_size <= MI_MAX_ALIGN_GUARANTEE) {
+    // for small objects, ensure the page start is aligned with the block size (PR#66 by kickunderscore)
+    const size_t adjust = block_size - ((uintptr_t)pstart % block_size);
+    if (adjust < block_size && psize >= block_size + adjust) {
+      start_offset += adjust;
+    }
+  }
+  if (block_size >= MI_INTPTR_SIZE) {
+    if (block_size <= 64) { start_offset += 3*block_size; }
+    else if (block_size <= 512) { start_offset += block_size; }
   }
   if (page_size != NULL) { *page_size = psize - start_offset; }
-  return (uint8_t*)segment + ((idx*MI_SEGMENT_SLICE_SIZE) + start_offset);
+  return (pstart + start_offset);
 }
 
 // Start of the page available memory; can be used on uninitialized pages
