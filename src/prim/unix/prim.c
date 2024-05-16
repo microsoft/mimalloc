@@ -144,7 +144,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   }
   config->large_page_size = 2*MI_MiB; // TODO: can we query the OS for this?
   config->has_overcommit = unix_detect_overcommit();
-  config->must_free_whole = false;    // mmap can free in parts
+  config->has_partial_free = true;    // mmap can free in parts
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
 
   // disable transparent huge pages for this process?
