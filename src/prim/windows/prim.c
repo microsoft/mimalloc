@@ -572,6 +572,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 #if !defined(MI_SHARED_LIB)
 
 // use thread local storage keys to detect thread ending
+// note: another design could be to use special linker sections (see issue #869)
 #include <fibersapi.h>
 #if (_WIN32_WINNT < 0x600)  // before Windows Vista
 WINBASEAPI DWORD WINAPI FlsAlloc( _In_opt_ PFLS_CALLBACK_FUNCTION lpCallback );
