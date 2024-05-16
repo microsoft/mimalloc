@@ -347,7 +347,7 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
 }
 
 
-static size_t mi_segment_calculate_slices(size_t required, size_t* pre_size, size_t* info_slices) {
+static size_t mi_segment_calculate_slices(size_t required, size_t* info_slices) {
   size_t page_size = _mi_os_page_size();
   size_t isize     = _mi_align_up(sizeof(mi_segment_t), page_size);
   size_t guardsize = 0;
@@ -361,7 +361,6 @@ static size_t mi_segment_calculate_slices(size_t required, size_t* pre_size, siz
     }
   }
 
-  if (pre_size != NULL) *pre_size = isize;
   isize = _mi_align_up(isize + guardsize, MI_SEGMENT_SLICE_SIZE);
   if (info_slices != NULL) *info_slices = isize / MI_SEGMENT_SLICE_SIZE;
   size_t segment_size = (required==0 ? MI_SEGMENT_SIZE : _mi_align_up( required + isize + guardsize, MI_SEGMENT_SLICE_SIZE) );
@@ -808,7 +807,7 @@ static mi_page_t* mi_segments_page_find_and_allocate(size_t slice_count, mi_aren
 ----------------------------------------------------------- */
 
 static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment, bool eager_delayed, mi_arena_id_t req_arena_id,
-                                          size_t* psegment_slices, size_t* ppre_size, size_t* pinfo_slices,
+                                          size_t* psegment_slices, size_t* pinfo_slices,
                                           bool commit, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 
 {
@@ -825,7 +824,7 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
     align_offset = _mi_align_up( info_size, MI_SEGMENT_ALIGN );
     const size_t extra = align_offset - info_size;
     // recalculate due to potential guard pages
-    *psegment_slices = mi_segment_calculate_slices(required + extra, ppre_size, pinfo_slices);
+    *psegment_slices = mi_segment_calculate_slices(required + extra, pinfo_slices);
     mi_assert_internal(*psegment_slices > 0 && *psegment_slices <= UINT32_MAX);
   }
 
@@ -874,8 +873,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
 
   // calculate needed sizes first
   size_t info_slices;
-  size_t pre_size;
-  size_t segment_slices = mi_segment_calculate_slices(required, &pre_size, &info_slices);
+  size_t segment_slices = mi_segment_calculate_slices(required, &info_slices);
   mi_assert_internal(segment_slices > 0 && segment_slices <= UINT32_MAX);
 
   // Commit eagerly only if not the first N lazy segments (to reduce impact of many threads that allocate just a little)
@@ -887,7 +885,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
 
   // Allocate the segment from the OS
   mi_segment_t* segment = mi_segment_os_alloc(required, page_alignment, eager_delay, req_arena_id,
-                                              &segment_slices, &pre_size, &info_slices, commit, tld, os_tld);
+                                              &segment_slices, &info_slices, commit, tld, os_tld);
   if (segment == NULL) return NULL;
 
   // zero the segment info? -- not always needed as it may be zero initialized from the OS
@@ -915,8 +913,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   if (MI_SECURE>0) {
     // in secure mode, we set up a protected page in between the segment info
     // and the page data, and at the end of the segment.
-    size_t os_pagesize = _mi_os_page_size();
-    mi_assert_internal(mi_segment_info_size(segment) - os_pagesize >= pre_size);
+    size_t os_pagesize = _mi_os_page_size();    
     _mi_os_protect((uint8_t*)segment + mi_segment_info_size(segment) - os_pagesize, os_pagesize);
     uint8_t* end = (uint8_t*)segment + mi_segment_size(segment) - os_pagesize;
     mi_segment_ensure_committed(segment, end, os_pagesize, tld->stats);
