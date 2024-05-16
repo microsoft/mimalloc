@@ -623,7 +623,9 @@ static void mi_segment_span_free(mi_segment_t* segment, size_t slice_index, size
   mi_assert_internal(slice->slice_count == slice_count); // no overflow?
   slice->slice_offset = 0;
   if (slice_count > 1) {
-    mi_slice_t* last = &segment->slices[slice_index + slice_count - 1];
+    mi_slice_t* last = slice + slice_count - 1;
+    mi_slice_t* end  = (mi_slice_t*)mi_segment_slices_end(segment);
+    if (last > end) { last = end; }
     last->slice_count = 0;
     last->slice_offset = (uint32_t)(sizeof(mi_page_t)*(slice_count - 1));
     last->block_size = 0;
