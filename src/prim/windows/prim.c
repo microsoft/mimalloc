@@ -112,7 +112,7 @@ static bool win_enable_large_os_pages(size_t* large_page_size)
 void _mi_prim_mem_init( mi_os_mem_config_t* config )
 {
   config->has_overcommit = false;
-  config->must_free_whole = true;
+  config->has_partial_free = false;
   config->has_virtual_reserve = true;
   // get the page size
   SYSTEM_INFO si;

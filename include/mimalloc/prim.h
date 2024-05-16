@@ -26,7 +26,7 @@ typedef struct mi_os_mem_config_s {
   size_t  large_page_size;      // 0 if not supported, usually 2MiB (4MiB on Windows)
   size_t  alloc_granularity;    // smallest allocation size (usually 4KiB, on Windows 64KiB)
   bool    has_overcommit;       // can we reserve more memory than can be actually committed?
-  bool    must_free_whole;      // must allocated blocks be freed as a whole (false for mmap, true for VirtualAlloc)
+  bool    has_partial_free;     // can allocated blocks be freed partially? (true for mmap, false for VirtualAlloc)
   bool    has_virtual_reserve;  // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
 } mi_os_mem_config_t;
 
