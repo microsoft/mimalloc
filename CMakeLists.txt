@@ -33,8 +33,8 @@ option(MI_NO_THP            "Disable transparent huge pages support on Linux/And
 
 # deprecated options
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
-option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
 
+include(CheckLinkerFlag)
 include(CheckIncludeFiles)
 include(GNUInstallDirs)
 include("cmake/mimalloc-config-version.cmake")
@@ -354,13 +354,9 @@ else()
     list(APPEND mi_libraries ${MI_LIBRT})
     set(pc_libraries "${pc_libraries} -lrt")
   endif()
-  find_library(MI_LIBATOMIC atomic)
-  if (NOT MI_LIBATOMIC AND MI_USE_LIBATOMIC)
-    set(MI_LIBATOMIC atomic)
-  endif()
-  if (MI_LIBATOMIC)
-    list(APPEND mi_libraries ${MI_LIBATOMIC})
-    set(pc_libraries "${pc_libraries} -latomic")
+  check_linker_flag(C "-latomic" MI_NEED_LIBATOMIC)
+  if (MI_NEED_LIBATOMIC)
+    list(APPEND mi_libraries -latomic)
   endif()
 endif()
 
