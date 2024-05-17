@@ -144,18 +144,19 @@ static bool mi_arena_memid_indices(mi_memid_t memid, size_t* arena_index, mi_bit
 
 #define MI_ARENA_STATIC_MAX  (MI_INTPTR_SIZE*MI_KiB)  // 8 KiB on 64-bit
 
-static uint8_t mi_arena_static[MI_ARENA_STATIC_MAX];
-static _Atomic(size_t) mi_arena_static_top;
+static mi_decl_cache_align uint8_t mi_arena_static[MI_ARENA_STATIC_MAX];  // must be cache aligned, see issue #895
+static mi_decl_cache_align _Atomic(size_t) mi_arena_static_top;
 
 static void* mi_arena_static_zalloc(size_t size, size_t alignment, mi_memid_t* memid) {
   *memid = _mi_memid_none();
   if (size == 0 || size > MI_ARENA_STATIC_MAX) return NULL;
-  if ((mi_atomic_load_relaxed(&mi_arena_static_top) + size) > MI_ARENA_STATIC_MAX) return NULL;
+  const size_t toplow = mi_atomic_load_relaxed(&mi_arena_static_top);
+  if ((toplow + size) > MI_ARENA_STATIC_MAX) return NULL;
 
   // try to claim space
-  if (alignment == 0) { alignment = 1; }
+  if (alignment < MI_MAX_ALIGN_SIZE) { alignment = MI_MAX_ALIGN_SIZE; }
   const size_t oversize = size + alignment - 1;
-  if (oversize > MI_ARENA_STATIC_MAX) return NULL;
+  if (toplow + oversize > MI_ARENA_STATIC_MAX) return NULL;
   const size_t oldtop = mi_atomic_add_acq_rel(&mi_arena_static_top, oversize);
   size_t top = oldtop + oversize;
   if (top > MI_ARENA_STATIC_MAX) {
@@ -169,7 +170,7 @@ static void* mi_arena_static_zalloc(size_t size, size_t alignment, mi_memid_t* m
   memid->initially_zero = true;
   const size_t start = _mi_align_up(oldtop, alignment);
   uint8_t* const p = &mi_arena_static[start];
-  _mi_memzero(p, size);
+  _mi_memzero_aligned(p, size);
   return p;
 }
 
@@ -177,12 +178,7 @@ static void* mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* st
   *memid = _mi_memid_none();
 
   // try static
-  void* p = NULL;
-  #if (MI_INTPTR_SIZE==4 && MI_LIBC_MUSL)  // fix 32-bit musl compilation, issue #895
-  MI_UNUSED(mi_arena_static_zalloc);  
-  #else
-  p = mi_arena_static_zalloc(size, MI_MAX_ALIGN_SIZE, memid);
-  #endif
+  void* p = mi_arena_static_zalloc(size, MI_MAX_ALIGN_SIZE, memid);
   if (p != NULL) return p;
 
   // or fall back to the OS
