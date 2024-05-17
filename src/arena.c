@@ -177,7 +177,12 @@ static void* mi_arena_meta_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* st
   *memid = _mi_memid_none();
 
   // try static
-  void* p = mi_arena_static_zalloc(size, MI_MAX_ALIGN_SIZE, memid);
+  void* p = NULL;
+  #if (MI_INTPTR_SIZE==4 && MI_LIBC_MUSL)  // fix 32-bit musl compilation, issue #895
+  MI_UNUSED(mi_arena_static_zalloc);  
+  #else
+  p = mi_arena_static_zalloc(size, MI_MAX_ALIGN_SIZE, memid);
+  #endif
   if (p != NULL) return p;
 
   // or fall back to the OS
