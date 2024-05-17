@@ -178,7 +178,7 @@ int _mi_prim_free(void* addr, size_t size ) {
 // VirtualAlloc
 //---------------------------------------------
 
-static void* win_virtual_alloc_prim(void* addr, size_t size, size_t try_alignment, DWORD flags) {
+static void* win_virtual_alloc_prim_once(void* addr, size_t size, size_t try_alignment, DWORD flags) {
   #if (MI_INTPTR_SIZE >= 8)
   // on 64-bit systems, try to use the virtual address area after 2TiB for 4MiB aligned allocations
   if (addr == NULL) {
@@ -200,11 +200,46 @@ static void* win_virtual_alloc_prim(void* addr, size_t size, size_t try_alignmen
     param.Arg.Pointer = &reqs;
     void* p = (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
     if (p != NULL) return p;
-    _mi_warning_message("unable to allocate aligned OS memory (%zu bytes, error code: 0x%x, address: %p, alignment: %zu, flags: 0x%x)\n", size, GetLastError(), addr, try_alignment, flags);
+    _mi_warning_message("unable to allocate aligned OS memory (0x%zx bytes, error code: 0x%x, address: %p, alignment: 0x%zx, flags: 0x%x)\n", size, GetLastError(), addr, try_alignment, flags);
     // fall through on error
   }
   // last resort
   return VirtualAlloc(addr, size, flags, PAGE_READWRITE);
+}
+
+static bool win_is_out_of_memory_error(DWORD err) {
+  switch (err) {
+    case ERROR_COMMITMENT_MINIMUM:
+    case ERROR_COMMITMENT_LIMIT:
+    case ERROR_PAGEFILE_QUOTA:
+    case ERROR_NOT_ENOUGH_MEMORY:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static void* win_virtual_alloc_prim(void* addr, size_t size, size_t try_alignment, DWORD flags) {
+  for (DWORD tries = 1; tries <= 5; tries++) {
+    void* p = win_virtual_alloc_prim_once(addr, size, try_alignment, flags);
+    if (p != NULL) { 
+      // success, return the address
+      return p; 
+    }
+    else if (try_alignment < 2*MI_SEGMENT_ALIGN &&
+             (flags&MEM_COMMIT)!=0 && (flags&MEM_LARGE_PAGES)==0 && 
+             win_is_out_of_memory_error(GetLastError())) { 
+      // if committing regular memory and being out-of-memory, 
+      // keep trying for a bit in case memory frees up after all. See issue #894
+      _mi_warning_message("out-of-memory on OS allocation, try again... (attempt %lu, 0x%zx bytes, error code: 0x%x, address: %p, alignment: 0x%zx, flags: 0x%x)\n", tries, size, GetLastError(), addr, try_alignment, flags);
+      Sleep(tries*25 /* milliseconds */);  // try for at most (1+2+3+4+5)x25 = 375ms
+    }
+    else {
+      // otherwise return with an error
+      break;
+    }
+  }
+  return NULL;
 }
 
 static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DWORD flags, bool large_only, bool allow_large, bool* is_large) {
