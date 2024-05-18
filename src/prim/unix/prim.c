@@ -57,7 +57,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/sysctl.h>
 #endif
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__FreeBSD__)
   #define MI_HAS_SYSCALL_H
   #include <sys/syscall.h>
 #endif
