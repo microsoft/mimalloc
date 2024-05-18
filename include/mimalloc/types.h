@@ -23,7 +23,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
-#include "mimalloc/atomic.h"  // _Atomic
+#include "atomic.h"   // _Atomic
 
 #ifdef _MSC_VER
 #pragma warning(disable:4214) // bitfield is not int
@@ -387,7 +387,7 @@ typedef struct mi_memid_s {
 // Segments contain mimalloc pages
 // ---------------------------------------------------------------
 
-// Segments are large allocated memory blocks (2MiB on 64 bit) from the OS. 
+// Segments are large allocated memory blocks (2MiB on 64 bit) from the OS.
 // Inside segments we allocated fixed size _pages_ that contain blocks.
 typedef struct mi_segment_s {
   // constant fields
