@@ -220,19 +220,24 @@ static bool win_is_out_of_memory_error(DWORD err) {
 }
 
 static void* win_virtual_alloc_prim(void* addr, size_t size, size_t try_alignment, DWORD flags) {
-  for (DWORD tries = 1; tries <= 5; tries++) {
+  long max_retry_msecs = mi_option_get_clamp(mi_option_retry_on_oom, 0, 2000);  // at most 2 seconds
+  if (max_retry_msecs == 1) { max_retry_msecs = 100; }  // if one sets the option to "true"
+  for (long tries = 1; tries <= 10; tries++) {          // try at most 10 times (=2200ms)
     void* p = win_virtual_alloc_prim_once(addr, size, try_alignment, flags);
-    if (p != NULL) { 
+    if (p != NULL) {
       // success, return the address
-      return p; 
+      return p;
     }
-    else if (try_alignment < 2*MI_SEGMENT_ALIGN &&
-             (flags&MEM_COMMIT)!=0 && (flags&MEM_LARGE_PAGES)==0 && 
-             win_is_out_of_memory_error(GetLastError())) { 
+    else if (max_retry_msecs > 0 && (try_alignment <= 2*MI_SEGMENT_ALIGN) &&
+              (flags&MEM_COMMIT) != 0 && (flags&MEM_LARGE_PAGES) == 0 &&
+              win_is_out_of_memory_error(GetLastError())) {
       // if committing regular memory and being out-of-memory, 
       // keep trying for a bit in case memory frees up after all. See issue #894
       _mi_warning_message("out-of-memory on OS allocation, try again... (attempt %lu, 0x%zx bytes, error code: 0x%x, address: %p, alignment: 0x%zx, flags: 0x%x)\n", tries, size, GetLastError(), addr, try_alignment, flags);
-      Sleep(tries*25 /* milliseconds */);  // try for at most (1+2+3+4+5)x25 = 375ms
+      long sleep_msecs = tries*40;  // increasing waits
+      if (sleep_msecs > max_retry_msecs) { sleep_msecs = max_retry_msecs; }
+      max_retry_msecs -= sleep_msecs;
+      Sleep(sleep_msecs);
     }
     else {
       // otherwise return with an error
