@@ -57,8 +57,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/sysctl.h>
 #endif
 
-#if !defined(__HAIKU__) && !defined(__APPLE__) && !defined(__CYGWIN__) && \
-    !defined(__OpenBSD__) && !defined(__sun) && !defined(_AIX)
+#if defined(__linux__)
   #define MI_HAS_SYSCALL_H
   #include <sys/syscall.h>
 #endif
@@ -68,37 +67,36 @@ terms of the MIT license. A copy of the license can be found in the file
 // Use syscalls for some primitives to allow for libraries that override open/read/close etc.
 // and do allocation themselves; using syscalls prevents recursion when mimalloc is
 // still initializing (issue #713)
+// Declare inline to avoid unused function warnings.
 //------------------------------------------------------------------------------------
-
 
 #if defined(MI_HAS_SYSCALL_H) && defined(SYS_open) && defined(SYS_close) && defined(SYS_read) && defined(SYS_access)
 
-static int mi_prim_open(const char* fpath, int open_flags) {
+static inline int mi_prim_open(const char* fpath, int open_flags) {
   return syscall(SYS_open,fpath,open_flags,0);
 }
-static ssize_t mi_prim_read(int fd, void* buf, size_t bufsize) {
+static inline ssize_t mi_prim_read(int fd, void* buf, size_t bufsize) {
   return syscall(SYS_read,fd,buf,bufsize);
 }
-static int mi_prim_close(int fd) {
+static inline int mi_prim_close(int fd) {
   return syscall(SYS_close,fd);
 }
-static int mi_prim_access(const char *fpath, int mode) {
+static inline int mi_prim_access(const char *fpath, int mode) {
   return syscall(SYS_access,fpath,mode);
 }
 
-#elif !defined(__sun) && !defined(_AIX) && \
-      (!defined(__APPLE__) || (MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_7))  // avoid unused warnings on macOS et al.
+#else
 
-static int mi_prim_open(const char* fpath, int open_flags) {
+static inline int mi_prim_open(const char* fpath, int open_flags) {
   return open(fpath,open_flags);
 }
-static ssize_t mi_prim_read(int fd, void* buf, size_t bufsize) {
+static inline ssize_t mi_prim_read(int fd, void* buf, size_t bufsize) {
   return read(fd,buf,bufsize);
 }
-static int mi_prim_close(int fd) {
+static inline int mi_prim_close(int fd) {
   return close(fd);
 }
-static int mi_prim_access(const char *fpath, int mode) {
+static inline int mi_prim_access(const char *fpath, int mode) {
   return access(fpath,mode);
 }
 
