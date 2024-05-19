@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.18)
 project(libmimalloc C CXX)
 
 set(CMAKE_C_STANDARD 11)
@@ -35,6 +35,7 @@ option(MI_NO_THP            "Disable transparent huge pages support on Linux/And
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
 
+include(CheckLinkerFlag)    # requires cmake 3.18
 include(CheckIncludeFiles)
 include(GNUInstallDirs)
 include("cmake/mimalloc-config-version.cmake")
@@ -339,28 +340,40 @@ if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
 endif()
 
 # extra needed libraries
+
+# we prefer -l<lib> test over `find_library` as sometimes core libraries 
+# like `libatomic` are not on the system path (see issue #898)
+function(find_link_library libname outlibname)  
+  check_linker_flag(C "-l${libname}" mi_has_lib${libname})  
+  if (mi_has_lib${libname})
+    message(VERBOSE "link library: -l${libname}")
+    set(${outlibname} ${libname} PARENT_SCOPE)    
+  else()
+    find_library(MI_LIBPATH libname)
+    if (MI_LIBPATH)
+      message(VERBOSE "link library ${libname} at ${MI_LIBPATH}")
+      set(${outlibname} ${MI_LIBPATH} PARENT_SCOPE)      
+    else()
+      message(VERBOSE "link library not found: ${libname}")
+      set(${outlibname} "" PARENT_SCOPE)
+    endif()
+  endif()
+endfunction()
+
 if(WIN32)
-  list(APPEND mi_libraries psapi shell32 user32 advapi32 bcrypt)
-  set(pc_libraries "-lpsapi -lshell32 -luser32 -ladvapi32 -lbcrypt")
+  list(APPEND mi_libraries psapi shell32 user32 advapi32 bcrypt)  
 else()
-  set(pc_libraries "")
-  find_library(MI_LIBPTHREAD pthread)
-  if (MI_LIBPTHREAD)
-    list(APPEND mi_libraries ${MI_LIBPTHREAD})
-    set(pc_libraries "${pc_libraries} -pthread")
+  find_link_library("pthread" MI_LIB_PTHREAD)
+  if(MI_LIB_PTHREAD) 
+    list(APPEND mi_libraries "${MI_LIB_PTHREAD}")
   endif()
-  find_library(MI_LIBRT rt)
-  if(MI_LIBRT)
-    list(APPEND mi_libraries ${MI_LIBRT})
-    set(pc_libraries "${pc_libraries} -lrt")
+  find_link_library("rt" MI_LIB_RT)
+  if(MI_LIB_RT) 
+    list(APPEND mi_libraries "${MI_LIB_RT}")
   endif()
-  find_library(MI_LIBATOMIC atomic)
-  if (NOT MI_LIBATOMIC AND MI_USE_LIBATOMIC)
-    set(MI_LIBATOMIC atomic)
-  endif()
-  if (MI_LIBATOMIC)
-    list(APPEND mi_libraries ${MI_LIBATOMIC})
-    set(pc_libraries "${pc_libraries} -latomic")
+  find_link_library("atomic" MI_LIB_ATOMIC)
+  if(MI_LIB_ATOMIC) 
+    list(APPEND mi_libraries "${MI_LIB_ATOMIC}")  
   endif()
 endif()
 
@@ -522,6 +535,15 @@ if (MI_BUILD_OBJECT)
 endif()
 
 # pkg-config file support
+set(pc_libraries "")
+foreach(item IN LISTS mi_libraries)
+  if(item MATCHES " *[-].*")
+    set(pc_libraries "${pc_libraries} ${item}")
+  else()
+    set(pc_libraries "${pc_libraries} -l${item}")
+  endif()
+endforeach()
+
 include("cmake/JoinPaths.cmake")
 join_paths(includedir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_INCLUDEDIR}")
 join_paths(libdir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_LIBDIR}")
@@ -529,6 +551,8 @@ join_paths(libdir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_LIBDIR}")
 configure_file(mimalloc.pc.in mimalloc.pc @ONLY)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mimalloc.pc"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig/")
+
+
 
 # -----------------------------------------------------------------------------
 # API surface testing
