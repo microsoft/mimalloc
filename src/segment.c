@@ -714,6 +714,7 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_seg
   // zero the page data, but not the segment fields and capacity, page start, and block_size (for page size calculations)
   size_t block_size = page->block_size;
   uint8_t block_size_shift = page->block_size_shift;
+  uint8_t heap_tag = page->heap_tag;
   uint8_t* page_start = page->page_start;
   uint16_t capacity = page->capacity;
   uint16_t reserved = page->reserved;
@@ -723,6 +724,7 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_seg
   page->reserved = reserved;
   page->block_size = block_size;
   page->block_size_shift = block_size_shift;
+  page->heap_tag = heap_tag;
   page->page_start = page_start;
   segment->used--;
 
@@ -898,7 +900,12 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       mi_assert(page->next == NULL);
       _mi_stat_decrease(&tld->stats->pages_abandoned, 1);
       // set the heap again and allow heap thread delayed free again.
-      mi_page_set_heap(page, heap);
+      mi_heap_t* target_heap = _mi_heap_by_tag(heap, page->heap_tag);  // allow custom heaps to separate objects
+      if (target_heap == NULL) {
+        target_heap = heap;
+        _mi_error_message(EINVAL, "page with tag %u cannot be reclaimed by a heap with the same tag (using %u instead)\n", page->heap_tag, heap->tag );
+      }
+      mi_page_set_heap(page, target_heap);
       _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, true); // override never (after heap is set)
       _mi_page_free_collect(page, false); // ensure used count is up to date
       if (mi_page_all_free(page)) {
@@ -907,8 +914,8 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       }
       else {
         // otherwise reclaim it into the heap
-        _mi_page_reclaim(heap, page);
-        if (requested_block_size == mi_page_block_size(page) && mi_page_has_any_available(page)) {
+        _mi_page_reclaim(target_heap, page);
+        if (requested_block_size == mi_page_block_size(page) && mi_page_has_any_available(page) && heap == target_heap) {
           if (right_page_reclaimed != NULL) { *right_page_reclaimed = true; }
         }
       }

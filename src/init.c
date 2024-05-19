@@ -25,6 +25,7 @@ const mi_page_t _mi_page_empty = {
   NULL,    // local_free
   0,       // used
   0,       // block size shift
+  0,       // heap tag
   0,       // block_size
   NULL,    // page_start
   #if (MI_PADDING || MI_ENCODE_FREELIST)
@@ -108,7 +109,8 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next
-  false,
+  false,            // can reclaim
+  0,                // tag
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY
 };
@@ -146,6 +148,7 @@ mi_heap_t _mi_heap_main = {
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
   false,            // can reclaim
+  0,                // tag
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY
 };
@@ -281,7 +284,7 @@ static bool _mi_thread_heap_init(void) {
     mi_tld_t*  tld = &td->tld;
     mi_heap_t* heap = &td->heap;
     _mi_tld_init(tld, heap);  // must be before `_mi_heap_init`
-    _mi_heap_init(heap, tld, _mi_arena_id_none());
+    _mi_heap_init(heap, tld, _mi_arena_id_none(), false /* can reclaim */, 0 /* default tag */);
     _mi_heap_set_default_direct(heap);   
   }
   return false;
@@ -291,7 +294,7 @@ static bool _mi_thread_heap_init(void) {
 void _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap) {
   _mi_memzero_aligned(tld,sizeof(mi_tld_t));
   tld->heap_backing = bheap;
-  tld->heaps = bheap;
+  tld->heaps = NULL;
   tld->segments.stats = &tld->stats;
   tld->segments.os = &tld->os;
   tld->os.stats = &tld->stats;
