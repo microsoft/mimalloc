@@ -222,7 +222,13 @@ extern bool _mi_process_is_initialized;             // has mi_process_init been 
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept;
 
 // Get a unique id for the current thread.
-#if defined(_WIN32)
+#if defined(MI_PRIM_THREAD_ID)
+
+static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
+  return MI_PRIM_THREAD_ID();  // used for example by CPython for a free threaded build (see python/cpython#115488)
+}
+
+#elif defined(_WIN32)
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
