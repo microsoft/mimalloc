@@ -264,7 +264,7 @@ void _mi_thread_data_collect(void) {
 }
 
 // Initialize the thread local default heap, called from `mi_thread_init`
-static bool _mi_heap_init(void) {
+static bool _mi_thread_heap_init(void) {
   if (mi_heap_is_initialized(mi_prim_get_default_heap())) return true;
   if (_mi_is_main_thread()) {
     // mi_assert_internal(_mi_heap_main.thread_id != 0);  // can happen on freeBSD where alloc is called before any initialization
@@ -280,25 +280,25 @@ static bool _mi_heap_init(void) {
 
     mi_tld_t*  tld = &td->tld;
     mi_heap_t* heap = &td->heap;
-    _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(*heap));
-    heap->thread_id = _mi_thread_id();
-    _mi_random_init(&heap->random);
-    heap->cookie  = _mi_heap_random_next(heap) | 1;
-    heap->keys[0] = _mi_heap_random_next(heap);
-    heap->keys[1] = _mi_heap_random_next(heap);
-    heap->tld = tld;
-    tld->heap_backing = heap;
-    tld->heaps = heap;
-    tld->segments.stats = &tld->stats;
-    tld->segments.os = &tld->os;
-    tld->os.stats = &tld->stats;
-    _mi_heap_set_default_direct(heap);
+    _mi_tld_init(tld, heap);  // must be before `_mi_heap_init`
+    _mi_heap_init(heap, tld, _mi_arena_id_none());
+    _mi_heap_set_default_direct(heap);   
   }
   return false;
 }
 
+// initialize thread local data
+void _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap) {
+  _mi_memzero_aligned(tld,sizeof(mi_tld_t));
+  tld->heap_backing = bheap;
+  tld->heaps = bheap;
+  tld->segments.stats = &tld->stats;
+  tld->segments.os = &tld->os;
+  tld->os.stats = &tld->stats;
+}
+
 // Free the thread local default heap (called from `mi_thread_done`)
-static bool _mi_heap_done(mi_heap_t* heap) {
+static bool _mi_thread_heap_done(mi_heap_t* heap) {
   if (!mi_heap_is_initialized(heap)) return true;
 
   // reset default heap
@@ -392,7 +392,7 @@ void mi_thread_init(void) mi_attr_noexcept
   // initialize the thread local default heap
   // (this will call `_mi_heap_set_default_direct` and thus set the
   //  fiber/pthread key to a non-zero value, ensuring `_mi_thread_done` is called)
-  if (_mi_heap_init()) return;  // returns true if already initialized
+  if (_mi_thread_heap_init()) return;  // returns true if already initialized
 
   _mi_stat_increase(&_mi_stats_main.threads, 1);
   mi_atomic_increment_relaxed(&thread_count);
@@ -424,7 +424,7 @@ void _mi_thread_done(mi_heap_t* heap)
   if (heap->thread_id != _mi_thread_id()) return;
 
   // abandon the thread local heap
-  if (_mi_heap_done(heap)) return;  // returns true if already ran
+  if (_mi_thread_heap_done(heap)) return;  // returns true if already ran
 }
 
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
