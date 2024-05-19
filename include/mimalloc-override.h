@@ -24,7 +24,7 @@ not accidentally mix pointers from different allocators).
 #define free(p)                 mi_free(p)
 
 #define strdup(s)               mi_strdup(s)
-#define strndup(s,n)              mi_strndup(s,n)
+#define strndup(s,n)            mi_strndup(s,n)
 #define realpath(f,n)           mi_realpath(f,n)
 
 // Microsoft extensions
