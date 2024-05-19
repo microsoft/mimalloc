@@ -211,11 +211,13 @@ mi_heap_t* mi_heap_get_backing(void) {
   return bheap;
 }
 
-void _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id) {
+void _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag) {
   _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(mi_heap_t));
   heap->tld = tld;
-  heap->thread_id = _mi_thread_id();
-  heap->arena_id = arena_id;
+  heap->thread_id  = _mi_thread_id();
+  heap->arena_id   = arena_id;
+  heap->no_reclaim = noreclaim;
+  heap->tag        = tag;
   if (heap == tld->heap_backing) {
     _mi_random_init(&heap->random);
   }
@@ -225,18 +227,17 @@ void _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id) {
   heap->cookie  = _mi_heap_random_next(heap) | 1;
   heap->keys[0] = _mi_heap_random_next(heap);
   heap->keys[1] = _mi_heap_random_next(heap);
+  // push on the thread local heaps list
+  heap->next = heap->tld->heaps;
+  heap->tld->heaps = heap;
 }
 
 mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);  // todo: OS allocate in secure mode?
   if (heap == NULL) return NULL;
-  _mi_heap_init(heap, bheap->tld, arena_id);
-  // don't reclaim abandoned pages or otherwise destroy is unsafe
-  heap->no_reclaim = true;
-  // push on the thread local heaps list
-  heap->next = heap->tld->heaps;
-  heap->tld->heaps = heap;
+  // don't reclaim abandoned pages or otherwise destroy is unsafe  
+  _mi_heap_init(heap, bheap->tld, arena_id, true /* no reclaim */, 0 /* default tag */);
   return heap;
 }
 
@@ -294,6 +295,18 @@ static void mi_heap_free(mi_heap_t* heap) {
   mi_free(heap);
 }
 
+// return a heap on the same thread as `heap` specialized for the specified tag (if it exists)
+mi_heap_t* _mi_heap_by_tag(mi_heap_t* heap, uint8_t tag) {
+  if (heap->tag == tag) {
+    return heap;
+  }
+  for (mi_heap_t *curr = heap->tld->heaps; curr != NULL; curr = curr->next) {
+    if (curr->tag == tag) {
+      return curr;
+    }
+  }
+  return NULL;
+}
 
 /* -----------------------------------------------------------
   Heap destroy

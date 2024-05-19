@@ -187,12 +187,13 @@ size_t     _mi_bin_size(uint8_t bin);           // for stats
 uint8_t    _mi_bin(size_t size);                // for stats
 
 // "heap.c"
-void       _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id);
+void       _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag);
 void       _mi_heap_destroy_pages(mi_heap_t* heap);
 void       _mi_heap_collect_abandon(mi_heap_t* heap);
 void       _mi_heap_set_default_direct(mi_heap_t* heap);
 bool       _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid);
 void       _mi_heap_unsafe_destroy_all(void);
+mi_heap_t* _mi_heap_by_tag(mi_heap_t* heap, uint8_t tag);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);
@@ -548,6 +549,7 @@ static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
 static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
   mi_atomic_store_release(&page->xheap,(uintptr_t)heap);
+  if (heap != NULL) { page->heap_tag = heap->tag; }
 }
 
 // Thread free flag helpers

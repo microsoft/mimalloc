@@ -1006,11 +1006,13 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
     _mi_os_reset(start, psize, tld->stats);
   }
 
-  // zero the page data, but not the segment fields
+  // zero the page data, but not the segment fields and heap tag
   page->is_zero_init = false;
+  uint8_t heap_tag = page->heap_tag;
   ptrdiff_t ofs = offsetof(mi_page_t, capacity);
   _mi_memzero((uint8_t*)page + ofs, sizeof(*page) - ofs);
   page->block_size = 1;
+  page->heap_tag = heap_tag;
 
   // and free it
   mi_slice_t* slice = mi_segment_span_free_coalesce(mi_page_to_slice(page), tld);
@@ -1211,8 +1213,13 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       mi_assert_internal(page->next == NULL && page->prev==NULL);
       _mi_stat_decrease(&tld->stats->pages_abandoned, 1);
       segment->abandoned--;
-      // set the heap again and allow delayed free again
-      mi_page_set_heap(page, heap);
+      // set the heap again and allow heap thread delayed free again.
+      mi_heap_t* target_heap = _mi_heap_by_tag(heap, page->heap_tag);  // allow custom heaps to separate objects
+      if (target_heap == NULL) {
+        target_heap = heap;
+        _mi_error_message(EINVAL, "page with tag %u cannot be reclaimed by a heap with the same tag (using %u instead)\n", page->heap_tag, heap->tag );
+      }
+      mi_page_set_heap(page, target_heap);
       _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, true); // override never (after heap is set)
       _mi_page_free_collect(page, false); // ensure used count is up to date
       if (mi_page_all_free(page)) {
@@ -1221,8 +1228,8 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       }
       else {
         // otherwise reclaim it into the heap
-        _mi_page_reclaim(heap, page);
-        if (requested_block_size == mi_page_block_size(page) && mi_page_has_any_available(page)) {
+        _mi_page_reclaim(target_heap, page);
+        if (requested_block_size == mi_page_block_size(page) && mi_page_has_any_available(page) && heap == target_heap) {
           if (right_page_reclaimed != NULL) { *right_page_reclaimed = true; }
         }
       }
