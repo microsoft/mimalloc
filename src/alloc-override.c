@@ -247,7 +247,6 @@ extern "C" {
 #ifndef MI_OSX_IS_INTERPOSED
   // Forward Posix/Unix calls as well
   void*  reallocf(void* p, size_t newsize) MI_FORWARD2(mi_reallocf,p,newsize)
-  size_t malloc_size(const void* p)        MI_FORWARD1(mi_usable_size,p)
   #if !defined(__ANDROID__) && !defined(__FreeBSD__)
   size_t malloc_usable_size(void *p)       MI_FORWARD1(mi_usable_size,p)
   #else
@@ -257,7 +256,10 @@ extern "C" {
   // No forwarding here due to aliasing/name mangling issues
   void*  valloc(size_t size)               { return mi_valloc(size); }
   void   vfree(void* p)                    { mi_free(p); }
+  #ifdef __APPLE__
+  size_t malloc_size(const void* p)        MI_FORWARD1(mi_usable_size,p)
   size_t malloc_good_size(size_t size)     { return mi_malloc_good_size(size); }
+  #endif
   int    posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
 
   // `aligned_alloc` is only available when __USE_ISOC11 is defined.
