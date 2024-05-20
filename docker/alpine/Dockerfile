@@ -1,10 +1,10 @@
-FROM quay.io/pypa/manylinux2014_x86_64
+# alpine image  
+FROM alpine
 
 # Install tools
-RUN yum install -y openssl-devel
-RUN yum install -y gcc gcc-c++ kernel-devel make
-RUN yum install -y git cmake
-RUN yum install -y vim
+RUN apk add build-base make cmake
+RUN apk add git
+RUN apk add vim
 
 RUN mkdir -p  /home/dev
 WORKDIR /home/dev
