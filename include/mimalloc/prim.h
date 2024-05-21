@@ -198,7 +198,7 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
     tcb[slot] = value;
   #elif defined(__APPLE__) && defined(__POWERPC__) // ppc, issue #781
     MI_UNUSED(ofs);
-    pthread_setspecific(slot, value);    
+    pthread_setspecific(slot, value);
   #endif
 }
 
@@ -208,11 +208,16 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 // but unfortunately, it seems we cannot test for this reliably at this time (see issue #883)
 // Nevertheless, it seems needed on older graviton platforms (see issue #851).
 // For now, we only enable this for specific platforms.
-#if defined(__GNUC__) && (__GNUC__ >= 7) && defined(__aarch64__) /* special case aarch64 for older gcc versions (issue #851) */ \
-    && !defined(__APPLE__)  /* on apple (M1) the wrong register is read (tpidr_el0 instead of tpidrro_el0) so fall back to TLS slot assembly (<https://github.com/microsoft/mimalloc/issues/343#issuecomment-763272369>)*/ \
+#if !defined(__APPLE__)  /* on apple (M1) the wrong register is read (tpidr_el0 instead of tpidrro_el0) so fall back to TLS slot assembly (<https://github.com/microsoft/mimalloc/issues/343#issuecomment-763272369>)*/ \
+    && !defined(MI_LIBC_MUSL) \
     && (!defined(__clang_major__) || __clang_major__ >= 14)  /* older clang versions emit bad code; fall back to using the TLS slot (<https://lore.kernel.org/linux-arm-kernel/202110280952.352F66D8@keescook/T/>) */
-#define MI_USE_BUILTIN_THREAD_POINTER  1
+  #if    (defined(__GNUC__) && (__GNUC__ >= 7)  && defined(__aarch64__)) /* aarch64 for older gcc versions (issue #851) */ \
+      || (defined(__GNUC__) && (__GNUC__ >= 11) && defined(__x86_64__)) \
+      || (defined(__clang_major__) && (__clang_major__ >= 14) && (defined(__aarch64__) || defined(__x86_64__)))
+    #define MI_USE_BUILTIN_THREAD_POINTER  1
+  #endif
 #endif
+
 
 
 // defined in `init.c`; do not use these directly
@@ -239,11 +244,11 @@ static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
   return (uintptr_t)NtCurrentTeb();
 }
 
-#elif MI_USE_BUILTIN_THREAD_POINTER 
+#elif MI_USE_BUILTIN_THREAD_POINTER
 
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
   // Works on most Unix based platforms with recent compilers
-  return (uintptr_t)__builtin_thread_pointer();  
+  return (uintptr_t)__builtin_thread_pointer();
 }
 
 #elif defined(MI_HAS_TLS_SLOT)
