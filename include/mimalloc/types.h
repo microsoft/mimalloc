@@ -307,7 +307,7 @@ typedef struct mi_page_s {
   mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
   uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
-  uint8_t               heap_tag;          // tag of the owning heap, used for separated heaps by object type
+  uint8_t               heap_tag;          // tag of the owning heap, used to separate heaps by object type
                                            // padding
   size_t                block_size;        // size available in each block (always `>0`)
   uint8_t*              page_start;        // start of the page area containing the blocks
@@ -387,6 +387,7 @@ typedef struct mi_memid_s {
 // ---------------------------------------------------------------
 // Segments contain mimalloc pages
 // ---------------------------------------------------------------
+typedef struct mi_subproc_s mi_subproc_t;
 
 // Segments are large allocated memory blocks (2MiB on 64 bit) from the OS.
 // Inside segments we allocated fixed size _pages_ that contain blocks.
@@ -409,6 +410,7 @@ typedef struct mi_segment_s {
   size_t               capacity;         // count of available pages (`#free + used`)
   size_t               segment_info_size;// space we are using from the first page for segment meta-data and possible guard pages.
   uintptr_t            cookie;           // verify addresses in secure mode: `_mi_ptr_cookie(segment) == segment->cookie`
+  mi_subproc_t*        subproc;          // segment belongs to sub process
 
   // layout like this to optimize access in `mi_free`
   _Atomic(mi_threadid_t) thread_id;      // unique id of the thread owning this segment
@@ -601,9 +603,22 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 
 
 // ------------------------------------------------------
+// Sub processes do not reclaim or visit segments
+// from other sub processes
+// ------------------------------------------------------
+
+struct mi_subproc_s {
+  _Atomic(size_t)    abandoned_count;   // count of abandoned segments for this sup-process
+  mi_memid_t         memid;             // provenance
+};
+
+mi_subproc_t* mi_subproc_from_id(mi_subproc_id_t subproc_id);
+
+// ------------------------------------------------------
 // Thread Local data
 // ------------------------------------------------------
 
+// Milliseconds as in `int64_t` to avoid overflows
 typedef int64_t  mi_msecs_t;
 
 // Queue of segments
@@ -628,8 +643,9 @@ typedef struct mi_segments_tld_s {
   size_t              current_size; // current size of all segments
   size_t              peak_size;    // peak size of all segments
   size_t              reclaim_count;// number of reclaimed (abandoned) segments
+  mi_subproc_t*       subproc;      // sub-process this thread belongs to.
   mi_stats_t*         stats;        // points to tld stats
-  mi_os_tld_t*        os;           // points to os stats
+  mi_os_tld_t*        os;           // points to os tld
 } mi_segments_tld_t;
 
 // Thread local data

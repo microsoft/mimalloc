@@ -125,18 +125,20 @@ mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 
 extern mi_heap_t _mi_heap_main;
 
-static mi_tld_t tld_main = {
+static mi_decl_cache_align mi_subproc_t mi_subproc_default;
+
+static mi_decl_cache_align mi_tld_t tld_main = {
   0, false,
-  &_mi_heap_main, &_mi_heap_main,
+  &_mi_heap_main, &_mi_heap_main, 
   { { NULL, NULL }, {NULL ,NULL}, {NULL ,NULL, 0},
-    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, &mi_subproc_default,
     &tld_main.stats, &tld_main.os
   }, // segments
   { 0, &tld_main.stats },  // os
   { MI_STATS_NULL }       // stats
 };
 
-mi_heap_t _mi_heap_main = {
+mi_decl_cache_align mi_heap_t _mi_heap_main = {
   &tld_main,
   MI_ATOMIC_VAR_INIT(NULL),
   0,                // thread id
@@ -177,6 +179,38 @@ mi_heap_t* _mi_heap_main_get(void) {
   mi_heap_main_init();
   return &_mi_heap_main;
 }
+
+
+/* -----------------------------------------------------------
+  Sub process
+----------------------------------------------------------- */
+
+mi_subproc_id_t mi_subproc_new(void) {
+  mi_memid_t memid = _mi_memid_none();
+  mi_subproc_t* subproc = (mi_subproc_t*)_mi_arena_meta_zalloc(sizeof(mi_subproc_t), &memid);
+  if (subproc == NULL) return NULL;
+  subproc->memid = memid;
+  return subproc;
+}
+
+mi_subproc_t* mi_subproc_from_id(mi_subproc_id_t subproc_id) {
+  return (subproc_id == NULL ? &mi_subproc_default : (mi_subproc_t*)subproc_id);
+}
+
+void mi_subproc_delete(mi_subproc_id_t subproc_id) {
+  if (subproc_id == NULL) return;
+  mi_subproc_t* subproc = mi_subproc_from_id(subproc_id);
+  _mi_arena_meta_free(subproc, subproc->memid, sizeof(mi_subproc_t));
+}
+
+void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
+  mi_heap_t* heap = mi_heap_get_default();
+  if (heap == NULL) return;
+  mi_assert(heap->tld->segments.subproc == &mi_subproc_default);
+  if (heap->tld->segments.subproc != &mi_subproc_default) return;
+  heap->tld->segments.subproc = mi_subproc_from_id(subproc_id);
+}
+
 
 
 /* -----------------------------------------------------------
@@ -295,6 +329,7 @@ void _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap) {
   _mi_memzero_aligned(tld,sizeof(mi_tld_t));
   tld->heap_backing = bheap;
   tld->heaps = NULL;
+  tld->segments.subproc = &mi_subproc_default;
   tld->segments.stats = &tld->stats;
   tld->segments.os = &tld->os;
   tld->os.stats = &tld->stats;

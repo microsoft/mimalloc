@@ -130,14 +130,17 @@ void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 
 bool       _mi_arena_segment_clear_abandoned(mi_segment_t* segment);
 void       _mi_arena_segment_mark_abandoned(mi_segment_t* segment);
-size_t     _mi_arena_segment_abandoned_count(void);
 
-typedef struct mi_arena_field_cursor_s { // abstract
+void*      _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid);
+void       _mi_arena_meta_free(void* p, mi_memid_t memid, size_t size);
+
+typedef struct mi_arena_field_cursor_s { // abstract struct
   mi_arena_id_t  start;
   int            count;
   size_t         bitmap_idx;
+  mi_subproc_t*  subproc;
 } mi_arena_field_cursor_t;
-void          _mi_arena_field_cursor_init(mi_heap_t* heap, mi_arena_field_cursor_t* current);
+void          _mi_arena_field_cursor_init(mi_heap_t* heap, mi_subproc_t* subproc, mi_arena_field_cursor_t* current);
 mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* previous);
 
 // "segment-map.c"
