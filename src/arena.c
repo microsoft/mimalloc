@@ -36,7 +36,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 typedef uintptr_t mi_block_info_t;
 #define MI_ARENA_BLOCK_SIZE   (MI_SEGMENT_SIZE)        // 64MiB  (must be at least MI_SEGMENT_ALIGN)
 #define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 32MiB
-#define MI_MAX_ARENAS         (112)                    // not more than 126 (since we use 7 bits in the memid and an arena index + 1)
+#define MI_MAX_ARENAS         (255)                    // Limited as the reservation exponentially increases (and takes up .bss)
 
 // A memory arena descriptor
 typedef struct mi_arena_s {
@@ -552,6 +552,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force, mi
         while (bitidx + bitlen < MI_BITMAP_FIELD_BITS && (purge & ((size_t)1 << (bitidx + bitlen))) != 0) {
           bitlen++;
         }
+        // temporarily claim the purge range as "in-use" to be thread-safe with allocation
         // try to claim the longest range of corresponding in_use bits
         const mi_bitmap_index_t bitmap_index = mi_bitmap_index_create(i, bitidx);
         while( bitlen > 0 ) {
