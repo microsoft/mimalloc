@@ -358,8 +358,14 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
     arena_reserve = arena_reserve/4;  // be conservative if virtual reserve is not supported (for WASM for example)
   }
   arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_BLOCK_SIZE);
+  arena_reserve = _mi_align_up(arena_reserve, MI_SEGMENT_SIZE);
   if (arena_count >= 8 && arena_count <= 128) {
-    arena_reserve = ((size_t)1<<(arena_count/8)) * arena_reserve;  // scale up the arena sizes exponentially
+    // scale up the arena sizes exponentially every 8 entries (128 entries get to 589TiB)
+    const size_t multiplier = (size_t)1 << _mi_clamp(arena_count/8, 0, 16 );
+    size_t reserve = 0;
+    if (!mi_mul_overflow(multiplier, arena_reserve, &reserve)) {
+      arena_reserve = reserve;
+    }
   }
   if (arena_reserve < req_size) return false;  // should be able to at least handle the current allocation size
 

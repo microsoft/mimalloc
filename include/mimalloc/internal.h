@@ -329,6 +329,14 @@ static inline uintptr_t _mi_divide_up(uintptr_t size, size_t divider) {
   return (divider == 0 ? size : ((size + divider - 1) / divider));
 }
 
+
+// clamp an integer
+static inline size_t _mi_clamp(size_t sz, size_t min, size_t max) {
+  if (sz < min) return min;
+  else if (sz > max) return max;
+  else return sz;
+}
+
 // Is memory zero initialized?
 static inline bool mi_mem_is_zero(const void* p, size_t size) {
   for (size_t i = 0; i < size; i++) {
