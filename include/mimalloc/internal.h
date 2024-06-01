@@ -53,11 +53,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_externc
 #endif
 
-// pthreads
-#if !defined(_WIN32) && !defined(__wasi__)
-#define  MI_USE_PTHREADS
-#include <pthread.h>
-#endif
 
 // "options.c"
 void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);

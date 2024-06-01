@@ -8,6 +8,17 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_ATOMIC_H
 #define MIMALLOC_ATOMIC_H
 
+// include windows.h or pthreads.h
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#elif !defined(_WIN32) && (defined(__EMSCRIPTEN_SHARED_MEMORY__) || !defined(__wasi__))
+#define  MI_USE_PTHREADS
+#include <pthread.h>
+#endif
+
 // --------------------------------------------------------------------------------------------
 // Atomics
 // We need to be portable between C, C++, and MSVC.
@@ -133,10 +144,6 @@ static inline void mi_atomic_maxi64_relaxed(volatile int64_t* p, int64_t x) {
 #elif defined(_MSC_VER)
 
 // Legacy MSVC plain C compilation wrapper that uses Interlocked operations to model C11 atomics.
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
 #include <intrin.h>
 #ifdef _WIN64
 typedef LONG64   msc_intptr_t;
@@ -306,7 +313,7 @@ typedef _Atomic(uintptr_t) mi_atomic_once_t;
 
 // Returns true only on the first invocation
 static inline bool mi_atomic_once( mi_atomic_once_t* once ) {
-  if (mi_atomic_load_relaxed(once) != 0) return false;     // quick test 
+  if (mi_atomic_load_relaxed(once) != 0) return false;     // quick test
   uintptr_t expected = 0;
   return mi_atomic_cas_strong_acq_rel(once, &expected, (uintptr_t)1); // try to set to 1
 }
@@ -329,10 +336,6 @@ static inline void mi_atomic_yield(void) {
   std::this_thread::yield();
 }
 #elif defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
 static inline void mi_atomic_yield(void) {
   YieldProcessor();
 }

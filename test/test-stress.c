@@ -200,7 +200,7 @@ static void test_stress(void) {
     #ifndef NDEBUG
     //mi_collect(false);
     //mi_debug_show_arenas();
-    #endif    
+    #endif
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
     #endif
@@ -232,7 +232,7 @@ static void test_leak(void) {
 int main(int argc, char** argv) {
   #ifndef USE_STD_MALLOC
     mi_stats_reset();
-  #endif  
+  #endif
 
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
   if (argc >= 2) {
@@ -285,7 +285,7 @@ static void (*thread_entry_fun)(intptr_t) = &stress;
 
 #ifdef _WIN32
 
-#include <Windows.h>
+#include <windows.h>
 
 static DWORD WINAPI thread_entry(LPVOID param) {
   thread_entry_fun((intptr_t)param);
