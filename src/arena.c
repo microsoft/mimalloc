@@ -510,7 +510,7 @@ static bool mi_arena_purge_range(mi_arena_t* arena, size_t idx, size_t startidx,
   size_t bitidx = startidx;
   bool all_purged = false;
   while (bitidx < endidx) {
-    // count consequetive ones in the purge mask
+    // count consecutive ones in the purge mask
     size_t count = 0;
     while (bitidx + count < endidx && (purge & ((size_t)1 << (bitidx + count))) != 0) {
       count++;
@@ -547,7 +547,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force, mi
     if (purge != 0) {
       size_t bitidx = 0;
       while (bitidx < MI_BITMAP_FIELD_BITS) {
-        // find consequetive range of ones in the purge mask
+        // find consecutive range of ones in the purge mask
         size_t bitlen = 0;
         while (bitidx + bitlen < MI_BITMAP_FIELD_BITS && (purge & ((size_t)1 << (bitidx + bitlen))) != 0) {
           bitlen++;
@@ -927,7 +927,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   arena->is_large     = is_large;
   arena->purge_expire = 0;
   arena->search_idx   = 0;
-  // consequetive bitmaps
+  // consecutive bitmaps
   arena->blocks_dirty     = &arena->blocks_inuse[fields];     // just after inuse bitmap
   arena->blocks_abandoned = &arena->blocks_inuse[2 * fields]; // just after dirty bitmap
   arena->blocks_committed = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[3*fields]); // just after abandoned bitmap
