@@ -129,6 +129,16 @@ static void free_items(void* p) {
   custom_free(p);
 }
 
+/* 
+static bool visit_blocks(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
+  (void)(heap); (void)(area); 
+  size_t* total = (size_t*)arg;
+  if (block != NULL) {
+    total += block_size;
+  }
+  return true;
+}
+*/
 
 static void stress(intptr_t tid) {
   //bench_start_thread();
@@ -173,6 +183,10 @@ static void stress(intptr_t tid) {
       data[data_idx] = q;
     }
   }
+  // walk the heap
+  // size_t total = 0;
+  // mi_heap_visit_blocks(mi_heap_get_default(), true, visit_blocks, &total);
+
   // free everything that is left
   for (size_t i = 0; i < retain_top; i++) {
     free_items(retained[i]);
