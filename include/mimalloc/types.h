@@ -404,13 +404,16 @@ typedef struct mi_segment_s {
   bool                 was_reclaimed;    // true if it was reclaimed (used to limit on-free reclamation)
 
   size_t               abandoned;        // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
-  size_t               abandoned_visits; // count how often this segment is visited in the abandoned list (to force reclaim if it is too long)
+  size_t               abandoned_visits; // count how often this segment is visited for reclaiming (to force reclaim if it is too long)
 
   size_t               used;             // count of pages in use (`used <= capacity`)
   size_t               capacity;         // count of available pages (`#free + used`)
   size_t               segment_info_size;// space we are using from the first page for segment meta-data and possible guard pages.
   uintptr_t            cookie;           // verify addresses in secure mode: `_mi_ptr_cookie(segment) == segment->cookie`
   mi_subproc_t*        subproc;          // segment belongs to sub process
+
+  struct mi_segment_s* abandoned_os_next; // only used for abandoned segments outside arena's, and only if `mi_option_visit_abandoned` is enabled
+  struct mi_segment_s* abandoned_os_prev;
 
   // layout like this to optimize access in `mi_free`
   _Atomic(mi_threadid_t) thread_id;      // unique id of the thread owning this segment
@@ -609,6 +612,8 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 
 struct mi_subproc_s {
   _Atomic(size_t)    abandoned_count;   // count of abandoned segments for this sup-process
+  mi_lock_t          abandoned_os_lock; // lock for the abandoned segments outside of arena's
+  mi_segment_t*      abandoned_os_list; // doubly-linked list of abandoned segments outside of arena's (in OS allocated memory)
   mi_memid_t         memid;             // provenance
 };
 

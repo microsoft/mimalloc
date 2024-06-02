@@ -171,7 +171,8 @@ static void mi_heap_main_init(void) {
     #endif
     _mi_heap_main.cookie  = _mi_heap_random_next(&_mi_heap_main);
     _mi_heap_main.keys[0] = _mi_heap_random_next(&_mi_heap_main);
-    _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
+    _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);    
+    mi_lock_init(&mi_subproc_default.abandoned_os_lock);
   }
 }
 
@@ -185,8 +186,6 @@ mi_heap_t* _mi_heap_main_get(void) {
   Sub process
 ----------------------------------------------------------- */
 
-static mi_decl_cache_align _Atomic(uintptr_t)  mi_subproc_count;
-
 mi_subproc_id_t mi_subproc_main(void) {
   return NULL;
 }
@@ -195,8 +194,9 @@ mi_subproc_id_t mi_subproc_new(void) {
   mi_memid_t memid = _mi_memid_none();
   mi_subproc_t* subproc = (mi_subproc_t*)_mi_arena_meta_zalloc(sizeof(mi_subproc_t), &memid);
   if (subproc == NULL) return NULL;
-  mi_atomic_increment_relaxed(&mi_subproc_count);
   subproc->memid = memid;
+  subproc->abandoned_os_list = NULL;
+  mi_lock_init(&subproc->abandoned_os_lock);
   return subproc;
 }
 
@@ -207,8 +207,19 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
 void mi_subproc_delete(mi_subproc_id_t subproc_id) {
   if (subproc_id == NULL) return;
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
+  // check if there are no abandoned segments still..
+  bool safe_to_delete = false;
+  if (mi_lock_acquire(&subproc->abandoned_os_lock)) {
+    if (subproc->abandoned_os_list == NULL) {
+      safe_to_delete = true;
+    }
+    mi_lock_release(&subproc->abandoned_os_lock);
+  }
+  if (!safe_to_delete) return;
+  // safe to release
+  // todo: should we refcount subprocesses?
+  mi_lock_done(&subproc->abandoned_os_lock);
   _mi_arena_meta_free(subproc, subproc->memid, sizeof(mi_subproc_t));
-  mi_atomic_decrement_relaxed(&mi_subproc_count);
 }
 
 void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
