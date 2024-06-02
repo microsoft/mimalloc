@@ -131,8 +131,8 @@ void*      _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid);
 void       _mi_arena_meta_free(void* p, mi_memid_t memid, size_t size);
 
 typedef struct mi_arena_field_cursor_s { // abstract struct
-  mi_arena_id_t  start;
-  int            count;
+  size_t         start;
+  size_t         end;
   size_t         bitmap_idx;
   mi_subproc_t*  subproc;
 } mi_arena_field_cursor_t;

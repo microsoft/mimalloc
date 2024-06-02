@@ -226,17 +226,22 @@ void _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool 
   heap->tld->heaps = heap;
 }
 
-mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id) {
+mi_decl_nodiscard mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);  // todo: OS allocate in secure mode?
   if (heap == NULL) return NULL;
-  // don't reclaim abandoned pages or otherwise destroy is unsafe  
-  _mi_heap_init(heap, bheap->tld, arena_id, true /* no reclaim */, 0 /* default tag */);
+  mi_assert(heap_tag >= 0 && heap_tag < 256);
+  _mi_heap_init(heap, bheap->tld, arena_id, allow_destroy /* no reclaim? */, (uint8_t)heap_tag /* heap tag */);
   return heap;
 }
 
+mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id) {
+  return mi_heap_new_ex(0 /* default heap tag */, false /* don't allow `mi_heap_destroy` */, arena_id);
+}
+
 mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
-  return mi_heap_new_in_arena(_mi_arena_id_none());
+  // don't reclaim abandoned memory or otherwise destroy is unsafe  
+  return mi_heap_new_ex(0 /* default heap tag */, true /* no reclaim */, _mi_arena_id_none());
 }
 
 bool _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid) {

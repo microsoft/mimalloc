@@ -905,7 +905,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       mi_heap_t* target_heap = _mi_heap_by_tag(heap, page->heap_tag);  // allow custom heaps to separate objects
       if (target_heap == NULL) {
         target_heap = heap;
-        _mi_error_message(EINVAL, "page with tag %u cannot be reclaimed by a heap with the same tag (using tag %u instead)\n", page->heap_tag, heap->tag );
+        _mi_error_message(EINVAL, "page with tag %u cannot be reclaimed by a heap with the same tag (using heap tag %u instead)\n", page->heap_tag, heap->tag );
       }
       // associate the heap with this page, and allow heap thread delayed free again.
       mi_page_set_heap(page, target_heap);
@@ -948,6 +948,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
 bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
   if (mi_atomic_load_relaxed(&segment->thread_id) != 0) return false;  // it is not abandoned
   if (segment->subproc != heap->tld->segments.subproc)  return false;  // only reclaim within the same subprocess
+  if (!_mi_heap_memid_is_suitable(heap,segment->memid)) return false;  // don't reclaim between exclusive and non-exclusive arena's
   // don't reclaim more from a `free` call than half the current segments
   // this is to prevent a pure free-ing thread to start owning too many segments
   if (heap->tld->segments.reclaim_count * 2 > heap->tld->segments.count) return false;

@@ -850,11 +850,20 @@ void _mi_arena_segment_mark_abandoned(mi_segment_t* segment)
 // start a cursor at a randomized arena
 void _mi_arena_field_cursor_init(mi_heap_t* heap, mi_subproc_t* subproc, mi_arena_field_cursor_t* current) {
   mi_assert_internal(heap == NULL || heap->tld->segments.subproc == subproc);
-  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
-  current->start = (heap == NULL || max_arena == 0 ? 0 : (mi_arena_id_t)( _mi_heap_random_next(heap) % max_arena));
-  current->count = 0;
-  current->bitmap_idx = 0;  
+  current->bitmap_idx = 0;
   current->subproc = subproc;
+  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  if (heap != NULL && heap->arena_id != _mi_arena_id_none()) {
+    // for a heap that is bound to one arena, only visit that arena
+    current->start = mi_arena_id_index(heap->arena_id);
+    current->end   = current->start + 1;
+  }
+  else {
+    // otherwise visit all starting at a random location
+    current->start = (heap == NULL || max_arena == 0 ? 0 : (mi_arena_id_t)(_mi_heap_random_next(heap) % max_arena));
+    current->end   = current->start + max_arena;
+  }
+  mi_assert_internal(current->start < max_arena);
 }
 
 static mi_segment_t* mi_arena_segment_clear_abandoned_at(mi_arena_t* arena, mi_subproc_t* subproc, mi_bitmap_index_t bitmap_idx) {  
@@ -884,16 +893,15 @@ static mi_segment_t* mi_arena_segment_clear_abandoned_at(mi_arena_t* arena, mi_s
 // this does not set the thread id (so it appears as still abandoned)
 mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* previous, bool visit_all ) 
 {
-  const int max_arena = (int)mi_atomic_load_relaxed(&mi_arena_count);
+  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   if (max_arena <= 0 || mi_atomic_load_relaxed(&previous->subproc->abandoned_count) == 0) return NULL;
 
-  int count = previous->count;
   size_t field_idx = mi_bitmap_index_field(previous->bitmap_idx);
   size_t bit_idx = mi_bitmap_index_bit_in_field(previous->bitmap_idx) + 1;
   // visit arena's (from the previous cursor)
-  for (; count < max_arena; count++, field_idx = 0, bit_idx = 0) {
-    mi_arena_id_t arena_idx = previous->start + count;
-    if (arena_idx >= max_arena) { arena_idx = arena_idx % max_arena; } // wrap around
+  for ( ; previous->start < previous->end; previous->start++, field_idx = 0, bit_idx = 0) {
+    // index wraps around
+    size_t arena_idx = (previous->start >= max_arena ? previous->start % max_arena : previous->start);    
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
     if (arena != NULL) {
       bool has_lock = false;      
@@ -918,11 +926,9 @@ mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* pr
             // pre-check if the bit is set
             size_t mask = ((size_t)1 << bit_idx);
             if mi_unlikely((field & mask) == mask) {
-              const mi_bitmap_index_t bitmap_idx = mi_bitmap_index_create(field_idx, bit_idx);
-              mi_segment_t* const segment = mi_arena_segment_clear_abandoned_at(arena, previous->subproc, bitmap_idx);
+              previous->bitmap_idx = mi_bitmap_index_create(field_idx, bit_idx);
+              mi_segment_t* const segment = mi_arena_segment_clear_abandoned_at(arena, previous->subproc, previous->bitmap_idx);
               if (segment != NULL) {
-                previous->bitmap_idx = bitmap_idx;
-                previous->count = count;
                 //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
                 if (has_lock) { mi_lock_release(&arena->abandoned_visit_lock); }
                 return segment;
@@ -935,8 +941,9 @@ mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* pr
     }
   }
   // no more found
+  mi_assert(previous->start == previous->end);
   previous->bitmap_idx = 0;
-  previous->count = 0;
+  previous->start = previous->end = 0;
   return NULL;
 }
 
