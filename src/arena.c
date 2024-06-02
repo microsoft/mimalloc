@@ -946,7 +946,9 @@ static bool mi_arena_visit_abandoned_blocks(mi_subproc_t* subproc, int heap_tag,
   _mi_arena_field_cursor_init(NULL, subproc, &current);
   mi_segment_t* segment;
   while ((segment = _mi_arena_segment_clear_abandoned_next(&current, true /* visit all */)) != NULL) {
-    if (!_mi_segment_visit_blocks(segment, heap_tag, visit_blocks, visitor, arg)) return false;
+    bool ok = _mi_segment_visit_blocks(segment, heap_tag, visit_blocks, visitor, arg);
+    _mi_arena_segment_mark_abandoned(segment);
+    if (!ok) return false;
   }
   return true;
 }
