@@ -905,7 +905,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
       mi_heap_t* target_heap = _mi_heap_by_tag(heap, page->heap_tag);  // allow custom heaps to separate objects
       if (target_heap == NULL) {
         target_heap = heap;
-        _mi_error_message(EINVAL, "page with tag %u cannot be reclaimed by a heap with the same tag (using heap tag %u instead)\n", page->heap_tag, heap->tag );
+        _mi_error_message(EFAULT, "page with tag %u cannot be reclaimed by a heap with the same tag (using heap tag %u instead)\n", page->heap_tag, heap->tag );
       }
       // associate the heap with this page, and allow heap thread delayed free again.
       mi_page_set_heap(page, target_heap);
