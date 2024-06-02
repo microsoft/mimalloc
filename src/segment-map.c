@@ -39,8 +39,7 @@ typedef struct mi_segmap_part_s {
 } mi_segmap_part_t;
 
 // Allocate parts on-demand to reduce .bss footprint
-_Atomic(mi_segmap_part_t*) mi_segment_map[MI_SEGMENT_MAP_MAX_PARTS]; // = { NULL, .. }
-
+static _Atomic(mi_segmap_part_t*) mi_segment_map[MI_SEGMENT_MAP_MAX_PARTS]; // = { NULL, .. }
 
 static mi_segmap_part_t* mi_segment_map_index_of(const mi_segment_t* segment, bool create_on_demand, size_t* idx, size_t* bitidx) {
   // note: segment can be invalid or NULL.
@@ -50,7 +49,7 @@ static mi_segmap_part_t* mi_segment_map_index_of(const mi_segment_t* segment, bo
   if ((uintptr_t)segment >= MI_SEGMENT_MAP_MAX_ADDRESS) return NULL;
   const uintptr_t segindex = ((uintptr_t)segment) / MI_SEGMENT_MAP_PART_SPAN;
   if (segindex >= MI_SEGMENT_MAP_MAX_PARTS) return NULL;
-  mi_segmap_part_t* part = mi_atomic_load_ptr_relaxed(mi_segmap_part_t*, &mi_segment_map[segindex]);
+  mi_segmap_part_t* part = mi_atomic_load_ptr_relaxed(mi_segmap_part_t, &mi_segment_map[segindex]);
 
   // allocate on demand to reduce .bss footprint
   if (part == NULL) {
