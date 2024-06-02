@@ -114,23 +114,6 @@ void _mi_prim_thread_done_auto_done(void);
 // Called when the default heap for a thread changes
 void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 
-// Locks are only used if abandoned segment visiting is permitted
-#if defined(_WIN32)
-#define mi_lock_t  CRITICAL_SECTION 
-#elif defined(MI_USE_PTHREADS)
-#define mi_lock_t  pthread_mutex_t
-#else
-#define mi_lock_t  _Atomic(uintptr_t)
-#endif
-
-// Take a lock (blocking). Return `true` on success.
-bool _mi_prim_lock(mi_lock_t* lock);
-
-// Try to take lock and return `true` if successful.
-bool _mi_prim_try_lock(mi_lock_t* lock);
-
-// Release a lock.
-void _mi_prim_unlock(mi_lock_t* lock);
 
 
 //-------------------------------------------------------------------

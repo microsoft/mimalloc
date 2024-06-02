@@ -9,7 +9,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
-#include "mimalloc/atomic.h"
 #include "mimalloc/prim.h"
 #include <stdio.h>   // fputs, stderr
 
@@ -560,24 +559,6 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   result[0] = 0;
   size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
   return (len > 0 && len < result_size);
-}
-
-
-//----------------------------------------------------------------
-// Locks
-//----------------------------------------------------------------
-
-bool _mi_prim_lock(mi_lock_t* lock) {
-  EnterCriticalSection(lock);
-  return true;
-}
-
-bool _mi_prim_try_lock(mi_lock_t* lock) {
-  return TryEnterCriticalSection(lock);
-}
-
-void _mi_prim_unlock(mi_lock_t* lock) {
-  LeaveCriticalSection(lock);
 }
 
 

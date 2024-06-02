@@ -612,8 +612,6 @@ struct mi_subproc_s {
   mi_memid_t         memid;             // provenance
 };
 
-mi_subproc_t* mi_subproc_from_id(mi_subproc_id_t subproc_id);
-
 // ------------------------------------------------------
 // Thread Local data
 // ------------------------------------------------------

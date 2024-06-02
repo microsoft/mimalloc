@@ -309,6 +309,11 @@ static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)*p, intptr_t sub) {
   return (intptr_t)mi_atomic_addi(p, -sub);
 }
 
+
+// ----------------------------------------------------------------------
+// Once and Guard
+// ----------------------------------------------------------------------
+
 typedef _Atomic(uintptr_t) mi_atomic_once_t;
 
 // Returns true only on the first invocation
@@ -329,7 +334,9 @@ typedef _Atomic(uintptr_t) mi_atomic_guard_t;
 
 
 
+// ----------------------------------------------------------------------
 // Yield
+// ----------------------------------------------------------------------
 #if defined(__cplusplus)
 #include <thread>
 static inline void mi_atomic_yield(void) {
@@ -391,6 +398,90 @@ static inline void mi_atomic_yield(void) {
   sleep(0);
 }
 #endif
+
+
+// ----------------------------------------------------------------------
+// Locks are only used for abandoned segment visiting
+// ----------------------------------------------------------------------
+#if defined(_WIN32)
+
+#define mi_lock_t  CRITICAL_SECTION 
+
+static inline bool _mi_prim_lock(mi_lock_t* lock) {
+  EnterCriticalSection(lock);
+  return true;
+}
+
+static inline bool _mi_prim_try_lock(mi_lock_t* lock) {
+  return TryEnterCriticalSection(lock);
+}
+
+static inline void _mi_prim_unlock(mi_lock_t* lock) {
+  LeaveCriticalSection(lock);
+}
+
+
+#elif defined(MI_USE_PTHREADS)
+
+#define mi_lock_t  pthread_mutex_t
+
+static inline bool _mi_prim_lock(mi_lock_t* lock) {
+  return (pthread_mutex_lock(lock) == 0);
+}
+
+static inline bool _mi_prim_try_lock(mi_lock_t* lock) {
+  return (pthread_mutex_trylock(lock) == 0);
+}
+
+static inline void _mi_prim_unlock(mi_lock_t* lock) {
+  pthread_mutex_unlock(lock);
+}
+
+#elif defined(__cplusplus)
+
+#include <mutex>
+#define mi_lock_t  std::mutex
+
+static inline bool _mi_prim_lock(mi_lock_t* lock) {
+  lock->lock();
+  return true;
+}
+
+static inline bool _mi_prim_try_lock(mi_lock_t* lock) {
+  return (lock->try_lock();
+}
+
+static inline void _mi_prim_unlock(mi_lock_t* lock) {
+  lock->unlock();
+}
+
+#else
+
+// fall back to poor man's locks.
+// this should only be the case in a single-threaded environment (like __wasi__)
+
+#define mi_lock_t  _Atomic(uintptr_t)
+
+static inline bool _mi_prim_try_lock(mi_lock_t* lock) {
+  uintptr_t expected = 0;
+  return mi_atomic_cas_strong_acq_rel(lock, &expected, (uintptr_t)1);
+}
+
+static inline bool _mi_prim_lock(mi_lock_t* lock) {
+  for (int i = 0; i < 1000; i++) {  // for at most 1000 tries?
+    if (_mi_prim_try_lock(lock)) return true;
+    mi_atomic_yield();
+  }
+  return true;
+}
+
+static inline void _mi_prim_unlock(mi_lock_t* lock) {
+  mi_atomic_store_release(lock, (uintptr_t)0);
+}
+
+#endif
+
+
 
 
 #endif // __MIMALLOC_ATOMIC_H

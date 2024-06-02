@@ -193,7 +193,7 @@ mi_subproc_id_t mi_subproc_new(void) {
   return subproc;
 }
 
-mi_subproc_t* mi_subproc_from_id(mi_subproc_id_t subproc_id) {
+static mi_subproc_t* mi_subproc_from_id(mi_subproc_id_t subproc_id) {
   return (subproc_id == NULL ? &mi_subproc_default : (mi_subproc_t*)subproc_id);
 }
 

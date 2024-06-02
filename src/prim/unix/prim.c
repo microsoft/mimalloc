@@ -22,7 +22,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
-#include "mimalloc/atomic.h"
 #include "mimalloc/prim.h"
 
 #include <sys/mman.h>  // mmap
@@ -877,52 +876,6 @@ void _mi_prim_thread_done_auto_done(void) {
 
 void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
   MI_UNUSED(heap);
-}
-
-#endif
-
-
-//----------------------------------------------------------------
-// Locks
-//----------------------------------------------------------------
-
-#if defined(MI_USE_PTHREADS)
-
-bool _mi_prim_lock(mi_lock_t* lock) {
-  return (pthread_mutex_lock(lock) == 0);
-}
-
-bool _mi_prim_try_lock(mi_lock_t* lock) {
-  return (pthread_mutex_trylock(lock) == 0);
-}
-
-void _mi_prim_unlock(mi_lock_t* lock) {
-  pthread_mutex_unlock(lock);
-}
-
-#else
-
-// fall back to poor man's locks.
-bool _mi_prim_lock(mi_lock_t* lock) {
-  for(int i = 0; i < 1000; i++) {  // for at most 1 second?
-    if (_mi_prim_try_lock(lock)) return true;
-    if (i < 25) {
-      mi_atomic_yield();    // first yield a bit
-    }
-    else {
-      usleep(1000);         // then sleep for 1ms intervals
-    }
-  }
-  return true;
-}
-
-bool _mi_prim_try_lock(mi_lock_t* lock) {
-  uintptr_t expected = 0;
-  return mi_atomic_cas_strong_acq_rel(lock,&expected,(uintptr_t)1);
-}
-
-void _mi_prim_unlock(mi_lock_t* lock) {
-  mi_atomic_store_release(lock,(uintptr_t)0);
 }
 
 #endif
