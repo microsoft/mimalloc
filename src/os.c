@@ -157,7 +157,8 @@ static void mi_os_prim_free(void* addr, size_t size, bool still_committed, mi_st
   _mi_stat_decrease(&stats->reserved, size);
 }
 
-void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* tld_stats) {
+void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* stats) {
+  if (stats == NULL) stats = &_mi_stats_main;
   if (mi_memkind_is_os(memid.memkind)) {
     size_t csize = _mi_os_good_alloc_size(size);
     void* base = addr;
@@ -171,10 +172,10 @@ void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t me
     // free it
     if (memid.memkind == MI_MEM_OS_HUGE) {
       mi_assert(memid.is_pinned);
-      mi_os_free_huge_os_pages(base, csize, tld_stats);
+      mi_os_free_huge_os_pages(base, csize, stats);
     }
     else {
-      mi_os_prim_free(base, csize, still_committed, tld_stats);
+      mi_os_prim_free(base, csize, still_committed, stats);
     }
   }
   else {
@@ -183,8 +184,9 @@ void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t me
   }
 }
 
-void  _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* tld_stats) {
-  _mi_os_free_ex(p, size, true, memid, tld_stats);
+void  _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats) {
+  if (stats == NULL) stats = &_mi_stats_main;
+  _mi_os_free_ex(p, size, true, memid, stats);
 }
 
 
@@ -299,6 +301,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
 void* _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats) {
   *memid = _mi_memid_none();
   if (size == 0) return NULL;
+  if (stats == NULL) stats = &_mi_stats_main;
   size = _mi_os_good_alloc_size(size);
   bool os_is_large = false;
   bool os_is_zero  = false;
@@ -314,6 +317,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   MI_UNUSED(&_mi_os_get_aligned_hint); // suppress unused warnings
   *memid = _mi_memid_none();
   if (size == 0) return NULL;
+  if (stats == NULL) stats = &_mi_stats_main;
   size = _mi_os_good_alloc_size(size);
   alignment = _mi_align_up(alignment, _mi_os_page_size());
 
@@ -342,6 +346,7 @@ void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offse
   mi_assert(offset <= size);
   mi_assert((alignment % _mi_os_page_size()) == 0);
   *memid = _mi_memid_none();
+  if (stats == NULL) stats = &_mi_stats_main;
   if (offset > MI_SEGMENT_SIZE) return NULL;
   if (offset == 0) {
     // regular aligned allocation

@@ -36,7 +36,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 typedef uintptr_t mi_block_info_t;
 #define MI_ARENA_BLOCK_SIZE   (MI_SEGMENT_SIZE)        // 64MiB  (must be at least MI_SEGMENT_ALIGN)
 #define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 32MiB
-#define MI_MAX_ARENAS         (255)                    // Limited as the reservation exponentially increases (and takes up .bss)
+#define MI_MAX_ARENAS         (132)                    // Limited as the reservation exponentially increases (and takes up .bss)
 
 // A memory arena descriptor
 typedef struct mi_arena_s {
@@ -735,7 +735,7 @@ void _mi_arena_unsafe_destroy_all(mi_stats_t* stats) {
 bool _mi_arena_contains(const void* p) {
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   for (size_t i = 0; i < max_arena; i++) {
-    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
+    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
     if (arena != NULL && arena->start <= (const uint8_t*)p && arena->start + mi_arena_block_size(arena->block_count) > (const uint8_t*)p) {
       return true;
     }

@@ -258,7 +258,7 @@ int main(int argc, char** argv) {
   #ifdef HEAP_WALK
     mi_option_enable(mi_option_visit_abandoned);    
   #endif
-  #ifndef NDBEBUG
+  #ifndef NDEBUG
     mi_option_set(mi_option_arena_reserve, 32 * 1024 /* in kib = 32MiB */);
   #endif
   #ifndef USE_STD_MALLOC
