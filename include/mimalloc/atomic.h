@@ -441,13 +441,13 @@ static inline void mi_lock_release(mi_lock_t* lock) {
   pthread_mutex_unlock(lock);
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
-  (void)(lock);
+  pthread_mutex_init(lock, NULL);
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
-  (void)(lock);
+  pthread_mutex_destroy(lock);
 }
 
-
+/*
 #elif defined(__cplusplus)
 
 #include <mutex>
@@ -469,6 +469,7 @@ static inline void mi_lock_init(mi_lock_t* lock) {
 static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
 }
+*/
 
 #else
 

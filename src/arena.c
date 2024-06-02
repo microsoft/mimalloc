@@ -863,7 +863,7 @@ void _mi_arena_field_cursor_init(mi_heap_t* heap, mi_subproc_t* subproc, mi_aren
     current->start = (heap == NULL || max_arena == 0 ? 0 : (mi_arena_id_t)(_mi_heap_random_next(heap) % max_arena));
     current->end   = current->start + max_arena;
   }
-  mi_assert_internal(current->start < max_arena);
+  mi_assert_internal(current->start <= max_arena);
 }
 
 static mi_segment_t* mi_arena_segment_clear_abandoned_at(mi_arena_t* arena, mi_subproc_t* subproc, mi_bitmap_index_t bitmap_idx) {  
