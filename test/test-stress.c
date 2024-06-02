@@ -138,7 +138,7 @@ static bool visit_blocks(const mi_heap_t* heap, const mi_heap_area_t* area, void
   (void)(heap); (void)(area); 
   size_t* total = (size_t*)arg;
   if (block != NULL) {
-    total += block_size;
+    *total += block_size;
   }
   return true;
 }
