@@ -94,6 +94,11 @@ static mi_option_desc_t options[_mi_option_last] =
   { 1,   UNINIT, MI_OPTION(abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
   { 0,   UNINIT, MI_OPTION(disallow_arena_alloc) },     // 1 = do not use arena's for allocation (except if using specific arena id's)
   { 400, UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
+#if defined(MI_VISIT_ABANDONED)  
+  { 1,   INITIALIZED, MI_OPTION(visit_abandoned) },     // allow visiting heap blocks in abandonded segments; requires taking locks during reclaim.
+#else
+  { 0,   UNINIT, MI_OPTION(visit_abandoned) },          
+#endif
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

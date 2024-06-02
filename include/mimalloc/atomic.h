@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#elif !defined(_WIN32) && (defined(__EMSCRIPTEN_SHARED_MEMORY__) || !defined(__wasi__))
+#elif !defined(__wasi__) && (!defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__))
 #define  MI_USE_PTHREADS
 #include <pthread.h>
 #endif
@@ -35,9 +35,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #define  mi_atomic(name)        std::atomic_##name
 #define  mi_memory_order(name)  std::memory_order_##name
 #if (__cplusplus >= 202002L)    // c++20, see issue #571
-#define MI_ATOMIC_VAR_INIT(x)  x
+ #define MI_ATOMIC_VAR_INIT(x)  x
 #elif !defined(ATOMIC_VAR_INIT)
-#define MI_ATOMIC_VAR_INIT(x)  x
+ #define MI_ATOMIC_VAR_INIT(x)  x
 #else
  #define MI_ATOMIC_VAR_INIT(x)  ATOMIC_VAR_INIT(x)
 #endif
@@ -337,6 +337,7 @@ typedef _Atomic(uintptr_t) mi_atomic_guard_t;
 // ----------------------------------------------------------------------
 // Yield
 // ----------------------------------------------------------------------
+
 #if defined(__cplusplus)
 #include <thread>
 static inline void mi_atomic_yield(void) {
@@ -401,23 +402,28 @@ static inline void mi_atomic_yield(void) {
 
 
 // ----------------------------------------------------------------------
-// Locks are only used for abandoned segment visiting
+// Locks are only used for abandoned segment visiting in `arena.c`
 // ----------------------------------------------------------------------
+
 #if defined(_WIN32)
 
-#define mi_lock_t  CRITICAL_SECTION 
+#define mi_lock_t  CRITICAL_SECTION
 
-static inline bool _mi_prim_lock(mi_lock_t* lock) {
+static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+  return TryEnterCriticalSection(lock);
+}
+static inline bool mi_lock_acquire(mi_lock_t* lock) {
   EnterCriticalSection(lock);
   return true;
 }
-
-static inline bool _mi_prim_try_lock(mi_lock_t* lock) {
-  return TryEnterCriticalSection(lock);
-}
-
-static inline void _mi_prim_unlock(mi_lock_t* lock) {
+static inline void mi_lock_release(mi_lock_t* lock) {
   LeaveCriticalSection(lock);
+}
+static inline void mi_lock_init(mi_lock_t* lock) {
+  InitializeCriticalSection(lock);
+}
+static inline void mi_lock_done(mi_lock_t* lock) {
+  DeleteCriticalSection(lock);
 }
 
 
@@ -425,34 +431,43 @@ static inline void _mi_prim_unlock(mi_lock_t* lock) {
 
 #define mi_lock_t  pthread_mutex_t
 
-static inline bool _mi_prim_lock(mi_lock_t* lock) {
-  return (pthread_mutex_lock(lock) == 0);
-}
-
-static inline bool _mi_prim_try_lock(mi_lock_t* lock) {
+static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return (pthread_mutex_trylock(lock) == 0);
 }
-
-static inline void _mi_prim_unlock(mi_lock_t* lock) {
+static inline bool mi_lock_acquire(mi_lock_t* lock) {
+  return (pthread_mutex_lock(lock) == 0);
+}
+static inline void mi_lock_release(mi_lock_t* lock) {
   pthread_mutex_unlock(lock);
 }
+static inline void mi_lock_init(mi_lock_t* lock) {
+  (void)(lock);
+}
+static inline void mi_lock_done(mi_lock_t* lock) {
+  (void)(lock);
+}
+
 
 #elif defined(__cplusplus)
 
 #include <mutex>
 #define mi_lock_t  std::mutex
 
-static inline bool _mi_prim_lock(mi_lock_t* lock) {
+static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+  return lock->lock_try_acquire();
+}
+static inline bool mi_lock_acquire(mi_lock_t* lock) {
   lock->lock();
   return true;
 }
-
-static inline bool _mi_prim_try_lock(mi_lock_t* lock) {
-  return (lock->try_lock();
-}
-
-static inline void _mi_prim_unlock(mi_lock_t* lock) {
+static inline void mi_lock_release(mi_lock_t* lock) {
   lock->unlock();
+}
+static inline void mi_lock_init(mi_lock_t* lock) {
+  (void)(lock);
+}
+static inline void mi_lock_done(mi_lock_t* lock) {
+  (void)(lock);
 }
 
 #else
@@ -462,21 +477,25 @@ static inline void _mi_prim_unlock(mi_lock_t* lock) {
 
 #define mi_lock_t  _Atomic(uintptr_t)
 
-static inline bool _mi_prim_try_lock(mi_lock_t* lock) {
+static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   uintptr_t expected = 0;
   return mi_atomic_cas_strong_acq_rel(lock, &expected, (uintptr_t)1);
 }
-
-static inline bool _mi_prim_lock(mi_lock_t* lock) {
+static inline bool mi_lock_acquire(mi_lock_t* lock) {
   for (int i = 0; i < 1000; i++) {  // for at most 1000 tries?
-    if (_mi_prim_try_lock(lock)) return true;
+    if (mi_lock_try_acquire(lock)) return true;
     mi_atomic_yield();
   }
   return true;
 }
-
-static inline void _mi_prim_unlock(mi_lock_t* lock) {
+static inline void mi_lock_release(mi_lock_t* lock) {
   mi_atomic_store_release(lock, (uintptr_t)0);
+}
+static inline void mi_lock_init(mi_lock_t* lock) {
+  mi_lock_release(lock);
+}
+static inline void mi_lock_done(mi_lock_t* lock) {
+  (void)(lock);
 }
 
 #endif

@@ -137,6 +137,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   {
     // the main thread is abandoned (end-of-program), try to reclaim all abandoned segments.
     // if all memory is freed by now, all segments should be freed.
+    // note: this only collects in the current subprocess
     _mi_abandoned_reclaim_all(heap, &heap->tld->segments);
   }
 
@@ -515,17 +516,21 @@ bool mi_check_owned(const void* p) {
         enable visiting all blocks of all heaps across threads
 ----------------------------------------------------------- */
 
-// Separate struct to keep `mi_page_t` out of the public interface
-typedef struct mi_heap_area_ex_s {
-  mi_heap_area_t area;
-  mi_page_t*     page;
-} mi_heap_area_ex_t;
+void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
+  const size_t bsize = mi_page_block_size(page);
+  const size_t ubsize = mi_page_usable_block_size(page);
+  area->reserved = page->reserved * bsize;
+  area->committed = page->capacity * bsize;
+  area->blocks = mi_page_start(page);
+  area->used = page->used;   // number of blocks in use (#553)
+  area->block_size = ubsize;
+  area->full_block_size = bsize;
+}
 
-static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_visit_fun* visitor, void* arg) {
-  mi_assert(xarea != NULL);
-  if (xarea==NULL) return true;
-  const mi_heap_area_t* area = &xarea->area;
-  mi_page_t* page = xarea->page;
+
+bool _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg) {
+  mi_assert(area != NULL);
+  if (area==NULL) return true;
   mi_assert(page != NULL);
   if (page == NULL) return true;
 
@@ -590,23 +595,23 @@ static bool mi_heap_area_visit_blocks(const mi_heap_area_ex_t* xarea, mi_block_v
   return true;
 }
 
-typedef bool (mi_heap_area_visit_fun)(const mi_heap_t* heap, const mi_heap_area_ex_t* area, void* arg);
 
+
+// Separate struct to keep `mi_page_t` out of the public interface
+typedef struct mi_heap_area_ex_s {
+  mi_heap_area_t area;
+  mi_page_t* page;
+} mi_heap_area_ex_t;
+
+typedef bool (mi_heap_area_visit_fun)(const mi_heap_t* heap, const mi_heap_area_ex_t* area, void* arg);
 
 static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* vfun, void* arg) {
   MI_UNUSED(heap);
   MI_UNUSED(pq);
   mi_heap_area_visit_fun* fun = (mi_heap_area_visit_fun*)vfun;
   mi_heap_area_ex_t xarea;
-  const size_t bsize = mi_page_block_size(page);
-  const size_t ubsize = mi_page_usable_block_size(page);
   xarea.page = page;
-  xarea.area.reserved = page->reserved * bsize;
-  xarea.area.committed = page->capacity * bsize;
-  xarea.area.blocks = mi_page_start(page);
-  xarea.area.used = page->used;   // number of blocks in use (#553)
-  xarea.area.block_size = ubsize;
-  xarea.area.full_block_size = bsize;
+  _mi_heap_area_init(&xarea.area, page);  
   return fun(heap, &xarea, arg);
 }
 
@@ -627,7 +632,7 @@ static bool mi_heap_area_visitor(const mi_heap_t* heap, const mi_heap_area_ex_t*
   mi_visit_blocks_args_t* args = (mi_visit_blocks_args_t*)arg;
   if (!args->visitor(heap, &xarea->area, NULL, xarea->area.block_size, args->arg)) return false;
   if (args->visit_blocks) {
-    return mi_heap_area_visit_blocks(xarea, args->visitor, args->arg);
+    return _mi_heap_area_visit_blocks(&xarea->area, xarea->page, args->visitor, args->arg);
   }
   else {
     return true;

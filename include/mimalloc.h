@@ -262,7 +262,7 @@ typedef struct mi_heap_area_s {
 
 typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
 
-mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block_visit_fun* visitor, void* arg);
+mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
 // Experimental
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
@@ -292,9 +292,13 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t a
 // Experimental: allow sub-processes whose memory segments stay separated (and no reclamation between them) 
 // Used for example for separate interpreter's in one process.
 typedef void* mi_subproc_id_t;
+mi_decl_export mi_subproc_id_t mi_subproc_main(void);
 mi_decl_export mi_subproc_id_t mi_subproc_new(void);
-mi_decl_export void   mi_subproc_delete(mi_subproc_id_t subproc);
-mi_decl_export void   mi_subproc_add_current_thread(mi_subproc_id_t subproc); // this should be called right after a thread is created (and no allocation has taken place yet)
+mi_decl_export void            mi_subproc_delete(mi_subproc_id_t subproc);
+mi_decl_export void            mi_subproc_add_current_thread(mi_subproc_id_t subproc); // this should be called right after a thread is created (and no allocation has taken place yet)
+
+// Experimental: visit abandoned heap areas (from threads that have been terminated)
+mi_decl_export bool   mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
 // deprecated
 mi_decl_export int    mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
@@ -355,6 +359,7 @@ typedef enum mi_option_e {
   mi_option_abandoned_reclaim_on_free,  // allow to reclaim an abandoned segment on a free (=1)
   mi_option_disallow_arena_alloc,       // 1 = do not use arena's for allocation (except if using specific arena id's)
   mi_option_retry_on_oom,               // retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries. (only on windows)
+  mi_option_visit_abandoned,            // allow visiting heap blocks from abandoned threads (=0)
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,

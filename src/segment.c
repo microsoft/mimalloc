@@ -962,7 +962,7 @@ bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
 void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
   mi_segment_t* segment;
   mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, tld->subproc, &current);
-  while ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL) {
+  while ((segment = _mi_arena_segment_clear_abandoned_next(&current, true /* blocking */)) != NULL) {
     mi_segment_reclaim(segment, heap, 0, NULL, tld);
   }
 }
@@ -987,7 +987,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
 
   mi_segment_t* segment;
   mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, tld->subproc, &current);
-  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL))
+  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current, false /* non-blocking */)) != NULL))
   {
     mi_assert(segment->subproc == heap->tld->segments.subproc); // cursor only visits segments in our sub-process
     segment->abandoned_visits++;
@@ -1239,4 +1239,33 @@ mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t pag
   mi_assert_internal(page == NULL || mi_page_not_in_queue(page, tld));
   mi_assert_internal(page == NULL || _mi_page_segment(page)->subproc == tld->subproc);
   return page;
+}
+
+
+/* -----------------------------------------------------------
+   Visit blocks in a segment (only used for abandoned segments)
+----------------------------------------------------------- */
+
+static bool mi_segment_visit_page(mi_page_t* page, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+  mi_heap_area_t area;
+  _mi_heap_area_init(&area, page);
+  if (!visitor(NULL, &area, NULL, area.block_size, arg)) return false;
+  if (visit_blocks) {
+    return _mi_heap_area_visit_blocks(&area, page, visitor, arg);
+  }
+  else {
+    return true;
+  }
+}
+
+bool _mi_segment_visit_blocks(mi_segment_t* segment, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {  
+  for (size_t i = 0; i < segment->capacity; i++) {
+    mi_page_t* const page = &segment->pages[i];
+    if (page->segment_in_use) {
+      if (heap_tag < 0 || (int)page->heap_tag == heap_tag) {
+        if (!mi_segment_visit_page(page, visit_blocks, visitor, arg)) return false;
+      }
+    }
+  }
+  return true;
 }

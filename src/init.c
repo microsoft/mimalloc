@@ -185,22 +185,30 @@ mi_heap_t* _mi_heap_main_get(void) {
   Sub process
 ----------------------------------------------------------- */
 
+static mi_decl_cache_align _Atomic(uintptr_t)  mi_subproc_count;
+
+mi_subproc_id_t mi_subproc_main(void) {
+  return NULL;
+}
+
 mi_subproc_id_t mi_subproc_new(void) {
   mi_memid_t memid = _mi_memid_none();
   mi_subproc_t* subproc = (mi_subproc_t*)_mi_arena_meta_zalloc(sizeof(mi_subproc_t), &memid);
   if (subproc == NULL) return NULL;
+  mi_atomic_increment_relaxed(&mi_subproc_count);
   subproc->memid = memid;
   return subproc;
 }
 
-static mi_subproc_t* mi_subproc_from_id(mi_subproc_id_t subproc_id) {
+mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
   return (subproc_id == NULL ? &mi_subproc_default : (mi_subproc_t*)subproc_id);
 }
 
 void mi_subproc_delete(mi_subproc_id_t subproc_id) {
   if (subproc_id == NULL) return;
-  mi_subproc_t* subproc = mi_subproc_from_id(subproc_id);
+  mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   _mi_arena_meta_free(subproc, subproc->memid, sizeof(mi_subproc_t));
+  mi_atomic_decrement_relaxed(&mi_subproc_count);
 }
 
 void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
@@ -208,7 +216,7 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
   if (heap == NULL) return;
   mi_assert(heap->tld->segments.subproc == &mi_subproc_default);
   if (heap->tld->segments.subproc != &mi_subproc_default) return;
-  heap->tld->segments.subproc = mi_subproc_from_id(subproc_id);
+  heap->tld->segments.subproc = _mi_subproc_from_id(subproc_id);
 }
 
 
