@@ -611,10 +611,12 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 // ------------------------------------------------------
 
 struct mi_subproc_s {
-  _Atomic(size_t)    abandoned_count;   // count of abandoned segments for this sup-process
-  mi_lock_t          abandoned_os_lock; // lock for the abandoned segments outside of arena's
-  mi_segment_t*      abandoned_os_list; // doubly-linked list of abandoned segments outside of arena's (in OS allocated memory)
-  mi_memid_t         memid;             // provenance
+  _Atomic(size_t)    abandoned_count;         // count of abandoned segments for this sub-process
+  _Atomic(size_t)    abandoned_os_list_count; // count of abandoned segments in the os-list
+  mi_lock_t          abandoned_os_lock;       // lock for the abandoned segments outside of arena's
+  mi_segment_t*      abandoned_os_list;       // doubly-linked list of abandoned segments outside of arena's (in OS allocated memory)
+  mi_segment_t*      abandoned_os_list_tail;  // the tail-end of the list
+  mi_memid_t         memid;                   // provenance of this memory block
 };
 
 // ------------------------------------------------------

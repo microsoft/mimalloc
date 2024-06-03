@@ -753,43 +753,49 @@ bool _mi_arena_contains(const void* p) {
   the arena bitmaps.
 ----------------------------------------------------------- */
 
+// reclaim a specific OS abandoned segment; `true` on success.
+// sets the thread_id.
+static bool mi_arena_segment_os_clear_abandoned(mi_segment_t* segment) {
+  mi_assert(segment->memid.memkind != MI_MEM_ARENA);
+  // not in an arena, remove from list of abandoned os segments
+  mi_subproc_t* const subproc = segment->subproc;
+  if (!mi_lock_try_acquire(&subproc->abandoned_os_lock)) {
+    return false;  // failed to acquire the lock, we just give up       
+  }
+  // remove atomically from the abandoned os list (if possible!)
+  bool reclaimed = false;
+  mi_segment_t* const next = segment->abandoned_os_next;
+  mi_segment_t* const prev = segment->abandoned_os_prev;
+  if (next != NULL || prev != NULL || subproc->abandoned_os_list == segment) {
+    #if MI_DEBUG>3
+    // find ourselves in the abandoned list
+    bool found = false;
+    for (mi_segment_t* current = subproc->abandoned_os_list; !found && current != NULL; current = current->abandoned_os_next) {
+      if (current == segment) { found = true; }
+    }
+    mi_assert_internal(found);
+    #endif
+    // remove (atomically) from the list and reclaim         
+    if (prev != NULL) { prev->abandoned_os_next = next; }
+                 else { subproc->abandoned_os_list = next; }
+    if (next != NULL) { next->abandoned_os_prev = prev; }
+                 else { subproc->abandoned_os_list_tail = prev;  }
+    segment->abandoned_os_next = NULL;
+    segment->abandoned_os_prev = NULL;
+    mi_atomic_decrement_relaxed(&segment->subproc->abandoned_count);
+    mi_atomic_store_release(&segment->thread_id, _mi_thread_id());
+    reclaimed = true;
+  }
+  mi_lock_release(&segment->subproc->abandoned_os_lock);
+  return reclaimed;
+}
+
 // reclaim a specific abandoned segment; `true` on success.
 // sets the thread_id.
-bool _mi_arena_segment_clear_abandoned(mi_segment_t* segment ) 
-{
+bool _mi_arena_segment_clear_abandoned(mi_segment_t* segment ) {
   if mi_unlikely(segment->memid.memkind != MI_MEM_ARENA) {
-    // not in an arena, remove from list of abandoned os segments
-    mi_subproc_t* const subproc = segment->subproc;
-    if (!mi_lock_try_acquire(&subproc->abandoned_os_lock)) {
-      return false;  // failed to acquire the lock, we just give up       
-    }
-    // remove atomically from the abandoned os list (if possible!)
-    bool reclaimed = false;
-    mi_segment_t* const next = segment->abandoned_os_next;
-    mi_segment_t* const prev = segment->abandoned_os_prev;
-    if (next != NULL || prev != NULL || subproc->abandoned_os_list == segment) {
-      #if MI_DEBUG>3
-      // find ourselves in the abandoned list
-      bool found = false;
-      for (mi_segment_t* current = subproc->abandoned_os_list; !found && current != NULL; current = current->abandoned_os_next) {
-        if (current == segment) { found = true;  }
-      }
-      mi_assert_internal(found);
-      #endif
-      // remove (atomically) from the list and reclaim         
-      if (prev != NULL) { prev->abandoned_os_next = next; }
-                   else { subproc->abandoned_os_list = next; }
-      if (next != NULL) { next->abandoned_os_prev = prev; }
-      segment->abandoned_os_next = NULL;
-      segment->abandoned_os_prev = NULL;
-      mi_atomic_decrement_relaxed(&segment->subproc->abandoned_count);
-      mi_atomic_store_release(&segment->thread_id, _mi_thread_id());
-      reclaimed = true;
-    }
-    mi_lock_release(&segment->subproc->abandoned_os_lock);
-    return reclaimed;
+    return mi_arena_segment_os_clear_abandoned(segment);
   }
-
   // arena segment: use the blocks_abandoned bitmap.
   size_t arena_idx;
   size_t bitmap_idx;
@@ -810,6 +816,34 @@ bool _mi_arena_segment_clear_abandoned(mi_segment_t* segment )
   return was_marked;
 }
 
+
+// mark a specific OS segment as abandoned
+static void mi_arena_segment_os_mark_abandoned(mi_segment_t* segment) {
+  mi_assert(segment->memid.memkind != MI_MEM_ARENA);
+  // not in an arena; we use a list of abandoned segments    
+  mi_subproc_t* const subproc = segment->subproc;
+  if (!mi_lock_acquire(&subproc->abandoned_os_lock)) {
+    _mi_error_message(EFAULT, "internal error: failed to acquire the abandoned (os) segment lock to mark abandonment");
+    // we can continue but cannot visit/reclaim such blocks..
+  }
+  else {
+    mi_atomic_increment_relaxed(&subproc->abandoned_count);
+    // push on the tail of the list (important for the visitor)
+    mi_segment_t* prev = subproc->abandoned_os_list_tail;
+    mi_assert_internal(prev == NULL || prev->abandoned_os_next == NULL);
+    mi_assert_internal(segment->abandoned_os_prev == NULL);
+    mi_assert_internal(segment->abandoned_os_next == NULL);
+    if (prev != NULL) { prev->abandoned_os_next = segment; }
+                 else { subproc->abandoned_os_list = segment; }    
+    subproc->abandoned_os_list_tail = segment;
+    segment->abandoned_os_prev = prev;
+    segment->abandoned_os_next = NULL;
+    // and release the lock
+    mi_lock_release(&subproc->abandoned_os_lock);
+  }
+  return;
+}
+
 // mark a specific segment as abandoned
 // clears the thread_id.
 void _mi_arena_segment_mark_abandoned(mi_segment_t* segment) 
@@ -817,28 +851,9 @@ void _mi_arena_segment_mark_abandoned(mi_segment_t* segment)
   mi_assert_internal(segment->used == segment->abandoned);
   mi_atomic_store_release(&segment->thread_id, 0);  // mark as abandoned for multi-thread free's
   if mi_unlikely(segment->memid.memkind != MI_MEM_ARENA) {
-    // not in an arena; we use a list of abandoned segments    
-    if (!mi_lock_acquire(&segment->subproc->abandoned_os_lock)) {
-      _mi_error_message(EFAULT, "internal error: failed to acquire the abandoned (os) segment lock to mark abandonment");
-      // we can continue but cannot visit/reclaim such blocks..
-    }      
-    else {
-      mi_atomic_increment_relaxed(&segment->subproc->abandoned_count);
-      // push on the front of the list
-      mi_segment_t* next = segment->subproc->abandoned_os_list;
-      mi_assert_internal(next == NULL || next->abandoned_os_prev == NULL);
-      mi_assert_internal(segment->abandoned_os_prev == NULL);
-      mi_assert_internal(segment->abandoned_os_next == NULL);
-      if (next != NULL) { next->abandoned_os_prev = segment; }
-      segment->abandoned_os_prev = NULL;
-      segment->abandoned_os_next = next;
-      segment->subproc->abandoned_os_list = segment;
-      // and release the lock
-      mi_lock_release(&segment->subproc->abandoned_os_lock);
-    }
+    mi_arena_segment_os_mark_abandoned(segment);
     return;
   }
-
   // segment is in an arena, mark it in the arena `blocks_abandoned` bitmap
   size_t arena_idx;
   size_t bitmap_idx;
@@ -852,6 +867,8 @@ void _mi_arena_segment_mark_abandoned(mi_segment_t* segment)
   mi_assert_internal(was_unmarked);
   mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
 }
+
+
 
 // start a cursor at a randomized arena
 void _mi_arena_field_cursor_init(mi_heap_t* heap, mi_subproc_t* subproc, mi_arena_field_cursor_t* current) {
