@@ -764,7 +764,7 @@ bool _mi_arena_segment_clear_abandoned(mi_segment_t* segment )
     if (mi_option_is_enabled(mi_option_visit_abandoned)) {
       has_lock = mi_lock_try_acquire(&segment->subproc->abandoned_os_lock);
       if (!has_lock) {
-        return false;  // failed to acquire the lock, we just give up
+        return false;  // failed to acquire the lock, we just give up 
       }
     }
     // abandon it, but we need to still claim it atomically -- we use the thread_id for that.
@@ -777,9 +777,10 @@ bool _mi_arena_segment_clear_abandoned(mi_segment_t* segment )
       // and remove from the abandoned os list (if needed)
       mi_segment_t* const next = segment->abandoned_os_next;
       mi_segment_t* const prev = segment->abandoned_os_prev;
+      mi_assert_internal((next == NULL && prev == NULL) || mi_option_is_enabled(mi_option_visit_abandoned));
       if (prev != NULL) { prev->abandoned_os_next = next; }
-                   else { segment->subproc->abandoned_os_list = next;  }
-      if (next != NULL) { next->abandoned_os_prev = prev; } 
+                   else { segment->subproc->abandoned_os_list = next; }
+      if (next != NULL) { next->abandoned_os_prev = prev; }
       segment->abandoned_os_next = NULL;
       segment->abandoned_os_prev = NULL;
     }
@@ -809,32 +810,37 @@ bool _mi_arena_segment_clear_abandoned(mi_segment_t* segment )
 // clears the thread_id.
 void _mi_arena_segment_mark_abandoned(mi_segment_t* segment) 
 {
-  mi_atomic_store_release(&segment->thread_id, 0);
   mi_assert_internal(segment->used == segment->abandoned);
   if mi_unlikely(segment->memid.memkind != MI_MEM_ARENA) {
     // not in an arena; count it as abandoned and return (these can be reclaimed on a `free`)
-    mi_atomic_increment_relaxed(&segment->subproc->abandoned_count);
     // if abandoned visiting is allowed, we need to take a lock on the abandoned os list to insert it
+    bool has_lock = false;
     if (mi_option_is_enabled(mi_option_visit_abandoned)) {
-      if (!mi_lock_acquire(&segment->subproc->abandoned_os_lock)) {
+      has_lock = mi_lock_acquire(&segment->subproc->abandoned_os_lock);
+      if (!has_lock) {
         _mi_error_message(EFAULT, "internal error: failed to acquire the abandoned (os) segment lock to mark abandonment");
-      }
-      else {
-        // push on the front of the list
-        mi_segment_t* next = segment->subproc->abandoned_os_list;
-        mi_assert_internal(next == NULL || next->abandoned_os_prev == NULL);
-        mi_assert_internal(segment->abandoned_os_prev == NULL);
-        mi_assert_internal(segment->abandoned_os_next == NULL);
-        if (next != NULL) { next->abandoned_os_prev = segment; }
-        segment->abandoned_os_prev = NULL;
-        segment->abandoned_os_next = next;
-        segment->subproc->abandoned_os_list = segment;
-        mi_lock_release(&segment->subproc->abandoned_os_lock);
-      }
+      }      
+    }
+    mi_atomic_store_release(&segment->thread_id, 0);  // mark as abandoned (inside the lock)
+    mi_atomic_increment_relaxed(&segment->subproc->abandoned_count);
+    if (has_lock) {
+      // push on the front of the list
+      mi_segment_t* next = segment->subproc->abandoned_os_list;
+      mi_assert_internal(next == NULL || next->abandoned_os_prev == NULL);
+      mi_assert_internal(segment->abandoned_os_prev == NULL);
+      mi_assert_internal(segment->abandoned_os_next == NULL);
+      if (next != NULL) { next->abandoned_os_prev = segment; }
+      segment->abandoned_os_prev = NULL;
+      segment->abandoned_os_next = next;
+      segment->subproc->abandoned_os_list = segment;
+      // and release the lock
+      mi_lock_release(&segment->subproc->abandoned_os_lock);
     }
     return;
   }
+
   // segment is in an arena, mark it in the arena `blocks_abandoned` bitmap
+  mi_atomic_store_release(&segment->thread_id, 0);  // mark as abandoned 
   size_t arena_idx;
   size_t bitmap_idx;
   mi_arena_memid_indices(segment->memid, &arena_idx, &bitmap_idx);
@@ -842,8 +848,10 @@ void _mi_arena_segment_mark_abandoned(mi_segment_t* segment)
   mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
   mi_assert_internal(arena != NULL);
   const bool was_unmarked = _mi_bitmap_claim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx, NULL);
-  if (was_unmarked) { mi_atomic_increment_relaxed(&segment->subproc->abandoned_count); }
-  mi_assert_internal(was_unmarked);
+  if (was_unmarked) { 
+    // note: it could be unmarked if someone reclaimed in between the thread_id=0 and the claim
+    mi_atomic_increment_relaxed(&segment->subproc->abandoned_count); 
+  }  
   mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
 }
 
