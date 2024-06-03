@@ -294,11 +294,11 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t a
 typedef void* mi_subproc_id_t;
 mi_decl_export mi_subproc_id_t mi_subproc_main(void);
 mi_decl_export mi_subproc_id_t mi_subproc_new(void);
-mi_decl_export void            mi_subproc_delete(mi_subproc_id_t subproc);
-mi_decl_export void            mi_subproc_add_current_thread(mi_subproc_id_t subproc); // this should be called right after a thread is created (and no allocation has taken place yet)
+mi_decl_export void mi_subproc_delete(mi_subproc_id_t subproc);
+mi_decl_export void mi_subproc_add_current_thread(mi_subproc_id_t subproc); // this should be called right after a thread is created (and no allocation has taken place yet)
 
 // Experimental: visit abandoned heap areas (from threads that have been terminated)
-mi_decl_export bool   mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
+mi_decl_export bool mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
 // Experimental: create a new heap with a specified heap tag. Set `allow_destroy` to false to allow the thread
 // to reclaim abandoned memory (with a compatible heap_tag and arena_id) but in that case `mi_heap_destroy` will
@@ -306,7 +306,7 @@ mi_decl_export bool   mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int 
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id);
 
 // deprecated
-mi_decl_export int    mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
+mi_decl_export int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
 
 
 // ------------------------------------------------------
