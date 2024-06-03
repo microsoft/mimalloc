@@ -159,7 +159,6 @@ void       _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, m
 
 uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size); // page start for any page
 void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
-void       _mi_abandoned_await_readers(void);
 void       _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld);
 bool       _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment);
 bool       _mi_segment_visit_blocks(mi_segment_t* segment, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);

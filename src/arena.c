@@ -140,10 +140,10 @@ static bool mi_arena_memid_indices(mi_memid_t memid, size_t* arena_index, mi_bit
 
 /* -----------------------------------------------------------
   Special static area for mimalloc internal structures
-  to avoid OS calls (for example, for the arena metadata)
+  to avoid OS calls (for example, for the arena metadata (~= 256b))
 ----------------------------------------------------------- */
 
-#define MI_ARENA_STATIC_MAX  (MI_INTPTR_SIZE*MI_KiB)  // 8 KiB on 64-bit
+#define MI_ARENA_STATIC_MAX  ((MI_INTPTR_SIZE/2)*MI_KiB)  // 4 KiB on 64-bit
 
 static mi_decl_cache_align uint8_t mi_arena_static[MI_ARENA_STATIC_MAX];  // must be cache aligned, see issue #895
 static mi_decl_cache_align _Atomic(size_t) mi_arena_static_top;

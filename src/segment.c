@@ -407,7 +407,6 @@ static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   const size_t size = mi_segment_size(segment);
   const size_t csize = _mi_commit_mask_committed_size(&segment->commit_mask, size);
 
-  _mi_abandoned_await_readers();  // wait until safe to free
   _mi_arena_free(segment, mi_segment_size(segment), csize, segment->memid, tld->stats);
 }
 
@@ -1066,11 +1065,6 @@ will first consider abondoned segments -- these can be found
 by scanning the arena memory
 (segments outside arena memoryare only reclaimed by a free).
 ----------------------------------------------------------- */
-
-// legacy: Wait until there are no more pending reads on segments that used to be in the abandoned list
-void _mi_abandoned_await_readers(void) {
-  // nothing needed
-}
 
 /* -----------------------------------------------------------
    Abandon segment/page
