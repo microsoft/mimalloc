@@ -212,6 +212,10 @@ static void test_stress(void) {
   uintptr_t r = rand();
   for (int n = 0; n < ITER; n++) {
     run_os_threads(THREADS, &stress);
+    #ifndef NDEBUG
+    // switch between arena and OS allocation for testing
+    mi_option_set_enabled(mi_option_disallow_arena_alloc, (n%2)==1);
+    #endif
     #ifdef HEAP_WALK
     size_t total = 0;
     mi_abandoned_visit_blocks(mi_subproc_main(), -1, true, visit_blocks, &total);
