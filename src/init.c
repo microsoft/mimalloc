@@ -249,7 +249,7 @@ typedef struct mi_thread_data_s {
 // destroy many OS threads, this may causes too much overhead
 // per thread so we maintain a small cache of recently freed metadata.
 
-#define TD_CACHE_SIZE (16)
+#define TD_CACHE_SIZE (32)
 static _Atomic(mi_thread_data_t*) td_cache[TD_CACHE_SIZE];
 
 static mi_thread_data_t* mi_thread_data_zalloc(void) {
