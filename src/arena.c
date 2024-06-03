@@ -768,12 +768,15 @@ static bool mi_arena_segment_os_clear_abandoned(mi_segment_t* segment) {
   mi_segment_t* const prev = segment->abandoned_os_prev;
   if (next != NULL || prev != NULL || subproc->abandoned_os_list == segment) {
     #if MI_DEBUG>3
-    // find ourselves in the abandoned list
+    // find ourselves in the abandoned list (and check the count)
     bool found = false;
-    for (mi_segment_t* current = subproc->abandoned_os_list; !found && current != NULL; current = current->abandoned_os_next) {
+    size_t count = 0;
+    for (mi_segment_t* current = subproc->abandoned_os_list; current != NULL; current = current->abandoned_os_next) {
       if (current == segment) { found = true; }
+      count++;
     }
     mi_assert_internal(found);
+    mi_assert_internal(count == mi_atomic_load_relaxed(&subproc->abandoned_os_list_count));
     #endif
     // remove (atomically) from the list and reclaim         
     if (prev != NULL) { prev->abandoned_os_next = next; }
@@ -782,7 +785,8 @@ static bool mi_arena_segment_os_clear_abandoned(mi_segment_t* segment) {
                  else { subproc->abandoned_os_list_tail = prev;  }
     segment->abandoned_os_next = NULL;
     segment->abandoned_os_prev = NULL;
-    mi_atomic_decrement_relaxed(&segment->subproc->abandoned_count);
+    mi_atomic_decrement_relaxed(&subproc->abandoned_count);
+    mi_atomic_decrement_relaxed(&subproc->abandoned_os_list_count);
     mi_atomic_store_release(&segment->thread_id, _mi_thread_id());
     reclaimed = true;
   }
@@ -827,8 +831,7 @@ static void mi_arena_segment_os_mark_abandoned(mi_segment_t* segment) {
     // we can continue but cannot visit/reclaim such blocks..
   }
   else {
-    mi_atomic_increment_relaxed(&subproc->abandoned_count);
-    // push on the tail of the list (important for the visitor)
+    // push on the tail of the list (important for the visitor)    
     mi_segment_t* prev = subproc->abandoned_os_list_tail;
     mi_assert_internal(prev == NULL || prev->abandoned_os_next == NULL);
     mi_assert_internal(segment->abandoned_os_prev == NULL);
@@ -838,6 +841,8 @@ static void mi_arena_segment_os_mark_abandoned(mi_segment_t* segment) {
     subproc->abandoned_os_list_tail = segment;
     segment->abandoned_os_prev = prev;
     segment->abandoned_os_next = NULL;
+    mi_atomic_increment_relaxed(&subproc->abandoned_os_list_count);
+    mi_atomic_increment_relaxed(&subproc->abandoned_count);
     // and release the lock
     mi_lock_release(&subproc->abandoned_os_lock);
   }
