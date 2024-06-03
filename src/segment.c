@@ -509,7 +509,6 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   MI_UNUSED(fully_committed);
   mi_assert_internal((fully_committed && committed_size == segment_size) || (!fully_committed && committed_size < segment_size));
 
-  _mi_abandoned_await_readers(); // prevent ABA issue if concurrent readers try to access our memory (that might be purged)
   _mi_arena_free(segment, segment_size, committed_size, segment->memid, tld->stats);
 }
 
@@ -783,11 +782,6 @@ will first consider abondoned segments -- these can be found
 by scanning the arena memory
 (segments outside arena memoryare only reclaimed by a free).
 ----------------------------------------------------------- */
-
-// legacy: Wait until there are no more pending reads on segments that used to be in the abandoned list
-void _mi_abandoned_await_readers(void) {
-  // nothing needed
-}
 
 /* -----------------------------------------------------------
    Abandon segment/page
