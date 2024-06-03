@@ -53,11 +53,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_externc
 #endif
 
-// pthreads
-#if !defined(_WIN32) && !defined(__wasi__)
-#define  MI_USE_PTHREADS
-#include <pthread.h>
-#endif
 
 // "options.c"
 void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
@@ -84,11 +79,12 @@ extern mi_decl_cache_align const mi_page_t  _mi_page_empty;
 bool       _mi_is_main_thread(void);
 size_t     _mi_current_thread_count(void);
 bool       _mi_preloading(void);           // true while the C runtime is not initialized yet
-mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
-mi_heap_t*    _mi_heap_main_get(void);     // statically allocated main backing heap
 void       _mi_thread_done(mi_heap_t* heap);
 void       _mi_thread_data_collect(void);
 void       _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap);
+mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
+mi_heap_t*    _mi_heap_main_get(void);     // statically allocated main backing heap
+mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 
 // os.c
 void       _mi_os_init(void);                                            // called from process init
@@ -131,15 +127,18 @@ void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 
 bool       _mi_arena_segment_clear_abandoned(mi_segment_t* segment);
 void       _mi_arena_segment_mark_abandoned(mi_segment_t* segment);
-size_t     _mi_arena_segment_abandoned_count(void);
 
-typedef struct mi_arena_field_cursor_s { // abstract
-  mi_arena_id_t  start;
-  int            count;
+void*      _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid);
+void       _mi_arena_meta_free(void* p, mi_memid_t memid, size_t size);
+
+typedef struct mi_arena_field_cursor_s { // abstract struct
+  size_t         start;
+  size_t         end;
   size_t         bitmap_idx;
+  mi_subproc_t*  subproc;
 } mi_arena_field_cursor_t;
-void          _mi_arena_field_cursor_init(mi_heap_t* heap, mi_arena_field_cursor_t* current);
-mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* previous);
+void          _mi_arena_field_cursor_init(mi_heap_t* heap, mi_subproc_t* subproc, mi_arena_field_cursor_t* current);
+mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* previous, bool visit_all);
 
 // "segment-map.c"
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
@@ -163,6 +162,7 @@ void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
 void       _mi_abandoned_await_readers(void);
 void       _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld);
 bool       _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment);
+bool       _mi_segment_visit_blocks(mi_segment_t* segment, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
 // "page.c"
 void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment)  mi_attr_noexcept mi_attr_malloc;
@@ -194,6 +194,8 @@ void       _mi_heap_set_default_direct(mi_heap_t* heap);
 bool       _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid);
 void       _mi_heap_unsafe_destroy_all(void);
 mi_heap_t* _mi_heap_by_tag(mi_heap_t* heap, uint8_t tag);
+void       _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
+bool       _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);
@@ -347,6 +349,14 @@ static inline void* mi_align_down_ptr(void* p, size_t alignment) {
 static inline uintptr_t _mi_divide_up(uintptr_t size, size_t divider) {
   mi_assert_internal(divider != 0);
   return (divider == 0 ? size : ((size + divider - 1) / divider));
+}
+
+
+// clamp an integer
+static inline size_t _mi_clamp(size_t sz, size_t min, size_t max) {
+  if (sz < min) return min;
+  else if (sz > max) return max;
+  else return sz;
 }
 
 // Is memory zero initialized?

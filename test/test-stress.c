@@ -39,6 +39,10 @@ static int ITER    = 50;      // N full iterations destructing and re-creating a
 
 #define STRESS                // undefine for leak test
 
+#ifndef NDEBUG
+#define HEAP_WALK             // walk the heap objects?
+#endif
+
 static bool   allow_large_objects = true;     // allow very large objects? (set to `true` if SCALE>100)
 static size_t use_one_size = 0;               // use single object size of `N * sizeof(uintptr_t)`?
 
@@ -129,6 +133,16 @@ static void free_items(void* p) {
   custom_free(p);
 }
 
+#ifdef HEAP_WALK 
+static bool visit_blocks(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
+  (void)(heap); (void)(area); 
+  size_t* total = (size_t*)arg;
+  if (block != NULL) {
+    *total += block_size;
+  }
+  return true;
+}
+#endif
 
 static void stress(intptr_t tid) {
   //bench_start_thread();
@@ -173,6 +187,13 @@ static void stress(intptr_t tid) {
       data[data_idx] = q;
     }
   }
+
+  #ifdef HEAP_WALK
+  // walk the heap
+  size_t total = 0;
+  mi_heap_visit_blocks(mi_heap_get_default(), true, visit_blocks, &total);
+  #endif
+
   // free everything that is left
   for (size_t i = 0; i < retain_top; i++) {
     free_items(retained[i]);
@@ -190,7 +211,11 @@ static void run_os_threads(size_t nthreads, void (*entry)(intptr_t tid));
 static void test_stress(void) {
   uintptr_t r = rand();
   for (int n = 0; n < ITER; n++) {
-    run_os_threads(THREADS, &stress);    
+    run_os_threads(THREADS, &stress);
+    #ifdef HEAP_WALK
+    size_t total = 0;
+    mi_abandoned_visit_blocks(mi_subproc_main(), -1, true, visit_blocks, &total);
+    #endif
     for (int i = 0; i < TRANSFERS; i++) {
       if (chance(50, &r) || n + 1 == ITER) { // free all on last run, otherwise free half of the transfers
         void* p = atomic_exchange_ptr(&transfer[i], NULL);
@@ -200,7 +225,7 @@ static void test_stress(void) {
     #ifndef NDEBUG
     //mi_collect(false);
     //mi_debug_show_arenas();
-    #endif    
+    #endif
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
     #endif
@@ -230,9 +255,15 @@ static void test_leak(void) {
 #endif
 
 int main(int argc, char** argv) {
+  #ifdef HEAP_WALK
+    mi_option_enable(mi_option_visit_abandoned);    
+  #endif
+  #ifndef NDEBUG
+    mi_option_set(mi_option_arena_reserve, 32 * 1024 /* in kib = 32MiB */);
+  #endif
   #ifndef USE_STD_MALLOC
     mi_stats_reset();
-  #endif  
+  #endif
 
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
   if (argc >= 2) {
@@ -291,7 +322,7 @@ static void (*thread_entry_fun)(intptr_t) = &stress;
 
 #ifdef _WIN32
 
-#include <Windows.h>
+#include <windows.h>
 
 static DWORD WINAPI thread_entry(LPVOID param) {
   thread_entry_fun((intptr_t)param);

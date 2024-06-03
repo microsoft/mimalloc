@@ -115,6 +115,7 @@ void _mi_prim_thread_done_auto_done(void);
 void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 
 
+
 //-------------------------------------------------------------------
 // Thread id: `_mi_prim_thread_id()`
 //
@@ -235,10 +236,6 @@ static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
 
 #elif defined(_WIN32)
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
   // Windows: works on Intel and ARM in both 32- and 64-bit
   return (uintptr_t)NtCurrentTeb();
@@ -367,6 +364,8 @@ static inline mi_heap_t* mi_prim_get_default_heap(void) {
 }
 
 #endif  // mi_prim_get_default_heap()
+
+
 
 
 

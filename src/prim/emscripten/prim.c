@@ -200,7 +200,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 // Thread init/done
 //----------------------------------------------------------------
 
-#ifdef __EMSCRIPTEN_SHARED_MEMORY__
+#if defined(MI_USE_PTHREADS)
 
 // use pthread local storage keys to detect thread ending
 // (and used with MI_TLS_PTHREADS for the default heap)

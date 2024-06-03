@@ -19,7 +19,7 @@
 #endif
 
 #ifdef _WIN32
-#include <Windows.h>
+#include <windows.h>
 static void msleep(unsigned long msecs) { Sleep(msecs); }
 #else
 #include <unistd.h>
@@ -46,7 +46,7 @@ static void test_stl_allocators();
 
 int main() {
   // mi_stats_reset();  // ignore earlier allocations
-  
+
   // test_std_string();
   // heap_thread_free_huge();
   /*

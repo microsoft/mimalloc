@@ -22,7 +22,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
-#include "mimalloc/atomic.h"
 #include "mimalloc/prim.h"
 
 #include <sys/mman.h>  // mmap
@@ -31,9 +30,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(__linux__)
   #include <features.h>
-  #if defined(MI_NO_THP)
-  #include <sys/prctl.h>
-  #endif
+  //#if defined(MI_NO_THP)
+  #include <sys/prctl.h>  // THP disable
+  //#endif
   #if defined(__GLIBC__)
   #include <linux/mman.h> // linux mmap flags
   #else

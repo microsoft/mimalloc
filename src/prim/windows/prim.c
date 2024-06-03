@@ -9,7 +9,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
-#include "mimalloc/atomic.h"
 #include "mimalloc/prim.h"
 #include <stdio.h>   // fputs, stderr
 
@@ -231,7 +230,7 @@ static void* win_virtual_alloc_prim(void* addr, size_t size, size_t try_alignmen
     else if (max_retry_msecs > 0 && (try_alignment <= 2*MI_SEGMENT_ALIGN) &&
               (flags&MEM_COMMIT) != 0 && (flags&MEM_LARGE_PAGES) == 0 &&
               win_is_out_of_memory_error(GetLastError())) {
-      // if committing regular memory and being out-of-memory, 
+      // if committing regular memory and being out-of-memory,
       // keep trying for a bit in case memory frees up after all. See issue #894
       _mi_warning_message("out-of-memory on OS allocation, try again... (attempt %lu, 0x%zx bytes, error code: 0x%x, address: %p, alignment: 0x%zx, flags: 0x%x)\n", tries, size, GetLastError(), addr, try_alignment, flags);
       long sleep_msecs = tries*40;  // increasing waits
@@ -316,7 +315,7 @@ int _mi_prim_commit(void* addr, size_t size, bool* is_zero) {
   return 0;
 }
 
-int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {  
+int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {
   BOOL ok = VirtualFree(addr, size, MEM_DECOMMIT);
   *needs_recommit = true;  // for safety, assume always decommitted even in the case of an error.
   return (ok ? 0 : (int)GetLastError());
@@ -468,7 +467,6 @@ mi_msecs_t _mi_prim_clock_now(void) {
 // Process Info
 //----------------------------------------------------------------
 
-#include <windows.h>
 #include <psapi.h>
 
 static mi_msecs_t filetime_msecs(const FILETIME* ftime) {
@@ -491,7 +489,7 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   GetProcessTimes(GetCurrentProcess(), &ct, &et, &st, &ut);
   pinfo->utime = filetime_msecs(&ut);
   pinfo->stime = filetime_msecs(&st);
-  
+
   // load psapi on demand
   if (pGetProcessMemoryInfo == NULL) {
     HINSTANCE hDll = LoadLibrary(TEXT("psapi.dll"));
@@ -505,7 +503,7 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   memset(&info, 0, sizeof(info));
   if (pGetProcessMemoryInfo != NULL) {
     pGetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
-  } 
+  }
   pinfo->current_rss    = (size_t)info.WorkingSetSize;
   pinfo->peak_rss       = (size_t)info.PeakWorkingSetSize;
   pinfo->current_commit = (size_t)info.PagefileUsage;
@@ -517,7 +515,7 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
 // Output
 //----------------------------------------------------------------
 
-void _mi_prim_out_stderr( const char* msg ) 
+void _mi_prim_out_stderr( const char* msg )
 {
   // on windows with redirection, the C runtime cannot handle locale dependent output
   // after the main thread closes so we use direct console output.
@@ -564,7 +562,6 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
 }
 
 
-
 //----------------------------------------------------------------
 // Random
 //----------------------------------------------------------------
@@ -600,7 +597,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
     }
     if (pBCryptGenRandom == NULL) return false;
   }
-  return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);  
+  return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
 }
 
 #endif  // MI_USE_RTLGENRANDOM
@@ -636,9 +633,9 @@ void _mi_prim_thread_init_auto_done(void) {
 }
 
 void _mi_prim_thread_done_auto_done(void) {
-  // call thread-done on all threads (except the main thread) to prevent 
+  // call thread-done on all threads (except the main thread) to prevent
   // dangling callback pointer if statically linked with a DLL; Issue #208
-  FlsFree(mi_fls_key);  
+  FlsFree(mi_fls_key);
 }
 
 void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
@@ -661,3 +658,4 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
 }
 
 #endif
+
