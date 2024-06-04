@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['used_168',['used',['../group__analysis.html#ab820302c5cd0df133eb8e51650a008b4',1,'mi_heap_area_t']]],
-  ['using_20the_20library_169',['Using the library',['../using.html',1,'']]]
+  ['performance_0',['Performance',['../bench.html',1,'']]],
+  ['posix_1',['Posix',['../group__posix.html',1,'']]]
 ];

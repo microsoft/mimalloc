@@ -1,11 +1,11 @@
 var group__cpp =
 [
-    [ "mi_stl_allocator", "group__cpp.html#structmi__stl__allocator", null ],
-    [ "mi_new", "group__cpp.html#gaad048a9fce3d02c5909cd05c6ec24545", null ],
-    [ "mi_new_aligned", "group__cpp.html#gaef2c2bdb4f70857902d3c8903ac095f3", null ],
-    [ "mi_new_aligned_nothrow", "group__cpp.html#gab5e29558926d934c3f1cae8c815f942c", null ],
-    [ "mi_new_n", "group__cpp.html#gae7bc4f56cd57ed3359060ff4f38bda81", null ],
-    [ "mi_new_nothrow", "group__cpp.html#gaeaded64eda71ed6b1d569d3e723abc4a", null ],
-    [ "mi_new_realloc", "group__cpp.html#gaab78a32f55149e9fbf432d5288e38e1e", null ],
-    [ "mi_new_reallocn", "group__cpp.html#ga756f4b2bc6a7ecd0a90baea8e90c7907", null ]
+    [ "mi_stl_allocator< T >", "group__cpp.html#structmi__stl__allocator", null ],
+    [ "mi_new", "group__cpp.html#ga633d96e3bc7011f960df9f3b2731fc6a", null ],
+    [ "mi_new_aligned", "group__cpp.html#ga79c54da0b4b4ce9fcc11d2f6ef6675f8", null ],
+    [ "mi_new_aligned_nothrow", "group__cpp.html#ga92ae00b6dd64406c7e64557711ec04b7", null ],
+    [ "mi_new_n", "group__cpp.html#gadd11b85c15d21d308386844b5233856c", null ],
+    [ "mi_new_nothrow", "group__cpp.html#ga5cb4f120d1f7296074256215aa9a9e54", null ],
+    [ "mi_new_realloc", "group__cpp.html#ga6867d89baf992728e0cc20a1f47db4d0", null ],
+    [ "mi_new_reallocn", "group__cpp.html#gaace912ce086682d56f3ce9f7638d9d67", null ]
 ];
