@@ -185,6 +185,12 @@ full_block_size</td>
 <td class="fielddoc">
 size in bytes of a full block including padding and metadata. </td></tr>
 <tr><td class="fieldtype">
+<a id="a2b7a0c92ece8daf46b558efc990ebdc1" name="a2b7a0c92ece8daf46b558efc990ebdc1"></a>int</td>
+<td class="fieldname">
+heap_tag</td>
+<td class="fielddoc">
+heap tag associated with this area (see <em>mi_heap_new_ex</em>) </td></tr>
+<tr><td class="fieldtype">
 <a id="ae848a3e6840414891035423948ca0383" name="ae848a3e6840414891035423948ca0383"></a>size_t</td>
 <td class="fieldname">
 reserved</td>
@@ -255,7 +261,18 @@ bytes in use by allocated blocks </td></tr>
 </div><div class="memdoc">
 
 <p>Visit all areas and blocks in abandoned heaps. </p>
-<p>Note: requires the option <code>mi_option_allow_visit_abandoned</code> to be set at the start of the program. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">subproc_id</td><td>The sub-process id associated with the abandonded heaps. </td></tr>
+    <tr><td class="paramname">heap_tag</td><td>Visit only abandoned memory with the specified heap tag, use -1 to visit all abandoned memory. </td></tr>
+    <tr><td class="paramname">visit_blocks</td><td>If <em>true</em> visits all allocated blocks, otherwise <em>visitor</em> is only called for every heap area. </td></tr>
+    <tr><td class="paramname">visitor</td><td>This function is called for every area in the heap (with <em>block</em> as <em>NULL</em>). If <em>visit_all_blocks</em> is <em>true</em>, <em>visitor</em> is also called for every allocated block in every area (with <code>block!=NULL</code>). return <em>false</em> from this function to stop visiting early. </td></tr>
+    <tr><td class="paramname">arg</td><td>extra argument passed to the <em>visitor</em>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><em>true</em> if all areas and blocks were visited.</dd></dl>
+<p>Note: requires the option <code>mi_option_visit_abandoned</code> to be set at the start of the program. </p>
 
 </div>
 </div>

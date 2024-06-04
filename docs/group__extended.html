@@ -225,6 +225,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gaaf2d9976576d5efd5544be12848af949" id="r_gaaf2d9976576d5efd5544be12848af949"><td class="memItemLeft" align="right" valign="top"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#gaaf2d9976576d5efd5544be12848af949">mi_heap_new_in_arena</a> (<a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a> arena_id)</td></tr>
 <tr class="memdesc:gaaf2d9976576d5efd5544be12848af949"><td class="mdescLeft">&#160;</td><td class="mdescRight">Create a new heap that only allocates in the specified arena.  <br /></td></tr>
 <tr class="separator:gaaf2d9976576d5efd5544be12848af949"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga3ae360583f4351aa5267ee7e43008faf" id="r_ga3ae360583f4351aa5267ee7e43008faf"><td class="memItemLeft" align="right" valign="top"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga3ae360583f4351aa5267ee7e43008faf">mi_heap_new_ex</a> (int heap_tag, bool allow_destroy, <a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a> arena_id)</td></tr>
+<tr class="memdesc:ga3ae360583f4351aa5267ee7e43008faf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Create a new heap.  <br /></td></tr>
+<tr class="separator:ga3ae360583f4351aa5267ee7e43008faf"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga2ecba0d7ebdc99e71bb985c4a1609806" id="r_ga2ecba0d7ebdc99e71bb985c4a1609806"><td class="memItemLeft" align="right" valign="top"><a class="el" href="#ga8c0bcd1fee27c7641e9c3c0d991b3b7d">mi_subproc_id_t</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga2ecba0d7ebdc99e71bb985c4a1609806">mi_subproc_main</a> (void)</td></tr>
 <tr class="memdesc:ga2ecba0d7ebdc99e71bb985c4a1609806"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get the main sub-process identifier.  <br /></td></tr>
 <tr class="separator:ga2ecba0d7ebdc99e71bb985c4a1609806"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -484,6 +487,45 @@ Functions</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>the size <code>n</code> that will be allocated, where <code>n &gt;= size</code>.</dd></dl>
 <p>Generally, <code>mi_usable_size(mi_malloc(size)) == mi_good_size(size)</code>. This can be used to reduce internal wasted space when allocating buffers for example.</p>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga089c859d9eddc5f9b4bd946cd53cebee" title="Return the available bytes in a memory block.">mi_usable_size()</a> </dd></dl>
+
+</div>
+</div>
+<a id="ga3ae360583f4351aa5267ee7e43008faf" name="ga3ae360583f4351aa5267ee7e43008faf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga3ae360583f4351aa5267ee7e43008faf">&#9670;&#160;</a></span>mi_heap_new_ex()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> * mi_heap_new_ex </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>heap_tag</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>allow_destroy</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a></td>          <td class="paramname"><span class="paramname"><em>arena_id</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Create a new heap. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">heap_tag</td><td>The heap tag associated with this heap; heaps only reclaim memory between heaps with the same tag. </td></tr>
+    <tr><td class="paramname">allow_destroy</td><td>Is <em>mi_heap_destroy</em> allowed? Not allowing this allows the heap to reclaim memory from terminated threads. </td></tr>
+    <tr><td class="paramname">arena_id</td><td>If not 0, the heap will only allocate from the specified arena. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>A new heap or <code>NULL</code> on failure.</dd></dl>
+<p>The <em>arena_id</em> can be used by runtimes to allocate only in a specified pre-reserved arena. This is used for example for a compressed pointer heap in Koka.</p>
+<p>The <em>heap_tag</em> enables heaps to keep objects of a certain type isolated to heaps with that tag. This is used for example in the CPython integration. </p>
 
 </div>
 </div>
@@ -1358,7 +1400,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Returns the available bytes in the memory block, or 0 if <em>p</em> was <em>NULL</em>.</dd></dl>
-<p>The returned size can be used to call <em>mi_expand</em> successfully. The returned size is always at least equal to the allocated size of <em>p</em>, and, in the current design, should be less than 16.7% more.</p>
+<p>The returned size can be used to call <em>mi_expand</em> successfully. The returned size is always at least equal to the allocated size of <em>p</em>.</p>
 <dl class="section see"><dt>See also</dt><dd><a href="https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/msize?view=vs-2017">_msize</a> (Windows) </dd>
 <dd>
 <a href="http://man7.org/linux/man-pages/man3/malloc_usable_size.3.html">malloc_usable_size</a> (Linux) </dd>

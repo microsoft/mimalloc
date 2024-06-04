@@ -214,12 +214,14 @@ Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">size</td><td>number of bytes to allocate. </td></tr>
-    <tr><td class="paramname">alignment</td><td>the minimal alignment of the allocated memory. </td></tr>
+    <tr><td class="paramname">alignment</td><td>the minimal alignment of the allocated memory. <br  />
+ </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>pointer to the allocated memory or <em>NULL</em> if out of memory. The returned pointer is aligned by <em>alignment</em>, i.e. <code>(uintptr_t)p % alignment == 0</code>.</dd></dl>
-<p>Returns a unique pointer if called with <em>size</em> 0. </p><dl class="section see"><dt>See also</dt><dd><a href="https://en.cppreference.com/w/c/memory/aligned_alloc">aligned_alloc</a> (in the standard C11 library, with switched arguments!) </dd>
+<dl class="section return"><dt>Returns</dt><dd>pointer to the allocated memory or <em>NULL</em> if out of memory, or if the alignment is not a power of 2 (including 0). The <em>size</em> is unrestricted (and does not have to be an integral multiple of the <em>alignment</em>). The returned pointer is aligned by <em>alignment</em>, i.e. <code>(uintptr_t)p % alignment == 0</code>. Returns a unique pointer if called with <em>size</em> 0.</dd></dl>
+<p>Note that <code>alignment</code> always follows <code>size</code> for consistency with the unaligned allocation API, but unfortunately this differs from <code>posix_memalign</code> and <code>aligned_alloc</code> in the C library.</p>
+<dl class="section see"><dt>See also</dt><dd><a href="https://en.cppreference.com/w/c/memory/aligned_alloc">aligned_alloc</a> (in the standard C11 library, with switched arguments!) </dd>
 <dd>
 <a href="https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-malloc?view=vs-2017">_aligned_malloc</a> (on Windows) </dd>
 <dd>
@@ -264,8 +266,8 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>pointer to the allocated memory or <em>NULL</em> if out of memory. The returned pointer is aligned by <em>alignment</em> at <em>offset</em>, i.e. <code>((uintptr_t)p + offset) % alignment == 0</code>.</dd></dl>
-<p>Returns a unique pointer if called with <em>size</em> 0. </p><dl class="section see"><dt>See also</dt><dd><a href="https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-offset-malloc?view=vs-2017">_aligned_offset_malloc</a> (on Windows) </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>pointer to the allocated memory or <em>NULL</em> if out of memory, or if the alignment is not a power of 2 (including 0). The <em>size</em> is unrestricted (and does not have to be an integral multiple of the <em>alignment</em>). The returned pointer is aligned by <em>alignment</em>, i.e. <code>(uintptr_t)p % alignment == 0</code>. Returns a unique pointer if called with <em>size</em> 0.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a href="https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-offset-malloc?view=vs-2017">_aligned_offset_malloc</a> (on Windows) </dd></dl>
 
 </div>
 </div>

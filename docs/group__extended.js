@@ -10,6 +10,7 @@ var group__extended =
     [ "mi_collect", "group__extended.html#ga421430e2226d7d468529cec457396756", null ],
     [ "mi_debug_show_arenas", "group__extended.html#gad7439207f8f71fb6c382a9ea20b997e7", null ],
     [ "mi_good_size", "group__extended.html#gac057927cd06c854b45fe7847e921bd47", null ],
+    [ "mi_heap_new_ex", "group__extended.html#ga3ae360583f4351aa5267ee7e43008faf", null ],
     [ "mi_heap_new_in_arena", "group__extended.html#gaaf2d9976576d5efd5544be12848af949", null ],
     [ "mi_is_in_heap_region", "group__extended.html#ga5f071b10d4df1c3658e04e7fd67a94e6", null ],
     [ "mi_is_redirected", "group__extended.html#gaad25050b19f30cd79397b227e0157a3f", null ],

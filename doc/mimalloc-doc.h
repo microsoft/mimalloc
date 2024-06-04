@@ -281,8 +281,7 @@ void* mi_zalloc_small(size_t size);
 /// The returned size can be
 /// used to call \a mi_expand successfully.
 /// The returned size is always at least equal to the
-/// allocated size of \a p, and, in the current design,
-/// should be less than 16.7% more.
+/// allocated size of \a p.
 ///
 /// @see [_msize](https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/msize?view=vs-2017) (Windows)
 /// @see [malloc_usable_size](http://man7.org/linux/man-pages/man3/malloc_usable_size.3.html) (Linux)
@@ -307,7 +306,7 @@ size_t mi_good_size(size_t size);
 /// in very narrow circumstances; in particular, when a long running thread
 /// allocates a lot of blocks that are freed by other threads it may improve
 /// resource usage by calling this every once in a while.
-void   mi_collect(bool force);
+void mi_collect(bool force);
 
 /// Deprecated
 /// @param out Ignored, outputs to the registered output function or stderr by default.
@@ -540,6 +539,19 @@ bool  mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool i
 /// @return The new heap or `NULL`.
 mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id);
 
+/// @brief Create a new heap
+/// @param heap_tag       The heap tag associated with this heap; heaps only reclaim memory between heaps with the same tag.
+/// @param allow_destroy  Is \a mi_heap_destroy allowed?  Not allowing this allows the heap to reclaim memory from terminated threads.
+/// @param arena_id       If not 0, the heap will only allocate from the specified arena.
+/// @return A new heap or `NULL` on failure.
+///
+/// The \a arena_id can be used by runtimes to allocate only in a specified pre-reserved arena.
+/// This is used for example for a compressed pointer heap in Koka.
+///
+/// The \a heap_tag enables heaps to keep objects of a certain type isolated to heaps with that tag.
+/// This is used for example in the CPython integration.
+mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id);
+
 /// A process can associate threads with sub-processes.
 /// A sub-process will not reclaim memory from (abandoned heaps/threads)
 /// other subprocesses.
@@ -578,12 +590,16 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc);
 
 /// Allocate \a size bytes aligned by \a alignment.
 /// @param size  number of bytes to allocate.
-/// @param alignment  the minimal alignment of the allocated memory.
-/// @returns pointer to the allocated memory or \a NULL if out of memory.
-/// The returned pointer is aligned by \a alignment, i.e.
-/// `(uintptr_t)p % alignment == 0`.
-///
+/// @param alignment  the minimal alignment of the allocated memory.       
+/// @returns pointer to the allocated memory or \a NULL if out of memory,
+/// or if the alignment is not a power of 2 (including 0). The \a size is unrestricted
+/// (and does not have to be an integral multiple of the \a alignment).
+/// The returned pointer is aligned by \a alignment, i.e. `(uintptr_t)p % alignment == 0`.
 /// Returns a unique pointer if called with \a size 0.
+///
+/// Note that `alignment` always follows `size` for consistency with the unaligned
+/// allocation API, but unfortunately this differs from `posix_memalign` and `aligned_alloc` in the C library.
+///
 /// @see [aligned_alloc](https://en.cppreference.com/w/c/memory/aligned_alloc) (in the standard C11 library, with switched arguments!)
 /// @see [_aligned_malloc](https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-malloc?view=vs-2017) (on Windows)
 /// @see [aligned_alloc](http://man.openbsd.org/reallocarray) (on BSD, with switched arguments!)
@@ -598,11 +614,12 @@ void* mi_realloc_aligned(void* p, size_t newsize, size_t alignment);
 /// @param size  number of bytes to allocate.
 /// @param alignment  the minimal alignment of the allocated memory at \a offset.
 /// @param offset     the offset that should be aligned.
-/// @returns pointer to the allocated memory or \a NULL if out of memory.
-/// The returned pointer is aligned by \a alignment at \a offset, i.e.
-/// `((uintptr_t)p + offset) % alignment == 0`.
-///
+/// @returns pointer to the allocated memory or \a NULL if out of memory,
+/// or if the alignment is not a power of 2 (including 0). The \a size is unrestricted
+/// (and does not have to be an integral multiple of the \a alignment).
+/// The returned pointer is aligned by \a alignment, i.e. `(uintptr_t)p % alignment == 0`.
 /// Returns a unique pointer if called with \a size 0.
+///
 /// @see [_aligned_offset_malloc](https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-offset-malloc?view=vs-2017) (on Windows)
 void* mi_malloc_aligned_at(size_t size, size_t alignment, size_t offset);
 void* mi_zalloc_aligned_at(size_t size, size_t alignment, size_t offset);
@@ -841,6 +858,7 @@ typedef struct mi_heap_area_s {
   size_t used;        ///< bytes in use by allocated blocks
   size_t block_size;  ///< size in bytes of one block
   size_t full_block_size; ///< size in bytes of a full block including padding and metadata.
+  int    heap_tag;    ///< heap tag associated with this area (see \a mi_heap_new_ex)
 } mi_heap_area_t;
 
 /// Visitor function passed to mi_heap_visit_blocks()
@@ -865,8 +883,20 @@ typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* a
 /// @returns \a true if all areas and blocks were visited.
 bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block_visit_fun* visitor, void* arg);
 
-/// Visit all areas and blocks in abandoned heaps.
-/// Note: requires the option `mi_option_allow_visit_abandoned` to be set
+/// @brief Visit all areas and blocks in abandoned heaps.
+/// @param subproc_id The sub-process id associated with the abandonded heaps.
+/// @param heap_tag Visit only abandoned memory with the specified heap tag, use -1 to visit all abandoned memory.
+/// @param visit_blocks If \a true visits all allocated blocks, otherwise
+///                         \a visitor is only called for every heap area.
+/// @param visitor This function is called for every area in the heap
+///                 (with \a block as \a NULL). If \a visit_all_blocks is
+///                 \a true, \a visitor is also called for every allocated
+///                 block in every area (with `block!=NULL`).
+///                 return \a false from this function to stop visiting early.
+/// @param arg extra argument passed to the \a visitor.
+/// @return \a true if all areas and blocks were visited.
+///
+/// Note: requires the option `mi_option_visit_abandoned` to be set
 /// at the start of the program.
 bool mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
