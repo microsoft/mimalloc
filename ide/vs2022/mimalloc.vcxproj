@@ -262,7 +262,6 @@
     <ClInclude Include="..\..\include\mimalloc\prim.h" />
     <ClInclude Include="..\..\include\mimalloc\track.h" />
     <ClInclude Include="..\..\include\mimalloc\types.h" />
-    <ClInclude Include="..\..\src\arena.h" />
     <ClInclude Include="..\..\src\bitmap.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

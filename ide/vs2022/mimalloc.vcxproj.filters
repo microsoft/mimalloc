@@ -93,9 +93,6 @@
     <ClInclude Include="..\..\include\mimalloc\prim.h">
       <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\arena.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Headers">
