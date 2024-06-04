@@ -530,6 +530,7 @@ void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
   area->used = page->used;   // number of blocks in use (#553)
   area->block_size = ubsize;
   area->full_block_size = bsize;
+  area->heap_tag = page->heap_tag;
 }
 
 

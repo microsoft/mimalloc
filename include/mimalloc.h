@@ -258,6 +258,7 @@ typedef struct mi_heap_area_s {
   size_t used;        // number of allocated blocks
   size_t block_size;  // size in bytes of each block
   size_t full_block_size; // size in bytes of a full block including padding and metadata.
+  int    heap_tag;    // heap tag associated with this area
 } mi_heap_area_t;
 
 typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
