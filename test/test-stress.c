@@ -27,12 +27,15 @@ terms of the MIT license.
 // argument defaults
 #if !defined(MI_TSAN)
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
-#else                         // with thread-sanitizer reduce the defaults for azure pipeline limits
-static int THREADS = 8;
-#endif
-
 static int SCALE   = 25;      // scaling factor
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
+#else                         // with thread-sanitizer reduce the threads to test within the azure pipeline limits
+static int THREADS = 8;       
+static int SCALE   = 25;      // scaling factor
+static int ITER    = 200;     // N full iterations destructing and re-creating all threads
+#endif
+
+
 
 #define STRESS                // undefine for leak test
 
