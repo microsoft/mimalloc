@@ -173,6 +173,7 @@ static void mi_heap_main_init(void) {
     _mi_heap_main.keys[0] = _mi_heap_random_next(&_mi_heap_main);
     _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);    
     mi_lock_init(&mi_subproc_default.abandoned_os_lock);
+    mi_lock_init(&mi_subproc_default.abandoned_os_visit_lock);
   }
 }
 
@@ -197,6 +198,7 @@ mi_subproc_id_t mi_subproc_new(void) {
   subproc->memid = memid;
   subproc->abandoned_os_list = NULL;
   mi_lock_init(&subproc->abandoned_os_lock);
+  mi_lock_init(&subproc->abandoned_os_visit_lock);
   return subproc;
 }
 
@@ -219,6 +221,7 @@ void mi_subproc_delete(mi_subproc_id_t subproc_id) {
   // safe to release
   // todo: should we refcount subprocesses?
   mi_lock_done(&subproc->abandoned_os_lock);
+  mi_lock_done(&subproc->abandoned_os_visit_lock);
   _mi_arena_meta_free(subproc, subproc->memid, sizeof(mi_subproc_t));
 }
 

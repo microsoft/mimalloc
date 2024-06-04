@@ -960,10 +960,12 @@ bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
 
 void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
   mi_segment_t* segment;
-  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, tld->subproc, &current);
-  while ((segment = _mi_arena_segment_clear_abandoned_next(&current, true /* blocking */)) != NULL) {
+  mi_arena_field_cursor_t current; 
+  _mi_arena_field_cursor_init(heap, tld->subproc, true /* visit all, blocking */, &current);
+  while ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL) {
     mi_segment_reclaim(segment, heap, 0, NULL, tld);
   }
+  _mi_arena_field_cursor_done(&current);
 }
 
 static long mi_segment_get_reclaim_tries(mi_segments_tld_t* tld) {
@@ -984,9 +986,11 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
   long max_tries = mi_segment_get_reclaim_tries(tld);
   if (max_tries <= 0) return NULL;
 
-  mi_segment_t* segment;
-  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, tld->subproc, &current);
-  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current, false /* non-blocking */)) != NULL))
+  mi_segment_t* result = NULL;
+  mi_segment_t* segment = NULL;
+  mi_arena_field_cursor_t current; 
+  _mi_arena_field_cursor_init(heap, tld->subproc, false /* non-blocking */, &current);
+  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL))
   {
     mi_assert(segment->subproc == heap->tld->segments.subproc); // cursor only visits segments in our sub-process
     segment->abandoned_visits++;
@@ -1008,7 +1012,8 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
       // found a free page of the right kind, or page of the right block_size with free space
       // we return the result of reclaim (which is usually `segment`) as it might free
       // the segment due to concurrent frees (in which case `NULL` is returned).
-      return mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
+      result = mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
+      break;
     }
     else if (segment->abandoned_visits >= 3 && is_suitable) {
       // always reclaim on 3rd visit to limit the list length.
@@ -1020,7 +1025,8 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
       _mi_arena_segment_mark_abandoned(segment);
     }
   }
-  return NULL;
+  _mi_arena_field_cursor_done(&current);
+  return result;
 }
 
 
