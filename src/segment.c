@@ -857,6 +857,7 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
   segment->allow_decommit = !memid.is_pinned;
   segment->allow_purge = segment->allow_decommit && (mi_option_get(mi_option_purge_delay) >= 0);
   segment->segment_size = segment_size;
+  segment->subproc = tld->subproc;
   segment->commit_mask = commit_mask;
   segment->purge_expire = 0;
   mi_commit_mask_create_empty(&segment->purge_mask);
@@ -903,7 +904,6 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   segment->segment_info_slices = info_slices;
   segment->thread_id = _mi_thread_id();
   segment->cookie = _mi_ptr_cookie(segment);
-  segment->subproc = tld->subproc;
   segment->slice_entries = slice_entries;
   segment->kind = (required == 0 ? MI_SEGMENT_NORMAL : MI_SEGMENT_HUGE);
 

@@ -193,7 +193,7 @@ static void mi_heap_main_init(void) {
     #endif
     _mi_heap_main.cookie  = _mi_heap_random_next(&_mi_heap_main);
     _mi_heap_main.keys[0] = _mi_heap_random_next(&_mi_heap_main);
-    _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);    
+    _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
     mi_lock_init(&mi_subproc_default.abandoned_os_lock);
     mi_lock_init(&mi_subproc_default.abandoned_os_visit_lock);
   }
@@ -363,7 +363,7 @@ static bool _mi_thread_heap_init(void) {
     mi_heap_t* heap = &td->heap;
     _mi_tld_init(tld, heap);  // must be before `_mi_heap_init`
     _mi_heap_init(heap, tld, _mi_arena_id_none(), false /* can reclaim */, 0 /* default tag */);
-    _mi_heap_set_default_direct(heap);   
+    _mi_heap_set_default_direct(heap);
   }
   return false;
 }

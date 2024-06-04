@@ -451,6 +451,7 @@ typedef struct mi_segment_s {
   bool              allow_decommit;     // can we decommmit the memory
   bool              allow_purge;        // can we purge the memory (reset or decommit)
   size_t            segment_size;
+  mi_subproc_t*     subproc;            // segment belongs to sub process
 
   // segment fields
   mi_msecs_t        purge_expire;       // purge slices in the `purge_mask` after this time
@@ -465,7 +466,6 @@ typedef struct mi_segment_s {
   size_t            abandoned_visits;   // count how often this segment is visited during abondoned reclamation (to force reclaim if it takes too long)
   size_t            used;               // count of pages in use
   uintptr_t         cookie;             // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
-  mi_subproc_t*     subproc;            // segment belongs to sub process
 
   struct mi_segment_s* abandoned_os_next; // only used for abandoned segments outside arena's, and only if `mi_option_visit_abandoned` is enabled
   struct mi_segment_s* abandoned_os_prev;

@@ -631,6 +631,9 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
   if (size==0) return;
   const bool all_committed = (committed_size == size);
 
+  // need to set all memory to undefined as some parts may still be marked as no_access (like padding etc.)
+  mi_track_mem_undefined(p,size);
+
   if (mi_memkind_is_os(memid.memkind)) {
     // was a direct OS allocation, pass through
     if (!all_committed && committed_size > 0) {
@@ -659,9 +662,6 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
       _mi_error_message(EINVAL, "trying to free from an invalid arena block: %p, size %zu, memid: 0x%zx\n", p, size, memid);
       return;
     }
-
-    // need to set all memory to undefined as some parts may still be marked as no_access (like padding etc.)
-    mi_track_mem_undefined(p,size);
 
     // potentially decommit
     if (arena->memid.is_pinned || arena->blocks_committed == NULL) {
