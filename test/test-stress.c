@@ -25,17 +25,14 @@ terms of the MIT license.
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
 // argument defaults
+#if !defined(MI_TSAN)
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
-static int SCALE   = 25;      // scaling factor
-
-#if defined(MI_TSAN)
-static int ITER    = 10;      // N full iterations destructing and re-creating all threads (on tsan reduce for azure pipeline limits)
-#else
-static int ITER    = 50;      // N full iterations destructing and re-creating all threads
+#else                         // with thread-sanitizer reduce the defaults for azure pipeline limits
+static int THREADS = 8;
 #endif
 
-// static int THREADS = 8;    // more repeatable if THREADS <= #processors
-// static int SCALE   = 100;  // scaling factor
+static int SCALE   = 25;      // scaling factor
+static int ITER    = 50;      // N full iterations destructing and re-creating all threads
 
 #define STRESS                // undefine for leak test
 

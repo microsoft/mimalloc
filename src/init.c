@@ -34,7 +34,7 @@ const mi_page_t _mi_page_empty = {
   MI_ATOMIC_VAR_INIT(0), // xthread_free
   MI_ATOMIC_VAR_INIT(0), // xheap
   NULL, NULL
-  #if MI_INTPTR_SIZE==4 
+  #if MI_INTPTR_SIZE==4
   , { NULL }
   #endif
 };
@@ -129,7 +129,7 @@ static mi_decl_cache_align mi_subproc_t mi_subproc_default;
 
 static mi_decl_cache_align mi_tld_t tld_main = {
   0, false,
-  &_mi_heap_main, &_mi_heap_main, 
+  &_mi_heap_main, &_mi_heap_main,
   { { NULL, NULL }, {NULL ,NULL}, {NULL ,NULL, 0},
     0, 0, 0, 0, 0, &mi_subproc_default,
     &tld_main.stats, &tld_main.os
@@ -171,7 +171,7 @@ static void mi_heap_main_init(void) {
     #endif
     _mi_heap_main.cookie  = _mi_heap_random_next(&_mi_heap_main);
     _mi_heap_main.keys[0] = _mi_heap_random_next(&_mi_heap_main);
-    _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);    
+    _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
     mi_lock_init(&mi_subproc_default.abandoned_os_lock);
     mi_lock_init(&mi_subproc_default.abandoned_os_visit_lock);
   }
@@ -341,7 +341,7 @@ static bool _mi_thread_heap_init(void) {
     mi_heap_t* heap = &td->heap;
     _mi_tld_init(tld, heap);  // must be before `_mi_heap_init`
     _mi_heap_init(heap, tld, _mi_arena_id_none(), false /* can reclaim */, 0 /* default tag */);
-    _mi_heap_set_default_direct(heap);   
+    _mi_heap_set_default_direct(heap);
   }
   return false;
 }

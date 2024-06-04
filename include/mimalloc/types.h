@@ -397,9 +397,10 @@ typedef struct mi_segment_s {
   bool                 allow_decommit;
   bool                 allow_purge;
   size_t               segment_size;     // for huge pages this may be different from `MI_SEGMENT_SIZE`
+  mi_subproc_t*        subproc;          // segment belongs to sub process
 
   // segment fields
-  struct mi_segment_s* next;             // must be the first segment field after abandoned_next -- see `segment.c:segment_init`
+  struct mi_segment_s* next;             // must be the first (non-constant) segment field  -- see `segment.c:segment_init`
   struct mi_segment_s* prev;
   bool                 was_reclaimed;    // true if it was reclaimed (used to limit on-free reclamation)
 
@@ -410,7 +411,6 @@ typedef struct mi_segment_s {
   size_t               capacity;         // count of available pages (`#free + used`)
   size_t               segment_info_size;// space we are using from the first page for segment meta-data and possible guard pages.
   uintptr_t            cookie;           // verify addresses in secure mode: `_mi_ptr_cookie(segment) == segment->cookie`
-  mi_subproc_t*        subproc;          // segment belongs to sub process
 
   struct mi_segment_s* abandoned_os_next; // only used for abandoned segments outside arena's, and only if `mi_option_visit_abandoned` is enabled
   struct mi_segment_s* abandoned_os_prev;
