@@ -213,6 +213,16 @@
     </ClCompile>
     <ClCompile Include="..\..\src\alloc-posix.c" />
     <ClCompile Include="..\..\src\alloc.c" />
+    <ClCompile Include="..\..\src\arena-abandoned.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      </ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+      </ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\src\arena.c" />
     <ClCompile Include="..\..\src\bitmap.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
@@ -256,6 +266,7 @@
     <ClInclude Include="..\..\include\mimalloc\prim.h" />
     <ClInclude Include="..\..\include\mimalloc\track.h" />
     <ClInclude Include="..\..\include\mimalloc\types.h" />
+    <ClInclude Include="..\..\src\arena.h" />
     <ClInclude Include="..\..\src\bitmap.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

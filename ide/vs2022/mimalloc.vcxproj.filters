@@ -61,6 +61,9 @@
     <ClCompile Include="..\..\src\free.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\arena-abandoned.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\bitmap.h">
@@ -88,6 +91,9 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mimalloc\prim.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\arena.h">
       <Filter>Headers</Filter>
     </ClInclude>
   </ItemGroup>

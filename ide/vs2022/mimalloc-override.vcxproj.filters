@@ -58,6 +58,9 @@
     <ClCompile Include="..\..\src\libc.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\arena-abandoned.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\mimalloc\atomic.h">
