@@ -105,18 +105,11 @@ $(function(){initNavTree('group__aligned.html',''); initResizable(true); });
 
 <div class="header">
   <div class="summary">
-<a href="#define-members">Macros</a> &#124;
 <a href="#func-members">Functions</a>  </div>
   <div class="headertitle"><div class="title">Aligned Allocation</div></div>
 </div><!--header-->
 <div class="contents">
 <table class="memberdecls">
-<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="define-members" name="define-members"></a>
-Macros</h2></td></tr>
-<tr class="memitem:ga2e3fc59317bd730a71788c4d56ac8bff" id="r_ga2e3fc59317bd730a71788c4d56ac8bff"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga2e3fc59317bd730a71788c4d56ac8bff">MI_BLOCK_ALIGNMENT_MAX</a></td></tr>
-<tr class="memdesc:ga2e3fc59317bd730a71788c4d56ac8bff"><td class="mdescLeft">&#160;</td><td class="mdescRight">The maximum supported alignment size (currently 1MiB).  <br /></td></tr>
-<tr class="separator:ga2e3fc59317bd730a71788c4d56ac8bff"><td class="memSeparator" colspan="2">&#160;</td></tr>
-</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
 <tr class="memitem:ga69578ff1a98ca16e1dcd02c0995cd65c" id="r_ga69578ff1a98ca16e1dcd02c0995cd65c"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga69578ff1a98ca16e1dcd02c0995cd65c">mi_malloc_aligned</a> (size_t size, size_t alignment)</td></tr>
@@ -139,24 +132,7 @@ Functions</h2></td></tr>
 <tr class="separator:gad06dcf2bb8faadb2c8ea61ee5d24bbf6"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
-<p>Allocating aligned memory blocks. </p>
-<h2 class="groupheader">Macro Definition Documentation</h2>
-<a id="ga2e3fc59317bd730a71788c4d56ac8bff" name="ga2e3fc59317bd730a71788c4d56ac8bff"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga2e3fc59317bd730a71788c4d56ac8bff">&#9670;&#160;</a></span>MI_BLOCK_ALIGNMENT_MAX</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">#define MI_BLOCK_ALIGNMENT_MAX</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>The maximum supported alignment size (currently 1MiB). </p>
-
-</div>
-</div>
+<p>Allocating aligned memory blocks. Note that <code>alignment</code> always follows <code>size</code> for consistency with the unaligned allocation API, but unfortunately this differs from <code>posix_memalign</code> and <code>aligned_alloc</code> in the C library. </p>
 <h2 class="groupheader">Function Documentation</h2>
 <a id="ga424ef386fb1f9f8e0a86ab53f16eaaf1" name="ga424ef386fb1f9f8e0a86ab53f16eaaf1"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga424ef386fb1f9f8e0a86ab53f16eaaf1">&#9670;&#160;</a></span>mi_calloc_aligned()</h2>
@@ -238,12 +214,14 @@ Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">size</td><td>number of bytes to allocate. </td></tr>
-    <tr><td class="paramname">alignment</td><td>the minimal alignment of the allocated memory. Must be less than <a class="el" href="#ga2e3fc59317bd730a71788c4d56ac8bff" title="The maximum supported alignment size (currently 1MiB).">MI_BLOCK_ALIGNMENT_MAX</a>. </td></tr>
+    <tr><td class="paramname">alignment</td><td>the minimal alignment of the allocated memory. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>pointer to the allocated memory or <em>NULL</em> if out of memory. The returned pointer is aligned by <em>alignment</em>, i.e. <code>(uintptr_t)p % alignment == 0</code>.</dd></dl>
-<p>Returns a unique pointer if called with <em>size</em> 0. </p><dl class="section see"><dt>See also</dt><dd><a href="https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-malloc?view=vs-2017">_aligned_malloc</a> (on Windows) </dd>
+<p>Returns a unique pointer if called with <em>size</em> 0. </p><dl class="section see"><dt>See also</dt><dd><a href="https://en.cppreference.com/w/c/memory/aligned_alloc">aligned_alloc</a> (in the standard C11 library, with switched arguments!) </dd>
+<dd>
+<a href="https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-malloc?view=vs-2017">_aligned_malloc</a> (on Windows) </dd>
 <dd>
 <a href="http://man.openbsd.org/reallocarray">aligned_alloc</a> (on BSD, with switched arguments!) </dd>
 <dd>

@@ -571,20 +571,20 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc);
 /// \defgroup aligned Aligned Allocation
 ///
 /// Allocating aligned memory blocks.
+/// Note that `alignment` always follows `size` for consistency with the unaligned
+/// allocation API, but unfortunately this differs from `posix_memalign` and `aligned_alloc` in the C library.
 ///
 /// \{
 
-/// The maximum supported alignment size (currently 1MiB).
-#define MI_BLOCK_ALIGNMENT_MAX   (1024*1024UL)
-
 /// Allocate \a size bytes aligned by \a alignment.
 /// @param size  number of bytes to allocate.
-/// @param alignment  the minimal alignment of the allocated memory. Must be less than #MI_BLOCK_ALIGNMENT_MAX.
+/// @param alignment  the minimal alignment of the allocated memory.
 /// @returns pointer to the allocated memory or \a NULL if out of memory.
 /// The returned pointer is aligned by \a alignment, i.e.
 /// `(uintptr_t)p % alignment == 0`.
 ///
 /// Returns a unique pointer if called with \a size 0.
+/// @see [aligned_alloc](https://en.cppreference.com/w/c/memory/aligned_alloc) (in the standard C11 library, with switched arguments!)
 /// @see [_aligned_malloc](https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-malloc?view=vs-2017) (on Windows)
 /// @see [aligned_alloc](http://man.openbsd.org/reallocarray) (on BSD, with switched arguments!)
 /// @see [posix_memalign](https://linux.die.net/man/3/posix_memalign) (on Posix, with switched arguments!)
