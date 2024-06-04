@@ -82,7 +82,10 @@ static bool mi_arena_segment_os_clear_abandoned(mi_segment_t* segment, bool take
     segment->abandoned_os_prev = NULL;
     mi_atomic_decrement_relaxed(&subproc->abandoned_count);
     mi_atomic_decrement_relaxed(&subproc->abandoned_os_list_count);
-    mi_atomic_store_release(&segment->thread_id, _mi_thread_id());
+    if (take_lock) {
+      // don't set the thread_id when iterating
+      mi_atomic_store_release(&segment->thread_id, _mi_thread_id());
+    }
     reclaimed = true;
   }
   if (take_lock) { mi_lock_release(&segment->subproc->abandoned_os_lock); }

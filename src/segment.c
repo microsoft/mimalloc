@@ -836,6 +836,7 @@ void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
 // Possibly clear pages and check if free space is available
 static bool mi_segment_check_free(mi_segment_t* segment, size_t block_size, bool* all_pages_free)
 {
+  mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == 0);
   bool has_page = false;
   size_t pages_used = 0;
   size_t pages_used_empty = 0;
