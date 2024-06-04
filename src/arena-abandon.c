@@ -13,8 +13,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "bitmap.h"
 #endif
 
-typedef struct mi_arena_s mi_arena_t;
-
 // Minimal exports for arena-abandoned.
 size_t      mi_arena_id_index(mi_arena_id_t id);
 mi_arena_t* mi_arena_from_index(size_t idx);
