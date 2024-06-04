@@ -108,12 +108,11 @@ jobs:
         CXX: clang++
         BuildType: debug-ubsan-clang
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_DEBUG_UBSAN=ON
-      # Disable for now as it times out on the azure build machines
-      #  Debug TSAN Clang++:
-      #    CC: clang
-      #    CXX: clang++
-      #    BuildType: debug-tsan-clang-cxx
-      #    cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_USE_CXX=ON -DMI_DEBUG_TSAN=ON
+      Debug TSAN Clang++:
+        CC: clang
+        CXX: clang++
+        BuildType: debug-tsan-clang-cxx
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMI_USE_CXX=ON -DMI_DEBUG_TSAN=ON
       
   steps:
   - task: CMake@1
