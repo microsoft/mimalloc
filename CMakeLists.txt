@@ -61,7 +61,7 @@ set(mi_sources
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
 set(mi_cflags_dynamic "")           # extra flags for a shared-object library build
-set(mi_defines "")                   
+set(mi_defines "")
 set(mi_libraries "")
 
 # -----------------------------------------------------------------------------
@@ -327,7 +327,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
       list(APPEND mi_cflags_dynamic -ftls-model=initial-exec)
       message(STATUS "Use local dynamic TLS for the static build (since MI_LIBC_MUSL=ON)")
     else()
-      list(APPEND mi_cflags -ftls-model=initial-exec)    
+      list(APPEND mi_cflags -ftls-model=initial-exec)
     endif()
   endif()
   if(MI_OVERRIDE)
@@ -345,18 +345,18 @@ endif()
 
 # extra needed libraries
 
-# we prefer -l<lib> test over `find_library` as sometimes core libraries 
+# we prefer -l<lib> test over `find_library` as sometimes core libraries
 # like `libatomic` are not on the system path (see issue #898)
-function(find_link_library libname outlibname)  
-  check_linker_flag(C "-l${libname}" mi_has_lib${libname})  
+function(find_link_library libname outlibname)
+  check_linker_flag(C "-l${libname}" mi_has_lib${libname})
   if (mi_has_lib${libname})
     message(VERBOSE "link library: -l${libname}")
-    set(${outlibname} ${libname} PARENT_SCOPE)    
+    set(${outlibname} ${libname} PARENT_SCOPE)
   else()
     find_library(MI_LIBPATH libname)
     if (MI_LIBPATH)
       message(VERBOSE "link library ${libname} at ${MI_LIBPATH}")
-      set(${outlibname} ${MI_LIBPATH} PARENT_SCOPE)      
+      set(${outlibname} ${MI_LIBPATH} PARENT_SCOPE)
     else()
       message(VERBOSE "link library not found: ${libname}")
       set(${outlibname} "" PARENT_SCOPE)
@@ -365,19 +365,19 @@ function(find_link_library libname outlibname)
 endfunction()
 
 if(WIN32)
-  list(APPEND mi_libraries psapi shell32 user32 advapi32 bcrypt)  
+  list(APPEND mi_libraries psapi shell32 user32 advapi32 bcrypt)
 else()
   find_link_library("pthread" MI_LIB_PTHREAD)
-  if(MI_LIB_PTHREAD) 
+  if(MI_LIB_PTHREAD)
     list(APPEND mi_libraries "${MI_LIB_PTHREAD}")
   endif()
   find_link_library("rt" MI_LIB_RT)
-  if(MI_LIB_RT) 
+  if(MI_LIB_RT)
     list(APPEND mi_libraries "${MI_LIB_RT}")
   endif()
   find_link_library("atomic" MI_LIB_ATOMIC)
-  if(MI_LIB_ATOMIC) 
-    list(APPEND mi_libraries "${MI_LIB_ATOMIC}")  
+  if(MI_LIB_ATOMIC)
+    list(APPEND mi_libraries "${MI_LIB_ATOMIC}")
   endif()
 endif()
 

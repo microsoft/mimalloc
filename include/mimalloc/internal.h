@@ -132,13 +132,17 @@ void*      _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid);
 void       _mi_arena_meta_free(void* p, mi_memid_t memid, size_t size);
 
 typedef struct mi_arena_field_cursor_s { // abstract struct
-  size_t         start;
-  size_t         end;
-  size_t         bitmap_idx;
-  mi_subproc_t*  subproc;
+  size_t         os_list_count;           // max entries to visit in the OS abandoned list
+  size_t         start;                   // start arena idx (may need to be wrapped)
+  size_t         end;                     // end arena idx (exclusive, may need to be wrapped)
+  size_t         bitmap_idx;              // current bit idx for an arena
+  mi_subproc_t*  subproc;                 // only visit blocks in this sub-process
+  bool           visit_all;               // ensure all abandoned blocks are seen (blocking)
+  bool           hold_visit_lock;         // if the subproc->abandoned_os_visit_lock is held
 } mi_arena_field_cursor_t;
-void          _mi_arena_field_cursor_init(mi_heap_t* heap, mi_subproc_t* subproc, mi_arena_field_cursor_t* current);
-mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* previous, bool visit_all);
+void          _mi_arena_field_cursor_init(mi_heap_t* heap, mi_subproc_t* subproc, bool visit_all, mi_arena_field_cursor_t* current);
+mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* previous);
+void          _mi_arena_field_cursor_done(mi_arena_field_cursor_t* current);
 
 // "segment-map.c"
 void       _mi_segment_map_allocated_at(const mi_segment_t* segment);
