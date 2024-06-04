@@ -25,14 +25,18 @@ terms of the MIT license.
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
 // argument defaults
-#if !defined(MI_TSAN)
+#if defined(MI_TSAN)          // with thread-sanitizer reduce the threads to test within the azure pipeline limits
+static int THREADS = 8;       
+static int SCALE   = 25;
+static int ITER    = 200;
+#elif defined(MI_UBSAN)       // with undefined behavious sanitizer reduce parameters to stay within the azure pipeline limits
+static int THREADS = 8;       
+static int SCALE   = 25;
+static int ITER    = 20;
+#else
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 25;      // scaling factor
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
-#else                         // with thread-sanitizer reduce the threads to test within the azure pipeline limits
-static int THREADS = 8;       
-static int SCALE   = 25;      // scaling factor
-static int ITER    = 200;     // N full iterations destructing and re-creating all threads
 #endif
 
 
