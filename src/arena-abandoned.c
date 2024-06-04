@@ -5,9 +5,22 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 
+#if !defined(MI_IN_ARENA_C)
+#error "this file should be included from 'arena.c' (so mi_arena_t is visible)"
+// add includes help an IDE
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
-#include "arena.h"
+#include "bitmap.h"
+#endif
+
+typedef struct mi_arena_s mi_arena_t;
+
+// Minimal exports for arena-abandoned.
+size_t      mi_arena_id_index(mi_arena_id_t id);
+mi_arena_t* mi_arena_from_index(size_t idx);
+size_t      mi_arena_get_count(void);
+void*       mi_arena_block_start(mi_arena_t* arena, mi_bitmap_index_t bindex);
+bool        mi_arena_memid_indices(mi_memid_t memid, size_t* arena_index, mi_bitmap_index_t* bitmap_index);
 
 /* -----------------------------------------------------------
   Abandoned blocks/segments:
