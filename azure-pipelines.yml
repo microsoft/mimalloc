@@ -112,7 +112,7 @@ jobs:
         CC: clang
         CXX: clang++
         BuildType: debug-tsan-clang-cxx
-        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_USE_CXX=ON -DMI_DEBUG_TSAN=ON
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMI_USE_CXX=ON -DMI_DEBUG_TSAN=ON
       
   steps:
   - task: CMake@1

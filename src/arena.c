@@ -62,7 +62,7 @@ static mi_decl_cache_align _Atomic(mi_arena_t*) mi_arenas[MI_MAX_ARENAS];
 static mi_decl_cache_align _Atomic(size_t)      mi_arena_count; // = 0
 
 #define MI_IN_ARENA_C
-#include "arena-abandoned.c"
+#include "arena-abandon.c"
 #undef MI_IN_ARENA_C
 
 /* -----------------------------------------------------------

@@ -584,6 +584,7 @@ mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
 #ifdef __cplusplus
 void* _mi_externs[] = {
   (void*)&_mi_page_malloc,
+  (void*)&_mi_page_malloc_zero,
   (void*)&_mi_heap_malloc_zero,
   (void*)&_mi_heap_malloc_zero_ex,
   (void*)&mi_malloc,
