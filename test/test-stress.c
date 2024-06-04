@@ -133,9 +133,9 @@ static void free_items(void* p) {
   custom_free(p);
 }
 
-#ifdef HEAP_WALK 
+#ifdef HEAP_WALK
 static bool visit_blocks(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
-  (void)(heap); (void)(area); 
+  (void)(heap); (void)(area);
   size_t* total = (size_t*)arg;
   if (block != NULL) {
     *total += block_size;
@@ -260,7 +260,7 @@ static void test_leak(void) {
 
 int main(int argc, char** argv) {
   #ifdef HEAP_WALK
-    mi_option_enable(mi_option_visit_abandoned);    
+    mi_option_enable(mi_option_visit_abandoned);
   #endif
   #ifndef NDEBUG
     mi_option_set(mi_option_arena_reserve, 32 * 1024 /* in kib = 32MiB */);
