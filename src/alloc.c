@@ -530,7 +530,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, si
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_new_n(size_t count, size_t size) {
-  return mi_heap_alloc_new_n(mi_prim_get_default_heap(), size, count);
+  return mi_heap_alloc_new_n(mi_prim_get_default_heap(), count, size);
 }
 
 
