@@ -547,7 +547,6 @@ mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id);
 ///
 /// The \a arena_id can be used by runtimes to allocate only in a specified pre-reserved arena.
 /// This is used for example for a compressed pointer heap in Koka.
-///
 /// The \a heap_tag enables heaps to keep objects of a certain type isolated to heaps with that tag.
 /// This is used for example in the CPython integration.
 mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id);
