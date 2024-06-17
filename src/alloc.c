@@ -40,6 +40,7 @@ extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_
   page->free = mi_block_next(page, block);
   page->used++;
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
+  mi_assert_internal(_mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
   #if MI_DEBUG>3
   if (page->free_is_zero) {
     mi_assert_expensive(mi_mem_is_zero(block+1,size - sizeof(*block)));
