@@ -360,6 +360,8 @@ static size_t mi_segment_calculate_slices(size_t required, size_t* info_slices) 
       required = _mi_align_up(required, MI_SEGMENT_SLICE_SIZE) + page_size;
     }
   }
+  mi_assert_internal(_mi_is_aligned(p, MI_MAX_ALIGN_SIZE));
+  mi_assert_internal(block_size > MI_MAX_ALIGN_GUARANTEE || _mi_is_aligned(p,block_size));
 
   isize = _mi_align_up(isize + guardsize, MI_SEGMENT_SLICE_SIZE);
   if (info_slices != NULL) *info_slices = isize / MI_SEGMENT_SLICE_SIZE;

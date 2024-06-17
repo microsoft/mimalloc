@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['performance_163',['Performance',['../bench.html',1,'']]],
-  ['posix_164',['Posix',['../group__posix.html',1,'']]]
+  ['library_0',['Using the library',['../using.html',1,'']]]
 ];

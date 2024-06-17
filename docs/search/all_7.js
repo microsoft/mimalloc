@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['overriding_20malloc_162',['Overriding Malloc',['../overrides.html',1,'']]]
+  ['initialized_20re_20allocation_0',['Zero initialized re-allocation',['../group__zeroinit.html',1,'']]],
+  ['introspection_1',['Heap Introspection',['../group__analysis.html',1,'']]]
 ];

@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['overriding_20malloc_326',['Overriding Malloc',['../overrides.html',1,'']]]
+  ['library_0',['Using the library',['../using.html',1,'']]]
 ];
