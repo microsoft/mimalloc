@@ -437,7 +437,7 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
     }
   }
   mi_assert_internal(_mi_is_aligned(p, MI_MAX_ALIGN_SIZE));
-  mi_assert_internal(block_size > MI_MAX_ALIGN_GUARANTEE || _mi_is_aligned(p,block_size));
+  mi_assert_internal(block_size == 0 || block_size > MI_MAX_ALIGN_GUARANTEE || _mi_is_aligned(p,block_size));
 
   if (page_size != NULL) *page_size = psize;
   mi_assert_internal(_mi_ptr_page(p) == page);
