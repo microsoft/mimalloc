@@ -284,7 +284,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
   return p;
 }
 
-// allocate in a speficic arena
+// allocate in a specific arena
 static void* mi_arena_try_alloc_at_id(mi_arena_id_t arena_id, bool match_numa_node, int numa_node, size_t size, size_t alignment,
                                        bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld )
 {
@@ -984,5 +984,3 @@ int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserv
   if (err==0 && pages_reserved!=NULL) *pages_reserved = pages;
   return err;
 }
-
-

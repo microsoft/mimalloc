@@ -50,7 +50,7 @@ typedef NTSTATUS (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*
 static PVirtualAlloc2 pVirtualAlloc2 = NULL;
 static PNtAllocateVirtualMemoryEx pNtAllocateVirtualMemoryEx = NULL;
 
-// Similarly, GetNumaProcesorNodeEx is only supported since Windows 7
+// Similarly, GetNumaProcessorNodeEx is only supported since Windows 7
 typedef struct MI_PROCESSOR_NUMBER_S { WORD Group; BYTE Number; BYTE Reserved; } MI_PROCESSOR_NUMBER;
 
 typedef VOID (__stdcall *PGetCurrentProcessorNumberEx)(MI_PROCESSOR_NUMBER* ProcNumber);
@@ -658,4 +658,3 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
 }
 
 #endif
-
