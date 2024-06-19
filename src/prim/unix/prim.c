@@ -763,7 +763,7 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
 #include <CommonCrypto/CommonRandom.h>
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
-  // We prefere CCRandomGenerateBytes as it returns an error code while arc4random_buf
+  // We prefer CCRandomGenerateBytes as it returns an error code while arc4random_buf
   // may fail silently on macOS. See PR #390, and <https://opensource.apple.com/source/Libc/Libc-1439.40.11/gen/FreeBSD/arc4random.c.auto.html>
   return (CCRandomGenerateBytes(buf, buf_len) == kCCSuccess);
 }
