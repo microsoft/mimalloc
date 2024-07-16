@@ -99,6 +99,8 @@ static mi_option_desc_t options[_mi_option_last] =
 #else
   { 0,   UNINIT, MI_OPTION(visit_abandoned) },          
 #endif
+  { 0,   UNINIT, MI_OPTION(debug_guarded_min) },        // only when build with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects (=0)     
+  { 0,   UNINIT, MI_OPTION(debug_guarded_max) },        // only when build with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects (=0)  
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -123,6 +125,15 @@ void _mi_options_init(void) {
   mi_max_error_count = mi_option_get(mi_option_max_errors);
   mi_max_warning_count = mi_option_get(mi_option_max_warnings);
 }
+
+long _mi_option_get_fast(mi_option_t option) {
+  mi_assert(option >= 0 && option < _mi_option_last);
+  mi_option_desc_t* desc = &options[option]; 
+  mi_assert(desc->option == option);  // index should match the option
+  //mi_assert(desc->init != UNINIT);
+  return desc->value;
+}
+  
 
 mi_decl_nodiscard long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
@@ -508,6 +519,9 @@ static void mi_option_init(mi_option_desc_t* desc) {
       if (*end == 0) {
         desc->value = value;
         desc->init = INITIALIZED;
+        if (desc->option == mi_option_debug_guarded_min && _mi_option_get_fast(mi_option_debug_guarded_max) < value) {
+          mi_option_set(mi_option_debug_guarded_max,value);
+        }
       }
       else {
         // set `init` first to avoid recursion through _mi_warning_message on mimalloc_verbose.
