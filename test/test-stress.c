@@ -26,11 +26,11 @@ terms of the MIT license.
 //
 // argument defaults
 #if defined(MI_TSAN)          // with thread-sanitizer reduce the threads to test within the azure pipeline limits
-static int THREADS = 8;       
+static int THREADS = 8;
 static int SCALE   = 25;
 static int ITER    = 200;
-#elif defined(MI_UBSAN)       // with undefined behavious sanitizer reduce parameters to stay within the azure pipeline limits
-static int THREADS = 8;       
+#elif defined(MI_UBSAN)       // with undefined behaviours sanitizer reduce parameters to stay within the azure pipeline limits
+static int THREADS = 8;
 static int SCALE   = 25;
 static int ITER    = 20;
 #else
