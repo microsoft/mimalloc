@@ -75,7 +75,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Use guard pages behind objects of a certain size (set by the MIMALLOC_DEBUG_GUARDED_MIN/MAX options)
 // Padding should be disabled when using guard pages
-// #define MI_DEBUG_GUARDED 1
+#define MI_DEBUG_GUARDED 1
 #if defined(MI_DEBUG_GUARDED)
 #define MI_PADDING  0
 #endif
