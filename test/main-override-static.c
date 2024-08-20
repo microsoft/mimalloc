@@ -18,11 +18,13 @@ static void test_reserved(void);
 static void negative_stat(void);
 static void alloc_huge(void);
 static void test_heap_walk(void);
+// static void test_large_pages(void);
 
 
 int main() {
   mi_version();
   mi_stats_reset();
+  // test_large_pages();
   // detect double frees and heap corruption
   // double_free1();
   // double_free2();
@@ -61,7 +63,7 @@ int main() {
   //mi_stats_print(NULL);
 
   // test_process_info();
-  
+
   return 0;
 }
 
@@ -215,6 +217,41 @@ static void test_heap_walk(void) {
   mi_heap_malloc(heap, 24576);
   mi_heap_visit_blocks(heap, true, &test_visit, NULL);
 }
+
+// Experiment with huge OS pages
+#if 0
+
+#include <mimalloc/types.h>
+#include <mimalloc/internal.h>
+#include <unistd.h>
+#include <sys/mman.h>
+
+static void test_large_pages(void) {
+  mi_memid_t memid;
+
+  #if 0
+  size_t pages_reserved;
+  size_t page_size;
+  uint8_t* p = (uint8_t*)_mi_os_alloc_huge_os_pages(1, -1, 30000, &pages_reserved, &page_size, &memid);
+  const size_t req_size = pages_reserved * page_size;
+  #else
+  const size_t req_size = 64*MI_MiB;
+  uint8_t* p = (uint8_t*)_mi_os_alloc(req_size,&memid,NULL);
+  #endif
+
+  p[0] = 1;
+
+  //_mi_os_protect(p, _mi_os_page_size());
+  //_mi_os_unprotect(p, _mi_os_page_size());
+  //_mi_os_decommit(p, _mi_os_page_size(), NULL);
+  if (madvise(p, req_size, MADV_HUGEPAGE) == 0) {
+    printf("advised huge pages\n");
+    _mi_os_decommit(p, _mi_os_page_size(), NULL);
+  };
+  _mi_os_free(p, req_size, memid, NULL);
+}
+
+#endif
 
 // ----------------------------
 // bin size experiments

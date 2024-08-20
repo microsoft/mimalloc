@@ -181,10 +181,11 @@ int _mi_prim_free(void* addr, size_t size ) {
 
 static int unix_madvise(void* addr, size_t size, int advice) {
   #if defined(__sun)
-  return madvise((caddr_t)addr, size, advice);  // Solaris needs cast (issue #520)
+  int res = madvise((caddr_t)addr, size, advice);  // Solaris needs cast (issue #520)
   #else
-  return madvise(addr, size, advice);
+  int res = madvise(addr, size, advice);
   #endif
+  return (res==0 ? 0 : errno);
 }
 
 static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
@@ -331,7 +332,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
       if (allow_large && _mi_os_use_large_page(size, try_alignment)) {
         if (unix_madvise(p, size, MADV_HUGEPAGE) == 0) {
-          *is_large = true; // possibly
+          // *is_large = true; // possibly
         };
       }
       #elif defined(__sun)
@@ -340,7 +341,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         cmd.mha_pagesize = _mi_os_large_page_size();
         cmd.mha_cmd = MHA_MAPSIZE_VA;
         if (memcntl((caddr_t)p, size, MC_HAT_ADVISE, (caddr_t)&cmd, 0, 0) == 0) {
-          *is_large = true;
+          // *is_large = true; // possibly
         }
       }
       #endif
