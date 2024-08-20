@@ -663,7 +663,7 @@ static void mi_segment_span_remove_from_queue(mi_slice_t* slice, mi_segments_tld
 static mi_slice_t* mi_segment_span_free_coalesce(mi_slice_t* slice, mi_segments_tld_t* tld) {
   mi_assert_internal(slice != NULL && slice->slice_count > 0 && slice->slice_offset == 0);
   mi_segment_t* const segment = _mi_ptr_segment(slice);
-  
+
   // for huge pages, just mark as free but don't add to the queues
   if (segment->kind == MI_SEGMENT_HUGE) {
     // issue #691: segment->used can be 0 if the huge page block was freed while abandoned (reclaim will get here in that case)
@@ -1027,7 +1027,6 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
 void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
 {
   mi_assert(page != NULL);
-
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
 

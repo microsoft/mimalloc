@@ -73,6 +73,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
+// Use guard pages behind objects of a certain size (set by the MIMALLOC_DEBUG_GUARDED_MIN/MAX options)
+// Padding should be disabled when using guard pages
+// #define MI_DEBUG_GUARDED 1
+#if defined(MI_DEBUG_GUARDED)
+#define MI_PADDING  0
+#endif
+
 // Reserve extra padding at the end of each block to be more resilient against heap block overflows.
 // The padding can detect buffer overflow on free.
 #if !defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1 || (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW))
@@ -255,15 +262,17 @@ typedef union mi_page_flags_s {
   struct {
     uint8_t in_full : 1;
     uint8_t has_aligned : 1;
+    uint8_t has_guarded : 1;  // only used with MI_DEBUG_GUARDED
   } x;
 } mi_page_flags_t;
 #else
 // under thread sanitizer, use a byte for each flag to suppress warning, issue #130
 typedef union mi_page_flags_s {
-  uint16_t full_aligned;
+  uint32_t full_aligned;
   struct {
     uint8_t in_full;
     uint8_t has_aligned;
+    uint8_t has_guarded; // only used with MI_DEBUG_GUARDED
   } x;
 } mi_page_flags_t;
 #endif

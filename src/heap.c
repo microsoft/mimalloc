@@ -171,9 +171,9 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   if (force && is_main_thread && mi_heap_is_backing(heap)) {
     _mi_thread_data_collect();  // collect thread data cache
   }
-  
+
   // collect arenas (this is program wide so don't force purges on abandonment of threads)
-  _mi_arenas_collect(collect == MI_FORCE /* force purge? */, &heap->tld->stats);  
+  _mi_arenas_collect(collect == MI_FORCE /* force purge? */, &heap->tld->stats);
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
@@ -247,7 +247,7 @@ mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id) {
 }
 
 mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
-  // don't reclaim abandoned memory or otherwise destroy is unsafe  
+  // don't reclaim abandoned memory or otherwise destroy is unsafe
   return mi_heap_new_ex(0 /* default heap tag */, true /* no reclaim */, _mi_arena_id_none());
 }
 
@@ -381,7 +381,13 @@ void mi_heap_destroy(mi_heap_t* heap) {
   mi_assert(heap->no_reclaim);
   mi_assert_expensive(mi_heap_is_valid(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
+  #if MI_DEBUG_GUARDED
+  _mi_warning_message("'mi_heap_destroy' called but ignored as MI_DEBUG_GUARDED is enabled (heap at %p)\n", heap);
+  mi_heap_delete(heap);
+  return;
+  #else
   if (!heap->no_reclaim) {
+    _mi_warning_message("'mi_heap_destroy' called but ignored as the heap was not created with 'allow_destroy' (heap at %p)\n", heap);
     // don't free in case it may contain reclaimed pages
     mi_heap_delete(heap);
   }
@@ -394,6 +400,7 @@ void mi_heap_destroy(mi_heap_t* heap) {
     _mi_heap_destroy_pages(heap);
     mi_heap_free(heap);
   }
+  #endif
 }
 
 // forcefully destroy all heaps in the current thread
@@ -549,7 +556,7 @@ void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
 static void mi_get_fast_divisor(size_t divisor, uint64_t* magic, size_t* shift) {
   mi_assert_internal(divisor > 0 && divisor <= UINT32_MAX);
   *shift = 64 - mi_clz(divisor - 1);
-  *magic = ((((uint64_t)1 << 32) * (((uint64_t)1 << *shift) - divisor)) / divisor + 1);  
+  *magic = ((((uint64_t)1 << 32) * (((uint64_t)1 << *shift) - divisor)) / divisor + 1);
 }
 
 static size_t mi_fast_divide(size_t n, uint64_t magic, size_t shift) {
@@ -593,7 +600,7 @@ bool _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_
   // create a bitmap of free blocks.
   #define MI_MAX_BLOCKS   (MI_SMALL_PAGE_SIZE / sizeof(void*))
   uintptr_t free_map[MI_MAX_BLOCKS / MI_INTPTR_BITS];
-  const uintptr_t bmapsize = _mi_divide_up(page->capacity, MI_INTPTR_BITS);    
+  const uintptr_t bmapsize = _mi_divide_up(page->capacity, MI_INTPTR_BITS);
   memset(free_map, 0, bmapsize * sizeof(intptr_t));
   if (page->capacity % MI_INTPTR_BITS != 0) {
     // mark left-over bits at the end as free
@@ -603,7 +610,7 @@ bool _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_
   }
 
   // fast repeated division by the block size
-  uint64_t magic; 
+  uint64_t magic;
   size_t   shift;
   mi_get_fast_divisor(bsize, &magic, &shift);
 
@@ -677,7 +684,7 @@ static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
   mi_heap_area_visit_fun* fun = (mi_heap_area_visit_fun*)vfun;
   mi_heap_area_ex_t xarea;
   xarea.page = page;
-  _mi_heap_area_init(&xarea.area, page);  
+  _mi_heap_area_init(&xarea.area, page);
   return fun(heap, &xarea, arg);
 }
 

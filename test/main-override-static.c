@@ -12,6 +12,7 @@ static void double_free1();
 static void double_free2();
 static void corrupt_free();
 static void block_overflow1();
+static void block_overflow2();
 static void invalid_free();
 static void test_aslr(void);
 static void test_process_info(void);
@@ -30,6 +31,7 @@ int main() {
   // double_free2();
   // corrupt_free();
   // block_overflow1();
+  block_overflow2();
   // test_aslr();
   // invalid_free();
   // test_reserved();
@@ -85,6 +87,12 @@ static void invalid_free() {
 static void block_overflow1() {
   uint8_t* p = (uint8_t*)mi_malloc(17);
   p[18] = 0;
+  free(p);
+}
+
+static void block_overflow2() {
+  uint8_t* p = (uint8_t*)mi_malloc(16);
+  p[17] = 0;
   free(p);
 }
 
