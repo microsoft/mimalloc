@@ -74,7 +74,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Use guard pages behind objects of a certain size
 #define MI_DEBUG_GUARDED 1
-#if defined(MI_DEBUG_GUARDED) || defined(MI_DEBUG_GUARDEDX)
+#if defined(MI_DEBUG_GUARDED)
 #define MI_PADDING  0
 #endif
 

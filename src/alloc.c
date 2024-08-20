@@ -55,8 +55,10 @@ extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
     mi_assert_internal(page->block_size != 0); // do not call with zero'ing for huge blocks (see _mi_malloc_generic)
-    mi_assert_internal(page->block_size >= MI_PADDING_SIZE);
     mi_assert_internal(!mi_page_is_huge(page));
+    #if MI_PADDING_SIZE > 0
+    mi_assert_internal(page->block_size >= MI_PADDING_SIZE);
+    #endif
     if (page->free_is_zero) {
       block->next = 0;
       mi_track_mem_defined(block, page->block_size - MI_PADDING_SIZE);
@@ -131,7 +133,7 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   if (size == 0) { size = sizeof(void*); }
   #endif
   #if MI_DEBUG_GUARDED
-  if (size >= _mi_option_get_fast(mi_option_debug_guarded_min) && size <= _mi_option_get_fast(mi_option_debug_guarded_max)) {
+  if (size <= (size_t)_mi_option_get_fast(mi_option_debug_guarded_max) && size >= (size_t)_mi_option_get_fast(mi_option_debug_guarded_min)) {
     return mi_heap_malloc_guarded(heap, size, zero, 0);
   }
   #endif
@@ -171,8 +173,9 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
   }
   #if MI_DEBUG_GUARDED
   else if ( huge_alignment == 0 &&  // guarded pages do not work with huge aligments at the moment
-            ((size >= _mi_option_get_fast(mi_option_debug_guarded_min) && size <= _mi_option_get_fast(mi_option_debug_guarded_max))
-             || ((size & (_mi_os_page_size()-1)) == 0)) )  // page-size multiple are always guarded so we can have a correct `mi_usable_size`.
+            _mi_option_get_fast(mi_option_debug_guarded_max) > 0 && // guarded must be enabled 
+            ((size >= (size_t)_mi_option_get_fast(mi_option_debug_guarded_min) && size <= (size_t)_mi_option_get_fast(mi_option_debug_guarded_max))
+             || ((mi_good_size(size) & (_mi_os_page_size()-1)) == 0)) )  // page-size multiple are always guarded so we can have a correct `mi_usable_size`.
   {
     return mi_heap_malloc_guarded(heap, size, zero, 0);
   }
@@ -611,15 +614,24 @@ static mi_decl_restrict void* mi_heap_malloc_guarded(mi_heap_t* heap, size_t siz
   if (base==NULL) return NULL;
   mi_page_t* page = _mi_ptr_page(base);
   mi_segment_t* segment = _mi_page_segment(page);
-  
+
   const size_t fullsize = mi_page_block_size(page);  // must use `block_size` to match `mi_free_local`
   void* const gpage  = (uint8_t*)base + (fullsize - psize);
   mi_assert_internal(_mi_is_aligned(gpage, psize));
-  void* const p      = (uint8_t*)base + (fullsize - psize - bsize);
+
+  // place block in front of the guard page
+  size_t offset = fullsize - psize - bsize; 
+  if (offset > MI_BLOCK_ALIGNMENT_MAX) {
+    // give up to place it right in front of the guard page if the offset is too large for unalignment
+    offset = MI_BLOCK_ALIGNMENT_MAX;
+  }
+  void* const p = (uint8_t*)base + offset;
   mi_assert_internal(p >= base);
 
   // set page flags
-  if (p > base) { mi_page_set_has_aligned(page, true); }
+  if (offset > 0) { 
+    mi_page_set_has_aligned(page, true); 
+  }
 
   // set guard page
   if (segment->allow_decommit) {
