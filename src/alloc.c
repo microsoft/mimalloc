@@ -56,7 +56,7 @@ extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_
   if mi_unlikely(zero) {
     mi_assert_internal(page->block_size != 0); // do not call with zero'ing for huge blocks (see _mi_malloc_generic)
     mi_assert_internal(!mi_page_is_huge(page));
-    #if MI_PADDING_SIZE > 0
+    #if MI_PADDING
     mi_assert_internal(page->block_size >= MI_PADDING_SIZE);
     #endif
     if (page->free_is_zero) {
@@ -173,7 +173,7 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
   }
   #if MI_DEBUG_GUARDED
   else if ( huge_alignment == 0 &&  // guarded pages do not work with huge aligments at the moment
-            _mi_option_get_fast(mi_option_debug_guarded_max) > 0 && // guarded must be enabled 
+            _mi_option_get_fast(mi_option_debug_guarded_max) > 0 && // guarded must be enabled
             ((size >= (size_t)_mi_option_get_fast(mi_option_debug_guarded_min) && size <= (size_t)_mi_option_get_fast(mi_option_debug_guarded_max))
              || ((mi_good_size(size) & (_mi_os_page_size()-1)) == 0)) )  // page-size multiple are always guarded so we can have a correct `mi_usable_size`.
   {
@@ -620,7 +620,7 @@ static mi_decl_restrict void* mi_heap_malloc_guarded(mi_heap_t* heap, size_t siz
   mi_assert_internal(_mi_is_aligned(guard_page, os_page_size));
 
   // place block in front of the guard page
-  size_t offset = block_size - os_page_size - obj_size; 
+  size_t offset = block_size - os_page_size - obj_size;
   if (offset > MI_BLOCK_ALIGNMENT_MAX) {
     // give up to place it right in front of the guard page if the offset is too large for unalignment
     offset = MI_BLOCK_ALIGNMENT_MAX;
@@ -629,8 +629,8 @@ static mi_decl_restrict void* mi_heap_malloc_guarded(mi_heap_t* heap, size_t siz
   mi_assert_internal(p>=block);
 
   // set page flags
-  if (offset > 0) { 
-    mi_page_set_has_aligned(page, true); 
+  if (offset > 0) {
+    mi_page_set_has_aligned(page, true);
   }
 
   // set guard page

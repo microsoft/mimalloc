@@ -452,14 +452,14 @@ static size_t mi_segment_calculate_sizes(size_t capacity, size_t required, size_
   size_t guardsize = 0;
   size_t isize     = 0;
 
-  
+
   if (MI_SECURE == 0) {
     // normally no guard pages
     #if MI_DEBUG_GUARDED
     isize = _mi_align_up(minsize, _mi_os_page_size());
     #else
     isize = _mi_align_up(minsize, 16 * MI_MAX_ALIGN_SIZE);
-    #endif  
+    #endif
   }
   else {
     // in secure mode, we set up a protected page in between the segment info
@@ -745,7 +745,6 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_seg
 void _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t* tld)
 {
   mi_assert(page != NULL);
-  mi_assert_internal(!mi_page_has_guarded(page));
   mi_segment_t* segment = _mi_page_segment(page);
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
   mi_pages_try_purge(false /*force?*/, tld);
