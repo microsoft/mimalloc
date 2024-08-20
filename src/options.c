@@ -99,8 +99,8 @@ static mi_option_desc_t options[_mi_option_last] =
 #else
   { 0,   UNINIT, MI_OPTION(visit_abandoned) },          
 #endif
-  { 0,   UNINIT, MI_OPTION(debug_guarded_min) },        // only used when built with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects (=0)     
-  { 0,   UNINIT, MI_OPTION(debug_guarded_max) },        // only used when built with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects (=0)  
+  { 0,   UNINIT, MI_OPTION(debug_guarded_min) },        // only used when building with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects
+  { 0,   UNINIT, MI_OPTION(debug_guarded_max) },        // only used when building with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -130,6 +130,7 @@ void _mi_options_init(void) {
       _mi_warning_message("option 'allow_large_os_pages' is disabled to allow for guarded objects\n");
     }
   }
+  _mi_verbose_message("guarded build: %s\n", mi_option_get(mi_option_debug_guarded_max) > 0 ? "enabled" : "disabled");
   #endif
 }
 

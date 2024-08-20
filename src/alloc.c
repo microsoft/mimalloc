@@ -607,26 +607,26 @@ static mi_decl_restrict void* mi_heap_malloc_guarded(mi_heap_t* heap, size_t siz
   mi_assert(MI_PADDING_SIZE==0);
   #endif
   // allocate multiple of page size ending in a guard page
-  const size_t bsize = _mi_align_up(size, MI_MAX_ALIGN_SIZE); // ensure minimal alignment requirement
-  const size_t psize = _mi_os_page_size();
-  const size_t gsize = _mi_align_up(bsize + psize, psize);
-  void* const base   = _mi_malloc_generic(heap, gsize, zero, huge_alignment);
-  if (base==NULL) return NULL;
-  mi_page_t* page = _mi_ptr_page(base);
+  const size_t obj_size  = _mi_align_up(size, MI_MAX_ALIGN_SIZE); // ensure minimal alignment requirement
+  const size_t os_page_size = _mi_os_page_size();
+  const size_t req_size  = _mi_align_up(obj_size + os_page_size, os_page_size);
+  void* const block = _mi_malloc_generic(heap, req_size, zero, huge_alignment);
+  if (block==NULL) return NULL;
+  mi_page_t* page = _mi_ptr_page(block);
   mi_segment_t* segment = _mi_page_segment(page);
 
-  const size_t fullsize = mi_page_block_size(page);  // must use `block_size` to match `mi_free_local`
-  void* const gpage  = (uint8_t*)base + (fullsize - psize);
-  mi_assert_internal(_mi_is_aligned(gpage, psize));
+  const size_t block_size = mi_page_block_size(page);  // must use `block_size` to match `mi_free_local`
+  void* const guard_page  = (uint8_t*)block + (block_size - os_page_size);
+  mi_assert_internal(_mi_is_aligned(guard_page, os_page_size));
 
   // place block in front of the guard page
-  size_t offset = fullsize - psize - bsize; 
+  size_t offset = block_size - os_page_size - obj_size; 
   if (offset > MI_BLOCK_ALIGNMENT_MAX) {
     // give up to place it right in front of the guard page if the offset is too large for unalignment
     offset = MI_BLOCK_ALIGNMENT_MAX;
   }
-  void* const p = (uint8_t*)base + offset;
-  mi_assert_internal(p >= base);
+  void* const p = (uint8_t*)block + offset;
+  mi_assert_internal(p>=block);
 
   // set page flags
   if (offset > 0) { 
@@ -636,7 +636,7 @@ static mi_decl_restrict void* mi_heap_malloc_guarded(mi_heap_t* heap, size_t siz
   // set guard page
   if (segment->allow_decommit) {
     mi_page_set_has_guarded(page, true);
-    _mi_os_protect(gpage, psize);
+    _mi_os_protect(guard_page, os_page_size);
   }
   else {
     _mi_warning_message("unable to set a guard page behind an object due to pinned memory (large OS pages?) (object %p of size %zu)\n", p, size);

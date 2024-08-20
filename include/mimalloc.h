@@ -366,8 +366,8 @@ typedef enum mi_option_e {
   mi_option_disallow_arena_alloc,       // 1 = do not use arena's for allocation (except if using specific arena id's)
   mi_option_retry_on_oom,               // retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries. (only on windows)
   mi_option_visit_abandoned,            // allow visiting heap blocks from abandoned threads (=0)
-  mi_option_debug_guarded_min,          // only used when build with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects (=0)
-  mi_option_debug_guarded_max,          // only used when build with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects (=0)
+  mi_option_debug_guarded_min,          // only used when building with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects (=0)
+  mi_option_debug_guarded_max,          // only used when building with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects (=0)
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,

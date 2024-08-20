@@ -26,25 +26,6 @@ static void   mi_stat_free(const mi_page_t* page, const mi_block_t* block);
 // forward declaration of multi-threaded free (`_mt`) (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
 static mi_decl_noinline void mi_free_block_mt(mi_page_t* page, mi_segment_t* segment, mi_block_t* block);
 
-#if !MI_DEBUG_GUARDED
-static void mi_block_unguard(mi_page_t* page, mi_block_t* block) {
-  MI_UNUSED(page);
-  MI_UNUSED(block);
-}
-#else
-static void mi_block_unguard(mi_page_t* page, mi_block_t* block) {
-  if (mi_page_has_guarded(page)) {
-    const size_t bsize = mi_page_block_size(page);
-    const size_t psize = _mi_os_page_size();
-    mi_assert_internal(bsize > psize);
-    mi_assert_internal(_mi_page_segment(page)->allow_decommit);
-    void* gpage = (uint8_t*)block + (bsize - psize);
-    mi_assert_internal(_mi_is_aligned(gpage, psize));
-    _mi_os_unprotect(gpage, psize);
-  }
-}
-#endif
-
 // regular free of a (thread local) block pointer
 // fast path written carefully to prevent spilling on the stack
 static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool track_stats, bool check_full)
@@ -87,6 +68,9 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
 
   return (mi_block_t*)((uintptr_t)p - adjust);
 }
+
+// forward declaration for a MI_DEBUG_GUARDED build
+static void mi_block_unguard(mi_page_t* page, mi_block_t* block);
 
 // free a local pointer  (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, mi_segment_t* segment, void* p) mi_attr_noexcept {
@@ -544,5 +528,27 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
 #else
 static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(page); MI_UNUSED(block);
+}
+#endif
+
+
+// Remove guard page when building with MI_DEBUG_GUARDED
+#if !MI_DEBUG_GUARDED
+static void mi_block_unguard(mi_page_t* page, mi_block_t* block) {
+  MI_UNUSED(page);
+  MI_UNUSED(block);
+  // do nothing
+}
+#else
+static void mi_block_unguard(mi_page_t* page, mi_block_t* block) {
+  if (mi_page_has_guarded(page)) {
+    const size_t bsize = mi_page_block_size(page);
+    const size_t psize = _mi_os_page_size();
+    mi_assert_internal(bsize > psize);
+    mi_assert_internal(_mi_page_segment(page)->allow_decommit);
+    void* gpage = (uint8_t*)block + (bsize - psize);
+    mi_assert_internal(_mi_is_aligned(gpage, psize));
+    _mi_os_unprotect(gpage, psize);
+  }
 }
 #endif
