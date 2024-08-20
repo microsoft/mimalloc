@@ -332,6 +332,7 @@ static uint8_t* _mi_segment_page_start_from_slice(const mi_segment_t* segment, c
     if (block_size <= 64) { start_offset += 3*block_size; }
     else if (block_size <= 512) { start_offset += block_size; }
   }
+  start_offset = _mi_align_up(start_offset, MI_MAX_ALIGN_SIZE);
   mi_assert_internal(_mi_is_aligned(pstart + start_offset, MI_MAX_ALIGN_SIZE));
   mi_assert_internal(block_size == 0 || block_size > MI_MAX_ALIGN_GUARANTEE || _mi_is_aligned(pstart + start_offset,block_size));
   if (page_size != NULL) { *page_size = psize - start_offset; }
