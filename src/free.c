@@ -34,11 +34,21 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   if mi_unlikely(mi_check_is_double_free(page, block)) return;
   mi_check_padding(page, block);
   if (track_stats) { mi_stat_free(page, block); }
-  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
+  #if MI_DEBUG_GUARDED
+  if (mi_page_has_guarded(page)) {
+    const size_t bsize = mi_page_block_size(page);
+    const size_t psize = _mi_os_page_size();
+    mi_assert_internal(bsize > psize);
+    mi_assert_internal(_mi_page_segment(page)->allow_decommit);
+    void* gpage = (uint8_t*)block + (bsize - psize);
+    _mi_os_unprotect(gpage, psize);
+  }
+  #endif
+  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN && !MI_DEBUG_GUARDED
   memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
   #endif
   if (track_stats) { mi_track_free_size(block, mi_page_usable_size_of(page, block)); } // faster then mi_usable_size as we already know the page and that p is unaligned
-  
+
   // actual free: push on the local free list
   mi_block_set_next(page, block, page->local_free);
   page->local_free = block;
@@ -51,8 +61,8 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 }
 
 // Adjust a block that was allocated aligned, to the actual start of the block in the page.
-// note: this can be called from `mi_free_generic_mt` where a non-owning thread accesses the 
-// `page_start` and `block_size` fields; however these are constant and the page won't be 
+// note: this can be called from `mi_free_generic_mt` where a non-owning thread accesses the
+// `page_start` and `block_size` fields; however these are constant and the page won't be
 // deallocated (as the block we are freeing keeps it alive) and thus safe to read concurrently.
 mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
@@ -298,6 +308,13 @@ static inline size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noe
   const mi_segment_t* const segment = mi_checked_ptr_segment(p, msg);
   if mi_unlikely(segment==NULL) return 0;
   const mi_page_t* const page = _mi_segment_page_of(segment, p);
+  #if MI_DEBUG_GUARDED
+  if (mi_page_has_guarded(page)) {
+    const size_t bsize = mi_page_usable_aligned_size_of(page, p);
+    mi_assert_internal(bsize > _mi_os_page_size());
+    return (bsize > _mi_os_page_size() ? bsize - _mi_os_page_size() : bsize);
+  } else
+  #endif
   if mi_likely(!mi_page_has_aligned(page)) {
     const mi_block_t* block = (const mi_block_t*)p;
     return mi_page_usable_size_of(page, block);

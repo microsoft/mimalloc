@@ -99,8 +99,8 @@ static mi_option_desc_t options[_mi_option_last] =
 #else
   { 0,   UNINIT, MI_OPTION(visit_abandoned) },          
 #endif
-  { 0,   UNINIT, MI_OPTION(debug_guarded_min) },        // only when build with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects (=0)     
-  { 0,   UNINIT, MI_OPTION(debug_guarded_max) },        // only when build with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects (=0)  
+  { 0,   UNINIT, MI_OPTION(debug_guarded_min) },        // only used when built with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects (=0)     
+  { 0,   UNINIT, MI_OPTION(debug_guarded_max) },        // only used when built with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects (=0)  
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -110,8 +110,7 @@ static bool mi_option_has_size_in_kib(mi_option_t option) {
 }
 
 void _mi_options_init(void) {
-  // called on process load; should not be called before the CRT is initialized!
-  // (e.g. do not call this from process_init as that may run before CRT initialization)
+  // called on process load
   mi_add_stderr_output(); // now it safe to use stderr for output
   for(int i = 0; i < _mi_option_last; i++ ) {
     mi_option_t option = (mi_option_t)i;
@@ -124,6 +123,14 @@ void _mi_options_init(void) {
   }
   mi_max_error_count = mi_option_get(mi_option_max_errors);
   mi_max_warning_count = mi_option_get(mi_option_max_warnings);
+  #if MI_DEBUG_GUARDED
+  if (mi_option_get(mi_option_debug_guarded_max) > 0) {
+    if (mi_option_is_enabled(mi_option_allow_large_os_pages)) {
+      mi_option_disable(mi_option_allow_large_os_pages);
+      _mi_warning_message("option 'allow_large_os_pages' is disabled to allow for guarded objects\n");
+    }
+  }
+  #endif
 }
 
 long _mi_option_get_fast(mi_option_t option) {
@@ -168,6 +175,13 @@ void mi_option_set(mi_option_t option, long value) {
   mi_assert(desc->option == option);  // index should match the option
   desc->value = value;
   desc->init = INITIALIZED;
+  // ensure min/max range; be careful to not recurse.
+  if (desc->option == mi_option_debug_guarded_min && _mi_option_get_fast(mi_option_debug_guarded_max) < value) {
+    mi_option_set(mi_option_debug_guarded_max, value);
+  }
+  else if (desc->option == mi_option_debug_guarded_max && _mi_option_get_fast(mi_option_debug_guarded_min) > value) {
+    mi_option_set(mi_option_debug_guarded_min, value);
+  }
 }
 
 void mi_option_set_default(mi_option_t option, long value) {
@@ -517,11 +531,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
         value = (size > LONG_MAX ? LONG_MAX : (long)size);
       }
       if (*end == 0) {
-        desc->value = value;
-        desc->init = INITIALIZED;
-        if (desc->option == mi_option_debug_guarded_min && _mi_option_get_fast(mi_option_debug_guarded_max) < value) {
-          mi_option_set(mi_option_debug_guarded_max,value);
-        }
+        mi_option_set(desc->option, value);        
       }
       else {
         // set `init` first to avoid recursion through _mi_warning_message on mimalloc_verbose.

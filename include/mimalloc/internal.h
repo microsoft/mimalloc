@@ -323,6 +323,7 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   }
 }
 
+
 // Align a pointer upwards
 static inline void* mi_align_up_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
@@ -594,6 +595,15 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
   page->flags.x.has_aligned = has_aligned;
 }
 
+#if MI_DEBUG_GUARDED
+static inline bool mi_page_has_guarded(const mi_page_t* page) {
+  return page->flags.x.has_guarded;
+}
+
+static inline void mi_page_set_has_guarded(mi_page_t* page, bool has_guarded) {
+  page->flags.x.has_guarded = has_guarded;
+}
+#endif
 
 /* -------------------------------------------------------------------
 Encoding/Decoding the free list next pointers
