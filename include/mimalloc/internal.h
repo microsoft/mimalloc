@@ -731,7 +731,7 @@ static inline mi_memid_t _mi_memid_create_os(bool committed, bool is_zero, bool 
 
 static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
   if (x==0) { x = 17; }   // ensure we don't get stuck in generating zeros
-#if (MI_INTPTR_SIZE==8)
+#if (MI_INTPTR_SIZE>=8)
   // by Sebastiano Vigna, see: <http://xoshiro.di.unimi.it/splitmix64.c>
   x ^= x >> 30;
   x *= 0xbf58476d1ce4e5b9UL;
