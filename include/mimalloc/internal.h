@@ -61,6 +61,7 @@ void       _mi_warning_message(const char* fmt, ...);
 void       _mi_verbose_message(const char* fmt, ...);
 void       _mi_trace_message(const char* fmt, ...);
 void       _mi_options_init(void);
+long       _mi_option_get_fast(mi_option_t option);
 void       _mi_error_message(int err, const char* fmt, ...);
 
 // random.c
@@ -321,6 +322,7 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
     return (((sz + mask)/alignment)*alignment);
   }
 }
+
 
 // Align a pointer upwards
 static inline void* mi_align_up_ptr(void* p, size_t alignment) {
@@ -593,6 +595,15 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
   page->flags.x.has_aligned = has_aligned;
 }
 
+#if MI_DEBUG_GUARDED
+static inline bool mi_page_has_guarded(const mi_page_t* page) {
+  return page->flags.x.has_guarded;
+}
+
+static inline void mi_page_set_has_guarded(mi_page_t* page, bool has_guarded) {
+  page->flags.x.has_guarded = has_guarded;
+}
+#endif
 
 /* -------------------------------------------------------------------
 Encoding/Decoding the free list next pointers

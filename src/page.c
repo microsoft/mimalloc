@@ -414,6 +414,9 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
 
   // no more aligned blocks in here
   mi_page_set_has_aligned(page, false);
+  #if MI_DEBUG_GUARDED
+  mi_page_set_has_guarded(page, false);
+  #endif
 
   // remove from the page list
   // (no need to do _mi_heap_delayed_free first as all blocks are already free)
@@ -440,6 +443,9 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   mi_assert_internal(mi_page_all_free(page));
 
   mi_page_set_has_aligned(page, false);
+  #if MI_DEBUG_GUARDED
+  mi_page_set_has_guarded(page, false);
+  #endif
 
   // don't retire too often..
   // (or we end up retiring and re-allocating most of the time)
@@ -912,7 +918,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   mi_assert_internal(mi_page_block_size(page) >= size);
 
   // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc)
-  if mi_unlikely(zero && page->block_size == 0) {
+  if mi_unlikely(zero && mi_page_is_huge(page)) {
     // note: we cannot call _mi_page_malloc with zeroing for huge blocks; we zero it afterwards in that case.
     void* p = _mi_page_malloc(heap, page, size);
     mi_assert_internal(p != NULL);
