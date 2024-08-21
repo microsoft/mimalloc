@@ -113,6 +113,11 @@ jobs:
         CXX: clang++
         BuildType: debug-tsan-clang-cxx
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMI_USE_CXX=ON -DMI_DEBUG_TSAN=ON
+      Debug Guarded Clang:
+        CC: clang
+        CXX: clang
+        BuildType: debug-guarded-clang
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMI_DEBUG_FULL=ON -DMI_DEBUG_GUARDED=ON
       
   steps:
   - task: CMake@1
@@ -124,6 +129,8 @@ jobs:
   - script: ctest --verbose --timeout 180
     workingDirectory: $(BuildType)
     displayName: CTest
+    env: 
+      MIMALLOC_DEBUG_GUARDED_MAX: 1024
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-ubuntu-$(BuildType)
 
