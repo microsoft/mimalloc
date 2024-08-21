@@ -31,18 +31,22 @@ terms of the MIT license. A copy of the license can be found in the file
 extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept
 {
   mi_assert_internal(page->block_size == 0 /* empty heap */ || mi_page_block_size(page) >= size);
+  
+  // check the free list
   mi_block_t* const block = page->free;
   if mi_unlikely(block == NULL) {
     return _mi_malloc_generic(heap, size, zero, 0);
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
+  
   // pop from the free list
   page->free = mi_block_next(page, block);
   page->used++;
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
   mi_assert_internal(page->block_size < MI_MAX_ALIGN_SIZE || _mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
+  
   #if MI_DEBUG>3
-  if (page->free_is_zero && size > sizeof(*block)) {
+  if (page->free_is_zero && size > sizeof(*block)) { 
     mi_assert_expensive(mi_mem_is_zero(block+1,size - sizeof(*block)));
   }
   #endif
@@ -125,11 +129,11 @@ static inline bool mi_heap_malloc_small_use_guarded(size_t size);
 
 static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
   mi_assert(heap != NULL);
+  mi_assert(size <= MI_SMALL_SIZE_MAX);
   #if MI_DEBUG
   const uintptr_t tid = _mi_thread_id();
   mi_assert(heap->thread_id == 0 || heap->thread_id == tid); // heaps are thread local
   #endif
-  mi_assert(size <= MI_SMALL_SIZE_MAX);
   #if (MI_PADDING || MI_DEBUG_GUARDED)
   if (size == 0) { size = sizeof(void*); }
   #endif
@@ -137,6 +141,7 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   if (mi_heap_malloc_small_use_guarded(size)) { return mi_heap_malloc_guarded(heap, size, zero); }
   #endif
 
+  // get page in constant time, and allocate from it
   mi_page_t* page = _mi_heap_get_free_small_page(heap, size + MI_PADDING_SIZE);
   void* const p = _mi_page_malloc_zero(heap, page, size + MI_PADDING_SIZE, zero);
   mi_track_malloc(p,size,zero);
@@ -166,6 +171,7 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc_small(size_t si
 
 // The main allocation function
 extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept {
+  // fast path for small objects 
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
     mi_assert_internal(huge_alignment == 0);
     return mi_heap_malloc_small_zero(heap, size, zero);
@@ -174,10 +180,12 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
   else if (mi_use_guarded(size,huge_alignment)) { return mi_heap_malloc_guarded(heap, size, zero); }
   #endif
   else {
+    // regular allocation
     mi_assert(heap!=NULL);
     mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id());   // heaps are thread local
     void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE, zero, huge_alignment);  // note: size can overflow but it is detected in malloc_generic
     mi_track_malloc(p,size,zero);
+    
     #if MI_STAT>1
     if (p != NULL) {
       if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
