@@ -123,7 +123,7 @@ extern void* _mi_page_malloc_zeroed(mi_heap_t* heap, mi_page_t* page, size_t siz
 
 #if MI_DEBUG_GUARDED
 static mi_decl_restrict void* mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
-static inline bool mi_heap_malloc_use_guarded(size_t size, bool huge_alignment);
+static inline bool mi_heap_malloc_use_guarded(size_t size, bool has_huge_alignment);
 static inline bool mi_heap_malloc_small_use_guarded(size_t size);
 #endif
 
@@ -177,7 +177,7 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
     return mi_heap_malloc_small_zero(heap, size, zero);
   }
   #if MI_DEBUG_GUARDED
-  else if (mi_use_guarded(size,huge_alignment)) { return mi_heap_malloc_guarded(heap, size, zero); }
+  else if (mi_heap_malloc_use_guarded(size,huge_alignment>0)) { return mi_heap_malloc_guarded(heap, size, zero); }
   #endif
   else {
     // regular allocation
@@ -607,8 +607,8 @@ static inline bool mi_heap_malloc_small_use_guarded(size_t size) {
           && size >= (size_t)_mi_option_get_fast(mi_option_debug_guarded_min));
 }
 
-static inline bool mi_heap_malloc_use_guarded(size_t size, bool huge_alignment) {
-  return (huge_alignment == 0  // guarded pages do not work with huge aligments at the moment
+static inline bool mi_heap_malloc_use_guarded(size_t size, bool has_huge_alignment) {
+  return (!has_huge_alignment  // guarded pages do not work with huge aligments at the moment
           && _mi_option_get_fast(mi_option_debug_guarded_max) > 0  // guarded must be enabled
           && (mi_heap_malloc_small_use_guarded(size)
               || ((mi_good_size(size) & (_mi_os_page_size() - 1)) == 0))  // page-size multiple are always guarded so we can have a correct `mi_usable_size`.
