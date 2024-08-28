@@ -632,9 +632,9 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
 
   if (mi_memkind_is_os(memid.memkind)) {
     // was a direct OS allocation, pass through
-    if (!all_committed && committed_size > 0) {
-      // if partially committed, adjust the committed stats (as `_mi_os_free` will increase decommit by the full size)
-      _mi_stat_decrease(&_mi_stats_main.committed, committed_size);
+    if (!all_committed) {
+      // if partially committed, adjust the committed stats (as `_mi_os_free` will reduce the stat by the full size)
+      _mi_stat_increase(&_mi_stats_main.committed, size - committed_size);
     }
     _mi_os_free(p, size, memid, stats);
   }
