@@ -605,3 +605,26 @@ if (MI_OVERRIDE)
     endif()
   endif()
 endif()
+
+
+# -----------------------------------------------------------------------------
+# Build fuzz tests
+# -----------------------------------------------------------------------------
+if(DEFINED ENV{LIB_FUZZING_ENGINE})
+    set(FUZZING_ENGINE $ENV{LIB_FUZZING_ENGINE})
+    set(FUZZING_COMPILE_FLAGS "")
+    set(FUZZING_LINK_FLAGS "${FUZZING_ENGINE}")
+else()
+    set(FUZZING_COMPILE_FLAGS "-fsanitize=fuzzer,address")
+    set(FUZZING_LINK_FLAGS "-fsanitize=fuzzer,address")
+endif()
+
+if('${CMAKE_CXX_COMPILER_ID}' STREQUAL 'Clang')
+  ## fuzz testing
+  add_executable(fuzz-random-alloc  test/fuzz-random-alloc.c)
+  target_link_libraries(fuzz-random-alloc PUBLIC mimalloc)
+  set_target_properties(fuzz-random-alloc PROPERTIES
+     COMPILE_FLAGS "${FUZZING_COMPILE_FLAGS}"
+     LINK_FLAGS "${FUZZING_LINK_FLAGS}"
+  )
+endif()
