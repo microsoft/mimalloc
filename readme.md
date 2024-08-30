@@ -540,7 +540,7 @@ clang -g -o test-wrong -Iinclude test/test-wrong.c out/debug/libmimalloc-asan-de
 
 Since the address sanitizer redirects the standard allocation functions, on some platforms (macOSX for example)
 it is required to compile mimalloc with `-DMI_OVERRIDE=OFF`.
-Adress sanitizer support is in its initial development -- please report any issues.
+Address sanitizer support is in its initial development -- please report any issues.
 
 [asan]: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
