@@ -77,8 +77,10 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats
 -------------------------------------------------------------- */
 
 // On 64-bit systems, we can do efficient aligned allocation by using
-// the 2TiB to 30TiB area to allocate those.
-#if (MI_INTPTR_SIZE >= 8)
+// the 2TiB to 30TiB area to allocate those. The one exception is on
+// 64-bit RISC-V systems that have an SV39 MMU; there the 256GiB+
+// range (and specifically the 2TiB+ range) will not be usable.
+#if (MI_INTPTR_SIZE >= 8) && (!defined(MI_SV39_MMU) || MI_SV39_MMU == 0)
 static mi_decl_cache_align _Atomic(uintptr_t)aligned_base;
 
 // Return a MI_SEGMENT_SIZE aligned address that is probably available.
