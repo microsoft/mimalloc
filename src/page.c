@@ -357,9 +357,7 @@ void _mi_page_unfull(mi_page_t* page) {
   mi_page_set_in_full(page, false); // to get the right queue
   mi_page_queue_t* pq = mi_heap_page_queue_of(heap, page);
   mi_page_set_in_full(page, true);
-  mi_page_queue_enqueue_from(pq, pqfull, page);  
-  // we could insert at the front to increase reuse, but it slows down certain benchmarks (like alloc-test)
-  // mi_page_queue_enqueue_from_at_start(pq, pqfull, page);  
+  mi_page_queue_enqueue_from_full(pq, pqfull, page);  
 }
 
 static void mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {

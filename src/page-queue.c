@@ -330,12 +330,13 @@ static void mi_page_queue_enqueue_from_ex(mi_page_queue_t* to, mi_page_queue_t* 
 }
 
 static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
-  mi_page_queue_enqueue_from_ex(to, from, true, page);
+  mi_page_queue_enqueue_from_ex(to, from, true /* enqueue at the end */, page);
 }
 
-// static void mi_page_queue_enqueue_from_at_start(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
-//   mi_page_queue_enqueue_from_ex(to, from, false, page);
-// }
+static void mi_page_queue_enqueue_from_full(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
+  // note: we could insert at the front to increase reuse, but it slows down certain benchmarks (like `alloc-test`)
+  mi_page_queue_enqueue_from_ex(to, from, true /* enqueue at the end of the `to` queue? */, page);
+}
 
 // Only called from `mi_heap_absorb`.
 size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append) {
