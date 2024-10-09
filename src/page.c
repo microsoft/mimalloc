@@ -715,13 +715,16 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   Find pages with free blocks
 -------------------------------------------------------------*/
 
+// search for a best next page to use for at most N pages (often cut short if immediate blocks are available)
 #define MI_MAX_CANDIDATE_SEARCH  (16)
 
-static inline bool mi_page_is_expandable(const mi_page_t* page) {
+// is the page not yet used up to its reserved space?
+static bool mi_page_is_expandable(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_internal(page->capacity <= page->reserved);
   return (page->capacity < page->reserved);
 }
+
 
 // Find a page with free blocks of `page->block_size`.
 static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try)
@@ -740,14 +743,17 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
     count++;
     #endif
     candidate_count++;
-#if defined(MI_MAX_CANDIDATE_SEARCH)
-    // 0. collect freed blocks by us and other threads
-    _mi_page_free_collect(page, false);  // todo: should we free empty pages?
 
+    // collect freed blocks by us and other threads
+    _mi_page_free_collect(page, false);
+
+#if defined(MI_MAX_CANDIDATE_SEARCH)
+    // search up to N pages for a best candidate
+        
     // is the local free list non-empty?
     const bool immediate_available = mi_page_immediate_available(page);
 
-    // 1. If the page is completely full, move it to the `mi_pages_full`
+    // if the page is completely full, move it to the `mi_pages_full`
     // queue so we don't visit long-lived pages too often.
     if (!immediate_available && !mi_page_is_expandable(page)) {
       mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
@@ -763,25 +769,20 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
       else if (!mi_page_is_expandable(page) && page->used > page_candidate->used) {
         page_candidate = page;
       }
+      // if we find a non-expandable candidate, or searched for N pages, return with the best candidate
       if (immediate_available || candidate_count > MI_MAX_CANDIDATE_SEARCH) {
         mi_assert_internal(page_candidate!=NULL);
         break;
       }
     }
 #else
-    // 1. if the page contains free blocks, we are done
-    if (mi_page_immediate_available(page)) {
+    // first-fit algorithm
+    // If the page contains free blocks, we are done
+    if (mi_page_immediate_available(page) || mi_page_is_expandable(page)) {
       break;  // pick this one
     }
 
-    // 2. Try to extend
-    if (page->capacity < page->reserved) {
-      mi_page_extend_free(heap, page, heap->tld);
-      mi_assert_internal(mi_page_immediate_available(page));
-      break;
-    }
-
-    // 3. If the page is completely full, move it to the `mi_pages_full`
+    // If the page is completely full, move it to the `mi_pages_full`
     // queue so we don't visit long-lived pages too often.
     mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
     mi_page_to_full(page, pq);
