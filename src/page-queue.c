@@ -338,9 +338,9 @@ static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* fro
   mi_page_queue_enqueue_from_ex(to, from, true, page);
 }
 
-static void mi_page_queue_enqueue_from_at_start(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
-  mi_page_queue_enqueue_from_ex(to, from, false, page);
-}
+// static void mi_page_queue_enqueue_from_at_start(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
+//   mi_page_queue_enqueue_from_ex(to, from, false, page);
+// }
 
 // Only called from `mi_heap_absorb`.
 size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append) {

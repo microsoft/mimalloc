@@ -359,7 +359,7 @@ void _mi_page_unfull(mi_page_t* page) {
   mi_page_queue_t* pq = mi_heap_page_queue_of(heap, page);
   mi_page_set_in_full(page, true);
   mi_page_queue_enqueue_from(pq, pqfull, page);  
-  // we may instead insert at the front to increase reuse but it slows down some benchmarks like `alloc-test1`
+  // we could insert at the front to increase reuse, but it slows down certain benchmarks (like alloc-test)
   // mi_page_queue_enqueue_from_at_start(pq, pqfull, page);  
 }
 
@@ -721,7 +721,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
 -------------------------------------------------------------*/
 
 // search for a best next page to use for at most N pages (often cut short if immediate blocks are available)
-#define MI_MAX_CANDIDATE_SEARCH  (16)
+#define MI_MAX_CANDIDATE_SEARCH  (8)
 
 // is the page not yet used up to its reserved space?
 static bool mi_page_is_expandable(const mi_page_t* page) {
@@ -771,7 +771,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
         page_candidate = page;
         candidate_count = 0;      
       }
-      else if (!mi_page_is_expandable(page) && page->used > page_candidate->used) {
+      else if (!mi_page_is_expandable(page) && page->capacity < page_candidate->capacity) {
         page_candidate = page;
       }
       // if we find a non-expandable candidate, or searched for N pages, return with the best candidate
