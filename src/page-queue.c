@@ -145,7 +145,7 @@ static inline bool mi_page_is_large_or_huge(const mi_page_t* page) {
   return (mi_page_block_size(page) > MI_MEDIUM_OBJ_SIZE_MAX || mi_page_is_huge(page));
 }
 
-static mi_page_queue_t* mi_heap_page_queue_of(mi_heap_t* heap, const mi_page_t* page) {
+mi_page_queue_t* mi_heap_page_queue_of(mi_heap_t* heap, const mi_page_t* page) {
   mi_assert_internal(heap!=NULL);
   uint8_t bin = (mi_page_is_in_full(page) ? MI_BIN_FULL : (mi_page_is_huge(page) ? MI_BIN_HUGE : mi_bin(mi_page_block_size(page))));
   mi_assert_internal(bin <= MI_BIN_FULL);
@@ -264,8 +264,15 @@ static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_
   heap->page_count++;
 }
 
+int32_t mi_get_page_usage(mi_page_t* page)
+{
+    _mi_page_free_collect(page, false);
 
-static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
+    int32_t usage = usage = (100 * page->used) / page->reserved;
+    return usage;
+}
+
+static void mi_page_queue_enqueue_from2(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page, bool addToHead) {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(mi_page_queue_contains(from, page));
   mi_assert_expensive(!mi_page_queue_contains(to, page));
@@ -292,8 +299,27 @@ static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* fro
   page->next = NULL;
   if (to->last != NULL) {
     mi_assert_internal(heap == mi_page_heap(to->last));
-    to->last->next = page;
-    to->last = page;
+    addToHead = addToHead && (mi_get_page_usage(page) > 50);
+    if (addToHead) {
+      if (to->first == to->last) {
+        to->last->next = page;
+        to->last = page;
+      }
+      else {
+        page->prev = to->first;
+        page->next = to->first->next;
+
+        if (to->first->next != NULL) {
+          to->first->next->prev = page;
+        }
+
+        to->first->next = page;
+      }
+    }
+    else {
+      to->last->next = page;
+      to->last = page;
+    }
   }
   else {
     to->first = page;
@@ -302,6 +328,10 @@ static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* fro
   }
 
   mi_page_set_in_full(page, mi_page_queue_is_full(to));
+}
+
+static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
+  mi_page_queue_enqueue_from2(to, from, page, false);
 }
 
 // Only called from `mi_heap_absorb`.
