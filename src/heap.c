@@ -651,3 +651,95 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_vis
   mi_visit_blocks_args_t args = { visit_blocks, visitor, arg };
   return mi_heap_visit_areas(heap, &mi_heap_area_visitor, &args);
 }
+
+static mi_segment_t* mi_heap_get_segment_to_drop(mi_heap_t* heap) {
+    mi_page_queue_t* fullPageQueue = &heap->pages[MI_BIN_FULL];
+    mi_segment_t* segment = NULL;
+
+    if (fullPageQueue->first != NULL) {
+        segment = _mi_ptr_segment(fullPageQueue->first);
+    }
+
+    return segment;
+}
+
+const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment);
+mi_page_queue_t* mi_heap_page_queue_of(mi_heap_t* heap, const mi_page_t* page);
+
+// Visit all pages in a segment
+static mi_decl_noinline void mi_segment_visit_pages(mi_heap_t* heap, mi_segment_t* segment, heap_page_visitor_fun* fn, void* arg1)
+{
+    // Visit all pages in the segments
+    // Note: starting from the 2nd slice because
+    // the first slice/page is allocated by the segment itself
+    mi_slice_t* slice = &segment->slices[1];
+    const mi_slice_t* end = mi_segment_slices_end(segment);
+    bool isLastPage;
+    uint32_t slice_count;
+
+    while (slice < end) {
+
+        // Recored segment's state before making any operations on its pages, as it can change the state and get marked as abandoned.
+        isLastPage = (segment->used == 1) || ((segment->used - segment->abandoned) == 1);
+        slice_count = slice->slice_count;
+
+        if (slice_count > 0) {
+            if (slice->block_size > 1) {
+                mi_page_t* page = (mi_page_t*)slice;
+                fn(heap, mi_heap_page_queue_of(heap, page), page, arg1, NULL);
+
+                if (isLastPage) {
+                    break;
+                }
+            }
+
+            slice = slice + slice_count;
+        }
+        else {
+            slice = slice + 1;
+        }
+    }
+}
+
+void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount) {
+    bool segmentsDropped = false;
+
+    while (heap->tld->segments.count >= targetSegmentCount) {
+
+        // 1. Find a segment to drop (abandon) using the Full Page queue
+        mi_segment_t* segmentToAbandon = mi_heap_get_segment_to_drop(heap);
+        if (segmentToAbandon == NULL) {
+            break;
+        }
+
+        segmentsDropped = true;
+        // 2. when abandoning, mark all pages to no longer add to delayed_free
+        mi_segment_visit_pages(heap, segmentToAbandon, &mi_heap_page_never_delayed_free, NULL);
+
+        // 3. free all current thread delayed blocks.
+        // (when abandoning, after this there are no more thread-delayed references into the pages.)
+        _mi_heap_delayed_free_all(heap);
+
+        // 4. collect all pages in the selected segment owned by this thread
+        // This will effectively abandon the segment.
+        mi_collect_t collect = MI_ABANDON;
+        mi_segment_visit_pages(heap, segmentToAbandon, &mi_heap_page_collect, &collect);
+    }
+
+    if (segmentsDropped) {
+        // collect abandoned segments (in particular, purge expired parts of segments in the abandoned segment list)
+        // note: forced purge can be quite expensive if many threads are created/destroyed so we do not force on abandonment
+        _mi_abandoned_collect(heap, false /* force? */, &heap->tld->segments);
+    }
+}
+
+void mi_heap_drop_segment_if_required(mi_heap_t* heap, size_t alloc_block_size)
+{
+    size_t targetSegmentCount = mi_option_get_size(mi_option_max_segments_per_heap);
+    if ((targetSegmentCount > 0) && 
+        (alloc_block_size <= MI_MEDIUM_OBJ_SIZE_MAX) &&
+        (heap->tld->segments.count >= targetSegmentCount)) {
+
+        mi_heap_drop_segment(heap, targetSegmentCount);
+    }
+}

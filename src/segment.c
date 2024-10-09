@@ -158,7 +158,7 @@ size_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, size_t* idx) {
 ----------------------------------------------------------- */
 
 
-static const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment) {
+const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment) {
   return &segment->slices[segment->slice_entries];
 }
 
@@ -1318,7 +1318,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
       // the segment due to concurrent frees (in which case `NULL` is returned).
       return mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
     }
-    else if (segment->abandoned_visits > 3 && is_suitable) {
+    else if (segment->abandoned_visits > 3 && is_suitable && mi_option_get_size(mi_option_max_segments_per_heap) == 0) {
       // always reclaim on 3rd visit to limit the abandoned queue length.
       mi_segment_reclaim(segment, heap, 0, NULL, tld);
     }
@@ -1358,9 +1358,13 @@ void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
    Reclaim or allocate
 ----------------------------------------------------------- */
 
+void mi_heap_drop_segment_if_required(mi_heap_t* heap, size_t alloc_block_size);
+
 static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t needed_slices, size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 {
   mi_assert_internal(block_size <= MI_LARGE_OBJ_SIZE_MAX);
+
+  mi_heap_drop_segment_if_required(heap, block_size);
 
   // 1. try to reclaim an abandoned segment
   bool reclaimed;

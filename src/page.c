@@ -358,7 +358,7 @@ void _mi_page_unfull(mi_page_t* page) {
   mi_page_set_in_full(page, false); // to get the right queue
   mi_page_queue_t* pq = mi_heap_page_queue_of(heap, page);
   mi_page_set_in_full(page, true);
-  mi_page_queue_enqueue_from(pq, pqfull, page);
+  mi_page_queue_enqueue_from2(pq, pqfull, page, true /*addToHead*/);
 }
 
 static void mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
@@ -712,6 +712,52 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   Find pages with free blocks
 -------------------------------------------------------------*/
 
+int32_t mi_get_page_usage(mi_page_t* page);
+
+mi_page_t* mi_page_queue_find_most_used_page(mi_page_queue_t* pq)
+{
+    mi_page_t* mostUsedPage = NULL;
+    int32_t mostUsedPageUsage = 0;
+    int32_t pagesChecked = 0;
+
+    mi_page_t* page = pq->first;
+    while ((page != NULL) && (pagesChecked < 5))
+    {
+        mi_page_t* next = page->next; // remember next
+
+        int32_t pageUsage = mi_get_page_usage(page);
+        if (pageUsage < 100) {
+            if (mostUsedPage == NULL) {
+                mostUsedPage = page;
+                mostUsedPageUsage = pageUsage;
+            }
+            else if (pageUsage > mostUsedPageUsage) {
+                mostUsedPage = page;
+                mostUsedPageUsage = pageUsage;
+            }
+
+            if (mostUsedPageUsage > 50) {
+                break;
+            }
+        }
+        else {
+            // If the page is completely full, move it to the `mi_pages_full`
+            // queue so we don't visit long-lived pages too often.
+            mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
+            mi_page_to_full(page, pq);
+        }
+
+        pagesChecked++;
+        page = next;
+    } // for each page
+
+    if (pq->first == pq->last) {
+        mostUsedPage = pq->first; // the page queue had only full pages after the first one
+    }
+
+    return mostUsedPage;
+}
+
 // Find a page with free blocks of `page->block_size`.
 static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try)
 {
@@ -719,7 +765,33 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   #if MI_STAT
   size_t count = 0;
   #endif
+
   mi_page_t* page = pq->first;
+  if (page != NULL) {
+    page = mi_page_queue_find_most_used_page(pq);
+    if ((page != NULL) && (page != pq->first)) {
+
+      // remove the page from list
+      mi_page_t* prev = page->prev;
+      mi_page_t* next = page->next;
+      prev->next = next;
+      if (next != NULL) {
+        next->prev = prev;
+      }
+      if (page == pq->last) {
+        pq->last = prev;
+      }
+
+      // Add to the head
+      page->prev = NULL;
+      page->next = pq->first;
+      pq->first->prev = page;
+      pq->first = page;
+      mi_heap_queue_first_update(heap, pq);
+    }
+  }
+
+  page = pq->first;
   while (page != NULL)
   {
     mi_page_t* next = page->next; // remember next
