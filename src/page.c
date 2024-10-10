@@ -405,6 +405,27 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
 }
 
 
+// force abandon a page; this is safe to call
+void _mi_page_force_abandon(mi_page_t* page) {
+  mi_heap_t* heap = mi_page_heap(page);
+  // mark page as not using delayed free
+  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);
+  
+  // ensure this page is no longer in the heap delayed free list
+  _mi_heap_delayed_free_all(heap);
+  if (page->block_size == 0) return; // it may have been freed now
+
+  // and now unlink it from the page queue and abandon (or free)
+  mi_page_queue_t* pq = mi_heap_page_queue_of(heap, page);
+  if (mi_page_all_free(page)) {
+    _mi_page_free(page, pq, false);
+  }
+  else {
+    _mi_page_abandon(page, pq);
+  }
+}
+
+
 // Free a page with no more free blocks
 void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   mi_assert_internal(page != NULL);

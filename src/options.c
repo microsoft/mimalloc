@@ -100,6 +100,7 @@ static mi_option_desc_t options[_mi_option_last] =
 #endif
   { 0,   UNINIT, MI_OPTION(debug_guarded_min) },        // only used when building with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects
   { 0,   UNINIT, MI_OPTION(debug_guarded_max) },        // only used when building with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects
+  { 0,   UNINIT, MI_OPTION(target_segments_per_thread) }, // abandon segments beyond this point, or 0 to disable.
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

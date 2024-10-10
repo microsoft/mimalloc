@@ -175,6 +175,8 @@ void       _mi_page_retire(mi_page_t* page) mi_attr_noexcept;                  /
 void       _mi_page_unfull(mi_page_t* page);
 void       _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force);   // free the page
 void       _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);            // abandon the page, to be picked up by another thread...
+void       _mi_page_force_abandon(mi_page_t* page);
+
 void       _mi_heap_delayed_free_all(mi_heap_t* heap);
 bool       _mi_heap_delayed_free_partial(mi_heap_t* heap);
 void       _mi_heap_collect_retired(mi_heap_t* heap, bool force);

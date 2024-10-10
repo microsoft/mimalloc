@@ -693,6 +693,8 @@ static mi_slice_t* mi_segment_span_free_coalesce(mi_slice_t* slice, mi_segments_
       // free previous slice -- remove it from free and merge
       mi_assert_internal(prev->slice_count > 0 && prev->slice_offset==0);
       slice_count += prev->slice_count;
+      slice->slice_count = 0;
+      slice->slice_offset = (uint32_t)((uint8_t*)slice - (uint8_t*)prev); // set the slice offset for `segment_force_abandon` (in case the previous free block is very large).
       if (!is_abandoned) { mi_segment_span_remove_from_queue(prev, tld); }
       slice = prev;
     }
@@ -1329,7 +1331,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
       result = mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
       break;
     }
-    else if (segment->abandoned_visits > 3 && is_suitable) {
+    else if (segment->abandoned_visits > 3 && is_suitable && !mi_option_is_enabled(mi_option_target_segments_per_thread)) {
       // always reclaim on 3rd visit to limit the abandoned queue length.
       mi_segment_reclaim(segment, heap, 0, NULL, tld);
     }
@@ -1343,7 +1345,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
   return result;
 }
 
-
+// collect abandoned segments
 void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
 {
   mi_segment_t* segment;
@@ -1368,12 +1370,89 @@ void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
 }
 
 /* -----------------------------------------------------------
+   Force abandon a segment that is in use by our thread
+----------------------------------------------------------- */
+
+// force abandon a segment
+static void mi_segment_force_abandon(mi_segment_t* segment, mi_segments_tld_t* tld)
+{
+  mi_assert_internal(!mi_segment_is_abandoned(segment));
+
+  // for all slices
+  const mi_slice_t* end;
+  mi_slice_t* slice = mi_slices_start_iterate(segment, &end);
+  while (slice < end) {
+    mi_assert_internal(slice->slice_count > 0);
+    mi_assert_internal(slice->slice_offset == 0);
+    if (mi_slice_is_used(slice)) {
+      // ensure used count is up to date and collect potential concurrent frees
+      mi_page_t* const page = mi_slice_to_page(slice);
+      _mi_page_free_collect(page, false);
+      {
+        // abandon the page if it is still in-use (this will free it if possible as well)
+        mi_assert_internal(segment->used > 0);
+        if (segment->used == segment->abandoned+1) {
+          // the last page.. abandon and return as the segment will be abandoned after this
+          // and we should no longer access it.          
+          _mi_page_force_abandon(page);
+          return;
+        }
+        else {
+          // abandon and continue
+          _mi_page_force_abandon(page);
+          // it might be freed, reset the slice (note: relies on coalesce setting the slice_offset) 
+          slice = mi_slice_first(slice);
+        }
+      }
+    }
+    slice = slice + slice->slice_count;
+  }
+  mi_assert(segment->used == segment->abandoned);
+  mi_assert(segment->used == 0);
+  if (segment->used == 0) {
+    // all free now
+    mi_segment_free(segment, false, tld);
+  }
+  else {
+    // perform delayed purges
+    mi_segment_try_purge(segment, false /* force? */, tld->stats);
+  }
+}
+
+
+// try abandon segments. 
+// this should be called from `reclaim_or_alloc` so we know all segments are (about) fully in use.
+static void mi_segments_try_abandon(mi_heap_t* heap, mi_segments_tld_t* tld) {
+  const size_t target = (size_t)mi_option_get_clamp(mi_option_target_segments_per_thread,0,1024);
+  if (target == 0 || tld->count <= target) return;
+
+  const size_t min_target = (target > 4 ? (target*3)/4 : target);  // 75%
+
+  // todo: we should maintain a list of segments per thread; for now, only consider segments from the heap full pages
+  for (int i = 0; i < 16 && tld->count >= min_target; i++) {
+    mi_page_t* page = heap->pages[MI_BIN_FULL].first;
+    while (page != NULL && mi_page_block_size(page) > MI_LARGE_OBJ_SIZE_MAX) {
+      page = page->next;
+    }
+    if (page==NULL) {
+      break;
+    }
+    mi_segment_t* segment = _mi_page_segment(page);
+    mi_segment_force_abandon(segment, tld);
+    mi_assert_internal(page != heap->pages[MI_BIN_FULL].first); // as it is just abandoned    
+  }
+}
+
+/* -----------------------------------------------------------
    Reclaim or allocate
 ----------------------------------------------------------- */
 
 static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t needed_slices, size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
 {
   mi_assert_internal(block_size <= MI_LARGE_OBJ_SIZE_MAX);
+
+  // try to abandon some segments to increase reuse between threads
+  mi_segments_try_abandon(heap,tld);
 
   // 1. try to reclaim an abandoned segment
   bool reclaimed;
