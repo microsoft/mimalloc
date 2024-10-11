@@ -1424,9 +1424,10 @@ static void mi_segment_force_abandon(mi_segment_t* segment, mi_segments_tld_t* t
 // this should be called from `reclaim_or_alloc` so we know all segments are (about) fully in use.
 static void mi_segments_try_abandon(mi_heap_t* heap, mi_segments_tld_t* tld) {
   const size_t target = (size_t)mi_option_get_clamp(mi_option_target_segments_per_thread,0,1024);
-  if (target == 0 || tld->count <= target) return;
+  // we call this when we are about to add a fresh segment so we should be under our target segment count.
+  if (target == 0 || tld->count < target) return;
 
-  const size_t min_target = (target > 4 ? (target*3)/4 : target);  // 75%
+  const size_t min_target = (target > 4 ? (target*3)/4 : target);  // 75% 
 
   // todo: we should maintain a list of segments per thread; for now, only consider segments from the heap full pages
   for (int i = 0; i < 16 && tld->count >= min_target; i++) {
