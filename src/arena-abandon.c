@@ -192,7 +192,7 @@ void _mi_arena_field_cursor_init(mi_heap_t* heap, mi_subproc_t* subproc, bool vi
   else {
     // otherwise visit all starting at a random location
     if (abandoned_count > abandoned_list_count && max_arena > 0) {
-      current->start = 0; // (heap == NULL || max_arena == 0 ? 0 : (mi_arena_id_t)(_mi_heap_random_next(heap) % max_arena));
+      current->start = (heap == NULL || max_arena == 0 ? 0 : (mi_arena_id_t)(_mi_heap_random_next(heap) % max_arena));
       current->end = current->start + max_arena;
     }
     else {
