@@ -215,6 +215,10 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
 // Primitive aligned allocation from the OS.
 // This function guarantees the allocated memory is aligned.
 static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** base, mi_stats_t* stats) {
+  #if (MI_INTPTR_SIZE < 8) || (defined(MI_SV39_MMU) && MI_SV39_MMU != 0)
+  MI_UNUSED(allow_large); // not used on 32-bit/SV39 systems
+  #endif
+
   mi_assert_internal(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0));
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(is_large != NULL);
@@ -224,18 +228,33 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
   if (!(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0))) return NULL;
   size = _mi_align_up(size, _mi_os_page_size());
 
-  // try first with a hint (this will be aligned directly on Win 10+ or BSD)
-  void* p = mi_os_prim_alloc(size, alignment, commit, allow_large, is_large, is_zero, stats);
+  void* p = NULL;
+
+  #if (MI_INTPTR_SIZE >= 8) && (!defined(MI_SV39_MMU) || MI_SV39_MMU == 0)
+  // Try first with a hint. This will be usually be aligned directly
+  // on Win 10+ or BSD, but if this is a 32-bit or SV39 system, we
+  // don't bother -- it's not going to work.
+  p = mi_os_prim_alloc(size, alignment, commit, allow_large, is_large, is_zero, stats);
   if (p == NULL) return NULL;
+  #endif
 
   // aligned already?
-  if (((uintptr_t)p % alignment) == 0) {
+  if (p && ((uintptr_t)p % alignment) == 0) {
     *base = p;
   }
   else {
-    // if not aligned, free it, overallocate, and unmap around it
+    // If p is not aligned, then either we tried and failed to obtain
+    // an aligned allocation, or we didn't try at all. Only one of
+    // these is a warning scenario.
+    #if (MI_INTPTR_SIZE >= 8) && (!defined(MI_SV39_MMU) || MI_SV39_MMU == 0)
+    // Skip the warning and the free() if we never attempted an aligned
+    // allocation in the first place.
     _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (size: 0x%zx bytes, address: %p, alignment: 0x%zx, commit: %d)\n", size, p, alignment, commit);
     mi_os_prim_free(p, size, commit, stats);
+    #endif
+
+    // now overallocate
+
     if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
     const size_t over_size = size + alignment;
 
