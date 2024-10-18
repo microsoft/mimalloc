@@ -343,6 +343,16 @@ if(MINGW)
   add_definitions(-D_WIN32_WINNT=0x600)
 endif()
 
+# Check /proc/cpuinfo for an SV39 MMU and define a constant if one is
+# found. We will want to skip the aligned hinting in that case.
+if (EXISTS /proc/cpuinfo)
+  file(STRINGS /proc/cpuinfo mi_sv39_mmu REGEX "^mmu[ \t]+:[ \t]+sv39$")
+  if (mi_sv39_mmu)
+    MESSAGE( STATUS "SV39 MMU detected" )
+    list(APPEND mi_defines MI_SV39_MMU=1)
+  endif()
+endif()
+
 # extra needed libraries
 
 # we prefer -l<lib> test over `find_library` as sometimes core libraries 
