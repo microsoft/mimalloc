@@ -47,6 +47,47 @@ typedef struct mi_option_desc_s {
 #define MI_OPTION(opt)                  mi_option_##opt, #opt, NULL
 #define MI_OPTION_LEGACY(opt,legacy)    mi_option_##opt, #opt, #legacy
 
+// Some options can be set at build time for statically linked libraries (use `-DMI_EXTRA_CPPDEFS="opt1=val1;opt2=val2"`)
+// This is useful if we cannot pass them as environment variables
+// (and setting them programmatically would be too late)
+
+#ifndef MI_DEFAULT_VERBOSE
+#define MI_DEFAULT_VERBOSE 0
+#endif
+
+#ifndef MI_DEFAULT_EAGER_COMMIT
+#define MI_DEFAULT_EAGER_COMMIT 1
+#endif
+
+#ifndef MI_DEFAULT_ARENA_EAGER_COMMIT
+#define MI_DEFAULT_ARENA_EAGER_COMMIT 2
+#endif
+
+#ifndef MI_DEFAULT_ARENA_RESERVE
+ #if (MI_INTPTR_SIZE>4)
+  #define MI_DEFAULT_ARENA_RESERVE 1024L*1024L
+ #else
+  #define MI_DEFAULT_ARENA_RESERVE 128L*1024L
+ #endif
+#endif
+
+#ifndef MI_DEFAULT_DISALLOW_ARENA_ALLOC
+#define MI_DEFAULT_DISALLOW_ARENA_ALLOC 0
+#endif
+
+#ifndef MI_DEFAULT_ALLOW_LARGE_OS_PAGES
+#define MI_DEFAULT_ALLOW_LARGE_OS_PAGES 0
+#endif
+
+#ifndef MI_DEFAULT_RESERVE_HUGE_OS_PAGES
+#define MI_DEFAULT_RESERVE_HUGE_OS_PAGES 0
+#endif
+
+#ifndef MI_DEFAULT_RESERVE_OS_MEMORY
+#define MI_DEFAULT_RESERVE_OS_MEMORY 0
+#endif
+
+
 static mi_option_desc_t options[_mi_option_last] =
 {
   // stable options
@@ -56,16 +97,16 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(show_errors) },
 #endif
   { 0, UNINIT, MI_OPTION(show_stats) },
-  { 0, UNINIT, MI_OPTION(verbose) },
+  { MI_DEFAULT_VERBOSE, UNINIT, MI_OPTION(verbose) },
 
   // the following options are experimental and not all combinations make sense.
-  { 1, UNINIT, MI_OPTION(eager_commit) },               // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
-  { 2, UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
+  { MI_DEFAULT_EAGER_COMMIT, UNINIT, MI_OPTION(eager_commit) },               // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
+  { MI_DEFAULT_ARENA_EAGER_COMMIT, UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
   { 1, UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },        // purge decommits memory (instead of reset) (note: on linux this uses MADV_DONTNEED for decommit)
-  { 0, UNINIT, MI_OPTION_LEGACY(allow_large_os_pages,large_os_pages) },    // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
-  { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },      // per 1GiB huge pages
+  { MI_DEFAULT_ALLOW_LARGE_OS_PAGES, UNINIT, MI_OPTION_LEGACY(allow_large_os_pages,large_os_pages) },    // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
+  { MI_DEFAULT_RESERVE_HUGE_OS_PAGES, UNINIT, MI_OPTION(reserve_huge_os_pages) },      // per 1GiB huge pages
   {-1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) },   // reserve huge pages at node N
-  { 0, UNINIT, MI_OPTION(reserve_os_memory)     },      // reserve N KiB OS memory in advance (use `option_get_size`)
+  { MI_DEFAULT_RESERVE_OS_MEMORY, UNINIT, MI_OPTION(reserve_os_memory)     },      // reserve N KiB OS memory in advance (use `option_get_size`)
   { 0, UNINIT, MI_OPTION(deprecated_segment_cache) },   // cache N segments per thread
   { 0, UNINIT, MI_OPTION(deprecated_page_reset) },      // reset page memory on free
   { 0, UNINIT, MI_OPTION(abandoned_page_purge) },       // purge free page memory when a thread terminates
@@ -83,16 +124,11 @@ static mi_option_desc_t options[_mi_option_last] =
   { 32,  UNINIT, MI_OPTION(max_warnings) },             // maximum warnings that are output
   { 10,  UNINIT, MI_OPTION(max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.
   { 0,   UNINIT, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
-  #if (MI_INTPTR_SIZE>4)
-  { 1024L*1024L, UNINIT, MI_OPTION(arena_reserve) },    // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
-  #else
-  {  128L*1024L, UNINIT, MI_OPTION(arena_reserve) },    // =128MiB on 32-bit
-  #endif
-
+  { MI_DEFAULT_ARENA_RESERVE, UNINIT, MI_OPTION(arena_reserve) },    // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
   { 10,  UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
   { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
   { 1,   UNINIT, MI_OPTION(abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
-  { 0,   UNINIT, MI_OPTION(disallow_arena_alloc) },     // 1 = do not use arena's for allocation (except if using specific arena id's)
+  { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   UNINIT, MI_OPTION(disallow_arena_alloc) },     // 1 = do not use arena's for allocation (except if using specific arena id's)
   { 400, UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
 #if defined(MI_VISIT_ABANDONED)  
   { 1,   INITIALIZED, MI_OPTION(visit_abandoned) },     // allow visiting heap blocks in abandonded segments; requires taking locks during reclaim.
