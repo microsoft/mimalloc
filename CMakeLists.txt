@@ -64,7 +64,12 @@ set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
 set(mi_cflags_dynamic "")           # extra flags for a shared-object library build
 set(mi_libraries "")
-set(mi_defines ${MI_EXTRA_CPPDEFS})
+
+if(MI_EXTRA_CPPDEFS)
+ set(mi_defines ${MI_EXTRA_CPPDEFS})
+else()
+ set(mi_defines "")
+endif()
 
 # -----------------------------------------------------------------------------
 # Convenience: set default build type depending on the build directory
