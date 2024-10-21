@@ -40,6 +40,7 @@ static void bench_alloc_large(void);  // issue #xxx
 //static void test_large_migrate(void); // issue #691
 static void heap_thread_free_huge();
 static void test_std_string();        // issue #697
+static void test_thread_local();      // issue #944
 
 static void test_stl_allocators();
 
@@ -47,7 +48,8 @@ static void test_stl_allocators();
 int main() {
   // mi_stats_reset();  // ignore earlier allocations
 
-  // test_std_string();
+  //test_std_string();
+  test_thread_local();
   // heap_thread_free_huge();
   /*
    heap_thread_free_huge();
@@ -398,3 +400,30 @@ static void bench_alloc_large(void) {
   std::cout << "Avg " << us_per_allocation << " us per allocation" << std::endl;
 }
 
+
+class MTest
+{
+    char *data;
+public:
+    MTest() { data = (char*)malloc(1024); }
+    ~MTest() { free(data); };
+};
+
+thread_local MTest tlVariable;
+
+void threadFun( int i )
+{
+    printf( "Thread %d\n", i );
+    std::this_thread::sleep_for( std::chrono::milliseconds(100) );
+}
+
+void test_thread_local()
+{
+    for( int i=1; i < 100; ++i )
+    {
+        std::thread t( threadFun, i );
+        t.join();
+        mi_stats_print(NULL);
+    }
+    return;
+}
