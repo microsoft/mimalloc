@@ -37,6 +37,7 @@ static void tsan_numa_test();         // issue #414
 static void strdup_test();            // issue #445
 static void heap_thread_free_huge();
 static void test_std_string();        // issue #697
+static void test_thread_local();      // issue #944
 
 static void test_stl_allocators();
 
@@ -44,7 +45,8 @@ static void test_stl_allocators();
 int main() {
   // mi_stats_reset();  // ignore earlier allocations
 
-  test_std_string();
+  //test_std_string();
+  test_thread_local();
   // heap_thread_free_huge();
   /*
   heap_thread_free_large();
@@ -311,4 +313,32 @@ static void tsan_numa_test() {
   auto t1 = std::thread(dummy_worker);
   dummy_worker();
   t1.join();
+}
+
+
+class MTest
+{
+    char *data;
+public:
+    MTest() { data = (char*)malloc(1024); }
+    ~MTest() { free(data); };
+};
+
+thread_local MTest tlVariable;
+
+void threadFun( int i )
+{
+    printf( "Thread %d\n", i );
+    std::this_thread::sleep_for( std::chrono::milliseconds(100) );
+}
+
+void test_thread_local()
+{
+    for( int i=1; i < 100; ++i )
+    {
+        std::thread t( threadFun, i );
+        t.join();
+        mi_stats_print(NULL);
+    }
+    return;
 }
