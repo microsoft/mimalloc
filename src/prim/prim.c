@@ -25,3 +25,47 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "unix/prim.c"     // mmap() (Linux, macOSX, BSD, Illumnos, Haiku, DragonFly, etc.)
 
 #endif
+
+// Generic process initialization
+#ifndef MI_PRIM_HAS_PROCESS_ATTACH
+#if defined(__GNUC__) || defined(__clang__)
+  // GCC,Clang: use the constructor attribute
+  #if defined(__clang__)
+    #define mi_attr_constructor __attribute__((constructor(101)))
+    #define mi_attr_destructor  __attribute__((destructor(101)))
+  #else
+    #define mi_attr_constructor __attribute__((constructor))
+    #define mi_attr_destructor  __attribute__((destructor))
+  #endif
+  static void mi_attr_constructor mi_process_attach(void) {
+    _mi_process_load();
+  }
+  static void mi_attr_destructor mi_process_detach(void) {
+    _mi_process_done();
+  }
+#elif defined(__cplusplus)
+  // C++: use static initialization to detect process start
+  static bool mi_process_attach(void) {
+    _mi_process_load();
+    atexit(&_mi_process_done);
+    return (_mi_heap_main.thread_id != 0);
+  }
+  static bool mi_initialized = mi_process_attach();
+#else
+  #pragma message("define a way to call _mi_process_load/done on your platform")
+#endif
+#endif
+
+// Generic allocator init/done callback 
+#ifndef MI_PRIM_HAS_ALLOCATOR_INIT
+bool _mi_is_redirected(void) {
+  return false;
+}
+bool _mi_allocator_init(const char** message) {
+  if (message != NULL) *message = NULL;
+  return true;
+}
+void _mi_allocator_done(void) {
+  // nothing to do
+}
+#endif
