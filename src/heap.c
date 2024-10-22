@@ -543,13 +543,14 @@ void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
 
 static void mi_get_fast_divisor(size_t divisor, uint64_t* magic, size_t* shift) {
   mi_assert_internal(divisor > 0 && divisor <= UINT32_MAX);
-  *shift = 64 - mi_clz(divisor - 1);
+  *shift = MI_INTPTR_BITS - mi_clz(divisor - 1);
   *magic = ((((uint64_t)1 << 32) * (((uint64_t)1 << *shift) - divisor)) / divisor + 1);
 }
 
 static size_t mi_fast_divide(size_t n, uint64_t magic, size_t shift) {
   mi_assert_internal(n <= UINT32_MAX);
-  return ((((uint64_t)n * magic) >> 32) + n) >> shift;
+  const uint64_t hi = ((uint64_t)n * magic) >> 32;
+  return (size_t)((hi + n) >> shift);
 }
 
 bool _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg) {
