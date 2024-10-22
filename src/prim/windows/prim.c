@@ -659,7 +659,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #pragma comment(linker, "/INCLUDE:__tls_used")
   #pragma comment(linker, "/INCLUDE:__mi_tls_callback")
   #pragma data_seg(".CRT$XLB")
-  const PIMAGE_TLS_CALLBACK _mi_tls_callback[] = { &mi_win_main };
+  PIMAGE_TLS_CALLBACK _mi_tls_callback[] = { &mi_win_main };
   #pragma data_seg()
   #endif
 
@@ -738,7 +738,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 // ---------------------------------------------------- 
 #if defined(MI_SHARED_LIB) && !defined(MI_WIN_NOREDIRECT)
   #define MI_PRIM_HAS_ALLOCATOR_INIT 1
-  
+
   static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
 
   bool _mi_is_redirected(void) {
