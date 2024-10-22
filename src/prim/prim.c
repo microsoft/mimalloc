@@ -29,7 +29,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // Generic process initialization
 #ifndef MI_PRIM_HAS_PROCESS_ATTACH
 #if defined(__GNUC__) || defined(__clang__)
-  // GCC,Clang: use the constructor attribute
+  // gcc,clang: use the constructor/destructor attribute
+  // which for both seem to run before regular constructors/destructors
   #if defined(__clang__)
     #define mi_attr_constructor __attribute__((constructor(101)))
     #define mi_attr_destructor  __attribute__((destructor(101)))
@@ -44,7 +45,17 @@ terms of the MIT license. A copy of the license can be found in the file
     _mi_process_done();
   }
 #elif defined(__cplusplus)
-  // C++: use static initialization to detect process start
+  // C++: use static initialization to detect process start/end
+  struct mi_init_done_t {
+    mi_init_done_t() {
+      _mi_process_load();
+    }
+    ~mi_init_done_t() {
+      _mi_process_done();
+    }
+  };
+  static mi_init_done_t mi_init_done;
+  /*
   extern mi_heap_t _mi_heap_main;
   static bool mi_process_attach(void) {
     _mi_process_load();
@@ -52,7 +63,8 @@ terms of the MIT license. A copy of the license can be found in the file
     return (_mi_heap_main.thread_id != 0);
   }
   static bool mi_initialized = mi_process_attach();
-#else
+  */
+ #else
   #pragma message("define a way to call _mi_process_load/done on your platform")
 #endif
 #endif
@@ -63,7 +75,7 @@ bool _mi_is_redirected(void) {
   return false;
 }
 bool _mi_allocator_init(const char** message) {
-  if (message != NULL) *message = NULL;
+  if (message != NULL) { *message = NULL; }
   return true;
 }
 void _mi_allocator_done(void) {

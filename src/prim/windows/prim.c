@@ -674,7 +674,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     MI_UNUSED(heap);
   }
 
-#else // statically linked, use fiber api 
+#else // deprecated: statically linked, use fiber api 
 
   #if defined(_MSC_VER) // on clang/gcc use the constructor attribute (in `src/prim/prim.c`)
     // MSVC: use data section magic for static libraries
@@ -686,15 +686,15 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
       atexit(&_mi_process_done);
       return 0;
     }
-    typedef int(*_mi_crt_callback_t)(void);
-    #if defined(_M_X64) || defined(_M_ARM64)
-      __pragma(comment(linker, "/include:" "_mi_msvc_initu"))
+    typedef int(*mi_crt_callback_t)(void);
+    #if defined(_WIN64)
+      #pragma comment(linker, "/INCLUDE:_mi_tls_callback")
       #pragma section(".CRT$XIU", long, read)
     #else
-      __pragma(comment(linker, "/include:" "__mi_msvc_initu"))
+      #pragma comment(linker, "/INCLUDE:__mi_tls_callback")
     #endif
     #pragma data_seg(".CRT$XIU")
-    mi_decl_externc _mi_crt_callback_t _mi_msvc_initu[] = { &mi_process_attach };
+    mi_decl_externc mi_crt_callback_t _mi_tls_callback[] = { &mi_process_attach };
     #pragma data_seg()
   #endif
 
