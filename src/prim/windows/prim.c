@@ -737,6 +737,8 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 // Communicate with the redirection module on Windows
 // ---------------------------------------------------- 
 #if defined(MI_SHARED_LIB) && !defined(MI_WIN_NOREDIRECT)
+  #define MI_PRIM_HAS_ALLOCATOR_INIT 1
+  
   static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
 
   bool _mi_is_redirected(void) {
