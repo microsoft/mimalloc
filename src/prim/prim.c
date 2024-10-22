@@ -45,6 +45,7 @@ terms of the MIT license. A copy of the license can be found in the file
   }
 #elif defined(__cplusplus)
   // C++: use static initialization to detect process start
+  extern mi_heap_t _mi_heap_main;
   static bool mi_process_attach(void) {
     _mi_process_load();
     atexit(&_mi_process_done);

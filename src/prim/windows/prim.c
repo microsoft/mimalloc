@@ -623,11 +623,11 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 
 
 #if defined(MI_SHARED_LIB)
-  #define MI_PRIM_HAS_PROCESS_INIT  1
+  #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
   // Windows DLL: easy to hook into process_init and thread_done
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
-    win_main((PVOID)inst,reason,reserved);
+    mi_win_main((PVOID)inst,reason,reserved);
     return TRUE;
   }
 
@@ -639,7 +639,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   }
 
 #elif !defined(MI_WIN_USE_FLS)
-  #define MI_PRIM_HAS_PROCESS_INIT  1
+  #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
   // Set up TLS callbacks in a statically linked library by using special data sections.
   // See <https://stackoverflow.com/questions/14538159/tls-callback-in-windows>
@@ -679,7 +679,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #if defined(_MSC_VER) // on clang/gcc use the constructor attribute (in `src/prim/prim.c`)
     // MSVC: use data section magic for static libraries
     // See <https://www.codeguru.com/cpp/misc/misc/applicationcontrol/article.php/c6945/Running-Code-Before-and-After-Main.htm>
-    #define MI_PRIM_HAS_PROCESS_INIT  1
+    #define MI_PRIM_HAS_PROCESS_ATTACH 1
     
     static int mi_process_attach(void) {
       mi_win_main(NULL,DLL_PROCESS_ATTACH,NULL);
