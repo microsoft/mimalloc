@@ -459,6 +459,10 @@ void mi_thread_init(void) mi_attr_noexcept
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
+void mi_thread_done(void) mi_attr_noexcept {
+  _mi_thread_done(NULL);
+}
+
 void _mi_thread_done(mi_heap_t* heap)
 {
   // calling with NULL implies using the default heap
