@@ -641,26 +641,47 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 #elif !defined(MI_WIN_USE_FLS)
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
+  static void NTAPI mi_win_main_attach(PVOID module, DWORD reason, LPVOID reserved) {
+    if (reason == DLL_PROCESS_ATTACH || reason == DLL_THREAD_ATTACH) {
+      mi_win_main(module, reason, reserved);
+    }
+  }
+  static void NTAPI mi_win_main_detach(PVOID module, DWORD reason, LPVOID reserved) {
+    if (reason == DLL_PROCESS_DETACH || reason == DLL_THREAD_DETACH) {
+      mi_win_main(module, reason, reserved);
+    }
+  }
+
   // Set up TLS callbacks in a statically linked library by using special data sections.
   // See <https://stackoverflow.com/questions/14538159/tls-callback-in-windows>
-  // We may use ".CRT$XLY" instead of "B" -- see also issue #869.
+  // We use 2 entries to ensure we call attach events before constructors
+  // are called, and detach events after destructors are called.
   #if defined(__cplusplus)
   extern "C" {
   #endif
 
   #if defined(_WIN64)
-  #pragma comment(linker, "/INCLUDE:_tls_used")
-  #pragma comment(linker, "/INCLUDE:_mi_tls_callback")
-  #pragma const_seg(".CRT$XLB")
-  extern const PIMAGE_TLS_CALLBACK _mi_tls_callback[];
-  const PIMAGE_TLS_CALLBACK _mi_tls_callback[] = { &mi_win_main };
-  #pragma const_seg()
+    #pragma comment(linker, "/INCLUDE:_tls_used")
+    #pragma comment(linker, "/INCLUDE:_mi_tls_callback_pre")
+    #pragma comment(linker, "/INCLUDE:_mi_tls_callback_post")
+    #pragma const_seg(".CRT$XLB")
+    extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[];
+    const PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[] = { &mi_win_main_attach };
+    #pragma const_seg()
+    #pragma const_seg(".CRT$XLY")
+    extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[];
+    const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
+    #pragma const_seg()
   #else
-  #pragma comment(linker, "/INCLUDE:__tls_used")
-  #pragma comment(linker, "/INCLUDE:__mi_tls_callback")
-  #pragma data_seg(".CRT$XLB")
-  PIMAGE_TLS_CALLBACK _mi_tls_callback[] = { &mi_win_main };
-  #pragma data_seg()
+    #pragma comment(linker, "/INCLUDE:__tls_used")
+    #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
+    #pragma comment(linker, "/INCLUDE:__mi_tls_callback_post")
+    #pragma data_seg(".CRT$XLB")
+    PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[] = { &mi_win_main_attach };
+    #pragma data_seg()
+    #pragma data_seg(".CRT$XLY")
+    PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
+    #pragma data_seg()    
   #endif
 
   #if defined(__cplusplus)
