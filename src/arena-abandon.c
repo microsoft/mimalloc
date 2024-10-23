@@ -271,7 +271,7 @@ static mi_segment_t* mi_arena_segment_clear_abandoned_next_field(mi_arena_field_
               if (segment != NULL) {
                 //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
                 if (has_lock) { mi_lock_release(&arena->abandoned_visit_lock); }
-                previous->bitmap_idx = mi_bitmap_index_create(field_idx, bit_idx + 1); // start at next one for the next iteration
+                previous->bitmap_idx = mi_bitmap_index_create_ex(field_idx, bit_idx + 1); // start at next one for the next iteration
                 return segment;
               }
             }
