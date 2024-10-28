@@ -237,7 +237,7 @@ static mi_segment_t* mi_arena_segment_clear_abandoned_at(mi_arena_t* arena, mi_s
 static mi_segment_t* mi_arena_segment_clear_abandoned_next_field(mi_arena_field_cursor_t* previous) {
   const size_t max_arena = mi_arena_get_count();
   size_t field_idx = mi_bitmap_index_field(previous->bitmap_idx);
-  size_t bit_idx = mi_bitmap_index_bit_in_field(previous->bitmap_idx) + 1;
+  size_t bit_idx = mi_bitmap_index_bit_in_field(previous->bitmap_idx);
   // visit arena's (from the previous cursor)
   for (; previous->start < previous->end; previous->start++, field_idx = 0, bit_idx = 0) {
     // index wraps around
@@ -266,11 +266,12 @@ static mi_segment_t* mi_arena_segment_clear_abandoned_next_field(mi_arena_field_
             // pre-check if the bit is set
             size_t mask = ((size_t)1 << bit_idx);
             if mi_unlikely((field & mask) == mask) {
-              previous->bitmap_idx = mi_bitmap_index_create(field_idx, bit_idx);
-              mi_segment_t* const segment = mi_arena_segment_clear_abandoned_at(arena, previous->subproc, previous->bitmap_idx);
+              mi_bitmap_index_t bitmap_idx = mi_bitmap_index_create(field_idx, bit_idx);
+              mi_segment_t* const segment = mi_arena_segment_clear_abandoned_at(arena, previous->subproc, bitmap_idx);
               if (segment != NULL) {
                 //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
                 if (has_lock) { mi_lock_release(&arena->abandoned_visit_lock); }
+                previous->bitmap_idx = mi_bitmap_index_create_ex(field_idx, bit_idx + 1); // start at next one for the next iteration
                 return segment;
               }
             }
