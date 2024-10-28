@@ -92,8 +92,9 @@ static void* mi_align_down_ptr(void* p, size_t alignment) {
 -------------------------------------------------------------- */
 
 // On 64-bit systems, we can do efficient aligned allocation by using
-// the 2TiB to 30TiB area to allocate those.
-#if (MI_INTPTR_SIZE >= 8)
+// the 2TiB to 30TiB area to allocate those. We assume we have
+// at least 48 bits of virtual address space on 64-bit systems (but see issue #939)
+#if (MI_INTPTR_SIZE >= 8) && !defined(MI_NO_ALIGNED_HINT)
 static mi_decl_cache_align _Atomic(uintptr_t)aligned_base;
 
 // Return a MI_SEGMENT_SIZE aligned address that is probably available.
@@ -239,7 +240,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
   if (!(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0))) return NULL;
   size = _mi_align_up(size, _mi_os_page_size());
 
-  // try first with a hint (this will be aligned directly on Win 10+ or BSD)
+  // try first with a requested alignment hint (this will usually be aligned directly on Win 10+ or BSD)
   void* p = mi_os_prim_alloc(size, alignment, commit, allow_large, is_large, is_zero, stats);
   if (p == NULL) return NULL;
 
