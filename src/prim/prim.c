@@ -46,6 +46,7 @@ terms of the MIT license. A copy of the license can be found in the file
   }
 #elif defined(__cplusplus)
   // C++: use static initialization to detect process start/end
+  // This is not guaranteed to be first/last but the best we can generally do?
   struct mi_init_done_t {
     mi_init_done_t() {
       _mi_process_load();
@@ -55,15 +56,6 @@ terms of the MIT license. A copy of the license can be found in the file
     }
   };
   static mi_init_done_t mi_init_done;
-  /*
-  extern mi_heap_t _mi_heap_main;
-  static bool mi_process_attach(void) {
-    _mi_process_load();
-    atexit(&_mi_process_done);
-    return (_mi_heap_main.thread_id != 0);
-  }
-  static bool mi_initialized = mi_process_attach();
-  */
  #else
   #pragma message("define a way to call _mi_process_load/done on your platform")
 #endif
