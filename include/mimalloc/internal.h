@@ -667,6 +667,16 @@ static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const 
   return mi_rotl(x ^ keys[1], keys[0]) + keys[0];
 }
 
+static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const uintptr_t* keys) {
+  const uint32_t x = (uint32_t)(mi_ptr_encode(null,p,keys));
+  // make the lowest byte 0 to prevent spurious read overflows which could be a security issue (issue #951)
+  #ifdef MI_BIG_ENDIAN
+  return (x & 0x00FFFFFF);
+  #else
+  return (x & 0xFFFFFF00);
+  #endif
+}
+
 static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, const uintptr_t* keys ) {
   mi_track_mem_defined(block,sizeof(mi_block_t));
   mi_block_t* next;
