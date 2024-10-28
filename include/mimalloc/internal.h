@@ -77,6 +77,11 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 // init.c
 extern mi_decl_cache_align mi_stats_t       _mi_stats_main;
 extern mi_decl_cache_align const mi_page_t  _mi_page_empty;
+void       _mi_process_load(void);
+void mi_cdecl _mi_process_done(void);
+bool       _mi_is_redirected(void);
+bool       _mi_allocator_init(const char** message);
+void       _mi_allocator_done(void);
 bool       _mi_is_main_thread(void);
 size_t     _mi_current_thread_count(void);
 bool       _mi_preloading(void);           // true while the C runtime is not initialized yet
@@ -702,6 +707,16 @@ static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const 
 static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const uintptr_t* keys) {
   uintptr_t x = (uintptr_t)(p==NULL ? null : p);
   return mi_rotl(x ^ keys[1], keys[0]) + keys[0];
+}
+
+static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const uintptr_t* keys) {
+  const uint32_t x = (uint32_t)(mi_ptr_encode(null,p,keys));
+  // make the lowest byte 0 to prevent spurious read overflows which could be a security issue (issue #951)
+  #ifdef MI_BIG_ENDIAN
+  return (x & 0x00FFFFFF);
+  #else
+  return (x & 0xFFFFFF00);
+  #endif
 }
 
 static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, const uintptr_t* keys ) {

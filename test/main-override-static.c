@@ -20,8 +20,12 @@ static void test_reserved(void);
 static void negative_stat(void);
 static void alloc_huge(void);
 static void test_heap_walk(void);
+<<<<<<< HEAD
 static void test_heap_arena(void);
 static void test_align(void);
+=======
+static void test_canary_leak(void);
+>>>>>>> dev
 // static void test_large_pages(void);
 
 int main() {
@@ -33,7 +37,8 @@ int main() {
   // double_free2();
   // corrupt_free();
   // block_overflow1();
-  block_overflow2();
+  // block_overflow2();
+  test_canary_leak();
   // test_aslr();
   // invalid_free();
   // test_reserved();
@@ -250,6 +255,13 @@ static void test_heap_arena(void) {
       break;
     }
   }
+static void test_canary_leak(void) {
+  char* p = mi_mallocn_tp(char,23);
+  for(int i = 0; i < 23; i++) {
+    p[i] = '0'+i;
+  }
+  puts(p);
+  free(p);
 }
 
 // Experiment with huge OS pages
