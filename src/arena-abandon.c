@@ -148,7 +148,7 @@ static void mi_arena_segment_os_mark_abandoned(mi_segment_t* segment) {
 void _mi_arena_segment_mark_abandoned(mi_segment_t* segment)
 {
   mi_assert_internal(segment->used == segment->abandoned);
-  mi_atomic_store_release(&segment->thread_id, 0);  // mark as abandoned for multi-thread free's
+  mi_atomic_store_release(&segment->thread_id, (uintptr_t)0);  // mark as abandoned for multi-thread free's
   if mi_unlikely(segment->memid.memkind != MI_MEM_ARENA) {
     mi_arena_segment_os_mark_abandoned(segment);
     return;

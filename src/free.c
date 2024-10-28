@@ -422,7 +422,7 @@ static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* bloc
   uintptr_t keys[2];
   keys[0] = page->keys[0];
   keys[1] = page->keys[1];
-  bool ok = ((uint32_t)mi_ptr_encode(page,block,keys) == canary && *delta <= *bsize);
+  bool ok = (mi_ptr_encode_canary(page,block,keys) == canary && *delta <= *bsize);
   mi_track_mem_noaccess(padding,sizeof(mi_padding_t));
   return ok;
 }
