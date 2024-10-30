@@ -196,7 +196,6 @@ mi_decl_nodiscard long mi_option_get_clamp(mi_option_t option, long min, long ma
 }
 
 mi_decl_nodiscard size_t mi_option_get_size(mi_option_t option) {
-  mi_assert_internal(mi_option_has_size_in_kib(option));
   const long x = mi_option_get(option);
   size_t size = (x < 0 ? 0 : (size_t)x);
   if (mi_option_has_size_in_kib(option)) {
