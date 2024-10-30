@@ -1261,6 +1261,8 @@ bool _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment) {
   if (mi_atomic_load_relaxed(&segment->thread_id) != 0) return false;  // it is not abandoned
   if (segment->subproc != heap->tld->segments.subproc)  return false;  // only reclaim within the same subprocess
   if (!_mi_heap_memid_is_suitable(heap,segment->memid)) return false;  // don't reclaim between exclusive and non-exclusive arena's
+  const long target = _mi_option_get_fast(mi_option_target_segments_per_thread);
+  if (target > 0 && (size_t)target <= heap->tld->segments.count) return false; // don't reclaim if going above the target count
   // don't reclaim more from a `free` call than half the current segments
   // this is to prevent a pure free-ing thread to start owning too many segments
   // (but not for out-of-arena segments as that is the main way to be reclaimed for those)
