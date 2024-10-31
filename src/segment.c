@@ -386,6 +386,7 @@ static void mi_segments_track_size(long segment_size, mi_segments_tld_t* tld) {
 
 static void mi_segment_os_free(mi_segment_t* segment, mi_segments_tld_t* tld) {
   segment->thread_id = 0;
+  segment->free_space_mask = 0;
   _mi_segment_map_freed_at(segment);
   mi_segments_track_size(-((long)mi_segment_size(segment)),tld);
   if (segment->was_reclaimed) {
@@ -903,6 +904,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   segment->segment_slices = segment_slices;
   segment->segment_info_slices = info_slices;
   segment->thread_id = _mi_thread_id();
+  segment->free_space_mask = 0;
   segment->cookie = _mi_ptr_cookie(segment);
   segment->slice_entries = slice_entries;
   segment->kind = (required == 0 ? MI_SEGMENT_NORMAL : MI_SEGMENT_HUGE);
@@ -1075,11 +1077,44 @@ void _mi_abandoned_await_readers(void) {
    Abandon segment/page
 ----------------------------------------------------------- */
 
+size_t mi_free_space_mask_from_blocksize(size_t size)
+{
+    size_t free_space_mask = 0;
+    uint8_t page_queue_index = _mi_bin(size);
+    uint8_t byteIndex = page_queue_index / MI_FREE_SPACE_BINS_PER_BIT;
+
+    // index 40 is for size 16384 (MI_SMALL_OBJ_SIZE_MAX)
+    if (byteIndex >= MI_FREE_SPACE_MASK_BIT_COUNT) {
+        byteIndex = MI_FREE_SPACE_MASK_BIT_COUNT - 1;
+    }
+
+    free_space_mask = 1ULL << byteIndex;
+    return free_space_mask;
+}
+
+size_t mi_free_space_mask_from_slicecount(uint32_t slice_count)
+{
+    size_t free_space_mask = 0;
+    size_t max_size = MI_SMALL_OBJ_SIZE_MAX;
+
+    if (slice_count >= MI_MEDIUM_PAGE_SIZE) {
+        max_size = slice_count * MI_SEGMENT_SLICE_SIZE;
+    }
+    
+    free_space_mask = mi_free_space_mask_from_blocksize(max_size - 1);
+    free_space_mask = free_space_mask | (free_space_mask - 1); // mark all allocations with size < max_size as available
+
+    return free_space_mask;
+}
+
 static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(segment->used == segment->abandoned);
   mi_assert_internal(segment->used > 0);
   mi_assert_internal(segment->abandoned_visits == 0);
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
+
+  size_t free_space_mask = MI_FREE_SPACE_MASK_ABANDONED;
+  mi_atomic_exchange_acq_rel(&segment->free_space_mask, free_space_mask);
 
   // remove the free pages from the free page queues
   mi_slice_t* slice = &segment->slices[0];
@@ -1090,6 +1125,10 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
     if (slice->block_size == 0) { // a free page
       mi_segment_span_remove_from_queue(slice,tld);
       slice->block_size = 0; // but keep it free
+      free_space_mask |= mi_free_space_mask_from_slicecount(slice->slice_count);
+    }
+    else if (slice->used < slice->reserved) {
+        free_space_mask |= mi_free_space_mask_from_blocksize(slice->block_size);
     }
     slice = slice + slice->slice_count;
   }
@@ -1109,6 +1148,8 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
     tld->reclaim_count--;
     segment->was_reclaimed = false;
   }
+
+  mi_atomic_or_acq_rel(&segment->free_space_mask, free_space_mask);
   _mi_arena_segment_mark_abandoned(segment);
 }
 
@@ -1191,6 +1232,7 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
   // can be 0 still with abandoned_next, or already a thread id for segments outside an arena that are reclaimed on a free.
   mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == 0 || mi_atomic_load_relaxed(&segment->thread_id) == _mi_thread_id());
   mi_atomic_store_release(&segment->thread_id, _mi_thread_id());
+  segment->free_space_mask = 0;
   segment->abandoned_visits = 0;
   segment->was_reclaimed = true;
   tld->reclaim_count++;
@@ -1295,7 +1337,8 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
   if (max_tries <= 0) return NULL;
 
   mi_segment_t* segment;
-  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, &current);
+  size_t free_space_mask = mi_free_space_mask_from_blocksize(block_size);
+  mi_arena_field_cursor_t current; _mi_arena_field_cursor_init2(heap, &current, free_space_mask);
   while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL))
   {
     segment->abandoned_visits++;

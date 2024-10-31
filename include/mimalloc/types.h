@@ -220,6 +220,11 @@ typedef int32_t  mi_ssize_t;
 #define MI_MAX_ALLOC_SIZE   PTRDIFF_MAX
 #endif
 
+#define MI_FREE_SPACE_MASK_BIT_COUNT 31
+#define MI_FREE_SPACE_BINS_PER_BIT (MI_BIN_HUGE/MI_FREE_SPACE_MASK_BIT_COUNT)
+#define MI_FREE_SPACE_MASK_ALL ((size_t)0xFFFFFFFF)
+#define MI_FREE_SPACE_MASK_ABANDONED ((size_t)0x80000000)
+#define MI_FREE_SPACE_MASK_ANY (MI_FREE_SPACE_MASK_ALL & (~MI_FREE_SPACE_MASK_ABANDONED))
 
 // ------------------------------------------------------
 // Mimalloc pages contain allocated blocks
@@ -470,6 +475,7 @@ typedef struct mi_segment_s {
   mi_segment_kind_t kind;
   size_t            slice_entries;       // entries in the `slices` array, at most `MI_SLICES_PER_SEGMENT`
   _Atomic(mi_threadid_t) thread_id;      // unique id of the thread owning this segment
+  _Atomic(size_t)   free_space_mask;     // bitmask that indicates wich allocation sizes are available in this segment
 
   mi_slice_t        slices[MI_SLICES_PER_SEGMENT+1];  // one extra final entry for huge blocks with large alignment
 } mi_segment_t;

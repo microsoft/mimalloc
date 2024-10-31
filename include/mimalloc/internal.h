@@ -137,8 +137,10 @@ typedef struct mi_arena_field_cursor_s { // abstract
   mi_arena_id_t  start;
   int            count;
   size_t         bitmap_idx;
+  size_t         free_space_mask;
 } mi_arena_field_cursor_t;
 void          _mi_arena_field_cursor_init(mi_heap_t* heap, mi_arena_field_cursor_t* current);
+void          _mi_arena_field_cursor_init2(mi_heap_t* heap, mi_arena_field_cursor_t* current, size_t free_space_mask);
 mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* previous);
 
 // "segment-map.c"
@@ -945,6 +947,7 @@ static inline size_t mi_bsr(uintptr_t x) {
   return (x==0 ? MI_INTPTR_BITS : MI_INTPTR_BITS - 1 - mi_clz(x));
 }
 
+size_t mi_free_space_mask_from_blocksize(size_t size);
 
 // ---------------------------------------------------------------------------------
 // Provide our own `_mi_memcpy` for potential performance optimizations.
