@@ -20,12 +20,9 @@ static void test_reserved(void);
 static void negative_stat(void);
 static void alloc_huge(void);
 static void test_heap_walk(void);
-<<<<<<< HEAD
 static void test_heap_arena(void);
 static void test_align(void);
-=======
 static void test_canary_leak(void);
->>>>>>> dev
 // static void test_large_pages(void);
 
 int main() {
