@@ -581,6 +581,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force, mi
   return any_purged;
 }
 
+size_t mi_arena_start_purge_index = 0;
 static void mi_arenas_try_purge( bool force, bool visit_all, mi_stats_t* stats ) {
   if (_mi_preloading() || mi_arena_purge_delay() <= 0) return;  // nothing will be scheduled
 
@@ -593,8 +594,15 @@ static void mi_arenas_try_purge( bool force, bool visit_all, mi_stats_t* stats )
   {
     mi_msecs_t now = _mi_clock_now();
     size_t max_purge_count = (visit_all ? max_arena : 1);
+
+    if (mi_arena_start_purge_index >= max_arena) {
+      mi_arena_start_purge_index = 0;
+    }
+
+    size_t arena_index_to_purge = 0;
     for (size_t i = 0; i < max_arena; i++) {
-      mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
+      arena_index_to_purge = (mi_arena_start_purge_index + i) % max_arena;
+      mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_index_to_purge]);
       if (arena != NULL) {
         if (mi_arena_try_purge(arena, now, force, stats)) {
           if (max_purge_count <= 1) break;
@@ -602,6 +610,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all, mi_stats_t* stats )
         }
       }
     }
+    mi_arena_start_purge_index = arena_index_to_purge + 1;
   }
 }
 
