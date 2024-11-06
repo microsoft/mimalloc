@@ -189,9 +189,8 @@ typedef void* mi_nothrow_t;
   void* operator new[]( std::size_t n, std::align_val_t al) noexcept(false) { return mi_new_aligned(n, static_cast<size_t>(al)); }
   void* operator new  (std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_new_aligned_nothrow(n, static_cast<size_t>(al)); }
   void* operator new[](std::size_t n, std::align_val_t al, const std::nothrow_t&) noexcept { return mi_new_aligned_nothrow(n, static_cast<size_t>(al)); }
-  #endif
 
-#elif (defined(__GNUC__) || defined(__clang__))
+  #elif (defined(__GNUC__) || defined(__clang__))
   // ------------------------------------------------------
   // Override by defining the mangled C++ names of the operators (as
   // used by GCC and CLang).
@@ -233,6 +232,7 @@ typedef void* mi_nothrow_t;
     void* _ZnajSt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); return mi_new_aligned_nothrow(n,al); }
   #else
     #error "define overloads for new/delete for this platform (just for performance, can be skipped)"
+  #endif
   #endif
 #endif // __cplusplus
 
