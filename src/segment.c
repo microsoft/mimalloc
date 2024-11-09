@@ -1101,7 +1101,7 @@ size_t mi_free_space_mask_from_slicecount(uint32_t slice_count)
         max_size = slice_count * MI_SEGMENT_SLICE_SIZE;
     }
     
-    free_space_mask = mi_free_space_mask_from_blocksize(max_size - 1);
+    free_space_mask = mi_free_space_mask_from_blocksize(max_size);
     free_space_mask = free_space_mask | (free_space_mask - 1); // mark all allocations with size < max_size as available
 
     return free_space_mask;
@@ -1187,6 +1187,7 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t slices_needed, s
 {
   mi_assert_internal(mi_segment_is_abandoned(segment));
   bool has_page = false;
+  size_t free_space_mask = 0;
 
   // for all slices
   const mi_slice_t* end;
@@ -1208,6 +1209,7 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t slices_needed, s
         if (slice->slice_count >= slices_needed) {
           has_page = true;
         }
+        free_space_mask |= mi_free_space_mask_from_slicecount(slice->slice_count);
       }
       else if (mi_page_block_size(page) == block_size && mi_page_has_any_available(page)) {
         // a page has available free blocks of the right size
@@ -1221,6 +1223,10 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t slices_needed, s
       }
     }
     slice = slice + slice->slice_count;
+  }
+
+  if (free_space_mask != 0) {
+      mi_atomic_or_acq_rel(&segment->free_space_mask, free_space_mask);
   }
   return has_page;
 }

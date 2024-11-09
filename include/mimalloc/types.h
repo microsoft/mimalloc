@@ -220,11 +220,12 @@ typedef int32_t  mi_ssize_t;
 #define MI_MAX_ALLOC_SIZE   PTRDIFF_MAX
 #endif
 
-#define MI_FREE_SPACE_MASK_BIT_COUNT 31
+#define MI_FREE_SPACE_MASK_BIT_COUNT 63
 #define MI_FREE_SPACE_BINS_PER_BIT (MI_BIN_HUGE/MI_FREE_SPACE_MASK_BIT_COUNT)
-#define MI_FREE_SPACE_MASK_ALL ((size_t)0xFFFFFFFF)
-#define MI_FREE_SPACE_MASK_ABANDONED ((size_t)0x80000000)
+#define MI_FREE_SPACE_MASK_ALL ((size_t)0xFFFFFFFFFFFFFFFF)
+#define MI_FREE_SPACE_MASK_ABANDONED ((size_t)0x8000000000000000)
 #define MI_FREE_SPACE_MASK_ANY (MI_FREE_SPACE_MASK_ALL & (~MI_FREE_SPACE_MASK_ABANDONED))
+
 
 // ------------------------------------------------------
 // Mimalloc pages contain allocated blocks
@@ -544,6 +545,7 @@ struct mi_heap_s {
   size_t                page_retired_min;                    // smallest retired index (retired pages are fully free, but still in the page queues)
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   mi_heap_t*            next;                                // list of heaps per thread
+  mi_msecs_t            last_abandoned_collect_time;
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
   uint8_t               tag;                                 // custom tag, can be used for separating heaps based on the object types
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.

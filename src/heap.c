@@ -230,6 +230,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool 
   // push on the thread local heaps list
   heap->next = heap->tld->heaps;
   heap->tld->heaps = heap;
+  heap->last_abandoned_collect_time = 0;
 }
 
 mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id) {
@@ -702,6 +703,7 @@ static mi_decl_noinline void mi_segment_visit_pages(mi_heap_t* heap, mi_segment_
 }
 
 void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount) {
+    bool segmentsDropped = false;
 
     while (heap->tld->segments.count >= targetSegmentCount) {
 
@@ -711,6 +713,7 @@ void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount) {
             break;
         }
 
+        segmentsDropped = true;
         // 2. when abandoning, mark all pages to no longer add to delayed_free
         mi_segment_visit_pages(heap, segmentToAbandon, &mi_heap_page_never_delayed_free, NULL);
 
@@ -722,6 +725,18 @@ void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount) {
         // This will effectively abandon the segment.
         mi_collect_t collect = MI_ABANDON;
         mi_segment_visit_pages(heap, segmentToAbandon, &mi_heap_page_collect, &collect);
+    }
+
+    if (segmentsDropped) {
+        mi_msecs_t now_msec = _mi_clock_now();
+        long collect_interval = mi_option_get(mi_option_heap_collect_abandoned_interval);
+        if ((now_msec - heap->last_abandoned_collect_time) >= collect_interval) {
+            heap->last_abandoned_collect_time = now_msec;
+
+            // collect abandoned segments (in particular, purge expired parts of segments in the abandoned segment list)
+            // note: forced purge can be quite expensive if many threads are created/destroyed so we do not force on abandonment
+            _mi_abandoned_collect(heap, false /* force? */, &heap->tld->segments);
+        }
     }
 }
 

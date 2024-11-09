@@ -349,6 +349,7 @@ typedef enum mi_option_e {
   mi_option_disallow_arena_alloc,       // 1 = do not use arena's for allocation (except if using specific arena id's)
   mi_option_retry_on_oom,               // retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries. (only on windows)
   mi_option_max_segments_per_heap,        // max number of segments that heap can own
+  mi_option_heap_collect_abandoned_interval, // interval (in ms) between collecting abandoned segments when a heap drops exessive segments
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,

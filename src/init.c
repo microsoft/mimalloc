@@ -123,6 +123,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next
+  0,                // last_abandoned_collect_time
   false,            // can reclaim
   0,                // tag
   MI_SMALL_PAGES_EMPTY,
@@ -169,6 +170,7 @@ mi_heap_t _mi_heap_main = {
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
+  0,                // last_abandoned_collect_time
   false,            // can reclaim
   0,                // tag
   MI_SMALL_PAGES_EMPTY,
