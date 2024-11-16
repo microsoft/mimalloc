@@ -320,13 +320,13 @@ if(MI_WIN_USE_FLS)
 endif()
 
 
- # Check /proc/cpuinfo for an SV39 MMU and define a constant if one is
- # found. We will want to skip the aligned hinting in that case. Issue #939, #949
+ # Check /proc/cpuinfo for an SV39 MMU and limit the virtual address bits.
+ # (this will skip the aligned hinting in that case. Issue #939, #949)
  if (EXISTS /proc/cpuinfo)
    file(STRINGS /proc/cpuinfo mi_sv39_mmu REGEX "^mmu[ \t]+:[ \t]+sv39$")
    if (mi_sv39_mmu)
-     MESSAGE( STATUS "Disable aligned hints (SV39 MMU detected)" )
-     list(APPEND mi_defines MI_NO_ALIGNED_HINT=1)
+     MESSAGE( STATUS "Set virtual address bits to 39 (SV39 MMU detected)" )
+     list(APPEND mi_defines MI_DEFAULT_VIRTUAL_ADDRESS_BITS=39)
    endif()
  endif()
 

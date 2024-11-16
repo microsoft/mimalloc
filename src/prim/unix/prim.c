@@ -139,6 +139,12 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   if (psize > 0) {
     config->page_size = (size_t)psize;
     config->alloc_granularity = (size_t)psize;
+    #if defined(_SC_PHYS_PAGES)
+    long pphys = sysconf(_SC_PHYS_PAGES);
+    if (pphys > 0 && (size_t)pphys < (SIZE_MAX/(size_t)psize)) {
+      config->physical_memory = (size_t)pphys * (size_t)psize;
+    }
+    #endif
   }
   config->large_page_size = 2*MI_MiB; // TODO: can we query the OS for this?
   config->has_overcommit = unix_detect_overcommit();

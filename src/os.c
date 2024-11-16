@@ -11,16 +11,33 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 /* -----------------------------------------------------------
-  Initialization. 
+  Initialization.
 ----------------------------------------------------------- */
+#ifndef MI_DEFAULT_VIRTUAL_ADDRESS_BITS
+#if MI_INTPTR_SIZE < 8
+#define MI_DEFAULT_VIRTUAL_ADDRESS_BITS   32
+#else
+#define MI_DEFAULT_VIRTUAL_ADDRESS_BITS   48
+#endif
+#endif
+
+#ifndef MI_DEFAULT_PHYSICAL_MEMORY
+#if MI_INTPTR_SIZE < 8
+#define MI_DEFAULT_PHYSICAL_MEMORY    4*MI_GiB
+#else
+#define MI_DEFAULT_PHYSICAL_MEMORY    32*MI_GiB
+#endif
+#endif
 
 static mi_os_mem_config_t mi_os_mem_config = {
-  4096,   // page size
-  0,      // large page size (usually 2MiB)
-  4096,   // allocation granularity
-  true,   // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
-  false,  // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
-  true    // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
+  4096,     // page size
+  0,        // large page size (usually 2MiB)
+  4096,     // allocation granularity
+  MI_DEFAULT_PHYSICAL_MEMORY,
+  MI_DEFAULT_VIRTUAL_ADDRESS_BITS,
+  true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
+  false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
+  true      // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
 };
 
 bool _mi_os_has_overcommit(void) {
@@ -91,9 +108,9 @@ static void* mi_align_down_ptr(void* p, size_t alignment) {
   aligned hinting
 -------------------------------------------------------------- */
 
-// On 64-bit systems, we can do efficient aligned allocation by using
-// the 2TiB to 30TiB area to allocate those. We assume we have
-// at least 48 bits of virtual address space on 64-bit systems (but see issue #939)
+// On systems with enough virtual address bits, we can do efficient aligned allocation by using
+// the 2TiB to 30TiB area to allocate those. If we have at least 46 bits of virtual address
+// space (64TiB) we use this technique. (but see issue #939)
 #if (MI_INTPTR_SIZE >= 8) && !defined(MI_NO_ALIGNED_HINT)
 static mi_decl_cache_align _Atomic(uintptr_t)aligned_base;
 
@@ -111,6 +128,7 @@ static mi_decl_cache_align _Atomic(uintptr_t)aligned_base;
 void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
 {
   if (try_alignment <= 1 || try_alignment > MI_SEGMENT_SIZE) return NULL;
+  if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
   size = _mi_align_up(size, MI_SEGMENT_SIZE);
   if (size > 1*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<30) = 1/4096.
   #if (MI_SECURE>0)
@@ -276,7 +294,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       p = mi_os_prim_alloc(over_size, 1, commit, false, is_large, is_zero, stats);
       if (p == NULL) return NULL;
 
-      // and selectively unmap parts around the over-allocated area. 
+      // and selectively unmap parts around the over-allocated area.
       void* aligned_p = mi_align_up_ptr(p, alignment);
       size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
       size_t mid_size = _mi_align_up(size, _mi_os_page_size());

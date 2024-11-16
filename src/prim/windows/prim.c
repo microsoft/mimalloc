@@ -118,6 +118,18 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   GetSystemInfo(&si);
   if (si.dwPageSize > 0) { config->page_size = si.dwPageSize; }
   if (si.dwAllocationGranularity > 0) { config->alloc_granularity = si.dwAllocationGranularity; }
+  // get virtual address bits
+  if ((uintptr_t)si.lpMaximumApplicationAddress > 0) {
+    const size_t vbits = MI_INTPTR_BITS - mi_clz((uintptr_t)si.lpMaximumApplicationAddress);
+    config->virtual_address_bits = vbits;
+  }
+  // get physical memory 
+  ULONGLONG memInKiB = 0;
+  if (GetPhysicallyInstalledSystemMemory(&memInKiB)) {
+    if (memInKiB > 0 && memInKiB < (SIZE_MAX / MI_KiB)) {
+      config->physical_memory = memInKiB * MI_KiB;
+    }
+  }
   // get the VirtualAlloc2 function
   HINSTANCE  hDll;
   hDll = LoadLibrary(TEXT("kernelbase.dll"));
