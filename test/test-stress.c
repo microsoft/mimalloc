@@ -47,10 +47,6 @@ static int ITER    = 50;      // N full iterations destructing and re-creating a
 
 #define STRESS                // undefine for leak test
 
-#ifndef NDEBUG
-#define HEAP_WALK             // walk the heap objects?
-#endif
-
 static bool   allow_large_objects = true;     // allow very large objects? (set to `true` if SCALE>100)
 static size_t use_one_size = 0;               // use single object size of `N * sizeof(uintptr_t)`?
 
@@ -66,6 +62,9 @@ static bool   main_participates = false;       // main thread participates as a 
 #define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
+#ifndef NDEBUG
+#define HEAP_WALK             // walk the heap objects?
+#endif
 #endif
 
 // transfer pointer between threads
@@ -220,7 +219,7 @@ static void test_stress(void) {
   uintptr_t r = rand();
   for (int n = 0; n < ITER; n++) {
     run_os_threads(THREADS, &stress);
-    #ifndef NDEBUG
+    #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     // switch between arena and OS allocation for testing
     mi_option_set_enabled(mi_option_disallow_arena_alloc, (n%2)==1);
     #endif
@@ -270,7 +269,7 @@ int main(int argc, char** argv) {
   #ifdef HEAP_WALK
     mi_option_enable(mi_option_visit_abandoned);
   #endif
-  #ifndef NDEBUG
+  #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     mi_option_set(mi_option_arena_reserve, 32 * 1024 /* in kib = 32MiB */);
   #endif
   #ifndef USE_STD_MALLOC
