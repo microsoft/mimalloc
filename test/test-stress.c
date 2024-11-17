@@ -22,6 +22,8 @@ terms of the MIT license.
 #include <string.h>
 #include <assert.h>
 
+#define MI_DEBUG_GUARDED
+
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
 // argument defaults

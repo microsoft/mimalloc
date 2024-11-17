@@ -414,9 +414,6 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
 
   // no more aligned blocks in here
   mi_page_set_has_aligned(page, false);
-  #if MI_DEBUG_GUARDED
-  mi_page_set_has_guarded(page, false);
-  #endif
 
   // remove from the page list
   // (no need to do _mi_heap_delayed_free first as all blocks are already free)
@@ -443,9 +440,6 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   mi_assert_internal(mi_page_all_free(page));
 
   mi_page_set_has_aligned(page, false);
-  #if MI_DEBUG_GUARDED
-  mi_page_set_has_guarded(page, false);
-  #endif
 
   // don't retire too often..
   // (or we end up retiring and re-allocating most of the time)

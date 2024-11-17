@@ -143,7 +143,13 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0,   UNINIT, MI_OPTION(visit_abandoned) },          
 #endif
   { 0,   UNINIT, MI_OPTION(debug_guarded_min) },        // only used when building with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects
-  { 0,   UNINIT, MI_OPTION(debug_guarded_max) },        // only used when building with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects
+  { MI_GiB, UNINIT, MI_OPTION(debug_guarded_max) },     // only used when building with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects
+  { 0,   UNINIT, MI_OPTION(debug_guarded_precise) },    // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+#if MI_DEBUG_GUARDED
+  { 1000,UNINIT, MI_OPTION(debug_guarded_sample_rate)}, // 1 out of N allocations in the min/max range will be guarded(= 1000)
+#else
+  { 0,   UNINIT, MI_OPTION(debug_guarded_sample_rate)},
+#endif
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

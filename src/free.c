@@ -70,20 +70,29 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
 }
 
 // forward declaration for a MI_DEBUG_GUARDED build
-static void mi_block_unguard(mi_page_t* page, mi_block_t* block);
+#if MI_DEBUG_GUARDED
+static void mi_block_unguard_prim(mi_page_t* page, mi_block_t* block, void* p); // forward declaration
+static inline void mi_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
+  if (mi_block_ptr_is_guarded(block, p)) { mi_block_unguard_prim(page, block, p); }
+}
+#else
+static inline void mi_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
+  MI_UNUSED(page); MI_UNUSED(block); MI_UNUSED(p);
+}
+#endif
 
 // free a local pointer  (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, mi_segment_t* segment, void* p) mi_attr_noexcept {
   MI_UNUSED(segment);
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(page, p) : (mi_block_t*)p);
-  mi_block_unguard(page,block);
+  mi_block_unguard(page, block, p);
   mi_free_block_local(page, block, true /* track stats */, true /* check for a full page */);
 }
 
 // free a pointer owned by another thread (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, mi_segment_t* segment, void* p) mi_attr_noexcept {
   mi_block_t* const block = _mi_page_ptr_unalign(page, p); // don't check `has_aligned` flag to avoid a race (issue #865)
-  mi_block_unguard(page, block);
+  mi_block_unguard(page, block, p);
   mi_free_block_mt(page, segment, block);
 }
 
@@ -297,20 +306,19 @@ static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_page_t* p
   const size_t size = mi_page_usable_size_of(page, block);
   const ptrdiff_t adjust = (uint8_t*)p - (uint8_t*)block;
   mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);
-  return (size - adjust);
+  const size_t aligned_size = (size - adjust);
+  #if MI_DEBUG_GUARDED
+  if (mi_block_ptr_is_guarded(block, p)) {
+    return aligned_size - _mi_os_page_size();
+  }
+  #endif
+  return aligned_size;
 }
 
 static inline size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noexcept {
   const mi_segment_t* const segment = mi_checked_ptr_segment(p, msg);
   if mi_unlikely(segment==NULL) return 0;
-  const mi_page_t* const page = _mi_segment_page_of(segment, p);
-  #if MI_DEBUG_GUARDED
-  if (mi_page_has_guarded(page)) {
-    const size_t bsize = mi_page_usable_aligned_size_of(page, p);
-    mi_assert_internal(bsize > _mi_os_page_size());
-    return (bsize > _mi_os_page_size() ? bsize - _mi_os_page_size() : bsize);
-  } else
-  #endif
+  const mi_page_t* const page = _mi_segment_page_of(segment, p);  
   if mi_likely(!mi_page_has_aligned(page)) {
     const mi_block_t* block = (const mi_block_t*)p;
     return mi_page_usable_size_of(page, block);
@@ -534,22 +542,19 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
 
 
 // Remove guard page when building with MI_DEBUG_GUARDED
-#if !MI_DEBUG_GUARDED
-static void mi_block_unguard(mi_page_t* page, mi_block_t* block) {
-  MI_UNUSED(page);
-  MI_UNUSED(block);
-  // do nothing
-}
-#else
-static void mi_block_unguard(mi_page_t* page, mi_block_t* block) {
-  if (mi_page_has_guarded(page)) {
-    const size_t bsize = mi_page_block_size(page);
-    const size_t psize = _mi_os_page_size();
-    mi_assert_internal(bsize > psize);
-    mi_assert_internal(_mi_page_segment(page)->allow_decommit);
-    void* gpage = (uint8_t*)block + (bsize - psize);
-    mi_assert_internal(_mi_is_aligned(gpage, psize));
-    _mi_os_unprotect(gpage, psize);
-  }
+#if MI_DEBUG_GUARDED
+static void mi_block_unguard_prim(mi_page_t* page, mi_block_t* block, void* p) {
+  mi_assert_internal(mi_block_ptr_is_guarded(block, p));
+  mi_assert_internal(mi_page_has_aligned(page));
+  mi_assert_internal((uint8_t*)p - (uint8_t*)block >= sizeof(mi_block_t));
+  mi_assert_internal(block->next == MI_BLOCK_TAG_GUARDED);
+
+  const size_t bsize = mi_page_block_size(page);
+  const size_t psize = _mi_os_page_size();
+  mi_assert_internal(bsize > psize);
+  mi_assert_internal(_mi_page_segment(page)->allow_decommit);
+  void* gpage = (uint8_t*)block + bsize - psize;
+  mi_assert_internal(_mi_is_aligned(gpage, psize));
+  _mi_os_unprotect(gpage, psize);  
 }
 #endif

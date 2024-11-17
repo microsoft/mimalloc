@@ -232,6 +232,13 @@ typedef struct mi_block_s {
   mi_encoded_t next;
 } mi_block_t;
 
+#if MI_DEBUG_GUARDED
+// we always align guarded pointers in a block at an offset
+// the block `next` field is then used as a tag to distinguish regular offset aligned blocks from guarded ones
+#define MI_BLOCK_TAG_ALIGNED   ((mi_encoded_t)(0))
+#define MI_BLOCK_TAG_GUARDED   (~MI_BLOCK_TAG_ALIGNED)
+#endif
+
 
 // The delayed flags are used for efficient multi-threaded free-ing
 typedef enum mi_delayed_e {

@@ -20,13 +20,23 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
   mi_assert_internal(_mi_is_power_of_two(alignment) && (alignment > 0));
   if (alignment > size) return false;
   if (alignment <= MI_MAX_ALIGN_SIZE) return true;
-  #if MI_DEBUG_GUARDED
-  return false;
-  #else
   const size_t bsize = mi_good_size(size);
-  return (bsize <= MI_MAX_ALIGN_GUARANTEE && (bsize & (alignment-1)) == 0);
-  #endif
+  return (bsize <= MI_MAX_ALIGN_GUARANTEE && (bsize & (alignment-1)) == 0);  
 }
+
+#if MI_DEBUG_GUARDED
+static mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, size_t size, size_t alignment, bool zero) mi_attr_noexcept {
+  // use over allocation for guarded blocksl
+  mi_assert_internal(alignment > 0 && alignment < MI_BLOCK_ALIGNMENT_MAX);
+  const size_t oversize = size + alignment - 1;
+  void* base = _mi_heap_malloc_guarded(heap, oversize, zero);
+  void* p = mi_align_up_ptr(base, alignment);
+  mi_track_align(base, p, (uint8_t*)p - (uint8_t*)base, size);
+  mi_assert_internal(mi_usable_size(p) >= size);
+  mi_assert_internal(_mi_is_aligned(p, alignment));
+  return p;
+}
+#endif
 
 // Fallback aligned allocation that over-allocates -- split out for better codegen
 static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t* const heap, const size_t size, const size_t alignment, const size_t offset, const bool zero) mi_attr_noexcept
@@ -68,6 +78,13 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
   void* aligned_p = (void*)((uintptr_t)p + adjust);
   if (aligned_p != p) {
     mi_page_set_has_aligned(page, true);
+    #if MI_DEBUG_GUARDED
+    // set tag to aligned so mi_usable_size works with guard pages
+    if (adjust > sizeof(mi_block_t)) {
+      mi_block_t* const block = (mi_block_t*)p;
+      block->next = MI_BLOCK_TAG_ALIGNED;
+    }
+    #endif
     _mi_padding_shrink(page, (mi_block_t*)p, adjust + size);
   }
   // todo: expand padding if overallocated ?
@@ -76,10 +93,8 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
   mi_assert_internal(((uintptr_t)aligned_p + offset) % alignment == 0);
   mi_assert_internal(mi_usable_size(aligned_p)>=size);
   mi_assert_internal(mi_usable_size(p) == mi_usable_size(aligned_p)+adjust);
-  #if !MI_DEBUG_GUARDED
   mi_assert_internal(p == _mi_page_ptr_unalign(_mi_ptr_page(aligned_p), aligned_p));
-  #endif
-
+  
   // now zero the block if needed
   if (alignment > MI_BLOCK_ALIGNMENT_MAX) {
     // for the tracker, on huge aligned allocations only from the start of the large block is defined
@@ -128,6 +143,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_generic(mi_heap_t* 
   return mi_heap_malloc_zero_aligned_at_overalloc(heap,size,alignment,offset,zero);
 }
 
+
 // Primitive aligned allocation
 static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t size, const size_t alignment, const size_t offset, const bool zero) mi_attr_noexcept
 {
@@ -138,8 +154,13 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
     #endif
     return NULL;
   }
+
+  #if MI_DEBUG_GUARDED
+  if (offset==0 && alignment < MI_BLOCK_ALIGNMENT_MAX && mi_heap_malloc_use_guarded(heap,size)) {
+    return mi_heap_malloc_guarded_aligned(heap, size, alignment, zero);
+  }
+  #endif
   
-  #if !MI_DEBUG_GUARDED
   // try first if there happens to be a small block available with just the right alignment
   if mi_likely(size <= MI_SMALL_SIZE_MAX && alignment <= size) {
     const uintptr_t align_mask = alignment-1;       // for any x, `(x & align_mask) == (x % alignment)`
@@ -160,8 +181,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
       }
     }
   }
-  #endif
-
+  
   // fallback to generic aligned allocation
   return mi_heap_malloc_zero_aligned_at_generic(heap, size, alignment, offset, zero);
 }
@@ -313,3 +333,5 @@ mi_decl_nodiscard void* mi_recalloc_aligned_at(void* p, size_t newcount, size_t 
 mi_decl_nodiscard void* mi_recalloc_aligned(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept {
   return mi_heap_recalloc_aligned(mi_prim_get_default_heap(), p, newcount, size, alignment);
 }
+
+

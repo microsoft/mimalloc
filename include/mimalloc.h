@@ -368,6 +368,8 @@ typedef enum mi_option_e {
   mi_option_visit_abandoned,            // allow visiting heap blocks from abandoned threads (=0)
   mi_option_debug_guarded_min,          // only used when building with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects (=0)
   mi_option_debug_guarded_max,          // only used when building with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects (=0)
+  mi_option_debug_guarded_precise,      // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+  mi_option_debug_guarded_sample_rate,  // 1 out of N allocations in the min/max range will be guarded (=1000)
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,

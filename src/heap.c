@@ -370,7 +370,7 @@ void mi_heap_destroy(mi_heap_t* heap) {
   mi_assert_expensive(mi_heap_is_valid(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
   #if MI_DEBUG_GUARDED
-  _mi_warning_message("'mi_heap_destroy' called but ignored as MI_DEBUG_GUARDED is enabled (heap at %p)\n", heap);
+  // _mi_warning_message("'mi_heap_destroy' called but MI_DEBUG_GUARDED is enabled -- using `mi_heap_delete` instead (heap at %p)\n", heap);
   mi_heap_delete(heap);
   return;
   #else
