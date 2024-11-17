@@ -86,7 +86,8 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } \
+  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
+  { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 
 // --------------------------------------------------------
@@ -111,6 +112,9 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,             // next
   false,            // can reclaim
   0,                // tag
+  #if MI_GUARDED
+  0, 0, 0, 0, 0,
+  #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY
 };
@@ -151,6 +155,9 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
   NULL,             // next heap
   false,            // can reclaim
   0,                // tag
+  #if MI_GUARDED
+  0, 0, 0, 0, 0,
+  #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY
 };
@@ -158,6 +165,22 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
 mi_stats_t _mi_stats_main = { MI_STATS_NULL };
+
+#if MI_GUARDED
+void _mi_heap_guarded_init(mi_heap_t* heap) {
+  heap->guarded_sample_rate = mi_option_get_clamp(mi_option_guarded_sample_rate, 0, LONG_MAX);
+  heap->guarded_size_max = mi_option_get_clamp(mi_option_guarded_max, 0, LONG_MAX);
+  heap->guarded_size_min = mi_option_get_clamp(mi_option_guarded_min, 0, (long)heap->guarded_size_max);
+  heap->guarded_sample_seed = (size_t)mi_option_get(mi_option_guarded_sample_seed);
+  if (heap->guarded_sample_seed == 0) { heap->guarded_sample_seed = _mi_heap_random_next(heap); }
+  heap->guarded_sample_seed  = heap->guarded_sample_seed % heap->guarded_sample_rate;
+  heap->guarded_sample_count = heap->guarded_sample_seed;
+}
+#else
+void _mi_heap_guarded_init(mi_heap_t* heap) {
+  MI_UNUSED(heap);
+}
+#endif
 
 
 static void mi_heap_main_init(void) {
@@ -174,6 +197,7 @@ static void mi_heap_main_init(void) {
     _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
     mi_lock_init(&mi_subproc_default.abandoned_os_lock);
     mi_lock_init(&mi_subproc_default.abandoned_os_visit_lock);
+    _mi_heap_guarded_init(&_mi_heap_main);
   }
 }
 

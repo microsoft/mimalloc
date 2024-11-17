@@ -502,6 +502,13 @@ struct mi_heap_s {
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
   uint8_t               tag;                                 // custom tag, can be used for separating heaps based on the object types
+  #if MI_GUARDED
+  size_t                guarded_size_min;                    // minimal size for guarded objects
+  size_t                guarded_size_max;                    // maximal size for guarded objects
+  size_t                guarded_sample_rate;                 // sample rate (set to 0 to disable guarded pages)
+  size_t                guarded_sample_seed;                 // starting sample count
+  size_t                guarded_sample_count;                // current sample count (wraps at `sample_rate`)
+  #endif
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
   mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
 };
@@ -594,6 +601,7 @@ typedef struct mi_stats_s {
   mi_stat_counter_t arena_count;
   mi_stat_counter_t arena_crossover_count;
   mi_stat_counter_t arena_rollback_count;
+  mi_stat_counter_t guarded_alloc_count;
 #if MI_STAT>1
   mi_stat_count_t normal_bins[MI_BIN_HUGE+1];
 #endif

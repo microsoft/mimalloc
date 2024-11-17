@@ -91,6 +91,7 @@ void       _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap);
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 mi_heap_t*    _mi_heap_main_get(void);     // statically allocated main backing heap
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
+void       _mi_heap_guarded_init(mi_heap_t* heap);
 
 // os.c
 void       _mi_os_init(void);                                            // called from process init
@@ -610,12 +611,21 @@ static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* 
 }
 
 static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
-  MI_UNUSED(heap);
-  return (size <= (size_t)_mi_option_get_fast(mi_option_guarded_max)
-           && size >= (size_t)_mi_option_get_fast(mi_option_guarded_min));
+  MI_UNUSED(heap);  
+  if (heap->guarded_sample_rate==0 ||
+      size > heap->guarded_size_max ||
+      size < heap->guarded_size_min) {
+    return false;
+  }
+  if (++heap->guarded_sample_count < heap->guarded_sample_rate) {
+    return false;
+  }
+  heap->guarded_sample_count = 0;  // reset
+  return true;
 }
 
 mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
+
 #endif
 
 

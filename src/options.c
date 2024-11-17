@@ -150,6 +150,7 @@ static mi_option_desc_t options[_mi_option_last] =
 #else
   { 0,   UNINIT, MI_OPTION(guarded_sample_rate)},
 #endif
+  { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -173,7 +174,7 @@ void _mi_options_init(void) {
   mi_max_error_count = mi_option_get(mi_option_max_errors);
   mi_max_warning_count = mi_option_get(mi_option_max_warnings);
   #if MI_GUARDED
-  if (mi_option_get(mi_option_guarded_max) > 0) {
+  if (mi_option_get(mi_option_guarded_sample_rate) > 0) {
     if (mi_option_is_enabled(mi_option_allow_large_os_pages)) {
       mi_option_disable(mi_option_allow_large_os_pages);
       _mi_warning_message("option 'allow_large_os_pages' is disabled to allow for guarded objects\n");
