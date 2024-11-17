@@ -214,7 +214,8 @@ void  _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats) {
 -------------------------------------------------------------- */
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
-static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* tld_stats) {
+// Also `hint_addr` is a hint and may be ignored.
+static void* mi_os_prim_alloc_at(void* hint_addr, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* tld_stats) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(is_zero != NULL);
   mi_assert_internal(is_large != NULL);
@@ -223,9 +224,9 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
   if (try_alignment == 0) { try_alignment = 1; } // avoid 0 to ensure there will be no divide by zero when aligning
   *is_zero = false;
   void* p = NULL;
-  int err = _mi_prim_alloc(size, try_alignment, commit, allow_large, is_large, is_zero, &p);
+  int err = _mi_prim_alloc(hint_addr, size, try_alignment, commit, allow_large, is_large, is_zero, &p);
   if (err != 0) {
-    _mi_warning_message("unable to allocate OS memory (error: %d (0x%x), size: 0x%zx bytes, align: 0x%zx, commit: %d, allow large: %d)\n", err, err, size, try_alignment, commit, allow_large);
+    _mi_warning_message("unable to allocate OS memory (error: %d (0x%x), addr: %p, size: 0x%zx bytes, align: 0x%zx, commit: %d, allow large: %d)\n", err, err, hint_addr, size, try_alignment, commit, allow_large);
   }
 
   MI_UNUSED(tld_stats);
@@ -243,6 +244,10 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
     }
   }
   return p;
+}
+
+static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* tld_stats) {
+  return mi_os_prim_alloc_at(NULL, size, try_alignment, commit, allow_large, is_large, is_zero, tld_stats);
 }
 
 
