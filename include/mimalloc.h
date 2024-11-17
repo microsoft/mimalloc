@@ -290,7 +290,7 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t a
 #endif
 
 
-// Experimental: allow sub-processes whose memory segments stay separated (and no reclamation between them) 
+// Experimental: allow sub-processes whose memory segments stay separated (and no reclamation between them)
 // Used for example for separate interpreter's in one process.
 typedef void* mi_subproc_id_t;
 mi_decl_export mi_subproc_id_t mi_subproc_main(void);
@@ -349,7 +349,7 @@ typedef enum mi_option_e {
   mi_option_deprecated_segment_cache,
   mi_option_deprecated_page_reset,
   mi_option_abandoned_page_purge,       // immediately purge delayed purges on thread termination
-  mi_option_deprecated_segment_reset, 
+  mi_option_deprecated_segment_reset,
   mi_option_eager_commit_delay,         // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
   mi_option_purge_delay,                // memory purging is delayed by N milli seconds; use 0 for immediate purging or -1 for no purging at all. (=10)
   mi_option_use_numa_nodes,             // 0 = use all available numa nodes, otherwise use at most N nodes.
@@ -366,10 +366,10 @@ typedef enum mi_option_e {
   mi_option_disallow_arena_alloc,       // 1 = do not use arena's for allocation (except if using specific arena id's)
   mi_option_retry_on_oom,               // retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries. (only on windows)
   mi_option_visit_abandoned,            // allow visiting heap blocks from abandoned threads (=0)
-  mi_option_debug_guarded_min,          // only used when building with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects (=0)
-  mi_option_debug_guarded_max,          // only used when building with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects (=0)
-  mi_option_debug_guarded_precise,      // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
-  mi_option_debug_guarded_sample_rate,  // 1 out of N allocations in the min/max range will be guarded (=1000)
+  mi_option_guarded_min,                // only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
+  mi_option_guarded_max,                // only used when building with MI_GUARDED: maximal rounded object size for guarded objects (=0)
+  mi_option_guarded_precise,            // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+  mi_option_guarded_sample_rate,        // 1 out of N allocations in the min/max range will be guarded (=1000)
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,
@@ -539,7 +539,7 @@ template<class T, bool _mi_destroy> struct _mi_heap_stl_allocator_common : publi
 protected:
   std::shared_ptr<mi_heap_t> heap;
   template<class U, bool D> friend struct _mi_heap_stl_allocator_common;
-  
+
   _mi_heap_stl_allocator_common() {
     mi_heap_t* hp = mi_heap_new();
     this->heap.reset(hp, (_mi_destroy ? &heap_destroy : &heap_delete));  /* calls heap_delete/destroy when the refcount drops to zero */
@@ -556,7 +556,7 @@ private:
 template<class T> struct mi_heap_stl_allocator : public _mi_heap_stl_allocator_common<T, false> {
   using typename _mi_heap_stl_allocator_common<T, false>::size_type;
   mi_heap_stl_allocator() : _mi_heap_stl_allocator_common<T, false>() { } // creates fresh heap that is deleted when the destructor is called
-  mi_heap_stl_allocator(mi_heap_t* hp) : _mi_heap_stl_allocator_common<T, false>(hp) { }  // no delete nor destroy on the passed in heap 
+  mi_heap_stl_allocator(mi_heap_t* hp) : _mi_heap_stl_allocator_common<T, false>(hp) { }  // no delete nor destroy on the passed in heap
   template<class U> mi_heap_stl_allocator(const mi_heap_stl_allocator<U>& x) mi_attr_noexcept : _mi_heap_stl_allocator_common<T, false>(x) { }
 
   mi_heap_stl_allocator select_on_container_copy_construction() const { return *this; }
@@ -573,7 +573,7 @@ template<class T1, class T2> bool operator!=(const mi_heap_stl_allocator<T1>& x,
 template<class T> struct mi_heap_destroy_stl_allocator : public _mi_heap_stl_allocator_common<T, true> {
   using typename _mi_heap_stl_allocator_common<T, true>::size_type;
   mi_heap_destroy_stl_allocator() : _mi_heap_stl_allocator_common<T, true>() { } // creates fresh heap that is destroyed when the destructor is called
-  mi_heap_destroy_stl_allocator(mi_heap_t* hp) : _mi_heap_stl_allocator_common<T, true>(hp) { }  // no delete nor destroy on the passed in heap 
+  mi_heap_destroy_stl_allocator(mi_heap_t* hp) : _mi_heap_stl_allocator_common<T, true>(hp) { }  // no delete nor destroy on the passed in heap
   template<class U> mi_heap_destroy_stl_allocator(const mi_heap_destroy_stl_allocator<U>& x) mi_attr_noexcept : _mi_heap_stl_allocator_common<T, true>(x) { }
 
   mi_heap_destroy_stl_allocator select_on_container_copy_construction() const { return *this; }

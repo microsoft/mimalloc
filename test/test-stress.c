@@ -22,21 +22,22 @@ terms of the MIT license.
 #include <string.h>
 #include <assert.h>
 
-#define MI_DEBUG_GUARDED
+// #define MI_GUARDED
+// #define USE_STD_MALLOC
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
 // argument defaults
 #if defined(MI_TSAN)          // with thread-sanitizer reduce the threads to test within the azure pipeline limits
-static int THREADS = 8;       
+static int THREADS = 8;
 static int SCALE   = 25;
 static int ITER    = 400;
 #elif defined(MI_UBSAN)       // with undefined behavious sanitizer reduce parameters to stay within the azure pipeline limits
-static int THREADS = 8;       
+static int THREADS = 8;
 static int SCALE   = 25;
 static int ITER    = 20;
-#elif defined(MI_DEBUG_GUARDED) // with debug guard pages reduce parameters to stay within the azure pipeline limits
-static int THREADS = 8;       
+#elif defined(MI_GUARDED) // with debug guard pages reduce parameters to stay within the azure pipeline limits
+static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
 #else
@@ -58,7 +59,6 @@ static size_t use_one_size = 0;               // use single object size of `N * 
 
 static bool   main_participates = false;       // main thread participates as a worker too
 
-// #define USE_STD_MALLOC
 #ifdef USE_STD_MALLOC
 #define custom_calloc(n,s)    calloc(n,s)
 #define custom_realloc(p,s)   realloc(p,s)

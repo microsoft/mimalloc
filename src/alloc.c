@@ -121,7 +121,7 @@ extern void* _mi_page_malloc_zeroed(mi_heap_t* heap, mi_page_t* page, size_t siz
   return _mi_page_malloc_zero(heap,page,size,true);
 }
 
-#if MI_DEBUG_GUARDED
+#if MI_GUARDED
 mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
 #endif
 
@@ -132,12 +132,12 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   const uintptr_t tid = _mi_thread_id();
   mi_assert(heap->thread_id == 0 || heap->thread_id == tid); // heaps are thread local
   #endif
-  #if (MI_PADDING || MI_DEBUG_GUARDED)
+  #if (MI_PADDING || MI_GUARDED)
   if (size == 0) { size = sizeof(void*); }
   #endif
-  #if MI_DEBUG_GUARDED
-  if (mi_heap_malloc_use_guarded(heap,size)) { 
-    return _mi_heap_malloc_guarded(heap, size, zero); 
+  #if MI_GUARDED
+  if (mi_heap_malloc_use_guarded(heap,size)) {
+    return _mi_heap_malloc_guarded(heap, size, zero);
   }
   #endif
 
@@ -176,9 +176,9 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
     mi_assert_internal(huge_alignment == 0);
     return mi_heap_malloc_small_zero(heap, size, zero);
   }
-  #if MI_DEBUG_GUARDED
-  else if (huge_alignment==0 && mi_heap_malloc_use_guarded(heap,size)) { 
-    return _mi_heap_malloc_guarded(heap, size, zero); 
+  #if MI_GUARDED
+  else if (huge_alignment==0 && mi_heap_malloc_use_guarded(heap,size)) {
+    return _mi_heap_malloc_guarded(heap, size, zero);
   }
   #endif
   else {
@@ -603,7 +603,7 @@ mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
   }
 }
 
-#if MI_DEBUG_GUARDED
+#if MI_GUARDED
 // We always allocate a guarded allocation at an offset (`mi_page_has_aligned` will be true).
 // We then set the first word of the block to `0` for regular offset aligned allocations (in `alloc-aligned.c`)
 // and the first word to `~0` for guarded allocations to have a correct `mi_usable_size`
@@ -653,7 +653,7 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   // allocate multiple of page size ending in a guard page
   // ensure minimal alignment requirement?
   const size_t os_page_size = _mi_os_page_size();
-  const size_t obj_size = (mi_option_is_enabled(mi_option_debug_guarded_precise) ? size : _mi_align_up(size, MI_MAX_ALIGN_SIZE));
+  const size_t obj_size = (mi_option_is_enabled(mi_option_guarded_precise) ? size : _mi_align_up(size, MI_MAX_ALIGN_SIZE));
   const size_t bsize    = _mi_align_up(_mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
   const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);
   mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(heap, req_size, zero, 0 /* huge_alignment */);

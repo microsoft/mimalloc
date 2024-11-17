@@ -74,8 +74,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Use guard pages behind objects of a certain size (set by the MIMALLOC_DEBUG_GUARDED_MIN/MAX options)
 // Padding should be disabled when using guard pages
-// #define MI_DEBUG_GUARDED 1
-#if defined(MI_DEBUG_GUARDED)
+// #define MI_GUARDED 1
+#if defined(MI_GUARDED)
 #define MI_PADDING  0
 #endif
 
@@ -232,7 +232,7 @@ typedef struct mi_block_s {
   mi_encoded_t next;
 } mi_block_t;
 
-#if MI_DEBUG_GUARDED
+#if MI_GUARDED
 // we always align guarded pointers in a block at an offset
 // the block `next` field is then used as a tag to distinguish regular offset aligned blocks from guarded ones
 #define MI_BLOCK_TAG_ALIGNED   ((mi_encoded_t)(0))
@@ -257,7 +257,6 @@ typedef union mi_page_flags_s {
   struct {
     uint8_t in_full : 1;
     uint8_t has_aligned : 1;
-    uint8_t has_guarded : 1;  // only used with MI_DEBUG_GUARDED
   } x;
 } mi_page_flags_t;
 #else
@@ -267,7 +266,6 @@ typedef union mi_page_flags_s {
   struct {
     uint8_t in_full;
     uint8_t has_aligned;
-    uint8_t has_guarded; // only used with MI_DEBUG_GUARDED
   } x;
 } mi_page_flags_t;
 #endif

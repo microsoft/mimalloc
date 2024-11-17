@@ -21,10 +21,10 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
   if (alignment > size) return false;
   if (alignment <= MI_MAX_ALIGN_SIZE) return true;
   const size_t bsize = mi_good_size(size);
-  return (bsize <= MI_MAX_ALIGN_GUARANTEE && (bsize & (alignment-1)) == 0);  
+  return (bsize <= MI_MAX_ALIGN_GUARANTEE && (bsize & (alignment-1)) == 0);
 }
 
-#if MI_DEBUG_GUARDED
+#if MI_GUARDED
 static mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, size_t size, size_t alignment, bool zero) mi_attr_noexcept {
   // use over allocation for guarded blocksl
   mi_assert_internal(alignment > 0 && alignment < MI_BLOCK_ALIGNMENT_MAX);
@@ -69,7 +69,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
     if (p == NULL) return NULL;
   }
   mi_page_t* page = _mi_ptr_page(p);
-  
+
   // .. and align within the allocation
   const uintptr_t align_mask = alignment - 1;  // for any x, `(x & align_mask) == (x % alignment)`
   const uintptr_t poffset = ((uintptr_t)p + offset) & align_mask;
@@ -78,7 +78,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
   void* aligned_p = (void*)((uintptr_t)p + adjust);
   if (aligned_p != p) {
     mi_page_set_has_aligned(page, true);
-    #if MI_DEBUG_GUARDED
+    #if MI_GUARDED
     // set tag to aligned so mi_usable_size works with guard pages
     if (adjust > sizeof(mi_block_t)) {
       mi_block_t* const block = (mi_block_t*)p;
@@ -94,7 +94,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
   mi_assert_internal(mi_usable_size(aligned_p)>=size);
   mi_assert_internal(mi_usable_size(p) == mi_usable_size(aligned_p)+adjust);
   mi_assert_internal(p == _mi_page_ptr_unalign(_mi_ptr_page(aligned_p), aligned_p));
-  
+
   // now zero the block if needed
   if (alignment > MI_BLOCK_ALIGNMENT_MAX) {
     // for the tracker, on huge aligned allocations only from the start of the large block is defined
@@ -115,27 +115,27 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_generic(mi_heap_t* 
 {
   mi_assert_internal(alignment != 0 && _mi_is_power_of_two(alignment));
   // we don't allocate more than MI_MAX_ALLOC_SIZE (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
-  if mi_unlikely(size > (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE)) { 
+  if mi_unlikely(size > (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE)) {
     #if MI_DEBUG > 0
     _mi_error_message(EOVERFLOW, "aligned allocation request is too large (size %zu, alignment %zu)\n", size, alignment);
     #endif
     return NULL;
   }
-  
+
   // use regular allocation if it is guaranteed to fit the alignment constraints.
   // this is important to try as the fast path in `mi_heap_malloc_zero_aligned` only works when there exist
   // a page with the right block size, and if we always use the over-alloc fallback that would never happen.
   if (offset == 0 && mi_malloc_is_naturally_aligned(size,alignment)) {
     void* p = _mi_heap_malloc_zero(heap, size, zero);
     mi_assert_internal(p == NULL || ((uintptr_t)p % alignment) == 0);
-    const bool is_aligned_or_null = (((uintptr_t)p) & (alignment-1))==0;  
+    const bool is_aligned_or_null = (((uintptr_t)p) & (alignment-1))==0;
     if mi_likely(is_aligned_or_null) {
       return p;
     }
     else {
       // this should never happen if the `mi_malloc_is_naturally_aligned` check is correct..
       mi_assert(false);
-      mi_free(p); 
+      mi_free(p);
     }
   }
 
@@ -155,16 +155,16 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
     return NULL;
   }
 
-  #if MI_DEBUG_GUARDED
+  #if MI_GUARDED
   if (offset==0 && alignment < MI_BLOCK_ALIGNMENT_MAX && mi_heap_malloc_use_guarded(heap,size)) {
     return mi_heap_malloc_guarded_aligned(heap, size, alignment, zero);
   }
   #endif
-  
+
   // try first if there happens to be a small block available with just the right alignment
   if mi_likely(size <= MI_SMALL_SIZE_MAX && alignment <= size) {
     const uintptr_t align_mask = alignment-1;       // for any x, `(x & align_mask) == (x % alignment)`
-    const size_t padsize = size + MI_PADDING_SIZE;  
+    const size_t padsize = size + MI_PADDING_SIZE;
     mi_page_t* page = _mi_heap_get_free_small_page(heap, padsize);
     if mi_likely(page->free != NULL) {
       const bool is_aligned = (((uintptr_t)page->free + offset) & align_mask)==0;
@@ -181,7 +181,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
       }
     }
   }
-  
+
   // fallback to generic aligned allocation
   return mi_heap_malloc_zero_aligned_at_generic(heap, size, alignment, offset, zero);
 }
