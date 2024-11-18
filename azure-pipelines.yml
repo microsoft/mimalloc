@@ -178,6 +178,10 @@ jobs:
         BuildType: debug
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
         MSBuildConfiguration: Debug
+      Release:
+        BuildType: release
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
+        MSBuildConfiguration: Release
   steps:
   - task: CMake@1
     inputs:
@@ -214,7 +218,16 @@ jobs:
         CXX: clang++
         BuildType: debug-clang
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
-
+      Debug++ Clang:
+        CC: clang
+        CXX: clang++
+        BuildType: debug-clang-cxx
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
+      Release Clang:
+        CC: clang
+        CXX: clang++
+        BuildType: release-clang
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
   steps:
   - task: CMake@1
     inputs:
@@ -248,7 +261,16 @@ jobs:
         CXX: clang++
         BuildType: debug-clang
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
-
+      Debug++ Clang:
+        CC: clang
+        CXX: clang++
+        BuildType: debug-clang-cxx
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
+      Release Clang:
+        CC: clang
+        CXX: clang++
+        BuildType: release-clang
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
   steps:
   - task: CMake@1
     inputs:
@@ -273,9 +295,6 @@ jobs:
       Release:
         BuildType: release
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
-      Secure:
-        BuildType: secure
-        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
   steps:
   - task: CMake@1
     inputs:
