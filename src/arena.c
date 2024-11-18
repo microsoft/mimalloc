@@ -293,7 +293,7 @@ static void* mi_arena_try_alloc_at_id(mi_arena_id_t arena_id, bool match_numa_no
                                        bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld )
 {
   MI_UNUSED_RELEASE(alignment);
-  mi_assert_internal(alignment <= MI_SEGMENT_ALIGN);
+  mi_assert(alignment <= MI_SEGMENT_ALIGN);
   const size_t bcount = mi_block_count_of_size(size);
   const size_t arena_index = mi_arena_id_index(arena_id);
   mi_assert_internal(arena_index < mi_atomic_load_relaxed(&mi_arena_count));

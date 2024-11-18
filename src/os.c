@@ -11,16 +11,33 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 /* -----------------------------------------------------------
-  Initialization. 
+  Initialization.
 ----------------------------------------------------------- */
+#ifndef MI_DEFAULT_VIRTUAL_ADDRESS_BITS
+#if MI_INTPTR_SIZE < 8
+#define MI_DEFAULT_VIRTUAL_ADDRESS_BITS   32
+#else
+#define MI_DEFAULT_VIRTUAL_ADDRESS_BITS   48
+#endif
+#endif
+
+#ifndef MI_DEFAULT_PHYSICAL_MEMORY
+#if MI_INTPTR_SIZE < 8
+#define MI_DEFAULT_PHYSICAL_MEMORY    4*MI_GiB
+#else
+#define MI_DEFAULT_PHYSICAL_MEMORY    32*MI_GiB
+#endif
+#endif
 
 static mi_os_mem_config_t mi_os_mem_config = {
-  4096,   // page size
-  0,      // large page size (usually 2MiB)
-  4096,   // allocation granularity
-  true,   // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
-  false,  // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
-  true    // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
+  4096,     // page size
+  0,        // large page size (usually 2MiB)
+  4096,     // allocation granularity
+  MI_DEFAULT_PHYSICAL_MEMORY,
+  MI_DEFAULT_VIRTUAL_ADDRESS_BITS,
+  true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
+  false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
+  true      // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
 };
 
 bool _mi_os_has_overcommit(void) {
@@ -76,9 +93,9 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats
   aligned hinting
 -------------------------------------------------------------- */
 
-// On 64-bit systems, we can do efficient aligned allocation by using
-// the 2TiB to 30TiB area to allocate those. We assume we have
-// at least 48 bits of virtual address space on 64-bit systems (but see issue #939)
+// On systems with enough virtual address bits, we can do efficient aligned allocation by using
+// the 2TiB to 30TiB area to allocate those. If we have at least 46 bits of virtual address
+// space (64TiB) we use this technique. (but see issue #939)
 #if (MI_INTPTR_SIZE >= 8) && !defined(MI_NO_ALIGNED_HINT)
 static mi_decl_cache_align _Atomic(uintptr_t)aligned_base;
 
@@ -96,6 +113,7 @@ static mi_decl_cache_align _Atomic(uintptr_t)aligned_base;
 void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
 {
   if (try_alignment <= 1 || try_alignment > MI_SEGMENT_SIZE) return NULL;
+  if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
   size = _mi_align_up(size, MI_SEGMENT_SIZE);
   if (size > 1*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<30) = 1/4096.
   #if (MI_SECURE>0)
@@ -181,7 +199,8 @@ void  _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats) {
 -------------------------------------------------------------- */
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
-static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* tld_stats) {
+// Also `hint_addr` is a hint and may be ignored.
+static void* mi_os_prim_alloc_at(void* hint_addr, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* tld_stats) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(is_zero != NULL);
   mi_assert_internal(is_large != NULL);
@@ -190,9 +209,9 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
   if (try_alignment == 0) { try_alignment = 1; } // avoid 0 to ensure there will be no divide by zero when aligning
   *is_zero = false;
   void* p = NULL;
-  int err = _mi_prim_alloc(size, try_alignment, commit, allow_large, is_large, is_zero, &p);
+  int err = _mi_prim_alloc(hint_addr, size, try_alignment, commit, allow_large, is_large, is_zero, &p);
   if (err != 0) {
-    _mi_warning_message("unable to allocate OS memory (error: %d (0x%x), size: 0x%zx bytes, align: 0x%zx, commit: %d, allow large: %d)\n", err, err, size, try_alignment, commit, allow_large);
+    _mi_warning_message("unable to allocate OS memory (error: %d (0x%x), addr: %p, size: 0x%zx bytes, align: 0x%zx, commit: %d, allow large: %d)\n", err, err, hint_addr, size, try_alignment, commit, allow_large);
   }
 
   MI_UNUSED(tld_stats);
@@ -210,6 +229,10 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
     }
   }
   return p;
+}
+
+static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, mi_stats_t* tld_stats) {
+  return mi_os_prim_alloc_at(NULL, size, try_alignment, commit, allow_large, is_large, is_zero, tld_stats);
 }
 
 
@@ -235,7 +258,9 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
   }
   else {
     // if not aligned, free it, overallocate, and unmap around it
+    #if !MI_TRACK_ASAN
     _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (size: 0x%zx bytes, address: %p, alignment: 0x%zx, commit: %d)\n", size, p, alignment, commit);
+    #endif
     mi_os_prim_free(p, size, commit, stats);
     if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
     const size_t over_size = size + alignment;
@@ -261,7 +286,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       p = mi_os_prim_alloc(over_size, 1, commit, false, is_large, is_zero, stats);
       if (p == NULL) return NULL;
 
-      // and selectively unmap parts around the over-allocated area. 
+      // and selectively unmap parts around the over-allocated area.
       void* aligned_p = mi_align_up_ptr(p, alignment);
       size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
       size_t mid_size = _mi_align_up(size, _mi_os_page_size());

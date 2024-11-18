@@ -139,6 +139,12 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   if (psize > 0) {
     config->page_size = (size_t)psize;
     config->alloc_granularity = (size_t)psize;
+    #if defined(_SC_PHYS_PAGES)
+    long pphys = sysconf(_SC_PHYS_PAGES);
+    if (pphys > 0 && (size_t)pphys < (SIZE_MAX/(size_t)psize)) {
+      config->physical_memory = (size_t)pphys * (size_t)psize;
+    }
+    #endif
   }
   config->large_page_size = 2*MI_MiB; // TODO: can we query the OS for this?
   config->has_overcommit = unix_detect_overcommit();
@@ -351,14 +357,14 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
 }
 
 // Note: the `try_alignment` is just a hint and the returned pointer is not guaranteed to be aligned.
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
+int _mi_prim_alloc(void* hint_addr, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(commit || !allow_large);
   mi_assert_internal(try_alignment > 0);
 
   *is_zero = true;
   int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
-  *addr = unix_mmap(NULL, size, try_alignment, protect_flags, false, allow_large, is_large);
+  *addr = unix_mmap(hint_addr, size, try_alignment, protect_flags, false, allow_large, is_large);
   return (*addr != NULL ? 0 : errno);
 }
 

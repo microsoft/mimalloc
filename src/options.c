@@ -47,7 +47,9 @@ typedef struct mi_option_desc_s {
 #define MI_OPTION(opt)                  mi_option_##opt, #opt, NULL
 #define MI_OPTION_LEGACY(opt,legacy)    mi_option_##opt, #opt, #legacy
 
-// Some options can be set at build time for statically linked libraries (use `-DMI_EXTRA_CPPDEFS="opt1=val1;opt2=val2"`)
+// Some options can be set at build time for statically linked libraries
+// (use `-DMI_EXTRA_CPPDEFS="opt1=val1;opt2=val2"`)
+//
 // This is useful if we cannot pass them as environment variables
 // (and setting them programmatically would be too late)
 
@@ -100,14 +102,19 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(show_stats) },
   { MI_DEFAULT_VERBOSE, UNINIT, MI_OPTION(verbose) },
 
-  // the following options are experimental and not all combinations make sense.
-  { MI_DEFAULT_EAGER_COMMIT, UNINIT, MI_OPTION(eager_commit) },               // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
-  { MI_DEFAULT_ARENA_EAGER_COMMIT, UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
+  // some of the following options are experimental and not all combinations are allowed.
+  { MI_DEFAULT_EAGER_COMMIT,
+       UNINIT, MI_OPTION(eager_commit) },               // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
+  { MI_DEFAULT_ARENA_EAGER_COMMIT,
+       UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
   { 1, UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },        // purge decommits memory (instead of reset) (note: on linux this uses MADV_DONTNEED for decommit)
-  { MI_DEFAULT_ALLOW_LARGE_OS_PAGES, UNINIT, MI_OPTION_LEGACY(allow_large_os_pages,large_os_pages) },    // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
-  { MI_DEFAULT_RESERVE_HUGE_OS_PAGES, UNINIT, MI_OPTION(reserve_huge_os_pages) },      // per 1GiB huge pages
+  { MI_DEFAULT_ALLOW_LARGE_OS_PAGES,
+       UNINIT, MI_OPTION_LEGACY(allow_large_os_pages,large_os_pages) },    // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
+  { MI_DEFAULT_RESERVE_HUGE_OS_PAGES,
+       UNINIT, MI_OPTION(reserve_huge_os_pages) },      // per 1GiB huge pages
   {-1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) },   // reserve huge pages at node N
-  { MI_DEFAULT_RESERVE_OS_MEMORY, UNINIT, MI_OPTION(reserve_os_memory)     },      // reserve N KiB OS memory in advance (use `option_get_size`)
+  { MI_DEFAULT_RESERVE_OS_MEMORY,
+       UNINIT, MI_OPTION(reserve_os_memory)     },      // reserve N KiB OS memory in advance (use `option_get_size`)
   { 0, UNINIT, MI_OPTION(deprecated_segment_cache) },   // cache N segments per thread
   { 0, UNINIT, MI_OPTION(deprecated_page_reset) },      // reset page memory on free
   { 0, UNINIT, MI_OPTION_LEGACY(abandoned_page_purge,abandoned_page_reset) },       // reset free page memory when a thread terminates
@@ -125,19 +132,26 @@ static mi_option_desc_t options[_mi_option_last] =
   { 32,  UNINIT, MI_OPTION(max_warnings) },             // maximum warnings that are output
   { 10,  UNINIT, MI_OPTION(max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.
   { 0,   UNINIT, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
-  { MI_DEFAULT_ARENA_RESERVE, UNINIT, MI_OPTION(arena_reserve) },    // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
+  { MI_DEFAULT_ARENA_RESERVE, UNINIT, MI_OPTION(arena_reserve) }, // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
   { 10,  UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
   { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
   { 1,   UNINIT, MI_OPTION(abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
-  { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   UNINIT, MI_OPTION(disallow_arena_alloc) },     // 1 = do not use arena's for allocation (except if using specific arena id's)
+  { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   UNINIT, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)
   { 400, UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
-#if defined(MI_VISIT_ABANDONED)  
+#if defined(MI_VISIT_ABANDONED)
   { 1,   INITIALIZED, MI_OPTION(visit_abandoned) },     // allow visiting heap blocks in abandonded segments; requires taking locks during reclaim.
 #else
-  { 0,   UNINIT, MI_OPTION(visit_abandoned) },          
+  { 0,   UNINIT, MI_OPTION(visit_abandoned) },
 #endif
-  { 0,   UNINIT, MI_OPTION(debug_guarded_min) },        // only used when building with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects
-  { 0,   UNINIT, MI_OPTION(debug_guarded_max) },        // only used when building with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects
+  { 0,   UNINIT, MI_OPTION(guarded_min) },              // only used when building with MI_GUARDED: minimal rounded object size for guarded objects
+  { MI_GiB, UNINIT, MI_OPTION(guarded_max) },           // only used when building with MI_GUARDED: maximal rounded object size for guarded objects
+  { 0,   UNINIT, MI_OPTION(guarded_precise) },          // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+#if MI_GUARDED
+  { 4000,UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded(= 1000)
+#else
+  { 0,   UNINIT, MI_OPTION(guarded_sample_rate)},
+#endif
+  { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
   { 0,   UNINIT, MI_OPTION(target_segments_per_thread) }, // abandon segments beyond this point, or 0 to disable.
 };
 
@@ -161,25 +175,25 @@ void _mi_options_init(void) {
   }
   mi_max_error_count = mi_option_get(mi_option_max_errors);
   mi_max_warning_count = mi_option_get(mi_option_max_warnings);
-  #if MI_DEBUG_GUARDED
-  if (mi_option_get(mi_option_debug_guarded_max) > 0) {
+  #if MI_GUARDED
+  if (mi_option_get(mi_option_guarded_sample_rate) > 0) {
     if (mi_option_is_enabled(mi_option_allow_large_os_pages)) {
       mi_option_disable(mi_option_allow_large_os_pages);
       _mi_warning_message("option 'allow_large_os_pages' is disabled to allow for guarded objects\n");
     }
   }
-  _mi_verbose_message("guarded build: %s\n", mi_option_get(mi_option_debug_guarded_max) > 0 ? "enabled" : "disabled");
+  _mi_verbose_message("guarded build: %s\n", mi_option_get(mi_option_guarded_max) > 0 ? "enabled" : "disabled");
   #endif
 }
 
 long _mi_option_get_fast(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
-  mi_option_desc_t* desc = &options[option]; 
+  mi_option_desc_t* desc = &options[option];
   mi_assert(desc->option == option);  // index should match the option
   //mi_assert(desc->init != UNINIT);
   return desc->value;
 }
-  
+
 
 mi_decl_nodiscard long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
@@ -214,11 +228,11 @@ void mi_option_set(mi_option_t option, long value) {
   desc->value = value;
   desc->init = INITIALIZED;
   // ensure min/max range; be careful to not recurse.
-  if (desc->option == mi_option_debug_guarded_min && _mi_option_get_fast(mi_option_debug_guarded_max) < value) {
-    mi_option_set(mi_option_debug_guarded_max, value);
+  if (desc->option == mi_option_guarded_min && _mi_option_get_fast(mi_option_guarded_max) < value) {
+    mi_option_set(mi_option_guarded_max, value);
   }
-  else if (desc->option == mi_option_debug_guarded_max && _mi_option_get_fast(mi_option_debug_guarded_min) > value) {
-    mi_option_set(mi_option_debug_guarded_min, value);
+  else if (desc->option == mi_option_guarded_max && _mi_option_get_fast(mi_option_guarded_min) > value) {
+    mi_option_set(mi_option_guarded_min, value);
   }
 }
 
@@ -554,7 +568,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
       char* end = buf;
       long value = strtol(buf, &end, 10);
       if (mi_option_has_size_in_kib(desc->option)) {
-        // this option is interpreted in KiB to prevent overflow of `long` for large allocations 
+        // this option is interpreted in KiB to prevent overflow of `long` for large allocations
         // (long is 32-bit on 64-bit windows, which allows for 4TiB max.)
         size_t size = (value < 0 ? 0 : (size_t)value);
         bool overflow = false;
@@ -569,7 +583,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
         value = (size > LONG_MAX ? LONG_MAX : (long)size);
       }
       if (*end == 0) {
-        mi_option_set(desc->option, value);        
+        mi_option_set(desc->option, value);
       }
       else {
         // set `init` first to avoid recursion through _mi_warning_message on mimalloc_verbose.

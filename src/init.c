@@ -88,7 +88,7 @@ const mi_page_t _mi_page_empty = {
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
-  { 0, 0 } \
+  { 0, 0 }, { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 
 
@@ -125,6 +125,9 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,             // next
   false,            // can reclaim
   0,                // tag
+  #if MI_GUARDED
+  0, 0, 0, 0, 1,    // count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
+  #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY
 };
@@ -173,6 +176,9 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
   NULL,             // next heap
   false,            // can reclaim
   0,                // tag
+  #if MI_GUARDED
+  0, 0, 0, 0, 0,
+  #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY
 };
@@ -180,6 +186,45 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
 mi_stats_t _mi_stats_main = { MI_STATS_NULL };
+
+#if MI_GUARDED
+mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed) {
+  heap->guarded_sample_seed = seed;
+  if (heap->guarded_sample_seed == 0) { 
+    heap->guarded_sample_seed = _mi_heap_random_next(heap); 
+  }
+  heap->guarded_sample_rate  = sample_rate;
+  if (heap->guarded_sample_rate >= 1) {
+    heap->guarded_sample_seed = heap->guarded_sample_seed % heap->guarded_sample_rate;
+  }
+  heap->guarded_sample_count = heap->guarded_sample_seed;  // count down samples
+}
+
+mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max) {
+  heap->guarded_size_min = min;
+  heap->guarded_size_max = (min > max ? min : max);
+}
+
+void _mi_heap_guarded_init(mi_heap_t* heap) {
+  mi_heap_guarded_set_sample_rate(heap,
+    (size_t)mi_option_get_clamp(mi_option_guarded_sample_rate, 0, LONG_MAX),
+    (size_t)mi_option_get(mi_option_guarded_sample_seed));
+  mi_heap_guarded_set_size_bound(heap, 
+    (size_t)mi_option_get_clamp(mi_option_guarded_min, 0, LONG_MAX),
+    (size_t)mi_option_get_clamp(mi_option_guarded_max, 0, LONG_MAX) );  
+}
+#else
+mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed) {
+  MI_UNUSED(heap); MI_UNUSED(sample_rate); MI_UNUSED(seed);
+}
+
+mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max) {
+  MI_UNUSED(heap); MI_UNUSED(min); MI_UNUSED(max);
+}
+void _mi_heap_guarded_init(mi_heap_t* heap) {
+  MI_UNUSED(heap);
+}
+#endif
 
 
 static void mi_heap_main_init(void) {
@@ -196,6 +241,7 @@ static void mi_heap_main_init(void) {
     _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
     mi_lock_init(&mi_subproc_default.abandoned_os_lock);
     mi_lock_init(&mi_subproc_default.abandoned_os_visit_lock);
+    _mi_heap_guarded_init(&_mi_heap_main);
   }
 }
 
@@ -577,7 +623,7 @@ static void mi_detect_cpu_features(void) {
 }
 #else
 static void mi_detect_cpu_features(void) {
-  // nothing
+  // nothing 
 }
 #endif
 

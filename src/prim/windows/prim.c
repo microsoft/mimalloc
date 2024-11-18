@@ -118,6 +118,18 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   GetSystemInfo(&si);
   if (si.dwPageSize > 0) { config->page_size = si.dwPageSize; }
   if (si.dwAllocationGranularity > 0) { config->alloc_granularity = si.dwAllocationGranularity; }
+  // get virtual address bits
+  if ((uintptr_t)si.lpMaximumApplicationAddress > 0) {
+    const size_t vbits = MI_INTPTR_BITS - mi_clz((uintptr_t)si.lpMaximumApplicationAddress);
+    config->virtual_address_bits = vbits;
+  }
+  // get physical memory
+  ULONGLONG memInKiB = 0;
+  if (GetPhysicallyInstalledSystemMemory(&memInKiB)) {
+    if (memInKiB > 0 && memInKiB < (SIZE_MAX / MI_KiB)) {
+      config->physical_memory = memInKiB * MI_KiB;
+    }
+  }
   // get the VirtualAlloc2 function
   HINSTANCE  hDll;
   hDll = LoadLibrary(TEXT("kernelbase.dll"));
@@ -191,7 +203,7 @@ static void* win_virtual_alloc_prim_once(void* addr, size_t size, size_t try_ali
   }
   #endif
   // on modern Windows try use VirtualAlloc2 for aligned allocation
-  if (try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
+  if (addr == NULL && try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
     MI_MEM_ADDRESS_REQUIREMENTS reqs = { 0, 0, 0 };
     reqs.Alignment = try_alignment;
     MI_MEM_EXTENDED_PARAMETER param = { {0, 0}, {0} };
@@ -279,14 +291,14 @@ static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DW
   return p;
 }
 
-int _mi_prim_alloc(size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
+int _mi_prim_alloc(void* hint_addr, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(commit || !allow_large);
   mi_assert_internal(try_alignment > 0);
   *is_zero = true;
   int flags = MEM_RESERVE;
   if (commit) { flags |= MEM_COMMIT; }
-  *addr = win_virtual_alloc(NULL, size, try_alignment, flags, false, allow_large, is_large);
+  *addr = win_virtual_alloc(hint_addr, size, try_alignment, flags, false, allow_large, is_large);
   return (*addr != NULL ? 0 : (int)GetLastError());
 }
 
@@ -617,8 +629,8 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     _mi_process_done();
   }
   else if (reason==DLL_THREAD_DETACH && !_mi_is_redirected()) {
-    _mi_thread_done(NULL); 
-  }  
+    _mi_thread_done(NULL);
+  }
 }
 
 
@@ -681,7 +693,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma data_seg()
     #pragma data_seg(".CRT$XLY")
     PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
-    #pragma data_seg()    
+    #pragma data_seg()
   #endif
 
   #if defined(__cplusplus)
@@ -695,13 +707,13 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     MI_UNUSED(heap);
   }
 
-#else // deprecated: statically linked, use fiber api 
+#else // deprecated: statically linked, use fiber api
 
   #if defined(_MSC_VER) // on clang/gcc use the constructor attribute (in `src/prim/prim.c`)
     // MSVC: use data section magic for static libraries
     // See <https://www.codeguru.com/cpp/misc/misc/applicationcontrol/article.php/c6945/Running-Code-Before-and-After-Main.htm>
     #define MI_PRIM_HAS_PROCESS_ATTACH 1
-    
+
     static int mi_process_attach(void) {
       mi_win_main(NULL,DLL_PROCESS_ATTACH,NULL);
       atexit(&_mi_process_done);
@@ -754,9 +766,9 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   }
 #endif
 
-// ---------------------------------------------------- 
+// ----------------------------------------------------
 // Communicate with the redirection module on Windows
-// ---------------------------------------------------- 
+// ----------------------------------------------------
 #if defined(MI_SHARED_LIB) && !defined(MI_WIN_NOREDIRECT)
   #define MI_PRIM_HAS_ALLOCATOR_INIT 1
 

@@ -11,7 +11,7 @@
 #include <iostream>
 
 #include <thread>
-#include <mimalloc.h>
+//#include <mimalloc.h>
 #include <assert.h>
 
 #ifdef _WIN32
@@ -35,21 +35,23 @@ static void test_mt_shutdown();
 static void large_alloc(void);        // issue #363
 static void fail_aslr();              // issue #372
 static void tsan_numa_test();         // issue #414
-static void strdup_test();            // issue #445 
+static void strdup_test();            // issue #445
 static void bench_alloc_large(void);  // issue #xxx
 //static void test_large_migrate(void); // issue #691
 static void heap_thread_free_huge();
 static void test_std_string();        // issue #697
 static void test_thread_local();      // issue #944
-
+// static void test_mixed0();             // issue #942
+static void test_mixed1();             // issue #942
 static void test_stl_allocators();
 
 
 int main() {
   // mi_stats_reset();  // ignore earlier allocations
 
+  test_mixed1();
   //test_std_string();
-  test_thread_local();
+  //test_thread_local();
   // heap_thread_free_huge();
   /*
    heap_thread_free_huge();
@@ -65,10 +67,9 @@ int main() {
   // test_stl_allocators();
   // test_mt_shutdown();
   // test_large_migrate();
-  
+
   //fail_aslr();
-  // bench_alloc_large();
-  // mi_stats_print(NULL);
+  mi_stats_print(NULL);
   return 0;
 }
 
@@ -185,6 +186,53 @@ static void test_stl_allocators() {
   test_stl_allocator5();
   test_stl_allocator6();
 #endif
+}
+
+#if 0
+#include <algorithm>
+#include <chrono>
+#include <functional>
+#include <iostream>
+#include <thread>
+#include <vector>
+
+static void test_mixed0() {
+    std::vector<std::unique_ptr<std::size_t>> numbers(1024 * 1024 * 100);
+    std::vector<std::thread> threads(1);
+
+    std::atomic<std::size_t> index{};
+
+    auto start = std::chrono::system_clock::now();
+
+    for (auto& thread : threads) {
+        thread = std::thread{[&index, &numbers]() {
+            while (true) {
+                auto i = index.fetch_add(1, std::memory_order_relaxed);
+                if (i >= numbers.size()) return;
+
+                numbers[i] = std::make_unique<std::size_t>(i);
+            }
+        }};
+    }
+
+    for (auto& thread : threads) thread.join();
+
+    auto end = std::chrono::system_clock::now();
+
+    auto duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "Running on " << threads.size() << " threads took " << duration
+              << std::endl;
+}
+#endif
+
+void asd() {
+  void* p = malloc(128);
+  free(p);
+}
+static void test_mixed1() {
+    std::thread thread(asd);
+    thread.join();
 }
 
 #if 0

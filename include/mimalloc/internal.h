@@ -91,6 +91,7 @@ void       _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap);
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 mi_heap_t*    _mi_heap_main_get(void);     // statically allocated main backing heap
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
+void       _mi_heap_guarded_init(mi_heap_t* heap);
 
 // os.c
 void       _mi_os_init(void);                                            // called from process init
@@ -641,15 +642,39 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
   page->flags.x.has_aligned = has_aligned;
 }
 
-#if MI_DEBUG_GUARDED
-static inline bool mi_page_has_guarded(const mi_page_t* page) {
-  return page->flags.x.has_guarded;
+/* -------------------------------------------------------------------
+  Guarded objects
+------------------------------------------------------------------- */
+#if MI_GUARDED
+static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* p) {
+  const ptrdiff_t offset = (uint8_t*)p - (uint8_t*)block;
+  return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && block->next == MI_BLOCK_TAG_GUARDED);
 }
 
-static inline void mi_page_set_has_guarded(mi_page_t* page, bool has_guarded) {
-  page->flags.x.has_guarded = has_guarded;
+static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
+  // this code is written to result in fast assembly as it is on the hot path for allocation
+  const size_t count = heap->guarded_sample_count - 1;  // if the rate was 0, this will underflow and count for a long time..
+  if mi_likely(count != 0) {
+    // no sample
+    heap->guarded_sample_count = count;
+    return false;
+  }
+  else if (size >= heap->guarded_size_min && size <= heap->guarded_size_max) {
+    // use guarded allocation
+    heap->guarded_sample_count = heap->guarded_sample_rate;  // reset
+    return (heap->guarded_sample_rate != 0);
+  }
+  else {
+    // failed size criteria, rewind count (but don't write to an empty heap)
+    if (heap->guarded_sample_rate != 0) { heap->guarded_sample_count = 1; } 
+    return false;
+  }  
 }
+
+mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
+
 #endif
+
 
 /* -------------------------------------------------------------------
 Encoding/Decoding the free list next pointers
