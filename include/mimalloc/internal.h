@@ -178,6 +178,8 @@ void       _mi_page_retire(mi_page_t* page) mi_attr_noexcept;                  /
 void       _mi_page_unfull(mi_page_t* page);
 void       _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force);   // free the page
 void       _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);            // abandon the page, to be picked up by another thread...
+void       _mi_page_force_abandon(mi_page_t* page);
+
 void       _mi_heap_delayed_free_all(mi_heap_t* heap);
 bool       _mi_heap_delayed_free_partial(mi_heap_t* heap);
 void       _mi_heap_collect_retired(mi_heap_t* heap, bool force);
@@ -625,9 +627,9 @@ static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
   }
   else {
     // failed size criteria, rewind count (but don't write to an empty heap)
-    if (heap->guarded_sample_rate != 0) { heap->guarded_sample_count = 1; } 
+    if (heap->guarded_sample_rate != 0) { heap->guarded_sample_count = 1; }
     return false;
-  }  
+  }
 }
 
 mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;

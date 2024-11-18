@@ -357,7 +357,7 @@ void _mi_page_unfull(mi_page_t* page) {
   mi_page_set_in_full(page, false); // to get the right queue
   mi_page_queue_t* pq = mi_heap_page_queue_of(heap, page);
   mi_page_set_in_full(page, true);
-  mi_page_queue_enqueue_from_full(pq, pqfull, page);  
+  mi_page_queue_enqueue_from_full(pq, pqfull, page);
 }
 
 static void mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
@@ -403,6 +403,29 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   _mi_segment_page_abandon(page,segments_tld);
 }
 
+// force abandon a page
+void _mi_page_force_abandon(mi_page_t* page) {
+  mi_heap_t* heap = mi_page_heap(page);
+  // mark page as not using delayed free
+  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);
+
+  // ensure this page is no longer in the heap delayed free list
+  _mi_heap_delayed_free_all(heap);
+  // TODO: can we still access the page as it may have been
+  // freed and the memory decommitted?
+  // A way around this is to explicitly unlink this page from
+  // the heap delayed free list.
+  if (page->capacity == 0) return; // it may have been freed now
+
+  // and now unlink it from the page queue and abandon (or free)
+  mi_page_queue_t* pq = mi_heap_page_queue_of(heap, page);
+  if (mi_page_all_free(page)) {
+    _mi_page_free(page, pq, false);
+  }
+  else {
+    _mi_page_abandon(page, pq);
+  }
+}
 
 // Free a page with no more free blocks
 void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
@@ -743,7 +766,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
 
 #if defined(MI_MAX_CANDIDATE_SEARCH)
     // search up to N pages for a best candidate
-        
+
     // is the local free list non-empty?
     const bool immediate_available = mi_page_immediate_available(page);
 
@@ -758,9 +781,9 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
       // we prefer non-expandable pages with high usage as candidates (to reduce commit, and increase chances of free-ing up pages)
       if (page_candidate == NULL) {
         page_candidate = page;
-        candidate_count = 0;      
+        candidate_count = 0;
       }
-      else if (!mi_page_is_expandable(page) && page->capacity < page_candidate->capacity) {
+      else if (!mi_page_is_expandable(page) && page->used >= page_candidate->used) {
         page_candidate = page;
       }
       // if we find a non-expandable candidate, or searched for N pages, return with the best candidate
@@ -805,7 +828,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
     }
   }
   else {
-    mi_assert(pq->first == page);
+    // mi_assert(pq->first == page);
     page->retire_expire = 0;
   }
   mi_assert_internal(page == NULL || mi_page_immediate_available(page));

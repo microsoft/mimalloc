@@ -65,6 +65,7 @@ typedef struct mi_option_desc_s {
 #define MI_DEFAULT_ARENA_EAGER_COMMIT 2
 #endif
 
+// in KiB
 #ifndef MI_DEFAULT_ARENA_RESERVE
  #if (MI_INTPTR_SIZE>4)
   #define MI_DEFAULT_ARENA_RESERVE 1024L*1024L
@@ -151,6 +152,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0,   UNINIT, MI_OPTION(guarded_sample_rate)},
 #endif
   { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
+  { 0,   UNINIT, MI_OPTION(target_segments_per_thread) }, // abandon segments beyond this point, or 0 to disable.
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
