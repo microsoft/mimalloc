@@ -228,6 +228,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool 
   heap->cookie  = _mi_heap_random_next(heap) | 1;
   heap->keys[0] = _mi_heap_random_next(heap);
   heap->keys[1] = _mi_heap_random_next(heap);
+  _mi_heap_guarded_init(heap);
   // push on the thread local heaps list
   heap->next = heap->tld->heaps;
   heap->tld->heaps = heap;
@@ -381,8 +382,8 @@ void mi_heap_destroy(mi_heap_t* heap) {
   mi_assert(heap->no_reclaim);
   mi_assert_expensive(mi_heap_is_valid(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
-  #if MI_DEBUG_GUARDED
-  _mi_warning_message("'mi_heap_destroy' called but ignored as MI_DEBUG_GUARDED is enabled (heap at %p)\n", heap);
+  #if MI_GUARDED
+  // _mi_warning_message("'mi_heap_destroy' called but MI_GUARDED is enabled -- using `mi_heap_delete` instead (heap at %p)\n", heap);
   mi_heap_delete(heap);
   return;
   #else

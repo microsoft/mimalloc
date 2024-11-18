@@ -35,7 +35,7 @@ static void test_mt_shutdown();
 static void large_alloc(void);        // issue #363
 static void fail_aslr();              // issue #372
 static void tsan_numa_test();         // issue #414
-static void strdup_test();            // issue #445 
+static void strdup_test();            // issue #445
 static void bench_alloc_large(void);  // issue #xxx
 //static void test_large_migrate(void); // issue #691
 static void heap_thread_free_huge();
@@ -67,10 +67,9 @@ int main() {
   // test_stl_allocators();
   // test_mt_shutdown();
   // test_large_migrate();
-  
+
   //fail_aslr();
-  // bench_alloc_large();
-  // mi_stats_print(NULL);
+  mi_stats_print(NULL);
   return 0;
 }
 
@@ -225,7 +224,7 @@ static void test_mixed0() {
     std::cout << "Running on " << threads.size() << " threads took " << duration
               << std::endl;
 }
-#endif 
+#endif
 
 void asd() {
   void* p = malloc(128);

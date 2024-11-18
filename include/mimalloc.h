@@ -291,7 +291,7 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t a
 #endif
 
 
-// Experimental: allow sub-processes whose memory segments stay separated (and no reclamation between them) 
+// Experimental: allow sub-processes whose memory segments stay separated (and no reclamation between them)
 // Used for example for separate interpreter's in one process.
 typedef void* mi_subproc_id_t;
 mi_decl_export mi_subproc_id_t mi_subproc_main(void);
@@ -309,6 +309,12 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_ex(int heap_tag, bool al
 
 // deprecated
 mi_decl_export int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
+
+// Experimental: objects followed by a guard page.
+// A sample rate of 0 disables guarded objects, while 1 uses a guard page for every object.
+// A seed of 0 uses a random start point. Only objects within the size bound are eligable for guard pages.
+mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed);
+mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max);
 
 
 // ------------------------------------------------------
@@ -350,7 +356,7 @@ typedef enum mi_option_e {
   mi_option_deprecated_segment_cache,
   mi_option_deprecated_page_reset,
   mi_option_abandoned_page_purge,       // immediately purge delayed purges on thread termination
-  mi_option_deprecated_segment_reset, 
+  mi_option_deprecated_segment_reset,
   mi_option_eager_commit_delay,         // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
   mi_option_purge_delay,                // memory purging is delayed by N milli seconds; use 0 for immediate purging or -1 for no purging at all. (=10)
   mi_option_use_numa_nodes,             // 0 = use all available numa nodes, otherwise use at most N nodes.
@@ -367,8 +373,11 @@ typedef enum mi_option_e {
   mi_option_disallow_arena_alloc,       // 1 = do not use arena's for allocation (except if using specific arena id's)
   mi_option_retry_on_oom,               // retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries. (only on windows)
   mi_option_visit_abandoned,            // allow visiting heap blocks from abandoned threads (=0)
-  mi_option_debug_guarded_min,          // only used when building with MI_DEBUG_GUARDED: minimal rounded object size for guarded objects (=0)
-  mi_option_debug_guarded_max,          // only used when building with MI_DEBUG_GUARDED: maximal rounded object size for guarded objects (=0)
+  mi_option_guarded_min,                // only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
+  mi_option_guarded_max,                // only used when building with MI_GUARDED: maximal rounded object size for guarded objects (=0)
+  mi_option_guarded_precise,            // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+  mi_option_guarded_sample_rate,        // 1 out of N allocations in the min/max range will be guarded (=1000)
+  mi_option_guarded_sample_seed,        // can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,
