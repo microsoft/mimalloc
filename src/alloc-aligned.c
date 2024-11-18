@@ -123,6 +123,9 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
 
   if (p != aligned_p) {
     mi_track_align(p,aligned_p,adjust,mi_usable_size(aligned_p));
+    #if MI_GUARDED
+    mi_track_mem_defined(p, sizeof(mi_block_t));
+    #endif
   }
   return aligned_p;
 }

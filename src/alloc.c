@@ -640,8 +640,9 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
     // give up to place it right in front of the guard page if the offset is too large for unalignment
     offset = MI_BLOCK_ALIGNMENT_MAX;
   }
-  void* p = (uint8_t*)block + offset;
+  void* p = (uint8_t*)block + offset;  
   mi_track_align(block, p, offset, obj_size);
+  mi_track_mem_defined(block, sizeof(mi_block_t));
   return p;
 }
 
@@ -661,7 +662,7 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   void* const p   = mi_block_ptr_set_guarded(block, obj_size);
 
   // stats
-  mi_track_malloc(p, size, zero);
+  mi_track_malloc(p, size, zero);  
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
     #if MI_STAT>1
