@@ -74,8 +74,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Use guard pages behind objects of a certain size (set by the MIMALLOC_DEBUG_GUARDED_MIN/MAX options)
 // Padding should be disabled when using guard pages
-// #define MI_DEBUG_GUARDED 1
-#if defined(MI_DEBUG_GUARDED)
+// #define MI_GUARDED 1
+#if defined(MI_GUARDED)
 #define MI_PADDING  0
 #endif
 
@@ -232,6 +232,13 @@ typedef struct mi_block_s {
   mi_encoded_t next;
 } mi_block_t;
 
+#if MI_GUARDED
+// we always align guarded pointers in a block at an offset
+// the block `next` field is then used as a tag to distinguish regular offset aligned blocks from guarded ones
+#define MI_BLOCK_TAG_ALIGNED   ((mi_encoded_t)(0))
+#define MI_BLOCK_TAG_GUARDED   (~MI_BLOCK_TAG_ALIGNED)
+#endif
+
 
 // The delayed flags are used for efficient multi-threaded free-ing
 typedef enum mi_delayed_e {
@@ -250,7 +257,6 @@ typedef union mi_page_flags_s {
   struct {
     uint8_t in_full : 1;
     uint8_t has_aligned : 1;
-    uint8_t has_guarded : 1;  // only used with MI_DEBUG_GUARDED
   } x;
 } mi_page_flags_t;
 #else
@@ -260,7 +266,6 @@ typedef union mi_page_flags_s {
   struct {
     uint8_t in_full;
     uint8_t has_aligned;
-    uint8_t has_guarded; // only used with MI_DEBUG_GUARDED
   } x;
 } mi_page_flags_t;
 #endif
@@ -497,6 +502,13 @@ struct mi_heap_s {
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
   uint8_t               tag;                                 // custom tag, can be used for separating heaps based on the object types
+  #if MI_GUARDED
+  size_t                guarded_size_min;                    // minimal size for guarded objects
+  size_t                guarded_size_max;                    // maximal size for guarded objects
+  size_t                guarded_sample_rate;                 // sample rate (set to 0 to disable guarded pages)
+  size_t                guarded_sample_seed;                 // starting sample count
+  size_t                guarded_sample_count;                // current sample count (counting down to 0)
+  #endif
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
   mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
 };
@@ -589,6 +601,7 @@ typedef struct mi_stats_s {
   mi_stat_counter_t arena_count;
   mi_stat_counter_t arena_crossover_count;
   mi_stat_counter_t arena_rollback_count;
+  mi_stat_counter_t guarded_alloc_count;
 #if MI_STAT>1
   mi_stat_count_t normal_bins[MI_BIN_HUGE+1];
 #endif

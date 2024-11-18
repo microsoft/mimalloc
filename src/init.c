@@ -86,7 +86,8 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } \
+  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
+  { 0, 0 } \
   MI_STAT_COUNT_END_NULL()
 
 // --------------------------------------------------------
@@ -111,6 +112,9 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,             // next
   false,            // can reclaim
   0,                // tag
+  #if MI_GUARDED
+  0, 0, 0, 0, 1,    // count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
+  #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY
 };
@@ -151,6 +155,9 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
   NULL,             // next heap
   false,            // can reclaim
   0,                // tag
+  #if MI_GUARDED
+  0, 0, 0, 0, 0,
+  #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY
 };
@@ -158,6 +165,45 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
 mi_stats_t _mi_stats_main = { MI_STATS_NULL };
+
+#if MI_GUARDED
+mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed) {
+  heap->guarded_sample_seed = seed;
+  if (heap->guarded_sample_seed == 0) { 
+    heap->guarded_sample_seed = _mi_heap_random_next(heap); 
+  }
+  heap->guarded_sample_rate  = sample_rate;
+  if (heap->guarded_sample_rate >= 1) {
+    heap->guarded_sample_seed = heap->guarded_sample_seed % heap->guarded_sample_rate;
+  }
+  heap->guarded_sample_count = heap->guarded_sample_seed;  // count down samples
+}
+
+mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max) {
+  heap->guarded_size_min = min;
+  heap->guarded_size_max = (min > max ? min : max);
+}
+
+void _mi_heap_guarded_init(mi_heap_t* heap) {
+  mi_heap_guarded_set_sample_rate(heap,
+    (size_t)mi_option_get_clamp(mi_option_guarded_sample_rate, 0, LONG_MAX),
+    (size_t)mi_option_get(mi_option_guarded_sample_seed));
+  mi_heap_guarded_set_size_bound(heap, 
+    (size_t)mi_option_get_clamp(mi_option_guarded_min, 0, LONG_MAX),
+    (size_t)mi_option_get_clamp(mi_option_guarded_max, 0, LONG_MAX) );  
+}
+#else
+mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed) {
+  MI_UNUSED(heap); MI_UNUSED(sample_rate); MI_UNUSED(seed);
+}
+
+mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max) {
+  MI_UNUSED(heap); MI_UNUSED(min); MI_UNUSED(max);
+}
+void _mi_heap_guarded_init(mi_heap_t* heap) {
+  MI_UNUSED(heap);
+}
+#endif
 
 
 static void mi_heap_main_init(void) {
@@ -174,6 +220,7 @@ static void mi_heap_main_init(void) {
     _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
     mi_lock_init(&mi_subproc_default.abandoned_os_lock);
     mi_lock_init(&mi_subproc_default.abandoned_os_visit_lock);
+    _mi_heap_guarded_init(&_mi_heap_main);
   }
 }
 
@@ -508,54 +555,15 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
 // --------------------------------------------------------
 // Run functions on process init/done, and thread init/done
 // --------------------------------------------------------
-static void mi_cdecl mi_process_done(void);
-
 static bool os_preloading = true;    // true until this module is initialized
-static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
 
 // Returns true if this module has not been initialized; Don't use C runtime routines until it returns false.
 bool mi_decl_noinline _mi_preloading(void) {
   return os_preloading;
 }
 
-mi_decl_nodiscard bool mi_is_redirected(void) mi_attr_noexcept {
-  return mi_redirected;
-}
-
-// Communicate with the redirection module on Windows
-#if defined(_WIN32) && defined(MI_SHARED_LIB) && !defined(MI_WIN_NOREDIRECT)
-#ifdef __cplusplus
-extern "C" {
-#endif
-mi_decl_export void _mi_redirect_entry(DWORD reason) {
-  // called on redirection; careful as this may be called before DllMain
-  if (reason == DLL_PROCESS_ATTACH) {
-    mi_redirected = true;
-  }
-  else if (reason == DLL_PROCESS_DETACH) {
-    mi_redirected = false;
-  }
-  else if (reason == DLL_THREAD_DETACH) {
-    mi_thread_done();
-  }
-}
-__declspec(dllimport) bool mi_cdecl mi_allocator_init(const char** message);
-__declspec(dllimport) void mi_cdecl mi_allocator_done(void);
-#ifdef __cplusplus
-}
-#endif
-#else
-static bool mi_allocator_init(const char** message) {
-  if (message != NULL) *message = NULL;
-  return true;
-}
-static void mi_allocator_done(void) {
-  // nothing to do
-}
-#endif
-
-// Called once by the process loader
-static void mi_process_load(void) {
+// Called once by the process loader from `src/prim/prim.c`
+void _mi_process_load(void) {
   mi_heap_main_init();
   #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
   volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
@@ -563,17 +571,14 @@ static void mi_process_load(void) {
   #endif
   os_preloading = false;
   mi_assert_internal(_mi_is_main_thread());
-  #if !(defined(_WIN32) && defined(MI_SHARED_LIB))  // use Dll process detach (see below) instead of atexit (issue #521)
-  atexit(&mi_process_done);
-  #endif
   _mi_options_init();
   mi_process_setup_auto_thread_done();
   mi_process_init();
-  if (mi_redirected) _mi_verbose_message("malloc is redirected.\n");
+  if (_mi_is_redirected()) _mi_verbose_message("malloc is redirected.\n");
 
   // show message from the redirector (if present)
   const char* msg = NULL;
-  mi_allocator_init(&msg);
+  _mi_allocator_init(&msg);
   if (msg != NULL && (mi_option_is_enabled(mi_option_verbose) || mi_option_is_enabled(mi_option_show_errors))) {
     _mi_fputs(NULL,NULL,NULL,msg);
   }
@@ -594,7 +599,7 @@ static void mi_detect_cpu_features(void) {
 }
 #else
 static void mi_detect_cpu_features(void) {
-  // nothing
+  // nothing 
 }
 #endif
 
@@ -651,7 +656,7 @@ void mi_process_init(void) mi_attr_noexcept {
 }
 
 // Called when the process is done (through `at_exit`)
-static void mi_cdecl mi_process_done(void) {
+void mi_cdecl _mi_process_done(void) {
   // only shutdown if we were initialized
   if (!_mi_process_is_initialized) return;
   // ensure we are called once
@@ -683,64 +688,8 @@ static void mi_cdecl mi_process_done(void) {
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
     mi_stats_print(NULL);
   }
-  mi_allocator_done();
+  _mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", _mi_heap_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
 }
 
-
-
-#if defined(_WIN32) && defined(MI_SHARED_LIB)
-  // Windows DLL: easy to hook into process_init and thread_done
-  __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
-    MI_UNUSED(reserved);
-    MI_UNUSED(inst);
-    if (reason==DLL_PROCESS_ATTACH) {
-      mi_process_load();
-    }
-    else if (reason==DLL_PROCESS_DETACH) {
-      mi_process_done();
-    }
-    else if (reason==DLL_THREAD_DETACH) {
-      if (!mi_is_redirected()) {
-        mi_thread_done();
-      }
-    }
-    return TRUE;
-  }
-
-#elif defined(_MSC_VER)
-  // MSVC: use data section magic for static libraries
-  // See <https://www.codeguru.com/cpp/misc/misc/applicationcontrol/article.php/c6945/Running-Code-Before-and-After-Main.htm>
-  static int _mi_process_init(void) {
-    mi_process_load();
-    return 0;
-  }
-  typedef int(*_mi_crt_callback_t)(void);
-  #if defined(_M_X64) || defined(_M_ARM64)
-    __pragma(comment(linker, "/include:" "_mi_msvc_initu"))
-    #pragma section(".CRT$XIU", long, read)
-  #else
-    __pragma(comment(linker, "/include:" "__mi_msvc_initu"))
-  #endif
-  #pragma data_seg(".CRT$XIU")
-  mi_decl_externc _mi_crt_callback_t _mi_msvc_initu[] = { &_mi_process_init };
-  #pragma data_seg()
-
-#elif defined(__cplusplus)
-  // C++: use static initialization to detect process start
-  static bool _mi_process_init(void) {
-    mi_process_load();
-    return (_mi_heap_main.thread_id != 0);
-  }
-  static bool mi_initialized = _mi_process_init();
-
-#elif defined(__GNUC__) || defined(__clang__)
-  // GCC,Clang: use the constructor attribute
-  static void __attribute__((constructor)) _mi_process_init(void) {
-    mi_process_load();
-  }
-
-#else
-#pragma message("define a way to call mi_process_load on your platform")
-#endif

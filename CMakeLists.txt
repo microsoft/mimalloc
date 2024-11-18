@@ -26,13 +26,15 @@ option(MI_BUILD_OBJECT      "Build object library" ON)
 option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
-option(MI_DEBUG_GUARDED     "Build with guard pages behind certain object allocations (implies MI_NO_PADDING=ON)" OFF)
+option(MI_GUARDED           "Build with guard pages behind certain object allocations (implies MI_NO_PADDING=ON)" OFF)
 option(MI_SKIP_COLLECT_ON_EXIT "Skip collecting memory on program exit" OFF)
 option(MI_NO_PADDING        "Force no use of padding even in DEBUG mode etc." OFF)
 option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
 option(MI_NO_THP            "Disable transparent huge pages support on Linux/Android for the mimalloc process only" OFF)
+option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
 
 # deprecated options
+option(MI_WIN_USE_FLS       "Use Fiber local storage on Windows to detect thread termination" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
 
@@ -62,8 +64,13 @@ set(mi_sources
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
 set(mi_cflags_dynamic "")           # extra flags for a shared-object library build
-set(mi_defines "")
 set(mi_libraries "")
+
+if(MI_EXTRA_CPPDEFS)
+ set(mi_defines ${MI_EXTRA_CPPDEFS})
+else()
+ set(mi_defines "")
+endif()
 
 # -----------------------------------------------------------------------------
 # Convenience: set default build type depending on the build directory
@@ -200,9 +207,9 @@ if(MI_TRACK_ETW)
   endif()
 endif()
 
-if(MI_DEBUG_GUARDED)
-  message(STATUS "Compile guard pages behind certain object allocations (MI_DEBUG_GUARDED=ON)")
-  list(APPEND mi_defines MI_DEBUG_GUARDED=1)
+if(MI_GUARDED)
+  message(STATUS "Compile guard pages behind certain object allocations (MI_GUARDED=ON)")
+  list(APPEND mi_defines MI_GUARDED=1)
   if(NOT MI_NO_PADDING)
     message(STATUS "  Disabling padding due to guard pages (MI_NO_PADDING=ON)")
     set(MI_NO_PADDING ON)
@@ -306,6 +313,22 @@ if(MI_LIBC_MUSL)
   message(STATUS "Assume using musl libc (MI_LIBC_MUSL=ON)")
   list(APPEND mi_defines MI_LIBC_MUSL=1)
 endif()
+
+if(MI_WIN_USE_FLS)
+  message(STATUS "Use the Fiber API to detect thread termination")
+  list(APPEND mi_defines MI_WIN_USE_FLS=1)
+endif()
+
+
+ # Check /proc/cpuinfo for an SV39 MMU and limit the virtual address bits.
+ # (this will skip the aligned hinting in that case. Issue #939, #949)
+ if (EXISTS /proc/cpuinfo)
+   file(STRINGS /proc/cpuinfo mi_sv39_mmu REGEX "^mmu[ \t]+:[ \t]+sv39$")
+   if (mi_sv39_mmu)
+     MESSAGE( STATUS "Set virtual address bits to 39 (SV39 MMU detected)" )
+     list(APPEND mi_defines MI_DEFAULT_VIRTUAL_ADDRESS_BITS=39)
+   endif()
+ endif()
 
 # On Haiku use `-DCMAKE_INSTALL_PREFIX` instead, issue #788
 # if(CMAKE_SYSTEM_NAME MATCHES "Haiku")

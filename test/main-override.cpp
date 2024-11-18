@@ -11,7 +11,7 @@
 #include <iostream>
 
 #include <thread>
-#include <mimalloc.h>
+//#include <mimalloc.h>
 #include <assert.h>
 
 #ifdef _WIN32
@@ -37,14 +37,18 @@ static void tsan_numa_test();         // issue #414
 static void strdup_test();            // issue #445
 static void heap_thread_free_huge();
 static void test_std_string();        // issue #697
-
+static void test_thread_local();      // issue #944
+// static void test_mixed0();             // issue #942
+static void test_mixed1();             // issue #942
 static void test_stl_allocators();
 
 
 int main() {
   // mi_stats_reset();  // ignore earlier allocations
 
-  test_std_string();
+  test_mixed1();
+  //test_std_string();
+  //test_thread_local();
   // heap_thread_free_huge();
   /*
   heap_thread_free_large();
@@ -58,7 +62,7 @@ int main() {
   test_mt_shutdown();
   */
   //fail_aslr();
-  // mi_stats_print(NULL);
+  mi_stats_print(NULL);
   return 0;
 }
 
@@ -176,6 +180,89 @@ static void test_stl_allocators() {
   test_stl_allocator6();
 #endif
 }
+
+#if 0
+#include <algorithm>
+#include <chrono>
+#include <functional>
+#include <iostream>
+#include <thread>
+#include <vector>
+
+static void test_mixed0() {
+    std::vector<std::unique_ptr<std::size_t>> numbers(1024 * 1024 * 100);
+    std::vector<std::thread> threads(1);
+
+    std::atomic<std::size_t> index{};
+
+    auto start = std::chrono::system_clock::now();
+
+    for (auto& thread : threads) {
+        thread = std::thread{[&index, &numbers]() {
+            while (true) {
+                auto i = index.fetch_add(1, std::memory_order_relaxed);
+                if (i >= numbers.size()) return;
+
+                numbers[i] = std::make_unique<std::size_t>(i);
+            }
+        }};
+    }
+
+    for (auto& thread : threads) thread.join();
+
+    auto end = std::chrono::system_clock::now();
+
+    auto duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "Running on " << threads.size() << " threads took " << duration
+              << std::endl;
+}
+#endif 
+
+void asd() {
+  void* p = malloc(128);
+  free(p);
+}
+static void test_mixed1() {
+    std::thread thread(asd);
+    thread.join();
+}
+
+#if 0
+// issue #691
+static char* cptr;
+
+static void* thread1_allocate()
+{
+  cptr = mi_calloc_tp(char,22085632);
+  return NULL;
+}
+
+static void* thread2_free()
+{
+  assert(cptr);
+  mi_free(cptr);
+  cptr = NULL;
+  return NULL;
+}
+
+static void test_large_migrate(void) {
+  auto t1 = std::thread(thread1_allocate);
+  t1.join();
+  auto t2 = std::thread(thread2_free);
+  t2.join();
+  /*
+  pthread_t thread1, thread2;
+
+  pthread_create(&thread1, NULL, &thread1_allocate, NULL);
+  pthread_join(thread1, NULL);
+
+  pthread_create(&thread2, NULL, &thread2_free, NULL);
+  pthread_join(thread2, NULL);
+  */
+  return;
+}
+#endif
 
 // issue 445
 static void strdup_test() {
@@ -311,4 +398,32 @@ static void tsan_numa_test() {
   auto t1 = std::thread(dummy_worker);
   dummy_worker();
   t1.join();
+}
+
+
+class MTest
+{
+    char *data;
+public:
+    MTest() { data = (char*)malloc(1024); }
+    ~MTest() { free(data); };
+};
+
+thread_local MTest tlVariable;
+
+void threadFun( int i )
+{
+    printf( "Thread %d\n", i );
+    std::this_thread::sleep_for( std::chrono::milliseconds(100) );
+}
+
+void test_thread_local()
+{
+    for( int i=1; i < 100; ++i )
+    {
+        std::thread t( threadFun, i );
+        t.join();
+        mi_stats_print(NULL);
+    }
+    return;
 }

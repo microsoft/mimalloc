@@ -77,6 +77,11 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 // init.c
 extern mi_decl_cache_align mi_stats_t       _mi_stats_main;
 extern mi_decl_cache_align const mi_page_t  _mi_page_empty;
+void       _mi_process_load(void);
+void mi_cdecl _mi_process_done(void);
+bool       _mi_is_redirected(void);
+bool       _mi_allocator_init(const char** message);
+void       _mi_allocator_done(void);
 bool       _mi_is_main_thread(void);
 size_t     _mi_current_thread_count(void);
 bool       _mi_preloading(void);           // true while the C runtime is not initialized yet
@@ -86,6 +91,7 @@ void       _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap);
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 mi_heap_t*    _mi_heap_main_get(void);     // statically allocated main backing heap
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
+void       _mi_heap_guarded_init(mi_heap_t* heap);
 
 // os.c
 void       _mi_os_init(void);                                            // called from process init
@@ -595,15 +601,39 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
   page->flags.x.has_aligned = has_aligned;
 }
 
-#if MI_DEBUG_GUARDED
-static inline bool mi_page_has_guarded(const mi_page_t* page) {
-  return page->flags.x.has_guarded;
+/* -------------------------------------------------------------------
+  Guarded objects
+------------------------------------------------------------------- */
+#if MI_GUARDED
+static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* p) {
+  const ptrdiff_t offset = (uint8_t*)p - (uint8_t*)block;
+  return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && block->next == MI_BLOCK_TAG_GUARDED);
 }
 
-static inline void mi_page_set_has_guarded(mi_page_t* page, bool has_guarded) {
-  page->flags.x.has_guarded = has_guarded;
+static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
+  // this code is written to result in fast assembly as it is on the hot path for allocation
+  const size_t count = heap->guarded_sample_count - 1;  // if the rate was 0, this will underflow and count for a long time..
+  if mi_likely(count != 0) {
+    // no sample
+    heap->guarded_sample_count = count;
+    return false;
+  }
+  else if (size >= heap->guarded_size_min && size <= heap->guarded_size_max) {
+    // use guarded allocation
+    heap->guarded_sample_count = heap->guarded_sample_rate;  // reset
+    return (heap->guarded_sample_rate != 0);
+  }
+  else {
+    // failed size criteria, rewind count (but don't write to an empty heap)
+    if (heap->guarded_sample_rate != 0) { heap->guarded_sample_count = 1; } 
+    return false;
+  }  
 }
+
+mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
+
 #endif
+
 
 /* -------------------------------------------------------------------
 Encoding/Decoding the free list next pointers
@@ -660,6 +690,16 @@ static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const 
 static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const uintptr_t* keys) {
   uintptr_t x = (uintptr_t)(p==NULL ? null : p);
   return mi_rotl(x ^ keys[1], keys[0]) + keys[0];
+}
+
+static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const uintptr_t* keys) {
+  const uint32_t x = (uint32_t)(mi_ptr_encode(null,p,keys));
+  // make the lowest byte 0 to prevent spurious read overflows which could be a security issue (issue #951)
+  #ifdef MI_BIG_ENDIAN
+  return (x & 0x00FFFFFF);
+  #else
+  return (x & 0xFFFFFF00);
+  #endif
 }
 
 static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, const uintptr_t* keys ) {

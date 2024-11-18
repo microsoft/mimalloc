@@ -455,7 +455,7 @@ static size_t mi_segment_calculate_sizes(size_t capacity, size_t required, size_
 
   if (MI_SECURE == 0) {
     // normally no guard pages
-    #if MI_DEBUG_GUARDED
+    #if MI_GUARDED
     isize = _mi_align_up(minsize, _mi_os_page_size());
     #else
     isize = _mi_align_up(minsize, 16 * MI_MAX_ALIGN_SIZE);
