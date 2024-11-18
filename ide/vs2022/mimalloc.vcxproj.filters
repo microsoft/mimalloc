@@ -61,7 +61,7 @@
     <ClCompile Include="..\..\src\free.c">
       <Filter>Sources</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\arena-abandoned.c">
+    <ClCompile Include="..\..\src\arena-abandon.c">
       <Filter>Sources</Filter>
     </ClCompile>
   </ItemGroup>

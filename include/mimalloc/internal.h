@@ -666,9 +666,9 @@ static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
   }
   else {
     // failed size criteria, rewind count (but don't write to an empty heap)
-    if (heap->guarded_sample_rate != 0) { heap->guarded_sample_count = 1; } 
+    if (heap->guarded_sample_rate != 0) { heap->guarded_sample_count = 1; }
     return false;
-  }  
+  }
 }
 
 mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
