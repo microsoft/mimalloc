@@ -611,17 +611,23 @@ static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* 
 }
 
 static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
-  MI_UNUSED(heap);  
-  if (heap->guarded_sample_rate==0 ||
-      size > heap->guarded_size_max ||
-      size < heap->guarded_size_min) {
+  // this code is written to result in fast assembly as it is on the hot path for allocation
+  const size_t count = heap->guarded_sample_count - 1;  // if the rate was 0, this will underflow and count for a long time..
+  if mi_likely(count != 0) {
+    // no sample
+    heap->guarded_sample_count = count;
     return false;
   }
-  if (++heap->guarded_sample_count < heap->guarded_sample_rate) {
-    return false;
+  else if (size >= heap->guarded_size_min && size <= heap->guarded_size_max) {
+    // use guarded allocation
+    heap->guarded_sample_count = heap->guarded_sample_rate;  // reset
+    return (heap->guarded_sample_rate != 0);
   }
-  heap->guarded_sample_count = 0;  // reset
-  return true;
+  else {
+    // failed size criteria, rewind count (but don't write to an empty heap)
+    if (heap->guarded_sample_rate != 0) { heap->guarded_sample_count = 1; } 
+    return false;
+  }  
 }
 
 mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;

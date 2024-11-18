@@ -146,7 +146,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { MI_GiB, UNINIT, MI_OPTION(guarded_max) },           // only used when building with MI_GUARDED: maximal rounded object size for guarded objects
   { 0,   UNINIT, MI_OPTION(guarded_precise) },          // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
 #if MI_GUARDED
-  { 1000,UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded(= 1000)
+  { 4000,UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded(= 1000)
 #else
   { 0,   UNINIT, MI_OPTION(guarded_sample_rate)},
 #endif

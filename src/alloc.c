@@ -661,16 +661,14 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   void* const p   = mi_block_ptr_set_guarded(block, obj_size);
 
   // stats
-  const size_t usize = mi_usable_size(p);
-  mi_assert_internal(usize >= size);
   mi_track_malloc(p, size, zero);
-  #if MI_STAT>1
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
+    #if MI_STAT>1
     mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
-    mi_heap_stat_counter_increase(heap, guarded_alloc_count, 1);
+    #endif
+    _mi_stat_counter_increase(&heap->tld->stats.guarded_alloc_count, 1);
   }
-  #endif
   #if MI_DEBUG>3
   if (p != NULL && zero) {
     mi_assert_expensive(mi_mem_is_zero(p, size));

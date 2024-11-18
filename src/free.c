@@ -544,6 +544,7 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
 // Remove guard page when building with MI_GUARDED
 #if MI_GUARDED
 static void mi_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
+  MI_UNUSED(p);
   mi_assert_internal(mi_block_ptr_is_guarded(block, p));
   mi_assert_internal(mi_page_has_aligned(page));
   mi_assert_internal((uint8_t*)p - (uint8_t*)block >= (ptrdiff_t)sizeof(mi_block_t));

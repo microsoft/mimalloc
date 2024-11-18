@@ -62,7 +62,7 @@ int main() {
   test_mt_shutdown();
   */
   //fail_aslr();
-  // mi_stats_print(NULL);
+  mi_stats_print(NULL);
   return 0;
 }
 

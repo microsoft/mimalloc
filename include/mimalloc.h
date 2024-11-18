@@ -309,6 +309,12 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_ex(int heap_tag, bool al
 // deprecated
 mi_decl_export int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
 
+// Experimental: objects followed by a guard page.
+// A sample rate of 0 disables guarded objects, while 1 uses a guard page for every object.
+// A seed of 0 uses a random start point. Only objects within the size bound are eligable for guard pages.
+mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed);
+mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max);
+
 
 // ------------------------------------------------------
 // Convenience
