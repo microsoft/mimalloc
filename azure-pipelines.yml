@@ -130,7 +130,7 @@ jobs:
     workingDirectory: $(BuildType)
     displayName: CTest
     env:
-      MIMALLOC_DEBUG_GUARDED_MAX: 1024
+      MIMALLOC_GUARDED_SAMPLE_RATE: 1000
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-ubuntu-$(BuildType)
 
