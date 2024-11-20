@@ -1097,10 +1097,10 @@ size_t mi_free_space_mask_from_slicecount(uint32_t slice_count)
     size_t free_space_mask = 0;
     size_t max_size = MI_SMALL_OBJ_SIZE_MAX;
 
-    if (slice_count >= MI_MEDIUM_PAGE_SIZE) {
+    if (slice_count >= (MI_MEDIUM_PAGE_SIZE / MI_SEGMENT_SLICE_SIZE)) {
         max_size = slice_count * MI_SEGMENT_SLICE_SIZE;
     }
-    
+
     free_space_mask = mi_free_space_mask_from_blocksize(max_size);
     free_space_mask = free_space_mask | (free_space_mask - 1); // mark all allocations with size < max_size as available
 
@@ -1365,7 +1365,10 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
       // found a large enough free span, or a page of the right block_size with free space
       // we return the result of reclaim (which is usually `segment`) as it might free
       // the segment due to concurrent frees (in which case `NULL` is returned).
-      return mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
+      mi_segment_t* segmentToReturn = mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
+      if (segmentToReturn != NULL) {
+          return segmentToReturn;
+      }
     }
     else if (segment->abandoned_visits > 3 && is_suitable && mi_option_get_size(mi_option_max_segments_per_heap) == 0) {
       // always reclaim on 3rd visit to limit the abandoned queue length.
