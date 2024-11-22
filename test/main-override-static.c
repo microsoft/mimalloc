@@ -252,6 +252,8 @@ static void test_heap_arena(void) {
       break;
     }
   }
+}
+
 static void test_canary_leak(void) {
   char* p = mi_mallocn_tp(char,23);
   for(int i = 0; i < 23; i++) {
