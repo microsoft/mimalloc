@@ -65,6 +65,7 @@ typedef struct mi_option_desc_s {
 #define MI_DEFAULT_ARENA_EAGER_COMMIT 2
 #endif
 
+// in KiB
 #ifndef MI_DEFAULT_ARENA_RESERVE
  #if (MI_INTPTR_SIZE>4)
   #define MI_DEFAULT_ARENA_RESERVE 1024L*1024L
@@ -87,6 +88,14 @@ typedef struct mi_option_desc_s {
 
 #ifndef MI_DEFAULT_RESERVE_OS_MEMORY
 #define MI_DEFAULT_RESERVE_OS_MEMORY 0
+#endif
+
+#ifndef MI_DEFAULT_GUARDED_SAMPLE_RATE
+#if MI_GUARDED
+#define MI_DEFAULT_GUARDED_SAMPLE_RATE 4000
+#else
+#define MI_DEFAULT_GUARDED_SAMPLE_RATE 0
+#endif
 #endif
 
 
@@ -145,12 +154,10 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0,   UNINIT, MI_OPTION(guarded_min) },              // only used when building with MI_GUARDED: minimal rounded object size for guarded objects
   { MI_GiB, UNINIT, MI_OPTION(guarded_max) },           // only used when building with MI_GUARDED: maximal rounded object size for guarded objects
   { 0,   UNINIT, MI_OPTION(guarded_precise) },          // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
-#if MI_GUARDED
-  { 4000,UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded(= 1000)
-#else
-  { 0,   UNINIT, MI_OPTION(guarded_sample_rate)},
-#endif
+  { MI_DEFAULT_GUARDED_SAMPLE_RATE,
+         UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)
   { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
+  { 0,   UNINIT, MI_OPTION(target_segments_per_thread) }, // abandon segments beyond this point, or 0 to disable.
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -180,7 +187,7 @@ void _mi_options_init(void) {
       _mi_warning_message("option 'allow_large_os_pages' is disabled to allow for guarded objects\n");
     }
   }
-  _mi_verbose_message("guarded build: %s\n", mi_option_get(mi_option_guarded_max) > 0 ? "enabled" : "disabled");
+  _mi_verbose_message("guarded build: %s\n", mi_option_get(mi_option_guarded_sample_rate) != 0 ? "enabled" : "disabled");
   #endif
 }
 
