@@ -958,6 +958,9 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   mi_assert_internal(segment != NULL);
   mi_assert_internal(segment->next == NULL);
   mi_assert_internal(segment->used == 0);
+  
+  // in `mi_segment_force_abandon` we set this to true to ensure the segment's memory stays valid
+  if (segment->dont_free) return;
 
   // Remove the free pages
   mi_slice_t* slice = &segment->slices[0];
@@ -1387,6 +1390,10 @@ void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
 static void mi_segment_force_abandon(mi_segment_t* segment, mi_segments_tld_t* tld)
 {
   mi_assert_internal(!mi_segment_is_abandoned(segment));
+  mi_assert_internal(!segment->dont_free);
+
+  // ensure the segment does not get free'd underneath us (so we can check if a page has been freed in `mi_page_force_abandon`)
+  segment->dont_free = true;
 
   // for all slices
   const mi_slice_t* end;
@@ -1404,6 +1411,7 @@ static void mi_segment_force_abandon(mi_segment_t* segment, mi_segments_tld_t* t
         if (segment->used == segment->abandoned+1) {
           // the last page.. abandon and return as the segment will be abandoned after this
           // and we should no longer access it.
+          segment->dont_free = false;
           _mi_page_force_abandon(page);
           return;
         }
@@ -1417,9 +1425,10 @@ static void mi_segment_force_abandon(mi_segment_t* segment, mi_segments_tld_t* t
     }
     slice = slice + slice->slice_count;
   }
+  segment->dont_free = false;
   mi_assert(segment->used == segment->abandoned);
   mi_assert(segment->used == 0);
-  if (segment->used == 0) {
+  if (segment->used == 0) {  // paranoia
     // all free now
     mi_segment_free(segment, false, tld);
   }

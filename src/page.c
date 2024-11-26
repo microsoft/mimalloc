@@ -412,10 +412,8 @@ void _mi_page_force_abandon(mi_page_t* page) {
 
   // ensure this page is no longer in the heap delayed free list
   _mi_heap_delayed_free_all(heap);
-  // TODO: can we still access the page as it may have been
-  // freed and the memory decommitted?
-  // A way around this is to explicitly unlink this page from
-  // the heap delayed free list.
+  // We can still access the page meta-info even if it is freed as we ensure 
+  // in `mi_segment_force_abandon` that the segment is not freed (yet)
   if (page->capacity == 0) return; // it may have been freed now
 
   // and now unlink it from the page queue and abandon (or free)
