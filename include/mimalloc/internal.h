@@ -1022,8 +1022,9 @@ static inline size_t mi_bsr(uintptr_t x) {
 #if !MI_TRACK_ENABLED && defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
 #include <intrin.h>
 extern bool _mi_cpu_has_fsrm;
+extern bool _mi_cpu_has_erms;
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
-  if (_mi_cpu_has_fsrm) {
+  if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
     __movsb((unsigned char*)dst, (const unsigned char*)src, n);
   }
   else {
@@ -1031,7 +1032,7 @@ static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
   }
 }
 static inline void _mi_memzero(void* dst, size_t n) {
-  if (_mi_cpu_has_fsrm) {
+  if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
     __stosb((unsigned char*)dst, 0, n);
   }
   else {

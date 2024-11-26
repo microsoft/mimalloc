@@ -614,12 +614,15 @@ void _mi_process_load(void) {
 #if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
 #include <intrin.h>
 mi_decl_cache_align bool _mi_cpu_has_fsrm = false;
+mi_decl_cache_align bool _mi_cpu_has_erms = false;
 
 static void mi_detect_cpu_features(void) {
-  // FSRM for fast rep movsb support (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017))
+  // FSRM for fast short rep movsb/stosb support (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017))
+  // EMRS for fast enhanced rep movsb/stosb support
   int32_t cpu_info[4];
   __cpuid(cpu_info, 7);
   _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+  _mi_cpu_has_erms = ((cpu_info[2] & (1 << 9)) != 0); // bit 9 of ECX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
 }
 #else
 static void mi_detect_cpu_features(void) {
