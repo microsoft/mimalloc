@@ -652,6 +652,10 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
 static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
   MI_UNUSED(force);
   mi_assert(segment != NULL);
+  
+  // in `mi_segment_force_abandon` we set this to true to ensure the segment's memory stays valid
+  if (segment->dont_free) return;
+
   // don't purge as we are freeing now
   mi_segment_remove_all_purges(segment, false /* don't force as we are about to free */, tld);
   mi_segment_remove_from_free_queue(segment, tld);
@@ -1056,32 +1060,34 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
 static void mi_segment_force_abandon(mi_segment_t* segment, mi_segments_tld_t* tld)
 {
   mi_assert_internal(segment->abandoned < segment->used);
+  mi_assert_internal(!segment->dont_free);
+  
+  // ensure the segment does not get free'd underneath us (so we can check if a page has been freed in `mi_page_force_abandon`)
+  segment->dont_free = true;
 
   // for all pages
   for (size_t i = 0; i < segment->capacity; i++) {
     mi_page_t* page = &segment->pages[i];
     if (page->segment_in_use) {
-      // ensure used count is up to date and collect potential concurrent frees
-      _mi_page_free_collect(page, false);
-      {
-        // abandon the page if it is still in-use (this will free it if possible as well)
-        mi_assert_internal(segment->used > 0);
-        if (segment->used == segment->abandoned+1) {
-          // the last page.. abandon and return as the segment will be abandoned after this
-          // and we should no longer access it.
-          _mi_page_force_abandon(page);
-          return;
-        }
-        else {
-          // abandon and continue
-          _mi_page_force_abandon(page);
-        }
+      // abandon the page if it is still in-use (this will free the page if possible as well (but not our segment))
+      mi_assert_internal(segment->used > 0);
+      if (segment->used == segment->abandoned+1) {
+        // the last page.. abandon and return as the segment will be abandoned after this
+        // and we should no longer access it.
+        segment->dont_free = false;
+        _mi_page_force_abandon(page);
+        return;
+      }
+      else {
+        // abandon and continue
+        _mi_page_force_abandon(page);
       }
     }
   }
+  segment->dont_free = false;
   mi_assert(segment->used == segment->abandoned);
   mi_assert(segment->used == 0);
-  if (segment->used == 0) {
+  if (segment->used == 0) {  // paranoia
     // all free now
     mi_segment_free(segment, false, tld);
   }
