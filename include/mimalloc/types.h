@@ -416,7 +416,8 @@ typedef struct mi_segment_s {
   // segment fields
   struct mi_segment_s* next;             // must be the first (non-constant) segment field  -- see `segment.c:segment_init`
   struct mi_segment_s* prev;
-  bool                 was_reclaimed;    // true if it was reclaimed (used to limit on-free reclamation)
+  bool                 was_reclaimed;    // true if it was reclaimed (used to limit reclaim-on-free reclamation)
+  bool                 dont_free;        // can be temporarily true to ensure the segment is not freed
 
   size_t               abandoned;        // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
   size_t               abandoned_visits; // count how often this segment is visited for reclaiming (to force reclaim if it is too long)
