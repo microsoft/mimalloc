@@ -1288,6 +1288,13 @@ void _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld) {
   _mi_arena_field_cursor_done(&current);
 }
 
+
+static bool segment_count_is_within_target(mi_segments_tld_t* tld, size_t* ptarget) {
+  const size_t target = (size_t)mi_option_get_clamp(mi_option_target_segments_per_thread, 0, 1024);
+  if (ptarget != NULL) { *ptarget = target; }
+  return (target == 0 || tld->count < target);
+}
+
 static long mi_segment_get_reclaim_tries(mi_segments_tld_t* tld) {
   // limit the tries to 10% (default) of the abandoned segments with at least 8 and at most 1024 tries.
   const size_t perc = (size_t)mi_option_get_clamp(mi_option_max_segment_reclaim, 0, 100);
@@ -1310,7 +1317,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
   mi_segment_t* segment = NULL;
   mi_arena_field_cursor_t current;
   _mi_arena_field_cursor_init(heap, tld->subproc, false /* non-blocking */, &current);
-  while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL))
+  while (segment_count_is_within_target(tld,NULL) && (max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL))
   {
     mi_assert(segment->subproc == heap->tld->segments.subproc); // cursor only visits segments in our sub-process
     segment->abandoned_visits++;
@@ -1334,7 +1341,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
       result = mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
       break;
     }
-    else if (segment->abandoned_visits > 3 && is_suitable && !mi_option_is_enabled(mi_option_target_segments_per_thread)) {
+    else if (segment->abandoned_visits > 3 && is_suitable) {
       // always reclaim on 3rd visit to limit the abandoned segment count.
       mi_segment_reclaim(segment, heap, 0, NULL, tld);
     }
@@ -1425,15 +1432,11 @@ static void mi_segment_force_abandon(mi_segment_t* segment, mi_segments_tld_t* t
 
 // try abandon segments.
 // this should be called from `reclaim_or_alloc` so we know all segments are (about) fully in use.
-static void mi_segments_try_abandon(mi_heap_t* heap, mi_segments_tld_t* tld) {
-  const size_t target = (size_t)mi_option_get_clamp(mi_option_target_segments_per_thread,0,1024);
-  // we call this when we are about to add a fresh segment so we should be under our target segment count.
-  if (target == 0 || tld->count < target) return;
-
+static void mi_segments_try_abandon_to_target(mi_heap_t* heap, size_t target, mi_segments_tld_t* tld) {
+  if (target <= 1) return;
   const size_t min_target = (target > 4 ? (target*3)/4 : target);  // 75%
-
   // todo: we should maintain a list of segments per thread; for now, only consider segments from the heap full pages
-  for (int i = 0; i < 16 && tld->count >= min_target; i++) {
+  for (int i = 0; i < 64 && tld->count >= min_target; i++) {
     mi_page_t* page = heap->pages[MI_BIN_FULL].first;
     while (page != NULL && mi_page_block_size(page) > MI_LARGE_OBJ_SIZE_MAX) {
       page = page->next;
@@ -1447,6 +1450,25 @@ static void mi_segments_try_abandon(mi_heap_t* heap, mi_segments_tld_t* tld) {
   }
 }
 
+// try abandon segments.
+// this should be called from `reclaim_or_alloc` so we know all segments are (about) fully in use.
+static void mi_segments_try_abandon(mi_heap_t* heap, mi_segments_tld_t* tld) {
+  // we call this when we are about to add a fresh segment so we should be under our target segment count.
+  size_t target = 0;
+  if (segment_count_is_within_target(tld, &target)) return;
+  mi_segments_try_abandon_to_target(heap, target, tld);
+}
+
+void mi_collect_reduce(size_t target_size) mi_attr_noexcept {
+  mi_collect(true);
+  mi_heap_t* heap = mi_heap_get_default();
+  mi_segments_tld_t* tld = &heap->tld->segments;
+  size_t target = target_size / MI_SEGMENT_SIZE;
+  if (target == 0) {
+    target = (size_t)mi_option_get_clamp(mi_option_target_segments_per_thread, 1, 1024);
+  }
+  mi_segments_try_abandon_to_target(heap, target, tld);
+}
 
 /* -----------------------------------------------------------
    Reclaim or allocate
