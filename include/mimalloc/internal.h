@@ -181,6 +181,7 @@ void       _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool o
 bool       _mi_page_try_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never);
 size_t     _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append);
 void       _mi_deferred_free(mi_heap_t* heap, bool force);
+mi_page_queue_t* mi_heap_page_queue_of(mi_heap_t* heap, const mi_page_t* page);
 
 void       _mi_page_free_collect(mi_page_t* page,bool force);
 void       _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback from segments
@@ -1017,5 +1018,11 @@ static inline void _mi_memzero_aligned(void* dst, size_t n) {
 }
 #endif
 
+void mi_segment_increment_alloc_stats(size_t block_size);
+void mi_segment_increment_freed_stats();
+void mi_segment_increment_reclaimed_stats();
+void mi_segment_increment_reclaim_failed_stats();
+void mi_allocation_stats_increment(size_t block_size);
+void mi_allocation_stats_decrement(size_t block_size);
 
 #endif

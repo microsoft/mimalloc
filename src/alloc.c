@@ -39,6 +39,11 @@ extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_
   // pop from the free list
   page->free = mi_block_next(page, block);
   page->used++;
+
+  mi_page_queue_t* pq = mi_heap_page_queue_of(heap, page);
+  pq->allocationCount++;
+  mi_allocation_stats_increment(page->block_size);
+
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
   #if MI_DEBUG>3
   if (page->free_is_zero) {

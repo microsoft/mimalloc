@@ -503,6 +503,7 @@ typedef struct mi_page_queue_s {
   mi_page_t* first;
   mi_page_t* last;
   size_t     block_size;
+  size_t     allocationCount;
 } mi_page_queue_t;
 
 #define MI_BIN_FULL  (MI_BIN_HUGE+1)
@@ -646,6 +647,18 @@ typedef struct mi_stats_s {
 #endif
 } mi_stats_t;
 
+typedef struct mi_segment_alloc_counter_s {
+  _Atomic(size_t) counter;
+  size_t          block_size; // size of the allocation block that caused a new segmented to be allocated)
+} mi_segment_alloc_counter_t;
+
+typedef struct mi_segment_stats_s {
+  _Atomic(size_t) reclaimed_count;
+  _Atomic(size_t) reclaim_failed_count;
+  _Atomic(size_t) allocated_count;
+  _Atomic(size_t) freed_count;
+  mi_segment_alloc_counter_t alloc_stats[MI_BIN_HUGE+1];
+} mi_segment_stats_t;
 
 void _mi_stat_increase(mi_stat_count_t* stat, size_t amount);
 void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount);

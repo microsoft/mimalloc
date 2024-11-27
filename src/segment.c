@@ -981,6 +981,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
 
   // return it to the OS
   mi_segment_os_free(segment, tld);
+  mi_segment_increment_freed_stats();
 }
 
 
@@ -1367,7 +1368,8 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
       // the segment due to concurrent frees (in which case `NULL` is returned).
       mi_segment_t* segmentToReturn = mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
       if (segmentToReturn != NULL) {
-          return segmentToReturn;
+        mi_segment_increment_reclaimed_stats();
+        return segmentToReturn;
       }
     }
     else if (segment->abandoned_visits > 3 && is_suitable && mi_option_get_size(mi_option_max_segments_per_heap) == 0) {
@@ -1380,6 +1382,8 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
       _mi_arena_segment_mark_abandoned(segment);
     }
   }
+
+  mi_segment_increment_reclaim_failed_stats();
   return NULL;
 }
 
@@ -1431,7 +1435,12 @@ static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t needed_
     return segment;
   }
   // 2. otherwise allocate a fresh segment
-  return mi_segment_alloc(0, 0, heap->arena_id, tld, os_tld, NULL);
+  segment = mi_segment_alloc(0, 0, heap->arena_id, tld, os_tld, NULL);
+  if (segment != NULL) {
+    mi_segment_increment_alloc_stats(block_size);
+  }
+
+  return segment;
 }
 
 
@@ -1482,6 +1491,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   segment->thread_id = 0; // huge segments are immediately abandoned
   #endif
 
+  mi_segment_increment_alloc_stats(size);
   // for huge pages we initialize the block_size as we may
   // overallocate to accommodate large alignments.
   size_t psize;

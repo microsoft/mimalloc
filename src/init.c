@@ -413,6 +413,9 @@ size_t  _mi_current_thread_count(void) {
   return mi_atomic_load_relaxed(&thread_count);
 }
 
+size_t _mi_get_next_thread_partition_id();
+extern mi_decl_thread size_t _mi_current_thread_partitionId;
+
 // This is called from the `mi_malloc_generic`
 void mi_thread_init(void) mi_attr_noexcept
 {
@@ -424,6 +427,7 @@ void mi_thread_init(void) mi_attr_noexcept
   //  fiber/pthread key to a non-zero value, ensuring `_mi_thread_done` is called)
   if (_mi_thread_heap_init()) return;  // returns true if already initialized
 
+  _mi_current_thread_partitionId = _mi_get_next_thread_partition_id();
   _mi_stat_increase(&_mi_stats_main.threads, 1);
   mi_atomic_increment_relaxed(&thread_count);
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());

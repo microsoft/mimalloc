@@ -373,6 +373,16 @@ mi_decl_nodiscard mi_decl_export size_t mi_option_get_size(mi_option_t option);
 mi_decl_export void mi_option_set(mi_option_t option, long value);
 mi_decl_export void mi_option_set_default(mi_option_t option, long value);
 
+typedef struct mi_allocation_counter_s {
+  size_t counter;
+  size_t block_size; // size of the allocation block that related to this counter (for example, the block that caused a new segmented to be allocated)
+} mi_allocation_counter_t;
+
+mi_decl_export bool mi_get_segment_stats(size_t* abandoned, size_t* reclaimed, size_t* reclaim_failed, size_t* allocated, size_t* freed,
+  mi_allocation_counter_t* allocated_segments, int allocated_segments_count,
+  mi_allocation_counter_t* free_space_in_segments, int free_space_in_segments_count,
+  mi_allocation_counter_t* allocated_memory, int allocated_memory_count);
+
 
 // -------------------------------------------------------------------------------------------------------
 // "mi" prefixed implementations of various posix, Unix, Windows, and C++ allocation functions.

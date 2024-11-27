@@ -15,6 +15,192 @@ terms of the MIT license. A copy of the license can be found in the file
 #pragma warning(disable:4204)  // non-constant aggregate initializer
 #endif
 
+// --------------------------------------------------------
+// Segment statistics
+// --------------------------------------------------------
+mi_segment_stats_t _mi_global_segment_stats;
+
+void mi_init_segment_stats()
+{
+  _mi_global_segment_stats.reclaimed_count = 0;
+  _mi_global_segment_stats.reclaim_failed_count = 0;
+  _mi_global_segment_stats.allocated_count = 0;
+  _mi_global_segment_stats.freed_count = 0;
+
+  static_assert((MI_BIN_HUGE + 1) == sizeof(_mi_global_segment_stats.alloc_stats) / sizeof(_mi_global_segment_stats.alloc_stats[0]));
+  for (int i = 0; i <= MI_BIN_HUGE; i++)
+  {
+    size_t block_size = _mi_bin_size((uint8_t)i);
+
+    _mi_global_segment_stats.alloc_stats[i].counter = 0;
+    _mi_global_segment_stats.alloc_stats[i].block_size = block_size;
+  }
+
+  // (MI_FREE_SPACE_MASK_BIT_COUNT-1) combines multiple block sizes. Set it INT32_MAX to distinguish from the rest.
+  _mi_global_segment_stats.alloc_stats[MI_FREE_SPACE_MASK_BIT_COUNT - 1].block_size = INT32_MAX;
+}
+
+
+void mi_segment_increment_alloc_stats(size_t block_size)
+{
+  uint8_t page_queue_index = _mi_bin(block_size);
+
+  mi_atomic_increment_relaxed(&_mi_global_segment_stats.alloc_stats[page_queue_index].counter);
+  mi_atomic_increment_relaxed(&_mi_global_segment_stats.allocated_count);
+}
+
+void mi_segment_increment_freed_stats()
+{
+  mi_atomic_increment_relaxed(&_mi_global_segment_stats.freed_count);
+}
+
+void mi_segment_increment_reclaimed_stats()
+{
+  mi_atomic_increment_relaxed(&_mi_global_segment_stats.reclaimed_count);
+}
+
+void mi_segment_increment_reclaim_failed_stats()
+{
+  mi_atomic_increment_relaxed(&_mi_global_segment_stats.reclaim_failed_count);
+}
+
+// --------------------------------------------------------
+// Partitioned counter to avoid contention in interlocked operations
+// --------------------------------------------------------
+_Atomic(size_t) _mi_next_counter_partition_id;
+#define NUMBER_OF_PARTITIONS 32
+
+size_t _mi_get_next_thread_partition_id()
+{
+    return mi_atomic_increment_relaxed(&_mi_next_counter_partition_id) % NUMBER_OF_PARTITIONS;
+}
+
+mi_decl_thread size_t _mi_current_thread_partitionId = 0;
+
+// Implements a counter that has its value partitioned in a set of bucket (in separate cache lines)
+// to reduce contention when the value of the counter is updated.
+typedef struct mi_decl_cache_align mi_partitioned_counter_value_s
+{
+    _Atomic(int64_t) counter_value;
+} mi_partitioned_counter_value_t;
+
+typedef struct mi_partitioned_counter_s
+{
+    mi_partitioned_counter_value_t counter_partitions[NUMBER_OF_PARTITIONS];
+} mi_partitioned_counter_t;
+
+void mi_partitioned_counter_increment(mi_partitioned_counter_t* counter, size_t value)
+{
+    mi_atomic_add_relaxed(&counter->counter_partitions[_mi_current_thread_partitionId].counter_value, value);
+}
+
+void mi_partitioned_counter_decrement(mi_partitioned_counter_t* counter, size_t value)
+{
+    mi_atomic_sub_relaxed(&counter->counter_partitions[_mi_current_thread_partitionId].counter_value, value);
+}
+
+int64_t mi_partitioned_counter_get_value(mi_partitioned_counter_t* counter)
+{
+    size_t total = 0;
+
+    for (int i = 0; i < NUMBER_OF_PARTITIONS; i++)
+    {
+        total += mi_atomic_load_relaxed(&counter->counter_partitions[i].counter_value);
+    }
+
+    int64_t retVal = ((int64_t)total);
+    if (retVal < 0)
+    {
+        retVal = 0;
+    }
+
+    return retVal;
+}
+
+mi_partitioned_counter_t _mi_allocated_memory[MI_BIN_HUGE+1];
+
+void mi_allocation_stats_increment(size_t block_size)
+{
+    uint8_t binIndex = _mi_bin(block_size);
+    mi_partitioned_counter_increment(&_mi_allocated_memory[binIndex], block_size);
+}
+
+void mi_allocation_stats_decrement(size_t block_size)
+{
+    uint8_t binIndex = _mi_bin(block_size);
+    mi_partitioned_counter_decrement(&_mi_allocated_memory[binIndex], block_size);
+}
+
+size_t _mi_arena_segment_abandoned_free_space_stats_next(mi_arena_field_cursor_t* previous);
+void mi_segment_update_free_space_stats(mi_allocation_counter_t* free_space_in_segments)
+{
+  mi_arena_field_cursor_t current;
+  size_t free_space_mask = 0;
+
+  _mi_arena_field_cursor_init(NULL, &current);
+  while ((free_space_mask = _mi_arena_segment_abandoned_free_space_stats_next(&current)) != MI_FREE_SPACE_MASK_ALL) {
+    
+    int bit_index = 0;
+    while (free_space_mask != 0) {
+      if ((free_space_mask & 1) != 0) {
+        free_space_in_segments[bit_index].counter++;
+      }
+
+      free_space_mask = free_space_mask >> 1;
+      bit_index++;
+    }
+  }
+}
+
+void mi_update_allocated_memory_stats(mi_allocation_counter_t* allocated_memory, int allocated_memory_count)
+{
+  for (int i = 0; i < allocated_memory_count; i++) {
+    allocated_memory[i].counter = mi_partitioned_counter_get_value(&_mi_allocated_memory[i]);
+  }
+}
+
+bool mi_get_segment_stats(size_t* abandoned, size_t* reclaimed, size_t* reclaim_failed, size_t* allocated, size_t* freed,
+  mi_allocation_counter_t* allocated_segments, int allocated_segments_count,
+  mi_allocation_counter_t* free_space_in_segments, int free_space_in_segments_count,
+  mi_allocation_counter_t* allocated_memory, int allocated_memory_count)
+{
+    int stat_count = sizeof(_mi_global_segment_stats.alloc_stats) / sizeof(_mi_global_segment_stats.alloc_stats[0]);
+    
+    if ((allocated_segments == NULL) || (allocated_segments_count != stat_count)) {
+      return false;
+    }
+
+    if ((free_space_in_segments == NULL) || (free_space_in_segments_count != stat_count)) {
+      return false;
+    }
+
+    if ((allocated_memory == NULL) || (allocated_memory_count != stat_count)) {
+      return false;
+    }
+
+    *abandoned = _mi_arena_segment_abandoned_count();
+    *reclaimed = mi_atomic_load_relaxed(&_mi_global_segment_stats.reclaimed_count);
+    *reclaim_failed = mi_atomic_load_relaxed(&_mi_global_segment_stats.reclaim_failed_count);
+    *allocated = mi_atomic_load_relaxed(&_mi_global_segment_stats.allocated_count);
+    *freed = mi_atomic_load_relaxed(&_mi_global_segment_stats.freed_count);
+
+    for (int i = 0; i < stat_count; i++) {
+      allocated_segments[i].counter = mi_atomic_load_relaxed(&_mi_global_segment_stats.alloc_stats[i].counter);
+      allocated_segments[i].block_size = _mi_global_segment_stats.alloc_stats[i].block_size;
+
+      free_space_in_segments[i].counter = 0;
+      free_space_in_segments[i].block_size = allocated_segments[i].block_size;
+
+      allocated_memory[i].counter = 0;
+      allocated_memory[i].block_size = allocated_segments[i].block_size;
+    }
+
+    mi_segment_update_free_space_stats(free_space_in_segments);
+    mi_update_allocated_memory_stats(allocated_memory, allocated_memory_count);
+
+    return true;
+}
+
 /* -----------------------------------------------------------
   Statistics operations
 ----------------------------------------------------------- */
@@ -388,6 +574,8 @@ void mi_stats_reset(void) mi_attr_noexcept {
   if (stats != &_mi_stats_main) { memset(stats, 0, sizeof(mi_stats_t)); }
   memset(&_mi_stats_main, 0, sizeof(mi_stats_t));
   if (mi_process_start == 0) { mi_process_start = _mi_clock_start(); };
+
+  mi_init_segment_stats();
 }
 
 void mi_stats_merge(void) mi_attr_noexcept {

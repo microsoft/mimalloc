@@ -825,7 +825,14 @@ void _mi_arena_segment_mark_abandoned(mi_segment_t* segment)
 // start a cursor at a randomized arena
 void _mi_arena_field_cursor_init(mi_heap_t* heap, mi_arena_field_cursor_t* current) {
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
-  current->start = (max_arena == 0 ? 0 : (mi_arena_id_t)( _mi_heap_random_next(heap) % max_arena));
+
+  if (heap != NULL) {
+    current->start = (max_arena == 0 ? 0 : (mi_arena_id_t)( _mi_heap_random_next(heap) % max_arena));
+  }
+  else {
+    current->start = 0;
+  }
+
   current->count = 0;
   current->bitmap_idx = 0;  
   current->free_space_mask = MI_FREE_SPACE_MASK_ANY;
@@ -894,6 +901,56 @@ mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* pr
   previous->bitmap_idx = 0;
   previous->count = 0;
   return NULL;
+}
+
+// NOTE: This function has RACE CONDITION. It access abandoned segments WITHOUT clearing the abandoned bit.
+// This can result in touching a segment object that has been freed and cause a crash.
+// This function is strictly for experimental purpose to be able to calculate free space in segments quickly
+// without performing numerous interlock operations while traversing through ALL abandoned segments.
+// It should be deleted after the experiment is done.
+size_t _mi_arena_segment_abandoned_free_space_stats_next(mi_arena_field_cursor_t* previous) 
+{
+  const int max_arena = (int)mi_atomic_load_relaxed(&mi_arena_count);
+  if (max_arena <= 0 || mi_atomic_load_relaxed(&abandoned_count) == 0) return MI_FREE_SPACE_MASK_ALL;
+
+  int count = previous->count;
+  size_t field_idx = mi_bitmap_index_field(previous->bitmap_idx);
+  size_t bit_idx = mi_bitmap_index_bit_in_field(previous->bitmap_idx) + 1;
+  // visit arena's (from previous)
+  for (; count < max_arena; count++, field_idx = 0, bit_idx = 0) {
+    mi_arena_id_t arena_idx = previous->start + count;
+    if (arena_idx >= max_arena) { arena_idx = arena_idx % max_arena; } // wrap around
+    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
+    if (arena != NULL) {
+      // visit the abandoned fields (starting at previous_idx)
+      for ( ; field_idx < arena->field_count; field_idx++, bit_idx = 0) {
+        size_t field = mi_atomic_load_relaxed(&arena->blocks_abandoned[field_idx]);
+        if mi_unlikely(field != 0) { // skip zero fields quickly
+          // visit each set bit in the field  (todo: maybe use `ctz` here?)
+          for ( ; bit_idx < MI_BITMAP_FIELD_BITS; bit_idx++) {
+            // pre-check if the bit is set
+            size_t mask = ((size_t)1 << bit_idx);
+            if mi_unlikely((field & mask) == mask) {
+              mi_bitmap_index_t bitmap_idx = mi_bitmap_index_create(field_idx, bit_idx);
+              
+              // *** THIS CAN CAUSE A CRASH: the segment can be freed while we access it's fields.
+              mi_segment_t* segment = (mi_segment_t*)mi_arena_block_start(arena, bitmap_idx);
+              size_t free_space_mask = mi_atomic_load_relaxed(&segment->free_space_mask) & MI_FREE_SPACE_MASK_ANY;
+
+              previous->bitmap_idx = bitmap_idx;
+              previous->count = count;
+
+              return free_space_mask;
+            }
+          }
+        }
+      }
+    }
+  }
+  // no more found
+  previous->bitmap_idx = 0;
+  previous->count = 0;
+  return MI_FREE_SPACE_MASK_ALL;
 }
 
 

@@ -34,7 +34,10 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   // checks
   if mi_unlikely(mi_check_is_double_free(page, block)) return;
   mi_check_padding(page, block);
-  if (track_stats) { mi_stat_free(page, block); }
+  if (track_stats) {
+    mi_stat_free(page, block);
+    mi_allocation_stats_decrement(page->block_size);
+  }
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
   if (!mi_page_is_huge(page)) {   // huge page content may be already decommitted
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
@@ -261,6 +264,7 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_segment_t* seg
   // adjust stats (after padding check and potentially recursive `mi_free` above)
   mi_stat_free(page, block);    // stat_free may access the padding
   mi_track_free_size(block, mi_page_usable_size_of(page,block));
+  mi_allocation_stats_decrement(page->block_size);
 
   // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
   _mi_padding_shrink(page, block, sizeof(mi_block_t));
