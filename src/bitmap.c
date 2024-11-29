@@ -512,9 +512,9 @@ bool mi_bitmap_is_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx, size_t n)
 }
 
 
-#define mi_bitmap_forall_set_chunks(bitmap,start,decl_chunk_idx) \
+#define mi_bitmap_forall_set_chunks(bitmap,tseq,decl_chunk_idx) \
   { size_t _set_idx; \
-    size_t _start = start % MI_BFIELD_BITS; \
+    size_t _start = tseq % MI_BFIELD_BITS; \
     mi_bfield_t _any_set = mi_bfield_rotate_right(bitmap->any_set, _start); \
     while (mi_bfield_find_least_bit(_any_set,&_set_idx)) { \
       decl_chunk_idx = (_set_idx + _start) % MI_BFIELD_BITS;
@@ -530,8 +530,8 @@ bool mi_bitmap_is_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx, size_t n)
 // and in that case sets the index: `0 <= *pidx < MI_BITMAP_MAX_BITS`.
 // The low `MI_BFIELD_BITS` of start are used to set the start point of the search
 // (to reduce thread contention).
-bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t* pidx, size_t start) {
-  mi_bitmap_forall_set_chunks(bitmap,start,size_t chunk_idx)
+bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
+  mi_bitmap_forall_set_chunks(bitmap,tseq,size_t chunk_idx)
   {
     size_t cidx;
     if mi_likely(mi_bitmap_chunk_find_and_try_clear(&bitmap->chunks[chunk_idx],&cidx)) {
@@ -554,8 +554,8 @@ bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t* pidx, size_t star
 
 // Find a byte in the bitmap with all bits set (0xFF) and atomically unset it to zero.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-8`.
-bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t start, size_t* pidx ) {
-  mi_bitmap_forall_set_chunks(bitmap,start,size_t chunk_idx)
+bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx ) {
+  mi_bitmap_forall_set_chunks(bitmap,tseq,size_t chunk_idx)
   {
     size_t cidx;
     if mi_likely(mi_bitmap_chunk_find_and_try_clear8(&bitmap->chunks[chunk_idx],&cidx)) {
@@ -576,11 +576,11 @@ bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t start, size_t* pi
 
 // Find a sequence of `n` bits in the bitmap with all bits set, and atomically unset all.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
-bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t start, size_t n, size_t* pidx ) {
+bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx ) {
   // TODO: allow at least MI_BITMAP_CHUNK_BITS and probably larger
   // TODO: allow spanning across chunk boundaries
   if (n == 0 || n > MI_BFIELD_BITS) return false;
-  mi_bitmap_forall_set_chunks(bitmap,start,size_t chunk_idx)
+  mi_bitmap_forall_set_chunks(bitmap,tseq,size_t chunk_idx)
   {
     size_t cidx;
     if mi_likely(mi_bitmap_chunk_find_and_try_clearN(&bitmap->chunks[chunk_idx],n,&cidx)) {

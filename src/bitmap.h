@@ -79,14 +79,14 @@ mi_decl_nodiscard bool mi_bitmap_try_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, si
 // and in that case sets the index: `0 <= *pidx < MI_BITMAP_MAX_BITS`.
 // The low `MI_BFIELD_BITS` of start are used to set the start point of the search
 // (to reduce thread contention).
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t* pidx, size_t start);
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx);
 
 // Find a byte in the bitmap with all bits set (0xFF) and atomically unset it to zero.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-8`.
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t start, size_t* pidx );
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx );
 
 // Find a sequence of `n` bits in the bitmap with all bits set, and atomically unset all.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t start, size_t n, size_t* pidx );
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx );
 
 #endif // MI_XBITMAP_H

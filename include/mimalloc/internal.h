@@ -137,6 +137,9 @@ bool       _mi_arena_contains(const void* p);
 void       _mi_arenas_collect(bool force_purge, mi_stats_t* stats);
 void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 
+mi_page_t* _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
+void       _mi_arena_page_abandon(mi_page_t* page, mi_tld_t* tld);
+void       _mi_arena_page_free(mi_page_t* page, mi_tld_t* tld);
 
 void*      _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid);
 void       _mi_arena_meta_free(void* p, mi_memid_t memid, size_t size);
@@ -181,6 +184,7 @@ void       _mi_deferred_free(mi_heap_t* heap, bool force);
 
 void       _mi_page_free_collect(mi_page_t* page,bool force);
 void       _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback from segments
+void       _mi_page_init(mi_heap_t* heap, mi_page_t* page);
 
 size_t     _mi_bin_size(uint8_t bin);           // for stats
 uint8_t    _mi_bin(size_t size);                // for stats
@@ -453,8 +457,7 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
 
 // Page start
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
-  mi_assert(sizeof(mi_page_t) <= MI_PAGE_INFO_SIZE);
-  return (uint8_t*)page + MI_PAGE_INFO_SIZE;
+  return page->page_start;
 }
 
 static inline uint8_t* mi_page_area(const mi_page_t* page, size_t* size) {

@@ -32,8 +32,12 @@ static bool mi_page_map_init(void) {
     return false;
   }
   if (mi_page_map_memid.initially_committed && !mi_page_map_memid.initially_zero) {
-    _mi_warning_message("the page map was committed on-demand but not zero initialized!\n");
+    _mi_warning_message("the page map was committed but not zero initialized!\n");
     _mi_memzero_aligned(_mi_page_map, page_map_size);
+  }
+  // commit the first part so NULL pointers get resolved without an access violation
+  if (!mi_page_map_all_committed) {
+    _mi_os_commit(_mi_page_map, _mi_os_page_size(), NULL, NULL);
   }
   return true;
 }
@@ -72,7 +76,7 @@ void _mi_page_map_register(mi_page_t* page) {
   // set the offsets
   for (int i = 0; i < block_count; i++) {
     mi_assert_internal(i < 128);
-    _mi_page_map[idx + i] = (int8_t)(-i-1);
+    _mi_page_map[idx + i] = (signed char)(-i-1);
   }
 }
 

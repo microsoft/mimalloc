@@ -127,8 +127,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ARENA_BLOCK_ALIGN              (MI_ARENA_BLOCK_SIZE)
 #define MI_BITMAP_CHUNK_BITS              (MI_ZU(1) << MI_BITMAP_CHUNK_BITS_SHIFT)
 
-#define MI_ARENA_MIN_OBJ_SIZE             MI_ARENA_BLOCK_SIZE
-#define MI_ARENA_MAX_OBJ_SIZE             (MI_BITMAP_CHUNK_BITS * MI_ARENA_BLOCK_SIZE)  // for now, cannot cross chunk boundaries
+#define MI_ARENA_MIN_OBJ_BLOCKS           (1) 
+#define MI_ARENA_MAX_OBJ_BLOCKS           (MI_BITMAP_CHUNK_BITS)      // for now, cannot cross chunk boundaries
+
+#define MI_ARENA_MIN_OBJ_SIZE             (MI_ARENA_MIN_OBJ_BLOCKS * MI_ARENA_BLOCK_SIZE)
+#define MI_ARENA_MAX_OBJ_SIZE             (MI_ARENA_MAX_OBJ_BLOCKS * MI_ARENA_BLOCK_SIZE)  
 
 #define MI_SMALL_PAGE_SIZE                MI_ARENA_MIN_OBJ_SIZE
 #define MI_MEDIUM_PAGE_SIZE               (8*MI_SMALL_PAGE_SIZE)                   // 512 KiB  (=byte in the bitmap)
@@ -141,7 +144,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_BIN_COUNT (MI_BIN_FULL+1)
 
 
-// Alignments over MI_BLOCK_ALIGNMENT_MAX are allocated in dedicated orphan pages
+// Alignments over MI_BLOCK_ALIGNMENT_MAX are allocated in singleton pages
 #define MI_BLOCK_ALIGNMENT_MAX   (MI_ARENA_BLOCK_ALIGN)
 
 // We never allocate more than PTRDIFF_MAX (see also <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
@@ -279,7 +282,6 @@ typedef struct mi_subproc_s mi_subproc_t;
 //   the owning heap `thread_delayed_free` list. This guarantees that pages
 //   will be freed correctly even if only other threads free blocks.
 typedef struct mi_page_s {
-  mi_memid_t            memid;             // provenance of the page memory
   uint16_t              capacity;          // number of blocks committed (must be the first field for proper zero-initialisation)
   uint16_t              reserved;          // number of blocks reserved in memory
   mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (8 bits)
@@ -293,6 +295,7 @@ typedef struct mi_page_s {
   uint8_t               heap_tag;          // tag of the owning heap, used to separate heaps by object type
                                            // padding
   size_t                block_size;        // size available in each block (always `>0`)  
+  uint8_t*              page_start;        // start of the blocks
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`) or padding canary
@@ -304,6 +307,7 @@ typedef struct mi_page_s {
 
   struct mi_page_s*     next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by the heap with the same `block_size`
+  mi_memid_t            memid;             // provenance of the page memory
 } mi_page_t;
 
 
@@ -312,7 +316,7 @@ typedef struct mi_page_s {
 // ------------------------------------------------------
 
 #define MI_PAGE_ALIGN                     (64)
-#define MI_PAGE_INFO_SIZE                 (MI_SIZE_SHIFT*MI_PAGE_ALIGN)   // should be > sizeof(mi_page_t)
+#define MI_PAGE_INFO_SIZE                 (2*MI_PAGE_ALIGN)   // should be > sizeof(mi_page_t)
 
 // The max object size are checked to not waste more than 12.5% internally over the page sizes.
 // (Except for large pages since huge objects are allocated in 4MiB chunks)
@@ -532,7 +536,7 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 // ------------------------------------------------------
 
 struct mi_subproc_s {
-  _Atomic(size_t)    abandoned_count;         // count of abandoned pages for this sub-process
+  _Atomic(size_t)    abandoned_count[MI_BIN_COUNT]; // count of abandoned pages for this sub-process
   _Atomic(size_t)    abandoned_os_list_count; // count of abandoned pages in the os-list
   mi_lock_t          abandoned_os_lock;       // lock for the abandoned os pages list (outside of arena's) (this lock protect list operations)
   mi_lock_t          abandoned_os_visit_lock; // ensure only one thread per subproc visits the abandoned os list
@@ -562,6 +566,7 @@ struct mi_tld_s {
   mi_heap_t*          heap_backing;  // backing heap of this thread (cannot be deleted)
   mi_heap_t*          heaps;         // list of heaps in this thread (so we can abandon all when the thread terminates)
   mi_subproc_t*       subproc;       // sub-process this thread belongs to.
+  size_t              tseq;          // thread sequence id
   mi_os_tld_t         os;            // os tld
   mi_stats_t          stats;         // statistics
 };
