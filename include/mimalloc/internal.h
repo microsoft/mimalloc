@@ -16,6 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "types.h"
 #include "track.h"
+#include "bits.h"
 
 #if (MI_DEBUG>0)
 #define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
@@ -23,25 +24,27 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_trace_message(...)
 #endif
 
-#define MI_CACHE_LINE          64
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
 #pragma warning(disable:26812)  // unscoped enum warning
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
-#define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
+#define mi_decl_align(a)        __declspec(align(a))
 #define mi_decl_weak
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
-#define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
+#define mi_decl_align(a)        __attribute__((aligned(a)))
 #define mi_decl_weak            __attribute__((weak))
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
-#define mi_decl_cache_align
+#define mi_decl_align(a)
 #define mi_decl_weak
 #endif
+
+#define mi_decl_cache_align     mi_decl_align(64)
+
 
 #if defined(__EMSCRIPTEN__) && !defined(__wasi__)
 #define __wasi__
@@ -89,6 +92,7 @@ void       _mi_thread_done(mi_heap_t* heap);
 void       _mi_thread_data_collect(void);
 void       _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap);
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
+size_t      _mi_thread_seq_id(void) mi_attr_noexcept;
 mi_heap_t*    _mi_heap_main_get(void);     // statically allocated main backing heap
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 void       _mi_heap_guarded_init(mi_heap_t* heap);
@@ -96,6 +100,7 @@ void       _mi_heap_guarded_init(mi_heap_t* heap);
 // os.c
 void       _mi_os_init(void);                                            // called from process init
 void*      _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);
+void*      _mi_os_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);
 void       _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats);
 void       _mi_os_free_ex(void* p, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* stats);
 
@@ -675,15 +680,6 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
   return (idxp == idxq);
 }
 
-static inline uintptr_t mi_rotl(uintptr_t x, uintptr_t shift) {
-  shift %= MI_INTPTR_BITS;
-  return (shift==0 ? x : ((x << shift) | (x >> (MI_INTPTR_BITS - shift))));
-}
-static inline uintptr_t mi_rotr(uintptr_t x, uintptr_t shift) {
-  shift %= MI_INTPTR_BITS;
-  return (shift==0 ? x : ((x >> shift) | (x << (MI_INTPTR_BITS - shift))));
-}
-
 static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
   void* p = (void*)(mi_rotr(x - keys[0], keys[0]) ^ keys[1]);
   return (p==null ? NULL : p);
@@ -821,112 +817,6 @@ static inline size_t _mi_os_numa_node_count(void) {
 }
 
 
-
-// -----------------------------------------------------------------------
-// Count bits: trailing or leading zeros (with MI_INTPTR_BITS on all zero)
-// -----------------------------------------------------------------------
-
-#if defined(__GNUC__)
-
-#include <limits.h>       // LONG_MAX
-#define MI_HAVE_FAST_BITSCAN
-static inline size_t mi_clz(uintptr_t x) {
-  if (x==0) return MI_INTPTR_BITS;
-#if (INTPTR_MAX == LONG_MAX)
-  return __builtin_clzl(x);
-#else
-  return __builtin_clzll(x);
-#endif
-}
-static inline size_t mi_ctz(uintptr_t x) {
-  if (x==0) return MI_INTPTR_BITS;
-#if (INTPTR_MAX == LONG_MAX)
-  return __builtin_ctzl(x);
-#else
-  return __builtin_ctzll(x);
-#endif
-}
-
-#elif defined(_MSC_VER)
-
-#include <limits.h>       // LONG_MAX
-#include <intrin.h>       // BitScanReverse64
-#define MI_HAVE_FAST_BITSCAN
-static inline size_t mi_clz(uintptr_t x) {
-  if (x==0) return MI_INTPTR_BITS;
-  unsigned long idx;
-#if (INTPTR_MAX == LONG_MAX)
-  _BitScanReverse(&idx, x);
-#else
-  _BitScanReverse64(&idx, x);
-#endif
-  return ((MI_INTPTR_BITS - 1) - idx);
-}
-static inline size_t mi_ctz(uintptr_t x) {
-  if (x==0) return MI_INTPTR_BITS;
-  unsigned long idx;
-#if (INTPTR_MAX == LONG_MAX)
-  _BitScanForward(&idx, x);
-#else
-  _BitScanForward64(&idx, x);
-#endif
-  return idx;
-}
-
-#else
-static inline size_t mi_ctz32(uint32_t x) {
-  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
-  static const unsigned char debruijn[32] = {
-    0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
-    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
-  };
-  if (x==0) return 32;
-  return debruijn[((x & -(int32_t)x) * 0x077CB531UL) >> 27];
-}
-static inline size_t mi_clz32(uint32_t x) {
-  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
-  static const uint8_t debruijn[32] = {
-    31, 22, 30, 21, 18, 10, 29, 2, 20, 17, 15, 13, 9, 6, 28, 1,
-    23, 19, 11, 3, 16, 14, 7, 24, 12, 4, 8, 25, 5, 26, 27, 0
-  };
-  if (x==0) return 32;
-  x |= x >> 1;
-  x |= x >> 2;
-  x |= x >> 4;
-  x |= x >> 8;
-  x |= x >> 16;
-  return debruijn[(uint32_t)(x * 0x07C4ACDDUL) >> 27];
-}
-
-static inline size_t mi_clz(uintptr_t x) {
-  if (x==0) return MI_INTPTR_BITS;
-#if (MI_INTPTR_BITS <= 32)
-  return mi_clz32((uint32_t)x);
-#else
-  size_t count = mi_clz32((uint32_t)(x >> 32));
-  if (count < 32) return count;
-  return (32 + mi_clz32((uint32_t)x));
-#endif
-}
-static inline size_t mi_ctz(uintptr_t x) {
-  if (x==0) return MI_INTPTR_BITS;
-#if (MI_INTPTR_BITS <= 32)
-  return mi_ctz32((uint32_t)x);
-#else
-  size_t count = mi_ctz32((uint32_t)x);
-  if (count < 32) return count;
-  return (32 + mi_ctz32((uint32_t)(x>>32)));
-#endif
-}
-
-#endif
-
-// "bit scan reverse": Return index of the highest bit (or MI_INTPTR_BITS if `x` is zero)
-static inline size_t mi_bsr(uintptr_t x) {
-  return (x==0 ? MI_INTPTR_BITS : MI_INTPTR_BITS - 1 - mi_clz(x));
-}
-
-
 // ---------------------------------------------------------------------------------
 // Provide our own `_mi_memcpy` for potential performance optimizations.
 //
@@ -947,20 +837,20 @@ static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
     memcpy(dst, src, n);
   }
 }
-static inline void _mi_memzero(void* dst, size_t n) {
+static inline void _mi_memset(void* dst, int val, size_t n) {
   if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
-    __stosb((unsigned char*)dst, 0, n);
+    __stosb((unsigned char*)dst, (uint8_t)val, n);
   }
   else {
-    memset(dst, 0, n);
+    memset(dst, val, n);
   }
 }
 #else
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
   memcpy(dst, src, n);
 }
-static inline void _mi_memzero(void* dst, size_t n) {
-  memset(dst, 0, n);
+static inline void _mi_memset(void* dst, int val, size_t n) {
+  memset(dst, val, n);
 }
 #endif
 
@@ -978,10 +868,10 @@ static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   _mi_memcpy(adst, asrc, n);
 }
 
-static inline void _mi_memzero_aligned(void* dst, size_t n) {
+static inline void _mi_memset_aligned(void* dst, int val, size_t n) {
   mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
   void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
-  _mi_memzero(adst, n);
+  _mi_memset(adst, val, n);
 }
 #else
 // Default fallback on `_mi_memcpy`
@@ -990,11 +880,19 @@ static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   _mi_memcpy(dst, src, n);
 }
 
-static inline void _mi_memzero_aligned(void* dst, size_t n) {
+static inline void _mi_memset_aligned(void* dst, int val, size_t n) {
   mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
-  _mi_memzero(dst, n);
+  _mi_memset(dst, val, n);
 }
 #endif
+
+static inline void _mi_memzero(void* dst, size_t n) {
+  _mi_memset(dst, 0, n);
+}
+
+static inline void _mi_memzero_aligned(void* dst, size_t n) {
+  _mi_memset_aligned(dst, 0, n);
+}
 
 
 #endif

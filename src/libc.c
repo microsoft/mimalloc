@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // --------------------------------------------------------
 // This module defines various std libc functions to reduce
-// the dependency on libc, and also prevent errors caused 
+// the dependency on libc, and also prevent errors caused
 // by some libc implementations when called before `main`
 // executes (due to malloc redirection)
 // --------------------------------------------------------
@@ -83,7 +83,7 @@ bool _mi_getenv(const char* name, char* result, size_t result_size) {
 // Define our own limited `_mi_vsnprintf` and `_mi_snprintf`
 // This is mostly to avoid calling these when libc is not yet
 // initialized (and to reduce dependencies)
-// 
+//
 // format:      d i, p x u, s
 // prec:        z l ll L
 // width:       10
@@ -130,7 +130,7 @@ static void mi_out_alignright(char fill, char* start, size_t len, size_t extra, 
 }
 
 
-static void mi_out_num(uintmax_t x, size_t base, char prefix, char** out, char* end) 
+static void mi_out_num(uintmax_t x, size_t base, char prefix, char** out, char* end)
 {
   if (x == 0 || base == 0 || base > 16) {
     if (prefix != 0) { mi_outc(prefix, out, end); }
@@ -144,8 +144,8 @@ static void mi_out_num(uintmax_t x, size_t base, char prefix, char** out, char* 
       mi_outc((digit <= 9 ? '0' + digit : 'A' + digit - 10),out,end);
       x = x / base;
     }
-    if (prefix != 0) { 
-      mi_outc(prefix, out, end); 
+    if (prefix != 0) {
+      mi_outc(prefix, out, end);
     }
     size_t len = *out - start;
     // and reverse in-place
@@ -181,7 +181,7 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
       size_t width = 0;
       char   numtype = 'd';
       char   numplus = 0;
-      bool   alignright = true; 
+      bool   alignright = true;
       if (c == '+' || c == ' ') { numplus = c; MI_NEXTC(); }
       if (c == '-') { alignright = false; MI_NEXTC(); }
       if (c == '0') { fill = '0'; MI_NEXTC(); }
@@ -191,7 +191,7 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
           width = (10 * width) + (c - '0'); MI_NEXTC();
         }
         if (c == 0) break;  // extra check due to while
-      }      
+      }
       if (c == 'z' || c == 't' || c == 'L') { numtype = c; MI_NEXTC(); }
       else if (c == 'l') {
         numtype = c; MI_NEXTC();
@@ -272,4 +272,57 @@ void _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...) {
   va_start(args, fmt);
   _mi_vsnprintf(buf, buflen, fmt, args);
   va_end(args);
+}
+
+
+
+// --------------------------------------------------------
+// generic trailing and leading zero count
+// --------------------------------------------------------
+
+static inline size_t mi_ctz_generic32(uint32_t x) {
+  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
+  static const uint8_t debruijn[32] = {
+    0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
+  };
+  if (x==0) return 32;
+  return debruijn[((x & -(int32_t)x) * 0x077CB531UL) >> 27];
+}
+
+static inline size_t mi_clz_generic32(uint32_t x) {
+  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
+  static const uint8_t debruijn[32] = {
+    31, 22, 30, 21, 18, 10, 29, 2, 20, 17, 15, 13, 9, 6, 28, 1,
+    23, 19, 11, 3, 16, 14, 7, 24, 12, 4, 8, 25, 5, 26, 27, 0
+  };
+  if (x==0) return 32;
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  return debruijn[(uint32_t)(x * 0x07C4ACDDUL) >> 27];
+}
+
+size_t _mi_clz_generic(size_t x) {
+  if (x==0) return MI_SIZE_BITS;
+  #if (MI_SIZE_BITS <= 32)
+    return mi_clz_generic32((uint32_t)x);
+  #else
+    const size_t count = mi_clz_generic32((uint32_t)(x >> 32));
+    if (count < 32) return count;
+    return (32 + mi_clz_generic32((uint32_t)x));
+  #endif
+}
+
+size_t _mi_ctz_generic(size_t x) {
+  if (x==0) return MI_SIZE_BITS;
+  #if (MI_SIZE_BITS <= 32)
+    return mi_ctz_generic32((uint32_t)x);
+  #else
+    const size_t count = mi_ctz_generic32((uint32_t)x);
+    if (count < 32) return count;
+    return (32 + mi_ctz_generic32((uint32_t)(x>>32)));
+  #endif
 }

@@ -359,6 +359,18 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   return p;
 }
 
+void* _mi_os_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* stats) {
+  void* p = _mi_os_alloc(size, memid, &_mi_stats_main);
+  if (p == NULL) return NULL;
+
+  // zero the OS memory if needed
+  if (!memid->initially_zero) {
+    _mi_memzero_aligned(p, size);
+    memid->initially_zero = true;
+  }
+  return p;
+}
+
 /* -----------------------------------------------------------
   OS aligned allocation with an offset. This is used
   for large alignments > MI_BLOCK_ALIGNMENT_MAX. We use a large mimalloc

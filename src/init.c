@@ -124,6 +124,18 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
   return _mi_prim_thread_id();
 }
 
+// Thread sequence number
+static _Atomic(size_t)        mi_tcount;
+static mi_decl_thread size_t  mi_tseq;
+
+size_t _mi_thread_seq_id(void) mi_attr_noexcept {
+  size_t tseq = mi_tseq;
+  if (tseq == 0) {
+    mi_tseq = tseq = mi_atomic_add_acq_rel(&mi_tcount,1);
+  }
+  return tseq;
+}
+
 // the thread-local default heap for allocation
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 
@@ -169,8 +181,8 @@ mi_stats_t _mi_stats_main = { MI_STATS_NULL };
 #if MI_GUARDED
 mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed) {
   heap->guarded_sample_seed = seed;
-  if (heap->guarded_sample_seed == 0) { 
-    heap->guarded_sample_seed = _mi_heap_random_next(heap); 
+  if (heap->guarded_sample_seed == 0) {
+    heap->guarded_sample_seed = _mi_heap_random_next(heap);
   }
   heap->guarded_sample_rate  = sample_rate;
   if (heap->guarded_sample_rate >= 1) {
@@ -188,9 +200,9 @@ void _mi_heap_guarded_init(mi_heap_t* heap) {
   mi_heap_guarded_set_sample_rate(heap,
     (size_t)mi_option_get_clamp(mi_option_guarded_sample_rate, 0, LONG_MAX),
     (size_t)mi_option_get(mi_option_guarded_sample_seed));
-  mi_heap_guarded_set_size_bound(heap, 
+  mi_heap_guarded_set_size_bound(heap,
     (size_t)mi_option_get_clamp(mi_option_guarded_min, 0, LONG_MAX),
-    (size_t)mi_option_get_clamp(mi_option_guarded_max, 0, LONG_MAX) );  
+    (size_t)mi_option_get_clamp(mi_option_guarded_max, 0, LONG_MAX) );
 }
 #else
 mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed) {
@@ -602,7 +614,7 @@ static void mi_detect_cpu_features(void) {
 }
 #else
 static void mi_detect_cpu_features(void) {
-  // nothing 
+  // nothing
 }
 #endif
 

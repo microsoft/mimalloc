@@ -369,7 +369,4 @@ static inline mi_heap_t* mi_prim_get_default_heap(void) {
 #endif  // mi_prim_get_default_heap()
 
 
-
-
-
 #endif  // MIMALLOC_PRIM_H

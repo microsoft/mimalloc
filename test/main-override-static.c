@@ -7,6 +7,8 @@
 #include <mimalloc.h>
 #include <mimalloc-override.h>  // redefines malloc etc.
 
+static void mi_bins(void);
+
 static void double_free1();
 static void double_free2();
 static void corrupt_free();
@@ -33,13 +35,16 @@ int main() {
   // corrupt_free();
   // block_overflow1();
   // block_overflow2();
-  test_canary_leak();
+  // test_canary_leak();
   // test_aslr();
   // invalid_free();
   // test_reserved();
   // negative_stat();
   // test_heap_walk();
   // alloc_huge();
+
+  mi_bins();
+
 
   void* p1 = malloc(78);
   void* p2 = malloc(24);
@@ -73,7 +78,7 @@ int main() {
 
 static void invalid_free() {
   free((void*)0xBADBEEF);
-  realloc((void*)0xBADBEEF,10);
+  realloc((void*)0xBADBEEF, 10);
 }
 
 static void block_overflow1() {
@@ -171,7 +176,7 @@ static void test_process_info(void) {
   size_t peak_commit = 0;
   size_t page_faults = 0;
   for (int i = 0; i < 100000; i++) {
-    void* p = calloc(100,10);
+    void* p = calloc(100, 10);
     free(p);
   }
   mi_process_info(&elapsed, &user_msecs, &system_msecs, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
@@ -229,8 +234,8 @@ static void test_heap_walk(void) {
 }
 
 static void test_canary_leak(void) {
-  char* p = mi_mallocn_tp(char,23);
-  for(int i = 0; i < 23; i++) {
+  char* p = mi_mallocn_tp(char, 23);
+  for (int i = 0; i < 23; i++) {
     p[i] = '0'+i;
   }
   puts(p);
@@ -248,15 +253,15 @@ static void test_canary_leak(void) {
 static void test_large_pages(void) {
   mi_memid_t memid;
 
-  #if 0
+#if 0
   size_t pages_reserved;
   size_t page_size;
   uint8_t* p = (uint8_t*)_mi_os_alloc_huge_os_pages(1, -1, 30000, &pages_reserved, &page_size, &memid);
   const size_t req_size = pages_reserved * page_size;
-  #else
+#else
   const size_t req_size = 64*MI_MiB;
-  uint8_t* p = (uint8_t*)_mi_os_alloc(req_size,&memid,NULL);
-  #endif
+  uint8_t* p = (uint8_t*)_mi_os_alloc(req_size, &memid, NULL);
+#endif
 
   p[0] = 1;
 
@@ -276,62 +281,15 @@ static void test_large_pages(void) {
 // bin size experiments
 // ------------------------------
 
-#if 0
+#if 1
 #include <stdint.h>
 #include <stdbool.h>
+#include <mimalloc/bits.h>
 
-#define MI_INTPTR_SIZE 8
 #define MI_LARGE_WSIZE_MAX (4*1024*1024 / MI_INTPTR_SIZE)
 
 #define MI_BIN_HUGE 100
 //#define MI_ALIGN2W
-
-// Bit scan reverse: return the index of the highest bit.
-static inline uint8_t mi_bsr32(uint32_t x);
-
-#if defined(_MSC_VER)
-#include <windows.h>
-#include <intrin.h>
-static inline uint8_t mi_bsr32(uint32_t x) {
-  uint32_t idx;
-  _BitScanReverse((DWORD*)&idx, x);
-  return idx;
-}
-#elif defined(__GNUC__) || defined(__clang__)
-static inline uint8_t mi_bsr32(uint32_t x) {
-  return (31 - __builtin_clz(x));
-}
-#else
-static inline uint8_t mi_bsr32(uint32_t x) {
-  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
-  static const uint8_t debruijn[32] = {
-     31,  0, 22,  1, 28, 23, 18,  2, 29, 26, 24, 10, 19,  7,  3, 12,
-     30, 21, 27, 17, 25,  9,  6, 11, 20, 16,  8,  5, 15,  4, 14, 13,
-  };
-  x |= x >> 1;
-  x |= x >> 2;
-  x |= x >> 4;
-  x |= x >> 8;
-  x |= x >> 16;
-  x++;
-  return debruijn[(x*0x076be629) >> 27];
-}
-#endif
-
-/*
-// Bit scan reverse: return the index of the highest bit.
-uint8_t _mi_bsr(uintptr_t x) {
-  if (x == 0) return 0;
-  #if MI_INTPTR_SIZE==8
-  uint32_t hi = (x >> 32);
-  return (hi == 0 ? mi_bsr32((uint32_t)x) : 32 + mi_bsr32(hi));
-  #elif MI_INTPTR_SIZE==4
-  return mi_bsr32(x);
-  #else
-  # error "define bsr for non-32 or 64-bit platforms"
-  #endif
-}
-*/
 
 
 static inline size_t _mi_wsize_from_size(size_t size) {
@@ -370,7 +328,9 @@ extern inline uint8_t _mi_bin8(size_t size) {
 #endif
     wsize--;
     // find the highest bit
-    uint8_t b = mi_bsr32((uint32_t)wsize);
+    size_t idx; 
+    mi_bsr(wsize, &idx);
+    uint8_t b = (uint8_t)idx;
     // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin
@@ -402,44 +362,79 @@ static inline uint8_t _mi_bin4(size_t size) {
     bin = MI_BIN_HUGE;
   }
   else {
-    uint8_t b = mi_bsr32((uint32_t)wsize);
+    size_t idx;
+    mi_bsr(wsize, &idx);
+    uint8_t b = (uint8_t)idx;
     bin = ((b << 1) + (uint8_t)((wsize >> (b - 1)) & 0x01)) + 3;
   }
   return bin;
 }
 
-static size_t _mi_binx4(size_t bsize) {
-  if (bsize==0) return 0;
-  uint8_t b = mi_bsr32((uint32_t)bsize);
-  if (b <= 1) return bsize;
-  size_t bin = ((b << 1) | (bsize >> (b - 1))&0x01);
+static size_t _mi_binx4(size_t wsize) {
+  size_t bin;
+  if (wsize <= 1) {
+    bin = 1;
+  }
+  else if (wsize <= 8) {
+    // bin = (wsize+1)&~1; // round to double word sizes
+    bin = (uint8_t)wsize;
+  }
+  else {
+    size_t idx;
+    mi_bsr(wsize, &idx);
+    uint8_t b = (uint8_t)idx;
+    if (b <= 1) return wsize;
+    bin = ((b << 1) | (wsize >> (b - 1))&0x01) + 3;
+  }
   return bin;
 }
 
 static size_t _mi_binx8(size_t bsize) {
   if (bsize<=1) return bsize;
-  uint8_t b = mi_bsr32((uint32_t)bsize);
+  size_t idx;
+  mi_bsr(bsize, &idx);
+  uint8_t b = (uint8_t)idx;
   if (b <= 2) return bsize;
   size_t bin = ((b << 2) | (bsize >> (b - 2))&0x03) - 5;
   return bin;
 }
 
+
+static inline size_t mi_bin(size_t wsize) {
+  uint8_t bin;
+  if (wsize <= 1) {
+    bin = 1;
+  }
+  else if (wsize <= 8) {
+    // bin = (wsize+1)&~1; // round to double word sizes
+    bin = (uint8_t)wsize;
+  }
+  else {
+    wsize--;
+    assert(wsize>0);
+    // find the highest bit
+    uint8_t b = (uint8_t)(MI_SIZE_BITS - 1 - mi_clz(wsize));
+    
+    // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
+    // - adjust with 3 because we use do not round the first 8 sizes
+    //   which each get an exact bin
+    bin = ((b << 2) + (uint8_t)((wsize >> (b - 2)) & 0x03)) - 3;
+  }
+  return bin;
+}
+
+
 static void mi_bins(void) {
   //printf("  QNULL(1), /* 0 */ \\\n  ");
   size_t last_bin = 0;
-  size_t min_bsize = 0;
-  size_t last_bsize = 0;
-  for (size_t bsize = 1; bsize < 2*1024; bsize++) {
-    size_t size = bsize * 64 * 1024;
-    size_t bin = _mi_binx8(bsize);
+  for (size_t wsize = 1; wsize <= (4*1024*1024) / 8 + 1024; wsize++) {
+    size_t bin = mi_bin(wsize);
     if (bin != last_bin) {
-      printf("min bsize: %6zd, max bsize: %6zd, bin: %6zd\n", min_bsize, last_bsize, last_bin);
-      //printf("QNULL(%6zd), ", wsize);
-      //if (last_bin%8 == 0) printf("/* %i */ \\\n  ", last_bin);
+      //printf("min bsize: %6zd, max bsize: %6zd, bin: %6zd\n", min_wsize, last_wsize, last_bin);
+      printf("QNULL(%6zd), ", wsize-1);
+      if (last_bin%8 == 0) printf("/* %zu */ \\\n  ", last_bin);
       last_bin = bin;
-      min_bsize = bsize;
     }
-    last_bsize = bsize;
   }
 }
 #endif

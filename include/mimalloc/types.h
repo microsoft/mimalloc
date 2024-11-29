@@ -23,6 +23,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
+#include "bits.h"     // bit ops, size defines
 #include "atomic.h"   // _Atomic
 
 #ifdef _MSC_VER
@@ -107,61 +108,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 // ------------------------------------------------------
-// Platform specific values
-// ------------------------------------------------------
-
-// ------------------------------------------------------
-// Size of a pointer.
-// We assume that `sizeof(void*)==sizeof(intptr_t)`
-// and it holds for all platforms we know of.
-//
-// However, the C standard only requires that:
-//  p == (void*)((intptr_t)p))
-// but we also need:
-//  i == (intptr_t)((void*)i)
-// or otherwise one might define an intptr_t type that is larger than a pointer...
-// ------------------------------------------------------
-
-#if INTPTR_MAX > INT64_MAX
-# define MI_INTPTR_SHIFT (4)  // assume 128-bit  (as on arm CHERI for example)
-#elif INTPTR_MAX == INT64_MAX
-# define MI_INTPTR_SHIFT (3)
-#elif INTPTR_MAX == INT32_MAX
-# define MI_INTPTR_SHIFT (2)
-#else
-#error platform pointers must be 32, 64, or 128 bits
-#endif
-
-#if SIZE_MAX == UINT64_MAX
-# define MI_SIZE_SHIFT (3)
-typedef int64_t  mi_ssize_t;
-#elif SIZE_MAX == UINT32_MAX
-# define MI_SIZE_SHIFT (2)
-typedef int32_t  mi_ssize_t;
-#else
-#error platform objects must be 32 or 64 bits
-#endif
-
-#if (SIZE_MAX/2) > LONG_MAX
-# define MI_ZU(x)  x##ULL
-# define MI_ZI(x)  x##LL
-#else
-# define MI_ZU(x)  x##UL
-# define MI_ZI(x)  x##L
-#endif
-
-#define MI_INTPTR_SIZE  (1<<MI_INTPTR_SHIFT)
-#define MI_INTPTR_BITS  (MI_INTPTR_SIZE*8)
-
-#define MI_SIZE_SIZE  (1<<MI_SIZE_SHIFT)
-#define MI_SIZE_BITS  (MI_SIZE_SIZE*8)
-
-#define MI_KiB     (MI_ZU(1024))
-#define MI_MiB     (MI_KiB*MI_KiB)
-#define MI_GiB     (MI_MiB*MI_KiB)
-
-
-// ------------------------------------------------------
 // Main internal data-structures
 // ------------------------------------------------------
 
@@ -202,6 +148,9 @@ typedef int32_t  mi_ssize_t;
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)
+#define MI_BIN_FULL  (MI_BIN_HUGE+1)
+#define MI_BIN_COUNT (MI_BIN_FULL+1)
+
 
 #if (MI_LARGE_OBJ_WSIZE_MAX >= 655360)
 #error "mimalloc internal: define more bins"
@@ -460,8 +409,6 @@ typedef struct mi_page_queue_s {
   mi_page_t* last;
   size_t     block_size;
 } mi_page_queue_t;
-
-#define MI_BIN_FULL  (MI_BIN_HUGE+1)
 
 // Random context
 typedef struct mi_random_cxt_s {

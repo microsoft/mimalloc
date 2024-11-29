@@ -13,9 +13,6 @@
     <ClCompile Include="..\..\src\alloc-posix.c">
       <Filter>Sources</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\arena.c">
-      <Filter>Sources</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\bitmap.c">
       <Filter>Sources</Filter>
     </ClCompile>
@@ -64,6 +61,12 @@
     <ClCompile Include="..\..\src\arena-abandoned.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\xbitmap.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\xarena.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\bitmap.h">
@@ -91,6 +94,12 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mimalloc\prim.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\xbitmap.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\bits.h">
       <Filter>Headers</Filter>
     </ClInclude>
   </ItemGroup>

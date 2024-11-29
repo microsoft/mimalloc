@@ -83,9 +83,10 @@ static inline uint8_t mi_bin(size_t size) {
     #if defined(MI_ALIGN4W)
     if (wsize <= 16) { wsize = (wsize+3)&~3; } // round to 4x word sizes
     #endif
-    wsize--;
-    // find the highest bit
-    uint8_t b = (uint8_t)mi_bsr(wsize);  // note: wsize != 0
+    wsize--; 
+    mi_assert_internal(wsize!=0);
+    // find the highest bit position
+    uint8_t b = (uint8_t)(MI_SIZE_BITS - 1 - mi_clz(wsize));    
     // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin
