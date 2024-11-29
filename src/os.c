@@ -59,6 +59,10 @@ size_t _mi_os_large_page_size(void) {
   return (mi_os_mem_config.large_page_size != 0 ? mi_os_mem_config.large_page_size : _mi_os_page_size());
 }
 
+size_t _mi_os_virtual_address_bits(void) {
+  return mi_os_mem_config.virtual_address_bits;
+}
+
 bool _mi_os_use_large_page(size_t size, size_t alignment) {
   // if we have access, check the size and alignment requirements
   if (mi_os_mem_config.large_page_size == 0 || !mi_option_is_enabled(mi_option_allow_large_os_pages)) return false;
@@ -103,58 +107,10 @@ static void* mi_align_down_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_down((uintptr_t)p, alignment);
 }
 
-
-/* -----------------------------------------------------------
-  aligned hinting
--------------------------------------------------------------- */
-
-// On systems with enough virtual address bits, we can do efficient aligned allocation by using
-// the 2TiB to 30TiB area to allocate those. If we have at least 46 bits of virtual address
-// space (64TiB) we use this technique. (but see issue #939)
-#if (MI_INTPTR_SIZE >= 8) && !defined(MI_NO_ALIGNED_HINT)
-static mi_decl_cache_align _Atomic(uintptr_t)aligned_base;
-
-// Return a MI_SEGMENT_SIZE aligned address that is probably available.
-// If this returns NULL, the OS will determine the address but on some OS's that may not be
-// properly aligned which can be more costly as it needs to be adjusted afterwards.
-// For a size > 1GiB this always returns NULL in order to guarantee good ASLR randomization;
-// (otherwise an initial large allocation of say 2TiB has a 50% chance to include (known) addresses
-//  in the middle of the 2TiB - 6TiB address range (see issue #372))
-
-#define MI_HINT_BASE ((uintptr_t)2 << 40)  // 2TiB start
-#define MI_HINT_AREA ((uintptr_t)4 << 40)  // upto 6TiB   (since before win8 there is "only" 8TiB available to processes)
-#define MI_HINT_MAX  ((uintptr_t)30 << 40) // wrap after 30TiB (area after 32TiB is used for huge OS pages)
-
-void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
-{
-  if (try_alignment <= 1 || try_alignment > MI_SEGMENT_SIZE) return NULL;
-  if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
-  size = _mi_align_up(size, MI_SEGMENT_SIZE);
-  if (size > 1*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<30) = 1/4096.
-  #if (MI_SECURE>0)
-  size += MI_SEGMENT_SIZE;        // put in `MI_SEGMENT_SIZE` virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
-  #endif
-
-  uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
-  if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
-    uintptr_t init = MI_HINT_BASE;
-    #if (MI_SECURE>0 || MI_DEBUG==0)       // security: randomize start of aligned allocations unless in debug mode
-    uintptr_t r = _mi_heap_random_next(mi_prim_get_default_heap());
-    init = init + ((MI_SEGMENT_SIZE * ((r>>17) & 0xFFFFF)) % MI_HINT_AREA);  // (randomly 20 bits)*4MiB == 0 to 4TiB
-    #endif
-    uintptr_t expected = hint + size;
-    mi_atomic_cas_strong_acq_rel(&aligned_base, &expected, init);
-    hint = mi_atomic_add_acq_rel(&aligned_base, size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
-  }
-  if (hint%try_alignment != 0) return NULL;
-  return (void*)hint;
-}
-#else
 void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   MI_UNUSED(try_alignment); MI_UNUSED(size);
   return NULL;
 }
-#endif
 
 
 /* -----------------------------------------------------------
@@ -380,12 +336,10 @@ void* _mi_os_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* stats) {
 ----------------------------------------------------------- */
 
 void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offset, bool commit, bool allow_large, mi_memid_t* memid, mi_stats_t* stats) {
-  mi_assert(offset <= MI_SEGMENT_SIZE);
   mi_assert(offset <= size);
   mi_assert((alignment % _mi_os_page_size()) == 0);
   *memid = _mi_memid_none();
   if (stats == NULL) stats = &_mi_stats_main;
-  if (offset > MI_SEGMENT_SIZE) return NULL;
   if (offset == 0) {
     // regular aligned allocation
     return _mi_os_alloc_aligned(size, alignment, commit, allow_large, memid, stats);
@@ -605,7 +559,6 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
     #endif
     }
     end = start + size;
-    mi_assert_internal(end % MI_SEGMENT_SIZE == 0);
   } while (!mi_atomic_cas_strong_acq_rel(&mi_huge_start, &huge_start, end));
 
   if (total_size != NULL) *total_size = size;

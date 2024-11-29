@@ -7,10 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
-#include "mimalloc/atomic.h"
 #include "mimalloc/prim.h"  // mi_prim_get_default_heap
-
-#include <string.h>  // memset, memcpy
 
 #if defined(_MSC_VER) && (_MSC_VER < 1920)
 #pragma warning(disable:4204)  // non-constant aggregate initializer
@@ -258,7 +255,7 @@ static void mi_heap_reset_pages(mi_heap_t* heap) {
   mi_assert_internal(heap != NULL);
   mi_assert_internal(mi_heap_is_initialized(heap));
   // TODO: copy full empty heap instead?
-  memset(&heap->pages_free_direct, 0, sizeof(heap->pages_free_direct));
+  _mi_memset(&heap->pages_free_direct, 0, sizeof(heap->pages_free_direct));
   _mi_memcpy_aligned(&heap->pages, &_mi_heap_empty.pages, sizeof(heap->pages));
   heap->thread_delayed_free = NULL;
   heap->page_count = 0;

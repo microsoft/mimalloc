@@ -100,6 +100,10 @@ typedef int32_t  mi_ssize_t;
 #define __BMI1__  1
 #endif
 
+// Define big endian if needed
+// #define MI_BIG_ENDIAN  1
+
+
 /* --------------------------------------------------------------------------------
   Builtin's
 -------------------------------------------------------------------------------- */
@@ -309,5 +313,7 @@ static inline size_t mi_rotl(size_t x, size_t r) {
     return (x << rshift) | (x >> ((-rshift) & (MI_SIZE_BITS-1)))
   #endif
 }
+
+
 
 #endif // MI_BITS_H

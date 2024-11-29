@@ -6,105 +6,87 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 /* ----------------------------------------------------------------------------
-Concurrent bitmap that can set/reset sequences of bits atomically,
-represented as an array of fields where each field is a machine word (`size_t`)
-
-There are two api's; the standard one cannot have sequences that cross
-between the bitmap fields (and a sequence must be <= MI_BITMAP_FIELD_BITS).
-(this is used in region allocation)
-
-The `_across` postfixed functions do allow sequences that can cross over
-between the fields. (This is used in arena allocation)
+Concurrent bitmap that can set/reset sequences of bits atomically
 ---------------------------------------------------------------------------- */
 #pragma once
 #ifndef MI_BITMAP_H
 #define MI_BITMAP_H
 
-/* -----------------------------------------------------------
-  Bitmap definition
------------------------------------------------------------ */
+/* --------------------------------------------------------------------------------
+  Definitions
+-------------------------------------------------------------------------------- */
 
-#define MI_BITMAP_FIELD_BITS   (8*MI_SIZE_SIZE)
-#define MI_BITMAP_FIELD_FULL   (~((size_t)0))   // all bits set
+typedef size_t mi_bfield_t;
 
-// An atomic bitmap of `size_t` fields
-typedef _Atomic(size_t)  mi_bitmap_field_t;
-typedef mi_bitmap_field_t*  mi_bitmap_t;
+#define MI_BFIELD_BITS_SHIFT               (MI_SIZE_SHIFT+3)
+#define MI_BFIELD_BITS                     (1 << MI_BFIELD_BITS_SHIFT)
+#define MI_BFIELD_SIZE                     (MI_BFIELD_BITS/8)
+#define MI_BFIELD_BITS_MOD_MASK            (MI_BFIELD_BITS - 1)
+#define MI_BFIELD_LO_BIT8                  ((~(mi_bfield_t(0)))/0xFF)         // 0x01010101 ..
+#define MI_BFIELD_HI_BIT8                  (MI_BFIELD_LO_BIT8 << 7)           // 0x80808080 ..
 
-// A bitmap index is the index of the bit in a bitmap.
-typedef size_t mi_bitmap_index_t;
+#define MI_BITMAP_CHUNK_FIELDS             (MI_BITMAP_CHUNK_BITS / MI_BFIELD_BITS)
+#define MI_BITMAP_CHUNK_BITS_MOD_MASK      (MI_BITMAP_CHUNK_BITS - 1)
 
-// Create a bit index.
-static inline mi_bitmap_index_t mi_bitmap_index_create_ex(size_t idx, size_t bitidx) {
-  mi_assert_internal(bitidx <= MI_BITMAP_FIELD_BITS);
-  return (idx*MI_BITMAP_FIELD_BITS) + bitidx;
-}
-static inline mi_bitmap_index_t mi_bitmap_index_create(size_t idx, size_t bitidx) {
-  mi_assert_internal(bitidx < MI_BITMAP_FIELD_BITS);
-  return mi_bitmap_index_create_ex(idx,bitidx);
-}
-
-// Get the field index from a bit index.
-static inline size_t mi_bitmap_index_field(mi_bitmap_index_t bitmap_idx) {
-  return (bitmap_idx / MI_BITMAP_FIELD_BITS);
-}
-
-// Get the bit index in a bitmap field
-static inline size_t mi_bitmap_index_bit_in_field(mi_bitmap_index_t bitmap_idx) {
-  return (bitmap_idx % MI_BITMAP_FIELD_BITS);
-}
-
-// Get the full bit index
-static inline size_t mi_bitmap_index_bit(mi_bitmap_index_t bitmap_idx) {
-  return bitmap_idx;
-}
-
-/* -----------------------------------------------------------
-  Claim a bit sequence atomically
------------------------------------------------------------ */
-
-// Try to atomically claim a sequence of `count` bits in a single
-// field at `idx` in `bitmap`. Returns `true` on success.
-bool _mi_bitmap_try_find_claim_field(mi_bitmap_t bitmap, size_t idx, const size_t count, mi_bitmap_index_t* bitmap_idx);
-
-// Starts at idx, and wraps around to search in all `bitmap_fields` fields.
-// For now, `count` can be at most MI_BITMAP_FIELD_BITS and will never cross fields.
-bool _mi_bitmap_try_find_from_claim(mi_bitmap_t bitmap, const size_t bitmap_fields, const size_t start_field_idx, const size_t count, mi_bitmap_index_t* bitmap_idx);
-
-// Set `count` bits at `bitmap_idx` to 0 atomically
-// Returns `true` if all `count` bits were 1 previously.
-bool _mi_bitmap_unclaim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx);
-
-// Try to set `count` bits at `bitmap_idx` from 0 to 1 atomically. 
-// Returns `true` if successful when all previous `count` bits were 0.
-bool _mi_bitmap_try_claim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx);
-
-// Set `count` bits at `bitmap_idx` to 1 atomically
-// Returns `true` if all `count` bits were 0 previously. `any_zero` is `true` if there was at least one zero bit.
-bool _mi_bitmap_claim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx, bool* any_zero);
-
-bool _mi_bitmap_is_claimed(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx);
-bool _mi_bitmap_is_any_claimed(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx);
+typedef mi_decl_align(32) struct mi_bitmap_chunk_s {
+  _Atomic(mi_bfield_t) bfields[MI_BITMAP_CHUNK_FIELDS];
+} mi_bitmap_chunk_t;
 
 
-//--------------------------------------------------------------------------
-// the `_across` functions work on bitmaps where sequences can cross over
-// between the fields. This is used in arena allocation
-//--------------------------------------------------------------------------
+typedef mi_decl_align(32) struct mi_bitmap_s {
+  mi_bitmap_chunk_t chunks[MI_BFIELD_BITS];
+  _Atomic(mi_bfield_t)any_set;
+} mi_bitmap_t;
 
-// Find `count` bits of zeros and set them to 1 atomically; returns `true` on success.
-// Starts at idx, and wraps around to search in all `bitmap_fields` fields.
-bool _mi_bitmap_try_find_from_claim_across(mi_bitmap_t bitmap, const size_t bitmap_fields, const size_t start_field_idx, const size_t count, mi_bitmap_index_t* bitmap_idx, mi_stats_t* stats);
+#define MI_BITMAP_MAX_BITS  (MI_BFIELD_BITS * MI_BITMAP_CHUNK_BITS)      // 16k bits on 64bit, 8k bits on 32bit
 
-// Set `count` bits at `bitmap_idx` to 0 atomically
-// Returns `true` if all `count` bits were 1 previously.
-bool _mi_bitmap_unclaim_across(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx);
+/* --------------------------------------------------------------------------------
+  Bitmap
+-------------------------------------------------------------------------------- */
 
-// Set `count` bits at `bitmap_idx` to 1 atomically
-// Returns `true` if all `count` bits were 0 previously. `any_zero` is `true` if there was at least one zero bit.
-bool _mi_bitmap_claim_across(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx, bool* pany_zero);
+typedef bool  mi_bit_t;
+#define MI_BIT_SET    (true)
+#define MI_BIT_CLEAR  (false)
 
-bool _mi_bitmap_is_claimed_across(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx);
-bool _mi_bitmap_is_any_claimed_across(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx);
+// initialize a bitmap to all unset; avoid a mem_zero if `already_zero` is true
+void mi_bitmap_init(mi_bitmap_t* bitmap, bool already_zero);
 
-#endif
+// Set/clear a sequence of `n` bits in the bitmap (and can cross chunks). Not atomic so only use if local to a thread.
+void mi_bitmap_unsafe_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx, size_t n);
+
+// Set/clear a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from all 0's to 1's (or all 1's to 0's).
+// `n` cannot cross chunk boundaries (and `n <= MI_BITMAP_CHUNK_BITS`)!
+// If `already_xset` is not NULL, it is set to true if all the bits were already all set/cleared.
+bool mi_bitmap_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx, size_t n, bool* already_xset);
+
+// Is a sequence of n bits already all set/cleared?
+bool mi_bitmap_is_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx, size_t n);
+
+// Try to set/clear a bit in the bitmap; returns `true` if atomically transitioned from 0 to 1 (or 1 to 0)
+// and false otherwise leaving the bitmask as is.
+mi_decl_nodiscard bool mi_bitmap_try_xset(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx);
+
+// Try to set/clear a byte in the bitmap; returns `true` if atomically transitioned from 0 to 0xFF (or 0xFF to 0)
+// and false otherwise leaving the bitmask as is.
+mi_decl_nodiscard bool mi_bitmap_try_xset8(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx);
+
+// Try to set/clear a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from 0's to 1's (or 1's to 0's)
+// and false otherwise leaving the bitmask as is.
+// `n` cannot cross chunk boundaries (and `n <= MI_BITMAP_CHUNK_BITS`)!
+mi_decl_nodiscard bool mi_bitmap_try_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx, size_t n);
+
+// Find a set bit in a bitmap and atomically unset it. Returns true on success,
+// and in that case sets the index: `0 <= *pidx < MI_BITMAP_MAX_BITS`.
+// The low `MI_BFIELD_BITS` of start are used to set the start point of the search
+// (to reduce thread contention).
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t* pidx, size_t start);
+
+// Find a byte in the bitmap with all bits set (0xFF) and atomically unset it to zero.
+// Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-8`.
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t start, size_t* pidx );
+
+// Find a sequence of `n` bits in the bitmap with all bits set, and atomically unset all.
+// Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t start, size_t n, size_t* pidx );
+
+#endif // MI_XBITMAP_H

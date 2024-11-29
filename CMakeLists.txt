@@ -55,6 +55,7 @@ set(mi_sources
     src/options.c
     src/os.c
     src/page.c
+    src/page-map.c
     src/random.c
     src/segment.c
     src/segment-map.c

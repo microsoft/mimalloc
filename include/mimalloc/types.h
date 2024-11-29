@@ -111,40 +111,29 @@ terms of the MIT license. A copy of the license can be found in the file
 // Main internal data-structures
 // ------------------------------------------------------
 
-// Main tuning parameters for segment and page sizes
-// Sizes for 64-bit, divide by two for 32-bit
-#ifndef MI_SMALL_PAGE_SHIFT
-#define MI_SMALL_PAGE_SHIFT               (13 + MI_INTPTR_SHIFT)      // 64KiB
+// Sizes are for 64-bit
+#ifndef MI_ARENA_BLOCK_SHIFT
+#ifdef  MI_SMALL_PAGE_SHIFT  // compatibility
+#define MI_ARENA_BLOCK_SHIFT              MI_SMALL_PAGE_SHIFT
+#else
+#define MI_ARENA_BLOCK_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
 #endif
-#ifndef MI_MEDIUM_PAGE_SHIFT
-#define MI_MEDIUM_PAGE_SHIFT              ( 3 + MI_SMALL_PAGE_SHIFT)  // 512KiB
 #endif
-#ifndef MI_LARGE_PAGE_SHIFT
-#define MI_LARGE_PAGE_SHIFT               ( 3 + MI_MEDIUM_PAGE_SHIFT) // 4MiB
-#endif
-#ifndef MI_SEGMENT_SHIFT
-#define MI_SEGMENT_SHIFT                  ( MI_LARGE_PAGE_SHIFT)      // 4MiB -- must be equal to `MI_LARGE_PAGE_SHIFT`
+#ifndef MI_BITMAP_CHUNK_BITS_SHIFT
+#define MI_BITMAP_CHUNK_BITS_SHIFT        8                           // optimized for 256 bits per chunk (avx2)
 #endif
 
-// Derived constants
-#define MI_SEGMENT_SIZE                   (MI_ZU(1)<<MI_SEGMENT_SHIFT)
-#define MI_SEGMENT_ALIGN                  (MI_SEGMENT_SIZE)
-#define MI_SEGMENT_MASK                   ((uintptr_t)(MI_SEGMENT_ALIGN - 1))
+#define MI_ARENA_BLOCK_SIZE               (MI_ZU(1) << MI_ARENA_BLOCK_SHIFT)   
+#define MI_ARENA_BLOCK_ALIGN              (MI_ARENA_BLOCK_SIZE)
+#define MI_BITMAP_CHUNK_BITS              (MI_ZU(1) << MI_BITMAP_CHUNK_BITS_SHIFT)
 
-#define MI_SMALL_PAGE_SIZE                (MI_ZU(1)<<MI_SMALL_PAGE_SHIFT)
-#define MI_MEDIUM_PAGE_SIZE               (MI_ZU(1)<<MI_MEDIUM_PAGE_SHIFT)
-#define MI_LARGE_PAGE_SIZE                (MI_ZU(1)<<MI_LARGE_PAGE_SHIFT)
+#define MI_ARENA_MIN_OBJ_SIZE             MI_ARENA_BLOCK_SIZE
+#define MI_ARENA_MAX_OBJ_SIZE             (MI_BITMAP_CHUNK_BITS * MI_ARENA_BLOCK_SIZE)  // for now, cannot cross chunk boundaries
 
-#define MI_SMALL_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_SMALL_PAGE_SIZE)
-#define MI_MEDIUM_PAGES_PER_SEGMENT       (MI_SEGMENT_SIZE/MI_MEDIUM_PAGE_SIZE)
-#define MI_LARGE_PAGES_PER_SEGMENT        (MI_SEGMENT_SIZE/MI_LARGE_PAGE_SIZE)
+#define MI_SMALL_PAGE_SIZE                MI_ARENA_MIN_OBJ_SIZE
+#define MI_MEDIUM_PAGE_SIZE               (8*MI_SMALL_PAGE_SIZE)                   // 512 KiB  (=byte in the bitmap)
+#define MI_LARGE_PAGE_SIZE                (MI_SIZE_SIZE*MI_MEDIUM_PAGE_SIZE)       // 4 MiB    (=word in the bitmap)
 
-// The max object size are checked to not waste more than 12.5% internally over the page sizes.
-// (Except for large pages since huge objects are allocated in 4MiB chunks)
-#define MI_SMALL_OBJ_SIZE_MAX             (MI_SMALL_PAGE_SIZE/4)   // 16KiB
-#define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/4)  // 128KiB
-#define MI_LARGE_OBJ_SIZE_MAX             (MI_LARGE_PAGE_SIZE/2)   // 2MiB
-#define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)
@@ -152,18 +141,54 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_BIN_COUNT (MI_BIN_FULL+1)
 
 
-#if (MI_LARGE_OBJ_WSIZE_MAX >= 655360)
-#error "mimalloc internal: define more bins"
-#endif
-
-// Maximum block size for which blocks are guaranteed to be block size aligned. (see `segment.c:_mi_segment_page_start`)
-#define MI_MAX_ALIGN_GUARANTEE   (MI_MEDIUM_OBJ_SIZE_MAX)
-
-// Alignments over MI_BLOCK_ALIGNMENT_MAX are allocated in dedicated huge page segments
-#define MI_BLOCK_ALIGNMENT_MAX   (MI_SEGMENT_SIZE >> 1)
+// Alignments over MI_BLOCK_ALIGNMENT_MAX are allocated in dedicated orphan pages
+#define MI_BLOCK_ALIGNMENT_MAX   (MI_ARENA_BLOCK_ALIGN)
 
 // We never allocate more than PTRDIFF_MAX (see also <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
-#define MI_MAX_ALLOC_SIZE   PTRDIFF_MAX
+#define MI_MAX_ALLOC_SIZE        PTRDIFF_MAX
+
+
+// ---------------------------------------------------------------
+// a memory id tracks the provenance of arena/OS allocated memory
+// ---------------------------------------------------------------
+
+// Memory can reside in arena's, direct OS allocated, or statically allocated. The memid keeps track of this.
+typedef enum mi_memkind_e {
+  MI_MEM_NONE,      // not allocated
+  MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
+  MI_MEM_STATIC,    // allocated in a static area and should not be freed (for arena meta data for example)
+  MI_MEM_OS,        // allocated from the OS
+  MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
+  MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`) 
+  MI_MEM_ARENA      // allocated from an arena (the usual case) 
+} mi_memkind_t;
+
+static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
+  return (memkind >= MI_MEM_OS && memkind <= MI_MEM_OS_REMAP);
+}
+
+typedef struct mi_memid_os_info {
+  void* base;                       // actual base address of the block (used for offset aligned allocations)
+  size_t        alignment;          // alignment at allocation
+} mi_memid_os_info_t;
+
+typedef struct mi_memid_arena_info {
+  size_t        block_index;        // index in the arena
+  mi_arena_id_t id;                 // arena id (>= 1)
+  bool          is_exclusive;       // this arena can only be used for specific arena allocations
+} mi_memid_arena_info_t;
+
+typedef struct mi_memid_s {
+  union {
+    mi_memid_os_info_t    os;       // only used for MI_MEM_OS
+    mi_memid_arena_info_t arena;    // only used for MI_MEM_ARENA
+  } mem;
+  bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)
+  bool          initially_committed;// `true` if the memory was originally allocated as committed
+  bool          initially_zero;     // `true` if the memory was originally zero initialized
+  mi_memkind_t  memkind;
+} mi_memid_t;
+
 
 // ------------------------------------------------------
 // Mimalloc pages contain allocated blocks
@@ -223,6 +248,10 @@ typedef union mi_page_flags_s {
 // We use the bottom 2 bits of the pointer for mi_delayed_t flags
 typedef uintptr_t mi_thread_free_t;
 
+// Sub processes are used to keep memory separate between them (e.g. multiple interpreters in CPython)
+typedef struct mi_subproc_s mi_subproc_t;
+
+
 // A page contains blocks of one specific size (`block_size`).
 // Each page has three list of free blocks:
 // `free` for blocks that can be allocated,
@@ -242,8 +271,6 @@ typedef uintptr_t mi_thread_free_t;
 // Notes:
 // - Access is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
 // - Using `uint16_t` does not seem to slow things down
-// - The size is 10 words on 64-bit which helps the page index calculations
-//   (and 12 words on 32-bit, and encoded free lists add 2 words)
 // - `xthread_free` uses the bottom bits as a delayed-free flags to optimize
 //   concurrent frees where only the first concurrent free adds to the owning
 //   heap `thread_delayed_free` list (see `free.c:mi_free_block_mt`).
@@ -252,15 +279,8 @@ typedef uintptr_t mi_thread_free_t;
 //   the owning heap `thread_delayed_free` list. This guarantees that pages
 //   will be freed correctly even if only other threads free blocks.
 typedef struct mi_page_s {
-  // "owned" by the segment
-  uint8_t               segment_idx;       // index in the segment `pages` array, `page == &segment->pages[page->segment_idx]`
-  uint8_t               segment_in_use:1;  // `true` if the segment allocated this page
-  uint8_t               is_committed:1;    // `true` if the page virtual memory is committed
-  uint8_t               is_zero_init:1;    // `true` if the page was initially zero initialized
-  uint8_t               is_huge:1;         // `true` if the page is in a huge segment
-
-  // layout like this to optimize access in `mi_malloc` and `mi_free`
-  uint16_t              capacity;          // number of blocks committed, must be the first field, see `segment.c:page_clear`
+  mi_memid_t            memid;             // provenance of the page memory
+  uint16_t              capacity;          // number of blocks committed (must be the first field for proper zero-initialisation)
   uint16_t              reserved;          // number of blocks reserved in memory
   mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (8 bits)
   uint8_t               free_is_zero:1;    // `true` if the blocks in the free list are zero initialized
@@ -272,119 +292,53 @@ typedef struct mi_page_s {
   uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
   uint8_t               heap_tag;          // tag of the owning heap, used to separate heaps by object type
                                            // padding
-  size_t                block_size;        // size available in each block (always `>0`)
-  uint8_t*              page_start;        // start of the page area containing the blocks
+  size_t                block_size;        // size available in each block (always `>0`)  
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
 
   _Atomic(mi_thread_free_t) xthread_free;  // list of deferred free blocks freed by other threads
-  _Atomic(uintptr_t)        xheap;
+  _Atomic(uintptr_t)    xheap;             // heap this threads belong to.
+  _Atomic(mi_threadid_t)xthread_id;        // thread this page belongs to. (= xheap->thread_id, or 0 if abandoned)
 
   struct mi_page_s*     next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by the heap with the same `block_size`
-
-  #if MI_INTPTR_SIZE==4                    // pad to 12 words on 32-bit
-  void* padding[1];
-  #endif
 } mi_page_t;
 
 
+// ------------------------------------------------------
+// Object sizes
+// ------------------------------------------------------
+
+#define MI_PAGE_ALIGN                     (64)
+#define MI_PAGE_INFO_SIZE                 (MI_SIZE_SHIFT*MI_PAGE_ALIGN)   // should be > sizeof(mi_page_t)
+
+// The max object size are checked to not waste more than 12.5% internally over the page sizes.
+// (Except for large pages since huge objects are allocated in 4MiB chunks)
+#define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_INFO_SIZE)/4)   // ~16KiB
+#define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_INFO_SIZE)/4)  // ~128KiB
+#define MI_LARGE_MAX_OBJ_SIZE             ((MI_LARGE_PAGE_SIZE-MI_PAGE_INFO_SIZE)/2)   // ~2MiB
+#define MI_LARGE_MAX_OBJ_WSIZE            (MI_LARGE_MAX_OBJ_SIZE/MI_SIZE_SIZE)
+
+
+#if (MI_LARGE_MAX_OBJ_WSIZE >= 655360)
+#error "mimalloc internal: define more bins"
+#endif
+
 
 // ------------------------------------------------------
-// Mimalloc segments contain mimalloc pages
+// Page kinds
 // ------------------------------------------------------
 
 typedef enum mi_page_kind_e {
-  MI_PAGE_SMALL,    // small blocks go into 64KiB pages inside a segment
-  MI_PAGE_MEDIUM,   // medium blocks go into 512KiB pages inside a segment
-  MI_PAGE_LARGE,    // larger blocks go into a single page spanning a whole segment
-  MI_PAGE_HUGE      // a huge page is a single page in a segment of variable size (but still 2MiB aligned)
+  MI_PAGE_SMALL,    // small blocks go into 64KiB pages
+  MI_PAGE_MEDIUM,   // medium blocks go into 512KiB pages
+  MI_PAGE_LARGE,    // larger blocks go into 4MiB pages
+  MI_PAGE_SINGLETON // page containing a single block. 
                     // used for blocks `> MI_LARGE_OBJ_SIZE_MAX` or an aligment `> MI_BLOCK_ALIGNMENT_MAX`.
 } mi_page_kind_t;
 
-
-// ---------------------------------------------------------------
-// a memory id tracks the provenance of arena/OS allocated memory
-// ---------------------------------------------------------------
-
-// Memory can reside in arena's, direct OS allocated, or statically allocated. The memid keeps track of this.
-typedef enum mi_memkind_e {
-  MI_MEM_NONE,      // not allocated
-  MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
-  MI_MEM_STATIC,    // allocated in a static area and should not be freed (for arena meta data for example)
-  MI_MEM_OS,        // allocated from the OS
-  MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
-  MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
-  MI_MEM_ARENA      // allocated from an arena (the usual case)
-} mi_memkind_t;
-
-static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
-  return (memkind >= MI_MEM_OS && memkind <= MI_MEM_OS_REMAP);
-}
-
-typedef struct mi_memid_os_info {
-  void*         base;               // actual base address of the block (used for offset aligned allocations)
-  size_t        alignment;          // alignment at allocation
-} mi_memid_os_info_t;
-
-typedef struct mi_memid_arena_info {
-  size_t        block_index;        // index in the arena
-  mi_arena_id_t id;                 // arena id (>= 1)
-  bool          is_exclusive;       // this arena can only be used for specific arena allocations
-} mi_memid_arena_info_t;
-
-typedef struct mi_memid_s {
-  union {
-    mi_memid_os_info_t    os;       // only used for MI_MEM_OS
-    mi_memid_arena_info_t arena;    // only used for MI_MEM_ARENA
-  } mem;
-  bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)
-  bool          initially_committed;// `true` if the memory was originally allocated as committed
-  bool          initially_zero;     // `true` if the memory was originally zero initialized
-  mi_memkind_t  memkind;
-} mi_memid_t;
-
-
-// ---------------------------------------------------------------
-// Segments contain mimalloc pages
-// ---------------------------------------------------------------
-typedef struct mi_subproc_s mi_subproc_t;
-
-// Segments are large allocated memory blocks (2MiB on 64 bit) from the OS.
-// Inside segments we allocated fixed size _pages_ that contain blocks.
-typedef struct mi_segment_s {
-  // constant fields
-  mi_memid_t           memid;            // memory id to track provenance
-  bool                 allow_decommit;
-  bool                 allow_purge;
-  size_t               segment_size;     // for huge pages this may be different from `MI_SEGMENT_SIZE`
-  mi_subproc_t*        subproc;          // segment belongs to sub process
-
-  // segment fields
-  struct mi_segment_s* next;             // must be the first (non-constant) segment field  -- see `segment.c:segment_init`
-  struct mi_segment_s* prev;
-  bool                 was_reclaimed;    // true if it was reclaimed (used to limit reclaim-on-free reclamation)
-  bool                 dont_free;        // can be temporarily true to ensure the segment is not freed
-
-  size_t               abandoned;        // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
-  size_t               abandoned_visits; // count how often this segment is visited for reclaiming (to force reclaim if it is too long)
-
-  size_t               used;             // count of pages in use (`used <= capacity`)
-  size_t               capacity;         // count of available pages (`#free + used`)
-  size_t               segment_info_size;// space we are using from the first page for segment meta-data and possible guard pages.
-  uintptr_t            cookie;           // verify addresses in secure mode: `_mi_ptr_cookie(segment) == segment->cookie`
-
-  struct mi_segment_s* abandoned_os_next; // only used for abandoned segments outside arena's, and only if `mi_option_visit_abandoned` is enabled
-  struct mi_segment_s* abandoned_os_prev;
-
-  // layout like this to optimize access in `mi_free`
-  _Atomic(mi_threadid_t) thread_id;      // unique id of the thread owning this segment
-  size_t               page_shift;       // `1 << page_shift` == the page sizes == `page->block_size * page->reserved` (unless the first page, then `-segment_info_size`).
-  mi_page_kind_t       page_kind;        // kind of pages: small, medium, large, or huge
-  mi_page_t            pages[1];         // up to `MI_SMALL_PAGES_PER_SEGMENT` pages
-} mi_segment_t;
 
 
 // ------------------------------------------------------
@@ -522,21 +476,18 @@ typedef struct mi_stat_counter_s {
 } mi_stat_counter_t;
 
 typedef struct mi_stats_s {
-  mi_stat_count_t segments;
   mi_stat_count_t pages;
   mi_stat_count_t reserved;
   mi_stat_count_t committed;
   mi_stat_count_t reset;
   mi_stat_count_t purged;
   mi_stat_count_t page_committed;
-  mi_stat_count_t segments_abandoned;
   mi_stat_count_t pages_abandoned;
   mi_stat_count_t threads;
   mi_stat_count_t normal;
   mi_stat_count_t huge;
   mi_stat_count_t giant;
   mi_stat_count_t malloc;
-  mi_stat_count_t segments_cache;
   mi_stat_counter_t pages_extended;
   mi_stat_counter_t mmap_calls;
   mi_stat_counter_t commit_calls;
@@ -581,12 +532,12 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 // ------------------------------------------------------
 
 struct mi_subproc_s {
-  _Atomic(size_t)    abandoned_count;         // count of abandoned segments for this sub-process
-  _Atomic(size_t)    abandoned_os_list_count; // count of abandoned segments in the os-list
-  mi_lock_t          abandoned_os_lock;       // lock for the abandoned os segment list (outside of arena's) (this lock protect list operations)
+  _Atomic(size_t)    abandoned_count;         // count of abandoned pages for this sub-process
+  _Atomic(size_t)    abandoned_os_list_count; // count of abandoned pages in the os-list
+  mi_lock_t          abandoned_os_lock;       // lock for the abandoned os pages list (outside of arena's) (this lock protect list operations)
   mi_lock_t          abandoned_os_visit_lock; // ensure only one thread per subproc visits the abandoned os list
-  mi_segment_t*      abandoned_os_list;       // doubly-linked list of abandoned segments outside of arena's (in OS allocated memory)
-  mi_segment_t*      abandoned_os_list_tail;  // the tail-end of the list
+  mi_page_t*         abandoned_os_list;       // doubly-linked list of abandoned pages outside of arena's (in OS allocated memory)
+  mi_page_t*         abandoned_os_list_tail;  // the tail-end of the list
   mi_memid_t         memid;                   // provenance of this memory block
 };
 
@@ -597,11 +548,6 @@ struct mi_subproc_s {
 // Milliseconds as in `int64_t` to avoid overflows
 typedef int64_t  mi_msecs_t;
 
-// Queue of segments
-typedef struct mi_segment_queue_s {
-  mi_segment_t* first;
-  mi_segment_t* last;
-} mi_segment_queue_t;
 
 // OS thread local data
 typedef struct mi_os_tld_s {
@@ -609,28 +555,13 @@ typedef struct mi_os_tld_s {
   mi_stats_t*           stats;        // points to tld stats
 } mi_os_tld_t;
 
-// Segments thread local data
-typedef struct mi_segments_tld_s {
-  mi_segment_queue_t  small_free;   // queue of segments with free small pages
-  mi_segment_queue_t  medium_free;  // queue of segments with free medium pages
-  mi_page_queue_t     pages_purge;  // queue of freed pages that are delay purged
-  size_t              count;        // current number of segments;
-  size_t              peak_count;   // peak number of segments
-  size_t              current_size; // current size of all segments
-  size_t              peak_size;    // peak size of all segments
-  size_t              reclaim_count;// number of reclaimed (abandoned) segments
-  mi_subproc_t*       subproc;      // sub-process this thread belongs to.
-  mi_stats_t*         stats;        // points to tld stats
-  mi_os_tld_t*        os;           // points to os tld
-} mi_segments_tld_t;
-
 // Thread local data
 struct mi_tld_s {
   unsigned long long  heartbeat;     // monotonic heartbeat count
   bool                recurse;       // true if deferred was called; used to prevent infinite recursion.
   mi_heap_t*          heap_backing;  // backing heap of this thread (cannot be deleted)
   mi_heap_t*          heaps;         // list of heaps in this thread (so we can abandon all when the thread terminates)
-  mi_segments_tld_t   segments;      // segment tld
+  mi_subproc_t*       subproc;       // sub-process this thread belongs to.
   mi_os_tld_t         os;            // os tld
   mi_stats_t          stats;         // statistics
 };
