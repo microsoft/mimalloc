@@ -149,7 +149,7 @@ static bool mi_bitmap_chunk_xsetN(mi_bit_t set, mi_bitmap_chunk_t* chunk, size_t
     mi_assert_internal(idx + m <= MI_BFIELD_BITS);
     mi_assert_internal(field < MI_BITMAP_CHUNK_FIELDS);
     const size_t mask = (m == MI_BFIELD_BITS ? ~MI_ZU(0) : ((MI_ZU(1)<<m)-1) << idx);
-    bool already_xset;
+    bool already_xset = false;
     all_transition = all_transition && mi_bfield_atomic_xset_mask(set, &chunk->bfields[field], mask, &already_xset);
     all_already_xset = all_already_xset && already_xset;
     // next field
@@ -268,7 +268,6 @@ static inline bool mi_bitmap_chunk_find_and_try_clear(mi_bitmap_chunk_t* chunk, 
     // try again
   }
   #else
-  size_t idx;
   for(int i = 0; i < MI_BITMAP_CHUNK_FIELDS; i++) {
     size_t idx;
     if mi_unlikely(mi_bfield_find_least_bit(chunk->bfields[i],&idx)) { // find least 1-bit
@@ -306,7 +305,6 @@ static inline bool mi_bitmap_chunk_find_and_try_clear8(mi_bitmap_chunk_t* chunk,
     // try again
   }
   #else
-    size_t idx;
     for(int i = 0; i < MI_BITMAP_CHUNK_FIELDS; i++) {
       const mi_bfield_t x = chunk->bfields[i];
       // has_set8 has low bit in each byte set if the byte in x == 0xFF
@@ -374,7 +372,7 @@ static inline bool mi_bitmap_chunk_find_and_try_clearN(mi_bitmap_chunk_t* chunk,
 
 
 // are all bits in a bitmap chunk set?
-static bool mi_bitmap_chunk_all_are_set(mi_bitmap_chunk_t* chunk) {
+static inline bool mi_bitmap_chunk_all_are_set(mi_bitmap_chunk_t* chunk) {
   #if defined(__AVX2__) && (MI_BITMAP_CHUNK_BITS==256)
   const __m256i vec = _mm256_load_si256((const __m256i*)chunk->bfields);
   return _mm256_test_all_ones(vec);

@@ -245,7 +245,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       // note: this is dangerous on Windows as VirtualFree needs the actual base pointer
       // this is handled though by having the `base` field in the memid's
       *base = p; // remember the base
-      p = mi_align_up_ptr(p, alignment);
+      p = _mi_align_up_ptr(p, alignment);
 
       // explicitly commit only the aligned part
       if (commit) {
@@ -258,7 +258,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       if (p == NULL) return NULL;
 
       // and selectively unmap parts around the over-allocated area.
-      void* aligned_p = mi_align_up_ptr(p, alignment);
+      void* aligned_p = _mi_align_up_ptr(p, alignment);
       size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
       size_t mid_size = _mi_align_up(size, _mi_os_page_size());
       size_t post_size = over_size - pre_size - mid_size;
@@ -316,6 +316,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
 }
 
 void* _mi_os_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* stats) {
+  MI_UNUSED(stats);
   void* p = _mi_os_alloc(size, memid, &_mi_stats_main);
   if (p == NULL) return NULL;
 
@@ -373,10 +374,10 @@ static void* mi_os_page_align_areax(bool conservative, void* addr, size_t size, 
   if (size == 0 || addr == NULL) return NULL;
 
   // page align conservatively within the range
-  void* start = (conservative ? mi_align_up_ptr(addr, _mi_os_page_size())
+  void* start = (conservative ? _mi_align_up_ptr(addr, _mi_os_page_size())
     : mi_align_down_ptr(addr, _mi_os_page_size()));
   void* end = (conservative ? mi_align_down_ptr((uint8_t*)addr + size, _mi_os_page_size())
-    : mi_align_up_ptr((uint8_t*)addr + size, _mi_os_page_size()));
+    : _mi_align_up_ptr((uint8_t*)addr + size, _mi_os_page_size()));
   ptrdiff_t diff = (uint8_t*)end - (uint8_t*)start;
   if (diff <= 0) return NULL;
 

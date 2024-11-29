@@ -90,7 +90,6 @@ static void mi_stat_counter_add(mi_stat_counter_t* stat, const mi_stat_counter_t
 // must be thread safe as it is called from stats_merge
 static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   if (stats==src) return;
-  mi_stat_add(&stats->segments, &src->segments,1);
   mi_stat_add(&stats->pages, &src->pages,1);
   mi_stat_add(&stats->reserved, &src->reserved, 1);
   mi_stat_add(&stats->committed, &src->committed, 1);
@@ -99,11 +98,9 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   mi_stat_add(&stats->page_committed, &src->page_committed, 1);
 
   mi_stat_add(&stats->pages_abandoned, &src->pages_abandoned, 1);
-  mi_stat_add(&stats->segments_abandoned, &src->segments_abandoned, 1);
   mi_stat_add(&stats->threads, &src->threads, 1);
 
   mi_stat_add(&stats->malloc, &src->malloc, 1);
-  mi_stat_add(&stats->segments_cache, &src->segments_cache, 1);
   mi_stat_add(&stats->normal, &src->normal, 1);
   mi_stat_add(&stats->huge, &src->huge, 1);
   mi_stat_add(&stats->giant, &src->giant, 1);
@@ -329,9 +326,9 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_peak_print(&stats->reset, "reset", 1, out, arg );
   mi_stat_peak_print(&stats->purged, "purged", 1, out, arg );
   mi_stat_print(&stats->page_committed, "touched", 1, out, arg);
-  mi_stat_print(&stats->segments, "segments", -1, out, arg);
-  mi_stat_print(&stats->segments_abandoned, "-abandoned", -1, out, arg);
-  mi_stat_print(&stats->segments_cache, "-cached", -1, out, arg);
+  //mi_stat_print(&stats->segments, "segments", -1, out, arg);
+  //mi_stat_print(&stats->segments_abandoned, "-abandoned", -1, out, arg);
+  //mi_stat_print(&stats->segments_cache, "-cached", -1, out, arg);
   mi_stat_print(&stats->pages, "pages", -1, out, arg);
   mi_stat_print(&stats->pages_abandoned, "-abandoned", -1, out, arg);
   mi_stat_counter_print(&stats->pages_extended, "-extended", out, arg);

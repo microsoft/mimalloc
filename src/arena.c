@@ -298,7 +298,7 @@ static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_id_t req_are
   for (size_t i = 0; i < _max_arena; i++) { \
     size_t _idx = i + _start; \
     if (_idx >= _max_arena) { _idx -= _max_arena; } \
-    const mi_arena_id_t var_arena_id = mi_arena_id_create(_idx); \
+    const mi_arena_id_t var_arena_id = mi_arena_id_create(_idx); MI_UNUSED(var_arena_id);\
     mi_arena_t* const   var_arena = mi_arena_from_index(_idx); \
     if (mi_arena_is_suitable(var_arena,req_arena_id,subproc,-1 /* todo: numa node */,allow_large)) \
     {
@@ -341,6 +341,7 @@ static mi_decl_noinline void* mi_arena_try_alloc(
   mi_assert(block_count <= MI_ARENA_MAX_OBJ_BLOCKS);
   mi_assert(alignment <= MI_ARENA_BLOCK_ALIGN);
 
+  // try to find free blocks in the arena's
   void* p = mi_arena_try_find_free(block_count, alignment, commit, allow_large, req_arena_id, memid, tld);
   if (p != NULL) return p;
 
@@ -354,6 +355,8 @@ static mi_decl_noinline void* mi_arena_try_alloc(
       if (p != NULL) return p;
     }
   }
+
+  return NULL;
 }
 
 // Allocate from the OS (if allowed)
@@ -445,7 +448,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t block_count, size_t bl
     }
   }
   mi_forall_arenas_end();
-  return false;
+  return NULL;
 }
 
 static mi_page_t* mi_arena_page_alloc_fresh(size_t block_count, size_t block_size, mi_arena_id_t req_arena_id, mi_tld_t* tld)
@@ -455,7 +458,7 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t block_count, size_t block_siz
   const size_t alignment = MI_ARENA_BLOCK_ALIGN;
 
   // try to allocate from free space in arena's
-  mi_memid_t memid;
+  mi_memid_t memid = _mi_memid_none();
   mi_page_t* page = NULL;
   if (_mi_option_get_fast(mi_option_disallow_arena_alloc)==0 && req_arena_id == _mi_arena_id_none()) {
     page = (mi_page_t*)mi_arena_try_alloc(block_count, alignment, commit, allow_large, req_arena_id, &memid, tld);
@@ -472,8 +475,8 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t block_count, size_t block_siz
   _mi_memzero_aligned(page, sizeof(*page));
   mi_assert(MI_PAGE_INFO_SIZE >= _mi_align_up(sizeof(*page), MI_PAGE_ALIGN));
   const size_t reserved = (mi_size_of_blocks(block_count) - MI_PAGE_INFO_SIZE) / block_size;
-  mi_assert_internal(reserved > 0 && reserved < UINT16_MAX);
-  page->reserved = reserved;
+  mi_assert_internal(reserved > 0 && reserved <= UINT16_MAX);
+  page->reserved = (uint16_t)reserved;
   page->page_start = (uint8_t*)page + MI_PAGE_INFO_SIZE;
   page->block_size = block_size;
   page->memid = memid;
@@ -493,7 +496,7 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t block_count, size_t block_siz
 // block_count: arena block count for the page
 // block size : page block size
 static mi_page_t* mi_arena_page_allocN(mi_heap_t* heap, size_t block_count, size_t block_size) {
-  const size_t    req_arena_id = heap->arena_id;
+  const mi_arena_id_t  req_arena_id = heap->arena_id;
   mi_tld_t* const tld = heap->tld;
 
   // 1. look for an abandoned page  
@@ -515,6 +518,7 @@ static mi_page_t* mi_arena_page_allocN(mi_heap_t* heap, size_t block_count, size
 
 
 static mi_page_t* mi_singleton_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment) {
+  MI_UNUSED(heap); MI_UNUSED(block_size); MI_UNUSED(page_alignment);
   _mi_error_message(EINVAL, "singleton page is not yet implemented\n");
   return NULL;
 }

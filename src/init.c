@@ -14,8 +14,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
-  0,
-  false, false, false, false,
   0,       // capacity
   0,       // reserved capacity
   { 0 },   // flags
@@ -33,10 +31,9 @@ const mi_page_t _mi_page_empty = {
   #endif
   MI_ATOMIC_VAR_INIT(0), // xthread_free
   MI_ATOMIC_VAR_INIT(0), // xheap
-  NULL, NULL
-  #if MI_INTPTR_SIZE==4
-  , { NULL }
-  #endif
+  MI_ATOMIC_VAR_INIT(0), // xthread_id
+  NULL, NULL, // next, prev
+  { { NULL, 0}, false, false, false, MI_MEM_NONE }  // memid
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
@@ -63,8 +60,8 @@ const mi_page_t _mi_page_empty = {
     QNULL( 10240), QNULL( 12288), QNULL( 14336), QNULL( 16384), QNULL( 20480), QNULL( 24576), QNULL( 28672), QNULL( 32768), /* 56 */ \
     QNULL( 40960), QNULL( 49152), QNULL( 57344), QNULL( 65536), QNULL( 81920), QNULL( 98304), QNULL(114688), QNULL(131072), /* 64 */ \
     QNULL(163840), QNULL(196608), QNULL(229376), QNULL(262144), QNULL(327680), QNULL(393216), QNULL(458752), QNULL(524288), /* 72 */ \
-    QNULL(MI_LARGE_OBJ_WSIZE_MAX + 1  /* 655360, Huge queue */), \
-    QNULL(MI_LARGE_OBJ_WSIZE_MAX + 2) /* Full queue */ }
+    QNULL(MI_LARGE_MAX_OBJ_WSIZE + 1  /* 655360, Huge queue */), \
+    QNULL(MI_LARGE_MAX_OBJ_WSIZE + 2) /* Full queue */ }
 
 #define MI_STAT_COUNT_NULL()  {0,0,0,0}
 
@@ -82,8 +79,6 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
   { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
@@ -101,10 +96,10 @@ const mi_page_t _mi_page_empty = {
 
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,
-  MI_ATOMIC_VAR_INIT(NULL),
-  0,                // tid
+  MI_ATOMIC_VAR_INIT(NULL),  // thread delayed free
+  0,                // thread_id
+  0,                // arena_id
   0,                // cookie
-  0,                // arena id
   { 0, 0 },         // keys
   { {0}, {0}, 0, true }, // random
   0,                // page count
@@ -124,17 +119,6 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
   return _mi_prim_thread_id();
 }
 
-// Thread sequence number
-static _Atomic(size_t)        mi_tcount;
-static mi_decl_thread size_t  mi_tseq;
-
-size_t _mi_thread_seq_id(void) mi_attr_noexcept {
-  size_t tseq = mi_tseq;
-  if (tseq == 0) {
-    mi_tseq = tseq = mi_atomic_add_acq_rel(&mi_tcount,1);
-  }
-  return tseq;
-}
 
 // the thread-local default heap for allocation
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
@@ -146,12 +130,10 @@ static mi_decl_cache_align mi_subproc_t mi_subproc_default;
 static mi_decl_cache_align mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main, &_mi_heap_main,
-  { { NULL, NULL }, {NULL ,NULL}, {NULL ,NULL, 0},
-    0, 0, 0, 0, 0, &mi_subproc_default,
-    &tld_main.stats, &tld_main.os
-  }, // segments
+  NULL, // subproc
+  0,    // tseq
   { 0, &tld_main.stats },  // os
-  { MI_STATS_NULL }       // stats
+  { MI_STATS_NULL }        // stats
 };
 
 mi_decl_cache_align mi_heap_t _mi_heap_main = {
@@ -287,9 +269,9 @@ void mi_subproc_delete(mi_subproc_id_t subproc_id) {
 void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
   mi_heap_t* heap = mi_heap_get_default();
   if (heap == NULL) return;
-  mi_assert(heap->tld->segments.subproc == &mi_subproc_default);
-  if (heap->tld->segments.subproc != &mi_subproc_default) return;
-  heap->tld->segments.subproc = _mi_subproc_from_id(subproc_id);
+  mi_assert(heap->tld->subproc == &mi_subproc_default);
+  if (heap->tld->subproc != &mi_subproc_default) return;
+  heap->tld->subproc = _mi_subproc_from_id(subproc_id);
 }
 
 
@@ -405,14 +387,16 @@ static bool _mi_thread_heap_init(void) {
   return false;
 }
 
+// Thread sequence number
+static _Atomic(size_t) mi_tcount;
+
 // initialize thread local data
 void _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap) {
   _mi_memzero_aligned(tld,sizeof(mi_tld_t));
   tld->heap_backing = bheap;
   tld->heaps = NULL;
-  tld->segments.subproc = &mi_subproc_default;
-  tld->segments.stats = &tld->stats;
-  tld->segments.os = &tld->os;
+  tld->subproc = &mi_subproc_default;
+  tld->tseq = mi_atomic_add_acq_rel(&mi_tcount, 1);
   tld->os.stats = &tld->stats;
 }
 
@@ -449,8 +433,7 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
   _mi_stats_done(&heap->tld->stats);
 
   // free if not the main thread
-  if (heap != &_mi_heap_main) {
-    mi_assert_internal(heap->tld->segments.count == 0 || heap->thread_id != _mi_thread_id());
+  if (heap != &_mi_heap_main) {    
     mi_thread_data_free((mi_thread_data_t*)heap);
   }
   else {

@@ -127,7 +127,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   ULONGLONG memInKiB = 0;
   if (GetPhysicallyInstalledSystemMemory(&memInKiB)) {
     if (memInKiB > 0 && memInKiB < (SIZE_MAX / MI_KiB)) {
-      config->physical_memory = memInKiB * MI_KiB;
+      config->physical_memory = (size_t)(memInKiB * MI_KiB);
     }
   }
   // get the VirtualAlloc2 function
@@ -175,7 +175,7 @@ int _mi_prim_free(void* addr, size_t size ) {
     // the start of the region.
     MEMORY_BASIC_INFORMATION info = { 0 };
     VirtualQuery(addr, &info, sizeof(info));
-    if (info.AllocationBase < addr && ((uint8_t*)addr - (uint8_t*)info.AllocationBase) < (ptrdiff_t)MI_SEGMENT_SIZE) {
+    if (info.AllocationBase < addr && ((uint8_t*)addr - (uint8_t*)info.AllocationBase) < (ptrdiff_t)(4*MI_MiB)) {
       errcode = 0;
       err = (VirtualFree(info.AllocationBase, 0, MEM_RELEASE) == 0);
       if (err) { errcode = GetLastError(); }
@@ -239,7 +239,7 @@ static void* win_virtual_alloc_prim(void* addr, size_t size, size_t try_alignmen
       // success, return the address
       return p;
     }
-    else if (max_retry_msecs > 0 && (try_alignment <= 2*MI_SEGMENT_ALIGN) &&
+    else if (max_retry_msecs > 0 && (try_alignment <= 8*MI_MiB) &&
               (flags&MEM_COMMIT) != 0 && (flags&MEM_LARGE_PAGES) == 0 &&
               win_is_out_of_memory_error(GetLastError())) {
       // if committing regular memory and being out-of-memory,

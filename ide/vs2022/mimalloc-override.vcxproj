@@ -265,7 +265,6 @@
     <ClCompile Include="..\..\src\page.c" />
     <ClCompile Include="..\..\src\random.c" />
     <ClCompile Include="..\..\src\segment-map.c" />
-    <ClCompile Include="..\..\src\segment.c" />
     <ClCompile Include="..\..\src\stats.c" />
   </ItemGroup>
   <ItemGroup>

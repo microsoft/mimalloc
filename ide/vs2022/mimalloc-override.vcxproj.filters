@@ -46,9 +46,6 @@
     <ClCompile Include="..\..\src\random.c">
       <Filter>Sources</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\segment.c">
-      <Filter>Sources</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\segment-map.c">
       <Filter>Sources</Filter>
     </ClCompile>

@@ -38,15 +38,15 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 static inline bool mi_page_queue_is_huge(const mi_page_queue_t* pq) {
-  return (pq->block_size == (MI_LARGE_OBJ_SIZE_MAX+sizeof(uintptr_t)));
+  return (pq->block_size == (MI_LARGE_MAX_OBJ_SIZE+sizeof(uintptr_t)));
 }
 
 static inline bool mi_page_queue_is_full(const mi_page_queue_t* pq) {
-  return (pq->block_size == (MI_LARGE_OBJ_SIZE_MAX+(2*sizeof(uintptr_t))));
+  return (pq->block_size == (MI_LARGE_MAX_OBJ_SIZE+(2*sizeof(uintptr_t))));
 }
 
 static inline bool mi_page_queue_is_special(const mi_page_queue_t* pq) {
-  return (pq->block_size > MI_LARGE_OBJ_SIZE_MAX);
+  return (pq->block_size > MI_LARGE_MAX_OBJ_SIZE);
 }
 
 /* -----------------------------------------------------------
@@ -76,7 +76,7 @@ static inline uint8_t mi_bin(size_t size) {
     bin = (uint8_t)wsize;
   }
   #endif
-  else if (wsize > MI_LARGE_OBJ_WSIZE_MAX) {
+  else if (wsize > MI_LARGE_MAX_OBJ_WSIZE) {
     bin = MI_BIN_HUGE;
   }
   else {
@@ -113,7 +113,7 @@ size_t _mi_bin_size(uint8_t bin) {
 
 // Good size for allocation
 size_t mi_good_size(size_t size) mi_attr_noexcept {
-  if (size <= MI_LARGE_OBJ_SIZE_MAX) {
+  if (size <= MI_LARGE_MAX_OBJ_SIZE) {
     return _mi_bin_size(mi_bin(size + MI_PADDING_SIZE));
   }
   else {

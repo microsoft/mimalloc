@@ -54,9 +54,7 @@ static bool mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   MI_UNUSED(arg1);
   MI_UNUSED(arg2);
   MI_UNUSED(pq);
-  mi_assert_internal(mi_page_heap(page) == heap);
-  mi_segment_t* segment = _mi_page_segment(page);
-  mi_assert_internal(segment->thread_id == heap->thread_id);
+  mi_assert_internal(mi_page_heap(page) == heap);  
   mi_assert_expensive(_mi_page_is_valid(page));
   return true;
 }
@@ -135,7 +133,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
     // the main thread is abandoned (end-of-program), try to reclaim all abandoned segments.
     // if all memory is freed by now, all segments should be freed.
     // note: this only collects in the current subprocess
-    _mi_abandoned_reclaim_all(heap, &heap->tld->segments);
+    _mi_arena_reclaim_all_abandoned(heap);
   }
 
   // if abandoning, mark all pages to no longer add to delayed_free
@@ -155,7 +153,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
   // collect segments (purge pages, this can be expensive so don't force on abandonment)
-  _mi_segments_collect(collect == MI_FORCE, &heap->tld->segments);
+  // _mi_segments_collect(collect == MI_FORCE, &heap->tld->segments);
 
   // if forced, collect thread data cache on program-exit (or shared library unload)
   if (force && is_main_thread && mi_heap_is_backing(heap)) {
@@ -320,13 +318,13 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
 
   // stats
   const size_t bsize = mi_page_block_size(page);
-  if (bsize > MI_LARGE_OBJ_SIZE_MAX) {
+  if (bsize > MI_LARGE_MAX_OBJ_SIZE) {
     mi_heap_stat_decrease(heap, huge, bsize);
   }
 #if (MI_STAT)
   _mi_page_free_collect(page, false);  // update used count
   const size_t inuse = page->used;
-  if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+  if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
     mi_heap_stat_decrease(heap, normal, bsize * inuse);
 #if (MI_STAT>1)
     mi_heap_stat_decrease(heap, normal_bins[_mi_bin(bsize)], inuse);
@@ -343,7 +341,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   // mi_page_free(page,false);
   page->next = NULL;
   page->prev = NULL;
-  _mi_segment_page_free(page,false /* no force? */, &heap->tld->segments);
+  _mi_arena_page_free(page,heap->tld);
 
   return true; // keep going
 }
@@ -483,11 +481,8 @@ mi_heap_t* mi_heap_set_default(mi_heap_t* heap) {
 // static since it is not thread safe to access heaps from other threads.
 static mi_heap_t* mi_heap_of_block(const void* p) {
   if (p == NULL) return NULL;
-  mi_segment_t* segment = _mi_ptr_segment(p);
-  bool valid = (_mi_ptr_cookie(segment) == segment->cookie);
-  mi_assert_internal(valid);
-  if mi_unlikely(!valid) return NULL;
-  return mi_page_heap(_mi_segment_page_of(segment,p));
+  mi_page_t* page = _mi_ptr_page(p); // TODO: check pointer validity?
+  return mi_page_heap(page);
 }
 
 bool mi_heap_contains_block(mi_heap_t* heap, const void* p) {
@@ -562,7 +557,7 @@ bool _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_
   if (page->used == 0) return true;
 
   size_t psize;
-  uint8_t* const pstart = _mi_segment_page_start(_mi_page_segment(page), page, &psize);
+  uint8_t* const pstart = mi_page_area(page, &psize);
   mi_heap_t* const heap = mi_page_heap(page);
   const size_t bsize    = mi_page_block_size(page);
   const size_t ubsize   = mi_page_usable_block_size(page); // without padding

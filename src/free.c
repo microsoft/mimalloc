@@ -233,7 +233,7 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block
       mi_prim_get_default_heap() != (mi_heap_t*)&_mi_heap_empty) // and we did not already exit this thread (without this check, a fresh heap will be initalized (issue #944))
   {
     // the page is abandoned, try to reclaim it into our heap
-    if (_mi_heap_try_reclaim(mi_heap_get_default(), page)) {  // TODO: avoid putting it in the full free queue
+    if (_mi_arena_try_reclaim(mi_heap_get_default(), page)) {  // TODO: avoid putting it in the full free queue
       mi_assert_internal(_mi_thread_id() == mi_page_thread_id(page));
       // mi_assert_internal(mi_heap_get_default()->tld->subproc == page->subproc);
       mi_free(block);  // recursively free as now it will be a local free in our heap

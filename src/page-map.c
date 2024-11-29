@@ -74,7 +74,7 @@ void _mi_page_map_register(mi_page_t* page) {
   }
 
   // set the offsets
-  for (int i = 0; i < block_count; i++) {
+  for (int i = 0; i < (int)block_count; i++) {
     mi_assert_internal(i < 128);
     _mi_page_map[idx + i] = (signed char)(-i-1);
   }

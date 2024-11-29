@@ -282,7 +282,7 @@ static inline size_t mi_rotr(size_t x, size_t r) {
   #elif (mi_has_builtin(rotateright32) && MI_SIZE_BITS==32)
     return mi_builtin(rotateright32)(x,r);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    #if MI_BFIELD_SIZE==4
+    #if MI_SIZE_BITS==32
     return _lrotr(x,(int)r);
     #else
     return _rotr64(x,(int)r);

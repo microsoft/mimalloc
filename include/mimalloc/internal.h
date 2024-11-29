@@ -140,6 +140,8 @@ void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 mi_page_t* _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
 void       _mi_arena_page_abandon(mi_page_t* page, mi_tld_t* tld);
 void       _mi_arena_page_free(mi_page_t* page, mi_tld_t* tld);
+bool       _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page);
+void       _mi_arena_reclaim_all_abandoned(mi_heap_t* heap);
 
 void*      _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid);
 void       _mi_arena_meta_free(void* p, mi_memid_t memid, size_t size);
@@ -567,11 +569,11 @@ static inline bool mi_page_mostly_used(const mi_page_t* page) {
   return (page->reserved - page->used <= frac);
 }
 
-static inline bool mi_page_is_abandoned(mi_page_t* page) {
+static inline bool mi_page_is_abandoned(const mi_page_t* page) {
   return (mi_page_thread_id(page) == 0);
 }
 
-static inline bool mi_page_is_huge(mi_page_t* page) {
+static inline bool mi_page_is_huge(const mi_page_t* page) {
   return (page->block_size > MI_LARGE_MAX_OBJ_SIZE);
 }
 

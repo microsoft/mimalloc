@@ -36,8 +36,8 @@ static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_sta
   return (mi_block_t*)((uint8_t*)page_start + (i * block_size));
 }
 
-static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t size, mi_tld_t* tld);
-static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld);
+//static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t size, mi_tld_t* tld);
+static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page);
 
 #if (MI_DEBUG>=3)
 static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
@@ -83,7 +83,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(page->capacity <= page->reserved);
 
   // const size_t bsize = mi_page_block_size(page);
-  uint8_t* start = mi_page_start(page);
+  // uint8_t* start = mi_page_start(page);
   //mi_assert_internal(start + page->capacity*page->block_size == page->top);
 
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
@@ -414,6 +414,7 @@ void _mi_page_force_abandon(mi_page_t* page) {
 
 // Free a page with no more free blocks
 void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
+  MI_UNUSED(force);
   mi_assert_internal(page != NULL);
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(pq == mi_page_queue_of(page));
@@ -784,7 +785,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   }
   if (page != NULL && !mi_page_immediate_available(page)) {
     mi_assert_internal(mi_page_is_expandable(page));
-    mi_page_extend_free(heap, page, heap->tld);
+    mi_page_extend_free(heap, page);
   }
 
   if (page == NULL) {

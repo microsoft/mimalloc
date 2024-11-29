@@ -16,12 +16,12 @@ terms of the MIT license. A copy of the license can be found in the file
 // ------------------------------------------------------
 
 static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
-  // objects up to `MI_MAX_ALIGN_GUARANTEE` are allocated aligned to their size (see `segment.c:_mi_segment_page_start`).
+  // objects up to `MI_PAGE_ALIGN` are allocated aligned to their size
   mi_assert_internal(_mi_is_power_of_two(alignment) && (alignment > 0));
   if (alignment > size) return false;
   if (alignment <= MI_MAX_ALIGN_SIZE) return true;
   const size_t bsize = mi_good_size(size);
-  return (bsize <= MI_MAX_ALIGN_GUARANTEE && (bsize & (alignment-1)) == 0);
+  return (bsize <= MI_PAGE_ALIGN && (bsize & (alignment-1)) == 0);
 }
 
 #if MI_GUARDED
