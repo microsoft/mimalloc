@@ -37,6 +37,13 @@ static inline mi_bfield_t mi_bfield_rotate_right(mi_bfield_t x, size_t r) {
   return mi_rotr(x,r);
 }
 
+// Find the least significant bit that can be xset (0 for MI_BIT_SET, 1 for MI_BIT_CLEAR).
+// return false if `x==~0` (for MI_BIT_SET) or `x==0` for MI_BIT_CLEAR (with `*idx` undefined) and true otherwise,
+// with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
+static inline bool mi_bfield_find_least_to_xset(mi_bit_t set, mi_bfield_t x, size_t* idx) {
+  return mi_bfield_find_least_bit((set ? ~x : x), idx);
+}
+
 // Set/clear a bit atomically. Returns `true` if the bit transitioned from 0 to 1 (or 1 to 0).
 static inline bool mi_bfield_atomic_xset(mi_bit_t set, _Atomic(mi_bfield_t)*b, size_t idx) {
   mi_assert_internal(idx < MI_BFIELD_BITS);
@@ -190,7 +197,8 @@ static bool mi_bitmap_chunk_is_xsetN(mi_bit_t set, mi_bitmap_chunk_t* chunk, siz
   return all_xset;
 }
 
-// Try to atomically set/clear a sequence of `n` bits within a chunk. Returns true if all bits transitioned from 0 to 1 (or 1 to 0),
+// Try to atomically set/clear a sequence of `n` bits within a chunk. 
+// Returns true if all bits transitioned from 0 to 1 (or 1 to 0),
 // and false otherwise leaving all bit fields as is.
 static bool mi_bitmap_chunk_try_xsetN(mi_bit_t set, mi_bitmap_chunk_t* chunk, size_t cidx, size_t n) {
   mi_assert_internal(cidx + n < MI_BITMAP_CHUNK_BITS);
@@ -251,6 +259,54 @@ restore:
 }
 
 
+// find least 0/1-bit in a chunk and try to set/clear it atomically
+// set `*pidx` to the bit index (0 <= *pidx < MI_BITMAP_CHUNK_BITS) on success.
+// todo: try neon version
+static inline bool mi_bitmap_chunk_find_and_try_xset(mi_bit_t set, mi_bitmap_chunk_t* chunk, size_t* pidx) {
+#if 0 && defined(__AVX2__) && (MI_BITMAP_CHUNK_BITS==256)
+  while (true) {
+    const __m256i vec   = _mm256_load_si256((const __m256i*)chunk->bfields);
+    const __m256i vcmp  = _mm256_cmpeq_epi64(vec, (set ? _mm256_set1_epi64x(~0) : _mm256_setzero_si256())); // (elem64 == ~0 / 0 ? 0xFF  : 0)
+    const uint32_t mask = ~_mm256_movemask_epi8(vcmp);  // mask of most significant bit of each byte (so each 8 bits are all set or clear)
+    // mask is inverted, so each 8-bits is 0xFF iff the corresponding elem64 has a zero / one bit (and thus can be set/cleared)
+    if (mask==0) return false;
+    mi_assert_internal((_tzcnt_u32(mask)%8) == 0); // tzcnt == 0, 8, 16, or 24
+    const size_t chunk_idx = _tzcnt_u32(mask) / 8;            
+    mi_assert_internal(chunk_idx < MI_BITMAP_CHUNK_FIELDS);
+    size_t cidx;
+    if (mi_bfield_find_least_to_xset(set, chunk->bfields[chunk_idx], &cidx)) {           // find the bit-idx that is set/clear
+      if mi_likely(mi_bfield_atomic_try_xset(set, &chunk->bfields[chunk_idx], cidx)) {  // set/clear it atomically
+        *pidx = (chunk_idx*MI_BFIELD_BITS) + cidx;
+        mi_assert_internal(*pidx < MI_BITMAP_CHUNK_BITS);
+        return true;
+      }
+    }
+    // try again
+  }
+#else
+  for (int i = 0; i < MI_BITMAP_CHUNK_FIELDS; i++) {
+    size_t idx;
+    if mi_unlikely(mi_bfield_find_least_to_xset(set, chunk->bfields[i], &idx)) { // find least 0-bit
+      if mi_likely(mi_bfield_atomic_try_xset(set, &chunk->bfields[i], idx)) {  // try to set it atomically
+        *pidx = (i*MI_BFIELD_BITS + idx);
+        mi_assert_internal(*pidx < MI_BITMAP_CHUNK_BITS);
+        return true;
+      }
+    }
+  }
+  return false;
+#endif
+}
+
+static inline bool mi_bitmap_chunk_find_and_try_clear(mi_bitmap_chunk_t* chunk, size_t* pidx) {
+  return mi_bitmap_chunk_find_and_try_xset(MI_BIT_CLEAR, chunk, pidx);
+}
+
+static inline bool mi_bitmap_chunk_find_and_try_set(mi_bitmap_chunk_t* chunk, size_t* pidx) {
+  return mi_bitmap_chunk_find_and_try_xset(MI_BIT_SET, chunk, pidx);
+}
+
+/*
 // find least 1-bit in a chunk and try unset it atomically
 // set `*pidx` to thi bit index (0 <= *pidx < MI_BITMAP_CHUNK_BITS) on success.
 // todo: try neon version
@@ -288,7 +344,7 @@ static inline bool mi_bitmap_chunk_find_and_try_clear(mi_bitmap_chunk_t* chunk, 
   return false;
   #endif
 }
-
+*/
 
 // find least byte in a chunk with all bits set, and try unset it atomically
 // set `*pidx` to its bit index (0 <= *pidx < MI_BITMAP_CHUNK_BITS) on success.
@@ -613,7 +669,7 @@ bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t tseq, size_t* pid
 
 // Find a sequence of `n` bits in the bitmap with all bits set, and atomically unset all.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
-bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx ) {
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx ) {
   // TODO: allow at least MI_BITMAP_CHUNK_BITS and probably larger
   // TODO: allow spanning across chunk boundaries
   if (n == 0 || n > MI_BFIELD_BITS) return false;
