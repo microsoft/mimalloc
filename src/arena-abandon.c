@@ -344,7 +344,7 @@ bool mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int heap_tag, bool vi
     _mi_error_message(EFAULT, "internal error: can only visit abandoned blocks when MIMALLOC_VISIT_ABANDONED=ON");
     return false;
   }
-  mi_arena_field_cursor_t current;
+  mi_arena_field_cursor_t current;0
   _mi_arena_field_cursor_init(NULL, _mi_subproc_from_id(subproc_id), true /* visit all (blocking) */, &current);
   mi_segment_t* segment;
   bool ok = true;

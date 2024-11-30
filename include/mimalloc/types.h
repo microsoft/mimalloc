@@ -112,26 +112,26 @@ terms of the MIT license. A copy of the license can be found in the file
 // ------------------------------------------------------
 
 // Sizes are for 64-bit
-#ifndef MI_ARENA_BLOCK_SHIFT
+#ifndef MI_ARENA_SLICE_SHIFT
 #ifdef  MI_SMALL_PAGE_SHIFT  // compatibility
-#define MI_ARENA_BLOCK_SHIFT              MI_SMALL_PAGE_SHIFT
+#define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
 #else
-#define MI_ARENA_BLOCK_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
+#define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
 #endif
 #endif
 #ifndef MI_BITMAP_CHUNK_BITS_SHIFT
 #define MI_BITMAP_CHUNK_BITS_SHIFT        8                           // optimized for 256 bits per chunk (avx2)
 #endif
 
-#define MI_ARENA_BLOCK_SIZE               (MI_ZU(1) << MI_ARENA_BLOCK_SHIFT)   
-#define MI_ARENA_BLOCK_ALIGN              (MI_ARENA_BLOCK_SIZE)
+#define MI_ARENA_SLICE_SIZE               (MI_ZU(1) << MI_ARENA_SLICE_SHIFT)
+#define MI_ARENA_SLICE_ALIGN              (MI_ARENA_SLICE_SIZE)
 #define MI_BITMAP_CHUNK_BITS              (MI_ZU(1) << MI_BITMAP_CHUNK_BITS_SHIFT)
 
-#define MI_ARENA_MIN_OBJ_BLOCKS           (1) 
+#define MI_ARENA_MIN_OBJ_BLOCKS           (1)
 #define MI_ARENA_MAX_OBJ_BLOCKS           (MI_BITMAP_CHUNK_BITS)      // for now, cannot cross chunk boundaries
 
-#define MI_ARENA_MIN_OBJ_SIZE             (MI_ARENA_MIN_OBJ_BLOCKS * MI_ARENA_BLOCK_SIZE)
-#define MI_ARENA_MAX_OBJ_SIZE             (MI_ARENA_MAX_OBJ_BLOCKS * MI_ARENA_BLOCK_SIZE)  
+#define MI_ARENA_MIN_OBJ_SIZE             (MI_ARENA_MIN_OBJ_BLOCKS * MI_ARENA_SLICE_SIZE)
+#define MI_ARENA_MAX_OBJ_SIZE             (MI_ARENA_MAX_OBJ_BLOCKS * MI_ARENA_SLICE_SIZE)
 
 #define MI_SMALL_PAGE_SIZE                MI_ARENA_MIN_OBJ_SIZE
 #define MI_MEDIUM_PAGE_SIZE               (8*MI_SMALL_PAGE_SIZE)                   // 512 KiB  (=byte in the bitmap)
@@ -145,7 +145,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 // Alignments over MI_BLOCK_ALIGNMENT_MAX are allocated in singleton pages
-#define MI_BLOCK_ALIGNMENT_MAX   (MI_ARENA_BLOCK_ALIGN)
+#define MI_BLOCK_ALIGNMENT_MAX   (MI_ARENA_SLICE_ALIGN)
 
 // We never allocate more than PTRDIFF_MAX (see also <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
 #define MI_MAX_ALLOC_SIZE        PTRDIFF_MAX
@@ -162,8 +162,8 @@ typedef enum mi_memkind_e {
   MI_MEM_STATIC,    // allocated in a static area and should not be freed (for arena meta data for example)
   MI_MEM_OS,        // allocated from the OS
   MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
-  MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`) 
-  MI_MEM_ARENA      // allocated from an arena (the usual case) 
+  MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
+  MI_MEM_ARENA      // allocated from an arena (the usual case)
 } mi_memkind_t;
 
 static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
@@ -176,8 +176,8 @@ typedef struct mi_memid_os_info {
 } mi_memid_os_info_t;
 
 typedef struct mi_memid_arena_info {
-  uint32_t      block_index;        // base index in the arena
-  uint32_t      block_count;        // allocated blocks
+  uint32_t      slice_index;        // base index in the arena
+  uint32_t      slice_count;        // allocated slices
   mi_arena_id_t id;                 // arena id (>= 1)
   bool          is_exclusive;       // this arena can only be used for specific arena allocations
 } mi_memid_arena_info_t;
@@ -295,7 +295,7 @@ typedef struct mi_page_s {
   uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
   uint8_t               heap_tag;          // tag of the owning heap, used to separate heaps by object type
                                            // padding
-  size_t                block_size;        // size available in each block (always `>0`)  
+  size_t                block_size;        // size available in each block (always `>0`)
   uint8_t*              page_start;        // start of the blocks
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
@@ -340,7 +340,7 @@ typedef enum mi_page_kind_e {
   MI_PAGE_SMALL,    // small blocks go into 64KiB pages
   MI_PAGE_MEDIUM,   // medium blocks go into 512KiB pages
   MI_PAGE_LARGE,    // larger blocks go into 4MiB pages
-  MI_PAGE_SINGLETON // page containing a single block. 
+  MI_PAGE_SINGLETON // page containing a single block.
                     // used for blocks `> MI_LARGE_OBJ_SIZE_MAX` or an aligment `> MI_BLOCK_ALIGNMENT_MAX`.
 } mi_page_kind_t;
 

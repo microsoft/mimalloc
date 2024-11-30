@@ -443,16 +443,16 @@ extern signed char* _mi_page_map;
 #define MI_PAGE_PTR_INVALID   ((mi_page_t*)(1))
 
 static inline mi_page_t* _mi_ptr_page(const void* p) {
-  const uintptr_t up  = ((uintptr_t)p) >> MI_ARENA_BLOCK_SHIFT;
+  const uintptr_t up  = ((uintptr_t)p) >> MI_ARENA_SLICE_SHIFT;
   const ptrdiff_t ofs = _mi_page_map[up];
   #if MI_DEBUG
   if mi_unlikely(ofs==0) return MI_PAGE_PTR_INVALID;
   #endif
-  return (mi_page_t*)((up + ofs + 1) << MI_ARENA_BLOCK_SHIFT);
+  return (mi_page_t*)((up + ofs + 1) << MI_ARENA_SLICE_SHIFT);
 }
 
 
-// Get the block size of a page 
+// Get the block size of a page
 static inline size_t mi_page_block_size(const mi_page_t* page) {
   mi_assert_internal(page->block_size > 0);
   return page->block_size;
@@ -509,8 +509,8 @@ static inline mi_threadid_t mi_page_thread_id(const mi_page_t* page) {
 static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
   mi_atomic_store_release(&page->xheap,(uintptr_t)heap);
-  if (heap != NULL) { 
-    page->heap_tag = heap->tag; 
+  if (heap != NULL) {
+    page->heap_tag = heap->tag;
     mi_atomic_store_release(&page->xthread_id, heap->thread_id);
   }
   else {
@@ -749,13 +749,13 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
 ----------------------------------------------------------- */
 
 // Blocks needed for a given byte size
-static inline size_t mi_block_count_of_size(size_t size) {
-  return _mi_divide_up(size, MI_ARENA_BLOCK_SIZE);
+static inline size_t mi_slice_count_of_size(size_t size) {
+  return _mi_divide_up(size, MI_ARENA_SLICE_SIZE);
 }
 
 // Byte size of a number of blocks
-static inline size_t mi_size_of_blocks(size_t bcount) {
-  return (bcount * MI_ARENA_BLOCK_SIZE);
+static inline size_t mi_size_of_slices(size_t bcount) {
+  return (bcount * MI_ARENA_SLICE_SIZE);
 }
 
 

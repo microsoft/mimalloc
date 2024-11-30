@@ -325,11 +325,11 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_print_ex(&stats->committed, "committed", 1, out, arg, "");
   mi_stat_peak_print(&stats->reset, "reset", 1, out, arg );
   mi_stat_peak_print(&stats->purged, "purged", 1, out, arg );
-  mi_stat_print(&stats->page_committed, "touched", 1, out, arg);
   //mi_stat_print(&stats->segments, "segments", -1, out, arg);
   //mi_stat_print(&stats->segments_abandoned, "-abandoned", -1, out, arg);
   //mi_stat_print(&stats->segments_cache, "-cached", -1, out, arg);
-  mi_stat_print(&stats->pages, "pages", -1, out, arg);
+  mi_stat_print_ex(&stats->page_committed, "touched", 1, out, arg, "");
+  mi_stat_print_ex(&stats->pages, "pages", -1, out, arg, "");
   mi_stat_print(&stats->pages_abandoned, "-abandoned", -1, out, arg);
   mi_stat_counter_print(&stats->pages_extended, "-extended", out, arg);
   mi_stat_counter_print(&stats->page_no_retire, "-noretire", out, arg);

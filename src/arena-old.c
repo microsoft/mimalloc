@@ -34,7 +34,7 @@ typedef struct mi_arena_s {
   mi_arena_id_t       id;                   // arena id; 0 for non-specific
   mi_memid_t          memid;                // memid of the memory area
   _Atomic(uint8_t*)start;                // the start of the memory area
-  size_t              block_count;          // size of the area in arena blocks (of `MI_ARENA_BLOCK_SIZE`)
+  size_t              block_count;          // size of the area in arena blocks (of `MI_ARENA_SLICE_SIZE`)
   size_t              field_count;          // number of bitmap fields (where `field_count * MI_BITMAP_FIELD_BITS >= block_count`)
   size_t              meta_size;            // size of the arena structure itself (including its bitmaps)
   mi_memid_t          meta_memid;           // memid of the arena structure itself (OS or static allocation)
@@ -53,8 +53,8 @@ typedef struct mi_arena_s {
 } mi_arena_t;
 
 
-#define MI_ARENA_BLOCK_SIZE   (MI_SEGMENT_SIZE)        // 64MiB  (must be at least MI_SEGMENT_ALIGN)
-#define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 32MiB
+#define MI_ARENA_SLICE_SIZE   (MI_SEGMENT_SIZE)        // 64MiB  (must be at least MI_SEGMENT_ALIGN)
+#define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_SLICE_SIZE/2)  // 32MiB
 #define MI_MAX_ARENAS         (132)                    // Limited as the reservation exponentially increases (and takes up .bss)
 
 // The available arenas
@@ -113,11 +113,11 @@ mi_arena_t* mi_arena_from_index(size_t idx) {
 ----------------------------------------------------------- */
 
 static size_t mi_block_count_of_size(size_t size) {
-  return _mi_divide_up(size, MI_ARENA_BLOCK_SIZE);
+  return _mi_divide_up(size, MI_ARENA_SLICE_SIZE);
 }
 
 static size_t mi_arena_block_size(size_t bcount) {
-  return (bcount * MI_ARENA_BLOCK_SIZE);
+  return (bcount * MI_ARENA_SLICE_SIZE);
 }
 
 static size_t mi_arena_size(mi_arena_t* arena) {
@@ -363,7 +363,7 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   if (!_mi_os_has_virtual_reserve()) {
     arena_reserve = arena_reserve/4;  // be conservative if virtual reserve is not supported (for WASM for example)
   }
-  arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_BLOCK_SIZE);
+  arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_SLICE_SIZE);
   arena_reserve = _mi_align_up(arena_reserve, MI_SEGMENT_SIZE);
   if (arena_count >= 8 && arena_count <= 128) {
     // scale up the arena sizes exponentially every 8 entries (128 entries get to 589TiB)
@@ -429,7 +429,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
 
 void* _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld)
 {
-  return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, 0, commit, allow_large, req_arena_id, memid, tld);
+  return _mi_arena_alloc_aligned(size, MI_ARENA_SLICE_SIZE, 0, commit, allow_large, req_arena_id, memid, tld);
 }
 
 
@@ -774,13 +774,13 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id, mi_stats_t*
 static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int numa_node, bool exclusive, mi_memid_t memid, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
-  if (size < MI_ARENA_BLOCK_SIZE) return false;
+  if (size < MI_ARENA_SLICE_SIZE) return false;
 
   if (is_large) {
     mi_assert_internal(memid.initially_committed && memid.is_pinned);
   }
 
-  const size_t bcount = size / MI_ARENA_BLOCK_SIZE;
+  const size_t bcount = size / MI_ARENA_SLICE_SIZE;
   const size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);
   const size_t bitmaps = (memid.is_pinned ? 3 : 5);
   const size_t asize  = sizeof(mi_arena_t) + (bitmaps*fields*sizeof(mi_bitmap_field_t));
@@ -836,7 +836,7 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
 // Reserve a range of regular OS memory
 int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
-  size = _mi_align_up(size, MI_ARENA_BLOCK_SIZE); // at least one block
+  size = _mi_align_up(size, MI_ARENA_SLICE_SIZE); // at least one block
   mi_memid_t memid;
   void* start = _mi_os_alloc_aligned(size, MI_SEGMENT_ALIGN, commit, allow_large, &memid, &_mi_stats_main);
   if (start == NULL) return ENOMEM;
@@ -898,7 +898,7 @@ void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge)
   for (size_t i = 0; i < max_arenas; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
     if (arena == NULL) break;
-    _mi_verbose_message("arena %zu: %zu blocks of size %zuMiB (in %zu fields) %s\n", i, arena->block_count, MI_ARENA_BLOCK_SIZE / MI_MiB, arena->field_count, (arena->memid.is_pinned ? ", pinned" : ""));
+    _mi_verbose_message("arena %zu: %zu blocks of size %zuMiB (in %zu fields) %s\n", i, arena->block_count, MI_ARENA_SLICE_SIZE / MI_MiB, arena->field_count, (arena->memid.is_pinned ? ", pinned" : ""));
     if (show_inuse) {
       inuse_total += mi_debug_show_bitmap("  ", "inuse blocks", arena->block_count, arena->blocks_inuse, arena->field_count);
     }
