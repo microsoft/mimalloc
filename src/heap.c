@@ -31,7 +31,7 @@ static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void
   size_t count = 0;
   #endif
 
-  for (int i = 0; i <= MI_BIN_FULL; i++) {
+  for (size_t i = 0; i <= MI_BIN_FULL; i++) {
     mi_page_queue_t* pq = &heap->pages[i];
     mi_page_t* page = pq->first;
     while(page != NULL) {
@@ -419,7 +419,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   // so threads may do delayed frees in either heap for a while.
   // note: appending waits for each page to not be in the `MI_DELAYED_FREEING` state
   // so after this only the new heap will get delayed frees
-  for (int i = 0; i <= MI_BIN_FULL; i++) {
+  for (size_t i = 0; i <= MI_BIN_FULL; i++) {
     mi_page_queue_t* pq = &heap->pages[i];
     mi_page_queue_t* append = &from->pages[i];
     size_t pcount = _mi_page_queue_append(heap, pq, append);

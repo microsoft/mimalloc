@@ -283,18 +283,21 @@ typedef struct mi_subproc_s mi_subproc_t;
 //   the owning heap `thread_delayed_free` list. This guarantees that pages
 //   will be freed correctly even if only other threads free blocks.
 typedef struct mi_page_s {
+  _Atomic(mi_threadid_t)xthread_id;        // thread this page belongs to. (= xheap->thread_id, or 0 if abandoned)
+
+  mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
+  uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
   uint16_t              capacity;          // number of blocks committed (must be the first field for proper zero-initialisation)
   uint16_t              reserved;          // number of blocks reserved in memory
+  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
+  uint8_t               heap_tag;          // tag of the owning heap, used to separate heaps by object type
+
   mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (8 bits)
   uint8_t               free_is_zero:1;    // `true` if the blocks in the free list are zero initialized
   uint8_t               retire_expire:7;   // expiration count for retired blocks
-
-  mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
-  mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
-  uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
-  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
-  uint8_t               heap_tag;          // tag of the owning heap, used to separate heaps by object type
                                            // padding
+
+  mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   size_t                block_size;        // size available in each block (always `>0`)
   uint8_t*              page_start;        // start of the blocks
 
@@ -304,7 +307,6 @@ typedef struct mi_page_s {
 
   _Atomic(mi_thread_free_t) xthread_free;  // list of deferred free blocks freed by other threads
   _Atomic(uintptr_t)    xheap;             // heap this threads belong to.
-  _Atomic(mi_threadid_t)xthread_id;        // thread this page belongs to. (= xheap->thread_id, or 0 if abandoned)
 
   struct mi_page_s*     next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by the heap with the same `block_size`

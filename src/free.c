@@ -126,10 +126,11 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p, const char* msg)
 // Fast path written carefully to prevent register spilling on the stack
 void mi_free(void* p) mi_attr_noexcept
 {
+  if (p==NULL) return;
   mi_page_t* const page = mi_checked_ptr_page(p,"mi_free");
-  if mi_unlikely(page==NULL) return;
+  // if mi_unlikely(page==NULL) return;
 
-  
+
   const bool is_local = (_mi_prim_thread_id() == mi_page_thread_id(page));
   if mi_likely(is_local) {                        // thread-local free?
     if mi_likely(page->flags.full_aligned == 0) { // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
@@ -257,7 +258,7 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block
     // huge pages are special as they occupy the entire segment
     // as these are large we reset the memory occupied by the page so it is available to other threads
     // (as the owning thread needs to actually free the memory later).
-    _mi_os_reset(mi_page_start(page), mi_page_block_size(page), NULL); // resets conservatively    
+    _mi_os_reset(mi_page_start(page), mi_page_block_size(page), NULL); // resets conservatively
   }
   else {
     #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading

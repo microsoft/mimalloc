@@ -438,17 +438,18 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
 }
 
 
-extern signed char* _mi_page_map;
+extern uint8_t* _mi_page_map;
 
 #define MI_PAGE_PTR_INVALID   ((mi_page_t*)(1))
 
 static inline mi_page_t* _mi_ptr_page(const void* p) {
   const uintptr_t up  = ((uintptr_t)p) >> MI_ARENA_SLICE_SHIFT;
+  // __builtin_prefetch((void*)(up << MI_ARENA_SLICE_SHIFT));
   const ptrdiff_t ofs = _mi_page_map[up];
   #if MI_DEBUG
   if mi_unlikely(ofs==0) return MI_PAGE_PTR_INVALID;
   #endif
-  return (mi_page_t*)((up + ofs + 1) << MI_ARENA_SLICE_SHIFT);
+  return (mi_page_t*)((up - ofs + 1) << MI_ARENA_SLICE_SHIFT);
 }
 
 
