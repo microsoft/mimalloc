@@ -244,7 +244,8 @@ static void test_stress(void) {
     //mi_debug_show_arenas();
     #endif
     #if !defined(NDEBUG) || defined(MI_TSAN)
-    if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
+    if (true) // (n + 1) % 10 == 0) 
+      { printf("- iterations left: %3d\n", ITER - (n + 1)); }
     #endif
   }
 }
@@ -276,7 +277,7 @@ int main(int argc, char** argv) {
     mi_option_enable(mi_option_visit_abandoned);
   #endif
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
-    mi_option_set(mi_option_arena_reserve, 32 * 1024 /* in kib = 32MiB */);
+    // mi_option_set(mi_option_arena_reserve, 32 * 1024 /* in kib = 32MiB */);
   #endif
   #ifndef USE_STD_MALLOC
     mi_stats_reset();

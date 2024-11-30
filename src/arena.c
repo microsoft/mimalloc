@@ -129,7 +129,7 @@ static uint8_t* mi_arena_start(mi_arena_t* arena) {
 }
 
 // Start of a block
-void* mi_arena_block_start(mi_arena_t* arena, size_t block_index) {
+uint8_t* mi_arena_block_start(mi_arena_t* arena, size_t block_index) {
   return (mi_arena_start(arena) + mi_size_of_blocks(block_index));
 }
 
@@ -146,34 +146,39 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
 
 
 // Create an arena memid
-static mi_memid_t mi_memid_create_arena(mi_arena_id_t id, bool is_exclusive, size_t block_index) {
+static mi_memid_t mi_memid_create_arena(mi_arena_id_t id, bool is_exclusive, size_t block_index, size_t block_count) {
+  mi_assert_internal(block_index < UINT32_MAX); 
+  mi_assert_internal(block_count < UINT32_MAX);
   mi_memid_t memid = _mi_memid_create(MI_MEM_ARENA);
   memid.mem.arena.id = id;
-  memid.mem.arena.block_index = block_index;
+  memid.mem.arena.block_index = (uint32_t)block_index;
+  memid.mem.arena.block_count = (uint32_t)block_count;
   memid.mem.arena.is_exclusive = is_exclusive;
   return memid;
 }
 
 // returns if the arena is exclusive
-static bool mi_arena_memid_indices(mi_memid_t memid, size_t* arena_index, size_t* block_index) {
+static bool mi_arena_memid_indices(mi_memid_t memid, size_t* arena_index, size_t* block_index, size_t* block_count) {
   mi_assert_internal(memid.memkind == MI_MEM_ARENA);
   *arena_index = mi_arena_id_index(memid.mem.arena.id);
-  *block_index = memid.mem.arena.block_index;
+  if (block_index) *block_index = memid.mem.arena.block_index;
+  if (block_count) *block_count = memid.mem.arena.block_count;
   return memid.mem.arena.is_exclusive;
 }
 
 // get the arena and block index
-static mi_arena_t* mi_arena_from_memid(mi_memid_t memid, size_t* block_index) {
+static mi_arena_t* mi_arena_from_memid(mi_memid_t memid, size_t* block_index, size_t* block_count) {
   size_t arena_index;
-  mi_arena_memid_indices(memid, &arena_index, block_index);
+  mi_arena_memid_indices(memid, &arena_index, block_index, block_count);
   return mi_arena_from_index(arena_index);
 }
 
 
-static mi_arena_t* mi_page_arena(mi_page_t* page, size_t* block_index) {
+static mi_arena_t* mi_page_arena(mi_page_t* page, size_t* block_index, size_t* block_count) {
   // todo: maybe store the arena* directly in the page?
-  return mi_arena_from_memid(page->memid, block_index);
+  return mi_arena_from_memid(page->memid, block_index, block_count);
 }
+
 
 /* -----------------------------------------------------------
   Arena Allocation
@@ -187,7 +192,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
 
   // claimed it!
   void* p = mi_arena_block_start(arena, block_index);
-  *memid = mi_memid_create_arena(arena->id, arena->exclusive, block_index);
+  *memid = mi_memid_create_arena(arena->id, arena->exclusive, block_index, needed_bcount);
   memid->is_pinned = arena->memid.is_pinned;
 
   // set the dirty bits
@@ -424,7 +429,15 @@ void* _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t 
   return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, 0, commit, allow_large, req_arena_id, memid, tld);
 }
 
-
+static uint8_t* xmi_arena_page_allocated_area(mi_page_t* page, size_t* psize) {
+  // todo: record real allocated size instead of trying to recalculate?
+  size_t page_size;
+  uint8_t* const pstart = mi_page_area(page, &page_size);
+  const size_t diff = pstart - (uint8_t*)page;
+  const size_t size = _mi_align_up(page_size + diff, MI_ARENA_BLOCK_SIZE);
+  if (psize != NULL) { *psize = size; }
+  return (uint8_t*)page;
+}
 
 /* -----------------------------------------------------------
   Arena page allocation
@@ -467,7 +480,7 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t block_count, size_t block_siz
 {
   const bool allow_large = true;
   const bool commit = true;
-  const size_t alignment = MI_ARENA_BLOCK_ALIGN;
+  const size_t alignment = 1;
 
   // try to allocate from free space in arena's
   mi_memid_t memid = _mi_memid_none();
@@ -515,13 +528,13 @@ static mi_page_t* mi_arena_page_allocN(mi_heap_t* heap, size_t block_count, size
   // 1. look for an abandoned page  
   mi_page_t* page = mi_arena_page_try_find_abandoned(block_count, block_size, req_arena_id, tld);
   if (page != NULL) {
-    _mi_page_reclaim(heap,page);
-    return page;
+    return page;  // return as abandoned
   }
 
   // 2. find a free block, potentially allocating a new arena
   page = mi_arena_page_alloc_fresh(block_count, block_size, req_arena_id, tld);
-  if (page != NULL) {    
+  if (page != NULL) {  
+    mi_assert_internal(page->memid.memkind != MI_MEM_ARENA || page->memid.mem.arena.block_count == block_count);
     _mi_page_init(heap, page);
     return page;
   }
@@ -559,21 +572,11 @@ mi_page_t* _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_
   return page;
 }
 
-static uint8_t* mi_arena_page_allocated_area(mi_page_t* page, size_t* psize) {
-  // todo: record real allocated size instead of trying to recalculate?
-  size_t page_size;
-  uint8_t* const pstart = mi_page_area(page, &page_size);
-  const size_t diff = pstart - (uint8_t*)page;
-  const size_t size = _mi_align_up(page_size + diff, MI_ARENA_BLOCK_SIZE);
-  if (psize != NULL) { *psize = size;  }
-  return (uint8_t*)page;
-}
+
 
 void _mi_arena_page_free(mi_page_t* page, mi_tld_t* tld) {
-  size_t size;
-  uint8_t* pstart = mi_arena_page_allocated_area(page, &size);
   _mi_page_map_unregister(page);
-  _mi_arena_free(pstart, size, size, page->memid, &tld->stats);
+  _mi_arena_free(page, 0, 0, page->memid, &tld->stats);
 }
 
 /* -----------------------------------------------------------
@@ -595,11 +598,9 @@ void _mi_arena_page_abandon(mi_page_t* page, mi_tld_t* tld) {
     // leave as is; it will be reclaimed on the first free
   }
   else if (page->memid.memkind==MI_MEM_ARENA) {
-    size_t size;
-    mi_arena_page_allocated_area(page, &size);
-    size_t bin      = _mi_bin(mi_page_block_size(page));
+    size_t bin = _mi_bin(mi_page_block_size(page));
     size_t block_index;
-    mi_arena_t* arena = mi_page_arena(page, &block_index);
+    mi_arena_t* arena = mi_page_arena(page, &block_index, NULL);
     bool were_zero = mi_bitmap_xsetN(MI_BIT_SET, &arena->blocks_abandoned[bin], block_index, 1, NULL);
     MI_UNUSED(were_zero); mi_assert_internal(were_zero);
     mi_atomic_increment_relaxed(&tld->subproc->abandoned_count[bin]);
@@ -618,7 +619,7 @@ bool _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page) {
 
   if mi_likely(memid.memkind == MI_MEM_ARENA) {
     size_t block_index;
-    mi_arena_t* arena = mi_page_arena(page, &block_index);
+    mi_arena_t* arena = mi_page_arena(page, &block_index, NULL);
     if (arena->subproc != heap->tld->subproc) return false;  // only reclaim within the same subprocess
 
     // don't reclaim more from a `free` call than half the current segments
@@ -657,7 +658,7 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t block_idx, size_t 
 static void mi_arenas_try_purge(bool force, bool visit_all, mi_stats_t* stats);
 
 void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memid, mi_stats_t* stats) {
-  mi_assert_internal(size > 0 && stats != NULL);
+  mi_assert_internal(size >= 0 && stats != NULL);
   mi_assert_internal(committed_size <= size);
   if (p==NULL) return;
   if (size==0) return;
@@ -676,21 +677,19 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
   }
   else if (memid.memkind == MI_MEM_ARENA) {
     // allocated in an arena
-    size_t arena_idx;
+    size_t block_count;
     size_t block_idx;
-    mi_arena_memid_indices(memid, &arena_idx, &block_idx);
-    mi_assert_internal(arena_idx < MI_MAX_ARENAS);
-    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
-    mi_assert_internal(arena != NULL);
-    const size_t blocks = mi_block_count_of_size(size);
-
+    mi_arena_t* arena = mi_arena_from_memid(memid, &block_idx, &block_count);
+    mi_assert_internal(size==1);
+    mi_assert_internal(mi_arena_block_start(arena,block_idx) <= p);
+    mi_assert_internal(mi_arena_block_start(arena,block_idx) + mi_size_of_blocks(block_count) > p);
     // checks
     if (arena == NULL) {
       _mi_error_message(EINVAL, "trying to free from an invalid arena: %p, size %zu, memid: 0x%zx\n", p, size, memid);
       return;
     }
     mi_assert_internal(block_idx < arena->block_count);
-    mi_assert_internal(block_idx > mi_arena_info_blocks());
+    mi_assert_internal(block_idx >= mi_arena_info_blocks());
     if (block_idx <= mi_arena_info_blocks() || block_idx > arena->block_count) {
       _mi_error_message(EINVAL, "trying to free from an invalid arena block: %p, size %zu, memid: 0x%zx\n", p, size, memid);
       return;
@@ -703,7 +702,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
     else {
       if (!all_committed) {
         // mark the entire range as no longer committed (so we recommit the full range when re-using)
-        mi_bitmap_xsetN(MI_BIT_CLEAR, &arena->blocks_committed, blocks, block_idx, NULL);
+        mi_bitmap_xsetN(MI_BIT_CLEAR, &arena->blocks_committed, block_idx, block_count, NULL);
         mi_track_mem_noaccess(p, size);
         if (committed_size > 0) {
           // if partially committed, adjust the committed stats (is it will be recommitted when re-using)
@@ -715,13 +714,13 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
         // works (as we should never reset decommitted parts).
       }
       // (delay) purge the entire range
-      mi_arena_schedule_purge(arena, block_idx, blocks, stats);
+      mi_arena_schedule_purge(arena, block_idx, block_count, stats);
     }
 
     // and make it available to others again
-    bool all_inuse = mi_bitmap_xsetN(MI_BIT_SET, &arena->blocks_free, block_idx, blocks, NULL);
+    bool all_inuse = mi_bitmap_xsetN(MI_BIT_SET, &arena->blocks_free, block_idx, block_count, NULL);
     if (!all_inuse) {
-      _mi_error_message(EAGAIN, "trying to free an already freed arena block: %p, size %zu\n", p, size);
+      _mi_error_message(EAGAIN, "trying to free an already freed arena block: %p, size %zu\n", mi_arena_block_start(arena,block_idx), mi_size_of_blocks(block_count));
       return;
     };
   }
@@ -846,7 +845,11 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   arena->is_large     = is_large;
   arena->purge_expire = 0;
   mi_lock_init(&arena->abandoned_visit_lock);
-
+  mi_heap_t* heap = mi_heap_get_default();
+  if (heap != NULL) {
+    arena->subproc = heap->tld->subproc;
+  }
+  
   // init bitmaps
   mi_bitmap_init(&arena->blocks_free,true);
   mi_bitmap_init(&arena->blocks_committed,true);
@@ -925,18 +928,21 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
   size_t bit_count = 0;
   size_t bit_set_count = 0;
   for (int i = 0; i < MI_BFIELD_BITS && bit_count < block_count; i++) {
-    char buf[MI_BITMAP_CHUNK_BITS + 1];
+    char buf[MI_BITMAP_CHUNK_BITS + 32]; _mi_memzero(buf, sizeof(buf));
     mi_bitmap_chunk_t* chunk = &bitmap->chunks[i];
-    for (int j = 0; j < MI_BITMAP_CHUNK_FIELDS; j++) {
+    for (int j = 0, k = 0; j < MI_BITMAP_CHUNK_FIELDS; j++) {
       if (bit_count < block_count) {
-        bit_set_count += mi_debug_show_bfield(chunk->bfields[j], buf + j*MI_BFIELD_BITS);
+        bit_set_count += mi_debug_show_bfield(chunk->bfields[j], buf + k);
+        k += MI_BFIELD_BITS;
+        buf[k++] = ' ';
       }
       else {
-        _mi_memset(buf + j*MI_BFIELD_BITS, ' ', MI_BFIELD_BITS);
-      }
-      bit_count += MI_BFIELD_BITS;
+        _mi_memset(buf + k, ' ', MI_BFIELD_BITS);
+        k += MI_BFIELD_BITS;
+      }      
+      bit_count += MI_BFIELD_BITS;      
     }
-    buf[MI_BITMAP_CHUNK_BITS] = 0;
+    
     _mi_verbose_message("%s  %s\n", prefix, buf);
   }
   _mi_verbose_message("%s  total ('x'): %zu\n", prefix, bit_set_count);
@@ -954,7 +960,7 @@ void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge)
     mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
     if (arena == NULL) break;
     block_total += arena->block_count;
-    _mi_verbose_message("arena %zu: %zu blocks%s\n", i, arena->block_count, (arena->memid.is_pinned ? ", pinned" : ""));
+    _mi_verbose_message("arena %zu: %zu blocks (%zu MiB)%s\n", i, arena->block_count, mi_size_of_blocks(arena->block_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""));
     if (show_inuse) {
       free_total += mi_debug_show_bitmap("  ", "free blocks", arena->block_count, &arena->blocks_free);
     }

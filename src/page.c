@@ -274,12 +274,17 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   #endif
   mi_page_t* page = _mi_arena_page_alloc(heap, block_size, page_alignment);
   if (page == NULL) {
-    // this may be out-of-memory, or an abandoned page was reclaimed (and in our queue)
+    // out-of-memory
     return NULL;
   }
-  mi_assert_internal(pq!=NULL || mi_page_block_size(page) >= block_size);
+  if (mi_page_is_abandoned(page)) {
+    _mi_page_reclaim(heap, page);
+  }
+  else if (pq != NULL) {
+    mi_page_queue_push(heap, pq, page);
+  }
   mi_heap_stat_increase(heap, pages, 1);
-  if (pq != NULL) { mi_page_queue_push(heap, pq, page); }
+  mi_assert_internal(pq!=NULL || mi_page_block_size(page) >= block_size);
   mi_assert_expensive(_mi_page_is_valid(page));
   return page;
 }

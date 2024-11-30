@@ -170,7 +170,7 @@ static bool mi_bitmap_chunk_xsetN(mi_bit_t set, mi_bitmap_chunk_t* chunk, size_t
 
 // Check if a sequence of `n` bits within a chunk are all set/cleared.
 static bool mi_bitmap_chunk_is_xsetN(mi_bit_t set, mi_bitmap_chunk_t* chunk, size_t cidx, size_t n) {
-  mi_assert_internal(cidx + n < MI_BITMAP_CHUNK_BITS);
+  mi_assert_internal(cidx + n <= MI_BITMAP_CHUNK_BITS);
   mi_assert_internal(n>0);
   bool all_xset = true;
   size_t idx = cidx % MI_BFIELD_BITS;
@@ -350,7 +350,7 @@ static inline bool mi_bitmap_chunk_find_and_try_clearN(mi_bitmap_chunk_t* chunk,
     while (mi_bfield_find_least_bit(b, &idx)) { // find least 1-bit
       b >>= idx;
       bshift += idx;
-      if (bshift + n >= MI_BFIELD_BITS) break;
+      if (bshift + n > MI_BFIELD_BITS) break;
 
       if ((b&mask) == mask) { // found a match
         mi_assert_internal( ((mask << bshift) >> bshift) == mask );
@@ -448,7 +448,7 @@ void mi_bitmap_unsafe_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx, size_
   n -= m;
   const size_t mid_chunks = n / MI_BITMAP_CHUNK_BITS;
   if (mid_chunks > 0) {
-    _mi_memset(&bitmap->chunks[chunk_idx], (set ? ~0 : 0), MI_BITMAP_CHUNK_BITS/8);
+    _mi_memset(&bitmap->chunks[chunk_idx], (set ? ~0 : 0), mid_chunks * (MI_BITMAP_CHUNK_BITS/8));
     const size_t end_chunk = chunk_idx + mid_chunks;
     while (chunk_idx < end_chunk) {
       mi_bitmap_update_anyset(set, bitmap, chunk_idx);
