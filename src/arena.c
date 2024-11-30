@@ -415,7 +415,8 @@ void* _mi_arena_alloc_aligned(
   }
 
   // fall back to the OS
-  return mi_arena_os_alloc_aligned(size, alignment, align_offset, commit, allow_large, req_arena_id, memid, tld);
+  void* p = mi_arena_os_alloc_aligned(size, alignment, align_offset, commit, allow_large, req_arena_id, memid, tld);
+  return p;
 }
 
 void* _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_tld_t* tld)
@@ -498,6 +499,7 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t block_count, size_t block_siz
   else {
     page->block_size_shift = 0;
   }
+  _mi_page_map_register(page);
 
   mi_assert_internal(mi_page_block_size(page) == block_size);
   mi_assert_internal(mi_page_is_abandoned(page));
@@ -564,12 +566,13 @@ static uint8_t* mi_arena_page_allocated_area(mi_page_t* page, size_t* psize) {
   const size_t diff = pstart - (uint8_t*)page;
   const size_t size = _mi_align_up(page_size + diff, MI_ARENA_BLOCK_SIZE);
   if (psize != NULL) { *psize = size;  }
-  return pstart;
+  return (uint8_t*)page;
 }
 
 void _mi_arena_page_free(mi_page_t* page, mi_tld_t* tld) {
   size_t size;
   uint8_t* pstart = mi_arena_page_allocated_area(page, &size);
+  _mi_page_map_unregister(page);
   _mi_arena_free(pstart, size, size, page->memid, &tld->stats);
 }
 
@@ -1110,7 +1113,7 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_stats_t* stats) {
   const size_t max_arena = mi_atomic_load_acquire(&mi_arena_count);
   if (max_arena == 0) return;
 
-  _mi_error_message(EFAULT, "purging not yet implemented\n");
+  // _mi_error_message(EFAULT, "purging not yet implemented\n");
   MI_UNUSED(stats);
   MI_UNUSED(visit_all);
   MI_UNUSED(force);

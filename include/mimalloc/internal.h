@@ -447,7 +447,7 @@ static inline mi_page_t* _mi_ptr_page(const void* p) {
   #if MI_DEBUG
   if mi_unlikely(ofs==0) return MI_PAGE_PTR_INVALID;
   #endif
-  return (mi_page_t*)((up + ofs - 1) << MI_ARENA_BLOCK_SHIFT);
+  return (mi_page_t*)((up + ofs + 1) << MI_ARENA_BLOCK_SHIFT);
 }
 
 
@@ -663,7 +663,8 @@ We also pass a separate `null` value to be used as `NULL` or otherwise
 ------------------------------------------------------------------- */
 
 static inline bool mi_is_in_same_page(const void* p, const void* q) {
-  return (_mi_ptr_page(p) == _mi_ptr_page(q));
+  // return (_mi_ptr_page(p) == _mi_ptr_page(q));
+  return  ((uintptr_t)p / MI_LARGE_PAGE_SIZE) == ((uintptr_t)q / MI_LARGE_PAGE_SIZE);
 }
 
 static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {

@@ -130,7 +130,7 @@ static mi_decl_cache_align mi_subproc_t mi_subproc_default;
 static mi_decl_cache_align mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main, &_mi_heap_main,
-  NULL, // subproc
+  &mi_subproc_default, // subproc
   0,    // tseq
   { 0, &tld_main.stats },  // os
   { MI_STATS_NULL }        // stats

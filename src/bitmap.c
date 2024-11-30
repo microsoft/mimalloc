@@ -144,7 +144,7 @@ static bool mi_bitmap_chunk_try_xset8(mi_bit_t set, mi_bitmap_chunk_t* chunk, si
 
 // Set/clear a sequence of `n` bits within a chunk. Returns true if all bits transitioned from 0 to 1 (or 1 to 0)
 static bool mi_bitmap_chunk_xsetN(mi_bit_t set, mi_bitmap_chunk_t* chunk, size_t cidx, size_t n, bool* palready_xset) {
-  mi_assert_internal(cidx + n < MI_BITMAP_CHUNK_BITS);
+  mi_assert_internal(cidx + n <= MI_BITMAP_CHUNK_BITS);
   mi_assert_internal(n>0);
   bool all_transition = true;
   bool all_already_xset = true;

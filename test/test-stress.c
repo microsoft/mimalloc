@@ -40,6 +40,10 @@ static int ITER    = 20;
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
+#elif 1
+static int THREADS = 1;
+static int SCALE   = 10;
+static int ITER    = 10;
 #else
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 25;      // scaling factor
