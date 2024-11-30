@@ -713,7 +713,7 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
 -------------------------------------------------------------*/
 
 // search for a best next page to use for at most N pages (often cut short if immediate blocks are available)
-#define MI_MAX_CANDIDATE_SEARCH  (8)
+#define MI_MAX_CANDIDATE_SEARCH  (0)
 
 
 // Find a page with free blocks of `page->block_size`.
@@ -788,9 +788,11 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   if (page_candidate != NULL) {
     page = page_candidate;
   }
-  if (page != NULL && !mi_page_immediate_available(page)) {
-    mi_assert_internal(mi_page_is_expandable(page));
-    mi_page_extend_free(heap, page);
+  if (page != NULL) {
+    if (!mi_page_immediate_available(page)) {
+      mi_assert_internal(mi_page_is_expandable(page));
+      mi_page_extend_free(heap, page);
+    }
   }
 
   if (page == NULL) {

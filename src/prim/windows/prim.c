@@ -108,6 +108,8 @@ static bool win_enable_large_os_pages(size_t* large_page_size)
 // Initialize
 //---------------------------------------------
 
+static DWORD win_allocation_granularity = 64*MI_KiB;
+
 void _mi_prim_mem_init( mi_os_mem_config_t* config )
 {
   config->has_overcommit = false;
@@ -117,7 +119,10 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   SYSTEM_INFO si;
   GetSystemInfo(&si);
   if (si.dwPageSize > 0) { config->page_size = si.dwPageSize; }
-  if (si.dwAllocationGranularity > 0) { config->alloc_granularity = si.dwAllocationGranularity; }
+  if (si.dwAllocationGranularity > 0) { 
+    config->alloc_granularity = si.dwAllocationGranularity; 
+    win_allocation_granularity = si.dwAllocationGranularity;
+  }
   // get virtual address bits
   if ((uintptr_t)si.lpMaximumApplicationAddress > 0) {
     const size_t vbits = MI_INTPTR_BITS - mi_clz((uintptr_t)si.lpMaximumApplicationAddress);
@@ -203,7 +208,7 @@ static void* win_virtual_alloc_prim_once(void* addr, size_t size, size_t try_ali
   }
   #endif
   // on modern Windows try use VirtualAlloc2 for aligned allocation
-  if (addr == NULL && try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
+  if (addr == NULL && try_alignment > win_allocation_granularity && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
     MI_MEM_ADDRESS_REQUIREMENTS reqs = { 0, 0, 0 };
     reqs.Alignment = try_alignment;
     MI_MEM_EXTENDED_PARAMETER param = { {0, 0}, {0} };

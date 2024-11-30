@@ -40,10 +40,10 @@ static int ITER    = 20;
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
-#elif 1
-static int THREADS = 1;
-static int SCALE   = 10;
-static int ITER    = 10;
+#elif 0
+static int THREADS = 4;
+static int SCALE   = 20;
+static int ITER    = 20;
 #else
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 25;      // scaling factor
@@ -69,7 +69,7 @@ static bool   main_participates = false;       // main thread participates as a 
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
 #ifndef NDEBUG
-#define HEAP_WALK             // walk the heap objects?
+#define xHEAP_WALK             // walk the heap objects?
 #endif
 #endif
 
@@ -323,7 +323,7 @@ int main(int argc, char** argv) {
   mi_debug_show_arenas(true,true,true);
   mi_collect(true);
   #endif
-  mi_stats_print(NULL);
+  // mi_stats_print(NULL);
 #endif
   //bench_end_program();
   return 0;

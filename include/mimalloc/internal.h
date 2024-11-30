@@ -467,6 +467,12 @@ static inline uint8_t* mi_page_area(const mi_page_t* page, size_t* size) {
   return mi_page_start(page);
 }
 
+static inline bool mi_page_contains_address(const mi_page_t* page, const void* p) {
+  size_t psize;
+  uint8_t* start = mi_page_area(page, &psize);
+  return (start <= p && p < start + psize);
+}
+
 static inline bool mi_page_is_in_arena(const mi_page_t* page) {
   return (page->memid.memkind == MI_MEM_ARENA);
 }
@@ -663,8 +669,9 @@ We also pass a separate `null` value to be used as `NULL` or otherwise
 ------------------------------------------------------------------- */
 
 static inline bool mi_is_in_same_page(const void* p, const void* q) {
+  mi_page_t* page = _mi_ptr_page(p);
+  return mi_page_contains_address(page,q);
   // return (_mi_ptr_page(p) == _mi_ptr_page(q));
-  return  ((uintptr_t)p / MI_LARGE_PAGE_SIZE) == ((uintptr_t)q / MI_LARGE_PAGE_SIZE);
 }
 
 static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {

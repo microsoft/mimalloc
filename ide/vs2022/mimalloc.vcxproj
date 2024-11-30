@@ -120,7 +120,6 @@
       <CompileAs>CompileAsCpp</CompileAs>
       <SupportJustMyCode>false</SupportJustMyCode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <PostBuildEvent>
       <Command>

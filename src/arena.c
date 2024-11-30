@@ -316,7 +316,7 @@ static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_id_t req_are
     if (_idx >= _max_arena) { _idx -= _max_arena; } \
     const mi_arena_id_t var_arena_id = mi_arena_id_create(_idx); MI_UNUSED(var_arena_id);\
     mi_arena_t* const   var_arena = mi_arena_from_index(_idx); \
-    if (mi_arena_is_suitable(var_arena,req_arena_id,subproc,-1 /* todo: numa node */,allow_large)) \
+    if (var_arena != NULL && mi_arena_is_suitable(var_arena,req_arena_id,subproc,-1 /* todo: numa node */,allow_large)) \
     {
 
 #define mi_forall_arenas_end()  }}} 
@@ -576,7 +576,7 @@ mi_page_t* _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_
 
 void _mi_arena_page_free(mi_page_t* page, mi_tld_t* tld) {
   _mi_page_map_unregister(page);
-  _mi_arena_free(page, 0, 0, page->memid, &tld->stats);
+  _mi_arena_free(page, 1, 1, page->memid, &tld->stats);
 }
 
 /* -----------------------------------------------------------
@@ -590,14 +590,8 @@ void _mi_arena_page_abandon(mi_page_t* page, mi_tld_t* tld) {
   if (mi_page_all_free(page)) {
     _mi_arena_page_free(page, tld);
   }
-  else if (mi_page_is_full(page)) {  // includes singleton pages
-    // leave as is; it will be reclaimed on free
-  }
-  else if (mi_memkind_is_os(page->memid.memkind)) {
-    _mi_error_message(EINVAL, "implement page abandon for OS allocated pages\n");
-    // leave as is; it will be reclaimed on the first free
-  }
   else if (page->memid.memkind==MI_MEM_ARENA) {
+    // make available for allocations
     size_t bin = _mi_bin(mi_page_block_size(page));
     size_t block_index;
     mi_arena_t* arena = mi_page_arena(page, &block_index, NULL);
@@ -606,14 +600,14 @@ void _mi_arena_page_abandon(mi_page_t* page, mi_tld_t* tld) {
     mi_atomic_increment_relaxed(&tld->subproc->abandoned_count[bin]);
   }
   else {
-    _mi_error_message(EINVAL, "implement page abandon for external allocated pages\n");
-    // leave as is; it will be reclaimed on the first free
+    // page is full (or a singleton), page is OS/externally allocated
+    // leave as is; it will be reclaimed when an object is free'd in the page
   }
 }
 
 bool _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page) {
-  mi_assert_internal(mi_page_is_abandoned(page));
-  // if (!mi_page_is_abandoned(page)) return false;  // it is not abandoned
+  if (mi_page_is_singleton(page)) { mi_assert_internal(mi_page_is_abandoned(page)); }
+  if (!mi_page_is_abandoned(page)) return false;  // it is not abandoned
   mi_memid_t memid = page->memid;
   if (!_mi_arena_memid_is_suitable(memid, heap->arena_id)) return false;  // don't reclaim between exclusive and non-exclusive arena's
 
@@ -637,7 +631,16 @@ bool _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page) {
     }
   }
   else {
-    _mi_warning_message("implement reclaim for OS allocated pages\n");
+    // A page in OS or external memory
+    // we use the thread_id to atomically grab ownership
+    // TODO: respect the subproc -- do we need to add this to the page?
+    mi_threadid_t abandoned_thread_id = 0;
+    if (mi_atomic_cas_strong_acq_rel(&page->xthread_id, &abandoned_thread_id, heap->thread_id)) {
+      // we unabandoned partly
+      _mi_page_reclaim(heap, page);
+      mi_assert_internal(!mi_page_is_abandoned(page));
+      return true;
+    }
   }
 
 
@@ -1193,7 +1196,7 @@ void _mi_arena_meta_free(void* p, mi_memid_t memid, size_t size) {
 
 bool mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
   MI_UNUSED(subproc_id); MI_UNUSED(heap_tag); MI_UNUSED(visit_blocks); MI_UNUSED(visitor); MI_UNUSED(arg);
-  _mi_error_message(EINVAL, "implement mi_abandon_visit_blocks\n");
+  _mi_error_message(EINVAL, "implement mi_abandoned_visit_blocks\n");
   return false;
 }
 
