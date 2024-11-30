@@ -638,7 +638,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
 
   // calculate the extend count
   const size_t bsize = mi_page_block_size(page);
-  size_t extend = page->reserved - page->capacity;
+  size_t extend = (size_t)page->reserved - page->capacity;
   mi_assert_internal(extend > 0);
 
   size_t max_extend = (bsize >= MI_MAX_EXTEND_SIZE ? MI_MIN_EXTEND : MI_MAX_EXTEND_SIZE/bsize);
@@ -672,7 +672,7 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
   mi_assert(page != NULL);
   mi_page_set_heap(page, heap);
   size_t page_size;
-  uint8_t* page_start = mi_page_area(page, &page_size);
+  uint8_t* page_start = mi_page_area(page, &page_size); MI_UNUSED(page_start);
   mi_track_mem_noaccess(page_start,page_size);
   mi_assert_internal(page_size / mi_page_block_size(page) < (1L<<16));
   mi_assert_internal(page->reserved > 0);

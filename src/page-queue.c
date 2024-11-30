@@ -112,7 +112,7 @@ size_t _mi_bin_size(uint8_t bin) {
 }
 
 // Good size for allocation
-size_t mi_good_size(size_t size) mi_attr_noexcept {
+mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size) mi_attr_noexcept {
   if (size <= MI_LARGE_MAX_OBJ_SIZE) {
     return _mi_bin_size(mi_bin(size + MI_PADDING_SIZE));
   }

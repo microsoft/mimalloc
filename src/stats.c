@@ -133,7 +133,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
 // unit == 0: count as decimal
 // unit < 0 : count in binary
 static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* arg, const char* fmt) {
-  char buf[32]; buf[0] = 0;
+  char buf[32]; _mi_memzero_var(buf);
   int  len = 32;
   const char* suffix = (unit <= 0 ? " " : "B");
   const int64_t base = (unit == 0 ? 1000 : 1024);
@@ -298,7 +298,7 @@ static void mi_cdecl mi_buffered_out(const char* msg, void* arg) {
 
 static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) mi_attr_noexcept {
   // wrap the output function to be line buffered
-  char buf[256];
+  char buf[256]; _mi_memzero_var(buf);
   buffered_t buffer = { out0, arg0, NULL, 0, 255 };
   buffer.buf = buf;
   mi_output_fun* out = &mi_buffered_out;

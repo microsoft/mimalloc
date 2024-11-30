@@ -48,13 +48,13 @@ static int ITER    = 20;
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 25;      // scaling factor
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
-#endif
+#endif  
 
 
 
 #define STRESS                // undefine for leak test
 
-static bool   allow_large_objects = true;     // allow very large objects? (set to `true` if SCALE>100)
+static bool   allow_large_objects = false;     // allow very large objects? (set to `true` if SCALE>100)
 static size_t use_one_size = 0;               // use single object size of `N * sizeof(uintptr_t)`?
 
 static bool   main_participates = false;       // main thread participates as a worker too
@@ -244,7 +244,7 @@ static void test_stress(void) {
     //mi_debug_show_arenas();
     #endif
     #if !defined(NDEBUG) || defined(MI_TSAN)
-    if (true) // (n + 1) % 10 == 0) 
+    if ((n + 1) % 10 == 0) 
       { printf("- iterations left: %3d\n", ITER - (n + 1)); }
     #endif
   }
@@ -320,7 +320,7 @@ int main(int argc, char** argv) {
 
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
-  mi_debug_show_arenas(true,true,true);
+  mi_debug_show_arenas(true,true,false);
   mi_collect(true);
   #endif
   // mi_stats_print(NULL);
@@ -345,9 +345,10 @@ static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
   thread_entry_fun = fun;
   DWORD* tids = (DWORD*)custom_calloc(nthreads,sizeof(DWORD));
   HANDLE* thandles = (HANDLE*)custom_calloc(nthreads,sizeof(HANDLE));
+  thandles[0] = GetCurrentThread(); // avoid lint warning
   const size_t start = (main_participates ? 1 : 0);
   for (size_t i = start; i < nthreads; i++) {
-    thandles[i] = CreateThread(0, 8*1024, &thread_entry, (void*)(i), 0, &tids[i]);
+    thandles[i] = CreateThread(0, 8*1024L, &thread_entry, (void*)(i), 0, &tids[i]);
   }
   if (main_participates) fun(0); // run the main thread as well
   for (size_t i = start; i < nthreads; i++) {

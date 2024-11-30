@@ -438,6 +438,13 @@ static void mi_vfprintf_thread(mi_output_fun* out, void* arg, const char* prefix
   }
 }
 
+void _mi_output_message(const char* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  mi_vfprintf(NULL, NULL, NULL, fmt, args);
+  va_end(args);
+}
+
 void _mi_trace_message(const char* fmt, ...) {
   if (mi_option_get(mi_option_verbose) <= 1) return;  // only with verbose level 2 or higher
   va_list args;

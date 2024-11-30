@@ -429,15 +429,7 @@ void* _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t 
   return _mi_arena_alloc_aligned(size, MI_ARENA_BLOCK_SIZE, 0, commit, allow_large, req_arena_id, memid, tld);
 }
 
-static uint8_t* xmi_arena_page_allocated_area(mi_page_t* page, size_t* psize) {
-  // todo: record real allocated size instead of trying to recalculate?
-  size_t page_size;
-  uint8_t* const pstart = mi_page_area(page, &page_size);
-  const size_t diff = pstart - (uint8_t*)page;
-  const size_t size = _mi_align_up(page_size + diff, MI_ARENA_BLOCK_SIZE);
-  if (psize != NULL) { *psize = size; }
-  return (uint8_t*)page;
-}
+
 
 /* -----------------------------------------------------------
   Arena page allocation
@@ -445,6 +437,7 @@ static uint8_t* xmi_arena_page_allocated_area(mi_page_t* page, size_t* psize) {
 
 static mi_page_t* mi_arena_page_try_find_abandoned(size_t block_count, size_t block_size, mi_arena_id_t req_arena_id, mi_tld_t* tld)
 {
+  MI_UNUSED(block_count);
   const size_t bin = _mi_bin(block_size); 
   mi_assert_internal(bin < MI_BIN_COUNT);
 
@@ -693,7 +686,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
     }
     mi_assert_internal(block_idx < arena->block_count);
     mi_assert_internal(block_idx >= mi_arena_info_blocks());
-    if (block_idx <= mi_arena_info_blocks() || block_idx > arena->block_count) {
+    if (block_idx < mi_arena_info_blocks() || block_idx > arena->block_count) {
       _mi_error_message(EINVAL, "trying to free from an invalid arena block: %p, size %zu, memid: 0x%zx\n", p, size, memid);
       return;
     }
@@ -926,8 +919,8 @@ static size_t mi_debug_show_bfield(mi_bfield_t field, char* buf) {
   return bit_set_count;
 }
 
-static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_t block_count, mi_bitmap_t* bitmap) {
-  _mi_verbose_message("%s%s:\n", prefix, header);
+static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_t block_count, mi_bitmap_t* bitmap, bool invert) {
+  _mi_output_message("%s%s:\n", prefix, header);
   size_t bit_count = 0;
   size_t bit_set_count = 0;
   for (int i = 0; i < MI_BFIELD_BITS && bit_count < block_count; i++) {
@@ -935,7 +928,11 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
     mi_bitmap_chunk_t* chunk = &bitmap->chunks[i];
     for (int j = 0, k = 0; j < MI_BITMAP_CHUNK_FIELDS; j++) {
       if (bit_count < block_count) {
-        bit_set_count += mi_debug_show_bfield(chunk->bfields[j], buf + k);
+        mi_bfield_t bfield = chunk->bfields[j];
+        if (invert) bfield = ~bfield;
+        size_t xcount = mi_debug_show_bfield(bfield, buf + k);
+        if (invert) xcount = MI_BFIELD_BITS - xcount;
+        bit_set_count += xcount;
         k += MI_BFIELD_BITS;
         buf[k++] = ' ';
       }
@@ -946,9 +943,9 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
       bit_count += MI_BFIELD_BITS;      
     }
     
-    _mi_verbose_message("%s  %s\n", prefix, buf);
+    _mi_output_message("%s  %s\n", prefix, buf);
   }
-  _mi_verbose_message("%s  total ('x'): %zu\n", prefix, bit_set_count);
+  _mi_output_message("%s  total ('x'): %zu\n", prefix, bit_set_count);
   return bit_set_count;
 }
 
@@ -963,19 +960,19 @@ void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge)
     mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
     if (arena == NULL) break;
     block_total += arena->block_count;
-    _mi_verbose_message("arena %zu: %zu blocks (%zu MiB)%s\n", i, arena->block_count, mi_size_of_blocks(arena->block_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""));
+    _mi_output_message("arena %zu: %zu blocks (%zu MiB)%s\n", i, arena->block_count, mi_size_of_blocks(arena->block_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""));
     if (show_inuse) {
-      free_total += mi_debug_show_bitmap("  ", "free blocks", arena->block_count, &arena->blocks_free);
+      free_total += mi_debug_show_bitmap("  ", "in-use blocks", arena->block_count, &arena->blocks_free, true);
     }
-    mi_debug_show_bitmap("  ", "committed blocks", arena->block_count, &arena->blocks_committed);
+    mi_debug_show_bitmap("  ", "committed blocks", arena->block_count, &arena->blocks_committed, false);
     // todo: abandoned blocks
     if (show_purge) {
-      purge_total += mi_debug_show_bitmap("  ", "purgeable blocks", arena->block_count, &arena->blocks_purge);
+      purge_total += mi_debug_show_bitmap("  ", "purgeable blocks", arena->block_count, &arena->blocks_purge, false);
     }
   }
-  if (show_inuse)     _mi_verbose_message("total inuse blocks    : %zu\n", block_total - free_total);
+  if (show_inuse)     _mi_output_message("total inuse blocks    : %zu\n", block_total - free_total);
   // if (show_abandoned) _mi_verbose_message("total abandoned blocks: %zu\n", abandoned_total);
-  if (show_purge)     _mi_verbose_message("total purgeable blocks: %zu\n", purge_total);
+  if (show_purge)     _mi_output_message("total purgeable blocks: %zu\n", purge_total);
 }
 
 
