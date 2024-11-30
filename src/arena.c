@@ -652,7 +652,7 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
 static void mi_arenas_try_purge(bool force, bool visit_all, mi_stats_t* stats);
 
 void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memid, mi_stats_t* stats) {
-  mi_assert_internal(size >= 0 && stats != NULL);
+  mi_assert_internal(size > 0 && stats != NULL);
   mi_assert_internal(committed_size <= size);
   if (p==NULL) return;
   if (size==0) return;
@@ -675,8 +675,8 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
     size_t slice_index;
     mi_arena_t* arena = mi_arena_from_memid(memid, &slice_index, &slice_count);
     mi_assert_internal(size==1);
-    mi_assert_internal(mi_arena_slice_start(arena,slice_index) <= p);
-    mi_assert_internal(mi_arena_slice_start(arena,slice_index) + mi_size_of_slices(slice_count) > p);
+    mi_assert_internal(mi_arena_slice_start(arena,slice_index) <= (uint8_t*)p);
+    mi_assert_internal(mi_arena_slice_start(arena,slice_index) + mi_size_of_slices(slice_count) > (uint8_t*)p);
     // checks
     if (arena == NULL) {
       _mi_error_message(EINVAL, "trying to free from an invalid arena: %p, size %zu, memid: 0x%zx\n", p, size, memid);
@@ -796,7 +796,7 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id, mi_stats_t*
 
 static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int numa_node, bool exclusive, mi_memid_t memid, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
-  mi_assert(!is_large || memid.initially_committed && memid.is_pinned);
+  mi_assert(!is_large || (memid.initially_committed && memid.is_pinned));
   mi_assert(_mi_is_aligned(start,MI_ARENA_SLICE_SIZE));
   mi_assert(start!=NULL);
   if (start==NULL) return false;
@@ -849,7 +849,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   mi_bitmap_init(&arena->slices_committed,true);
   mi_bitmap_init(&arena->slices_dirty,true);
   mi_bitmap_init(&arena->slices_purge,true);
-  for( int i = 0; i < MI_ARENA_BIN_COUNT; i++) {
+  for( size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
     mi_bitmap_init(&arena->slices_abandoned[i],true);
   }
 
@@ -924,7 +924,7 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
   for (int i = 0; i < MI_BFIELD_BITS && bit_count < slice_count; i++) {
     char buf[MI_BITMAP_CHUNK_BITS + 32]; _mi_memzero(buf, sizeof(buf));
     mi_bitmap_chunk_t* chunk = &bitmap->chunks[i];
-    for (int j = 0, k = 0; j < MI_BITMAP_CHUNK_FIELDS; j++) {
+    for (size_t j = 0, k = 0; j < MI_BITMAP_CHUNK_FIELDS; j++) {
       if (bit_count < slice_count) {
         mi_bfield_t bfield = chunk->bfields[j];
         if (invert) bfield = ~bfield;

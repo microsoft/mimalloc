@@ -125,7 +125,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define MI_ARENA_SLICE_SIZE               (MI_ZU(1) << MI_ARENA_SLICE_SHIFT)
 #define MI_ARENA_SLICE_ALIGN              (MI_ARENA_SLICE_SIZE)
-#define MI_BITMAP_CHUNK_BITS              (MI_ZU(1) << MI_BITMAP_CHUNK_BITS_SHIFT)
+#define MI_BITMAP_CHUNK_BITS              (1 << MI_BITMAP_CHUNK_BITS_SHIFT)
 
 #define MI_ARENA_MIN_OBJ_BLOCKS           (1)
 #define MI_ARENA_MAX_OBJ_BLOCKS           (MI_BITMAP_CHUNK_BITS)      // for now, cannot cross chunk boundaries

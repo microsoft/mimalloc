@@ -471,7 +471,7 @@ static inline uint8_t* mi_page_area(const mi_page_t* page, size_t* size) {
 static inline bool mi_page_contains_address(const mi_page_t* page, const void* p) {
   size_t psize;
   uint8_t* start = mi_page_area(page, &psize);
-  return (start <= p && p < start + psize);
+  return (start <= (uint8_t*)p && (uint8_t*)p < start + psize);
 }
 
 static inline bool mi_page_is_in_arena(const mi_page_t* page) {

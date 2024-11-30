@@ -22,7 +22,7 @@ typedef size_t mi_bfield_t;
 #define MI_BFIELD_BITS                     (1 << MI_BFIELD_BITS_SHIFT)
 #define MI_BFIELD_SIZE                     (MI_BFIELD_BITS/8)
 #define MI_BFIELD_BITS_MOD_MASK            (MI_BFIELD_BITS - 1)
-#define MI_BFIELD_LO_BIT8                  ((~(mi_bfield_t(0)))/0xFF)         // 0x01010101 ..
+#define MI_BFIELD_LO_BIT8                  (((~(mi_bfield_t)0))/0xFF)         // 0x01010101 ..
 #define MI_BFIELD_HI_BIT8                  (MI_BFIELD_LO_BIT8 << 7)           // 0x80808080 ..
 
 #define MI_BITMAP_CHUNK_FIELDS             (MI_BITMAP_CHUNK_BITS / MI_BFIELD_BITS)

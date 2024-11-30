@@ -33,7 +33,7 @@ const mi_page_t _mi_page_empty = {
   MI_ATOMIC_VAR_INIT(0), // xheap
   MI_ATOMIC_VAR_INIT(0), // xthread_id
   NULL, NULL, // next, prev
-  { { NULL, 0}, false, false, false, MI_MEM_NONE }  // memid
+  { {{ NULL, 0}}, false, false, false, MI_MEM_NONE }  // memid
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
@@ -396,7 +396,8 @@ void _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap) {
   tld->heap_backing = bheap;
   tld->heaps = NULL;
   tld->subproc = &mi_subproc_default;
-  tld->tseq = 0; // mi_atomic_add_acq_rel(&mi_tcount, 1);
+  tld->tseq = 0;
+  mi_atomic_add_acq_rel(&mi_tcount, 1);
   tld->os.stats = &tld->stats;
 }
 
@@ -433,7 +434,7 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
   _mi_stats_done(&heap->tld->stats);
 
   // free if not the main thread
-  if (heap != &_mi_heap_main) {    
+  if (heap != &_mi_heap_main) {
     mi_thread_data_free((mi_thread_data_t*)heap);
   }
   else {

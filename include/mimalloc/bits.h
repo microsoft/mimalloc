@@ -291,7 +291,7 @@ static inline size_t mi_rotr(size_t x, size_t r) {
     // The term `(-rshift)&(MI_BFIELD_BITS-1)` is written instead of `MI_BFIELD_BITS - rshift` to
     // avoid UB when `rshift==0`. See <https://blog.regehr.org/archives/1063>
     const unsigned int rshift = (unsigned int)(r) & (MI_SIZE_BITS-1);
-    return (x >> rshift) | (x << ((-rshift) & (MI_SIZE_BITS-1)));
+    return ((x >> rshift) | (x << ((-rshift) & (MI_SIZE_BITS-1))));
   #endif
 }
 
@@ -310,7 +310,7 @@ static inline size_t mi_rotl(size_t x, size_t r) {
     // The term `(-rshift)&(MI_BFIELD_BITS-1)` is written instead of `MI_BFIELD_BITS - rshift` to
     // avoid UB when `rshift==0`. See <https://blog.regehr.org/archives/1063>
     const unsigned int rshift = (unsigned int)(r) & (MI_SIZE_BITS-1);
-    return (x << rshift) | (x >> ((-rshift) & (MI_SIZE_BITS-1)))
+    return ((x << rshift) | (x >> ((-rshift) & (MI_SIZE_BITS-1))));
   #endif
 }
 

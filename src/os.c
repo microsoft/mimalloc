@@ -573,7 +573,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
 }
 #endif
 
-// Allocate MI_SEGMENT_SIZE aligned huge pages
+// Allocate MI_ARENA_SLICE_ALIGN aligned huge pages
 void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_msecs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid) {
   *memid = _mi_memid_none();
   if (psize != NULL) *psize = 0;
