@@ -130,8 +130,8 @@ void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t ma
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
 void       _mi_arena_free(void* p, size_t size, size_t still_committed_size, mi_memid_t memid, mi_stats_t* stats);
-void*      _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld);
-void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_os_tld_t* tld);
+void*      _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_tld_t* tld);
+void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_tld_t* tld);
 bool       _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id);
 bool       _mi_arena_contains(const void* p);
 void       _mi_arenas_collect(bool force_purge, mi_stats_t* stats);
@@ -503,7 +503,7 @@ static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
   mi_atomic_store_release(&page->xheap,(uintptr_t)heap);
   if (heap != NULL) { 
-    page->heap_tag  = heap->tag; 
+    page->heap_tag = heap->tag; 
     mi_atomic_store_release(&page->xthread_id, heap->thread_id);
   }
   else {

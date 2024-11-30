@@ -42,6 +42,21 @@ static bool mi_page_map_init(void) {
   return true;
 }
 
+static void mi_page_map_ensure_committed(void* p, size_t idx, size_t block_count) {
+  // is the page map area that contains the page address committed?
+  if (!mi_page_map_all_committed) {
+    const size_t commit_bit_count = _mi_divide_up(block_count, mi_blocks_per_commit_bit);
+    const size_t commit_bit_idx = idx / mi_blocks_per_commit_bit;
+    for (size_t i = 0; i < commit_bit_count; i++) {  // per bit to avoid crossing over bitmap chunks
+      if (mi_bitmap_is_xsetN(MI_BIT_CLEAR, &mi_page_map_commit, commit_bit_idx + i, 1)) {
+        // this may race, in which case we do multiple commits (which is ok)
+        _mi_os_commit((uint8_t*)p + (i*mi_blocks_per_commit_bit*MI_ARENA_BLOCK_SIZE), mi_blocks_per_commit_bit* MI_ARENA_BLOCK_SIZE, NULL, NULL);
+        mi_bitmap_xsetN(MI_BIT_SET, &mi_page_map_commit, commit_bit_idx + i, 1, NULL);
+      }
+    }
+  }
+}
+
 static size_t mi_page_map_get_idx(mi_page_t* page, uint8_t** page_start, size_t* block_count) {
   size_t page_size;
   *page_start = mi_page_area(page, &page_size);
@@ -60,18 +75,7 @@ void _mi_page_map_register(mi_page_t* page) {
   size_t   block_count;
   const size_t idx = mi_page_map_get_idx(page, &page_start, &block_count);
   
-  // is the page map area that contains the page address committed?
-  if (!mi_page_map_all_committed) {
-    const size_t commit_bit_count = _mi_divide_up(block_count, mi_blocks_per_commit_bit);
-    const size_t commit_bit_idx = idx / mi_blocks_per_commit_bit;
-    for (size_t i = 0; i < commit_bit_count; i++) {  // per bit to avoid crossing over bitmap chunks
-      if (mi_bitmap_is_xsetN(MI_BIT_CLEAR, &mi_page_map_commit, commit_bit_idx + i, 1)) {
-        // this may race, in which case we do multiple commits (which is ok)
-        _mi_os_commit(page_start + (i*mi_blocks_per_commit_bit*MI_ARENA_BLOCK_SIZE), mi_blocks_per_commit_bit* MI_ARENA_BLOCK_SIZE, NULL, NULL);
-        mi_bitmap_xsetN(MI_BIT_SET, &mi_page_map_commit, commit_bit_idx + i, 1, NULL);
-      }
-    }
-  }
+  mi_page_map_ensure_committed(page, idx, block_count);
 
   // set the offsets
   for (int i = 0; i < (int)block_count; i++) {
@@ -91,4 +95,15 @@ void _mi_page_map_unregister(mi_page_t* page) {
 
   // unset the offsets
   _mi_memzero(_mi_page_map + idx, block_count);
+}
+
+
+mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
+  uintptr_t idx = ((uintptr_t)p >> MI_ARENA_BLOCK_SHIFT);
+  if (!mi_page_map_all_committed || mi_bitmap_is_xsetN(MI_BIT_SET, &mi_page_map_commit, idx/mi_blocks_per_commit_bit, 1)) {
+    return (_mi_page_map[idx] != 0);
+  }
+  else {
+    return false;
+  }
 }
