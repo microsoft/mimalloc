@@ -598,7 +598,7 @@ static inline bool mi_page_mostly_used(const mi_page_t* page) {
 
 static inline bool mi_page_is_abandoned(const mi_page_t* page) {
   // note: the xheap field of an abandoned heap is set to the subproc (for fast reclaim-on-free)
-  return (mi_page_thread_id(page) == 0);
+  return (mi_atomic_load_acquire(&page->xthread_id) == 0);
 }
 
 static inline bool mi_page_is_huge(const mi_page_t* page) {

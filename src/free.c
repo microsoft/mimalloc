@@ -225,23 +225,28 @@ static void mi_decl_noinline mi_free_block_delayed_mt( mi_page_t* page, mi_block
 static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block)
 {
   // first see if the page was abandoned and if we can reclaim it into our thread
-  if (mi_page_is_abandoned(page) &&
-      (_mi_option_get_fast(mi_option_abandoned_reclaim_on_free) != 0 ||
-       mi_page_is_singleton(page)  // only one block, and we are free-ing it
-      ) &&
-      mi_prim_get_default_heap() != (mi_heap_t*)&_mi_heap_empty) // and we did not already exit this thread (without this check, a fresh heap will be initalized (issue #944))
-  {
-    // the page is abandoned, try to reclaim it into our heap
-    if (_mi_arena_try_reclaim(mi_heap_get_default(), page)) {  // TODO: avoid putting it in the full free queue
-      mi_assert_internal(_mi_thread_id() == mi_page_thread_id(page));      
-      // mi_assert_internal(mi_heap_get_default()->tld->subproc == page->subproc);
-      mi_free(block);  // recursively free as now it will be a local free in our heap
-      return;
-    }
-    else {
-      mi_assert_internal(!mi_page_is_singleton(page)); // we should have succeeded on singleton pages
+  if (mi_page_is_abandoned(page)) {
+    if (_mi_option_get_fast(mi_option_abandoned_reclaim_on_free) != 0 ||
+      mi_page_is_singleton(page)) {  // only one block, and we are free-ing it
+      if (mi_prim_get_default_heap() != (mi_heap_t*)&_mi_heap_empty) // and we did not already exit this thread (without this check, a fresh heap will be initalized (issue #944))
+      {
+        // the page is abandoned, try to reclaim it into our heap
+        if (_mi_arena_try_reclaim(mi_heap_get_default(), page)) {  // TODO: avoid putting it in the full free queue
+          mi_assert_internal(_mi_thread_id() == mi_page_thread_id(page));
+          // mi_assert_internal(mi_heap_get_default()->tld->subproc == page->subproc);
+          mi_free(block);  // recursively free as now it will be a local free in our heap
+          return;
+        }
+        else {
+          if (mi_page_is_abandoned(page)) {
+            mi_assert(false);
+          }
+          mi_assert_internal(!mi_page_is_singleton(page)); // we should have succeeded on singleton pages
+        }
+      }
     }
   }
+
 
   // The padding check may access the non-thread-owned page for the key values.
   // that is safe as these are constant and the page won't be freed (as the block is not freed yet).

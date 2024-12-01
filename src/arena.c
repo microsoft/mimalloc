@@ -646,11 +646,12 @@ bool _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page) {
   // we only call this when on free (and thus there is still an object alive in the page)
   mi_memid_t memid = page->memid;
   if (!_mi_arena_memid_is_suitable(memid, heap->arena_id)) return false;  // don't reclaim between exclusive and non-exclusive arena's
+  if (mi_atomic_load_acquire(&page->xheap) != (uintptr_t)heap->tld->subproc) return false;
 
   if mi_likely(memid.memkind == MI_MEM_ARENA) {
     size_t slice_index;
     mi_arena_t* arena = mi_page_arena(page, &slice_index, NULL);
-    if (arena->subproc != heap->tld->subproc) return false;  // only reclaim within the same subprocess
+    //if (arena->subproc != heap->tld->subproc) return false;  // only reclaim within the same subprocess
 
     // don't reclaim more from a `free` call than half the current segments
     // this is to prevent a pure free-ing thread to start owning too many segments
@@ -664,6 +665,11 @@ bool _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page) {
       _mi_page_reclaim(heap, page);
       mi_assert_internal(!mi_page_is_abandoned(page));
       return true;
+    }
+    else {
+      if (mi_page_is_abandoned(page)) {
+        mi_assert(false);
+      }
     }
   }
   else {
@@ -1088,15 +1094,6 @@ int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserv
 }
 
 
-
-/* -----------------------------------------------------------
-  Abandoned pages
------------------------------------------------------------ */
-
-void mi_arena_page_abandon(mi_page_t* page) {
-  mi_assert_internal(mi_page_is_abandoned(page));
-  if (mi_page_is_full(page)) {}
-}
 
 
 
