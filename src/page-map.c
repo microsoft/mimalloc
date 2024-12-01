@@ -37,7 +37,8 @@ static bool mi_page_map_init(void) {
   // commit the first part so NULL pointers get resolved without an access violation
   if (!mi_page_map_all_committed) {
     _mi_os_commit(_mi_page_map, _mi_os_page_size(), NULL, NULL);
-    _mi_page_map[0] = -1; // so _mi_ptr_page(NULL) == NULL
+    _mi_page_map[0] = 1; // so _mi_ptr_page(NULL) == NULL
+    mi_assert_internal(_mi_ptr_page(NULL)==NULL);
   }
   return true;
 }
@@ -60,9 +61,9 @@ static void mi_page_map_ensure_committed(size_t idx, size_t slice_count) {
 static size_t mi_page_map_get_idx(mi_page_t* page, uint8_t** page_start, size_t* slice_count) {
   size_t page_size;
   *page_start = mi_page_area(page, &page_size);
-  if (page_size > MI_LARGE_PAGE_SIZE) { page_size = MI_LARGE_PAGE_SIZE; }  // furthest interior pointer
-  *slice_count = mi_slice_count_of_size(page_size);
-  return ((uintptr_t)*page_start >> MI_ARENA_SLICE_SHIFT);
+  if (page_size > MI_LARGE_PAGE_SIZE) { page_size = MI_LARGE_PAGE_SIZE - MI_ARENA_SLICE_SIZE; }  // furthest interior pointer
+  *slice_count = mi_slice_count_of_size(page_size) + (((uint8_t*)*page_start - (uint8_t*)page)/MI_ARENA_SLICE_SIZE); // add for large aligned blocks
+  return ((uintptr_t)page >> MI_ARENA_SLICE_SHIFT);
 }
 
 
@@ -79,9 +80,9 @@ void _mi_page_map_register(mi_page_t* page) {
   mi_page_map_ensure_committed(idx, slice_count);
 
   // set the offsets
-  for (int i = 0; i < (int)slice_count; i++) {
+  for (size_t i = 0; i < slice_count; i++) {
     mi_assert_internal(i < 128);
-    _mi_page_map[idx + i] = (i+1);
+    _mi_page_map[idx + i] = (uint8_t)(i+1);
   }
 }
 

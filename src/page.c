@@ -41,9 +41,10 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page);
 
 #if (MI_DEBUG>=3)
 static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
+  mi_assert_internal(_mi_ptr_page(page) == page);
   size_t count = 0;
   while (head != NULL) {
-    mi_assert_internal(page == _mi_ptr_page(head));
+    mi_assert_internal((uint8_t*)head - (uint8_t*)page > MI_LARGE_PAGE_SIZE || page == _mi_ptr_page(head));
     count++;
     head = mi_block_next(page, head);
   }
@@ -123,7 +124,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
     {
       mi_page_queue_t* pq = mi_page_queue_of(page);
       mi_assert_internal(mi_page_queue_contains(pq, page));
-      mi_assert_internal(pq->block_size==mi_page_block_size(page) || mi_page_block_size(page) > MI_LARGE_MAX_OBJ_SIZE || mi_page_is_in_full(page));
+      mi_assert_internal(pq->block_size==mi_page_block_size(page) || mi_page_is_huge(page) || mi_page_is_in_full(page));
       mi_assert_internal(mi_heap_contains_queue(mi_page_heap(page),pq));
     }
   }
@@ -258,7 +259,7 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_internal(mi_page_thread_free_flag(page) != MI_NEVER_DELAYED_FREE);
 
   // TODO: push on full queue immediately if it is full?
-  mi_page_queue_t* pq = mi_page_queue(heap, mi_page_block_size(page));
+  mi_page_queue_t* pq = mi_heap_page_queue_of(heap, page);
   mi_page_queue_push(heap, pq, page);
   mi_assert_expensive(_mi_page_is_valid(page));
 }
@@ -279,6 +280,15 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   }
   if (mi_page_is_abandoned(page)) {
     _mi_page_reclaim(heap, page);
+    if (!mi_page_immediate_available(page)) {
+      if (mi_page_is_expandable(page)) {
+        mi_page_extend_free(heap, page);
+      }
+      else {
+        mi_assert(false); // should not happen?
+        return NULL;
+      }
+    }
   }
   else if (pq != NULL) {
     mi_page_queue_push(heap, pq, page);
@@ -295,7 +305,7 @@ static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
   mi_page_t* page = mi_page_fresh_alloc(heap, pq, pq->block_size, 0);
   if (page==NULL) return NULL;
   mi_assert_internal(pq->block_size==mi_page_block_size(page));
-  mi_assert_internal(pq==mi_page_queue(heap, mi_page_block_size(page)));
+  mi_assert_internal(pq==mi_heap_page_queue_of(heap, page));
   return page;
 }
 
@@ -713,7 +723,7 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
 -------------------------------------------------------------*/
 
 // search for a best next page to use for at most N pages (often cut short if immediate blocks are available)
-#define MI_MAX_CANDIDATE_SEARCH  (0)
+#define MI_MAX_CANDIDATE_SEARCH  (8)
 
 
 // Find a page with free blocks of `page->block_size`.
@@ -723,7 +733,9 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   #if MI_STAT
   size_t count = 0;
   #endif
+  #if MI_MAX_CANDIDATE_SEARCH > 1
   size_t candidate_count = 0;        // we reset this on the first candidate to limit the search
+  #endif
   mi_page_t* page_candidate = NULL;  // a page with free space
   mi_page_t* page = pq->first;
 
@@ -793,17 +805,21 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
       mi_assert_internal(mi_page_is_expandable(page));
       mi_page_extend_free(heap, page);
     }
+    mi_assert_internal(mi_page_immediate_available(page));
   }
 
   if (page == NULL) {
     _mi_heap_collect_retired(heap, false); // perhaps make a page available
     page = mi_page_fresh(heap, pq);
+    mi_assert_internal(page == NULL || mi_page_immediate_available(page));
     if (page == NULL && first_try) {
       // out-of-memory _or_ an abandoned page with free blocks was reclaimed, try once again
       page = mi_page_queue_find_free_ex(heap, pq, false);
+      mi_assert_internal(page == NULL || mi_page_immediate_available(page));
     }
   }
   else {
+    mi_assert_internal(page == NULL || mi_page_immediate_available(page));
     // move the page to the front of the queue
     mi_page_queue_move_to_front(heap, pq, page);
     page->retire_expire = 0;

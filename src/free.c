@@ -115,7 +115,7 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p, const char* msg)
   #endif
   mi_page_t* const page = _mi_ptr_page(p);
   #if MI_DEBUG
-  if (page == MI_PAGE_PTR_INVALID) {
+  if (page == NULL && p != NULL) {
     _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);
   }
   #endif
@@ -126,11 +126,9 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p, const char* msg)
 // Fast path written carefully to prevent register spilling on the stack
 void mi_free(void* p) mi_attr_noexcept
 {
-  if (p==NULL) return;
   mi_page_t* const page = mi_checked_ptr_page(p,"mi_free");
-  // if mi_unlikely(page==NULL) return;
-
-
+  if mi_unlikely(page==NULL) return;
+  
   const bool is_local = (_mi_prim_thread_id() == mi_page_thread_id(page));
   if mi_likely(is_local) {                        // thread-local free?
     if mi_likely(page->flags.full_aligned == 0) { // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
@@ -235,10 +233,13 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block
   {
     // the page is abandoned, try to reclaim it into our heap
     if (_mi_arena_try_reclaim(mi_heap_get_default(), page)) {  // TODO: avoid putting it in the full free queue
-      mi_assert_internal(_mi_thread_id() == mi_page_thread_id(page));
+      mi_assert_internal(_mi_thread_id() == mi_page_thread_id(page));      
       // mi_assert_internal(mi_heap_get_default()->tld->subproc == page->subproc);
       mi_free(block);  // recursively free as now it will be a local free in our heap
       return;
+    }
+    else {
+      mi_assert_internal(!mi_page_is_singleton(page)); // we should have succeeded on singleton pages
     }
   }
 

@@ -440,16 +440,34 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
 
 extern uint8_t* _mi_page_map;
 
-#define MI_PAGE_PTR_INVALID   ((mi_page_t*)(1))
+static inline mi_page_t* _mi_ptr_page_ex(const void* p, bool* valid) {
+  #if 1
+  const uintptr_t idx = ((uintptr_t)p) >> MI_ARENA_SLICE_SHIFT;
+  const size_t ofs = _mi_page_map[idx];
+  if (valid != NULL) *valid = (ofs != 0);
+  return (mi_page_t*)((idx - ofs + 1) << MI_ARENA_SLICE_SHIFT);
+  #else
+  const uintptr_t idx = ((uintptr_t)p) >> MI_ARENA_SLICE_SHIFT;
+  const uintptr_t up   = idx << MI_ARENA_SLICE_SHIFT;
+  __builtin_prefetch((void*)up);
+  const size_t ofs = _mi_page_map[idx];
+  if (valid != NULL) *valid = (ofs != 0);
+  return (mi_page_t*)(up - ((ofs - 1) << MI_ARENA_SLICE_SHIFT));
+  #endif
+}
+
+static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
+  bool valid;
+  mi_page_t* const page = _mi_ptr_page_ex(p,&valid);
+  return (valid ? page : NULL);
+}
 
 static inline mi_page_t* _mi_ptr_page(const void* p) {
-  const uintptr_t up  = ((uintptr_t)p) >> MI_ARENA_SLICE_SHIFT;
-  // __builtin_prefetch((void*)(up << MI_ARENA_SLICE_SHIFT));
-  const ptrdiff_t ofs = _mi_page_map[up];
   #if MI_DEBUG
-  if mi_unlikely(ofs==0) return MI_PAGE_PTR_INVALID;
+  return _mi_checked_ptr_page(p);
+  #else
+  return _mi_ptr_page_ex(p,NULL);
   #endif
-  return (mi_page_t*)((up - ofs + 1) << MI_ARENA_SLICE_SHIFT);
 }
 
 
@@ -509,12 +527,13 @@ static inline mi_threadid_t mi_page_thread_id(const mi_page_t* page) {
 
 static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
-  mi_atomic_store_release(&page->xheap,(uintptr_t)heap);
   if (heap != NULL) {
+    mi_atomic_store_release(&page->xheap, (uintptr_t)heap);
     page->heap_tag = heap->tag;
     mi_atomic_store_release(&page->xthread_id, heap->thread_id);
   }
   else {
+    mi_atomic_store_release(&page->xheap, (uintptr_t)mi_page_heap(page)->tld->subproc);
     mi_atomic_store_release(&page->xthread_id,0);
   }
 }
@@ -578,11 +597,12 @@ static inline bool mi_page_mostly_used(const mi_page_t* page) {
 }
 
 static inline bool mi_page_is_abandoned(const mi_page_t* page) {
+  // note: the xheap field of an abandoned heap is set to the subproc (for fast reclaim-on-free)
   return (mi_page_thread_id(page) == 0);
 }
 
 static inline bool mi_page_is_huge(const mi_page_t* page) {
-  return (page->block_size > MI_LARGE_MAX_OBJ_SIZE);
+  return (page->block_size > MI_LARGE_MAX_OBJ_SIZE || (mi_memkind_is_os(page->memid.memkind) && page->memid.mem.os.alignment > MI_PAGE_MAX_OVERALLOC_ALIGN));
 }
 
 

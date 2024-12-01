@@ -263,7 +263,7 @@ restore:
 // set `*pidx` to the bit index (0 <= *pidx < MI_BITMAP_CHUNK_BITS) on success.
 // todo: try neon version
 static inline bool mi_bitmap_chunk_find_and_try_xset(mi_bit_t set, mi_bitmap_chunk_t* chunk, size_t* pidx) {
-#if 0 && defined(__AVX2__) && (MI_BITMAP_CHUNK_BITS==256)
+#if defined(__AVX2__) && (MI_BITMAP_CHUNK_BITS==256)
   while (true) {
     const __m256i vec   = _mm256_load_si256((const __m256i*)chunk->bfields);
     const __m256i vcmp  = _mm256_cmpeq_epi64(vec, (set ? _mm256_set1_epi64x(~0) : _mm256_setzero_si256())); // (elem64 == ~0 / 0 ? 0xFF  : 0)
