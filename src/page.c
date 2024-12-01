@@ -745,7 +745,9 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
     #if MI_STAT
     count++;
     #endif
+    #if MI_MAX_CANDIDATE_SEARCH > 1
     candidate_count++;
+    #endif
 
     // collect freed blocks by us and other threads
     _mi_page_free_collect(page, false);
@@ -978,6 +980,8 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
 
   mi_assert_internal(mi_page_immediate_available(page));
   mi_assert_internal(mi_page_block_size(page) >= size);
+  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_ptr_page(page)==page);
 
   // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc)
   if mi_unlikely(zero && mi_page_is_huge(page)) {

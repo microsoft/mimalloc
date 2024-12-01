@@ -30,7 +30,11 @@ terms of the MIT license. A copy of the license can be found in the file
 // Note: in release mode the (inlined) routine is about 7 instructions with a single test.
 extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept
 {
-  mi_assert_internal(page->block_size == 0 /* empty heap */ || mi_page_block_size(page) >= size);
+  if (page->block_size != 0) { // not the empty heap
+    mi_assert_internal(mi_page_block_size(page) >= size);
+    mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+    mi_assert_internal(_mi_ptr_page(page)==page);
+  }
 
   // check the free list
   mi_block_t* const block = page->free;

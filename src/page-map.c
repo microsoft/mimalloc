@@ -36,7 +36,9 @@ static bool mi_page_map_init(void) {
   }
   // commit the first part so NULL pointers get resolved without an access violation
   if (!mi_page_map_all_committed) {
-    _mi_os_commit(_mi_page_map, _mi_os_page_size(), NULL, NULL);
+    bool is_zero;
+    _mi_os_commit(_mi_page_map, _mi_os_page_size(), &is_zero, NULL);
+    if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(_mi_page_map, _mi_os_page_size()); }
     _mi_page_map[0] = 1; // so _mi_ptr_page(NULL) == NULL
     mi_assert_internal(_mi_ptr_page(NULL)==NULL);
   }
@@ -51,7 +53,11 @@ static void mi_page_map_ensure_committed(size_t idx, size_t slice_count) {
     for (size_t i = commit_bit_idx_lo; i <= commit_bit_idx_hi; i++) {  // per bit to avoid crossing over bitmap chunks
       if (mi_bitmap_is_xsetN(MI_BIT_CLEAR, &mi_page_map_commit, i, 1)) {
         // this may race, in which case we do multiple commits (which is ok)
-        _mi_os_commit(_mi_page_map + (i*mi_page_map_entries_per_commit_bit), mi_page_map_entries_per_commit_bit, NULL, NULL);
+        bool is_zero;
+        uint8_t* const start = _mi_page_map + (i*mi_page_map_entries_per_commit_bit);
+        const size_t   size = mi_page_map_entries_per_commit_bit;
+        _mi_os_commit(start, size, &is_zero, NULL);
+        if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(start,size); }
         mi_bitmap_xsetN(MI_BIT_SET, &mi_page_map_commit, i, 1, NULL);
       }
     }
@@ -69,6 +75,8 @@ static size_t mi_page_map_get_idx(mi_page_t* page, uint8_t** page_start, size_t*
 
 
 void _mi_page_map_register(mi_page_t* page) {
+  mi_assert_internal(page != NULL);
+  mi_assert_internal(_mi_is_aligned(page,MI_PAGE_ALIGN));
   if mi_unlikely(_mi_page_map == NULL) {
     if (!mi_page_map_init()) return;
   }

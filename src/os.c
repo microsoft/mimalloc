@@ -219,20 +219,26 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
   if (!(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0))) return NULL;
   size = _mi_align_up(size, _mi_os_page_size());
 
+  const bool use_overalloc = (alignment > mi_os_mem_config.alloc_granularity && alignment <= size/8);
+
   // try first with a requested alignment hint (this will usually be aligned directly on Win 10+ or BSD)
-  void* p = mi_os_prim_alloc(size, alignment, commit, allow_large, is_large, is_zero, stats);
-  if (p == NULL) return NULL;
+  void* p = NULL;
+  if (!use_overalloc) {
+    p = mi_os_prim_alloc(size, alignment, commit, allow_large, is_large, is_zero, stats);
+  }
 
   // aligned already?
-  if (((uintptr_t)p % alignment) == 0) {
+  if (p != NULL && ((uintptr_t)p % alignment) == 0) {
     *base = p;
   }
   else {
     // if not aligned, free it, overallocate, and unmap around it
     #if !MI_TRACK_ASAN
-    _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (size: 0x%zx bytes, address: %p, alignment: 0x%zx, commit: %d)\n", size, p, alignment, commit);
+    if (!use_overalloc) {
+      _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (size: 0x%zx bytes, address: %p, alignment: 0x%zx, commit: %d)\n", size, p, alignment, commit);
+    }
     #endif
-    mi_os_prim_free(p, size, commit, stats);
+    if (p != NULL) { mi_os_prim_free(p, size, commit, stats); }
     if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
     const size_t over_size = size + alignment;
 

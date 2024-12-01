@@ -462,6 +462,9 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
       mi_assert_internal(mi_page_block_size(page) == block_size);
       mi_assert_internal(!mi_page_is_full(page));
       mi_assert_internal(mi_page_is_abandoned(page));
+      mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+      mi_assert_internal(_mi_ptr_page(page)==page);
+      mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
       return page;
     }
   }
@@ -521,6 +524,8 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
     page->block_size_shift = 0;
   }
   _mi_page_map_register(page);
+  mi_assert_internal(_mi_ptr_page(page)==page);
+  mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
 
   mi_assert_internal(mi_page_block_size(page) == block_size);
   mi_assert_internal(mi_page_is_abandoned(page));
@@ -561,6 +566,9 @@ static mi_page_t* mi_singleton_page_alloc(mi_heap_t* heap, size_t block_size, si
   
   mi_assert(page != NULL);
   mi_assert(page->reserved == 1);  
+  mi_assert_internal(_mi_ptr_page(page)==page);
+  mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
+
   return page;  
 }
 
@@ -584,6 +592,11 @@ mi_page_t* _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t block
     page = mi_singleton_page_alloc(heap, block_size, block_alignment);
   }
   // mi_assert_internal(page == NULL || _mi_page_segment(page)->subproc == tld->subproc);
+  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_ptr_page(page)==page);
+  mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
+  mi_assert_internal(block_alignment <= MI_PAGE_MAX_OVERALLOC_ALIGN || _mi_is_aligned(mi_page_start(page), block_alignment));
+
   return page;
 }
 
@@ -601,11 +614,14 @@ void _mi_arena_page_free(mi_page_t* page, mi_tld_t* tld) {
 void _mi_arena_page_abandon(mi_page_t* page, mi_tld_t* tld) {
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(page->next==NULL);
+  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_ptr_page(page)==page);
+
 
   if (mi_page_all_free(page)) {
     _mi_arena_page_free(page, tld);
   }
-  else if (page->memid.memkind==MI_MEM_ARENA) {
+  else if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
     // make available for allocations
     size_t bin = _mi_bin(mi_page_block_size(page));
     size_t slice_index;
@@ -622,6 +638,8 @@ void _mi_arena_page_abandon(mi_page_t* page, mi_tld_t* tld) {
 
 bool _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page) {
   if (mi_page_is_singleton(page)) { mi_assert_internal(mi_page_is_abandoned(page)); }
+  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_ptr_page(page)==page);
   // if (!mi_page_is_abandoned(page)) return false;  // it is not abandoned (anymore)
    
   // note: we can access the page even it is in the meantime reclaimed by another thread since
