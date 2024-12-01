@@ -743,7 +743,7 @@ void mi_heap_drop_segment_if_required(mi_heap_t* heap, size_t alloc_block_size)
 {
     size_t targetSegmentCount = mi_option_get_size(mi_option_max_segments_per_heap);
     if ((targetSegmentCount > 0) && 
-        (alloc_block_size <= MI_LARGE_OBJ_SIZE_MAX) &&
+        (alloc_block_size <= MI_MEDIUM_OBJ_SIZE_MAX) &&
         (heap->tld->segments.count >= targetSegmentCount)) {
 
         mi_heap_drop_segment(heap, targetSegmentCount);
