@@ -462,14 +462,15 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
   *mi_prim_tls_pthread_heap_slot() = heap;
   #elif defined(MI_TLS_PTHREAD)
+    // ensure the default heap is passed to `_mi_thread_done`
+  // setting to a non-NULL value also ensures `mi_thread_done` is called.
+  _mi_prim_thread_associate_default_heap(heap);
   // we use _mi_heap_default_key
   #else
   _mi_heap_default = heap;
   #endif
 
-  // ensure the default heap is passed to `_mi_thread_done`
-  // setting to a non-NULL value also ensures `mi_thread_done` is called.
-  _mi_prim_thread_associate_default_heap(heap);
+
 }
 
 
