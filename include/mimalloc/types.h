@@ -120,7 +120,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 #ifndef MI_BITMAP_CHUNK_BITS_SHIFT
-#define MI_BITMAP_CHUNK_BITS_SHIFT        8                           // optimized for 256 bits per chunk (avx2)
+#define MI_BITMAP_CHUNK_BITS_SHIFT        (6 + MI_SIZE_SHIFT)         // optimized for 512 bits per chunk (avx512)
 #endif
 
 #define MI_BITMAP_CHUNK_BITS              (1 << MI_BITMAP_CHUNK_BITS_SHIFT)

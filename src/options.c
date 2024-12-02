@@ -412,7 +412,7 @@ void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* me
 // Define our own limited `fprintf` that avoids memory allocation.
 // We do this using `_mi_vsnprintf` with a limited buffer.
 static void mi_vfprintf( mi_output_fun* out, void* arg, const char* prefix, const char* fmt, va_list args ) {
-  char buf[512];
+  char buf[768];
   if (fmt==NULL) return;
   if (!mi_recurse_enter()) return;
   _mi_vsnprintf(buf, sizeof(buf)-1, fmt, args);

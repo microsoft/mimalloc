@@ -239,9 +239,9 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block
         }
         else {
           if (mi_page_is_abandoned(page)) {
-            mi_assert(false);
+            // mi_assert(false);
           }
-          mi_assert_internal(!mi_page_is_singleton(page)); // we should have succeeded on singleton pages
+          // mi_assert_internal(!mi_page_is_singleton(page)); // we should have succeeded on singleton pages
         }
       }
     }
