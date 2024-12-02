@@ -147,39 +147,66 @@ void mi_free(void* p) mi_attr_noexcept
   }
 }
 
-// return true if successful
-bool _mi_free_delayed_block(mi_block_t* block) {
-  // get segment and page
-  mi_assert_internal(block!=NULL);
-  mi_page_t* const page = mi_checked_ptr_page(block,"_mi_free_delayed_block");
-  mi_assert_internal(_mi_thread_id() == mi_page_thread_id(page));
 
-  // Clear the no-delayed flag so delayed freeing is used again for this page.
-  // This must be done before collecting the free lists on this page -- otherwise
-  // some blocks may end up in the page `thread_free` list with no blocks in the
-  // heap `thread_delayed_free` list which may cause the page to be never freed!
-  // (it would only be freed if we happen to scan it in `mi_page_queue_find_free_ex`)
-  if (!_mi_page_try_use_delayed_free(page, MI_USE_DELAYED_FREE, false /* dont overwrite never delayed */)) {
-    return false;
-  }
-
-  // collect all other non-local frees (move from `thread_free` to `free`) to ensure up-to-date `used` count
-  _mi_page_free_collect(page, false);
-
-  // and free the block (possibly freeing the page as well since `used` is updated)
-  mi_free_block_local(page, block, false /* stats have already been adjusted */, true /* check for a full page */);
-  return true;
-}
 
 // ------------------------------------------------------
 // Multi-threaded Free (`_mt`)
 // ------------------------------------------------------
 
-// Push a block that is owned by another thread on its page-local thread free
-// list or it's heap delayed free list. Such blocks are later collected by
-// the owning thread in `_mi_free_delayed_block`.
-static void mi_decl_noinline mi_free_block_delayed_mt( mi_page_t* page, mi_block_t* block )
+static void mi_decl_noinline mi_free_try_reclaim_mt(mi_page_t* page) {
+  mi_assert_internal(mi_page_is_owned(page));
+  mi_assert_internal(mi_page_thread_id(page)==0);
+
+  // we own the page now..
+  // first remove it from the abandoned pages in the arena
+  mi_heap_t* const heap = mi_heap_get_default();
+  _mi_arena_page_unabandon(page,heap->tld);
+
+  // collect the thread atomic free list
+  _mi_page_free_collect(page, false);  // update `used` count
+  if (mi_page_is_singleton(page)) mi_assert_internal(mi_page_all_free(page));
+
+  if (mi_page_all_free(page)) {
+    // we can free the page directly
+    _mi_arena_page_free(page, heap->tld);
+  }
+  else {
+    // the page has still some blocks in use
+    // reclaim in our heap if compatible, or otherwise abandon again
+    if ((_mi_option_get_fast(mi_option_abandoned_reclaim_on_free) != 0) &&
+        (mi_prim_get_default_heap() != (mi_heap_t*)&_mi_heap_empty) && // we did not already terminate our thread (can this happen? yes, due to thread-local destructors for example (issue #944))
+        (page->subproc == heap->tld->subproc) &&  // don't reclaim across sub-processes        
+        mi_arena_page_try_reclaim(page)           // and we can reclaim it from the arena
+       )
+    {
+      // make it part of our heap
+      _mi_heap_page_reclaim(heap, page);
+    }
+    else {
+      // abandon again
+      _mi_arena_page_abandon(page, heap->tld);
+    }
+  }
+}
+
+// Push a block that is owned by another thread on its page-local thread free list. 
+static void mi_decl_noinline mi_free_block_delayed_mt(mi_page_t* page, mi_block_t* block)
 {
+  // push atomically on the page thread free list
+  mi_thread_free_t tf_new;
+  mi_thread_free_t tf;
+  do {
+    tf = mi_atomic_load_relaxed(&page->xthread_free);
+    mi_block_set_next(page, block, mi_tf_block(tf));
+    tf_new = mi_tf_create(block, true /* always owned: try to claim it if abandoned */);
+  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tf, tf_new));
+
+  // and atomically reclaim the page if it was abandoned
+  bool reclaimed = !mi_tf_is_owned(tf);
+  if (reclaimed) mi_free_try_reclaim_mt(page);
+}
+
+  /*
   // Try to put the block on either the page-local thread free list,
   // or the heap delayed free list (if this is the first non-local free in that page)
   mi_thread_free_t tfreex;
@@ -276,7 +303,7 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block
   // thread_delayed free list (or heap delayed free list)
   mi_free_block_delayed_mt(page,block);
 }
-
+*/
 
 // ------------------------------------------------------
 // Usable size

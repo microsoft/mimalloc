@@ -693,3 +693,48 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t
   mi_bitmap_forall_set_chunks_end();
   return false;
 }
+
+
+
+mi_decl_nodiscard bool mi_pairmap_xset(mi_pair_t set, mi_bitmap_t* bitmap, size_t idx);
+mi_decl_nodiscard bool mi_pairmap_xset_while_not_busy(mi_pair_t set, mi_bitmap_t* bitmap, size_t idx);
+
+mi_decl_nodiscard bool mi_pairmap_try_find_and_set_busy(mi_pairmap_t* pairmap, size_t tseq, size_t* pidx) {
+  size_t set_idx;
+  size_t start = tseq % MI_BFIELD_BITS;
+  size_t epoch = mi_atomic_load_acquire(&pairmap->epoch);
+  mi_bfield_t any_set = mi_bfield_rotate_right(mi_atomic_load_relaxed(&pairmap->any_set), start);
+  while (mi_bfield_find_least_bit(any_set, &set_idx)) {
+    size_t chunk_idx = 2*((set_idx + start) % MI_BFIELD_BITS);
+    {
+      // look at chunk_idx and chunck_idx+1
+      mi_bitmap_chunk_t* chunk1 = &pairmap->chunks[chunk_idx];
+      mi_bitmap_chunk_t* chunk2 = &pairmap->chunks[chunk_idx+1];
+      size_t cidx;
+      if (mi_pairmap_chunk_find_and_set_busy(chunk1, &cidx)) {
+        *pidx = (chunk_idx * MI_BITMAP_CHUNK_BITS) + cidx;
+        mi_assert_internal(*pidx < MI_PAIRMAP_MAX_BITS);
+        return true;
+      }
+      else {
+        if (mi_pairmap_chunk_find_and_set_busy(chunk2, &cidx)) {
+          *pidx = ((chunk_idx+1) * MI_BITMAP_CHUNK_BITS) + cidx;
+          mi_assert_internal(*pidx < MI_PAIRMAP_MAX_BITS);
+          return true;
+        }
+        else if (mi_bitmap_chunk_all_are_clear(chunk1) && mi_bitmap_chunk_all_are_clear(chunk2)) {
+
+          mi_bfield_atomic_xset(MI_BIT_CLEAR, &pairmap->any_set, chunk_idx/2);
+        }
+      }
+      else {
+        if (mi_bitmap_chunk_all_are_clear(&bitmap->chunks[chunk_idx])) {
+          mi_bfield_atomic_xset(MI_BIT_CLEAR, &bitmap->any_set, chunk_idx);
+        }
+      }
+    }
+    start += set_idx+1;    /* so chunk_idx stays valid */ 
+    any_set >>= set_idx;   /* skip scanned bits (and avoid UB with (idx+1)) */ 
+    any_set >>= 1;
+  }
+}

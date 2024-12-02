@@ -41,7 +41,7 @@ typedef mi_decl_align(32) struct mi_bitmap_s {
 #define MI_BITMAP_MAX_BITS  (MI_BFIELD_BITS * MI_BITMAP_CHUNK_BITS)      // 16k bits on 64bit, 8k bits on 32bit
 
 /* --------------------------------------------------------------------------------
-  Bitmap
+  Atomic bitmap
 -------------------------------------------------------------------------------- */
 
 typedef bool  mi_bit_t;
@@ -88,5 +88,31 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t
 // Find a sequence of `n` bits in the bitmap with all bits set, and atomically unset all.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx );
+
+
+/* --------------------------------------------------------------------------------
+  Atomic bitmap for a pair of bits
+-------------------------------------------------------------------------------- */
+
+typedef mi_bfield_t     mi_pair_t;
+ 
+#define MI_PAIR_CLEAR   (0)
+#define MI_PAIR_BUSY    (1)
+#define MI_PAIR_BUSYX   (2)
+#define MI_PAIR_SET     (3)
+
+typedef mi_decl_align(32) struct mi_pairmap_s {
+  mi_bitmap_chunk_t    chunks[2*MI_BFIELD_BITS];
+  _Atomic(mi_bfield_t) any_set;
+  _Atomic(size_t)      epoch;
+} mi_pairmap_t;
+
+#define MI_PAIRMAP_MAX_PAIRS  (MI_BITMAP_MAX_BITS)      // 16k pairs on 64bit, 8k pairs on 32bit
+#define MI_PAIRMAP_MAX_BITS   (2*MI_PAIRMAP_MAX_PAIRS)  
+
+mi_decl_nodiscard bool mi_pairmap_xset(mi_pair_t set, mi_pairmap_t* pairmap, size_t idx);
+mi_decl_nodiscard bool mi_pairmap_xset_while_not_busy(mi_pair_t set, mi_pairmap_t* pairmap, size_t idx);
+mi_decl_nodiscard bool mi_pairmap_try_find_and_set_busy(mi_pairmap_t* pairmap, size_t n, size_t tseq, size_t* pidx);
+
 
 #endif // MI_XBITMAP_H

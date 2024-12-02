@@ -92,11 +92,13 @@ bool       _mi_preloading(void);           // true while the C runtime is not in
 void       _mi_thread_done(mi_heap_t* heap);
 void       _mi_thread_data_collect(void);
 void       _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap);
+
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
-size_t      _mi_thread_seq_id(void) mi_attr_noexcept;
+size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
+
 mi_heap_t*    _mi_heap_main_get(void);     // statically allocated main backing heap
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
-void       _mi_heap_guarded_init(mi_heap_t* heap);
+void          _mi_heap_guarded_init(mi_heap_t* heap);
 
 // os.c
 void       _mi_os_init(void);                                            // called from process init
@@ -180,8 +182,6 @@ void       _mi_heap_delayed_free_all(mi_heap_t* heap);
 bool       _mi_heap_delayed_free_partial(mi_heap_t* heap);
 void       _mi_heap_collect_retired(mi_heap_t* heap, bool force);
 
-void       _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never);
-bool       _mi_page_try_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never);
 size_t     _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append);
 void       _mi_deferred_free(mi_heap_t* heap, bool force);
 
@@ -426,6 +426,10 @@ static inline uintptr_t _mi_ptr_cookie(const void* p) {
   return ((uintptr_t)p ^ _mi_heap_main.cookie);
 }
 
+static inline mi_tld_t* _mi_tld(void) {
+  return mi_heap_get_default()->tld;
+}
+
 /* -----------------------------------------------------------
   Pages
 ----------------------------------------------------------- */
@@ -507,53 +511,53 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
   return mi_page_block_size(page) - MI_PADDING_SIZE;
 }
 
+//static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
+//  mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
+//  if (heap != NULL) {
+//    mi_atomic_store_release(&page->xheap, (uintptr_t)heap);
+//    page->heap_tag = heap->tag;
+//    mi_atomic_store_release(&page->xthread_id, heap->thread_id);
+//  }
+//  else {
+//    mi_atomic_store_release(&page->xheap, (uintptr_t)mi_page_heap(page)->tld->subproc);
+//    mi_atomic_store_release(&page->xthread_id,0);
+//  }
+//}
+
+// Thread free flag helpers
+static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
+  return (mi_block_t*)(tf & ~1);
+}
+static inline bool mi_tf_is_owned(mi_thread_free_t tf) {
+  return ((tf & 1) == 0);
+}
+static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned) {
+  return (mi_thread_free_t)((uintptr_t)block | (owned ? 0 : 1));
+}
+
+
 // Thread free access
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
-  return (mi_block_t*)(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free) & ~3);
+  return mi_tf_block(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
 }
 
-static inline mi_delayed_t mi_page_thread_free_flag(const mi_page_t* page) {
-  return (mi_delayed_t)(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free) & 3);
+// Owned?
+static inline bool mi_page_is_owned(const mi_page_t* page) {
+  return mi_tf_is_owned(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
 }
 
-// Heap access
-static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
-  return (mi_heap_t*)(mi_atomic_load_relaxed(&((mi_page_t*)page)->xheap));
-}
-
+// Thread id of thread that owns this page
 static inline mi_threadid_t mi_page_thread_id(const mi_page_t* page) {
   return mi_atomic_load_relaxed(&page->xthread_id);
 }
 
-static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
-  mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
-  if (heap != NULL) {
-    mi_atomic_store_release(&page->xheap, (uintptr_t)heap);
-    page->heap_tag = heap->tag;
-    mi_atomic_store_release(&page->xthread_id, heap->thread_id);
-  }
-  else {
-    mi_atomic_store_release(&page->xheap, (uintptr_t)mi_page_heap(page)->tld->subproc);
-    mi_atomic_store_release(&page->xthread_id,0);
-  }
-}
 
-// Thread free flag helpers
-static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
-  return (mi_block_t*)(tf & ~0x03);
-}
-static inline mi_delayed_t mi_tf_delayed(mi_thread_free_t tf) {
-  return (mi_delayed_t)(tf & 0x03);
-}
-static inline mi_thread_free_t mi_tf_make(mi_block_t* block, mi_delayed_t delayed) {
-  return (mi_thread_free_t)((uintptr_t)block | (uintptr_t)delayed);
-}
-static inline mi_thread_free_t mi_tf_set_delayed(mi_thread_free_t tf, mi_delayed_t delayed) {
-  return mi_tf_make(mi_tf_block(tf),delayed);
-}
-static inline mi_thread_free_t mi_tf_set_block(mi_thread_free_t tf, mi_block_t* block) {
-  return mi_tf_make(block, mi_tf_delayed(tf));
-}
+//static inline mi_thread_free_t mi_tf_set_delayed(mi_thread_free_t tf, mi_delayed_t delayed) {
+//  return mi_tf_make(mi_tf_block(tf),delayed);
+//}
+//static inline mi_thread_free_t mi_tf_set_block(mi_thread_free_t tf, mi_block_t* block) {
+//  return mi_tf_make(block, mi_tf_delayed(tf));
+//}
 
 // are all blocks in a page freed?
 // note: needs up-to-date used count, (as the `xthread_free` list may not be empty). see `_mi_page_collect_free`.

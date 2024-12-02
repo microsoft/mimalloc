@@ -216,13 +216,14 @@ typedef struct mi_block_s {
 #endif
 
 
-// The delayed flags are used for efficient multi-threaded free-ing
-typedef enum mi_delayed_e {
-  MI_USE_DELAYED_FREE   = 0, // push on the owning heap thread delayed list
-  MI_DELAYED_FREEING    = 1, // temporary: another thread is accessing the owning heap
-  MI_NO_DELAYED_FREE    = 2, // optimize: push on page local thread free queue if another block is already in the heap thread delayed free list
-  MI_NEVER_DELAYED_FREE = 3  // sticky: used for abondoned pages without a owning heap; this only resets on page reclaim
-} mi_delayed_t;
+// The owned flags are used for efficient multi-threaded free-ing
+// When we push on the page thread free queue of an abandoned page,
+// we also atomically get to own it. This is needed to atomically
+// abandon a page (while other threads could concurrently free blocks in it).
+typedef enum mi_owned_e {
+  MI_OWNED              = 0, // some heap owns this page
+  MI_ABANDONED          = 1, // the page is abandoned
+} mi_owned_t;
 
 
 // The `in_full` and `has_aligned` page flags are put in a union to efficiently
@@ -247,7 +248,7 @@ typedef union mi_page_flags_s {
 #endif
 
 // Thread free list.
-// We use the bottom 2 bits of the pointer for mi_delayed_t flags
+// We use the bottom bit of the pointer for `mi_owned_t` flags
 typedef uintptr_t mi_thread_free_t;
 
 // Sub processes are used to keep memory separate between them (e.g. multiple interpreters in CPython)
@@ -304,10 +305,11 @@ typedef struct mi_page_s {
   #endif
 
   _Atomic(mi_thread_free_t) xthread_free;  // list of deferred free blocks freed by other threads
-  _Atomic(uintptr_t)    xheap;             // heap this threads belong to.
+  //  _Atomic(uintptr_t)    xheap;             // heap this threads belong to.
 
   struct mi_page_s*     next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by the heap with the same `block_size`
+  mi_subproc_t*         subproc;           // sub-process of this heap
   mi_memid_t            memid;             // provenance of the page memory
 } mi_page_t;
 
