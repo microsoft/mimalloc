@@ -505,9 +505,13 @@ you also need to tell `valgrind` to not intercept those calls itself, and use:
 
 By setting the `MIMALLOC_SHOW_STATS` environment variable you can check that mimalloc is indeed
 used and not the standard allocator. Even though the [Valgrind option][valgrind-soname]
-is called `--soname-synonyms`, this also
-works when overriding with a static library or object file. Unfortunately, it is not possible to
-dynamically override mimalloc using `LD_PRELOAD` together with `valgrind`.
+is called `--soname-synonyms`, this also works when overriding with a static library or object file.
+To dynamically override mimalloc using `LD_PRELOAD` together with `valgrind`, use:
+
+```
+> valgrind --trace-children=yes --soname-synonyms=somalloc=*mimalloc* /usr/bin/env LD_PRELOAD=/usr/lib/libmimalloc.so -- <myprogram>
+```
+
 See also the `test/test-wrong.c` file to test with `valgrind`.
 
 Valgrind support is in its initial development -- please report any issues.
