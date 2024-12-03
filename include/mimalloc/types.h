@@ -505,6 +505,10 @@ typedef struct mi_stats_s {
   mi_stat_count_t giant;
   mi_stat_count_t malloc;
   mi_stat_counter_t pages_extended;
+  mi_stat_counter_t pages_reclaim_on_alloc;
+  mi_stat_counter_t pages_reclaim_on_free;
+  mi_stat_counter_t pages_reabandon_full;
+  mi_stat_counter_t pages_unabandon_busy_wait;
   mi_stat_counter_t mmap_calls;
   mi_stat_counter_t commit_calls;
   mi_stat_counter_t reset_calls;

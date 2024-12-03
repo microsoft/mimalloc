@@ -42,7 +42,7 @@ typedef struct mi_arena_s {
   bool                is_large;             // memory area consists of large- or huge OS pages (always committed)
   mi_lock_t           abandoned_visit_lock; // lock is only used when abandoned segments are being visited
   _Atomic(mi_msecs_t) purge_expire;         // expiration time when slices should be decommitted from `slices_decommit`.
-  
+
   mi_bitmap_t         slices_free;          // is the slice free?
   mi_bitmap_t         slices_committed;     // is the slice committed? (i.e. accessible)
   mi_bitmap_t         slices_purge;         // can the slice be purged? (slice in purge => slice in free)
@@ -216,7 +216,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
       else {
         if (commit_zero) { memid->initially_zero = true; }
       }
-    }    
+    }
   }
   else {
     // no need to commit, but check if already fully committed
@@ -355,7 +355,7 @@ static mi_decl_noinline void* mi_arena_try_alloc(
 {
   mi_assert(slice_count <= MI_ARENA_MAX_OBJ_SLICES);
   mi_assert(alignment <= MI_ARENA_SLICE_ALIGN);
-  
+
   // try to find free slices in the arena's
   void* p = mi_arena_try_find_free(slice_count, alignment, commit, allow_large, req_arena_id, memid, tld);
   if (p != NULL) return p;
@@ -457,7 +457,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
       // try to claim ownership atomically
       mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
       if (!mi_page_try_claim_ownership(page)) {
-        // a concurrent free already grabbed the page. 
+        // a concurrent free already grabbed the page.
         // Restore the abandoned_map to make it available again (unblocking busy waiters)
         mi_pairmap_set(pairmap, slice_index);
       }
@@ -465,6 +465,9 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
         // we got ownership, clear the abandoned entry (unblocking busy waiters)
         mi_pairmap_clear(pairmap, slice_index);
         mi_atomic_decrement_relaxed(&subproc->abandoned_count[bin]);
+        _mi_stat_decrease(&_mi_stats_main.pages_abandoned, 1);
+        _mi_stat_counter_increase(&_mi_stats_main.pages_reclaim_on_alloc, 1);
+
         _mi_page_free_collect(page, false);  // update `used` count
         mi_assert_internal(mi_bitmap_is_clearN(&arena->slices_free, slice_index, slice_count));
         mi_assert_internal(mi_bitmap_is_setN(&arena->slices_committed, slice_index, slice_count));
@@ -472,7 +475,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
         mi_assert_internal(mi_bitmap_is_clearN(&arena->slices_purge, slice_index, slice_count));
         mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
         mi_assert_internal(_mi_ptr_page(page)==page);
-        mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page); 
+        mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
         mi_assert_internal(mi_page_block_size(page) == block_size);
         mi_assert_internal(mi_page_is_abandoned(page));
         mi_assert_internal(mi_page_is_owned(page));
@@ -492,11 +495,11 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
   const bool commit = true;
   const bool os_align = (block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN);
   const size_t page_alignment = MI_ARENA_SLICE_ALIGN;
-  
+
   // try to allocate from free space in arena's
   mi_memid_t memid = _mi_memid_none();
   mi_page_t* page = NULL;
-  if (!_mi_option_get_fast(mi_option_disallow_arena_alloc) && // allowed to allocate from arena's?       
+  if (!_mi_option_get_fast(mi_option_disallow_arena_alloc) && // allowed to allocate from arena's?
       !os_align &&                            // not large alignment
       slice_count <= MI_ARENA_MAX_OBJ_SLICES) // and not too large
   {
@@ -575,16 +578,16 @@ static mi_page_t* mi_singleton_page_alloc(mi_heap_t* heap, size_t block_size, si
   const bool os_align = (block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN);
   const size_t info_size = (os_align ? MI_PAGE_ALIGN : MI_PAGE_INFO_SIZE);
   const size_t slice_count = mi_slice_count_of_size(info_size + block_size);
-  
+
   mi_page_t* page = mi_arena_page_alloc_fresh(slice_count, block_size, block_alignment, req_arena_id, tld);
   if (page == NULL) return NULL;
-  
+
   mi_assert(page != NULL);
-  mi_assert(page->reserved == 1);  
+  mi_assert(page->reserved == 1);
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
 
-  return page;  
+  return page;
 }
 
 
@@ -646,17 +649,17 @@ void _mi_arena_page_free(mi_page_t* page) {
   Arena abandon
 ----------------------------------------------------------- */
 
-void _mi_arena_page_abandon(mi_page_t* page) {
+static void mi_arena_page_abandon_no_stat(mi_page_t* page) {
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(!mi_page_all_free(page));
   mi_assert_internal(page->next==NULL);
-  
+
   mi_subproc_t* subproc = page->subproc;
   if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
-    // make available for allocations    
+    // make available for allocations
     size_t bin = _mi_bin(mi_page_block_size(page));
     size_t slice_index;
     size_t slice_count;
@@ -667,6 +670,7 @@ void _mi_arena_page_abandon(mi_page_t* page) {
     mi_assert_internal(mi_bitmap_is_clearN(&arena->slices_purge, slice_index, slice_count));
     // mi_assert_internal(mi_bitmap_is_setN(&arena->slices_dirty, slice_index, slice_count));
 
+    mi_page_set_abandoned_mapped(page);
     bool were_zero = mi_pairmap_set(&arena->pages_abandoned[bin], slice_index);
     MI_UNUSED(were_zero); mi_assert_internal(were_zero);
     mi_atomic_increment_relaxed(&subproc->abandoned_count[bin]);
@@ -676,7 +680,30 @@ void _mi_arena_page_abandon(mi_page_t* page) {
     // leave as is; it will be reclaimed when an object is free'd in the page
   }
   _mi_page_unown(page);
+}
+
+void _mi_arena_page_abandon(mi_page_t* page) {
+  mi_arena_page_abandon_no_stat(page);
   _mi_stat_increase(&_mi_stats_main.pages_abandoned, 1);
+}
+
+bool _mi_arena_page_try_reabandon_to_mapped(mi_page_t* page) {
+  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_ptr_page(page)==page);
+  mi_assert_internal(mi_page_is_owned(page));
+  mi_assert_internal(mi_page_is_abandoned(page));
+  mi_assert_internal(!mi_page_is_abandoned_mapped(page));
+  mi_assert_internal(!mi_page_is_full(page));
+  mi_assert_internal(!mi_page_all_free(page));
+  mi_assert_internal(!mi_page_is_singleton(page));
+  if (mi_page_is_full(page) || mi_page_is_abandoned_mapped(page) || page->memid.memkind != MI_MEM_ARENA) {
+    return false;
+  }
+  else {
+    _mi_stat_counter_increase(&_mi_stats_main.pages_reabandon_full, 1);
+    mi_arena_page_abandon_no_stat(page);
+    return true;
+  }
 }
 
 // called from `mi_free` if trying to unabandon an abandoned page
@@ -685,25 +712,27 @@ void _mi_arena_page_unabandon(mi_page_t* page) {
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
-  
-  if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
+
+  if (mi_page_is_abandoned_mapped(page)) {
+    mi_assert_internal(page->memid.memkind==MI_MEM_ARENA);
     // remove from the abandoned map
     size_t bin = _mi_bin(mi_page_block_size(page));
     size_t slice_index;
     size_t slice_count;
     mi_arena_t* arena = mi_page_arena(page, &slice_index, &slice_count);
-    
+
     mi_assert_internal(mi_bitmap_is_clearN(&arena->slices_free, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_setN(&arena->slices_committed, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_clearN(&arena->slices_purge, slice_index, slice_count));
 
     // this busy waits until a concurrent reader (from alloc_abandoned) is done
     mi_pairmap_clear_while_not_busy(&arena->pages_abandoned[bin], slice_index);
+    mi_page_clear_abandoned_mapped(page);
     mi_atomic_decrement_relaxed(&page->subproc->abandoned_count[bin]);
   }
   else {
     // page is full (or a singleton), page is OS/externally allocated
-    // nothing to do    
+    // nothing to do
     // TODO: maintain count of these as well?
   }
   _mi_stat_decrease(&_mi_stats_main.pages_abandoned, 1);
@@ -715,7 +744,7 @@ bool _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(page)==page);
   // if (!mi_page_is_abandoned(page)) return false;  // it is not abandoned (anymore)
-   
+
   // note: we can access the page even it is in the meantime reclaimed by another thread since
   // we only call this when on free (and thus there is still an object alive in the page)
   mi_memid_t memid = page->memid;
@@ -967,7 +996,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   arena->is_large     = is_large;
   arena->purge_expire = 0;
   mi_lock_init(&arena->abandoned_visit_lock);
-  
+
   // init bitmaps
   mi_bitmap_init(&arena->slices_free,true);
   mi_bitmap_init(&arena->slices_committed,true);
@@ -1068,7 +1097,7 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
         _mi_memset(buf + k, 'o', MI_BFIELD_BITS);
         k += MI_BFIELD_BITS;
       }
-      bit_count += MI_BFIELD_BITS;      
+      bit_count += MI_BFIELD_BITS;
     }
     _mi_output_message("%s  %s\n", prefix, buf);
   }

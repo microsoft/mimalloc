@@ -143,7 +143,8 @@ void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 mi_page_t* _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
 void       _mi_arena_page_free(mi_page_t* page);
 void       _mi_arena_page_abandon(mi_page_t* page);
-void       _mi_arena_page_unabandon(mi_page_t* page); 
+void       _mi_arena_page_unabandon(mi_page_t* page);
+bool       _mi_arena_page_try_reabandon_to_mapped(mi_page_t* page);
 
 bool       _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page);
 void       _mi_arena_reclaim_all_abandoned(mi_heap_t* heap);
@@ -572,29 +573,6 @@ static inline bool mi_page_is_owned(const mi_page_t* page) {
   return mi_tf_is_owned(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
 }
 
-// Unown a page that is currently owned
-static inline void _mi_page_unown(mi_page_t* page) {
-  mi_assert_internal(mi_page_is_owned(page));
-  mi_assert_internal(mi_page_thread_id(page)==0);
-  const uintptr_t old = mi_atomic_and_acq_rel(&page->xthread_free, ~((uintptr_t)1));
-  mi_assert_internal((old&1)==1); MI_UNUSED(old);
-  /*
-  mi_thread_free_t tf_new;
-  mi_thread_free_t tf_old;
-  do {
-    tf_old = mi_atomic_load_relaxed(&page->xthread_free);
-    mi_assert_internal(mi_tf_is_owned(tf_old));
-    tf_new = mi_tf_create(mi_tf_block(tf_old), false);
-  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tf_old, tf_new));
-  */
-}
-
-// get ownership if it is not yet owned
-static inline bool mi_page_try_claim_ownership(mi_page_t* page) {
-  const uintptr_t old = mi_atomic_or_acq_rel(&page->xthread_free, 1);
-  return ((old&1)==0);
-}
-
 
 //static inline mi_thread_free_t mi_tf_set_delayed(mi_thread_free_t tf, mi_delayed_t delayed) {
 //  return mi_tf_make(mi_tf_block(tf),delayed);
@@ -638,7 +616,7 @@ static inline bool mi_page_is_full(mi_page_t* page) {
 }
 
 // is more than 7/8th of a page in use?
-static inline bool mi_page_mostly_used(const mi_page_t* page) {
+static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / 8U;
   return (page->reserved - page->used <= frac);
@@ -646,8 +624,21 @@ static inline bool mi_page_mostly_used(const mi_page_t* page) {
 
 static inline bool mi_page_is_abandoned(const mi_page_t* page) {
   // note: the xheap field of an abandoned heap is set to the subproc (for fast reclaim-on-free)
-  return (mi_atomic_load_acquire(&page->xthread_id) == 0);
+  return (mi_atomic_load_acquire(&page->xthread_id) <= 1);
 }
+
+static inline bool mi_page_is_abandoned_mapped(const mi_page_t* page) {
+  return (mi_atomic_load_acquire(&page->xthread_id) == 1);
+}
+
+static inline void mi_page_set_abandoned_mapped(mi_page_t* page) {
+  mi_atomic_or_acq_rel(&page->xthread_id, (uintptr_t)1);
+}
+
+static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
+  mi_atomic_and_acq_rel(&page->xthread_id, ~(uintptr_t)1);
+}
+
 
 static inline bool mi_page_is_huge(const mi_page_t* page) {
   return (page->block_size > MI_LARGE_MAX_OBJ_SIZE || (mi_memkind_is_os(page->memid.memkind) && page->memid.mem.os.alignment > MI_PAGE_MAX_OVERALLOC_ALIGN));
@@ -659,6 +650,51 @@ static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size)
 }
 
 
+// Unown a page that is currently owned
+static inline void _mi_page_unown_unconditional(mi_page_t* page) {
+  mi_assert_internal(mi_page_is_owned(page));
+  mi_assert_internal(mi_page_thread_id(page)==0);
+  const uintptr_t old = mi_atomic_and_acq_rel(&page->xthread_free, ~((uintptr_t)1));
+  mi_assert_internal((old&1)==1); MI_UNUSED(old);
+  /*
+  mi_thread_free_t tf_new;
+  mi_thread_free_t tf_old;
+  do {
+    tf_old = mi_atomic_load_relaxed(&page->xthread_free);
+    mi_assert_internal(mi_tf_is_owned(tf_old));
+    tf_new = mi_tf_create(mi_tf_block(tf_old), false);
+  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tf_old, tf_new));
+  */
+}
+
+
+// get ownership if it is not yet owned
+static inline bool mi_page_try_claim_ownership(mi_page_t* page) {
+  const uintptr_t old = mi_atomic_or_acq_rel(&page->xthread_free, 1);
+  return ((old&1)==0);
+}
+
+static inline void _mi_page_unown(mi_page_t* page) {
+  mi_assert_internal(mi_page_is_owned(page));
+  mi_assert_internal(mi_page_is_abandoned(page));
+  mi_assert_internal(mi_page_thread_id(page)==0);
+  mi_thread_free_t tf_new;
+  mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
+  do {
+    mi_assert_internal(mi_tf_is_owned(tf_old));
+    while mi_unlikely(mi_tf_block(tf_old) != NULL) {
+      _mi_page_free_collect(page, false);  // update used
+      if (mi_page_all_free(page)) {        // it may become free just before unowning it
+        _mi_arena_page_unabandon(page);
+        _mi_arena_page_free(page);
+        return;
+      }
+      tf_old = mi_atomic_load_relaxed(&page->xthread_free);
+    }
+    mi_assert_internal(mi_tf_block(tf_old)==NULL);
+    tf_new = mi_tf_create(NULL, false);
+  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tf_old, tf_new));
+}
 
 //-----------------------------------------------------------
 // Page flags

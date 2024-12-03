@@ -80,7 +80,7 @@ static inline bool mi_bfield_atomic_set2(_Atomic(mi_bfield_t)*b, size_t idx, boo
   mi_assert_internal(idx < MI_BFIELD_BITS-1);
   const size_t mask = (mi_bfield_t)0x03 << idx;
   mi_bfield_t old = mi_atomic_load_relaxed(b);
-  while (!mi_atomic_cas_weak_acq_rel(b, &old, old|mask));  // try to atomically set the mask bits until success
+  while (!mi_atomic_cas_weak_acq_rel(b, &old, old|mask)) { };  // try to atomically set the mask bits until success
   if (all_already_set!=NULL) { *all_already_set = ((old&mask)==mask); }
   return ((old&mask) == 0);
 }
@@ -90,7 +90,7 @@ static inline bool mi_bfield_atomic_clear2(_Atomic(mi_bfield_t)*b, size_t idx, b
   mi_assert_internal(idx < MI_BFIELD_BITS-1);
   const size_t mask = (mi_bfield_t)0x03 << idx;
   mi_bfield_t old = mi_atomic_load_relaxed(b);
-  while (!mi_atomic_cas_weak_acq_rel(b, &old, old&~mask));  // try to atomically clear the mask bits until success
+  while (!mi_atomic_cas_weak_acq_rel(b, &old, old&~mask)) { };  // try to atomically clear the mask bits until success
   if (all_already_clear!=NULL) { *all_already_clear = ((old&mask) == 0); }
   return ((old&mask) == mask);
 }
@@ -110,7 +110,7 @@ static inline bool mi_bfield_atomic_xset2(mi_bit_t set, _Atomic(mi_bfield_t)*b, 
 static inline bool mi_bfield_atomic_set_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask, size_t* already_set) {
   mi_assert_internal(mask != 0);
   mi_bfield_t old = mi_atomic_load_relaxed(b);
-  while (!mi_atomic_cas_weak_acq_rel(b, &old, old|mask));  // try to atomically set the mask bits until success
+  while (!mi_atomic_cas_weak_acq_rel(b, &old, old|mask)) { };  // try to atomically set the mask bits until success
   if (already_set!=NULL) { *already_set = mi_bfield_popcount(old&mask); }
   return ((old&mask) == 0);
 }
@@ -119,7 +119,7 @@ static inline bool mi_bfield_atomic_set_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t
 static inline bool mi_bfield_atomic_clear_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask, size_t* already_clear) {
   mi_assert_internal(mask != 0);
   mi_bfield_t old = mi_atomic_load_relaxed(b);
-  while (!mi_atomic_cas_weak_acq_rel(b, &old, old&~mask));  // try to atomically clear the mask bits until success
+  while (!mi_atomic_cas_weak_acq_rel(b, &old, old&~mask)) { };  // try to atomically clear the mask bits until success
   if (already_clear!=NULL) { *already_clear = mi_bfield_popcount(~(old&mask)); }
   return ((old&mask) == mask);
 }
@@ -1115,16 +1115,18 @@ static inline bool mi_bfield_atomic_clear_while_not_busy(_Atomic(mi_bfield_t)*b,
   mi_assert_internal(idx < MI_BFIELD_BITS-1);
   const mi_bfield_t mask = ((mi_bfield_t)0x03 << idx);
   const mi_bfield_t mask_busy = ((mi_bfield_t)MI_PAIR_BUSY << idx);
-  mi_bfield_t old;
   mi_bfield_t bnew;
+  mi_bfield_t old = mi_atomic_load_relaxed(b);
   do {
-    old = mi_atomic_load_relaxed(b);
     if mi_unlikely((old&mask)==mask_busy) {
       old = mi_atomic_load_acquire(b);
+      if ((old&mask)==mask_busy) {
+        _mi_stat_counter_increase(&_mi_stats_main.pages_unabandon_busy_wait, 1);
+      }
       while ((old&mask)==mask_busy) {  // busy wait
         mi_atomic_yield();
         old = mi_atomic_load_acquire(b);
-      }
+      }      
     }
     bnew = (old & ~mask);  // clear
   } while (!mi_atomic_cas_weak_acq_rel(b, &old, bnew));
