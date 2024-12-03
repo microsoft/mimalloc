@@ -46,7 +46,7 @@ static int SCALE   = 100;
 static int ITER    = 50;
 #else
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
-static int SCALE   = 25;      // scaling factor
+static int SCALE   = 50;      // scaling factor
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
 #endif  
 
@@ -54,7 +54,7 @@ static int ITER    = 50;      // N full iterations destructing and re-creating a
 
 #define STRESS                // undefine for leak test
 
-static bool   allow_large_objects = true;     // allow very large objects? (set to `true` if SCALE>100)
+static bool   allow_large_objects = false;     // allow very large objects? (set to `true` if SCALE>100)
 static size_t use_one_size = 0;               // use single object size of `N * sizeof(uintptr_t)`?
 
 static bool   main_participates = false;       // main thread participates as a worker too

@@ -453,6 +453,20 @@ static inline bool mi_bitmap_chunk_try_clearN(mi_bitmap_chunk_t* chunk, size_t c
   return mi_bitmap_chunk_try_xsetN(MI_BIT_CLEAR, chunk, cidx, n);
 }
 
+#if defined(__AVX2__)
+static inline __m256i mi_mm256_zero(void) {
+  return _mm256_setzero_si256();
+}
+static inline __m256i mi_mm256_ones(void) {
+  return _mm256_set1_epi64x(~0);
+}
+static inline bool mi_mm256_is_ones(__m256i vec) {
+  return _mm256_testc_si256(vec, _mm256_cmpeq_epi32(vec, vec));
+}
+static inline bool mi_mm256_is_zero( __m256i vec) {
+  return _mm256_testz_si256(vec,vec);
+}
+#endif
 
 // find least 0/1-bit in a chunk and try to set/clear it atomically
 // set `*pidx` to the bit index (0 <= *pidx < MI_BITMAP_CHUNK_BITS) on success.
@@ -461,7 +475,7 @@ static inline bool mi_bitmap_chunk_find_and_try_xset(mi_bit_t set, mi_bitmap_chu
 #if defined(__AVX2__) && (MI_BITMAP_CHUNK_BITS==256)
   while (true) {
     const __m256i vec = _mm256_load_si256((const __m256i*)chunk->bfields);
-    const __m256i vcmp = _mm256_cmpeq_epi64(vec, (set ? _mm256_set1_epi64x(~0) : _mm256_setzero_si256())); // (elem64 == ~0 / 0 ? 0xFF  : 0)
+    const __m256i vcmp = _mm256_cmpeq_epi64(vec, (set ? mi_mm256_ones() : mi_mm256_zero())); // (elem64 == ~0 / 0 ? 0xFF  : 0)
     const uint32_t mask = ~_mm256_movemask_epi8(vcmp);  // mask of most significant bit of each byte (so each 8 bits are all set or clear)
     // mask is inverted, so each 8-bits is 0xFF iff the corresponding elem64 has a zero / one bit (and thus can be set/cleared)
     if (mask==0) return false;
@@ -483,11 +497,11 @@ static inline bool mi_bitmap_chunk_find_and_try_xset(mi_bit_t set, mi_bitmap_chu
     size_t chunk_idx = 0;
     #if 1
     __m256i vec = _mm256_load_si256((const __m256i*)chunk->bfields);
-    if ((set ? _mm256_test_all_ones(vec) : _mm256_testz_si256(vec,vec))) {
+    if ((set ? mi_mm256_is_ones(vec) : mi_mm256_is_zero(vec))) {
       chunk_idx += 4;
       vec = _mm256_load_si256(((const __m256i*)chunk->bfields) + 1);
     }
-    const __m256i vcmp = _mm256_cmpeq_epi64(vec, (set ? _mm256_set1_epi64x(~0) : _mm256_setzero_si256())); // (elem64 == ~0 / 0 ? 0xFF  : 0)
+    const __m256i vcmp = _mm256_cmpeq_epi64(vec, (set ? mi_mm256_ones() : mi_mm256_zero())); // (elem64 == ~0 / 0 ? 0xFF  : 0)
     const uint32_t mask = ~_mm256_movemask_epi8(vcmp);  // mask of most significant bit of each byte (so each 8 bits are all set or clear)
     // mask is inverted, so each 8-bits is 0xFF iff the corresponding elem64 has a zero / one bit (and thus can be set/cleared)
     if (mask==0) return false;
@@ -496,7 +510,7 @@ static inline bool mi_bitmap_chunk_find_and_try_xset(mi_bit_t set, mi_bitmap_chu
     #else
     const __m256i vec1  = _mm256_load_si256((const __m256i*)chunk->bfields);
     const __m256i vec2  = _mm256_load_si256(((const __m256i*)chunk->bfields)+1);
-    const __m256i cmpv  = (set ? _mm256_set1_epi64x(~0) : _mm256_setzero_si256());
+    const __m256i cmpv  = (set ? mi_mm256_ones() : mi_mm256_zero());
     const __m256i vcmp1 = _mm256_cmpeq_epi64(vec1, cmpv); // (elem64 == ~0 / 0 ? 0xFF  : 0)
     const __m256i vcmp2 = _mm256_cmpeq_epi64(vec2, cmpv); // (elem64 == ~0 / 0 ? 0xFF  : 0)
     const uint32_t mask1 = ~_mm256_movemask_epi8(vcmp1);  // mask of most significant bit of each byte (so each 8 bits are all set or clear)
@@ -549,7 +563,7 @@ static inline bool mi_bitmap_chunk_find_and_try_clear8(mi_bitmap_chunk_t* chunk,
   #if defined(__AVX2__) && (MI_BITMAP_CHUNK_BITS==256)
   while(true) {
     const __m256i vec  = _mm256_load_si256((const __m256i*)chunk->bfields);
-    const __m256i vcmp = _mm256_cmpeq_epi8(vec, _mm256_set1_epi64x(~0)); // (byte == ~0 ? -1  : 0)
+    const __m256i vcmp = _mm256_cmpeq_epi8(vec, mi_mm256_ones()); // (byte == ~0 ? -1  : 0)
     const uint32_t mask = _mm256_movemask_epi8(vcmp);    // mask of most significant bit of each byte
     if (mask == 0) return false;
     const size_t i = _tzcnt_u32(mask);
@@ -650,12 +664,12 @@ static inline bool mi_bitmap_chunk_find_and_try_clearN(mi_bitmap_chunk_t* chunk,
 static inline bool mi_bitmap_chunk_all_are_clear(mi_bitmap_chunk_t* chunk) {
   #if defined(__AVX2__) && (MI_BITMAP_CHUNK_BITS==256)
   const __m256i vec = _mm256_load_si256((const __m256i*)chunk->bfields);
-  return _mm256_testz_si256( vec, vec );
+  return mi_mm256_is_zero(vec);
   #elif defined(__AVX2__) && (MI_BITMAP_CHUNK_BITS==512)
   const __m256i vec1 = _mm256_load_si256((const __m256i*)chunk->bfields);
-  if (!_mm256_testz_si256(vec1, vec1)) return false;
+  if (!mi_mm256_is_zero(vec1)) return false;
   const __m256i vec2 = _mm256_load_si256(((const __m256i*)chunk->bfields)+1);
-  return (_mm256_testz_si256(vec2, vec2));
+  return (mi_mm256_is_zero(vec2));
   #else
   for(int i = 0; i < MI_BITMAP_CHUNK_FIELDS; i++) {
     if (chunk->bfields[i] != 0) return false;

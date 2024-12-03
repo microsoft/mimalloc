@@ -34,7 +34,7 @@ const mi_page_t _mi_page_empty = {
   NULL,       // xheap
   NULL, NULL, // next, prev
   NULL,       // subproc
-  { {{ NULL, 0}}, false, false, false, MI_MEM_NONE }  // memid
+  { {{ NULL, 0, 0}}, false, false, false, MI_MEM_NONE }  // memid
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)

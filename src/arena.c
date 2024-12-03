@@ -676,7 +676,7 @@ void _mi_arena_page_abandon(mi_page_t* page) {
     // leave as is; it will be reclaimed when an object is free'd in the page
   }
   _mi_page_unown(page);
-  mi_stat_increase(_mi_stats_main.pages_abandoned, 1);
+  _mi_stat_increase(&_mi_stats_main.pages_abandoned, 1);
 }
 
 // called from `mi_free` if trying to unabandon an abandoned page
@@ -706,7 +706,7 @@ void _mi_arena_page_unabandon(mi_page_t* page) {
     // nothing to do    
     // TODO: maintain count of these as well?
   }
-  mi_stat_decrease(_mi_stats_main.pages_abandoned, 1);
+  _mi_stat_decrease(&_mi_stats_main.pages_abandoned, 1);
 }
 
 /*

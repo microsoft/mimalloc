@@ -260,6 +260,34 @@ static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_
   heap->page_count++;
 }
 
+static void mi_page_queue_push_at_end(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_t* page) {
+  mi_assert_internal(mi_page_heap(page) == heap);
+  mi_assert_internal(!mi_page_queue_contains(queue, page));
+
+  mi_assert_internal(mi_page_block_size(page) == queue->block_size ||
+                      (mi_page_is_huge(page) && mi_page_queue_is_huge(queue)) ||
+                       (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
+
+  mi_page_set_in_full(page, mi_page_queue_is_full(queue));
+
+  page->prev = queue->last;
+  page->next = NULL;
+  if (queue->last != NULL) {
+    mi_assert_internal(queue->last->next == NULL);
+    queue->last->next = page;
+    queue->last = page;
+  }
+  else {
+    queue->first = queue->last = page;
+  }
+
+  // update direct
+  if (queue->first == page) {
+    mi_heap_queue_first_update(heap, queue);
+  }
+  heap->page_count++;
+}
+
 static void mi_page_queue_move_to_front(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(mi_page_heap(page) == heap);
   mi_assert_internal(mi_page_queue_contains(queue, page));
@@ -344,7 +372,7 @@ static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* fro
 
 static void mi_page_queue_enqueue_from_full(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
   // note: we could insert at the front to increase reuse, but it slows down certain benchmarks (like `alloc-test`)
-  mi_page_queue_enqueue_from_ex(to, from, false /* enqueue at the end of the `to` queue? */, page);
+  mi_page_queue_enqueue_from_ex(to, from, true /* enqueue at the end of the `to` queue? */, page);
 }
 
 // Only called from `mi_heap_absorb`.
