@@ -280,7 +280,7 @@ void _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...) {
 // generic trailing and leading zero count
 // --------------------------------------------------------
 
-static inline size_t mi_ctz_generic32(uint32_t x) {
+uint32_t _mi_ctz_generic32(uint32_t x) {
   // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
   static const uint8_t debruijn[32] = {
     0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
@@ -290,7 +290,7 @@ static inline size_t mi_ctz_generic32(uint32_t x) {
   return debruijn[((x & -(int32_t)x) * 0x077CB531UL) >> 27];
 }
 
-static inline size_t mi_clz_generic32(uint32_t x) {
+static size_t mi_clz_generic32(uint32_t x) {
   // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
   static const uint8_t debruijn[32] = {
     31, 22, 30, 21, 18, 10, 29, 2, 20, 17, 15, 13, 9, 6, 28, 1,
@@ -319,10 +319,10 @@ size_t _mi_clz_generic(size_t x) {
 size_t _mi_ctz_generic(size_t x) {
   if (x==0) return MI_SIZE_BITS;
   #if (MI_SIZE_BITS <= 32)
-    return mi_ctz_generic32((uint32_t)x);
+    return _mi_ctz_generic32((uint32_t)x);
   #else
-    const size_t count = mi_ctz_generic32((uint32_t)x);
+    const size_t count = _mi_ctz_generic32((uint32_t)x);
     if (count < 32) return count;
-    return (32 + mi_ctz_generic32((uint32_t)(x>>32)));
+    return (32 + _mi_ctz_generic32((uint32_t)(x>>32)));
   #endif
 }

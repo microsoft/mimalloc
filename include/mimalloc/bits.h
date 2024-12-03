@@ -145,19 +145,12 @@ typedef int32_t  mi_ssize_t;
 
 size_t _mi_clz_generic(size_t x);
 size_t _mi_ctz_generic(size_t x);
+uint32_t _mi_ctz_generic32(uint32_t x);
 
 static inline size_t mi_ctz(size_t x) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)  // on x64 tzcnt is defined for 0
     uint64_t r;
     __asm volatile ("tzcnt\t%1, %0" : "=&r"(r) : "r"(x) : "cc");
-    return r;
-  #elif defined(__GNUC__) && MI_ARCH_ARM64
-    uint64_t r;
-    __asm volatile ("rbit\t%0, %1\n\tclz\t%0, %0" : "=&r"(r) : "r"(x) : "cc");
-    return r;
-  #elif defined(__GNUC__) && MI_ARCH_RISCV
-    size_t r;
-    __asm volatile ("ctz\t%0, %1" : "=&r"(r) : "r"(x) : );
     return r;
   #elif MI_ARCH_X64 && defined(__BMI1__)
     return (size_t)_tzcnt_u64(x);
@@ -168,6 +161,17 @@ static inline size_t mi_ctz(size_t x) {
     #else
       return (_BitScanForward64(&idx, x) ? (size_t)idx : 64);
     #endif
+  /*
+  // for arm64 and riscv, the builtin_ctz is defined for 0 as well
+  #elif defined(__GNUC__) && MI_ARCH_ARM64
+    uint64_t r;
+    __asm volatile ("rbit\t%0, %1\n\tclz\t%0, %0" : "=&r"(r) : "r"(x) : "cc");
+    return r;
+  #elif defined(__GNUC__) && MI_ARCH_RISCV
+    size_t r;
+    __asm volatile ("ctz\t%0, %1" : "=&r"(r) : "r"(x) : );
+    return r;
+  */
   #elif mi_has_builtin_size(ctz)
     return (x!=0 ? (size_t)mi_builtin_size(ctz)(x) : MI_SIZE_BITS);
   #else
@@ -177,17 +181,9 @@ static inline size_t mi_ctz(size_t x) {
 }
 
 static inline size_t mi_clz(size_t x) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 lzcnt is defined for 0
     uint64_t r;
     __asm volatile ("lzcnt\t%1, %0" : "=&r"(r) : "r"(x) : "cc");
-    return r;
-  #elif defined(__GNUC__) && MI_ARCH_ARM64
-    uint64_t r;
-    __asm volatile ("clz\t%0, %1" : "=&r"(r) : "r"(x) : "cc");
-    return r;
-  #elif defined(__GNUC__) && MI_ARCH_RISCV
-    size_t r;
-    __asm volatile ("clz\t%0, %1" : "=&r"(r) : "r"(x) : );
     return r;
   #elif MI_ARCH_X64 && defined(__BMI1__)
     return (size_t)_lzcnt_u64(x);
@@ -198,11 +194,42 @@ static inline size_t mi_clz(size_t x) {
     #else
       return (_BitScanReverse64(&idx, x) ? 63 - (size_t)idx : 64);
     #endif
+  /*
+  // for arm64 and riscv, the builtin_clz is defined for 0 as well
+  #elif defined(__GNUC__) && MI_ARCH_ARM64
+    uint64_t r;
+    __asm volatile ("clz\t%0, %1" : "=&r"(r) : "r"(x) : "cc");
+    return r;
+  #elif defined(__GNUC__) && MI_ARCH_RISCV
+    size_t r;
+    __asm volatile ("clz\t%0, %1" : "=&r"(r) : "r"(x) : );
+    return r;
+  */
   #elif mi_has_builtin_size(clz)
     return (x!=0 ? (size_t)mi_builtin_size(clz)(x) : MI_SIZE_BITS);
   #else
     #define MI_HAS_FAST_BITSCAN  0
     return _mi_clz_generic(x);
+  #endif
+}
+
+static inline uint32_t mi_ctz32(uint32_t x) {
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 tzcnt is defined for 0
+    uint32_t r;
+    __asm volatile ("tzcntl\t%1, %0" : "=&r"(r) : "r"(x) : "cc");
+    return r;
+  #elif MI_ARCH_X64 && defined(__BMI1__)
+    return (uint32_t)_tzcnt_u32(x);
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+    unsigned long idx;
+    return (_BitScanForward(&idx, x) ? (uint32_t)idx : 32);
+  #elif mi_has_builtin(ctz) && (INT_MAX == INT32_MAX)
+    return (x!=0 ? (uint32_t)mi_builtin(ctz)(x) : 32);
+  #elif mi_has_builtin(ctzl) && (LONG_MAX == INT32_MAX)
+    return (x!=0 ? (uint32_t)mi_builtin(ctzl)(x) : 32);
+  #else
+    #define MI_HAS_FAST_BITSCAN  0
+    return _mi_ctz_generic32(x);
   #endif
 }
 
@@ -229,6 +256,22 @@ static inline bool mi_bsf(size_t x, size_t* idx) {
   #endif
 }
 
+// Bit scan forward: find the least significant bit that is set (i.e. count trailing zero's)
+// return false if `x==0` (with `*idx` undefined) and true otherwise,
+// with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
+static inline bool mi_bsf32(uint32_t x, uint32_t* idx) {
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)
+    // on x64 the carry flag is set on zero which gives better codegen
+    bool is_zero;
+    __asm ("tzcntl\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc");
+    return !is_zero;
+  #else
+    *idx = mi_ctz32(x);
+    return (x!=0);
+  #endif
+}
+
+
 // Bit scan reverse: find the most significant bit that is set
 // return false if `x==0` (with `*idx` undefined) and true otherwise,
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
@@ -248,29 +291,6 @@ static inline bool mi_bsr(size_t x, size_t* idx) {
 }
 
 
-/* --------------------------------------------------------------------------------
-  find least/most significant bit position
--------------------------------------------------------------------------------- */
-
-// Find most significant bit index, or MI_SIZE_BITS if 0
-static inline size_t mi_find_msb(size_t x) {
-  #if defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    unsigned long i;
-    #if MI_SIZE_BITS==32
-      return (_BitScanReverse(&i, x) ? i : 32);
-    #else
-      return (_BitScanReverse64(&i, x) ? i : 64);
-    #endif
-  #else
-    return (x==0 ? MI_SIZE_BITS : MI_SIZE_BITS - 1 - mi_clz(x));
-  #endif
-}
-
-// Find least significant bit index, or MI_SIZE_BITS if 0 (this equals `mi_ctz`, count trailing zero's)
-static inline size_t mi_find_lsb(size_t x) {
-  return mi_ctz(x);
-}
-
 
 /* --------------------------------------------------------------------------------
   rotate
@@ -288,10 +308,23 @@ static inline size_t mi_rotr(size_t x, size_t r) {
     return _rotr64(x,(int)r);
     #endif
   #else
-    // The term `(-rshift)&(MI_BFIELD_BITS-1)` is written instead of `MI_BFIELD_BITS - rshift` to
+    // The term `(-rshift)&(BITS-1)` is written instead of `BITS - rshift` to
     // avoid UB when `rshift==0`. See <https://blog.regehr.org/archives/1063>
     const unsigned int rshift = (unsigned int)(r) & (MI_SIZE_BITS-1);
     return ((x >> rshift) | (x << ((-rshift) & (MI_SIZE_BITS-1))));
+  #endif
+}
+
+static inline uint32_t mi_rotr32(uint32_t x, uint32_t r) {
+  #if mi_has_builtin(rotateright32)
+    return mi_builtin(rotateright32)(x, r);
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+    return _lrotr(x, (int)r);
+  #else
+    // The term `(-rshift)&(BITS-1)` is written instead of `BITS - rshift` to
+    // avoid UB when `rshift==0`. See <https://blog.regehr.org/archives/1063>
+    const unsigned int rshift = (unsigned int)(r) & 31;
+    return ((x >> rshift) | (x << ((-rshift) & 31)));
   #endif
 }
 
@@ -307,7 +340,7 @@ static inline size_t mi_rotl(size_t x, size_t r) {
     return _rotl64(x,(int)r);
     #endif
   #else
-    // The term `(-rshift)&(MI_BFIELD_BITS-1)` is written instead of `MI_BFIELD_BITS - rshift` to
+    // The term `(-rshift)&(BITS-1)` is written instead of `BITS - rshift` to
     // avoid UB when `rshift==0`. See <https://blog.regehr.org/archives/1063>
     const unsigned int rshift = (unsigned int)(r) & (MI_SIZE_BITS-1);
     return ((x << rshift) | (x >> ((-rshift) & (MI_SIZE_BITS-1))));

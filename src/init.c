@@ -31,8 +31,9 @@ const mi_page_t _mi_page_empty = {
   { 0, 0 },
   #endif
   MI_ATOMIC_VAR_INIT(0), // xthread_free
-  MI_ATOMIC_VAR_INIT(0), // xheap
+  NULL,       // xheap
   NULL, NULL, // next, prev
+  NULL,       // subproc
   { {{ NULL, 0}}, false, false, false, MI_MEM_NONE }  // memid
 };
 
@@ -96,7 +97,7 @@ const mi_page_t _mi_page_empty = {
 
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,
-  MI_ATOMIC_VAR_INIT(NULL),  // thread delayed free
+  // MI_ATOMIC_VAR_INIT(NULL),  // thread delayed free
   0,                // thread_id
   0,                // arena_id
   0,                // cookie
@@ -106,6 +107,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next
   false,            // can reclaim
+  true,             // can eager abandon
   0,                // tag
   #if MI_GUARDED
   0, 0, 0, 0, 1,    // count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
@@ -138,7 +140,7 @@ static mi_decl_cache_align mi_tld_t tld_main = {
 
 mi_decl_cache_align mi_heap_t _mi_heap_main = {
   &tld_main,
-  MI_ATOMIC_VAR_INIT(NULL),
+  // MI_ATOMIC_VAR_INIT(NULL),  // thread delayed free list
   0,                // thread id
   0,                // initial cookie
   0,                // arena id
@@ -148,6 +150,7 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
   false,            // can reclaim
+  true,             // eager abandon
   0,                // tag
   #if MI_GUARDED
   0, 0, 0, 0, 0,

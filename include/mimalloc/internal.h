@@ -141,8 +141,10 @@ void       _mi_arenas_collect(bool force_purge, mi_stats_t* stats);
 void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 
 mi_page_t* _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
-void       _mi_arena_page_abandon(mi_page_t* page, mi_tld_t* tld);
-void       _mi_arena_page_free(mi_page_t* page, mi_tld_t* tld);
+void       _mi_arena_page_free(mi_page_t* page);
+void       _mi_arena_page_abandon(mi_page_t* page);
+void       _mi_arena_page_unabandon(mi_page_t* page); 
+
 bool       _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page);
 void       _mi_arena_reclaim_all_abandoned(mi_heap_t* heap);
 
@@ -174,19 +176,19 @@ void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t hu
 
 void       _mi_page_retire(mi_page_t* page) mi_attr_noexcept;                  // free the page if there are no other pages with many free blocks
 void       _mi_page_unfull(mi_page_t* page);
-void       _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force);   // free the page
+void       _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);               // free the page
 void       _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);            // abandon the page, to be picked up by another thread...
 void       _mi_page_force_abandon(mi_page_t* page);
 
-void       _mi_heap_delayed_free_all(mi_heap_t* heap);
-bool       _mi_heap_delayed_free_partial(mi_heap_t* heap);
+// void       _mi_heap_delayed_free_all(mi_heap_t* heap);
+// bool       _mi_heap_delayed_free_partial(mi_heap_t* heap);
 void       _mi_heap_collect_retired(mi_heap_t* heap, bool force);
 
 size_t     _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append);
 void       _mi_deferred_free(mi_heap_t* heap, bool force);
 
 void       _mi_page_free_collect(mi_page_t* page,bool force);
-void       _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback from segments
+// void       _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback from segments
 void       _mi_page_init(mi_heap_t* heap, mi_page_t* page);
 
 size_t     _mi_bin_size(uint8_t bin);           // for stats
@@ -202,6 +204,7 @@ void       _mi_heap_unsafe_destroy_all(void);
 mi_heap_t* _mi_heap_by_tag(mi_heap_t* heap, uint8_t tag);
 void       _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
 bool       _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
+void       _mi_heap_page_reclaim(mi_heap_t* heap, mi_page_t* page);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);
@@ -511,6 +514,24 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
   return mi_page_block_size(page) - MI_PADDING_SIZE;
 }
 
+static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
+  return page->heap;
+}
+
+static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
+  if (heap != NULL) {
+    // mi_atomic_store_release(&page->xheap, (uintptr_t)heap);
+    page->heap = heap;
+    page->heap_tag = heap->tag;
+    mi_atomic_store_release(&page->xthread_id, heap->thread_id);
+  }
+  else {
+    // mi_atomic_store_release(&page->xheap, (uintptr_t)heap->tld->subproc);
+    page->heap = NULL;
+    mi_atomic_store_release(&page->xthread_id,0);
+  }
+}
+
 //static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
 //  mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
 //  if (heap != NULL) {
@@ -529,12 +550,17 @@ static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
   return (mi_block_t*)(tf & ~1);
 }
 static inline bool mi_tf_is_owned(mi_thread_free_t tf) {
-  return ((tf & 1) == 0);
+  return ((tf & 1) == 1);
 }
 static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned) {
-  return (mi_thread_free_t)((uintptr_t)block | (owned ? 0 : 1));
+  return (mi_thread_free_t)((uintptr_t)block | (owned ? 1 : 0));
 }
 
+
+// Thread id of thread that owns this page
+static inline mi_threadid_t mi_page_thread_id(const mi_page_t* page) {
+  return mi_atomic_load_relaxed(&page->xthread_id);
+}
 
 // Thread free access
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
@@ -546,9 +572,27 @@ static inline bool mi_page_is_owned(const mi_page_t* page) {
   return mi_tf_is_owned(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
 }
 
-// Thread id of thread that owns this page
-static inline mi_threadid_t mi_page_thread_id(const mi_page_t* page) {
-  return mi_atomic_load_relaxed(&page->xthread_id);
+// Unown a page that is currently owned
+static inline void _mi_page_unown(mi_page_t* page) {
+  mi_assert_internal(mi_page_is_owned(page));
+  mi_assert_internal(mi_page_thread_id(page)==0);
+  const uintptr_t old = mi_atomic_and_acq_rel(&page->xthread_free, ~((uintptr_t)1));
+  mi_assert_internal((old&1)==1); MI_UNUSED(old);
+  /*
+  mi_thread_free_t tf_new;
+  mi_thread_free_t tf_old;
+  do {
+    tf_old = mi_atomic_load_relaxed(&page->xthread_free);
+    mi_assert_internal(mi_tf_is_owned(tf_old));
+    tf_new = mi_tf_create(mi_tf_block(tf_old), false);
+  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tf_old, tf_new));
+  */
+}
+
+// get ownership if it is not yet owned
+static inline bool mi_page_try_claim_ownership(mi_page_t* page) {
+  const uintptr_t old = mi_atomic_or_acq_rel(&page->xthread_free, 1);
+  return ((old&1)==0);
 }
 
 

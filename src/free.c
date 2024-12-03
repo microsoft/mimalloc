@@ -158,52 +158,64 @@ static void mi_decl_noinline mi_free_try_reclaim_mt(mi_page_t* page) {
   mi_assert_internal(mi_page_thread_id(page)==0);
 
   // we own the page now..
-  // first remove it from the abandoned pages in the arena
-  mi_heap_t* const heap = mi_heap_get_default();
-  _mi_arena_page_unabandon(page,heap->tld);
-
   // collect the thread atomic free list
   _mi_page_free_collect(page, false);  // update `used` count
   if (mi_page_is_singleton(page)) mi_assert_internal(mi_page_all_free(page));
 
   if (mi_page_all_free(page)) {
+    // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
+    _mi_arena_page_unabandon(page);
     // we can free the page directly
-    _mi_arena_page_free(page, heap->tld);
+    _mi_arena_page_free(page);
+    return;
   }
   else {
     // the page has still some blocks in use
     // reclaim in our heap if compatible, or otherwise abandon again
-    if ((_mi_option_get_fast(mi_option_abandoned_reclaim_on_free) != 0) &&
-        (mi_prim_get_default_heap() != (mi_heap_t*)&_mi_heap_empty) && // we did not already terminate our thread (can this happen? yes, due to thread-local destructors for example (issue #944))
-        (page->subproc == heap->tld->subproc) &&  // don't reclaim across sub-processes        
-        mi_arena_page_try_reclaim(page)           // and we can reclaim it from the arena
-       )
+    // todo: optimize this check further?
+    // note: don't use `mi_heap_get_default()` as we may just have terminated this thread and we should
+    // not reinitialize the heap for this thread. (can happen due to thread-local destructors for example -- issue #944)
+    mi_heap_t* const heap = mi_prim_get_default_heap();
+
+    if ((_mi_option_get_fast(mi_option_abandoned_reclaim_on_free) != 0) && // only if reclaim on free is allowed
+        (heap != (mi_heap_t*)&_mi_heap_empty))       // we did not already terminate our thread (can this happen? 
     {
-      // make it part of our heap
-      _mi_heap_page_reclaim(heap, page);
+      mi_heap_t* const tagheap = _mi_heap_by_tag(heap, page->heap_tag);
+      if ((tagheap != NULL) &&                         // don't reclaim across heap object types       
+          (page->subproc == tagheap->tld->subproc) &&  // don't reclaim across sub-processes; todo: make this check faster (integrate with _mi_heap_by_tag ? )
+          (_mi_arena_memid_is_suitable(page->memid, tagheap->arena_id))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)        
+         )
+      {
+        // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
+        _mi_arena_page_unabandon(page);
+        // and make it part of our heap
+        _mi_heap_page_reclaim(tagheap, page);
+        return;
+      }      
     }
-    else {
-      // abandon again
-      _mi_arena_page_abandon(page, heap->tld);
-    }
+    
+    // give up ownership as we cannot reclaim this page
+    // note: we don't need to re-abandon as we did not yet unabandon
+    _mi_page_unown(page);
   }
 }
 
 // Push a block that is owned by another thread on its page-local thread free list. 
-static void mi_decl_noinline mi_free_block_delayed_mt(mi_page_t* page, mi_block_t* block)
+static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block)
 {
   // push atomically on the page thread free list
   mi_thread_free_t tf_new;
-  mi_thread_free_t tf;
+  mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {
-    tf = mi_atomic_load_relaxed(&page->xthread_free);
-    mi_block_set_next(page, block, mi_tf_block(tf));
+    mi_block_set_next(page, block, mi_tf_block(tf_old));
     tf_new = mi_tf_create(block, true /* always owned: try to claim it if abandoned */);
-  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tf, tf_new));
+  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
 
   // and atomically reclaim the page if it was abandoned
-  bool reclaimed = !mi_tf_is_owned(tf);
-  if (reclaimed) mi_free_try_reclaim_mt(page);
+  bool reclaimed = !mi_tf_is_owned(tf_old);
+  if (reclaimed) {
+    mi_free_try_reclaim_mt(page);
+  }
 }
 
   /*
@@ -266,9 +278,9 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block
         }
         else {
           if (mi_page_is_abandoned(page)) {
-            mi_assert(false);
+            // mi_assert(false);
           }
-          mi_assert_internal(!mi_page_is_singleton(page)); // we should have succeeded on singleton pages
+          // mi_assert_internal(!mi_page_is_singleton(page)); // we should have succeeded on singleton pages
         }
       }
     }

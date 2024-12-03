@@ -120,7 +120,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 #ifndef MI_BITMAP_CHUNK_BITS_SHIFT
-#define MI_BITMAP_CHUNK_BITS_SHIFT        8                           // optimized for 256 bits per chunk (avx2)
+#define MI_BITMAP_CHUNK_BITS_SHIFT        (6 + MI_SIZE_SHIFT)         // optimized for 512 bits per chunk (avx512)
 #endif
 
 #define MI_BITMAP_CHUNK_BITS              (1 << MI_BITMAP_CHUNK_BITS_SHIFT)
@@ -305,8 +305,8 @@ typedef struct mi_page_s {
   #endif
 
   _Atomic(mi_thread_free_t) xthread_free;  // list of deferred free blocks freed by other threads
-  //  _Atomic(uintptr_t)    xheap;             // heap this threads belong to.
-
+  
+  mi_heap_t*            heap;              // heap this threads belong to.
   struct mi_page_s*     next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by the heap with the same `block_size`
   mi_subproc_t*         subproc;           // sub-process of this heap
@@ -401,7 +401,7 @@ typedef struct mi_padding_s {
 // A heap owns a set of pages.
 struct mi_heap_s {
   mi_tld_t*             tld;
-  _Atomic(mi_block_t*)  thread_delayed_free;
+  // _Atomic(mi_block_t*)  thread_delayed_free;
   mi_threadid_t         thread_id;                           // thread this heap belongs too
   mi_arena_id_t         arena_id;                            // arena id if the heap belongs to a specific arena (or 0)
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
@@ -412,6 +412,7 @@ struct mi_heap_s {
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
+  bool                  eager_abandon;                       // `true` if this heap can abandon pages to reduce memory footprint
   uint8_t               tag;                                 // custom tag, can be used for separating heaps based on the object types
   #if MI_GUARDED
   size_t                guarded_size_min;                    // minimal size for guarded objects

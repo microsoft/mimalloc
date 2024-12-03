@@ -93,7 +93,7 @@ static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t
   if (mi_page_all_free(page)) {
     // no more used blocks, free the page.
     // note: this will free retired pages as well.
-    _mi_page_free(page, pq, collect >= MI_FORCE);
+    _mi_page_free(page, pq);
   }
   else if (collect == MI_ABANDON) {
     // still used blocks but the thread is done; abandon the page
@@ -102,14 +102,14 @@ static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t
   return true; // don't break
 }
 
-static bool mi_heap_page_never_delayed_free(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
-  MI_UNUSED(arg1);
-  MI_UNUSED(arg2);
-  MI_UNUSED(heap);
-  MI_UNUSED(pq);
-  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);
-  return true; // don't break
-}
+//static bool mi_heap_page_never_delayed_free(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
+//  MI_UNUSED(arg1);
+//  MI_UNUSED(arg2);
+//  MI_UNUSED(heap);
+//  MI_UNUSED(pq);
+//  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);
+//  return true; // don't break
+//}
 
 static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 {
@@ -137,20 +137,20 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   }
 
   // if abandoning, mark all pages to no longer add to delayed_free
-  if (collect == MI_ABANDON) {
-    mi_heap_visit_pages(heap, &mi_heap_page_never_delayed_free, NULL, NULL);
-  }
+  //if (collect == MI_ABANDON) {
+  //  mi_heap_visit_pages(heap, &mi_heap_page_never_delayed_free, NULL, NULL);
+  //}
 
   // free all current thread delayed blocks.
   // (if abandoning, after this there are no more thread-delayed references into the pages.)
-  _mi_heap_delayed_free_all(heap);
+  // _mi_heap_delayed_free_all(heap);
 
   // collect retired pages
   _mi_heap_collect_retired(heap, force);
 
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
-  mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
+  // mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
   // collect segments (purge pages, this can be expensive so don't force on abandonment)
   // _mi_segments_collect(collect == MI_FORCE, &heap->tld->segments);
@@ -206,6 +206,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool 
   heap->thread_id  = _mi_thread_id();
   heap->arena_id   = arena_id;
   heap->no_reclaim = noreclaim;
+  heap->eager_abandon = (!noreclaim && mi_option_is_enabled(mi_option_eager_abandon));
   heap->tag        = tag;
   if (heap == tld->heap_backing) {
     _mi_random_init(&heap->random);
@@ -255,7 +256,7 @@ static void mi_heap_reset_pages(mi_heap_t* heap) {
   // TODO: copy full empty heap instead?
   _mi_memset(&heap->pages_free_direct, 0, sizeof(heap->pages_free_direct));
   _mi_memcpy_aligned(&heap->pages, &_mi_heap_empty.pages, sizeof(heap->pages));
-  heap->thread_delayed_free = NULL;
+  // heap->thread_delayed_free = NULL;
   heap->page_count = 0;
 }
 
@@ -314,7 +315,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   MI_UNUSED(pq);
 
   // ensure no more thread_delayed_free will be added
-  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);
+  //_mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);
 
   // stats
   const size_t bsize = mi_page_block_size(page);
@@ -341,7 +342,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   // mi_page_free(page,false);
   page->next = NULL;
   page->prev = NULL;
-  _mi_arena_page_free(page,heap->tld);
+  _mi_arena_page_free(page);
 
   return true; // keep going
 }
@@ -413,7 +414,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   if (from==NULL || from->page_count == 0) return;
 
   // reduce the size of the delayed frees
-  _mi_heap_delayed_free_partial(from);
+  // _mi_heap_delayed_free_partial(from);
 
   // transfer all pages by appending the queues; this will set a new heap field
   // so threads may do delayed frees in either heap for a while.
@@ -432,10 +433,10 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   // note: be careful here as the `heap` field in all those pages no longer point to `from`,
   // turns out to be ok as `_mi_heap_delayed_free` only visits the list and calls a
   // the regular `_mi_free_delayed_block` which is safe.
-  _mi_heap_delayed_free_all(from);
-  #if !defined(_MSC_VER) || (_MSC_VER > 1900) // somehow the following line gives an error in VS2015, issue #353
-  mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_block_t,&from->thread_delayed_free) == NULL);
-  #endif
+  //_mi_heap_delayed_free_all(from);
+  //#if !defined(_MSC_VER) || (_MSC_VER > 1900) // somehow the following line gives an error in VS2015, issue #353
+  //  mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_block_t,&from->thread_delayed_free) == NULL);
+  //#endif
 
   // and reset the `from` heap
   mi_heap_reset_pages(from);
