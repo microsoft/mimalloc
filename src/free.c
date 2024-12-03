@@ -16,7 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 static void   mi_check_padding(const mi_page_t* page, const mi_block_t* block);
 static bool   mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block);
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block);
-// static void   _mi_stat_free(const mi_page_t* page, const mi_block_t* block);
+static void   mi_stat_free(const mi_page_t* page, const mi_block_t* block);
 
 
 // ------------------------------------------------------
@@ -33,7 +33,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   // checks
   if mi_unlikely(mi_check_is_double_free(page, block)) return;
   mi_check_padding(page, block);
-  if (track_stats) { _mi_stat_free(page, block); }
+  if (track_stats) { mi_stat_free(page, block); }
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN && !MI_GUARDED
   memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
   #endif
@@ -203,7 +203,7 @@ static void mi_decl_noinline mi_free_try_reclaim_mt(mi_page_t* page) {
 static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block)
 {
   // adjust stats (after padding check and potentially recursive `mi_free` above)
-  _mi_stat_free(page, block);    // stat_free may access the padding
+  mi_stat_free(page, block);    // stat_free may access the padding
   mi_track_free_size(block, mi_page_usable_size_of(page, block));
 
   // _mi_padding_shrink(page, block, sizeof(mi_block_t));
@@ -543,7 +543,7 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
 
 // only maintain stats for smaller objects if requested
 #if (MI_STAT>0)
-void _mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
+void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   #if (MI_STAT < 2)
   MI_UNUSED(block);
   #endif
@@ -565,7 +565,7 @@ void _mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   }
 }
 #else
-void _mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
+void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(page); MI_UNUSED(block);
 }
 #endif

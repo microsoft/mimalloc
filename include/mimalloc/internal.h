@@ -220,10 +220,9 @@ void*       _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_att
 void*       _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept;     // called from `_mi_heap_malloc_aligned`
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
 mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
-bool        _mi_free_delayed_block(mi_block_t* block);
-// void        _mi_free_generic(mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept;  // for runtime integration
 void        _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
-void        _mi_stat_free(const mi_page_t* page, const mi_block_t* block);
+// bool        _mi_free_delayed_block(mi_block_t* block);
+
 
 // "libc.c"
 #include    <stdarg.h>
