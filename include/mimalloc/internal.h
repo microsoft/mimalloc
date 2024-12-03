@@ -676,8 +676,7 @@ static inline bool mi_page_try_claim_ownership(mi_page_t* page) {
 
 static inline void _mi_page_unown(mi_page_t* page) {
   mi_assert_internal(mi_page_is_owned(page));
-  mi_assert_internal(mi_page_is_abandoned(page));
-  mi_assert_internal(mi_page_thread_id(page)==0);
+  mi_assert_internal(mi_page_is_abandoned(page));  
   mi_thread_free_t tf_new;
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {

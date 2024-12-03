@@ -1120,9 +1120,7 @@ static inline bool mi_bfield_atomic_clear_while_not_busy(_Atomic(mi_bfield_t)*b,
   do {
     if mi_unlikely((old&mask)==mask_busy) {
       old = mi_atomic_load_acquire(b);
-      if ((old&mask)==mask_busy) {
-        _mi_stat_counter_increase(&_mi_stats_main.pages_unabandon_busy_wait, 1);
-      }
+      if ((old&mask)==mask_busy) { _mi_stat_counter_increase(&_mi_stats_main.pages_unabandon_busy_wait, 1); }
       while ((old&mask)==mask_busy) {  // busy wait
         mi_atomic_yield();
         old = mi_atomic_load_acquire(b);

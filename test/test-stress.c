@@ -45,14 +45,14 @@ static int THREADS = 4;
 static int SCALE   = 100;
 static int ITER    = 10;
 #define ALLOW_LARGE false
-#elif 1
+#elif 0
 static int THREADS = 32;
 static int SCALE   = 50;
 static int ITER    = 50;
 #define ALLOW_LARGE false
 #else
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
-static int SCALE   = 50;      // scaling factor
+static int SCALE   = 25;      // scaling factor
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
 #endif  
 

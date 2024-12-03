@@ -155,7 +155,7 @@ void mi_free(void* p) mi_attr_noexcept
 
 static void mi_decl_noinline mi_free_try_reclaim_mt(mi_page_t* page) {
   mi_assert_internal(mi_page_is_owned(page));
-  mi_assert_internal(mi_page_thread_id(page)==0);
+  mi_assert_internal(mi_page_is_abandoned(page));
 #if 1
   // we own the page now..
   // safe to collect the thread atomic free list
