@@ -189,10 +189,11 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   size_t count = 1;
   mi_block_t* tail = head;
   mi_block_t* next;
-  while ((next = mi_block_next(page,tail)) != NULL && count <= max_count) {
+  while( (next = mi_block_next(page,tail)) != NULL && count <= max_count) {
     count++;
     tail = next;
   }
+
   // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
   if (count > max_count) {
     _mi_error_message(EFAULT, "corrupted thread-free list\n");

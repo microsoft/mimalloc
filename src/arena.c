@@ -622,6 +622,10 @@ void _mi_arena_page_free(mi_page_t* page) {
   mi_assert_internal(mi_page_all_free(page));
   mi_assert_internal(page->next==NULL);
 
+  #if MI_STAT > 1
+  _mi_page_free_collect(page, true);  
+  #endif
+
   #if MI_DEBUG>1
   if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
     size_t bin = _mi_bin(mi_page_block_size(page));
@@ -665,7 +669,6 @@ void _mi_arena_page_abandon(mi_page_t* page) {
     mi_assert_internal(mi_bitmap_is_clearN(&arena->slices_purge, slice_index, slice_count));
     // mi_assert_internal(mi_bitmap_is_setN(&arena->slices_dirty, slice_index, slice_count));
 
-    _mi_page_unown(page);
     bool were_zero = mi_pairmap_set(&arena->pages_abandoned[bin], slice_index);
     MI_UNUSED(were_zero); mi_assert_internal(were_zero);
     mi_atomic_increment_relaxed(&subproc->abandoned_count[bin]);
@@ -673,8 +676,9 @@ void _mi_arena_page_abandon(mi_page_t* page) {
   else {
     // page is full (or a singleton), page is OS/externally allocated
     // leave as is; it will be reclaimed when an object is free'd in the page
-    _mi_page_unown(page);
-  }  
+  }
+  _mi_page_unown(page);
+  mi_stat_increase(_mi_stats_main.pages_abandoned, 1);
 }
 
 // called from `mi_free` if trying to unabandon an abandoned page
@@ -704,6 +708,7 @@ void _mi_arena_page_unabandon(mi_page_t* page) {
     // nothing to do    
     // TODO: maintain count of these as well?
   }
+  mi_stat_decrease(_mi_stats_main.pages_abandoned, 1);
 }
 
 /*

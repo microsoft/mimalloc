@@ -223,6 +223,7 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
 // void        _mi_free_generic(mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept;  // for runtime integration
 void        _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
+void        _mi_stat_free(const mi_page_t* page, const mi_block_t* block);
 
 // "libc.c"
 #include    <stdarg.h>

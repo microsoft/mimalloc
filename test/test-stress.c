@@ -40,10 +40,10 @@ static int ITER    = 20;
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
-#elif 0
+#elif 1
 static int THREADS = 4;
 static int SCALE   = 100;
-static int ITER    = 20;
+static int ITER    = 50;
 #else
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 25;      // scaling factor
@@ -227,7 +227,7 @@ static void test_stress(void) {
     run_os_threads(THREADS, &stress);
     #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     // switch between arena and OS allocation for testing
-    mi_option_set_enabled(mi_option_disallow_arena_alloc, (n%2)==1);
+    // mi_option_set_enabled(mi_option_disallow_arena_alloc, (n%2)==1);
     #endif
     #ifdef HEAP_WALK
     size_t total = 0;
@@ -248,7 +248,14 @@ static void test_stress(void) {
       { printf("- iterations left: %3d\n", ITER - (n + 1)); }
     #endif
   }
-}
+  // clean up
+  for (int i = 0; i < TRANSFERS; i++) {
+    void* p = atomic_exchange_ptr(&transfer[i], NULL);
+    if (p != NULL) {
+      free_items(p);
+    }
+  }
+} 
 
 #ifndef STRESS
 static void leak(intptr_t tid) {
@@ -320,6 +327,7 @@ int main(int argc, char** argv) {
 
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
+  // mi_debug_show_arenas(true, true, false);
   mi_collect(true);
   mi_debug_show_arenas(true,true,false);
   #endif
