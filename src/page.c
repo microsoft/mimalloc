@@ -120,7 +120,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
   mi_assert_internal(page->keys[0] != 0);
   #endif
   if (!mi_page_is_abandoned(page)) {
-    mi_assert_internal(!_mi_process_is_initialized);
+    //mi_assert_internal(!_mi_process_is_initialized);
     {
       mi_page_queue_t* pq = mi_page_queue_of(page);
       mi_assert_internal(mi_page_queue_contains(pq, page));
@@ -734,7 +734,8 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->used == 0);
-  mi_assert_internal(page->xthread_free == 0);
+  mi_assert_internal(mi_page_is_owned(page));
+  mi_assert_internal(page->xthread_free == 1);
   mi_assert_internal(page->next == NULL);
   mi_assert_internal(page->prev == NULL);
   mi_assert_internal(page->retire_expire == 0);

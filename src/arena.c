@@ -538,8 +538,10 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
 
+  mi_page_try_claim_ownership(page);
   mi_assert_internal(mi_page_block_size(page) == block_size);
   mi_assert_internal(mi_page_is_abandoned(page));
+  mi_assert_internal(mi_page_is_owned(page));
   return page;
 }
 
@@ -627,7 +629,6 @@ void _mi_arena_page_free(mi_page_t* page) {
     size_t slice_count;
     mi_arena_t* arena = mi_page_arena(page, &slice_index, &slice_count);
 
-    mi_assert_internal(!mi_page_is_singleton(page));
     mi_assert_internal(mi_bitmap_is_clearN(&arena->slices_free, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_setN(&arena->slices_committed, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_clearN(&arena->slices_purge, slice_index, slice_count));

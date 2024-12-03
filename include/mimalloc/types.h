@@ -321,7 +321,12 @@ typedef struct mi_page_s {
 #define MI_PAGE_ALIGN                     MI_ARENA_SLICE_ALIGN // pages must be aligned on this for the page map.
 #define MI_PAGE_MIN_BLOCK_ALIGN           (32)                 // minimal block alignment in a page
 #define MI_PAGE_MAX_OVERALLOC_ALIGN       MI_ARENA_SLICE_SIZE  // (64 KiB) limit for which we overallocate in arena pages, beyond this use OS allocation
+
+#if MI_DEBUG && MI_SIZE_SIZE == 8
+#define MI_PAGE_INFO_SIZE                 ((MI_INTPTR_SHIFT+2)*MI_PAGE_MIN_BLOCK_ALIGN)  // >= sizeof(mi_page_t)
+#else
 #define MI_PAGE_INFO_SIZE                 ((MI_INTPTR_SHIFT+1)*MI_PAGE_MIN_BLOCK_ALIGN)  // >= sizeof(mi_page_t)
+#endif
 
 // The max object size are checked to not waste more than 12.5% internally over the page sizes.
 // (Except for large pages since huge objects are allocated in 4MiB chunks)

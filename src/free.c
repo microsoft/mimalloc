@@ -158,13 +158,15 @@ static void mi_decl_noinline mi_free_try_reclaim_mt(mi_page_t* page) {
   mi_assert_internal(mi_page_thread_id(page)==0);
 
   // we own the page now..
+  
+  // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
+  _mi_arena_page_unabandon(page);  // this must be before collect
+
   // collect the thread atomic free list
   _mi_page_free_collect(page, false);  // update `used` count
-  if (mi_page_is_singleton(page)) mi_assert_internal(mi_page_all_free(page));
+  if (mi_page_is_singleton(page)) { mi_assert_internal(mi_page_all_free(page)); }
 
   if (mi_page_all_free(page)) {
-    // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
-    _mi_arena_page_unabandon(page);
     // we can free the page directly
     _mi_arena_page_free(page);
     return;
@@ -186,17 +188,14 @@ static void mi_decl_noinline mi_free_try_reclaim_mt(mi_page_t* page) {
           (_mi_arena_memid_is_suitable(page->memid, tagheap->arena_id))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)        
          )
       {
-        // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
-        _mi_arena_page_unabandon(page);
-        // and make it part of our heap
+        // make it part of our heap
         _mi_heap_page_reclaim(tagheap, page);
         return;
       }      
     }
-    
-    // give up ownership as we cannot reclaim this page
-    // note: we don't need to re-abandon as we did not yet unabandon
-    _mi_page_unown(page);
+        
+    // we cannot reclaim this page.. abandon it again
+    _mi_arena_page_abandon(page);
   }
 }
 
