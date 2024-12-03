@@ -40,7 +40,7 @@ static int ITER    = 20;
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
-#elif 1
+#elif 0
 static int THREADS = 4;
 static int SCALE   = 100;
 static int ITER    = 50;

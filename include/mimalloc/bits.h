@@ -237,6 +237,30 @@ static inline uint32_t mi_ctz32(uint32_t x) {
 #define MI_HAS_FAST_BITSCAN 1
 #endif
 
+
+
+static inline size_t mi_popcount(size_t x) {
+#if mi_has_builtin_size(popcount)
+  return mi_builtin_size(popcount)(x);
+#elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+  #if MI_SIZE_BITS==32
+  return __popcnt(x);
+  #else
+  return __popcnt64(x);
+  #endif
+#elif MI_ARCH_X64 && defined(__BMI1__)
+    return (size_t)_mm_popcnt_u64(x);
+#else
+  #define MI_HAS_FAST_POPCOUNT  0
+  error define generic popcount
+#endif
+}
+
+#ifndef MI_HAS_FAST_POPCOUNT
+#define MI_HAS_FAST_POPCOUNT 1
+#endif
+
+
 /* --------------------------------------------------------------------------------
   find trailing/leading zero  (bit scan forward/reverse)
 -------------------------------------------------------------------------------- */

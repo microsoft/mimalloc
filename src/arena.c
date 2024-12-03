@@ -204,17 +204,19 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
     // commit requested, but the range may not be committed as a whole: ensure it is committed now
     memid->initially_committed = true;
 
-    bool all_already_committed;
-    mi_bitmap_setN(&arena->slices_committed, slice_index, slice_count, &all_already_committed);
-    if (!all_already_committed) {
+    size_t already_committed_count = 0;
+    mi_bitmap_setN(&arena->slices_committed, slice_index, slice_count, &already_committed_count);
+    if (already_committed_count < slice_count) {
+      // recommit the full range
       bool commit_zero = false;
+      mi_stat_decrease(_mi_stats_main.committed, mi_size_of_slices(already_committed_count));
       if (!_mi_os_commit(p, mi_size_of_slices(slice_count), &commit_zero, NULL)) {
         memid->initially_committed = false;
       }
       else {
         if (commit_zero) { memid->initially_zero = true; }
       }
-    }
+    }    
   }
   else {
     // no need to commit, but check if already fully committed
@@ -621,10 +623,6 @@ void _mi_arena_page_free(mi_page_t* page) {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_all_free(page));
   mi_assert_internal(page->next==NULL);
-
-  #if MI_STAT > 1
-  _mi_page_free_collect(page, true);  
-  #endif
 
   #if MI_DEBUG>1
   if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {

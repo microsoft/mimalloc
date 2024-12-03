@@ -22,6 +22,11 @@ static inline size_t mi_bfield_ctz(mi_bfield_t x) {
   return mi_ctz(x);
 }
 
+
+static inline size_t mi_bfield_popcount(mi_bfield_t x) {
+  return mi_popcount(x);
+}
+
 //static inline size_t mi_bfield_clz(mi_bfield_t x) {
 //  return mi_clz(x);
 //}
@@ -70,26 +75,57 @@ static inline bool mi_bfield_atomic_xset(mi_bit_t set, _Atomic(mi_bfield_t)*b, s
   }
 }
 
+// Set a pair of bits atomically, and return true of the mask bits transitioned from all 0's to 1's.
+static inline bool mi_bfield_atomic_set2(_Atomic(mi_bfield_t)*b, size_t idx, bool* all_already_set) {
+  mi_assert_internal(idx < MI_BFIELD_BITS-1);
+  const size_t mask = (mi_bfield_t)0x03 << idx;
+  mi_bfield_t old = mi_atomic_load_relaxed(b);
+  while (!mi_atomic_cas_weak_acq_rel(b, &old, old|mask));  // try to atomically set the mask bits until success
+  if (all_already_set!=NULL) { *all_already_set = ((old&mask)==mask); }
+  return ((old&mask) == 0);
+}
+
+// Clear a pair of bits atomically, and return true of the mask bits transitioned from all 1's to 0's
+static inline bool mi_bfield_atomic_clear2(_Atomic(mi_bfield_t)*b, size_t idx, bool* all_already_clear) {
+  mi_assert_internal(idx < MI_BFIELD_BITS-1);
+  const size_t mask = (mi_bfield_t)0x03 << idx;
+  mi_bfield_t old = mi_atomic_load_relaxed(b);
+  while (!mi_atomic_cas_weak_acq_rel(b, &old, old&~mask));  // try to atomically clear the mask bits until success
+  if (all_already_clear!=NULL) { *all_already_clear = ((old&mask) == 0); }
+  return ((old&mask) == mask);
+}
+
+// Set/clear a pair of bits atomically, and return true of the mask bits transitioned from all 0's to 1's (or all 1's to 0's)
+static inline bool mi_bfield_atomic_xset2(mi_bit_t set, _Atomic(mi_bfield_t)*b, size_t idx, bool* already_xset) {
+  if (set) {
+    return mi_bfield_atomic_set2(b, idx, already_xset);
+  }
+  else {
+    return mi_bfield_atomic_clear2(b, idx, already_xset);
+  }
+}
+
+
 // Set a mask set of bits atomically, and return true of the mask bits transitioned from all 0's to 1's.
-static inline bool mi_bfield_atomic_set_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask, bool* already_set) {
+static inline bool mi_bfield_atomic_set_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask, size_t* already_set) {
   mi_assert_internal(mask != 0);
   mi_bfield_t old = mi_atomic_load_relaxed(b);
   while (!mi_atomic_cas_weak_acq_rel(b, &old, old|mask));  // try to atomically set the mask bits until success
-  if (already_set!=NULL) { *already_set = ((old&mask)==mask); }
+  if (already_set!=NULL) { *already_set = mi_bfield_popcount(old&mask); }
   return ((old&mask) == 0);
 }
 
 // Clear a mask set of bits atomically, and return true of the mask bits transitioned from all 1's to 0's
-static inline bool mi_bfield_atomic_clear_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask, bool* already_clear) {
+static inline bool mi_bfield_atomic_clear_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask, size_t* already_clear) {
   mi_assert_internal(mask != 0);
   mi_bfield_t old = mi_atomic_load_relaxed(b);
   while (!mi_atomic_cas_weak_acq_rel(b, &old, old&~mask));  // try to atomically clear the mask bits until success
-  if (already_clear!=NULL) { *already_clear = ((old&mask)==0); }
+  if (already_clear!=NULL) { *already_clear = mi_bfield_popcount(~(old&mask)); }
   return ((old&mask) == mask);
 }
 
 // Set/clear a mask set of bits atomically, and return true of the mask bits transitioned from all 0's to 1's (or all 1's to 0's)
-static inline bool mi_bfield_atomic_xset_mask(mi_bit_t set, _Atomic(mi_bfield_t)*b, mi_bfield_t mask, bool* already_xset) {
+static inline bool mi_bfield_atomic_xset_mask(mi_bit_t set, _Atomic(mi_bfield_t)*b, mi_bfield_t mask, size_t* already_xset) {
   mi_assert_internal(mask != 0);
   if (set) {
     return mi_bfield_atomic_set_mask(b, mask, already_xset);
@@ -225,9 +261,8 @@ static inline bool mi_bitmap_chunk_xset2(mi_bit_t set, mi_bitmap_chunk_t* chunk,
   const size_t i = cidx / MI_BFIELD_BITS;
   const size_t idx = cidx % MI_BFIELD_BITS;
   mi_assert_internal(idx < MI_BFIELD_BITS-1);
-  mi_assert_internal((idx%2)==0);
-  const size_t mask = (mi_bfield_t)0x03 << idx;
-  return mi_bfield_atomic_xset_mask(set, &chunk->bfields[i], mask, all_already_xset);
+  mi_assert_internal((idx%2)==0);  
+  return mi_bfield_atomic_xset2(set, &chunk->bfields[i], idx, all_already_xset);
 }
 
 static inline bool mi_bitmap_chunk_set2(mi_bitmap_chunk_t* chunk, size_t cidx, bool* all_already_set) {
@@ -241,11 +276,11 @@ static inline bool mi_bitmap_chunk_clear2(mi_bitmap_chunk_t* chunk, size_t cidx,
 
 // Set/clear a sequence of `n` bits within a chunk.
 // Returns true if all bits transitioned from 0 to 1 (or 1 to 0).
-static bool mi_bitmap_chunk_xsetN(mi_bit_t set, mi_bitmap_chunk_t* chunk, size_t cidx, size_t n, bool* pall_already_xset) {
+static bool mi_bitmap_chunk_xsetN(mi_bit_t set, mi_bitmap_chunk_t* chunk, size_t cidx, size_t n, size_t* pall_already_xset) {
   mi_assert_internal(cidx + n <= MI_BITMAP_CHUNK_BITS);
   mi_assert_internal(n>0);
   bool all_transition = true;
-  bool all_already_xset = true;
+  size_t all_already_xset = 0;
   size_t idx   = cidx % MI_BFIELD_BITS;
   size_t field = cidx / MI_BFIELD_BITS;
   while (n > 0) {
@@ -254,9 +289,9 @@ static bool mi_bitmap_chunk_xsetN(mi_bit_t set, mi_bitmap_chunk_t* chunk, size_t
     mi_assert_internal(idx + m <= MI_BFIELD_BITS);
     mi_assert_internal(field < MI_BITMAP_CHUNK_FIELDS);
     const size_t mask = (m == MI_BFIELD_BITS ? ~MI_ZU(0) : ((MI_ZU(1)<<m)-1) << idx);
-    bool already_xset = false;
+    size_t already_xset = 0;
     all_transition = all_transition && mi_bfield_atomic_xset_mask(set, &chunk->bfields[field], mask, &already_xset );
-    all_already_xset = all_already_xset && already_xset;
+    all_already_xset += already_xset;
     // next field
     field++;
     idx = 0;
@@ -267,12 +302,12 @@ static bool mi_bitmap_chunk_xsetN(mi_bit_t set, mi_bitmap_chunk_t* chunk, size_t
 }
 
 
-static inline bool mi_bitmap_chunk_setN(mi_bitmap_chunk_t* chunk, size_t cidx, size_t n, bool* all_allready_set) {
-  return mi_bitmap_chunk_xsetN(MI_BIT_SET, chunk, cidx, n, all_allready_set);
+static inline bool mi_bitmap_chunk_setN(mi_bitmap_chunk_t* chunk, size_t cidx, size_t n, size_t* already_set) {
+  return mi_bitmap_chunk_xsetN(MI_BIT_SET, chunk, cidx, n, already_set);
 }
 
-static inline bool mi_bitmap_chunk_clearN(mi_bitmap_chunk_t* chunk, size_t cidx, size_t n, bool* all_allready_clear) {
-  return mi_bitmap_chunk_xsetN(MI_BIT_CLEAR, chunk, cidx, n, all_allready_clear);
+static inline bool mi_bitmap_chunk_clearN(mi_bitmap_chunk_t* chunk, size_t cidx, size_t n, size_t* already_clear) {
+  return mi_bitmap_chunk_xsetN(MI_BIT_CLEAR, chunk, cidx, n, already_clear);
 }
 
 
@@ -829,7 +864,7 @@ bool mi_bitmap_try_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
 
 // Set/clear a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from 0's to 1's (or 1's to 0's).
 // `n` cannot cross chunk boundaries (and `n <= MI_BITMAP_CHUNK_BITS`)!
-bool mi_bitmap_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx, size_t n, bool* all_already_xset ) {
+bool mi_bitmap_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx, size_t n, size_t* already_xset ) {
   mi_assert_internal(n>0);
   mi_assert_internal(n<=MI_BITMAP_CHUNK_BITS);
 
@@ -846,11 +881,11 @@ bool mi_bitmap_xsetN(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx, size_t n, bo
     // first set the anyset since it is a conservative approximation (increases epoch)
     mi_bitmap_anyset_set(bitmap, chunk_idx);
     // then actually try to set it atomically
-    return mi_bitmap_chunk_setN(&bitmap->chunks[chunk_idx], cidx, n, all_already_xset);
+    return mi_bitmap_chunk_setN(&bitmap->chunks[chunk_idx], cidx, n, already_xset);
   }
   else {
     const size_t epoch = mi_bitmap_epoch(bitmap);
-    bool cleared = mi_bitmap_chunk_clearN(&bitmap->chunks[chunk_idx], cidx, n, all_already_xset);
+    bool cleared = mi_bitmap_chunk_clearN(&bitmap->chunks[chunk_idx], cidx, n, already_xset);
     if (cleared && epoch == mi_bitmap_epoch(bitmap) && mi_bitmap_chunk_all_are_clear(&bitmap->chunks[chunk_idx])) {
       mi_bitmap_anyset_try_clear(bitmap, chunk_idx, epoch);
     }

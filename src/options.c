@@ -158,7 +158,7 @@ static mi_option_desc_t options[_mi_option_last] =
          UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)
   { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
   { 0,   UNINIT, MI_OPTION(target_segments_per_thread) }, // abandon segments beyond this point, or 0 to disable.
-  { 0,   UNINIT, MI_OPTION(eager_abandon) },
+  { 1,   UNINIT, MI_OPTION(eager_abandon) },
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

@@ -128,21 +128,24 @@ static void mi_os_prim_free(void* addr, size_t size, bool still_committed, mi_st
   if (err != 0) {
     _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
-  if (still_committed) { _mi_stat_decrease(&stats->committed, size); }
+  if (still_committed) { 
+    _mi_stat_decrease(&stats->committed, size); 
+  }
   _mi_stat_decrease(&stats->reserved, size);
 }
 
 void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* stats) {
   if (stats == NULL) stats = &_mi_stats_main;
   if (mi_memkind_is_os(memid.memkind)) {
-    size_t csize = _mi_os_good_alloc_size(size);
+    size_t csize = memid.mem.os.size;
+    if (csize==0) { _mi_os_good_alloc_size(size); }
     void* base = addr;
     // different base? (due to alignment)
-    if (memid.mem.os.base != NULL) {
+    if (memid.mem.os.base != base) {
       mi_assert(memid.mem.os.base <= addr);
       mi_assert((uint8_t*)memid.mem.os.base + memid.mem.os.alignment >= (uint8_t*)addr);
       base = memid.mem.os.base;
-      csize += ((uint8_t*)addr - (uint8_t*)memid.mem.os.base);
+      if (memid.mem.os.size==0) { csize += ((uint8_t*)addr - (uint8_t*)memid.mem.os.base); }
     }
     // free it
     if (memid.memkind == MI_MEM_OS_HUGE) {
@@ -296,7 +299,7 @@ void* _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats) {
   bool os_is_zero  = false;
   void* p = mi_os_prim_alloc(size, 0, true, false, &os_is_large, &os_is_zero, stats);
   if (p != NULL) {
-    *memid = _mi_memid_create_os(true, os_is_zero, os_is_large);
+    *memid = _mi_memid_create_os(p, size, true, os_is_zero, os_is_large);
   }
   return p;
 }
@@ -315,9 +318,10 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   void* os_base = NULL;
   void* p = mi_os_prim_alloc_aligned(size, alignment, commit, allow_large, &os_is_large, &os_is_zero, &os_base, stats );
   if (p != NULL) {
-    *memid = _mi_memid_create_os(commit, os_is_zero, os_is_large);
+    *memid = _mi_memid_create_os(p, size, commit, os_is_zero, os_is_large);
     memid->mem.os.base = os_base;
     memid->mem.os.alignment = alignment;
+    memid->mem.os.size += ((uint8_t*)p - (uint8_t*)os_base);  // todo: return from prim_alloc_aligned
   }
   return p;
 }
@@ -642,7 +646,7 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
   if (psize != NULL) { *psize = page * MI_HUGE_OS_PAGE_SIZE; }
   if (page != 0) {
     mi_assert(start != NULL);
-    *memid = _mi_memid_create_os(true /* is committed */, all_zero, true /* is_large */);
+    *memid = _mi_memid_create_os(start, *psize, true /* is committed */, all_zero, true /* is_large */);
     memid->memkind = MI_MEM_OS_HUGE;
     mi_assert(memid->is_pinned);
     #ifdef MI_TRACK_ASAN
