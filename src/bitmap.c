@@ -985,7 +985,7 @@ static bool mi_bitmap_try_xsetN_(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx,
   }
 }
 
-bool mi_bitmap_try_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n) {
+mi_decl_nodiscard bool mi_bitmap_try_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n) {
   mi_assert_internal(n>0 && n<=MI_BITMAP_CHUNK_BITS);
   if (n==1) return mi_bitmap_try_xset(set, bitmap, idx);
   if (n==8) return mi_bitmap_try_xset8(set, bitmap, idx);
@@ -1304,7 +1304,7 @@ static inline bool mi_bitmap_chunk_try_find_and_set_busy(mi_bitmap_chunk_t* chun
 }
 
 static bool mi_bitmap_try_find_and_set_busy_at(mi_bitmap_t* bitmap, size_t n, size_t chunk_idx, mi_epoch_t epoch, size_t* pidx) {
-  MI_UNUSED(epoch);
+  MI_UNUSED(epoch); MI_UNUSED(n);
   mi_assert_internal(n==2);
   size_t cidx;
   if mi_likely(mi_bitmap_chunk_try_find_and_set_busy(&bitmap->chunks[chunk_idx], &cidx)) {

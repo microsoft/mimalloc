@@ -53,13 +53,19 @@ typedef struct mi_arena_s {
   // followed by the bitmaps (whose size depends on the arena size)
 } mi_arena_t;
 
-#define MI_MAX_ARENAS         (1024)        // Limited for now (and takes up .bss)
+#define MI_MAX_ARENAS         (160)         // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
+                                            // 160 arenas is enough for ~2 TiB memory
 
 // The available arenas
 static mi_decl_cache_align _Atomic(mi_arena_t*) mi_arenas[MI_MAX_ARENAS];
 static mi_decl_cache_align _Atomic(size_t)      mi_arena_count; // = 0
 
 
+static mi_lock_t mi_arena_reserve_lock;
+
+void _mi_arena_init(void) {
+  mi_lock_init(&mi_arena_reserve_lock);
+}
 
 /* -----------------------------------------------------------
   Arena id's
@@ -275,9 +281,9 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   }
   arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_SLICE_SIZE);
 
-  if (arena_count >= 8 && arena_count <= 128) {
-    // scale up the arena sizes exponentially every 8 entries (128 entries get to 589TiB)
-    const size_t multiplier = (size_t)1 << _mi_clamp(arena_count/8, 0, 16);
+  if (arena_count >= 1 && arena_count <= 128) {
+    // scale up the arena sizes exponentially every 8 entries 
+    const size_t multiplier = (size_t)1 << _mi_clamp(arena_count/8, 0, 16); 
     size_t reserve = 0;
     if (!mi_mul_overflow(multiplier, arena_reserve, &reserve)) {
       arena_reserve = reserve;
@@ -285,7 +291,7 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   }
 
   // check arena bounds
-  const size_t min_reserve = 8; // hope that fits minimal bitmaps?
+  const size_t min_reserve = 8 * MI_ARENA_SLICE_SIZE; // hope that fits minimal bitmaps?
   const size_t max_reserve = MI_BITMAP_MAX_BIT_COUNT * MI_ARENA_SLICE_SIZE;  // 16 GiB
   if (arena_reserve < min_reserve) {
     arena_reserve = min_reserve;
@@ -380,20 +386,31 @@ static mi_decl_noinline void* mi_arena_try_alloc(
 {
   mi_assert(slice_count <= MI_ARENA_MAX_OBJ_SLICES);
   mi_assert(alignment <= MI_ARENA_SLICE_ALIGN);
-
+  void* p;
+again:
   // try to find free slices in the arena's
-  void* p = mi_arena_try_find_free(slice_count, alignment, commit, allow_large, req_arena_id, memid, tld);
+  p = mi_arena_try_find_free(slice_count, alignment, commit, allow_large, req_arena_id, memid, tld);
   if (p != NULL) return p;
 
-  // otherwise, try to first eagerly reserve a new arena
-  if (req_arena_id == _mi_arena_id_none()) {
+  // did we need a specific arena?
+  if (req_arena_id != _mi_arena_id_none()) return NULL;
+
+  // otherwise, try to reserve a new arena -- but one thread at a time.. (todo: allow 2 or 4 to reduce contention?)
+  if (mi_lock_try_acquire(&mi_arena_reserve_lock)) {
     mi_arena_id_t arena_id = 0;
-    if (mi_arena_reserve(mi_size_of_slices(slice_count), allow_large, req_arena_id, &arena_id)) {
+    bool ok = mi_arena_reserve(mi_size_of_slices(slice_count), allow_large, req_arena_id, &arena_id);
+    mi_lock_release(&mi_arena_reserve_lock);    
+    if (ok) {
       // and try allocate in there
       mi_assert_internal(req_arena_id == _mi_arena_id_none());
       p = mi_arena_try_find_free(slice_count, alignment, commit, allow_large, req_arena_id, memid, tld);
       if (p != NULL) return p;
     }
+  }
+  else {
+    // if we are racing with another thread wait until the new arena is reserved (todo: a better yield?)
+    mi_atomic_yield();
+    goto again;
   }
 
   return NULL;
@@ -524,7 +541,7 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
   // try to allocate from free space in arena's
   mi_memid_t memid = _mi_memid_none();
   mi_page_t* page = NULL;
-  if (!_mi_option_get_fast(mi_option_disallow_arena_alloc) && // allowed to allocate from arena's?
+  if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) && // allowed to allocate from arena's?
       !os_align &&                            // not large alignment
       slice_count <= MI_ARENA_MAX_OBJ_SLICES) // and not too large
   {
@@ -982,6 +999,7 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id, mi_stats_t*
     mi_atomic_decrement_acq_rel(&mi_arena_count);
     return false;
   }
+  
   _mi_stat_counter_increase(&stats->arena_count,1);
   arena->id = mi_arena_id_create(i);
   mi_atomic_store_ptr_release(mi_arena_t,&mi_arenas[i], arena);
@@ -1145,7 +1163,7 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
   _mi_output_message("%s%s:\n", prefix, header);
   size_t bit_count = 0;
   size_t bit_set_count = 0;
-  for (int i = 0; i < mi_bitmap_chunk_count(bitmap) && bit_count < slice_count; i++) {
+  for (size_t i = 0; i < mi_bitmap_chunk_count(bitmap) && bit_count < slice_count; i++) {
     char buf[MI_BITMAP_CHUNK_BITS + 64]; _mi_memzero(buf, sizeof(buf));
     mi_bitmap_chunk_t* chunk = &bitmap->chunks[i];
     for (size_t j = 0, k = 0; j < MI_BITMAP_CHUNK_FIELDS; j++) {

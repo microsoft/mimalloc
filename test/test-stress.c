@@ -50,6 +50,11 @@ static int THREADS = 32;
 static int SCALE   = 50;
 static int ITER    = 50;
 #define ALLOW_LARGE false
+#elif 0
+static int THREADS = 64;
+static int SCALE = 400;
+static int ITER = 10;
+#define ALLOW_LARGE true
 #else
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 25;      // scaling factor

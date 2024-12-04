@@ -619,6 +619,7 @@ void mi_process_init(void) mi_attr_noexcept {
 
   mi_detect_cpu_features();
   _mi_os_init();
+  _mi_arena_init();
   mi_heap_main_init();
   #if MI_DEBUG
   _mi_verbose_message("debug level : %d\n", MI_DEBUG);
