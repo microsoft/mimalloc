@@ -128,8 +128,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ARENA_SLICE_ALIGN              (MI_ARENA_SLICE_SIZE)
 
 #define MI_ARENA_MIN_OBJ_SLICES           (1)
-#define MI_ARENA_MAX_OBJ_SLICES           (MI_SIZE_BITS)              // for now, cannot cross bit field boundaries.. todo: make it at least MI_BITMAP_CHUNK_BITS ? (16 MiB)
-// #define MI_ARENA_MAX_OBJ_BLOCKS        (MI_BITMAP_CHUNK_BITS)      // for now, cannot cross chunk boundaries
+#define MI_ARENA_MAX_OBJ_SLICES           (MI_BITMAP_CHUNK_BITS)      // 32 MiB (for now, cannot cross chunk boundaries)
 
 #define MI_ARENA_MIN_OBJ_SIZE             (MI_ARENA_MIN_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
 #define MI_ARENA_MAX_OBJ_SIZE             (MI_ARENA_MAX_OBJ_SLICES * MI_ARENA_SLICE_SIZE)

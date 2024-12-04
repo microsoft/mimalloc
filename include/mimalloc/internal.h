@@ -339,6 +339,21 @@ static inline uint8_t* _mi_align_up_ptr(void* p, size_t alignment) {
 }
 
 
+static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
+  mi_assert_internal(alignment != 0);
+  uintptr_t mask = alignment - 1;
+  if ((alignment & mask) == 0) { // power of two?
+    return (sz & ~mask);
+  }
+  else {
+    return ((sz / alignment) * alignment);
+  }
+}
+
+static inline void* mi_align_down_ptr(void* p, size_t alignment) {
+  return (void*)_mi_align_down((uintptr_t)p, alignment);
+}
+
 // Divide upwards: `s <= _mi_divide_up(s,d)*d < s+d`.
 static inline uintptr_t _mi_divide_up(uintptr_t size, size_t divider) {
   mi_assert_internal(divider != 0);

@@ -24,7 +24,7 @@ static bool mi_page_map_init(void) {
 
   mi_page_map_entries_per_commit_bit = _mi_divide_up(page_map_size,MI_BITMAP_MAX_BITS);
 
-  mi_page_map_all_committed = _mi_os_has_overcommit(); // commit on-access on Linux systems
+  mi_page_map_all_committed = false; // _mi_os_has_overcommit(); // commit on-access on Linux systems?
   _mi_page_map = (uint8_t*)_mi_os_alloc_aligned(page_map_size, 1, mi_page_map_all_committed, true, &mi_page_map_memid, NULL);
   if (_mi_page_map==NULL) {
     _mi_error_message(ENOMEM, "unable to reserve virtual memory for the page map (%zu KiB)\n", page_map_size / MI_KiB);

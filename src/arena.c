@@ -193,30 +193,55 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
   void* p = mi_arena_slice_start(arena, slice_index);
   *memid = mi_memid_create_arena(arena->id, arena->exclusive, slice_index, slice_count);
   memid->is_pinned = arena->memid.is_pinned;
-
+  
   // set the dirty bits
   if (arena->memid.initially_zero) {
+    // size_t dirty_count = 0;
     memid->initially_zero = mi_bitmap_setN(&arena->slices_dirty, slice_index, slice_count, NULL);
+    //if (dirty_count>0) {
+    //  if (memid->initially_zero) {
+    //    _mi_error_message(EFAULT, "ouch1\n");
+    //  }
+    //  // memid->initially_zero = false;
+    //}
+    //else {
+    //  if (!memid->initially_zero) {
+    //    _mi_error_message(EFAULT, "ouch2\n");
+    //  }
+    //  // memid->initially_zero = true;
+    //}
   }
 
   // set commit state
   if (commit) {
-    // commit requested, but the range may not be committed as a whole: ensure it is committed now
     memid->initially_committed = true;
 
-    size_t already_committed_count = 0;
-    mi_bitmap_setN(&arena->slices_committed, slice_index, slice_count, &already_committed_count);
-    if (already_committed_count < slice_count) {
-      // recommit the full range
+    // commit requested, but the range may not be committed as a whole: ensure it is committed now
+    if (!mi_bitmap_is_setN(&arena->slices_committed, slice_index, slice_count)) {
+      // not fully committed: commit the full range and set the commit bits
+      // (this may race and we may double-commit which is fine)
       bool commit_zero = false;
-      mi_stat_decrease(_mi_stats_main.committed, mi_size_of_slices(already_committed_count));
       if (!_mi_os_commit(p, mi_size_of_slices(slice_count), &commit_zero, NULL)) {
         memid->initially_committed = false;
       }
       else {
         if (commit_zero) { memid->initially_zero = true; }
+        #if MI_DEBUG > 1
+        if (memid->initially_zero) {
+          if (!mi_mem_is_zero(p, mi_size_of_slices(slice_count))) {
+            _mi_error_message(EFAULT, "arena allocation was not zero-initialized!\n");
+            memid->initially_zero = false;
+          }
+        }
+        #endif  
+        size_t already_committed_count = 0;
+        mi_bitmap_setN(&arena->slices_committed, slice_index, slice_count, &already_committed_count);
+        if (already_committed_count < slice_count) {
+          // todo: also decrease total
+          mi_stat_decrease(_mi_stats_main.committed, mi_size_of_slices(already_committed_count));
+        }
       }
-    }
+    }    
   }
   else {
     // no need to commit, but check if already fully committed
@@ -523,7 +548,18 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
   mi_assert_internal(!os_align || _mi_is_aligned((uint8_t*)page + page_alignment, block_alignment));
 
   // claimed free slices: initialize the page partly
-  if (!memid.initially_zero) { _mi_memzero_aligned(page, sizeof(*page)); }
+  if (!memid.initially_zero) { 
+    _mi_memzero_aligned(page, sizeof(*page)); 
+  }
+  #if MI_DEBUG > 1
+  else {
+    if (!mi_mem_is_zero(page, mi_size_of_slices(slice_count))) {
+      _mi_error_message(EFAULT, "page memory was not zero initialized!\n");
+      memid.initially_zero = false;
+      _mi_memzero_aligned(page, sizeof(*page));
+    }
+  }
+  #endif
   mi_assert(MI_PAGE_INFO_SIZE >= _mi_align_up(sizeof(*page), MI_PAGE_MIN_BLOCK_ALIGN));
   const size_t block_start = (os_align ? MI_PAGE_ALIGN : MI_PAGE_INFO_SIZE);
   const size_t reserved    = (os_align ? 1 : (mi_size_of_slices(slice_count) - block_start) / block_size);
@@ -668,7 +704,7 @@ static void mi_arena_page_abandon_no_stat(mi_page_t* page) {
     mi_assert_internal(mi_bitmap_is_clearN(&arena->slices_free, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_setN(&arena->slices_committed, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_clearN(&arena->slices_purge, slice_index, slice_count));
-    // mi_assert_internal(mi_bitmap_is_setN(&arena->slices_dirty, slice_index, slice_count));
+    mi_assert_internal(mi_bitmap_is_setN(&arena->slices_dirty, slice_index, slice_count));
 
     mi_page_set_abandoned_mapped(page);
     bool were_zero = mi_pairmap_set(&arena->pages_abandoned[bin], slice_index);
@@ -851,6 +887,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
       mi_assert_internal(all_committed);
     }
     else {
+      /*
       if (!all_committed) {
         // mark the entire range as no longer committed (so we recommit the full range when re-using)
         mi_bitmap_clearN(&arena->slices_committed, slice_index, slice_count);
@@ -864,6 +901,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
         // that contains already decommitted parts. Since purge consistently uses reset or decommit that
         // works (as we should never reset decommitted parts).
       }
+      */
       // (delay) purge the entire range
       mi_arena_schedule_purge(arena, slice_index, slice_count, stats);
     }
@@ -1014,7 +1052,12 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   else {
     mi_bitmap_setN(&arena->slices_committed, 0, info_slices, NULL);
   }
-  mi_bitmap_setN(&arena->slices_dirty, 0, info_slices, NULL);
+  if (!memid.initially_zero) {
+    mi_bitmap_unsafe_setN(&arena->slices_dirty, 0, arena->slice_count);
+  }
+  else {
+    mi_bitmap_setN(&arena->slices_dirty, 0, info_slices, NULL);
+  }
 
   return mi_arena_add(arena, arena_id, &_mi_stats_main);
 }

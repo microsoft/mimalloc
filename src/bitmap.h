@@ -90,28 +90,28 @@ static inline bool mi_bitmap_is_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n
 
 // Try to set/clear a bit in the bitmap; returns `true` if atomically transitioned from 0 to 1 (or 1 to 0)
 // and false otherwise leaving the bitmask as is.
-mi_decl_nodiscard bool mi_bitmap_try_xset(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx);
-
-static inline bool mi_bitmap_try_set(mi_bitmap_t* bitmap, size_t idx) {
-  return mi_bitmap_try_xset(MI_BIT_SET, bitmap, idx);
-}
-
-static inline bool mi_bitmap_try_clear(mi_bitmap_t* bitmap, size_t idx) {
-  return mi_bitmap_try_xset(MI_BIT_CLEAR, bitmap, idx);
-}
+//mi_decl_nodiscard bool mi_bitmap_try_xset(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx);
+//
+//static inline bool mi_bitmap_try_set(mi_bitmap_t* bitmap, size_t idx) {
+//  return mi_bitmap_try_xset(MI_BIT_SET, bitmap, idx);
+//}
+//
+//static inline bool mi_bitmap_try_clear(mi_bitmap_t* bitmap, size_t idx) {
+//  return mi_bitmap_try_xset(MI_BIT_CLEAR, bitmap, idx);
+//}
 
 
 // Try to set/clear a byte in the bitmap; returns `true` if atomically transitioned from 0 to 0xFF (or 0xFF to 0)
 // and false otherwise leaving the bitmask as is.
-mi_decl_nodiscard bool mi_bitmap_try_xset8(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx);
-
-static inline bool mi_bitmap_try_set8(mi_bitmap_t* bitmap, size_t idx) {
-  return mi_bitmap_try_xset8(MI_BIT_SET, bitmap, idx);
-}
-
-static inline bool mi_bitmap_try_clear8(mi_bitmap_t* bitmap, size_t idx) {
-  return mi_bitmap_try_xset8(MI_BIT_CLEAR, bitmap, idx);
-}
+//mi_decl_nodiscard bool mi_bitmap_try_xset8(mi_bit_t set, mi_bitmap_t* bitmap, size_t idx);
+//
+//static inline bool mi_bitmap_try_set8(mi_bitmap_t* bitmap, size_t idx) {
+//  return mi_bitmap_try_xset8(MI_BIT_SET, bitmap, idx);
+//}
+//
+//static inline bool mi_bitmap_try_clear8(mi_bitmap_t* bitmap, size_t idx) {
+//  return mi_bitmap_try_xset8(MI_BIT_CLEAR, bitmap, idx);
+//}
 
 // Try to set/clear a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from 0's to 1's (or 1's to 0's)
 // and false otherwise leaving the bitmask as is.
@@ -125,17 +125,6 @@ static inline bool mi_bitmap_try_setN(mi_bitmap_t* bitmap, size_t idx, size_t n)
 static inline bool mi_bitmap_try_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
   return mi_bitmap_try_xsetN(MI_BIT_CLEAR, bitmap, idx, n);
 }
-
-
-// Find a set bit in a bitmap and atomically unset it. Returns true on success,
-// and in that case sets the index: `0 <= *pidx < MI_BITMAP_MAX_BITS`.
-// The low `MI_BFIELD_BITS` of start are used to set the start point of the search
-// (to reduce thread contention).
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx);
-
-// Find a byte in the bitmap with all bits set (0xFF) and atomically unset it to zero.
-// Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-8`.
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx );
 
 // Find a sequence of `n` bits in the bitmap with all bits set, and atomically unset all.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
