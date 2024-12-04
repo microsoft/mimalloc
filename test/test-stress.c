@@ -45,7 +45,7 @@ static int THREADS = 1;
 static int SCALE   = 100;
 static int ITER    = 10;
 #define ALLOW_LARGE false
-#elif 0
+#elif 1
 static int THREADS = 32;
 static int SCALE   = 50;
 static int ITER    = 50;

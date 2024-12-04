@@ -487,7 +487,7 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
 }
 
 static inline mi_page_t* _mi_ptr_page(const void* p) {
-  #if 1 // MI_DEBUG
+  #if MI_DEBUG
   return _mi_checked_ptr_page(p);
   #else
   return _mi_ptr_page_ex(p,NULL);
@@ -638,6 +638,13 @@ static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
   return (page->reserved - page->used <= frac);
 }
 
+// is less than 1/n'th of a page free?
+static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
+  if (page==NULL) return true;
+  uint16_t frac = page->reserved / n;
+  return (page->reserved - page->used <= frac);
+}
+
 static inline bool mi_page_is_abandoned(const mi_page_t* page) {
   // note: the xheap field of an abandoned heap is set to the subproc (for fast reclaim-on-free)
   return (mi_atomic_load_acquire(&page->xthread_id) <= 1);
@@ -692,7 +699,7 @@ static inline bool mi_page_try_claim_ownership(mi_page_t* page) {
 
 static inline void _mi_page_unown(mi_page_t* page) {
   mi_assert_internal(mi_page_is_owned(page));
-  mi_assert_internal(mi_page_is_abandoned(page));  
+  mi_assert_internal(mi_page_is_abandoned(page));
   mi_thread_free_t tf_new;
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {

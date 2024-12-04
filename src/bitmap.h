@@ -51,8 +51,9 @@ typedef uint32_t mi_cmap_t;
 typedef mi_decl_align(MI_BITMAP_CHUNK_SIZE) struct mi_bitmap_s {
   _Atomic(size_t)         chunk_map_count;
   _Atomic(size_t)         chunk_count;        
+  size_t                  padding[MI_BITMAP_CHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc
   _Atomic(mi_chunkmap_t)  chunk_maps[MI_BITMAP_MAX_CHUNKMAPS];
-  // padding
+  
   mi_bitmap_chunk_t       chunks[MI_BITMAP_MIN_BIT_COUNT];  // or more, up to MI_BITMAP_MAX_CHUNK_COUNT
 } mi_bitmap_t;
 
