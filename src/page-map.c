@@ -22,7 +22,8 @@ static bool mi_page_map_init(void) {
   //                    64 KiB for 4 GiB address space (on 32-bit)
   const size_t page_map_size = (MI_ZU(1) << (vbits - MI_ARENA_SLICE_SHIFT));
 
-  mi_page_map_entries_per_commit_bit = _mi_divide_up(page_map_size,MI_BITMAP_MAX_BITS);
+  mi_page_map_entries_per_commit_bit = _mi_divide_up(page_map_size, MI_BITMAP_MIN_BIT_COUNT);
+  mi_bitmap_init(&mi_page_map_commit, MI_BITMAP_MIN_BIT_COUNT, true);
 
   mi_page_map_all_committed = false; // _mi_os_has_overcommit(); // commit on-access on Linux systems?
   _mi_page_map = (uint8_t*)_mi_os_alloc_aligned(page_map_size, 1, mi_page_map_all_committed, true, &mi_page_map_memid, NULL);
