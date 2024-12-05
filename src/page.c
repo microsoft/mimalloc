@@ -44,7 +44,7 @@ static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
   mi_assert_internal(_mi_ptr_page(page) == page);
   size_t count = 0;
   while (head != NULL) {
-    mi_assert_internal((uint8_t*)head - (uint8_t*)page > MI_LARGE_PAGE_SIZE || page == _mi_ptr_page(head));
+    mi_assert_internal((uint8_t*)head - (uint8_t*)page > (ptrdiff_t)MI_LARGE_PAGE_SIZE || page == _mi_ptr_page(head));
     count++;
     head = mi_block_next(page, head);
   }

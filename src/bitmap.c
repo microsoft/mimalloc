@@ -995,13 +995,13 @@ mi_decl_nodiscard bool mi_bitmap_try_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, s
 
 // Set/clear a sequence of 2 bits that were on an even `idx` in the bitmap; returns `true` if atomically transitioned from 0's to 1's (or 1's to 0's).
 // `n` cannot cross chunk boundaries (and `n <= MI_BITMAP_CHUNK_BITS`)!
-static bool mi_bitmap_xset_pair(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx) {  
+static bool mi_bitmap_xset_pair(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx) {
   mi_assert_internal((idx%2)==0);
   const size_t chunk_idx = idx / MI_BITMAP_CHUNK_BITS;
   const size_t cidx = idx % MI_BITMAP_CHUNK_BITS;
   mi_assert_internal(cidx + 2 <= MI_BITMAP_CHUNK_BITS);
   mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
-  
+
   if (set) {
     // first set the chunkmap since it is a conservative approximation (increases epoch)
     mi_bitmap_chunkmap_set(bitmap, chunk_idx);
@@ -1066,7 +1066,7 @@ static inline bool mi_bitmap_is_xset2(mi_xset_t set, mi_bitmap_t* bitmap, size_t
   mi_assert_internal(idx + 2 <= mi_bitmap_max_bits(bitmap));
   const size_t chunk_idx = idx / MI_BITMAP_CHUNK_BITS;
   const size_t cidx = idx % MI_BITMAP_CHUNK_BITS;
-  mi_assert_internal(cidx + 2 <= MI_BITMAP_CHUNK_BITS); 
+  mi_assert_internal(cidx + 2 <= MI_BITMAP_CHUNK_BITS);
   mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
   return mi_bitmap_chunk_is_xset2(set, &bitmap->chunks[chunk_idx], cidx);
 }
@@ -1091,13 +1091,13 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
 /* --------------------------------------------------------------------------------
   bitmap try_find_and_clear
 -------------------------------------------------------------------------------- */
-
+/*
 typedef bool (mi_bitmap_find_fun_t)(mi_bitmap_t* bitmap, size_t n, size_t chunk_idx, mi_epoch_t epoch, size_t* pidx);
 
 static inline bool mi_bitmap_try_find(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx, mi_bitmap_find_fun_t* find_fun)
 {
   if (n == 0 || n > MI_BITMAP_CHUNK_BITS) return false;
-  
+
   // start chunk index -- todo: can depend on the tseq to decrease contention between threads
   MI_UNUSED(tseq);
   const size_t chunk_start = 0;
@@ -1105,7 +1105,7 @@ static inline bool mi_bitmap_try_find(mi_bitmap_t* bitmap, size_t n, size_t tseq
   const size_t chunk_map_start_idx = chunk_start % MI_CHUNKMAP_BITS;
 
   // for each chunkmap entry `i`
-  for( size_t _i = 0; _i < bitmap->chunk_map_count; _i++) 
+  for( size_t _i = 0; _i < bitmap->chunk_map_count; _i++)
   {
     size_t i = (_i + chunk_map_start);
     if (i > bitmap->chunk_map_count) i -= bitmap->chunk_map_count;  // adjust for the start position
@@ -1122,50 +1122,106 @@ static inline bool mi_bitmap_try_find(mi_bitmap_t* bitmap, size_t n, size_t tseq
       if (_i == 0) { cmap_idx = (cmap_idx + chunk_map_start_idx) % MI_CHUNKMAP_BITS; }
       // set the chunk idx
       const size_t chunk_idx = chunk_idx0 + cmap_idx + cmap_idx_shift;
-      
+
       // try to find and clear N bits in that chunk
       if (chunk_idx < mi_bitmap_chunk_count(bitmap)) {   // we can have less chunks than in the chunkmap..
         if ((*find_fun)(bitmap, n, chunk_idx, epoch, pidx)) {
           return true;
         }
       }
-            
+
       // skip to the next bit
       cmap_idx_shift += cmap_idx+1;
       cmap >>= cmap_idx;            // skip scanned bits (and avoid UB for `cmap_idx+1`)
       cmap >>= 1;
     }
   }
-  
+
   return false;
 }
+*/
 
-static bool mi_bitmap_try_find_and_clearN_at(mi_bitmap_t* bitmap, size_t n, size_t chunk_idx, mi_epoch_t epoch, size_t* pidx) {
-  size_t cidx;
-  if mi_likely(mi_bitmap_chunk_find_and_try_clearN(&bitmap->chunks[chunk_idx], n, &cidx)) {
-    *pidx = (chunk_idx * MI_BITMAP_CHUNK_BITS) + cidx;
-    mi_assert_internal(*pidx <= mi_bitmap_max_bits(bitmap) - n);
-    return true;
-  }
-  else {
-    // we may find that all are cleared only on a second iteration but that is ok as
-    // the chunkmap is a conservative approximation.
-    if (epoch == mi_bitmap_chunkmap_epoch(bitmap, chunk_idx) && mi_bitmap_chunk_all_are_clear(&bitmap->chunks[chunk_idx])) {
-      mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx, epoch);
-    }
-    return false;
-  }
-}
+#define mi_bitmap_forall_chunks(bitmap, tseq, name_epoch, name_chunk_idx) \
+  { \
+  /* start chunk index -- todo: can depend on the tseq to decrease contention between threads */ \
+  MI_UNUSED(tseq); \
+  const size_t chunk_start = 0; \
+  const size_t chunk_map_start = chunk_start / MI_CHUNKMAP_BITS; \
+  const size_t chunk_map_start_idx = chunk_start % MI_CHUNKMAP_BITS; \
+  /* for each chunkmap entry `i` */ \
+  for (size_t _i = 0; _i < bitmap->chunk_map_count; _i++) { \
+    size_t i = (_i + chunk_map_start); \
+    if (i > bitmap->chunk_map_count) i -= bitmap->chunk_map_count;  /* adjust for the start position */ \
+    \
+    const size_t chunk_idx0 = i*MI_CHUNKMAP_BITS; \
+    mi_epoch_t name_epoch; \
+    mi_cmap_t  cmap = mi_bitmap_chunkmap(bitmap, chunk_idx0, &name_epoch); \
+    if (_i == 0) { cmap = mi_rotr32(cmap, chunk_map_start_idx); }   /* rotate right for the start position (on the first iteration) */ \
+    \
+    uint32_t cmap_idx;             /* one bit set of each chunk that may have bits set */ \
+    size_t   cmap_idx_shift = 0;   /* shift through the cmap */ \
+    while (mi_bsf32(cmap, &cmap_idx)) {     /* find least bit that is set */ \
+      /* adjust for the start position again */ \
+      if (_i == 0) { cmap_idx = (cmap_idx + chunk_map_start_idx) % MI_CHUNKMAP_BITS; } \
+      /* set the chunk idx */ \
+      const size_t name_chunk_idx = chunk_idx0 + cmap_idx + cmap_idx_shift; \
+      /* try to find and clear N bits in that chunk */ \
+      if (name_chunk_idx < mi_bitmap_chunk_count(bitmap)) {   /* we can have less chunks than in the chunkmap.. */ 
+
+#define mi_bitmap_forall_chunks_end() \
+      } \
+      /* skip to the next bit */ \
+      cmap_idx_shift += cmap_idx+1; \
+      cmap >>= cmap_idx;            /* skip scanned bits (and avoid UB for `cmap_idx+1`) */ \
+      cmap >>= 1; \
+    } \
+  }}
+   
+//static bool mi_bitmap_try_find_and_clearN_at(mi_bitmap_t* bitmap, size_t n, size_t chunk_idx, mi_epoch_t epoch, size_t* pidx) {
+//  size_t cidx;
+//  if mi_likely(mi_bitmap_chunk_find_and_try_clearN(&bitmap->chunks[chunk_idx], n, &cidx)) {
+//    *pidx = (chunk_idx * MI_BITMAP_CHUNK_BITS) + cidx;
+//    mi_assert_internal(*pidx <= mi_bitmap_max_bits(bitmap) - n);
+//    return true;
+//  }
+//  else {
+//    // we may find that all are cleared only on a second iteration but that is ok as
+//    // the chunkmap is a conservative approximation.
+//    if (epoch == mi_bitmap_chunkmap_epoch(bitmap, chunk_idx) && mi_bitmap_chunk_all_are_clear(&bitmap->chunks[chunk_idx])) {
+//      mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx, epoch);
+//    }
+//    return false;
+//  }
+//}
 
 // Find a sequence of `n` bits in the bitmap with all bits set, and atomically unset all.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx)
 {
-  return mi_bitmap_try_find(bitmap, n, tseq, pidx, &mi_bitmap_try_find_and_clearN_at);
+  // return mi_bitmap_try_find(bitmap, n, tseq, pidx, &mi_bitmap_try_find_and_clearN_at);
+  mi_bitmap_forall_chunks(bitmap, tseq, epoch, chunk_idx)
+  {
+    size_t cidx;
+    if mi_likely(mi_bitmap_chunk_find_and_try_clearN(&bitmap->chunks[chunk_idx], n, &cidx)) {
+      *pidx = (chunk_idx * MI_BITMAP_CHUNK_BITS) + cidx;
+      mi_assert_internal(*pidx <= mi_bitmap_max_bits(bitmap) - n);
+      return true;
+    }
+    else {
+      // we may find that all are cleared only on a second iteration but that is ok as
+      // the chunkmap is a conservative approximation.
+      if (epoch == mi_bitmap_chunkmap_epoch(bitmap, chunk_idx) && mi_bitmap_chunk_all_are_clear(&bitmap->chunks[chunk_idx])) {
+        mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx, epoch);
+      }
+      // continue
+    }
+  }
+  mi_bitmap_forall_chunks_end();
+  return false;
 }
 
 /* --------------------------------------------------------------------------------
-  pairmap 
+  pairmap
 -------------------------------------------------------------------------------- */
 
 void mi_pairmap_init(mi_pairmap_t* pairmap, mi_bitmap_t* bm1, mi_bitmap_t* bm2) {
@@ -1215,10 +1271,10 @@ bool mi_pairmap_is_clear(mi_pairmap_t* pairmap, size_t pair_idx) {
   pairmap clear while not busy
 -------------------------------------------------------------------------------- */
 
-static inline bool mi_bfield_atomic_clear2_while_not_busy(_Atomic(mi_bfield_t)*b, size_t idx) {
-  mi_assert_internal((idx%2)==0); // bit patterns are 00 (clear), 01 (busy), and 11 (set).
+static inline bool mi_bfield_atomic_clear2_once_not_busy(_Atomic(mi_bfield_t)*b, size_t idx) {
+  mi_assert_internal((idx%2)==0); // bit patterns are 00 (clear), 10 (busy), and 11 (set).
   mi_assert_internal(idx < MI_BFIELD_BITS-1);
-  const mi_bfield_t mask = ((mi_bfield_t)0x03 << idx);
+  const mi_bfield_t mask = ((mi_bfield_t)MI_PAIR_SET << idx);
   const mi_bfield_t mask_busy = ((mi_bfield_t)MI_PAIR_BUSY << idx);
   mi_bfield_t bnew;
   mi_bfield_t old = mi_atomic_load_relaxed(b);
@@ -1238,32 +1294,32 @@ static inline bool mi_bfield_atomic_clear2_while_not_busy(_Atomic(mi_bfield_t)*b
   return ((old&mask) == mask);
 }
 
-static inline bool mi_bitmap_chunk_clear2_while_not_busy(mi_bitmap_chunk_t* chunk, size_t cidx) {
+static inline bool mi_bitmap_chunk_clear2_once_not_busy(mi_bitmap_chunk_t* chunk, size_t cidx) {
   mi_assert_internal(cidx < MI_BITMAP_CHUNK_BITS);
   const size_t i = cidx / MI_BFIELD_BITS;
   const size_t idx = cidx % MI_BFIELD_BITS;
-  return mi_bfield_atomic_clear2_while_not_busy(&chunk->bfields[i], idx);
+  return mi_bfield_atomic_clear2_once_not_busy(&chunk->bfields[i], idx);
 }
 
-static bool mi_bitmap_clear2_while_not_busy(mi_bitmap_t* bitmap, size_t idx) {
+static bool mi_bitmap_clear2_once_not_busy(mi_bitmap_t* bitmap, size_t idx) {
   mi_assert_internal((idx%2)==0);
   mi_assert_internal(idx < mi_bitmap_max_bits(bitmap));
   const size_t chunk_idx = idx / MI_BITMAP_CHUNK_BITS;
   const size_t cidx = idx % MI_BITMAP_CHUNK_BITS;
   mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
   const mi_epoch_t epoch = mi_bitmap_chunkmap_epoch(bitmap, chunk_idx);
-  bool cleared = mi_bitmap_chunk_clear2_while_not_busy(&bitmap->chunks[chunk_idx], cidx);
+  bool cleared = mi_bitmap_chunk_clear2_once_not_busy(&bitmap->chunks[chunk_idx], cidx);
   if (cleared && epoch == mi_bitmap_chunkmap_epoch(bitmap, chunk_idx) && mi_bitmap_chunk_all_are_clear(&bitmap->chunks[chunk_idx])) {
     mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx, epoch);
-  }  
+  }
   return cleared;
 }
 
-void mi_pairmap_clear_while_not_busy(mi_pairmap_t* pairmap, size_t pair_idx) {
+void mi_pairmap_clear_once_not_busy(mi_pairmap_t* pairmap, size_t pair_idx) {
   mi_bitmap_t* bitmap;
   size_t idx;
   mi_pairmap_from_pair_idx(pairmap, pair_idx, &bitmap, &idx);
-  mi_bitmap_clear2_while_not_busy(bitmap, idx);
+  mi_bitmap_clear2_once_not_busy(bitmap, idx);
 }
 
 
@@ -1274,9 +1330,9 @@ void mi_pairmap_clear_while_not_busy(mi_pairmap_t* pairmap, size_t pair_idx) {
 
 // Atomically go from set to busy, or return false otherwise and leave the bit field as-is.
 static inline bool mi_bfield_atomic_try_set_busy(_Atomic(mi_bfield_t)*b, size_t idx) {
-  mi_assert_internal((idx%2)==0); // bit patterns are 00 (clear), 01 (busy), and 11 (set).
+  mi_assert_internal((idx%2)==0); // bit patterns are 00 (clear), 10 (busy), and 11 (set).
   mi_assert_internal(idx < MI_BFIELD_BITS-1);
-  const mi_bfield_t mask = ((mi_bfield_t)0x03 << idx);
+  const mi_bfield_t mask = ((mi_bfield_t)MI_PAIR_SET << idx);
   const mi_bfield_t mask_busy = ((mi_bfield_t)MI_PAIR_BUSY << idx);
   mi_bfield_t old;
   mi_bfield_t bnew;
@@ -1290,49 +1346,57 @@ static inline bool mi_bfield_atomic_try_set_busy(_Atomic(mi_bfield_t)*b, size_t 
 
 static inline bool mi_bitmap_chunk_try_find_and_set_busy(mi_bitmap_chunk_t* chunk, size_t* pidx) {
   for (int i = 0; i < MI_BITMAP_CHUNK_FIELDS; i++) {
-    size_t idx;
-    if mi_unlikely(mi_bfield_find_least_bit(chunk->bfields[i], &idx)) { // find least 1-bit, it may be set or busy
-      mi_assert_internal((idx%2)==0); // bit patterns are 00 (clear), 01 (busy), and 11 (set).
-      if mi_likely(mi_bfield_atomic_try_set_busy(&chunk->bfields[i], idx)) {
-        *pidx = (i*MI_BFIELD_BITS) + idx;
-        mi_assert_internal(*pidx < MI_BITMAP_CHUNK_BITS-1);
-        return true;
+    while (true) {
+      const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]) & MI_BFIELD_LO_BIT2; // only keep MI_PAIR_SET bits
+      size_t idx;
+      if (!mi_bfield_find_least_bit(b, &idx)) { // find least 1-bit
+        break; // not found: continue with the next field
+      }
+      else {
+        mi_assert_internal((idx%2)==0);
+        if mi_likely(mi_bfield_atomic_try_set_busy(&chunk->bfields[i], idx)) {
+          *pidx = (i*MI_BFIELD_BITS) + idx;
+          mi_assert_internal(*pidx < MI_BITMAP_CHUNK_BITS-1);
+          return true;
+        }
+        // else: try this word once again
       }
     }
   }
   return false;
 }
 
-static bool mi_bitmap_try_find_and_set_busy_at(mi_bitmap_t* bitmap, size_t n, size_t chunk_idx, mi_epoch_t epoch, size_t* pidx) {
-  MI_UNUSED(epoch); MI_UNUSED(n);
-  mi_assert_internal(n==2);
-  size_t cidx;
-  if mi_likely(mi_bitmap_chunk_try_find_and_set_busy(&bitmap->chunks[chunk_idx], &cidx)) {
-    *pidx = (chunk_idx * MI_BITMAP_CHUNK_BITS) + cidx;
-    mi_assert_internal(*pidx <= mi_bitmap_max_bits(bitmap) - n);
-    return true;
-  }
-  else {
-    return false;
-  }
-}
 
-static bool mi_bitmap_try_find_and_set_busy(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx) {
-  return mi_bitmap_try_find(bitmap, n, tseq, pidx, &mi_bitmap_try_find_and_set_busy_at);
+static bool mi_bitmap_try_find_and_set_busy(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t idx_offset, size_t* ppair_idx,
+                                            mi_bitmap_claim_while_busy_fun_t* claim, void* arg1, void* arg2) 
+{
+  mi_bitmap_forall_chunks(bitmap, tseq, epoch, chunk_idx)
+  {
+    MI_UNUSED(epoch); MI_UNUSED(n);
+    mi_assert_internal(n==2);
+    size_t cidx;
+    if mi_likely(mi_bitmap_chunk_try_find_and_set_busy(&bitmap->chunks[chunk_idx], &cidx)) {
+      const size_t idx = (chunk_idx * MI_BITMAP_CHUNK_BITS) + cidx;
+      mi_assert_internal((idx%2)==0);
+      const size_t pair_idx = (idx + idx_offset)/2;
+      if (claim(pair_idx, arg1, arg2)) { // while busy, the claim function can read from the page
+        mi_bitmap_xset_pair(MI_BIT_CLEAR, bitmap, idx); // claimed, clear the entry
+        *ppair_idx = pair_idx;
+        return true;
+      }
+      else {
+        mi_bitmap_xset_pair(MI_BIT_SET, bitmap, idx); // not claimed, reset the entry
+        // and continue
+      }
+    }
+  }
+  mi_bitmap_forall_chunks_end();
+  return false;
 }
 
 // Used to find an abandoned page, and transition from set to busy.
-mi_decl_nodiscard bool mi_pairmap_try_find_and_set_busy(mi_pairmap_t* pairmap, size_t tseq, size_t* pidx) {
-  size_t idx = 0;
-  if (!mi_bitmap_try_find_and_set_busy(pairmap->bitmap1, 2, tseq, &idx)) {
-    if (!mi_bitmap_try_find_and_set_busy(pairmap->bitmap2, 2, tseq, &idx)) {
-      return false;
-    }
-    else {
-      idx += mi_bitmap_max_bits(pairmap->bitmap1);
-    }
-  }
-  mi_assert_internal((idx%2)==0);
-  *pidx = idx/2;
-  return true;
+mi_decl_nodiscard bool mi_pairmap_try_find_and_set_busy(mi_pairmap_t* pairmap, size_t tseq, size_t* pair_idx, 
+                                                        mi_bitmap_claim_while_busy_fun_t* claim, void* arg1, void* arg2 ) {
+  if (mi_bitmap_try_find_and_set_busy(pairmap->bitmap1, 2, tseq, 0, pair_idx, claim, arg1, arg2)) return true;
+  return mi_bitmap_try_find_and_set_busy(pairmap->bitmap2, 2, tseq, mi_bitmap_max_bits(pairmap->bitmap1), pair_idx, claim, arg1, arg2);  
 }

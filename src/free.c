@@ -148,15 +148,44 @@ void mi_free(void* p) mi_attr_noexcept
 }
 
 
-
 // ------------------------------------------------------
 // Multi-threaded Free (`_mt`)
 // ------------------------------------------------------
 
+static void mi_decl_noinline mi_free_try_reclaim_mt(mi_page_t* page);
+
+// Push a block that is owned by another thread (or abandoned) on its page-local thread free list.
+static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block)
+{
+  // adjust stats (after padding check and potentially recursive `mi_free` above)
+  mi_stat_free(page, block);    // stat_free may access the padding
+  mi_track_free_size(block, mi_page_usable_size_of(page, block));
+
+  // _mi_padding_shrink(page, block, sizeof(mi_block_t));
+  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
+  size_t dbgsize = mi_usable_size(block);
+  if (dbgsize > MI_MiB) { dbgsize = MI_MiB; }
+  _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);
+  #endif
+
+  // push atomically on the page thread free list
+  mi_thread_free_t tf_new;
+  mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
+  do {
+    mi_block_set_next(page, block, mi_tf_block(tf_old));
+    tf_new = mi_tf_create(block, true /* always owned: try to claim it if abandoned */);
+  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
+
+  // and atomically reclaim the page if it was abandoned
+  bool reclaimed = !mi_tf_is_owned(tf_old);
+  if (reclaimed) {
+    mi_free_try_reclaim_mt(page);
+  }
+}
+
 static void mi_decl_noinline mi_free_try_reclaim_mt(mi_page_t* page) {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
-#if 1
   // we own the page now..
   // safe to collect the thread atomic free list
   _mi_page_free_collect(page, false);  // update `used` count
@@ -209,237 +238,8 @@ static void mi_decl_noinline mi_free_try_reclaim_mt(mi_page_t* page) {
 
   // not reclaimed or free'd, unown again
   _mi_page_unown(page);
-
-#else
-  if (!mi_page_is_abandoned_mapped(page)) {
-    // singleton or OS allocated
-    if (mi_page_is_singleton(page)) {
-      // free singleton pages
-      #if MI_DEBUG>1
-      _mi_page_free_collect(page, false);  // update `used` count
-      mi_assert_internal(mi_page_all_free(page));
-      #endif
-      // we can free the page directly
-      _mi_arena_page_free(page);
-      return;
-    }
-    else {
-      const bool was_full = mi_page_is_full(page);
-      _mi_page_free_collect(page,false); // update used
-      if (mi_page_all_free(page)) {
-        // no need to unabandon as it is unmapped
-        _mi_arena_page_free(page);
-        return;
-      }
-      else if (was_full && _mi_arena_page_reabandon_full(page)) {
-        return;
-      }
-      else if (!mi_page_is_mostly_used(page) && _mi_option_get_fast(mi_option_abandoned_reclaim_on_free) != 0) {
-        // the page has still some blocks in use (but not too many)
-        // reclaim in our heap if compatible, or otherwise abandon again
-        // todo: optimize this check further?
-        // note: don't use `mi_heap_get_default()` as we may just have terminated this thread and we should
-        // not reinitialize the heap for this thread. (can happen due to thread-local destructors for example -- issue #944)
-        mi_heap_t* const heap = mi_prim_get_default_heap();
-        if (heap != (mi_heap_t*)&_mi_heap_empty) {       // we did not already terminate our thread (can this happen?
-          mi_heap_t* const tagheap = _mi_heap_by_tag(heap, page->heap_tag);
-          if ((tagheap != NULL) &&                         // don't reclaim across heap object types
-              (page->subproc == tagheap->tld->subproc) &&  // don't reclaim across sub-processes; todo: make this check faster (integrate with _mi_heap_by_tag ? )
-              (_mi_arena_memid_is_suitable(page->memid, tagheap->arena_id))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
-              )
-          {
-            _mi_stat_counter_increase(&_mi_stats_main.pages_reclaim_on_free, 1);
-            // make it part of our heap (no need to unabandon as is unmapped)
-            _mi_heap_page_reclaim(tagheap, page);
-            return;
-          }
-        }
-      }
-    }
-  }
-  else {
-    // don't reclaim pages that can be found for fresh page allocations
-  }
-
-  // not reclaimed or free'd, unown again
-  _mi_page_unown(page);
-#endif
 }
 
-/*
-// we own the page now..
-// safe to collect the thread atomic free list
-_mi_page_free_collect(page, false);  // update `used` count
-if (mi_page_is_singleton(page)) { mi_assert_internal(mi_page_all_free(page)); }
-
-if (mi_page_all_free(page)) {
-  // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
-  _mi_arena_page_unabandon(page);  // this must be before free'ing
-  // we can free the page directly
-  _mi_arena_page_free(page);
-  return;
-}
-else if (!mi_page_is_mostly_used(page)) {
-  // the page has still some blocks in use (but not too many)
-  // reclaim in our heap if compatible, or otherwise abandon again
-  // todo: optimize this check further?
-  // note: don't use `mi_heap_get_default()` as we may just have terminated this thread and we should
-  // not reinitialize the heap for this thread. (can happen due to thread-local destructors for example -- issue #944)
-  mi_heap_t* const heap = mi_prim_get_default_heap();
-
-  if ((_mi_option_get_fast(mi_option_abandoned_reclaim_on_free) != 0) && // only if reclaim on free is allowed
-      (heap != (mi_heap_t*)&_mi_heap_empty))       // we did not already terminate our thread (can this happen?
-  {
-    mi_heap_t* const tagheap = _mi_heap_by_tag(heap, page->heap_tag);
-    if ((tagheap != NULL) &&                         // don't reclaim across heap object types
-        (page->subproc == tagheap->tld->subproc) &&  // don't reclaim across sub-processes; todo: make this check faster (integrate with _mi_heap_by_tag ? )
-        (_mi_arena_memid_is_suitable(page->memid, tagheap->arena_id))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
-        )
-    {
-      // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
-      _mi_arena_page_unabandon(page);
-      _mi_stat_counter_increase(&_mi_stats_main.pages_reclaim_on_free, 1);
-      // make it part of our heap
-      _mi_heap_page_reclaim(tagheap, page);
-      return;
-    }
-  }
-}
-
-// we cannot reclaim this page.. leave it abandoned
-// todo: should re-abandon or otherwise a partly used page could never be re-used if the
-// objects in it are not freed explicitly.
-_mi_page_unown(page);
-*/
-
-
-// Push a block that is owned by another thread (or abandoned) on its page-local thread free list.
-static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block)
-{
-  // adjust stats (after padding check and potentially recursive `mi_free` above)
-  mi_stat_free(page, block);    // stat_free may access the padding
-  mi_track_free_size(block, mi_page_usable_size_of(page, block));
-
-  // _mi_padding_shrink(page, block, sizeof(mi_block_t));
-  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
-  size_t dbgsize = mi_usable_size(block);
-  if (dbgsize > MI_MiB) { dbgsize = MI_MiB; }
-  _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);
-  #endif
-
-  // push atomically on the page thread free list
-  mi_thread_free_t tf_new;
-  mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
-  do {
-    mi_block_set_next(page, block, mi_tf_block(tf_old));
-    tf_new = mi_tf_create(block, true /* always owned: try to claim it if abandoned */);
-  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
-
-  // and atomically reclaim the page if it was abandoned
-  bool reclaimed = !mi_tf_is_owned(tf_old);
-  if (reclaimed) {
-    mi_free_try_reclaim_mt(page);
-  }
-}
-
-  /*
-  // Try to put the block on either the page-local thread free list,
-  // or the heap delayed free list (if this is the first non-local free in that page)
-  mi_thread_free_t tfreex;
-  bool use_delayed;
-  mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
-  do {
-    use_delayed = (mi_tf_delayed(tfree) == MI_USE_DELAYED_FREE);
-    if mi_unlikely(use_delayed) {
-      // unlikely: this only happens on the first concurrent free in a page that is in the full list
-      tfreex = mi_tf_set_delayed(tfree,MI_DELAYED_FREEING);
-    }
-    else {
-      // usual: directly add to page thread_free list
-      mi_block_set_next(page, block, mi_tf_block(tfree));
-      tfreex = mi_tf_set_block(tfree,block);
-    }
-  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
-
-  // If this was the first non-local free, we need to push it on the heap delayed free list instead
-  if mi_unlikely(use_delayed) {
-    // racy read on `heap`, but ok because MI_DELAYED_FREEING is set (see `mi_heap_delete` and `mi_heap_collect_abandon`)
-    mi_heap_t* const heap = (mi_heap_t*)(mi_atomic_load_acquire(&page->xheap)); //mi_page_heap(page);
-    mi_assert_internal(heap != NULL);
-    if (heap != NULL) {
-      // add to the delayed free list of this heap. (do this atomically as the lock only protects heap memory validity)
-      mi_block_t* dfree = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
-      do {
-        mi_block_set_nextx(heap,block,dfree, heap->keys);
-      } while (!mi_atomic_cas_ptr_weak_release(mi_block_t,&heap->thread_delayed_free, &dfree, block));
-    }
-
-    // and reset the MI_DELAYED_FREEING flag
-    tfree = mi_atomic_load_relaxed(&page->xthread_free);
-    do {
-      tfreex = tfree;
-      mi_assert_internal(mi_tf_delayed(tfree) == MI_DELAYED_FREEING);
-      tfreex = mi_tf_set_delayed(tfree,MI_NO_DELAYED_FREE);
-    } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
-  }
-}
-
-// Multi-threaded free (`_mt`) (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
-static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_block_t* block)
-{
-  // first see if the page was abandoned and if we can reclaim it into our thread
-  if (mi_page_is_abandoned(page)) {
-    if (_mi_option_get_fast(mi_option_abandoned_reclaim_on_free) != 0 ||
-      mi_page_is_singleton(page)) {  // only one block, and we are free-ing it
-      if (mi_prim_get_default_heap() != (mi_heap_t*)&_mi_heap_empty) // and we did not already exit this thread (without this check, a fresh heap will be initalized (issue #944))
-      {
-        // the page is abandoned, try to reclaim it into our heap
-        if (_mi_arena_try_reclaim(mi_heap_get_default(), page)) {  // TODO: avoid putting it in the full free queue
-          mi_assert_internal(_mi_thread_id() == mi_page_thread_id(page));
-          // mi_assert_internal(mi_heap_get_default()->tld->subproc == page->subproc);
-          mi_free(block);  // recursively free as now it will be a local free in our heap
-          return;
-        }
-        else {
-          if (mi_page_is_abandoned(page)) {
-            // mi_assert(false);
-          }
-          // mi_assert_internal(!mi_page_is_singleton(page)); // we should have succeeded on singleton pages
-        }
-      }
-    }
-  }
-
-
-  // The padding check may access the non-thread-owned page for the key values.
-  // that is safe as these are constant and the page won't be freed (as the block is not freed yet).
-  mi_check_padding(page, block);
-
-  // adjust stats (after padding check and potentially recursive `mi_free` above)
-  mi_stat_free(page, block);    // stat_free may access the padding
-  mi_track_free_size(block, mi_page_usable_size_of(page,block));
-
-  // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
-  _mi_padding_shrink(page, block, sizeof(mi_block_t));
-
-  if (mi_page_is_huge(page)) {
-    mi_assert_internal(mi_page_is_singleton(page));
-    // huge pages are special as they occupy the entire segment
-    // as these are large we reset the memory occupied by the page so it is available to other threads
-    // (as the owning thread needs to actually free the memory later).
-    _mi_os_reset(mi_page_start(page), mi_page_block_size(page), NULL); // resets conservatively
-  }
-  else {
-    #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
-    memset(block, MI_DEBUG_FREED, mi_usable_size(block));
-    #endif
-  }
-
-  // and finally free the actual block by pushing it on the owning heap
-  // thread_delayed free list (or heap delayed free list)
-  mi_free_block_delayed_mt(page,block);
-}
-*/
 
 // ------------------------------------------------------
 // Usable size
