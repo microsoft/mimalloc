@@ -653,18 +653,29 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_vis
   return mi_heap_visit_areas(heap, &mi_heap_area_visitor, &args);
 }
 
+mi_segment_t* mi_segments_get_segment_to_drop_by_slice(mi_segments_tld_t* tld);
+const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment);
+
 static mi_segment_t* mi_heap_get_segment_to_drop(mi_heap_t* heap) {
     mi_page_queue_t* fullPageQueue = &heap->pages[MI_BIN_FULL];
     mi_segment_t* segment = NULL;
 
     if (fullPageQueue->first != NULL) {
         segment = _mi_ptr_segment(fullPageQueue->first);
+        int i = 0;
+        for (mi_page_t* page = fullPageQueue->first->next; page != NULL && i < 3; page = page->next, i++) {
+            mi_segment_t* temp_segment = _mi_ptr_segment(page);
+            if (temp_segment->used > segment->used) {
+                segment = temp_segment;
+            }
+        }
+    }
+    else {
+        segment = mi_segments_get_segment_to_drop_by_slice(&heap->tld->segments);
     }
 
     return segment;
 }
-
-const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment);
 
 // Visit all pages in a segment
 static mi_decl_noinline void mi_segment_visit_pages(mi_heap_t* heap, mi_segment_t* segment, heap_page_visitor_fun* fn, void* arg1)
@@ -743,7 +754,7 @@ void mi_heap_drop_segment_if_required(mi_heap_t* heap, size_t alloc_block_size)
 {
     size_t targetSegmentCount = mi_option_get_size(mi_option_max_segments_per_heap);
     if ((targetSegmentCount > 0) && 
-        (alloc_block_size <= MI_MEDIUM_OBJ_SIZE_MAX) &&
+        (alloc_block_size <= MI_LARGE_OBJ_SIZE_MAX) &&
         (heap->tld->segments.count >= targetSegmentCount)) {
 
         mi_heap_drop_segment(heap, targetSegmentCount);
