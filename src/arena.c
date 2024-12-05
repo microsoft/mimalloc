@@ -335,7 +335,7 @@ static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_id_t req_are
   size_t _start; \
   if (req_arena_id == _mi_arena_id_none()) { \
     _max_arena = mi_atomic_load_relaxed(&mi_arena_count); \
-    _start = (_max_arena <= 1 ? 0 : (tseq / MI_THREADS_PER_ARENA) % _max_arena); \
+    _start = (_max_arena <= 2 ? 0 : (tseq % (_max_arena-1))); \
   } \
   else { \
     _max_arena = 1; \
@@ -794,62 +794,6 @@ void _mi_arena_page_unabandon(mi_page_t* page) {
   }
   _mi_stat_decrease(&_mi_stats_main.pages_abandoned, 1);
 }
-
-/*
-bool _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page) {
-  if (mi_page_is_singleton(page)) { mi_assert_internal(mi_page_is_abandoned(page)); }
-  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
-  mi_assert_internal(_mi_ptr_page(page)==page);
-  // if (!mi_page_is_abandoned(page)) return false;  // it is not abandoned (anymore)
-
-  // note: we can access the page even it is in the meantime reclaimed by another thread since
-  // we only call this when on free (and thus there is still an object alive in the page)
-  mi_memid_t memid = page->memid;
-  if (!_mi_arena_memid_is_suitable(memid, heap->arena_id)) return false;  // don't reclaim between exclusive and non-exclusive arena's
-  if (mi_atomic_load_acquire(&page->xheap) != (uintptr_t)heap->tld->subproc) return false;
-
-  if mi_likely(memid.memkind == MI_MEM_ARENA) {
-    size_t slice_index;
-    mi_arena_t* arena = mi_page_arena(page, &slice_index, NULL);
-    //if (arena->subproc != heap->tld->subproc) return false;  // only reclaim within the same subprocess
-
-    // don't reclaim more from a `free` call than half the current segments
-    // this is to prevent a pure free-ing thread to start owning too many segments
-    // (but not for out-of-arena segments as that is the main way to be reclaimed for those)
-    // if (segment->memid.memkind == MI_MEM_ARENA && heap->tld->segments.reclaim_count * 2 > heap->tld->segments.count) {
-    //  return false;
-    // }
-    const size_t bin = _mi_bin(page->block_size);
-    if (mi_bitmap_try_clear(&arena->slices_abandoned[bin], slice_index)) {
-      // we got it atomically
-      _mi_page_reclaim(heap, page);
-      mi_assert_internal(!mi_page_is_abandoned(page));
-      return true;
-    }
-    else {
-      if (mi_page_is_abandoned(page)) {
-        // mi_assert(false);
-      }
-    }
-  }
-  else {
-    // A page in OS or external memory
-    if (mi_atomic_load_acquire(&page->xheap) != (uintptr_t)heap->tld->subproc) return false;
-
-    // we use the thread_id to atomically grab ownership
-    mi_threadid_t abandoned_thread_id = 0;
-    if (mi_atomic_cas_strong_acq_rel(&page->xthread_id, &abandoned_thread_id, heap->thread_id)) {
-      // we got it atomically
-      _mi_page_reclaim(heap, page);
-      mi_assert_internal(!mi_page_is_abandoned(page));
-      return true;
-    }
-  }
-
-
-  return false;
-}
-*/
 
 void _mi_arena_reclaim_all_abandoned(mi_heap_t* heap) {
   MI_UNUSED(heap);

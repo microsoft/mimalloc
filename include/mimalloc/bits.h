@@ -314,6 +314,19 @@ static inline bool mi_bsr(size_t x, size_t* idx) {
   #endif
 }
 
+// Bit scan reverse: find the most significant bit that is set
+// return false if `x==0` (with `*idx` undefined) and true otherwise,
+// with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
+static inline bool mi_bsr32(uint32_t x, uint32_t* idx) {
+#if defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+  unsigned long i;
+  return (_BitScanReverse(&i, x) ? (*idx = i, true) : false);
+#else
+  const size_t r = mi_clz((size_t)x);
+  *idx = (~r & (MI_SIZE_BITS - 1)) - (MI_SIZE_SIZE - sizeof(uint32_t));
+  return (x!=0);
+#endif
+}
 
 
 /* --------------------------------------------------------------------------------

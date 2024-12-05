@@ -343,9 +343,9 @@ int main(int argc, char** argv) {
 
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
-  // mi_debug_show_arenas(true, true, false);
+  mi_debug_show_arenas(true, true, false);
   mi_collect(true);
-  mi_debug_show_arenas(true,true,false);
+  // mi_debug_show_arenas(true,true,false);
   #endif
   // mi_stats_print(NULL);
 #else

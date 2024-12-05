@@ -768,7 +768,7 @@ static inline bool mi_bitmap_chunk_all_are_clear(mi_bitmap_chunk_t* chunk) {
 
 static void mi_chunkmap_split(mi_chunkmap_t es, mi_cmap_t* cmap, mi_epoch_t* epoch) {
   *cmap = (mi_cmap_t)es;
-  *epoch = (mi_epoch_t)(es >> 32);
+  if (epoch!=NULL) { *epoch = (mi_epoch_t)(es >> 32); }
 }
 
 static mi_chunkmap_t mi_chunkmap_join(mi_cmap_t cmap, mi_epoch_t epoch) {
@@ -1091,80 +1091,50 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
 /* --------------------------------------------------------------------------------
   bitmap try_find_and_clear
 -------------------------------------------------------------------------------- */
-/*
-typedef bool (mi_bitmap_find_fun_t)(mi_bitmap_t* bitmap, size_t n, size_t chunk_idx, mi_epoch_t epoch, size_t* pidx);
-
-static inline bool mi_bitmap_try_find(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx, mi_bitmap_find_fun_t* find_fun)
-{
-  if (n == 0 || n > MI_BITMAP_CHUNK_BITS) return false;
-
-  // start chunk index -- todo: can depend on the tseq to decrease contention between threads
-  MI_UNUSED(tseq);
-  const size_t chunk_start = 0;
-  const size_t chunk_map_start = chunk_start / MI_CHUNKMAP_BITS;
-  const size_t chunk_map_start_idx = chunk_start % MI_CHUNKMAP_BITS;
-
-  // for each chunkmap entry `i`
-  for( size_t _i = 0; _i < bitmap->chunk_map_count; _i++)
-  {
-    size_t i = (_i + chunk_map_start);
-    if (i > bitmap->chunk_map_count) i -= bitmap->chunk_map_count;  // adjust for the start position
-
-    const size_t chunk_idx0 = i*MI_CHUNKMAP_BITS;
-    mi_epoch_t epoch;
-    mi_cmap_t  cmap = mi_bitmap_chunkmap(bitmap, chunk_idx0, &epoch);
-    if (_i == 0) { cmap = mi_rotr32(cmap, chunk_map_start_idx); }   // rotate right for the start position (on the first iteration)
-
-    uint32_t cmap_idx;             // one bit set of each chunk that may have bits set
-    size_t cmap_idx_shift = 0;     // shift through the cmap
-    while (mi_bsf32(cmap, &cmap_idx)) {     // find least bit that is set
-      // adjust for the start position
-      if (_i == 0) { cmap_idx = (cmap_idx + chunk_map_start_idx) % MI_CHUNKMAP_BITS; }
-      // set the chunk idx
-      const size_t chunk_idx = chunk_idx0 + cmap_idx + cmap_idx_shift;
-
-      // try to find and clear N bits in that chunk
-      if (chunk_idx < mi_bitmap_chunk_count(bitmap)) {   // we can have less chunks than in the chunkmap..
-        if ((*find_fun)(bitmap, n, chunk_idx, epoch, pidx)) {
-          return true;
-        }
-      }
-
-      // skip to the next bit
-      cmap_idx_shift += cmap_idx+1;
-      cmap >>= cmap_idx;            // skip scanned bits (and avoid UB for `cmap_idx+1`)
-      cmap >>= 1;
+static inline size_t mi_bitmap_find_hi_chunk(mi_bitmap_t* bitmap) {
+  size_t hi_chunk_map_idx = 0;
+  mi_cmap_t hi_cmap = 0;
+  for (size_t i = 1; i < mi_bitmap_chunk_map_count(bitmap); i++) {
+    mi_cmap_t cmap = mi_bitmap_chunkmap(bitmap, i, NULL);
+    if (cmap != 0) {
+      hi_chunk_map_idx = i;
+      hi_cmap = cmap;
     }
   }
-
-  return false;
+  uint32_t cmap_idx;
+  if (mi_bsr32(hi_cmap, &cmap_idx)) {
+    const size_t hi = (hi_chunk_map_idx * MI_CHUNKMAP_BITS) + cmap_idx;
+    mi_assert_internal(hi < mi_bitmap_chunk_count(bitmap));
+    return hi;
+  }
+  else {
+    return 0;
+  }
 }
-*/
 
 #define mi_bitmap_forall_chunks(bitmap, tseq, name_epoch, name_chunk_idx) \
   { \
   /* start chunk index -- todo: can depend on the tseq to decrease contention between threads */ \
   MI_UNUSED(tseq); \
-  const size_t chunk_start = 0; \
+  const size_t chunk_start = 0; /* tseq % (1 + mi_bitmap_find_hi_chunk(bitmap)); */ \
   const size_t chunk_map_start = chunk_start / MI_CHUNKMAP_BITS; \
-  const size_t chunk_map_start_idx = chunk_start % MI_CHUNKMAP_BITS; \
+  const uint32_t chunk_map_start_idx = (uint32_t)(chunk_start % MI_CHUNKMAP_BITS); \
   /* for each chunkmap entry `i` */ \
   for (size_t _i = 0; _i < bitmap->chunk_map_count; _i++) { \
     size_t i = (_i + chunk_map_start); \
-    if (i > bitmap->chunk_map_count) i -= bitmap->chunk_map_count;  /* adjust for the start position */ \
+    if (i >= bitmap->chunk_map_count) { i -= bitmap->chunk_map_count; } /* adjust for the start position */ \
     \
     const size_t chunk_idx0 = i*MI_CHUNKMAP_BITS; \
     mi_epoch_t name_epoch; \
     mi_cmap_t  cmap = mi_bitmap_chunkmap(bitmap, chunk_idx0, &name_epoch); \
-    if (_i == 0) { cmap = mi_rotr32(cmap, chunk_map_start_idx); }   /* rotate right for the start position (on the first iteration) */ \
+    uint32_t cmap_idx_shift = 0;   /* shift through the cmap */ \
+    if (_i == 0) { cmap = mi_rotr32(cmap, chunk_map_start_idx); cmap_idx_shift = chunk_map_start_idx; }   /* rotate right for the start position (on the first iteration) */ \
     \
     uint32_t cmap_idx;             /* one bit set of each chunk that may have bits set */ \
-    size_t   cmap_idx_shift = 0;   /* shift through the cmap */ \
     while (mi_bsf32(cmap, &cmap_idx)) {     /* find least bit that is set */ \
-      /* adjust for the start position again */ \
-      if (_i == 0) { cmap_idx = (cmap_idx + chunk_map_start_idx) % MI_CHUNKMAP_BITS; } \
       /* set the chunk idx */ \
-      const size_t name_chunk_idx = chunk_idx0 + cmap_idx + cmap_idx_shift; \
+      size_t name_chunk_idx = chunk_idx0 + ((cmap_idx + cmap_idx_shift) % MI_CHUNKMAP_BITS); \
+      if (name_chunk_idx >= mi_bitmap_chunk_count(bitmap)) { name_chunk_idx -= mi_bitmap_chunk_count(bitmap); } \
       /* try to find and clear N bits in that chunk */ \
       if (name_chunk_idx < mi_bitmap_chunk_count(bitmap)) {   /* we can have less chunks than in the chunkmap.. */ 
 
@@ -1177,28 +1147,10 @@ static inline bool mi_bitmap_try_find(mi_bitmap_t* bitmap, size_t n, size_t tseq
     } \
   }}
    
-//static bool mi_bitmap_try_find_and_clearN_at(mi_bitmap_t* bitmap, size_t n, size_t chunk_idx, mi_epoch_t epoch, size_t* pidx) {
-//  size_t cidx;
-//  if mi_likely(mi_bitmap_chunk_find_and_try_clearN(&bitmap->chunks[chunk_idx], n, &cidx)) {
-//    *pidx = (chunk_idx * MI_BITMAP_CHUNK_BITS) + cidx;
-//    mi_assert_internal(*pidx <= mi_bitmap_max_bits(bitmap) - n);
-//    return true;
-//  }
-//  else {
-//    // we may find that all are cleared only on a second iteration but that is ok as
-//    // the chunkmap is a conservative approximation.
-//    if (epoch == mi_bitmap_chunkmap_epoch(bitmap, chunk_idx) && mi_bitmap_chunk_all_are_clear(&bitmap->chunks[chunk_idx])) {
-//      mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx, epoch);
-//    }
-//    return false;
-//  }
-//}
-
 // Find a sequence of `n` bits in the bitmap with all bits set, and atomically unset all.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx)
 {
-  // return mi_bitmap_try_find(bitmap, n, tseq, pidx, &mi_bitmap_try_find_and_clearN_at);
   mi_bitmap_forall_chunks(bitmap, tseq, epoch, chunk_idx)
   {
     size_t cidx;
