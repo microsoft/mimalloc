@@ -206,7 +206,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool 
   heap->thread_id  = _mi_thread_id();
   heap->arena_id   = arena_id;
   heap->no_reclaim = noreclaim;
-  heap->eager_abandon = (!noreclaim && mi_option_is_enabled(mi_option_eager_abandon));
+  heap->allow_page_abandon = (!noreclaim && mi_option_get(mi_option_full_page_retain) >= 0);
   heap->tag        = tag;
   if (heap == tld->heap_backing) {
     _mi_random_init(&heap->random);

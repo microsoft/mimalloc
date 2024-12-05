@@ -305,7 +305,7 @@ typedef struct mi_page_s {
   #endif
 
   _Atomic(mi_thread_free_t) xthread_free;  // list of deferred free blocks freed by other threads
-  
+
   mi_heap_t*            heap;              // heap this threads belong to.
   struct mi_page_s*     next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*     prev;              // previous page owned by the heap with the same `block_size`
@@ -417,7 +417,7 @@ struct mi_heap_s {
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
-  bool                  eager_abandon;                       // `true` if this heap can abandon pages to reduce memory footprint
+  bool                  allow_page_abandon;                       // `true` if this heap can abandon pages to reduce memory footprint
   uint8_t               tag;                                 // custom tag, can be used for separating heaps based on the object types
   #if MI_GUARDED
   size_t                guarded_size_min;                    // minimal size for guarded objects

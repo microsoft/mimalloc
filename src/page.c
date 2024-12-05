@@ -212,7 +212,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
   mi_assert_internal(page!=NULL);
 
   // collect the thread free list
-  _mi_page_thread_free_collect(page);  
+  _mi_page_thread_free_collect(page);
 
   // and the local free list
   if (page->local_free != NULL) {
@@ -264,7 +264,7 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
 */
 
 // called from `mi_free` on a reclaim, and fresh_alloc if we get an abandoned page
-void _mi_heap_page_reclaim(mi_heap_t* heap, mi_page_t* page) 
+void _mi_heap_page_reclaim(mi_heap_t* heap, mi_page_t* page)
 {
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(page)==page);
@@ -381,7 +381,7 @@ void _mi_page_unfull(mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(mi_page_is_in_full(page));
-  mi_assert_internal(!mi_page_heap(page)->eager_abandon);
+  mi_assert_internal(!mi_page_heap(page)->allow_page_abandon);
   if (!mi_page_is_in_full(page)) return;
 
   mi_heap_t* heap = mi_page_heap(page);
@@ -398,7 +398,7 @@ static void mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(!mi_page_is_in_full(page));
 
   mi_heap_t* heap = mi_page_heap(page);
-  if (heap->eager_abandon) {
+  if (heap->allow_page_abandon) {
     // abandon full pages
     _mi_page_abandon(page, pq);
   }
@@ -761,9 +761,10 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
 // search for a best next page to use for at most N pages (often cut short if immediate blocks are available)
 #define MI_MAX_CANDIDATE_SEARCH  (8)
 
+#define MI_MAX_FULL_PAGES_PER_QUEUE  (4)
 
 // Find a page with free blocks of `page->block_size`.
-static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try)
+static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try)
 {
   // search through the pages in "next fit" order
   #if MI_STAT
@@ -772,6 +773,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   #if MI_MAX_CANDIDATE_SEARCH > 1
   size_t candidate_count = 0;        // we reset this on the first candidate to limit the search
   #endif
+  size_t full_page_count = 0;
   mi_page_t* page_candidate = NULL;  // a page with free space
   mi_page_t* page = pq->first;
 
@@ -797,8 +799,11 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
     // if the page is completely full, move it to the `mi_pages_full`
     // queue so we don't visit long-lived pages too often.
     if (!immediate_available && !mi_page_is_expandable(page)) {
-      mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
-      mi_page_to_full(page, pq);
+      full_page_count++;
+      if (full_page_count > MI_MAX_FULL_PAGES_PER_QUEUE) {
+        mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
+        mi_page_to_full(page, pq);
+      }
     }
     else {
       // the page has free space, make it a candidate
@@ -807,8 +812,8 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
         page_candidate = page;
         candidate_count = 0;
       }
-      else if (mi_page_all_free(page_candidate)) { 
-        _mi_page_free(page_candidate, pq); 
+      else if (mi_page_all_free(page_candidate)) {
+        _mi_page_free(page_candidate, pq);
         page_candidate = page;
       }
       else if (page->used >= page_candidate->used)  { // && !mi_page_is_mostly_used(page)) {
@@ -1000,7 +1005,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   mi_assert_internal(mi_heap_is_initialized(heap));
 
   // call potential deferred free routines
-  _mi_deferred_free(heap, false);
+  // _mi_deferred_free(heap, false);
 
   // free delayed frees from other threads (but skip contended ones)
   // _mi_heap_delayed_free_partial(heap);
