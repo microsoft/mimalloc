@@ -13,9 +13,9 @@ mi_decl_cache_align uint8_t* _mi_page_map = NULL;
 static bool        mi_page_map_all_committed = false;
 static size_t      mi_page_map_entries_per_commit_bit = MI_ARENA_SLICE_SIZE;
 static mi_memid_t  mi_page_map_memid;
-static mi_bitmap_t mi_page_map_commit;
+static mi_bitmap_t mi_page_map_commit = { 1, MI_BITMAP_MIN_CHUNK_COUNT };
 
-static bool mi_page_map_init(void) {
+bool _mi_page_map_init(void) {
   size_t vbits = _mi_os_virtual_address_bits();
   if (vbits >= 48) vbits = 47;
   // 1 byte per block =  2 GiB for 128 TiB address space  (48 bit = 256 TiB address space)
@@ -23,7 +23,7 @@ static bool mi_page_map_init(void) {
   const size_t page_map_size = (MI_ZU(1) << (vbits - MI_ARENA_SLICE_SHIFT));
 
   mi_page_map_entries_per_commit_bit = _mi_divide_up(page_map_size, MI_BITMAP_MIN_BIT_COUNT);
-  mi_bitmap_init(&mi_page_map_commit, MI_BITMAP_MIN_BIT_COUNT, true);
+  // mi_bitmap_init(&mi_page_map_commit, MI_BITMAP_MIN_BIT_COUNT, true);
 
   mi_page_map_all_committed = false; // _mi_os_has_overcommit(); // commit on-access on Linux systems?
   _mi_page_map = (uint8_t*)_mi_os_alloc_aligned(page_map_size, 1, mi_page_map_all_committed, true, &mi_page_map_memid, NULL);
@@ -57,11 +57,15 @@ static void mi_page_map_ensure_committed(size_t idx, size_t slice_count) {
         bool is_zero;
         uint8_t* const start = _mi_page_map + (i*mi_page_map_entries_per_commit_bit);
         const size_t   size = mi_page_map_entries_per_commit_bit;
-        _mi_os_commit(start, size, &is_zero, NULL);
+        _mi_os_commit(start, size, &is_zero, NULL);        
         if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(start,size); }
         mi_bitmap_xsetN(MI_BIT_SET, &mi_page_map_commit, i, 1, NULL);
       }
     }
+    #if MI_DEBUG > 0
+    _mi_page_map[idx] = 0;
+    _mi_page_map[idx+slice_count-1] = 0;
+    #endif
   }
 }
 
@@ -78,8 +82,9 @@ static size_t mi_page_map_get_idx(mi_page_t* page, uint8_t** page_start, size_t*
 void _mi_page_map_register(mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_internal(_mi_is_aligned(page,MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_page_map != NULL);  // should be initialized before multi-thread access!
   if mi_unlikely(_mi_page_map == NULL) {
-    if (!mi_page_map_init()) return;
+    if (!_mi_page_map_init()) return;
   }
   mi_assert(_mi_page_map!=NULL);
   uint8_t* page_start;

@@ -758,11 +758,6 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
   Find pages with free blocks
 -------------------------------------------------------------*/
 
-// search for a best next page to use for at most N pages (often cut short if immediate blocks are available)
-#define MI_MAX_CANDIDATE_SEARCH  (8)
-
-#define MI_MAX_FULL_PAGES_PER_QUEUE  (4)
-
 // Find a page with free blocks of `page->block_size`.
 static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try)
 {
@@ -770,10 +765,8 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
   #if MI_STAT
   size_t count = 0;
   #endif
-  #if MI_MAX_CANDIDATE_SEARCH > 1
-  size_t candidate_count = 0;        // we reset this on the first candidate to limit the search
-  #endif
-  size_t full_page_count = 0;
+  long candidate_limit = 0;          // we reset this on the first candidate to limit the search  
+  long full_page_retain = _mi_option_get_fast(mi_option_full_page_retain);
   mi_page_t* page_candidate = NULL;  // a page with free space
   mi_page_t* page = pq->first;
 
@@ -783,14 +776,11 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
     #if MI_STAT
     count++;
     #endif
-    #if MI_MAX_CANDIDATE_SEARCH > 1
-    candidate_count++;
-    #endif
-
+    candidate_limit--;
+    
     // collect freed blocks by us and other threads
     _mi_page_free_collect(page, false);
 
-  #if MI_MAX_CANDIDATE_SEARCH > 1
     // search up to N pages for a best candidate
 
     // is the local free list non-empty?
@@ -799,8 +789,8 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
     // if the page is completely full, move it to the `mi_pages_full`
     // queue so we don't visit long-lived pages too often.
     if (!immediate_available && !mi_page_is_expandable(page)) {
-      full_page_count++;
-      if (full_page_count > MI_MAX_FULL_PAGES_PER_QUEUE) {
+      full_page_retain--;
+      if (full_page_retain < 0) {
         mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
         mi_page_to_full(page, pq);
       }
@@ -810,7 +800,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
       // we prefer non-expandable pages with high usage as candidates (to reduce commit, and increase chances of free-ing up pages)
       if (page_candidate == NULL) {
         page_candidate = page;
-        candidate_count = 0;
+        candidate_limit = _mi_option_get_fast(mi_option_max_page_candidates);
       }
       else if (mi_page_all_free(page_candidate)) {
         _mi_page_free(page_candidate, pq);
@@ -820,13 +810,14 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
         page_candidate = page;
       }
       // if we find a non-expandable candidate, or searched for N pages, return with the best candidate
-      if (immediate_available || candidate_count > MI_MAX_CANDIDATE_SEARCH) {
+      if (immediate_available || candidate_limit <= 0) {
         mi_assert_internal(page_candidate!=NULL);
         break;
       }
     }
-  #else
-    // first-fit algorithm
+
+  #if 0
+    // first-fit algorithm without candidates
     // If the page contains free blocks, we are done
     if (mi_page_immediate_available(page) || mi_page_is_expandable(page)) {
       break;  // pick this one

@@ -400,7 +400,7 @@ void _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap) {
   tld->heap_backing = bheap;
   tld->heaps = NULL;
   tld->subproc = &mi_subproc_default;
-  tld->tseq = mi_atomic_add_acq_rel(&mi_tcount, 1);
+  tld->tseq = 0; // mi_atomic_add_acq_rel(&mi_tcount, 1);
   tld->os.stats = &tld->stats;
 }
 
@@ -619,6 +619,7 @@ void mi_process_init(void) mi_attr_noexcept {
 
   mi_detect_cpu_features();
   _mi_os_init();
+  _mi_page_map_init();
   _mi_arena_init();
   mi_heap_main_init();
   #if MI_DEBUG

@@ -12,10 +12,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // This file contains the main type definitions for mimalloc:
 // mi_heap_t      : all data for a thread-local heap, contains
 //                  lists of all managed heap pages.
-// mi_segment_t   : a larger chunk of memory (32GiB) from where pages
-//                  are allocated.
 // mi_page_t      : a mimalloc page (usually 64KiB or 512KiB) from
-//                  where objects are allocated.
+//                  where objects of a single size are allocated.
 //                  Note: we write "OS page" for OS memory pages while
 //                  using plain "page" for mimalloc pages (`mi_page_t`).
 // --------------------------------------------------------------------------
@@ -417,7 +415,7 @@ struct mi_heap_s {
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
-  bool                  allow_page_abandon;                       // `true` if this heap can abandon pages to reduce memory footprint
+  bool                  allow_page_abandon;                  // `true` if this heap can abandon pages to reduce memory footprint
   uint8_t               tag;                                 // custom tag, can be used for separating heaps based on the object types
   #if MI_GUARDED
   size_t                guarded_size_min;                    // minimal size for guarded objects

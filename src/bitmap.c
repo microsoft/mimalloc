@@ -861,10 +861,10 @@ size_t mi_bitmap_init(mi_bitmap_t* bitmap, size_t bit_count, bool already_zero) 
   if (!already_zero) {
     _mi_memzero_aligned(bitmap, size);
   }
-  bitmap->chunk_map_count = _mi_divide_up(chunk_count, MI_CHUNKMAP_BITS);
-  mi_assert_internal(bitmap->chunk_map_count <= MI_BITMAP_MAX_CHUNKMAPS);
-  bitmap->chunk_count = chunk_count;
-  mi_assert_internal(bitmap->chunk_map_count <= MI_BITMAP_MAX_CHUNK_COUNT);
+  mi_atomic_store_release(&bitmap->chunk_map_count, _mi_divide_up(chunk_count, MI_CHUNKMAP_BITS));
+  mi_assert_internal(mi_atomic_load_relaxed(&bitmap->chunk_map_count) <= MI_BITMAP_MAX_CHUNKMAPS);
+  mi_atomic_store_release(&bitmap->chunk_count, chunk_count);
+  mi_assert_internal(mi_atomic_load_relaxed(&bitmap->chunk_count) <= MI_BITMAP_MAX_CHUNK_COUNT);
   return size;
 }
 

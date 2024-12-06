@@ -27,6 +27,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
 #pragma warning(disable:26812)  // unscoped enum warning
+#pragma warning(disable:28159)  // don't use GetVersion
+#pragma warning(disable:4996)   // don't use GetVersion
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_align(a)        __declspec(align(a))
@@ -169,6 +171,7 @@ void          _mi_arena_field_cursor_done(mi_arena_field_cursor_t* current);
 */
 
 // "page-map.c"
+bool       _mi_page_map_init(void);
 void       _mi_page_map_register(mi_page_t* page);
 void       _mi_page_map_unregister(mi_page_t* page);
 
@@ -638,7 +641,7 @@ static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
   return (page->reserved - page->used <= frac);
 }
 
-// is less than 1/n'th of a page free?
+// is more than (n-1)/n'th of a page in use?
 static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / n;

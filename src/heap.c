@@ -208,6 +208,20 @@ void _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool 
   heap->no_reclaim = noreclaim;
   heap->allow_page_abandon = (!noreclaim && mi_option_get(mi_option_full_page_retain) >= 0);
   heap->tag        = tag;
+
+  #if defined(WIN32) && (MI_ARCH_X64 || MI_ARCH_X86)
+  // disallow reclaim for threads running in the windows threadpool
+  const DWORD winVersion = GetVersion();
+  const DWORD winMajorVersion = (DWORD)(LOBYTE(LOWORD(winVersion)));
+  if (winMajorVersion >= 6) {
+    _TEB* const teb = NtCurrentTeb();
+    void* const poolData = *((void**)((uint8_t*)teb + (MI_SIZE_BITS == 32 ? 0x0F90 : 0x1778)));
+    if (poolData != NULL) {
+      heap->no_reclaim = true;
+    }
+  }  
+  #endif
+
   if (heap == tld->heap_backing) {
     _mi_random_init(&heap->random);
   }
