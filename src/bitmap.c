@@ -42,9 +42,9 @@ static inline mi_bfield_t mi_bfield_rotate_right(mi_bfield_t x, size_t r) {
   return mi_rotr(x,r);
 }
 
-static inline mi_bfield_t mi_bfield_zero(void) {
-  return 0;
-}
+//static inline mi_bfield_t mi_bfield_zero(void) {
+//  return 0;
+//}
 
 static inline mi_bfield_t mi_bfield_one(void) {
   return 1;
@@ -147,10 +147,10 @@ static inline bool mi_bfield_atomic_xset_mask(mi_xset_t set, _Atomic(mi_bfield_t
 
 // Tries to set a bit atomically. Returns `true` if the bit transitioned from 0 to 1
 // and otherwise false (leaving the bit unchanged)
-static inline bool mi_bfield_atomic_try_set(_Atomic(mi_bfield_t)*b, size_t idx) {
-  mi_assert_internal(idx < MI_BFIELD_BITS);
-  return mi_bfield_atomic_set(b, idx); // for a single bit there is no difference
-}
+//static inline bool mi_bfield_atomic_try_set(_Atomic(mi_bfield_t)*b, size_t idx) {
+//  mi_assert_internal(idx < MI_BFIELD_BITS);
+//  return mi_bfield_atomic_set(b, idx); // for a single bit there is no difference
+//}
 
 // Tries to clear a bit atomically. Returns `true` if the bit transitioned from 1 to 0.
 // `all_clear` is set to true if the new bfield is zero (and false otherwise)
@@ -237,17 +237,17 @@ static inline bool mi_bfield_atomic_try_clear8(_Atomic(mi_bfield_t)*b, size_t by
 
 // Try to set a full field of bits atomically, and return true all bits transitioned from all 0's to 1's.
 // and false otherwise leaving the bit field as-is.
-static inline bool mi_bfield_atomic_try_setX(_Atomic(mi_bfield_t)*b) {
-  mi_bfield_t old = 0;
-  return mi_atomic_cas_weak_acq_rel(b, &old, mi_bfield_all_set());
-}
+//static inline bool mi_bfield_atomic_try_setX(_Atomic(mi_bfield_t)*b) {
+//  mi_bfield_t old = 0;
+//  return mi_atomic_cas_weak_acq_rel(b, &old, mi_bfield_all_set());
+//}
 
 // Try to clear a full field of bits atomically, and return true all bits transitioned from all 1's to 0's.
 // and false otherwise leaving the bit field as-is.
-static inline bool mi_bfield_atomic_try_clearX(_Atomic(mi_bfield_t)*b) {
-  mi_bfield_t old = mi_bfield_all_set();
-  return mi_atomic_cas_weak_acq_rel(b, &old, mi_bfield_zero());
-}
+//static inline bool mi_bfield_atomic_try_clearX(_Atomic(mi_bfield_t)*b) {
+//  mi_bfield_t old = mi_bfield_all_set();
+//  return mi_atomic_cas_weak_acq_rel(b, &old, mi_bfield_zero());
+//}
 
 
 // Check if all bits corresponding to a mask are set.
@@ -328,7 +328,7 @@ static bool mi_bchunk_xsetN(mi_xset_t set, mi_bchunk_t* chunk, size_t cidx, size
     const mi_bfield_t mask = mi_bfield_mask(m, idx);
     size_t already_xset = 0;
     const bool transition = mi_bfield_atomic_xset_mask(set, &chunk->bfields[field], mask, &already_xset);
-    mi_assert_internal((transition && already_xset == m) || (!transition && already_xset > 0));
+    mi_assert_internal((transition && already_xset == 0) || (!transition && already_xset > 0));
     all_transition = all_transition && transition;
     total_already_xset += already_xset;
     // next field
@@ -605,9 +605,9 @@ static inline bool mi_bchunk_find_and_try_clear(mi_bchunk_t* chunk, size_t* pidx
   return mi_bchunk_find_and_try_xset(MI_BIT_CLEAR, chunk, pidx);
 }
 
-static inline bool mi_bchunk_find_and_try_set(mi_bchunk_t* chunk, size_t* pidx) {
-  return mi_bchunk_find_and_try_xset(MI_BIT_SET, chunk, pidx);
-}
+//static inline bool mi_bchunk_find_and_try_set(mi_bchunk_t* chunk, size_t* pidx) {
+//  return mi_bchunk_find_and_try_xset(MI_BIT_SET, chunk, pidx);
+//}
 
 
 // find least byte in a chunk with all bits set, and try unset it atomically
@@ -763,7 +763,7 @@ static inline bool mi_bchunk_all_are_clear_relaxed(mi_bchunk_t* chunk) {
   // a 64b cache-line contains the entire chunk anyway so load both at once
   const __m256i vec1 = _mm256_load_si256((const __m256i*)chunk->bfields);
   const __m256i vec2 = _mm256_load_si256(((const __m256i*)chunk->bfields)+1);
-  return (mi_mm256_is_zero(_mm256_or_epi64(vec1,vec2)));
+  return (mi_mm256_is_zero(_mm256_or_si256(vec1,vec2)));
   #else
   return mi_bchunk_all_are_clear(chunk);
   #endif
@@ -810,7 +810,7 @@ size_t mi_bitmap_size(size_t bit_count, size_t* pchunk_count) {
   mi_assert_internal(bit_count > 0);
   const size_t chunk_count = bit_count / MI_BCHUNK_BITS;
   mi_assert_internal(chunk_count >= 1);
-  const size_t size = sizeof(mi_bitmap_t) + ((chunk_count - 1) * MI_BCHUNK_SIZE);
+  const size_t size = offsetof(mi_bitmap_t,chunks) + (chunk_count * MI_BCHUNK_SIZE);
   mi_assert_internal( (size%MI_BCHUNK_SIZE) == 0 );
   if (pchunk_count != NULL) { *pchunk_count = chunk_count;  }
   return size;
@@ -1044,10 +1044,10 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
     const size_t chunk_idx0 = i*MI_BFIELD_BITS; \
     mi_bfield_t cmap = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]); \
     size_t      cmap_idx_shift = 0;   /* shift through the cmap */ \
-    if (_i == 0) { cmap = mi_rotr(cmap, chunkmap_start_idx); cmap_idx_shift = chunkmap_start_idx; }   /* rotate right for the start position (on the first iteration) */ \
+    if (_i == 0) { cmap = mi_bfield_rotate_right(cmap, chunkmap_start_idx); cmap_idx_shift = chunkmap_start_idx; }   /* rotate right for the start position (on the first iteration) */ \
     \
     size_t cmap_idx; \
-    while (mi_bsf(cmap, &cmap_idx)) {     /* find least bit that is set */ \
+    while (mi_bfield_find_least_bit(cmap, &cmap_idx)) { \
       /* set the chunk idx */ \
       size_t name_chunk_idx = chunk_idx0 + ((cmap_idx + cmap_idx_shift) % MI_BFIELD_BITS); \
       mi_assert(chunk_idx < mi_bitmap_chunk_count(bitmap)); \

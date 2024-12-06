@@ -400,7 +400,7 @@ void _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap) {
   tld->heap_backing = bheap;
   tld->heaps = NULL;
   tld->subproc = &mi_subproc_default;
-  tld->tseq = 0; // mi_atomic_add_acq_rel(&mi_tcount, 1);
+  tld->tseq = mi_atomic_add_acq_rel(&mi_tcount, 1);
   tld->os.stats = &tld->stats;
 }
 

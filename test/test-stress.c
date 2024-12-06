@@ -41,11 +41,11 @@ static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
 #elif 0
-static int THREADS = 1;
+static int THREADS = 4;
 static int SCALE   = 100;
 static int ITER    = 10;
 #define ALLOW_LARGE false
-#elif 1
+#elif 0
 static int THREADS = 32;
 static int SCALE   = 50;
 static int ITER    = 50;
@@ -343,9 +343,9 @@ int main(int argc, char** argv) {
 
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
-  mi_debug_show_arenas(true, true, false);
+  //mi_debug_show_arenas(true, true, false);
   mi_collect(true);
-  // mi_debug_show_arenas(true,true,false);
+  mi_debug_show_arenas(true,true,false);
   #endif
   // mi_stats_print(NULL);
 #else

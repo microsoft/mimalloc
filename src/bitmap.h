@@ -75,12 +75,18 @@ typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bchunk_s {
 // The chunkmap is itself a chunk.
 typedef mi_bchunk_t mi_bchunkmap_t;
 
-#define MI_BCHUNKMAP_BITS            MI_BCHUNK_BITS
+#define MI_BCHUNKMAP_BITS             MI_BCHUNK_BITS
 
-#define MI_BITMAP_MAX_CHUNK_COUNT   (MI_BCHUNKMAP_BITS)
-#define MI_BITMAP_MIN_CHUNK_COUNT   (1)
-#define MI_BITMAP_MAX_BIT_COUNT     (MI_BITMAP_MAX_CHUNK_COUNT * MI_BCHUNK_BITS)  // 16 GiB arena
-#define MI_BITMAP_MIN_BIT_COUNT     (MI_BITMAP_MIN_CHUNK_COUNT * MI_BCHUNK_BITS)  // 32 MiB arena
+#define MI_BITMAP_MAX_CHUNK_COUNT     (MI_BCHUNKMAP_BITS)
+#define MI_BITMAP_MIN_CHUNK_COUNT     (1)
+#if MI_SIZE_BITS > 32
+#define MI_BITMAP_DEFAULT_CHUNK_COUNT     (64)  // 2 GiB on 64-bit -- this is for the page map
+#else
+#define MI_BITMAP_DEFAULT_CHUNK_COUNT      (1)  
+#endif
+#define MI_BITMAP_MAX_BIT_COUNT       (MI_BITMAP_MAX_CHUNK_COUNT * MI_BCHUNK_BITS)  // 16 GiB arena
+#define MI_BITMAP_MIN_BIT_COUNT       (MI_BITMAP_MIN_CHUNK_COUNT * MI_BCHUNK_BITS)  // 32 MiB arena
+#define MI_BITMAP_DEFAULT_BIT_COUNT   (MI_BITMAP_DEFAULT_CHUNK_COUNT * MI_BCHUNK_BITS)  // 2 GiB arena
 
 
 // An atomic bitmap
@@ -88,7 +94,7 @@ typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bitmap_s {
   _Atomic(size_t)  chunk_count;     // total count of chunks (0 < N <= MI_BCHUNKMAP_BITS)
   size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 1];    // suppress warning on msvc
   mi_bchunkmap_t   chunkmap;
-  mi_bchunk_t      chunks[1];       // or more, up to MI_BITMAP_MAX_CHUNK_COUNT
+  mi_bchunk_t      chunks[MI_BITMAP_DEFAULT_CHUNK_COUNT];        // usually dynamic MI_BITMAP_MAX_CHUNK_COUNT
 } mi_bitmap_t;
 
 
