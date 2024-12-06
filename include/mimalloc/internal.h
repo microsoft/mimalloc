@@ -700,7 +700,9 @@ static inline bool mi_page_try_claim_ownership(mi_page_t* page) {
   return ((old&1)==0);
 }
 
-static inline void _mi_page_unown(mi_page_t* page) {
+// release ownership of a page. This may free the page if all blocks were concurrently
+// freed in the meantime. Returns true if the page was freed.
+static inline bool _mi_page_unown(mi_page_t* page) {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_thread_free_t tf_new;
@@ -712,13 +714,14 @@ static inline void _mi_page_unown(mi_page_t* page) {
       if (mi_page_all_free(page)) {        // it may become free just before unowning it
         _mi_arena_page_unabandon(page);
         _mi_arena_page_free(page);
-        return;
+        return true;
       }
       tf_old = mi_atomic_load_relaxed(&page->xthread_free);
     }
     mi_assert_internal(mi_tf_block(tf_old)==NULL);
     tf_new = mi_tf_create(NULL, false);
   } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tf_old, tf_new));
+  return false;
 }
 
 //-----------------------------------------------------------

@@ -117,16 +117,16 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
 #endif
 #endif
-#ifndef MI_BITMAP_CHUNK_BITS_SHIFT
-#define MI_BITMAP_CHUNK_BITS_SHIFT        (6 + MI_SIZE_SHIFT)         // optimized for 512 bits per chunk (avx512)
+#ifndef MI_BCHUNK_BITS_SHIFT
+#define MI_BCHUNK_BITS_SHIFT        (6 + MI_SIZE_SHIFT)         // optimized for 512 bits per chunk (avx512)
 #endif
 
-#define MI_BITMAP_CHUNK_BITS              (1 << MI_BITMAP_CHUNK_BITS_SHIFT)
+#define MI_BCHUNK_BITS              (1 << MI_BCHUNK_BITS_SHIFT)
 #define MI_ARENA_SLICE_SIZE               (MI_ZU(1) << MI_ARENA_SLICE_SHIFT)
 #define MI_ARENA_SLICE_ALIGN              (MI_ARENA_SLICE_SIZE)
 
 #define MI_ARENA_MIN_OBJ_SLICES           (1)
-#define MI_ARENA_MAX_OBJ_SLICES           (MI_BITMAP_CHUNK_BITS)      // 32 MiB (for now, cannot cross chunk boundaries)
+#define MI_ARENA_MAX_OBJ_SLICES           (MI_BCHUNK_BITS)      // 32 MiB (for now, cannot cross chunk boundaries)
 
 #define MI_ARENA_MIN_OBJ_SIZE             (MI_ARENA_MIN_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
 #define MI_ARENA_MAX_OBJ_SIZE             (MI_ARENA_MAX_OBJ_SLICES * MI_ARENA_SLICE_SIZE)

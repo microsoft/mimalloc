@@ -48,7 +48,7 @@ typedef struct mi_arena_s {
   mi_bitmap_t*        slices_committed;     // is the slice committed? (i.e. accessible)
   mi_bitmap_t*        slices_purge;         // can the slice be purged? (slice in purge => slice in free)
   mi_bitmap_t*        slices_dirty;         // is the slice potentially non-zero?
-  mi_pairmap_t        pages_abandoned[MI_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)
+  mi_bitmap_t*        pages_abandoned[MI_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)
                                             // the full queue contains abandoned full pages
   // followed by the bitmaps (whose size depends on the arena size)
 } mi_arena_t;
@@ -476,16 +476,24 @@ void* _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t 
   Arena page allocation
 ----------------------------------------------------------- */
 
-static bool mi_arena_claim_abandoned(size_t slice_index, void* arg1, void* arg2) {
-  mi_arena_t* arena = (mi_arena_t*)arg1;
-  mi_subproc_t* subproc = (mi_subproc_t*)arg2;
-
+static bool mi_arena_claim_abandoned(size_t slice_index, void* arg1, void* arg2, bool* keep_abandoned) {
   // found an abandoned page of the right size
-  // it is set busy for now so we can read safely even with concurrent mi_free reclaiming
-  // try to claim ownership atomically
-  mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
-  if (subproc != page->subproc)           return false;
-  if (!mi_page_try_claim_ownership(page)) return false;
+  mi_arena_t* const   arena   = (mi_arena_t*)arg1;
+  mi_subproc_t* const subproc = (mi_subproc_t*)arg2;
+  mi_page_t* const    page    = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
+  // can we claim ownership?
+  if (!mi_page_try_claim_ownership(page)) {
+    *keep_abandoned = true;
+    return false;
+  }
+  if (subproc != page->subproc) {
+    // wrong sub-process.. we need to unown again, and perhaps not keep it abandoned
+    const bool freed = _mi_page_unown(page);
+    *keep_abandoned = !freed;
+    return false;
+  }
+  // yes, we can reclaim it
+  *keep_abandoned = false;
   return true;
 }
 
@@ -505,10 +513,10 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
   mi_forall_arenas(req_arena_id, allow_large, tseq, arena_id, arena)
   {
     size_t slice_index;
-    mi_pairmap_t* const pairmap = &arena->pages_abandoned[bin];
+    mi_bitmap_t* const bitmap = arena->pages_abandoned[bin];
 
-    if (mi_pairmap_try_find_and_set_busy(pairmap, tseq, &slice_index, &mi_arena_claim_abandoned, arena, subproc)) {  
-      // found an abandoned page of the right size 
+    if (mi_bitmap_try_find_and_claim(bitmap, tseq, &slice_index, &mi_arena_claim_abandoned, arena, subproc)) {
+      // found an abandoned page of the right size
       // and claimed ownership.
       mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
       mi_assert_internal(mi_page_is_owned(page));
@@ -528,7 +536,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
       mi_assert_internal(mi_page_block_size(page) == block_size);
       mi_assert_internal(!mi_page_is_full(page));
       return page;
-    }    
+    }
   }
   mi_forall_arenas_end();
   return NULL;
@@ -694,7 +702,7 @@ void _mi_arena_page_free(mi_page_t* page) {
     mi_assert_internal(mi_bitmap_is_clearN(arena->slices_free, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_clearN(arena->slices_purge, slice_index, slice_count));
-    mi_assert_internal(mi_pairmap_is_clear(&arena->pages_abandoned[bin], slice_index));
+    mi_assert_internal(mi_bitmap_is_clearN(arena->pages_abandoned[bin], slice_index, 1));
   }
   #endif
 
@@ -728,8 +736,8 @@ static void mi_arena_page_abandon_no_stat(mi_page_t* page) {
     mi_assert_internal(mi_bitmap_is_setN(arena->slices_dirty, slice_index, slice_count));
 
     mi_page_set_abandoned_mapped(page);
-    bool were_zero = mi_pairmap_set(&arena->pages_abandoned[bin], slice_index);
-    MI_UNUSED(were_zero); mi_assert_internal(were_zero);
+    const bool wasclear = mi_bitmap_set(arena->pages_abandoned[bin], slice_index);
+    MI_UNUSED(wasclear); mi_assert_internal(wasclear);
     mi_atomic_increment_relaxed(&subproc->abandoned_count[bin]);
   }
   else {
@@ -783,7 +791,7 @@ void _mi_arena_page_unabandon(mi_page_t* page) {
     mi_assert_internal(mi_bitmap_is_clearN(arena->slices_purge, slice_index, slice_count));
 
     // this busy waits until a concurrent reader (from alloc_abandoned) is done
-    mi_pairmap_clear_once_not_busy(&arena->pages_abandoned[bin], slice_index);
+    mi_bitmap_clear_once_set(arena->pages_abandoned[bin], slice_index);
     mi_page_clear_abandoned_mapped(page);
     mi_atomic_decrement_relaxed(&page->subproc->abandoned_count[bin]);
   }
@@ -956,12 +964,12 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id, mi_stats_t*
 }
 
 static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_base) {
-  if (slice_count == 0) slice_count = MI_BITMAP_CHUNK_BITS;
-  mi_assert_internal((slice_count % MI_BITMAP_CHUNK_BITS) == 0);
-  const size_t base_size = _mi_align_up(sizeof(mi_arena_t), MI_BITMAP_CHUNK_SIZE);
-  const size_t bitmaps_size = 4 * mi_bitmap_size(slice_count,NULL);
-  const size_t pairmaps_size = MI_BIN_COUNT * 2 * mi_bitmap_size(slice_count,NULL);
-  const size_t size = base_size + bitmaps_size + pairmaps_size;
+  if (slice_count == 0) slice_count = MI_BCHUNK_BITS;
+  mi_assert_internal((slice_count % MI_BCHUNK_BITS) == 0);
+  const size_t base_size = _mi_align_up(sizeof(mi_arena_t), MI_BCHUNK_SIZE);
+  const size_t bitmaps_count = 4 + MI_BIN_COUNT; // free, commit, dirty, purge, and abandonded
+  const size_t bitmaps_size = bitmaps_count * mi_bitmap_size(slice_count,NULL);
+  const size_t size = base_size + bitmaps_size;
 
   const size_t os_page_size = _mi_os_page_size();
   const size_t info_size = _mi_align_up(size, os_page_size) + os_page_size; // + guard page
@@ -992,7 +1000,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
 
   if (arena_id != NULL) { *arena_id = _mi_arena_id_none(); }
 
-  const size_t slice_count = _mi_align_down(size / MI_ARENA_SLICE_SIZE, MI_BITMAP_CHUNK_BITS);
+  const size_t slice_count = _mi_align_down(size / MI_ARENA_SLICE_SIZE, MI_BCHUNK_BITS);
   if (slice_count > MI_BITMAP_MAX_BIT_COUNT) {  // 16 GiB for now
     // todo: allow larger areas (either by splitting it up in arena's or having larger arena's)
     _mi_warning_message("cannot use OS memory since it is too large (size %zu MiB, maximum is %zu MiB)", size/MI_MiB, mi_size_of_slices(MI_BITMAP_MAX_BIT_COUNT)/MI_MiB);
@@ -1034,7 +1042,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   arena->slices_dirty = mi_arena_bitmap_init(slice_count,&base);
   arena->slices_purge = mi_arena_bitmap_init(slice_count,&base);
   for( size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
-    mi_pairmap_init(&arena->pages_abandoned[i], mi_arena_bitmap_init(slice_count, &base), mi_arena_bitmap_init(slice_count, &base));
+    arena->pages_abandoned[i] = mi_arena_bitmap_init(slice_count,&base);
   }
   mi_assert_internal(mi_size_of_slices(info_slices) >= (size_t)(base - mi_arena_start(arena)));
 
@@ -1112,9 +1120,9 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
   size_t bit_count = 0;
   size_t bit_set_count = 0;
   for (size_t i = 0; i < mi_bitmap_chunk_count(bitmap) && bit_count < slice_count; i++) {
-    char buf[MI_BITMAP_CHUNK_BITS + 64]; _mi_memzero(buf, sizeof(buf));
-    mi_bitmap_chunk_t* chunk = &bitmap->chunks[i];
-    for (size_t j = 0, k = 0; j < MI_BITMAP_CHUNK_FIELDS; j++) {
+    char buf[MI_BCHUNK_BITS + 64]; _mi_memzero(buf, sizeof(buf));
+    mi_bchunk_t* chunk = &bitmap->chunks[i];
+    for (size_t j = 0, k = 0; j < MI_BCHUNK_FIELDS; j++) {
       if (j > 0 && (j % 4) == 0) {
         buf[k++] = '\n';
         _mi_memcpy(buf+k, prefix, strlen(prefix)); k += strlen(prefix);
