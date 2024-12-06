@@ -137,7 +137,7 @@ mi_decl_cache_align static const mi_tld_t tld_empty = {
   0,
   false,
   NULL, NULL,
-  { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, tld_empty_stats, tld_empty_os }, // segments
+  { MI_SEGMENT_SPAN_QUEUES_EMPTY, MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, tld_empty_stats, tld_empty_os }, // segments
   { 0, tld_empty_stats }, // os
   { MI_STATS_NULL }       // stats
 };
@@ -154,7 +154,7 @@ extern mi_heap_t _mi_heap_main;
 static mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main, & _mi_heap_main,
-  { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, &tld_main.stats, &tld_main.os }, // segments
+  { MI_SEGMENT_SPAN_QUEUES_EMPTY, MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, &tld_main.stats, &tld_main.os }, // segments
   { 0, &tld_main.stats },  // os
   { MI_STATS_NULL }       // stats
 };

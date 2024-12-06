@@ -653,10 +653,10 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_vis
   return mi_heap_visit_areas(heap, &mi_heap_area_visitor, &args);
 }
 
-mi_segment_t* mi_segments_get_segment_to_drop_by_slice(mi_segments_tld_t* tld);
+mi_segment_t* mi_segments_get_segment_to_drop_by_slice(mi_segments_tld_t* tld, size_t alloc_block_size);
 const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment);
 
-static mi_segment_t* mi_heap_get_segment_to_drop(mi_heap_t* heap) {
+static mi_segment_t* mi_heap_get_segment_to_drop(mi_heap_t* heap, size_t alloc_block_size) {
     mi_page_queue_t* fullPageQueue = &heap->pages[MI_BIN_FULL];
     mi_segment_t* segment = NULL;
 
@@ -671,7 +671,7 @@ static mi_segment_t* mi_heap_get_segment_to_drop(mi_heap_t* heap) {
         }
     }
     else {
-        segment = mi_segments_get_segment_to_drop_by_slice(&heap->tld->segments);
+        segment = mi_segments_get_segment_to_drop_by_slice(&heap->tld->segments, alloc_block_size);
     }
 
     return segment;
@@ -712,13 +712,13 @@ static mi_decl_noinline void mi_segment_visit_pages(mi_heap_t* heap, mi_segment_
     }
 }
 
-void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount) {
+void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount, size_t alloc_block_size) {
     bool segmentsDropped = false;
 
     while (heap->tld->segments.count >= targetSegmentCount) {
 
         // 1. Find a segment to drop (abandon) using the Full Page queue
-        mi_segment_t* segmentToAbandon = mi_heap_get_segment_to_drop(heap);
+        mi_segment_t* segmentToAbandon = mi_heap_get_segment_to_drop(heap, alloc_block_size);
         if (segmentToAbandon == NULL) {
             break;
         }
@@ -757,6 +757,6 @@ void mi_heap_drop_segment_if_required(mi_heap_t* heap, size_t alloc_block_size)
         (alloc_block_size <= MI_LARGE_OBJ_SIZE_MAX) &&
         (heap->tld->segments.count >= targetSegmentCount)) {
 
-        mi_heap_drop_segment(heap, targetSegmentCount);
+        mi_heap_drop_segment(heap, targetSegmentCount, alloc_block_size);
     }
 }
