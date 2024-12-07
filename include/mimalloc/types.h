@@ -237,6 +237,8 @@ typedef uintptr_t mi_thread_free_t;
 // Sub processes are used to keep memory separate between them (e.g. multiple interpreters in CPython)
 typedef struct mi_subproc_s mi_subproc_t;
 
+// A heap can serve only specific objects signified by its heap tag (e.g. various object types in CPython)
+typedef uint8_t mi_heaptag_t;
 
 // A page contains blocks of one specific size (`block_size`).
 // Each page has three list of free blocks:
@@ -280,7 +282,7 @@ typedef struct mi_page_s {
 
   size_t                    block_size;        // size available in each block (always `>0`)  
   uint8_t*                  page_start;        // start of the blocks
-  uint8_t                   heap_tag;          // tag of the owning heap, used to separate heaps by object type
+  mi_heaptag_t              heap_tag;          // tag of the owning heap, used to separate heaps by object type
   bool                      free_is_zero;      // `true` if the blocks in the free list are zero initialized
                                                // padding
   #if (MI_ENCODE_FREELIST || MI_PADDING)
@@ -411,7 +413,16 @@ struct mi_heap_s {
   mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
 };
 
+// ------------------------------------------------------
+// Arena's
+// These are large reserved areas of memory allocated from
+// the OS that are managed by mimalloc to efficiently
+// allocate MI_SLICE_SIZE slices of memory for the 
+// mimalloc pages.
+// ------------------------------------------------------
 
+// A large memory arena where pages are allocated in.
+typedef struct mi_arena_s mi_arena_t;
 
 // ------------------------------------------------------
 // Debug

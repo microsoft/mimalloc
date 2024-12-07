@@ -1165,7 +1165,7 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t
 // Find a set bit in the bitmap and try to atomically clear it and claim it.
 // (Used to find pages in the pages_abandoned bitmaps.)
 mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx,
-                                                    mi_claim_fun_t* claim, void* arg1, void* arg2)
+                                                    mi_claim_fun_t* claim, mi_arena_t* arena, mi_subproc_t* subproc, mi_heaptag_t heap_tag )
 {
   mi_bitmap_forall_chunks(bitmap, tseq, chunk_idx)
   {
@@ -1174,7 +1174,7 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t 
       const size_t slice_index = (chunk_idx * MI_BCHUNK_BITS) + cidx;
       mi_assert_internal(slice_index < mi_bitmap_max_bits(bitmap));
       bool keep_set = true;
-      if ((*claim)(slice_index, arg1, arg2, &keep_set)) {
+      if ((*claim)(slice_index, arena, subproc, heap_tag, &keep_set)) {
         // success!
         mi_assert_internal(!keep_set);
         *pidx = slice_index;

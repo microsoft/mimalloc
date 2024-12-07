@@ -479,11 +479,9 @@ void* _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t 
   Arena page allocation
 ----------------------------------------------------------- */
 
-static bool mi_arena_try_claim_abandoned(size_t slice_index, void* arg1, void* arg2, bool* keep_abandoned) {
+static bool mi_arena_try_claim_abandoned(size_t slice_index, mi_arena_t* arena, mi_subproc_t* subproc, mi_heaptag_t heap_tag, bool* keep_abandoned) {
   // found an abandoned page of the right size
-  mi_arena_t* const   arena   = (mi_arena_t*)arg1;
-  mi_subproc_t* const subproc = (mi_subproc_t*)arg2;
-  mi_page_t* const    page    = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
+  mi_page_t* const page  = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
   // can we claim ownership?
   if (!mi_page_try_claim_ownership(page)) {
     // there was a concurrent free ..
@@ -493,8 +491,9 @@ static bool mi_arena_try_claim_abandoned(size_t slice_index, void* arg1, void* a
     *keep_abandoned = true;
     return false;
   }
-  if (subproc != page->subproc) {
-    // wrong sub-process.. we need to unown again
+  if (subproc != page->subproc || heap_tag != page->heap_tag) {
+    // wrong sub-process or heap_tag.. we need to unown again
+    // note: this normally never happens unless subprocesses/heaptags are actually used.
     // (an unown might free the page, and depending on that we can keep it in the abandoned map or not)
     // note: a minor wrinkle: the page will still be mapped but the abandoned map entry is (temporarily) clear at this point.
     //       so we cannot check in `mi_arena_free` for this invariant to hold.
@@ -507,7 +506,7 @@ static bool mi_arena_try_claim_abandoned(size_t slice_index, void* arg1, void* a
   return true;
 }
 
-static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t block_size, mi_arena_id_t req_arena_id, mi_tld_t* tld)
+static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t block_size, mi_arena_id_t req_arena_id, mi_heaptag_t heaptag, mi_tld_t* tld)
 {
   MI_UNUSED(slice_count);
   const size_t bin = _mi_bin(block_size);
@@ -525,7 +524,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
     size_t slice_index;
     mi_bitmap_t* const bitmap = arena->pages_abandoned[bin];
 
-    if (mi_bitmap_try_find_and_claim(bitmap, tseq, &slice_index, &mi_arena_try_claim_abandoned, arena, subproc)) {
+    if (mi_bitmap_try_find_and_claim(bitmap, tseq, &slice_index, &mi_arena_try_claim_abandoned, arena, subproc, heaptag)) {
       // found an abandoned page of the right size
       // and claimed ownership.
       mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
@@ -632,7 +631,7 @@ static mi_page_t* mi_arena_page_allocN(mi_heap_t* heap, size_t slice_count, size
   mi_tld_t* const tld = heap->tld;
 
   // 1. look for an abandoned page
-  mi_page_t* page = mi_arena_page_try_find_abandoned(slice_count, block_size, req_arena_id, tld);
+  mi_page_t* page = mi_arena_page_try_find_abandoned(slice_count, block_size, req_arena_id, heap->tag, tld);
   if (page != NULL) {
     return page;  // return as abandoned
   }

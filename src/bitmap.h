@@ -185,10 +185,10 @@ static inline bool mi_bitmap_try_clearN(mi_bitmap_t* bitmap, size_t idx, size_t 
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx);
 
-typedef bool (mi_claim_fun_t)(size_t slice_index, void* arg1, void* arg2, bool* keep_set);
+typedef bool (mi_claim_fun_t)(size_t slice_index, mi_arena_t* arena, mi_subproc_t* subproc, mi_heaptag_t heap_tag, bool* keep_set);
 
 mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx, 
-                                                    mi_claim_fun_t* claim, void* arg1, void* arg2);
+                                                    mi_claim_fun_t* claim, mi_arena_t* arena, mi_subproc_t* subproc, mi_heaptag_t heap_tag );
 
 void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx);
 
