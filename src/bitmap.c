@@ -42,9 +42,9 @@ static inline mi_bfield_t mi_bfield_rotate_right(mi_bfield_t x, size_t r) {
   return mi_rotr(x,r);
 }
 
-//static inline mi_bfield_t mi_bfield_zero(void) {
-//  return 0;
-//}
+static inline mi_bfield_t mi_bfield_zero(void) {
+  return 0;
+}
 
 static inline mi_bfield_t mi_bfield_one(void) {
   return 1;
@@ -64,9 +64,9 @@ static inline mi_bfield_t mi_bfield_mask(size_t bit_count, size_t shiftl) {
 // Find the least significant bit that can be xset (0 for MI_BIT_SET, 1 for MI_BIT_CLEAR).
 // return false if `x==~0` (for MI_BIT_SET) or `x==0` for MI_BIT_CLEAR (with `*idx` undefined) and true otherwise,
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
-static inline bool mi_bfield_find_least_to_xset(mi_xset_t set, mi_bfield_t x, size_t* idx) {
-  return mi_bfield_find_least_bit((set ? ~x : x), idx);
-}
+//static inline bool mi_bfield_find_least_to_xset(mi_xset_t set, mi_bfield_t x, size_t* idx) {
+//  return mi_bfield_find_least_bit((set ? ~x : x), idx);
+//}
 
 // Set a bit atomically. Returns `true` if the bit transitioned from 0 to 1
 static inline bool mi_bfield_atomic_set(_Atomic(mi_bfield_t)*b, size_t idx) {
@@ -244,10 +244,10 @@ static inline bool mi_bfield_atomic_try_clear8(_Atomic(mi_bfield_t)*b, size_t by
 
 // Try to clear a full field of bits atomically, and return true all bits transitioned from all 1's to 0's.
 // and false otherwise leaving the bit field as-is.
-//static inline bool mi_bfield_atomic_try_clearX(_Atomic(mi_bfield_t)*b) {
-//  mi_bfield_t old = mi_bfield_all_set();
-//  return mi_atomic_cas_weak_acq_rel(b, &old, mi_bfield_zero());
-//}
+static inline bool mi_bfield_atomic_try_clearX(_Atomic(mi_bfield_t)*b) {
+  mi_bfield_t old = mi_bfield_all_set();
+  return mi_atomic_cas_strong_acq_rel(b, &old, mi_bfield_zero());
+}
 
 
 // Check if all bits corresponding to a mask are set.
@@ -514,31 +514,33 @@ static inline __m256i mi_mm256_zero(void) {
 static inline __m256i mi_mm256_ones(void) {
   return _mm256_set1_epi64x(~0);
 }
-static inline bool mi_mm256_is_ones(__m256i vec) {
-  return _mm256_testc_si256(vec, _mm256_cmpeq_epi32(vec, vec));
-}
+//static inline bool mi_mm256_is_ones(__m256i vec) {
+//  return _mm256_testc_si256(vec, _mm256_cmpeq_epi32(vec, vec));
+//}
 static inline bool mi_mm256_is_zero( __m256i vec) {
   return _mm256_testz_si256(vec,vec);
 }
 #endif
 
-// find least 0/1-bit in a chunk and try to set/clear it atomically
+// Find least 1-bit in a chunk and try to clear it atomically
 // set `*pidx` to the bit index (0 <= *pidx < MI_BCHUNK_BITS) on success.
+// This is used to find free slices and abandoned pages and should be efficient.
 // todo: try neon version
-static inline bool mi_bchunk_find_and_try_xset(mi_xset_t set, mi_bchunk_t* chunk, size_t* pidx) {
-#if defined(__AVX2__) && (MI_BCHUNK_BITS==256)
+static inline bool mi_bchunk_find_and_try_clear(mi_bchunk_t* chunk, size_t* pidx) { 
+  #if defined(__AVX2__) && (MI_BCHUNK_BITS==256)
   while (true) {
     const __m256i vec = _mm256_load_si256((const __m256i*)chunk->bfields);
-    const __m256i vcmp = _mm256_cmpeq_epi64(vec, (set ? mi_mm256_ones() : mi_mm256_zero())); // (elem64 == ~0 / 0 ? 0xFF  : 0)
+    const __m256i vcmp = _mm256_cmpeq_epi64(vec, mi_mm256_zero()); // (elem64 == 0 ? 0xFF  : 0)
     const uint32_t mask = ~_mm256_movemask_epi8(vcmp);  // mask of most significant bit of each byte (so each 8 bits are all set or clear)
-    // mask is inverted, so each 8-bits is 0xFF iff the corresponding elem64 has a zero / one bit (and thus can be set/cleared)
+    // mask is inverted, so each 8-bits is 0xFF iff the corresponding elem64 has a bit set (and thus can be cleared)
     if (mask==0) return false;
     mi_assert_internal((_tzcnt_u32(mask)%8) == 0); // tzcnt == 0, 8, 16, or 24
     const size_t chunk_idx = _tzcnt_u32(mask) / 8;
     mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
+    const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[chunk_idx]);
     size_t cidx;
-    if (mi_bfield_find_least_to_xset(set, chunk->bfields[chunk_idx], &cidx)) {           // find the bit-idx that is set/clear
-      if mi_likely(mi_bfield_atomic_try_xset(set, &chunk->bfields[chunk_idx], cidx)) {  // set/clear it atomically
+    if (mi_bfield_find_least_bit(b, &cidx)) {           // find the least bit
+      if mi_likely(mi_bfield_atomic_try_clear(&chunk->bfields[chunk_idx], cidx, NULL)) {  // clear it atomically
         *pidx = (chunk_idx*MI_BFIELD_BITS) + cidx;
         mi_assert_internal(*pidx < MI_BCHUNK_BITS);
         return true;
@@ -546,39 +548,42 @@ static inline bool mi_bchunk_find_and_try_xset(mi_xset_t set, mi_bchunk_t* chunk
     }
     // try again
   }
-#elif defined(__AVX2__) && (MI_BCHUNK_BITS==512)
+  #elif defined(__AVX2__) && (MI_BCHUNK_BITS==512)
   while (true) {
     size_t chunk_idx = 0;
-    #if 1
+    #if 0
+    // one vector at a time
     __m256i vec = _mm256_load_si256((const __m256i*)chunk->bfields);
-    if ((set ? mi_mm256_is_ones(vec) : mi_mm256_is_zero(vec))) {
+    if (mi_mm256_is_zero(vec)) {
       chunk_idx += 4;
       vec = _mm256_load_si256(((const __m256i*)chunk->bfields) + 1);
     }
-    const __m256i vcmp = _mm256_cmpeq_epi64(vec, (set ? mi_mm256_ones() : mi_mm256_zero())); // (elem64 == ~0 / 0 ? 0xFF  : 0)
+    const __m256i vcmp = _mm256_cmpeq_epi64(vec, mi_mm256_zero()); // (elem64 == 0 ? 0xFF  : 0)
     const uint32_t mask = ~_mm256_movemask_epi8(vcmp);  // mask of most significant bit of each byte (so each 8 bits are all set or clear)
-    // mask is inverted, so each 8-bits is 0xFF iff the corresponding elem64 has a zero / one bit (and thus can be set/cleared)
+    // mask is inverted, so each 8-bits is 0xFF iff the corresponding elem64 has a bit set (and thus can be cleared)
     if (mask==0) return false;
     mi_assert_internal((_tzcnt_u32(mask)%8) == 0); // tzcnt == 0, 8, 16, or 24
     chunk_idx += _tzcnt_u32(mask) / 8;
     #else
+    // a cache line is 64b so we can just as well load all at the same time
     const __m256i vec1  = _mm256_load_si256((const __m256i*)chunk->bfields);
     const __m256i vec2  = _mm256_load_si256(((const __m256i*)chunk->bfields)+1);
-    const __m256i cmpv  = (set ? mi_mm256_ones() : mi_mm256_zero());
-    const __m256i vcmp1 = _mm256_cmpeq_epi64(vec1, cmpv); // (elem64 == ~0 / 0 ? 0xFF  : 0)
-    const __m256i vcmp2 = _mm256_cmpeq_epi64(vec2, cmpv); // (elem64 == ~0 / 0 ? 0xFF  : 0)
+    const __m256i cmpv  = mi_mm256_zero();
+    const __m256i vcmp1 = _mm256_cmpeq_epi64(vec1, cmpv); // (elem64 == 0 ? 0xFF  : 0)
+    const __m256i vcmp2 = _mm256_cmpeq_epi64(vec2, cmpv); // (elem64 == 0 ? 0xFF  : 0)
     const uint32_t mask1 = ~_mm256_movemask_epi8(vcmp1);  // mask of most significant bit of each byte (so each 8 bits are all set or clear)
-    const uint32_t mask2 = ~_mm256_movemask_epi8(vcmp1);  // mask of most significant bit of each byte (so each 8 bits are all set or clear)
+    const uint32_t mask2 = ~_mm256_movemask_epi8(vcmp2);  // mask of most significant bit of each byte (so each 8 bits are all set or clear)
     const uint64_t mask = ((uint64_t)mask2 << 32) | mask1;
-    // mask is inverted, so each 8-bits is 0xFF iff the corresponding elem64 has a zero / one bit (and thus can be set/cleared)
+    // mask is inverted, so each 8-bits is 0xFF iff the corresponding elem64 has a bit set (and thus can be cleared)
     if (mask==0) return false;
     mi_assert_internal((_tzcnt_u64(mask)%8) == 0); // tzcnt == 0, 8, 16, 24 , ..
-    const size_t chunk_idx = _tzcnt_u64(mask) / 8;
+    chunk_idx = _tzcnt_u64(mask) / 8;
     #endif
     mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
+    const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[chunk_idx]);
     size_t cidx;
-    if (mi_bfield_find_least_to_xset(set, chunk->bfields[chunk_idx], &cidx)) {           // find the bit-idx that is set/clear
-      if mi_likely(mi_bfield_atomic_try_xset(set, &chunk->bfields[chunk_idx], cidx)) {  // set/clear it atomically
+    if (mi_bfield_find_least_bit(b, &cidx)) {           // find the bit-idx that is clear
+      if mi_likely(mi_bfield_atomic_try_clear(&chunk->bfields[chunk_idx], cidx, NULL)) {  // clear it atomically
         *pidx = (chunk_idx*MI_BFIELD_BITS) + cidx;
         mi_assert_internal(*pidx < MI_BCHUNK_BITS);
         return true;
@@ -586,11 +591,12 @@ static inline bool mi_bchunk_find_and_try_xset(mi_xset_t set, mi_bchunk_t* chunk
     }
     // try again
   }
-#else
+  #else
   for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
+    const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
     size_t idx;
-    if mi_unlikely(mi_bfield_find_least_to_xset(set, chunk->bfields[i], &idx)) { // find least 0-bit
-      if mi_likely(mi_bfield_atomic_try_xset(set, &chunk->bfields[i], idx)) {  // try to set it atomically
+    if (mi_bfield_find_least_bit(b, &idx)) { // find least 1-bit
+      if mi_likely(mi_bfield_atomic_try_clear(&chunk->bfields[i], idx, NULL)) {  // try to clear it atomically
         *pidx = (i*MI_BFIELD_BITS + idx);
         mi_assert_internal(*pidx < MI_BCHUNK_BITS);
         return true;
@@ -598,48 +604,49 @@ static inline bool mi_bchunk_find_and_try_xset(mi_xset_t set, mi_bchunk_t* chunk
     }
   }
   return false;
-#endif
+  #endif
 }
 
-static inline bool mi_bchunk_find_and_try_clear(mi_bchunk_t* chunk, size_t* pidx) {
-  return mi_bchunk_find_and_try_xset(MI_BIT_CLEAR, chunk, pidx);
-}
-
-//static inline bool mi_bchunk_find_and_try_set(mi_bchunk_t* chunk, size_t* pidx) {
-//  return mi_bchunk_find_and_try_xset(MI_BIT_SET, chunk, pidx);
-//}
 
 
 // find least byte in a chunk with all bits set, and try unset it atomically
 // set `*pidx` to its bit index (0 <= *pidx < MI_BCHUNK_BITS) on success.
+// Used to find medium size pages in the free blocks.
 // todo: try neon version
 static inline bool mi_bchunk_find_and_try_clear8(mi_bchunk_t* chunk, size_t* pidx) {
-  #if defined(__AVX2__) && (MI_BCHUNK_BITS==256)
-  while(true) {
-    const __m256i vec  = _mm256_load_si256((const __m256i*)chunk->bfields);
-    const __m256i vcmp = _mm256_cmpeq_epi8(vec, mi_mm256_ones()); // (byte == ~0 ? -1  : 0)
-    const uint32_t mask = _mm256_movemask_epi8(vcmp);    // mask of most significant bit of each byte
-    if (mask == 0) return false;
-    const size_t i = _tzcnt_u32(mask);
-    mi_assert_internal(8*i < MI_BCHUNK_BITS);
-    const size_t chunk_idx = i / MI_BFIELD_SIZE;
-    const size_t byte_idx  = i % MI_BFIELD_SIZE;
-    if mi_likely(mi_bfield_atomic_try_xset8(MI_BIT_CLEAR,&chunk->bfields[chunk_idx],byte_idx)) {  // try to unset atomically
-      *pidx = (chunk_idx*MI_BFIELD_BITS) + (byte_idx*8);
-      mi_assert_internal(*pidx < MI_BCHUNK_BITS);
+  #if defined(__AVX2__) && (MI_BCHUNK_BITS==512)
+  while (true) {
+    // since a cache-line is 64b, load all at once 
+    const __m256i vec1  = _mm256_load_si256((const __m256i*)chunk->bfields);
+    const __m256i vec2  = _mm256_load_si256((const __m256i*)chunk->bfields+1);
+    const __m256i cmpv  = mi_mm256_ones();
+    const __m256i vcmp1 = _mm256_cmpeq_epi8(vec1, cmpv); // (byte == ~0 ? 0xFF : 0)
+    const __m256i vcmp2 = _mm256_cmpeq_epi8(vec2, cmpv); // (byte == ~0 ? 0xFF : 0)
+    const uint32_t mask1 = _mm256_movemask_epi8(vcmp1);    // mask of most significant bit of each byte
+    const uint32_t mask2 = _mm256_movemask_epi8(vcmp2);    // mask of most significant bit of each byte
+    const uint64_t mask = ((uint64_t)mask2 << 32) | mask1;
+    // mask is inverted, so each bit is 0xFF iff the corresponding byte has a bit set (and thus can be cleared)
+    if (mask==0) return false;
+    const size_t bidx = _tzcnt_u64(mask);          // byte-idx of the byte in the chunk
+    const size_t chunk_idx = bidx / 8;          
+    const size_t byte_idx  = bidx % 8;             // byte index of the byte in the bfield
+    mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);    
+    if mi_likely(mi_bfield_atomic_try_clear8(&chunk->bfields[chunk_idx], byte_idx, NULL)) {  // clear it atomically
+      *pidx = (chunk_idx*MI_BFIELD_BITS) + 8*byte_idx;
+      mi_assert_internal(*pidx + 8 <= MI_BCHUNK_BITS);
       return true;
     }
     // try again
   }
   #else
     for(int i = 0; i < MI_BCHUNK_FIELDS; i++) {
-      const mi_bfield_t x = chunk->bfields[i];
+      const mi_bfield_t x = mi_atomic_load_relaxed(&chunk->bfields[i]);
       // has_set8 has low bit in each byte set if the byte in x == 0xFF
       const mi_bfield_t has_set8 = ((~x - MI_BFIELD_LO_BIT8) &      // high bit set if byte in x is 0xFF or < 0x7F
                                     (x  & MI_BFIELD_HI_BIT8))       // high bit set if byte in x is >= 0x80
                                     >> 7;                           // shift high bit to low bit
       size_t idx;
-      if mi_unlikely(mi_bfield_find_least_bit(has_set8,&idx)) { // find least 1-bit
+      if (mi_bfield_find_least_bit(has_set8,&idx)) { // find least 1-bit
         mi_assert_internal(idx <= (MI_BFIELD_BITS - 8));
         mi_assert_internal((idx%8)==0);
         const size_t byte_idx = idx/8;
@@ -656,14 +663,58 @@ static inline bool mi_bchunk_find_and_try_clear8(mi_bchunk_t* chunk, size_t* pid
 }
 
 
+
+// find least bfield in a chunk with all bits set, and try unset it atomically
+// set `*pidx` to its bit index (0 <= *pidx < MI_BCHUNK_BITS) on success.
+// Used to find large size pages in the free blocks.
+// todo: try neon version
+static inline bool mi_bchunk_find_and_try_clearX(mi_bchunk_t* chunk, size_t* pidx) {
+#if defined(__AVX2__) && (MI_BCHUNK_BITS==512)
+  while (true) {
+    // since a cache-line is 64b, load all at once 
+    const __m256i vec1 = _mm256_load_si256((const __m256i*)chunk->bfields);
+    const __m256i vec2 = _mm256_load_si256((const __m256i*)chunk->bfields+1);
+    const __m256i cmpv = mi_mm256_ones();
+    const __m256i vcmp1 = _mm256_cmpeq_epi64(vec1, cmpv); // (bfield == ~0 ? -1 : 0)
+    const __m256i vcmp2 = _mm256_cmpeq_epi64(vec2, cmpv); // (bfield == ~0 ? -1 : 0)
+    const uint32_t mask1 = _mm256_movemask_epi8(vcmp1);    // mask of most significant bit of each byte
+    const uint32_t mask2 = _mm256_movemask_epi8(vcmp2);    // mask of most significant bit of each byte
+    const uint64_t mask = ((uint64_t)mask2 << 32) | mask1;
+    // mask is inverted, so each 8-bits are set iff the corresponding elem64 has all bits set (and thus can be cleared)
+    if (mask==0) return false;
+    mi_assert_internal((_tzcnt_u64(mask)%8) == 0); // tzcnt == 0, 8, 16, 24 , ..
+    const size_t chunk_idx = _tzcnt_u64(mask) / 8;
+    mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
+    if mi_likely(mi_bfield_atomic_try_clearX(&chunk->bfields[chunk_idx])) {
+      *pidx = chunk_idx*MI_BFIELD_BITS;
+      mi_assert_internal(*pidx + MI_BFIELD_BITS <= MI_BCHUNK_BITS);
+      return true;
+    }    
+    // try again
+  }
+#else
+  for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
+    const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
+    if (~b==0 && mi_bfield_atomic_try_clearX(&chunk->bfields[i])) {
+      *pidx = i*MI_BFIELD_BITS;
+      mi_assert_internal(*pidx + MI_BFIELD_BITS <= MI_BCHUNK_BITS);
+      return true;
+    }
+  }
+  return false;
+#endif
+}
+
+
 // find a sequence of `n` bits in a chunk with `n < MI_BFIELD_BITS` with all bits set,
 // and try to clear them atomically.
 // set `*pidx` to its bit index (0 <= *pidx <= MI_BCHUNK_BITS - n) on success.
+// (We do not cross bfield boundaries)
 static bool mi_bchunk_find_and_try_clearNX(mi_bchunk_t* chunk, size_t n, size_t* pidx) {
   if (n == 0 || n > MI_BFIELD_BITS) return false;
   const mi_bfield_t mask = mi_bfield_mask(n, 0);
   for(int i = 0; i < MI_BCHUNK_FIELDS; i++) {
-    mi_bfield_t b = chunk->bfields[i];
+    mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
     size_t bshift = 0;
     size_t idx;
     while (mi_bfield_find_least_bit(b, &idx)) { // find least 1-bit
@@ -680,8 +731,9 @@ static bool mi_bchunk_find_and_try_clearNX(mi_bchunk_t* chunk, size_t n, size_t*
           return true;
         }
         else {
-          // if failed to atomically commit, try again from this position
-          b = (chunk->bfields[i] >> bshift);
+          // if failed to atomically commit, reload b and try again from this position
+          bshift -= idx;
+          b = mi_atomic_load_relaxed(&chunk->bfields[i]) >> bshift;
         }
       }
       else {
@@ -699,11 +751,11 @@ static bool mi_bchunk_find_and_try_clearNX(mi_bchunk_t* chunk, size_t n, size_t*
 // find a sequence of `n` bits in a chunk with `n < MI_BCHUNK_BITS` with all bits set,
 // and try to clear them atomically.
 // set `*pidx` to its bit index (0 <= *pidx <= MI_BCHUNK_BITS - n) on success.
+// This can cross bfield boundaries.
 static bool mi_bchunk_find_and_try_clearN_(mi_bchunk_t* chunk, size_t n, size_t* pidx) {
   if (n == 0 || n > MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
-  // if (n < MI_BFIELD_BITS) return mi_bchunk_find_and_try_clearNX(chunk, n, pidx);
-
-  // we align an a field, and require `field_count` fields to be all clear.
+  
+  // we align at a bfield, and scan `field_count` fields 
   // n >= MI_BFIELD_BITS; find a first field that is 0
   const size_t field_count = _mi_divide_up(n, MI_BFIELD_BITS);  // we need this many fields
   for (size_t i = 0; i <= MI_BCHUNK_FIELDS - field_count; i++)
@@ -740,14 +792,16 @@ static bool mi_bchunk_find_and_try_clearN_(mi_bchunk_t* chunk, size_t n, size_t*
         return true;
       }
     }
+    // continue
   }
   return false;
 }
 
 
 static inline bool mi_bchunk_find_and_try_clearN(mi_bchunk_t* chunk, size_t n, size_t* pidx) {
-  if (n==1) return mi_bchunk_find_and_try_clear(chunk, pidx);
-  if (n==8) return mi_bchunk_find_and_try_clear8(chunk, pidx);
+  if (n==1) return mi_bchunk_find_and_try_clear(chunk, pidx);         // small pages
+  if (n==8) return mi_bchunk_find_and_try_clear8(chunk, pidx);        // medium pages
+  if (n==MI_BFIELD_BITS) return mi_bchunk_find_and_try_clearX(chunk, pidx);  // large pages
   if (n == 0 || n > MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
   if (n < MI_BFIELD_BITS) return mi_bchunk_find_and_try_clearNX(chunk, n, pidx);
   return mi_bchunk_find_and_try_clearN_(chunk, n, pidx);

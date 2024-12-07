@@ -202,20 +202,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
 
   // set the dirty bits
   if (arena->memid.initially_zero) {
-    // size_t dirty_count = 0;
-    memid->initially_zero = mi_bitmap_setN(arena->slices_dirty, slice_index, slice_count, NULL);
-    //if (dirty_count>0) {
-    //  if (memid->initially_zero) {
-    //    _mi_error_message(EFAULT, "ouch1\n");
-    //  }
-    //  // memid->initially_zero = false;
-    //}
-    //else {
-    //  if (!memid->initially_zero) {
-    //    _mi_error_message(EFAULT, "ouch2\n");
-    //  }
-    //  // memid->initially_zero = true;
-    //}
+    memid->initially_zero = mi_bitmap_setN(arena->slices_dirty, slice_index, slice_count, NULL);    
   }
 
   // set commit state
@@ -235,7 +222,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
         #if MI_DEBUG > 1
         if (memid->initially_zero) {
           if (!mi_mem_is_zero(p, mi_size_of_slices(slice_count))) {
-            _mi_error_message(EFAULT, "arena allocation was not zero-initialized!\n");
+            _mi_error_message(EFAULT, "interal error: arena allocation was not zero-initialized!\n");
             memid->initially_zero = false;
           }
         }
@@ -327,31 +314,47 @@ static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_id_t req_are
   return true;
 }
 
-#define MI_THREADS_PER_ARENA  (16)
 
-#define mi_forall_arenas(req_arena_id, allow_large, tseq, var_arena_id, var_arena) \
+#define mi_forall_arenas(req_arena_id, tseq, name_arena) \
   { \
-  size_t _max_arena; \
-  size_t _start; \
-  if (req_arena_id == _mi_arena_id_none()) { \
-    _max_arena = mi_atomic_load_relaxed(&mi_arena_count); \
-    _start = (_max_arena <= 2 ? 0 : (tseq % (_max_arena-1))); \
-  } \
-  else { \
-    _max_arena = 1; \
-    _start = mi_arena_id_index(req_arena_id); \
-    mi_assert_internal(mi_atomic_load_relaxed(&mi_arena_count) > _start); \
-  } \
-  for (size_t i = 0; i < _max_arena; i++) { \
-    size_t _idx = i + _start; \
-    if (_idx >= _max_arena) { _idx -= _max_arena; } \
-    const mi_arena_id_t var_arena_id = mi_arena_id_create(_idx); MI_UNUSED(var_arena_id);\
-    mi_arena_t* const   var_arena = mi_arena_from_index(_idx); \
-    if (var_arena != NULL && mi_arena_is_suitable(var_arena,req_arena_id,-1 /* todo: numa node */,allow_large)) \
-    {
+  const size_t _arena_count = mi_atomic_load_relaxed(&mi_arena_count); \
+  if (_arena_count > 0) { \
+    const size_t _arena_cycle = _arena_count - 1; /* first search the arenas below the last one */ \
+    size_t _start; \
+    if (req_arena_id == _mi_arena_id_none()) { \
+       /* always start searching in an arena 1 below the max */ \
+      _start = (_arena_cycle <= 1 ? 0 : (tseq % _arena_cycle)); \
+    } \
+    else { \
+      _start = mi_arena_id_index(req_arena_id); \
+      mi_assert_internal(_start < _arena_count); \
+    } \
+    for (size_t _i = 0; _i < _arena_count; _i++) { \
+      size_t _idx; \
+      if (_i < _arena_cycle) { \
+        _idx = _i + _start; \
+        if (_idx >= _arena_cycle) { _idx -= _arena_cycle; } /* adjust so we rotate */ \
+      } \
+      else { \
+        _idx = _i; \
+      } \
+      mi_arena_t* const name_arena = mi_arena_from_index(_idx); \
+      if (name_arena != NULL) \
+      {
 
-#define mi_forall_arenas_end()  }}}
+#define mi_forall_arenas_end()  \
+      } \
+      if (req_arena_id != _mi_arena_id_none()) break; \
+    } \
+  }}
 
+#define mi_forall_suitable_arenas(req_arena_id, tseq, allow_large, name_arena) \
+  mi_forall_arenas(req_arena_id,tseq,name_arena) { \
+    if (mi_arena_is_suitable(name_arena, req_arena_id, -1 /* todo: numa node */, allow_large)) { \
+
+#define mi_forall_suitable_arenas_end() \
+  }} \
+  mi_forall_arenas_end()
 
 /* -----------------------------------------------------------
   Arena allocation
@@ -369,12 +372,12 @@ static mi_decl_noinline void* mi_arena_try_find_free(
 
   // search arena's
   const size_t tseq = tld->tseq;
-  mi_forall_arenas(req_arena_id, allow_large, tseq, arena_id, arena)
+  mi_forall_suitable_arenas(req_arena_id, tseq, allow_large, arena)
   {
     void* p = mi_arena_try_alloc_at(arena, slice_count, commit, tseq, memid);
     if (p != NULL) return p;
   }
-  mi_forall_arenas_end();
+  mi_forall_suitable_arenas_end();
   return NULL;
 }
 
@@ -517,7 +520,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
   // search arena's
   const bool allow_large = true;
   size_t tseq = tld->tseq;
-  mi_forall_arenas(req_arena_id, allow_large, tseq, arena_id, arena)
+  mi_forall_suitable_arenas(req_arena_id, tseq, allow_large, arena)
   {
     size_t slice_index;
     mi_bitmap_t* const bitmap = arena->pages_abandoned[bin];
@@ -545,7 +548,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
       return page;
     }
   }
-  mi_forall_arenas_end();
+  mi_forall_suitable_arenas_end();
   return NULL;
 }
 
