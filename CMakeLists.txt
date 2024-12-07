@@ -385,7 +385,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
       list(APPEND mi_cflags_dynamic -ftls-model=initial-exec)
       message(STATUS "Use local dynamic TLS for the static build (since MI_LIBC_MUSL=ON)")
     else()
-      list(APPEND mi_cflags -ftls-model=initial-exec -march=haswell -mavx2 -O2)
+      list(APPEND mi_cflags -ftls-model=initial-exec)
     endif()
   endif()
   if(MI_OVERRIDE)
