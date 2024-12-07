@@ -113,7 +113,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
 endif()
 
-if(NOT CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo")
+if(CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo")
+  if (NOT MI_ARCHOPT)
+    message(STATUS "Architecture specific optimizations are disabled (MI_ARCHOPT=OFF)")
+  endif()
+else()
   set(MI_ARCHOPT OFF)
 endif()
 
@@ -325,6 +329,7 @@ if(MI_WIN_USE_FLS)
 endif()
 
 # Check architecture
+set(MI_ARCHOPT_FLAGS "")
 set(MI_ARCH "unknown")
 if(APPLE)
   list(FIND CMAKE_OSX_ARCHITECTURES "x86_64" x64_index)
@@ -388,25 +393,32 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
     list(APPEND mi_cflags -fno-builtin-malloc)
   endif()
   if(MI_ARCHOPT)
-    set(mi_arch_opt "")
     if(MI_ARCH STREQUAL "x64")
-      set(mi_arch_opt "-march=haswell;-mavx2")    # fast bit scan, ~ 2013
+      set(MI_ARCH_OPT_FLAGS "-march=haswell;-mavx2")    # fast bit scan, ~ 2013
     elseif(MI_ARCH STREQUAL "arm64")
-      set(mi_arch_opt "-march=armv8.1-a")         # fast atomics, ~ 2016
-    endif()
-    if(mi_arch_opt)
-      list(APPEND mi_cflags ${mi_arch_opt})
-      message(STATUS "Architecture specific optimization is enabled (with ${mi_arch_opt}) (since MI_ARCHOPT=ON)")
+      set(MI_ARCH_OPT_FLAGS "-march=armv8.1-a")         # fast atomics, ~ 2016
     endif()
   endif()
 endif()
 
 if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
   list(APPEND mi_cflags /Zc:__cplusplus)
+  if(MI_ARCHOPT)
+    if(MI_ARCH STREQUAL "x64")
+      set(MI_ARCHOPT_FLAGS "/arch:AVX2")              # fast bit scan, ~ 2013
+    elseif(MI_ARCH STREQUAL "arm64")
+      set(MI_ARCHOPT_FLAGS "/arch:armv8.1")           # fast atomics, ~ 2016
+    endif()
+  endif()
 endif()
 
 if(MINGW)
   add_definitions(-D_WIN32_WINNT=0x600)
+endif()
+
+if(MI_ARCH_OPT_FLAGS)
+  list(APPEND mi_cflags ${MI_ARCH_OPT_FLAGS})
+  message(STATUS "Architecture specific optimization is enabled (with ${MI_ARCH_OPT_FLAGS}) (MI_ARCHOPT=ON)")
 endif()
 
 # extra needed libraries
