@@ -14,6 +14,7 @@ option(MI_TRACK_VALGRIND    "Compile with Valgrind support (adds a small overhea
 option(MI_TRACK_ASAN        "Compile with address sanitizer support (adds a small overhead)" OFF)
 option(MI_TRACK_ETW         "Compile with Windows event tracing (ETW) support (adds a small overhead)" OFF)
 option(MI_USE_CXX           "Use the C++ compiler to compile the library (instead of the C compiler)" OFF)
+option(MI_ARCHOPT           "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell -mavx2' (2013), for arm64: '-march=armv8.1-a' (2016))" ON)
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" ON)
@@ -110,6 +111,10 @@ endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
+endif()
+
+if(NOT CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo")
+  set(MI_ARCHOPT OFF)
 endif()
 
 if(MI_OVERRIDE)
@@ -319,16 +324,31 @@ if(MI_WIN_USE_FLS)
   list(APPEND mi_defines MI_WIN_USE_FLS=1)
 endif()
 
+# Check architecture
+set(MI_ARCH "unknown")
+if(APPLE)
+  list(FIND CMAKE_OSX_ARCHITECTURES "x86_64" x64_index)
+  list(FIND CMAKE_OSX_ARCHITECTURES "arm64" arm64_index)
+  if(x64_index GREATER_EQUAL 0)
+    set(MI_ARCH "x64")
+  elseif(arm64_index GREATER_EQUAL 0)
+    set(MI_ARCH "arm64")
+  endif()
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_GENERATOR_PLATFORM STREQUAL "x64")
+  set(MI_ARCH "x64")
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
+  set(MI_ARCH "arm64")
+endif()
 
- # Check /proc/cpuinfo for an SV39 MMU and limit the virtual address bits.
- # (this will skip the aligned hinting in that case. Issue #939, #949)
- if (EXISTS /proc/cpuinfo)
-   file(STRINGS /proc/cpuinfo mi_sv39_mmu REGEX "^mmu[ \t]+:[ \t]+sv39$")
-   if (mi_sv39_mmu)
-     MESSAGE( STATUS "Set virtual address bits to 39 (SV39 MMU detected)" )
-     list(APPEND mi_defines MI_DEFAULT_VIRTUAL_ADDRESS_BITS=39)
-   endif()
- endif()
+# Check /proc/cpuinfo for an SV39 MMU and limit the virtual address bits.
+# (this will skip the aligned hinting in that case. Issue #939, #949)
+if (EXISTS /proc/cpuinfo)
+  file(STRINGS /proc/cpuinfo mi_sv39_mmu REGEX "^mmu[ \t]+:[ \t]+sv39$")
+  if (mi_sv39_mmu)
+    MESSAGE( STATUS "Set virtual address bits to 39 (SV39 MMU detected)" )
+    list(APPEND mi_defines MI_DEFAULT_VIRTUAL_ADDRESS_BITS=39)
+  endif()
+endif()
 
 # On Haiku use `-DCMAKE_INSTALL_PREFIX` instead, issue #788
 # if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
@@ -366,6 +386,18 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
   endif()
   if(MI_OVERRIDE)
     list(APPEND mi_cflags -fno-builtin-malloc)
+  endif()
+  if(MI_ARCHOPT)
+    set(mi_arch_opt "")
+    if(MI_ARCH STREQUAL "x64")
+      set(mi_arch_opt "-march=haswell;-mavx2")    # fast bit scan, ~ 2013
+    elseif(MI_ARCH STREQUAL "arm64")
+      set(mi_arch_opt "-march=armv8.1-a")         # fast atomics, ~ 2016
+    endif()
+    if(mi_arch_opt)
+      list(APPEND mi_cflags ${mi_arch_opt})
+      message(STATUS "Architecture specific optimization is enabled (with ${mi_arch_opt}) (since MI_ARCHOPT=ON)")
+    endif()
   endif()
 endif()
 
