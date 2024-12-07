@@ -128,7 +128,7 @@ void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t me
     // different base? (due to alignment)
     if (memid.mem.os.base != base) {
       mi_assert(memid.mem.os.base <= addr);
-      mi_assert((uint8_t*)memid.mem.os.base + memid.mem.os.alignment >= (uint8_t*)addr);
+      // mi_assert((uint8_t*)memid.mem.os.base + memid.mem.os.alignment >= (uint8_t*)addr);
       base = memid.mem.os.base;
       if (memid.mem.os.size==0) { csize += ((uint8_t*)addr - (uint8_t*)memid.mem.os.base); }
     }
@@ -305,7 +305,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   if (p != NULL) {
     *memid = _mi_memid_create_os(p, size, commit, os_is_zero, os_is_large);
     memid->mem.os.base = os_base;
-    memid->mem.os.alignment = alignment;
+    // memid->mem.os.alignment = alignment;
     memid->mem.os.size += ((uint8_t*)p - (uint8_t*)os_base);  // todo: return from prim_alloc_aligned
   }
   return p;

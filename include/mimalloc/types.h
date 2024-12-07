@@ -111,17 +111,17 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Sizes are for 64-bit
 #ifndef MI_ARENA_SLICE_SHIFT
-#ifdef  MI_SMALL_PAGE_SHIFT  // compatibility
+#ifdef  MI_SMALL_PAGE_SHIFT   // compatibility
 #define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
 #else
 #define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
 #endif
 #endif
 #ifndef MI_BCHUNK_BITS_SHIFT
-#define MI_BCHUNK_BITS_SHIFT        (6 + MI_SIZE_SHIFT)         // optimized for 512 bits per chunk (avx512)
+#define MI_BCHUNK_BITS_SHIFT              (6 + MI_SIZE_SHIFT)         // optimized for 512 bits per chunk (avx512)
 #endif
 
-#define MI_BCHUNK_BITS              (1 << MI_BCHUNK_BITS_SHIFT)
+#define MI_BCHUNK_BITS                    (1 << MI_BCHUNK_BITS_SHIFT)
 #define MI_ARENA_SLICE_SIZE               (MI_ZU(1) << MI_ARENA_SLICE_SHIFT)
 #define MI_ARENA_SLICE_ALIGN              (MI_ARENA_SLICE_SIZE)
 
@@ -167,8 +167,8 @@ static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
 
 typedef struct mi_memid_os_info {
   void*         base;               // actual base address of the block (used for offset aligned allocations)
-  size_t        alignment;          // alignment at allocation
   size_t        size;               // allocated full size
+  // size_t        alignment;       // alignment at allocation
 } mi_memid_os_info_t;
 
 typedef struct mi_memid_arena_info {
@@ -224,26 +224,11 @@ typedef enum mi_owned_e {
 } mi_owned_t;
 
 
-// The `in_full` and `has_aligned` page flags are put in a union to efficiently
-// test if both are false (`full_aligned == 0`) in the `mi_free` routine.
-#if !MI_TSAN
-typedef union mi_page_flags_s {
-  uint8_t full_aligned;
-  struct {
-    uint8_t in_full : 1;
-    uint8_t has_aligned : 1;
-  } x;
-} mi_page_flags_t;
-#else
-// under thread sanitizer, use a byte for each flag to suppress warning, issue #130
-typedef union mi_page_flags_s {
-  uint32_t full_aligned;
-  struct {
-    uint8_t in_full;
-    uint8_t has_aligned;
-  } x;
-} mi_page_flags_t;
-#endif
+// The `in_full` and `has_aligned` page flags are put in the same field
+// to efficiently test if both are false (`full_aligned == 0`) in the `mi_free` routine.
+#define MI_PAGE_IN_FULL_QUEUE  MI_ZU(0x01)
+#define MI_PAGE_HAS_ALIGNED    MI_ZU(0x02)
+typedef size_t mi_page_flags_t;
 
 // Thread free list.
 // We use the bottom bit of the pointer for `mi_owned_t` flags
@@ -280,35 +265,33 @@ typedef struct mi_subproc_s mi_subproc_t;
 //   the owning heap `thread_delayed_free` list. This guarantees that pages
 //   will be freed correctly even if only other threads free blocks.
 typedef struct mi_page_s {
-  _Atomic(mi_threadid_t)xthread_id;        // thread this page belongs to. (= xheap->thread_id, or 0 if abandoned)
+  _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= xheap->thread_id, or 0 if abandoned)
 
-  mi_block_t*           free;              // list of available free blocks (`malloc` allocates from this list)
-  uint16_t              used;              // number of blocks in use (including blocks in `thread_free`)
-  uint16_t              capacity;          // number of blocks committed (must be the first field for proper zero-initialisation)
-  uint16_t              reserved;          // number of blocks reserved in memory
-  uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
-  uint8_t               heap_tag;          // tag of the owning heap, used to separate heaps by object type
+  mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
+  uint16_t                  used;              // number of blocks in use (including blocks in `thread_free`)
+  uint16_t                  capacity;          // number of blocks committed (must be the first field for proper zero-initialisation)
+  uint16_t                  reserved;          // number of blocks reserved in memory
+  uint8_t                   block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
+  uint8_t                   retire_expire;     // expiration count for retired blocks
 
-  mi_page_flags_t       flags;             // `in_full` and `has_aligned` flags (8 bits)
-  uint8_t               free_is_zero:1;    // `true` if the blocks in the free list are zero initialized
-  uint8_t               retire_expire:7;   // expiration count for retired blocks
-                                           // padding
+  mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
+  _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads
+  _Atomic(mi_page_flags_t)  xflags;            // `in_full` and `has_aligned` flags 
 
-  mi_block_t*           local_free;        // list of deferred free blocks by this thread (migrates to `free`)
-  size_t                block_size;        // size available in each block (always `>0`)
-  uint8_t*              page_start;        // start of the blocks
-
+  size_t                    block_size;        // size available in each block (always `>0`)  
+  uint8_t*                  page_start;        // start of the blocks
+  uint8_t                   heap_tag;          // tag of the owning heap, used to separate heaps by object type
+  bool                      free_is_zero;      // `true` if the blocks in the free list are zero initialized
+                                               // padding
   #if (MI_ENCODE_FREELIST || MI_PADDING)
-  uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`) or padding canary
+  uintptr_t                 keys[2];           // two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
 
-  _Atomic(mi_thread_free_t) xthread_free;  // list of deferred free blocks freed by other threads
-
-  mi_heap_t*            heap;              // heap this threads belong to.
-  struct mi_page_s*     next;              // next page owned by the heap with the same `block_size`
-  struct mi_page_s*     prev;              // previous page owned by the heap with the same `block_size`
-  mi_subproc_t*         subproc;           // sub-process of this heap
-  mi_memid_t            memid;             // provenance of the page memory
+  mi_heap_t*                heap;              // heap this threads belong to.
+  struct mi_page_s*         next;              // next page owned by the heap with the same `block_size`
+  struct mi_page_s*         prev;              // previous page owned by the heap with the same `block_size`
+  mi_subproc_t*             subproc;           // sub-process of this heap
+  mi_memid_t                memid;             // provenance of the page memory
 } mi_page_t;
 
 
@@ -317,10 +300,10 @@ typedef struct mi_page_s {
 // ------------------------------------------------------
 
 #define MI_PAGE_ALIGN                     MI_ARENA_SLICE_ALIGN // pages must be aligned on this for the page map.
-#define MI_PAGE_MIN_BLOCK_ALIGN           (32)                 // minimal block alignment in a page
+#define MI_PAGE_MIN_BLOCK_ALIGN           (64)                 // minimal block alignment in a page 
 #define MI_PAGE_MAX_OVERALLOC_ALIGN       MI_ARENA_SLICE_SIZE  // (64 KiB) limit for which we overallocate in arena pages, beyond this use OS allocation
 
-#if MI_DEBUG && MI_SIZE_SIZE == 8
+#if (MI_ENCODE_FREELIST || MI_PADDING) && MI_SIZE_SIZE == 8
 #define MI_PAGE_INFO_SIZE                 ((MI_INTPTR_SHIFT+2)*MI_PAGE_MIN_BLOCK_ALIGN)  // >= sizeof(mi_page_t)
 #else
 #define MI_PAGE_INFO_SIZE                 ((MI_INTPTR_SHIFT+1)*MI_PAGE_MIN_BLOCK_ALIGN)  // >= sizeof(mi_page_t)

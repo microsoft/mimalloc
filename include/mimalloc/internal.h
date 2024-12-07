@@ -667,7 +667,8 @@ static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
 
 
 static inline bool mi_page_is_huge(const mi_page_t* page) {
-  return (page->block_size > MI_LARGE_MAX_OBJ_SIZE || (mi_memkind_is_os(page->memid.memkind) && page->memid.mem.os.alignment > MI_PAGE_MAX_OVERALLOC_ALIGN));
+  return (page->block_size > MI_LARGE_MAX_OBJ_SIZE || 
+          (mi_memkind_is_os(page->memid.memkind) && page->memid.mem.os.base < (void*)page));
 }
 
 
@@ -727,20 +728,33 @@ static inline bool _mi_page_unown(mi_page_t* page) {
 //-----------------------------------------------------------
 // Page flags
 //-----------------------------------------------------------
+static inline mi_page_flags_t mi_page_flags(const mi_page_t* page) {
+  return mi_atomic_load_acquire(&page->xflags);
+}
+
+static inline void mi_page_flags_set(mi_page_t* page, bool set, mi_page_flags_t newflag) {
+  if (set) {
+    mi_atomic_or_acq_rel(&page->xflags, newflag);
+  }
+  else {
+    mi_atomic_and_acq_rel(&page->xflags, ~newflag);
+  }
+}
+
 static inline bool mi_page_is_in_full(const mi_page_t* page) {
-  return page->flags.x.in_full;
+  return ((mi_page_flags(page) & MI_PAGE_IN_FULL_QUEUE) != 0);
 }
 
 static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
-  page->flags.x.in_full = in_full;
+  mi_page_flags_set(page, in_full, MI_PAGE_IN_FULL_QUEUE);
 }
 
 static inline bool mi_page_has_aligned(const mi_page_t* page) {
-  return page->flags.x.has_aligned;
+  return ((mi_page_flags(page) & MI_PAGE_HAS_ALIGNED) != 0);
 }
 
 static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
-  page->flags.x.has_aligned = has_aligned;
+  mi_page_flags_set(page, has_aligned, MI_PAGE_HAS_ALIGNED);
 }
 
 /* -------------------------------------------------------------------

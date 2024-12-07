@@ -20,21 +20,21 @@ const mi_page_t _mi_page_empty = {
   0,       // capacity
   0,       // reserved capacity
   0,       // block size shift
-  0,       // heap tag
-  { 0 },   // flags
-  false,   // is_zero
   0,       // retire_expire
   NULL,    // local_free
+  MI_ATOMIC_VAR_INIT(0), // xthread_free
+  MI_ATOMIC_VAR_INIT(0), // xflags
   0,       // block_size
   NULL,    // page_start
+  0,       // heap tag
+  false,   // is_zero
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   { 0, 0 },
   #endif
-  MI_ATOMIC_VAR_INIT(0), // xthread_free
   NULL,       // xheap
   NULL, NULL, // next, prev
   NULL,       // subproc
-  { {{ NULL, 0, 0}}, false, false, false, MI_MEM_NONE }  // memid
+  { {{ NULL, 0}}, false, false, false, MI_MEM_NONE }  // memid
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)

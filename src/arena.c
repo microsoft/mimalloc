@@ -483,7 +483,7 @@ static bool mi_arena_try_claim_abandoned(size_t slice_index, void* arg1, void* a
   mi_page_t* const    page    = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
   // can we claim ownership?
   if (!mi_page_try_claim_ownership(page)) {
-    // there was a concurrent free .. 
+    // there was a concurrent free ..
     // we need to keep it in the abandoned map as the free will call `mi_arena_page_unabandon`,
     // and wait for readers (us!) to finish. This is why it is very important to set the abandoned
     // bit again (or otherwise the unabandon will never stop waiting).
@@ -596,7 +596,9 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
     }
   }
   #endif
-  mi_assert(MI_PAGE_INFO_SIZE >= _mi_align_up(sizeof(*page), MI_PAGE_MIN_BLOCK_ALIGN));
+  if (MI_PAGE_INFO_SIZE < _mi_align_up(sizeof(*page), MI_PAGE_MIN_BLOCK_ALIGN)) {
+    _mi_error_message(EFAULT, "fatal internal error: MI_PAGE_INFO_SIZE is too small\n");
+  };
   const size_t block_start = (os_align ? MI_PAGE_ALIGN : MI_PAGE_INFO_SIZE);
   const size_t reserved    = (os_align ? 1 : (mi_size_of_slices(slice_count) - block_start) / block_size);
   mi_assert_internal(reserved > 0 && reserved <= UINT16_MAX);
@@ -1126,28 +1128,22 @@ static size_t mi_debug_show_bfield(mi_bfield_t field, char* buf) {
   return bit_set_count;
 }
 
-static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_t slice_count, mi_bitmap_t* bitmap, bool invert) {
-  _mi_output_message("%s%s:\n", prefix, header);
+static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bitmap_t* bitmap, bool invert) {
+  _mi_output_message("%s:\n", header);
   size_t bit_count = 0;
   size_t bit_set_count = 0;
   for (size_t i = 0; i < mi_bitmap_chunk_count(bitmap) && bit_count < slice_count; i++) {
     char buf[MI_BCHUNK_BITS + 64]; _mi_memzero(buf, sizeof(buf));
     size_t k = 0;
     mi_bchunk_t* chunk = &bitmap->chunks[i];
-    
-    if (i<10)  { buf[k++] = ' '; }
-    if (i<100) { itoa((int)i, buf+k, 10); k += (i < 10 ? 1 : 2); }
-    buf[k++] = ' ';
 
+    if (i<10)        { buf[k++] = ('0' + (char)i); buf[k++] = ' '; buf[k++] = ' '; }
+    else if (i<100)  { buf[k++] = ('0' + (char)(i/10)); buf[k++] = ('0' + (char)(i%10)); buf[k++] = ' '; }
+    else if (i<1000) { buf[k++] = ('0' + (char)(i/100)); buf[k++] = ('0' + (char)((i%100)/10)); buf[k++] = ('0' + (char)(i%10)); }
+    
     for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
       if (j > 0 && (j % 4) == 0) {
-        buf[k++] = '\n';
-        _mi_memcpy(buf+k, prefix, strlen(prefix)); k += strlen(prefix);
-        buf[k++] = ' ';
-        buf[k++] = ' ';
-        buf[k++] = ' ';
-        buf[k++] = ' ';
-        buf[k++] = ' ';
+        buf[k++] = '\n'; _mi_memset(buf+k,' ',5); k += 5;
       }
       if (bit_count < slice_count) {
         mi_bfield_t bfield = chunk->bfields[j];
@@ -1164,9 +1160,9 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
       }
       bit_count += MI_BFIELD_BITS;
     }
-    _mi_output_message("%s  %s\n", prefix, buf);
+    _mi_output_message("  %s\n", buf);
   }
-  _mi_output_message("%s  total ('x'): %zu\n", prefix, bit_set_count);
+  _mi_output_message("  total ('x'): %zu\n", bit_set_count);
   return bit_set_count;
 }
 
@@ -1183,12 +1179,12 @@ void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge)
     slice_total += arena->slice_count;
     _mi_output_message("arena %zu: %zu slices (%zu MiB)%s\n", i, arena->slice_count, mi_size_of_slices(arena->slice_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""));
     if (show_inuse) {
-      free_total += mi_debug_show_bitmap("  ", "in-use slices", arena->slice_count, arena->slices_free, true);
+      free_total += mi_debug_show_bitmap("in-use slices", arena->slice_count, arena->slices_free, true);
     }
-    mi_debug_show_bitmap("  ", "committed slices", arena->slice_count, arena->slices_committed, false);
+    mi_debug_show_bitmap("committed slices", arena->slice_count, arena->slices_committed, false);
     // todo: abandoned slices
     if (show_purge) {
-      purge_total += mi_debug_show_bitmap("  ", "purgeable slices", arena->slice_count, arena->slices_purge, false);
+      purge_total += mi_debug_show_bitmap("purgeable slices", arena->slice_count, arena->slices_purge, false);
     }
   }
   if (show_inuse)     _mi_output_message("total inuse slices    : %zu\n", slice_total - free_total);

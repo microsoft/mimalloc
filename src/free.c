@@ -163,8 +163,9 @@ void mi_free(void* p) mi_attr_noexcept
   if mi_unlikely(page==NULL) return;
 
   const bool is_local = (_mi_prim_thread_id() == mi_page_thread_id(page));
+  const mi_page_flags_t flags = mi_page_flags(page);
   if mi_likely(is_local) {                        // thread-local free?
-    if mi_likely(page->flags.full_aligned == 0) { // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
+    if mi_likely(flags == 0) { // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
       // thread-local, aligned, and not a full page
       mi_block_t* const block = (mi_block_t*)p;
       mi_free_block_local(page, block, true /* track stats */, false /* no need to check if the page is full */);
@@ -176,7 +177,7 @@ void mi_free(void* p) mi_attr_noexcept
   }
   else {
     // free-ing in a page owned by a heap in another thread, or on abandoned page (not belonging to a heap)
-    if mi_likely(page->flags.full_aligned == 0) {
+    if mi_likely(flags == 0) {
       // blocks are aligned (and not a full page)
       mi_block_t* const block = (mi_block_t*)p;
       mi_free_block_mt(page,block);

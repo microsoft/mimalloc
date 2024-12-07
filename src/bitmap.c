@@ -805,10 +805,10 @@ static bool mi_bitmap_chunkmap_try_clear(mi_bitmap_t* bitmap, size_t chunk_idx) 
     return false;
   }
   // record the max clear 
-  size_t oldmax = mi_atomic_load_relaxed(&bitmap->chunk_max_clear);
+  /*size_t oldmax = mi_atomic_load_relaxed(&bitmap->chunk_max_clear);
   do {
     if mi_likely(chunk_idx <= oldmax) break;
-  } while (!mi_atomic_cas_weak_acq_rel(&bitmap->chunk_max_clear, &oldmax, chunk_idx));
+  } while (!mi_atomic_cas_weak_acq_rel(&bitmap->chunk_max_clear, &oldmax, chunk_idx));*/
   return true;
 }
 
@@ -1046,7 +1046,7 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
   { \
   /* start chunk index -- todo: can depend on the tseq to decrease contention between threads */ \
   MI_UNUSED(tseq); \
-  const size_t chunk_max = mi_atomic_load_acquire(&bitmap->chunk_max_clear);  /* mi_bitmap_chunk_count(bitmap) */ \
+  /* const size_t chunk_max = mi_atomic_load_acquire(&bitmap->chunk_max_clear); */ /* mi_bitmap_chunk_count(bitmap) */ \
   const size_t chunk_start = 0; /* (chunk_max <= 1 ? 0 : (tseq % chunk_max)); */      /* space out threads */ \
   const size_t chunkmap_max_bfield = _mi_divide_up( mi_bitmap_chunk_count(bitmap), MI_BCHUNK_BITS ); \
   const size_t chunkmap_start = chunk_start / MI_BFIELD_BITS; \
