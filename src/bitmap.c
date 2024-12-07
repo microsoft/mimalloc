@@ -87,7 +87,7 @@ static inline bool mi_bfield_atomic_clear(_Atomic(mi_bfield_t)*b, size_t idx, bo
 }
 
 // Clear a bit but only when/once it is set. This is used by concurrent free's while
-// the page is abandoned and mapped. 
+// the page is abandoned and mapped.
 static inline void mi_bfield_atomic_clear_once_set(_Atomic(mi_bfield_t)*b, size_t idx) {
   mi_assert_internal(idx < MI_BFIELD_BITS);
   const mi_bfield_t mask = mi_bfield_one()<<idx;
@@ -101,7 +101,7 @@ static inline void mi_bfield_atomic_clear_once_set(_Atomic(mi_bfield_t)*b, size_
         old = mi_atomic_load_acquire(b);
       }
     }
-  } while (!mi_atomic_cas_weak_acq_rel(b,&old, (old&~mask)));  
+  } while (!mi_atomic_cas_weak_acq_rel(b,&old, (old&~mask)));
   mi_assert_internal((old&mask)==mask);  // we should only clear when it was set
 }
 
@@ -187,10 +187,10 @@ static inline bool mi_bfield_atomic_try_clear_mask(_Atomic(mi_bfield_t)*b, mi_bf
   mi_assert_internal(mask != 0);
   mi_bfield_t old = mi_atomic_load_relaxed(b);
   do {
-    if ((old&mask) != mask) {  
+    if ((old&mask) != mask) {
       // the mask bits are no longer set
       if (all_clear != NULL) { *all_clear = (old==0); }
-      return false; 
+      return false;
     }
   } while (!mi_atomic_cas_weak_acq_rel(b, &old, old&~mask));  // try to atomically clear the mask bits
   if (all_clear != NULL) { *all_clear = ((old&~mask) == 0); }
@@ -708,19 +708,27 @@ static bool mi_bchunk_find_and_try_clearN_(mi_bchunk_t* chunk, size_t n, size_t*
   const size_t field_count = _mi_divide_up(n, MI_BFIELD_BITS);  // we need this many fields
   for (size_t i = 0; i <= MI_BCHUNK_FIELDS - field_count; i++)
   {
-    // first pre-scan for a range of fields that are all set
+    // first pre-scan for a range of fields that are all set (up to the last one)
     bool allset = true;
     size_t j = 0;
+    size_t m = n;
     do {
       mi_assert_internal(i + j < MI_BCHUNK_FIELDS);
       mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i+j]);
-      if (~b != 0) {
-        allset = false;
-        i += j;  // no need to look again at the previous fields
-        break;
+      size_t idx;
+      if (mi_bfield_find_least_bit(~b,&idx)) {
+        if (m > idx) {
+          allset = false;
+          i += j;  // no need to look again at the previous fields
+          break;
+        }
+      }
+      else {
+        // all bits in b were set
+        m -= MI_BFIELD_BITS;  // note: can underflow
       }
     } while (++j < field_count);
-
+    
     // if all set, we can try to atomically clear them
     if (allset) {
       const size_t cidx = i*MI_BFIELD_BITS;
@@ -796,6 +804,11 @@ static bool mi_bitmap_chunkmap_try_clear(mi_bitmap_t* bitmap, size_t chunk_idx) 
     mi_bchunk_set(&bitmap->chunkmap, chunk_idx);
     return false;
   }
+  // record the max clear 
+  size_t oldmax = mi_atomic_load_relaxed(&bitmap->chunk_max_clear);
+  do {
+    if mi_likely(chunk_idx <= oldmax) break;
+  } while (!mi_atomic_cas_weak_acq_rel(&bitmap->chunk_max_clear, &oldmax, chunk_idx));
   return true;
 }
 
@@ -853,6 +866,7 @@ void mi_bitmap_unsafe_setN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
       if ((chunk_idx % MI_BFIELD_BITS) == 0 && (chunk_idx + MI_BFIELD_BITS <= end_chunk)) {
         // optimize: we can set a full bfield in the chunkmap
         mi_atomic_store_relaxed( &bitmap->chunkmap.bfields[chunk_idx/MI_BFIELD_BITS], mi_bfield_all_set());
+        mi_bitmap_chunkmap_set(bitmap, chunk_idx + MI_BFIELD_BITS - 1);  // track the max set
         chunk_idx += MI_BFIELD_BITS;
       }
       else {
@@ -1032,20 +1046,24 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
   { \
   /* start chunk index -- todo: can depend on the tseq to decrease contention between threads */ \
   MI_UNUSED(tseq); \
-  const size_t chunk_start = 0; /* tseq % (1 + mi_bitmap_find_hi_chunk(bitmap)); */ \
+  const size_t chunk_max = mi_atomic_load_acquire(&bitmap->chunk_max_clear);  /* mi_bitmap_chunk_count(bitmap) */ \
+  const size_t chunk_start = 0; /* (chunk_max <= 1 ? 0 : (tseq % chunk_max)); */      /* space out threads */ \
   const size_t chunkmap_max_bfield = _mi_divide_up( mi_bitmap_chunk_count(bitmap), MI_BCHUNK_BITS ); \
   const size_t chunkmap_start = chunk_start / MI_BFIELD_BITS; \
   const size_t chunkmap_start_idx = chunk_start % MI_BFIELD_BITS; \
   /* for each chunkmap entry `i` */ \
   for (size_t _i = 0; _i < chunkmap_max_bfield; _i++) { \
     size_t i = (_i + chunkmap_start); \
-    if (i >= chunkmap_max_bfield) { i -= chunkmap_max_bfield; } /* adjust for the start position */ \
-    \
+    if (i >= chunkmap_max_bfield) { \
+      i -= chunkmap_max_bfield; /* adjust for the start position */ \
+    } \
     const size_t chunk_idx0 = i*MI_BFIELD_BITS; \
     mi_bfield_t cmap = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]); \
     size_t      cmap_idx_shift = 0;   /* shift through the cmap */ \
-    if (_i == 0) { cmap = mi_bfield_rotate_right(cmap, chunkmap_start_idx); cmap_idx_shift = chunkmap_start_idx; }   /* rotate right for the start position (on the first iteration) */ \
-    \
+    if (_i == 0) { \
+      cmap = mi_bfield_rotate_right(cmap, chunkmap_start_idx); /* rotate right for the start position (on the first iteration) */ \
+      cmap_idx_shift = chunkmap_start_idx; \
+    } \
     size_t cmap_idx; \
     while (mi_bfield_find_least_bit(cmap, &cmap_idx)) { \
       /* set the chunk idx */ \
@@ -1065,6 +1083,7 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
 
 // Find a sequence of `n` bits in the bitmap with all bits set, and atomically unset all.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
+// (Used to find fresh free slices.)
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx)
 {
   mi_bitmap_forall_chunks(bitmap, tseq, epoch, chunk_idx)
@@ -1087,6 +1106,8 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t
 }
 
 
+// Find a set bit in the bitmap and try to atomically clear it and claim it.
+// (Used to find pages in the pages_abandoned bitmaps.)
 mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx,
                                                     mi_claim_fun_t* claim, void* arg1, void* arg2)
 {
@@ -1108,7 +1129,7 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t 
         if (keep_set) {
           const bool wasclear = mi_bchunk_set(&bitmap->chunks[chunk_idx], cidx);
           mi_assert_internal(wasclear); MI_UNUSED(wasclear);
-        }        
+        }
         // continue
       }
     }

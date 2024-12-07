@@ -13,7 +13,10 @@ mi_decl_cache_align uint8_t* _mi_page_map = NULL;
 static bool        mi_page_map_all_committed = false;
 static size_t      mi_page_map_entries_per_commit_bit = MI_ARENA_SLICE_SIZE;
 static mi_memid_t  mi_page_map_memid;
-static mi_bitmap_t mi_page_map_commit = { MI_BITMAP_DEFAULT_CHUNK_COUNT, { 0 }, { 0 }, { { 0 } } };
+
+// (note: we need to initialize statically or otherwise C++ may run a default constructors after process initialization)
+static mi_bitmap_t mi_page_map_commit = { MI_ATOMIC_VAR_INIT(MI_BITMAP_DEFAULT_CHUNK_COUNT), MI_ATOMIC_VAR_INIT(0),
+                                          { 0 }, { {MI_ATOMIC_VAR_INIT(0)} }, {{{ MI_ATOMIC_VAR_INIT(0) }}} };
 
 bool _mi_page_map_init(void) {
   size_t vbits = _mi_os_virtual_address_bits();

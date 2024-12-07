@@ -476,23 +476,30 @@ void* _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t 
   Arena page allocation
 ----------------------------------------------------------- */
 
-static bool mi_arena_claim_abandoned(size_t slice_index, void* arg1, void* arg2, bool* keep_abandoned) {
+static bool mi_arena_try_claim_abandoned(size_t slice_index, void* arg1, void* arg2, bool* keep_abandoned) {
   // found an abandoned page of the right size
   mi_arena_t* const   arena   = (mi_arena_t*)arg1;
   mi_subproc_t* const subproc = (mi_subproc_t*)arg2;
   mi_page_t* const    page    = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
   // can we claim ownership?
   if (!mi_page_try_claim_ownership(page)) {
+    // there was a concurrent free .. 
+    // we need to keep it in the abandoned map as the free will call `mi_arena_page_unabandon`,
+    // and wait for readers (us!) to finish. This is why it is very important to set the abandoned
+    // bit again (or otherwise the unabandon will never stop waiting).
     *keep_abandoned = true;
     return false;
   }
   if (subproc != page->subproc) {
-    // wrong sub-process.. we need to unown again, and perhaps not keep it abandoned
+    // wrong sub-process.. we need to unown again
+    // (an unown might free the page, and depending on that we can keep it in the abandoned map or not)
+    // note: a minor wrinkle: the page will still be mapped but the abandoned map entry is (temporarily) clear at this point.
+    //       so we cannot check in `mi_arena_free` for this invariant to hold.
     const bool freed = _mi_page_unown(page);
     *keep_abandoned = !freed;
     return false;
   }
-  // yes, we can reclaim it
+  // yes, we can reclaim it, keep the abandaned map entry clear
   *keep_abandoned = false;
   return true;
 }
@@ -515,7 +522,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
     size_t slice_index;
     mi_bitmap_t* const bitmap = arena->pages_abandoned[bin];
 
-    if (mi_bitmap_try_find_and_claim(bitmap, tseq, &slice_index, &mi_arena_claim_abandoned, arena, subproc)) {
+    if (mi_bitmap_try_find_and_claim(bitmap, tseq, &slice_index, &mi_arena_try_claim_abandoned, arena, subproc)) {
       // found an abandoned page of the right size
       // and claimed ownership.
       mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
@@ -703,6 +710,9 @@ void _mi_arena_page_free(mi_page_t* page) {
     mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_clearN(arena->slices_purge, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_clearN(arena->pages_abandoned[bin], slice_index, 1));
+    // note: we cannot check for `!mi_page_is_abandoned_and_mapped` since that may
+    // be (temporarily) not true if the free happens while trying to reclaim
+    // see `mi_arana_try_claim_abandoned`
   }
   #endif
 
@@ -1087,9 +1097,10 @@ int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exc
     return ENOMEM;
   }
   _mi_verbose_message("reserved %zu KiB memory%s\n", _mi_divide_up(size, 1024), is_large ? " (in large os pages)" : "");
+  // mi_debug_show_arenas(true, true, false);
+
   return 0;
 }
-
 
 // Manage a range of regular OS memory
 bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept {
@@ -1121,11 +1132,20 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
   size_t bit_set_count = 0;
   for (size_t i = 0; i < mi_bitmap_chunk_count(bitmap) && bit_count < slice_count; i++) {
     char buf[MI_BCHUNK_BITS + 64]; _mi_memzero(buf, sizeof(buf));
+    size_t k = 0;
     mi_bchunk_t* chunk = &bitmap->chunks[i];
-    for (size_t j = 0, k = 0; j < MI_BCHUNK_FIELDS; j++) {
+    
+    if (i<10)  { buf[k++] = ' '; }
+    if (i<100) { itoa((int)i, buf+k, 10); k += (i < 10 ? 1 : 2); }
+    buf[k++] = ' ';
+
+    for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
       if (j > 0 && (j % 4) == 0) {
         buf[k++] = '\n';
         _mi_memcpy(buf+k, prefix, strlen(prefix)); k += strlen(prefix);
+        buf[k++] = ' ';
+        buf[k++] = ' ';
+        buf[k++] = ' ';
         buf[k++] = ' ';
         buf[k++] = ' ';
       }
