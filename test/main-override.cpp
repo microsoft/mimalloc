@@ -382,7 +382,7 @@ static void test_mt_shutdown()
 
 // issue #372
 static void fail_aslr() {
-  size_t sz = (4ULL << 40); // 4TiB
+  uint64_t sz = (4ULL << 40); // 4TiB
   void* p = malloc(sz);
   printf("pointer p: %p: area up to %p\n", p, (uint8_t*)p + sz);
   *(int*)0x5FFFFFFF000 = 0;  // should segfault

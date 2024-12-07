@@ -43,9 +43,9 @@ bool _mi_page_map_init(void) {
     bool is_zero;
     _mi_os_commit(_mi_page_map, _mi_os_page_size(), &is_zero, NULL);
     if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(_mi_page_map, _mi_os_page_size()); }
-    _mi_page_map[0] = 1; // so _mi_ptr_page(NULL) == NULL
-    mi_assert_internal(_mi_ptr_page(NULL)==NULL);
   }
+  _mi_page_map[0] = 1; // so _mi_ptr_page(NULL) == NULL
+  mi_assert_internal(_mi_ptr_page(NULL)==NULL);
   return true;
 }
 

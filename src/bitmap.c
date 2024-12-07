@@ -805,10 +805,10 @@ static bool mi_bitmap_chunkmap_try_clear(mi_bitmap_t* bitmap, size_t chunk_idx) 
     return false;
   }
   // record the max clear 
-  /*size_t oldmax = mi_atomic_load_relaxed(&bitmap->chunk_max_clear);
+  size_t oldmax = mi_atomic_load_relaxed(&bitmap->chunk_max_clear);
   do {
     if mi_likely(chunk_idx <= oldmax) break;
-  } while (!mi_atomic_cas_weak_acq_rel(&bitmap->chunk_max_clear, &oldmax, chunk_idx));*/
+  } while (!mi_atomic_cas_weak_acq_rel(&bitmap->chunk_max_clear, &oldmax, chunk_idx));
   return true;
 }
 
@@ -1042,21 +1042,23 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
 -------------------------------------------------------------------------------- */
 
 
-#define mi_bitmap_forall_chunks(bitmap, tseq, name_epoch, name_chunk_idx) \
+#define mi_bitmap_forall_chunks(bitmap, tseq, name_chunk_idx) \
   { \
   /* start chunk index -- todo: can depend on the tseq to decrease contention between threads */ \
   MI_UNUSED(tseq); \
-  /* const size_t chunk_max = mi_atomic_load_acquire(&bitmap->chunk_max_clear); */ /* mi_bitmap_chunk_count(bitmap) */ \
-  const size_t chunk_start = 0; /* (chunk_max <= 1 ? 0 : (tseq % chunk_max)); */      /* space out threads */ \
+  const size_t chunk_start = 0; /* (tseq % (1+chunk_hi_idx)); */ /* space out threads? */ \
   const size_t chunkmap_max_bfield = _mi_divide_up( mi_bitmap_chunk_count(bitmap), MI_BCHUNK_BITS ); \
+  const size_t chunkmap_hi_bfield  = chunkmap_max_bfield; /* chunk_hi_idx / MI_BFIELD_BITS; */\
   const size_t chunkmap_start = chunk_start / MI_BFIELD_BITS; \
   const size_t chunkmap_start_idx = chunk_start % MI_BFIELD_BITS; \
   /* for each chunkmap entry `i` */ \
   for (size_t _i = 0; _i < chunkmap_max_bfield; _i++) { \
-    size_t i = (_i + chunkmap_start); \
-    if (i >= chunkmap_max_bfield) { \
-      i -= chunkmap_max_bfield; /* adjust for the start position */ \
+    size_t i; \
+    if (_i < chunkmap_hi_bfield) { \
+      i = _i + chunkmap_start; /* first the chunks up to chunk_hi */ \
+      if (i >= chunkmap_hi_bfield) { i -= chunkmap_hi_bfield; } /* rotate */ \
     } \
+    else { i = _i;  }  /* the rest of the chunks above chunk_hi_idx */ \
     const size_t chunk_idx0 = i*MI_BFIELD_BITS; \
     mi_bfield_t cmap = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]); \
     size_t      cmap_idx_shift = 0;   /* shift through the cmap */ \
@@ -1086,7 +1088,8 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
 // (Used to find fresh free slices.)
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx)
 {
-  mi_bitmap_forall_chunks(bitmap, tseq, epoch, chunk_idx)
+  // const size_t chunk_hi_idx = mi_atomic_load_relaxed(&bitmap->chunk_max_clear);
+  mi_bitmap_forall_chunks(bitmap, tseq, chunk_idx)
   {
     size_t cidx;
     if mi_likely(mi_bchunk_find_and_try_clearN(&bitmap->chunks[chunk_idx], n, &cidx)) {
@@ -1111,7 +1114,7 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t
 mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx,
                                                     mi_claim_fun_t* claim, void* arg1, void* arg2)
 {
-  mi_bitmap_forall_chunks(bitmap, tseq, epoch, chunk_idx)
+  mi_bitmap_forall_chunks(bitmap, tseq, chunk_idx)
   {
     size_t cidx;
     if mi_likely(mi_bchunk_find_and_try_clear(&bitmap->chunks[chunk_idx], &cidx)) {
