@@ -944,7 +944,7 @@ void _mi_arena_unsafe_destroy_all(mi_stats_t* stats) {
 bool _mi_arena_contains(const void* p) {
   const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   for (size_t i = 0; i < max_arena; i++) {
-    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
     if (arena != NULL && mi_arena_start(arena) <= (const uint8_t*)p && mi_arena_start(arena) + mi_size_of_slices(arena->slice_count) > (const uint8_t*)p) {
       return true;
     }
@@ -1140,7 +1140,7 @@ static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bi
     if (i<10)        { buf[k++] = ('0' + (char)i); buf[k++] = ' '; buf[k++] = ' '; }
     else if (i<100)  { buf[k++] = ('0' + (char)(i/10)); buf[k++] = ('0' + (char)(i%10)); buf[k++] = ' '; }
     else if (i<1000) { buf[k++] = ('0' + (char)(i/100)); buf[k++] = ('0' + (char)((i%100)/10)); buf[k++] = ('0' + (char)(i%10)); }
-    
+
     for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
       if (j > 0 && (j % 4) == 0) {
         buf[k++] = '\n'; _mi_memset(buf+k,' ',5); k += 5;
@@ -1174,7 +1174,7 @@ void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge)
   //size_t abandoned_total = 0;
   size_t purge_total = 0;
   for (size_t i = 0; i < max_arenas; i++) {
-    mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
+    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
     if (arena == NULL) break;
     slice_total += arena->slice_count;
     _mi_output_message("arena %zu: %zu slices (%zu MiB)%s\n", i, arena->slice_count, mi_size_of_slices(arena->slice_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""));
@@ -1324,7 +1324,7 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
 static void mi_arenas_try_purge(bool force, bool visit_all, mi_stats_t* stats) {
   if (_mi_preloading() || mi_arena_purge_delay() <= 0) return;  // nothing will be scheduled
 
-  const size_t max_arena = mi_atomic_load_acquire(&mi_arena_count);
+  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
   if (max_arena == 0) return;
 
   // _mi_error_message(EFAULT, "purging not yet implemented\n");

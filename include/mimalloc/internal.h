@@ -540,30 +540,16 @@ static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
 
 static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   if (heap != NULL) {
-    // mi_atomic_store_release(&page->xheap, (uintptr_t)heap);
     page->heap = heap;
     page->heap_tag = heap->tag;
     mi_atomic_store_release(&page->xthread_id, heap->thread_id);
   }
   else {
-    // mi_atomic_store_release(&page->xheap, (uintptr_t)heap->tld->subproc);
     page->heap = NULL;
     mi_atomic_store_release(&page->xthread_id,0);
   }
 }
 
-//static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
-//  mi_assert_internal(mi_page_thread_free_flag(page) != MI_DELAYED_FREEING);
-//  if (heap != NULL) {
-//    mi_atomic_store_release(&page->xheap, (uintptr_t)heap);
-//    page->heap_tag = heap->tag;
-//    mi_atomic_store_release(&page->xthread_id, heap->thread_id);
-//  }
-//  else {
-//    mi_atomic_store_release(&page->xheap, (uintptr_t)mi_page_heap(page)->tld->subproc);
-//    mi_atomic_store_release(&page->xthread_id,0);
-//  }
-//}
 
 // Thread free flag helpers
 static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
@@ -650,24 +636,24 @@ static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
 
 static inline bool mi_page_is_abandoned(const mi_page_t* page) {
   // note: the xheap field of an abandoned heap is set to the subproc (for fast reclaim-on-free)
-  return (mi_atomic_load_acquire(&page->xthread_id) <= 1);
+  return (mi_atomic_load_relaxed(&page->xthread_id) <= 1);
 }
 
 static inline bool mi_page_is_abandoned_mapped(const mi_page_t* page) {
-  return (mi_atomic_load_acquire(&page->xthread_id) == 1);
+  return (mi_atomic_load_relaxed(&page->xthread_id) == 1);
 }
 
 static inline void mi_page_set_abandoned_mapped(mi_page_t* page) {
-  mi_atomic_or_acq_rel(&page->xthread_id, (uintptr_t)1);
+  mi_atomic_or_relaxed(&page->xthread_id, (uintptr_t)1);
 }
 
 static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
-  mi_atomic_and_acq_rel(&page->xthread_id, ~(uintptr_t)1);
+  mi_atomic_and_relaxed(&page->xthread_id, ~(uintptr_t)1);
 }
 
 
 static inline bool mi_page_is_huge(const mi_page_t* page) {
-  return (page->block_size > MI_LARGE_MAX_OBJ_SIZE || 
+  return (page->block_size > MI_LARGE_MAX_OBJ_SIZE ||
           (mi_memkind_is_os(page->memid.memkind) && page->memid.mem.os.base < (void*)page));
 }
 
@@ -683,15 +669,6 @@ static inline void _mi_page_unown_unconditional(mi_page_t* page) {
   mi_assert_internal(mi_page_thread_id(page)==0);
   const uintptr_t old = mi_atomic_and_acq_rel(&page->xthread_free, ~((uintptr_t)1));
   mi_assert_internal((old&1)==1); MI_UNUSED(old);
-  /*
-  mi_thread_free_t tf_new;
-  mi_thread_free_t tf_old;
-  do {
-    tf_old = mi_atomic_load_relaxed(&page->xthread_free);
-    mi_assert_internal(mi_tf_is_owned(tf_old));
-    tf_new = mi_tf_create(mi_tf_block(tf_old), false);
-  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tf_old, tf_new));
-  */
 }
 
 
@@ -721,7 +698,7 @@ static inline bool _mi_page_unown(mi_page_t* page) {
     }
     mi_assert_internal(mi_tf_block(tf_old)==NULL);
     tf_new = mi_tf_create(NULL, false);
-  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tf_old, tf_new));
+  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
   return false;
 }
 
@@ -729,15 +706,15 @@ static inline bool _mi_page_unown(mi_page_t* page) {
 // Page flags
 //-----------------------------------------------------------
 static inline mi_page_flags_t mi_page_flags(const mi_page_t* page) {
-  return mi_atomic_load_acquire(&page->xflags);
+  return mi_atomic_load_relaxed(&page->xflags);
 }
 
 static inline void mi_page_flags_set(mi_page_t* page, bool set, mi_page_flags_t newflag) {
   if (set) {
-    mi_atomic_or_acq_rel(&page->xflags, newflag);
+    mi_atomic_or_relaxed(&page->xflags, newflag);
   }
   else {
-    mi_atomic_and_acq_rel(&page->xflags, ~newflag);
+    mi_atomic_and_relaxed(&page->xflags, ~newflag);
   }
 }
 

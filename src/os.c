@@ -113,8 +113,8 @@ static void mi_os_prim_free(void* addr, size_t size, bool still_committed, mi_st
   if (err != 0) {
     _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
-  if (still_committed) { 
-    _mi_stat_decrease(&stats->committed, size); 
+  if (still_committed) {
+    _mi_stat_decrease(&stats->committed, size);
   }
   _mi_stat_decrease(&stats->reserved, size);
 }
@@ -556,7 +556,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
     #endif
     }
     end = start + size;
-  } while (!mi_atomic_cas_strong_acq_rel(&mi_huge_start, &huge_start, end));
+  } while (!mi_atomic_cas_weak_acq_rel(&mi_huge_start, &huge_start, end));
 
   if (total_size != NULL) *total_size = size;
   return (uint8_t*)start;

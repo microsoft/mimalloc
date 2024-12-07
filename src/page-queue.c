@@ -12,7 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MI_IN_PAGE_C
 #error "this file should be included from 'page.c'"
 // include to help an IDE
-#include "mimalloc.h"     
+#include "mimalloc.h"
 #include "mimalloc/internal.h"
 #include "mimalloc/atomic.h"
 #endif
@@ -83,10 +83,10 @@ static inline uint8_t mi_bin(size_t size) {
     #if defined(MI_ALIGN4W)
     if (wsize <= 16) { wsize = (wsize+3)&~3; } // round to 4x word sizes
     #endif
-    wsize--; 
+    wsize--;
     mi_assert_internal(wsize!=0);
     // find the highest bit position
-    uint8_t b = (uint8_t)(MI_SIZE_BITS - 1 - mi_clz(wsize));    
+    uint8_t b = (uint8_t)(MI_SIZE_BITS - 1 - mi_clz(wsize));
     // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin
@@ -211,8 +211,8 @@ static bool mi_page_queue_is_empty(mi_page_queue_t* queue) {
 static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(mi_page_queue_contains(queue, page));
-  mi_assert_internal(mi_page_block_size(page) == queue->block_size || 
-                      (mi_page_is_huge(page) && mi_page_queue_is_huge(queue)) || 
+  mi_assert_internal(mi_page_block_size(page) == queue->block_size ||
+                      (mi_page_is_huge(page) && mi_page_queue_is_huge(queue)) ||
                         (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
   mi_heap_t* heap = mi_page_heap(page);
   if (page->prev != NULL) page->prev->next = page->next;
@@ -227,7 +227,6 @@ static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
   heap->page_count--;
   page->next = NULL;
   page->prev = NULL;
-  // mi_atomic_store_ptr_release(mi_atomic_cast(void*, &page->heap), NULL);
   mi_page_set_in_full(page,false);
 }
 
@@ -243,7 +242,7 @@ static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_
                         (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
 
   mi_page_set_in_full(page, mi_page_queue_is_full(queue));
-  // mi_atomic_store_ptr_release(mi_atomic_cast(void*, &page->heap), heap);
+
   page->next = queue->first;
   page->prev = NULL;
   if (queue->first != NULL) {
@@ -346,8 +345,8 @@ static void mi_page_queue_enqueue_from_ex(mi_page_queue_t* to, mi_page_queue_t* 
       page->prev = to->first;
       page->next = next;
       to->first->next = page;
-      if (next != NULL) { 
-        next->prev = page; 
+      if (next != NULL) {
+        next->prev = page;
       }
       else {
         to->last = page;
@@ -385,15 +384,6 @@ size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue
   // set append pages to new heap and count
   size_t count = 0;
   for (mi_page_t* page = append->first; page != NULL; page = page->next) {
-    /*
-    // inline `mi_page_set_heap` to avoid wrong assertion during absorption;
-    // in this case it is ok to be delayed freeing since both "to" and "from" heap are still alive.
-    mi_atomic_store_release(&page->xheap, (uintptr_t)heap);
-    // set the flag to delayed free (not overriding NEVER_DELAYED_FREE) which has as a
-    // side effect that it spins until any DELAYED_FREEING is finished. This ensures
-    // that after appending only the new heap will be used for delayed free operations.
-    _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, false);
-    */
     mi_page_set_heap(page, heap);
     count++;
   }

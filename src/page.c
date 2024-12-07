@@ -132,40 +132,6 @@ bool _mi_page_is_valid(mi_page_t* page) {
 }
 #endif
 
-/*
-void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never) {
-  while (!_mi_page_try_use_delayed_free(page, delay, override_never)) {
-    mi_atomic_yield();
-  }
-}
-
-bool _mi_page_try_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never) {
-  mi_thread_free_t tfreex;
-  mi_delayed_t     old_delay;
-  mi_thread_free_t tfree;
-  size_t yield_count = 0;
-  do {
-    tfree = mi_atomic_load_acquire(&page->xthread_free); // note: must acquire as we can break/repeat this loop and not do a CAS;
-    tfreex = mi_tf_set_delayed(tfree, delay);
-    old_delay = mi_tf_delayed(tfree);
-    if mi_unlikely(old_delay == MI_DELAYED_FREEING) {
-      if (yield_count >= 4) return false;  // give up after 4 tries
-      yield_count++;
-      mi_atomic_yield(); // delay until outstanding MI_DELAYED_FREEING are done.
-      // tfree = mi_tf_set_delayed(tfree, MI_NO_DELAYED_FREE); // will cause CAS to busy fail
-    }
-    else if (delay == old_delay) {
-      break; // avoid atomic operation if already equal
-    }
-    else if (!override_never && old_delay == MI_NEVER_DELAYED_FREE) {
-      break; // leave never-delayed flag set
-    }
-  } while ((old_delay == MI_DELAYED_FREEING) ||
-           !mi_atomic_cas_weak_release(&page->xthread_free, &tfree, tfreex));
-
-  return true; // success
-}
-*/
 
 /* -----------------------------------------------------------
   Page collect the `local_free` and `thread_free` lists
@@ -181,7 +147,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
     head = mi_tf_block(tfree);
     if (head == NULL) return; // return if the list is empty
     tfreex = mi_tf_create(NULL,mi_tf_is_owned(tfree));  // set the thread free list to NULL
-  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));
+  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));  // release is enough?
   mi_assert_internal(head != NULL);
 
   // find the tail -- also to get a proper count (without data races)
@@ -334,43 +300,6 @@ static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
   return page;
 }
 
-/* -----------------------------------------------------------
-   Do any delayed frees
-   (put there by other threads if they deallocated in a full page)
------------------------------------------------------------ */
-/*
-void _mi_heap_delayed_free_all(mi_heap_t* heap) {
-  while (!_mi_heap_delayed_free_partial(heap)) {
-    mi_atomic_yield();
-  }
-}
-
-// returns true if all delayed frees were processed
-bool _mi_heap_delayed_free_partial(mi_heap_t* heap) {
-  // take over the list (note: no atomic exchange since it is often NULL)
-  mi_block_t* block = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
-  while (block != NULL && !mi_atomic_cas_ptr_weak_acq_rel(mi_block_t, &heap->thread_delayed_free, &block, NULL)) {  };
-  bool all_freed = true;
-
-  // and free them all
-  while(block != NULL) {
-    mi_block_t* next = mi_block_nextx(heap,block, heap->keys);
-    // use internal free instead of regular one to keep stats etc correct
-    if (!_mi_free_delayed_block(block)) {
-      // we might already start delayed freeing while another thread has not yet
-      // reset the delayed_freeing flag; in that case delay it further by reinserting the current block
-      // into the delayed free list
-      all_freed = false;
-      mi_block_t* dfree = mi_atomic_load_ptr_relaxed(mi_block_t, &heap->thread_delayed_free);
-      do {
-        mi_block_set_nextx(heap, block, dfree, heap->keys);
-      } while (!mi_atomic_cas_ptr_weak_release(mi_block_t,&heap->thread_delayed_free, &dfree, block));
-    }
-    block = next;
-  }
-  return all_freed;
-}
-*/
 
 /* -----------------------------------------------------------
   Unfull, abandon, free and retire
@@ -765,7 +694,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
   #if MI_STAT
   size_t count = 0;
   #endif
-  long candidate_limit = 0;          // we reset this on the first candidate to limit the search  
+  long candidate_limit = 0;          // we reset this on the first candidate to limit the search
   long full_page_retain = _mi_option_get_fast(mi_option_full_page_retain);
   mi_page_t* page_candidate = NULL;  // a page with free space
   mi_page_t* page = pq->first;
@@ -777,7 +706,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
     count++;
     #endif
     candidate_limit--;
-    
+
     // collect freed blocks by us and other threads
     _mi_page_free_collect(page, false);
 

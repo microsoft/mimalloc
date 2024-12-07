@@ -70,7 +70,7 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block)
   do {
     mi_block_set_next(page, block, mi_tf_block(tf_old));
     tf_new = mi_tf_create(block, true /* always owned: try to claim it if abandoned */);
-  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
+  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new)); // todo: release is enough?
 
   // and atomically try to collect the page if it was abandoned
   const bool is_owned_now = !mi_tf_is_owned(tf_old);
@@ -207,17 +207,17 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) {
   #endif
 
   // 1. free if the page is free now
-  if (mi_page_all_free(page)) 
+  if (mi_page_all_free(page))
   {
     // first remove it from the abandoned pages in the arena (if mapped, this waits for any readers to finish)
-    _mi_arena_page_unabandon(page); 
+    _mi_arena_page_unabandon(page);
     // we can free the page directly
     _mi_arena_page_free(page);
     return;
   }
-    
+
   // 2. if the page is not too full, we can try to reclaim it for ourselves
-  if (_mi_option_get_fast(mi_option_reclaim_on_free) != 0 && 
+  if (_mi_option_get_fast(mi_option_reclaim_on_free) != 0 &&
       !mi_page_is_used_at_frac(page,8))
   {
     // the page has still some blocks in use (but not too many)
@@ -234,7 +234,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) {
           (page->subproc == tagheap->tld->subproc) &&  // don't reclaim across sub-processes; todo: make this check faster (integrate with _mi_heap_by_tag ? )
           (_mi_arena_memid_is_suitable(page->memid, tagheap->arena_id))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
          )
-      {        
+      {
         if (mi_page_queue(tagheap, page->block_size)->first != NULL) {  // don't reclaim for an block_size we don't use
           // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
           _mi_arena_page_unabandon(page);
