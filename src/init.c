@@ -131,12 +131,14 @@ extern mi_heap_t _mi_heap_main;
 static mi_decl_cache_align mi_subproc_t mi_subproc_default;
 
 static mi_decl_cache_align mi_tld_t tld_main = {
-  0, false,
+  0, 
   &_mi_heap_main, &_mi_heap_main,
-  &mi_subproc_default, // subproc
-  0,    // tseq
-  { 0, &tld_main.stats },  // os
-  { MI_STATS_NULL }        // stats
+  &mi_subproc_default,    // subproc
+  0,                      // tseq
+  false,                  // recurse
+  false,                  // is_in_threadpool
+  { 0, &tld_main.stats }, // os
+  { MI_STATS_NULL }       // stats
 };
 
 mi_decl_cache_align mi_heap_t _mi_heap_main = {
@@ -150,8 +152,8 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
-  false,            // can reclaim
-  true,             // eager abandon
+  true,             // allow page reclaim
+  true,             // allow page abandon
   0,                // tag
   #if MI_GUARDED
   0, 0, 0, 0, 0,
@@ -402,6 +404,7 @@ void _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap) {
   tld->subproc = &mi_subproc_default;
   tld->tseq = mi_atomic_add_acq_rel(&mi_tcount, 1);
   tld->os.stats = &tld->stats;
+  tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
 }
 
 // Free the thread local default heap (called from `mi_thread_done`)

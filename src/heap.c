@@ -128,7 +128,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   #else
       collect >= MI_FORCE
   #endif
-    && is_main_thread && mi_heap_is_backing(heap) && !heap->no_reclaim)
+    && is_main_thread && mi_heap_is_backing(heap) && heap->allow_page_reclaim)
   {
     // the main thread is abandoned (end-of-program), try to reclaim all abandoned segments.
     // if all memory is freed by now, all segments should be freed.
@@ -192,23 +192,14 @@ void _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool 
   heap->tld = tld;
   heap->thread_id  = _mi_thread_id();
   heap->arena_id   = arena_id;
-  heap->no_reclaim = noreclaim;
+  heap->allow_page_reclaim = !noreclaim;
   heap->allow_page_abandon = (!noreclaim && mi_option_get(mi_option_full_page_retain) >= 0);
   heap->tag        = tag;
-
-  #if defined(WIN32) && (MI_ARCH_X64 || MI_ARCH_X86)
-  // disallow reclaim for threads running in the windows threadpool
-  const DWORD winVersion = GetVersion();
-  const DWORD winMajorVersion = (DWORD)(LOBYTE(LOWORD(winVersion)));
-  if (winMajorVersion >= 6) {
-    _TEB* const teb = NtCurrentTeb();
-    void* const poolData = *((void**)((uint8_t*)teb + (MI_SIZE_BITS == 32 ? 0x0F90 : 0x1778)));
-    if (poolData != NULL) {
-      heap->no_reclaim = true;
-    }
+  if (tld->is_in_threadpool) {
+    // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our heap.
+    // (but abandoning is good in this case)
+    heap->allow_page_reclaim = false;
   }
-  #endif
-
   if (heap == tld->heap_backing) {
     _mi_random_init(&heap->random);
   }
@@ -364,7 +355,8 @@ static bool mi_cdecl mi_heap_track_block_free(const mi_heap_t* heap, const mi_he
 void mi_heap_destroy(mi_heap_t* heap) {
   mi_assert(heap != NULL);
   mi_assert(mi_heap_is_initialized(heap));
-  mi_assert(heap->no_reclaim);
+  mi_assert(!heap->allow_page_reclaim);
+  mi_assert(!heap->allow_page_abandon);
   mi_assert_expensive(mi_heap_is_valid(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
   #if MI_GUARDED
@@ -372,9 +364,9 @@ void mi_heap_destroy(mi_heap_t* heap) {
   mi_heap_delete(heap);
   return;
   #else
-  if (!heap->no_reclaim) {
+  if (heap->allow_page_reclaim) {
     _mi_warning_message("'mi_heap_destroy' called but ignored as the heap was not created with 'allow_destroy' (heap at %p)\n", heap);
-    // don't free in case it may contain reclaimed pages
+    // don't free in case it may contain reclaimed pages,
     mi_heap_delete(heap);
   }
   else {
@@ -395,7 +387,7 @@ void _mi_heap_unsafe_destroy_all(void) {
   mi_heap_t* curr = bheap->tld->heaps;
   while (curr != NULL) {
     mi_heap_t* next = curr->next;
-    if (curr->no_reclaim) {
+    if (!curr->allow_page_reclaim) {
       mi_heap_destroy(curr);
     }
     else {

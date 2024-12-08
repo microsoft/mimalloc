@@ -17,6 +17,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // Dynamically bind Windows API points for portability
 //---------------------------------------------
 
+static DWORD win_major_version = 6;
+static DWORD win_minor_version = 0;
+
 // We use VirtualAlloc2 for aligned allocation, but it is only supported on Windows 10 and Windows Server 2016.
 // So, we need to look it up dynamically to run on older systems. (use __stdcall for 32-bit compatibility)
 // NtAllocateVirtualAllocEx is used for huge OS page allocation (1GiB)
@@ -115,6 +118,10 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_overcommit = false;
   config->has_partial_free = false;
   config->has_virtual_reserve = true;
+  // windows version
+  const DWORD win_version = GetVersion();
+  win_major_version = (DWORD)(LOBYTE(LOWORD(win_version)));
+  win_minor_version = (DWORD)(HIBYTE(LOWORD(win_version)));
   // get the page size
   SYSTEM_INFO si;
   GetSystemInfo(&si);
@@ -134,7 +141,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     if (memInKiB > 0 && memInKiB < (SIZE_MAX / MI_KiB)) {
       config->physical_memory = (size_t)(memInKiB * MI_KiB);
     }
-  }
+  }  
   // get the VirtualAlloc2 function
   HINSTANCE  hDll;
   hDll = LoadLibrary(TEXT("kernelbase.dll"));
@@ -810,3 +817,17 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     mi_allocator_done();
   }
 #endif
+
+
+bool _mi_prim_thread_is_in_threadpool(void) {
+  #if (MI_ARCH_X64 || MI_ARCH_X86)
+  if (win_major_version >= 6) {
+    // check if this thread belongs to a windows threadpool
+    // see: <https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/teb/index.htm>
+    _TEB* const teb = NtCurrentTeb();
+    void* const pool_data = *((void**)((uint8_t*)teb + (MI_SIZE_BITS == 32 ? 0x0F90 : 0x1778))); 
+    return (pool_data != NULL);
+  }
+  #endif
+  return false;
+}

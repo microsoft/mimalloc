@@ -117,7 +117,8 @@ void _mi_prim_thread_done_auto_done(void);
 // Called when the default heap for a thread changes
 void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 
-
+// Is this thread part of a thread pool?
+bool _mi_prim_thread_is_in_threadpool(void);
 
 //-------------------------------------------------------------------
 // Thread id: `_mi_prim_thread_id()`

@@ -886,3 +886,7 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
 }
 
 #endif
+
+bool _mi_prim_thread_is_in_threadpool(void) {
+  return false;
+}

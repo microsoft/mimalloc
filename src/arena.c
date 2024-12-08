@@ -585,21 +585,25 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(!os_align || _mi_is_aligned((uint8_t*)page + page_alignment, block_alignment));
 
-  // claimed free slices: initialize the page partly
+  // claimed free slices: initialize the page partly  
   if (!memid.initially_zero) {
+    mi_track_mem_undefined(page, slice_count * MI_ARENA_SLICE_SIZE);
     _mi_memzero_aligned(page, sizeof(*page));
   }
-  #if MI_DEBUG > 1
   else {
+    mi_track_mem_defined(page, slice_count * MI_ARENA_SLICE_SIZE);
+  }
+  #if MI_DEBUG > 1
+  if (memid.initially_zero) {
     if (!mi_mem_is_zero(page, mi_size_of_slices(slice_count))) {
-      _mi_error_message(EFAULT, "page memory was not zero initialized!\n");
+      _mi_error_message(EFAULT, "internal error: page memory was not zero initialized.\n");
       memid.initially_zero = false;
       _mi_memzero_aligned(page, sizeof(*page));
     }
   }
   #endif
   if (MI_PAGE_INFO_SIZE < _mi_align_up(sizeof(*page), MI_PAGE_MIN_BLOCK_ALIGN)) {
-    _mi_error_message(EFAULT, "fatal internal error: MI_PAGE_INFO_SIZE is too small\n");
+    _mi_error_message(EFAULT, "fatal internal error: MI_PAGE_INFO_SIZE is too small.\n");
   };
   const size_t block_start = (os_align ? MI_PAGE_ALIGN : MI_PAGE_INFO_SIZE);
   const size_t reserved    = (os_align ? 1 : (mi_size_of_slices(slice_count) - block_start) / block_size);

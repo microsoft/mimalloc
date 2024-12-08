@@ -230,7 +230,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) {
     {
       mi_heap_t* const tagheap = _mi_heap_by_tag(heap, page->heap_tag);
       if ((tagheap != NULL) &&                         // don't reclaim across heap object types
-          (!tagheap->no_reclaim) &&                    // we are allowed to reclaim abandoned pages
+          (tagheap->allow_page_reclaim) &&             // we are allowed to reclaim abandoned pages
           (page->subproc == tagheap->tld->subproc) &&  // don't reclaim across sub-processes; todo: make this check faster (integrate with _mi_heap_by_tag ? )
           (_mi_arena_memid_is_suitable(page->memid, tagheap->arena_id))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
          )

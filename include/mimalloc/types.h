@@ -399,7 +399,7 @@ struct mi_heap_s {
   size_t                page_retired_min;                    // smallest retired index (retired pages are fully free, but still in the page queues)
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   mi_heap_t*            next;                                // list of heaps per thread
-  bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
+  bool                  allow_page_reclaim;                  // `true` if this heap can reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this heap can abandon pages to reduce memory footprint
   uint8_t               tag;                                 // custom tag, can be used for separating heaps based on the object types
   #if MI_GUARDED
@@ -568,14 +568,15 @@ typedef struct mi_os_tld_s {
 
 // Thread local data
 struct mi_tld_s {
-  unsigned long long  heartbeat;     // monotonic heartbeat count
-  bool                recurse;       // true if deferred was called; used to prevent infinite recursion.
-  mi_heap_t*          heap_backing;  // backing heap of this thread (cannot be deleted)
-  mi_heap_t*          heaps;         // list of heaps in this thread (so we can abandon all when the thread terminates)
-  mi_subproc_t*       subproc;       // sub-process this thread belongs to.
-  size_t              tseq;          // thread sequence id
-  mi_os_tld_t         os;            // os tld
-  mi_stats_t          stats;         // statistics
+  unsigned long long  heartbeat;        // monotonic heartbeat count
+  mi_heap_t*          heap_backing;     // backing heap of this thread (cannot be deleted)
+  mi_heap_t*          heaps;            // list of heaps in this thread (so we can abandon all when the thread terminates)
+  mi_subproc_t*       subproc;          // sub-process this thread belongs to.
+  size_t              tseq;             // thread sequence id
+  bool                recurse;          // true if deferred was called; used to prevent infinite recursion.
+  bool                is_in_threadpool; // true if this thread is part of a threadpool (and can run arbitrary tasks)
+  mi_os_tld_t         os;               // os tld
+  mi_stats_t          stats;            // statistics
 };
 
 #endif

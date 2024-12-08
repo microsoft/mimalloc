@@ -347,8 +347,8 @@ int main(int argc, char** argv) {
   mi_collect(true);
   mi_debug_show_arenas(true,true,false);
   #endif
-  mi_collect(true);
-  mi_debug_show_arenas(true, true, false);
+  // mi_collect(true);
+  // mi_debug_show_arenas(true, true, false);
   // mi_stats_print(NULL);
 #else
   mi_stats_print(NULL);  // so we see rss/commit/elapsed
