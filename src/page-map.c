@@ -55,14 +55,14 @@ static void mi_page_map_ensure_committed(size_t idx, size_t slice_count) {
     const size_t commit_bit_idx_lo = idx / mi_page_map_entries_per_commit_bit;
     const size_t commit_bit_idx_hi = (idx + slice_count - 1) / mi_page_map_entries_per_commit_bit;
     for (size_t i = commit_bit_idx_lo; i <= commit_bit_idx_hi; i++) {  // per bit to avoid crossing over bitmap chunks
-      if (mi_bitmap_is_xsetN(MI_BIT_CLEAR, &mi_page_map_commit, i, 1)) {
+      if (mi_bitmap_is_clearN(&mi_page_map_commit, i, 1)) {
         // this may race, in which case we do multiple commits (which is ok)
         bool is_zero;
         uint8_t* const start = _mi_page_map + (i*mi_page_map_entries_per_commit_bit);
         const size_t   size = mi_page_map_entries_per_commit_bit;
-        _mi_os_commit(start, size, &is_zero, NULL);        
+        _mi_os_commit(start, size, &is_zero, NULL);
         if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(start,size); }
-        mi_bitmap_xsetN(MI_BIT_SET, &mi_page_map_commit, i, 1, NULL);
+        mi_bitmap_set(&mi_page_map_commit, i);
       }
     }
     #if MI_DEBUG > 0
@@ -119,7 +119,7 @@ void _mi_page_map_unregister(mi_page_t* page) {
 
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
   uintptr_t idx = ((uintptr_t)p >> MI_ARENA_SLICE_SHIFT);
-  if (!mi_page_map_all_committed || mi_bitmap_is_xsetN(MI_BIT_SET, &mi_page_map_commit, idx/mi_page_map_entries_per_commit_bit, 1)) {
+  if (!mi_page_map_all_committed || mi_bitmap_is_setN(&mi_page_map_commit, idx/mi_page_map_entries_per_commit_bit, 1)) {
     return (_mi_page_map[idx] != 0);
   }
   else {

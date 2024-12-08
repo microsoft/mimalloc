@@ -82,7 +82,7 @@ typedef mi_bchunk_t mi_bchunkmap_t;
 #if MI_SIZE_BITS > 32
 #define MI_BITMAP_DEFAULT_CHUNK_COUNT     (64)  // 2 GiB on 64-bit -- this is for the page map
 #else
-#define MI_BITMAP_DEFAULT_CHUNK_COUNT      (1)  
+#define MI_BITMAP_DEFAULT_CHUNK_COUNT      (1)
 #endif
 #define MI_BITMAP_MAX_BIT_COUNT       (MI_BITMAP_MAX_CHUNK_COUNT * MI_BCHUNK_BITS)  // 16 GiB arena
 #define MI_BITMAP_MIN_BIT_COUNT       (MI_BITMAP_MIN_CHUNK_COUNT * MI_BCHUNK_BITS)  // 32 MiB arena
@@ -92,7 +92,7 @@ typedef mi_bchunk_t mi_bchunkmap_t;
 // An atomic bitmap
 typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bitmap_s {
   _Atomic(size_t)  chunk_count;      // total count of chunks (0 < N <= MI_BCHUNKMAP_BITS)
-  _Atomic(size_t)  chunk_max_clear;  // max chunk index that was once cleared 
+  _Atomic(size_t)  chunk_max_clear;  // max chunk index that was once cleared
   size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc
   mi_bchunkmap_t   chunkmap;
   mi_bchunk_t      chunks[MI_BITMAP_DEFAULT_CHUNK_COUNT];        // usually dynamic MI_BITMAP_MAX_CHUNK_COUNT
@@ -126,7 +126,8 @@ size_t mi_bitmap_size(size_t bit_count, size_t* chunk_count);
 // returns the size of the bitmap.
 size_t mi_bitmap_init(mi_bitmap_t* bitmap, size_t bit_count, bool already_zero);
 
-// Set/clear a sequence of `n` bits in the bitmap (and can cross chunks). Not atomic so only use if local to a thread.
+// Set/clear a sequence of `n` bits in the bitmap (and can cross chunks).
+// Not atomic so only use if still local to a thread.
 void mi_bitmap_unsafe_setN(mi_bitmap_t* bitmap, size_t idx, size_t n);
 
 
@@ -144,7 +145,8 @@ static inline bool mi_bitmap_clear(mi_bitmap_t* bitmap, size_t idx) {
 
 // Set/clear a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from all 0's to 1's (or all 1's to 0's).
 // `n` cannot cross chunk boundaries (and `n <= MI_BCHUNK_BITS`)!
-// If `already_xset` is not NULL, it is to all the bits were already all set/cleared.
+// If `already_xset` is not NULL, it is set to count of bits were already all set/cleared.
+// (this is used for correct statistics if commiting over a partially committed area)
 bool mi_bitmap_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n, size_t* already_xset);
 
 static inline bool mi_bitmap_setN(mi_bitmap_t* bitmap, size_t idx, size_t n, size_t* already_set) {
@@ -159,6 +161,8 @@ static inline bool mi_bitmap_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
 // Is a sequence of n bits already all set/cleared?
 bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n);
 
+// Is a sequence of n bits already set?
+// (Used to check if a memory range is already committed)
 static inline bool mi_bitmap_is_setN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
   return mi_bitmap_is_xsetN(MI_BIT_SET, bitmap, idx, n);
 }
@@ -168,28 +172,24 @@ static inline bool mi_bitmap_is_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n
 }
 
 
-// Try to set/clear a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from 0's to 1's (or 1's to 0's)
-// and false otherwise leaving the bitmask as is.
-// `n` cannot cross chunk boundaries (and `n <= MI_BCHUNK_BITS`)!
-mi_decl_nodiscard bool mi_bitmap_try_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n);
-
-static inline bool mi_bitmap_try_setN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
-  return mi_bitmap_try_xsetN(MI_BIT_SET, bitmap, idx, n);
-}
-
-static inline bool mi_bitmap_try_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
-  return mi_bitmap_try_xsetN(MI_BIT_CLEAR, bitmap, idx, n);
-}
-
-// Find a sequence of `n` bits in the bitmap with all bits set, and atomically unset all.
+// Find a sequence of `n` bits in the bitmap with all bits set, and try to atomically clear all.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx);
 
+
+// Called once a bit is cleared to see if the memory slice can be claimed.
 typedef bool (mi_claim_fun_t)(size_t slice_index, mi_arena_t* arena, mi_subproc_t* subproc, mi_heaptag_t heap_tag, bool* keep_set);
 
-mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx, 
+// Find a set bits in the bitmap, atomically clear it, and check if `claim` returns true.
+// If not claimed, continue on (potentially setting the bit again depending on `keep_set`).
+// Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
+mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx,
                                                     mi_claim_fun_t* claim, mi_arena_t* arena, mi_subproc_t* subproc, mi_heaptag_t heap_tag );
 
+
+// Atomically clear a bit but only if it is set. Will block otherwise until the bit is set.
+// This is used to delay free-ing a page that it at the same time being considered to be
+// allocated from `mi_arena_try_abandoned` (and is in the `claim` function of `mi_bitmap_try_find_and_claim`).
 void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx);
 
 #endif // MI_BITMAP_H
