@@ -14,7 +14,7 @@ option(MI_TRACK_VALGRIND    "Compile with Valgrind support (adds a small overhea
 option(MI_TRACK_ASAN        "Compile with address sanitizer support (adds a small overhead)" OFF)
 option(MI_TRACK_ETW         "Compile with Windows event tracing (ETW) support (adds a small overhead)" OFF)
 option(MI_USE_CXX           "Use the C++ compiler to compile the library (instead of the C compiler)" OFF)
-option(MI_ARCHOPT           "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell -mavx2' (2013), for arm64: '-march=armv8.1-a' (2016))" ON)
+option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for arm64: '-march=armv8.1-a' (2016))" ON)
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" ON)
@@ -113,11 +113,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo")
-  if (NOT MI_ARCHOPT)
-    message(STATUS "Architecture specific optimizations are disabled (MI_ARCHOPT=OFF)")
+  if (NOT MI_OPT_ARCH)
+    message(STATUS "Architecture specific optimizations are disabled (MI_OPT_ARCH=OFF)")
   endif()
 else()
-  set(MI_ARCHOPT OFF)
+  set(MI_OPT_ARCH OFF)
 endif()
 
 if(MI_OVERRIDE)
@@ -327,8 +327,8 @@ if(MI_WIN_USE_FLS)
   list(APPEND mi_defines MI_WIN_USE_FLS=1)
 endif()
 
-# Check architecture
-set(MI_ARCHOPT_FLAGS "")
+# Determine architecture
+set(MI_OPT_ARCH_FLAGS "")
 set(MI_ARCH "unknown")
 if(APPLE)
   list(FIND CMAKE_OSX_ARCHITECTURES "x86_64" x64_index)
@@ -391,22 +391,18 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
   if(MI_OVERRIDE)
     list(APPEND mi_cflags -fno-builtin-malloc)
   endif()
-  if(MI_ARCHOPT)
-    if(MI_ARCH STREQUAL "x64")
-      set(MI_ARCH_OPT_FLAGS "-march=haswell;-mavx2")    # fast bit scan, ~ 2013
-    elseif(MI_ARCH STREQUAL "arm64")
-      set(MI_ARCH_OPT_FLAGS "-march=armv8.1-a")         # fast atomics, ~ 2016
+  if(MI_OPT_ARCH)
+    if(MI_ARCH STREQUAL "arm64")
+      set(MI_ARCH_OPT_FLAGS "-march=armv8.1-a")         # fast atomics, since ~ 2016
     endif()
   endif()
 endif()
 
 if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
   list(APPEND mi_cflags /Zc:__cplusplus)
-  if(MI_ARCHOPT)
-    if(MI_ARCH STREQUAL "x64")
-      set(MI_ARCHOPT_FLAGS "/arch:AVX2")              # fast bit scan, ~ 2013
-    elseif(MI_ARCH STREQUAL "arm64")
-      set(MI_ARCHOPT_FLAGS "/arch:armv8.1")           # fast atomics, ~ 2016
+  if(MI_OPT_ARCH)
+    if(MI_ARCH STREQUAL "arm64")
+      set(MI_OPT_ARCH_FLAGS "/arch:armv8.1")           # fast atomics, since ~ 2016
     endif()
   endif()
 endif()
@@ -417,7 +413,7 @@ endif()
 
 if(MI_ARCH_OPT_FLAGS)
   list(APPEND mi_cflags ${MI_ARCH_OPT_FLAGS})
-  message(STATUS "Architecture specific optimization is enabled (with ${MI_ARCH_OPT_FLAGS}) (MI_ARCHOPT=ON)")
+  message(STATUS "Architecture specific optimization is enabled (with ${MI_ARCH_OPT_FLAGS}) (MI_OPT_ARCH=ON)")
 endif()
 
 # extra needed libraries
