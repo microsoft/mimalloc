@@ -394,7 +394,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
   endif()
   if(MI_OPT_ARCH)
     if(MI_ARCH STREQUAL "arm64")
-      set(MI_ARCH_OPT_FLAGS "-march=armv8.1-a")         # fast atomics, since ~ 2016
+      set(MI_OPT_ARCH_FLAGS "-march=armv8.1-a")         # fast atomics
     endif()
   endif()
 endif()
@@ -403,7 +403,7 @@ if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
   list(APPEND mi_cflags /Zc:__cplusplus)
   if(MI_OPT_ARCH)
     if(MI_ARCH STREQUAL "arm64")
-      set(MI_OPT_ARCH_FLAGS "/arch:armv8.1")           # fast atomics, since ~ 2016
+      set(MI_OPT_ARCH_FLAGS "/arch:armv8.1")           # fast atomics
     endif()
   endif()
 endif()
@@ -412,9 +412,9 @@ if(MINGW)
   add_definitions(-D_WIN32_WINNT=0x600)
 endif()
 
-if(MI_ARCH_OPT_FLAGS)
-  list(APPEND mi_cflags ${MI_ARCH_OPT_FLAGS})
-  message(STATUS "Architecture specific optimization is enabled (with ${MI_ARCH_OPT_FLAGS}) (MI_OPT_ARCH=ON)")
+if(MI_OPT_ARCH_FLAGS)
+  list(APPEND mi_cflags ${MI_OPT_ARCH_FLAGS})
+  message(STATUS "Architecture specific optimization is enabled (with ${MI_OPT_ARCH_FLAGS}) (MI_OPT_ARCH=ON)")
 endif()
 
 # extra needed libraries
