@@ -36,6 +36,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #error platform pointers must be 32, 64, or 128 bits
 #endif
 
+#if (INTPTR_MAX) > LONG_MAX
+# define MI_PU(x)  x##ULL
+#else
+# define MI_PU(x)  x##UL
+#endif
+
 #if SIZE_MAX == UINT64_MAX
 # define MI_SIZE_SHIFT (3)
 typedef int64_t  mi_ssize_t;
@@ -43,15 +49,13 @@ typedef int64_t  mi_ssize_t;
 # define MI_SIZE_SHIFT (2)
 typedef int32_t  mi_ssize_t;
 #else
-#error platform objects must be 32 or 64 bits
+#error platform objects must be 32 or 64 bits in size
 #endif
 
 #if (SIZE_MAX/2) > LONG_MAX
 # define MI_ZU(x)  x##ULL
-# define MI_ZI(x)  x##LL
 #else
 # define MI_ZU(x)  x##UL
-# define MI_ZI(x)  x##L
 #endif
 
 #define MI_INTPTR_SIZE  (1<<MI_INTPTR_SHIFT)
@@ -131,11 +135,13 @@ typedef int32_t  mi_ssize_t;
 #endif
 
 #if (MI_SIZE_BITS == 32)
-#define mi_builtin_size(name)       mi_builtin32(name)
-#define mi_has_builtin_size(name)   mi_has_builtin32(name)
+#define mi_builtinz(name)        mi_builtin32(name)
+#define mi_has_builtinz(name)    mi_has_builtin32(name)
+#define mi_msc_builtinz(name)    name
 #elif (MI_SIZE_BITS == 64)
-#define mi_builtin_size(name)       mi_builtin64(name)
-#define mi_has_builtin_size(name)   mi_has_builtin64(name)
+#define mi_builtinz(name)        mi_builtin64(name)
+#define mi_has_builtinz(name)    mi_has_builtin64(name)
+#define mi_msc_builtinz(name)    name##64
 #endif
 
 
@@ -145,91 +151,40 @@ typedef int32_t  mi_ssize_t;
 
 size_t _mi_clz_generic(size_t x);
 size_t _mi_ctz_generic(size_t x);
-uint32_t _mi_ctz_generic32(uint32_t x);
 
 static inline size_t mi_ctz(size_t x) {
   #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)  // on x64 tzcnt is defined for 0
     uint64_t r;
-    __asm volatile ("tzcnt\t%1, %0" : "=&r"(r) : "r"(x) : "cc");
+    __asm ("tzcnt\t%1, %0" : "=&r"(r) : "r"(x) : "cc");
     return r;
   #elif MI_ARCH_X64 && defined(__BMI1__)
     return (size_t)_tzcnt_u64(x);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long idx;
-    #if MI_SIZE_BITS==32
-      return (_BitScanForward(&idx, x) ? (size_t)idx : 32);
-    #else
-      return (_BitScanForward64(&idx, x) ? (size_t)idx : 64);
-    #endif
-  /*
-  // for arm64 and riscv, the builtin_ctz is defined for 0 as well
-  #elif defined(__GNUC__) && MI_ARCH_ARM64
-    uint64_t r;
-    __asm volatile ("rbit\t%0, %1\n\tclz\t%0, %0" : "=&r"(r) : "r"(x) : "cc");
-    return r;
-  #elif defined(__GNUC__) && MI_ARCH_RISCV
-    size_t r;
-    __asm volatile ("ctz\t%0, %1" : "=&r"(r) : "r"(x) : );
-    return r;
-  */
-  #elif mi_has_builtin_size(ctz)
-    return (x!=0 ? (size_t)mi_builtin_size(ctz)(x) : MI_SIZE_BITS);
+    return (mi_msc_builtinz(_BitScanForward)(&idx, x) ? (size_t)idx : MI_SIZE_BITS);
+  #elif mi_has_builtinz(ctz)
+    return (x!=0 ? (size_t)mi_builtinz(ctz)(x) : MI_SIZE_BITS);
   #else
     #define MI_HAS_FAST_BITSCAN  0
-    return _mi_ctz_generic(x);
+    return (x!=0 ? _mi_ctz_generic(x) : MI_SIZE_BITS);
   #endif
 }
 
 static inline size_t mi_clz(size_t x) {
   #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 lzcnt is defined for 0
     uint64_t r;
-    __asm volatile ("lzcnt\t%1, %0" : "=&r"(r) : "r"(x) : "cc");
+    __asm ("lzcnt\t%1, %0" : "=&r"(r) : "r"(x) : "cc");
     return r;
   #elif MI_ARCH_X64 && defined(__BMI1__)
     return (size_t)_lzcnt_u64(x);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long idx;
-    #if MI_SIZE_BITS==32
-      return (_BitScanReverse(&idx, x) ? 31 - (size_t)idx : 32);
-    #else
-      return (_BitScanReverse64(&idx, x) ? 63 - (size_t)idx : 64);
-    #endif
-  /*
-  // for arm64 and riscv, the builtin_clz is defined for 0 as well
-  #elif defined(__GNUC__) && MI_ARCH_ARM64
-    uint64_t r;
-    __asm volatile ("clz\t%0, %1" : "=&r"(r) : "r"(x) : "cc");
-    return r;
-  #elif defined(__GNUC__) && MI_ARCH_RISCV
-    size_t r;
-    __asm volatile ("clz\t%0, %1" : "=&r"(r) : "r"(x) : );
-    return r;
-  */
-  #elif mi_has_builtin_size(clz)
-    return (x!=0 ? (size_t)mi_builtin_size(clz)(x) : MI_SIZE_BITS);
+    return (mi_msc_builtinz(_BitScanReverse)(&idx, x) ? MI_SIZE_BITS - 1 - (size_t)idx : MI_SIZE_BITS);
+  #elif mi_has_builtinz(clz)
+    return (x!=0 ? (size_t)mi_builtinz(clz)(x) : MI_SIZE_BITS);
   #else
     #define MI_HAS_FAST_BITSCAN  0
-    return _mi_clz_generic(x);
-  #endif
-}
-
-static inline uint32_t mi_ctz32(uint32_t x) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 tzcnt is defined for 0
-    uint32_t r;
-    __asm volatile ("tzcntl\t%1, %0" : "=&r"(r) : "r"(x) : "cc");
-    return r;
-  #elif MI_ARCH_X64 && defined(__BMI1__)
-    return (uint32_t)_tzcnt_u32(x);
-  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    unsigned long idx;
-    return (_BitScanForward(&idx, x) ? (uint32_t)idx : 32);
-  #elif mi_has_builtin(ctz) && (INT_MAX == INT32_MAX)
-    return (x!=0 ? (uint32_t)mi_builtin(ctz)(x) : 32);
-  #elif mi_has_builtin(ctzl) && (LONG_MAX == INT32_MAX)
-    return (x!=0 ? (uint32_t)mi_builtin(ctzl)(x) : 32);
-  #else
-    #define MI_HAS_FAST_BITSCAN  0
-    return _mi_ctz_generic32(x);
+    return (x!=0 ? _mi_clz_generic(x) : MI_SIZE_BITS);
   #endif
 }
 
@@ -237,23 +192,19 @@ static inline uint32_t mi_ctz32(uint32_t x) {
 #define MI_HAS_FAST_BITSCAN 1
 #endif
 
-
+size_t _mi_popcount_generic(size_t x);
 
 static inline size_t mi_popcount(size_t x) {
-#if mi_has_builtin_size(popcount)
-  return mi_builtin_size(popcount)(x);
-#elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-  #if MI_SIZE_BITS==32
-  return __popcnt(x);
-  #else
-  return __popcnt64(x);
-  #endif
-#elif MI_ARCH_X64 && defined(__BMI1__)
+  #if mi_has_builtinz(popcount)
+    return mi_builtinz(popcount)(x);
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+    return mi_msc_builtinz(__popcnt)(x);
+  #elif MI_ARCH_X64 && defined(__BMI1__)
     return (size_t)_mm_popcnt_u64(x);
-#else
-  #define MI_HAS_FAST_POPCOUNT  0
-  error define generic popcount
-#endif
+  #else
+    #define MI_HAS_FAST_POPCOUNT  0
+    return (x<=1 ? x : _mi_popcount_generic(x));
+  #endif
 }
 
 #ifndef MI_HAS_FAST_POPCOUNT
@@ -274,58 +225,29 @@ static inline bool mi_bsf(size_t x, size_t* idx) {
     bool is_zero;
     __asm ( "tzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc" );
     return !is_zero;
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+    unsigned long i;
+    return (mi_msc_builtinz(_BitScanForward)(&i, x) ? (*idx = (size_t)i, true) : false);
   #else
-    *idx = mi_ctz(x);
-    return (x!=0);
+    return (x!=0 ? (*idx = mi_ctz(x), true) : false);    
   #endif
 }
-
-// Bit scan forward: find the least significant bit that is set (i.e. count trailing zero's)
-// return false if `x==0` (with `*idx` undefined) and true otherwise,
-// with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
-static inline bool mi_bsf32(uint32_t x, uint32_t* idx) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)
-    // on x64 the carry flag is set on zero which gives better codegen
-    bool is_zero;
-    __asm ("tzcntl\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc");
-    return !is_zero;
-  #else
-    *idx = mi_ctz32(x);
-    return (x!=0);
-  #endif
-}
-
 
 // Bit scan reverse: find the most significant bit that is set
 // return false if `x==0` (with `*idx` undefined) and true otherwise,
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
 static inline bool mi_bsr(size_t x, size_t* idx) {
-  #if defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)
+    // on x64 the carry flag is set on zero which gives better codegen
+    bool is_zero;
+    __asm ("lzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc");
+    return !is_zero;
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long i;
-    #if MI_SIZE_BITS==32
-      return (_BitScanReverse(&i, x) ? (*idx = i, true) : false);
-    #else
-      return (_BitScanReverse64(&i, x) ? (*idx = i, true) : false);
-    #endif
+    return (mi_msc_builtinz(_BitScanReverse)(&i, x) ? (*idx = (size_t)i, true) : false);
   #else
-    const size_t r = mi_clz(x);
-    *idx = (~r & (MI_SIZE_BITS - 1));
-    return (x!=0);
+    return (x!=0 ? (*idx = MI_SIZE_BITS - 1 - mi_clz(x), true) : false);
   #endif
-}
-
-// Bit scan reverse: find the most significant bit that is set
-// return false if `x==0` (with `*idx` undefined) and true otherwise,
-// with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
-static inline bool mi_bsr32(uint32_t x, uint32_t* idx) {
-#if defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-  unsigned long i;
-  return (_BitScanReverse(&i, x) ? (*idx = i, true) : false);
-#else
-  const size_t r = mi_clz((size_t)x);
-  *idx = (~r & (MI_SIZE_BITS - 1)) - (MI_SIZE_SIZE - sizeof(uint32_t));
-  return (x!=0);
-#endif
 }
 
 
@@ -338,12 +260,10 @@ static inline size_t mi_rotr(size_t x, size_t r) {
     return mi_builtin(rotateright64)(x,r);
   #elif (mi_has_builtin(rotateright32) && MI_SIZE_BITS==32)
     return mi_builtin(rotateright32)(x,r);
-  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    #if MI_SIZE_BITS==32
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_ARM64)
+    return _rotr64(x, (int)r);
+  #elif defined(_MSC_VER) && (MI_ARCH_X86 || MI_ARCH_ARM32)
     return _lrotr(x,(int)r);
-    #else
-    return _rotr64(x,(int)r);
-    #endif
   #else
     // The term `(-rshift)&(BITS-1)` is written instead of `BITS - rshift` to
     // avoid UB when `rshift==0`. See <https://blog.regehr.org/archives/1063>
@@ -352,30 +272,15 @@ static inline size_t mi_rotr(size_t x, size_t r) {
   #endif
 }
 
-static inline uint32_t mi_rotr32(uint32_t x, uint32_t r) {
-  #if mi_has_builtin(rotateright32)
-    return mi_builtin(rotateright32)(x, r);
-  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    return _lrotr(x, (int)r);
-  #else
-    // The term `(-rshift)&(BITS-1)` is written instead of `BITS - rshift` to
-    // avoid UB when `rshift==0`. See <https://blog.regehr.org/archives/1063>
-    const unsigned int rshift = (unsigned int)(r) & 31;
-    return ((x >> rshift) | (x << ((-rshift) & 31)));
-  #endif
-}
-
 static inline size_t mi_rotl(size_t x, size_t r) {
   #if (mi_has_builtin(rotateleft64) && MI_SIZE_BITS==64)
     return mi_builtin(rotateleft64)(x,r);
   #elif (mi_has_builtin(rotateleft32) && MI_SIZE_BITS==32)
     return mi_builtin(rotateleft32)(x,r);
-  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    #if MI_SIZE_BITS==32
-    return _lrotl(x,(int)r);
-    #else
-    return _rotl64(x,(int)r);
-    #endif
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_ARM64)
+    return _rotl64(x, (int)r);
+  #elif defined(_MSC_VER) && (MI_ARCH_X86 || MI_ARCH_ARM32)
+    return _lrotl(x, (int)r);
   #else
     // The term `(-rshift)&(BITS-1)` is written instead of `BITS - rshift` to
     // avoid UB when `rshift==0`. See <https://blog.regehr.org/archives/1063>
@@ -383,7 +288,6 @@ static inline size_t mi_rotl(size_t x, size_t r) {
     return ((x << rshift) | (x >> ((-rshift) & (MI_SIZE_BITS-1))));
   #endif
 }
-
 
 
 #endif // MI_BITS_H

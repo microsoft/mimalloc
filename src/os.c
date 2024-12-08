@@ -175,7 +175,7 @@ static void* mi_os_prim_alloc_at(void* hint_addr, size_t size, size_t try_alignm
 
   MI_UNUSED(tld_stats);
   mi_stats_t* stats = &_mi_stats_main;
-  mi_stat_counter_increase(stats->mmap_calls, 1);
+  _mi_stat_counter_increase(&stats->mmap_calls, 1);
   if (p != NULL) {
     _mi_stat_increase(&stats->reserved, size);
     if (commit) {
