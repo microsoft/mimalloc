@@ -236,6 +236,7 @@
     </ClCompile>
     <ClCompile Include="..\..\src\alloc-posix.c" />
     <ClCompile Include="..\..\src\alloc.c" />
+    <ClCompile Include="..\..\src\arena-meta.c" />
     <ClCompile Include="..\..\src\arena.c" />
     <ClCompile Include="..\..\src\bitmap.c" />
     <ClCompile Include="..\..\src\free.c">

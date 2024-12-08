@@ -49,6 +49,7 @@ set(mi_sources
     src/alloc-aligned.c
     src/alloc-posix.c
     src/arena.c
+    src/arena-meta.c
     src/bitmap.c
     src/heap.c
     src/init.c

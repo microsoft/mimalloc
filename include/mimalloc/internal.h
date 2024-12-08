@@ -27,8 +27,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
 #pragma warning(disable:26812)  // unscoped enum warning
-#pragma warning(disable:28159)  // don't use GetVersion
-#pragma warning(disable:4996)   // don't use GetVersion
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_align(a)        __declspec(align(a))
@@ -58,42 +56,52 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_externc
 #endif
 
+// "libc.c"
+#include    <stdarg.h>
+void        _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args);
+void        _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...);
+char        _mi_toupper(char c);
+int         _mi_strnicmp(const char* s, const char* t, size_t n);
+void        _mi_strlcpy(char* dest, const char* src, size_t dest_size);
+void        _mi_strlcat(char* dest, const char* src, size_t dest_size);
+size_t      _mi_strlen(const char* s);
+size_t      _mi_strnlen(const char* s, size_t max_len);
+bool        _mi_getenv(const char* name, char* result, size_t result_size);
 
 // "options.c"
-void       _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
-void       _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
-void       _mi_warning_message(const char* fmt, ...);
-void       _mi_verbose_message(const char* fmt, ...);
-void       _mi_trace_message(const char* fmt, ...);
-void       _mi_output_message(const char* fmt, ...);
-void       _mi_options_init(void);
-long       _mi_option_get_fast(mi_option_t option);
-void       _mi_error_message(int err, const char* fmt, ...);
+void        _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
+void        _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
+void        _mi_warning_message(const char* fmt, ...);
+void        _mi_verbose_message(const char* fmt, ...);
+void        _mi_trace_message(const char* fmt, ...);
+void        _mi_output_message(const char* fmt, ...);
+void        _mi_options_init(void);
+long        _mi_option_get_fast(mi_option_t option);
+void        _mi_error_message(int err, const char* fmt, ...);
 
 // random.c
-void       _mi_random_init(mi_random_ctx_t* ctx);
-void       _mi_random_init_weak(mi_random_ctx_t* ctx);
-void       _mi_random_reinit_if_weak(mi_random_ctx_t * ctx);
-void       _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* new_ctx);
-uintptr_t  _mi_random_next(mi_random_ctx_t* ctx);
-uintptr_t  _mi_heap_random_next(mi_heap_t* heap);
-uintptr_t  _mi_os_random_weak(uintptr_t extra_seed);
+void        _mi_random_init(mi_random_ctx_t* ctx);
+void        _mi_random_init_weak(mi_random_ctx_t* ctx);
+void        _mi_random_reinit_if_weak(mi_random_ctx_t * ctx);
+void        _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* new_ctx);
+uintptr_t   _mi_random_next(mi_random_ctx_t* ctx);
+uintptr_t   _mi_heap_random_next(mi_heap_t* heap);
+uintptr_t   _mi_os_random_weak(uintptr_t extra_seed);
 static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 
 // init.c
 extern mi_decl_cache_align mi_stats_t       _mi_stats_main;
 extern mi_decl_cache_align const mi_page_t  _mi_page_empty;
-void       _mi_process_load(void);
+void        _mi_process_load(void);
 void mi_cdecl _mi_process_done(void);
-bool       _mi_is_redirected(void);
-bool       _mi_allocator_init(const char** message);
-void       _mi_allocator_done(void);
-bool       _mi_is_main_thread(void);
-size_t     _mi_current_thread_count(void);
-bool       _mi_preloading(void);           // true while the C runtime is not initialized yet
-void       _mi_thread_done(mi_heap_t* heap);
-void       _mi_thread_data_collect(void);
-void       _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap);
+bool        _mi_is_redirected(void);
+bool        _mi_allocator_init(const char** message);
+void        _mi_allocator_done(void);
+bool        _mi_is_main_thread(void);
+size_t      _mi_current_thread_count(void);
+bool        _mi_preloading(void);           // true while the C runtime is not initialized yet
+void        _mi_thread_done(mi_heap_t* heap);
+mi_tld_t*   _mi_tld(void);                  // current tld: `_mi_tld() == _mi_heap_get_default()->tld`
 
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
@@ -103,116 +111,94 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 void          _mi_heap_guarded_init(mi_heap_t* heap);
 
 // os.c
-void       _mi_os_init(void);                                            // called from process init
-void*      _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);
-void*      _mi_os_zalloc(size_t size, mi_memid_t* memid, mi_stats_t* stats);
-void       _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats);
-void       _mi_os_free_ex(void* p, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* stats);
+void        _mi_os_init(void);                                            // called from process init
+void*       _mi_os_alloc(size_t size, mi_memid_t* memid);
+void*       _mi_os_zalloc(size_t size, mi_memid_t* memid);
+void        _mi_os_free(void* p, size_t size, mi_memid_t memid);
+void        _mi_os_free_ex(void* p, size_t size, bool still_committed, mi_memid_t memid);
 
-size_t     _mi_os_page_size(void);
-size_t     _mi_os_good_alloc_size(size_t size);
-bool       _mi_os_has_overcommit(void);
-bool       _mi_os_has_virtual_reserve(void);
-size_t     _mi_os_virtual_address_bits(void);
+size_t      _mi_os_page_size(void);
+size_t      _mi_os_good_alloc_size(size_t size);
+bool        _mi_os_has_overcommit(void);
+bool        _mi_os_has_virtual_reserve(void);
+size_t      _mi_os_virtual_address_bits(void);
 
-bool       _mi_os_reset(void* addr, size_t size, mi_stats_t* tld_stats);
-bool       _mi_os_commit(void* p, size_t size, bool* is_zero, mi_stats_t* stats);
-bool       _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
-bool       _mi_os_protect(void* addr, size_t size);
-bool       _mi_os_unprotect(void* addr, size_t size);
-bool       _mi_os_purge(void* p, size_t size, mi_stats_t* stats);
-bool       _mi_os_purge_ex(void* p, size_t size, bool allow_reset, mi_stats_t* stats);
+bool        _mi_os_reset(void* addr, size_t size);
+bool        _mi_os_commit(void* p, size_t size, bool* is_zero);
+bool        _mi_os_decommit(void* addr, size_t size);
+bool        _mi_os_protect(void* addr, size_t size);
+bool        _mi_os_unprotect(void* addr, size_t size);
+bool        _mi_os_purge(void* p, size_t size);
+bool        _mi_os_purge_ex(void* p, size_t size, bool allow_reset);
 
-void*      _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid, mi_stats_t* stats);
-void*      _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid, mi_stats_t* tld_stats);
+void*       _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid);
+void*       _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
 
-void*      _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
-bool       _mi_os_use_large_page(size_t size, size_t alignment);
-size_t     _mi_os_large_page_size(void);
+void*       _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
+bool        _mi_os_use_large_page(size_t size, size_t alignment);
+size_t      _mi_os_large_page_size(void);
 
-void*      _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
+void*       _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
 
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
-void       _mi_arena_init(void);
-void       _mi_arena_free(void* p, size_t size, size_t still_committed_size, mi_memid_t memid, mi_stats_t* stats);
-void*      _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_tld_t* tld);
-void*      _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid, mi_tld_t* tld);
-bool       _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id);
-bool       _mi_arena_contains(const void* p);
-void       _mi_arenas_collect(bool force_purge, mi_stats_t* stats);
-void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
+void        _mi_arena_init(void);
+void        _mi_arena_free(void* p, size_t size, size_t still_committed_size, mi_memid_t memid);
+void*       _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t req_arena_id, size_t tseq, mi_memid_t* memid);
+void*       _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_id_t req_arena_id, size_t tseq, mi_memid_t* memid);
+bool        _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id);
+bool        _mi_arena_contains(const void* p);
+void        _mi_arenas_collect(bool force_purge);
+void        _mi_arena_unsafe_destroy_all(void);
 
-mi_page_t* _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
-void       _mi_arena_page_free(mi_page_t* page);
-void       _mi_arena_page_abandon(mi_page_t* page);
-void       _mi_arena_page_unabandon(mi_page_t* page);
-bool       _mi_arena_page_try_reabandon_to_mapped(mi_page_t* page);
+mi_page_t*  _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
+void        _mi_arena_page_free(mi_page_t* page);
+void        _mi_arena_page_abandon(mi_page_t* page);
+void        _mi_arena_page_unabandon(mi_page_t* page);
+bool        _mi_arena_page_try_reabandon_to_mapped(mi_page_t* page);
 
-bool       _mi_arena_try_reclaim(mi_heap_t* heap, mi_page_t* page);
-void       _mi_arena_reclaim_all_abandoned(mi_heap_t* heap);
-
-void*      _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid);
-void       _mi_arena_meta_free(void* p, mi_memid_t memid, size_t size);
-
-/*
-typedef struct mi_arena_field_cursor_s { // abstract struct
-  size_t         os_list_count;           // max entries to visit in the OS abandoned list
-  size_t         start;                   // start arena idx (may need to be wrapped)
-  size_t         end;                     // end arena idx (exclusive, may need to be wrapped)
-  size_t         bitmap_idx;              // current bit idx for an arena
-  mi_subproc_t*  subproc;                 // only visit blocks in this sub-process
-  bool           visit_all;               // ensure all abandoned blocks are seen (blocking)
-  bool           hold_visit_lock;         // if the subproc->abandoned_os_visit_lock is held
-} mi_arena_field_cursor_t;
-void          _mi_arena_field_cursor_init(mi_heap_t* heap, mi_subproc_t* subproc, bool visit_all, mi_arena_field_cursor_t* current);
-mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* previous);
-void          _mi_arena_field_cursor_done(mi_arena_field_cursor_t* current);
-*/
+// arena-meta.c
+void*       _mi_meta_zalloc( size_t size, mi_memid_t* memid );
+void        _mi_meta_free(void* p, size_t size, mi_memid_t memid);
 
 // "page-map.c"
-bool       _mi_page_map_init(void);
-void       _mi_page_map_register(mi_page_t* page);
-void       _mi_page_map_unregister(mi_page_t* page);
-
+bool        _mi_page_map_init(void);
+void        _mi_page_map_register(mi_page_t* page);
+void        _mi_page_map_unregister(mi_page_t* page);
 
 // "page.c"
-void*      _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment)  mi_attr_noexcept mi_attr_malloc;
+void*       _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment)  mi_attr_noexcept mi_attr_malloc;
 
-void       _mi_page_retire(mi_page_t* page) mi_attr_noexcept;                  // free the page if there are no other pages with many free blocks
-void       _mi_page_unfull(mi_page_t* page);
-void       _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);               // free the page
-void       _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);            // abandon the page, to be picked up by another thread...
-void       _mi_page_force_abandon(mi_page_t* page);
+void        _mi_page_retire(mi_page_t* page) mi_attr_noexcept;                  // free the page if there are no other pages with many free blocks
+void        _mi_page_unfull(mi_page_t* page);
+void        _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);               // free the page
+void        _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);            // abandon the page, to be picked up by another thread...
+void        _mi_page_force_abandon(mi_page_t* page);
+void        _mi_heap_collect_retired(mi_heap_t* heap, bool force);
 
-// void       _mi_heap_delayed_free_all(mi_heap_t* heap);
-// bool       _mi_heap_delayed_free_partial(mi_heap_t* heap);
-void       _mi_heap_collect_retired(mi_heap_t* heap, bool force);
+size_t      _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append);
+void        _mi_deferred_free(mi_heap_t* heap, bool force);
 
-size_t     _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append);
-void       _mi_deferred_free(mi_heap_t* heap, bool force);
+void        _mi_page_free_collect(mi_page_t* page,bool force);
+void        _mi_page_init(mi_heap_t* heap, mi_page_t* page);
 
-void       _mi_page_free_collect(mi_page_t* page,bool force);
-// void       _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback from segments
-void       _mi_page_init(mi_heap_t* heap, mi_page_t* page);
-
-size_t     _mi_bin_size(uint8_t bin);           // for stats
-uint8_t    _mi_bin(size_t size);                // for stats
+size_t      _mi_bin_size(uint8_t bin);           // for stats
+uint8_t     _mi_bin(size_t size);                // for stats
 
 // "heap.c"
-void       _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag);
-void       _mi_heap_destroy_pages(mi_heap_t* heap);
-void       _mi_heap_collect_abandon(mi_heap_t* heap);
-void       _mi_heap_set_default_direct(mi_heap_t* heap);
-bool       _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid);
-void       _mi_heap_unsafe_destroy_all(void);
-mi_heap_t* _mi_heap_by_tag(mi_heap_t* heap, uint8_t tag);
-void       _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
-bool       _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
-void       _mi_heap_page_reclaim(mi_heap_t* heap, mi_page_t* page);
+void        _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag);
+void        _mi_heap_destroy_pages(mi_heap_t* heap);
+void        _mi_heap_collect_abandon(mi_heap_t* heap);
+void        _mi_heap_set_default_direct(mi_heap_t* heap);
+bool        _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid);
+void        _mi_heap_unsafe_destroy_all(void);
+mi_heap_t*  _mi_heap_by_tag(mi_heap_t* heap, uint8_t tag);
+void        _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
+bool        _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
+void        _mi_heap_page_reclaim(mi_heap_t* heap, mi_page_t* page);
 
 // "stats.c"
-void       _mi_stats_done(mi_stats_t* stats);
+void        _mi_stats_done(mi_stats_t* stats);
 mi_msecs_t  _mi_clock_now(void);
 mi_msecs_t  _mi_clock_end(mi_msecs_t start);
 mi_msecs_t  _mi_clock_start(void);
@@ -226,20 +212,6 @@ void*       _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool zero, siz
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
 mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
 void        _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
-// bool        _mi_free_delayed_block(mi_block_t* block);
-
-
-// "libc.c"
-#include    <stdarg.h>
-void        _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args);
-void        _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...);
-char        _mi_toupper(char c);
-int         _mi_strnicmp(const char* s, const char* t, size_t n);
-void        _mi_strlcpy(char* dest, const char* src, size_t dest_size);
-void        _mi_strlcat(char* dest, const char* src, size_t dest_size);
-size_t      _mi_strlen(const char* s);
-size_t      _mi_strnlen(const char* s, size_t max_len);
-bool        _mi_getenv(const char* name, char* result, size_t result_size);
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
@@ -449,9 +421,6 @@ static inline uintptr_t _mi_ptr_cookie(const void* p) {
   return ((uintptr_t)p ^ _mi_heap_main.cookie);
 }
 
-static inline mi_tld_t* _mi_tld(void) {
-  return mi_heap_get_default()->tld;
-}
 
 /* -----------------------------------------------------------
   Pages
@@ -908,6 +877,16 @@ static inline mi_memid_t _mi_memid_create_os(void* base, size_t size, bool commi
   return memid;
 }
 
+static inline mi_memid_t _mi_memid_create_meta(void* mpage, size_t block_idx, size_t block_count) {
+  mi_memid_t memid = _mi_memid_create(MI_MEM_META);
+  memid.mem.meta.meta_page = mpage;
+  memid.mem.meta.block_index = (uint32_t)block_idx;
+  memid.mem.meta.block_count = (uint32_t)block_count;
+  memid.initially_committed = true;
+  memid.initially_zero = true;
+  memid.is_pinned = true;
+  return memid;
+}
 
 // -------------------------------------------------------------------
 // Fast "random" shuffle
@@ -937,13 +916,13 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
 // Optimize numa node access for the common case (= one node)
 // -------------------------------------------------------------------
 
-int    _mi_os_numa_node_get(mi_os_tld_t* tld);
+int    _mi_os_numa_node_get(void);
 size_t _mi_os_numa_node_count_get(void);
 
 extern _Atomic(size_t) _mi_numa_node_count;
-static inline int _mi_os_numa_node(mi_os_tld_t* tld) {
+static inline int _mi_os_numa_node(void) {
   if mi_likely(mi_atomic_load_relaxed(&_mi_numa_node_count) == 1) { return 0; }
-  else return _mi_os_numa_node_get(tld);
+  else return _mi_os_numa_node_get();
 }
 static inline size_t _mi_os_numa_node_count(void) {
   const size_t count = mi_atomic_load_relaxed(&_mi_numa_node_count);

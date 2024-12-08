@@ -96,6 +96,8 @@ const mi_page_t _mi_page_empty = {
 // may lead to allocation itself on some platforms)
 // --------------------------------------------------------
 
+#define MI_MEMID_STATIC  {{{0}},true /* pinned */, true /* committed */, false /* zero */, MI_MEM_STATIC }
+
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,
   // MI_ATOMIC_VAR_INIT(NULL),  // thread delayed free
@@ -107,6 +109,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next
+  MI_MEMID_STATIC,  // memid
   false,            // can reclaim
   true,             // can eager abandon
   0,                // tag
@@ -135,9 +138,9 @@ static mi_decl_cache_align mi_tld_t tld_main = {
   &_mi_heap_main, &_mi_heap_main,
   &mi_subproc_default,    // subproc
   0,                      // tseq
+  MI_MEMID_STATIC,        // memid
   false,                  // recurse
   false,                  // is_in_threadpool
-  { 0, &tld_main.stats }, // os
   { MI_STATS_NULL }       // stats
 };
 
@@ -152,6 +155,7 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
+  MI_MEMID_STATIC,  // memid
   true,             // allow page reclaim
   true,             // allow page abandon
   0,                // tag
@@ -231,6 +235,47 @@ mi_heap_t* _mi_heap_main_get(void) {
 
 
 /* -----------------------------------------------------------
+  Thread local data
+----------------------------------------------------------- */
+
+// Thread sequence number
+static _Atomic(size_t) mi_tcount;
+
+// The mimalloc thread local data 
+mi_decl_thread mi_tld_t* mi_tld;
+
+// Allocate fresh tld
+static mi_tld_t* mi_tld_alloc(void) {
+  if (_mi_is_main_thread()) {
+    return &tld_main;
+  }
+  else {
+    mi_memid_t memid;
+    mi_tld_t* tld = (mi_tld_t*)_mi_meta_zalloc(sizeof(mi_tld_t), &memid);
+    if (tld==NULL) {
+      _mi_error_message(ENOMEM, "unable to allocate memory for thread local data\n");
+      return NULL;
+    }
+    tld->memid = memid;
+    tld->heap_backing = NULL;
+    tld->heaps = NULL;
+    tld->subproc = &mi_subproc_default;
+    tld->tseq = mi_atomic_add_acq_rel(&mi_tcount, 1);
+    tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
+    return tld;
+  }
+}
+
+mi_tld_t* _mi_tld(void) {
+  if (mi_tld==NULL) {
+    mi_tld = mi_tld_alloc();
+  }
+  return mi_tld;
+}
+
+
+
+/* -----------------------------------------------------------
   Sub process
 ----------------------------------------------------------- */
 
@@ -239,11 +284,11 @@ mi_subproc_id_t mi_subproc_main(void) {
 }
 
 mi_subproc_id_t mi_subproc_new(void) {
-  mi_memid_t memid = _mi_memid_none();
-  mi_subproc_t* subproc = (mi_subproc_t*)_mi_arena_meta_zalloc(sizeof(mi_subproc_t), &memid);
+  mi_memid_t memid;
+  mi_subproc_t* subproc = (mi_subproc_t*)_mi_meta_zalloc(sizeof(mi_subproc_t),&memid);
   if (subproc == NULL) return NULL;
-  subproc->memid = memid;
   subproc->abandoned_os_list = NULL;
+  subproc->memid = memid;
   mi_lock_init(&subproc->abandoned_os_lock);
   mi_lock_init(&subproc->abandoned_os_visit_lock);
   return subproc;
@@ -269,7 +314,7 @@ void mi_subproc_delete(mi_subproc_id_t subproc_id) {
   // todo: should we refcount subprocesses?
   mi_lock_done(&subproc->abandoned_os_lock);
   mi_lock_done(&subproc->abandoned_os_visit_lock);
-  _mi_arena_meta_free(subproc, subproc->memid, sizeof(mi_subproc_t));
+  _mi_meta_free(subproc, sizeof(mi_subproc_t), subproc->memid);
 }
 
 void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
@@ -281,93 +326,9 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
 }
 
 
-
 /* -----------------------------------------------------------
-  Initialization and freeing of the thread local heaps
+  Allocate heap data
 ----------------------------------------------------------- */
-
-// note: in x64 in release build `sizeof(mi_thread_data_t)` is under 4KiB (= OS page size).
-typedef struct mi_thread_data_s {
-  mi_heap_t  heap;   // must come first due to cast in `_mi_heap_done`
-  mi_tld_t   tld;
-  mi_memid_t memid;  // must come last due to zero'ing
-} mi_thread_data_t;
-
-
-// Thread meta-data is allocated directly from the OS. For
-// some programs that do not use thread pools and allocate and
-// destroy many OS threads, this may causes too much overhead
-// per thread so we maintain a small cache of recently freed metadata.
-
-#define TD_CACHE_SIZE (32)
-static _Atomic(mi_thread_data_t*) td_cache[TD_CACHE_SIZE];
-
-static mi_thread_data_t* mi_thread_data_zalloc(void) {
-  // try to find thread metadata in the cache
-  bool is_zero = false;
-  mi_thread_data_t* td = NULL;
-  for (int i = 0; i < TD_CACHE_SIZE; i++) {
-    td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
-    if (td != NULL) {
-      // found cached allocation, try use it
-      td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL);
-      if (td != NULL) {
-        break;
-      }
-    }
-  }
-
-  // if that fails, allocate as meta data
-  if (td == NULL) {
-    mi_memid_t memid;
-    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
-    if (td == NULL) {
-      // if this fails, try once more. (issue #257)
-      td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
-      if (td == NULL) {
-        // really out of memory
-        _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
-      }
-    }
-    if (td != NULL) {
-      td->memid = memid;
-      is_zero = memid.initially_zero;
-    }
-  }
-
-  if (td != NULL && !is_zero) {
-    _mi_memzero_aligned(td, offsetof(mi_thread_data_t,memid));
-  }
-  return td;
-}
-
-static void mi_thread_data_free( mi_thread_data_t* tdfree ) {
-  // try to add the thread metadata to the cache
-  for (int i = 0; i < TD_CACHE_SIZE; i++) {
-    mi_thread_data_t* td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
-    if (td == NULL) {
-      mi_thread_data_t* expected = NULL;
-      if (mi_atomic_cas_ptr_weak_acq_rel(mi_thread_data_t, &td_cache[i], &expected, tdfree)) {
-        return;
-      }
-    }
-  }
-  // if that fails, just free it directly
-  _mi_os_free(tdfree, sizeof(mi_thread_data_t), tdfree->memid, &_mi_stats_main);
-}
-
-void _mi_thread_data_collect(void) {
-  // free all thread metadata from the cache
-  for (int i = 0; i < TD_CACHE_SIZE; i++) {
-    mi_thread_data_t* td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
-    if (td != NULL) {
-      td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL);
-      if (td != NULL) {
-        _mi_os_free(td, sizeof(mi_thread_data_t), td->memid, &_mi_stats_main);
-      }
-    }
-  }
-}
 
 // Initialize the thread local default heap, called from `mi_thread_init`
 static bool _mi_thread_heap_init(void) {
@@ -380,32 +341,21 @@ static bool _mi_thread_heap_init(void) {
     //mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_prim_get_default_heap());
   }
   else {
-    // use `_mi_os_alloc` to allocate directly from the OS
-    mi_thread_data_t* td = mi_thread_data_zalloc();
-    if (td == NULL) return false;
-
-    mi_tld_t*  tld = &td->tld;
-    mi_heap_t* heap = &td->heap;
-    _mi_tld_init(tld, heap);  // must be before `_mi_heap_init`
-    _mi_heap_init(heap, tld, _mi_arena_id_none(), false /* can reclaim */, 0 /* default tag */);
+    // allocate heap and thread local data
+    mi_tld_t* tld = _mi_tld();  // allocates & initializes tld if needed
+    mi_memid_t memid;
+    mi_heap_t* heap = (tld == NULL ? NULL : (mi_heap_t*)_mi_meta_zalloc(sizeof(mi_heap_t), &memid));
+    if (heap==NULL || tld==NULL) {
+      _mi_error_message(ENOMEM, "unable to allocate heap meta-data\n");
+      return false;
+    }
+    heap->memid = memid;
+    _mi_heap_init(heap, _mi_arena_id_none(), false /* can reclaim */, 0 /* default tag */);
     _mi_heap_set_default_direct(heap);
   }
   return false;
 }
 
-// Thread sequence number
-static _Atomic(size_t) mi_tcount;
-
-// initialize thread local data
-void _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap) {
-  _mi_memzero_aligned(tld,sizeof(mi_tld_t));
-  tld->heap_backing = bheap;
-  tld->heaps = NULL;
-  tld->subproc = &mi_subproc_default;
-  tld->tseq = mi_atomic_add_acq_rel(&mi_tcount, 1);
-  tld->os.stats = &tld->stats;
-  tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
-}
 
 // Free the thread local default heap (called from `mi_thread_done`)
 static bool _mi_thread_heap_done(mi_heap_t* heap) {
@@ -441,7 +391,7 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
 
   // free if not the main thread
   if (heap != &_mi_heap_main) {
-    mi_thread_data_free((mi_thread_data_t*)heap);
+    _mi_meta_free(heap, sizeof(mi_heap_t), heap->memid);
   }
   else {
     #if 0
@@ -533,7 +483,13 @@ void _mi_thread_done(mi_heap_t* heap)
   if (heap->thread_id != _mi_thread_id()) return;
 
   // abandon the thread local heap
-  if (_mi_thread_heap_done(heap)) return;  // returns true if already ran
+  _mi_thread_heap_done(heap);  // returns true if already ran
+
+  // free thread local data
+  if (mi_tld != NULL) {
+    _mi_meta_free(mi_tld, sizeof(mi_tld_t), mi_tld->memid);
+    mi_tld = NULL;
+  }
 }
 
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
@@ -689,7 +645,7 @@ void mi_cdecl _mi_process_done(void) {
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
     mi_collect(true /* force */);
     _mi_heap_unsafe_destroy_all();     // forcefully release all memory held by all heaps (of this thread only!)
-    _mi_arena_unsafe_destroy_all(& _mi_heap_main_get()->tld->stats);
+    _mi_arena_unsafe_destroy_all();
   }
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {

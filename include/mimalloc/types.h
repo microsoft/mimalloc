@@ -155,6 +155,7 @@ typedef enum mi_memkind_e {
   MI_MEM_NONE,      // not allocated
   MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
   MI_MEM_STATIC,    // allocated in a static area and should not be freed (for arena meta data for example)
+  MI_MEM_META,      // allocated with the meta data allocator
   MI_MEM_OS,        // allocated from the OS
   MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
@@ -164,6 +165,11 @@ typedef enum mi_memkind_e {
 static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
   return (memkind >= MI_MEM_OS && memkind <= MI_MEM_OS_REMAP);
 }
+
+static inline bool mi_memkind_needs_no_free(mi_memkind_t memkind) {
+  return (memkind <= MI_MEM_STATIC);
+}
+
 
 typedef struct mi_memid_os_info {
   void*         base;               // actual base address of the block (used for offset aligned allocations)
@@ -178,10 +184,17 @@ typedef struct mi_memid_arena_info {
   bool          is_exclusive;       // this arena can only be used for specific arena allocations
 } mi_memid_arena_info_t;
 
+typedef struct mi_memid_meta_info {
+  void*         meta_page;          // meta-page that contains the block
+  uint32_t      block_index;        // block index in the meta-data page
+  uint32_t      block_count;        // allocated blocks
+} mi_memid_meta_info_t;
+
 typedef struct mi_memid_s {
   union {
     mi_memid_os_info_t    os;       // only used for MI_MEM_OS
     mi_memid_arena_info_t arena;    // only used for MI_MEM_ARENA
+    mi_memid_meta_info_t  meta;     // only used for MI_MEM_META
   } mem;
   bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)
   bool          initially_committed;// `true` if the memory was originally allocated as committed
@@ -189,6 +202,14 @@ typedef struct mi_memid_s {
   mi_memkind_t  memkind;
 } mi_memid_t;
 
+
+static inline bool mi_memid_is_os(mi_memid_t memid) {
+  return mi_memkind_is_os(memid.memkind);
+}
+
+static inline bool mi_memid_needs_no_free(mi_memid_t memid) {
+  return mi_memkind_needs_no_free(memid.memkind);
+}
 
 // ------------------------------------------------------
 // Mimalloc pages contain allocated blocks
@@ -399,7 +420,8 @@ struct mi_heap_s {
   size_t                page_retired_min;                    // smallest retired index (retired pages are fully free, but still in the page queues)
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   mi_heap_t*            next;                                // list of heaps per thread
-  bool                  allow_page_reclaim;                  // `true` if this heap can reclaim abandoned pages
+  mi_memid_t            memid;                               // provenance of the heap struct itseft (meta or os)
+  bool                  allow_page_reclaim;                  // `true` if this heap should not reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this heap can abandon pages to reduce memory footprint
   uint8_t               tag;                                 // custom tag, can be used for separating heaps based on the object types
   #if MI_GUARDED
@@ -560,12 +582,6 @@ struct mi_subproc_s {
 typedef int64_t  mi_msecs_t;
 
 
-// OS thread local data
-typedef struct mi_os_tld_s {
-  size_t                region_idx;   // start point for next allocation
-  mi_stats_t*           stats;        // points to tld stats
-} mi_os_tld_t;
-
 // Thread local data
 struct mi_tld_s {
   unsigned long long  heartbeat;        // monotonic heartbeat count
@@ -573,9 +589,9 @@ struct mi_tld_s {
   mi_heap_t*          heaps;            // list of heaps in this thread (so we can abandon all when the thread terminates)
   mi_subproc_t*       subproc;          // sub-process this thread belongs to.
   size_t              tseq;             // thread sequence id
+  mi_memid_t          memid;            // provenance of the tld memory itself (meta or OS)
   bool                recurse;          // true if deferred was called; used to prevent infinite recursion.
   bool                is_in_threadpool; // true if this thread is part of a threadpool (and can run arbitrary tasks)
-  mi_os_tld_t         os;               // os tld
   mi_stats_t          stats;            // statistics
 };
 

@@ -29,7 +29,7 @@ bool _mi_page_map_init(void) {
   // mi_bitmap_init(&mi_page_map_commit, MI_BITMAP_MIN_BIT_COUNT, true);
 
   mi_page_map_all_committed = (page_map_size <= 1*MI_MiB); // _mi_os_has_overcommit(); // commit on-access on Linux systems?
-  _mi_page_map = (uint8_t*)_mi_os_alloc_aligned(page_map_size, 1, mi_page_map_all_committed, true, &mi_page_map_memid, NULL);
+  _mi_page_map = (uint8_t*)_mi_os_alloc_aligned(page_map_size, 1, mi_page_map_all_committed, true, &mi_page_map_memid);
   if (_mi_page_map==NULL) {
     _mi_error_message(ENOMEM, "unable to reserve virtual memory for the page map (%zu KiB)\n", page_map_size / MI_KiB);
     return false;
@@ -41,7 +41,7 @@ bool _mi_page_map_init(void) {
   // commit the first part so NULL pointers get resolved without an access violation
   if (!mi_page_map_all_committed) {
     bool is_zero;
-    _mi_os_commit(_mi_page_map, _mi_os_page_size(), &is_zero, NULL);
+    _mi_os_commit(_mi_page_map, _mi_os_page_size(), &is_zero);
     if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(_mi_page_map, _mi_os_page_size()); }
   }
   _mi_page_map[0] = 1; // so _mi_ptr_page(NULL) == NULL
@@ -60,7 +60,7 @@ static void mi_page_map_ensure_committed(size_t idx, size_t slice_count) {
         bool is_zero;
         uint8_t* const start = _mi_page_map + (i*mi_page_map_entries_per_commit_bit);
         const size_t   size = mi_page_map_entries_per_commit_bit;
-        _mi_os_commit(start, size, &is_zero, NULL);
+        _mi_os_commit(start, size, &is_zero);
         if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(start,size); }
         mi_bitmap_set(&mi_page_map_commit, i);
       }

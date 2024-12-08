@@ -17,6 +17,11 @@ terms of the MIT license. A copy of the license can be found in the file
 // Dynamically bind Windows API points for portability
 //---------------------------------------------
 
+#if defined(_MSC_VER)
+#pragma warning(disable:28159)  // don't use GetVersion
+#pragma warning(disable:4996)   // don't use GetVersion
+#endif
+
 static DWORD win_major_version = 6;
 static DWORD win_minor_version = 0;
 
@@ -126,8 +131,8 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   SYSTEM_INFO si;
   GetSystemInfo(&si);
   if (si.dwPageSize > 0) { config->page_size = si.dwPageSize; }
-  if (si.dwAllocationGranularity > 0) { 
-    config->alloc_granularity = si.dwAllocationGranularity; 
+  if (si.dwAllocationGranularity > 0) {
+    config->alloc_granularity = si.dwAllocationGranularity;
     win_allocation_granularity = si.dwAllocationGranularity;
   }
   // get virtual address bits
@@ -141,7 +146,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     if (memInKiB > 0 && memInKiB < (SIZE_MAX / MI_KiB)) {
       config->physical_memory = (size_t)(memInKiB * MI_KiB);
     }
-  }  
+  }
   // get the VirtualAlloc2 function
   HINSTANCE  hDll;
   hDll = LoadLibrary(TEXT("kernelbase.dll"));
@@ -818,14 +823,13 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   }
 #endif
 
-
 bool _mi_prim_thread_is_in_threadpool(void) {
   #if (MI_ARCH_X64 || MI_ARCH_X86)
   if (win_major_version >= 6) {
     // check if this thread belongs to a windows threadpool
     // see: <https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/teb/index.htm>
     _TEB* const teb = NtCurrentTeb();
-    void* const pool_data = *((void**)((uint8_t*)teb + (MI_SIZE_BITS == 32 ? 0x0F90 : 0x1778))); 
+    void* const pool_data = *((void**)((uint8_t*)teb + (MI_SIZE_BITS == 32 ? 0x0F90 : 0x1778)));
     return (pool_data != NULL);
   }
   #endif
