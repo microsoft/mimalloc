@@ -339,59 +339,6 @@ static void mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
   }
 }
 
-/*
-// Abandon a page with used blocks at the end of a thread.
-// Note: only call if it is ensured that no references exist from
-// the `page->heap->thread_delayed_free` into this page.
-// Currently only called through `mi_heap_collect_ex` which ensures this.
-void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
-  mi_assert_internal(page != NULL);
-  mi_assert_expensive(_mi_page_is_valid(page));
-  mi_assert_internal(pq == mi_page_queue_of(page));
-  mi_assert_internal(mi_page_heap(page) != NULL);
-
-  mi_heap_t* pheap = mi_page_heap(page);
-
-  // remove from our page list
-  mi_page_queue_remove(pq, page);
-
-  // page is no longer associated with our heap
-  mi_assert_internal(mi_page_thread_free_flag(page)==MI_NEVER_DELAYED_FREE);
-  mi_page_set_heap(page, NULL);
-
-#if (MI_DEBUG>1) && !MI_TRACK_ENABLED
-  // check there are no references left..
-  for (mi_block_t* block = (mi_block_t*)pheap->thread_delayed_free; block != NULL; block = mi_block_nextx(pheap, block, pheap->keys)) {
-    mi_assert_internal(_mi_ptr_page(block) != page);
-  }
-#endif
-
-  // and abandon it
-  mi_assert_internal(mi_page_is_abandoned(page));
-  _mi_arena_page_abandon(page, pheap->tld);
-}
-
-// force abandon a page
-void _mi_page_force_abandon(mi_page_t* page) {
-  mi_heap_t* heap = mi_page_heap(page);
-  // mark page as not using delayed free
-  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);
-
-  // ensure this page is no longer in the heap delayed free list
-  _mi_heap_delayed_free_all(heap);
-  // TODO: can we still access the page meta-info even if it is freed?
-  if (page->capacity == 0) return; // it may have been freed now
-
-  // and now unlink it from the page queue and abandon (or free)
-  mi_page_queue_t* pq = mi_heap_page_queue_of(heap, page);
-  if (mi_page_all_free(page)) {
-    _mi_page_free(page, pq, false);
-  }
-  else {
-    _mi_page_abandon(page, pq);
-  }
-}
-*/
 
 // Free a page with no more free blocks
 void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
