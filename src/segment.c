@@ -1059,6 +1059,9 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
   // initialize initial free pages
   if (segment->kind == MI_SEGMENT_NORMAL) { // not a huge page
     mi_assert_internal(huge_page==NULL);
+    if (segment->is_for_large_pages) {
+      tld->large_segment = segment;
+    }
     mi_segment_span_free(segment, info_slices, segment->slice_entries - info_slices, false /* don't purge */, tld);
   }
   else {
@@ -1102,6 +1105,10 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
 
   // stats
   _mi_stat_decrease(&tld->stats->page_committed, mi_segment_info_size(segment));
+
+  if (segment == tld->large_segment) {
+    tld->large_segment = NULL;
+  }
 
   // return it to the OS
   mi_segment_os_free(segment, tld);
@@ -1275,6 +1282,10 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   }
 
   mi_atomic_or_acq_rel(&segment->free_space_mask, free_space_mask);
+
+  if (segment == tld->large_segment) {
+    tld->large_segment = NULL;
+  }
   _mi_arena_segment_mark_abandoned(segment);
 }
 
@@ -1428,6 +1439,9 @@ static mi_segment_t* mi_segment_reclaim(mi_segment_t* segment, mi_heap_t* heap, 
     return NULL;
   }
   else {
+    if (segment->is_for_large_pages) {
+      tld->large_segment = segment;
+    }
     return segment;
   }
 }
@@ -1474,6 +1488,10 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
 
   mi_segment_t* segment;
   size_t free_space_mask = mi_free_space_mask_from_blocksize(block_size);
+  bool is_large_allocation = block_size > MI_MEDIUM_OBJ_SIZE_MAX;
+  mi_segment_t* best_candidate_segment = NULL;
+  int candidates_to_check = 5;
+
   mi_arena_field_cursor_t current; _mi_arena_field_cursor_init2(heap, &current, free_space_mask);
   while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL))
   {
@@ -1495,10 +1513,31 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
       // found a large enough free span, or a page of the right block_size with free space
       // we return the result of reclaim (which is usually `segment`) as it might free
       // the segment due to concurrent frees (in which case `NULL` is returned).
-      mi_segment_t* segmentToReturn = mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
-      if (segmentToReturn != NULL) {
-          mi_segment_increment_reclaimed_stats();
-          return segmentToReturn;
+      if (segment->is_for_large_pages == is_large_allocation)
+      {
+          mi_segment_t* segmentToReturn = mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
+          if (segmentToReturn != NULL) {
+              if (best_candidate_segment != NULL) {
+                  mi_segment_try_purge(best_candidate_segment, true /* true force? */, tld->stats);
+                  _mi_arena_segment_mark_abandoned(best_candidate_segment);
+              }
+              mi_segment_increment_reclaimed_stats();
+              return segmentToReturn;
+          }
+          continue;
+      }
+
+      if (best_candidate_segment == NULL) {
+          best_candidate_segment = segment;
+      }
+      else {
+          mi_segment_try_purge(segment, true /* true force? */, tld->stats); // force purge if needed as we may not visit soon again
+          _mi_arena_segment_mark_abandoned(segment);
+      }
+
+      candidates_to_check--;
+      if (candidates_to_check == 0) {
+        break;
       }
     }
     else if (segment->abandoned_visits > 3 && is_suitable && mi_option_get_size(mi_option_max_segments_per_heap) == 0) {
@@ -1510,6 +1549,11 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
       mi_segment_try_purge(segment, false /* true force? */, tld->stats); // force purge if needed as we may not visit soon again
       _mi_arena_segment_mark_abandoned(segment);
     }
+  }
+
+  if (best_candidate_segment != NULL) {
+      mi_segment_increment_reclaimed_stats();
+      return mi_segment_reclaim(best_candidate_segment, heap, block_size, reclaimed, tld);
   }
 
   mi_segment_increment_reclaim_failed_stats();

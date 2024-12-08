@@ -657,20 +657,31 @@ mi_segment_t* mi_segments_get_segment_to_drop_by_slice(mi_segments_tld_t* tld, s
 const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment);
 
 static mi_segment_t* mi_heap_get_segment_to_drop(mi_heap_t* heap, size_t alloc_block_size) {
-    mi_page_queue_t* fullPageQueue = &heap->pages[MI_BIN_FULL];
     mi_segment_t* segment = NULL;
 
-    if (fullPageQueue->first != NULL) {
-        segment = _mi_ptr_segment(fullPageQueue->first);
-        int i = 0;
-        for (mi_page_t* page = fullPageQueue->first->next; page != NULL && i < 3; page = page->next, i++) {
-            mi_segment_t* temp_segment = _mi_ptr_segment(page);
-            if (temp_segment->used > segment->used) {
+    if ((alloc_block_size > MI_MEDIUM_OBJ_SIZE_MAX) && (heap->tld->segments.large_segment != NULL)) {
+        return heap->tld->segments.large_segment;
+    }
+
+    int i = 0;
+    mi_page_queue_t* fullPageQueue = &heap->pages[MI_BIN_FULL];
+    for (mi_page_t* page = fullPageQueue->first; page != NULL; page = page->next) {
+        mi_segment_t* temp_segment = _mi_ptr_segment(page);
+        if (!temp_segment->is_for_large_pages) {
+            if (segment == NULL) {
                 segment = temp_segment;
             }
+            else if (temp_segment->used > segment->used) {
+                segment = temp_segment;
+            }
+            if (i > 3) {
+                break;
+            }
+            i++;
         }
     }
-    else {
+
+    if (segment == NULL) {
         segment = mi_segments_get_segment_to_drop_by_slice(&heap->tld->segments, alloc_block_size);
     }
 
@@ -745,7 +756,7 @@ void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount, size_t all
 
             // collect abandoned segments (in particular, purge expired parts of segments in the abandoned segment list)
             // note: forced purge can be quite expensive if many threads are created/destroyed so we do not force on abandonment
-            _mi_abandoned_collect(heap, false /* force? */, &heap->tld->segments);
+            _mi_abandoned_collect(heap, true /* force? */, &heap->tld->segments);
         }
     }
 }

@@ -27,23 +27,32 @@ void mi_init_segment_stats()
   _mi_global_segment_stats.allocated_count = 0;
   _mi_global_segment_stats.freed_count = 0;
 
-  static_assert((MI_BIN_HUGE + 1) == sizeof(_mi_global_segment_stats.alloc_stats) / sizeof(_mi_global_segment_stats.alloc_stats[0]));
-  for (int i = 0; i <= MI_BIN_HUGE; i++)
+  static_assert((MI_BIN_FULL + 1) == sizeof(_mi_global_segment_stats.alloc_stats) / sizeof(_mi_global_segment_stats.alloc_stats[0]));
+  for (int i = 0; i <= MI_BIN_FULL; i++)
   {
     size_t block_size = _mi_bin_size((uint8_t)i);
 
     _mi_global_segment_stats.alloc_stats[i].counter = 0;
     _mi_global_segment_stats.alloc_stats[i].block_size = block_size;
   }
-
-  // (MI_FREE_SPACE_MASK_BIT_COUNT-1) combines multiple block sizes. Set it INT32_MAX to distinguish from the rest.
-  _mi_global_segment_stats.alloc_stats[MI_FREE_SPACE_MASK_BIT_COUNT - 1].block_size = INT32_MAX;
 }
 
+uint8_t mi_counter_index_from_block_size(size_t block_size)
+{
+  uint8_t binIndex = 0;
 
+  if (block_size <= MI_LARGE_OBJ_SIZE_MAX){
+    binIndex = _mi_bin(block_size);
+  }
+  else {
+    binIndex = MI_BIN_FULL; // use the last element for Huge allocations
+  }
+
+  return binIndex;
+}
 void mi_segment_increment_alloc_stats(size_t block_size)
 {
-  uint8_t page_queue_index = _mi_bin(block_size);
+  uint8_t page_queue_index = mi_counter_index_from_block_size(block_size);
 
   mi_atomic_increment_relaxed(&_mi_global_segment_stats.alloc_stats[page_queue_index].counter);
   mi_atomic_increment_relaxed(&_mi_global_segment_stats.allocated_count);
@@ -117,17 +126,17 @@ int64_t mi_partitioned_counter_get_value(mi_partitioned_counter_t* counter)
     return retVal;
 }
 
-mi_partitioned_counter_t _mi_allocated_memory[MI_BIN_HUGE+1];
+mi_partitioned_counter_t _mi_allocated_memory[MI_BIN_FULL+1];
 
 void mi_allocation_stats_increment(size_t block_size)
 {
-    uint8_t binIndex = _mi_bin(block_size);
+    uint8_t binIndex = mi_counter_index_from_block_size(block_size);
     mi_partitioned_counter_increment(&_mi_allocated_memory[binIndex], block_size);
 }
 
 void mi_allocation_stats_decrement(size_t block_size)
 {
-    uint8_t binIndex = _mi_bin(block_size);
+    uint8_t binIndex = mi_counter_index_from_block_size(block_size);
     mi_partitioned_counter_decrement(&_mi_allocated_memory[binIndex], block_size);
 }
 
@@ -194,6 +203,9 @@ bool mi_get_segment_stats(size_t* abandoned, size_t* reclaimed, size_t* reclaim_
       allocated_memory[i].counter = 0;
       allocated_memory[i].block_size = allocated_segments[i].block_size;
     }
+
+    // (MI_FREE_SPACE_MASK_BIT_COUNT-1) combines multiple block sizes. Set it INT32_MAX to distinguish from the rest.
+    free_space_in_segments[MI_FREE_SPACE_MASK_BIT_COUNT - 1].block_size = INT32_MAX;
 
     mi_segment_update_free_space_stats(free_space_in_segments);
     mi_update_allocated_memory_stats(allocated_memory, allocated_memory_count);

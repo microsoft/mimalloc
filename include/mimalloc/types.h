@@ -658,7 +658,7 @@ typedef struct mi_segment_stats_s {
   _Atomic(size_t) reclaim_failed_count;
   _Atomic(size_t) allocated_count;
   _Atomic(size_t) freed_count;
-  mi_segment_alloc_counter_t alloc_stats[MI_BIN_HUGE+1];
+  mi_segment_alloc_counter_t alloc_stats[MI_BIN_FULL+1];
 } mi_segment_stats_t;
 
 void _mi_stat_increase(mi_stat_count_t* stat, size_t amount);
@@ -705,6 +705,7 @@ typedef struct mi_os_tld_s {
 typedef struct mi_segments_tld_s {
   mi_span_queue_t     spans[MI_SEGMENT_BIN_MAX+1];  // free slice spans inside segments
   mi_span_queue_t     large_spans[MI_SEGMENT_BIN_MAX+1];  // free slice spans inside large segments
+  mi_segment_t*       large_segment;
   size_t              count;        // current number of segments;
   size_t              peak_count;   // peak number of segments
   size_t              current_size; // current size of all segments
