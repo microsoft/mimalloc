@@ -299,9 +299,9 @@ typedef struct mi_page_s {
 
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads
-  _Atomic(mi_page_flags_t)  xflags;            // `in_full` and `has_aligned` flags 
+  _Atomic(mi_page_flags_t)  xflags;            // `in_full` and `has_aligned` flags
 
-  size_t                    block_size;        // size available in each block (always `>0`)  
+  size_t                    block_size;        // size available in each block (always `>0`)
   uint8_t*                  page_start;        // start of the blocks
   mi_heaptag_t              heap_tag;          // tag of the owning heap, used to separate heaps by object type
   bool                      free_is_zero;      // `true` if the blocks in the free list are zero initialized
@@ -439,7 +439,7 @@ struct mi_heap_s {
 // Arena's
 // These are large reserved areas of memory allocated from
 // the OS that are managed by mimalloc to efficiently
-// allocate MI_SLICE_SIZE slices of memory for the 
+// allocate MI_SLICE_SIZE slices of memory for the
 // mimalloc pages.
 // ------------------------------------------------------
 

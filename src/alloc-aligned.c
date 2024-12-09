@@ -38,7 +38,8 @@ static mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, si
 
 static void* mi_heap_malloc_zero_no_guarded(mi_heap_t* heap, size_t size, bool zero) {
   const size_t rate = heap->guarded_sample_rate;
-  if (rate != 0) { heap->guarded_sample_rate = 0; }   // don't write to constant heap_empty
+  // only write if `rate!=0` so we don't write to the constant `_mi_heap_empty`
+  if (rate != 0) { heap->guarded_sample_rate = 0; }
   void* p = _mi_heap_malloc_zero(heap, size, zero);
   if (rate != 0) { heap->guarded_sample_rate = rate; }
   return p;
@@ -59,7 +60,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
   size_t oversize;
   if mi_unlikely(alignment > MI_PAGE_MAX_OVERALLOC_ALIGN) {
     // use OS allocation for large alignments and allocate inside a singleton page (not in an arena)
-    // This can support alignments >= MI_PAGE_ALIGN by ensuring the object can be aligned 
+    // This can support alignments >= MI_PAGE_ALIGN by ensuring the object can be aligned
     // in the first (and single) page such that the page info is `MI_PAGE_ALIGN` bytes before it (and can be found in the _mi_page_map).
     if mi_unlikely(offset != 0) {
       // todo: cannot support offset alignment for very large alignments yet

@@ -43,8 +43,7 @@ int main() {
   // test_heap_walk();
   // alloc_huge();
 
-  mi_bins();
-
+  // mi_bins();
 
   void* p1 = malloc(78);
   void* p2 = malloc(24);
@@ -281,7 +280,7 @@ static void test_large_pages(void) {
 // bin size experiments
 // ------------------------------
 
-#if 1
+#if 0
 #include <stdint.h>
 #include <stdbool.h>
 #include <mimalloc/bits.h>
@@ -291,6 +290,51 @@ static void test_large_pages(void) {
 #define MI_BIN_HUGE 100
 //#define MI_ALIGN2W
 
+// Bit scan reverse: return the index of the highest bit.
+static inline uint8_t mi_bsr32(uint32_t x);
+
+#if defined(_MSC_VER)
+//#include <Windows.h>
+#include <intrin.h>
+static inline uint8_t mi_bsr32(uint32_t x) {
+  uint32_t idx;
+  _BitScanReverse(&idx, x);
+  return idx;
+}
+#elif defined(__GNUC__) || defined(__clang__)
+static inline uint8_t mi_bsr32(uint32_t x) {
+  return (31 - __builtin_clz(x));
+}
+#else
+static inline uint8_t mi_bsr32(uint32_t x) {
+  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
+  static const uint8_t debruijn[32] = {
+     31,  0, 22,  1, 28, 23, 18,  2, 29, 26, 24, 10, 19,  7,  3, 12,
+     30, 21, 27, 17, 25,  9,  6, 11, 20, 16,  8,  5, 15,  4, 14, 13,
+  };
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  x++;
+  return debruijn[(x*0x076be629) >> 27];
+}
+#endif
+
+
+// Bit scan reverse: return the index of the highest bit.
+uint8_t _mi_bsr(uintptr_t x) {
+  if (x == 0) return 0;
+  #if MI_INTPTR_SIZE==8
+  uint32_t hi = (x >> 32);
+  return (hi == 0 ? mi_bsr32((uint32_t)x) : 32 + mi_bsr32(hi));
+  #elif MI_INTPTR_SIZE==4
+  return mi_bsr32(x);
+  #else
+  # error "define bsr for non-32 or 64-bit platforms"
+  #endif
+}
 
 static inline size_t _mi_wsize_from_size(size_t size) {
   return (size + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);

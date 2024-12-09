@@ -134,7 +134,7 @@ extern mi_heap_t _mi_heap_main;
 static mi_decl_cache_align mi_subproc_t mi_subproc_default;
 
 static mi_decl_cache_align mi_tld_t tld_main = {
-  0, 
+  0,
   &_mi_heap_main, &_mi_heap_main,
   &mi_subproc_default,    // subproc
   0,                      // tseq
@@ -241,7 +241,7 @@ mi_heap_t* _mi_heap_main_get(void) {
 // Thread sequence number
 static _Atomic(size_t) mi_tcount;
 
-// The mimalloc thread local data 
+// The mimalloc thread local data
 mi_decl_thread mi_tld_t* mi_tld;
 
 // Allocate fresh tld

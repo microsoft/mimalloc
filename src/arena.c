@@ -202,7 +202,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
 
   // set the dirty bits
   if (arena->memid.initially_zero) {
-    memid->initially_zero = mi_bitmap_setN(arena->slices_dirty, slice_index, slice_count, NULL);    
+    memid->initially_zero = mi_bitmap_setN(arena->slices_dirty, slice_index, slice_count, NULL);
   }
 
   // set commit state
@@ -584,7 +584,7 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(!os_align || _mi_is_aligned((uint8_t*)page + page_alignment, block_alignment));
 
-  // claimed free slices: initialize the page partly  
+  // claimed free slices: initialize the page partly
   if (!memid.initially_zero) {
     mi_track_mem_undefined(page, slice_count * MI_ARENA_SLICE_SIZE);
     _mi_memzero_aligned(page, sizeof(*page));

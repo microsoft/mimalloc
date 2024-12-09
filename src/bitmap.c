@@ -920,7 +920,7 @@ bool mi_bitmap_xset(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx) {
   }
 }
 
-// Set/clear aligned 8-bits in the bitmap (with `(idx%8)==0`). 
+// Set/clear aligned 8-bits in the bitmap (with `(idx%8)==0`).
 // Returns `true` if atomically transitioned from 0 to 1 (or 1 to 0)
 static bool mi_bitmap_xset8(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx) {
   mi_assert_internal(idx < mi_bitmap_max_bits(bitmap));
