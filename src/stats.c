@@ -128,16 +128,22 @@ int64_t mi_partitioned_counter_get_value(mi_partitioned_counter_t* counter)
 
 mi_partitioned_counter_t _mi_allocated_memory[MI_BIN_FULL+1];
 
+//#define MI_ENABLE_DETAILED_ALOC_COUNTERS
+
 void mi_allocation_stats_increment(size_t block_size)
 {
+#ifdef MI_ENABLE_DETAILED_ALOC_COUNTERS
     uint8_t binIndex = mi_counter_index_from_block_size(block_size);
     mi_partitioned_counter_increment(&_mi_allocated_memory[binIndex], block_size);
+#endif
 }
 
 void mi_allocation_stats_decrement(size_t block_size)
 {
+#ifdef MI_ENABLE_DETAILED_ALOC_COUNTERS
     uint8_t binIndex = mi_counter_index_from_block_size(block_size);
     mi_partitioned_counter_decrement(&_mi_allocated_memory[binIndex], block_size);
+#endif
 }
 
 size_t _mi_arena_segment_abandoned_free_space_stats_next(mi_arena_field_cursor_t* previous);
@@ -207,8 +213,10 @@ bool mi_get_segment_stats(size_t* abandoned, size_t* reclaimed, size_t* reclaim_
     // (MI_FREE_SPACE_MASK_BIT_COUNT-1) combines multiple block sizes. Set it INT32_MAX to distinguish from the rest.
     free_space_in_segments[MI_FREE_SPACE_MASK_BIT_COUNT - 1].block_size = INT32_MAX;
 
+#ifdef MI_ENABLE_DETAILED_ALOC_COUNTERS
     mi_segment_update_free_space_stats(free_space_in_segments);
     mi_update_allocated_memory_stats(allocated_memory, allocated_memory_count);
+#endif
 
     return true;
 }
