@@ -29,7 +29,7 @@ static mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, si
   mi_assert_internal(alignment > 0 && alignment < MI_BLOCK_ALIGNMENT_MAX);
   const size_t oversize = size + alignment - 1;
   void* base = _mi_heap_malloc_guarded(heap, oversize, zero);
-  void* p = mi_align_up_ptr(base, alignment);
+  void* p = _mi_align_up_ptr(base, alignment);
   mi_track_align(base, p, (uint8_t*)p - (uint8_t*)base, size);
   mi_assert_internal(mi_usable_size(p) >= size);
   mi_assert_internal(_mi_is_aligned(p, alignment));
@@ -175,7 +175,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
   }
 
   #if MI_GUARDED
-  if (offset==0 && alignment < MI_BLOCK_ALIGNMENT_MAX && mi_heap_malloc_use_guarded(heap,size)) {
+  if (offset==0 && alignment < MI_PAGE_MAX_OVERALLOC_ALIGN && mi_heap_malloc_use_guarded(heap,size)) {
     return mi_heap_malloc_guarded_aligned(heap, size, alignment, zero);
   }
   #endif

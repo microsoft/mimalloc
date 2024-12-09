@@ -519,7 +519,7 @@ static void mi_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
   const size_t bsize = mi_page_block_size(page);
   const size_t psize = _mi_os_page_size();
   mi_assert_internal(bsize > psize);
-  mi_assert_internal(_mi_page_segment(page)->allow_decommit);
+  mi_assert_internal(!page->memid.is_pinned);
   void* gpage = (uint8_t*)block + bsize - psize;
   mi_assert_internal(_mi_is_aligned(gpage, psize));
   _mi_os_unprotect(gpage, psize);

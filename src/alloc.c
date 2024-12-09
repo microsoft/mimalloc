@@ -619,7 +619,6 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
   block->next = MI_BLOCK_TAG_GUARDED;
 
   // set guard page at the end of the block
-  mi_segment_t* const segment = _mi_page_segment(page);
   const size_t block_size = mi_page_block_size(page);  // must use `block_size` to match `mi_free_local`
   const size_t os_page_size = _mi_os_page_size();
   mi_assert_internal(block_size >= obj_size + os_page_size + sizeof(mi_block_t));
@@ -630,7 +629,7 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
   }
   uint8_t* guard_page = (uint8_t*)block + block_size - os_page_size;
   mi_assert_internal(_mi_is_aligned(guard_page, os_page_size));
-  if (segment->allow_decommit && _mi_is_aligned(guard_page, os_page_size)) {
+  if (!page->memid.is_pinned && _mi_is_aligned(guard_page, os_page_size)) {
     _mi_os_protect(guard_page, os_page_size);
   }
   else {
@@ -640,9 +639,9 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
   // align pointer just in front of the guard page
   size_t offset = block_size - os_page_size - obj_size;
   mi_assert_internal(offset > sizeof(mi_block_t));
-  if (offset > MI_BLOCK_ALIGNMENT_MAX) {
+  if (offset > MI_PAGE_MAX_OVERALLOC_ALIGN) {
     // give up to place it right in front of the guard page if the offset is too large for unalignment
-    offset = MI_BLOCK_ALIGNMENT_MAX;
+    offset = MI_PAGE_MAX_OVERALLOC_ALIGN;
   }
   void* p = (uint8_t*)block + offset;  
   mi_track_align(block, p, offset, obj_size);
