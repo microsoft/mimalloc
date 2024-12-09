@@ -14,6 +14,8 @@ Concurrent bitmap that can set/reset sequences of bits atomically
 #include "mimalloc/bits.h"
 #include "bitmap.h"
 
+#define MI_USE_SIMD   0
+
 /* --------------------------------------------------------------------------------
   bfields
 -------------------------------------------------------------------------------- */
@@ -34,9 +36,9 @@ static inline bool mi_bfield_find_least_bit(mi_bfield_t x, size_t* idx) {
   return mi_bsf(x,idx);
 }
 
-static inline mi_bfield_t mi_bfield_rotate_right(mi_bfield_t x, size_t r) {
-  return mi_rotr(x,r);
-}
+//static inline mi_bfield_t mi_bfield_rotate_right(mi_bfield_t x, size_t r) {
+//  return mi_rotr(x,r);
+//}
 
 static inline mi_bfield_t mi_bfield_zero(void) {
   return 0;
@@ -456,7 +458,7 @@ static inline bool mi_bchunk_try_clearN(mi_bchunk_t* chunk, size_t cidx, size_t 
 
 // ------- mi_bchunk_try_find_and_clear ---------------------------------------
 
-#if defined(__AVX2__)
+#if MI_USE_SIMD && defined(__AVX2__) 
 static inline __m256i mi_mm256_zero(void) {
   return _mm256_setzero_si256();
 }
@@ -471,12 +473,27 @@ static inline bool mi_mm256_is_zero( __m256i vec) {
 }
 #endif
 
+static inline bool mi_bchunk_try_find_and_clear_at(mi_bchunk_t* chunk, size_t chunk_idx, size_t* pidx, bool allow_allset) {
+  mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
+  const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[chunk_idx]);
+  size_t cidx;
+  if (!allow_allset && (~b == 0)) return false;
+  if (mi_bfield_find_least_bit(b, &cidx)) {           // find the least bit
+    if mi_likely(mi_bfield_atomic_try_clear(&chunk->bfields[chunk_idx], cidx, NULL)) {  // clear it atomically
+      *pidx = (chunk_idx*MI_BFIELD_BITS) + cidx;
+      mi_assert_internal(*pidx < MI_BCHUNK_BITS);
+      return true;
+    }
+  }
+  return false;
+}
+
 // Find least 1-bit in a chunk and try to clear it atomically
 // set `*pidx` to the bit index (0 <= *pidx < MI_BCHUNK_BITS) on success.
 // This is used to find free slices and abandoned pages and should be efficient.
 // todo: try neon version
 static inline bool mi_bchunk_try_find_and_clear(mi_bchunk_t* chunk, size_t* pidx) {
-  #if defined(__AVX2__) && (MI_BCHUNK_BITS==256)
+  #if MI_USE_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==256)
   while (true) {
     const __m256i vec = _mm256_load_si256((const __m256i*)chunk->bfields);
     const __m256i vcmp = _mm256_cmpeq_epi64(vec, mi_mm256_zero()); // (elem64 == 0 ? 0xFF  : 0)
@@ -485,19 +502,10 @@ static inline bool mi_bchunk_try_find_and_clear(mi_bchunk_t* chunk, size_t* pidx
     if (mask==0) return false;
     mi_assert_internal((_tzcnt_u32(mask)%8) == 0); // tzcnt == 0, 8, 16, or 24
     const size_t chunk_idx = _tzcnt_u32(mask) / 8;
-    mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
-    const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[chunk_idx]);
-    size_t cidx;
-    if (mi_bfield_find_least_bit(b, &cidx)) {           // find the least bit
-      if mi_likely(mi_bfield_atomic_try_clear(&chunk->bfields[chunk_idx], cidx, NULL)) {  // clear it atomically
-        *pidx = (chunk_idx*MI_BFIELD_BITS) + cidx;
-        mi_assert_internal(*pidx < MI_BCHUNK_BITS);
-        return true;
-      }
-    }
+    if (mi_bchunk_try_find_and_clear_at(chunk, chunk_idx, pidx)) return true;    
     // try again
   }
-  #elif defined(__AVX2__) && (MI_BCHUNK_BITS==512)
+  #elif MI_USE_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==512)
   while (true) {
     size_t chunk_idx = 0;
     #if 0
@@ -528,42 +536,50 @@ static inline bool mi_bchunk_try_find_and_clear(mi_bchunk_t* chunk, size_t* pidx
     mi_assert_internal((_tzcnt_u64(mask)%8) == 0); // tzcnt == 0, 8, 16, 24 , ..
     chunk_idx = _tzcnt_u64(mask) / 8;
     #endif
-    mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
-    const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[chunk_idx]);
-    size_t cidx;
-    if (mi_bfield_find_least_bit(b, &cidx)) {           // find the bit-idx that is clear
-      if mi_likely(mi_bfield_atomic_try_clear(&chunk->bfields[chunk_idx], cidx, NULL)) {  // clear it atomically
-        *pidx = (chunk_idx*MI_BFIELD_BITS) + cidx;
-        mi_assert_internal(*pidx < MI_BCHUNK_BITS);
-        return true;
-      }
-    }
+    if (mi_bchunk_try_find_and_clear_at(chunk, chunk_idx, pidx)) return true;
     // try again
   }
   #else
+  // try first to find a field that is not all set (to reduce fragmentation)
   for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
-    const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
-    size_t idx;
-    if (mi_bfield_find_least_bit(b, &idx)) { // find least 1-bit
-      if mi_likely(mi_bfield_atomic_try_clear(&chunk->bfields[i], idx, NULL)) {  // try to clear it atomically
-        *pidx = (i*MI_BFIELD_BITS + idx);
-        mi_assert_internal(*pidx < MI_BCHUNK_BITS);
-        return true;
-      }
-    }
+    if (mi_bchunk_try_find_and_clear_at(chunk, i, pidx, false /* don't consider allset fields */)) return true;
+  }
+  for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
+    if (mi_bchunk_try_find_and_clear_at(chunk, i, pidx, true)) return true;
   }
   return false;
   #endif
 }
 
 
+static inline bool mi_bchunk_try_find_and_clear8_at(mi_bchunk_t* chunk, size_t chunk_idx, size_t* pidx, bool allow_all_set) {
+  const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[chunk_idx]);
+  if (!allow_all_set && (~b == 0)) return false;
+  // has_set8 has low bit in each byte set if the byte in x == 0xFF
+  const mi_bfield_t has_set8 = 
+    ((~b - MI_BFIELD_LO_BIT8) &      // high bit set if byte in x is 0xFF or < 0x7F
+     (b  & MI_BFIELD_HI_BIT8))       // high bit set if byte in x is >= 0x80
+     >> 7;                           // shift high bit to low bit
+  size_t idx;
+  if (mi_bfield_find_least_bit(has_set8, &idx)) { // find least 1-bit
+    mi_assert_internal(idx <= (MI_BFIELD_BITS - 8));
+    mi_assert_internal((idx%8)==0);
+    const size_t byte_idx = idx/8;
+    if mi_likely(mi_bfield_atomic_try_clear8(&chunk->bfields[chunk_idx], byte_idx, NULL)) {  // unset the byte atomically
+      *pidx = (chunk_idx*MI_BFIELD_BITS) + idx;
+      mi_assert_internal(*pidx + 8 <= MI_BCHUNK_BITS);
+      return true;
+    }
+  }
+  return false;
+}
 
 // find least byte in a chunk with all bits set, and try unset it atomically
 // set `*pidx` to its bit index (0 <= *pidx < MI_BCHUNK_BITS) on success.
 // Used to find medium size pages in the free blocks.
 // todo: try neon version
 static mi_decl_noinline bool mi_bchunk_try_find_and_clear8(mi_bchunk_t* chunk, size_t* pidx) {
-  #if defined(__AVX2__) && (MI_BCHUNK_BITS==512)
+  #if MI_USE_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==512)
   while (true) {
     // since a cache-line is 64b, load all at once
     const __m256i vec1  = _mm256_load_si256((const __m256i*)chunk->bfields);
@@ -588,24 +604,12 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clear8(mi_bchunk_t* chunk, s
     // try again
   }
   #else
+    // first skip allset fields to reduce fragmentation
     for(int i = 0; i < MI_BCHUNK_FIELDS; i++) {
-      const mi_bfield_t x = mi_atomic_load_relaxed(&chunk->bfields[i]);
-      // has_set8 has low bit in each byte set if the byte in x == 0xFF
-      const mi_bfield_t has_set8 = ((~x - MI_BFIELD_LO_BIT8) &      // high bit set if byte in x is 0xFF or < 0x7F
-                                    (x  & MI_BFIELD_HI_BIT8))       // high bit set if byte in x is >= 0x80
-                                    >> 7;                           // shift high bit to low bit
-      size_t idx;
-      if (mi_bfield_find_least_bit(has_set8,&idx)) { // find least 1-bit
-        mi_assert_internal(idx <= (MI_BFIELD_BITS - 8));
-        mi_assert_internal((idx%8)==0);
-        const size_t byte_idx = idx/8;
-        if mi_likely(mi_bfield_atomic_try_clear8(&chunk->bfields[i],byte_idx,NULL)) {  // unset the byte atomically
-          *pidx = (i*MI_BFIELD_BITS) + idx;
-          mi_assert_internal(*pidx + 8 <= MI_BCHUNK_BITS);
-          return true;
-        }
-        // else continue
-      }
+      if (mi_bchunk_try_find_and_clear8_at(chunk, i, pidx, false /* don't allow allset fields */)) return true;
+    }
+    for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
+      if (mi_bchunk_try_find_and_clear8_at(chunk, i, pidx, true /* allow allset fields */)) return true;
     }
     return false;
   #endif
@@ -618,7 +622,7 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clear8(mi_bchunk_t* chunk, s
 // Used to find large size pages in the free blocks.
 // todo: try neon version
 static mi_decl_noinline  bool mi_bchunk_try_find_and_clearX(mi_bchunk_t* chunk, size_t* pidx) {
-  #if defined(__AVX2__) && (MI_BCHUNK_BITS==512)
+  #if MI_USE_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==512)
   while (true) {
     // since a cache-line is 64b, load all at once
     const __m256i vec1 = _mm256_load_si256((const __m256i*)chunk->bfields);
@@ -747,14 +751,14 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clearN_(mi_bchunk_t* chunk, 
 }
 
 
-static inline bool mi_bchunk_try_find_and_clearN(mi_bchunk_t* chunk, size_t n, size_t* pidx) {
-  if (n==1) return mi_bchunk_try_find_and_clear(chunk, pidx);         // small pages
-  if (n==8) return mi_bchunk_try_find_and_clear8(chunk, pidx);        // medium pages
-  if (n==MI_BFIELD_BITS) return mi_bchunk_try_find_and_clearX(chunk, pidx);  // large pages
-  if (n == 0 || n > MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
-  if (n < MI_BFIELD_BITS) return mi_bchunk_try_find_and_clearNX(chunk, n, pidx);
-  return mi_bchunk_try_find_and_clearN_(chunk, n, pidx);
-}
+//static inline bool mi_bchunk_try_find_and_clearN(mi_bchunk_t* chunk, size_t n, size_t* pidx) {
+//  if (n==1) return mi_bchunk_try_find_and_clear(chunk, pidx);         // small pages
+//  if (n==8) return mi_bchunk_try_find_and_clear8(chunk, pidx);        // medium pages
+//  if (n==MI_BFIELD_BITS) return mi_bchunk_try_find_and_clearX(chunk, pidx);  // large pages
+//  if (n == 0 || n > MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
+//  if (n < MI_BFIELD_BITS) return mi_bchunk_try_find_and_clearNX(chunk, n, pidx);
+//  return mi_bchunk_try_find_and_clearN_(chunk, n, pidx);
+//}
 
 
 // ------- mi_bchunk_clear_once_set ---------------------------------------
@@ -779,10 +783,10 @@ static inline bool mi_bchunk_all_are_clear(mi_bchunk_t* chunk) {
 
 // are all bits in a bitmap chunk clear?
 static inline bool mi_bchunk_all_are_clear_relaxed(mi_bchunk_t* chunk) {
-  #if defined(__AVX2__) && (MI_BCHUNK_BITS==256)
+  #if MI_USE_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==256)
   const __m256i vec = _mm256_load_si256((const __m256i*)chunk->bfields);
   return mi_mm256_is_zero(vec);
-  #elif defined(__AVX2__) && (MI_BCHUNK_BITS==512)
+  #elif MI_USE_SIMD &&  defined(__AVX2__) && (MI_BCHUNK_BITS==512)
   // a 64b cache-line contains the entire chunk anyway so load both at once
   const __m256i vec1 = _mm256_load_si256((const __m256i*)chunk->bfields);
   const __m256i vec2 = _mm256_load_si256(((const __m256i*)chunk->bfields)+1);
@@ -796,9 +800,17 @@ static inline bool mi_bchunk_all_are_clear_relaxed(mi_bchunk_t* chunk) {
  bitmap chunkmap
 -------------------------------------------------------------------------------- */
 
+static void mi_bitmap_chunkmap_set_max(mi_bitmap_t* bitmap, size_t chunk_idx) {
+  size_t oldmax = mi_atomic_load_relaxed(&bitmap->chunk_max_accessed);
+  if mi_unlikely(chunk_idx > oldmax) {
+    mi_atomic_cas_strong_relaxed(&bitmap->chunk_max_accessed, &oldmax, chunk_idx);
+  }
+}
+
 static void mi_bitmap_chunkmap_set(mi_bitmap_t* bitmap, size_t chunk_idx) {
   mi_assert(chunk_idx < mi_bitmap_chunk_count(bitmap));
   mi_bchunk_set(&bitmap->chunkmap, chunk_idx);
+  mi_bitmap_chunkmap_set_max(bitmap, chunk_idx);
 }
 
 static bool mi_bitmap_chunkmap_try_clear(mi_bitmap_t* bitmap, size_t chunk_idx) {
@@ -813,11 +825,7 @@ static bool mi_bitmap_chunkmap_try_clear(mi_bitmap_t* bitmap, size_t chunk_idx) 
     mi_bchunk_set(&bitmap->chunkmap, chunk_idx);
     return false;
   }
-  // record the max clear
-  size_t oldmax = mi_atomic_load_relaxed(&bitmap->chunk_max_clear);
-  do {
-    if mi_likely(chunk_idx <= oldmax) break;
-  } while (!mi_atomic_cas_weak_acq_rel(&bitmap->chunk_max_clear, &oldmax, chunk_idx));
+  mi_bitmap_chunkmap_set_max(bitmap, chunk_idx);
   return true;
 }
 
@@ -894,6 +902,9 @@ void mi_bitmap_unsafe_setN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
     mi_bchunk_setN(&bitmap->chunks[chunk_idx], 0, n, NULL);
     mi_bitmap_chunkmap_set(bitmap, chunk_idx);
   }
+
+  // reset max_accessed
+  mi_atomic_store_relaxed(&bitmap->chunk_max_accessed, 0);
 }
 
 
@@ -1027,31 +1038,27 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
   { \
   /* start chunk index -- todo: can depend on the tseq to decrease contention between threads */ \
   MI_UNUSED(tseq); \
-  const size_t chunk_start = 0; /* (tseq % (1+chunk_hi_idx)); */ /* space out threads? */ \
-  const size_t chunkmap_max_bfield = _mi_divide_up( mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS ); \
-  const size_t chunkmap_hi_bfield  = chunkmap_max_bfield; /* chunk_hi_idx / MI_BFIELD_BITS; */\
-  const size_t chunkmap_start = chunk_start / MI_BFIELD_BITS; \
-  const size_t chunkmap_start_idx = chunk_start % MI_BFIELD_BITS; \
+  const size_t chunk_max_acc       = 1 + mi_atomic_load_relaxed(&bitmap->chunk_max_accessed); \
+  const size_t chunk_start         = tseq % chunk_max_acc; /* space out threads? */ \
+  const size_t chunkmap_max        = _mi_divide_up(mi_bitmap_chunk_count(bitmap),MI_BFIELD_BITS); \
+  const size_t chunkmap_max_acc    = _mi_divide_up(chunk_max_acc,MI_BFIELD_BITS); \
+  const size_t chunkmap_start      = chunk_start / MI_BFIELD_BITS; \
   /* for each chunkmap entry `i` */ \
-  for (size_t _i = 0; _i < chunkmap_max_bfield; _i++) { \
+  for (size_t _i = 0; _i < chunkmap_max; _i++) { \
     size_t i; \
-    if (_i < chunkmap_hi_bfield) { \
-      i = _i + chunkmap_start; /* first the chunks up to chunk_hi */ \
-      if (i >= chunkmap_hi_bfield) { i -= chunkmap_hi_bfield; } /* rotate */ \
+    if (_i < chunkmap_max_acc) { /* first the chunks up to chunk_max_accessed */ \
+      i = _i + chunkmap_start;  \
+      if (i >= chunkmap_max_acc) { i -= chunkmap_max_acc; } /* rotate */ \
     } \
-    else { i = _i;  }  /* the rest of the chunks above chunk_hi_idx */ \
+    else { i = _i;  }  /* the rest of the chunks above chunk_max_accessed */ \
     const size_t chunk_idx0 = i*MI_BFIELD_BITS; \
     mi_bfield_t cmap = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]); \
-    size_t      cmap_idx_shift = 0;   /* shift through the cmap */ \
-    if (_i == 0 && chunkmap_start_idx > 0) { \
-      cmap = mi_bfield_rotate_right(cmap, chunkmap_start_idx); /* rotate right for the start position (on the first iteration) */ \
-      cmap_idx_shift = chunkmap_start_idx; \
-    } \
+    /* todo: space out threads within a chunkmap (2GiB) as well? */ \
+    size_t cmap_idx_shift = 0;   /* shift through the cmap */ \
     size_t cmap_idx; \
     while (mi_bfield_find_least_bit(cmap, &cmap_idx)) { \
       /* set the chunk idx */ \
       size_t name_chunk_idx = chunk_idx0 + ((cmap_idx + cmap_idx_shift) % MI_BFIELD_BITS); \
-      mi_assert(chunk_idx < mi_bitmap_chunk_count(bitmap)); \
       /* try to find and clear N bits in that chunk */ \
       {
 
@@ -1064,28 +1071,45 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
     } \
   }}
 
-// Find a sequence of `n` bits in the bitmap with all bits set, and atomically unset all.
-// Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
-// (Used to find fresh free slices -- optimized for n=1, 8, and MI_BFIELD_BITS)
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx)
-{
-  // const size_t chunk_hi_idx = mi_atomic_load_relaxed(&bitmap->chunk_max_clear);
-  mi_bitmap_forall_chunks(bitmap, tseq, chunk_idx)
-  {
-    size_t cidx;
-    if mi_likely(mi_bchunk_try_find_and_clearN(&bitmap->chunks[chunk_idx], n, &cidx)) {
-      *pidx = (chunk_idx * MI_BCHUNK_BITS) + cidx;
-      mi_assert_internal(*pidx + n <= mi_bitmap_max_bits(bitmap));
-      return true;
-    }
-    else {
-      // we may find that all are cleared only on a second iteration but that is ok as
-      // the chunkmap is a conservative approximation.
-      mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx);
-    }
-  }
-  mi_bitmap_forall_chunks_end();
-  return false;
+
+#define mi_bitmap_forall_chunks_try_find_and_clear(bitmap, tseq, pidx, NSUF, NPAR) { \
+  mi_bitmap_forall_chunks(bitmap, tseq, _chunk_idx) { \
+    size_t _cidx; \
+    if mi_likely(mi_bchunk_try_find_and_clear##NSUF(&bitmap->chunks[_chunk_idx] NPAR, &_cidx)) { \
+      *pidx = (_chunk_idx * MI_BCHUNK_BITS) + _cidx; \
+      return true; \
+    } \
+    else { \
+      /* we may find that all are cleared only on a second iteration but that is ok as the chunkmap is a conservative approximation. */ \
+      mi_bitmap_chunkmap_try_clear(bitmap, _chunk_idx); \
+    } \
+  } \
+  mi_bitmap_forall_chunks_end(); \
+  return false; \
+}
+
+#define COMMA ,
+
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
+  mi_bitmap_forall_chunks_try_find_and_clear(bitmap, tseq, pidx, , );
+}
+
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
+  mi_bitmap_forall_chunks_try_find_and_clear(bitmap, tseq, pidx, 8, );
+}
+
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clearX(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
+  mi_bitmap_forall_chunks_try_find_and_clear(bitmap, tseq, pidx, X, );
+}
+
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clearNX(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx) {
+  mi_assert_internal(n<=MI_BFIELD_BITS);
+  mi_bitmap_forall_chunks_try_find_and_clear(bitmap, tseq, pidx, NX, COMMA n);
+}
+
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN_(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx) {
+  mi_assert_internal(n<=MI_BCHUNK_BITS);
+  mi_bitmap_forall_chunks_try_find_and_clear(bitmap, tseq, pidx, N_, COMMA n);
 }
 
 

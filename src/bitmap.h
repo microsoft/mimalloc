@@ -91,8 +91,8 @@ typedef mi_bchunk_t mi_bchunkmap_t;
 
 // An atomic bitmap
 typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bitmap_s {
-  _Atomic(size_t)  chunk_count;      // total count of chunks (0 < N <= MI_BCHUNKMAP_BITS)
-  _Atomic(size_t)  chunk_max_clear;  // max chunk index that was once cleared
+  _Atomic(size_t)  chunk_count;         // total count of chunks (0 < N <= MI_BCHUNKMAP_BITS)
+  _Atomic(size_t)  chunk_max_accessed;  // max chunk index that was once cleared or set
   size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc
   mi_bchunkmap_t   chunkmap;
   mi_bchunk_t      chunks[MI_BITMAP_DEFAULT_CHUNK_COUNT];        // usually dynamic MI_BITMAP_MAX_CHUNK_COUNT
@@ -172,9 +172,23 @@ static inline bool mi_bitmap_is_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n
 }
 
 
+// Specialized versions for common bit sequence sizes
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx);  // 1-bit
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx); // 8-bits
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clearX(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx); // MI_BFIELD_BITS
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clearNX(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx); // < MI_BFIELD_BITS
+mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN_(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx); // > MI_BFIELD_BITS <= MI_BCHUNK_BITS
+
 // Find a sequence of `n` bits in the bitmap with all bits set, and try to atomically clear all.
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx);
+mi_decl_nodiscard static inline bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx) {
+  if (n==1) return mi_bitmap_try_find_and_clear(bitmap, tseq, pidx);               // small pages
+  if (n==8) return mi_bitmap_try_find_and_clear8(bitmap, tseq, pidx);              // medium pages
+  if (n==MI_BFIELD_BITS) return mi_bitmap_try_find_and_clearX(bitmap, tseq, pidx); // large pages
+  if (n == 0 || n > MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
+  if (n < MI_BFIELD_BITS) return mi_bitmap_try_find_and_clearNX(bitmap, tseq, n, pidx);
+  return mi_bitmap_try_find_and_clearN_(bitmap, tseq, n, pidx);
+}
 
 
 // Called once a bit is cleared to see if the memory slice can be claimed.

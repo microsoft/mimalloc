@@ -203,10 +203,9 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
   if (!(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0))) return NULL;
   size = _mi_align_up(size, _mi_os_page_size());
 
-  // try a direct allocation if the alignment is below the default, or if larger than 1/64 fraction of the size (to avoid waste).
-  const bool try_direct_alloc = (alignment <= mi_os_mem_config.alloc_granularity || alignment > size/64);
+  // try a direct allocation if the alignment is below the default, or if larger than 1/8 fraction of the size.
+  const bool try_direct_alloc = (alignment <= mi_os_mem_config.alloc_granularity || alignment > size/8);
 
-  // try first with a requested alignment hint (this will usually be aligned directly on Win 10+ or BSD)
   void* p = NULL;
   if (try_direct_alloc) {
     p = mi_os_prim_alloc(size, alignment, commit, allow_large, is_large, is_zero);
@@ -233,8 +232,8 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       if (p == NULL) return NULL;
 
       // set p to the aligned part in the full region
-      // note: this is dangerous on Windows as VirtualFree needs the actual base pointer
-      // this is handled though by having the `base` field in the memid's
+      // note: on Windows VirtualFree needs the actual base pointer
+      // this is handledby having the `base` field in the memid.
       *base = p; // remember the base
       p = _mi_align_up_ptr(p, alignment);
 
@@ -361,7 +360,7 @@ static void* mi_os_page_align_areax(bool conservative, void* addr, size_t size, 
   if (newsize != NULL) *newsize = 0;
   if (size == 0 || addr == NULL) return NULL;
 
-  // page align conservatively within the range
+  // page align conservatively within the range, or liberally straddling pages outside the range
   void* start = (conservative ? _mi_align_up_ptr(addr, _mi_os_page_size())
     : mi_align_down_ptr(addr, _mi_os_page_size()));
   void* end = (conservative ? mi_align_down_ptr((uint8_t*)addr + size, _mi_os_page_size())
@@ -472,7 +471,7 @@ bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset)
     return needs_recommit;
   }
   else {
-    if (allow_reset) {  // this can sometimes be not allowed if the range is not fully committed
+    if (allow_reset) {  // this can sometimes be not allowed if the range is not fully committed (on Windows, we cannot reset uncommitted memory)
       _mi_os_reset(p, size);
     }
     return false;  // needs no recommit

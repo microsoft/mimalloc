@@ -229,7 +229,7 @@ static inline bool mi_bsf(size_t x, size_t* idx) {
     unsigned long i;
     return (mi_msc_builtinz(_BitScanForward)(&i, x) ? (*idx = (size_t)i, true) : false);
   #else
-    return (x!=0 ? (*idx = mi_ctz(x), true) : false);    
+    return (x!=0 ? (*idx = mi_ctz(x), true) : false);
   #endif
 }
 
@@ -286,6 +286,19 @@ static inline size_t mi_rotl(size_t x, size_t r) {
     // avoid UB when `rshift==0`. See <https://blog.regehr.org/archives/1063>
     const unsigned int rshift = (unsigned int)(r) & (MI_SIZE_BITS-1);
     return ((x << rshift) | (x >> ((-rshift) & (MI_SIZE_BITS-1))));
+  #endif
+}
+
+static inline uint32_t mi_rotl32(uint32_t x, uint32_t r) {
+  #if mi_has_builtin(rotateleft32)
+    return mi_builtin(rotateleft32)(x,r);
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+    return _lrotl(x, (int)r);
+  #else
+    // The term `(-rshift)&(BITS-1)` is written instead of `BITS - rshift` to
+    // avoid UB when `rshift==0`. See <https://blog.regehr.org/archives/1063>
+    const unsigned int rshift = (unsigned int)(r) & 31;
+    return ((x << rshift) | (x >> ((-rshift) & 31)));
   #endif
 }
 

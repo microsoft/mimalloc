@@ -29,7 +29,8 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 ----------------------------------------------------------- */
 
 #define MI_ARENA_BIN_COUNT      (MI_BIN_COUNT)
-
+#define MI_ARENA_MIN_SIZE       (MI_BCHUNK_BITS * MI_ARENA_SLICE_SIZE)           // 32 MiB (or 8 MiB on 32-bit)
+#define MI_ARENA_MAX_SIZE       (MI_BITMAP_MAX_BIT_COUNT * MI_ARENA_SLICE_SIZE)
 
 // A memory arena descriptor
 typedef struct mi_arena_s {
@@ -105,7 +106,7 @@ size_t mi_arena_get_count(void) {
 
 mi_arena_t* mi_arena_from_index(size_t idx) {
   mi_assert_internal(idx < mi_arena_get_count());
-  return mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[idx]);
+  return mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[idx]);
 }
 
 mi_arena_t* mi_arena_from_id(mi_arena_id_t id) {
@@ -235,6 +236,12 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
         }
       }
     }
+    if (memid->initially_zero) {
+      mi_track_mem_defined(p, slice_count * MI_ARENA_SLICE_SIZE);
+    }
+    else {
+      mi_track_mem_undefined(p, slice_count * MI_ARENA_SLICE_SIZE);
+    }
   }
   else {
     // no need to commit, but check if already fully committed
@@ -253,7 +260,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
 // try to reserve a fresh arena space
 static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t req_arena_id, mi_arena_id_t* arena_id)
 {
-  if (_mi_preloading()) return false;  // use OS only while pre loading
+  // if (_mi_preloading()) return false;  // use OS only while pre loading
   if (req_arena_id != _mi_arena_id_none()) return false;
 
   const size_t arena_count = mi_atomic_load_acquire(&mi_arena_count);
@@ -269,8 +276,8 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_SLICE_SIZE);
 
   if (arena_count >= 1 && arena_count <= 128) {
-    // scale up the arena sizes exponentially every 8 entries
-    const size_t multiplier = (size_t)1 << _mi_clamp(arena_count/8, 0, 16);
+    // scale up the arena sizes exponentially every 4 entries
+    const size_t multiplier = (size_t)1 << _mi_clamp(arena_count/4, 0, 16);
     size_t reserve = 0;
     if (!mi_mul_overflow(multiplier, arena_reserve, &reserve)) {
       arena_reserve = reserve;
@@ -278,8 +285,8 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   }
 
   // check arena bounds
-  const size_t min_reserve = 8 * MI_ARENA_SLICE_SIZE; // hope that fits minimal bitmaps?
-  const size_t max_reserve = MI_BITMAP_MAX_BIT_COUNT * MI_ARENA_SLICE_SIZE;  // 16 GiB
+  const size_t min_reserve = MI_ARENA_MIN_SIZE;   
+  const size_t max_reserve = MI_ARENA_MAX_SIZE;   // 16 GiB
   if (arena_reserve < min_reserve) {
     arena_reserve = min_reserve;
   }
@@ -294,7 +301,17 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   if (mi_option_get(mi_option_arena_eager_commit) == 2) { arena_commit = _mi_os_has_overcommit(); }
   else if (mi_option_get(mi_option_arena_eager_commit) == 1) { arena_commit = true; }
 
-  return (mi_reserve_os_memory_ex(arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id) == 0);
+  // and try to reserve the arena
+  int err = mi_reserve_os_memory_ex(arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id); 
+  if (err != 0) {
+    // failed, try a smaller size?
+    const size_t small_arena_reserve = (MI_SIZE_BITS == 32 ? 128*MI_MiB : 1*MI_GiB);
+    if (arena_reserve > small_arena_reserve) {
+      // try again
+      err = mi_reserve_os_memory_ex(small_arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
+    }
+  }
+  return (err==0);
 }
 
 
@@ -317,12 +334,12 @@ static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_id_t req_are
 
 #define mi_forall_arenas(req_arena_id, tseq, name_arena) \
   { \
-  const size_t _arena_count = mi_atomic_load_relaxed(&mi_arena_count); \
+  const size_t _arena_count = mi_arena_get_count(); \
   if (_arena_count > 0) { \
     const size_t _arena_cycle = _arena_count - 1; /* first search the arenas below the last one */ \
     size_t _start; \
     if (req_arena_id == _mi_arena_id_none()) { \
-       /* always start searching in an arena 1 below the max */ \
+       /* always start searching in the arena's below the max */ \
       _start = (_arena_cycle <= 1 ? 0 : (tseq % _arena_cycle)); \
     } \
     else { \
@@ -333,10 +350,10 @@ static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_id_t req_are
       size_t _idx; \
       if (_i < _arena_cycle) { \
         _idx = _i + _start; \
-        if (_idx >= _arena_cycle) { _idx -= _arena_cycle; } /* adjust so we rotate */ \
+        if (_idx >= _arena_cycle) { _idx -= _arena_cycle; } /* adjust so we rotate through the cycle */ \
       } \
       else { \
-        _idx = _i; \
+        _idx = _i; /* remaining arena's */ \
       } \
       mi_arena_t* const name_arena = mi_arena_from_index(_idx); \
       if (name_arena != NULL) \
@@ -396,6 +413,9 @@ again:
 
   // did we need a specific arena?
   if (req_arena_id != _mi_arena_id_none()) return NULL;
+
+  // don't create arena's while preloading (todo: or should we?)
+  if (_mi_preloading()) return NULL;
 
   // otherwise, try to reserve a new arena -- but one thread at a time.. (todo: allow 2 or 4 to reduce contention?)
   if (mi_lock_try_acquire(&mi_arena_reserve_lock)) {
@@ -917,7 +937,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
 // destroy owned arenas; this is unsafe and should only be done using `mi_option_destroy_on_exit`
 // for dynamic libraries that are unloaded and need to release all their allocated memory.
 static void mi_arenas_unsafe_destroy(void) {
-  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  const size_t max_arena = mi_arena_get_count();
   size_t new_max_arena = 0;
   for (size_t i = 0; i < max_arena; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
@@ -949,7 +969,7 @@ void _mi_arena_unsafe_destroy_all(void) {
 
 // Is a pointer inside any of our arenas?
 bool _mi_arena_contains(const void* p) {
-  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  const size_t max_arena = mi_arena_get_count();
   for (size_t i = 0; i < max_arena; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
     if (arena != NULL && mi_arena_start(arena) <= (const uint8_t*)p && mi_arena_start(arena) + mi_size_of_slices(arena->slice_count) > (const uint8_t*)p) {
@@ -1175,7 +1195,7 @@ static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bi
 
 void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge) mi_attr_noexcept {
   MI_UNUSED(show_abandoned);
-  size_t max_arenas = mi_atomic_load_relaxed(&mi_arena_count);
+  size_t max_arenas = mi_arena_get_count();
   size_t free_total = 0;
   size_t slice_total = 0;
   //size_t abandoned_total = 0;
@@ -1331,7 +1351,7 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
 static void mi_arenas_try_purge(bool force, bool visit_all) {
   if (_mi_preloading() || mi_arena_purge_delay() <= 0) return;  // nothing will be scheduled
 
-  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
+  const size_t max_arena = mi_arena_get_count();
   if (max_arena == 0) return;
 
   // _mi_error_message(EFAULT, "purging not yet implemented\n");

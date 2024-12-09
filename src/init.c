@@ -96,7 +96,7 @@ const mi_page_t _mi_page_empty = {
 // may lead to allocation itself on some platforms)
 // --------------------------------------------------------
 
-#define MI_MEMID_STATIC  {{{0}}, true /* pinned */, true /* committed */, false /* zero */, MI_MEM_STATIC }
+#define MI_MEMID_STATIC  {{{NULL,0}}, true /* pinned */, true /* committed */, false /* zero */, MI_MEM_STATIC }
 
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,
