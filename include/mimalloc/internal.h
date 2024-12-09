@@ -459,7 +459,7 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
 }
 
 static inline mi_page_t* _mi_ptr_page(const void* p) {
-  #if MI_DEBUG
+  #if MI_DEBUG || defined(__APPLE__)
   return _mi_checked_ptr_page(p);
   #else
   return _mi_ptr_page_ex(p,NULL);

@@ -12,6 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 mi_decl_cache_align uint8_t* _mi_page_map = NULL;
 static bool        mi_page_map_all_committed = false;
 static size_t      mi_page_map_entries_per_commit_bit = MI_ARENA_SLICE_SIZE;
+static void*       mi_page_map_max_address = NULL;
 static mi_memid_t  mi_page_map_memid;
 
 // (note: we need to initialize statically or otherwise C++ may run a default constructors after process initialization)
@@ -23,12 +24,13 @@ bool _mi_page_map_init(void) {
   if (vbits >= 48) vbits = 47;
   // 1 byte per block =  2 GiB for 128 TiB address space  (48 bit = 256 TiB address space)
   //                    64 KiB for 4 GiB address space (on 32-bit)
+  mi_page_map_max_address = (void*)(MI_PU(1) << vbits);
   const size_t page_map_size = (MI_ZU(1) << (vbits - MI_ARENA_SLICE_SHIFT));
 
   mi_page_map_entries_per_commit_bit = _mi_divide_up(page_map_size, MI_BITMAP_DEFAULT_BIT_COUNT);
   // mi_bitmap_init(&mi_page_map_commit, MI_BITMAP_MIN_BIT_COUNT, true);
 
-  mi_page_map_all_committed = (page_map_size <= 1*MI_MiB); // _mi_os_has_overcommit(); // commit on-access on Linux systems?
+  mi_page_map_all_committed = true; // (page_map_size <= 1*MI_MiB); // _mi_os_has_overcommit(); // commit on-access on Linux systems?
   _mi_page_map = (uint8_t*)_mi_os_alloc_aligned(page_map_size, 1, mi_page_map_all_committed, true, &mi_page_map_memid);
   if (_mi_page_map==NULL) {
     _mi_error_message(ENOMEM, "unable to reserve virtual memory for the page map (%zu KiB)\n", page_map_size / MI_KiB);
@@ -118,8 +120,12 @@ void _mi_page_map_unregister(mi_page_t* page) {
 
 
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
+  // if mi_unlikely(_mi_page_map==NULL) {  // happens on macOS during loading
+  //   _mi_page_map_init();  
+  // }
+  if mi_unlikely(p >= mi_page_map_max_address) return false;
   uintptr_t idx = ((uintptr_t)p >> MI_ARENA_SLICE_SHIFT);
-  if (!mi_page_map_all_committed || mi_bitmap_is_setN(&mi_page_map_commit, idx/mi_page_map_entries_per_commit_bit, 1)) {
+  if (mi_page_map_all_committed || mi_bitmap_is_setN(&mi_page_map_commit, idx/mi_page_map_entries_per_commit_bit, 1)) {
     return (_mi_page_map[idx] != 0);
   }
   else {

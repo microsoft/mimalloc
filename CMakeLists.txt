@@ -330,19 +330,17 @@ endif()
 
 # Determine architecture
 set(MI_OPT_ARCH_FLAGS "")
-set(MI_ARCH "unknown")
-if(APPLE)
-  list(FIND CMAKE_OSX_ARCHITECTURES "x86_64" x64_index)
-  list(FIND CMAKE_OSX_ARCHITECTURES "arm64" arm64_index)
-  if(x64_index GREATER_EQUAL 0)
-    set(MI_ARCH "x64")
-  elseif(arm64_index GREATER_EQUAL 0)
-    set(MI_ARCH "arm64")
-  endif()
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_GENERATOR_PLATFORM STREQUAL "x64")
+set(MI_ARCH "")
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR 
+   CMAKE_GENERATOR_PLATFORM STREQUAL "x64")          # msvc
   set(MI_ARCH "x64")
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" OR   
+       CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64" OR    # apple
+       CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")    # msvc
   set(MI_ARCH "arm64")
+endif()
+if(MI_ARCH)
+  message(STATUS "Architecture: ${MI_ARCH}")
 endif()
 
 # Check /proc/cpuinfo for an SV39 MMU and limit the virtual address bits.
