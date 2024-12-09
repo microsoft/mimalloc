@@ -1028,7 +1028,7 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
   /* start chunk index -- todo: can depend on the tseq to decrease contention between threads */ \
   MI_UNUSED(tseq); \
   const size_t chunk_start = 0; /* (tseq % (1+chunk_hi_idx)); */ /* space out threads? */ \
-  const size_t chunkmap_max_bfield = _mi_divide_up( mi_bitmap_chunk_count(bitmap), MI_BCHUNK_BITS ); \
+  const size_t chunkmap_max_bfield = _mi_divide_up( mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS ); \
   const size_t chunkmap_hi_bfield  = chunkmap_max_bfield; /* chunk_hi_idx / MI_BFIELD_BITS; */\
   const size_t chunkmap_start = chunk_start / MI_BFIELD_BITS; \
   const size_t chunkmap_start_idx = chunk_start % MI_BFIELD_BITS; \

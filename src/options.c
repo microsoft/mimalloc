@@ -68,7 +68,7 @@ typedef struct mi_option_desc_s {
 // in KiB
 #ifndef MI_DEFAULT_ARENA_RESERVE
  #if (MI_INTPTR_SIZE>4)
-  #define MI_DEFAULT_ARENA_RESERVE 1024L*1024L
+  #define MI_DEFAULT_ARENA_RESERVE 8*1024L*1024L
  #else
   #define MI_DEFAULT_ARENA_RESERVE 128L*1024L
  #endif
