@@ -55,11 +55,11 @@ static mi_segmap_part_t* mi_segment_map_index_of(const mi_segment_t* segment, bo
   if (part == NULL) {
     if (!create_on_demand) return NULL;
     mi_memid_t memid;
-    part = (mi_segmap_part_t*)_mi_os_alloc(sizeof(mi_segmap_part_t), &memid, NULL);
+    part = (mi_segmap_part_t*)_mi_os_alloc(sizeof(mi_segmap_part_t), &memid);
     if (part == NULL) return NULL;
     mi_segmap_part_t* expected = NULL;
     if (!mi_atomic_cas_ptr_strong_release(mi_segmap_part_t, &mi_segment_map[segindex], &expected, part)) {
-      _mi_os_free(part, sizeof(mi_segmap_part_t), memid, NULL);
+      _mi_os_free(part, sizeof(mi_segmap_part_t), memid);
       part = expected;
       if (part == NULL) return NULL;
     }

@@ -189,7 +189,7 @@ static void mi_segment_protect_range(void* p, size_t size, bool protect) {
   }
 }
 
-static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t* tld) {
+static void mi_segment_protect(mi_segment_t* segment, bool protect) {
   // add/remove guard pages
   if (MI_SECURE != 0) {
     // in secure mode, we set up a protected page in between the segment info and the page data
@@ -207,7 +207,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect, mi_os_tld_t*
       if (protect && !segment->memid.initially_committed) {
         if (protect) {
           // ensure secure page is committed
-          if (_mi_os_commit(start, os_psize, NULL, tld->stats)) {  // if this fails that is ok (as it is an unaccessible page)
+          if (_mi_os_commit(start, os_psize, NULL)) {  // if this fails that is ok (as it is an unaccessible page)
             mi_segment_protect_range(start, os_psize, protect);
           }
         }
@@ -241,23 +241,23 @@ static void mi_page_purge(mi_segment_t* segment, mi_page_t* page, mi_segments_tl
   if (!segment->allow_purge) return;
   mi_assert_internal(page->used == 0);
   mi_assert_internal(page->free == NULL);
-  mi_assert_expensive(!mi_pages_purge_contains(page, tld));
+  mi_assert_expensive(!mi_pages_purge_contains(page, tld)); MI_UNUSED(tld);
   size_t psize;
   void* start = mi_segment_raw_page_start(segment, page, &psize);
-  const bool needs_recommit = _mi_os_purge(start, psize, tld->stats);
+  const bool needs_recommit = _mi_os_purge(start, psize);
   if (needs_recommit) { page->is_committed = false; }
 }
 
 static bool mi_page_ensure_committed(mi_segment_t* segment, mi_page_t* page, mi_segments_tld_t* tld) {
   if (page->is_committed) return true;
   mi_assert_internal(segment->allow_decommit);
-  mi_assert_expensive(!mi_pages_purge_contains(page, tld));
+  mi_assert_expensive(!mi_pages_purge_contains(page, tld)); MI_UNUSED(tld);
 
   size_t psize;
   uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
   bool is_zero = false;
   const size_t gsize = (MI_SECURE >= 2 ? _mi_os_page_size() : 0);
-  bool ok = _mi_os_commit(start, psize + gsize, &is_zero, tld->stats);
+  bool ok = _mi_os_commit(start, psize + gsize, &is_zero);
   if (!ok) return false; // failed to commit!
   page->is_committed = true;
   page->used = 0;
@@ -502,7 +502,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
 
   if (MI_SECURE != 0) {
     mi_assert_internal(!segment->memid.is_pinned);
-    mi_segment_protect(segment, false, tld->os); // ensure no more guard pages are set
+    mi_segment_protect(segment, false); // ensure no more guard pages are set
   }
 
   bool fully_committed = true;
@@ -516,7 +516,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
   MI_UNUSED(fully_committed);
   mi_assert_internal((fully_committed && committed_size == segment_size) || (!fully_committed && committed_size < segment_size));
 
-  _mi_arena_free(segment, segment_size, committed_size, segment->memid, tld->stats);
+  _mi_arena_free(segment, segment_size, committed_size, segment->memid);
 }
 
 // called from `heap_collect`.
@@ -537,7 +537,7 @@ void _mi_segments_collect(bool force, mi_segments_tld_t* tld) {
 
 static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignment, mi_arena_id_t req_arena_id,
                                          size_t pre_size, size_t info_size, bool commit, size_t segment_size,
-                                         mi_segments_tld_t* tld, mi_os_tld_t* tld_os)
+                                         mi_segments_tld_t* tld)
 {
   mi_memid_t memid;
   bool   allow_large = (!eager_delayed && (MI_SECURE == 0)); // only allow large OS pages once we are no longer lazy
@@ -549,7 +549,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
     segment_size = segment_size + (align_offset - pre_size);  // adjust the segment size
   }
 
-  mi_segment_t* segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, alignment, align_offset, commit, allow_large, req_arena_id, &memid, tld_os);
+  mi_segment_t* segment = (mi_segment_t*)_mi_arena_alloc_aligned(segment_size, alignment, align_offset, commit, allow_large, req_arena_id, &memid);
   if (segment == NULL) {
     return NULL;  // failed to allocate
   }
@@ -557,10 +557,10 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
   if (!memid.initially_committed) {
     // ensure the initial info is committed
     mi_assert_internal(!memid.is_pinned);
-    bool ok = _mi_os_commit(segment, pre_size, NULL, tld_os->stats);
+    bool ok = _mi_os_commit(segment, pre_size, NULL);
     if (!ok) {
       // commit failed; we cannot touch the memory: free the segment directly and return `NULL`
-      _mi_arena_free(segment, segment_size, 0, memid, tld_os->stats);
+      _mi_arena_free(segment, segment_size, 0, memid);
       return NULL;
     }
   }
@@ -578,7 +578,7 @@ static mi_segment_t* mi_segment_os_alloc(bool eager_delayed, size_t page_alignme
 
 // Allocate a segment from the OS aligned to `MI_SEGMENT_SIZE` .
 static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind, size_t page_shift, size_t page_alignment,
-                                      mi_arena_id_t req_arena_id, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
+                                      mi_arena_id_t req_arena_id, mi_segments_tld_t* tld)
 {
   // required is only > 0 for huge page allocations
   mi_assert_internal((required > 0 && page_kind > MI_PAGE_LARGE)|| (required==0 && page_kind <= MI_PAGE_LARGE));
@@ -610,7 +610,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   const bool init_commit = eager; // || (page_kind >= MI_PAGE_LARGE);
 
   // Allocate the segment from the OS (segment_size can change due to alignment)
-  mi_segment_t* segment = mi_segment_os_alloc(eager_delayed, page_alignment, req_arena_id, pre_size, info_size, init_commit, init_segment_size, tld, os_tld);
+  mi_segment_t* segment = mi_segment_os_alloc(eager_delayed, page_alignment, req_arena_id, pre_size, info_size, init_commit, init_segment_size, tld);
   if (segment == NULL) return NULL;
   mi_assert_internal(segment != NULL && (uintptr_t)segment % MI_SEGMENT_SIZE == 0);
   mi_assert_internal(segment->memid.is_pinned ? segment->memid.initially_committed : true);
@@ -638,7 +638,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
   segment->cookie     = _mi_ptr_cookie(segment);
 
   // set protection
-  mi_segment_protect(segment, true, tld->os);
+  mi_segment_protect(segment, true);
 
   // insert in free lists for small and medium pages
   if (page_kind <= MI_PAGE_MEDIUM) {
@@ -1142,7 +1142,7 @@ void mi_collect_reduce(size_t target_size) mi_attr_noexcept {
    Reclaim or allocate
 ----------------------------------------------------------- */
 
-static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, size_t page_shift, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
+static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t block_size, mi_page_kind_t page_kind, size_t page_shift, mi_segments_tld_t* tld)
 {
   mi_assert_internal(page_kind <= MI_PAGE_LARGE);
   mi_assert_internal(block_size <= MI_LARGE_OBJ_SIZE_MAX);
@@ -1164,7 +1164,7 @@ static mi_segment_t* mi_segment_reclaim_or_alloc(mi_heap_t* heap, size_t block_s
     return segment;
   }
   // 2. otherwise allocate a fresh segment
-  return mi_segment_alloc(0, page_kind, page_shift, 0, heap->arena_id, tld, os_tld);
+  return mi_segment_alloc(0, page_kind, page_shift, 0, heap->arena_id, tld);
 }
 
 
@@ -1203,11 +1203,11 @@ static mi_page_t* mi_segment_page_try_alloc_in_queue(mi_heap_t* heap, mi_page_ki
   return NULL;
 }
 
-static mi_page_t* mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, mi_page_kind_t kind, size_t page_shift, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
+static mi_page_t* mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, mi_page_kind_t kind, size_t page_shift, mi_segments_tld_t* tld) {
   mi_page_t* page = mi_segment_page_try_alloc_in_queue(heap, kind, tld);
   if (page == NULL) {
     // possibly allocate or reclaim a fresh segment
-    mi_segment_t* const segment = mi_segment_reclaim_or_alloc(heap, block_size, kind, page_shift, tld, os_tld);
+    mi_segment_t* const segment = mi_segment_reclaim_or_alloc(heap, block_size, kind, page_shift, tld);
     if (segment == NULL) return NULL;  // return NULL if out-of-memory (or reclaimed)
     mi_assert_internal(segment->page_kind==kind);
     mi_assert_internal(segment->used < segment->capacity);
@@ -1222,20 +1222,20 @@ static mi_page_t* mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, mi_p
   return page;
 }
 
-static mi_page_t* mi_segment_small_page_alloc(mi_heap_t* heap, size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
-  return mi_segment_page_alloc(heap, block_size, MI_PAGE_SMALL,MI_SMALL_PAGE_SHIFT,tld,os_tld);
+static mi_page_t* mi_segment_small_page_alloc(mi_heap_t* heap, size_t block_size, mi_segments_tld_t* tld) {
+  return mi_segment_page_alloc(heap, block_size, MI_PAGE_SMALL,MI_SMALL_PAGE_SHIFT,tld);
 }
 
-static mi_page_t* mi_segment_medium_page_alloc(mi_heap_t* heap, size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
-  return mi_segment_page_alloc(heap, block_size, MI_PAGE_MEDIUM, MI_MEDIUM_PAGE_SHIFT, tld, os_tld);
+static mi_page_t* mi_segment_medium_page_alloc(mi_heap_t* heap, size_t block_size, mi_segments_tld_t* tld) {
+  return mi_segment_page_alloc(heap, block_size, MI_PAGE_MEDIUM, MI_MEDIUM_PAGE_SHIFT, tld);
 }
 
 /* -----------------------------------------------------------
    large page allocation
 ----------------------------------------------------------- */
 
-static mi_page_t* mi_segment_large_page_alloc(mi_heap_t* heap, size_t block_size, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
-  mi_segment_t* segment = mi_segment_reclaim_or_alloc(heap,block_size,MI_PAGE_LARGE,MI_LARGE_PAGE_SHIFT,tld,os_tld);
+static mi_page_t* mi_segment_large_page_alloc(mi_heap_t* heap, size_t block_size, mi_segments_tld_t* tld) {
+  mi_segment_t* segment = mi_segment_reclaim_or_alloc(heap,block_size,MI_PAGE_LARGE,MI_LARGE_PAGE_SHIFT,tld);
   if (segment == NULL) return NULL;
   mi_page_t* page = mi_segment_find_free(segment, tld);
   mi_assert_internal(page != NULL);
@@ -1245,9 +1245,9 @@ static mi_page_t* mi_segment_large_page_alloc(mi_heap_t* heap, size_t block_size
   return page;
 }
 
-static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment, mi_arena_id_t req_arena_id, mi_segments_tld_t* tld, mi_os_tld_t* os_tld)
+static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment, mi_arena_id_t req_arena_id, mi_segments_tld_t* tld)
 {
-  mi_segment_t* segment = mi_segment_alloc(size, MI_PAGE_HUGE, MI_SEGMENT_SHIFT + 1, page_alignment, req_arena_id, tld, os_tld);
+  mi_segment_t* segment = mi_segment_alloc(size, MI_PAGE_HUGE, MI_SEGMENT_SHIFT + 1, page_alignment, req_arena_id, tld);
   if (segment == NULL) return NULL;
   mi_assert_internal(mi_segment_page_size(segment) - segment->segment_info_size - (2*(MI_SECURE == 0 ? 0 : _mi_os_page_size())) >= size);
   #if MI_HUGE_PAGE_ABANDON
@@ -1271,7 +1271,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
     mi_assert_internal(psize - (aligned_p - start) >= size);
     uint8_t* decommit_start = start + sizeof(mi_block_t); // for the free list
     ptrdiff_t decommit_size = aligned_p - decommit_start;
-    _mi_os_reset(decommit_start, decommit_size, os_tld->stats);  // do not decommit as it may be in a region
+    _mi_os_reset(decommit_start, decommit_size);  // do not decommit as it may be in a region
   }
 
   return page;
@@ -1318,7 +1318,7 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
     if (usize > sizeof(mi_block_t)) {
       usize = usize - sizeof(mi_block_t);
       uint8_t* p = (uint8_t*)block + sizeof(mi_block_t);
-      _mi_os_reset(p, usize, &_mi_stats_main);
+      _mi_os_reset(p, usize);
     }
   }
 }
@@ -1328,26 +1328,26 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
    Page allocation
 ----------------------------------------------------------- */
 
-mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld, mi_os_tld_t* os_tld) {
+mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld) {
   mi_page_t* page;
   if mi_unlikely(page_alignment > MI_BLOCK_ALIGNMENT_MAX) {
     mi_assert_internal(_mi_is_power_of_two(page_alignment));
     mi_assert_internal(page_alignment >= MI_SEGMENT_SIZE);
     //mi_assert_internal((MI_SEGMENT_SIZE % page_alignment) == 0);
     if (page_alignment < MI_SEGMENT_SIZE) { page_alignment = MI_SEGMENT_SIZE; }
-    page = mi_segment_huge_page_alloc(block_size, page_alignment, heap->arena_id, tld, os_tld);
+    page = mi_segment_huge_page_alloc(block_size, page_alignment, heap->arena_id, tld);
   }
   else if (block_size <= MI_SMALL_OBJ_SIZE_MAX) {
-    page = mi_segment_small_page_alloc(heap, block_size, tld, os_tld);
+    page = mi_segment_small_page_alloc(heap, block_size, tld);
   }
   else if (block_size <= MI_MEDIUM_OBJ_SIZE_MAX) {
-    page = mi_segment_medium_page_alloc(heap, block_size, tld, os_tld);
+    page = mi_segment_medium_page_alloc(heap, block_size, tld);
   }
   else if (block_size <= MI_LARGE_OBJ_SIZE_MAX /* || mi_is_good_fit(block_size, MI_LARGE_PAGE_SIZE - sizeof(mi_segment_t)) */ ) {
-    page = mi_segment_large_page_alloc(heap, block_size, tld, os_tld);
+    page = mi_segment_large_page_alloc(heap, block_size, tld);
   }
   else {
-    page = mi_segment_huge_page_alloc(block_size, page_alignment, heap->arena_id, tld, os_tld);
+    page = mi_segment_huge_page_alloc(block_size, page_alignment, heap->arena_id, tld);
   }
   mi_assert_expensive(page == NULL || mi_segment_is_valid(_mi_page_segment(page),tld));
   mi_assert_internal(page == NULL || (mi_segment_page_size(_mi_page_segment(page)) - (MI_SECURE == 0 ? 0 : _mi_os_page_size())) >= block_size);

@@ -656,12 +656,6 @@ typedef struct mi_segment_queue_s {
   mi_segment_t* last;
 } mi_segment_queue_t;
 
-// OS thread local data
-typedef struct mi_os_tld_s {
-  size_t                region_idx;   // start point for next allocation
-  mi_stats_t*           stats;        // points to tld stats
-} mi_os_tld_t;
-
 // Segments thread local data
 typedef struct mi_segments_tld_s {
   mi_segment_queue_t  small_free;   // queue of segments with free small pages
@@ -674,7 +668,6 @@ typedef struct mi_segments_tld_s {
   size_t              reclaim_count;// number of reclaimed (abandoned) segments
   mi_subproc_t*       subproc;      // sub-process this thread belongs to.
   mi_stats_t*         stats;        // points to tld stats
-  mi_os_tld_t*        os;           // points to os tld
 } mi_segments_tld_t;
 
 // Thread local data
@@ -684,7 +677,6 @@ struct mi_tld_s {
   mi_heap_t*          heap_backing;  // backing heap of this thread (cannot be deleted)
   mi_heap_t*          heaps;         // list of heaps in this thread (so we can abandon all when the thread terminates)
   mi_segments_tld_t   segments;      // segment tld
-  mi_os_tld_t         os;            // os tld
   mi_stats_t          stats;         // statistics
 };
 
