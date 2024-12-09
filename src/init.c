@@ -96,7 +96,7 @@ const mi_page_t _mi_page_empty = {
 // may lead to allocation itself on some platforms)
 // --------------------------------------------------------
 
-#define MI_MEMID_STATIC  {{{0}},true /* pinned */, true /* committed */, false /* zero */, MI_MEM_STATIC }
+#define MI_MEMID_STATIC  {{{0}}, true /* pinned */, true /* committed */, false /* zero */, MI_MEM_STATIC }
 
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,
@@ -250,6 +250,9 @@ static mi_tld_t* mi_tld_alloc(void) {
     return &tld_main;
   }
   else {
+    // allocate tld meta-data
+    // note: we need to be careful to not access the tld from `_mi_meta_zalloc`
+    // (and in turn from `_mi_arena_alloc_aligned` and `_mi_os_alloc_aligned`).
     mi_memid_t memid;
     mi_tld_t* tld = (mi_tld_t*)_mi_meta_zalloc(sizeof(mi_tld_t), &memid);
     if (tld==NULL) {
@@ -414,7 +417,7 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
 // 1. windows dynamic library:
 //     call from DllMain on DLL_THREAD_DETACH
 // 2. windows static library:
-//     use `FlsAlloc` to call a destructor when the thread is done
+//     use special linker section to call a destructor when the thread is done
 // 3. unix, pthreads:
 //     use a pthread key to call a destructor when a pthread is done
 //
