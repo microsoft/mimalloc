@@ -26,7 +26,7 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
 #if MI_GUARDED
 static mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, size_t size, size_t alignment, bool zero) mi_attr_noexcept {
   // use over allocation for guarded blocksl
-  mi_assert_internal(alignment > 0 && alignment < MI_BLOCK_ALIGNMENT_MAX);
+  mi_assert_internal(alignment > 0 && alignment < MI_PAGE_MAX_OVERALLOC_ALIGN);
   const size_t oversize = size + alignment - 1;
   void* base = _mi_heap_malloc_guarded(heap, oversize, zero);
   void* p = _mi_align_up_ptr(base, alignment);
