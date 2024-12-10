@@ -214,7 +214,7 @@ static void mi_heap_main_init(void) {
   if (_mi_heap_main.cookie == 0) {
     _mi_heap_main.thread_id = _mi_thread_id();
     _mi_heap_main.cookie = 1;
-    #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+    #if defined(__APPLE__) || defined(_WIN32) && !defined(MI_SHARED_LIB)
       _mi_random_init_weak(&_mi_heap_main.random);    // prevent allocation failure during bcrypt dll initialization with static linking
     #else
       _mi_random_init(&_mi_heap_main.random);
@@ -344,8 +344,12 @@ static bool _mi_thread_heap_init(void) {
     //mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_prim_get_default_heap());
   }
   else {
-    // allocate heap and thread local data
-    mi_tld_t* tld = _mi_tld();  // allocates & initializes tld if needed
+    // allocates tld data 
+    // note: we cannot access thread-locals yet as that can cause (recursive) allocation (on macOS <= 14 for 
+    // example where the loader allocates thread-local data on demand).
+    mi_tld_t* tld = mi_tld_alloc();  
+    
+    // allocate and initialize the heap
     mi_memid_t memid;
     mi_heap_t* heap = (tld == NULL ? NULL : (mi_heap_t*)_mi_meta_zalloc(sizeof(mi_heap_t), &memid));
     if (heap==NULL || tld==NULL) {
@@ -353,8 +357,13 @@ static bool _mi_thread_heap_init(void) {
       return false;
     }
     heap->memid = memid;
-    _mi_heap_init(heap, _mi_arena_id_none(), false /* can reclaim */, 0 /* default tag */);
+    _mi_heap_init(heap, _mi_arena_id_none(), false /* can reclaim */, 0 /* default tag */, tld);
+
+    // associate the heap with this thread
+    // (this is safe, on macOS for example, the heap is set in a dedicated TLS slot and thus does not cause recursive allocation)
     _mi_heap_set_default_direct(heap);
+    // now that the heap is set for this thread, we can set the thread-local tld.
+    mi_tld = tld; 
   }
   return false;
 }
