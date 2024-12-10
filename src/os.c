@@ -703,7 +703,7 @@ size_t _mi_os_numa_node_count_get(void) {
   return count;
 }
 
-int _mi_os_numa_node_get() {
+int _mi_os_numa_node_get(void) {
   size_t numa_count = _mi_os_numa_node_count();
   if (numa_count<=1) return 0; // optimize on single numa node systems: always node 0
   // never more than the node count and >= 0
