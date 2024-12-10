@@ -160,6 +160,8 @@ static mi_option_desc_t options[_mi_option_last] =
   { 1,   UNINIT, MI_OPTION_LEGACY(reclaim_on_free, abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
   { 2,   UNINIT, MI_OPTION(full_page_retain) },
   { 4,   UNINIT, MI_OPTION(max_page_candidates) },
+  { 0,   UNINIT, MI_OPTION(max_vabits) },
+  { 0,   UNINIT, MI_OPTION(debug_commit_full_pagemap) },
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

@@ -20,8 +20,11 @@ static mi_bitmap_t mi_page_map_commit = { MI_ATOMIC_VAR_INIT(MI_BITMAP_DEFAULT_C
                                           { 0 }, { {MI_ATOMIC_VAR_INIT(0)} }, {{{ MI_ATOMIC_VAR_INIT(0) }}} };
 
 bool _mi_page_map_init(void) {
-  size_t vbits = _mi_os_virtual_address_bits();
-  if (vbits >= 48) vbits = 47;
+  size_t vbits = (size_t)mi_option_get_clamp(mi_option_max_vabits, 0, MI_SIZE_BITS);  
+  if (vbits == 0) {
+    vbits = _mi_os_virtual_address_bits();
+    if (vbits >= 48) { vbits = 47; }
+  }
   // 1 byte per block =  2 GiB for 128 TiB address space  (48 bit = 256 TiB address space)
   //                    64 KiB for 4 GiB address space (on 32-bit)
   mi_page_map_max_address = (void*)(MI_PU(1) << vbits);
@@ -30,7 +33,7 @@ bool _mi_page_map_init(void) {
   mi_page_map_entries_per_commit_bit = _mi_divide_up(page_map_size, MI_BITMAP_DEFAULT_BIT_COUNT);
   // mi_bitmap_init(&mi_page_map_commit, MI_BITMAP_MIN_BIT_COUNT, true);
 
-  mi_page_map_all_committed = true; // (page_map_size <= 1*MI_MiB); // _mi_os_has_overcommit(); // commit on-access on Linux systems?
+  mi_page_map_all_committed = (page_map_size <= 1*MI_MiB || mi_option_is_enabled(mi_option_debug_commit_full_pagemap)); // _mi_os_has_overcommit(); // commit on-access on Linux systems?
   _mi_page_map = (uint8_t*)_mi_os_alloc_aligned(page_map_size, 1, mi_page_map_all_committed, true, &mi_page_map_memid);
   if (_mi_page_map==NULL) {
     _mi_error_message(ENOMEM, "unable to reserve virtual memory for the page map (%zu KiB)\n", page_map_size / MI_KiB);
@@ -52,26 +55,28 @@ bool _mi_page_map_init(void) {
 }
 
 static void mi_page_map_ensure_committed(size_t idx, size_t slice_count) {
-  // is the page map area that contains the page address committed?
-  if (!mi_page_map_all_committed) {
-    const size_t commit_bit_idx_lo = idx / mi_page_map_entries_per_commit_bit;
-    const size_t commit_bit_idx_hi = (idx + slice_count - 1) / mi_page_map_entries_per_commit_bit;
-    for (size_t i = commit_bit_idx_lo; i <= commit_bit_idx_hi; i++) {  // per bit to avoid crossing over bitmap chunks
-      if (mi_bitmap_is_clearN(&mi_page_map_commit, i, 1)) {
-        // this may race, in which case we do multiple commits (which is ok)
+  // is the page map area that contains the page address committed?  
+  // we always set the commit bits so we can track what ranges are in-use.
+  // we only actually commit if the map wasn't committed fully already.
+  const size_t commit_bit_idx_lo = idx / mi_page_map_entries_per_commit_bit;
+  const size_t commit_bit_idx_hi = (idx + slice_count - 1) / mi_page_map_entries_per_commit_bit;
+  for (size_t i = commit_bit_idx_lo; i <= commit_bit_idx_hi; i++) {  // per bit to avoid crossing over bitmap chunks
+    if (mi_bitmap_is_clearN(&mi_page_map_commit, i, 1)) {
+      // this may race, in which case we do multiple commits (which is ok)
+      if (!mi_page_map_all_committed) {
         bool is_zero;
         uint8_t* const start = _mi_page_map + (i*mi_page_map_entries_per_commit_bit);
         const size_t   size = mi_page_map_entries_per_commit_bit;
         _mi_os_commit(start, size, &is_zero);
-        if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(start,size); }
-        mi_bitmap_set(&mi_page_map_commit, i);
+        if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(start, size); }
       }
+      mi_bitmap_set(&mi_page_map_commit, i);
     }
-    #if MI_DEBUG > 0
-    _mi_page_map[idx] = 0;
-    _mi_page_map[idx+slice_count-1] = 0;
-    #endif
   }
+  #if MI_DEBUG > 0
+  _mi_page_map[idx] = 0;
+  _mi_page_map[idx+slice_count-1] = 0;
+  #endif  
 }
 
 static size_t mi_page_map_get_idx(mi_page_t* page, uint8_t** page_start, size_t* slice_count) {

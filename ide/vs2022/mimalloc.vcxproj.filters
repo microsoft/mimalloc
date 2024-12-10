@@ -58,7 +58,9 @@
     <ClCompile Include="..\..\src\page-map.c">
       <Filter>Sources</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\arena-meta.c" />
+    <ClCompile Include="..\..\src\arena-meta.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\bitmap.h">
