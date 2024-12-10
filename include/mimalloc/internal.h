@@ -534,7 +534,7 @@ static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned) {
 
 // Thread id of thread that owns this page
 static inline mi_threadid_t mi_page_thread_id(const mi_page_t* page) {
-  return mi_atomic_load_relaxed(&page->xthread_id);
+  return mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id);
 }
 
 // Thread free access
@@ -605,11 +605,11 @@ static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
 
 static inline bool mi_page_is_abandoned(const mi_page_t* page) {
   // note: the xheap field of an abandoned heap is set to the subproc (for fast reclaim-on-free)
-  return (mi_atomic_load_relaxed(&page->xthread_id) <= 1);
+  return (mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id) <= 1);
 }
 
 static inline bool mi_page_is_abandoned_mapped(const mi_page_t* page) {
-  return (mi_atomic_load_relaxed(&page->xthread_id) == 1);
+  return (mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id) == 1);
 }
 
 static inline void mi_page_set_abandoned_mapped(mi_page_t* page) {
@@ -675,7 +675,7 @@ static inline bool _mi_page_unown(mi_page_t* page) {
 // Page flags
 //-----------------------------------------------------------
 static inline mi_page_flags_t mi_page_flags(const mi_page_t* page) {
-  return mi_atomic_load_relaxed(&page->xflags);
+  return mi_atomic_load_relaxed(&((mi_page_t*)page)->xflags);
 }
 
 static inline void mi_page_flags_set(mi_page_t* page, bool set, mi_page_flags_t newflag) {
