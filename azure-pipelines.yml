@@ -283,7 +283,7 @@ jobs:
     displayName: CTest
 
 - job:
-  displayName: macOS 15 (Sequia)
+  displayName: macOS 15 (Sequoia)
   pool:
     vmImage:
       macOS-15
