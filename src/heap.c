@@ -184,7 +184,7 @@ mi_heap_t* mi_heap_get_backing(void) {
 
 void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag, mi_tld_t* tld) {
   _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(mi_heap_t));
-  heap->tld = (tld == NULL ? _mi_tld() : tld);  // avoid reading the thread-local tld during initialization
+  heap->tld = tld;  // avoid reading the thread-local tld during initialization
   heap->thread_id  = _mi_thread_id();
   heap->arena_id   = arena_id;
   heap->allow_page_reclaim = !noreclaim;
@@ -216,7 +216,7 @@ mi_decl_nodiscard mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi
   mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);  // todo: OS allocate in secure mode?
   if (heap == NULL) return NULL;
   mi_assert(heap_tag >= 0 && heap_tag < 256);
-  _mi_heap_init(heap, arena_id, allow_destroy /* no reclaim? */, (uint8_t)heap_tag /* heap tag */, NULL);
+  _mi_heap_init(heap, arena_id, allow_destroy /* no reclaim? */, (uint8_t)heap_tag /* heap tag */, bheap->tld);
   return heap;
 }
 
