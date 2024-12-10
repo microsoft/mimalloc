@@ -283,7 +283,7 @@ void _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...) {
 #if !MI_HAS_FAST_BITSCAN
 
 static size_t mi_ctz_generic32(uint32_t x) {
-  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
+  // de Bruijn multiplication, see <http://keithandkatie.com/keith/papers/debruijn.html>
   static const uint8_t debruijn[32] = {
     0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
     31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
@@ -293,7 +293,7 @@ static size_t mi_ctz_generic32(uint32_t x) {
 }
 
 static size_t mi_clz_generic32(uint32_t x) {
-  // de Bruijn multiplication, see <http://supertech.csail.mit.edu/papers/debruijn.pdf>
+  // de Bruijn multiplication, see <http://keithandkatie.com/keith/papers/debruijn.html>
   static const uint8_t debruijn[32] = {
     31, 22, 30, 21, 18, 10, 29, 2, 20, 17, 15, 13, 9, 6, 28, 1,
     23, 19, 11, 3, 16, 14, 7, 24, 12, 4, 8, 25, 5, 26, 27, 0

@@ -144,10 +144,30 @@ typedef int32_t  mi_ssize_t;
 #define mi_msc_builtinz(name)    name##64
 #endif
 
-
 /* --------------------------------------------------------------------------------
-  Count trailing/leading zero's
+  Popcount and count trailing/leading zero's
 -------------------------------------------------------------------------------- */
+
+size_t _mi_popcount_generic(size_t x);
+
+static inline size_t mi_popcount(size_t x) {
+  #if mi_has_builtinz(popcount)
+    return mi_builtinz(popcount)(x);
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+    return mi_msc_builtinz(__popcnt)(x);
+  #elif MI_ARCH_X64 && defined(__BMI1__)
+    return (size_t)_mm_popcnt_u64(x);
+  #else
+    #define MI_HAS_FAST_POPCOUNT  0
+    return (x<=1 ? x : _mi_popcount_generic(x));
+  #endif
+}
+
+#ifndef MI_HAS_FAST_POPCOUNT
+#define MI_HAS_FAST_POPCOUNT 1
+#endif
+
+
 
 size_t _mi_clz_generic(size_t x);
 size_t _mi_ctz_generic(size_t x);
@@ -169,6 +189,8 @@ static inline size_t mi_ctz(size_t x) {
     size_t r;
     __asm ("bsf\t%1, %0" : "=r"(r) : "r"(x) : "cc");
     return r;
+  #elif MI_HAS_FAST_POPCOUNT
+    return (x!=0 ? (mi_popcount(x^(x-1))-1) : MI_SIZE_BITS);
   #else
     #define MI_HAS_FAST_BITSCAN  0
     return (x!=0 ? _mi_ctz_generic(x) : MI_SIZE_BITS);
@@ -179,7 +201,7 @@ static inline size_t mi_clz(size_t x) {
   #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 lzcnt is defined for 0
     size_t r;
     __asm ("lzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
-    return r;    
+    return r;
   #elif MI_ARCH_X64 && defined(__BMI1__)
     return (size_t)_lzcnt_u64(x);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
@@ -201,26 +223,6 @@ static inline size_t mi_clz(size_t x) {
 #ifndef MI_HAS_FAST_BITSCAN
 #define MI_HAS_FAST_BITSCAN 1
 #endif
-
-size_t _mi_popcount_generic(size_t x);
-
-static inline size_t mi_popcount(size_t x) {
-  #if mi_has_builtinz(popcount)
-    return mi_builtinz(popcount)(x);
-  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    return mi_msc_builtinz(__popcnt)(x);
-  #elif MI_ARCH_X64 && defined(__BMI1__)
-    return (size_t)_mm_popcnt_u64(x);
-  #else
-    #define MI_HAS_FAST_POPCOUNT  0
-    return (x<=1 ? x : _mi_popcount_generic(x));
-  #endif
-}
-
-#ifndef MI_HAS_FAST_POPCOUNT
-#define MI_HAS_FAST_POPCOUNT 1
-#endif
-
 
 /* --------------------------------------------------------------------------------
   find trailing/leading zero  (bit scan forward/reverse)
