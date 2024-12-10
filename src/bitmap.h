@@ -100,7 +100,7 @@ typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bitmap_s {
 
 
 static inline size_t mi_bitmap_chunk_count(const mi_bitmap_t* bitmap) {
-  return mi_atomic_load_relaxed(&bitmap->chunk_count);
+  return mi_atomic_load_relaxed(&((mi_bitmap_t*)bitmap)->chunk_count);
 }
 
 static inline size_t mi_bitmap_max_bits(const mi_bitmap_t* bitmap) {
