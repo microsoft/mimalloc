@@ -153,9 +153,9 @@ size_t _mi_clz_generic(size_t x);
 size_t _mi_ctz_generic(size_t x);
 
 static inline size_t mi_ctz(size_t x) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)  // on x64 tzcnt is defined for 0
-    uint64_t r;
-    __asm ("tzcnt\t%1, %0" : "=&r"(r) : "r"(x) : "cc");
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 tzcnt is defined for 0
+    size_t r;
+    __asm ("tzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
     return r;
   #elif MI_ARCH_X64 && defined(__BMI1__)
     return (size_t)_tzcnt_u64(x);
@@ -164,6 +164,11 @@ static inline size_t mi_ctz(size_t x) {
     return (mi_msc_builtinz(_BitScanForward)(&idx, x) ? (size_t)idx : MI_SIZE_BITS);
   #elif mi_has_builtinz(ctz)
     return (x!=0 ? (size_t)mi_builtinz(ctz)(x) : MI_SIZE_BITS);
+  #elif defined(__GNUC__) && (MI_ARCH_X64 || MI_ARCH_X86)
+    if (x==0) return MI_SIZE_BITS;
+    size_t r;
+    __asm ("bsf\t%1, %0" : "=r"(r) : "r"(x) : "cc");
+    return r;
   #else
     #define MI_HAS_FAST_BITSCAN  0
     return (x!=0 ? _mi_ctz_generic(x) : MI_SIZE_BITS);
@@ -172,9 +177,9 @@ static inline size_t mi_ctz(size_t x) {
 
 static inline size_t mi_clz(size_t x) {
   #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 lzcnt is defined for 0
-    uint64_t r;
-    __asm ("lzcnt\t%1, %0" : "=&r"(r) : "r"(x) : "cc");
-    return r;
+    size_t r;
+    __asm ("lzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
+    return r;    
   #elif MI_ARCH_X64 && defined(__BMI1__)
     return (size_t)_lzcnt_u64(x);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
@@ -182,6 +187,11 @@ static inline size_t mi_clz(size_t x) {
     return (mi_msc_builtinz(_BitScanReverse)(&idx, x) ? MI_SIZE_BITS - 1 - (size_t)idx : MI_SIZE_BITS);
   #elif mi_has_builtinz(clz)
     return (x!=0 ? (size_t)mi_builtinz(clz)(x) : MI_SIZE_BITS);
+  #elif defined(__GNUC__) && (MI_ARCH_X64 || MI_ARCH_X86)
+    if (x==0) return MI_SIZE_BITS;
+    size_t r;
+    __asm ("bsr\t%1, %0" : "=r"(r) : "r"(x) : "cc");
+    return (MI_SIZE_BITS - 1 - r);
   #else
     #define MI_HAS_FAST_BITSCAN  0
     return (x!=0 ? _mi_clz_generic(x) : MI_SIZE_BITS);
