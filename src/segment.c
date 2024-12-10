@@ -1319,6 +1319,10 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
     tld->medium_segment = NULL;
   }
   else if (segment == tld->large_segment) {
+    // Clear out small object free space in large segments
+    free_space_mask = mi_free_space_mask_from_blocksize(MI_SMALL_OBJ_SIZE_MAX);
+    free_space_mask = free_space_mask | (free_space_mask - 1);
+    mi_atomic_and_acq_rel(&segment->free_space_mask, ~free_space_mask);
     tld->large_segment = NULL;
   }
   _mi_arena_segment_mark_abandoned(segment);
