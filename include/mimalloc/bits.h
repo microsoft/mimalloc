@@ -220,7 +220,7 @@ static inline size_t mi_popcount(size_t x) {
 // return false if `x==0` (with `*idx` undefined) and true otherwise,
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
 static inline bool mi_bsf(size_t x, size_t* idx) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) && (!defined(__clang_major__) || __clang_major__ >= 9)
     // on x64 the carry flag is set on zero which gives better codegen
     bool is_zero;
     __asm ( "tzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc" );
@@ -237,7 +237,7 @@ static inline bool mi_bsf(size_t x, size_t* idx) {
 // return false if `x==0` (with `*idx` undefined) and true otherwise,
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
 static inline bool mi_bsr(size_t x, size_t* idx) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)  && (!defined(__clang_major__) || __clang_major__ >= 9)
     // on x64 the carry flag is set on zero which gives better codegen
     bool is_zero;
     __asm ("lzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc");
