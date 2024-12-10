@@ -659,15 +659,19 @@ const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment);
 static mi_segment_t* mi_heap_get_segment_to_drop(mi_heap_t* heap, size_t alloc_block_size) {
     mi_segment_t* segment = NULL;
 
-    if ((alloc_block_size > MI_MEDIUM_OBJ_SIZE_MAX) && (heap->tld->segments.large_segment != NULL)) {
+    mi_page_kind_t page_kind = mi_page_kind_from_size(alloc_block_size);
+    if ((page_kind == MI_PAGE_LARGE) && (heap->tld->segments.large_segment != NULL)) {
         return heap->tld->segments.large_segment;
+    }
+    if ((page_kind == MI_PAGE_MEDIUM) && (heap->tld->segments.medium_segment != NULL)) {
+        return heap->tld->segments.medium_segment;
     }
 
     int i = 0;
     mi_page_queue_t* fullPageQueue = &heap->pages[MI_BIN_FULL];
     for (mi_page_t* page = fullPageQueue->first; page != NULL; page = page->next) {
         mi_segment_t* temp_segment = _mi_ptr_segment(page);
-        if (!temp_segment->is_for_large_pages) {
+        if (temp_segment->page_kind == MI_PAGE_SMALL) {
             if (segment == NULL) {
                 segment = temp_segment;
             }

@@ -453,7 +453,6 @@ typedef struct mi_segment_s {
   mi_memid_t        memid;              // memory id for arena/OS allocation
   bool              allow_decommit;     // can we decommmit the memory
   bool              allow_purge;        // can we purge the memory (reset or decommit)
-  bool              is_for_large_pages; // this should be part of segment_kind; indicates if segment is used to allocate large pages
   size_t            segment_size;
 
   // segment fields
@@ -475,6 +474,7 @@ typedef struct mi_segment_s {
 
   // layout like this to optimize access in `mi_free`
   mi_segment_kind_t kind;
+  mi_page_kind_t    page_kind;           // this should be part of segment_kind; indicates if the preferred page size of the segment
   size_t            slice_entries;       // entries in the `slices` array, at most `MI_SLICES_PER_SEGMENT`
   _Atomic(mi_threadid_t) thread_id;      // unique id of the thread owning this segment
   _Atomic(size_t)   free_space_mask;     // bitmask that indicates wich allocation sizes are available in this segment
@@ -704,7 +704,9 @@ typedef struct mi_os_tld_s {
 // Segments thread local data
 typedef struct mi_segments_tld_s {
   mi_span_queue_t     spans[MI_SEGMENT_BIN_MAX+1];  // free slice spans inside segments
+  mi_span_queue_t     medium_spans[MI_SEGMENT_BIN_MAX+1];  // free slice spans inside medium segments
   mi_span_queue_t     large_spans[MI_SEGMENT_BIN_MAX+1];  // free slice spans inside large segments
+  mi_segment_t*       medium_segment;
   mi_segment_t*       large_segment;
   size_t              count;        // current number of segments;
   size_t              peak_count;   // peak number of segments

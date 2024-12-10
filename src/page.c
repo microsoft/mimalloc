@@ -758,8 +758,30 @@ mi_page_t* mi_page_queue_find_most_used_page(mi_page_queue_t* pq)
     return mostUsedPage;
 }
 
+mi_page_kind_t mi_page_kind_from_size(size_t block_size)
+{
+  mi_page_kind_t kind;
+
+  if (block_size <= MI_SMALL_OBJ_SIZE_MAX) {
+    kind = MI_PAGE_SMALL;
+  }
+  else if (block_size <= MI_MEDIUM_OBJ_SIZE_MAX) {
+    kind = MI_PAGE_MEDIUM;
+  }
+  else if (block_size <= MI_LARGE_OBJ_SIZE_MAX) {
+    kind = MI_PAGE_LARGE;
+  }
+  else {
+    kind = MI_PAGE_HUGE;
+  }
+  return kind;
+}
+
+void mi_allocation_stats_large_bin_increment(size_t block_size);
+static mi_page_t* mi_find_free_page_from_large_bin(mi_heap_t* heap, mi_page_queue_t* pq);
+
 // Find a page with free blocks of `page->block_size`.
-static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try)
+static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try, bool allow_using_larger_bin)
 {
   // search through the pages in "next fit" order
   #if MI_STAT
@@ -825,11 +847,23 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   mi_heap_stat_counter_increase(heap, searches, count);
 
   if (page == NULL) {
+    if (allow_using_larger_bin) {
+      // Try using a page from a large bind (the next size bin) before allocating a new page
+      page = mi_find_free_page_from_large_bin(heap, pq);
+      if (page != NULL) {
+        mi_allocation_stats_large_bin_increment(pq->block_size);
+        return page;
+      }
+    }
+    else if (!first_try) {
+      return NULL;
+    }
+
     _mi_heap_collect_retired(heap, false); // perhaps make a page available?
     page = mi_page_fresh(heap, pq);
     if (page == NULL && first_try) {
       // out-of-memory _or_ an abandoned page with free blocks was reclaimed, try once again
-      page = mi_page_queue_find_free_ex(heap, pq, false);
+      page = mi_page_queue_find_free_ex(heap, pq, false, true);
     }
   }
   else {
@@ -843,7 +877,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
 
 
 // Find a page with free blocks of `size`.
-static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
+static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size, bool first_try, bool allow_using_larger_bin) {
   mi_page_queue_t* pq = mi_page_queue(heap,size);
   mi_page_t* page = pq->first;
   if (page != NULL) {
@@ -863,9 +897,21 @@ static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
       return page; // fast path
     }
   }
-  return mi_page_queue_find_free_ex(heap, pq, true);
+  return mi_page_queue_find_free_ex(heap, pq, first_try, allow_using_larger_bin);
 }
 
+static mi_page_t* mi_find_free_page_from_large_bin(mi_heap_t* heap, mi_page_queue_t* pq)
+{
+  mi_page_t* page = NULL;
+
+  size_t current_block_size = pq->block_size;
+  // Make sure that the page kind remains the same in the next bin (i.e. so we don't do a small allocation from a medium page)
+  if (mi_page_kind_from_size(current_block_size) == mi_page_kind_from_size(current_block_size + 1)) {
+    page = mi_find_free_page(heap, current_block_size + 1, false, false);
+  }
+
+  return page;
+}
 
 /* -----------------------------------------------------------
   Users can register a deferred free function called
@@ -960,7 +1006,7 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size, size_t huge_alignme
     #if MI_PADDING
     mi_assert_internal(size >= MI_PADDING_SIZE);
     #endif
-    return mi_find_free_page(heap, size);
+    return mi_find_free_page(heap, size, true, size < MI_MEDIUM_OBJ_SIZE_MAX);
   }
 }
 

@@ -1025,4 +1025,6 @@ void mi_segment_increment_reclaim_failed_stats();
 void mi_allocation_stats_increment(size_t block_size);
 void mi_allocation_stats_decrement(size_t block_size);
 
+mi_page_kind_t mi_page_kind_from_size(size_t block_size);
+
 #endif

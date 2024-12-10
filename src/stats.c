@@ -146,6 +146,23 @@ void mi_allocation_stats_decrement(size_t block_size)
 #endif
 }
 
+mi_partitioned_counter_t _mi_allocated_from_large_bin[MI_BIN_FULL+1];
+
+void mi_allocation_stats_large_bin_increment(size_t block_size)
+{
+#ifdef MI_ENABLE_DETAILED_ALOC_COUNTERS
+    uint8_t binIndex = mi_counter_index_from_block_size(block_size);
+    mi_partitioned_counter_increment(&_mi_allocated_from_large_bin[binIndex], 1);
+#endif
+}
+
+void mi_update_allocated_memory_stats_large_bins(mi_allocation_counter_t* allocation_counter, int counter_count)
+{
+  for (int i = 0; i < counter_count; i++) {
+    allocation_counter[i].counter = mi_partitioned_counter_get_value(&_mi_allocated_from_large_bin[i]);
+  }
+}
+
 size_t _mi_arena_segment_abandoned_free_space_stats_next(mi_arena_field_cursor_t* previous);
 void mi_segment_update_free_space_stats(mi_allocation_counter_t* free_space_in_segments)
 {
