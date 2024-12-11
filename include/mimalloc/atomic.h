@@ -5,8 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MIMALLOC_ATOMIC_H
-#define MIMALLOC_ATOMIC_H
+#ifndef MI_ATOMIC_H
+#define MI_ATOMIC_H
 
 // include windows.h or pthreads.h
 #if defined(_WIN32)
@@ -509,4 +509,4 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 
 
 
-#endif // __MIMALLOC_ATOMIC_H
+#endif // MI_ATOMIC_H

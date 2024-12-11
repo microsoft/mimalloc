@@ -5,8 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MIMALLOC_TYPES_H
-#define MIMALLOC_TYPES_H
+#ifndef MI_TYPES_H
+#define MI_TYPES_H
 
 // --------------------------------------------------------------------------
 // This file contains the main type definitions for mimalloc:
@@ -21,12 +21,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
-#include "bits.h"     // bit ops, size defines
-#include "atomic.h"   // _Atomic
-
-#ifdef _MSC_VER
-#pragma warning(disable:4214) // bitfield is not int
-#endif
+#include <errno.h>    // error codes
+#include "bits.h"     // size defines (MI_INTPTR_SIZE etc), bit operations
+#include "atomic.h"   // _Atomic primitives
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `sizeof(void*)`
@@ -351,6 +348,7 @@ typedef enum mi_page_kind_e {
 
 // ------------------------------------------------------
 // Heaps
+// 
 // Provide first-class heaps to allocate from.
 // A heap just owns a set of pages for allocation and
 // can only be allocate/reallocate from the thread that created it.
@@ -425,40 +423,6 @@ struct mi_heap_s {
   mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
 };
 
-
-// ------------------------------------------------------
-// Debug
-// ------------------------------------------------------
-
-#if !defined(MI_DEBUG_UNINIT)
-#define MI_DEBUG_UNINIT     (0xD0)
-#endif
-#if !defined(MI_DEBUG_FREED)
-#define MI_DEBUG_FREED      (0xDF)
-#endif
-#if !defined(MI_DEBUG_PADDING)
-#define MI_DEBUG_PADDING    (0xDE)
-#endif
-
-#if (MI_DEBUG)
-// use our own assertion to print without memory allocation
-void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line, const char* func );
-#define mi_assert(expr)     ((expr) ? (void)0 : _mi_assert_fail(#expr,__FILE__,__LINE__,__func__))
-#else
-#define mi_assert(x)
-#endif
-
-#if (MI_DEBUG>1)
-#define mi_assert_internal    mi_assert
-#else
-#define mi_assert_internal(x)
-#endif
-
-#if (MI_DEBUG>2)
-#define mi_assert_expensive   mi_assert
-#else
-#define mi_assert_expensive(x)
-#endif
 
 // ------------------------------------------------------
 // Statistics
@@ -575,4 +539,28 @@ struct mi_tld_s {
   mi_stats_t          stats;            // statistics
 };
 
+/* -----------------------------------------------------------
+  Error codes passed to `_mi_fatal_error`
+  All are recoverable but EFAULT is a serious error and aborts by default in secure mode.
+  For portability define undefined error codes using common Unix codes:
+  <https://www-numi.fnal.gov/offline_software/srt_public_context/WebDocs/Errors/unix_system_errors.html>
+----------------------------------------------------------- */
+
+#ifndef EAGAIN         // double free
+#define EAGAIN (11)
 #endif
+#ifndef ENOMEM         // out of memory
+#define ENOMEM (12)
+#endif
+#ifndef EFAULT         // corrupted free-list or meta-data
+#define EFAULT (14)
+#endif
+#ifndef EINVAL         // trying to free an invalid pointer
+#define EINVAL (22)
+#endif
+#ifndef EOVERFLOW      // count*size overflow
+#define EOVERFLOW (75)
+#endif
+
+
+#endif // MI_TYPES_H

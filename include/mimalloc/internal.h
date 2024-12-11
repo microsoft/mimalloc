@@ -5,8 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MIMALLOC_INTERNAL_H
-#define MIMALLOC_INTERNAL_H
+#ifndef MI_INTERNAL_H
+#define MI_INTERNAL_H
 
 
 // --------------------------------------------------------------------------
@@ -239,27 +239,42 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #endif
 
 
+// ------------------------------------------------------
+// Debug
+// ------------------------------------------------------
+
+#if !defined(MI_DEBUG_UNINIT)
+#define MI_DEBUG_UNINIT     (0xD0)
+#endif
+#if !defined(MI_DEBUG_FREED)
+#define MI_DEBUG_FREED      (0xDF)
+#endif
+#if !defined(MI_DEBUG_PADDING)
+#define MI_DEBUG_PADDING    (0xDE)
+#endif
+
 /* -----------------------------------------------------------
-  Error codes passed to `_mi_fatal_error`
-  All are recoverable but EFAULT is a serious error and aborts by default in secure mode.
-  For portability define undefined error codes using common Unix codes:
-  <https://www-numi.fnal.gov/offline_software/srt_public_context/WebDocs/Errors/unix_system_errors.html>
+  Assertions
 ----------------------------------------------------------- */
-#include <errno.h>
-#ifndef EAGAIN         // double free
-#define EAGAIN (11)
+
+#if (MI_DEBUG)
+// use our own assertion to print without memory allocation
+void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line, const char* func);
+#define mi_assert(expr)     ((expr) ? (void)0 : _mi_assert_fail(#expr,__FILE__,__LINE__,__func__))
+#else
+#define mi_assert(x)
 #endif
-#ifndef ENOMEM         // out of memory
-#define ENOMEM (12)
+
+#if (MI_DEBUG>1)
+#define mi_assert_internal    mi_assert
+#else
+#define mi_assert_internal(x)
 #endif
-#ifndef EFAULT         // corrupted free-list or meta-data
-#define EFAULT (14)
-#endif
-#ifndef EINVAL         // trying to free an invalid pointer
-#define EINVAL (22)
-#endif
-#ifndef EOVERFLOW      // count*size overflow
-#define EOVERFLOW (75)
+
+#if (MI_DEBUG>2)
+#define mi_assert_expensive   mi_assert
+#else
+#define mi_assert_expensive(x)
 #endif
 
 
@@ -1023,4 +1038,4 @@ static inline void _mi_memzero_aligned(void* dst, size_t n) {
 }
 
 
-#endif
+#endif  // MI_INTERNAL_H
