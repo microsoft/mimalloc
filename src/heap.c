@@ -182,19 +182,25 @@ mi_heap_t* mi_heap_get_backing(void) {
   return bheap;
 }
 
-void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag, mi_tld_t* tld) {
+// todo: make order of parameters consistent (but would that break compat with CPython?)
+void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint8_t heap_tag, mi_tld_t* tld) 
+{
+  mi_assert_internal(heap!=NULL);  
+  mi_memid_t memid = heap->memid;
   _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(mi_heap_t));
-  heap->tld = tld;  // avoid reading the thread-local tld during initialization
+  heap->memid = memid;
+  heap->tld        = tld;  // avoid reading the thread-local tld during initialization
   heap->thread_id  = _mi_thread_id();
   heap->arena_id   = arena_id;
   heap->allow_page_reclaim = !noreclaim;
   heap->allow_page_abandon = (!noreclaim && mi_option_get(mi_option_full_page_retain) >= 0);
-  heap->tag        = tag;
+  heap->tag        = heap_tag;
   if (heap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our heap.
     // (but abandoning is good in this case)
     heap->allow_page_reclaim = false;
   }
+  
   if (heap->tld->heap_backing == NULL) {
     heap->tld->heap_backing = heap;  // first heap becomes the backing heap
     _mi_random_init(&heap->random);
@@ -206,18 +212,31 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint
   heap->keys[0] = _mi_heap_random_next(heap);
   heap->keys[1] = _mi_heap_random_next(heap);
   _mi_heap_guarded_init(heap);
+
   // push on the thread local heaps list
   heap->next = heap->tld->heaps;
   heap->tld->heaps = heap;
 }
 
+mi_heap_t* _mi_heap_create(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id, mi_tld_t* tld) {
+  mi_assert_internal(tld!=NULL);
+  mi_assert(heap_tag >= 0 && heap_tag < 256);
+  // allocate and initialize a heap
+  mi_memid_t memid;
+  mi_heap_t* heap = (mi_heap_t*)_mi_meta_zalloc(sizeof(mi_heap_t), &memid);
+  if (heap==NULL) {
+    _mi_error_message(ENOMEM, "unable to allocate heap meta-data\n");
+    return NULL;
+  }
+  heap->memid = memid;
+  _mi_heap_init(heap, arena_id, allow_destroy, (uint8_t)heap_tag, tld);
+  return heap;
+}
+
 mi_decl_nodiscard mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id) {
   mi_heap_t* bheap = mi_heap_get_backing();
-  mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);  // todo: OS allocate in secure mode?
-  if (heap == NULL) return NULL;
-  mi_assert(heap_tag >= 0 && heap_tag < 256);
-  _mi_heap_init(heap, arena_id, allow_destroy /* no reclaim? */, (uint8_t)heap_tag /* heap tag */, bheap->tld);
-  return heap;
+  mi_assert_internal(bheap != NULL);
+  return _mi_heap_create(heap_tag, allow_destroy, arena_id, bheap->tld);  
 }
 
 mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id) {
@@ -276,7 +295,7 @@ static void mi_heap_free(mi_heap_t* heap) {
   mi_assert_internal(heap->tld->heaps != NULL);
 
   // and free the used memory
-  mi_free(heap);
+  _mi_meta_free(heap, sizeof(*heap), heap->memid);
 }
 
 // return a heap on the same thread as `heap` specialized for the specified tag (if it exists)
@@ -402,13 +421,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   mi_assert_internal(heap!=NULL);
   if (from==NULL || from->page_count == 0) return;
 
-  // reduce the size of the delayed frees
-  // _mi_heap_delayed_free_partial(from);
-
   // transfer all pages by appending the queues; this will set a new heap field
-  // so threads may do delayed frees in either heap for a while.
-  // note: appending waits for each page to not be in the `MI_DELAYED_FREEING` state
-  // so after this only the new heap will get delayed frees
   for (size_t i = 0; i <= MI_BIN_FULL; i++) {
     mi_page_queue_t* pq = &heap->pages[i];
     mi_page_queue_t* append = &from->pages[i];
@@ -418,17 +431,15 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   }
   mi_assert_internal(from->page_count == 0);
 
-  // and do outstanding delayed frees in the `from` heap
-  // note: be careful here as the `heap` field in all those pages no longer point to `from`,
-  // turns out to be ok as `_mi_heap_delayed_free` only visits the list and calls a
-  // the regular `_mi_free_delayed_block` which is safe.
-  //_mi_heap_delayed_free_all(from);
-  //#if !defined(_MSC_VER) || (_MSC_VER > 1900) // somehow the following line gives an error in VS2015, issue #353
-  //  mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_block_t,&from->thread_delayed_free) == NULL);
-  //#endif
-
   // and reset the `from` heap
   mi_heap_reset_pages(from);
+}
+
+// are two heaps compatible with respect to heap-tag, exclusive arena etc.
+static bool mi_heaps_are_compatible(mi_heap_t* heap1, mi_heap_t* heap2) {
+  return (heap1->tag == heap2->tag &&                   // store same kind of objects
+          heap1->tld->subproc == heap2->tld->subproc && // same sub-process
+          heap1->arena_id == heap2->arena_id);          // same arena preference
 }
 
 // Safe delete a heap without freeing any still allocated blocks in that heap.
@@ -439,7 +450,8 @@ void mi_heap_delete(mi_heap_t* heap)
   mi_assert_expensive(mi_heap_is_valid(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
 
-  if (!mi_heap_is_backing(heap)) {
+  mi_heap_t* bheap = heap->tld->heap_backing;
+  if (heap != bheap && mi_heaps_are_compatible(bheap,heap)) {
     // transfer still used pages to the backing heap
     mi_heap_absorb(heap->tld->heap_backing, heap);
   }

@@ -186,6 +186,7 @@ size_t      _mi_bin_size(uint8_t bin);           // for stats
 uint8_t     _mi_bin(size_t size);                // for stats
 
 // "heap.c"
+mi_heap_t*  _mi_heap_create(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id, mi_tld_t* tld);
 void        _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag, mi_tld_t* tld);
 void        _mi_heap_destroy_pages(mi_heap_t* heap);
 void        _mi_heap_collect_abandon(mi_heap_t* heap);

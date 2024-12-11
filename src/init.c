@@ -345,25 +345,19 @@ static bool _mi_thread_heap_init(void) {
   }
   else {
     // allocates tld data 
-    // note: we cannot access thread-locals yet as that can cause (recursive) allocation (on macOS <= 14 for 
-    // example where the loader allocates thread-local data on demand).
+    // note: we cannot access thread-locals yet as that can cause (recursive) allocation 
+    // (on macOS <= 14 for example where the loader allocates thread-local data on demand).
     mi_tld_t* tld = mi_tld_alloc();  
     
     // allocate and initialize the heap
-    mi_memid_t memid;
-    mi_heap_t* heap = (tld == NULL ? NULL : (mi_heap_t*)_mi_meta_zalloc(sizeof(mi_heap_t), &memid));
-    if (heap==NULL || tld==NULL) {
-      _mi_error_message(ENOMEM, "unable to allocate heap meta-data\n");
-      return false;
-    }
-    heap->memid = memid;
-    _mi_heap_init(heap, _mi_arena_id_none(), false /* can reclaim */, 0 /* default tag */, tld);
+    mi_heap_t* heap = _mi_heap_create(0 /* default tag */, false /* allow destroy? */, _mi_arena_id_none(), tld);
 
     // associate the heap with this thread
     // (this is safe, on macOS for example, the heap is set in a dedicated TLS slot and thus does not cause recursive allocation)
     _mi_heap_set_default_direct(heap);
+
     // now that the heap is set for this thread, we can set the thread-local tld.
-    mi_tld = tld; 
+    mi_tld = tld;
   }
   return false;
 }
