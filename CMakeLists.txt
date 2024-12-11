@@ -74,16 +74,16 @@ else()
 endif()
 
 # -----------------------------------------------------------------------------
-# Convenience: set default build type depending on the build directory
+# Convenience: set default build type and compiler depending on the build directory
 # -----------------------------------------------------------------------------
 
 message(STATUS "")
 if (NOT CMAKE_BUILD_TYPE)
-  if ("${CMAKE_BINARY_DIR}" MATCHES ".*(D|d)ebug$" OR  MI_DEBUG_FULL)
-    message(STATUS "No build type selected, default to: Debug")
+  if ("${CMAKE_BINARY_DIR}" MATCHES ".*((D|d)ebug|asan|tsan|ubsan|valgrind)$" OR MI_DEBUG_FULL)
+    message(STATUS "No build type selected, default to 'Debug'")
     set(CMAKE_BUILD_TYPE "Debug")
   else()
-    message(STATUS "No build type selected, default to: Release")
+    message(STATUS "No build type selected, default to 'Release'")
     set(CMAKE_BUILD_TYPE "Release")
   endif()
 endif()
@@ -92,7 +92,6 @@ if("${CMAKE_BINARY_DIR}" MATCHES ".*(S|s)ecure$")
   message(STATUS "Default to secure build")
   set(MI_SECURE "ON")
 endif()
-
 
 # -----------------------------------------------------------------------------
 # Process options
