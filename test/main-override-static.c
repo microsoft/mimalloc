@@ -233,8 +233,8 @@ static void test_heap_walk(void) {
 }
 
 static void test_canary_leak(void) {
-  char* p = mi_mallocn_tp(char, 23);
-  for (int i = 0; i < 23; i++) {
+  char* p = mi_mallocn_tp(char, 22);
+  for (int i = 0; i < 22; i++) {
     p[i] = '0'+i;
   }
   puts(p);

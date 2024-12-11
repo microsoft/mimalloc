@@ -285,7 +285,7 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   }
 
   // check arena bounds
-  const size_t min_reserve = MI_ARENA_MIN_SIZE;   
+  const size_t min_reserve = MI_ARENA_MIN_SIZE;
   const size_t max_reserve = MI_ARENA_MAX_SIZE;   // 16 GiB
   if (arena_reserve < min_reserve) {
     arena_reserve = min_reserve;
@@ -302,7 +302,7 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
   else if (mi_option_get(mi_option_arena_eager_commit) == 1) { arena_commit = true; }
 
   // and try to reserve the arena
-  int err = mi_reserve_os_memory_ex(arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id); 
+  int err = mi_reserve_os_memory_ex(arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
   if (err != 0) {
     // failed, try a smaller size?
     const size_t small_arena_reserve = (MI_SIZE_BITS == 32 ? 128*MI_MiB : 1*MI_GiB);
@@ -624,7 +624,23 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
   if (MI_PAGE_INFO_SIZE < _mi_align_up(sizeof(*page), MI_PAGE_MIN_BLOCK_ALIGN)) {
     _mi_error_message(EFAULT, "fatal internal error: MI_PAGE_INFO_SIZE is too small.\n");
   };
-  const size_t block_start = (os_align ? MI_PAGE_ALIGN : MI_PAGE_INFO_SIZE);
+  size_t block_start;
+  #if MI_GUARDED
+  // in a guarded build, we aling pages with blocks a multiple of an OS page size, to the OS page size
+  // this ensures that all blocks in such pages are OS page size aligned (which is needed for the guard pages)
+  const size_t os_page_size = _mi_os_page_size();
+  mi_assert_internal(MI_PAGE_ALIGN >= os_page_size);
+  if (block_size % os_page_size == 0) {
+    block_start = _mi_align_up(MI_PAGE_INFO_SIZE, os_page_size);
+  }
+  else
+  #endif
+  if (os_align) {
+    block_start = MI_PAGE_ALIGN;
+  }
+  else {
+    block_start = MI_PAGE_INFO_SIZE;
+  }
   const size_t reserved    = (os_align ? 1 : (mi_size_of_slices(slice_count) - block_start) / block_size);
   mi_assert_internal(reserved > 0 && reserved <= UINT16_MAX);
   page->reserved = (uint16_t)reserved;

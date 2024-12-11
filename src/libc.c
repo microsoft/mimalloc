@@ -84,8 +84,8 @@ bool _mi_getenv(const char* name, char* result, size_t result_size) {
 // This is mostly to avoid calling these when libc is not yet
 // initialized (and to reduce dependencies)
 //
-// format:      d i, p x u, s
-// prec:        z l ll L
+// format:      d i, p, x, u, s
+// type:        z l ll L
 // width:       10
 // align-left:  -
 // fill:        0

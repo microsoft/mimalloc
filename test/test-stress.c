@@ -42,7 +42,7 @@ static int SCALE   = 10;
 static int ITER    = 10;
 #elif 0
 static int THREADS = 4;
-static int SCALE   = 100;
+static int SCALE   = 10;
 static int ITER    = 10;
 #define ALLOW_LARGE false
 #elif 0

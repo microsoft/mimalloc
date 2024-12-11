@@ -628,6 +628,9 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
     return NULL;
   }
   uint8_t* guard_page = (uint8_t*)block + block_size - os_page_size;
+  // note: the alignment of the guard page relies on blocks being os_page_size aligned which
+  // is ensured in `mi_arena_page_alloc_fresh`.
+  mi_assert_internal(_mi_is_aligned(block, os_page_size));
   mi_assert_internal(_mi_is_aligned(guard_page, os_page_size));
   if (!page->memid.is_pinned && _mi_is_aligned(guard_page, os_page_size)) {
     _mi_os_protect(guard_page, os_page_size);
@@ -662,7 +665,7 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);
   mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(heap, req_size, zero, 0 /* huge_alignment */);
   if (block==NULL) return NULL;
-  void* const p   = mi_block_ptr_set_guarded(block, obj_size);
+  void* const p = mi_block_ptr_set_guarded(block, obj_size);
 
   // stats
   mi_track_malloc(p, size, zero);  

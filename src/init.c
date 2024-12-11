@@ -180,7 +180,7 @@ mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t samp
   if (heap->guarded_sample_rate >= 1) {
     heap->guarded_sample_seed = heap->guarded_sample_seed % heap->guarded_sample_rate;
   }
-  heap->guarded_sample_count = heap->guarded_sample_seed;  // count down samples
+  heap->guarded_sample_count = 1 + heap->guarded_sample_seed;  // count down samples
 }
 
 mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max) {
