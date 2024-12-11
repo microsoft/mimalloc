@@ -479,9 +479,14 @@ static inline uint8_t* mi_page_start(const mi_page_t* page) {
   return page->page_start;
 }
 
+
 static inline uint8_t* mi_page_area(const mi_page_t* page, size_t* size) {
   if (size) { *size = mi_page_block_size(page) * page->reserved; }
   return mi_page_start(page);
+}
+
+static inline size_t mi_page_info_size(void) {
+  return _mi_align_up(sizeof(mi_page_t), MI_MAX_ALIGN_SIZE);
 }
 
 static inline bool mi_page_contains_address(const mi_page_t* page, const void* p) {

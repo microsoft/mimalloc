@@ -20,7 +20,9 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
   mi_assert_internal(_mi_is_power_of_two(alignment) && (alignment > 0));
   if (alignment > size) return false;
   const size_t bsize = mi_good_size(size);
-  return (bsize <= MI_PAGE_MIN_BLOCK_ALIGN && (bsize & (alignment-1)) == 0);
+  const bool ok = (bsize <= MI_PAGE_MAX_START_BLOCK_ALIGN2 && _mi_is_power_of_two(bsize));
+  if (ok) { mi_assert_internal((bsize & (alignment-1)) == 0); } // since both power of 2 and alignment <= size
+  return ok;
 }
 
 #if MI_GUARDED

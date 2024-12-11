@@ -621,25 +621,28 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
     }
   }
   #endif
-  if (MI_PAGE_INFO_SIZE < _mi_align_up(sizeof(*page), MI_PAGE_MIN_BLOCK_ALIGN)) {
-    _mi_error_message(EFAULT, "fatal internal error: MI_PAGE_INFO_SIZE is too small.\n");
-  };
+  mi_assert(MI_PAGE_INFO_SIZE >= mi_page_info_size());
   size_t block_start;
   #if MI_GUARDED
-  // in a guarded build, we aling pages with blocks a multiple of an OS page size, to the OS page size
+  // in a guarded build, we align pages with blocks a multiple of an OS page size, to the OS page size
   // this ensures that all blocks in such pages are OS page size aligned (which is needed for the guard pages)
   const size_t os_page_size = _mi_os_page_size();
   mi_assert_internal(MI_PAGE_ALIGN >= os_page_size);
-  if (block_size % os_page_size == 0) {
-    block_start = _mi_align_up(MI_PAGE_INFO_SIZE, os_page_size);
+  if (block_size % os_page_size == 0 && block_size > os_page_size /* at least 2 or more */ ) {
+    block_start = _mi_align_up(_mi_page_info_size(), os_page_size);
   }
   else
   #endif
   if (os_align) {
     block_start = MI_PAGE_ALIGN;
   }
+  else if (_mi_is_power_of_two(block_size) && block_size <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
+    // naturally align all power-of-2 blocks
+    block_start = _mi_align_up(mi_page_info_size(), block_size);
+  }
   else {
-    block_start = MI_PAGE_INFO_SIZE;
+    // otherwise start after the info
+    block_start = mi_page_info_size();
   }
   const size_t reserved    = (os_align ? 1 : (mi_size_of_slices(slice_count) - block_start) / block_size);
   mi_assert_internal(reserved > 0 && reserved <= UINT16_MAX);
@@ -691,7 +694,7 @@ static mi_page_t* mi_singleton_page_alloc(mi_heap_t* heap, size_t block_size, si
   const mi_arena_id_t  req_arena_id = heap->arena_id;
   mi_tld_t* const tld = heap->tld;
   const bool os_align = (block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN);
-  const size_t info_size = (os_align ? MI_PAGE_ALIGN : MI_PAGE_INFO_SIZE);
+  const size_t info_size = (os_align ? MI_PAGE_ALIGN : mi_page_info_size());
   const size_t slice_count = mi_slice_count_of_size(info_size + block_size);
 
   mi_page_t* page = mi_arena_page_alloc_fresh(slice_count, block_size, block_alignment, req_arena_id, tld);
