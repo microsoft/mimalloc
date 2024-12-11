@@ -581,7 +581,7 @@ static inline bool mi_page_immediate_available(const mi_page_t* page) {
   return (page->free != NULL);
 }
 
-
+  
 // is the page not yet used up to its reserved space?
 static inline bool mi_page_is_expandable(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
@@ -714,6 +714,12 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
   Guarded objects
 ------------------------------------------------------------------- */
 #if MI_GUARDED
+
+// we always align guarded pointers in a block at an offset
+// the block `next` field is then used as a tag to distinguish regular offset aligned blocks from guarded ones
+#define MI_BLOCK_TAG_ALIGNED   ((mi_encoded_t)(0))
+#define MI_BLOCK_TAG_GUARDED   (~MI_BLOCK_TAG_ALIGNED)
+
 static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* p) {
   const ptrdiff_t offset = (uint8_t*)p - (uint8_t*)block;
   return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && block->next == MI_BLOCK_TAG_GUARDED);
@@ -894,6 +900,7 @@ static inline mi_memid_t _mi_memid_create_meta(void* mpage, size_t block_idx, si
   memid.is_pinned = true;
   return memid;
 }
+
 
 // -------------------------------------------------------------------
 // Fast "random" shuffle

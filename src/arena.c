@@ -35,14 +35,13 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 // A memory arena descriptor
 typedef struct mi_arena_s {
   mi_memid_t          memid;                // memid of the memory area
-  mi_arena_id_t       id;                   // arena id; 0 for non-specific
-
+  mi_arena_id_t       id;                   // arena id (> 0 where `arena == arenas[arena->id - 1]`)
+  
   size_t              slice_count;          // size of the area in arena slices (of `MI_ARENA_SLICE_SIZE`)
   size_t              info_slices;          // initial slices reserved for the arena bitmaps
   int                 numa_node;            // associated NUMA node
-  bool                exclusive;            // only allow allocations if specifically for this arena
+  bool                is_exclusive;            // only allow allocations if specifically for this arena
   bool                is_large;             // memory area consists of large- or huge OS pages (always committed)
-  mi_lock_t           abandoned_visit_lock; // lock is only used when abandoned segments are being visited
   _Atomic(mi_msecs_t) purge_expire;         // expiration time when slices should be decommitted from `slices_decommit`.
 
   mi_bitmap_t*        slices_free;          // is the slice free?
@@ -93,7 +92,8 @@ static bool mi_arena_id_is_suitable(mi_arena_id_t arena_id, bool arena_is_exclus
 
 bool _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id) {
   if (memid.memkind == MI_MEM_ARENA) {
-    return mi_arena_id_is_suitable(memid.mem.arena.id, memid.mem.arena.is_exclusive, request_arena_id);
+    const mi_arena_t* arena = memid.mem.arena.arena;
+    return mi_arena_id_is_suitable(arena->id, arena->is_exclusive, request_arena_id);
   }
   else {
     return mi_arena_id_is_suitable(_mi_arena_id_none(), false, request_arena_id);
@@ -152,33 +152,24 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
 
 
 // Create an arena memid
-static mi_memid_t mi_memid_create_arena(mi_arena_id_t id, bool is_exclusive, size_t slice_index, size_t slice_count) {
+static mi_memid_t mi_memid_create_arena(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
   mi_assert_internal(slice_index < UINT32_MAX);
   mi_assert_internal(slice_count < UINT32_MAX);
   mi_memid_t memid = _mi_memid_create(MI_MEM_ARENA);
-  memid.mem.arena.id = id;
+  memid.mem.arena.arena = arena;
   memid.mem.arena.slice_index = (uint32_t)slice_index;
-  memid.mem.arena.slice_count = (uint32_t)slice_count;
-  memid.mem.arena.is_exclusive = is_exclusive;
+  memid.mem.arena.slice_count = (uint32_t)slice_count;  
   return memid;
 }
 
-// returns if the arena is exclusive
-static bool mi_arena_memid_indices(mi_memid_t memid, size_t* arena_index, size_t* slice_index, size_t* slice_count) {
+// get the arena and slice span
+static mi_arena_t* mi_arena_from_memid(mi_memid_t memid, size_t* slice_index, size_t* slice_count) {
   mi_assert_internal(memid.memkind == MI_MEM_ARENA);
-  *arena_index = mi_arena_id_index(memid.mem.arena.id);
+  mi_arena_t* arena = memid.mem.arena.arena;
   if (slice_index) *slice_index = memid.mem.arena.slice_index;
   if (slice_count) *slice_count = memid.mem.arena.slice_count;
-  return memid.mem.arena.is_exclusive;
+  return arena;
 }
-
-// get the arena and slice index
-static mi_arena_t* mi_arena_from_memid(mi_memid_t memid, size_t* slice_index, size_t* slice_count) {
-  size_t arena_index;
-  mi_arena_memid_indices(memid, &arena_index, slice_index, slice_count);
-  return mi_arena_from_index(arena_index);
-}
-
 
 static mi_arena_t* mi_page_arena(mi_page_t* page, size_t* slice_index, size_t* slice_count) {
   // todo: maybe store the arena* directly in the page?
@@ -198,7 +189,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
 
   // claimed it!
   void* p = mi_arena_slice_start(arena, slice_index);
-  *memid = mi_memid_create_arena(arena->id, arena->exclusive, slice_index, slice_count);
+  *memid = mi_memid_create_arena(arena, slice_index, slice_count);
   memid->is_pinned = arena->memid.is_pinned;
 
   // set the dirty bits
@@ -323,7 +314,7 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
 
 static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_id_t req_arena_id, int numa_node, bool allow_large) {
   if (!allow_large && arena->is_large) return false;
-  if (!mi_arena_id_is_suitable(arena->id, arena->exclusive, req_arena_id)) return false;
+  if (!mi_arena_id_is_suitable(arena->id, arena->is_exclusive, req_arena_id)) return false;
   if (req_arena_id == _mi_arena_id_none()) { // if not specific, check numa affinity
     const bool numa_suitable = (numa_node < 0 || arena->numa_node < 0 || arena->numa_node == numa_node);
     if (!numa_suitable) return false;
@@ -628,8 +619,8 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
   // this ensures that all blocks in such pages are OS page size aligned (which is needed for the guard pages)
   const size_t os_page_size = _mi_os_page_size();
   mi_assert_internal(MI_PAGE_ALIGN >= os_page_size);
-  if (block_size % os_page_size == 0 && block_size > os_page_size /* at least 2 or more */ ) {
-    block_start = _mi_align_up(_mi_page_info_size(), os_page_size);
+  if (!os_align && block_size % os_page_size == 0 && block_size > os_page_size /* at least 2 or more */ ) {
+    block_start = _mi_align_up(mi_page_info_size(), os_page_size);
   }
   else
   #endif
@@ -961,7 +952,7 @@ static void mi_arenas_unsafe_destroy(void) {
   for (size_t i = 0; i < max_arena; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
     if (arena != NULL) {
-      mi_lock_done(&arena->abandoned_visit_lock);
+      // mi_lock_done(&arena->abandoned_visit_lock);
       if (mi_memkind_is_os(arena->memid.memkind)) {
         mi_atomic_store_ptr_release(mi_arena_t, &mi_arenas[i], NULL);
         _mi_os_free(mi_arena_start(arena), mi_arena_size(arena), arena->memid);
@@ -1085,13 +1076,13 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   // init
   arena->id           = _mi_arena_id_none();
   arena->memid        = memid;
-  arena->exclusive    = exclusive;
+  arena->is_exclusive    = exclusive;
   arena->slice_count  = slice_count;
   arena->info_slices  = info_slices;
   arena->numa_node    = numa_node; // TODO: or get the current numa node if -1? (now it allows anyone to allocate on -1)
   arena->is_large     = is_large;
   arena->purge_expire = 0;
-  mi_lock_init(&arena->abandoned_visit_lock);
+  // mi_lock_init(&arena->abandoned_visit_lock);
 
   // init bitmaps
   uint8_t* base = mi_arena_start(arena) + bitmap_base;

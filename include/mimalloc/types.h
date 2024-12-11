@@ -97,16 +97,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 
-// We used to abandon huge pages in order to eagerly deallocate it if freed from another thread.
-// Unfortunately, that makes it not possible to visit them during a heap walk or include them in a
-// `mi_heap_destroy`. We therefore instead reset/decommit the huge blocks nowadays if freed from
-// another thread so the memory becomes "virtually" available (and eventually gets properly freed by
-// the owning thread).
-// #define MI_HUGE_PAGE_ABANDON 1
-
-
 // ------------------------------------------------------
-// Main internal data-structures
+// Sizes of internal data-structures
 // ------------------------------------------------------
 
 // Sizes are for 64-bit
@@ -145,21 +137,32 @@ terms of the MIT license. A copy of the license can be found in the file
 // We never allocate more than PTRDIFF_MAX (see also <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
 #define MI_MAX_ALLOC_SIZE        PTRDIFF_MAX
 
+// ------------------------------------------------------
+// Arena's are large reserved areas of memory allocated from
+// the OS that are managed by mimalloc to efficiently
+// allocate MI_ARENA_SLICE_SIZE slices of memory for the
+// mimalloc pages.
+// ------------------------------------------------------
+
+// A large memory arena where pages are allocated in.
+typedef struct mi_arena_s mi_arena_t;     // defined in `arena.c`
+
 
 // ---------------------------------------------------------------
 // a memory id tracks the provenance of arena/OS allocated memory
 // ---------------------------------------------------------------
 
-// Memory can reside in arena's, direct OS allocated, or statically allocated. The memid keeps track of this.
+// Memory can reside in arena's, direct OS allocated, meta-data pages, or statically allocated. 
+// The memid keeps track of this.
 typedef enum mi_memkind_e {
   MI_MEM_NONE,      // not allocated
   MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
-  MI_MEM_STATIC,    // allocated in a static area and should not be freed (for arena meta data for example)
-  MI_MEM_META,      // allocated with the meta data allocator
+  MI_MEM_STATIC,    // allocated in a static area and should not be freed (the initial main heap data for example (`init.c`))
+  MI_MEM_META,      // allocated with the meta data allocator (`arena-meta.c`)
   MI_MEM_OS,        // allocated from the OS
   MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
-  MI_MEM_ARENA      // allocated from an arena (the usual case)
+  MI_MEM_ARENA      // allocated from an arena (the usual case) (`arena.c`)
 } mi_memkind_t;
 
 static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
@@ -178,10 +181,9 @@ typedef struct mi_memid_os_info {
 } mi_memid_os_info_t;
 
 typedef struct mi_memid_arena_info {
-  uint32_t      slice_index;        // base index in the arena
+  mi_arena_t*   arena;              // arena that contains this memory
+  uint32_t      slice_index;        // slice index in the arena
   uint32_t      slice_count;        // allocated slices
-  mi_arena_id_t id;                 // arena id (>= 1)
-  bool          is_exclusive;       // this arena can only be used for specific arena allocations
 } mi_memid_arena_info_t;
 
 typedef struct mi_memid_meta_info {
@@ -196,10 +198,10 @@ typedef struct mi_memid_s {
     mi_memid_arena_info_t arena;    // only used for MI_MEM_ARENA
     mi_memid_meta_info_t  meta;     // only used for MI_MEM_META
   } mem;
+  mi_memkind_t  memkind;
   bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)
   bool          initially_committed;// `true` if the memory was originally allocated as committed
   bool          initially_zero;     // `true` if the memory was originally zero initialized
-  mi_memkind_t  memkind;
 } mi_memid_t;
 
 
@@ -227,32 +229,21 @@ typedef struct mi_block_s {
   mi_encoded_t next;
 } mi_block_t;
 
-#if MI_GUARDED
-// we always align guarded pointers in a block at an offset
-// the block `next` field is then used as a tag to distinguish regular offset aligned blocks from guarded ones
-#define MI_BLOCK_TAG_ALIGNED   ((mi_encoded_t)(0))
-#define MI_BLOCK_TAG_GUARDED   (~MI_BLOCK_TAG_ALIGNED)
-#endif
-
-
-// The owned flags are used for efficient multi-threaded free-ing
-// When we push on the page thread free queue of an abandoned page,
-// we also atomically get to own it. This is needed to atomically
-// abandon a page (while other threads could concurrently free blocks in it).
-typedef enum mi_owned_e {
-  MI_OWNED              = 0, // some heap owns this page
-  MI_ABANDONED          = 1, // the page is abandoned
-} mi_owned_t;
-
 
 // The `in_full` and `has_aligned` page flags are put in the same field
 // to efficiently test if both are false (`full_aligned == 0`) in the `mi_free` routine.
+// `has_aligned` is true if the page has pointers at an offset in a block (so we unalign before free-ing)
+// `in_full_queue` is true if the page is full and resides in the full queue (so we move it to a regular queue on free-ing)
 #define MI_PAGE_IN_FULL_QUEUE  MI_ZU(0x01)
 #define MI_PAGE_HAS_ALIGNED    MI_ZU(0x02)
 typedef size_t mi_page_flags_t;
 
 // Thread free list.
-// We use the bottom bit of the pointer for `mi_owned_t` flags
+// Points to a list of blocks that are freed by other threads.
+// The low-bit is set if the page is owned by the current thread. (`mi_page_is_owned`).
+// Ownership is required before we can read any non-atomic fields in the page.
+// This way we can push a block on the thread free list and try to claim ownership
+// atomically in `free.c:mi_free_block_mt`.
 typedef uintptr_t mi_thread_free_t;
 
 // Sub processes are used to keep memory separate between them (e.g. multiple interpreters in CPython)
@@ -276,19 +267,17 @@ typedef uint8_t mi_heaptag_t;
 //
 // We don't count `freed` (as |free|) but use `used` to reduce
 // the number of memory accesses in the `mi_page_all_free` function(s).
-//
+// 
 // Notes:
-// - Access is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
+// - Non-atomic fields can only be accessed if having ownership (low bit of `xthread_free`).
+// - If a page is not part of a heap it is called "abandoned" -- in
+//   that case the `xthreadid` is 0 or 1 (1 is for abandoned pages that
+//   are in the abandoned page lists of an arena, these are called "mapped" abandoned pages).
+// - The layout is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
 // - Using `uint16_t` does not seem to slow things down
-// - `xthread_free` uses the bottom bits as a delayed-free flags to optimize
-//   concurrent frees where only the first concurrent free adds to the owning
-//   heap `thread_delayed_free` list (see `free.c:mi_free_block_mt`).
-//   The invariant is that no-delayed-free is only set if there is
-//   at least one block that will be added, or as already been added, to
-//   the owning heap `thread_delayed_free` list. This guarantees that pages
-//   will be freed correctly even if only other threads free blocks.
+
 typedef struct mi_page_s {
-  _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= xheap->thread_id, or 0 if abandoned)
+  _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= heap->thread_id, or 0 or 1 if abandoned)
 
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
   uint16_t                  used;              // number of blocks in use (including blocks in `thread_free`)
@@ -299,7 +288,7 @@ typedef struct mi_page_s {
 
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads
-  _Atomic(mi_page_flags_t)  xflags;            // `in_full` and `has_aligned` flags
+  _Atomic(mi_page_flags_t)  xflags;            // `in_full_queue` and `has_aligned` flags
 
   size_t                    block_size;        // size available in each block (always `>0`)
   uint8_t*                  page_start;        // start of the blocks
@@ -355,7 +344,7 @@ typedef enum mi_page_kind_e {
   MI_PAGE_MEDIUM,   // medium blocks go into 512KiB pages
   MI_PAGE_LARGE,    // larger blocks go into 4MiB pages
   MI_PAGE_SINGLETON // page containing a single block.
-                    // used for blocks `> MI_LARGE_OBJ_SIZE_MAX` or an aligment `> MI_BLOCK_ALIGNMENT_MAX`.
+                    // used for blocks `> MI_LARGE_MAX_OBJ_SIZE` or an aligment `> MI_PAGE_MAX_OVERALLOC_ALIGN`.
 } mi_page_kind_t;
 
 
@@ -366,7 +355,7 @@ typedef enum mi_page_kind_e {
 // A heap just owns a set of pages for allocation and
 // can only be allocate/reallocate from the thread that created it.
 // Freeing blocks can be done from any thread though.
-// Per thread, the segments are shared among its heaps.
+// 
 // Per thread, there is always a default heap that is
 // used for allocation; it is initialized to statically
 // point to an empty heap to avoid initialization checks
@@ -436,16 +425,6 @@ struct mi_heap_s {
   mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
 };
 
-// ------------------------------------------------------
-// Arena's
-// These are large reserved areas of memory allocated from
-// the OS that are managed by mimalloc to efficiently
-// allocate MI_SLICE_SIZE slices of memory for the
-// mimalloc pages.
-// ------------------------------------------------------
-
-// A large memory arena where pages are allocated in.
-typedef struct mi_arena_s mi_arena_t;
 
 // ------------------------------------------------------
 // Debug

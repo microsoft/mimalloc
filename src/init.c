@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit
 
+#define MI_MEMID_STATIC  {{{NULL,0}}, MI_MEM_STATIC, true /* pinned */, true /* committed */, false /* zero */ }
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
@@ -34,7 +35,7 @@ const mi_page_t _mi_page_empty = {
   NULL,       // xheap
   NULL, NULL, // next, prev
   NULL,       // subproc
-  { {{ NULL, 0}}, false, false, false, MI_MEM_NONE }  // memid
+  MI_MEMID_STATIC  // memid
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
@@ -95,8 +96,6 @@ const mi_page_t _mi_page_empty = {
 // itself (as accessing a thread local for the first time
 // may lead to allocation itself on some platforms)
 // --------------------------------------------------------
-
-#define MI_MEMID_STATIC  {{{NULL,0}}, true /* pinned */, true /* committed */, false /* zero */, MI_MEM_STATIC }
 
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,
