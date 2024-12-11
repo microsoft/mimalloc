@@ -1404,6 +1404,13 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t slices_needed, s
     slice = slice + slice->slice_count;
   }
 
+  if (segment->page_kind == MI_PAGE_LARGE) {
+    // Clear out small object free space in large segments
+    size_t small_free_space_mask = mi_free_space_mask_from_blocksize(MI_SMALL_OBJ_SIZE_MAX);
+    small_free_space_mask = small_free_space_mask | (small_free_space_mask - 1);
+    free_space_mask &= ~small_free_space_mask;
+  }
+
   if (free_space_mask != 0) {
       mi_atomic_or_acq_rel(&segment->free_space_mask, free_space_mask);
   }
