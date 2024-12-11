@@ -417,30 +417,30 @@ void _mi_heap_unsafe_destroy_all(void) {
 ----------------------------------------------------------- */
 
 // Transfer the pages from one heap to the other
-static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
-  mi_assert_internal(heap!=NULL);
-  if (from==NULL || from->page_count == 0) return;
+//static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
+//  mi_assert_internal(heap!=NULL);
+//  if (from==NULL || from->page_count == 0) return;
+//
+//  // transfer all pages by appending the queues; this will set a new heap field
+//  for (size_t i = 0; i <= MI_BIN_FULL; i++) {
+//    mi_page_queue_t* pq = &heap->pages[i];
+//    mi_page_queue_t* append = &from->pages[i];
+//    size_t pcount = _mi_page_queue_append(heap, pq, append);
+//    heap->page_count += pcount;
+//    from->page_count -= pcount;
+//  }
+//  mi_assert_internal(from->page_count == 0);
+//
+//  // and reset the `from` heap
+//  mi_heap_reset_pages(from);
+//}
 
-  // transfer all pages by appending the queues; this will set a new heap field
-  for (size_t i = 0; i <= MI_BIN_FULL; i++) {
-    mi_page_queue_t* pq = &heap->pages[i];
-    mi_page_queue_t* append = &from->pages[i];
-    size_t pcount = _mi_page_queue_append(heap, pq, append);
-    heap->page_count += pcount;
-    from->page_count -= pcount;
-  }
-  mi_assert_internal(from->page_count == 0);
-
-  // and reset the `from` heap
-  mi_heap_reset_pages(from);
-}
-
-// are two heaps compatible with respect to heap-tag, exclusive arena etc.
-static bool mi_heaps_are_compatible(mi_heap_t* heap1, mi_heap_t* heap2) {
-  return (heap1->tag == heap2->tag &&                   // store same kind of objects
-          heap1->tld->subproc == heap2->tld->subproc && // same sub-process
-          heap1->arena_id == heap2->arena_id);          // same arena preference
-}
+//// are two heaps compatible with respect to heap-tag, exclusive arena etc.
+//static bool mi_heaps_are_compatible(mi_heap_t* heap1, mi_heap_t* heap2) {
+//  return (heap1->tag == heap2->tag &&                   // store same kind of objects
+//          heap1->tld->subproc == heap2->tld->subproc && // same sub-process
+//          heap1->arena_id == heap2->arena_id);          // same arena preference
+//}
 
 // Safe delete a heap without freeing any still allocated blocks in that heap.
 void mi_heap_delete(mi_heap_t* heap)
@@ -450,13 +450,16 @@ void mi_heap_delete(mi_heap_t* heap)
   mi_assert_expensive(mi_heap_is_valid(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
 
+  /*
   mi_heap_t* bheap = heap->tld->heap_backing;
-  if (heap != bheap && mi_heaps_are_compatible(bheap,heap)) {
+  if (bheap != heap && mi_heaps_are_compatible(bheap,heap)) {
     // transfer still used pages to the backing heap
-    mi_heap_absorb(heap->tld->heap_backing, heap);
+    mi_heap_absorb(bheap, heap);
   }
-  else {
-    // the backing heap abandons its pages
+  else 
+  */
+  {
+    // abandon all pages
     _mi_heap_collect_abandon(heap);
   }
   mi_assert_internal(heap->page_count==0);
