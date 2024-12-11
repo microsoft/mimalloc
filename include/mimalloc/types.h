@@ -562,5 +562,19 @@ struct mi_tld_s {
 #define EOVERFLOW (75)
 #endif
 
+// ------------------------------------------------------
+// Debug
+// ------------------------------------------------------
+
+#ifndef MI_DEBUG_UNINIT
+#define MI_DEBUG_UNINIT     (0xD0)
+#endif
+#ifndef MI_DEBUG_FREED
+#define MI_DEBUG_FREED      (0xDF)
+#endif
+#ifndef MI_DEBUG_PADDING
+#define MI_DEBUG_PADDING    (0xDE)
+#endif
+
 
 #endif // MI_TYPES_H

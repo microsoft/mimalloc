@@ -239,20 +239,6 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #endif
 
 
-// ------------------------------------------------------
-// Debug
-// ------------------------------------------------------
-
-#if !defined(MI_DEBUG_UNINIT)
-#define MI_DEBUG_UNINIT     (0xD0)
-#endif
-#if !defined(MI_DEBUG_FREED)
-#define MI_DEBUG_FREED      (0xDF)
-#endif
-#if !defined(MI_DEBUG_PADDING)
-#define MI_DEBUG_PADDING    (0xDE)
-#endif
-
 /* -----------------------------------------------------------
   Assertions
 ----------------------------------------------------------- */
