@@ -446,6 +446,12 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   mi_heap_reset_pages(from);
 }
 
+// are two heaps compatible with respect to heap-tag, exclusive arena etc.
+static bool mi_heaps_are_compatible(mi_heap_t* heap1, mi_heap_t* heap2) {
+  return (heap1->tag == heap2->tag &&                   // store same kind of objects
+          heap1->arena_id == heap2->arena_id);          // same arena preference
+}
+
 // Safe delete a heap without freeing any still allocated blocks in that heap.
 void mi_heap_delete(mi_heap_t* heap)
 {
@@ -454,9 +460,10 @@ void mi_heap_delete(mi_heap_t* heap)
   mi_assert_expensive(mi_heap_is_valid(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
 
-  if (!mi_heap_is_backing(heap)) {
+  mi_heap_t* bheap = heap->tld->heap_backing;
+  if (bheap != heap && mi_heaps_are_compatible(bheap,heap)) {
     // transfer still used pages to the backing heap
-    mi_heap_absorb(heap->tld->heap_backing, heap);
+    mi_heap_absorb(bheap, heap);
   }
   else {
     // the backing heap abandons its pages
