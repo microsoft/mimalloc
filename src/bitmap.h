@@ -206,4 +206,10 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t 
 // allocated from `mi_arena_try_abandoned` (and is in the `claim` function of `mi_bitmap_try_find_and_claim`).
 void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx);
 
+
+// If a bit is set in the bitmap, return `true` and set `idx` to its index.
+// Otherwise return `false` (and `*idx` is undefined).
+bool mi_bitmap_bsr(mi_bitmap_t* bitmap, size_t* idx);
+
+
 #endif // MI_BITMAP_H

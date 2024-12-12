@@ -796,6 +796,20 @@ static inline bool mi_bchunk_all_are_clear_relaxed(mi_bchunk_t* chunk) {
   #endif
 }
 
+
+static bool mi_bchunk_bsr(mi_bchunk_t* chunk, size_t* pidx) {
+  for (size_t i = MI_BCHUNK_FIELDS; i > 0; ) {
+    i--;
+    mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
+    size_t idx;
+    if (mi_bsr(b, &idx)) {
+      *pidx = (i*MI_BFIELD_BITS) + idx;
+      return true;
+    }
+  }
+  return false;
+}
+
 /* --------------------------------------------------------------------------------
  bitmap chunkmap
 -------------------------------------------------------------------------------- */
@@ -1153,6 +1167,27 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t 
   mi_bitmap_forall_chunks_end();
   return false;
 }
+
+
+bool mi_bitmap_bsr(mi_bitmap_t* bitmap, size_t* idx) {
+  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  for (size_t i = chunkmap_max; i > 0; ) {
+    i--;
+    mi_bfield_t cmap = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
+    size_t cmap_idx;
+    if (mi_bsr(cmap,&cmap_idx)) {
+      // highest chunk
+      const size_t chunk_idx = i*MI_BFIELD_BITS + cmap_idx;
+      size_t cidx; 
+      if (mi_bchunk_bsr(&bitmap->chunks[chunk_idx], &cidx)) {
+        *idx = (chunk_idx * MI_BCHUNK_BITS) + cidx;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 
 // Clear a bit once it is set.
 void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx) {

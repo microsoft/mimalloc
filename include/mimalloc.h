@@ -317,6 +317,17 @@ mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t samp
 mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max);
 
 
+// experimental
+//mi_decl_export void* mi_os_alloc(size_t size, bool commit, size_t* full_size);
+//mi_decl_export void* mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, void** base, size_t* full_size);
+//mi_decl_export void* mi_os_alloc_aligned_allow_large(size_t size, size_t alignment, bool commit, bool* is_committed, bool* is_pinned, void** base, size_t* full_size);
+//mi_decl_export void  mi_os_free(void* p, size_t size);
+//mi_decl_export void  mi_os_commit(void* p, size_t size);
+//mi_decl_export void  mi_os_decommit(void* p, size_t size);
+
+mi_decl_export bool  mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t* accessed_size, size_t* size);
+mi_decl_export bool  mi_arena_reload(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, mi_arena_id_t* arena_id); 
+
 // ------------------------------------------------------
 // Convenience
 // ------------------------------------------------------

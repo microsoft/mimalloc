@@ -290,7 +290,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   if (size == 0) return NULL;
   size = _mi_os_good_alloc_size(size);
   alignment = _mi_align_up(alignment, _mi_os_page_size());
-
+  
   bool os_is_large = false;
   bool os_is_zero  = false;
   void* os_base = NULL;
@@ -670,4 +670,49 @@ int _mi_os_numa_node_get(void) {
   size_t numa_node = _mi_prim_numa_node();
   if (numa_node >= numa_count) { numa_node = numa_node % numa_count; }
   return (int)numa_node;
+}
+
+
+/* ----------------------------------------------------------------------------
+  Public API
+-----------------------------------------------------------------------------*/
+
+mi_decl_export void* mi_os_alloc(size_t size, bool commit, size_t* full_size) {
+  return mi_os_alloc_aligned(size, mi_os_mem_config.alloc_granularity, commit, NULL, full_size);
+}
+
+static void* mi_os_alloc_aligned_ex(size_t size, size_t alignment, bool commit, bool allow_large, bool* is_committed, bool* is_pinned, void** base, size_t* full_size) {
+  mi_memid_t memid = _mi_memid_none();
+  void* p = _mi_os_alloc_aligned(size, alignment, commit, allow_large, &memid);
+  if (p == NULL) return p;
+  if (is_committed != NULL) { *is_committed = memid.initially_committed;  }
+  if (is_pinned != NULL) { *is_pinned = memid.is_pinned;  }
+  if (base != NULL) { *base = memid.mem.os.base;  }
+  if (full_size != NULL) { *full_size = memid.mem.os.size;  }
+  if (!memid.initially_zero && memid.initially_committed) {
+    _mi_memzero_aligned(memid.mem.os.base, memid.mem.os.size);
+  }
+  return p;
+}
+
+mi_decl_export void* mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, void** base, size_t* full_size) {
+  return mi_os_alloc_aligned_ex(size, alignment, commit, false, NULL, NULL, base, full_size);
+}
+
+mi_decl_export void* mi_os_alloc_aligned_allow_large(size_t size, size_t alignment, bool commit, bool* is_committed, bool* is_pinned, void** base, size_t* full_size) {
+  return mi_os_alloc_aligned_ex(size, alignment, commit, true, is_committed, is_pinned, base, full_size);
+}
+
+mi_decl_export void  mi_os_free(void* p, size_t size) {
+  if (p==NULL || size == 0) return;
+  mi_memid_t memid = _mi_memid_create_os(p, size, true, false, false);
+  _mi_os_free(p, size, memid);
+}
+
+mi_decl_export void  mi_os_commit(void* p, size_t size) {
+  _mi_os_commit(p, size, NULL);
+}
+
+mi_decl_export void  mi_os_decommit(void* p, size_t size) {
+  _mi_os_decommit(p, size);
 }

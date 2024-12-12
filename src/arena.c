@@ -176,6 +176,17 @@ static mi_arena_t* mi_page_arena(mi_page_t* page, size_t* slice_index, size_t* s
   return mi_arena_from_memid(page->memid, slice_index, slice_count);
 }
 
+static size_t mi_memid_size(mi_memid_t memid) {
+  if (memid.memkind == MI_MEM_ARENA) {
+    return memid.mem.arena.slice_count * MI_ARENA_SLICE_SIZE;
+  }
+  else if (mi_memid_is_os(memid) || memid.memkind == MI_MEM_EXTERNAL) {
+    return memid.mem.os.size;
+  }
+  else {
+    return 0;
+  }
+}
 
 /* -----------------------------------------------------------
   Arena Allocation
@@ -727,7 +738,7 @@ mi_page_t* _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t block
   return page;
 }
 
-
+static void mi_arena_free(void* p, size_t size, mi_memid_t memid);
 
 void _mi_arena_page_free(mi_page_t* page) {
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
@@ -754,7 +765,7 @@ void _mi_arena_page_free(mi_page_t* page) {
   #endif
 
   _mi_page_map_unregister(page);
-  _mi_arena_free(page, 1, 1, page->memid);
+  mi_arena_free(page, mi_memid_size(page->memid), page->memid);
 }
 
 /* -----------------------------------------------------------
@@ -843,7 +854,7 @@ void _mi_arena_page_unabandon(mi_page_t* page) {
     mi_atomic_decrement_relaxed(&page->subproc->abandoned_count[bin]);
   }
   else {
-    // page is full (or a singleton), page is OS/externally allocated
+    // page is full (or a singleton), page is OS/nly allocated
     // nothing to do
     // TODO: maintain count of these as well?
   }
@@ -863,22 +874,16 @@ void _mi_arena_reclaim_all_abandoned(mi_heap_t* heap) {
 static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_t slices);
 static void mi_arenas_try_purge(bool force, bool visit_all);
 
-void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memid) {
-  mi_assert_internal(size > 0);
-  mi_assert_internal(committed_size <= size);
+static void mi_arena_free(void* p, size_t size, mi_memid_t memid) {
+  mi_assert_internal(size >= 0);
   if (p==NULL) return;
   if (size==0) return;
-  const bool all_committed = (committed_size == size);
-
+  
   // need to set all memory to undefined as some parts may still be marked as no_access (like padding etc.)
   mi_track_mem_undefined(p, size);
 
   if (mi_memkind_is_os(memid.memkind)) {
     // was a direct OS allocation, pass through
-    if (!all_committed && committed_size > 0) {
-      // if partially committed, adjust the committed stats (as `_mi_os_free` will increase decommit by the full size)
-      _mi_stat_decrease(&_mi_stats_main.committed, committed_size);
-    }
     _mi_os_free(p, size, memid);
   }
   else if (memid.memkind == MI_MEM_ARENA) {
@@ -886,7 +891,8 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
     size_t slice_count;
     size_t slice_index;
     mi_arena_t* arena = mi_arena_from_memid(memid, &slice_index, &slice_count);
-    mi_assert_internal(size==1);
+    mi_assert_internal((size%MI_ARENA_SLICE_SIZE)==0);
+    mi_assert_internal((slice_count*MI_ARENA_SLICE_SIZE)==size);
     mi_assert_internal(mi_arena_slice_start(arena,slice_index) <= (uint8_t*)p);
     mi_assert_internal(mi_arena_slice_start(arena,slice_index) + mi_size_of_slices(slice_count) > (uint8_t*)p);
     // checks
@@ -902,25 +908,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
     }
 
     // potentially decommit
-    if (arena->memid.is_pinned || arena->memid.initially_committed) {
-      mi_assert_internal(all_committed);
-    }
-    else {
-      /*
-      if (!all_committed) {
-        // mark the entire range as no longer committed (so we recommit the full range when re-using)
-        mi_bitmap_clearN(&arena->slices_committed, slice_index, slice_count);
-        mi_track_mem_noaccess(p, size);
-        if (committed_size > 0) {
-          // if partially committed, adjust the committed stats (is it will be recommitted when re-using)
-          // in the delayed purge, we now need to not count a decommit if the range is not marked as committed.
-          _mi_stat_decrease(&_mi_stats_main.committed, committed_size);
-        }
-        // note: if not all committed, it may be that the purge will reset/decommit the entire range
-        // that contains already decommitted parts. Since purge consistently uses reset or decommit that
-        // works (as we should never reset decommitted parts).
-      }
-      */
+    if (!arena->memid.is_pinned && !arena->memid.initially_committed) { // todo: maybe allow decommit even if initially committed?
       // (delay) purge the entire range
       mi_arena_schedule_purge(arena, slice_index, slice_count);
     }
@@ -944,6 +932,29 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
   mi_arenas_try_purge(false, false);
 }
 
+// Purge the arenas; if `force_purge` is true, amenable parts are purged even if not yet expired
+void _mi_arenas_collect(bool force_purge) {
+  mi_arenas_try_purge(force_purge, force_purge /* visit all? */);
+}
+
+// Is a pointer inside any of our arenas?
+bool _mi_arena_contains(const void* p) {
+  const size_t max_arena = mi_arena_get_count();
+  for (size_t i = 0; i < max_arena; i++) {
+    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
+    if (arena != NULL && mi_arena_start(arena) <= (const uint8_t*)p && mi_arena_start(arena) + mi_size_of_slices(arena->slice_count) >(const uint8_t*)p) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+
+/* -----------------------------------------------------------
+  Remove an arena.
+----------------------------------------------------------- */
+
 // destroy owned arenas; this is unsafe and should only be done using `mi_option_destroy_on_exit`
 // for dynamic libraries that are unloaded and need to release all their allocated memory.
 static void mi_arenas_unsafe_destroy(void) {
@@ -953,8 +964,8 @@ static void mi_arenas_unsafe_destroy(void) {
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
     if (arena != NULL) {
       // mi_lock_done(&arena->abandoned_visit_lock);
-      if (mi_memkind_is_os(arena->memid.memkind)) {
-        mi_atomic_store_ptr_release(mi_arena_t, &mi_arenas[i], NULL);
+      mi_atomic_store_ptr_release(mi_arena_t, &mi_arenas[i], NULL);
+      if (mi_memkind_is_os(arena->memid.memkind)) {        
         _mi_os_free(mi_arena_start(arena), mi_arena_size(arena), arena->memid);
       }
     }
@@ -965,28 +976,12 @@ static void mi_arenas_unsafe_destroy(void) {
   mi_atomic_cas_strong_acq_rel(&mi_arena_count, &expected, new_max_arena);
 }
 
-// Purge the arenas; if `force_purge` is true, amenable parts are purged even if not yet expired
-void _mi_arenas_collect(bool force_purge) {
-  mi_arenas_try_purge(force_purge, force_purge /* visit all? */);
-}
 
 // destroy owned arenas; this is unsafe and should only be done using `mi_option_destroy_on_exit`
 // for dynamic libraries that are unloaded and need to release all their allocated memory.
 void _mi_arena_unsafe_destroy_all(void) {
   mi_arenas_unsafe_destroy();
   _mi_arenas_collect(true /* force purge */);  // purge non-owned arenas
-}
-
-// Is a pointer inside any of our arenas?
-bool _mi_arena_contains(const void* p) {
-  const size_t max_arena = mi_arena_get_count();
-  for (size_t i = 0; i < max_arena; i++) {
-    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
-    if (arena != NULL && mi_arena_start(arena) <= (const uint8_t*)p && mi_arena_start(arena) + mi_size_of_slices(arena->slice_count) > (const uint8_t*)p) {
-      return true;
-    }
-  }
-  return false;
 }
 
 
@@ -999,7 +994,26 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id, mi_stats_t*
   mi_assert_internal(arena->slice_count > 0);
   if (arena_id != NULL) { *arena_id = -1; }
 
-  size_t i = mi_atomic_increment_acq_rel(&mi_arena_count);
+  // first try to find a NULL entry
+  const size_t count = mi_arena_get_count();
+  size_t i;
+  for (i = 0; i < count; i++) {
+    if (mi_arena_from_index(i) == NULL) {
+      arena->id = mi_arena_id_create(i);
+      mi_arena_t* expected = NULL;
+      if (mi_atomic_cas_ptr_strong_release(mi_arena_t, &mi_arenas[i], &expected, arena)) {
+        // success
+        if (arena_id != NULL) { *arena_id = arena->id; }
+        return true;
+      }
+      else {
+        arena->id = _mi_arena_id_none();
+      }
+    }
+  }
+
+  // otherwise increase the max
+  i = mi_atomic_increment_acq_rel(&mi_arena_count);
   if (i >= MI_MAX_ARENAS) {
     mi_atomic_decrement_acq_rel(&mi_arena_count);
     return false;
@@ -1076,7 +1090,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   // init
   arena->id           = _mi_arena_id_none();
   arena->memid        = memid;
-  arena->is_exclusive    = exclusive;
+  arena->is_exclusive = exclusive;
   arena->slice_count  = slice_count;
   arena->info_slices  = info_slices;
   arena->numa_node    = numa_node; // TODO: or get the current numa node if -1? (now it allows anyone to allocate on -1)
@@ -1116,6 +1130,8 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
 
 bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
   mi_memid_t memid = _mi_memid_create(MI_MEM_EXTERNAL);
+  memid.mem.os.base = start;
+  memid.mem.os.size = size;
   memid.initially_committed = is_committed;
   memid.initially_zero = is_zero;
   memid.is_pinned = is_large;
@@ -1370,74 +1386,86 @@ static void mi_arenas_try_purge(bool force, bool visit_all) {
 }
 
 
-/* -----------------------------------------------------------
-  Special static area for mimalloc internal structures
-  to avoid OS calls (for example, for the subproc metadata (~= 721b))
------------------------------------------------------------ */
-
-#define MI_ARENA_STATIC_MAX  ((MI_INTPTR_SIZE/2)*MI_KiB)  // 4 KiB on 64-bit
-
-static mi_decl_cache_align uint8_t mi_arena_static[MI_ARENA_STATIC_MAX];  // must be cache aligned, see issue #895
-static mi_decl_cache_align _Atomic(size_t)mi_arena_static_top;
-
-static void* mi_arena_static_zalloc(size_t size, size_t alignment, mi_memid_t* memid) {
-  *memid = _mi_memid_none();
-  if (size == 0 || size > MI_ARENA_STATIC_MAX) return NULL;
-  const size_t toplow = mi_atomic_load_relaxed(&mi_arena_static_top);
-  if ((toplow + size) > MI_ARENA_STATIC_MAX) return NULL;
-
-  // try to claim space
-  if (alignment < MI_MAX_ALIGN_SIZE) { alignment = MI_MAX_ALIGN_SIZE; }
-  const size_t oversize = size + alignment - 1;
-  if (toplow + oversize > MI_ARENA_STATIC_MAX) return NULL;
-  const size_t oldtop = mi_atomic_add_acq_rel(&mi_arena_static_top, oversize);
-  size_t top = oldtop + oversize;
-  if (top > MI_ARENA_STATIC_MAX) {
-    // try to roll back, ok if this fails
-    mi_atomic_cas_strong_acq_rel(&mi_arena_static_top, &top, oldtop);
-    return NULL;
-  }
-
-  // success
-  *memid = _mi_memid_create(MI_MEM_STATIC);
-  memid->initially_zero = true;
-  const size_t start = _mi_align_up(oldtop, alignment);
-  uint8_t* const p = &mi_arena_static[start];
-  _mi_memzero_aligned(p, size);
-  return p;
-}
-
-void* _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid) {
-  *memid = _mi_memid_none();
-
-  // try static
-  void* p = mi_arena_static_zalloc(size, MI_MAX_ALIGN_SIZE, memid);
-  if (p != NULL) return p;
-
-  // or fall back to the OS
-  p = _mi_os_alloc(size, memid);
-  if (p == NULL) return NULL;
-
-  // zero the OS memory if needed
-  if (!memid->initially_zero) {
-    _mi_memzero_aligned(p, size);
-    memid->initially_zero = true;
-  }
-  return p;
-}
-
-void _mi_arena_meta_free(void* p, mi_memid_t memid, size_t size) {
-  if (mi_memkind_is_os(memid.memkind)) {
-    _mi_os_free(p, size, memid);
-  }
-  else {
-    mi_assert(memid.memkind == MI_MEM_STATIC);
-  }
-}
-
 bool mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
   MI_UNUSED(subproc_id); MI_UNUSED(heap_tag); MI_UNUSED(visit_blocks); MI_UNUSED(visitor); MI_UNUSED(arg);
   _mi_error_message(EINVAL, "implement mi_abandoned_visit_blocks\n");
   return false;
+}
+
+
+/* -----------------------------------------------------------
+  Unloading and reloading an arena.
+----------------------------------------------------------- */
+
+mi_decl_export bool mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t* accessed_size, size_t* full_size) {
+  const size_t count = mi_arena_get_count();
+  const size_t arena_idx = mi_arena_id_index(arena_id);
+  if (count <= arena_idx) {
+    _mi_warning_message("arena id is invalid (%zu)\n", arena_id);
+    return false;
+  }
+  mi_arena_t* arena = mi_arena_from_id(arena_id);
+  if (arena==NULL) {
+    return false;
+  }
+  else if (!arena->is_exclusive) {
+    _mi_warning_message("cannot unload a non-exclusive arena (id %zu at %p)\n", arena_id, arena);
+    return false;
+  }
+  else if (arena->memid.memkind != MI_MEM_EXTERNAL) {
+    _mi_warning_message("can only unload managed arena's for external memory (id %zu at %p)\n", arena_id, arena);
+    return false;
+  }
+  if (base != NULL) { *base = (void*)arena; }
+  if (full_size != NULL) { *full_size = arena->memid.mem.os.size;  }
+  if (accessed_size != NULL) {
+    // scan the commit map for the highest entry
+    size_t idx;
+    if (mi_bitmap_bsr(arena->slices_committed, &idx)) {
+      *accessed_size = (idx + 1)* MI_ARENA_SLICE_SIZE;
+    }
+    else {
+      *accessed_size = mi_arena_info_slices(arena) * MI_ARENA_SLICE_SIZE;
+    }
+  }
+  
+  // set the entry to NULL
+  mi_atomic_store_ptr_release(mi_arena_t, &mi_arenas[arena_idx], NULL);
+  if (arena_idx + 1 == count) { // try adjust the count?
+    size_t expected = count;
+    mi_atomic_cas_strong_acq_rel(&mi_arena_count, &expected, count-1);
+  }
+  return true;
+}
+
+bool mi_arena_reload(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, mi_arena_id_t* arena_id) {
+  // assume the memory area is already containing the arena
+  if (arena_id != NULL) { *arena_id = _mi_arena_id_none(); }
+  if (start == NULL || size == 0) return false;
+  mi_arena_t* arena = (mi_arena_t*)start;
+  mi_memid_t memid = arena->memid;
+  if (memid.memkind != MI_MEM_EXTERNAL) {
+    _mi_warning_message("can only reload arena's from external memory (%p)\n", arena);
+    return false;
+  }
+  if (memid.mem.os.base != start) {
+    _mi_warning_message("the reloaded arena base address differs from the external memory (arena: %p, external: %p)\n", arena, start);
+    return false;
+  }
+  if (memid.mem.os.size != size) {
+    _mi_warning_message("the reloaded arena size differs from the external memory (arena size: %zu, external size: %zu)\n", arena->memid.mem.os.size, size);
+    return false;
+  }
+  if (!arena->is_exclusive) {
+    _mi_warning_message("the reloaded arena is not exclusive\n");
+    return false;
+  }
+  arena->memid.is_pinned = is_large;
+  arena->memid.initially_committed = is_committed;
+  arena->memid.initially_zero = is_zero;
+  arena->is_exclusive = true;
+  arena->is_large = is_large;
+  arena->id = _mi_arena_id_none();
+  return mi_arena_add(arena, arena_id, &_mi_stats_main);
 }
 

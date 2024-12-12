@@ -143,7 +143,6 @@ void*       _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t m
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
 void        _mi_arena_init(void);
-void        _mi_arena_free(void* p, size_t size, size_t still_committed_size, mi_memid_t memid);
 void*       _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t req_arena_id, size_t tseq, mi_memid_t* memid);
 void*       _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_id_t req_arena_id, size_t tseq, mi_memid_t* memid);
 bool        _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id);
