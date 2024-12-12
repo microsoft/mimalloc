@@ -15,6 +15,7 @@ static size_t      mi_page_map_entries_per_commit_bit = MI_ARENA_SLICE_SIZE;
 static void*       mi_page_map_max_address = NULL;
 static mi_memid_t  mi_page_map_memid;
 
+
 // (note: we need to initialize statically or otherwise C++ may run a default constructors after process initialization)
 static mi_bitmap_t mi_page_map_commit = { MI_ATOMIC_VAR_INIT(MI_BITMAP_DEFAULT_CHUNK_COUNT), MI_ATOMIC_VAR_INIT(0),
                                           { 0 }, { {MI_ATOMIC_VAR_INIT(0)} }, {{{ MI_ATOMIC_VAR_INIT(0) }}} };
@@ -84,7 +85,7 @@ static size_t mi_page_map_get_idx(mi_page_t* page, uint8_t** page_start, size_t*
   *page_start = mi_page_area(page, &page_size);
   if (page_size > MI_LARGE_PAGE_SIZE) { page_size = MI_LARGE_PAGE_SIZE - MI_ARENA_SLICE_SIZE; }  // furthest interior pointer
   *slice_count = mi_slice_count_of_size(page_size) + (((uint8_t*)*page_start - (uint8_t*)page)/MI_ARENA_SLICE_SIZE); // add for large aligned blocks
-  return ((uintptr_t)page >> MI_ARENA_SLICE_SHIFT);
+  return _mi_page_map_index(page);
 }
 
 
@@ -113,16 +114,20 @@ void _mi_page_map_register(mi_page_t* page) {
 
 void _mi_page_map_unregister(mi_page_t* page) {
   mi_assert_internal(_mi_page_map != NULL);
-
   // get index and count
   uint8_t* page_start;
   size_t   slice_count;
   const size_t idx = mi_page_map_get_idx(page, &page_start, &slice_count);
-
   // unset the offsets
   _mi_memzero(_mi_page_map + idx, slice_count);
 }
 
+void _mi_page_map_unregister_range(void* start, size_t size) {
+  const size_t slice_count = _mi_divide_up(size, MI_ARENA_SLICE_SIZE);
+  const uintptr_t index = _mi_page_map_index(start);
+  mi_page_map_ensure_committed(index, slice_count); // we commit the range in total; todo: scan the commit bits and clear only those ranges?
+  _mi_memzero(&_mi_page_map[index], slice_count);
+}
 
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
   // if mi_unlikely(_mi_page_map==NULL) {  // happens on macOS during loading

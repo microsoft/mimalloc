@@ -676,7 +676,7 @@ int _mi_os_numa_node_get(void) {
 /* ----------------------------------------------------------------------------
   Public API
 -----------------------------------------------------------------------------*/
-
+#if 0
 mi_decl_export void* mi_os_alloc(size_t size, bool commit, size_t* full_size) {
   return mi_os_alloc_aligned(size, mi_os_mem_config.alloc_granularity, commit, NULL, full_size);
 }
@@ -716,3 +716,4 @@ mi_decl_export void  mi_os_commit(void* p, size_t size) {
 mi_decl_export void  mi_os_decommit(void* p, size_t size) {
   _mi_os_decommit(p, size);
 }
+#endif

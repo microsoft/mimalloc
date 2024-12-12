@@ -212,4 +212,9 @@ void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx);
 bool mi_bitmap_bsr(mi_bitmap_t* bitmap, size_t* idx);
 
 
+typedef bool (mi_forall_set_fun_t)(size_t slice_index, mi_arena_t* arena, void* arg2);
+
+// Visit all set bits in a bitmap
+bool _mi_bitmap_forall_set(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg);
+
 #endif // MI_BITMAP_H

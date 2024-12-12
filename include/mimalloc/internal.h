@@ -164,6 +164,7 @@ void        _mi_meta_free(void* p, size_t size, mi_memid_t memid);
 bool        _mi_page_map_init(void);
 void        _mi_page_map_register(mi_page_t* page);
 void        _mi_page_map_unregister(mi_page_t* page);
+void        _mi_page_map_unregister_range(void* start, size_t size);
 
 // "page.c"
 void*       _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment)  mi_attr_noexcept mi_attr_malloc;
@@ -437,14 +438,18 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
 
 extern uint8_t* _mi_page_map;
 
+static inline uintptr_t _mi_page_map_index(const void* p) {
+  return (((uintptr_t)p) >> MI_ARENA_SLICE_SHIFT);
+}
+
 static inline mi_page_t* _mi_ptr_page_ex(const void* p, bool* valid) {
   #if 1
-  const uintptr_t idx = ((uintptr_t)p) >> MI_ARENA_SLICE_SHIFT;
+  const uintptr_t idx = _mi_page_map_index(p);
   const size_t ofs = _mi_page_map[idx];
   if (valid != NULL) *valid = (ofs != 0);
   return (mi_page_t*)((idx - ofs + 1) << MI_ARENA_SLICE_SHIFT);
   #else
-  const uintptr_t idx = ((uintptr_t)p) >> MI_ARENA_SLICE_SHIFT;
+  const uintptr_t idx = _mi_page_map_index(p);
   const uintptr_t up   = idx << MI_ARENA_SLICE_SHIFT;
   __builtin_prefetch((void*)up);
   const size_t ofs = _mi_page_map[idx];

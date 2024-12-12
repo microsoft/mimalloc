@@ -1051,7 +1051,6 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
 #define mi_bitmap_forall_chunks(bitmap, tseq, name_chunk_idx) \
   { \
   /* start chunk index -- todo: can depend on the tseq to decrease contention between threads */ \
-  MI_UNUSED(tseq); \
   const size_t chunk_max_acc       = 1 + mi_atomic_load_relaxed(&bitmap->chunk_max_accessed); \
   const size_t chunk_start         = tseq % chunk_max_acc; /* space out threads? */ \
   const size_t chunkmap_max        = _mi_divide_up(mi_bitmap_chunk_count(bitmap),MI_BFIELD_BITS); \
@@ -1196,4 +1195,26 @@ void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx) {
   const size_t cidx = idx % MI_BCHUNK_BITS;
   mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
   mi_bchunk_clear_once_set(&bitmap->chunks[chunk_idx], cidx);
+}
+
+
+// Visit all set bits in a bitmap.
+// todo: optimize further? maybe popcount to help the branch predictor for the loop,
+// and keep b constant (using a mask)? or avx512 to directly get all indices using a mask_compressstore?
+bool _mi_bitmap_forall_set(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg) {
+  mi_bitmap_forall_chunks(bitmap, 0, chunk_idx) {
+    mi_bchunk_t* chunk = &bitmap->chunks[chunk_idx];
+    for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
+      const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
+      mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[j]);
+      size_t bidx;
+      while (mi_bsf(b, &bidx)) {
+        b = b & (b-1);  // clear low bit
+        const size_t idx = base_idx + bidx;
+        if (!visit(idx, arena, arg)) return false;
+      }
+    }
+  }
+  mi_bitmap_forall_chunks_end();
+  return true;
 }
