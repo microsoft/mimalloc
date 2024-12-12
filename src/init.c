@@ -109,6 +109,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next
   MI_MEMID_STATIC,  // memid
+  0,                // full page retain
   false,            // can reclaim
   true,             // can eager abandon
   0,                // tag
@@ -155,6 +156,7 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
   MI_MEMID_STATIC,  // memid
+  2,                // full page retain
   true,             // allow page reclaim
   true,             // allow page abandon
   0,                // tag
@@ -224,6 +226,8 @@ static void mi_heap_main_init(void) {
     mi_lock_init(&mi_subproc_default.abandoned_os_lock);
     mi_lock_init(&mi_subproc_default.abandoned_os_visit_lock);
     _mi_heap_guarded_init(&_mi_heap_main);
+    _mi_heap_main.allow_page_abandon = (mi_option_get(mi_option_full_page_retain) >= 0);
+    _mi_heap_main.full_page_retain   = mi_option_get_clamp(mi_option_full_page_retain, -1, 32);
   }
 }
 
