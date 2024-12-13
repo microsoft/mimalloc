@@ -15,6 +15,7 @@ option(MI_TRACK_ASAN        "Compile with address sanitizer support (adds a smal
 option(MI_TRACK_ETW         "Compile with Windows event tracing (ETW) support (adds a small overhead)" OFF)
 option(MI_USE_CXX           "Use the C++ compiler to compile the library (instead of the C compiler)" OFF)
 option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.1-a' (2016))" ON)
+option(MI_OPT_SIMD          "Use SIMD instructions (requires MI_OPT_ARCH to be enabled)" OFF)
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" ON)
@@ -227,7 +228,7 @@ endif()
 if(MI_SEE_ASM)
   message(STATUS "Generate assembly listings (MI_SEE_ASM=ON)")
   list(APPEND mi_cflags -save-temps)
-  if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
+  if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 14)
     message(STATUS "No GNU Line marker")
     list(APPEND mi_cflags -Wno-gnu-line-marker)
   endif()
@@ -330,10 +331,10 @@ endif()
 # Determine architecture
 set(MI_OPT_ARCH_FLAGS "")
 set(MI_ARCH "")
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR 
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR
    CMAKE_GENERATOR_PLATFORM STREQUAL "x64")          # msvc
   set(MI_ARCH "x64")
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" OR   
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" OR
        CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64" OR    # apple
        CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")    # msvc
   set(MI_ARCH "arm64")
@@ -419,6 +420,12 @@ endif()
 if(MI_OPT_ARCH_FLAGS)
   list(APPEND mi_cflags ${MI_OPT_ARCH_FLAGS})
   message(STATUS "Architecture specific optimization is enabled (with ${MI_OPT_ARCH_FLAGS}) (MI_OPT_ARCH=ON)")
+  if (MI_OPT_SIMD)
+    list(APPEND mi_defines "MI_OPT_SIMD=1")
+    message(STATUS "SIMD instructions are enabled (MI_OPT_SIMD=ON)")
+  endif()
+elseif(MI_OPT_SIMD)
+  message(STATUS "SIMD instructions are not enabled (either MI_OPT_ARCH=OFF or this architecture has no SIMD support)")
 endif()
 
 # extra needed libraries

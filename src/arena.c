@@ -36,7 +36,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 typedef struct mi_arena_s {
   mi_memid_t          memid;                // memid of the memory area
   mi_arena_id_t       id;                   // arena id (> 0 where `arena == arenas[arena->id - 1]`)
-  
+
   size_t              slice_count;          // size of the area in arena slices (of `MI_ARENA_SLICE_SIZE`)
   size_t              info_slices;          // initial slices reserved for the arena bitmaps
   int                 numa_node;            // associated NUMA node
@@ -165,7 +165,7 @@ static mi_memid_t mi_memid_create_arena(mi_arena_t* arena, size_t slice_index, s
   mi_memid_t memid = _mi_memid_create(MI_MEM_ARENA);
   memid.mem.arena.arena = arena;
   memid.mem.arena.slice_index = (uint32_t)slice_index;
-  memid.mem.arena.slice_count = (uint32_t)slice_count;  
+  memid.mem.arena.slice_count = (uint32_t)slice_count;
   return memid;
 }
 
@@ -562,7 +562,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
       mi_atomic_decrement_relaxed(&subproc->abandoned_count[bin]);
       _mi_stat_decrease(&_mi_stats_main.pages_abandoned, 1);
       _mi_stat_counter_increase(&_mi_stats_main.pages_reclaim_on_alloc, 1);
-      
+
       _mi_page_free_collect(page, false);  // update `used` count
       mi_assert_internal(mi_bitmap_is_clearN(arena->slices_free, slice_index, slice_count));
       mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
@@ -770,7 +770,7 @@ void _mi_arena_page_free(mi_page_t* page) {
     mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_clearN(arena->slices_purge, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_clearN(arena->pages_abandoned[bin], slice_index, 1));
-    mi_assert_internal(mi_bitmap_is_setN(page->memid.mem.arena.arena->pages, page->memid.mem.arena.slice_index, 1));    
+    mi_assert_internal(mi_bitmap_is_setN(page->memid.mem.arena.arena->pages, page->memid.mem.arena.slice_index, 1));
     // note: we cannot check for `!mi_page_is_abandoned_and_mapped` since that may
     // be (temporarily) not true if the free happens while trying to reclaim
     // see `mi_arana_try_claim_abandoned`
@@ -891,10 +891,9 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
 static void mi_arenas_try_purge(bool force, bool visit_all);
 
 static void mi_arena_free(void* p, size_t size, mi_memid_t memid) {
-  mi_assert_internal(size >= 0);
   if (p==NULL) return;
   if (size==0) return;
-  
+
   // need to set all memory to undefined as some parts may still be marked as no_access (like padding etc.)
   mi_track_mem_undefined(p, size);
 
@@ -981,7 +980,7 @@ static void mi_arenas_unsafe_destroy(void) {
     if (arena != NULL) {
       // mi_lock_done(&arena->abandoned_visit_lock);
       mi_atomic_store_ptr_release(mi_arena_t, &mi_arenas[i], NULL);
-      if (mi_memkind_is_os(arena->memid.memkind)) {        
+      if (mi_memkind_is_os(arena->memid.memkind)) {
         _mi_os_free(mi_arena_start(arena), mi_arena_size(arena), arena->memid);
       }
     }
@@ -1457,12 +1456,12 @@ mi_decl_export bool mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t*
     asize = mi_arena_info_slices(arena) * MI_ARENA_SLICE_SIZE;
   }
   if (base != NULL) { *base = (void*)arena; }
-  if (full_size != NULL) { *full_size = arena->memid.mem.os.size;  }  
+  if (full_size != NULL) { *full_size = arena->memid.mem.os.size;  }
   if (accessed_size != NULL) { *accessed_size = asize; }
 
-  // unregister the pages 
+  // unregister the pages
   _mi_page_map_unregister_range(arena, asize);
-  
+
   // set the entry to NULL
   mi_atomic_store_ptr_release(mi_arena_t, &mi_arenas[arena_idx], NULL);
   if (arena_idx + 1 == count) { // try adjust the count?
