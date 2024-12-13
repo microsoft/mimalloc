@@ -1051,6 +1051,23 @@ bool mi_bitmap_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n, s
   return mi_bitmap_xsetN_(set, bitmap, idx, n, already_xset);
 }
 
+// ------- mi_bitmap_try_clearN ---------------------------------------
+
+bool mi_bitmap_try_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
+  mi_assert_internal(n>0);
+  mi_assert_internal(n<=MI_BCHUNK_BITS);
+  mi_assert_internal(idx + n <= mi_bitmap_max_bits(bitmap));
+
+  const size_t chunk_idx = idx / MI_BCHUNK_BITS;
+  const size_t cidx = idx % MI_BCHUNK_BITS;
+  mi_assert_internal(cidx + n <= MI_BCHUNK_BITS);  // don't cross chunks (for now)
+  mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
+  if (cidx + n > MI_BCHUNK_BITS) return false;
+  bool maybe_all_clear;
+  const bool cleared = mi_bchunk_try_clearN(&bitmap->chunks[chunk_idx], cidx, n, &maybe_all_clear);
+  if (cleared && maybe_all_clear) { mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx); }
+  return cleared;
+}
 
 // ------- mi_bitmap_is_xset ---------------------------------------
 
@@ -1068,6 +1085,7 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
 
   return mi_bchunk_is_xsetN(set, &bitmap->chunks[chunk_idx], cidx, n);
 }
+
 
 
 
@@ -1144,7 +1162,7 @@ static inline bool mi_bitmap_find(mi_bitmap_t* bitmap, size_t tseq, size_t n, si
     // and for each chunkmap entry we iterate over its bits to find the chunks
     mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[cmap_idx]);
     size_t cmap_entry_cycle = (cmap_idx != cmap_acc ? MI_BFIELD_BITS : cmap_acc_bits);
-    mi_bfield_cycle_iterate(cmap_entry, tseq, cmap_entry_cycle, eidx, Y)
+    mi_bfield_cycle_iterate(cmap_entry, tseq%8, cmap_entry_cycle, eidx, Y) // reduce the tseq to 8 bins to reduce using extra memory (see `mstress`)
     {
       mi_assert_internal(eidx <= MI_BFIELD_BITS);
       const size_t chunk_idx = cmap_idx*MI_BFIELD_BITS + eidx;
@@ -1314,10 +1332,47 @@ bool _mi_bitmap_forall_set(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_a
         size_t bidx;
         while (mi_bfield_foreach_bit(&b, &bidx)) {
           const size_t idx = base_idx + bidx;
-          if (!visit(idx, arena, arg)) return false;
+          if (!visit(idx, 1, arena, arg)) return false;
         }
       }
     }
   }
   return true;
 }
+
+// Visit all set bits in a bitmap but try to return ranges (within bfields) if possible.
+// used by purging to purge larger ranges if possible
+// todo: optimize further? maybe use avx512 to directly get all indices using a mask_compressstore?
+bool _mi_bitmap_forall_set_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg) {
+  // for all chunkmap entries
+  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  for (size_t i = 0; i < chunkmap_max; i++) {
+    mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
+    size_t cmap_idx;
+    // for each chunk (corresponding to a set bit in a chunkmap entry)
+    while (mi_bfield_foreach_bit(&cmap_entry, &cmap_idx)) {
+      const size_t chunk_idx = i*MI_BFIELD_BITS + cmap_idx;
+      // for each chunk field
+      mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
+      for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
+        const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
+        mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[j]);
+        size_t bshift = 0;
+        size_t bidx;
+        while (mi_bfield_find_least_bit(b, &bidx)) {
+          b >>= bidx;
+          bshift += bidx;
+          const size_t rng = mi_ctz(~b); // all the set bits from bidx
+          mi_assert_internal(rng>=1);
+          const size_t idx = base_idx + bshift + bidx;
+          if (!visit(idx, rng, arena, arg)) return false;
+          // skip rng
+          b >>= rng;
+          bshift += rng;
+        }
+      }
+    }
+  }
+  return true;
+}
+

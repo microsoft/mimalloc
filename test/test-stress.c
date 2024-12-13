@@ -40,10 +40,10 @@ static int ITER    = 20;
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
-#elif 1
+#elif 0
 static int THREADS = 4;
 static int SCALE   = 10;
-static int ITER    = 10;
+static int ITER    = 20;
 #define ALLOW_LARGE false
 #elif 0
 static int THREADS = 32;
@@ -260,8 +260,12 @@ static void test_stress(void) {
     //mi_debug_show_arenas();
     #endif
     #if !defined(NDEBUG) || defined(MI_TSAN)
-    if ((n + 1) % 10 == 0) 
-      { printf("- iterations left: %3d\n", ITER - (n + 1)); }
+    if ((n + 1) % 10 == 0) { 
+      printf("- iterations left: %3d\n", ITER - (n + 1)); 
+      //mi_debug_show_arenas(true, false, false);
+      //mi_collect(true);
+      //mi_debug_show_arenas(true, false, false);
+    }
     #endif
   }
   // clean up
@@ -344,8 +348,8 @@ int main(int argc, char** argv) {
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
   //mi_debug_show_arenas(true, true, false);
-  // mi_debug_show_arenas(true, false, false);
-  // mi_collect(true);
+  mi_debug_show_arenas(true, false, false);
+  mi_collect(true);
   mi_debug_show_arenas(true,false,false);
   #else
   mi_collect(false);
