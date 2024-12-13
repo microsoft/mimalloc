@@ -155,6 +155,7 @@ void _mi_meta_free(void* p, size_t size, mi_memid_t memid) {
   }
 }
 
+// used for debug output
 bool _mi_meta_is_meta_page(void* p) 
 {
   mi_meta_page_t* mpage0 = mi_atomic_load_ptr_acquire(mi_meta_page_t, &mi_meta_pages);
