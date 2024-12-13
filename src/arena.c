@@ -1212,7 +1212,7 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, mi_arena_t
       char c = 'p';
       if (mi_page_is_abandoned_mapped(page)) { c = 'a'; }
       else if (mi_page_is_abandoned(page)) { c = 'f'; }      
-      bit_of_page = (long)page->memid.mem.arena.slice_count - 1;
+      bit_of_page = (long)page->memid.mem.arena.slice_count;
       buf[bit] = c;
     }    
     else {
@@ -1265,13 +1265,12 @@ static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bi
   return bit_set_count;
 }
 
-void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge) mi_attr_noexcept {
-  MI_UNUSED(show_abandoned);
+void mi_debug_show_arenas(bool show_inuse, bool show_committed, bool show_pages) mi_attr_noexcept {
   size_t max_arenas = mi_arena_get_count();
   size_t free_total = 0;
   size_t slice_total = 0;
   //size_t abandoned_total = 0;
-  size_t purge_total = 0;
+  size_t page_total = 0;
   for (size_t i = 0; i < max_arenas; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
     if (arena == NULL) break;
@@ -1280,16 +1279,20 @@ void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge)
     if (show_inuse) {
       free_total += mi_debug_show_bitmap("in-use slices", arena->slice_count, arena->slices_free, true, NULL);
     }
-    mi_debug_show_bitmap("committed slices", arena->slice_count, arena->slices_committed, false, NULL);
-    // todo: abandoned slices
-    if (show_purge) {
-      purge_total += mi_debug_show_bitmap("purgeable slices", arena->slice_count, arena->slices_purge, false, NULL);
+    if (show_committed) {
+      mi_debug_show_bitmap("committed slices", arena->slice_count, arena->slices_committed, false, NULL);
     }
-    mi_debug_show_bitmap("pages (p=page, a=abandoned, f=full-abandoned, i=info, m=meta)", arena->slice_count, arena->pages, false, arena);
+    // todo: abandoned slices
+    //if (show_purge) {
+    //  purge_total += mi_debug_show_bitmap("purgeable slices", arena->slice_count, arena->slices_purge, false, NULL);
+    //}
+    if (show_pages) {
+      page_total += mi_debug_show_bitmap("pages (p=page, a=abandoned, f=full-abandoned, i=info, m=meta)", arena->slice_count, arena->pages, false, arena);
+    }
   }
   if (show_inuse)     _mi_output_message("total inuse slices    : %zu\n", slice_total - free_total);
   // if (show_abandoned) _mi_verbose_message("total abandoned slices: %zu\n", abandoned_total);
-  if (show_purge)     _mi_output_message("total purgeable slices: %zu\n", purge_total);
+  if (show_pages)     _mi_output_message("total pages in areanas: %zu\n", page_total);
 }
 
 

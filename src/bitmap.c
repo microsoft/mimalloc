@@ -1220,7 +1220,7 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN_(mi_bitmap_t* bitmap, size_
 typedef struct mi_claim_fun_data_s {
   mi_arena_t*   arena;
   mi_subproc_t* subproc;
-  int           heap_tag;
+  mi_heaptag_t  heap_tag;
 } mi_claim_fun_data_t;
 
 static bool mi_bitmap_try_find_and_claim_visit(mi_bitmap_t* bitmap, size_t chunk_idx, size_t n, size_t* pidx, void* arg1, void* arg2)
