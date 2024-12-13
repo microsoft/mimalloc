@@ -42,6 +42,13 @@ static inline bool mi_bfield_find_least_bit(mi_bfield_t x, size_t* idx) {
   return mi_bsf(x,idx);
 }
 
+// find each set bit in a bit field `x` until it becomes zero.
+static inline bool mi_bfield_foreach_bit(mi_bfield_t* x, size_t* idx) {
+  const bool found = mi_bfield_find_least_bit(*x, idx);
+  *x = mi_bfield_clear_least_bit(*x);
+  return found;
+}
+
 //static inline mi_bfield_t mi_bfield_rotate_right(mi_bfield_t x, size_t r) {
 //  return mi_rotr(x,r);
 //}
@@ -1080,7 +1087,7 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
 //
 // The start is determined usually as `tseq % cycle` to have each thread
 // start at a different spot.
-// - We use `popcount` to improve branch prediction`
+// - We use `popcount` to improve branch prediction (maybe not needed? can we simplify?)
 // - The `cycle_mask` is the part `[start, cycle>`.
 #define mi_bfield_iterate(bfield,start,cycle,name_idx,SUF) { \
   mi_assert_internal(start <= cycle); \
@@ -1112,14 +1119,15 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
 
 
 /* --------------------------------------------------------------------------------
-  bitmap  try_find_and_clear
+  mi_bitmap_find
   (used to find free pages)
 -------------------------------------------------------------------------------- */
 
+typedef bool (mi_bitmap_visit_fun_t)(mi_bitmap_t* bitmap, size_t chunk_idx, size_t n, size_t* idx, void* arg1, void* arg2);
 
-typedef bool (mi_bchunk_try_find_and_clear_fun_t)(mi_bchunk_t* chunk, size_t n, size_t* idx);
-
-static inline bool mi_bitmap_try_find_and_clear_generic(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx, mi_bchunk_try_find_and_clear_fun_t* try_find_and_clear)
+// Go through the bitmap and for every sequence of `n` set bits, call the visitor function.
+// If it returns `true` stop the search.
+static inline bool mi_bitmap_find(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx, mi_bitmap_visit_fun_t* on_find, void* arg1, void* arg2)
 {
   // we space out threads to reduce contention
   const size_t cmap_max_count  = _mi_divide_up(mi_bitmap_chunk_count(bitmap),MI_BFIELD_BITS);
@@ -1141,22 +1149,44 @@ static inline bool mi_bitmap_try_find_and_clear_generic(mi_bitmap_t* bitmap, siz
       mi_assert_internal(eidx <= MI_BFIELD_BITS);
       const size_t chunk_idx = cmap_idx*MI_BFIELD_BITS + eidx;
       mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
-      size_t cidx;
-      // if we find a spot in the chunk we are done
-      if ((*try_find_and_clear)(&bitmap->chunks[chunk_idx], n, &cidx)) {
-        *pidx = (chunk_idx * MI_BCHUNK_BITS) + cidx;
-        mi_assert_internal(*pidx + n <= mi_bitmap_max_bits(bitmap));
+      if ((*on_find)(bitmap, chunk_idx, n, pidx, arg1, arg2)) {
         return true;
-      }
-      else {
-        /* we may find that all are cleared only on a second iteration but that is ok as the chunkmap is a conservative approximation. */
-        mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx);
       }
     }
     mi_bfield_cycle_iterate_end(Y);
   }
   mi_bfield_cycle_iterate_end(X);
   return false;
+}
+
+
+/* --------------------------------------------------------------------------------
+  mi_bitmap_try_find_and_clear -- used to find free pages
+  note: the compiler will fully inline the indirect function calls
+-------------------------------------------------------------------------------- */
+
+
+typedef bool (mi_bchunk_try_find_and_clear_fun_t)(mi_bchunk_t* chunk, size_t n, size_t* idx);
+
+static bool mi_bitmap_try_find_and_clear_visit(mi_bitmap_t* bitmap, size_t chunk_idx, size_t n, size_t* pidx, void* arg1, void* arg2) {
+  MI_UNUSED(arg2);
+  mi_bchunk_try_find_and_clear_fun_t* try_find_and_clear = (mi_bchunk_try_find_and_clear_fun_t*)arg1;
+  size_t cidx;
+  // if we find a spot in the chunk we are done
+  if ((*try_find_and_clear)(&bitmap->chunks[chunk_idx], n, &cidx)) {
+    *pidx = (chunk_idx * MI_BCHUNK_BITS) + cidx;
+    mi_assert_internal(*pidx + n <= mi_bitmap_max_bits(bitmap));
+    return true;
+  }
+  else {
+    /* we may find that all are cleared only on a second iteration but that is ok as the chunkmap is a conservative approximation. */
+    mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx);
+    return false;
+  }
+}
+
+static inline bool mi_bitmap_try_find_and_clear_generic(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx, mi_bchunk_try_find_and_clear_fun_t* try_find_and_clear) {
+  return mi_bitmap_find(bitmap, tseq, n, pidx, &mi_bitmap_try_find_and_clear_visit, (void*)try_find_and_clear, NULL);  
 }
 
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
@@ -1183,80 +1213,55 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN_(mi_bitmap_t* bitmap, size_
 
 
 /* --------------------------------------------------------------------------------
-  bitmap  try_find_and_claim
-  (used to allocate abandoned pages)
+  Bitmap: try_find_and_claim  -- used to allocate abandoned pages
+  note: the compiler will fully inline the indirect function call
 -------------------------------------------------------------------------------- */
 
-#define mi_bitmap_forall_chunks(bitmap, tseq, name_chunk_idx) \
-  { \
-  /* start chunk index -- todo: can depend on the tseq to decrease contention between threads */ \
-  const size_t chunk_max_acc       = 1 + mi_atomic_load_relaxed(&bitmap->chunk_max_accessed); \
-  const size_t chunk_start         = tseq % chunk_max_acc; /* space out threads? */ \
-  const size_t chunkmap_max        = _mi_divide_up(mi_bitmap_chunk_count(bitmap),MI_BFIELD_BITS); \
-  const size_t chunkmap_max_acc    = _mi_divide_up(chunk_max_acc,MI_BFIELD_BITS); \
-  const size_t chunkmap_start      = chunk_start / MI_BFIELD_BITS; \
-  /* for each chunkmap entry `i` */ \
-  for (size_t _i = 0; _i < chunkmap_max; _i++) { \
-    size_t i; \
-    if (_i < chunkmap_max_acc) { /* first the chunks up to chunk_max_accessed */ \
-      i = _i + chunkmap_start;  \
-      if (i >= chunkmap_max_acc) { i -= chunkmap_max_acc; } /* rotate */ \
-    } \
-    else { i = _i;  }  /* the rest of the chunks above chunk_max_accessed */ \
-    const size_t chunk_idx0 = i*MI_BFIELD_BITS; \
-    mi_bfield_t cmap = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]); \
-    /* todo: space out threads within a chunkmap (2GiB) as well? */ \
-    size_t cmap_idx_shift = 0;   /* shift through the cmap */ \
-    size_t cmap_idx; \
-    while (mi_bfield_find_least_bit(cmap, &cmap_idx)) { \
-      /* set the chunk idx */ \
-      size_t name_chunk_idx = chunk_idx0 + ((cmap_idx + cmap_idx_shift) % MI_BFIELD_BITS); \
-      /* try to find and clear N bits in that chunk */ \
-      {
+typedef struct mi_claim_fun_data_s {
+  mi_arena_t*   arena;
+  mi_subproc_t* subproc;
+  int           heap_tag;
+} mi_claim_fun_data_t;
 
-#define mi_bitmap_forall_chunks_end() \
-      } \
-      /* skip to the next bit */ \
-      cmap_idx_shift += cmap_idx+1; \
-      cmap >>= cmap_idx;            /* skip scanned bits (and avoid UB for `cmap_idx+1`) */ \
-      cmap >>= 1; \
-    } \
-  }}
+static bool mi_bitmap_try_find_and_claim_visit(mi_bitmap_t* bitmap, size_t chunk_idx, size_t n, size_t* pidx, void* arg1, void* arg2)
+{
+  mi_assert_internal(n==1); MI_UNUSED(n);
+  mi_claim_fun_t* claim_fun = (mi_claim_fun_t*)arg1;
+  mi_claim_fun_data_t* claim_data = (mi_claim_fun_data_t*)arg2;
+  size_t cidx;
+  if mi_likely(mi_bchunk_try_find_and_clear(&bitmap->chunks[chunk_idx], &cidx)) {
+    const size_t slice_index = (chunk_idx * MI_BCHUNK_BITS) + cidx;
+    mi_assert_internal(slice_index < mi_bitmap_max_bits(bitmap));
+    bool keep_set = true;
+    if ((*claim_fun)(slice_index, claim_data->arena, claim_data->subproc, claim_data->heap_tag, &keep_set)) {
+      // success!
+      mi_assert_internal(!keep_set);
+      *pidx = slice_index;
+      return true;
+    }
+    else {
+      // failed to claim it, set abandoned mapping again (unless the page was freed)
+      if (keep_set) {
+        const bool wasclear = mi_bchunk_set(&bitmap->chunks[chunk_idx], cidx);
+        mi_assert_internal(wasclear); MI_UNUSED(wasclear);
+      }
+    }
+  }
+  else {
+    // we may find that all are cleared only on a second iteration but that is ok as
+    // the chunkmap is a conservative approximation.
+    mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx);
+  }
+  return false;
+}
 
 // Find a set bit in the bitmap and try to atomically clear it and claim it.
 // (Used to find pages in the pages_abandoned bitmaps.)
 mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx,
-                                                    mi_claim_fun_t* claim, mi_arena_t* arena, mi_subproc_t* subproc, mi_heaptag_t heap_tag )
+  mi_claim_fun_t* claim, mi_arena_t* arena, mi_subproc_t* subproc, mi_heaptag_t heap_tag)
 {
-  mi_bitmap_forall_chunks(bitmap, tseq, chunk_idx)
-  {
-    size_t cidx;
-    if mi_likely(mi_bchunk_try_find_and_clear(&bitmap->chunks[chunk_idx], &cidx)) {
-      const size_t slice_index = (chunk_idx * MI_BCHUNK_BITS) + cidx;
-      mi_assert_internal(slice_index < mi_bitmap_max_bits(bitmap));
-      bool keep_set = true;
-      if ((*claim)(slice_index, arena, subproc, heap_tag, &keep_set)) {
-        // success!
-        mi_assert_internal(!keep_set);
-        *pidx = slice_index;
-        return true;
-      }
-      else {
-        // failed to claim it, set abandoned mapping again (unless the page was freed)
-        if (keep_set) {
-          const bool wasclear = mi_bchunk_set(&bitmap->chunks[chunk_idx], cidx);
-          mi_assert_internal(wasclear); MI_UNUSED(wasclear);
-        }
-      }
-    }
-    else {
-      // we may find that all are cleared only on a second iteration but that is ok as
-      // the chunkmap is a conservative approximation.
-      mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx);
-    }
-  }
-  mi_bitmap_forall_chunks_end();
-  return false;
+  mi_claim_fun_data_t claim_data = { arena, subproc, heap_tag };
+  return mi_bitmap_find(bitmap, tseq, 1, pidx, &mi_bitmap_try_find_and_claim_visit, (void*)claim, &claim_data);
 }
 
 
@@ -1291,22 +1296,28 @@ void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx) {
 
 
 // Visit all set bits in a bitmap.
-// todo: optimize further? maybe popcount to help the branch predictor for the loop,
-// and keep b constant (using a mask)? or avx512 to directly get all indices using a mask_compressstore?
+// todo: optimize further? maybe use avx512 to directly get all indices using a mask_compressstore?
 bool _mi_bitmap_forall_set(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg) {
-  mi_bitmap_forall_chunks(bitmap, 0, chunk_idx) {
-    mi_bchunk_t* chunk = &bitmap->chunks[chunk_idx];
-    for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
-      const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
-      mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[j]);
-      size_t bidx;
-      while (mi_bsf(b, &bidx)) {
-        b = b & (b-1);  // clear low bit
-        const size_t idx = base_idx + bidx;
-        if (!visit(idx, arena, arg)) return false;
+  // for all chunkmap entries
+  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  for(size_t i = 0; i < chunkmap_max; i++) {
+    mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
+    size_t cmap_idx;
+    // for each chunk (corresponding to a set bit in a chunkmap entry)
+    while (mi_bfield_foreach_bit(&cmap_entry, &cmap_idx)) {
+      const size_t chunk_idx = i*MI_BFIELD_BITS + cmap_idx;
+      // for each chunk field
+      mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
+      for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
+        const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
+        mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[j]);
+        size_t bidx;
+        while (mi_bfield_foreach_bit(&b, &bidx)) {
+          const size_t idx = base_idx + bidx;
+          if (!visit(idx, arena, arg)) return false;
+        }
       }
     }
   }
-  mi_bitmap_forall_chunks_end();
   return true;
 }
