@@ -1425,9 +1425,9 @@ static void mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slices)
 // Note: assumes we (still) own the area as we may purge immediately
 static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_t slices) {
   const long delay = mi_arena_purge_delay();
-  if (delay < 0) return;  // is purging allowed at all?
+  if (delay < 0 || _mi_preloading()) return;  // is purging allowed at all?
 
-  if (_mi_preloading() || delay == 0) {
+  if (delay == 0) {
     // decommit directly
     mi_arena_purge(arena, slice_index, slices);
   }
