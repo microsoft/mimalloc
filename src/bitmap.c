@@ -1111,7 +1111,7 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
 }
 
 #define mi_bfield_cycle_iterate(bfield,tseq,cycle,name_idx,SUF) { \
-  const size_t _start##SUF = (uint32_t)(tseq) % (uint32_t)(cycle); \
+  const size_t _start##SUF = (uint32_t)(tseq) % (uint32_t)(cycle); /* or: 0 to always search from the start? */\
   mi_bfield_iterate(bfield,_start##SUF,cycle,name_idx,SUF)
 
 #define mi_bfield_cycle_iterate_end(SUF) \
