@@ -40,7 +40,7 @@ static int ITER    = 20;
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
-#elif 0
+#elif 1
 static int THREADS = 4;
 static int SCALE   = 10;
 static int ITER    = 10;
@@ -345,11 +345,11 @@ int main(int argc, char** argv) {
   #ifndef NDEBUG
   //mi_debug_show_arenas(true, true, false);
   // mi_debug_show_arenas(true, false, false);
-  mi_collect(true);
-  mi_debug_show_arenas(true, false, false);
+  // mi_collect(true);
+  mi_debug_show_arenas(true,false,false);
   #else
   mi_collect(false);
-  mi_debug_show_arenas(true, true, false);
+  mi_debug_show_arenas(true,false,false);
   // mi_stats_print(NULL);
   #endif
 #else
