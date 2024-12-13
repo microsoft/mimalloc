@@ -202,7 +202,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint
     heap->allow_page_reclaim = false;
     // and halve the full page retain (possibly to 0)
     if (heap->full_page_retain >= 0) {
-      heap->full_page_retain = heap->full_page_retain / 2;
+      heap->full_page_retain = heap->full_page_retain / 4;
     }
   }
   
