@@ -666,7 +666,6 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
   page->page_start = (uint8_t*)page + block_start;
   page->block_size = block_size;
   page->memid = memid; 
-  mi_assert_internal(memid.mem.arena.slice_count > 0);
   page->free_is_zero = memid.initially_zero;
   if (block_size > 0 && _mi_is_power_of_two(block_size)) {
     page->block_size_shift = (uint8_t)mi_ctz(block_size);
