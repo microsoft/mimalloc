@@ -145,7 +145,7 @@ void _mi_meta_free(void* p, size_t size, mi_memid_t memid) {
     mi_assert_internal(mi_bitmap_is_clearN(&mpage->blocks_free, block_idx, block_count));
     // we zero on free (and on the initial page allocation) so we don't need a "dirty" map
     _mi_memzero_aligned(mi_meta_block_start(mpage, block_idx), block_count*MI_META_BLOCK_SIZE);
-    mi_bitmap_clearN(&mpage->blocks_free, block_idx, block_count);
+    mi_bitmap_setN(&mpage->blocks_free, block_idx, block_count,NULL);
   }
   else if (mi_memid_is_os(memid)) {
     _mi_os_free(p, size, memid);    
@@ -153,4 +153,15 @@ void _mi_meta_free(void* p, size_t size, mi_memid_t memid) {
   else {
     mi_assert_internal(mi_memid_needs_no_free(memid));
   }
+}
+
+bool _mi_meta_is_meta_page(void* p) 
+{
+  mi_meta_page_t* mpage0 = mi_atomic_load_ptr_acquire(mi_meta_page_t, &mi_meta_pages);
+  mi_meta_page_t* mpage = mpage0;
+  while (mpage != NULL) {
+    if ((void*)mpage == p) return true;
+    mpage = mi_meta_page_next(mpage);    
+  }
+  return false;
 }
