@@ -159,6 +159,7 @@ bool        _mi_arena_page_try_reabandon_to_mapped(mi_page_t* page);
 // arena-meta.c
 void*       _mi_meta_zalloc( size_t size, mi_memid_t* memid );
 void        _mi_meta_free(void* p, size_t size, mi_memid_t memid);
+bool        _mi_meta_is_meta_page(void* p);
 
 // "page-map.c"
 bool        _mi_page_map_init(void);

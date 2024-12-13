@@ -162,6 +162,8 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
 static mi_memid_t mi_memid_create_arena(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
   mi_assert_internal(slice_index < UINT32_MAX);
   mi_assert_internal(slice_count < UINT32_MAX);
+  mi_assert_internal(slice_count > 0);
+  mi_assert_internal(slice_index < arena->slice_count);
   mi_memid_t memid = _mi_memid_create(MI_MEM_ARENA);
   memid.mem.arena.arena = arena;
   memid.mem.arena.slice_index = (uint32_t)slice_index;
@@ -663,7 +665,8 @@ static mi_page_t* mi_arena_page_alloc_fresh(size_t slice_count, size_t block_siz
   page->reserved = (uint16_t)reserved;
   page->page_start = (uint8_t*)page + block_start;
   page->block_size = block_size;
-  page->memid = memid;
+  page->memid = memid; 
+  mi_assert_internal(memid.mem.arena.slice_count > 0);
   page->free_is_zero = memid.initially_zero;
   if (block_size > 0 && _mi_is_power_of_two(block_size)) {
     page->block_size_shift = (uint8_t)mi_ctz(block_size);
@@ -1197,7 +1200,33 @@ static size_t mi_debug_show_bfield(mi_bfield_t field, char* buf) {
   return bit_set_count;
 }
 
-static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bitmap_t* bitmap, bool invert) {
+static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, mi_arena_t* arena, size_t slice_index) {
+  size_t bit_set_count = 0;
+  long bit_of_page = 0;
+  for (int bit = 0; bit < MI_BFIELD_BITS; bit++, bit_of_page--) {
+    bool is_set = ((((mi_bfield_t)1 << bit) & field) != 0);
+    void* start = mi_arena_slice_start(arena, slice_index + bit);
+    if (is_set) {
+      bit_set_count++;
+      mi_page_t* page = (mi_page_t*)start;
+      char c = 'p';
+      if (mi_page_is_abandoned_mapped(page)) { c = 'a'; }
+      else if (mi_page_is_abandoned(page)) { c = 'f'; }      
+      bit_of_page = (long)page->memid.mem.arena.slice_count - 1;
+      buf[bit] = c;
+    }    
+    else {
+      char c = '.';
+      if (bit_of_page > 0) { c = '-'; }
+      else if (_mi_meta_is_meta_page(start)) { c = 'm'; }
+      else if (slice_index + bit < arena->info_slices) { c = 'i'; }
+      buf[bit] = c;
+    }
+  }
+  return bit_set_count;
+}
+
+static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bitmap_t* bitmap, bool invert, mi_arena_t* arena) {
   _mi_output_message("%s:\n", header);
   size_t bit_count = 0;
   size_t bit_set_count = 0;
@@ -1217,7 +1246,8 @@ static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bi
       if (bit_count < slice_count) {
         mi_bfield_t bfield = chunk->bfields[j];
         if (invert) bfield = ~bfield;
-        size_t xcount = mi_debug_show_bfield(bfield, buf + k);
+        size_t xcount = (arena!=NULL ? mi_debug_show_page_bfield(bfield, buf + k, arena, bit_count)
+                                     : mi_debug_show_bfield(bfield, buf + k));
         if (invert) xcount = MI_BFIELD_BITS - xcount;
         bit_set_count += xcount;
         k += MI_BFIELD_BITS;
@@ -1246,15 +1276,16 @@ void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge)
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
     if (arena == NULL) break;
     slice_total += arena->slice_count;
-    _mi_output_message("arena %zu: %zu slices (%zu MiB)%s\n", i, arena->slice_count, mi_size_of_slices(arena->slice_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""));
+    _mi_output_message("arena %zu at %p: %zu slices (%zu MiB)%s\n", i, arena, arena->slice_count, mi_size_of_slices(arena->slice_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""));
     if (show_inuse) {
-      free_total += mi_debug_show_bitmap("in-use slices", arena->slice_count, arena->slices_free, true);
+      free_total += mi_debug_show_bitmap("in-use slices", arena->slice_count, arena->slices_free, true, NULL);
     }
-    mi_debug_show_bitmap("committed slices", arena->slice_count, arena->slices_committed, false);
+    mi_debug_show_bitmap("committed slices", arena->slice_count, arena->slices_committed, false, NULL);
     // todo: abandoned slices
     if (show_purge) {
-      purge_total += mi_debug_show_bitmap("purgeable slices", arena->slice_count, arena->slices_purge, false);
+      purge_total += mi_debug_show_bitmap("purgeable slices", arena->slice_count, arena->slices_purge, false, NULL);
     }
+    mi_debug_show_bitmap("pages (p=page, a=abandoned, f=full-abandoned, i=info, m=meta)", arena->slice_count, arena->pages, false, arena);
   }
   if (show_inuse)     _mi_output_message("total inuse slices    : %zu\n", slice_total - free_total);
   // if (show_abandoned) _mi_verbose_message("total abandoned slices: %zu\n", abandoned_total);

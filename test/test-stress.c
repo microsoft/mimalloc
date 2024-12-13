@@ -344,12 +344,14 @@ int main(int argc, char** argv) {
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
   //mi_debug_show_arenas(true, true, false);
+  // mi_debug_show_arenas(true, false, false);
   mi_collect(true);
-  mi_debug_show_arenas(true,true,false);
-  #endif
-  // mi_collect(true);
-  // mi_debug_show_arenas(true, true, false);
+  mi_debug_show_arenas(true, false, false);
+  #else
+  mi_collect(false);
+  mi_debug_show_arenas(true, true, false);
   // mi_stats_print(NULL);
+  #endif
 #else
   mi_stats_print(NULL);  // so we see rss/commit/elapsed
 #endif

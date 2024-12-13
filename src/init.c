@@ -398,11 +398,10 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
   // merge stats
   _mi_stats_done(&heap->tld->stats);
 
-  // free if not the main thread
-  if (heap != &_mi_heap_main) {
-    _mi_meta_free(heap, sizeof(mi_heap_t), heap->memid);
-  }
-  else {
+  // free heap meta data
+  _mi_meta_free(heap, sizeof(mi_heap_t), heap->memid);
+
+  if (heap == &_mi_heap_main) {
     #if 0
     // never free the main thread even in debug mode; if a dll is linked statically with mimalloc,
     // there may still be delete/free calls after the mi_fls_done is called. Issue #207
@@ -410,6 +409,10 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
     mi_assert_internal(heap->tld->heap_backing == &_mi_heap_main);
     #endif
   }
+
+  // free the tld
+  mi_tld_t* tld = _mi_tld();
+  _mi_meta_free(_mi_tld(), sizeof(mi_tld_t), tld->memid);
   return false;
 }
 

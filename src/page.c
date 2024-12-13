@@ -82,7 +82,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_block_size(page) > 0);
   mi_assert_internal(page->used <= page->capacity);
   mi_assert_internal(page->capacity <= page->reserved);
-
+  
   // const size_t bsize = mi_page_block_size(page);
   // uint8_t* start = mi_page_start(page);
   //mi_assert_internal(start + page->capacity*page->block_size == page->top);
@@ -623,7 +623,7 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
   #endif
   mi_assert_internal(page->block_size_shift == 0 || (mi_page_block_size(page) == ((size_t)1 << page->block_size_shift)));
   mi_assert_expensive(mi_page_is_valid_init(page));
-
+  
   // initialize an initial free list
   mi_page_extend_free(heap,page);
   mi_assert(mi_page_immediate_available(page));
