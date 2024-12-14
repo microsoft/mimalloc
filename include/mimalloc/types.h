@@ -471,13 +471,12 @@ typedef struct mi_stats_s {
   mi_stat_counter_t commit_calls;
   mi_stat_counter_t reset_calls;
   mi_stat_counter_t purge_calls;
+  mi_stat_counter_t arena_purges;
   mi_stat_counter_t page_no_retire;
   mi_stat_counter_t searches;
   mi_stat_counter_t normal_count;
   mi_stat_counter_t huge_count;
   mi_stat_counter_t arena_count;
-  mi_stat_counter_t arena_crossover_count;
-  mi_stat_counter_t arena_rollback_count;
   mi_stat_counter_t guarded_alloc_count;
 #if MI_STAT>1
   mi_stat_count_t normal_bins[MI_BIN_HUGE+1];

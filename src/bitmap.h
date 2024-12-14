@@ -13,7 +13,7 @@ Concurrent bitmap that can set/reset sequences of bits atomically
 #define MI_BITMAP_H
 
 /* --------------------------------------------------------------------------------
-  Atomic bitmaps:
+  Atomic bitmaps with release/acquire guarantees:
 
   `mi_bfield_t`: is a single machine word that can efficiently be bit counted (usually `size_t`)
       each bit usually represents a single MI_ARENA_SLICE_SIZE in an arena (64 KiB).
@@ -25,19 +25,25 @@ Concurrent bitmap that can set/reset sequences of bits atomically
       These chunks are cache-aligned and we can use AVX2/AVX512/NEON/SVE/SVE2/etc. instructions
       to scan for bits (perhaps) more efficiently.
 
-   `mi_bchunkmap_t` == `mi_bchunk_t`: for each chunk we track if it has (potentially) any bit set.
+      We allocate byte-sized ranges aligned to bytes in the bfield, and bfield-sized
+      ranges aligned to a bfield.
+
+    Searching linearly through the chunks would be too slow (16K bits per GiB).
+    Instead we add a "chunkmap" to do a two-level search (more or less a btree of depth 2).
+
+   `mi_bchunkmap_t` (== `mi_bchunk_t`): for each chunk we track if it has (potentially) any bit set.
       The chunkmap has 1 bit per chunk that is set if the chunk potentially has a bit set.
       This is used to avoid scanning every chunk. (and thus strictly an optimization)
-      It is conservative: it is fine to a bit in the chunk map even if the chunk turns out
+      It is conservative: it is fine to set a bit in the chunk map even if the chunk turns out
       to have no bits set. It is also allowed to briefly have a clear bit even if the
-      chunk has bits set, as long as we guarantee that we set the bit later on -- this
-      allows us to set the chunkmap bit after we set a bit in the corresponding chunk.
+      chunk has bits set -- as long as we guarantee that the bit will be set later on; 
+      (this allows us to set the chunkmap bit right after we set a bit in the corresponding chunk).
 
       However, when we clear a bit in a chunk, and the chunk is indeed all clear, we
       cannot safely clear the bit corresponding to the chunk in the chunkmap since it
       may race with another thread setting a bit in the same chunk. Therefore, when
       clearing, we first test if a chunk is clear, then clear the chunkmap bit, and
-      then test again to catch any set bits that we missed.
+      then test again to catch any set bits that we may have missed.
 
       Since the chunkmap may thus be briefly out-of-sync, this means that we may sometimes
       not find a free page even though it's there (but we accept this as we avoid taking
@@ -130,32 +136,22 @@ size_t mi_bitmap_init(mi_bitmap_t* bitmap, size_t bit_count, bool already_zero);
 // Not atomic so only use if still local to a thread.
 void mi_bitmap_unsafe_setN(mi_bitmap_t* bitmap, size_t idx, size_t n);
 
+// Set a bit in the bitmap; returns `true` if it atomically transitioned from 0 to 1
+bool mi_bitmap_set(mi_bitmap_t* bitmap, size_t idx);
 
-// Set/clear a bit in the bitmap; returns `true` if atomically transitioned from 0 to 1 (or 1 to 0)
-bool mi_bitmap_xset(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx);
-
-static inline bool mi_bitmap_set(mi_bitmap_t* bitmap, size_t idx) {
-  return mi_bitmap_xset(MI_BIT_SET, bitmap, idx);
-}
-
-static inline bool mi_bitmap_clear(mi_bitmap_t* bitmap, size_t idx) {
-  return mi_bitmap_xset(MI_BIT_CLEAR, bitmap, idx);
-}
+// Clear a bit in the bitmap; returns `true` if it atomically transitioned from 1 to 0
+bool mi_bitmap_clear(mi_bitmap_t* bitmap, size_t idx);
 
 
-// Set/clear a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from all 0's to 1's (or all 1's to 0's).
+// Set a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from all 0's to 1's
 // `n` cannot cross chunk boundaries (and `n <= MI_BCHUNK_BITS`)!
-// If `already_xset` is not NULL, it is set to count of bits were already all set/cleared.
+// If `already_set` is not NULL, it is set to count of bits were already all set.
 // (this is used for correct statistics if commiting over a partially committed area)
-bool mi_bitmap_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n, size_t* already_xset);
+bool mi_bitmap_setN(mi_bitmap_t* bitmap, size_t idx, size_t n, size_t* already_set);
 
-static inline bool mi_bitmap_setN(mi_bitmap_t* bitmap, size_t idx, size_t n, size_t* already_set) {
-  return mi_bitmap_xsetN(MI_BIT_SET, bitmap, idx, n, already_set);
-}
-
-static inline bool mi_bitmap_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
-  return mi_bitmap_xsetN(MI_BIT_CLEAR, bitmap, idx, n, NULL);
-}
+// Clear a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from all 1's to 0's
+// `n` cannot cross chunk boundaries (and `n <= MI_BCHUNK_BITS`)!
+bool mi_bitmap_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n);
 
 
 // Is a sequence of n bits already all set/cleared?
@@ -167,6 +163,7 @@ static inline bool mi_bitmap_is_setN(mi_bitmap_t* bitmap, size_t idx, size_t n) 
   return mi_bitmap_is_xsetN(MI_BIT_SET, bitmap, idx, n);
 }
 
+// Is a sequence of n bits already clear?
 static inline bool mi_bitmap_is_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
   return mi_bitmap_is_xsetN(MI_BIT_CLEAR, bitmap, idx, n);
 }
@@ -180,8 +177,11 @@ static inline bool mi_bitmap_is_clear(mi_bitmap_t* bitmap, size_t idx) {
 }
 
 
+// Try to atomically transition `n` bits from all set to all clear. Returns `true` on succes.
+// `n` cannot cross chunk boundaries, where `n <= MI_CHUNK_BITS`.
 bool mi_bitmap_try_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n);
 
+// Try to atomically transition a bit from set to clear. Returns `true` on succes.
 static inline bool mi_bitmap_try_clear(mi_bitmap_t* bitmap, size_t idx) {
   return mi_bitmap_try_clearN(bitmap, idx, 1);
 }
@@ -223,7 +223,7 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t 
 void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx);
 
 
-// If a bit is set in the bitmap, return `true` and set `idx` to its index.
+// If a bit is set in the bitmap, return `true` and set `idx` to the index of the highest bit.
 // Otherwise return `false` (and `*idx` is undefined).
 bool mi_bitmap_bsr(mi_bitmap_t* bitmap, size_t* idx);
 

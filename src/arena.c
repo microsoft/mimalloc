@@ -1225,7 +1225,7 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, mi_arena_t
       else if (slice_index + bit < arena->info_slices) { c = 'i'; }
       // else if (mi_bitmap_is_setN(arena->pages_purge, slice_index + bit, NULL)) { c = '*'; }
       else if (mi_bitmap_is_set(arena->slices_free, slice_index+bit)) {
-        if (mi_bitmap_is_set(arena->slices_purge, slice_index + bit)) { c = '!'; }
+        if (mi_bitmap_is_set(arena->slices_purge, slice_index + bit)) { c = '~'; }
         else if (mi_bitmap_is_setN(arena->slices_committed, slice_index + bit, 1)) { c = '_'; }
         else { c = '.'; }
       }
@@ -1297,7 +1297,7 @@ void mi_debug_show_arenas(bool show_pages, bool show_inuse, bool show_committed)
     //  purge_total += mi_debug_show_bitmap("purgeable slices", arena->slice_count, arena->slices_purge, false, NULL);
     //}
     if (show_pages) {
-      page_total += mi_debug_show_bitmap("pages (p:page, a:abandoned, f:full-abandoned, s:singleton-abandoned, i:arena-info, m:heap-meta-data, !:free-purgable, _:free-committed, .:free-reserved)", arena->slice_count, arena->pages, false, arena);
+      page_total += mi_debug_show_bitmap("pages (p:page, a:abandoned, f:full-abandoned, s:singleton-abandoned, i:arena-info, m:heap-meta-data, ~:free-purgable, _:free-committed, .:free-reserved)", arena->slice_count, arena->pages, false, arena);
     }
   }
   if (show_inuse)     _mi_output_message("total inuse slices    : %zu\n", slice_total - free_total);
@@ -1470,8 +1470,6 @@ static bool mi_arena_try_purge_visitor(size_t slice_index, size_t slice_count, m
   mi_bitmap_clearN(arena->slices_purge, slice_index, slice_count);
   return true; // continue
 }
-  
-
 
 // returns true if anything was purged
 static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
@@ -1486,6 +1484,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
 
   // reset expire (if not already set concurrently)
   mi_atomic_casi64_strong_acq_rel(&arena->purge_expire, &expire, (mi_msecs_t)0);
+  _mi_stat_counter_increase(&_mi_stats_main.arena_purges, 1);
 
   // go through all purge info's
   // todo: instead of visiting per-bit, we should visit per range of bits
