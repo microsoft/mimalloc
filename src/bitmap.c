@@ -26,6 +26,10 @@ static inline size_t mi_bfield_ctz(mi_bfield_t x) {
   return mi_ctz(x);
 }
 
+static inline size_t mi_bfield_clz(mi_bfield_t x) {
+  return mi_clz(x);
+}
+
 static inline size_t mi_bfield_popcount(mi_bfield_t x) {
   return mi_popcount(x);
 }
@@ -40,6 +44,15 @@ static inline mi_bfield_t mi_bfield_clear_least_bit(mi_bfield_t x) {
 static inline bool mi_bfield_find_least_bit(mi_bfield_t x, size_t* idx) {
   return mi_bsf(x,idx);
 }
+
+
+// find the most significant bit that is set.
+// return false if `x==0` (with `*idx` undefined) and true otherwise,
+// with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
+static inline bool mi_bfield_find_highest_bit(mi_bfield_t x, size_t* idx) {
+  return mi_bsr(x, idx);
+}
+
 
 // find each set bit in a bit field `x` and clear it, until it becomes zero.
 static inline bool mi_bfield_foreach_bit(mi_bfield_t* x, size_t* idx) {
@@ -598,9 +611,9 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clear8(mi_bchunk_t* chunk, s
   #if MI_OPT_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==512)
   while (true) {
     // since a cache-line is 64b, load all at once
-    const __m256i vec1  = _mm256_load_si256((const __m256i*)chunk->bfields);
-    const __m256i vec2  = _mm256_load_si256((const __m256i*)chunk->bfields+1);
-    const __m256i cmpv  = mi_mm256_ones();
+    const __m256i vec1 = _mm256_load_si256((const __m256i*)chunk->bfields);
+    const __m256i vec2 = _mm256_load_si256((const __m256i*)chunk->bfields+1);
+    const __m256i cmpv = mi_mm256_ones();
     const __m256i vcmp1 = _mm256_cmpeq_epi8(vec1, cmpv); // (byte == ~0 ? 0xFF : 0)
     const __m256i vcmp2 = _mm256_cmpeq_epi8(vec2, cmpv); // (byte == ~0 ? 0xFF : 0)
     const uint32_t mask1 = _mm256_movemask_epi8(vcmp1);    // mask of most significant bit of each byte
@@ -610,7 +623,7 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clear8(mi_bchunk_t* chunk, s
     if (mask==0) return false;
     const size_t bidx = _tzcnt_u64(mask);          // byte-idx of the byte in the chunk
     const size_t chunk_idx = bidx / 8;
-    const size_t idx  = (bidx % 8)*8;
+    const size_t idx = (bidx % 8)*8;
     mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
     if mi_likely(mi_bfield_atomic_try_clear8(&chunk->bfields[chunk_idx], idx, NULL)) {  // clear it atomically
       *pidx = (chunk_idx*MI_BFIELD_BITS) + idx;
@@ -618,6 +631,7 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clear8(mi_bchunk_t* chunk, s
       return true;
     }
     // try again
+    // note: there must be an atomic release/acquire in between or otherwise the registers may not be reloaded  }
   }
   #else
     // first skip allset fields to reduce fragmentation
@@ -664,6 +678,7 @@ static mi_decl_noinline  bool mi_bchunk_try_find_and_clearX(mi_bchunk_t* chunk, 
       return true;
     }
     // try again
+    // note: there must be an atomic release/acquire in between or otherwise the registers may not be reloaded
   }
 #else
   for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
@@ -684,7 +699,8 @@ static inline bool mi_bchunk_try_find_and_clear_X(mi_bchunk_t* chunk, size_t n, 
 }
 
 // find a sequence of `n` bits in a chunk with `n < MI_BFIELD_BITS` with all bits set,
-// and try to clear them atomically.
+// and try to clear them atomically. 
+// Currently does not cross bfield boundaries.
 // set `*pidx` to its bit index (0 <= *pidx <= MI_BCHUNK_BITS - n) on success.
 // (We do not cross bfield boundaries)
 mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, size_t n, size_t* pidx) {
@@ -732,35 +748,51 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
 static mi_decl_noinline bool mi_bchunk_try_find_and_clearN_(mi_bchunk_t* chunk, size_t n, size_t* pidx) {
   if (n == 0 || n > MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
 
-  // we align at a bfield, and scan `field_count` fields
-  // n >= MI_BFIELD_BITS; find a first field that is 0
-  const size_t field_count = _mi_divide_up(n, MI_BFIELD_BITS);  // we need this many fields
-  for (size_t i = 0; i <= MI_BCHUNK_FIELDS - field_count; i++)
+  const size_t skip_count = n/MI_BFIELD_BITS;  
+  size_t cidx;
+  for (size_t i = 0; i <= MI_BCHUNK_FIELDS - skip_count; i++)
   {
-    // first pre-scan for a range of fields that are all set (up to the last one)
-    bool allset = true;
-    size_t j = 0;
-    size_t m = n;
-    do {
-      mi_assert_internal(i + j < MI_BCHUNK_FIELDS);
-      mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i+j]);
-      size_t idx;
-      if (mi_bfield_find_least_bit(~b,&idx)) {
-        if (m > idx) {
-          allset = false;
-          i += j;  // no need to look again at the previous fields
-          break;
-        }
+    size_t j = 1;   // field count from i
+    size_t m = n;   // bits to go
+
+    // first field
+    mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
+    size_t ones = mi_bfield_clz(~b);
+    cidx = i*MI_BFIELD_BITS + (MI_BFIELD_BITS - ones);  // start index
+    if (ones >= m) {
+      // we found enough bits!
+      m = 0;      
+    }
+    else {
+      m -= ones;
+      mi_assert_internal(m>0);
+    }
+
+    // keep scanning further fields?
+    while (i+j < MI_BCHUNK_FIELDS) {
+      mi_assert_internal(m > 0);
+      b = mi_atomic_load_relaxed(&chunk->bfields[i+j]);
+      ones = mi_bfield_ctz(~b);
+      if (ones >= m) {
+        // we found enough bits
+        m = 0;
+        break;
+      }
+      else if (ones == MI_BFIELD_BITS) {
+        // not enough yet, proceed to the next field
+        j++;
+        m -= MI_BFIELD_BITS;
       }
       else {
-        // all bits in b were set
-        m -= MI_BFIELD_BITS;  // note: can underflow
+        // the range was not enough, start from scratch
+        i = i + j - 1;  // no need to re-scan previous fields, except the last one (with clz this time)
+        mi_assert_internal(m>0);
+        break;
       }
-    } while (++j < field_count);
-
-    // if all set, we can try to atomically clear them
-    if (allset) {
-      const size_t cidx = i*MI_BFIELD_BITS;
+    }
+    
+    // did we find a range? 
+    if (m==0) {
       if (mi_bchunk_try_clearN(chunk, cidx, n, NULL)) {
         // we cleared all atomically
         *pidx = cidx;
@@ -768,8 +800,9 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clearN_(mi_bchunk_t* chunk, 
         mi_assert_internal(*pidx + n <= MI_BCHUNK_BITS);
         return true;
       }
+      // note: if we fail for a small `n` on the first field, we don't rescan that field (as `i` is incremented)
     }
-    // continue
+    // otherwise continue searching
   }
   return false;
 }
