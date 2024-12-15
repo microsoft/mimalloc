@@ -551,6 +551,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
 
   // any abandoned in our size class?
   mi_subproc_t* const subproc = tld->subproc;
+  mi_assert_internal(subproc != NULL);
   if (mi_atomic_load_relaxed(&subproc->abandoned_count[bin]) == 0) return NULL;
 
   // search arena's

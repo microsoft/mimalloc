@@ -93,7 +93,7 @@ static mi_meta_page_t* mi_meta_page_zalloc(void) {
 
 
 // allocate meta-data
-void* _mi_meta_zalloc( size_t size, mi_memid_t* pmemid )
+mi_decl_noinline void* _mi_meta_zalloc( size_t size, mi_memid_t* pmemid )
 {
   mi_assert_internal(pmemid != NULL);
   size = _mi_align_up(size,MI_META_BLOCK_SIZE);
@@ -133,7 +133,7 @@ void* _mi_meta_zalloc( size_t size, mi_memid_t* pmemid )
 }
 
 // free meta-data
-void _mi_meta_free(void* p, size_t size, mi_memid_t memid) {
+mi_decl_noinline void _mi_meta_free(void* p, size_t size, mi_memid_t memid) {
   if (p==NULL) return;
   if (memid.memkind == MI_MEM_META) {
     mi_assert_internal(_mi_divide_up(size, MI_META_BLOCK_SIZE) == memid.mem.meta.block_count);

@@ -134,7 +134,8 @@ static mi_decl_cache_align mi_subproc_t mi_subproc_default;
 
 static mi_decl_cache_align mi_tld_t tld_main = {
   0,
-  &_mi_heap_main, &_mi_heap_main,
+  &_mi_heap_main,         // heap_backing
+  &_mi_heap_main,         // heaps list
   &mi_subproc_default,    // subproc
   0,                      // tseq
   MI_MEMID_STATIC,        // memid
@@ -271,10 +272,23 @@ static mi_tld_t* mi_tld_alloc(void) {
   }
 }
 
-mi_tld_t* _mi_tld(void) {
+#define MI_TLD_INVALID  ((mi_tld_t*)1)
+
+static mi_decl_noinline void mi_tld_free(void) {
+  mi_tld_t* tld = _mi_tld();
+  mi_tld = MI_TLD_INVALID;
+  _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);
+}
+
+mi_tld_t* mi_decl_noinline _mi_tld(void) {
+  if (mi_tld == MI_TLD_INVALID) {
+    _mi_error_message(EFAULT, "internal error: tld accessed after the thread terminated\n");
+    abort();
+    mi_tld = NULL;
+  }
   if (mi_tld==NULL) {
     mi_tld = mi_tld_alloc();
-  }
+  }  
   return mi_tld;
 }
 
@@ -409,9 +423,6 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
     #endif
   }
 
-  // free the tld
-  mi_tld_t* tld = _mi_tld();
-  _mi_meta_free(_mi_tld(), sizeof(mi_tld_t), tld->memid);
   return false;
 }
 
@@ -497,10 +508,7 @@ void _mi_thread_done(mi_heap_t* heap)
   _mi_thread_heap_done(heap);  // returns true if already ran
 
   // free thread local data
-  if (mi_tld != NULL) {
-    _mi_meta_free(mi_tld, sizeof(mi_tld_t), mi_tld->memid);
-    mi_tld = NULL;
-  }
+  mi_tld_free();
 }
 
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
