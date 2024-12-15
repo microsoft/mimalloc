@@ -46,14 +46,6 @@ static inline bool mi_bfield_find_least_bit(mi_bfield_t x, size_t* idx) {
 }
 
 
-// find the most significant bit that is set.
-// return false if `x==0` (with `*idx` undefined) and true otherwise,
-// with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
-static inline bool mi_bfield_find_highest_bit(mi_bfield_t x, size_t* idx) {
-  return mi_bsr(x, idx);
-}
-
-
 // find each set bit in a bit field `x` and clear it, until it becomes zero.
 static inline bool mi_bfield_foreach_bit(mi_bfield_t* x, size_t* idx) {
   const bool found = mi_bfield_find_least_bit(*x, idx);
@@ -497,7 +489,7 @@ static inline bool mi_bchunk_try_find_and_clear_at(mi_bchunk_t* chunk, size_t ch
   mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
   // note: this must be acquire (and not relaxed), or otherwise the AVX code below can loop forever
   // as the compiler won't reload the registers vec1 and vec2 from memory again.
-  const mi_bfield_t b = mi_atomic_load_acquire(&chunk->bfields[chunk_idx]); 
+  const mi_bfield_t b = mi_atomic_load_acquire(&chunk->bfields[chunk_idx]);
   size_t idx;
   if (!allow_allset && (~b == 0)) return false;
   if (mi_bfield_find_least_bit(b, &idx)) {           // find the least bit
@@ -560,7 +552,7 @@ static inline bool mi_bchunk_try_find_and_clear(mi_bchunk_t* chunk, size_t* pidx
     chunk_idx = mi_ctz(mask) / 8;
     #endif
     if (mi_bchunk_try_find_and_clear_at(chunk, chunk_idx, pidx, true)) return true;
-    // try again    
+    // try again
     // note: there must be an atomic release/acquire in between or otherwise the registers may not be reloaded
   }
   #else
@@ -699,42 +691,38 @@ static inline bool mi_bchunk_try_find_and_clear_X(mi_bchunk_t* chunk, size_t n, 
 }
 
 // find a sequence of `n` bits in a chunk with `n < MI_BFIELD_BITS` with all bits set,
-// and try to clear them atomically. 
+// and try to clear them atomically.
 // Currently does not cross bfield boundaries.
 // set `*pidx` to its bit index (0 <= *pidx <= MI_BCHUNK_BITS - n) on success.
 // (We do not cross bfield boundaries)
 mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, size_t n, size_t* pidx) {
   if (n == 0 || n > MI_BFIELD_BITS) return false;
   const mi_bfield_t mask = mi_bfield_mask(n, 0);
-  for(int i = 0; i < MI_BCHUNK_FIELDS; i++) {
+  for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
     mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
-    size_t bshift = 0;
     size_t idx;
     while (mi_bfield_find_least_bit(b, &idx)) { // find least 1-bit
-      b >>= idx;
-      bshift += idx;
-      if (bshift + n > MI_BFIELD_BITS) break;
+      if (idx + n > MI_BFIELD_BITS) break;
 
-      if ((b&mask) == mask) { // found a match
-        mi_assert_internal( ((mask << bshift) >> bshift) == mask );
-        if mi_likely(mi_bfield_atomic_try_clear_mask(&chunk->bfields[i],mask<<bshift,NULL)) {
-          *pidx = (i*MI_BFIELD_BITS) + bshift;
+      const size_t bmask = mask<<idx;
+      mi_assert_internal(bmask>>idx == mask);
+      if ((b&bmask) == bmask) { // found a match        
+        if mi_likely(mi_bfield_atomic_try_clear_mask(&chunk->bfields[i], bmask, NULL)) {
+          *pidx = (i*MI_BFIELD_BITS) + idx;
           mi_assert_internal(*pidx < MI_BCHUNK_BITS);
           mi_assert_internal(*pidx + n <= MI_BCHUNK_BITS);
           return true;
         }
         else {
           // if failed to atomically commit, reload b and try again from this position
-          bshift -= idx;
-          b = mi_atomic_load_relaxed(&chunk->bfields[i]) >> bshift;
+          b = mi_atomic_load_acquire(&chunk->bfields[i]);
         }
       }
       else {
         // advance
-        const size_t ones = mi_bfield_ctz(~b);      // skip all ones (since it didn't fit the mask)
+        const size_t ones = mi_bfield_ctz(~(b>>idx));  // skip all ones (since it didn't fit the mask)
         mi_assert_internal(ones>0);
-        b >>= ones;
-        bshift += ones;
+        b = b & ~mi_bfield_mask(ones, idx);            // clear the ones
       }
     }
   }
@@ -748,11 +736,10 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
 static mi_decl_noinline bool mi_bchunk_try_find_and_clearN_(mi_bchunk_t* chunk, size_t n, size_t* pidx) {
   if (n == 0 || n > MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
 
-  const size_t skip_count = n/MI_BFIELD_BITS;  
+  const size_t skip_count = n/MI_BFIELD_BITS;
   size_t cidx;
   for (size_t i = 0; i <= MI_BCHUNK_FIELDS - skip_count; i++)
   {
-    size_t j = 1;   // field count from i
     size_t m = n;   // bits to go
 
     // first field
@@ -761,7 +748,7 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clearN_(mi_bchunk_t* chunk, 
     cidx = i*MI_BFIELD_BITS + (MI_BFIELD_BITS - ones);  // start index
     if (ones >= m) {
       // we found enough bits!
-      m = 0;      
+      m = 0;
     }
     else {
       m -= ones;
@@ -769,6 +756,7 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clearN_(mi_bchunk_t* chunk, 
     }
 
     // keep scanning further fields?
+    size_t j = 1;   // field count from i
     while (i+j < MI_BCHUNK_FIELDS) {
       mi_assert_internal(m > 0);
       b = mi_atomic_load_relaxed(&chunk->bfields[i+j]);
@@ -790,8 +778,8 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clearN_(mi_bchunk_t* chunk, 
         break;
       }
     }
-    
-    // did we find a range? 
+
+    // did we find a range?
     if (m==0) {
       if (mi_bchunk_try_clearN(chunk, cidx, n, NULL)) {
         // we cleared all atomically
@@ -1194,24 +1182,24 @@ static inline bool mi_bitmap_try_find_and_clear_generic(mi_bitmap_t* bitmap, siz
   return mi_bitmap_find(bitmap, tseq, n, pidx, &mi_bitmap_try_find_and_clear_visit, (void*)try_find_and_clear, NULL);
 }
 
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
+bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
   return mi_bitmap_try_find_and_clear_generic(bitmap, tseq, 1, pidx, &mi_bchunk_try_find_and_clear_1);
 }
 
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
+bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
   return mi_bitmap_try_find_and_clear_generic(bitmap, tseq, 8, pidx, &mi_bchunk_try_find_and_clear_8);
 }
 
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clearX(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
+bool mi_bitmap_try_find_and_clearX(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
   return mi_bitmap_try_find_and_clear_generic(bitmap, tseq, MI_BFIELD_BITS, pidx, &mi_bchunk_try_find_and_clear_X);
 }
 
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clearNX(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx) {
+bool mi_bitmap_try_find_and_clearNX(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx) {
   mi_assert_internal(n<=MI_BFIELD_BITS);
   return mi_bitmap_try_find_and_clear_generic(bitmap, tseq, n, pidx, &mi_bchunk_try_find_and_clearNX);
 }
 
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN_(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx) {
+bool mi_bitmap_try_find_and_clearN_(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx) {
   mi_assert_internal(n<=MI_BCHUNK_BITS);
   return mi_bitmap_try_find_and_clear_generic(bitmap, tseq, n, pidx, &mi_bchunk_try_find_and_clearN_);
 }

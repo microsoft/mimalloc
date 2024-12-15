@@ -274,16 +274,15 @@ static mi_tld_t* mi_tld_alloc(void) {
 
 #define MI_TLD_INVALID  ((mi_tld_t*)1)
 
-static mi_decl_noinline void mi_tld_free(void) {
+mi_decl_noinline static void mi_tld_free(void) {
   mi_tld_t* tld = _mi_tld();
   mi_tld = MI_TLD_INVALID;
   _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);
 }
 
-mi_tld_t* mi_decl_noinline _mi_tld(void) {
+mi_decl_noinline mi_tld_t* _mi_tld(void) {
   if (mi_tld == MI_TLD_INVALID) {
     _mi_error_message(EFAULT, "internal error: tld accessed after the thread terminated\n");
-    abort();
     mi_tld = NULL;
   }
   if (mi_tld==NULL) {
