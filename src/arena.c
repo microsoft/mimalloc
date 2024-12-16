@@ -1243,7 +1243,7 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, mi_arena_t
   return bit_set_count;
 }
 
-static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_t chunk_count, mi_bchunk_t* chunks, bool invert, mi_arena_t* arena) {
+static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_t chunk_count, mi_bchunk_t* chunks, _Atomic(uint8_t)* chunk_bins, bool invert, mi_arena_t* arena) {
   _mi_output_message("%s:\n", header);
   size_t bit_count = 0;
   size_t bit_set_count = 0;
@@ -1256,9 +1256,22 @@ static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_
     else if (i<100)  { buf[k++] = ('0' + (char)(i/10)); buf[k++] = ('0' + (char)(i%10)); buf[k++] = ' '; }
     else if (i<1000) { buf[k++] = ('0' + (char)(i/100)); buf[k++] = ('0' + (char)((i%100)/10)); buf[k++] = ('0' + (char)(i%10)); }
 
+    char chunk_kind = ' ';
+    if (chunk_bins != NULL) {
+      switch (chunk_bins[i]) {
+        // case MI_BBIN_SMALL: chunk_kind  = 'S'; break;
+        case MI_BBIN_MEDIUM: chunk_kind = 'M'; break;
+        case MI_BBIN_LARGE: chunk_kind  = 'L'; break;
+        case MI_BBIN_OTHER: chunk_kind  = 'O'; break;
+        // case MI_BBIN_NONE: chunk_kind = 'N'; break;
+      }
+    }
+    buf[k++] = chunk_kind;
+    buf[k++] = ' ';
+
     for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
       if (j > 0 && (j % 4) == 0) {
-        buf[k++] = '\n'; _mi_memset(buf+k,' ',5); k += 5;
+        buf[k++] = '\n'; _mi_memset(buf+k,' ',7); k += 7;
       }
       if (bit_count < slice_count) {
         mi_bfield_t bfield = chunk->bfields[j];
@@ -1283,11 +1296,15 @@ static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_
 }
 
 static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bitmap_t* bitmap, bool invert, mi_arena_t* arena) {
-  return mi_debug_show_chunks(header, slice_count, mi_bitmap_chunk_count(bitmap), &bitmap->chunks[0], invert, arena);
+  return mi_debug_show_chunks(header, slice_count, mi_bitmap_chunk_count(bitmap), &bitmap->chunks[0], NULL, invert, arena);
+}
+
+static size_t mi_debug_show_bitmap_binned(const char* header, size_t slice_count, mi_bitmap_t* bitmap, _Atomic(uint8_t)* chunk_bins, bool invert, mi_arena_t* arena) {
+  return mi_debug_show_chunks(header, slice_count, mi_bitmap_chunk_count(bitmap), &bitmap->chunks[0], chunk_bins, invert, arena);
 }
 
 static size_t mi_debug_show_bbitmap(const char* header, size_t slice_count, mi_bbitmap_t* bbitmap, bool invert, mi_arena_t* arena) {
-  return mi_debug_show_chunks(header, slice_count, mi_bbitmap_chunk_count(bbitmap), &bbitmap->chunks[0], invert, arena);
+  return mi_debug_show_chunks(header, slice_count, mi_bbitmap_chunk_count(bbitmap), &bbitmap->chunks[0], &bbitmap->chunk_bins[0], invert, arena);
 }
 
 
@@ -1313,7 +1330,7 @@ void mi_debug_show_arenas(bool show_pages, bool show_inuse, bool show_committed)
     //  purge_total += mi_debug_show_bitmap("purgeable slices", arena->slice_count, arena->slices_purge, false, NULL);
     //}
     if (show_pages) {
-      page_total += mi_debug_show_bitmap("pages (p:page, a:abandoned, f:full-abandoned, s:singleton-abandoned, i:arena-info, m:heap-meta-data, ~:free-purgable, _:free-committed, .:free-reserved)", arena->slice_count, arena->pages, false, arena);
+      page_total += mi_debug_show_bitmap_binned("pages (p:page, a:abandoned, f:full-abandoned, s:singleton-abandoned, i:arena-info, m:heap-meta-data, ~:free-purgable, _:free-committed, .:free-reserved)", arena->slice_count, arena->pages, arena->slices_free->chunk_bins, false, arena);
     }
   }
   if (show_inuse)     _mi_output_message("total inuse slices    : %zu\n", slice_total - free_total);

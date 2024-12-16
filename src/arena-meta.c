@@ -33,7 +33,7 @@ terms of the MIT license. A copy of the license can be found in the file
 typedef struct mi_meta_page_s  {
   _Atomic(struct mi_meta_page_s*)  next;    // a linked list of meta-data pages (never released)
   mi_memid_t                       memid;   // provenance of the meta-page memory itself
-  mi_bitmap_t                      blocks_free;  // a small bitmap with 1 bit per block.
+  mi_bbitmap_t                     blocks_free;  // a small bitmap with 1 bit per block.
 } mi_meta_page_t;
 
 static mi_decl_cache_align _Atomic(mi_meta_page_t*)  mi_meta_pages = MI_ATOMIC_VAR_INIT(NULL);
@@ -76,11 +76,11 @@ static mi_meta_page_t* mi_meta_page_zalloc(void) {
 
   // initialize the page
   mpage->memid = memid;
-  mi_bitmap_init(&mpage->blocks_free, MI_META_BLOCKS_PER_PAGE, true /* already_zero */);
+  mi_bbitmap_init(&mpage->blocks_free, MI_META_BLOCKS_PER_PAGE, true /* already_zero */);
   const size_t mpage_size  = offsetof(mi_meta_page_t,blocks_free) + mi_bitmap_size(MI_META_BLOCKS_PER_PAGE, NULL);
   const size_t info_blocks = _mi_divide_up(mpage_size,MI_META_BLOCK_SIZE);
   mi_assert_internal(info_blocks < MI_META_BLOCKS_PER_PAGE);
-  mi_bitmap_unsafe_setN(&mpage->blocks_free, info_blocks, MI_META_BLOCKS_PER_PAGE - info_blocks);
+  mi_bbitmap_unsafe_setN(&mpage->blocks_free, info_blocks, MI_META_BLOCKS_PER_PAGE - info_blocks);
 
   // push atomically in front of the meta page list
   // (note: there is no ABA issue since we never free meta-pages)
@@ -104,7 +104,7 @@ mi_decl_noinline void* _mi_meta_zalloc( size_t size, mi_memid_t* pmemid )
   mi_meta_page_t* mpage = mpage0;
   while (mpage != NULL) {
     size_t block_idx;
-    if (mi_bitmap_try_find_and_clearN(&mpage->blocks_free, block_count, 0, &block_idx)) {
+    if (mi_bbitmap_try_find_and_clearN(&mpage->blocks_free, block_count, 0, &block_idx)) {
       // found and claimed `block_count` blocks
       *pmemid = _mi_memid_create_meta(mpage, block_idx, block_count);
       return mi_meta_block_start(mpage,block_idx);
@@ -122,7 +122,7 @@ mi_decl_noinline void* _mi_meta_zalloc( size_t size, mi_memid_t* pmemid )
   mpage = mi_meta_page_zalloc();
   if (mpage != NULL) {
     size_t block_idx;
-    if (mi_bitmap_try_find_and_clearN(&mpage->blocks_free, block_count, 0, &block_idx)) {
+    if (mi_bbitmap_try_find_and_clearN(&mpage->blocks_free, block_count, 0, &block_idx)) {
       // found and claimed `block_count` blocks
       *pmemid = _mi_memid_create_meta(mpage, block_idx, block_count);
       return mi_meta_block_start(mpage,block_idx);
@@ -145,7 +145,7 @@ mi_decl_noinline void _mi_meta_free(void* p, size_t size, mi_memid_t memid) {
     mi_assert_internal(mi_bitmap_is_clearN(&mpage->blocks_free, block_idx, block_count));
     // we zero on free (and on the initial page allocation) so we don't need a "dirty" map
     _mi_memzero_aligned(mi_meta_block_start(mpage, block_idx), block_count*MI_META_BLOCK_SIZE);
-    mi_bitmap_setN(&mpage->blocks_free, block_idx, block_count,NULL);
+    mi_bbitmap_setN(&mpage->blocks_free, block_idx, block_count);
   }
   else if (mi_memid_is_os(memid)) {
     _mi_os_free(p, size, memid);    

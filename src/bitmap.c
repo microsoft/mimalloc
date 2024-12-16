@@ -938,9 +938,7 @@ size_t mi_bitmap_init(mi_bitmap_t* bitmap, size_t bit_count, bool already_zero) 
 // Set a sequence of `n` bits in the bitmap (and can cross chunks). Not atomic so only use if local to a thread.
 static void mi_bchunks_unsafe_setN(mi_bchunk_t* chunks, mi_bchunkmap_t* cmap, size_t idx, size_t n) {
   mi_assert_internal(n>0);
-  const size_t total = n;
-
-
+  
   // start chunk and index
   size_t chunk_idx = idx / MI_BCHUNK_BITS;
   const size_t cidx = idx % MI_BCHUNK_BITS;
@@ -984,29 +982,6 @@ void mi_bitmap_unsafe_setN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
 
 // ------- mi_bitmap_xset ---------------------------------------
 
-// Set/clear a bit in the bitmap; returns `true` if atomically transitioned from 0 to 1 (or 1 to 0)
-bool mi_bitmap_set(mi_bitmap_t* bitmap, size_t idx) {
-  mi_assert_internal(idx < mi_bitmap_max_bits(bitmap));
-  const size_t chunk_idx = idx / MI_BCHUNK_BITS;
-  const size_t cidx = idx % MI_BCHUNK_BITS;
-  mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
-  const bool wasclear = mi_bchunk_set(&bitmap->chunks[chunk_idx], cidx);
-  mi_bitmap_chunkmap_set(bitmap, chunk_idx); // set afterwards
-  return wasclear;
-}
-
-bool mi_bitmap_clear(mi_bitmap_t* bitmap, size_t idx) {
-  mi_assert_internal(idx < mi_bitmap_max_bits(bitmap));
-  const size_t chunk_idx = idx / MI_BCHUNK_BITS;
-  const size_t cidx = idx % MI_BCHUNK_BITS;
-  mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
-  bool maybe_all_clear;
-  const bool wasset = mi_bchunk_clear(&bitmap->chunks[chunk_idx], cidx, &maybe_all_clear);
-  if (maybe_all_clear) { mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx); }
-  return wasset;
-}
-
-
 // Set a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from 0's to 1's (or 1's to 0's).
 // `n` cannot cross chunk boundaries (and `n <= MI_BCHUNK_BITS`)!
 bool mi_bitmap_setN(mi_bitmap_t* bitmap, size_t idx, size_t n, size_t* already_set) {
@@ -1043,23 +1018,16 @@ bool mi_bitmap_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
 }
 
 
-// ------- mi_bitmap_try_clearN ---------------------------------------
-
-bool mi_bitmap_try_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
-  mi_assert_internal(n>0);
-  mi_assert_internal(n<=MI_BCHUNK_BITS);
-  mi_assert_internal(idx + n <= mi_bitmap_max_bits(bitmap));
-
-  const size_t chunk_idx = idx / MI_BCHUNK_BITS;
-  const size_t cidx = idx % MI_BCHUNK_BITS;
-  mi_assert_internal(cidx + n <= MI_BCHUNK_BITS);  // don't cross chunks (for now)
-  mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
-  if (cidx + n > MI_BCHUNK_BITS) return false;
-  bool maybe_all_clear;
-  const bool cleared = mi_bchunk_try_clearN(&bitmap->chunks[chunk_idx], cidx, n, &maybe_all_clear);
-  if (cleared && maybe_all_clear) { mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx); }
-  return cleared;
+// Set/clear a bit in the bitmap; returns `true` if atomically transitioned from 0 to 1 (or 1 to 0)
+bool mi_bitmap_set(mi_bitmap_t* bitmap, size_t idx) {
+  return mi_bitmap_setN(bitmap, idx, 1, NULL);
 }
+
+bool mi_bitmap_clear(mi_bitmap_t* bitmap, size_t idx) {
+  return mi_bitmap_clearN(bitmap, idx, 1);
+}
+
+
 
 // ------- mi_bitmap_is_xset ---------------------------------------
 
@@ -1171,58 +1139,6 @@ static inline bool mi_bitmap_find(mi_bitmap_t* bitmap, size_t tseq, size_t n, si
 
 
 /* --------------------------------------------------------------------------------
-  mi_bitmap_try_find_and_clear -- used to find free pages
-  note: the compiler will fully inline the indirect function calls
--------------------------------------------------------------------------------- */
-
-
-typedef bool (mi_bchunk_try_find_and_clear_fun_t)(mi_bchunk_t* chunk, size_t n, size_t* idx);
-
-static bool mi_bitmap_try_find_and_clear_visit(mi_bitmap_t* bitmap, size_t chunk_idx, size_t n, size_t* pidx, void* arg1, void* arg2) {
-  MI_UNUSED(arg2);
-  mi_bchunk_try_find_and_clear_fun_t* try_find_and_clear = (mi_bchunk_try_find_and_clear_fun_t*)arg1;
-  size_t cidx;
-  // if we find a spot in the chunk we are done
-  if ((*try_find_and_clear)(&bitmap->chunks[chunk_idx], n, &cidx)) {
-    *pidx = (chunk_idx * MI_BCHUNK_BITS) + cidx;
-    mi_assert_internal(*pidx + n <= mi_bitmap_max_bits(bitmap));
-    return true;
-  }
-  else {
-    /* we may find that all are cleared only on a second iteration but that is ok as the chunkmap is a conservative approximation. */
-    mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx);
-    return false;
-  }
-}
-
-static inline bool mi_bitmap_try_find_and_clear_generic(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx, mi_bchunk_try_find_and_clear_fun_t* try_find_and_clear) {
-  return mi_bitmap_find(bitmap, tseq, n, pidx, &mi_bitmap_try_find_and_clear_visit, (void*)try_find_and_clear, NULL);
-}
-
-bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
-  return mi_bitmap_try_find_and_clear_generic(bitmap, tseq, 1, pidx, &mi_bchunk_try_find_and_clear_1);
-}
-
-bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
-  return mi_bitmap_try_find_and_clear_generic(bitmap, tseq, 8, pidx, &mi_bchunk_try_find_and_clear_8);
-}
-
-bool mi_bitmap_try_find_and_clearX(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx) {
-  return mi_bitmap_try_find_and_clear_generic(bitmap, tseq, MI_BFIELD_BITS, pidx, &mi_bchunk_try_find_and_clear_X);
-}
-
-bool mi_bitmap_try_find_and_clearNX(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx) {
-  mi_assert_internal(n<=MI_BFIELD_BITS);
-  return mi_bitmap_try_find_and_clear_generic(bitmap, tseq, n, pidx, &mi_bchunk_try_find_and_clearNX);
-}
-
-bool mi_bitmap_try_find_and_clearN_(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx) {
-  mi_assert_internal(n<=MI_BCHUNK_BITS);
-  return mi_bitmap_try_find_and_clear_generic(bitmap, tseq, n, pidx, &mi_bchunk_try_find_and_clearN_);
-}
-
-
-/* --------------------------------------------------------------------------------
   Bitmap: try_find_and_claim  -- used to allocate abandoned pages
   note: the compiler will fully inline the indirect function call
 -------------------------------------------------------------------------------- */
@@ -1267,7 +1183,7 @@ static bool mi_bitmap_try_find_and_claim_visit(mi_bitmap_t* bitmap, size_t chunk
 
 // Find a set bit in the bitmap and try to atomically clear it and claim it.
 // (Used to find pages in the pages_abandoned bitmaps.)
-bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx,
+mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx,
   mi_claim_fun_t* claim, mi_arena_t* arena, mi_subproc_t* subproc, mi_heaptag_t heap_tag)
 {
   mi_claim_fun_data_t claim_data = { arena, subproc, heap_tag };
@@ -1541,15 +1457,15 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
   const size_t cmap_cycle      = cmap_acc+1;
   const mi_bbin_t bbin = mi_bbin_of(n);
   // visit bins from largest size bin up to the NONE bin
-  // for(int bin = bbin; bin >= MI_BBIN_SMALL; bin--)  // no need to traverse for MI_BBIN_NONE as anyone can allocate in MI_BBIN_SMALL
-  const mi_bbin_t bin = bbin;
+  for(int bin = bbin; bin >= MI_BBIN_SMALL; bin--)  // no need to traverse for MI_BBIN_NONE as anyone can allocate in MI_BBIN_SMALL
+  // const mi_bbin_t bin = bbin;
   {
     mi_bfield_cycle_iterate(cmap_mask, tseq, cmap_cycle, cmap_idx, X)
     {
       // don't search into non-accessed memory until we tried other size bins as well
-      //if (bin > MI_BBIN_SMALL && cmap_idx > cmap_acc) { 
-      //  break; 
-      //}
+      if (bin > MI_BBIN_SMALL && cmap_idx > cmap_acc) { 
+        break; 
+      }
 
       // and for each chunkmap entry we iterate over its bits to find the chunks
       const mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bbitmap->chunkmap.bfields[cmap_idx]);
@@ -1561,7 +1477,8 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
         mi_assert_internal(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
         // only in the current size class!
         const mi_bbin_t chunk_bin = (mi_bbin_t)mi_atomic_load_acquire(&bbitmap->chunk_bins[chunk_idx]);
-        if (bin >= chunk_bin) { // || (bin <= MI_BBIN_SMALL && chunk_bin <= MI_BBIN_SMALL)) {
+        if // (bin >= chunk_bin) { 
+           (bin == chunk_bin || (bin <= MI_BBIN_SMALL && chunk_bin <= MI_BBIN_SMALL)) {
           mi_bchunk_t* chunk = &bbitmap->chunks[chunk_idx];
           size_t cidx;
           if ((*on_find)(chunk, n, &cidx)) {

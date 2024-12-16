@@ -136,12 +136,12 @@ size_t mi_bitmap_init(mi_bitmap_t* bitmap, size_t bit_count, bool already_zero);
 // Not atomic so only use if still local to a thread.
 void mi_bitmap_unsafe_setN(mi_bitmap_t* bitmap, size_t idx, size_t n);
 
+
 // Set a bit in the bitmap; returns `true` if it atomically transitioned from 0 to 1
 bool mi_bitmap_set(mi_bitmap_t* bitmap, size_t idx);
 
 // Clear a bit in the bitmap; returns `true` if it atomically transitioned from 1 to 0
 bool mi_bitmap_clear(mi_bitmap_t* bitmap, size_t idx);
-
 
 // Set a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from all 0's to 1's
 // `n` cannot cross chunk boundaries (and `n <= MI_BCHUNK_BITS`)!
@@ -177,36 +177,6 @@ static inline bool mi_bitmap_is_clear(mi_bitmap_t* bitmap, size_t idx) {
 }
 
 
-// Try to atomically transition `n` bits from all set to all clear. Returns `true` on succes.
-// `n` cannot cross chunk boundaries, where `n <= MI_CHUNK_BITS`.
-bool mi_bitmap_try_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n);
-
-// Try to atomically transition a bit from set to clear. Returns `true` on succes.
-static inline bool mi_bitmap_try_clear(mi_bitmap_t* bitmap, size_t idx) {
-  return mi_bitmap_try_clearN(bitmap, idx, 1);
-}
-
-
-
-// Specialized versions for common bit sequence sizes
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx);  // 1-bit
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx); // 8-bits
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clearX(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx); // MI_BFIELD_BITS
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clearNX(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx); // < MI_BFIELD_BITS
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN_(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx); // > MI_BFIELD_BITS <= MI_BCHUNK_BITS
-
-// Find a sequence of `n` bits in the bitmap with all bits set, and try to atomically clear all.
-// Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
-mi_decl_nodiscard static inline bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx) {
-  if (n==1) return mi_bitmap_try_find_and_clear(bitmap, tseq, pidx);               // small pages
-  if (n==8) return mi_bitmap_try_find_and_clear8(bitmap, tseq, pidx);              // medium pages
-  if (n==MI_BFIELD_BITS) return mi_bitmap_try_find_and_clearX(bitmap, tseq, pidx); // large pages
-  if (n == 0 || n > MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
-  if (n < MI_BFIELD_BITS) return mi_bitmap_try_find_and_clearNX(bitmap, tseq, n, pidx);
-  return mi_bitmap_try_find_and_clearN_(bitmap, tseq, n, pidx);
-}
-
-
 // Called once a bit is cleared to see if the memory slice can be claimed.
 typedef bool (mi_claim_fun_t)(size_t slice_index, mi_arena_t* arena, mi_subproc_t* subproc, mi_heaptag_t heap_tag, bool* keep_set);
 
@@ -225,6 +195,7 @@ void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx);
 
 // If a bit is set in the bitmap, return `true` and set `idx` to the index of the highest bit.
 // Otherwise return `false` (and `*idx` is undefined).
+// Used for unloading arena's
 bool mi_bitmap_bsr(mi_bitmap_t* bitmap, size_t* idx);
 
 
@@ -236,17 +207,24 @@ bool _mi_bitmap_forall_set(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_a
 // Visit all set bits in a bitmap with larger ranges if possible (`slice_count >= 1`)
 bool _mi_bitmap_forall_set_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg);
 
-//
+
+/* ----------------------------------------------------------------------------
+  Binned concurrent bitmap
+  Assigns a size class to each chunk such that small blocks don't cause too
+  much fragmentation by keeping chunks for larger blocks separate.
+---------------------------------------------------------------------------- */
+
 typedef enum mi_bbin_e {
   MI_BBIN_NONE,     // no bin assigned yet (the chunk is completely free)
   MI_BBIN_SMALL,    // slice_count == 1
   MI_BBIN_MEDIUM,   // slice_count == 8
-  MI_BBIN_OTHER,    // slice_count > 1, and not 8
+  MI_BBIN_LARGE,    // slice_count == MI_BFIELD_BITS
+  MI_BBIN_OTHER,    // slice_count > 1, and not 8 or MI_BFIELD_BITS
   MI_BBIN_COUNT
 } mi_bbin_t;
 
 static inline mi_bbin_t mi_bbin_of(size_t n) {
-  return (n==1 ? MI_BBIN_SMALL : (n==8 ? MI_BBIN_MEDIUM : MI_BBIN_OTHER));
+  return (n==1 ? MI_BBIN_SMALL : (n==8 ? MI_BBIN_MEDIUM : (n==64 ? MI_BBIN_LARGE : MI_BBIN_OTHER)));
 }
 
 // An atomic "binned" bitmap for the free slices where we keep chunks reserved for particalar size classes
@@ -307,8 +285,6 @@ static inline bool mi_bbitmap_is_clearN(mi_bbitmap_t* bbitmap, size_t idx, size_
 // Try to atomically transition `n` bits from all set to all clear. Returns `true` on succes.
 // `n` cannot cross chunk boundaries, where `n <= MI_CHUNK_BITS`.
 bool mi_bbitmap_try_clearN(mi_bbitmap_t* bbitmap, size_t idx, size_t n);
-
-
 
 // Specialized versions for common bit sequence sizes
 bool mi_bbitmap_try_find_and_clear(mi_bbitmap_t* bbitmap, size_t tseq, size_t* pidx);  // 1-bit

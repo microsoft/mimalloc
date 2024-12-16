@@ -353,7 +353,7 @@ int main(int argc, char** argv) {
   mi_debug_show_arenas(true,false,false);
   #else
   //mi_collect(true);
-  //mi_debug_show_arenas(true,false,false);
+  mi_debug_show_arenas(true,false,false);
   // mi_stats_print(NULL);
   #endif
 #else
