@@ -82,7 +82,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_block_size(page) > 0);
   mi_assert_internal(page->used <= page->capacity);
   mi_assert_internal(page->capacity <= page->reserved);
-  
+
   // const size_t bsize = mi_page_block_size(page);
   // uint8_t* start = mi_page_start(page);
   //mi_assert_internal(start + page->capacity*page->block_size == page->top);
@@ -623,7 +623,7 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
   #endif
   mi_assert_internal(page->block_size_shift == 0 || (mi_page_block_size(page) == ((size_t)1 << page->block_size_shift)));
   mi_assert_expensive(mi_page_is_valid_init(page));
-  
+
   // initialize an initial free list
   mi_page_extend_free(heap,page);
   mi_assert(mi_page_immediate_available(page));
@@ -872,10 +872,14 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   mi_assert_internal(mi_heap_is_initialized(heap));
 
   // call potential deferred free routines
-  // _mi_deferred_free(heap, false);
+  _mi_deferred_free(heap, false);
 
-  // free delayed frees from other threads (but skip contended ones)
-  // _mi_heap_delayed_free_partial(heap);
+  // collect every N generic mallocs
+  /*static long count = 0;
+  if (count++ > 100000) {
+    count = 0;
+    _mi_heap_collect_retired(heap,false);
+  }*/
 
   // find (or allocate) a page of the right size
   mi_page_t* page = mi_find_page(heap, size, huge_alignment);

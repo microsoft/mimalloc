@@ -98,8 +98,7 @@ typedef mi_bchunk_t mi_bchunkmap_t;
 // An atomic bitmap
 typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bitmap_s {
   _Atomic(size_t)  chunk_count;         // total count of chunks (0 < N <= MI_BCHUNKMAP_BITS)
-  _Atomic(size_t)  chunk_max_accessed;  // max chunk index that was once cleared or set
-  size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc
+  size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 1];    // suppress warning on msvc
   mi_bchunkmap_t   chunkmap;
   mi_bchunk_t      chunks[MI_BITMAP_DEFAULT_CHUNK_COUNT];        // usually dynamic MI_BITMAP_MAX_CHUNK_COUNT
 } mi_bitmap_t;

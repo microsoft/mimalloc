@@ -45,6 +45,14 @@ static inline bool mi_bfield_find_least_bit(mi_bfield_t x, size_t* idx) {
   return mi_bsf(x,idx);
 }
 
+// find the most significant bit that is set.
+// return false if `x==0` (with `*idx` undefined) and true otherwise,
+// with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
+static inline bool mi_bfield_find_highest_bit(mi_bfield_t x, size_t* idx) {
+  return mi_bsf(x, idx);
+}
+
+
 
 // find each set bit in a bit field `x` and clear it, until it becomes zero.
 static inline bool mi_bfield_foreach_bit(mi_bfield_t* x, size_t* idx) {
@@ -873,17 +881,9 @@ static bool mi_bchunk_bsr(mi_bchunk_t* chunk, size_t* pidx) {
  bitmap chunkmap
 -------------------------------------------------------------------------------- */
 
-static void mi_bitmap_chunkmap_set_max(mi_bitmap_t* bitmap, size_t chunk_idx) {
-  size_t oldmax = mi_atomic_load_relaxed(&bitmap->chunk_max_accessed);
-  if mi_unlikely(chunk_idx > oldmax) {
-    mi_atomic_cas_strong_relaxed(&bitmap->chunk_max_accessed, &oldmax, chunk_idx);
-  }
-}
-
 static void mi_bitmap_chunkmap_set(mi_bitmap_t* bitmap, size_t chunk_idx) {
   mi_assert(chunk_idx < mi_bitmap_chunk_count(bitmap));
-  mi_bchunk_set(&bitmap->chunkmap, chunk_idx);
-  mi_bitmap_chunkmap_set_max(bitmap, chunk_idx);
+  mi_bchunk_set(&bitmap->chunkmap, chunk_idx);  
 }
 
 static bool mi_bitmap_chunkmap_try_clear(mi_bitmap_t* bitmap, size_t chunk_idx) {
@@ -898,13 +898,12 @@ static bool mi_bitmap_chunkmap_try_clear(mi_bitmap_t* bitmap, size_t chunk_idx) 
     mi_bchunk_set(&bitmap->chunkmap, chunk_idx);
     return false;
   }
-  mi_bitmap_chunkmap_set_max(bitmap, chunk_idx);
   return true;
 }
 
 
 /* --------------------------------------------------------------------------------
- bitmap
+  bitmap
 -------------------------------------------------------------------------------- */
 
 size_t mi_bitmap_size(size_t bit_count, size_t* pchunk_count) {
@@ -1107,33 +1106,24 @@ typedef bool (mi_bitmap_visit_fun_t)(mi_bitmap_t* bitmap, size_t chunk_idx, size
 // If it returns `true` stop the search.
 static inline bool mi_bitmap_find(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx, mi_bitmap_visit_fun_t* on_find, void* arg1, void* arg2)
 {
-  // we space out threads to reduce contention
-  const size_t cmap_max_count  = _mi_divide_up(mi_bitmap_chunk_count(bitmap),MI_BFIELD_BITS);
-  const size_t chunk_acc       = mi_atomic_load_relaxed(&bitmap->chunk_max_accessed);
-  const size_t cmap_acc        = chunk_acc / MI_BFIELD_BITS;
-  const size_t cmap_acc_bits   = 1 + (chunk_acc % MI_BFIELD_BITS);
-
-  // create a mask over the chunkmap entries to iterate over them efficiently
-  mi_assert_internal(MI_BFIELD_BITS >= MI_BCHUNK_FIELDS);
-  const mi_bfield_t cmap_mask  = mi_bfield_mask(cmap_max_count,0);
-  const size_t cmap_cycle      = cmap_acc+1;
-  mi_bfield_cycle_iterate(cmap_mask, tseq, cmap_cycle, cmap_idx, X)
-  {
+  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  for (size_t i = 0; i < chunkmap_max; i++) {
     // and for each chunkmap entry we iterate over its bits to find the chunks
-    mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[cmap_idx]);
-    size_t cmap_entry_cycle = (cmap_idx != cmap_acc ? MI_BFIELD_BITS : cmap_acc_bits);
-    mi_bfield_cycle_iterate(cmap_entry, tseq%8, cmap_entry_cycle, eidx, Y) // reduce the tseq to 8 bins to reduce using extra memory (see `mstress`)
-    {
-      mi_assert_internal(eidx <= MI_BFIELD_BITS);
-      const size_t chunk_idx = cmap_idx*MI_BFIELD_BITS + eidx;
-      mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
-      if ((*on_find)(bitmap, chunk_idx, n, pidx, arg1, arg2)) {
-        return true;
+    const mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
+    size_t hi;
+    if (mi_bfield_find_highest_bit(cmap_entry, &hi)) {
+      mi_bfield_cycle_iterate(cmap_entry, tseq%8, hi+1, eidx, Y) // reduce the tseq to 8 bins to reduce using extra memory (see `mstress`)
+      {
+        mi_assert_internal(eidx <= MI_BFIELD_BITS);
+        const size_t chunk_idx = i*MI_BFIELD_BITS + eidx;
+        mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
+        if ((*on_find)(bitmap, chunk_idx, n, pidx, arg1, arg2)) {
+          return true;
+        }
       }
+      mi_bfield_cycle_iterate_end(Y);
     }
-    mi_bfield_cycle_iterate_end(Y);
   }
-  mi_bfield_cycle_iterate_end(X);
   return false;
 }
 
@@ -1478,7 +1468,7 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
         // only in the current size class!
         const mi_bbin_t chunk_bin = (mi_bbin_t)mi_atomic_load_acquire(&bbitmap->chunk_bins[chunk_idx]);
         if // (bin >= chunk_bin) { 
-           (bin == chunk_bin || (bin <= MI_BBIN_SMALL && chunk_bin <= MI_BBIN_SMALL)) {
+           ((mi_bbin_t)bin == chunk_bin || (bin <= MI_BBIN_SMALL && chunk_bin <= MI_BBIN_SMALL)) {
           mi_bchunk_t* chunk = &bbitmap->chunks[chunk_idx];
           size_t cidx;
           if ((*on_find)(chunk, n, &cidx)) {

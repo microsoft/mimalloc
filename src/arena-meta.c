@@ -77,7 +77,7 @@ static mi_meta_page_t* mi_meta_page_zalloc(void) {
   // initialize the page
   mpage->memid = memid;
   mi_bbitmap_init(&mpage->blocks_free, MI_META_BLOCKS_PER_PAGE, true /* already_zero */);
-  const size_t mpage_size  = offsetof(mi_meta_page_t,blocks_free) + mi_bitmap_size(MI_META_BLOCKS_PER_PAGE, NULL);
+  const size_t mpage_size  = offsetof(mi_meta_page_t,blocks_free) + mi_bbitmap_size(MI_META_BLOCKS_PER_PAGE, NULL);
   const size_t info_blocks = _mi_divide_up(mpage_size,MI_META_BLOCK_SIZE);
   mi_assert_internal(info_blocks < MI_META_BLOCKS_PER_PAGE);
   mi_bbitmap_unsafe_setN(&mpage->blocks_free, info_blocks, MI_META_BLOCKS_PER_PAGE - info_blocks);
@@ -142,7 +142,7 @@ mi_decl_noinline void _mi_meta_free(void* p, size_t size, mi_memid_t memid) {
     mi_meta_page_t* mpage = (mi_meta_page_t*)memid.mem.meta.meta_page; 
     mi_assert_internal(mi_meta_page_of_ptr(p,NULL) == mpage);
     mi_assert_internal(block_idx + block_count < MI_META_BLOCKS_PER_PAGE);
-    mi_assert_internal(mi_bitmap_is_clearN(&mpage->blocks_free, block_idx, block_count));
+    mi_assert_internal(mi_bbitmap_is_clearN(&mpage->blocks_free, block_idx, block_count));
     // we zero on free (and on the initial page allocation) so we don't need a "dirty" map
     _mi_memzero_aligned(mi_meta_block_start(mpage, block_idx), block_count*MI_META_BLOCK_SIZE);
     mi_bbitmap_setN(&mpage->blocks_free, block_idx, block_count);

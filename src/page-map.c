@@ -17,7 +17,7 @@ static mi_memid_t  mi_page_map_memid;
 
 
 // (note: we need to initialize statically or otherwise C++ may run a default constructors after process initialization)
-static mi_bitmap_t mi_page_map_commit = { MI_ATOMIC_VAR_INIT(MI_BITMAP_DEFAULT_CHUNK_COUNT), MI_ATOMIC_VAR_INIT(0),
+static mi_bitmap_t mi_page_map_commit = { MI_ATOMIC_VAR_INIT(MI_BITMAP_DEFAULT_CHUNK_COUNT),
                                           { 0 }, { {MI_ATOMIC_VAR_INIT(0)} }, {{{ MI_ATOMIC_VAR_INIT(0) }}} };
 
 bool _mi_page_map_init(void) {

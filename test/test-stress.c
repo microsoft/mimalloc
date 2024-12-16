@@ -262,7 +262,7 @@ static void test_stress(void) {
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) { 
       printf("- iterations left: %3d\n", ITER - (n + 1)); 
-      //mi_debug_show_arenas(true, false, false);
+      mi_debug_show_arenas(true, false, false);
       //mi_collect(true);
       //mi_debug_show_arenas(true, false, false);
     }
@@ -352,7 +352,7 @@ int main(int argc, char** argv) {
   mi_collect(true);
   mi_debug_show_arenas(true,false,false);
   #else
-  //mi_collect(true);
+  mi_collect(false);
   mi_debug_show_arenas(true,false,false);
   // mi_stats_print(NULL);
   #endif

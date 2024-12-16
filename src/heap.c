@@ -138,7 +138,9 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // collect retired pages
   _mi_heap_collect_retired(heap, force);
-
+  
+  // if (_mi_is_main_thread()) { mi_debug_show_arenas(true, false, false); }
+  
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   

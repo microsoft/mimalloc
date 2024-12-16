@@ -1258,7 +1258,7 @@ static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_
 
     char chunk_kind = ' ';
     if (chunk_bins != NULL) {
-      switch (chunk_bins[i]) {
+      switch (mi_atomic_load_relaxed(&chunk_bins[i])) {
         // case MI_BBIN_SMALL: chunk_kind  = 'S'; break;
         case MI_BBIN_MEDIUM: chunk_kind = 'M'; break;
         case MI_BBIN_LARGE: chunk_kind  = 'L'; break;
