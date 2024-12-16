@@ -870,16 +870,15 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
     if mi_unlikely(!mi_heap_is_initialized(heap)) { return NULL; }
   }
   mi_assert_internal(mi_heap_is_initialized(heap));
-
-  // call potential deferred free routines
-  _mi_deferred_free(heap, false);
-
+  
   // collect every N generic mallocs
-  /*static long count = 0;
-  if (count++ > 100000) {
-    count = 0;
+  if (heap->generic_count++ > 10000) {
+    heap->generic_count = 0;
+    // call potential deferred free routines
+    _mi_deferred_free(heap, false);
+    // collect retired pages
     _mi_heap_collect_retired(heap,false);
-  }*/
+  }
 
   // find (or allocate) a page of the right size
   mi_page_t* page = mi_find_page(heap, size, huge_alignment);

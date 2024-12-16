@@ -108,6 +108,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next
   MI_MEMID_STATIC,  // memid
+  0,
   0,                // full page retain
   false,            // can reclaim
   true,             // can eager abandon
@@ -156,6 +157,7 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
   MI_MEMID_STATIC,  // memid
+  0, 
   2,                // full page retain
   true,             // allow page reclaim
   true,             // allow page abandon
