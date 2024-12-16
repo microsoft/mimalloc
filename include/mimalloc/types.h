@@ -100,7 +100,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Sizes are for 64-bit
 #ifndef MI_ARENA_SLICE_SHIFT
-#ifdef  MI_SMALL_PAGE_SHIFT   // compatibility
+#ifdef  MI_SMALL_PAGE_SHIFT   // backward compatibility
 #define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
 #else
 #define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
@@ -149,7 +149,7 @@ typedef struct mi_arena_s mi_arena_t;     // defined in `arena.c`
 // a memory id tracks the provenance of arena/OS allocated memory
 // ---------------------------------------------------------------
 
-// Memory can reside in arena's, direct OS allocated, meta-data pages, or statically allocated. 
+// Memory can reside in arena's, direct OS allocated, meta-data pages, or statically allocated.
 // The memid keeps track of this.
 typedef enum mi_memkind_e {
   MI_MEM_NONE,      // not allocated
@@ -264,7 +264,7 @@ typedef uint8_t mi_heaptag_t;
 //
 // We don't count `freed` (as |free|) but use `used` to reduce
 // the number of memory accesses in the `mi_page_all_free` function(s).
-// 
+//
 // Notes:
 // - Non-atomic fields can only be accessed if having ownership (low bit of `xthread_free`).
 // - If a page is not part of a heap it is called "abandoned" -- in
@@ -310,7 +310,7 @@ typedef struct mi_page_s {
 
 #define MI_PAGE_ALIGN                     MI_ARENA_SLICE_ALIGN // pages must be aligned on this for the page map.
 #define MI_PAGE_MIN_START_BLOCK_ALIGN     MI_MAX_ALIGN_SIZE    // minimal block alignment for the first block in a page (16b)
-#define MI_PAGE_MAX_START_BLOCK_ALIGN2    MI_KiB               // maximal block alignment for "power of 2"-sized blocks 
+#define MI_PAGE_MAX_START_BLOCK_ALIGN2    MI_KiB               // maximal block alignment for "power of 2"-sized blocks
 #define MI_PAGE_MAX_OVERALLOC_ALIGN       MI_ARENA_SLICE_SIZE  // (64 KiB) limit for which we overallocate in arena pages, beyond this use OS allocation
 
 #if (MI_ENCODE_FREELIST || MI_PADDING) && MI_SIZE_SIZE == 8
@@ -348,12 +348,12 @@ typedef enum mi_page_kind_e {
 
 // ------------------------------------------------------
 // Heaps
-// 
+//
 // Provide first-class heaps to allocate from.
 // A heap just owns a set of pages for allocation and
 // can only be allocate/reallocate from the thread that created it.
 // Freeing blocks can be done from any thread though.
-// 
+//
 // Per thread, there is always a default heap that is
 // used for allocation; it is initialized to statically
 // point to an empty heap to avoid initialization checks
