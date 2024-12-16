@@ -44,7 +44,7 @@ typedef struct mi_arena_s {
   bool                is_large;             // memory area consists of large- or huge OS pages (always committed)
   _Atomic(mi_msecs_t) purge_expire;         // expiration time when slices can be purged from `slices_purge`.
 
-  mi_bitmap_t*        slices_free;          // is the slice free?
+  mi_bbitmap_t*       slices_free;          // is the slice free? (a binned bitmap with size classes)
   mi_bitmap_t*        slices_committed;     // is the slice committed? (i.e. accessible)
   mi_bitmap_t*        slices_dirty;         // is the slice potentially non-zero?
   mi_bitmap_t*        slices_purge;         // slices that can be purged
@@ -213,7 +213,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
   mi_arena_t* arena, size_t slice_count, bool commit, size_t tseq, mi_memid_t* memid)
 {
   size_t slice_index;
-  if (!mi_bitmap_try_find_and_clearN(arena->slices_free, slice_count, tseq, &slice_index)) return NULL;
+  if (!mi_bbitmap_try_find_and_clearN(arena->slices_free, slice_count, tseq, &slice_index)) return NULL;
 
   // claimed it!
   void* p = mi_arena_slice_start(arena, slice_index);
@@ -267,7 +267,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
     memid->initially_committed = mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count);
   }
 
-  mi_assert_internal(mi_bitmap_is_clearN(arena->slices_free, slice_index, slice_count));
+  mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
   if (commit) { mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count)); }
   mi_assert_internal(mi_bitmap_is_setN(arena->slices_dirty, slice_index, slice_count));
   
@@ -574,7 +574,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(size_t slice_count, size_t bl
       _mi_stat_counter_increase(&_mi_stats_main.pages_reclaim_on_alloc, 1);
 
       _mi_page_free_collect(page, false);  // update `used` count
-      mi_assert_internal(mi_bitmap_is_clearN(arena->slices_free, slice_index, slice_count));
+      mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
       mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
       mi_assert_internal(mi_bitmap_is_setN(arena->slices_dirty, slice_index, slice_count));
       mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
@@ -775,7 +775,7 @@ void _mi_arena_page_free(mi_page_t* page) {
     size_t slice_count;
     mi_arena_t* arena = mi_page_arena(page, &slice_index, &slice_count);
 
-    mi_assert_internal(mi_bitmap_is_clearN(arena->slices_free, slice_index, slice_count));
+    mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_clearN(arena->pages_abandoned[bin], slice_index, 1));
     mi_assert_internal(mi_bitmap_is_setN(page->memid.mem.arena.arena->pages, page->memid.mem.arena.slice_index, 1));
@@ -812,7 +812,7 @@ static void mi_arena_page_abandon_no_stat(mi_page_t* page) {
     size_t slice_count;
     mi_arena_t* arena = mi_page_arena(page, &slice_index, &slice_count);
     mi_assert_internal(!mi_page_is_singleton(page));
-    mi_assert_internal(mi_bitmap_is_clearN(arena->slices_free, slice_index, slice_count));
+    mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_setN(arena->slices_dirty, slice_index, slice_count));
 
@@ -867,7 +867,7 @@ void _mi_arena_page_unabandon(mi_page_t* page) {
     size_t slice_count;
     mi_arena_t* arena = mi_page_arena(page, &slice_index, &slice_count);
 
-    mi_assert_internal(mi_bitmap_is_clearN(arena->slices_free, slice_index, slice_count));
+    mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
     mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
     
     // this busy waits until a concurrent reader (from alloc_abandoned) is done
@@ -935,7 +935,7 @@ static void mi_arena_free(void* p, size_t size, mi_memid_t memid) {
     }
 
     // and make it available to others again
-    bool all_inuse = mi_bitmap_setN(arena->slices_free, slice_index, slice_count, NULL);
+    bool all_inuse = mi_bbitmap_setN(arena->slices_free, slice_index, slice_count);
     if (!all_inuse) {
       _mi_error_message(EAGAIN, "trying to free an already freed arena block: %p, size %zu\n", mi_arena_slice_start(arena,slice_index), mi_size_of_slices(slice_count));
       return;
@@ -1051,8 +1051,8 @@ static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_bas
   if (slice_count == 0) slice_count = MI_BCHUNK_BITS;
   mi_assert_internal((slice_count % MI_BCHUNK_BITS) == 0);
   const size_t base_size = _mi_align_up(sizeof(mi_arena_t), MI_BCHUNK_SIZE);
-  const size_t bitmaps_count = 4 + MI_BIN_COUNT; // free, commit, dirty, purge, and abandonded
-  const size_t bitmaps_size = bitmaps_count * mi_bitmap_size(slice_count,NULL);
+  const size_t bitmaps_count = 4 + MI_BIN_COUNT; // commit, dirty, purge, and abandonded
+  const size_t bitmaps_size = bitmaps_count * mi_bitmap_size(slice_count, NULL) + mi_bbitmap_size(slice_count, NULL); // + free
   const size_t size = base_size + bitmaps_size;
 
   const size_t os_page_size = _mi_os_page_size();
@@ -1067,6 +1067,12 @@ static mi_bitmap_t* mi_arena_bitmap_init(size_t slice_count, uint8_t** base) {
   mi_bitmap_t* bitmap = (mi_bitmap_t*)(*base);
   *base = (*base) + mi_bitmap_init(bitmap, slice_count, true /* already zero */);
   return bitmap;
+}
+
+static mi_bbitmap_t* mi_arena_bbitmap_init(size_t slice_count, uint8_t** base) {
+  mi_bbitmap_t* bbitmap = (mi_bbitmap_t*)(*base);
+  *base = (*base) + mi_bbitmap_init(bbitmap, slice_count, true /* already zero */);
+  return bbitmap;
 }
 
 
@@ -1121,7 +1127,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
 
   // init bitmaps
   uint8_t* base = mi_arena_start(arena) + bitmap_base;
-  arena->slices_free = mi_arena_bitmap_init(slice_count,&base);
+  arena->slices_free = mi_arena_bbitmap_init(slice_count,&base);
   arena->slices_committed = mi_arena_bitmap_init(slice_count,&base);
   arena->slices_dirty = mi_arena_bitmap_init(slice_count,&base);
   arena->slices_purge = mi_arena_bitmap_init(slice_count, &base);
@@ -1132,7 +1138,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   mi_assert_internal(mi_size_of_slices(info_slices) >= (size_t)(base - mi_arena_start(arena)));
 
   // reserve our meta info (and reserve slices outside the memory area)
-  mi_bitmap_unsafe_setN(arena->slices_free, info_slices /* start */, arena->slice_count - info_slices);
+  mi_bbitmap_unsafe_setN(arena->slices_free, info_slices /* start */, arena->slice_count - info_slices);
   if (memid.initially_committed) {
     mi_bitmap_unsafe_setN(arena->slices_committed, 0, arena->slice_count);
   }
@@ -1225,7 +1231,7 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, mi_arena_t
       else if (_mi_meta_is_meta_page(start)) { c = 'm'; }
       else if (slice_index + bit < arena->info_slices) { c = 'i'; }
       // else if (mi_bitmap_is_setN(arena->pages_purge, slice_index + bit, NULL)) { c = '*'; }
-      else if (mi_bitmap_is_set(arena->slices_free, slice_index+bit)) {
+      else if (mi_bbitmap_is_setN(arena->slices_free, slice_index+bit, 1)) {
         if (mi_bitmap_is_set(arena->slices_purge, slice_index + bit)) { c = '~'; }
         else if (mi_bitmap_is_setN(arena->slices_committed, slice_index + bit, 1)) { c = '_'; }
         else { c = '.'; }
@@ -1237,14 +1243,14 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, mi_arena_t
   return bit_set_count;
 }
 
-static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bitmap_t* bitmap, bool invert, mi_arena_t* arena) {
+static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_t chunk_count, mi_bchunk_t* chunks, bool invert, mi_arena_t* arena) {
   _mi_output_message("%s:\n", header);
   size_t bit_count = 0;
   size_t bit_set_count = 0;
-  for (size_t i = 0; i < mi_bitmap_chunk_count(bitmap) && bit_count < slice_count; i++) {
+  for (size_t i = 0; i < chunk_count && bit_count < slice_count; i++) {
     char buf[MI_BCHUNK_BITS + 64]; _mi_memzero(buf, sizeof(buf));
     size_t k = 0;
-    mi_bchunk_t* chunk = &bitmap->chunks[i];
+    mi_bchunk_t* chunk = &chunks[i];
 
     if (i<10)        { buf[k++] = ('0' + (char)i); buf[k++] = ' '; buf[k++] = ' '; }
     else if (i<100)  { buf[k++] = ('0' + (char)(i/10)); buf[k++] = ('0' + (char)(i%10)); buf[k++] = ' '; }
@@ -1276,6 +1282,15 @@ static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bi
   return bit_set_count;
 }
 
+static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bitmap_t* bitmap, bool invert, mi_arena_t* arena) {
+  return mi_debug_show_chunks(header, slice_count, mi_bitmap_chunk_count(bitmap), &bitmap->chunks[0], invert, arena);
+}
+
+static size_t mi_debug_show_bbitmap(const char* header, size_t slice_count, mi_bbitmap_t* bbitmap, bool invert, mi_arena_t* arena) {
+  return mi_debug_show_chunks(header, slice_count, mi_bbitmap_chunk_count(bbitmap), &bbitmap->chunks[0], invert, arena);
+}
+
+
 void mi_debug_show_arenas(bool show_pages, bool show_inuse, bool show_committed) mi_attr_noexcept {
   size_t max_arenas = mi_arena_get_count();
   size_t free_total = 0;
@@ -1288,7 +1303,7 @@ void mi_debug_show_arenas(bool show_pages, bool show_inuse, bool show_committed)
     slice_total += arena->slice_count;
     _mi_output_message("arena %zu at %p: %zu slices (%zu MiB)%s\n", i, arena, arena->slice_count, mi_size_of_slices(arena->slice_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""));
     if (show_inuse) {
-      free_total += mi_debug_show_bitmap("in-use slices", arena->slice_count, arena->slices_free, true, NULL);
+      free_total += mi_debug_show_bbitmap("in-use slices", arena->slice_count, arena->slices_free, true, NULL);
     }
     if (show_committed) {
       mi_debug_show_bitmap("committed slices", arena->slice_count, arena->slices_committed, false, NULL);
@@ -1391,7 +1406,7 @@ static long mi_arena_purge_delay(void) {
 // assumes we own the area (i.e. slices_free is claimed by us)
 static void mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
   mi_assert_internal(!arena->memid.is_pinned);
-  mi_assert_internal(mi_bitmap_is_clearN(arena->slices_free, slice_index, slice_count));
+  mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
 
   const size_t size = mi_size_of_slices(slice_count);
   void* const p = mi_arena_slice_start(arena, slice_index);
@@ -1417,7 +1432,7 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
   const long delay = mi_arena_purge_delay();
   if (delay < 0 || _mi_preloading()) return;  // is purging allowed at all?
 
-  mi_assert_internal(mi_bitmap_is_clearN(arena->slices_free, slice_index, slice_count));
+  mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
   if (delay == 0) {
     // purge directly
     mi_arena_purge(arena, slice_index, slice_count);
@@ -1443,11 +1458,11 @@ typedef struct mi_purge_visit_info_s {
 } mi_purge_visit_info_t;
 
 static bool mi_arena_try_purge_range(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
-  if (mi_bitmap_try_clearN(arena->slices_free, slice_index, slice_count)) {
+  if (mi_bbitmap_try_clearN(arena->slices_free, slice_index, slice_count)) {
     // purge
     mi_arena_purge(arena, slice_index, slice_count);
     // and reset the free range
-    mi_bitmap_setN(arena->slices_free, slice_index, slice_count, NULL);
+    mi_bbitmap_setN(arena->slices_free, slice_index, slice_count);
     return true;
   }
   else {
