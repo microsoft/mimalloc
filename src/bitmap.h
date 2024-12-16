@@ -210,15 +210,20 @@ bool _mi_bitmap_forall_set_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visi
 /* ----------------------------------------------------------------------------
   Binned concurrent bitmap
   Assigns a size class to each chunk such that small blocks don't cause too
-  much fragmentation by keeping chunks for larger blocks separate.
+  much fragmentation since we keep chunks for larger blocks separate.
 ---------------------------------------------------------------------------- */
 
+// Size bins; larger bins are allowed to go into smaller bins.
+// Since LARGE and MEDIUM are aligned (on word and byte boundaries respectively),
+// they are larger than OTHER even though those can contain very large objects (but we
+// don't want those in the MEDIUM or LARGE bins as these are variable size).
+// SMALL can only be in small (and NONE), so they cannot fragment the larger bins.
 typedef enum mi_bbin_e {
   MI_BBIN_NONE,     // no bin assigned yet (the chunk is completely free)
   MI_BBIN_SMALL,    // slice_count == 1
+  MI_BBIN_OTHER,    // slice_count: any other from the other bins, and 1 <= slice_count <= MI_BCHUNK_BITS
   MI_BBIN_MEDIUM,   // slice_count == 8
   MI_BBIN_LARGE,    // slice_count == MI_BFIELD_BITS
-  MI_BBIN_OTHER,    // slice_count > 1, and not 8 or MI_BFIELD_BITS
   MI_BBIN_COUNT
 } mi_bbin_t;
 
