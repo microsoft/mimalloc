@@ -44,8 +44,8 @@ static void test_stl_allocators();
 
 
 int main() {
-  // mi_stats_reset();  // ignore earlier allocations
-
+  mi_stats_reset();  // ignore earlier allocations
+  various_tests();
   test_mixed1();
   //test_std_string();
   //test_thread_local();
@@ -55,8 +55,10 @@ int main() {
   heap_no_delete();
   heap_late_free();
   padding_shrink();
-  various_tests();
+  
   tsan_numa_test();
+  */
+  /*
   strdup_test();
   test_stl_allocators();
   test_mt_shutdown();

@@ -359,6 +359,7 @@ int main(int argc, char** argv) {
 #else
   mi_stats_print(NULL);  // so we see rss/commit/elapsed
 #endif
+  //mi_stats_print(NULL);
   //bench_end_program();
   return 0;
 }
