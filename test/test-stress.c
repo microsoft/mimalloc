@@ -23,7 +23,7 @@ terms of the MIT license.
 #include <assert.h>
 
 // #define MI_GUARDED
-// #define USE_STD_MALLOC
+#define USE_STD_MALLOC
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
