@@ -1424,7 +1424,7 @@ static void mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_c
   void* const p = mi_arena_slice_start(arena, slice_index);
   const bool all_committed = mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count);
   const bool needs_recommit = _mi_os_purge_ex(p, size, all_committed);
-  
+
   // update committed bitmap
   if (needs_recommit) {
     mi_bitmap_clearN(arena->slices_committed, slice_index, slice_count);
@@ -1483,7 +1483,7 @@ static bool mi_arena_try_purge_visitor(size_t slice_index, size_t slice_count, m
   mi_purge_visit_info_t* vinfo = (mi_purge_visit_info_t*)arg;  
   // try to purge: first claim the free blocks
   if (mi_arena_try_purge_range(arena, slice_index, slice_count)) {
-    vinfo->any_purged = true;  
+    vinfo->any_purged = true;
     vinfo->all_purged = true;
   }
   else if (slice_count > 1)

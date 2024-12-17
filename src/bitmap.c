@@ -89,7 +89,7 @@ static inline mi_bfield_t mi_bfield_mask(size_t bit_count, size_t shiftl) {
 // Set a bit atomically. Returns `true` if the bit transitioned from 0 to 1
 static inline bool mi_bfield_atomic_set(_Atomic(mi_bfield_t)*b, size_t idx) {
   mi_assert_internal(idx < MI_BFIELD_BITS);
-  const mi_bfield_t mask = mi_bfield_mask(1,idx);
+  const mi_bfield_t mask = mi_bfield_mask(1, idx);;
   const mi_bfield_t old = mi_atomic_or_acq_rel(b, mask);
   return ((old&mask) == 0);
 }
@@ -98,7 +98,7 @@ static inline bool mi_bfield_atomic_set(_Atomic(mi_bfield_t)*b, size_t idx) {
 // `all_clear` is set if the new bfield is zero.
 static inline bool mi_bfield_atomic_clear(_Atomic(mi_bfield_t)*b, size_t idx, bool* all_clear) {
   mi_assert_internal(idx < MI_BFIELD_BITS);
-  const mi_bfield_t mask = mi_bfield_mask(1,idx);
+  const mi_bfield_t mask = mi_bfield_mask(1, idx);;
   mi_bfield_t old = mi_atomic_and_acq_rel(b, ~mask);
   if (all_clear != NULL) { *all_clear = ((old&~mask)==0); }
   return ((old&mask) == mask);
@@ -109,7 +109,7 @@ static inline bool mi_bfield_atomic_clear(_Atomic(mi_bfield_t)*b, size_t idx, bo
 // happen almost never (and is accounted for in the stats)
 static inline void mi_bfield_atomic_clear_once_set(_Atomic(mi_bfield_t)*b, size_t idx) {
   mi_assert_internal(idx < MI_BFIELD_BITS);
-  const mi_bfield_t mask = mi_bfield_mask(1,idx);
+  const mi_bfield_t mask = mi_bfield_mask(1, idx);;
   mi_bfield_t old = mi_atomic_load_relaxed(b);
   do {
     if mi_unlikely((old&mask) == 0) {
@@ -1255,12 +1255,16 @@ bool _mi_bitmap_forall_set_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visi
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
         mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[j]);
-        const size_t bcount = mi_popcount(b);
+        #if MI_DEBUG > 1
+        const size_t bpopcount = mi_popcount(b);
         size_t rngcount = 0;
+        #endif
         size_t bidx;
         while (mi_bfield_find_least_bit(b, &bidx)) {          
           const size_t rng = mi_ctz(~(b>>bidx)); // all the set bits from bidx
+          #if MI_DEBUG > 1
           rngcount += rng;
+          #endif  
           mi_assert_internal(rng>=1 && rng<=MI_BFIELD_BITS);
           const size_t idx = base_idx + bidx;
           mi_assert_internal((idx % MI_BFIELD_BITS) + rng <= MI_BFIELD_BITS);
@@ -1269,7 +1273,7 @@ bool _mi_bitmap_forall_set_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visi
           // clear rng bits in b
           b = b & ~mi_bfield_mask(rng, bidx);          
         }
-        mi_assert_internal(rngcount == bcount);
+        mi_assert_internal(rngcount == bpopcount);
       }
     }
   }
