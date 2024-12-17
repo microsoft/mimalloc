@@ -52,6 +52,7 @@ typedef struct mi_arena_s {
   mi_bitmap_t*        pages_abandoned[MI_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)
                                             // the full queue contains abandoned full pages
   // followed by the bitmaps (whose sizes depend on the arena size)
+  // note: when adding bitmaps revise `mi_arena_info_slices_needed`
 } mi_arena_t;
 
 // Every "page" in `pages_purge` points to purge info 
@@ -1051,7 +1052,7 @@ static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_bas
   if (slice_count == 0) slice_count = MI_BCHUNK_BITS;
   mi_assert_internal((slice_count % MI_BCHUNK_BITS) == 0);
   const size_t base_size = _mi_align_up(sizeof(mi_arena_t), MI_BCHUNK_SIZE);
-  const size_t bitmaps_count = 4 + MI_BIN_COUNT; // free, commit, dirty, purge, and abandonded
+  const size_t bitmaps_count = 5 + MI_ARENA_BIN_COUNT; // free, commit, dirty, purge, pages, and abandoned
   const size_t bitmaps_size = bitmaps_count * mi_bitmap_size(slice_count,NULL);
   const size_t size = base_size + bitmaps_size;
 
@@ -1303,7 +1304,7 @@ void mi_debug_show_arenas(bool show_pages, bool show_inuse, bool show_committed)
   }
   if (show_inuse)     _mi_output_message("total inuse slices    : %zu\n", slice_total - free_total);
   // if (show_abandoned) _mi_verbose_message("total abandoned slices: %zu\n", abandoned_total);
-  if (show_pages)     _mi_output_message("total pages in areanas: %zu\n", page_total);
+  if (show_pages)     _mi_output_message("total pages in arenas: %zu\n", page_total);
 }
 
 
