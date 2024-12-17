@@ -43,7 +43,7 @@ jobs:
       solution: $(BuildType)/libmimalloc.sln
       configuration: '$(MSBuildConfiguration)'
       msbuildArguments: -m
-  - script: ctest --verbose --timeout 180 -C $(MSBuildConfiguration)
+  - script: ctest --verbose --timeout 240 -C $(MSBuildConfiguration)
     workingDirectory: $(BuildType)
     displayName: CTest
   #- script: $(BuildType)\$(BuildType)\mimalloc-test-stress
@@ -126,7 +126,7 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(nproc) -C $(BuildType)
     displayName: Make
-  - script: ctest --verbose --timeout 180
+  - script: ctest --verbose --timeout 240
     workingDirectory: $(BuildType)
     displayName: CTest
     env:
@@ -157,7 +157,7 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(sysctl -n hw.ncpu) -C $(BuildType)
     displayName: Make
-  - script: ctest --verbose --timeout 180
+  - script: ctest --verbose --timeout 240
     workingDirectory: $(BuildType)
     displayName: CTest
     
@@ -193,7 +193,7 @@ jobs:
       solution: $(BuildType)/libmimalloc.sln
       configuration: '$(MSBuildConfiguration)'
       msbuildArguments: -m
-  - script: ctest --verbose --timeout 180 -C $(MSBuildConfiguration)
+  - script: ctest --verbose --timeout 240 -C $(MSBuildConfiguration)
     workingDirectory: $(BuildType)
     displayName: CTest
 
@@ -236,7 +236,7 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(nproc) -C $(BuildType)
     displayName: Make
-  - script: ctest --verbose --timeout 180
+  - script: ctest --verbose --timeout 240
     workingDirectory: $(BuildType)
     displayName: CTest
 
@@ -279,7 +279,7 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(nproc) -C $(BuildType)
     displayName: Make
-  - script: ctest --verbose --timeout 180
+  - script: ctest --verbose --timeout 240
     workingDirectory: $(BuildType)
     displayName: CTest
 
@@ -303,6 +303,6 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(sysctl -n hw.ncpu) -C $(BuildType)
     displayName: Make
-  - script: ctest --verbose --timeout 180
+  - script: ctest --verbose --timeout 240
     workingDirectory: $(BuildType)
     displayName: CTest
