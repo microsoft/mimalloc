@@ -1398,14 +1398,8 @@ static void mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_c
 
   const size_t size = mi_size_of_slices(slice_count);
   void* const p = mi_arena_slice_start(arena, slice_index);
-  bool needs_recommit = false;  // reset needs no recommit, decommit does need it
-  if (mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count)) {
-    // all slices are committed, we can purge the entire range
-    needs_recommit = _mi_os_purge(p, size);
-  }
-  else {
-    mi_assert_internal(false); // can this happen?
-  }
+  const bool all_committed = mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count);
+  const bool needs_recommit = _mi_os_purge_ex(p, size, all_committed);
 
   // update committed bitmap
   if (needs_recommit) {
@@ -1450,11 +1444,13 @@ static bool mi_arena_try_purge_range(mi_arena_t* arena, size_t slice_index, size
   if (mi_bitmap_try_clearN(arena->slices_free, slice_index, slice_count)) {
     // purge
     mi_arena_purge(arena, slice_index, slice_count);
+    mi_assert_internal(mi_bitmap_is_clearN(arena->slices_committed, slice_index, slice_count));
     // and reset the free range
     mi_bitmap_setN(arena->slices_free, slice_index, slice_count, NULL);
     return true;
   }
   else {
+    // was allocated again already
     return false;
   }
 }
@@ -1463,12 +1459,15 @@ static bool mi_arena_try_purge_visitor(size_t slice_index, size_t slice_count, m
   mi_purge_visit_info_t* vinfo = (mi_purge_visit_info_t*)arg;  
   // try to purge: first claim the free blocks
   if (mi_arena_try_purge_range(arena, slice_index, slice_count)) {
-    vinfo->any_purged = true;    
+    vinfo->any_purged = true;
+    vinfo->all_purged = true;
   }
   else {
     // failed to claim the full range, try per slice instead
     for (size_t i = 0; i < slice_count; i++) {
-      vinfo->any_purged = vinfo->any_purged || mi_arena_try_purge_range(arena, slice_index + i, 1);
+      const bool purged = mi_arena_try_purge_range(arena, slice_index + i, 1);
+      vinfo->any_purged = vinfo->any_purged || purged;
+      vinfo->all_purged = vinfo->all_purged && purged;
     }
   }
   // done: clear the purge bits
