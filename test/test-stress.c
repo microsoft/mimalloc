@@ -305,6 +305,7 @@ int main(int argc, char** argv) {
   #endif
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     // mi_option_set(mi_option_arena_reserve, 32 * 1024 /* in kib = 32MiB */);
+    mi_option_set(mi_option_purge_delay,10);
   #endif
   #ifndef USE_STD_MALLOC
     mi_stats_reset();
@@ -353,8 +354,8 @@ int main(int argc, char** argv) {
   mi_debug_show_arenas(true,false,false);
   #else
   //mi_collect(true);
-  //mi_debug_show_arenas(true,false,false);
-  // mi_stats_print(NULL);
+  mi_debug_show_arenas(true,false,false);
+  mi_stats_print(NULL);
   #endif
 #else
   mi_stats_print(NULL);  // so we see rss/commit/elapsed

@@ -1332,18 +1332,16 @@ bool _mi_bitmap_forall_set_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visi
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
         mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[j]);
-        size_t bshift = 0;
         size_t bidx;
-        while (mi_bfield_find_least_bit(b, &bidx)) {
-          b >>= bidx;
-          bshift += bidx;
-          const size_t rng = mi_ctz(~b); // all the set bits from bidx
-          mi_assert_internal(rng>=1);
-          const size_t idx = base_idx + bshift + bidx;
+        while (mi_bfield_find_least_bit(b, &bidx)) {          
+          const size_t rng = mi_ctz(~(b>>bidx)); // all the set bits from bidx
+          mi_assert_internal(rng>=1 && rng<=MI_BFIELD_BITS);
+          const size_t idx = base_idx + bidx;
+          mi_assert_internal((idx % MI_BFIELD_BITS) + rng <= MI_BFIELD_BITS);
+          mi_assert_internal((idx / MI_BCHUNK_BITS) < mi_bitmap_chunk_count(bitmap));
           if (!visit(idx, rng, arena, arg)) return false;
-          // skip rng
-          b >>= rng;
-          bshift += rng;
+          // clear rng bits in b
+          b = b & ~mi_bfield_mask(rng, bidx);          
         }
       }
     }
