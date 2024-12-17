@@ -1392,19 +1392,21 @@ static long mi_arena_purge_delay(void) {
 
 // reset or decommit in an arena and update the commit bitmap
 // assumes we own the area (i.e. slices_free is claimed by us)
-static void mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
+// returns if the memory is no longer committed (versus reset which keeps the commit)
+static bool mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
   mi_assert_internal(!arena->memid.is_pinned);
   mi_assert_internal(mi_bitmap_is_clearN(arena->slices_free, slice_index, slice_count));
 
   const size_t size = mi_size_of_slices(slice_count);
   void* const p = mi_arena_slice_start(arena, slice_index);
   const bool all_committed = mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count);
-  const bool needs_recommit = _mi_os_purge_ex(p, size, all_committed);
+  const bool needs_recommit = _mi_os_purge_ex(p, size, all_committed /* allow reset? */);
 
   // update committed bitmap
   if (needs_recommit) {
     mi_bitmap_clearN(arena->slices_committed, slice_index, slice_count);
   }
+  return needs_recommit;
 }
 
 
@@ -1421,12 +1423,13 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
   }
   else {
     // schedule purge
-    mi_msecs_t expire = mi_atomic_loadi64_relaxed(&arena->purge_expire);
-    if (expire == 0) {
-      mi_atomic_storei64_release(&arena->purge_expire, _mi_clock_now() + delay);
+    mi_msecs_t expire0 = 0;
+    if (mi_atomic_casi64_strong_acq_rel(&arena->purge_expire, &expire0, _mi_clock_now() + delay)) {
+      // expiration was not yet set
       mi_atomic_storei64_release(&arena->purge_expire_extend, 0);      
     }
     else if (mi_atomic_loadi64_acquire(&arena->purge_expire_extend) < 10*delay) {     // limit max extension time
+      // already an expiration was set
       mi_atomic_addi64_acq_rel(&arena->purge_expire_extend, (mi_msecs_t)(delay/10));  // add smallish extra delay
     }
     mi_bitmap_setN(arena->slices_purge, slice_index, slice_count, NULL);
@@ -1443,8 +1446,8 @@ typedef struct mi_purge_visit_info_s {
 static bool mi_arena_try_purge_range(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
   if (mi_bitmap_try_clearN(arena->slices_free, slice_index, slice_count)) {
     // purge
-    mi_arena_purge(arena, slice_index, slice_count);
-    mi_assert_internal(mi_bitmap_is_clearN(arena->slices_committed, slice_index, slice_count));
+    bool decommitted = mi_arena_purge(arena, slice_index, slice_count); MI_UNUSED(decommitted);
+    mi_assert_internal(!decommitted || mi_bitmap_is_clearN(arena->slices_committed, slice_index, slice_count));
     // and reset the free range
     mi_bitmap_setN(arena->slices_free, slice_index, slice_count, NULL);
     return true;
@@ -1470,8 +1473,8 @@ static bool mi_arena_try_purge_visitor(size_t slice_index, size_t slice_count, m
       vinfo->all_purged = vinfo->all_purged && purged;
     }
   }
-  // done: clear the purge bits
-  mi_bitmap_clearN(arena->slices_purge, slice_index, slice_count);
+  // don't clear the purge bits as that is done atomically be the _bitmap_forall_set_ranges
+  // mi_bitmap_clearN(arena->slices_purge, slice_index, slice_count);
   return true; // continue
 }
 
@@ -1495,17 +1498,11 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
   _mi_stat_counter_increase(&_mi_stats_main.arena_purges, 1);
 
   // go through all purge info's  (with max MI_BFIELD_BITS ranges at a time)
+  // this also clears those ranges atomically (so any newly freed blocks will get purged next
+  // time around)
   mi_purge_visit_info_t vinfo = { now, mi_arena_purge_delay(), true /*all?*/, false /*any?*/};
-  _mi_bitmap_forall_set_ranges(arena->slices_purge, &mi_arena_try_purge_visitor, arena, &vinfo);
+  _mi_bitmap_forall_setc_ranges(arena->slices_purge, &mi_arena_try_purge_visitor, arena, &vinfo);
 
-  // if not fully purged, make sure to purge again in the future
-  if (!vinfo.all_purged) {
-    const long delay = mi_arena_purge_delay();
-    mi_msecs_t expected = 0;
-    if (mi_atomic_casi64_strong_acq_rel(&arena->purge_expire, &expected, _mi_clock_now() + delay)) {
-      mi_atomic_storei64_release(&arena->purge_expire_extend, (mi_msecs_t)0);
-    }
-  }
   return vinfo.any_purged;
 }
 
