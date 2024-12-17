@@ -23,7 +23,7 @@ terms of the MIT license.
 #include <assert.h>
 
 // #define MI_GUARDED
-#define USE_STD_MALLOC
+// #define USE_STD_MALLOC
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
@@ -323,10 +323,10 @@ int main(int argc, char** argv) {
   #ifndef NDEBUG
   mi_debug_show_arenas(true,true,true);
   mi_collect(true);
-  #endif
-  mi_stats_print(NULL);
+  #endif  
 #endif
   mi_stats_print(NULL);
+  //mi_stats_print(NULL);
   //bench_end_program();
   return 0;
 }
