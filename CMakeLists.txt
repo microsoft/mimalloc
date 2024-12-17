@@ -147,13 +147,7 @@ if(MI_OVERRIDE)
   endif()
 endif()
 
-if(WIN32)
-  if (MI_WIN_REDIRECT)
-    if (MSVC_C_ARCHITECTURE_ID MATCHES "ARM")
-      message(STATUS "Cannot use redirection on Windows ARM (MI_WIN_REDIRECT=OFF)")
-      set(MI_WIN_REDIRECT OFF)
-    endif()
-  endif()
+if(WIN32)  
   if (NOT MI_WIN_REDIRECT)
     # use a negative define for backward compatibility
     list(APPEND mi_defines MI_WIN_NOREDIRECT=1)
@@ -336,6 +330,7 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR
   set(MI_ARCH "x64")
 elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" OR
        CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64" OR    # apple
+       CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64" OR    # win32
        CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")    # msvc
   set(MI_ARCH "arm64")
 endif()
@@ -546,7 +541,9 @@ if(MI_BUILD_SHARED)
   )
   if(WIN32 AND MI_WIN_REDIRECT)
     # On windows, link and copy the mimalloc redirection dll too.
-    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    if(MI_ARCH STREQUAL "arm64")
+      set(MIMALLOC_REDIRECT_SUFFIX "-arm64")
+    elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
       set(MIMALLOC_REDIRECT_SUFFIX "32")
     else()
       set(MIMALLOC_REDIRECT_SUFFIX "")
@@ -668,6 +665,11 @@ endif()
 if (MI_OVERRIDE)
   if (MI_BUILD_SHARED)
     target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)
+    if (WIN32)
+      # on windows we should generate mimalloc-override.dll.
+      string(REPLACE "mimalloc" "mimalloc-override" mi_override_output_name ${mi_basename})
+      set_target_properties(mimalloc PROPERTIES OUTPUT_NAME ${mi_override_output_name})
+    endif()
   endif()
   if(NOT WIN32)
     # It is only possible to override malloc on Windows when building as a DLL.
