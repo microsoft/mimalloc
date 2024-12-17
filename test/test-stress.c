@@ -317,9 +317,9 @@ int main(int argc, char** argv) {
   #ifndef NDEBUG
   mi_debug_show_arenas(true,true,true);
   mi_collect(true);
-  #endif
-  mi_stats_print(NULL);
+  #endif  
 #endif
+  //mi_stats_print(NULL);
   //bench_end_program();
   return 0;
 }
