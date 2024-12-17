@@ -11,11 +11,12 @@ There are four requirements to make the overriding work robustly:
 
 2. Link your program explicitly with `mimalloc-override.dll` library.
    To ensure the `mimalloc-override.dll` is loaded at run-time it is easiest to insert some
-    call to the mimalloc API in the `main` function, like `mi_version()`
-    (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
-    for an example on how to use this. 
+  call to the mimalloc API in the `main` function, like `mi_version()`
+  (or use the `/INCLUDE:mi_version` switch on the linker, or
+  use `#pragma comment(linker, "/include:mi_version")` in some source file). 
+  See the `mimalloc-override-test` project for an example on how to use this. 
 
-3. The `mimalloc-redirect.dll` (or `mimalloc-redirect32.dll`) must be put
+3. The `mimalloc-redirect.dll` (x64) (or `mimalloc-redirect32.dll` (x86), or `mimalloc-redirect-arm64.dll` (arm64)) must be put
    in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency of that DLL).
    The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
    mimalloc functions (which reside in `mimalloc-override.dll`).
@@ -40,7 +41,9 @@ if they are linked with the dynamic C runtime (`ucrtbase.dll`) -- just put the `
 into the import table (and put `mimalloc-redirect.dll` in the same folder)
 Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388).
 
-The `minject` program can also do this from the command line, use `minject --help` for options:
+The `minject` program can also do this from the command line
+(or `minject32` for 32-bit PE files, or `minject-arm64` on arm64 Windows). 
+Use `minject --help` for options:
 
 ```
 > minject --help

@@ -98,7 +98,7 @@ static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t
   if (collect == MI_FORCE) {
     // note: call before a potential `_mi_page_free` as the segment may be freed if this was the last used page in that segment.
     mi_segment_t* segment = _mi_page_segment(page);
-    _mi_segment_collect(segment, true /* force? */, &heap->tld->segments);
+    _mi_segment_collect(segment, true /* force? */);
   }
   if (mi_page_all_free(page)) {
     // no more used blocks, free the page.
@@ -173,7 +173,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   }
 
   // collect arenas (this is program wide so don't force purges on abandonment of threads)
-  _mi_arenas_collect(collect == MI_FORCE /* force purge? */, &heap->tld->stats);
+  _mi_arenas_collect(collect == MI_FORCE /* force purge? */);
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
@@ -458,6 +458,12 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   mi_heap_reset_pages(from);
 }
 
+// are two heaps compatible with respect to heap-tag, exclusive arena etc.
+static bool mi_heaps_are_compatible(mi_heap_t* heap1, mi_heap_t* heap2) {
+  return (heap1->tag == heap2->tag &&                   // store same kind of objects
+          heap1->arena_id == heap2->arena_id);          // same arena preference
+}
+
 // Safe delete a heap without freeing any still allocated blocks in that heap.
 void mi_heap_delete(mi_heap_t* heap)
 {
@@ -466,9 +472,10 @@ void mi_heap_delete(mi_heap_t* heap)
   mi_assert_expensive(mi_heap_is_valid(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
 
-  if (!mi_heap_is_backing(heap)) {
+  mi_heap_t* bheap = heap->tld->heap_backing;
+  if (bheap != heap && mi_heaps_are_compatible(bheap,heap)) {
     // transfer still used pages to the backing heap
-    mi_heap_absorb(heap->tld->heap_backing, heap);
+    mi_heap_absorb(bheap, heap);
   }
   else {
     // the backing heap abandons its pages

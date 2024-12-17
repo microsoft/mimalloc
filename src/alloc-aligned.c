@@ -39,9 +39,10 @@ static mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, si
 
 static void* mi_heap_malloc_zero_no_guarded(mi_heap_t* heap, size_t size, bool zero) {
   const size_t rate = heap->guarded_sample_rate;
-  heap->guarded_sample_rate = 0;
+  // only write if `rate!=0` so we don't write to the constant `_mi_heap_empty`
+  if (rate != 0) { heap->guarded_sample_rate = 0; }
   void* p = _mi_heap_malloc_zero(heap, size, zero);
-  heap->guarded_sample_rate = rate;
+  if (rate != 0) { heap->guarded_sample_rate = rate; }
   return p;
 }
 #else

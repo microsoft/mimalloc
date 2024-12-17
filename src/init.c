@@ -135,14 +135,12 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
 static mi_decl_cache_align mi_subproc_t mi_subproc_default;
 
 #define tld_empty_stats  ((mi_stats_t*)((uint8_t*)&tld_empty + offsetof(mi_tld_t,stats)))
-#define tld_empty_os     ((mi_os_tld_t*)((uint8_t*)&tld_empty + offsetof(mi_tld_t,os)))
 
 mi_decl_cache_align static const mi_tld_t tld_empty = {
   0,
   false,
   NULL, NULL,
-  { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, &mi_subproc_default, tld_empty_stats, tld_empty_os }, // segments
-  { 0, tld_empty_stats }, // os
+  { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, &mi_subproc_default, tld_empty_stats }, // segments
   { MI_STATS_NULL }       // stats
 };
 
@@ -158,8 +156,7 @@ extern mi_heap_t _mi_heap_main;
 static mi_decl_cache_align mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main, & _mi_heap_main,
-  { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, &mi_subproc_default, &tld_main.stats, &tld_main.os }, // segments
-  { 0, &tld_main.stats },  // os
+  { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, &mi_subproc_default, &tld_main.stats }, // segments
   { MI_STATS_NULL }       // stats
 };
 
@@ -341,10 +338,10 @@ static mi_thread_data_t* mi_thread_data_zalloc(void) {
   // if that fails, allocate as meta data
   if (td == NULL) {
     mi_memid_t memid;
-    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
+    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid);
     if (td == NULL) {
       // if this fails, try once more. (issue #257)
-      td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid, &_mi_stats_main);
+      td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid);
       if (td == NULL) {
         // really out of memory
         _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
@@ -374,7 +371,7 @@ static void mi_thread_data_free( mi_thread_data_t* tdfree ) {
     }
   }
   // if that fails, just free it directly
-  _mi_os_free(tdfree, sizeof(mi_thread_data_t), tdfree->memid, &_mi_stats_main);
+  _mi_os_free(tdfree, sizeof(mi_thread_data_t), tdfree->memid);
 }
 
 void _mi_thread_data_collect(void) {
@@ -384,7 +381,7 @@ void _mi_thread_data_collect(void) {
     if (td != NULL) {
       td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL);
       if (td != NULL) {
-        _mi_os_free(td, sizeof(mi_thread_data_t), td->memid, &_mi_stats_main);
+        _mi_os_free(td, sizeof(mi_thread_data_t), td->memid);
       }
     }
   }
@@ -420,9 +417,7 @@ void _mi_tld_init(mi_tld_t* tld, mi_heap_t* bheap) {
   tld->heap_backing = bheap;
   tld->heaps = NULL;
   tld->segments.subproc = &mi_subproc_default;
-  tld->segments.stats = &tld->stats;
-  tld->segments.os = &tld->os;
-  tld->os.stats = &tld->stats;
+  tld->segments.stats = &tld->stats;  
 }
 
 // Free the thread local default heap (called from `mi_thread_done`)
@@ -709,7 +704,7 @@ void mi_cdecl _mi_process_done(void) {
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
     mi_collect(true /* force */);
     _mi_heap_unsafe_destroy_all();     // forcefully release all memory held by all heaps (of this thread only!)
-    _mi_arena_unsafe_destroy_all(& _mi_heap_main_get()->tld->stats);
+    _mi_arena_unsafe_destroy_all();
   }
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {

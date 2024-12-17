@@ -717,13 +717,6 @@ typedef struct mi_span_queue_s {
 
 #define MI_SEGMENT_BIN_MAX (35)     // 35 == mi_segment_bin(MI_SLICES_PER_SEGMENT)
 
-// OS thread local data
-typedef struct mi_os_tld_s {
-  size_t                region_idx;   // start point for next allocation
-  mi_stats_t*           stats;        // points to tld stats
-} mi_os_tld_t;
-
-
 // Segments thread local data
 typedef struct mi_segments_tld_s {
   mi_span_queue_t     spans[MI_SEGMENT_BIN_MAX+1];  // free slice spans inside segments
@@ -734,7 +727,6 @@ typedef struct mi_segments_tld_s {
   size_t              reclaim_count;// number of reclaimed (abandoned) segments
   mi_subproc_t*       subproc;      // sub-process this thread belongs to.
   mi_stats_t*         stats;        // points to tld stats
-  mi_os_tld_t*        os;           // points to os tld
 } mi_segments_tld_t;
 
 // Thread local data
@@ -744,7 +736,6 @@ struct mi_tld_s {
   mi_heap_t*          heap_backing;  // backing heap of this thread (cannot be deleted)
   mi_heap_t*          heaps;         // list of heaps in this thread (so we can abandon all when the thread terminates)
   mi_segments_tld_t   segments;      // segment tld
-  mi_os_tld_t         os;            // os tld
   mi_stats_t          stats;         // statistics
 };
 

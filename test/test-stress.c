@@ -23,7 +23,7 @@ terms of the MIT license.
 #include <assert.h>
 
 // #define MI_GUARDED
-// #define USE_STD_MALLOC
+#define USE_STD_MALLOC
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
@@ -36,13 +36,13 @@ static int ITER    = 400;
 static int THREADS = 8;
 static int SCALE   = 25;
 static int ITER    = 20;
-#elif defined(xMI_GUARDED)     // with debug guard pages reduce parameters to stay within the azure pipeline limits
+#elif defined(MI_GUARDED)     // with debug guard pages reduce parameters to stay within the azure pipeline limits
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
 #else
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
-static int SCALE   = 25;      // scaling factor
+static int SCALE   = 50;      // scaling factor
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
 #endif
 
@@ -50,7 +50,7 @@ static int ITER    = 50;      // N full iterations destructing and re-creating a
 
 #define STRESS                // undefine for leak test
 
-static bool   allow_large_objects = true;     // allow very large objects? (set to `true` if SCALE>100)
+static bool   allow_large_objects = false;     // allow very large objects? (set to `true` if SCALE>100)
 static size_t use_one_size = 0;               // use single object size of `N * sizeof(uintptr_t)`?
 
 static bool   main_participates = false;       // main thread participates as a worker too
@@ -326,6 +326,7 @@ int main(int argc, char** argv) {
   #endif
   mi_stats_print(NULL);
 #endif
+  mi_stats_print(NULL);
   //bench_end_program();
   return 0;
 }
