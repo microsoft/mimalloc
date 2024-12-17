@@ -656,7 +656,7 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_vis
 mi_segment_t* mi_segments_get_segment_to_drop_by_slice(mi_segments_tld_t* tld, size_t alloc_block_size);
 const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment);
 
-static mi_segment_t* mi_heap_get_segment_to_drop(mi_heap_t* heap, size_t alloc_block_size) {
+static mi_segment_t* mi_heap_get_segment_to_drop(mi_heap_t* heap, size_t targetSegmentCount, size_t alloc_block_size) {
     mi_segment_t* segment = NULL;
 
     mi_page_kind_t page_kind = mi_page_kind_from_size(alloc_block_size);
@@ -667,26 +667,28 @@ static mi_segment_t* mi_heap_get_segment_to_drop(mi_heap_t* heap, size_t alloc_b
         return heap->tld->segments.medium_segment;
     }
 
-    int i = 0;
-    mi_page_queue_t* fullPageQueue = &heap->pages[MI_BIN_FULL];
-    for (mi_page_t* page = fullPageQueue->first; page != NULL; page = page->next) {
-        mi_segment_t* temp_segment = _mi_ptr_segment(page);
-        if (temp_segment->page_kind == MI_PAGE_SMALL) {
-            if (segment == NULL) {
-                segment = temp_segment;
+    if (heap->tld->segments.count >= targetSegmentCount) {
+        int i = 0;
+        mi_page_queue_t* fullPageQueue = &heap->pages[MI_BIN_FULL];
+        for (mi_page_t* page = fullPageQueue->first; page != NULL; page = page->next) {
+            mi_segment_t* temp_segment = _mi_ptr_segment(page);
+            if (temp_segment->page_kind == MI_PAGE_SMALL) {
+                if (segment == NULL) {
+                    segment = temp_segment;
+                }
+                else if (temp_segment->used > segment->used) {
+                    segment = temp_segment;
+                }
+                if (i > 3) {
+                    break;
+                }
+                i++;
             }
-            else if (temp_segment->used > segment->used) {
-                segment = temp_segment;
-            }
-            if (i > 3) {
-                break;
-            }
-            i++;
         }
-    }
 
-    if (segment == NULL) {
-        segment = mi_segments_get_segment_to_drop_by_slice(&heap->tld->segments, alloc_block_size);
+        if (segment == NULL) {
+            segment = mi_segments_get_segment_to_drop_by_slice(&heap->tld->segments, alloc_block_size);
+        }
     }
 
     return segment;
@@ -730,10 +732,9 @@ static mi_decl_noinline void mi_segment_visit_pages(mi_heap_t* heap, mi_segment_
 void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount, size_t alloc_block_size) {
     bool segmentsDropped = false;
 
-    while (heap->tld->segments.count >= targetSegmentCount) {
-
+    do {
         // 1. Find a segment to drop (abandon) using the Full Page queue
-        mi_segment_t* segmentToAbandon = mi_heap_get_segment_to_drop(heap, alloc_block_size);
+        mi_segment_t* segmentToAbandon = mi_heap_get_segment_to_drop(heap, targetSegmentCount, alloc_block_size);
         if (segmentToAbandon == NULL) {
             break;
         }
@@ -750,7 +751,7 @@ void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount, size_t all
         // This will effectively abandon the segment.
         mi_collect_t collect = MI_ABANDON;
         mi_segment_visit_pages(heap, segmentToAbandon, &mi_heap_page_collect, &collect);
-    }
+    } while (heap->tld->segments.count >= targetSegmentCount);
 
     if (segmentsDropped) {
         mi_msecs_t now_msec = _mi_clock_now();
@@ -769,8 +770,8 @@ void mi_heap_drop_segment_if_required(mi_heap_t* heap, size_t alloc_block_size)
 {
     size_t targetSegmentCount = mi_option_get_size(mi_option_max_segments_per_heap);
     if ((targetSegmentCount > 0) && 
-        (alloc_block_size <= MI_LARGE_OBJ_SIZE_MAX) &&
-        (heap->tld->segments.count >= targetSegmentCount)) {
+        ((alloc_block_size > MI_SMALL_OBJ_SIZE_MAX) ||
+        (heap->tld->segments.count >= targetSegmentCount))) {
 
         mi_heap_drop_segment(heap, targetSegmentCount, alloc_block_size);
     }
