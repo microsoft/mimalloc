@@ -222,9 +222,13 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
   *memid = mi_memid_create_arena(arena, slice_index, slice_count);
   memid->is_pinned = arena->memid.is_pinned;
 
-  // set the dirty bits
+  // set the dirty bits and track which slices become accessible
+  size_t touched_slices = slice_count;
   if (arena->memid.initially_zero) {
-    memid->initially_zero = mi_bitmap_setN(arena->slices_dirty, slice_index, slice_count, NULL);
+    size_t already_dirty = 0;
+    memid->initially_zero = mi_bitmap_setN(arena->slices_dirty, slice_index, slice_count, &already_dirty);
+    mi_assert_internal(already_dirty <= touched_slices);
+    touched_slices -= already_dirty;
   }
 
   // set commit state
@@ -239,7 +243,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
       mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed_count);
       // adjust the stats so we don't double count the commits
       if (already_committed_count > 0) {
-        _mi_stat_adjust_decrease(&_mi_stats_main.committed, mi_size_of_slices(already_committed_count));
+        _mi_stat_adjust_decrease(&_mi_stats_main.committed, mi_size_of_slices(already_committed_count), true /* on alloc */);
       }
       // now actually commit
       bool commit_zero = false;
@@ -263,6 +267,15 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
         #endif        
       }
     }
+    else {
+      // already fully commited.
+      // if the OS has overcommit, and this is the first time we access these pages, then 
+      // count the commit now (as at arena reserve we didn't count those commits as these are on-demand)
+      if (_mi_os_has_overcommit() && touched_slices > 0) {
+        _mi_stat_increase(&_mi_stats_main.committed, mi_size_of_slices(touched_slices));
+      }
+    }
+    // tool support
     if (memid->initially_zero) {
       mi_track_mem_defined(p, slice_count * MI_ARENA_SLICE_SIZE);
     }
@@ -324,17 +337,25 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t re
 
   // commit eagerly?
   bool arena_commit = false;
-  if (mi_option_get(mi_option_arena_eager_commit) == 2) { arena_commit = _mi_os_has_overcommit(); }
+  const bool overcommit = _mi_os_has_overcommit();
+  if (mi_option_get(mi_option_arena_eager_commit) == 2) { arena_commit = overcommit; }
   else if (mi_option_get(mi_option_arena_eager_commit) == 1) { arena_commit = true; }
 
+  // on an OS with overcommit (Linux) we don't count the commit yet as it is on-demand. Once a slice
+  // is actually allocated for the first time it will be counted.
+  const bool adjust = (overcommit && arena_commit);
+  if (adjust) { _mi_stat_adjust_decrease(&_mi_stats_main.committed, arena_reserve, true /* on alloc */); }
   // and try to reserve the arena
   int err = mi_reserve_os_memory_ex(arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
   if (err != 0) {
+    if (adjust) { _mi_stat_adjust_increase(&_mi_stats_main.committed, arena_reserve, true); } // roll back
     // failed, try a smaller size?
     const size_t small_arena_reserve = (MI_SIZE_BITS == 32 ? 128*MI_MiB : 1*MI_GiB);
+    if (adjust) { _mi_stat_adjust_decrease(&_mi_stats_main.committed, arena_reserve, true); }
     if (arena_reserve > small_arena_reserve) {
       // try again
       err = mi_reserve_os_memory_ex(small_arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
+      if (err != 0 && adjust) { _mi_stat_adjust_increase(&_mi_stats_main.committed, arena_reserve, true); } // roll back      
     }
   }
   return (err==0);
@@ -851,7 +872,7 @@ bool _mi_arena_page_try_reabandon_to_mapped(mi_page_t* page) {
   }
   else {
     _mi_stat_counter_increase(&_mi_stats_main.pages_reabandon_full, 1);
-    _mi_stat_adjust_decrease(&_mi_stats_main.pages_abandoned, 1);  // adjust as we are not abandoning fresh
+    _mi_stat_adjust_decrease(&_mi_stats_main.pages_abandoned, 1, true /* on alloc */);  // adjust as we are not abandoning fresh
     _mi_arena_page_abandon(page);
     return true;
   }
@@ -1402,7 +1423,13 @@ static bool mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_c
 
   const size_t size = mi_size_of_slices(slice_count);
   void* const p = mi_arena_slice_start(arena, slice_index);
-  const bool all_committed = mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count);
+  //const bool all_committed = mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count);
+  size_t already_committed;
+  mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed);
+  const bool all_committed = (already_committed == slice_count);
+  if (mi_option_is_enabled(mi_option_purge_decommits)) {
+    _mi_stat_adjust_increase(&_mi_stats_main.committed, mi_size_of_slices(already_committed), false /* on freed */);
+  }  
   const bool needs_recommit = _mi_os_purge_ex(p, size, all_committed /* allow reset? */);
 
   // update committed bitmap
