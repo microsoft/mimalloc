@@ -489,8 +489,8 @@ typedef struct mi_stats_s {
 void _mi_stat_increase(mi_stat_count_t* stat, size_t amount);
 void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
 // adjust stat in special cases to compensate for double counting
-void _mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount);
-void _mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount);
+void _mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount, bool on_alloc);
+void _mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount, bool on_free);
 // counters can just be increased
 void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 
@@ -498,14 +498,14 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 #define mi_stat_increase(stat,amount)         _mi_stat_increase( &(stat), amount)
 #define mi_stat_decrease(stat,amount)         _mi_stat_decrease( &(stat), amount)
 #define mi_stat_counter_increase(stat,amount) _mi_stat_counter_increase( &(stat), amount)
-#define mi_stat_adjust_increase(stat,amount)  _mi_stat_adjust_increase( &(stat), amount)
-#define mi_stat_adjust_decrease(stat,amount)  _mi_stat_adjust_decrease( &(stat), amount)
+#define mi_stat_adjust_increase(stat,amnt,b)  _mi_stat_adjust_increase( &(stat), amnt, b)
+#define mi_stat_adjust_decrease(stat,amnt,b)  _mi_stat_adjust_decrease( &(stat), amnt, b)
 #else
 #define mi_stat_increase(stat,amount)         ((void)0)
 #define mi_stat_decrease(stat,amount)         ((void)0)
 #define mi_stat_counter_increase(stat,amount) ((void)0)
-#define mi_stat_adjuct_increase(stat,amount)  ((void)0)
-#define mi_stat_adjust_decrease(stat,amount)  ((void)0)
+#define mi_stat_adjuct_increase(stat,amnt,b)  ((void)0)
+#define mi_stat_adjust_decrease(stat,amnt,b)  ((void)0)
 #endif
 
 #define mi_heap_stat_counter_increase(heap,stat,amount)  mi_stat_counter_increase( (heap)->tld->stats.stat, amount)
