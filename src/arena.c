@@ -1451,13 +1451,11 @@ static bool mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_c
   size_t already_committed;
   mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed);
   const bool all_committed = (already_committed == slice_count);
-  if (mi_option_is_enabled(mi_option_purge_decommits)) {
-    _mi_stat_adjust_increase(&_mi_stats_main.committed, mi_size_of_slices(already_committed), false /* on freed */);
-  }  
   const bool needs_recommit = _mi_os_purge_ex(p, size, all_committed /* allow reset? */);
 
   // update committed bitmap
   if (needs_recommit) {
+    _mi_stat_adjust_decrease(&_mi_stats_main.committed, mi_size_of_slices(slice_count - already_committed), false /* on freed */);
     mi_bitmap_clearN(arena->slices_committed, slice_index, slice_count);
   }
   return needs_recommit;
