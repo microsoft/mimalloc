@@ -234,12 +234,24 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
     // commit requested, but the range may not be committed as a whole: ensure it is committed now
     if (!mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count)) {
       // not fully committed: commit the full range and set the commit bits
-      // (this may race and we may double-commit which is fine)
+      // we set the bits first since we own these slices (they are no longer free)
+      size_t already_committed_count = 0;
+      mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed_count);
+      // adjust the stats so we don't double count the commits
+      if (already_committed_count > 0) {
+        _mi_stat_adjust_decrease(&_mi_stats_main.committed, mi_size_of_slices(already_committed_count));
+      }
+      // now actually commit
       bool commit_zero = false;
       if (!_mi_os_commit(p, mi_size_of_slices(slice_count), &commit_zero)) {
+        // failed to commit (todo: give warning?)
+        if (already_committed_count > 0) {
+          _mi_stat_increase(&_mi_stats_main.committed, mi_size_of_slices(already_committed_count));
+        }
         memid->initially_committed = false;
       }
       else {
+        // committed
         if (commit_zero) { memid->initially_zero = true; }
         #if MI_DEBUG > 1
         if (memid->initially_zero) {
@@ -248,13 +260,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
             memid->initially_zero = false;
           }
         }
-        #endif
-        size_t already_committed_count = 0;
-        mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed_count);
-        if (already_committed_count < slice_count) {
-          // todo: also decrease total
-          mi_stat_decrease(_mi_stats_main.committed, mi_size_of_slices(already_committed_count));
-        }
+        #endif        
       }
     }
     if (memid->initially_zero) {
@@ -798,7 +804,7 @@ void _mi_arena_page_free(mi_page_t* page) {
   Arena abandon
 ----------------------------------------------------------- */
 
-static void mi_arena_page_abandon_no_stat(mi_page_t* page) {
+void _mi_arena_page_abandon(mi_page_t* page) {
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(mi_page_is_owned(page));
@@ -827,12 +833,8 @@ static void mi_arena_page_abandon_no_stat(mi_page_t* page) {
     // page is full (or a singleton), page is OS/externally allocated
     // leave as is; it will be reclaimed when an object is free'd in the page
   }
-  _mi_page_unown(page);
-}
-
-void _mi_arena_page_abandon(mi_page_t* page) {
-  mi_arena_page_abandon_no_stat(page);
   _mi_stat_increase(&_mi_stats_main.pages_abandoned, 1);
+  _mi_page_unown(page);
 }
 
 bool _mi_arena_page_try_reabandon_to_mapped(mi_page_t* page) {
@@ -849,7 +851,8 @@ bool _mi_arena_page_try_reabandon_to_mapped(mi_page_t* page) {
   }
   else {
     _mi_stat_counter_increase(&_mi_stats_main.pages_reabandon_full, 1);
-    mi_arena_page_abandon_no_stat(page);
+    _mi_stat_adjust_decrease(&_mi_stats_main.pages_abandoned, 1);  // adjust as we are not abandoning fresh
+    _mi_arena_page_abandon(page);
     return true;
   }
 }
