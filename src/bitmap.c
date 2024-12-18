@@ -1239,9 +1239,10 @@ bool _mi_bitmap_forall_set(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_a
 }
 
 // Visit all set bits in a bitmap but try to return ranges (within bfields) if possible.
-// used by purging to purge larger ranges if possible
+// Also clear those ranges atomically.
+// Used by purging to purge larger ranges when possible
 // todo: optimize further? maybe use avx512 to directly get all indices using a mask_compressstore?
-bool _mi_bitmap_forall_set_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg) {
+bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg) {
   // for all chunkmap entries
   const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
   for (size_t i = 0; i < chunkmap_max; i++) {
@@ -1254,7 +1255,7 @@ bool _mi_bitmap_forall_set_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visi
       mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
-        mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[j]);
+        mi_bfield_t b = mi_atomic_exchange_acq_rel(&chunk->bfields[j], 0); // can be relaxed?
         #if MI_DEBUG > 1
         const size_t bpopcount = mi_popcount(b);
         size_t rngcount = 0;

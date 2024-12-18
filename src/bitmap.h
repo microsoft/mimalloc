@@ -204,7 +204,7 @@ typedef bool (mi_forall_set_fun_t)(size_t slice_index, size_t slice_count, mi_ar
 bool _mi_bitmap_forall_set(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg);
 
 // Visit all set bits in a bitmap with larger ranges if possible (`slice_count >= 1`)
-bool _mi_bitmap_forall_set_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg);
+bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg);
 
 
 /* ----------------------------------------------------------------------------
