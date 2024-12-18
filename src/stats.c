@@ -26,7 +26,7 @@ static bool mi_is_in_main(void* stat) {
 
 static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   if (amount == 0) return;
-  if (mi_is_in_main(stat))
+  if mi_unlikely(mi_is_in_main(stat))
   {
     // add atomically (for abandoned pages)
     int64_t current = mi_atomic_addi64_relaxed(&stat->current, amount);
@@ -51,6 +51,27 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   }
 }
 
+// Adjust stats to compensate; for example before committing a range,
+// first adjust downwards with parts that were already committed so 
+// we avoid double counting.
+static void mi_stat_adjust(mi_stat_count_t* stat, int64_t amount) {
+  if (amount == 0) return;
+  if mi_unlikely(mi_is_in_main(stat))
+  {
+    // adjust atomically 
+    mi_atomic_addi64_relaxed(&stat->current, amount);
+    mi_atomic_addi64_relaxed(&stat->allocated, amount);
+    mi_atomic_addi64_relaxed(&stat->freed, amount);
+  }
+  else {
+    // don't affect the peak
+    stat->current += amount;    
+    // add to both
+    stat->allocated += amount;
+    stat->freed += amount;    
+  }
+}
+
 void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {
   if (mi_is_in_main(stat)) {
     mi_atomic_addi64_relaxed( &stat->count, 1 );
@@ -68,6 +89,14 @@ void _mi_stat_increase(mi_stat_count_t* stat, size_t amount) {
 
 void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
   mi_stat_update(stat, -((int64_t)amount));
+}
+
+void _mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount) {
+  mi_stat_adjust(stat, (int64_t)amount);
+}
+
+void _mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount) {
+  mi_stat_adjust(stat, -((int64_t)amount));
 }
 
 // must be thread safe as it is called from stats_merge
