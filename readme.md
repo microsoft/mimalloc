@@ -210,7 +210,8 @@ The examples use the default compiler. If you like to use another, use:
 ## Cmake with Visual Studio
 
 You can also use cmake on Windows. Open a Visual Studio development prompt 
-and invoke `cmake` with the right generator and architecture, like:
+and invoke `cmake` with the right [generator](https://cmake.org/cmake/help/latest/generator/Visual%20Studio%2017%202022.html) 
+and architecture, like:
 ```
 > cmake ..\.. -G "Visual Studio 17 2022" -A x64 -DMI_OVERRIDE=ON
 ```
