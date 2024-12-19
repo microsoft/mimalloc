@@ -1,9 +1,9 @@
 # Windows Override
 
 <span id="override_on_windows">Dynamically overriding on mimalloc on Windows</span> 
-is robust and has the particular advantage to be able to redirect all malloc/free calls that go through
-the (dynamic) C runtime allocator, including those from other DLL's or libraries.
-As it intercepts all allocation calls on a low level, it can be used reliably 
+is robust and has the particular advantage to be able to redirect all malloc/free calls 
+that go through the (dynamic) C runtime allocator, including those from other DLL's or 
+libraries. As it intercepts all allocation calls on a low level, it can be used reliably 
 on large programs that include other 3rd party components.
 There are four requirements to make the overriding work well:
 
@@ -11,8 +11,8 @@ There are four requirements to make the overriding work well:
 
 2. Link your program explicitly with the `mimalloc-override.lib` export library for
    the `mimalloc-override.dll` -- which contains all mimalloc functionality.
-   To ensure the `mimalloc-override.dll` is actually loaded at run-time it is easiest to insert some
-   call to the mimalloc API in the `main` function, like `mi_version()`
+   To ensure the `mimalloc-override.dll` is actually loaded at run-time it is easiest 
+   to insert some call to the mimalloc API in the `main` function, like `mi_version()`
    (or use the `/include:mi_version` switch on the linker, or
    use `#pragma comment(linker, "/include:mi_version")` in some source file). 
    See the `mimalloc-override-test` project for an example on how to use this. 
@@ -32,7 +32,8 @@ is also recommended to also override the `new`/`delete` operations (by including
 a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
-overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully redirected.
+overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully 
+redirected.
 
 ### Other Platforms
 
@@ -49,7 +50,7 @@ need a specific `mimalloc-redirect.dll`:
      `mimalloc-override.lib` export library.
   2. Now separately build `mimalloc-override.dll` in `arm64ec` mode and _overwrite_ your
      previous (x64) `mimalloc-override.dll` -- the loader can handle the mix of arm64ec
-     and x64 code. Now use `mimalloc-redirect-arm64ec.dll` in this case to match your 
+     and x64 code. Now use `mimalloc-redirect-arm64ec.dll` to match your new
      arm64ec `mimalloc-override.dll`. The main program stays as is and can be fully x64 
      or contain more arm64ec modules. At runtime, the arm64ec `mimalloc-override.dll` will
      run with native arm64 instructions while the rest of the program runs emulated x64.
@@ -59,12 +60,12 @@ need a specific `mimalloc-redirect.dll`:
 
 ### Minject
 
-We cannot always re-link an executable with `mimalloc-override.dll`, and similarly, we cannot always
-ensure that the DLL comes first in the import table of the final executable.
+We cannot always re-link an executable with `mimalloc-override.dll`, and similarly, we 
+cannot always ensure that the DLL comes first in the import table of the final executable.
 In many cases though we can patch existing executables without any recompilation
-if they are linked with the dynamic C runtime (`ucrtbase.dll`) -- just put the `mimalloc-override.dll`
-into the import table (and put `mimalloc-redirect.dll` in the same folder)
-Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388).
+if they are linked with the dynamic C runtime (`ucrtbase.dll`) -- just put the 
+`mimalloc-override.dll` into the import table (and put `mimalloc-redirect.dll` in the same 
+directory) Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388).
 
 The `minject` program can also do this from the command line
 Use `minject --help` for options:
