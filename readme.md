@@ -164,7 +164,7 @@ The `mimalloc` project builds a static library (in `out/msvc-x64`), while the
 `mimalloc-override` project builds a DLL for overriding malloc
 in the entire program.
 
-## macOS, Linux, BSD, etc.
+## Linux, macOS, BSD, etc.
 
 We use [`cmake`](https://cmake.org)<sup>1</sup> as the build system:
 
@@ -200,13 +200,25 @@ free lists, etc., as:
 > make
 ```
 This will name the shared library as `libmimalloc-secure.so`.
-Use `ccmake`<sup>2</sup> instead of `cmake`
-to see and customize all the available build options.
+Use `cmake ../.. -LH` to see all the available build options.
 
-Notes:
-1. Install CMake: `sudo apt-get install cmake`
-2. Install CCMake: `sudo apt-get install cmake-curses-gui`
+The examples use the default compiler. If you like to use another, use:
+```
+> CC=clang CXX=clang++ cmake ../..
+```
 
+## Cmake with Visual Studio
+
+You can also use cmake on Windows. Open a Visual Studio development prompt 
+and invoke `cmake` with the right generator and architecture, like:
+```
+> cmake ..\.. -G "Visual Studio 17 2022" -A x64 -DMI_OVERRIDE=ON
+```
+
+The cmake build type is specified when actually building, for example:
+```
+> cmake --build . --config=Release
+```
 
 ## Single source
 
