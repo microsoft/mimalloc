@@ -47,6 +47,7 @@ int main() {
   mi_stats_reset();  // ignore earlier allocations
   various_tests();
   test_mixed1();
+  
   //test_std_string();
   //test_thread_local();
   // heap_thread_free_huge();
@@ -107,6 +108,9 @@ static void various_tests() {
   t = new (tbuf) Test(42);
   t->~Test();
   delete[] tbuf;
+
+  const char* ptr = ::_Getdays();  // test _base overrid
+  free((void*)ptr);
 }
 
 class Static {
