@@ -208,21 +208,40 @@ static inline bool mi_bfield_atomic_try_clearX(_Atomic(mi_bfield_t)*b, bool* all
 
 // ------- mi_bfield_atomic_is_set ---------------------------------------
 
+// Check if a bit is set
+static inline bool mi_bfield_atomic_is_set(_Atomic(mi_bfield_t)*b, const size_t idx) {
+  const mi_bfield_t x = mi_atomic_load_relaxed(b);
+  return ((x & mi_bfield_mask(1,idx)) != 0);
+}
+
+// Check if a bit is clear
+static inline bool mi_bfield_atomic_is_clear(_Atomic(mi_bfield_t)*b, const size_t idx) {
+  const mi_bfield_t x = mi_atomic_load_relaxed(b);
+  return ((x & mi_bfield_mask(1, idx)) == 0);
+}
+
+// Check if a bit is xset
+static inline bool mi_bfield_atomic_is_xset(mi_xset_t set, _Atomic(mi_bfield_t)*b, const size_t idx) {
+  if (set) return mi_bfield_atomic_is_set(b, idx);
+      else return mi_bfield_atomic_is_clear(b, idx);
+}
 
 // Check if all bits corresponding to a mask are set.
-static inline bool mi_bfield_atomic_is_set_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask) {
+static inline bool mi_bfield_atomic_is_set_mask(_Atomic(mi_bfield_t)* b, mi_bfield_t mask) {
   mi_assert_internal(mask != 0);
-  return ((*b & mask) == mask);
+  const mi_bfield_t x = mi_atomic_load_relaxed(b);
+  return ((x & mask) == mask);
 }
 
 // Check if all bits corresponding to a mask are clear.
-static inline bool mi_bfield_atomic_is_clear_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask) {
+static inline bool mi_bfield_atomic_is_clear_mask(_Atomic(mi_bfield_t)* b, mi_bfield_t mask) {
   mi_assert_internal(mask != 0);
-  return ((*b & mask) == 0);
+  const mi_bfield_t x = mi_atomic_load_relaxed(b);
+  return ((x & mask) == 0);
 }
 
 // Check if all bits corresponding to a mask are set/cleared.
-static inline bool mi_bfield_atomic_is_xset_mask(mi_xset_t set, _Atomic(mi_bfield_t)*b, mi_bfield_t mask) {
+static inline bool mi_bfield_atomic_is_xset_mask(mi_xset_t set, _Atomic(mi_bfield_t)* b, mi_bfield_t mask) {
   mi_assert_internal(mask != 0);
   if (set) return mi_bfield_atomic_is_set_mask(b, mask);
       else return mi_bfield_atomic_is_clear_mask(b, mask);
@@ -367,12 +386,9 @@ static inline bool mi_bchunk_is_xsetN(mi_xset_t set, mi_bchunk_t* chunk, size_t 
   if (n==0) return true;
   const size_t i = cidx / MI_BFIELD_BITS;
   const size_t idx = cidx % MI_BFIELD_BITS;
-  if mi_likely(n<=MI_BFIELD_BITS) {
-    return mi_bfield_atomic_is_xset_mask(set, &chunk->bfields[i], mi_bfield_mask(n, idx));
-  }
-  else {
-    return mi_bchunk_is_xsetN_(set, chunk, i, idx, n);
-  }
+  if mi_likely(n==1) { return mi_bfield_atomic_is_xset(set, &chunk->bfields[i], idx); }
+  if mi_likely(n<=MI_BFIELD_BITS) { return mi_bfield_atomic_is_xset_mask(set, &chunk->bfields[i], mi_bfield_mask(n, idx)); }
+  return mi_bchunk_is_xsetN_(set, chunk, i, idx, n);
 }
 
 

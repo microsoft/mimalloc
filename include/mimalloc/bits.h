@@ -73,12 +73,12 @@ typedef int32_t  mi_ssize_t;
   Architecture
 -------------------------------------------------------------------------------- */
 
-#if defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64) || defined(_M_X64) || defined(_M_AMD64)
+#if defined(__aarch64__) || defined(_M_ARM64) || defined(_M_HYBRID_X86_ARM64) || defined(_M_ARM64EC)  // consider arm64ec as arm64
+#define MI_ARCH_ARM64     1
+#elif defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64) || defined(_M_X64) || defined(_M_AMD64)
 #define MI_ARCH_X64       1
 #elif defined(__i386__) || defined(__i386) || defined(_M_IX86) || defined(_X86_) || defined(__X86__)
 #define MI_ARCH_X86       1
-#elif defined(__aarch64__) || defined(_M_ARM64) || defined(_M_HYBRID_X86_ARM64) || defined(_M_ARM64EC)
-#define MI_ARCH_ARM64     1
 #elif defined(__arm__) || defined(_ARM) || defined(_M_ARM)  || defined(_M_ARMT) || defined(__arm)
 #define MI_ARCH_ARM32     1
 #elif defined(__riscv) || defined(_M_RISCV)
@@ -97,10 +97,10 @@ typedef int32_t  mi_ssize_t;
 #include <intrin.h>
 #endif
 
-#if defined(__AVX2__) && !defined(__BMI2__) // msvc
+#if MI_ARCH_X64 && defined(__AVX2__) && !defined(__BMI2__) // msvc
 #define __BMI2__  1
 #endif
-#if (defined(__AVX2__) || defined(__BMI2__)) && !defined(__BMI1__) // msvc
+#if MI_ARCH_X64 && (defined(__AVX2__) || defined(__BMI2__)) && !defined(__BMI1__) // msvc
 #define __BMI1__  1
 #endif
 
@@ -177,8 +177,6 @@ static inline size_t mi_ctz(size_t x) {
     size_t r;
     __asm ("tzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
     return r;
-  #elif MI_ARCH_X64 && defined(__BMI1__)
-    return (size_t)_tzcnt_u64(x);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long idx;
     return (mi_msc_builtinz(_BitScanForward)(&idx, x) ? (size_t)idx : MI_SIZE_BITS);
@@ -202,8 +200,6 @@ static inline size_t mi_clz(size_t x) {
     size_t r;
     __asm ("lzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
     return r;
-  #elif MI_ARCH_X64 && defined(__BMI1__)
-    return (size_t)_lzcnt_u64(x);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long idx;
     return (mi_msc_builtinz(_BitScanReverse)(&idx, x) ? MI_SIZE_BITS - 1 - (size_t)idx : MI_SIZE_BITS);
