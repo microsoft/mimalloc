@@ -9,20 +9,20 @@ There are four requirements to make the overriding work well:
 
 1. Use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
 
-2. Link your program explicitly with the `mimalloc-override.lib` export library for
-   the `mimalloc-override.dll` -- which contains all mimalloc functionality.
-   To ensure the `mimalloc-override.dll` is actually loaded at run-time it is easiest 
+2. Link your program explicitly with the `mimalloc.lib` export library for
+   the `mimalloc.dll` -- which contains all mimalloc functionality.
+   To ensure the `mimalloc.dll` is actually loaded at run-time it is easiest 
    to insert some call to the mimalloc API in the `main` function, like `mi_version()`
    (or use the `/include:mi_version` switch on the linker, or
-   use `#pragma comment(linker, "/include:mi_version")` in some source file). 
-   See the `mimalloc-override-test` project for an example on how to use this. 
+   similarly, `#pragma comment(linker, "/include:mi_version")` in some source file). 
+   See the `mimalloc-test-override` project for an example on how to use this. 
 
 3. The `mimalloc-redirect.dll` must be put in the same folder as the main 
-   `mimalloc-override.dll` at runtime (as it is a dependency of that DLL).
+   `mimalloc.dll` at runtime (as it is a dependency of that DLL).
    The redirection DLL ensures that all calls to the C runtime malloc API get 
-   redirected to mimalloc functions (which reside in `mimalloc-override.dll`).
+   redirected to mimalloc functions (which reside in `mimalloc.dll`).
 
-4. Ensure the `mimalloc-override.dll` comes as early as possible in the import
+4. Ensure the `mimalloc.dll` comes as early as possible in the import
    list of the final executable (so it can intercept all potential allocations).
    You can use `minject -l <exe>` to check this if needed.
 
@@ -37,8 +37,8 @@ redirected.
 
 ### Other Platforms
 
-You always link with `mimalloc-override.dll` but for different platforms you may 
-need a specific `mimalloc-redirect.dll`:
+You always link with `mimalloc.dll` but for different platforms you may 
+need a specific redirection DLL:
 
 - __x64__: `mimalloc-redirect.dll`.
 - __x86__: `mimalloc-redirect32.dll`. Use for older 32-bit Windows programs.
@@ -47,12 +47,12 @@ need a specific `mimalloc-redirect.dll`:
   mode on Windows arm64. Unfortunately we cannot run x64 code emulated on Windows arm64 with
   the x64 mimalloc override directly (since the C runtime always uses `arm64ec`). Instead:
   1. Build the program as normal for x64 and link as normal with the x64 
-     `mimalloc-override.lib` export library.
-  2. Now separately build `mimalloc-override.dll` in `arm64ec` mode and _overwrite_ your
-     previous (x64) `mimalloc-override.dll` -- the loader can handle the mix of arm64ec
+     `mimalloc.lib` export library.
+  2. Now separately build `mimalloc.dll` in `arm64ec` mode and _overwrite_ your
+     previous (x64) `mimalloc.dll` -- the loader can handle the mix of arm64ec
      and x64 code. Now use `mimalloc-redirect-arm64ec.dll` to match your new
-     arm64ec `mimalloc-override.dll`. The main program stays as is and can be fully x64 
-     or contain more arm64ec modules. At runtime, the arm64ec `mimalloc-override.dll` will
+     arm64ec `mimalloc.dll`. The main program stays as is and can be fully x64 
+     or contain more arm64ec modules. At runtime, the arm64ec `mimalloc.dll` will
      run with native arm64 instructions while the rest of the program runs emulated x64.
 
 [arm64ec]: https://learn.microsoft.com/en-us/windows/arm/arm64ec
@@ -60,11 +60,11 @@ need a specific `mimalloc-redirect.dll`:
 
 ### Minject
 
-We cannot always re-link an executable with `mimalloc-override.dll`, and similarly, we 
+We cannot always re-link an executable with `mimalloc.dll`, and similarly, we 
 cannot always ensure that the DLL comes first in the import table of the final executable.
 In many cases though we can patch existing executables without any recompilation
 if they are linked with the dynamic C runtime (`ucrtbase.dll`) -- just put the 
-`mimalloc-override.dll` into the import table (and put `mimalloc-redirect.dll` in the same 
+`mimalloc.dll` into the import table (and put `mimalloc-redirect.dll` in the same 
 directory) Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388).
 
 The `minject` program can also do this from the command line
@@ -86,8 +86,8 @@ options:
   -l   --list        only list imported modules
   -i   --inplace     update the exe in-place (make sure there is a backup!)
   -f   --force       always overwrite without prompting
-       --postfix=<p> use <p> as a postfix to the mimalloc dll (default is 'override')
-                     e.g. use --postfix=override-debug to link with mimalloc-override-debug.dll
+       --postfix=<p> use <p> as a postfix to the mimalloc dll.
+                     e.g. use --postfix=debug to link with mimalloc-debug.dll
 
 notes:
   Without '--inplace' an injected <exe> is generated with the same name ending in '-mi'.
