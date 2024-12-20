@@ -609,7 +609,7 @@ static inline bool mi_page_immediate_available(const mi_page_t* page) {
 }
 
 // is more than 7/8th of a page in use?
-static inline bool mi_page_mostly_used(const mi_page_t* page) {
+static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / 8U;
   return (page->reserved - page->used <= frac);

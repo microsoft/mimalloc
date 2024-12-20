@@ -326,7 +326,6 @@ int main(int argc, char** argv) {
   #endif  
 #endif
   mi_stats_print(NULL);
-  //mi_stats_print(NULL);
   //bench_end_program();
   return 0;
 }
