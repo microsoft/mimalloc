@@ -870,7 +870,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
     if mi_unlikely(!mi_heap_is_initialized(heap)) { return NULL; }
   }
   mi_assert_internal(mi_heap_is_initialized(heap));
-  
+
   // collect every N generic mallocs
   if (heap->generic_count++ > 10000) {
     heap->generic_count = 0;

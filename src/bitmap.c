@@ -352,7 +352,7 @@ static inline bool mi_bchunk_clearN(mi_bchunk_t* chunk, size_t cidx, size_t n, b
   if (n==1) return mi_bchunk_clear(chunk, cidx, pmaybe_all_clear);
   if (n==MI_BFIELD_BITS) return mi_bchunk_clearX(chunk, cidx, pmaybe_all_clear);
   if (n <MI_BFIELD_BITS) return mi_bchunk_clearNX(chunk, cidx, n, pmaybe_all_clear);
-  return mi_bchunk_xsetN_(MI_BIT_CLEAR, chunk, cidx, n, NULL, pmaybe_all_clear); 
+  return mi_bchunk_xsetN_(MI_BIT_CLEAR, chunk, cidx, n, NULL, pmaybe_all_clear);
 }
 
 
@@ -596,7 +596,7 @@ static inline bool mi_bchunk_try_find_and_clear_1(mi_bchunk_t* chunk, size_t n, 
   return mi_bchunk_try_find_and_clear(chunk, pidx);
 }
 
-#if !MI_OPT_SIMD
+#if !(MI_OPT_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==512))
 static inline bool mi_bchunk_try_find_and_clear8_at(mi_bchunk_t* chunk, size_t chunk_idx, size_t* pidx, bool allow_all_set) {
   const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[chunk_idx]);
   if (!allow_all_set && (~b == 0)) return false;
@@ -1277,18 +1277,18 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
         size_t rngcount = 0;
         #endif
         size_t bidx;
-        while (mi_bfield_find_least_bit(b, &bidx)) {          
+        while (mi_bfield_find_least_bit(b, &bidx)) {
           const size_t rng = mi_ctz(~(b>>bidx)); // all the set bits from bidx
           #if MI_DEBUG > 1
           rngcount += rng;
-          #endif  
+          #endif
           mi_assert_internal(rng>=1 && rng<=MI_BFIELD_BITS);
           const size_t idx = base_idx + bidx;
           mi_assert_internal((idx % MI_BFIELD_BITS) + rng <= MI_BFIELD_BITS);
           mi_assert_internal((idx / MI_BCHUNK_BITS) < mi_bitmap_chunk_count(bitmap));
           if (!visit(idx, rng, arena, arg)) return false;
           // clear rng bits in b
-          b = b & ~mi_bfield_mask(rng, bidx);          
+          b = b & ~mi_bfield_mask(rng, bidx);
         }
         mi_assert_internal(rngcount == bpopcount);
       }

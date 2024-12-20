@@ -166,8 +166,12 @@ void mi_collect(bool force) mi_attr_noexcept {
 ----------------------------------------------------------- */
 
 mi_heap_t* mi_heap_get_default(void) {
-  mi_thread_init();
-  return mi_prim_get_default_heap();
+  mi_heap_t* heap = mi_prim_get_default_heap();
+  if mi_unlikely(!mi_heap_is_initialized(heap)) {
+    mi_thread_init();
+    heap = mi_prim_get_default_heap();
+  }
+  return heap;
 }
 
 static bool mi_heap_is_default(const mi_heap_t* heap) {

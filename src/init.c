@@ -157,7 +157,7 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
   MI_MEMID_STATIC,  // memid
-  0, 
+  0,
   2,                // full page retain
   true,             // allow page reclaim
   true,             // allow page abandon
@@ -289,7 +289,7 @@ mi_decl_noinline mi_tld_t* _mi_tld(void) {
   }
   if (mi_tld==NULL) {
     mi_tld = mi_tld_alloc();
-  }  
+  }
   return mi_tld;
 }
 
@@ -361,11 +361,11 @@ static bool _mi_thread_heap_init(void) {
     //mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_prim_get_default_heap());
   }
   else {
-    // allocates tld data 
-    // note: we cannot access thread-locals yet as that can cause (recursive) allocation 
+    // allocates tld data
+    // note: we cannot access thread-locals yet as that can cause (recursive) allocation
     // (on macOS <= 14 for example where the loader allocates thread-local data on demand).
-    mi_tld_t* tld = mi_tld_alloc();  
-    
+    mi_tld_t* tld = mi_tld_alloc();
+
     // allocate and initialize the heap
     mi_heap_t* heap = _mi_heap_create(0 /* default tag */, false /* allow destroy? */, _mi_arena_id_none(), tld);
 
