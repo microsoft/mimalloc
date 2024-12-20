@@ -783,7 +783,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
         page_candidate = page;
         candidate_count = 0;
       }
-      else if (/* !mi_page_is_expandable(page) && */ page->used >= page_candidate->used) {
+      else if (!mi_page_mostly_used(page) && page->used >= page_candidate->used) {
         page_candidate = page;
       }
       // if we find a non-expandable candidate, or searched for N pages, return with the best candidate
