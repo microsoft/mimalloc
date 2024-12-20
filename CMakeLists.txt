@@ -681,12 +681,7 @@ endif()
 # -----------------------------------------------------------------------------
 if (MI_OVERRIDE)
   if (MI_BUILD_SHARED)
-    target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)
-    if (WIN32)
-      # on windows we should generate mimalloc-override.dll.
-      string(REPLACE "mimalloc" "mimalloc-override" mi_override_output_name ${mi_basename})
-      set_target_properties(mimalloc PROPERTIES OUTPUT_NAME ${mi_override_output_name})
-    endif()
+    target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)    
   endif()
   if(NOT WIN32)
     # It is only possible to override malloc on Windows when building as a DLL.
