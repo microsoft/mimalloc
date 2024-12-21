@@ -33,8 +33,7 @@ const mi_page_t _mi_page_empty = {
   { 0, 0 },
   #endif
   NULL,       // xheap
-  NULL, NULL, // next, prev
-  NULL,       // subproc
+  NULL, NULL, // next, prev  
   MI_MEMID_STATIC  // memid
 };
 
@@ -96,27 +95,76 @@ const mi_page_t _mi_page_empty = {
 // may lead to allocation itself on some platforms)
 // --------------------------------------------------------
 
+static mi_decl_cache_align mi_subproc_t subproc_main;
+
+static mi_decl_cache_align mi_tld_t tld_empty = {
+  0,                      // thread_id
+  0,                      // thread_seq
+  &subproc_main,      // subproc
+  NULL,                   // heap_backing
+  NULL,                   // heaps list  
+  0,                      // heartbeat
+  false,                  // recurse
+  false,                  // is_in_threadpool
+  { MI_STATS_NULL },      // stats
+  MI_MEMID_STATIC         // memid
+};
+
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
-  NULL,
-  // MI_ATOMIC_VAR_INIT(NULL),  // thread delayed free
-  0,                // thread_id
-  0,                // arena_id
-  0,                // cookie
-  { 0, 0 },         // keys
-  { {0}, {0}, 0, true }, // random
-  0,                // page count
-  MI_BIN_FULL, 0,   // page retired min/max
-  NULL,             // next
-  MI_MEMID_STATIC,  // memid
-  0,                // full page retain
-  false,            // can reclaim
-  true,             // can eager abandon
-  0,                // tag
+  &tld_empty,         // tld
+  NULL,                   // exclusive_arena
+  0,                      // cookie
+  { 0, 0 },               // keys
+  { {0}, {0}, 0, true },  // random
+  0,                      // page count
+  MI_BIN_FULL, 0,         // page retired min/max
+  NULL,                   // next
+  0,                      // full page retain
+  false,                  // can reclaim
+  true,                   // can eager abandon
+  0,                      // tag
   #if MI_GUARDED
-  0, 0, 0, 0, 1,    // count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
+  0, 0, 0, 0, 1,          // count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
   #endif
   MI_SMALL_PAGES_EMPTY,
-  MI_PAGE_QUEUES_EMPTY
+  MI_PAGE_QUEUES_EMPTY,
+  MI_MEMID_STATIC
+};
+
+extern mi_heap_t heap_main;
+
+static mi_decl_cache_align mi_tld_t tld_main = {
+  0,                      // thread_id
+  0,                      // thread_seq
+  &subproc_main,      // subproc
+  &heap_main,         // heap_backing
+  &heap_main,         // heaps list  
+  0,                      // heartbeat
+  false,                  // recurse
+  false,                  // is_in_threadpool
+  { MI_STATS_NULL },      // stats
+  MI_MEMID_STATIC         // memid
+};
+
+mi_decl_cache_align mi_heap_t heap_main = {
+  &tld_main,          // thread local data
+  0,                      // initial cookie
+  0,                      // arena id
+  { 0, 0 },               // the key of the main heap can be fixed (unlike page keys that need to be secure!)
+  { {0x846ca68b}, {0}, 0, true },  // random
+  0,                      // page count
+  MI_BIN_FULL, 0,         // page retired min/max
+  NULL,                   // next heap
+  2,                      // full page retain
+  true,                   // allow page reclaim
+  true,                   // allow page abandon
+  0,                      // tag
+  #if MI_GUARDED
+  0, 0, 0, 0, 0,
+  #endif
+  MI_SMALL_PAGES_EMPTY,
+  MI_PAGE_QUEUES_EMPTY,
+  MI_MEMID_STATIC         
 };
 
 
@@ -124,48 +172,8 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
   return _mi_prim_thread_id();
 }
 
-
 // the thread-local default heap for allocation
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
-
-extern mi_heap_t _mi_heap_main;
-
-static mi_decl_cache_align mi_subproc_t mi_subproc_default;
-
-static mi_decl_cache_align mi_tld_t tld_main = {
-  0,
-  &_mi_heap_main,         // heap_backing
-  &_mi_heap_main,         // heaps list
-  &mi_subproc_default,    // subproc
-  0,                      // tseq
-  MI_MEMID_STATIC,        // memid
-  false,                  // recurse
-  false,                  // is_in_threadpool
-  { MI_STATS_NULL }       // stats
-};
-
-mi_decl_cache_align mi_heap_t _mi_heap_main = {
-  &tld_main,
-  // MI_ATOMIC_VAR_INIT(NULL),  // thread delayed free list
-  0,                // thread id
-  0,                // initial cookie
-  0,                // arena id
-  { 0, 0 },         // the key of the main heap can be fixed (unlike page keys that need to be secure!)
-  { {0x846ca68b}, {0}, 0, true },  // random
-  0,                // page count
-  MI_BIN_FULL, 0,   // page retired min/max
-  NULL,             // next heap
-  MI_MEMID_STATIC,  // memid
-  2,                // full page retain
-  true,             // allow page reclaim
-  true,             // allow page abandon
-  0,                // tag
-  #if MI_GUARDED
-  0, 0, 0, 0, 0,
-  #endif
-  MI_SMALL_PAGES_EMPTY,
-  MI_PAGE_QUEUES_EMPTY
-};
 
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
@@ -210,30 +218,46 @@ void _mi_heap_guarded_init(mi_heap_t* heap) {
 }
 #endif
 
-
-static void mi_heap_main_init(void) {
-  if (_mi_heap_main.cookie == 0) {
-    _mi_heap_main.thread_id = _mi_thread_id();
-    _mi_heap_main.cookie = 1;
-    #if defined(__APPLE__) || defined(_WIN32) && !defined(MI_SHARED_LIB)
-      _mi_random_init_weak(&_mi_heap_main.random);    // prevent allocation failure during bcrypt dll initialization with static linking
-    #else
-      _mi_random_init(&_mi_heap_main.random);
-    #endif
-    _mi_heap_main.cookie  = _mi_heap_random_next(&_mi_heap_main);
-    _mi_heap_main.keys[0] = _mi_heap_random_next(&_mi_heap_main);
-    _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
-    mi_lock_init(&mi_subproc_default.abandoned_os_lock);
-    mi_lock_init(&mi_subproc_default.abandoned_os_visit_lock);
-    _mi_heap_guarded_init(&_mi_heap_main);
-    _mi_heap_main.allow_page_abandon = (mi_option_get(mi_option_full_page_retain) >= 0);
-    _mi_heap_main.full_page_retain   = mi_option_get_clamp(mi_option_full_page_retain, -1, 32);
+// Initialize main subproc
+static void mi_subproc_main_init(void) {
+  if (subproc_main.memid.memkind != MI_MEM_STATIC) {
+    subproc_main.memid = _mi_memid_create(MI_MEM_STATIC);
+    mi_lock_init(&subproc_main.os_pages_lock);
+    mi_lock_init(&subproc_main.arena_reserve_lock);
   }
 }
 
-mi_heap_t* _mi_heap_main_get(void) {
+// Initialize main tld
+static void mi_tld_main_init(void) {
+  if (tld_main.thread_id == 0) {
+    tld_main.thread_id = _mi_prim_thread_id();
+  }
+}
+
+// Initialization of the (statically allocated) main heap, and the main tld and subproc.
+static void mi_heap_main_init(void) {
+  if (heap_main.cookie == 0) {   
+    mi_subproc_main_init();
+    mi_tld_main_init();
+    // heap
+    heap_main.cookie = 1;
+    #if defined(__APPLE__) || defined(_WIN32) && !defined(MI_SHARED_LIB)
+      _mi_random_init_weak(&heap_main.random);    // prevent allocation failure during bcrypt dll initialization with static linking
+    #else
+      _mi_random_init(&heap_main.random);
+    #endif
+    heap_main.cookie  = _mi_heap_random_next(&heap_main);
+    heap_main.keys[0] = _mi_heap_random_next(&heap_main);
+    heap_main.keys[1] = _mi_heap_random_next(&heap_main);    
+    _mi_heap_guarded_init(&heap_main);
+    heap_main.allow_page_abandon = (mi_option_get(mi_option_full_page_retain) >= 0);
+    heap_main.full_page_retain   = mi_option_get_clamp(mi_option_full_page_retain, -1, 32);
+  }
+}
+
+mi_heap_t* heap_main_get(void) {
   mi_heap_main_init();
-  return &_mi_heap_main;
+  return &heap_main;
 }
 
 
@@ -265,8 +289,9 @@ static mi_tld_t* mi_tld_alloc(void) {
     tld->memid = memid;
     tld->heap_backing = NULL;
     tld->heaps = NULL;
-    tld->subproc = &mi_subproc_default;
-    tld->tseq = mi_atomic_add_acq_rel(&mi_tcount, 1);
+    tld->subproc = &subproc_main;
+    tld->thread_id = _mi_prim_thread_id();
+    tld->thread_seq = mi_atomic_add_acq_rel(&mi_tcount, 1);
     tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
     return tld;
   }
@@ -291,11 +316,23 @@ mi_decl_noinline mi_tld_t* _mi_tld(void) {
   return mi_tld;
 }
 
+mi_subproc_t* _mi_subproc(void) {
+  if (_mi_is_main_thread()) {  // during initialization we should not recurse over reading the _mi_tld
+    return &subproc_main;  
+  }
+  else {
+    return _mi_tld()->subproc;
+  }
+}
 
 
 /* -----------------------------------------------------------
   Sub process
 ----------------------------------------------------------- */
+
+mi_subproc_t* _mi_subproc_main(void) {
+  return &subproc_main;
+}
 
 mi_subproc_id_t mi_subproc_main(void) {
   return NULL;
@@ -305,42 +342,41 @@ mi_subproc_id_t mi_subproc_new(void) {
   mi_memid_t memid;
   mi_subproc_t* subproc = (mi_subproc_t*)_mi_meta_zalloc(sizeof(mi_subproc_t),&memid);
   if (subproc == NULL) return NULL;
-  subproc->abandoned_os_list = NULL;
   subproc->memid = memid;
-  mi_lock_init(&subproc->abandoned_os_lock);
-  mi_lock_init(&subproc->abandoned_os_visit_lock);
+  mi_lock_init(&subproc->os_pages_lock);
+  mi_lock_init(&subproc->arena_reserve_lock);
   return subproc;
 }
 
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
-  return (subproc_id == NULL ? &mi_subproc_default : (mi_subproc_t*)subproc_id);
+  return (subproc_id == NULL ? &subproc_main : (mi_subproc_t*)subproc_id);
 }
 
 void mi_subproc_delete(mi_subproc_id_t subproc_id) {
   if (subproc_id == NULL) return;
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
-  // check if there are no abandoned segments still..
+  // check if there are os pages still..
   bool safe_to_delete = false;
-  if (mi_lock_acquire(&subproc->abandoned_os_lock)) {
-    if (subproc->abandoned_os_list == NULL) {
+  if (mi_lock_acquire(&subproc->os_pages_lock)) {
+    if (subproc->os_pages.first == NULL) {
       safe_to_delete = true;
     }
-    mi_lock_release(&subproc->abandoned_os_lock);
+    mi_lock_release(&subproc->os_pages_lock);
   }
   if (!safe_to_delete) return;
   // safe to release
   // todo: should we refcount subprocesses?
-  mi_lock_done(&subproc->abandoned_os_lock);
-  mi_lock_done(&subproc->abandoned_os_visit_lock);
+  mi_lock_done(&subproc->os_pages_lock);
+  mi_lock_done(&subproc->arena_reserve_lock);
   _mi_meta_free(subproc, sizeof(mi_subproc_t), subproc->memid);
 }
 
 void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
-  mi_heap_t* heap = mi_heap_get_default();
-  if (heap == NULL) return;
-  mi_assert(heap->tld->subproc == &mi_subproc_default);
-  if (heap->tld->subproc != &mi_subproc_default) return;
-  heap->tld->subproc = _mi_subproc_from_id(subproc_id);
+  mi_tld_t* tld = _mi_tld();
+  if (tld == NULL) return;
+  mi_assert(tld->subproc == &subproc_main);
+  if (tld->subproc != &subproc_main) return;
+  tld->subproc = _mi_subproc_from_id(subproc_id);
 }
 
 
@@ -352,10 +388,10 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
 static bool _mi_thread_heap_init(void) {
   if (mi_heap_is_initialized(mi_prim_get_default_heap())) return true;
   if (_mi_is_main_thread()) {
-    // mi_assert_internal(_mi_heap_main.thread_id != 0);  // can happen on freeBSD where alloc is called before any initialization
+    // mi_assert_internal(heap_main.thread_id != 0);  // can happen on freeBSD where alloc is called before any initialization
     // the main heap is statically allocated
     mi_heap_main_init();
-    _mi_heap_set_default_direct(&_mi_heap_main);
+    _mi_heap_set_default_direct(&heap_main);
     //mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_prim_get_default_heap());
   }
   else {
@@ -383,7 +419,7 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
   if (!mi_heap_is_initialized(heap)) return true;
 
   // reset default heap
-  _mi_heap_set_default_direct(_mi_is_main_thread() ? &_mi_heap_main : (mi_heap_t*)&_mi_heap_empty);
+  _mi_heap_set_default_direct(_mi_is_main_thread() ? &heap_main : (mi_heap_t*)&_mi_heap_empty);
 
   // switch to backing heap
   heap = heap->tld->heap_backing;
@@ -403,7 +439,7 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
   mi_assert_internal(mi_heap_is_backing(heap));
 
   // collect if not the main thread
-  if (heap != &_mi_heap_main) {
+  if (heap != &heap_main) {
     _mi_heap_collect_abandon(heap);
   }
 
@@ -413,12 +449,12 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
   // free heap meta data
   _mi_meta_free(heap, sizeof(mi_heap_t), heap->memid);
 
-  if (heap == &_mi_heap_main) {
+  if (heap == &heap_main) {
     #if 0
     // never free the main thread even in debug mode; if a dll is linked statically with mimalloc,
     // there may still be delete/free calls after the mi_fls_done is called. Issue #207
     _mi_heap_destroy_pages(heap);
-    mi_assert_internal(heap->tld->heap_backing == &_mi_heap_main);
+    mi_assert_internal(heap->tld->heap_backing == &heap_main);
     #endif
   }
 
@@ -449,12 +485,12 @@ static void mi_process_setup_auto_thread_done(void) {
   if (tls_initialized) return;
   tls_initialized = true;
   _mi_prim_thread_init_auto_done();
-  _mi_heap_set_default_direct(&_mi_heap_main);
+  _mi_heap_set_default_direct(&heap_main);
 }
 
 
 bool _mi_is_main_thread(void) {
-  return (_mi_heap_main.thread_id==0 || _mi_heap_main.thread_id == _mi_thread_id());
+  return (tld_main.thread_id==0 || tld_main.thread_id == _mi_thread_id());
 }
 
 static _Atomic(size_t) thread_count = MI_ATOMIC_VAR_INIT(1);
@@ -501,7 +537,7 @@ void _mi_thread_done(mi_heap_t* heap)
   _mi_stat_decrease(&_mi_stats_main.threads, 1);
 
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local heaps...
-  if (heap->thread_id != _mi_thread_id()) return;
+  if (heap->tld->thread_id != _mi_prim_thread_id()) return;
 
   // abandon the thread local heap
   _mi_thread_heap_done(heap);  // returns true if already ran
@@ -560,7 +596,7 @@ void _mi_process_load(void) {
   }
 
   // reseed random
-  _mi_random_reinit_if_weak(&_mi_heap_main.random);
+  _mi_random_reinit_if_weak(&heap_main.random);
 }
 
 #if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
@@ -587,7 +623,7 @@ void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   static mi_atomic_once_t process_init;
 	#if _MSC_VER < 1920
-	mi_heap_main_init(); // vs2017 can dynamically re-initialize _mi_heap_main
+	mi_heap_main_init(); // vs2017 can dynamically re-initialize heap_main
 	#endif
   if (!mi_atomic_once(&process_init)) return;
   _mi_process_is_initialized = true;
@@ -595,10 +631,11 @@ void mi_process_init(void) mi_attr_noexcept {
   mi_process_setup_auto_thread_done();
 
   mi_detect_cpu_features();
+  mi_subproc_main_init();
+  mi_tld_main_init();
+  mi_heap_main_init();
   _mi_os_init();
   _mi_page_map_init();
-  _mi_arena_init();
-  mi_heap_main_init();
   #if MI_DEBUG
   _mi_verbose_message("debug level : %d\n", MI_DEBUG);
   #endif
@@ -609,7 +646,7 @@ void mi_process_init(void) mi_attr_noexcept {
   #endif
   mi_thread_init();
 
-  #if defined(_WIN32)
+  #if defined(_WIN32) && defined(MI_WIN_USE_FLS)
   // On windows, when building as a static lib the FLS cleanup happens to early for the main thread.
   // To avoid this, set the FLS value for the main thread to NULL so the fls cleanup
   // will not call _mi_thread_done on the (still executing) main thread. See issue #508.
@@ -670,7 +707,7 @@ void mi_cdecl _mi_process_done(void) {
     mi_stats_print(NULL);
   }
   _mi_allocator_done();
-  _mi_verbose_message("process done: 0x%zx\n", _mi_heap_main.thread_id);
+  _mi_verbose_message("process done: 0x%zx\n", tld_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
 }
 

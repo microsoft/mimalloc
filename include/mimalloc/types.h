@@ -243,9 +243,6 @@ typedef size_t mi_page_flags_t;
 // atomically in `free.c:mi_free_block_mt`.
 typedef uintptr_t mi_thread_free_t;
 
-// Sub processes are used to keep memory separate between them (e.g. multiple interpreters in CPython)
-typedef struct mi_subproc_s mi_subproc_t;
-
 // A heap can serve only specific objects signified by its heap tag (e.g. various object types in CPython)
 typedef uint8_t mi_heaptag_t;
 
@@ -299,7 +296,6 @@ typedef struct mi_page_s {
   mi_heap_t*                heap;              // heap this threads belong to.
   struct mi_page_s*         next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*         prev;              // previous page owned by the heap with the same `block_size`
-  mi_subproc_t*             subproc;           // sub-process of this heap
   mi_memid_t                memid;             // provenance of the page memory
 } mi_page_t;
 
@@ -380,7 +376,7 @@ typedef struct mi_random_cxt_s {
 
 
 // In debug mode there is a padding structure at the end of the blocks to check for buffer overflows
-#if (MI_PADDING)
+#if MI_PADDING
 typedef struct mi_padding_s {
   uint32_t canary; // encoded block value to check validity of the padding (in case of overflow)
   uint32_t delta;  // padding bytes before the block. (mi_usable_size(p) - delta == exact allocated bytes)
@@ -397,10 +393,8 @@ typedef struct mi_padding_s {
 
 // A heap owns a set of pages.
 struct mi_heap_s {
-  mi_tld_t*             tld;
-  // _Atomic(mi_block_t*)  thread_delayed_free;
-  mi_threadid_t         thread_id;                           // thread this heap belongs too
-  mi_arena_id_t         arena_id;                            // arena id if the heap belongs to a specific arena (or 0)
+  mi_tld_t*             tld;                                 // thread-local data
+  mi_arena_t*           exclusive_arena;                     // if the heap belongs to a specific arena (or NULL)
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   uintptr_t             keys[2];                             // two random keys used to encode the `thread_delayed_free` list
   mi_random_ctx_t       random;                              // random number context used for secure allocation
@@ -408,7 +402,6 @@ struct mi_heap_s {
   size_t                page_retired_min;                    // smallest retired index (retired pages are fully free, but still in the page queues)
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   mi_heap_t*            next;                                // list of heaps per thread
-  mi_memid_t            memid;                               // provenance of the heap struct itseft (meta or os)
   long                  full_page_retain;                    // how many full pages can be retained per queue (before abondoning them)
   bool                  allow_page_reclaim;                  // `true` if this heap should not reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this heap can abandon pages to reduce memory footprint
@@ -421,7 +414,8 @@ struct mi_heap_s {
   size_t                guarded_sample_count;                // current sample count (counting down to 0)
   #endif
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
-  mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
+  mi_page_queue_t       pages[MI_BIN_COUNT];                 // queue of pages for each size class (or "bin")
+  mi_memid_t            memid;                               // provenance of the heap struct itself (meta or os)
 };
 
 
@@ -479,7 +473,7 @@ typedef struct mi_stats_s {
   mi_stat_counter_t arena_count;
   mi_stat_counter_t guarded_alloc_count;
 #if MI_STAT>1
-  mi_stat_count_t normal_bins[MI_BIN_HUGE+1];
+  mi_stat_count_t normal_bins[MI_BIN_COUNT];
 #endif
 } mi_stats_t;
 
@@ -513,19 +507,24 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 
 
 // ------------------------------------------------------
-// Sub processes do not reclaim or visit segments
-// from other sub processes
+// Sub processes use separate arena's and no heaps/pages/blocks
+// are shared between sub processes. 
+// Each thread should also belong to one sub-process only
 // ------------------------------------------------------
 
-struct mi_subproc_s {
-  _Atomic(size_t)    abandoned_count[MI_BIN_COUNT]; // count of abandoned pages for this sub-process
-  _Atomic(size_t)    abandoned_os_list_count; // count of abandoned pages in the os-list
-  mi_lock_t          abandoned_os_lock;       // lock for the abandoned os pages list (outside of arena's) (this lock protect list operations)
-  mi_lock_t          abandoned_os_visit_lock; // ensure only one thread per subproc visits the abandoned os list
-  mi_page_t*         abandoned_os_list;       // doubly-linked list of abandoned pages outside of arena's (in OS allocated memory)
-  mi_page_t*         abandoned_os_list_tail;  // the tail-end of the list
-  mi_memid_t         memid;                   // provenance of this memory block
-};
+#define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
+                                // 160 arenas is enough for ~2 TiB memory
+
+typedef struct mi_subproc_s {
+  _Atomic(size_t)       arena_count;                    // current count of arena's
+  _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
+  mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
+  _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages for this sub-process
+  mi_page_queue_t       os_pages;                       // list of pages that OS allocated and not in an arena (only used if `mi_option_visit_abandoned` is on)
+  mi_lock_t             os_pages_lock;                  // lock for the os pages list (this lock protects list operations)
+  mi_memid_t            memid;                          // provenance of this memory block (meta or OS)
+} mi_subproc_t;
+
 
 // ------------------------------------------------------
 // Thread Local data
@@ -534,19 +533,20 @@ struct mi_subproc_s {
 // Milliseconds as in `int64_t` to avoid overflows
 typedef int64_t  mi_msecs_t;
 
-
 // Thread local data
 struct mi_tld_s {
-  unsigned long long  heartbeat;        // monotonic heartbeat count
+  mi_threadid_t       thread_id;        // thread id of this thread
+  size_t              thread_seq;       // thread sequence id (linear count of created threads)
+  mi_subproc_t*       subproc;          // sub-process this thread belongs to.
   mi_heap_t*          heap_backing;     // backing heap of this thread (cannot be deleted)
   mi_heap_t*          heaps;            // list of heaps in this thread (so we can abandon all when the thread terminates)
-  mi_subproc_t*       subproc;          // sub-process this thread belongs to.
-  size_t              tseq;             // thread sequence id
-  mi_memid_t          memid;            // provenance of the tld memory itself (meta or OS)
+  unsigned long long  heartbeat;        // monotonic heartbeat count
   bool                recurse;          // true if deferred was called; used to prevent infinite recursion.
   bool                is_in_threadpool; // true if this thread is part of a threadpool (and can run arbitrary tasks)
   mi_stats_t          stats;            // statistics
+  mi_memid_t          memid;            // provenance of the tld memory itself (meta or OS)
 };
+
 
 /* -----------------------------------------------------------
   Error codes passed to `_mi_fatal_error`

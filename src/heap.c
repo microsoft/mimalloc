@@ -178,7 +178,7 @@ mi_heap_t* mi_heap_get_backing(void) {
   mi_assert_internal(heap!=NULL);
   mi_heap_t* bheap = heap->tld->heap_backing;
   mi_assert_internal(bheap!=NULL);
-  mi_assert_internal(bheap->thread_id == _mi_thread_id());
+  mi_assert_internal(bheap->tld->thread_id == _mi_thread_id());
   return bheap;
 }
 
@@ -190,8 +190,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint
   _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(mi_heap_t));
   heap->memid = memid;
   heap->tld        = tld;  // avoid reading the thread-local tld during initialization
-  heap->thread_id  = _mi_thread_id();
-  heap->arena_id   = arena_id;
+  heap->exclusive_arena    = _mi_arena_from_id(arena_id);
   heap->allow_page_reclaim = !noreclaim;
   heap->allow_page_abandon = (!noreclaim && mi_option_get(mi_option_full_page_retain) >= 0);
   heap->full_page_retain = mi_option_get_clamp(mi_option_full_page_retain, -1, 32);
@@ -254,7 +253,7 @@ mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
 }
 
 bool _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid) {
-  return _mi_arena_memid_is_suitable(memid, heap->arena_id);
+  return _mi_arena_memid_is_suitable(memid, heap->exclusive_arena);
 }
 
 uintptr_t _mi_heap_random_next(mi_heap_t* heap) {

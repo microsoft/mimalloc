@@ -434,7 +434,7 @@ static inline void mi_lock_init(mi_lock_t* lock) {
   InitializeSRWLock(lock);
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
-  // nothing
+  (void)(lock);
 }
 
 
