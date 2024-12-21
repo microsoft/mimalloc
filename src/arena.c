@@ -453,7 +453,7 @@ static mi_decl_noinline void* mi_arena_try_alloc(
   mi_assert(slice_count <= MI_ARENA_MAX_OBJ_SLICES);
   mi_assert(alignment <= MI_ARENA_SLICE_ALIGN);
   void* p;
-again:
+
   // try to find free slices in the arena's
   p = mi_arena_try_find_free(slice_count, alignment, commit, allow_large, req_arena_id, tseq, memid);
   if (p != NULL) return p;
@@ -465,21 +465,24 @@ again:
   if (_mi_preloading()) return NULL;
 
   // otherwise, try to reserve a new arena -- but one thread at a time.. (todo: allow 2 or 4 to reduce contention?)
-  if (mi_lock_try_acquire(&mi_arena_reserve_lock)) {
-    mi_arena_id_t arena_id = 0;
-    bool ok = mi_arena_reserve(mi_size_of_slices(slice_count), allow_large, req_arena_id, &arena_id);
+  const size_t arena_count = mi_arena_get_count();
+  if (mi_lock_acquire(&mi_arena_reserve_lock)) {
+    bool ok = true;
+    if (arena_count == mi_arena_get_count()) {
+      // we are the first to enter the lock, reserve a fresh arena
+      mi_arena_id_t arena_id = 0;
+      ok = mi_arena_reserve(mi_size_of_slices(slice_count), allow_large, req_arena_id, &arena_id);
+    }
+    else {
+      // another thread already reserved a new arena
+    }
     mi_lock_release(&mi_arena_reserve_lock);
     if (ok) {
-      // and try allocate in there
+      // try once more to allocate in the new arena
       mi_assert_internal(req_arena_id == _mi_arena_id_none());
       p = mi_arena_try_find_free(slice_count, alignment, commit, allow_large, req_arena_id, tseq, memid);
       if (p != NULL) return p;
     }
-  }
-  else {
-    // if we are racing with another thread wait until the new arena is reserved (todo: a better yield?)
-    mi_atomic_yield();
-    goto again;
   }
 
   return NULL;
