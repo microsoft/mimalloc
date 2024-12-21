@@ -234,7 +234,7 @@ mi_heap_t* _mi_heap_create(int heap_tag, bool allow_destroy, mi_arena_id_t arena
   else {
     // heaps associated wita a specific arena are allocated in that arena
     // note: takes up at least one slice which is quite wasteful...
-    heap = (mi_heap_t*)_mi_arena_alloc(_mi_subproc(), sizeof(mi_heap_t), true, true, _mi_arena_from_id(arena_id), tld->thread_seq, &memid);
+    heap = (mi_heap_t*)_mi_arena_alloc(_mi_subproc(), _mi_align_up(sizeof(mi_heap_t),MI_ARENA_MIN_OBJ_SIZE), true, true, _mi_arena_from_id(arena_id), tld->thread_seq, &memid);
   }
   if (heap==NULL) {
     _mi_error_message(ENOMEM, "unable to allocate heap meta-data\n");
@@ -280,7 +280,7 @@ static void mi_heap_reset_pages(mi_heap_t* heap) {
 }
 
 // called from `mi_heap_destroy` and `mi_heap_delete` to free the internal heap resources.
-static void mi_heap_free(mi_heap_t* heap) {
+static void mi_heap_free(mi_heap_t* heap, bool do_free_mem) {
   mi_assert(heap != NULL);
   mi_assert_internal(mi_heap_is_initialized(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
@@ -307,7 +307,9 @@ static void mi_heap_free(mi_heap_t* heap) {
   mi_assert_internal(heap->tld->heaps != NULL);
 
   // and free the used memory
-  _mi_meta_free(heap, sizeof(*heap), heap->memid);
+  if (do_free_mem) {
+    _mi_meta_free(heap, sizeof(*heap), heap->memid);
+  }
 }
 
 // return a heap on the same thread as `heap` specialized for the specified tag (if it exists)
@@ -403,7 +405,7 @@ void mi_heap_destroy(mi_heap_t* heap) {
     #endif
     // free all pages
     _mi_heap_destroy_pages(heap);
-    mi_heap_free(heap);
+    mi_heap_free(heap,true);
   }
   #endif
 }
@@ -462,20 +464,11 @@ void mi_heap_delete(mi_heap_t* heap)
   mi_assert_expensive(mi_heap_is_valid(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
 
-  /*
-  mi_heap_t* bheap = heap->tld->heap_backing;
-  if (bheap != heap && mi_heaps_are_compatible(bheap,heap)) {
-    // transfer still used pages to the backing heap
-    mi_heap_absorb(bheap, heap);
-  }
-  else
-  */
-  {
-    // abandon all pages
-    _mi_heap_collect_abandon(heap);
-  }
+  // abandon all pages
+  _mi_heap_collect_abandon(heap);
+  
   mi_assert_internal(heap->page_count==0);
-  mi_heap_free(heap);
+  mi_heap_free(heap,true);
 }
 
 mi_heap_t* mi_heap_set_default(mi_heap_t* heap) {
@@ -489,7 +482,63 @@ mi_heap_t* mi_heap_set_default(mi_heap_t* heap) {
 }
 
 
+/* -----------------------------------------------------------
+  Load/unload heaps
+----------------------------------------------------------- */
+void mi_heap_unload(mi_heap_t* heap) {
+  mi_assert(mi_heap_is_initialized(heap));
+  mi_assert_expensive(mi_heap_is_valid(heap));
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return;
+  if (heap->exclusive_arena == NULL) {
+    _mi_warning_message("cannot unload heaps that are not associated with an exclusive arena\n");
+    return;
+  }
+  
+  // abandon all pages so all thread'id in the pages are cleared
+  _mi_heap_collect_abandon(heap);
+  mi_assert_internal(heap->page_count==0);
 
+  // remove from heap list
+  mi_heap_free(heap, false /* but don't actually free the memory */);
+
+  // disassociate from the current thread-local and static state
+  heap->tld = NULL;
+  return;
+}
+
+bool mi_heap_reload(mi_heap_t* heap, mi_arena_id_t arena_id) {
+  mi_assert(mi_heap_is_initialized(heap));  
+  if (heap==NULL || !mi_heap_is_initialized(heap)) return false;
+  if (heap->exclusive_arena == NULL) {
+    _mi_warning_message("cannot reload heaps that were not associated with an exclusive arena\n");
+    return false;
+  }
+  if (heap->tld != NULL) {
+    _mi_warning_message("cannot reload heaps that were not unloaded first\n");
+    return false;
+  }
+  mi_arena_t* arena = _mi_arena_from_id(arena_id);
+  if (heap->exclusive_arena != arena) {
+    _mi_warning_message("trying to reload a heap at a different arena address: %p vs %p\n", heap->exclusive_arena, arena);
+    return false;
+  }
+
+  mi_assert_internal(heap->page_count==0);
+
+  // re-associate from the current thread-local and static state
+  heap->tld = _mi_tld();
+
+  // reinit direct pages (as we may be in a different process)
+  mi_assert_internal(heap->page_count == 0);
+  for (int i = 0; i < MI_PAGES_DIRECT; i++) {
+    heap->pages_free_direct[i] = (mi_page_t*)&_mi_page_empty;
+  }
+
+  // push on the thread local heaps list
+  heap->next = heap->tld->heaps;
+  heap->tld->heaps = heap;
+  return true;
+}
 
 /* -----------------------------------------------------------
   Analysis

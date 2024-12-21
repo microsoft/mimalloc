@@ -492,7 +492,6 @@ void* _mi_arena_alloc_aligned( mi_subproc_t* subproc,
 
   // try to allocate in an arena if the alignment is small enough and the object is not too small (as for heap meta data)
   if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) &&           // is arena allocation allowed?
-      req_arena == NULL &&                                               // not a specific arena?
       size >= MI_ARENA_MIN_OBJ_SIZE && size <= MI_ARENA_MAX_OBJ_SIZE &&  // and not too small/large
       alignment <= MI_ARENA_SLICE_ALIGN && align_offset == 0)            // and good alignment
   {
@@ -980,13 +979,21 @@ void _mi_arenas_collect(bool force_purge) {
   mi_arenas_try_purge(force_purge, force_purge /* visit all? */);
 }
 
+
+// Is a pointer contained in the given arena area?
+bool mi_arena_contains(mi_arena_id_t arena_id, const void* p) {
+  mi_arena_t* arena = _mi_arena_from_id(arena_id);
+  return (mi_arena_start(arena) <= (const uint8_t*)p &&
+          mi_arena_start(arena) + mi_size_of_slices(arena->slice_count) >(const uint8_t*)p);
+}
+
 // Is a pointer inside any of our arenas?
 bool _mi_arena_contains(const void* p) {
   mi_subproc_t* subproc = _mi_subproc();
   const size_t max_arena = mi_arenas_get_count(subproc);
   for (size_t i = 0; i < max_arena; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &subproc->arenas[i]);
-    if (arena != NULL && mi_arena_start(arena) <= (const uint8_t*)p && mi_arena_start(arena) + mi_size_of_slices(arena->slice_count) >(const uint8_t*)p) {
+    if (arena != NULL && mi_arena_contains(arena,p)) {
       return true;
     }
   }
@@ -1636,7 +1643,7 @@ mi_decl_export bool mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t*
   return true;
 }
 
-mi_decl_export bool mi_arena_reload(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, mi_arena_id_t* arena_id) {
+mi_decl_export bool mi_arena_reload(void* start, size_t size, mi_arena_id_t* arena_id) {
   // assume the memory area is already containing the arena
   if (arena_id != NULL) { *arena_id = _mi_arena_id_none(); }
   if (start == NULL || size == 0) return false;
@@ -1658,13 +1665,10 @@ mi_decl_export bool mi_arena_reload(void* start, size_t size, bool is_committed,
     _mi_warning_message("the reloaded arena is not exclusive\n");
     return false;
   }
-  arena->memid.is_pinned = is_large;
-  arena->memid.initially_committed = is_committed;
-  arena->memid.initially_zero = is_zero;
+  
   arena->is_exclusive = true;
-  arena->is_large = is_large;
-  arena->subproc = NULL;
-  if (!mi_arena_add(_mi_subproc(), arena, arena_id)) {
+  arena->subproc = _mi_subproc();
+  if (!mi_arena_add(arena->subproc, arena, arena_id)) {
     return false;
   }
   mi_arena_pages_reregister(arena);
