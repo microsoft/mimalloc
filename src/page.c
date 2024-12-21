@@ -732,7 +732,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
 -------------------------------------------------------------*/
 
 // search for a best next page to use for at most N pages (often cut short if immediate blocks are available)
-#define MI_MAX_CANDIDATE_SEARCH  (8)
+#define MI_MAX_CANDIDATE_SEARCH  (4)
 
 // is the page not yet used up to its reserved space?
 static bool mi_page_is_expandable(const mi_page_t* page) {
