@@ -147,6 +147,7 @@ mi_arena_t* _mi_arena_from_id(mi_arena_id_t id);
 
 void*       _mi_arena_alloc(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
 void*       _mi_arena_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
+void        _mi_arena_free(void* p, size_t size, mi_memid_t memid);
 bool        _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_t* request_arena);
 bool        _mi_arena_contains(const void* p);
 void        _mi_arenas_collect(bool force_purge);
@@ -421,11 +422,11 @@ static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
   return (heap != &_mi_heap_empty);
 }
 
-static inline uintptr_t _mi_ptr_cookie(const void* p) {
-  extern mi_heap_t _mi_heap_main;
-  mi_assert_internal(_mi_heap_main.cookie != 0);
-  return ((uintptr_t)p ^ _mi_heap_main.cookie);
-}
+//static inline uintptr_t _mi_ptr_cookie(const void* p) {
+//  extern mi_heap_t _mi_heap_main;
+//  mi_assert_internal(_mi_heap_main.cookie != 0);
+//  return ((uintptr_t)p ^ _mi_heap_main.cookie);
+//}
 
 
 /* -----------------------------------------------------------

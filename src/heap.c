@@ -213,8 +213,8 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint
     _mi_random_split(&heap->tld->heap_backing->random, &heap->random);
   }
   heap->cookie  = _mi_heap_random_next(heap) | 1;
-  heap->keys[0] = _mi_heap_random_next(heap);
-  heap->keys[1] = _mi_heap_random_next(heap);
+  //heap->keys[0] = _mi_heap_random_next(heap);
+  //heap->keys[1] = _mi_heap_random_next(heap);*/
   _mi_heap_guarded_init(heap);
 
   // push on the thread local heaps list
@@ -227,7 +227,15 @@ mi_heap_t* _mi_heap_create(int heap_tag, bool allow_destroy, mi_arena_id_t arena
   mi_assert(heap_tag >= 0 && heap_tag < 256);
   // allocate and initialize a heap
   mi_memid_t memid;
-  mi_heap_t* heap = (mi_heap_t*)_mi_meta_zalloc(sizeof(mi_heap_t), &memid);
+  mi_heap_t* heap; 
+  if (arena_id == _mi_arena_id_none()) {
+    heap = (mi_heap_t*)_mi_meta_zalloc(sizeof(mi_heap_t), &memid);
+  }
+  else {
+    // heaps associated wita a specific arena are allocated in that arena
+    // note: takes up at least one slice which is quite wasteful...
+    heap = (mi_heap_t*)_mi_arena_alloc(_mi_subproc(), sizeof(mi_heap_t), true, true, _mi_arena_from_id(arena_id), tld->thread_seq, &memid);
+  }
   if (heap==NULL) {
     _mi_error_message(ENOMEM, "unable to allocate heap meta-data\n");
     return NULL;

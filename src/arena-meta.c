@@ -148,11 +148,8 @@ mi_decl_noinline void _mi_meta_free(void* p, size_t size, mi_memid_t memid) {
     _mi_memzero_aligned(mi_meta_block_start(mpage, block_idx), block_count*MI_META_BLOCK_SIZE);
     mi_bitmap_setN(&mpage->blocks_free, block_idx, block_count,NULL);
   }
-  else if (mi_memid_is_os(memid)) {
-    _mi_os_free(p, size, memid);    
-  }
   else {
-    mi_assert_internal(mi_memid_needs_no_free(memid));
+    _mi_arena_free(p,size,memid);
   }
 }
 

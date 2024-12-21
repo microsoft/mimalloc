@@ -115,7 +115,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   &tld_empty,             // tld
   NULL,                   // exclusive_arena
   0,                      // cookie
-  { 0, 0 },               // keys
+  //{ 0, 0 },               // keys
   { {0}, {0}, 0, true },  // random
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
@@ -149,9 +149,9 @@ static mi_decl_cache_align mi_tld_t tld_main = {
 
 mi_decl_cache_align mi_heap_t heap_main = {
   &tld_main,              // thread local data
+  NULL,                   // exclusive arena
   0,                      // initial cookie
-  0,                      // arena id
-  { 0, 0 },               // the key of the main heap can be fixed (unlike page keys that need to be secure!)
+  //{ 0, 0 },               // the key of the main heap can be fixed (unlike page keys that need to be secure!)
   { {0x846ca68b}, {0}, 0, true },  // random
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
@@ -248,8 +248,8 @@ static void mi_heap_main_init(void) {
       _mi_random_init(&heap_main.random);
     #endif
     heap_main.cookie  = _mi_heap_random_next(&heap_main);
-    heap_main.keys[0] = _mi_heap_random_next(&heap_main);
-    heap_main.keys[1] = _mi_heap_random_next(&heap_main);
+    //heap_main.keys[0] = _mi_heap_random_next(&heap_main);
+    //heap_main.keys[1] = _mi_heap_random_next(&heap_main);
     _mi_heap_guarded_init(&heap_main);
     heap_main.allow_page_abandon = (mi_option_get(mi_option_full_page_retain) >= 0);
     heap_main.full_page_retain   = mi_option_get_clamp(mi_option_full_page_retain, -1, 32);

@@ -762,8 +762,6 @@ mi_page_t* _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t block
   return page;
 }
 
-static void mi_arena_free(void* p, size_t size, mi_memid_t memid);
-
 void _mi_arena_page_free(mi_page_t* page) {
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(page)==page);
@@ -794,7 +792,7 @@ void _mi_arena_page_free(mi_page_t* page) {
   if (page->memid.memkind == MI_MEM_ARENA) {
     mi_bitmap_clear(page->memid.mem.arena.arena->pages, page->memid.mem.arena.slice_index);
   }
-  mi_arena_free(page, mi_memid_size(page->memid), page->memid);
+  _mi_arena_free(page, mi_memid_size(page->memid), page->memid);
 }
 
 /* -----------------------------------------------------------
@@ -920,7 +918,7 @@ void _mi_arena_reclaim_all_abandoned(mi_heap_t* heap) {
 static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_t slices);
 static void mi_arenas_try_purge(bool force, bool visit_all);
 
-static void mi_arena_free(void* p, size_t size, mi_memid_t memid) {
+void _mi_arena_free(void* p, size_t size, mi_memid_t memid) {
   if (p==NULL) return;
   if (size==0) return;
 

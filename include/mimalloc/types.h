@@ -396,7 +396,6 @@ struct mi_heap_s {
   mi_tld_t*             tld;                                 // thread-local data
   mi_arena_t*           exclusive_arena;                     // if the heap should only allocate from a specific arena (or NULL)
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
-  uintptr_t             keys[2];                             // two random keys used to encode the `thread_delayed_free` list
   mi_random_ctx_t       random;                              // random number context used for secure allocation
   size_t                page_count;                          // total number of pages in the `pages` queues.
   size_t                page_retired_min;                    // smallest retired index (retired pages are fully free, but still in the page queues)
@@ -522,21 +521,13 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
 #define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
 
-#define mi_tld_stat_counter_increase(tld,stat,amount)           __mi_stat_counter_increase( &(tld)->stats.stat, amount)
-#define mi_tld_stat_increase(tld,stat,amount)                   __mi_stat_increase( &(tld)->stats.stat, amount)
-#define mi_tld_stat_decrease(tld,stat,amount)                   __mi_stat_decrease( &(tld)->stats.stat, amount)
+#define mi_heap_stat_counter_increase(heap,stat,amount)         __mi_stat_counter_increase( &(heap)->tld->stats.stat, amount)
+#define mi_heap_stat_increase(heap,stat,amount)                 __mi_stat_increase( &(heap)->tld->stats.stat, amount)
+#define mi_heap_stat_decrease(heap,stat,amount)                 __mi_stat_decrease( &(heap)->tld->stats.stat, amount)
 
-#define mi_debug_tld_stat_counter_increase(tld,stat,amount)     mi_debug_stat_counter_increase( (tld)->stats.stat, amount)
-#define mi_debug_tld_stat_increase(tld,stat,amount)             mi_debug_stat_increase( (tld)->stats.stat, amount)
-#define mi_debug_tld_stat_decrease(tld,stat,amount)             mi_debug_stat_decrease( (tld)->stats.stat, amount)
-
-#define mi_heap_stat_counter_increase(heap,stat,amount)         mi_tld_stat_counter_increase((heap)->tld, stat, amount)
-#define mi_heap_stat_increase(heap,stat,amount)                 mi_tld_stat_increase( (heap)->tld, stat, amount)
-#define mi_heap_stat_decrease(heap,stat,amount)                 mi_tld_stat_decrease( (heap)->tld, stat, amount)
-
-#define mi_debug_heap_stat_counter_increase(heap,stat,amount)   mi_debug_tld_stat_counter_increase((heap)->tld, stat, amount)
-#define mi_debug_heap_stat_increase(heap,stat,amount)           mi_debug_tld_stat_increase( (heap)->tld, stat, amount)
-#define mi_debug_heap_stat_decrease(heap,stat,amount)           mi_debug_tld_stat_decrease( (heap)->tld, stat, amount)
+#define mi_debug_heap_stat_counter_increase(heap,stat,amount)   mi_debug_stat_counter_increase( (heap)->tld->stats.stat, amount)
+#define mi_debug_heap_stat_increase(heap,stat,amount)           mi_debug_stat_increase( (heap)->tld->stats.stat, amount)
+#define mi_debug_heap_stat_decrease(heap,stat,amount)           mi_debug_stat_decrease( (heap)->tld->stats.stat, amount)
 
 
 // ------------------------------------------------------
