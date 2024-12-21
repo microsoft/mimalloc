@@ -878,7 +878,7 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
     // call potential deferred free routines
     _mi_deferred_free(heap, false);
     // collect retired pages
-    _mi_heap_collect_retired(heap,false);
+    _mi_heap_collect_retired(heap, false);
   }
 
   // find (or allocate) a page of the right size

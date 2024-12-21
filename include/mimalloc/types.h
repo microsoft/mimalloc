@@ -400,6 +400,7 @@ struct mi_heap_s {
   size_t                page_count;                          // total number of pages in the `pages` queues.
   size_t                page_retired_min;                    // smallest retired index (retired pages are fully free, but still in the page queues)
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
+  size_t                generic_count;                       // how often is mimalloc_generic invoked?
   mi_heap_t*            next;                                // list of heaps per thread
   long                  full_page_retain;                    // how many full pages can be retained per queue (before abondoning them)
   bool                  allow_page_reclaim;                  // `true` if this heap should not reclaim abandoned pages
