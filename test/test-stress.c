@@ -44,20 +44,18 @@ static int ITER    = 10;
 static int THREADS = 4;
 static int SCALE   = 10;
 static int ITER    = 20;
-#define ALLOW_LARGE false
 #elif 0
 static int THREADS = 32;
 static int SCALE   = 50;
 static int ITER    = 50;
-#define ALLOW_LARGE false
-#elif 0
-static int THREADS = 64;
-static int SCALE = 400;
-static int ITER = 10;
+#elif 1
+static int THREADS = 32;
+static int SCALE   = 25;
+static int ITER    = 50;
 #define ALLOW_LARGE true
 #else
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
-static int SCALE   = 25;      // scaling factor
+static int SCALE   = 50;      // scaling factor
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
 #endif  
 
@@ -66,7 +64,7 @@ static int ITER    = 50;      // N full iterations destructing and re-creating a
 #define STRESS                // undefine for leak test
 
 #ifndef ALLOW_LARGE
-#define ALLOW_LARGE  true
+#define ALLOW_LARGE  false
 #endif
 
 static bool   allow_large_objects = ALLOW_LARGE;    // allow very large objects? (set to `true` if SCALE>100)
@@ -363,7 +361,7 @@ int main(int argc, char** argv) {
 #else
   mi_stats_print(NULL);  // so we see rss/commit/elapsed
 #endif
-  //mi_stats_print(NULL);
+  mi_stats_print(NULL);
   //bench_end_program();
   return 0;
 }

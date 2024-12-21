@@ -210,7 +210,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) {
   if (mi_page_all_free(page))
   {
     // first remove it from the abandoned pages in the arena (if mapped, this waits for any readers to finish)
-    _mi_arena_page_unabandon(page);
+      _mi_arena_page_unabandon(page);
     // we can free the page directly
     _mi_arena_page_free(page);
     return;
@@ -234,15 +234,15 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) {
       mi_heap_t* const tagheap = _mi_heap_by_tag(heap, page->heap_tag);
       if ((tagheap != NULL) &&                         // don't reclaim across heap object types
           (tagheap->allow_page_reclaim) &&             // we are allowed to reclaim abandoned pages
-          (page->subproc == tagheap->tld->subproc) &&  // don't reclaim across sub-processes; todo: make this check faster (integrate with _mi_heap_by_tag ? )
-          (_mi_arena_memid_is_suitable(page->memid, tagheap->arena_id))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
+          // (page->subproc == tagheap->tld->subproc) &&  // don't reclaim across sub-processes; todo: make this check faster (integrate with _mi_heap_by_tag ? )
+          (_mi_arena_memid_is_suitable(page->memid, tagheap->exclusive_arena))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
          )
       {
         if (mi_page_queue(tagheap, page->block_size)->first != NULL) {  // don't reclaim for an block_size we don't use
           // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
           _mi_arena_page_unabandon(page);
           _mi_heap_page_reclaim(tagheap, page);
-          _mi_stat_counter_increase(&_mi_stats_main.pages_reclaim_on_free, 1);
+          mi_heap_stat_counter_increase(tagheap, pages_reclaim_on_free, 1);
           return;
         }
       }

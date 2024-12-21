@@ -134,7 +134,7 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   mi_assert(size <= MI_SMALL_SIZE_MAX);
   #if MI_DEBUG
   const uintptr_t tid = _mi_thread_id();
-  mi_assert(heap->thread_id == 0 || heap->thread_id == tid); // heaps are thread local
+  mi_assert(heap->tld->thread_id == 0 || heap->tld->thread_id == tid); // heaps are thread local
   #endif
   #if (MI_PADDING || MI_GUARDED)
   if (size == 0) { size = sizeof(void*); }
@@ -188,7 +188,7 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
   else {
     // regular allocation
     mi_assert(heap!=NULL);
-    mi_assert(heap->thread_id == 0 || heap->thread_id == _mi_thread_id());   // heaps are thread local
+    mi_assert(heap->tld->thread_id == 0 || heap->tld->thread_id == _mi_thread_id());   // heaps are thread local
     void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE, zero, huge_alignment);  // note: size can overflow but it is detected in malloc_generic
     mi_track_malloc(p,size,zero);
 

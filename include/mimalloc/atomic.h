@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2023 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2024 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -407,19 +407,45 @@ static inline void mi_atomic_yield(void) {
 
 
 // ----------------------------------------------------------------------
-// Locks are only used for abandoned segment visiting in `arena.c`
+// Locks
+// These should be light-weight in-process only locks.
+// Only used for reserving arena's and to maintain the abandoned list.
 // ----------------------------------------------------------------------
+#if _MSC_VER
+#pragma warning(disable:26110)  // unlock with holding lock
+#endif
+
+#define mi_lock(lock)    for(bool _go = (mi_lock_acquire(lock),true); _go; (mi_lock_release(lock), _go=false) )
 
 #if defined(_WIN32)
 
+#if 1
+#define mi_lock_t  SRWLOCK   // slim reader-writer lock
+
+static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+  return TryAcquireSRWLockExclusive(lock);
+}
+static inline void mi_lock_acquire(mi_lock_t* lock) {
+  AcquireSRWLockExclusive(lock);
+}
+static inline void mi_lock_release(mi_lock_t* lock) {
+  ReleaseSRWLockExclusive(lock);
+}
+static inline void mi_lock_init(mi_lock_t* lock) {
+  InitializeSRWLock(lock);
+}
+static inline void mi_lock_done(mi_lock_t* lock) {
+  (void)(lock);
+}
+
+#else
 #define mi_lock_t  CRITICAL_SECTION
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return TryEnterCriticalSection(lock);
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_lock_acquire(mi_lock_t* lock) {
   EnterCriticalSection(lock);
-  return true;
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   LeaveCriticalSection(lock);
@@ -431,16 +457,22 @@ static inline void mi_lock_done(mi_lock_t* lock) {
   DeleteCriticalSection(lock);
 }
 
+#endif
 
 #elif defined(MI_USE_PTHREADS)
+
+void _mi_error_message(int err, const char* fmt, ...);
 
 #define mi_lock_t  pthread_mutex_t
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return (pthread_mutex_trylock(lock) == 0);
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
-  return (pthread_mutex_lock(lock) == 0);
+static inline void mi_lock_acquire(mi_lock_t* lock) {
+  const int err = pthread_mutex_lock(lock);
+  if (err != 0) {
+    _mi_error_message(err, "internal error: lock cannot be acquired\n");
+  }
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   pthread_mutex_unlock(lock);
@@ -452,18 +484,16 @@ static inline void mi_lock_done(mi_lock_t* lock) {
   pthread_mutex_destroy(lock);
 }
 
-/*
 #elif defined(__cplusplus)
 
 #include <mutex>
 #define mi_lock_t  std::mutex
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
-  return lock->lock_try_acquire();
+  return lock->try_lock();
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_lock_acquire(mi_lock_t* lock) {
   lock->lock();
-  return true;
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   lock->unlock();
@@ -474,7 +504,6 @@ static inline void mi_lock_init(mi_lock_t* lock) {
 static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
 }
-*/
 
 #else
 
@@ -487,12 +516,11 @@ static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   uintptr_t expected = 0;
   return mi_atomic_cas_strong_acq_rel(lock, &expected, (uintptr_t)1);
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_lock_acquire(mi_lock_t* lock) {
   for (int i = 0; i < 1000; i++) {  // for at most 1000 tries?
-    if (mi_lock_try_acquire(lock)) return true;
+    if (mi_lock_try_acquire(lock)) return;
     mi_atomic_yield();
   }
-  return true;
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   mi_atomic_store_release(lock, (uintptr_t)0);
@@ -505,8 +533,6 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 }
 
 #endif
-
-
 
 
 #endif // MI_ATOMIC_H

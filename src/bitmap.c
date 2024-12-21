@@ -114,7 +114,9 @@ static inline void mi_bfield_atomic_clear_once_set(_Atomic(mi_bfield_t)*b, size_
   do {
     if mi_unlikely((old&mask) == 0) {
       old = mi_atomic_load_acquire(b);
-      if ((old&mask)==0) { _mi_stat_counter_increase(&_mi_stats_main.pages_unabandon_busy_wait, 1); }
+      if ((old&mask)==0) { 
+        mi_subproc_stat_counter_increase(_mi_subproc(), pages_unabandon_busy_wait, 1); 
+      }
       while ((old&mask)==0) { // busy wait
         mi_atomic_yield();
         old = mi_atomic_load_acquire(b);
@@ -1151,7 +1153,6 @@ static inline bool mi_bitmap_find(mi_bitmap_t* bitmap, size_t tseq, size_t n, si
 
 typedef struct mi_claim_fun_data_s {
   mi_arena_t*   arena;
-  mi_subproc_t* subproc;
   mi_heaptag_t  heap_tag;
 } mi_claim_fun_data_t;
 
@@ -1165,7 +1166,7 @@ static bool mi_bitmap_try_find_and_claim_visit(mi_bitmap_t* bitmap, size_t chunk
     const size_t slice_index = (chunk_idx * MI_BCHUNK_BITS) + cidx;
     mi_assert_internal(slice_index < mi_bitmap_max_bits(bitmap));
     bool keep_set = true;
-    if ((*claim_fun)(slice_index, claim_data->arena, claim_data->subproc, claim_data->heap_tag, &keep_set)) {
+    if ((*claim_fun)(slice_index, claim_data->arena, claim_data->heap_tag, &keep_set)) {
       // success!
       mi_assert_internal(!keep_set);
       *pidx = slice_index;
@@ -1190,9 +1191,9 @@ static bool mi_bitmap_try_find_and_claim_visit(mi_bitmap_t* bitmap, size_t chunk
 // Find a set bit in the bitmap and try to atomically clear it and claim it.
 // (Used to find pages in the pages_abandoned bitmaps.)
 mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx,
-  mi_claim_fun_t* claim, mi_arena_t* arena, mi_subproc_t* subproc, mi_heaptag_t heap_tag)
+  mi_claim_fun_t* claim, mi_arena_t* arena, mi_heaptag_t heap_tag)
 {
-  mi_claim_fun_data_t claim_data = { arena, subproc, heap_tag };
+  mi_claim_fun_data_t claim_data = { arena, heap_tag };
   return mi_bitmap_find(bitmap, tseq, 1, pidx, &mi_bitmap_try_find_and_claim_visit, (void*)claim, &claim_data);
 }
 

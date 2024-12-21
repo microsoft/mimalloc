@@ -90,7 +90,6 @@ uintptr_t   _mi_os_random_weak(uintptr_t extra_seed);
 static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 
 // init.c
-extern mi_decl_cache_align mi_stats_t       _mi_stats_main;
 extern mi_decl_cache_align const mi_page_t  _mi_page_empty;
 void        _mi_process_load(void);
 void mi_cdecl _mi_process_done(void);
@@ -101,8 +100,10 @@ bool        _mi_is_main_thread(void);
 size_t      _mi_current_thread_count(void);
 bool        _mi_preloading(void);           // true while the C runtime is not initialized yet
 void        _mi_thread_done(mi_heap_t* heap);
-mi_tld_t*   _mi_tld(void);                  // current tld: `_mi_tld() == _mi_heap_get_default()->tld`
 
+mi_tld_t*   _mi_tld(void);                  // current tld: `_mi_tld() == _mi_heap_get_default()->tld`
+mi_subproc_t* _mi_subproc(void);
+mi_subproc_t* _mi_subproc_main(void);
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
 
@@ -142,10 +143,12 @@ void*       _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t m
 
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
-void        _mi_arena_init(void);
-void*       _mi_arena_alloc(size_t size, bool commit, bool allow_large, mi_arena_id_t req_arena_id, size_t tseq, mi_memid_t* memid);
-void*       _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_id_t req_arena_id, size_t tseq, mi_memid_t* memid);
-bool        _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_id_t request_arena_id);
+mi_arena_t* _mi_arena_from_id(mi_arena_id_t id);
+
+void*       _mi_arena_alloc(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
+void*       _mi_arena_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
+void        _mi_arena_free(void* p, size_t size, mi_memid_t memid);
+bool        _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_t* request_arena);
 bool        _mi_arena_contains(const void* p);
 void        _mi_arenas_collect(bool force_purge);
 void        _mi_arena_unsafe_destroy_all(void);
@@ -201,6 +204,7 @@ void        _mi_heap_page_reclaim(mi_heap_t* heap, mi_page_t* page);
 
 // "stats.c"
 void        _mi_stats_done(mi_stats_t* stats);
+void        _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from);
 mi_msecs_t  _mi_clock_now(void);
 mi_msecs_t  _mi_clock_end(mi_msecs_t start);
 mi_msecs_t  _mi_clock_start(void);
@@ -418,11 +422,11 @@ static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
   return (heap != &_mi_heap_empty);
 }
 
-static inline uintptr_t _mi_ptr_cookie(const void* p) {
-  extern mi_heap_t _mi_heap_main;
-  mi_assert_internal(_mi_heap_main.cookie != 0);
-  return ((uintptr_t)p ^ _mi_heap_main.cookie);
-}
+//static inline uintptr_t _mi_ptr_cookie(const void* p) {
+//  extern mi_heap_t _mi_heap_main;
+//  mi_assert_internal(_mi_heap_main.cookie != 0);
+//  return ((uintptr_t)p ^ _mi_heap_main.cookie);
+//}
 
 
 /* -----------------------------------------------------------
@@ -524,7 +528,7 @@ static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   if (heap != NULL) {
     page->heap = heap;
     page->heap_tag = heap->tag;
-    mi_atomic_store_release(&page->xthread_id, heap->thread_id);
+    mi_atomic_store_release(&page->xthread_id, heap->tld->thread_id);
   }
   else {
     page->heap = NULL;
