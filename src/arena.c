@@ -274,11 +274,8 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
 static int mi_reserve_os_memory_ex2(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id);
 
 // try to reserve a fresh arena space
-static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_large, mi_arena_id_t req_arena_id, mi_arena_id_t* arena_id)
+static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_large, mi_arena_id_t* arena_id)
 {
-  // if (_mi_preloading()) return false;  // use OS only while pre loading
-  if (req_arena_id != _mi_arena_id_none()) return false;
-
   const size_t arena_count = mi_arenas_get_count(subproc);
   if (arena_count > (MI_MAX_ARENAS - 4)) return false;
 
@@ -443,7 +440,7 @@ static mi_decl_noinline void* mi_arenas_try_alloc(
     if (arena_count == mi_arenas_get_count(subproc)) {
       // we are the first to enter the lock, reserve a fresh arena
       mi_arena_id_t arena_id = 0;
-      mi_arena_reserve(subproc, mi_size_of_slices(slice_count), allow_large, req_arena, &arena_id);
+      mi_arena_reserve(subproc, mi_size_of_slices(slice_count), allow_large, &arena_id);
     }
     else {
       // another thread already reserved a new arena
