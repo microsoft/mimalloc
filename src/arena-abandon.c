@@ -120,11 +120,7 @@ static void mi_arena_segment_os_mark_abandoned(mi_segment_t* segment) {
   mi_assert(segment->memid.memkind != MI_MEM_ARENA);
   // not in an arena; we use a list of abandoned segments
   mi_subproc_t* const subproc = segment->subproc;
-  if (!mi_lock_acquire(&subproc->abandoned_os_lock)) {
-    _mi_error_message(EFAULT, "internal error: failed to acquire the abandoned (os) segment lock to mark abandonment");
-    // we can continue but cannot visit/reclaim such blocks..
-  }
-  else {
+  mi_lock(&subproc->abandoned_os_lock) {
     // push on the tail of the list (important for the visitor)
     mi_segment_t* prev = subproc->abandoned_os_list_tail;
     mi_assert_internal(prev == NULL || prev->abandoned_os_next == NULL);
@@ -138,7 +134,6 @@ static void mi_arena_segment_os_mark_abandoned(mi_segment_t* segment) {
     mi_atomic_increment_relaxed(&subproc->abandoned_os_list_count);
     mi_atomic_increment_relaxed(&subproc->abandoned_count);
     // and release the lock
-    mi_lock_release(&subproc->abandoned_os_lock);
   }
   return;
 }
@@ -251,7 +246,7 @@ static mi_segment_t* mi_arena_segment_clear_abandoned_next_field(mi_arena_field_
         if mi_unlikely(field != 0) { // skip zero fields quickly
           // we only take the arena lock if there are actually abandoned segments present
           if (!has_lock && mi_option_is_enabled(mi_option_visit_abandoned)) {
-            has_lock = (previous->visit_all ? mi_lock_acquire(&arena->abandoned_visit_lock) : mi_lock_try_acquire(&arena->abandoned_visit_lock));
+            has_lock = (previous->visit_all ? (mi_lock_acquire(&arena->abandoned_visit_lock),true) : mi_lock_try_acquire(&arena->abandoned_visit_lock));
             if (!has_lock) {
               if (previous->visit_all) {
                 _mi_error_message(EFAULT, "internal error: failed to visit all abandoned segments due to failure to acquire the visitor lock");
@@ -289,8 +284,8 @@ static mi_segment_t* mi_arena_segment_clear_abandoned_next_list(mi_arena_field_c
   // we only allow one thread per sub-process to do to visit guarded by the `abandoned_os_visit_lock`.
   // The lock is released when the cursor is released.
   if (!previous->hold_visit_lock) {
-    previous->hold_visit_lock = (previous->visit_all ? mi_lock_acquire(&previous->subproc->abandoned_os_visit_lock)
-      : mi_lock_try_acquire(&previous->subproc->abandoned_os_visit_lock));
+    previous->hold_visit_lock = (previous->visit_all ? (mi_lock_acquire(&previous->subproc->abandoned_os_visit_lock),true)
+                                                     : mi_lock_try_acquire(&previous->subproc->abandoned_os_visit_lock));
     if (!previous->hold_visit_lock) {
       if (previous->visit_all) {
         _mi_error_message(EFAULT, "internal error: failed to visit all abandoned segments due to failure to acquire the OS visitor lock");
@@ -301,21 +296,15 @@ static mi_segment_t* mi_arena_segment_clear_abandoned_next_list(mi_arena_field_c
   // One list entry at a time
   while (previous->os_list_count > 0) {
     previous->os_list_count--;
-    const bool has_lock = mi_lock_acquire(&previous->subproc->abandoned_os_lock); // this could contend with concurrent OS block abandonment and reclaim from `free`
-    if (has_lock) {
-      mi_segment_t* segment = previous->subproc->abandoned_os_list;
-      // pop from head of the list, a subsequent mark will push at the end (and thus we iterate through os_list_count entries)
-      if (segment == NULL || mi_arena_segment_os_clear_abandoned(segment, false /* we already have the lock */)) {
-        mi_lock_release(&previous->subproc->abandoned_os_lock);
-        return segment;
-      }
-      // already abandoned, try again
+    mi_lock_acquire(&previous->subproc->abandoned_os_lock); // this could contend with concurrent OS block abandonment and reclaim from `free`
+    mi_segment_t* segment = previous->subproc->abandoned_os_list;
+    // pop from head of the list, a subsequent mark will push at the end (and thus we iterate through os_list_count entries)
+    if (segment == NULL || mi_arena_segment_os_clear_abandoned(segment, false /* we already have the lock */)) {
       mi_lock_release(&previous->subproc->abandoned_os_lock);
+      return segment;
     }
-    else {
-      _mi_error_message(EFAULT, "failed to acquire abandoned OS list lock during abandoned block visit\n");
-      return NULL;
-    }
+    // already abandoned, try again
+    mi_lock_release(&previous->subproc->abandoned_os_lock);
   }
   // done
   mi_assert_internal(previous->os_list_count == 0);
