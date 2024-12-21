@@ -421,9 +421,8 @@ static inline void mi_atomic_yield(void) {
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return TryAcquireSRWLockExclusive(lock);
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_lock_acquire(mi_lock_t* lock) {
   AcquireSRWLockExclusive(lock);
-  return true;
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   ReleaseSRWLockExclusive(lock);
@@ -432,7 +431,7 @@ static inline void mi_lock_init(mi_lock_t* lock) {
   InitializeSRWLock(lock);
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
-  // nothing
+  (void)(lock);
 }
 
 #else
@@ -440,24 +439,20 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return TryEnterCriticalSection(lock);
-  
 }
 static inline void mi_lock_acquire(mi_lock_t* lock) {
   EnterCriticalSection(lock);
-  
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   LeaveCriticalSection(lock);
-  
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
   InitializeCriticalSection(lock);
-  
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
   DeleteCriticalSection(lock);
-  
 }
+
 #endif
 
 #elif defined(MI_USE_PTHREADS)
@@ -467,8 +462,11 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return (pthread_mutex_trylock(lock) == 0);
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
-  return (pthread_mutex_lock(lock) == 0);
+static inline void mi_lock_acquire(mi_lock_t* lock) {
+  const int err = pthread_mutex_lock(lock);
+  if (err != 0) {
+    mi_error_message(EFAULT, "internal error: lock cannot be acquired\n");
+  }
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   pthread_mutex_unlock(lock);
@@ -488,9 +486,8 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return lock->try_lock();
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_lock_acquire(mi_lock_t* lock) {
   lock->lock();
-  return true;
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   lock->unlock();
@@ -513,12 +510,11 @@ static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   uintptr_t expected = 0;
   return mi_atomic_cas_strong_acq_rel(lock, &expected, (uintptr_t)1);
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_lock_acquire(mi_lock_t* lock) {
   for (int i = 0; i < 1000; i++) {  // for at most 1000 tries?
-    if (mi_lock_try_acquire(lock)) return true;
+    if (mi_lock_try_acquire(lock)) return;
     mi_atomic_yield();
   }
-  return true;
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   mi_atomic_store_release(lock, (uintptr_t)0);
