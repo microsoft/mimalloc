@@ -402,28 +402,34 @@ static inline void mi_atomic_yield(void) {
 
 
 // ----------------------------------------------------------------------
-// Locks are only used for abandoned segment visiting in `arena.c`
+// Locks 
+// These do not have to be recursive and should be light-weight 
+// in-process only locks. Only used for reserving arena's and to 
+// maintain the abandoned list.
 // ----------------------------------------------------------------------
+#if _MSC_VER
+#pragma warning(disable:26110)  // unlock with holding lock
+#endif
 
 #if defined(_WIN32)
 
-#define mi_lock_t  CRITICAL_SECTION
+#define mi_lock_t  SRWLOCK   // slim reader-writer lock
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
-  return TryEnterCriticalSection(lock);
+  return TryAcquireSRWLockExclusive(lock);
 }
 static inline bool mi_lock_acquire(mi_lock_t* lock) {
-  EnterCriticalSection(lock);
+  AcquireSRWLockExclusive(lock);
   return true;
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
-  LeaveCriticalSection(lock);
+  ReleaseSRWLockExclusive(lock);
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
-  InitializeCriticalSection(lock);
+  InitializeSRWLock(lock);
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
-  DeleteCriticalSection(lock);
+  // nothing
 }
 
 
@@ -447,14 +453,13 @@ static inline void mi_lock_done(mi_lock_t* lock) {
   pthread_mutex_destroy(lock);
 }
 
-/*
 #elif defined(__cplusplus)
 
 #include <mutex>
 #define mi_lock_t  std::mutex
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
-  return lock->lock_try_acquire();
+  return lock->try_lock();
 }
 static inline bool mi_lock_acquire(mi_lock_t* lock) {
   lock->lock();
@@ -469,7 +474,6 @@ static inline void mi_lock_init(mi_lock_t* lock) {
 static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
 }
-*/
 
 #else
 
