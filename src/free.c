@@ -242,7 +242,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) {
           // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
           _mi_arena_page_unabandon(page);
           _mi_heap_page_reclaim(tagheap, page);
-          _mi_stat_counter_increase(&_mi_stats_main.pages_reclaim_on_free, 1);
+          mi_heap_stat_counter_increase(tagheap, pages_reclaim_on_free, 1);
           return;
         }
       }

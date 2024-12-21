@@ -34,7 +34,7 @@ const mi_page_t _mi_page_empty = {
   { 0, 0 },               // keys
   #endif
   NULL,                   // xheap
-  NULL, NULL,             // next, prev  
+  NULL, NULL,             // next, prev
   MI_MEMID_STATIC         // memid
 };
 
@@ -103,7 +103,7 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
   0,                      // thread_seq
   &subproc_main,          // subproc
   NULL,                   // heap_backing
-  NULL,                   // heaps list  
+  NULL,                   // heaps list
   0,                      // heartbeat
   false,                  // recurse
   false,                  // is_in_threadpool
@@ -139,7 +139,7 @@ static mi_decl_cache_align mi_tld_t tld_main = {
   0,                      // thread_seq
   &subproc_main,          // subproc
   &heap_main,             // heap_backing
-  &heap_main,             // heaps list  
+  &heap_main,             // heaps list
   0,                      // heartbeat
   false,                  // recurse
   false,                  // is_in_threadpool
@@ -165,7 +165,7 @@ mi_decl_cache_align mi_heap_t heap_main = {
   #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
-  MI_MEMID_STATIC         
+  MI_MEMID_STATIC
 };
 
 
@@ -237,7 +237,7 @@ static void mi_tld_main_init(void) {
 
 // Initialization of the (statically allocated) main heap, and the main tld and subproc.
 static void mi_heap_main_init(void) {
-  if (heap_main.cookie == 0) {   
+  if (heap_main.cookie == 0) {
     mi_subproc_main_init();
     mi_tld_main_init();
     // heap
@@ -249,7 +249,7 @@ static void mi_heap_main_init(void) {
     #endif
     heap_main.cookie  = _mi_heap_random_next(&heap_main);
     heap_main.keys[0] = _mi_heap_random_next(&heap_main);
-    heap_main.keys[1] = _mi_heap_random_next(&heap_main);    
+    heap_main.keys[1] = _mi_heap_random_next(&heap_main);
     _mi_heap_guarded_init(&heap_main);
     heap_main.allow_page_abandon = (mi_option_get(mi_option_full_page_retain) >= 0);
     heap_main.full_page_retain   = mi_option_get_clamp(mi_option_full_page_retain, -1, 32);
@@ -266,14 +266,21 @@ mi_heap_t* heap_main_get(void) {
   Thread local data
 ----------------------------------------------------------- */
 
-// Thread sequence number
-static _Atomic(size_t) mi_tcount;
+// Count current and total created threads
+static _Atomic(size_t)  thread_count = MI_ATOMIC_VAR_INIT(1);
+static _Atomic(size_t)  thread_total_count;
+
+size_t  _mi_current_thread_count(void) {
+  return mi_atomic_load_relaxed(&thread_count);
+}
+
 
 // The mimalloc thread local data
-mi_decl_thread mi_tld_t* mi_tld;
+mi_decl_thread mi_tld_t* thread_tld = &tld_empty;
 
 // Allocate fresh tld
 static mi_tld_t* mi_tld_alloc(void) {
+  mi_atomic_increment_relaxed(&thread_count);
   if (_mi_is_main_thread()) {
     return &tld_main;
   }
@@ -292,7 +299,7 @@ static mi_tld_t* mi_tld_alloc(void) {
     tld->heaps = NULL;
     tld->subproc = &subproc_main;
     tld->thread_id = _mi_prim_thread_id();
-    tld->thread_seq = mi_atomic_add_acq_rel(&mi_tcount, 1);
+    tld->thread_seq = mi_atomic_add_acq_rel(&thread_total_count, 1);
     tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
     return tld;
   }
@@ -301,28 +308,38 @@ static mi_tld_t* mi_tld_alloc(void) {
 #define MI_TLD_INVALID  ((mi_tld_t*)1)
 
 mi_decl_noinline static void mi_tld_free(void) {
-  mi_tld_t* tld = _mi_tld();
-  mi_tld = MI_TLD_INVALID;
-  _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);
+  mi_tld_t* tld = _mi_tld();  
+  if (tld != NULL && tld != MI_TLD_INVALID) {
+    _mi_stats_done(&tld->stats);
+    _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);
+  }
+  tld = MI_TLD_INVALID;
+  mi_atomic_decrement_relaxed(&thread_count);
 }
 
 mi_decl_noinline mi_tld_t* _mi_tld(void) {
-  if (mi_tld == MI_TLD_INVALID) {
-    _mi_error_message(EFAULT, "internal error: tld accessed after the thread terminated\n");
-    mi_tld = NULL;
+  mi_tld_t* tld = thread_tld;
+  if (tld == MI_TLD_INVALID) {
+    _mi_error_message(EFAULT, "internal error: tld is accessed after the thread terminated\n");
+    thread_tld = &tld_empty;
   }
-  if (mi_tld==NULL) {
-    mi_tld = mi_tld_alloc();
+  if (tld==&tld_empty) {
+    thread_tld = tld = mi_tld_alloc();
   }  
-  return mi_tld;
+  return tld;
 }
 
 mi_subproc_t* _mi_subproc(void) {
-  if (_mi_is_main_thread()) {  // during initialization we should not recurse over reading the _mi_tld
-    return &subproc_main;  
+  // should work without doing initialization (as it may be called from `_mi_tld -> mi_tld_alloc ... -> os_alloc -> _mi_subproc()`
+  // todo: this will still fail on OS systems where the first access to a thread-local causes allocation.
+  //       on such systems we can check for this with the _mi_prim_get_default_heap as those are protected (by being
+  //       stored in a TLS slot for example)
+  mi_heap_t* heap = mi_prim_get_default_heap();
+  if (heap == NULL || heap == &_mi_heap_empty) {
+    return _mi_subproc_main();
   }
   else {
-    return _mi_tld()->subproc;
+    return thread_tld->subproc;  // don't call `_mi_tld()`
   }
 }
 
@@ -396,11 +413,11 @@ static bool _mi_thread_heap_init(void) {
     //mi_assert_internal(_mi_heap_default->tld->heap_backing == mi_prim_get_default_heap());
   }
   else {
-    // allocates tld data 
-    // note: we cannot access thread-locals yet as that can cause (recursive) allocation 
+    // allocates tld data
+    // note: we cannot access thread-locals yet as that can cause (recursive) allocation
     // (on macOS <= 14 for example where the loader allocates thread-local data on demand).
-    mi_tld_t* tld = mi_tld_alloc();  
-    
+    mi_tld_t* tld = mi_tld_alloc();
+
     // allocate and initialize the heap
     mi_heap_t* heap = _mi_heap_create(0 /* default tag */, false /* allow destroy? */, _mi_arena_id_none(), tld);
 
@@ -409,7 +426,7 @@ static bool _mi_thread_heap_init(void) {
     _mi_heap_set_default_direct(heap);
 
     // now that the heap is set for this thread, we can set the thread-local tld.
-    mi_tld = tld;
+    thread_tld = tld;
   }
   return false;
 }
@@ -443,9 +460,6 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
   if (heap != &heap_main) {
     _mi_heap_collect_abandon(heap);
   }
-
-  // merge stats
-  _mi_stats_done(&heap->tld->stats);
 
   // free heap meta data
   _mi_meta_free(heap, sizeof(mi_heap_t), heap->memid);
@@ -494,11 +508,6 @@ bool _mi_is_main_thread(void) {
   return (tld_main.thread_id==0 || tld_main.thread_id == _mi_thread_id());
 }
 
-static _Atomic(size_t) thread_count = MI_ATOMIC_VAR_INIT(1);
-
-size_t  _mi_current_thread_count(void) {
-  return mi_atomic_load_relaxed(&thread_count);
-}
 
 // This is called from the `mi_malloc_generic`
 void mi_thread_init(void) mi_attr_noexcept
@@ -511,8 +520,7 @@ void mi_thread_init(void) mi_attr_noexcept
   //  fiber/pthread key to a non-zero value, ensuring `_mi_thread_done` is called)
   if (_mi_thread_heap_init()) return;  // returns true if already initialized
 
-  _mi_stat_increase(&_mi_stats_main.threads, 1);
-  mi_atomic_increment_relaxed(&thread_count);
+  mi_subproc_stat_increase(_mi_subproc_main(), threads, 1);  
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
@@ -534,15 +542,14 @@ void _mi_thread_done(mi_heap_t* heap)
   }
 
   // adjust stats
-  mi_atomic_decrement_relaxed(&thread_count);
-  _mi_stat_decrease(&_mi_stats_main.threads, 1);
+  mi_subproc_stat_decrease(_mi_subproc_main(), threads, 1);
 
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local heaps...
   if (heap->tld->thread_id != _mi_prim_thread_id()) return;
 
   // abandon the thread local heap
   _mi_thread_heap_done(heap);  // returns true if already ran
-
+  
   // free thread local data
   mi_tld_free();
 }
@@ -654,7 +661,7 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_prim_thread_associate_default_heap(NULL);
   #endif
 
-  mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
+  mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)  
   mi_track_init();
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {

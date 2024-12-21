@@ -106,7 +106,9 @@ static inline void mi_bfield_atomic_clear_once_set(_Atomic(mi_bfield_t)*b, size_
   do {
     if mi_unlikely((old&mask) == 0) {
       old = mi_atomic_load_acquire(b);
-      if ((old&mask)==0) { _mi_stat_counter_increase(&_mi_stats_main.pages_unabandon_busy_wait, 1); }
+      if ((old&mask)==0) { 
+        mi_subproc_stat_counter_increase(_mi_subproc(), pages_unabandon_busy_wait, 1); 
+      }
       while ((old&mask)==0) { // busy wait
         mi_atomic_yield();
         old = mi_atomic_load_acquire(b);

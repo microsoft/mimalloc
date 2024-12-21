@@ -293,7 +293,7 @@ typedef struct mi_page_s {
   uintptr_t                 keys[2];           // two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
 
-  mi_heap_t*                heap;              // heap this threads belong to.
+  mi_heap_t*                heap;              // the heap owning this page (or NULL for abandoned pages)
   struct mi_page_s*         next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*         prev;              // previous page owned by the heap with the same `block_size`
   mi_memid_t                memid;             // provenance of the page memory
@@ -394,7 +394,7 @@ typedef struct mi_padding_s {
 // A heap owns a set of pages.
 struct mi_heap_s {
   mi_tld_t*             tld;                                 // thread-local data
-  mi_arena_t*           exclusive_arena;                     // if the heap belongs to a specific arena (or NULL)
+  mi_arena_t*           exclusive_arena;                     // if the heap should only allocate from a specific arena (or NULL)
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   uintptr_t             keys[2];                             // two random keys used to encode the `thread_delayed_free` list
   mi_random_ctx_t       random;                              // random number context used for secure allocation
@@ -444,18 +444,18 @@ typedef struct mi_stat_counter_s {
 } mi_stat_counter_t;
 
 typedef struct mi_stats_s {
-  mi_stat_count_t pages;
-  mi_stat_count_t reserved;
-  mi_stat_count_t committed;
-  mi_stat_count_t reset;
-  mi_stat_count_t purged;
-  mi_stat_count_t page_committed;
-  mi_stat_count_t pages_abandoned;
-  mi_stat_count_t threads;
-  mi_stat_count_t normal;
-  mi_stat_count_t huge;
-  mi_stat_count_t giant;
-  mi_stat_count_t malloc;
+  mi_stat_count_t   pages;
+  mi_stat_count_t   reserved;
+  mi_stat_count_t   committed;
+  mi_stat_count_t   reset;
+  mi_stat_count_t   purged;
+  mi_stat_count_t   page_committed;
+  mi_stat_count_t   pages_abandoned;
+  mi_stat_count_t   threads;
+  mi_stat_count_t   normal;
+  mi_stat_count_t   huge;
+  mi_stat_count_t   giant;
+  mi_stat_count_t   malloc;
   mi_stat_counter_t pages_extended;
   mi_stat_counter_t pages_reclaim_on_alloc;
   mi_stat_counter_t pages_reclaim_on_free;
@@ -479,37 +479,72 @@ typedef struct mi_stats_s {
 
 
 // add to stat keeping track of the peak
-void _mi_stat_increase(mi_stat_count_t* stat, size_t amount);
-void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_increase(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_decrease_mt(mi_stat_count_t* stat, size_t amount);
 // adjust stat in special cases to compensate for double counting
-void _mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount, bool on_alloc);
-void _mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount, bool on_free);
+void __mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount, bool on_alloc);
+void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount, bool on_free);
+void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, size_t amount, bool on_alloc);
+void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount, bool on_free);
 // counters can just be increased
-void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
+void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
+void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 
 #if (MI_STAT)
-#define mi_stat_increase(stat,amount)         _mi_stat_increase( &(stat), amount)
-#define mi_stat_decrease(stat,amount)         _mi_stat_decrease( &(stat), amount)
-#define mi_stat_counter_increase(stat,amount) _mi_stat_counter_increase( &(stat), amount)
-#define mi_stat_adjust_increase(stat,amnt,b)  _mi_stat_adjust_increase( &(stat), amnt, b)
-#define mi_stat_adjust_decrease(stat,amnt,b)  _mi_stat_adjust_decrease( &(stat), amnt, b)
+#define mi_debug_stat_increase(stat,amount)                     __mi_stat_increase( &(stat), amount)
+#define mi_debug_stat_decrease(stat,amount)                     __mi_stat_decrease( &(stat), amount)
+#define mi_debug_stat_counter_increase(stat,amount)             __mi_stat_counter_increase( &(stat), amount)
+#define mi_debug_stat_increase_mt(stat,amount)                  __mi_stat_increase_mt( &(stat), amount)
+#define mi_debug_stat_decrease_mt(stat,amount)                  __mi_stat_decrease_mt( &(stat), amount)
+#define mi_debug_stat_counter_increase_mt(stat,amount)          __mi_stat_counter_increase_mt( &(stat), amount)
+#define mi_debug_stat_adjust_increase_mt(stat,amnt,b)           __mi_stat_adjust_increase_mt( &(stat), amnt, b)
+#define mi_debug_stat_adjust_decrease_mt(stat,amnt,b)           __mi_stat_adjust_decrease_mt( &(stat), amnt, b)
 #else
-#define mi_stat_increase(stat,amount)         ((void)0)
-#define mi_stat_decrease(stat,amount)         ((void)0)
-#define mi_stat_counter_increase(stat,amount) ((void)0)
-#define mi_stat_adjuct_increase(stat,amnt,b)  ((void)0)
-#define mi_stat_adjust_decrease(stat,amnt,b)  ((void)0)
+#define mi_debug_stat_increase(stat,amount)                     ((void)0)
+#define mi_debug_stat_decrease(stat,amount)                     ((void)0)
+#define mi_debug_stat_counter_increase(stat,amount)             ((void)0)
+#define mi_debug_stat_increase_mt(stat,amount)                  ((void)0)
+#define mi_debug_stat_decrease_mt(stat,amount)                  ((void)0)
+#define mi_debug_stat_counter_increase_mt(stat,amount)          ((void)0)
+#define mi_debug_stat_adjust_increase(stat,amnt,b)              ((void)0)
+#define mi_debug_stat_adjust_decrease(stat,amnt,b)              ((void)0)
 #endif
 
-#define mi_heap_stat_counter_increase(heap,stat,amount)  mi_stat_counter_increase( (heap)->tld->stats.stat, amount)
-#define mi_heap_stat_increase(heap,stat,amount)  mi_stat_increase( (heap)->tld->stats.stat, amount)
-#define mi_heap_stat_decrease(heap,stat,amount)  mi_stat_decrease( (heap)->tld->stats.stat, amount)
+#define mi_subproc_stat_counter_increase(subproc,stat,amount)   __mi_stat_counter_increase_mt( &(subproc)->stats.stat, amount)
+#define mi_subproc_stat_increase(subproc,stat,amount)           __mi_stat_increase_mt( &(subproc)->stats.stat, amount)
+#define mi_subproc_stat_decrease(subproc,stat,amount)           __mi_stat_decrease_mt( &(subproc)->stats.stat, amount)
+#define mi_subproc_stat_adjust_increase(subproc,stat,amnt,b)    __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amnt, b)
+#define mi_subproc_stat_adjust_decrease(subproc,stat,amnt,b)    __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amnt, b)
+
+#define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
+#define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
+#define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
+
+#define mi_tld_stat_counter_increase(tld,stat,amount)           __mi_stat_counter_increase( &(tld)->stats.stat, amount)
+#define mi_tld_stat_increase(tld,stat,amount)                   __mi_stat_increase( &(tld)->stats.stat, amount)
+#define mi_tld_stat_decrease(tld,stat,amount)                   __mi_stat_decrease( &(tld)->stats.stat, amount)
+
+#define mi_debug_tld_stat_counter_increase(tld,stat,amount)     mi_debug_stat_counter_increase( (tld)->stats.stat, amount)
+#define mi_debug_tld_stat_increase(tld,stat,amount)             mi_debug_stat_increase( (tld)->stats.stat, amount)
+#define mi_debug_tld_stat_decrease(tld,stat,amount)             mi_debug_stat_decrease( (tld)->stats.stat, amount)
+
+#define mi_heap_stat_counter_increase(heap,stat,amount)         mi_tld_stat_counter_increase((heap)->tld, stat, amount)
+#define mi_heap_stat_increase(heap,stat,amount)                 mi_tld_stat_increase( (heap)->tld, stat, amount)
+#define mi_heap_stat_decrease(heap,stat,amount)                 mi_tld_stat_decrease( (heap)->tld, stat, amount)
+
+#define mi_debug_heap_stat_counter_increase(heap,stat,amount)   mi_debug_tld_stat_counter_increase((heap)->tld, stat, amount)
+#define mi_debug_heap_stat_increase(heap,stat,amount)           mi_debug_tld_stat_increase( (heap)->tld, stat, amount)
+#define mi_debug_heap_stat_decrease(heap,stat,amount)           mi_debug_tld_stat_decrease( (heap)->tld, stat, amount)
 
 
 // ------------------------------------------------------
 // Sub processes use separate arena's and no heaps/pages/blocks
 // are shared between sub processes. 
-// Each thread should also belong to one sub-process only
+// The subprocess structure contains essentially all static variables (except per subprocess :-))
+// 
+// Each thread should belong to one sub-process only
 // ------------------------------------------------------
 
 #define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
@@ -519,10 +554,13 @@ typedef struct mi_subproc_s {
   _Atomic(size_t)       arena_count;                    // current count of arena's
   _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
   mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
-  _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages for this sub-process
+
+  _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages for this sub-process  
   mi_page_queue_t       os_pages;                       // list of pages that OS allocated and not in an arena (only used if `mi_option_visit_abandoned` is on)
   mi_lock_t             os_pages_lock;                  // lock for the os pages list (this lock protects list operations)
+  
   mi_memid_t            memid;                          // provenance of this memory block (meta or OS)
+  mi_stats_t            stats;                          // sub-process statistics (tld stats are merged in on thread termination)
 } mi_subproc_t;
 
 
@@ -535,16 +573,16 @@ typedef int64_t  mi_msecs_t;
 
 // Thread local data
 struct mi_tld_s {
-  mi_threadid_t       thread_id;        // thread id of this thread
-  size_t              thread_seq;       // thread sequence id (linear count of created threads)
-  mi_subproc_t*       subproc;          // sub-process this thread belongs to.
-  mi_heap_t*          heap_backing;     // backing heap of this thread (cannot be deleted)
-  mi_heap_t*          heaps;            // list of heaps in this thread (so we can abandon all when the thread terminates)
-  unsigned long long  heartbeat;        // monotonic heartbeat count
-  bool                recurse;          // true if deferred was called; used to prevent infinite recursion.
-  bool                is_in_threadpool; // true if this thread is part of a threadpool (and can run arbitrary tasks)
-  mi_stats_t          stats;            // statistics
-  mi_memid_t          memid;            // provenance of the tld memory itself (meta or OS)
+  mi_threadid_t         thread_id;            // thread id of this thread
+  size_t                thread_seq;           // thread sequence id (linear count of created threads)
+  mi_subproc_t*         subproc;              // sub-process this thread belongs to.
+  mi_heap_t*            heap_backing;         // backing heap of this thread (cannot be deleted)
+  mi_heap_t*            heaps;                // list of heaps in this thread (so we can abandon all when the thread terminates)
+  unsigned long long    heartbeat;            // monotonic heartbeat count
+  bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
+  bool                  is_in_threadpool;     // true if this thread is part of a threadpool (and can run arbitrary tasks)
+  mi_stats_t            stats;                // statistics
+  mi_memid_t            memid;                // provenance of the tld memory itself (meta or OS)
 };
 
 

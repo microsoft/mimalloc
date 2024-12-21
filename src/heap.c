@@ -141,7 +141,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
-  
+
   // collect arenas (this is program wide so don't force purges on abandonment of threads)
   _mi_arenas_collect(collect == MI_FORCE /* force purge? */);
 }
@@ -183,9 +183,9 @@ mi_heap_t* mi_heap_get_backing(void) {
 }
 
 // todo: make order of parameters consistent (but would that break compat with CPython?)
-void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint8_t heap_tag, mi_tld_t* tld) 
+void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint8_t heap_tag, mi_tld_t* tld)
 {
-  mi_assert_internal(heap!=NULL);  
+  mi_assert_internal(heap!=NULL);
   mi_memid_t memid = heap->memid;
   _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(mi_heap_t));
   heap->memid = memid;
@@ -204,7 +204,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint
       heap->full_page_retain = heap->full_page_retain / 4;
     }
   }
-  
+
   if (heap->tld->heap_backing == NULL) {
     heap->tld->heap_backing = heap;  // first heap becomes the backing heap
     _mi_random_init(&heap->random);
@@ -240,7 +240,7 @@ mi_heap_t* _mi_heap_create(int heap_tag, bool allow_destroy, mi_arena_id_t arena
 mi_decl_nodiscard mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_assert_internal(bheap != NULL);
-  return _mi_heap_create(heap_tag, allow_destroy, arena_id, bheap->tld);  
+  return _mi_heap_create(heap_tag, allow_destroy, arena_id, bheap->tld);
 }
 
 mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id) {
@@ -333,17 +333,17 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   if (bsize > MI_LARGE_MAX_OBJ_SIZE) {
     mi_heap_stat_decrease(heap, huge, bsize);
   }
-#if (MI_STAT)
+  #if (MI_STAT)
   _mi_page_free_collect(page, false);  // update used count
   const size_t inuse = page->used;
   if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
     mi_heap_stat_decrease(heap, normal, bsize * inuse);
-#if (MI_STAT>1)
+    #if (MI_STAT>1)
     mi_heap_stat_decrease(heap, normal_bins[_mi_bin(bsize)], inuse);
-#endif
+    #endif
   }
   mi_heap_stat_decrease(heap, malloc, bsize * inuse);  // todo: off for aligned blocks...
-#endif
+  #endif
 
   /// pretend it is all free now
   mi_assert_internal(mi_page_thread_free(page) == NULL);
@@ -460,7 +460,7 @@ void mi_heap_delete(mi_heap_t* heap)
     // transfer still used pages to the backing heap
     mi_heap_absorb(bheap, heap);
   }
-  else 
+  else
   */
   {
     // abandon all pages

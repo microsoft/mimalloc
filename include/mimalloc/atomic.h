@@ -417,6 +417,8 @@ static inline void mi_atomic_yield(void) {
 
 #if defined(_WIN32)
 
+#if 0
+
 #define mi_lock_t  CRITICAL_SECTION
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
@@ -436,7 +438,8 @@ static inline void mi_lock_done(mi_lock_t* lock) {
   DeleteCriticalSection(lock);
 }
 
-#if 0
+#else
+
 #define mi_lock_t  SRWLOCK   // slim reader-writer lock
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
@@ -455,6 +458,7 @@ static inline void mi_lock_init(mi_lock_t* lock) {
 static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
 }
+
 #endif
 
 #elif defined(MI_USE_PTHREADS)

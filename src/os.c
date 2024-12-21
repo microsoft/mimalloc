@@ -114,9 +114,9 @@ static void mi_os_prim_free(void* addr, size_t size, bool still_committed) {
     _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
   if (still_committed) {
-    _mi_stat_decrease(&os_stats->committed, size);
+    mi_os_stat_decrease(committed, size);
   }
-  _mi_stat_decrease(&os_stats->reserved, size);
+  mi_os_stat_decrease(reserved, size);
 }
 
 void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t memid) {
@@ -171,11 +171,11 @@ static void* mi_os_prim_alloc_at(void* hint_addr, size_t size, size_t try_alignm
     _mi_warning_message("unable to allocate OS memory (error: %d (0x%x), addr: %p, size: 0x%zx bytes, align: 0x%zx, commit: %d, allow large: %d)\n", err, err, hint_addr, size, try_alignment, commit, allow_large);
   }
 
-  _mi_stat_counter_increase(&os_stats->mmap_calls, 1);
+  mi_os_stat_counter_increase(mmap_calls, 1);
   if (p != NULL) {
-    _mi_stat_increase(&os_stats->reserved, size);
+    mi_os_stat_increase(reserved, size);
     if (commit) {
-      _mi_stat_increase(&os_stats->committed, size);
+      mi_os_stat_increase(committed, size);
       // seems needed for asan (or `mimalloc-test-api` fails)
       #ifdef MI_TRACK_ASAN
       if (*is_zero) { mi_track_mem_defined(p,size); }
@@ -290,7 +290,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   if (size == 0) return NULL;
   size = _mi_os_good_alloc_size(size);
   alignment = _mi_align_up(alignment, _mi_os_page_size());
-  
+
   bool os_is_large = false;
   bool os_is_zero  = false;
   void* os_base = NULL;
@@ -379,8 +379,8 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
 
 bool _mi_os_commit(void* addr, size_t size, bool* is_zero) {
   if (is_zero != NULL) { *is_zero = false; }
-  _mi_stat_increase(&os_stats->committed, size);  // use size for precise commit vs. decommit
-  _mi_stat_counter_increase(&os_stats->commit_calls, 1);
+  mi_os_stat_increase(committed, size);  // use size for precise commit vs. decommit
+  mi_os_stat_counter_increase(commit_calls, 1);
 
   // page align range
   size_t csize;
@@ -408,7 +408,7 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero) {
 
 static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit) {
   mi_assert_internal(needs_recommit!=NULL);
-  _mi_stat_decrease(&os_stats->committed, size);
+  mi_os_stat_decrease(committed, size);
 
   // page align
   size_t csize;
@@ -440,8 +440,8 @@ bool _mi_os_reset(void* addr, size_t size) {
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return true;  // || _mi_os_is_huge_reserved(addr)
-  _mi_stat_increase(&os_stats->reset, csize);
-  _mi_stat_counter_increase(&os_stats->reset_calls, 1);
+  mi_os_stat_increase(reset, csize);
+  mi_os_stat_counter_increase(reset_calls, 1);
 
   #if (MI_DEBUG>1) && !MI_SECURE && !MI_TRACK_ENABLED // && !MI_TSAN
   memset(start, 0, csize); // pretend it is eagerly reset
@@ -460,8 +460,8 @@ bool _mi_os_reset(void* addr, size_t size) {
 bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset)
 {
   if (mi_option_get(mi_option_purge_delay) < 0) return false;  // is purging allowed?
-  _mi_stat_counter_increase(&os_stats->purge_calls, 1);
-  _mi_stat_increase(&os_stats->purged, size);
+  mi_os_stat_counter_increase(purge_calls, 1);
+  mi_os_stat_increase(purged, size);
 
   if (mi_option_is_enabled(mi_option_purge_decommits) &&   // should decommit?
     !_mi_preloading())                                     // don't decommit during preloading (unsafe)
@@ -595,8 +595,8 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
 
     // success, record it
     page++;  // increase before timeout check (see issue #711)
-    _mi_stat_increase(&os_stats->committed, MI_HUGE_OS_PAGE_SIZE);
-    _mi_stat_increase(&os_stats->reserved, MI_HUGE_OS_PAGE_SIZE);
+    mi_os_stat_increase(committed, MI_HUGE_OS_PAGE_SIZE);
+    mi_os_stat_increase(reserved, MI_HUGE_OS_PAGE_SIZE);
 
     // check for timeout
     if (max_msecs > 0) {
