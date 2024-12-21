@@ -382,6 +382,10 @@ void mi_subproc_delete(mi_subproc_id_t subproc_id) {
     mi_lock_release(&subproc->os_pages_lock);
   }
   if (!safe_to_delete) return;
+
+  // merge stats back into the main subproc?
+  _mi_stats_merge_from(&_mi_subproc_main()->stats, &subproc->stats);
+
   // safe to release
   // todo: should we refcount subprocesses?
   mi_lock_done(&subproc->os_pages_lock);

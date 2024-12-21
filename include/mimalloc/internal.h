@@ -203,6 +203,7 @@ void        _mi_heap_page_reclaim(mi_heap_t* heap, mi_page_t* page);
 
 // "stats.c"
 void        _mi_stats_done(mi_stats_t* stats);
+void        _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from);
 mi_msecs_t  _mi_clock_now(void);
 mi_msecs_t  _mi_clock_end(mi_msecs_t start);
 mi_msecs_t  _mi_clock_start(void);

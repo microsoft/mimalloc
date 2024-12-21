@@ -411,14 +411,6 @@ static mi_stats_t* mi_get_tld_stats(void) {
   return &_mi_tld()->stats;
 }
 
-static void mi_stats_merge_from(mi_stats_t* stats) {
-  mi_subproc_t* subproc = _mi_subproc();
-  if (stats != &subproc->stats) {
-    mi_stats_add(&subproc->stats, stats);
-    _mi_memzero(stats, sizeof(mi_stats_t));
-  }
-}
-
 void mi_stats_reset(void) mi_attr_noexcept {
   mi_stats_t* stats = mi_get_tld_stats();
   mi_subproc_t* subproc = _mi_subproc();
@@ -427,16 +419,23 @@ void mi_stats_reset(void) mi_attr_noexcept {
   if (mi_process_start == 0) { mi_process_start = _mi_clock_start(); };
 }
 
-void mi_stats_merge(void) mi_attr_noexcept {
-  mi_stats_merge_from( mi_get_tld_stats() );
+void _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from) {
+  if (to != from) {
+    mi_stats_add(to, from);
+    _mi_memzero(from, sizeof(mi_stats_t));
+  }
 }
 
 void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
-  mi_stats_merge_from(stats);
+  _mi_stats_merge_from(&_mi_subproc()->stats, stats);
+}
+
+void mi_stats_merge(void) mi_attr_noexcept {
+  _mi_stats_done( mi_get_tld_stats() );
 }
 
 void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
-  mi_stats_merge_from(mi_get_tld_stats());
+  mi_stats_merge();
   _mi_stats_print(&_mi_subproc()->stats, out, arg);
 }
 
