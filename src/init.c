@@ -308,7 +308,7 @@ static mi_tld_t* mi_tld_alloc(void) {
 #define MI_TLD_INVALID  ((mi_tld_t*)1)
 
 mi_decl_noinline static void mi_tld_free(void) {
-  mi_tld_t* tld = _mi_tld();  
+  mi_tld_t* tld = _mi_tld();
   if (tld != NULL && tld != MI_TLD_INVALID) {
     _mi_stats_done(&tld->stats);
     _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);
@@ -325,7 +325,7 @@ mi_decl_noinline mi_tld_t* _mi_tld(void) {
   }
   if (tld==&tld_empty) {
     thread_tld = tld = mi_tld_alloc();
-  }  
+  }
   return tld;
 }
 
@@ -523,7 +523,7 @@ void mi_thread_init(void) mi_attr_noexcept
   //  fiber/pthread key to a non-zero value, ensuring `_mi_thread_done` is called)
   if (_mi_thread_heap_init()) return;  // returns true if already initialized
 
-  mi_subproc_stat_increase(_mi_subproc_main(), threads, 1);  
+  mi_subproc_stat_increase(_mi_subproc_main(), threads, 1);
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
@@ -552,7 +552,7 @@ void _mi_thread_done(mi_heap_t* heap)
 
   // abandon the thread local heap
   _mi_thread_heap_done(heap);  // returns true if already ran
-  
+
   // free thread local data
   mi_tld_free();
 }
@@ -664,7 +664,7 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_prim_thread_associate_default_heap(NULL);
   #endif
 
-  mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)  
+  mi_stats_reset();  // only call stat reset *after* thread init (or the heap tld == NULL)
   mi_track_init();
 
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {

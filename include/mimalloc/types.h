@@ -149,7 +149,7 @@ typedef struct mi_arena_s mi_arena_t;     // defined in `arena.c`
 // a memory id tracks the provenance of arena/OS allocated memory
 // ---------------------------------------------------------------
 
-// Memory can reside in arena's, direct OS allocated, meta-data pages, or statically allocated. 
+// Memory can reside in arena's, direct OS allocated, meta-data pages, or statically allocated.
 // The memid keeps track of this.
 typedef enum mi_memkind_e {
   MI_MEM_NONE,      // not allocated
@@ -261,7 +261,7 @@ typedef uint8_t mi_heaptag_t;
 //
 // We don't count `freed` (as |free|) but use `used` to reduce
 // the number of memory accesses in the `mi_page_all_free` function(s).
-// 
+//
 // Notes:
 // - Non-atomic fields can only be accessed if having ownership (low bit of `xthread_free`).
 // - If a page is not part of a heap it is called "abandoned" -- in
@@ -306,7 +306,7 @@ typedef struct mi_page_s {
 
 #define MI_PAGE_ALIGN                     MI_ARENA_SLICE_ALIGN // pages must be aligned on this for the page map.
 #define MI_PAGE_MIN_START_BLOCK_ALIGN     MI_MAX_ALIGN_SIZE    // minimal block alignment for the first block in a page (16b)
-#define MI_PAGE_MAX_START_BLOCK_ALIGN2    MI_KiB               // maximal block alignment for "power of 2"-sized blocks 
+#define MI_PAGE_MAX_START_BLOCK_ALIGN2    MI_KiB               // maximal block alignment for "power of 2"-sized blocks
 #define MI_PAGE_MAX_OVERALLOC_ALIGN       MI_ARENA_SLICE_SIZE  // (64 KiB) limit for which we overallocate in arena pages, beyond this use OS allocation
 
 #if (MI_ENCODE_FREELIST || MI_PADDING) && MI_SIZE_SIZE == 8
@@ -344,12 +344,12 @@ typedef enum mi_page_kind_e {
 
 // ------------------------------------------------------
 // Heaps
-// 
+//
 // Provide first-class heaps to allocate from.
 // A heap just owns a set of pages for allocation and
 // can only be allocate/reallocate from the thread that created it.
 // Freeing blocks can be done from any thread though.
-// 
+//
 // Per thread, there is always a default heap that is
 // used for allocation; it is initialized to statically
 // point to an empty heap to avoid initialization checks
@@ -532,9 +532,9 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 
 // ------------------------------------------------------
 // Sub processes use separate arena's and no heaps/pages/blocks
-// are shared between sub processes. 
+// are shared between sub processes.
 // The subprocess structure contains essentially all static variables (except per subprocess :-))
-// 
+//
 // Each thread should belong to one sub-process only
 // ------------------------------------------------------
 
@@ -545,11 +545,12 @@ typedef struct mi_subproc_s {
   _Atomic(size_t)       arena_count;                    // current count of arena's
   _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
   mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
+  _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
 
-  _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages for this sub-process  
+  _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages for this sub-process
   mi_page_t*            os_abandoned_pages;             // list of pages that OS allocated and not in an arena (only used if `mi_option_visit_abandoned` is on)
   mi_lock_t             os_abandoned_pages_lock;        // lock for the os abandoned pages list (this lock protects list operations)
-  
+
   mi_memid_t            memid;                          // provenance of this memory block (meta or OS)
   mi_stats_t            stats;                          // sub-process statistics (tld stats are merged in on thread termination)
 } mi_subproc_t;

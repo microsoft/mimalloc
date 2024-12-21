@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2023 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2024 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -407,8 +407,8 @@ static inline void mi_atomic_yield(void) {
 
 
 // ----------------------------------------------------------------------
-// Locks 
-// These should be light-weight in-process only locks. 
+// Locks
+// These should be light-weight in-process only locks.
 // Only used for reserving arena's and to maintain the abandoned list.
 // ----------------------------------------------------------------------
 #if _MSC_VER
@@ -419,28 +419,7 @@ static inline void mi_atomic_yield(void) {
 
 #if defined(_WIN32)
 
-#if 0
-
-#define mi_lock_t  CRITICAL_SECTION
-
-static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
-  return TryEnterCriticalSection(lock);
-}
-static inline void mi_lock_acquire(mi_lock_t* lock) {
-  EnterCriticalSection(lock);
-}
-static inline void mi_lock_release(mi_lock_t* lock) {
-  LeaveCriticalSection(lock);
-}
-static inline void mi_lock_init(mi_lock_t* lock) {
-  InitializeCriticalSection(lock);
-}
-static inline void mi_lock_done(mi_lock_t* lock) {
-  DeleteCriticalSection(lock);
-}
-
-#else
-
+#if 1
 #define mi_lock_t  SRWLOCK   // slim reader-writer lock
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
@@ -459,9 +438,30 @@ static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
 }
 
+#else
+#define mi_lock_t  CRITICAL_SECTION
+
+static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+  return TryEnterCriticalSection(lock);
+}
+static inline void mi_lock_acquire(mi_lock_t* lock) {
+  EnterCriticalSection(lock);
+}
+static inline void mi_lock_release(mi_lock_t* lock) {
+  LeaveCriticalSection(lock);
+}
+static inline void mi_lock_init(mi_lock_t* lock) {
+  InitializeCriticalSection(lock);
+}
+static inline void mi_lock_done(mi_lock_t* lock) {
+  DeleteCriticalSection(lock);
+}
+
 #endif
 
 #elif defined(MI_USE_PTHREADS)
+
+void _mi_error_message(int err, const char* fmt, ...);
 
 #define mi_lock_t  pthread_mutex_t
 
@@ -471,7 +471,7 @@ static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
 static inline void mi_lock_acquire(mi_lock_t* lock) {
   const int err = pthread_mutex_lock(lock);
   if (err != 0) {
-    mi_error_message(EFAULT, "internal error: lock cannot be acquired\n");
+    _mi_error_message(err, "internal error: lock cannot be acquired\n");
   }
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
@@ -520,7 +520,7 @@ static inline void mi_lock_acquire(mi_lock_t* lock) {
   for (int i = 0; i < 1000; i++) {  // for at most 1000 tries?
     if (mi_lock_try_acquire(lock)) return;
     mi_atomic_yield();
-  }  
+  }
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   mi_atomic_store_release(lock, (uintptr_t)0);
@@ -533,8 +533,6 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 }
 
 #endif
-
-
 
 
 #endif // MI_ATOMIC_H
