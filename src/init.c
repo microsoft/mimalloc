@@ -11,30 +11,31 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit
 
-#define MI_MEMID_STATIC  {{{NULL,0}}, MI_MEM_STATIC, true /* pinned */, true /* committed */, false /* zero */ }
+#define MI_MEMID_INIT(kind)   {{{NULL,0}}, kind, true /* pinned */, true /* committed */, false /* zero */ }
+#define MI_MEMID_STATIC       MI_MEMID_INIT(MI_MEM_STATIC)
 
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
-  MI_ATOMIC_VAR_INIT(0), // xthread_id
-  NULL,    // free
-  0,       // used
-  0,       // capacity
-  0,       // reserved capacity
-  0,       // block size shift
-  0,       // retire_expire
-  NULL,    // local_free
-  MI_ATOMIC_VAR_INIT(0), // xthread_free
-  MI_ATOMIC_VAR_INIT(0), // xflags
-  0,       // block_size
-  NULL,    // page_start
-  0,       // heap tag
-  false,   // is_zero
+  MI_ATOMIC_VAR_INIT(0),  // xthread_id
+  NULL,                   // free
+  0,                      // used
+  0,                      // capacity
+  0,                      // reserved capacity
+  0,                      // block size shift
+  0,                      // retire_expire
+  NULL,                   // local_free
+  MI_ATOMIC_VAR_INIT(0),  // xthread_free
+  MI_ATOMIC_VAR_INIT(0),  // xflags
+  0,                      // block_size
+  NULL,                   // page_start
+  0,                      // heap tag
+  false,                  // is_zero
   #if (MI_PADDING || MI_ENCODE_FREELIST)
-  { 0, 0 },
+  { 0, 0 },               // keys
   #endif
-  NULL,       // xheap
-  NULL, NULL, // next, prev  
-  MI_MEMID_STATIC  // memid
+  NULL,                   // xheap
+  NULL, NULL,             // next, prev  
+  MI_MEMID_STATIC         // memid
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
@@ -100,7 +101,7 @@ static mi_decl_cache_align mi_subproc_t subproc_main;
 static mi_decl_cache_align mi_tld_t tld_empty = {
   0,                      // thread_id
   0,                      // thread_seq
-  &subproc_main,      // subproc
+  &subproc_main,          // subproc
   NULL,                   // heap_backing
   NULL,                   // heaps list  
   0,                      // heartbeat
@@ -111,7 +112,7 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
 };
 
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
-  &tld_empty,         // tld
+  &tld_empty,             // tld
   NULL,                   // exclusive_arena
   0,                      // cookie
   { 0, 0 },               // keys
@@ -136,9 +137,9 @@ extern mi_heap_t heap_main;
 static mi_decl_cache_align mi_tld_t tld_main = {
   0,                      // thread_id
   0,                      // thread_seq
-  &subproc_main,      // subproc
-  &heap_main,         // heap_backing
-  &heap_main,         // heaps list  
+  &subproc_main,          // subproc
+  &heap_main,             // heap_backing
+  &heap_main,             // heaps list  
   0,                      // heartbeat
   false,                  // recurse
   false,                  // is_in_threadpool
@@ -147,7 +148,7 @@ static mi_decl_cache_align mi_tld_t tld_main = {
 };
 
 mi_decl_cache_align mi_heap_t heap_main = {
-  &tld_main,          // thread local data
+  &tld_main,              // thread local data
   0,                      // initial cookie
   0,                      // arena id
   { 0, 0 },               // the key of the main heap can be fixed (unlike page keys that need to be secure!)

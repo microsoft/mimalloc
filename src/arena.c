@@ -275,6 +275,8 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
 }
 
 
+static int mi_reserve_os_memory_ex2(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id);
+
 // try to reserve a fresh arena space
 static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_large, mi_arena_id_t req_arena_id, mi_arena_id_t* arena_id)
 {
@@ -325,7 +327,7 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
   const bool adjust = (overcommit && arena_commit);
   if (adjust) { _mi_stat_adjust_decrease(&_mi_stats_main.committed, arena_reserve, true /* on alloc */); }
   // and try to reserve the arena
-  int err = mi_reserve_os_memory_ex(arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
+  int err = mi_reserve_os_memory_ex2(subproc, arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
   if (err != 0) {
     if (adjust) { _mi_stat_adjust_increase(&_mi_stats_main.committed, arena_reserve, true); } // roll back
     // failed, try a smaller size?
@@ -1162,14 +1164,14 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
 }
 
 // Reserve a range of regular OS memory
-int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
+static int mi_reserve_os_memory_ex2(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
   size = _mi_align_up(size, MI_ARENA_SLICE_SIZE); // at least one slice
   mi_memid_t memid;
   void* start = _mi_os_alloc_aligned(size, MI_ARENA_SLICE_ALIGN, commit, allow_large, &memid);
   if (start == NULL) return ENOMEM;
   const bool is_large = memid.is_pinned; // todo: use separate is_large field?
-  if (!mi_manage_os_memory_ex2(_mi_subproc(), start, size, is_large, -1 /* numa node */, exclusive, memid, arena_id)) {
+  if (!mi_manage_os_memory_ex2(subproc, start, size, is_large, -1 /* numa node */, exclusive, memid, arena_id)) {
     _mi_os_free_ex(start, size, commit, memid);
     _mi_verbose_message("failed to reserve %zu KiB memory\n", _mi_divide_up(size, 1024));
     return ENOMEM;
@@ -1178,6 +1180,11 @@ int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exc
   // mi_debug_show_arenas(true, true, false);
 
   return 0;
+}
+
+// Reserve a range of regular OS memory
+int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
+  return mi_reserve_os_memory_ex2(_mi_subproc(), size, commit, allow_large, exclusive, arena_id);
 }
 
 // Manage a range of regular OS memory
@@ -1289,7 +1296,7 @@ void mi_debug_show_arenas(bool show_pages, bool show_inuse, bool show_committed)
     if (arena == NULL) break;
     mi_assert(arena->subproc == subproc);
     slice_total += arena->slice_count;
-    _mi_output_message("arena %zu at %p: %zu slices (%zu MiB)%s, subproc: %p\n", i, arena, arena->slice_count, mi_size_of_slices(arena->slice_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : "", arena->subproc));
+    _mi_output_message("arena %zu at %p: %zu slices (%zu MiB)%s, subproc: %p\n", i, arena, arena->slice_count, mi_size_of_slices(arena->slice_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""), arena->subproc);
     if (show_inuse) {
       free_total += mi_debug_show_bitmap("in-use slices", arena->slice_count, arena->slices_free, true, NULL);
     }

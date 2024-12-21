@@ -408,9 +408,8 @@ static inline void mi_atomic_yield(void) {
 
 // ----------------------------------------------------------------------
 // Locks 
-// These do not have to be recursive and should be light-weight 
-// in-process only locks. Only used for reserving arena's and to 
-// maintain the abandoned list.
+// These should be light-weight in-process only locks. 
+// Only used for reserving arena's and to maintain the abandoned list.
 // ----------------------------------------------------------------------
 #if _MSC_VER
 #pragma warning(disable:26110)  // unlock with holding lock
@@ -418,6 +417,26 @@ static inline void mi_atomic_yield(void) {
 
 #if defined(_WIN32)
 
+#define mi_lock_t  CRITICAL_SECTION
+
+static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+  return TryEnterCriticalSection(lock);
+}
+static inline bool mi_lock_acquire(mi_lock_t* lock) {
+  EnterCriticalSection(lock);
+  return true;
+}
+static inline void mi_lock_release(mi_lock_t* lock) {
+  LeaveCriticalSection(lock);
+}
+static inline void mi_lock_init(mi_lock_t* lock) {
+  InitializeCriticalSection(lock);
+}
+static inline void mi_lock_done(mi_lock_t* lock) {
+  DeleteCriticalSection(lock);
+}
+
+#if 0
 #define mi_lock_t  SRWLOCK   // slim reader-writer lock
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
@@ -436,7 +455,7 @@ static inline void mi_lock_init(mi_lock_t* lock) {
 static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
 }
-
+#endif
 
 #elif defined(MI_USE_PTHREADS)
 
