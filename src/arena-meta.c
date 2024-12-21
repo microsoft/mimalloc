@@ -64,12 +64,11 @@ static void* mi_meta_block_start( mi_meta_page_t* mpage, size_t block_idx ) {
 // allocate a fresh meta page and add it to the global list.
 static mi_meta_page_t* mi_meta_page_zalloc(void) {
   // allocate a fresh arena slice
-  // note: we always use subproc_main directly for the meta-data since at thread start the metadata for the 
-  // tld and heap need to be (meta) allocated and at that time we cannot read the tld pointer (yet).
+  // note: careful with _mi_subproc as it may recurse into mi_tld and meta_page_zalloc again..
   mi_memid_t memid;
-  mi_meta_page_t* mpage = (mi_meta_page_t*)_mi_arena_alloc_aligned(_mi_subproc_main(), MI_ARENA_SLICE_SIZE, MI_ARENA_SLICE_ALIGN, 0,
+  mi_meta_page_t* mpage = (mi_meta_page_t*)_mi_arena_alloc_aligned(_mi_subproc(), MI_ARENA_SLICE_SIZE, MI_ARENA_SLICE_ALIGN, 0,
                                                                    true /* commit*/, true /* allow large */,
-                                                                   NULL, 0 /* tseq */, &memid );
+                                                                   NULL /* req arena */, 0 /* thread_seq */, &memid);
   if (mpage == NULL) return NULL;
   mi_assert_internal(_mi_is_aligned(mpage,MI_META_PAGE_ALIGN));
   if (!memid.initially_zero) {

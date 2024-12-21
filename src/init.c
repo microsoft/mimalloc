@@ -223,7 +223,7 @@ void _mi_heap_guarded_init(mi_heap_t* heap) {
 static void mi_subproc_main_init(void) {
   if (subproc_main.memid.memkind != MI_MEM_STATIC) {
     subproc_main.memid = _mi_memid_create(MI_MEM_STATIC);
-    mi_lock_init(&subproc_main.os_pages_lock);
+    mi_lock_init(&subproc_main.os_abandoned_pages_lock);
     mi_lock_init(&subproc_main.arena_reserve_lock);
   }
 }
@@ -361,7 +361,7 @@ mi_subproc_id_t mi_subproc_new(void) {
   mi_subproc_t* subproc = (mi_subproc_t*)_mi_meta_zalloc(sizeof(mi_subproc_t),&memid);
   if (subproc == NULL) return NULL;
   subproc->memid = memid;
-  mi_lock_init(&subproc->os_pages_lock);
+  mi_lock_init(&subproc->os_abandoned_pages_lock);
   mi_lock_init(&subproc->arena_reserve_lock);
   return subproc;
 }
@@ -375,11 +375,10 @@ void mi_subproc_delete(mi_subproc_id_t subproc_id) {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   // check if there are os pages still..
   bool safe_to_delete = false;
-  if (mi_lock_acquire(&subproc->os_pages_lock)) {
-    if (subproc->os_pages.first == NULL) {
+  mi_lock(&subproc->os_abandoned_pages_lock) {
+    if (subproc->os_abandoned_pages == NULL) {
       safe_to_delete = true;
     }
-    mi_lock_release(&subproc->os_pages_lock);
   }
   if (!safe_to_delete) return;
 
@@ -388,7 +387,7 @@ void mi_subproc_delete(mi_subproc_id_t subproc_id) {
 
   // safe to release
   // todo: should we refcount subprocesses?
-  mi_lock_done(&subproc->os_pages_lock);
+  mi_lock_done(&subproc->os_abandoned_pages_lock);
   mi_lock_done(&subproc->arena_reserve_lock);
   _mi_meta_free(subproc, sizeof(mi_subproc_t), subproc->memid);
 }

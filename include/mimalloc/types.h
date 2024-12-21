@@ -556,8 +556,8 @@ typedef struct mi_subproc_s {
   mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
 
   _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages for this sub-process  
-  mi_page_queue_t       os_pages;                       // list of pages that OS allocated and not in an arena (only used if `mi_option_visit_abandoned` is on)
-  mi_lock_t             os_pages_lock;                  // lock for the os pages list (this lock protects list operations)
+  mi_page_t*            os_abandoned_pages;             // list of pages that OS allocated and not in an arena (only used if `mi_option_visit_abandoned` is on)
+  mi_lock_t             os_abandoned_pages_lock;        // lock for the os abandoned pages list (this lock protects list operations)
   
   mi_memid_t            memid;                          // provenance of this memory block (meta or OS)
   mi_stats_t            stats;                          // sub-process statistics (tld stats are merged in on thread termination)
