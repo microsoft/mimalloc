@@ -394,8 +394,9 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
   const int numa_node = _mi_os_numa_node(); // current numa node
 
   // try to allocate in an arena if the alignment is small enough and the object is not too small (as for heap meta data)
-  if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) || req_arena_id != _mi_arena_id_none()) {  // is arena allocation allowed?
-    if (size >= MI_ARENA_MIN_OBJ_SIZE && alignment <= MI_SEGMENT_ALIGN && align_offset == 0) {
+  if (!mi_option_is_enabled(mi_option_disallow_arena_alloc)) {  // is arena allocation allowed?
+    if (size >= MI_ARENA_MIN_OBJ_SIZE && alignment <= MI_SEGMENT_ALIGN && align_offset == 0) 
+    {
       void* p = mi_arena_try_alloc(numa_node, size, alignment, commit, allow_large, req_arena_id, memid);
       if (p != NULL) return p;
 

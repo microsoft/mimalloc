@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2023 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2024 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -411,8 +411,11 @@ static inline void mi_atomic_yield(void) {
 #pragma warning(disable:26110)  // unlock with holding lock
 #endif
 
+#define mi_lock(lock)    for(bool _go = (mi_lock_acquire(lock),true); _go; (mi_lock_release(lock), _go=false) )
+
 #if defined(_WIN32)
 
+#if 1
 #define mi_lock_t  SRWLOCK   // slim reader-writer lock
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
@@ -432,6 +435,30 @@ static inline void mi_lock_done(mi_lock_t* lock) {
   // nothing
 }
 
+#else
+#define mi_lock_t  CRITICAL_SECTION
+
+static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+  return TryEnterCriticalSection(lock);
+  
+}
+static inline void mi_lock_acquire(mi_lock_t* lock) {
+  EnterCriticalSection(lock);
+  
+}
+static inline void mi_lock_release(mi_lock_t* lock) {
+  LeaveCriticalSection(lock);
+  
+}
+static inline void mi_lock_init(mi_lock_t* lock) {
+  InitializeCriticalSection(lock);
+  
+}
+static inline void mi_lock_done(mi_lock_t* lock) {
+  DeleteCriticalSection(lock);
+  
+}
+#endif
 
 #elif defined(MI_USE_PTHREADS)
 
@@ -504,8 +531,6 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 }
 
 #endif
-
-
 
 
 #endif // __MIMALLOC_ATOMIC_H
