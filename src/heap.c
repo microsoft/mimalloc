@@ -346,6 +346,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   // mi_page_free(page,false);
   page->next = NULL;
   page->prev = NULL;
+  mi_page_set_heap(page, NULL);
   _mi_arena_page_free(page);
 
   return true; // keep going
@@ -513,7 +514,7 @@ bool mi_heap_reload(mi_heap_t* heap, mi_arena_id_t arena_id) {
 
   // reinit direct pages (as we may be in a different process)
   mi_assert_internal(heap->page_count == 0);
-  for (int i = 0; i < MI_PAGES_DIRECT; i++) {
+  for (size_t i = 0; i < MI_PAGES_DIRECT; i++) {
     heap->pages_free_direct[i] = (mi_page_t*)&_mi_page_empty;
   }
 

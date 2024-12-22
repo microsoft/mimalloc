@@ -25,7 +25,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_META_PAGE_SIZE         MI_ARENA_SLICE_SIZE
 #define MI_META_PAGE_ALIGN        MI_ARENA_SLICE_ALIGN
 
-#define MI_META_BLOCK_SIZE        (64)
+#define MI_META_BLOCK_SIZE        (128)                       // large enough such that META_MAX_SIZE > 4k (even on 32-bit)
 #define MI_META_BLOCK_ALIGN       MI_META_BLOCK_SIZE
 #define MI_META_BLOCKS_PER_PAGE   (MI_ARENA_SLICE_SIZE / MI_META_BLOCK_SIZE)  // 1024
 #define MI_META_MAX_SIZE          (MI_BCHUNK_SIZE * MI_META_BLOCK_SIZE)
