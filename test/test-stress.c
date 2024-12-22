@@ -302,8 +302,8 @@ int main(int argc, char** argv) {
     mi_option_enable(mi_option_visit_abandoned);
   #endif
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
-    // mi_option_set(mi_option_arena_reserve, 32 * 1024 /* in kib = 32MiB */);
-    mi_option_set(mi_option_purge_delay,10);
+    mi_option_set(mi_option_arena_reserve, 32 * 1024 /* in kib = 32MiB */);
+    //mi_option_set(mi_option_purge_delay,10);
   #endif
   #ifndef USE_STD_MALLOC
     mi_stats_reset();

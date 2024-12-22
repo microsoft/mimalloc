@@ -9,6 +9,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal.h"
 #include "bitmap.h"
 
+#if MI_PAGE_MAP_FLAT
+
 // The page-map contains a byte for each 64kb slice in the address space. 
 // For an address `a` where `n = _mi_page_map[a >> 16]`:
 // 0 = unused
@@ -17,6 +19,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // 
 // 1 byte per slice => 1 GiB page map = 2^30 slices of 2^16 = 2^46 = 64 TiB address space.
 // 4 GiB virtual for 256 TiB address space (48 bit) (and 64 KiB for 4 GiB address space (on 32-bit)).
+
+// 1MiB = 2^20*2^16 = 2^36 = 64GiB address space
+// 2^12 pointers = 2^15 k = 32k
 mi_decl_cache_align uint8_t* _mi_page_map = NULL;
 static bool        mi_page_map_all_committed = false;
 static size_t      mi_page_map_entries_per_commit_bit = MI_ARENA_SLICE_SIZE;
@@ -25,7 +30,7 @@ static mi_memid_t  mi_page_map_memid;
 
 
 // (note: we need to initialize statically or otherwise C++ may run a default constructors after process initialization)
-static mi_bitmap_t mi_page_map_commit = { MI_ATOMIC_VAR_INIT(MI_BITMAP_DEFAULT_CHUNK_COUNT), MI_ATOMIC_VAR_INIT(0),
+sstatic mi_bitmap_t mi_page_map_commit = { MI_ATOMIC_VAR_INIT(MI_BITMAP_DEFAULT_CHUNK_COUNT), MI_ATOMIC_VAR_INIT(0),
                                           { 0 }, { {MI_ATOMIC_VAR_INIT(0)} }, {{{ MI_ATOMIC_VAR_INIT(0) }}} };
 
 bool _mi_page_map_init(void) {
@@ -101,7 +106,7 @@ static size_t mi_page_map_get_idx(mi_page_t* page, uint8_t** page_start, size_t*
 
 void _mi_page_map_register(mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  mi_assert_internal(_mi_is_aligned(page,MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(_mi_page_map != NULL);  // should be initialized before multi-thread access!
   if mi_unlikely(_mi_page_map == NULL) {
     if (!_mi_page_map_init()) return;
@@ -151,3 +156,137 @@ mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_att
     return false;
   }
 }
+
+#else 
+
+mi_decl_cache_align uint8_t** _mi_page_map = NULL;
+
+static void*       mi_page_map_max_address = NULL;
+static mi_memid_t  mi_page_map_memid;
+
+bool _mi_page_map_init(void) {
+  size_t vbits = (size_t)mi_option_get_clamp(mi_option_max_vabits, 0, MI_SIZE_BITS);
+  if (vbits == 0) {
+    vbits = _mi_os_virtual_address_bits();
+    mi_assert_internal(vbits <= MI_MAX_VABITS);
+  }
+
+  mi_page_map_max_address = (void*)(MI_PU(1) << vbits);
+  const size_t os_page_size = _mi_os_page_size();
+  const size_t page_map_size = _mi_align_up(MI_ZU(1) << (vbits - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT + MI_INTPTR_SHIFT), os_page_size);
+  const size_t reserve_size = page_map_size + (2 * MI_PAGE_MAP_SUB_SIZE);  
+  _mi_page_map = (uint8_t**)_mi_os_alloc_aligned(reserve_size, 1, true /* commit */, true, &mi_page_map_memid);
+  if (_mi_page_map==NULL) {
+    _mi_error_message(ENOMEM, "unable to reserve virtual memory for the page map (%zu KiB)\n", reserve_size / MI_KiB);
+    return false;
+  }
+  if (mi_page_map_memid.initially_committed && !mi_page_map_memid.initially_zero) {
+    _mi_warning_message("the page map was committed but not zero initialized!\n");
+    _mi_memzero_aligned(_mi_page_map, reserve_size);
+  }
+
+  uint8_t* sub0 = (uint8_t*)_mi_page_map + page_map_size;
+  uint8_t* sub1 = sub0 + MI_PAGE_MAP_SUB_SIZE;
+  // initialize the first part so NULL pointers get resolved without an access violation
+  _mi_page_map[0] = sub0; 
+  sub0[0] = 1;                // so _mi_ptr_page(NULL) == NULL
+  // and initialize the 4GiB range where we were allocated 
+  _mi_page_map[_mi_page_map_index(_mi_page_map,NULL)] = sub1;
+
+  mi_assert_internal(_mi_ptr_page(NULL)==NULL);
+  return true;
+}
+
+static size_t mi_page_map_get_idx(mi_page_t* page, uint8_t** page_start, size_t* sub_idx, size_t* slice_count) {
+  size_t page_size;
+  *page_start = mi_page_area(page, &page_size);
+  if (page_size > MI_LARGE_PAGE_SIZE) { page_size = MI_LARGE_PAGE_SIZE - MI_ARENA_SLICE_SIZE; }  // furthest interior pointer
+  *slice_count = mi_slice_count_of_size(page_size) + (((uint8_t*)*page_start - (uint8_t*)page)/MI_ARENA_SLICE_SIZE); // add for large aligned blocks
+  return _mi_page_map_index(page,sub_idx);
+}
+
+
+static inline void mi_page_map_set_range(size_t idx, size_t sub_idx, size_t slice_count, uint8_t (*set)(uint8_t ofs)) {
+  // is the page map area that contains the page address committed?
+  uint8_t ofs = 1;
+  while (slice_count > 0) {
+    uint8_t* sub = _mi_page_map[idx];
+    if (sub == NULL) {
+      mi_memid_t memid;
+      sub = (uint8_t*)_mi_os_alloc(MI_PAGE_MAP_SUB_SIZE, &memid);
+      if (sub == NULL) {
+        _mi_error_message(EFAULT, "internal error: unable to extend the page map\n");
+        return; // abort?
+      }
+    }
+    // set the offsets for the page
+    while (sub_idx < MI_PAGE_MAP_SUB_SIZE && slice_count > 0) {
+      sub[sub_idx] = set(ofs);
+      sub_idx++;
+      ofs++;
+      slice_count--;
+    }
+    sub_idx = 0; // potentially wrap around to the next idx    
+  }  
+}
+
+static uint8_t set_ofs(uint8_t ofs) {
+  return ofs;
+}
+
+void _mi_page_map_register(mi_page_t* page) {
+  mi_assert_internal(page != NULL);
+  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_page_map != NULL);  // should be initialized before multi-thread access!
+  if mi_unlikely(_mi_page_map == NULL) {
+    if (!_mi_page_map_init()) return;
+  }
+  mi_assert(_mi_page_map!=NULL);
+  uint8_t* page_start;
+  size_t   slice_count;
+  size_t   sub_idx;
+  const size_t idx = mi_page_map_get_idx(page, &page_start, &sub_idx, &slice_count);
+  mi_page_map_set_range(idx, sub_idx, slice_count, &set_ofs);
+}
+
+static uint8_t set_zero(uint8_t ofs) {
+  MI_UNUSED(ofs);
+  return 0;
+}
+
+
+void _mi_page_map_unregister(mi_page_t* page) {
+  mi_assert_internal(_mi_page_map != NULL);
+  // get index and count
+  uint8_t* page_start;
+  size_t   slice_count;
+  size_t   sub_idx;
+  const size_t idx = mi_page_map_get_idx(page, &page_start, &sub_idx, &slice_count);
+  // unset the offsets
+  mi_page_map_set_range(idx, sub_idx, slice_count, &set_zero);
+}
+
+void _mi_page_map_unregister_range(void* start, size_t size) {
+  const size_t slice_count = _mi_divide_up(size, MI_ARENA_SLICE_SIZE);
+  size_t sub_idx;
+  const size_t idx = _mi_page_map_index(start, &sub_idx);
+  mi_page_map_set_range(idx, sub_idx, slice_count, &set_zero);
+}
+
+mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
+
+  if mi_unlikely(p >= mi_page_map_max_address) return false;
+  size_t sub_idx;
+  const size_t idx = _mi_page_map_index(p, &sub_idx);
+  uint8_t* sub = _mi_page_map[idx];  
+  if (sub != NULL) {
+    return (sub[sub_idx] != 0);
+  }
+  else {
+    return false;
+  }
+}
+
+
+#endif
+

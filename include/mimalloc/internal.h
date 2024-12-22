@@ -422,6 +422,14 @@ static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
   return (heap != &_mi_heap_empty);
 }
 
+static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t size) {
+  mi_assert_internal(size <= (MI_SMALL_SIZE_MAX + MI_PADDING_SIZE));
+  const size_t idx = _mi_wsize_from_size(size);
+  mi_assert_internal(idx < MI_PAGES_DIRECT);
+  return heap->pages_free_direct[idx];
+}
+
+
 //static inline uintptr_t _mi_ptr_cookie(const void* p) {
 //  extern mi_heap_t _mi_heap_main;
 //  mi_assert_internal(_mi_heap_main.cookie != 0);
@@ -433,14 +441,9 @@ static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
   Pages
 ----------------------------------------------------------- */
 
-static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t size) {
-  mi_assert_internal(size <= (MI_SMALL_SIZE_MAX + MI_PADDING_SIZE));
-  const size_t idx = _mi_wsize_from_size(size);
-  mi_assert_internal(idx < MI_PAGES_DIRECT);
-  return heap->pages_free_direct[idx];
-}
+#if MI_PAGE_MAP_FLAT
 
-
+// flat page-map committed on demand
 extern uint8_t* _mi_page_map;
 
 static inline uintptr_t _mi_page_map_index(const void* p) {
@@ -465,16 +468,59 @@ static inline mi_page_t* _mi_ptr_page_ex(const void* p, bool* valid) {
 
 static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
   bool valid;
-  mi_page_t* const page = _mi_ptr_page_ex(p,&valid);
+  mi_page_t* const page = _mi_ptr_page_ex(p, &valid);
   return (valid ? page : NULL);
 }
+
+static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
+  return _mi_ptr_page_ex(p, NULL);
+}
+
+#else 
+
+// 2-level page map
+ 
+// one page-map directory = 64 KiB => covers 2^16 * 2^16 = 2^32 = 4 GiB address space
+// the page-map needs 48-16-16 = 16 bits => 2^16 map directories = 2^16 * 2^3 = 2^19 = 512 KiB size.
+// we commit the page-map directories on-demand. (2^16 * 2^16 = 2^32 ~= 4 GiB needed to cover 256 TeB)
+
+#define MI_PAGE_MAP_SUB_SHIFT     (16)    // 64 KiB 
+#define MI_PAGE_MAP_SUB_SIZE      (MI_ZU(1) << MI_PAGE_MAP_SUB_SHIFT)
+#define MI_PAGE_MAP_SHIFT         (MI_MAX_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT)
+#define MI_PAGE_MAP_COUNT         (MI_ZU(1) << MI_PAGE_MAP_SHIFT)
+
+extern uint8_t** _mi_page_map;
+
+static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
+  const uintptr_t u = (uintptr_t)p / MI_ARENA_SLICE_SIZE;
+  if (sub_idx != NULL) { *sub_idx = (uint32_t)u % MI_PAGE_MAP_SUB_SIZE; }
+  return (size_t)(u / MI_PAGE_MAP_COUNT);
+}
+
+static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
+  const uintptr_t u = (uintptr_t)p / MI_ARENA_SLICE_SIZE;
+  const uint8_t* const sub = _mi_page_map[u / MI_PAGE_MAP_COUNT];
+  const uint8_t ofs = sub[(uint32_t)u % MI_PAGE_MAP_SUB_SIZE];
+  return (mi_page_t*)((u - ofs + 1) * MI_ARENA_SLICE_SIZE);
+}
+
+static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
+  const uintptr_t u = (uintptr_t)p / MI_ARENA_SLICE_SIZE;
+  const uint8_t* const sub = _mi_page_map[u / MI_PAGE_MAP_COUNT];
+  //if mi_unlikely(sub == NULL) { return NULL; }
+  const uint8_t ofs = sub[(uint32_t)u % MI_PAGE_MAP_SUB_SIZE];
+  //if mi_unlikely(ofs == 0) { return NULL;  }
+  return (mi_page_t*)((u - ofs + 1) * MI_ARENA_SLICE_SIZE);
+}
+
+#endif
 
 static inline mi_page_t* _mi_ptr_page(const void* p) {
   mi_assert_internal(p==NULL || mi_is_in_heap_region(p));
   #if MI_DEBUG || defined(__APPLE__)
   return _mi_checked_ptr_page(p);
   #else
-  return _mi_ptr_page_ex(p,NULL);
+  return _mi_unchecked_ptr_page(p);
   #endif
 }
 
