@@ -107,6 +107,24 @@ typedef int32_t  mi_ssize_t;
 // Define big endian if needed
 // #define MI_BIG_ENDIAN  1
 
+#if MI_DEFAULT_VIRTUAL_ADDRESS_BITS > 0 
+#define MI_MAX_VABITS     MI_DEFAULT_VIRTUAL_ADDRESS_BITS
+#elif   MI_ARCH_X64
+#define MI_MAX_VABITS     (47)
+#elif MI_INTPTR_SIZE > 4
+#define MI_MAX_VABITS     (48)
+#else
+#define MI_MAX_VABITS     (32)
+#endif
+
+#ifndef MI_PAGE_MAP_FLAT
+#if MI_MAX_VABITS <= 40
+#define MI_PAGE_MAP_FLAT  1
+#else
+#define MI_PAGE_MAP_FLAT  0
+#endif
+#endif
+
 
 /* --------------------------------------------------------------------------------
   Builtin's

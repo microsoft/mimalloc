@@ -442,6 +442,8 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
   Pages
 ----------------------------------------------------------- */
 
+#if MI_PAGE_MAP_FLAT
+
 // flat page-map committed on demand
 extern uint8_t* _mi_page_map;
 
@@ -466,10 +468,49 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
   return _mi_ptr_page_ex(p, NULL);
 }
 
+#else
+
+// 2-level page map
+
+// one sub page-map = 64 KiB => covers 2^13 * 2^16 = 2^32 = 512 MiB address space
+// the page-map needs 48-16-13 = 19 bits => 2^19 sub map pointers = 4 MiB size.
+// we commit the page-map and the sub maps on-demand.
+
+#define MI_PAGE_MAP_SUB_SHIFT     (13)
+#define MI_PAGE_MAP_SUB_COUNT     (MI_ZU(1) << MI_PAGE_MAP_SUB_SHIFT)
+
+#define MI_PAGE_MAP_SHIFT         (MI_MAX_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT)
+#define MI_PAGE_MAP_COUNT         (MI_ZU(1) << MI_PAGE_MAP_SHIFT)
+
+extern mi_page_t*** _mi_page_map;
+
+static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
+  const uintptr_t u = (uintptr_t)p / MI_ARENA_SLICE_SIZE;
+  if (sub_idx != NULL) { *sub_idx = (uint32_t)u % MI_PAGE_MAP_SUB_COUNT; }
+  return (size_t)(u / MI_PAGE_MAP_SUB_COUNT);
+}
+
+static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
+  size_t sub_idx;
+  const size_t idx = _mi_page_map_index(p, &sub_idx);
+  return _mi_page_map[idx][sub_idx];
+}
+
+static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
+  size_t sub_idx;
+  const size_t idx = _mi_page_map_index(p, &sub_idx);
+  mi_page_t** const sub = _mi_page_map[idx];
+  if mi_unlikely(sub == NULL) return NULL;
+  return sub[sub_idx];
+}
+
+#endif
+
+
 static inline mi_page_t* _mi_ptr_page(const void* p) {
   mi_assert_internal(p==NULL || mi_is_in_heap_region(p));
   #if MI_DEBUG || defined(__APPLE__)
-  return _mi_checked_ptr_page(p); 
+  return _mi_checked_ptr_page(p);
   #else
   return _mi_unchecked_ptr_page(p);
   #endif
