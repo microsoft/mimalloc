@@ -147,7 +147,7 @@ void _mi_page_map_unregister_range(void* start, size_t size) {
 mi_page_t* _mi_safe_ptr_page(const void* p) {
   if mi_unlikely(p >= mi_page_map_max_address) return NULL;
   const uintptr_t idx = _mi_page_map_index(p);
-  if mi_unlikely(mi_page_map_commit == NULL || !mi_bitmap_is_set(mi_page_map_commit, idx/MI_PAGE_MAP_ENTRIES_PER_COMMIT_BIT)) return NULL;
+  if mi_unlikely(mi_page_map_commit != NULL && !mi_bitmap_is_set(mi_page_map_commit, idx/MI_PAGE_MAP_ENTRIES_PER_COMMIT_BIT)) return NULL;
   const uintptr_t ofs = _mi_page_map[idx];
   if mi_unlikely(ofs == 0) return NULL;
   return (mi_page_t*)((((uintptr_t)p >> MI_ARENA_SLICE_SHIFT) - ofs + 1) << MI_ARENA_SLICE_SHIFT);

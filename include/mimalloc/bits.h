@@ -107,6 +107,7 @@ typedef int32_t  mi_ssize_t;
 // Define big endian if needed
 // #define MI_BIG_ENDIAN  1
 
+// maximum virtual address bits in a user-space pointer
 #if MI_DEFAULT_VIRTUAL_ADDRESS_BITS > 0 
 #define MI_MAX_VABITS     MI_DEFAULT_VIRTUAL_ADDRESS_BITS
 #elif   MI_ARCH_X64
@@ -117,6 +118,7 @@ typedef int32_t  mi_ssize_t;
 #define MI_MAX_VABITS     (32)
 #endif
 
+// use a flat page-map (or a 2-level one)
 #ifndef MI_PAGE_MAP_FLAT
 #if MI_MAX_VABITS <= 40
 #define MI_PAGE_MAP_FLAT  1
