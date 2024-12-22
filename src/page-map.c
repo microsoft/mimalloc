@@ -214,6 +214,12 @@ static inline void mi_page_map_set_range(size_t idx, size_t sub_idx, size_t slic
     if (sub == NULL) {
       mi_memid_t memid;
       sub = (uint8_t*)_mi_os_alloc(MI_PAGE_MAP_SUB_SIZE, &memid);
+      uint8_t* expect = NULL;
+      if (!mi_atomic_cas_strong_acq_rel(((_Atomic(uint8_t*)*)&_mi_page_map[idx]), &expect, sub)) {
+        _mi_os_free(sub, MI_PAGE_MAP_SUB_SIZE, memid);
+        sub = expect;
+        mi_assert_internal(sub!=NULL);
+      }
       if (sub == NULL) {
         _mi_error_message(EFAULT, "internal error: unable to extend the page map\n");
         return; // abort?
