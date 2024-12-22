@@ -470,11 +470,12 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
 
 #else
 
-// 2-level page map
-
-// one sub page-map = 64 KiB => covers 2^13 * 2^16 = 2^32 = 512 MiB address space
-// the page-map needs 48-16-13 = 19 bits => 2^19 sub map pointers = 4 MiB size.
-// we commit the page-map and the sub maps on-demand.
+// 2-level page map:
+// The page-map is usually 4 MiB and points to sub maps of 64 KiB. 
+// The page-map is committed on-demand (in 64 KiB) parts (and sub-maps are committed on-demand as well)
+// One sub page-map = 64 KiB => covers 2^13 * 2^16 = 2^32 = 512 MiB address space
+// The page-map needs 48-16-13 = 19 bits => 2^19 sub map pointers = 4 MiB size.
+// (Choosing a MI_PAGE_MAP_SUB_SHIFT of 16 gives slightly better code but will commit the initial sub-map at 512 KiB)
 
 #define MI_PAGE_MAP_SUB_SHIFT     (13)
 #define MI_PAGE_MAP_SUB_COUNT     (MI_ZU(1) << MI_PAGE_MAP_SUB_SHIFT)
