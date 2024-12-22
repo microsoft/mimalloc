@@ -9,6 +9,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal.h"
 #include "bitmap.h"
 
+// The page-map contains a byte for each 64kb slice in the address space. 
+// For an address `a` where `n = _mi_page_map[a >> 16]`:
+// 0 = unused
+// 1 = the slice at `a & ~0xFFFF` is a mimalloc page.
+// 1 < n << 127 = the slice is part of a page, starting at `(((a>>16) - n - 1) << 16)`.
+// 
+// 1 byte per slice => 1 GiB page map = 2^30 slices of 2^16 = 2^46 = 64 TiB address space.
+// 4 GiB virtual for 256 TiB address space (48 bit) (and 64 KiB for 4 GiB address space (on 32-bit)).
 mi_decl_cache_align uint8_t* _mi_page_map = NULL;
 static bool        mi_page_map_all_committed = false;
 static size_t      mi_page_map_entries_per_commit_bit = MI_ARENA_SLICE_SIZE;
@@ -24,10 +32,11 @@ bool _mi_page_map_init(void) {
   size_t vbits = (size_t)mi_option_get_clamp(mi_option_max_vabits, 0, MI_SIZE_BITS);  
   if (vbits == 0) {
     vbits = _mi_os_virtual_address_bits();
+    #if MI_ARCH_X64
     if (vbits >= 48) { vbits = 47; }
+    #endif
   }
-  // 1 byte per block =  2 GiB for 128 TiB address space  (48 bit = 256 TiB address space)
-  //                    64 KiB for 4 GiB address space (on 32-bit)
+  
   mi_page_map_max_address = (void*)(MI_PU(1) << vbits);
   const size_t page_map_size = (MI_ZU(1) << (vbits - MI_ARENA_SLICE_SHIFT));
 
