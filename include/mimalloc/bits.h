@@ -68,14 +68,6 @@ typedef int32_t  mi_ssize_t;
 #define MI_MiB     (MI_KiB*MI_KiB)
 #define MI_GiB     (MI_MiB*MI_KiB)
 
-#if MI_INTPTR_SIZE > 4
-#define MI_MAX_VABITS     (48)
-#define MI_PAGE_MAP_FLAT  0
-#else
-#define MI_MAX_VABITS     (32)
-#define MI_PAGE_MAP_FLAT  1
-#endif
-
 
 /* --------------------------------------------------------------------------------
   Architecture

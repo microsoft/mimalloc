@@ -145,14 +145,14 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p, const char* msg)
     _mi_error_message(EINVAL, "%s: invalid (unaligned) pointer: %p\n", msg, p);
     return NULL;
   }
-  #endif
-  mi_page_t* const page = _mi_ptr_page(p);
-  #if MI_DEBUG
+  mi_page_t* const page = _mi_safe_ptr_page(p);
   if (page == NULL && p != NULL) {
     _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);
   }
-  #endif
   return page;
+  #else
+  return _mi_ptr_page(p);
+  #endif
 }
 
 // Free a block
