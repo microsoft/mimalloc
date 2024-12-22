@@ -102,14 +102,6 @@ static bool mi_heap_page_collect(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t
   return true; // don't break
 }
 
-//static bool mi_heap_page_never_delayed_free(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
-//  MI_UNUSED(arg1);
-//  MI_UNUSED(arg2);
-//  MI_UNUSED(heap);
-//  MI_UNUSED(pq);
-//  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE, false);
-//  return true; // don't break
-//}
 
 static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 {
@@ -120,21 +112,6 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // python/cpython#112532: we may be called from a thread that is not the owner of the heap
   // const bool is_main_thread = (_mi_is_main_thread() && heap->thread_id == _mi_thread_id());
-
-  // note: never reclaim on collect but leave it to threads that need storage to reclaim
-  //if (
-  //#ifdef NDEBUG
-  //    collect == MI_FORCE
-  //#else
-  //    collect >= MI_FORCE
-  //#endif
-  //  && is_main_thread && mi_heap_is_backing(heap) && heap->allow_page_reclaim)
-  //{
-  //  // the main thread is abandoned (end-of-program), try to reclaim all abandoned segments.
-  //  // if all memory is freed by now, all segments should be freed.
-  //  // note: this only collects in the current subprocess
-  //  _mi_arena_reclaim_all_abandoned(heap);
-  //}
 
   // collect retired pages
   _mi_heap_collect_retired(heap, force);

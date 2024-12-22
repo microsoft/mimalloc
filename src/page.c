@@ -433,6 +433,36 @@ void _mi_heap_collect_retired(mi_heap_t* heap, bool force) {
 }
 
 
+static void mi_heap_collect_full_pages(mi_heap_t* heap) {
+  // note: normally full pages get immediately abandoned and the full queue is always empty
+  // this path is only used if abandoning is disabled due to a destroy-able heap or options
+  // set by the user.
+  mi_page_queue_t* pq = &heap->pages[MI_BIN_FULL];
+  for (mi_page_t* page = pq->first; page != NULL; ) {
+    mi_page_t* next = page->next;         // get next in case we free the page
+    _mi_page_free_collect(page, false);   // register concurrent free's
+    // no longer full?
+    if (!mi_page_is_full(page)) {
+      if (mi_page_all_free(page)) {
+        _mi_page_free(page, pq);
+      }
+      else {
+        _mi_page_unfull(page);
+      }
+    }
+    page = next;
+  }
+}
+
+static mi_decl_noinline void mi_heap_generic_collect(mi_heap_t* heap) {
+  // call potential deferred free routines
+  _mi_deferred_free(heap, false);
+  // collect retired pages
+  _mi_heap_collect_retired(heap, false);
+  // collect full pages that had concurrent free's
+  mi_heap_collect_full_pages(heap);
+}
+
 /* -----------------------------------------------------------
   Initialize the initial free list in a page.
   In secure mode we initialize a randomized list by
@@ -857,6 +887,7 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size, size_t huge_alignme
   }
 }
 
+
 // Generic allocation routine if the fast path (`alloc.c:mi_page_malloc`) does not succeed.
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
 // The `huge_alignment` is normally 0 but is set to a multiple of MI_SLICE_SIZE for
@@ -873,17 +904,15 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   mi_assert_internal(mi_heap_is_initialized(heap));
 
   // collect every N generic mallocs
-  if (heap->generic_count++ > 10000) {
+  if mi_unlikely(heap->generic_count++ > 10000) {
     heap->generic_count = 0;
-    // call potential deferred free routines
-    _mi_deferred_free(heap, false);
-    // collect retired pages
-    _mi_heap_collect_retired(heap, false);
+    mi_heap_generic_collect(heap);
   }
 
   // find (or allocate) a page of the right size
   mi_page_t* page = mi_find_page(heap, size, huge_alignment);
   if mi_unlikely(page == NULL) { // first time out of memory, try to collect and retry the allocation once more
+    mi_heap_generic_collect(heap);
     mi_heap_collect(heap, true /* force */);
     page = mi_find_page(heap, size, huge_alignment);
   }
