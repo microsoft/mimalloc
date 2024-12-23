@@ -536,8 +536,8 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
     start = huge_start;
     if (start == 0) {
       // Initialize the start address after the 32TiB area
-      start = ((uintptr_t)32 << 40);  // 32TiB virtual start address
-    #if (MI_SECURE>0 || MI_DEBUG==0)      // security: randomize start of huge pages unless in debug mode
+      start = ((uintptr_t)8 << 40);   // 8TiB virtual start address
+    #if (MI_SECURE>0 || MI_DEBUG==0)  // security: randomize start of huge pages unless in debug mode
       uintptr_t r = _mi_heap_random_next(mi_prim_get_default_heap());
       start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x0FFF));  // (randomly 12bits)*1GiB == between 0 to 4TiB
     #endif

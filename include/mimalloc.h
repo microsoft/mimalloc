@@ -398,8 +398,8 @@ typedef enum mi_option_e {
   mi_option_reclaim_on_free,            // allow to reclaim an abandoned segment on a free (=1)
   mi_option_full_page_retain,           // retain N full pages per size class (=2)
   mi_option_max_page_candidates,        // max candidate pages to consider for allocation (=4)
-  mi_option_max_vabits,                 // max virtual address bits to consider in user space (=48)
-  mi_option_debug_commit_full_pagemap,  // commit the full pagemap to catch invalid pointer uses (=0)
+  mi_option_max_vabits,                 // max user space virtual address bits to consider (=48)
+  mi_option_pagemap_commit,             // commit the full pagemap (to always catch invalid pointer uses) (=0)
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,

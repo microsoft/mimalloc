@@ -42,7 +42,7 @@ bool _mi_page_map_init(void) {
   // Allocate the page map and commit bits
   mi_page_map_max_address = (void*)(MI_PU(1) << vbits);
   const size_t page_map_size = (MI_ZU(1) << (vbits - MI_ARENA_SLICE_SHIFT));
-  const bool commit = (page_map_size <= 1*MI_MiB || mi_option_is_enabled(mi_option_debug_commit_full_pagemap)); // _mi_os_has_overcommit(); // commit on-access on Linux systems?
+  const bool commit = (page_map_size <= 1*MI_MiB || mi_option_is_enabled(mi_option_pagemap_commit)); // _mi_os_has_overcommit(); // commit on-access on Linux systems?
   const size_t commit_bits = _mi_divide_up(page_map_size, MI_PAGE_MAP_ENTRIES_PER_COMMIT_BIT);
   const size_t bitmap_size = (commit ? 0 : mi_bitmap_size(commit_bits, NULL));
   const size_t reserve_size = bitmap_size + page_map_size;
@@ -187,7 +187,7 @@ bool _mi_page_map_init(void) {
   const size_t os_page_size = _mi_os_page_size();
   const size_t page_map_size = _mi_align_up( page_map_count * sizeof(mi_page_t**), os_page_size);
   const size_t reserve_size = page_map_size + os_page_size;
-  const bool commit = page_map_size <= 64*MI_KiB || mi_option_is_enabled(mi_option_debug_commit_full_pagemap); // _mi_os_has_overcommit(); // commit on-access on Linux systems?
+  const bool commit = page_map_size <= 64*MI_KiB || mi_option_is_enabled(mi_option_pagemap_commit); // _mi_os_has_overcommit(); // commit on-access on Linux systems?
   _mi_page_map = (mi_page_t***)_mi_os_alloc_aligned(reserve_size, 1, commit, true /* allow large */, &mi_page_map_memid);
   if (_mi_page_map==NULL) {
     _mi_error_message(ENOMEM, "unable to reserve virtual memory for the page map (%zu KiB)\n", page_map_size / MI_KiB);

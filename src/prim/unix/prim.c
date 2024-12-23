@@ -412,7 +412,7 @@ int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   int err = 0;
   // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
   err = unix_madvise(start, size, MADV_DONTNEED);
-  #if !MI_DEBUG && !MI_SECURE
+  #if !MI_DEBUG && MI_SECURE<=2
     *needs_recommit = false;
   #else
     *needs_recommit = true;

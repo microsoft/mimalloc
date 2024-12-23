@@ -35,7 +35,7 @@ int main() {
   // corrupt_free();
   // block_overflow1();
   // block_overflow2();
-  // test_canary_leak();
+  test_canary_leak();
   // test_aslr();
   // invalid_free();
   // test_reserved();
