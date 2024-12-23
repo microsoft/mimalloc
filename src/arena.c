@@ -352,6 +352,7 @@ static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_t* req_arena
     mi_arena_t* name_arena; \
     if (req_arena != NULL) { \
       name_arena = req_arena; /* if there is a specific req_arena, only search that one */\
+      if (_i > 0) break;       /* only once */ \
     } \
     else { \
       size_t _idx; \
@@ -369,7 +370,6 @@ static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_t* req_arena
 
 #define mi_forall_arenas_end()  \
     } \
-    if (req_arena != NULL) break; \
   } \
   }
 
@@ -1594,10 +1594,71 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_tld_t* tld)
   }
 }
 
+/* -----------------------------------------------------------
+  Visit abandoned pages
+----------------------------------------------------------- */
+
+typedef struct mi_abandoned_page_visit_info_s {
+  int heap_tag;
+  mi_block_visit_fun* visitor;
+  void* arg;
+  bool visit_blocks;
+} mi_abandoned_page_visit_info_t;
+
+static bool abandoned_page_visit(mi_page_t* page, mi_abandoned_page_visit_info_t* vinfo) {
+  if (page->heap_tag != vinfo->heap_tag) { return true; } // continue
+  mi_heap_area_t area;
+  _mi_heap_area_init(&area, page);
+  if (!vinfo->visitor(NULL, &area, NULL, area.block_size, vinfo->arg)) { 
+    return false; 
+  }
+  if (vinfo->visit_blocks) {
+    return _mi_heap_area_visit_blocks(&area, page, vinfo->visitor, vinfo->arg);
+  }
+  else {
+    return true;
+  }
+}
+
+static bool abandoned_page_visit_at(size_t slice_index, size_t slice_count, mi_arena_t* arena, void* arg) {
+  MI_UNUSED(slice_count);
+  mi_abandoned_page_visit_info_t* vinfo = (mi_abandoned_page_visit_info_t*)arg;
+  mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
+  mi_assert_internal(mi_page_is_abandoned_mapped(page));
+  return abandoned_page_visit(page, vinfo); 
+}
+
+// Visit all abandoned pages in this subproc.
 bool mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+  mi_abandoned_page_visit_info_t visit_info = { heap_tag, visitor, arg, visit_blocks };
   MI_UNUSED(subproc_id); MI_UNUSED(heap_tag); MI_UNUSED(visit_blocks); MI_UNUSED(visitor); MI_UNUSED(arg);
-  _mi_error_message(EINVAL, "implement mi_abandoned_visit_blocks\n");
-  return false;
+
+  // visit abandoned pages in the arenas
+  // we don't have to claim because we assume we are the only thread running (in this subproc).
+  // (but we could atomically claim as well by first doing abandoned_reclaim and afterwards reabandoning).
+  bool ok = true;
+  mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
+  mi_forall_arenas(subproc, NULL, 0, arena) {
+    mi_assert_internal(arena->subproc == subproc);
+    for (size_t bin = 0; ok && bin < MI_BIN_COUNT; bin++) {
+      // todo: if we had a single abandoned page map as well, this can be faster.
+      if (mi_atomic_load_relaxed(&subproc->abandoned_count[bin]) > 0) {
+        ok = _mi_bitmap_forall_set(arena->pages_abandoned[bin], &abandoned_page_visit_at, arena, &visit_info);
+      }
+    }
+  }
+  mi_forall_arenas_end();
+  if (!ok) return false;
+
+  // visit abandoned pages in OS allocated memory
+  // (technically we don't need the lock as we assume we are the only thread running in this subproc)
+  mi_lock(&subproc->os_abandoned_pages_lock) {
+    for (mi_page_t* page = subproc->os_abandoned_pages; ok && page != NULL; page = page->next) {
+      ok = abandoned_page_visit(page, &visit_info);
+    }
+  }
+
+  return ok;
 }
 
 
@@ -1696,4 +1757,5 @@ mi_decl_export bool mi_arena_reload(void* start, size_t size, mi_arena_id_t* are
   mi_arena_pages_reregister(arena);
   return true;
 }
+
 
