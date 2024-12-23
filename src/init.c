@@ -310,17 +310,21 @@ static mi_tld_t* mi_tld_alloc(void) {
 
 #define MI_TLD_INVALID  ((mi_tld_t*)1)
 
-mi_decl_noinline static void mi_tld_free(void) {
-  mi_tld_t* tld = _mi_tld();
+mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   if (tld != NULL && tld != MI_TLD_INVALID) {
     _mi_stats_done(&tld->stats);
     _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);
   }
-  tld = MI_TLD_INVALID;
+  #if 0
+  // do not read/write to `thread_tld` on older macOS <= 14 as that will re-initialize the thread local storage
+  // (since we are calling this during pthread shutdown)
+  // (and this could happen on other systems as well, so let's never do it)
+  thread_tld = MI_TLD_INVALID;
+  #endif
   mi_atomic_decrement_relaxed(&thread_count);
 }
 
-mi_decl_noinline mi_tld_t* _mi_tld(void) {
+static mi_tld_t* mi_tld(void) {
   mi_tld_t* tld = thread_tld;
   if (tld == MI_TLD_INVALID) {
     _mi_error_message(EFAULT, "internal error: tld is accessed after the thread terminated\n");
@@ -338,11 +342,11 @@ mi_subproc_t* _mi_subproc(void) {
   //       on such systems we can check for this with the _mi_prim_get_default_heap as those are protected (by being
   //       stored in a TLS slot for example)
   mi_heap_t* heap = mi_prim_get_default_heap();
-  if (heap == NULL || heap == &_mi_heap_empty) {
+  if (heap == NULL) {
     return _mi_subproc_main();
   }
   else {
-    return thread_tld->subproc;  // don't call `_mi_tld()`
+    return heap->tld->subproc;  // avoid using thread local storage (`thread_tld`)
   }
 }
 
@@ -396,7 +400,7 @@ void mi_subproc_delete(mi_subproc_id_t subproc_id) {
 }
 
 void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
-  mi_tld_t* tld = _mi_tld();
+  mi_tld_t* tld = mi_tld();
   if (tld == NULL) return;
   mi_assert(tld->subproc == &subproc_main);
   if (tld->subproc != &subproc_main) return;
@@ -554,10 +558,12 @@ void _mi_thread_done(mi_heap_t* heap)
   if (heap->tld->thread_id != _mi_prim_thread_id()) return;
 
   // abandon the thread local heap
+  // note: we store the tld as we should avoid reading `thread_tld` at this point (to avoid reinitializing the thread local storage)
+  mi_tld_t* tld = heap->tld;
   _mi_thread_heap_done(heap);  // returns true if already ran
 
   // free thread local data
-  mi_tld_free();
+  mi_tld_free(tld);
 }
 
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
@@ -714,7 +720,7 @@ void mi_cdecl _mi_process_done(void) {
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
     mi_collect(true /* force */);
     _mi_heap_unsafe_destroy_all();     // forcefully release all memory held by all heaps (of this thread only!)
-    _mi_arenas_unsafe_destroy_all();
+    _mi_arenas_unsafe_destroy_all(&tld_main);
   }
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {

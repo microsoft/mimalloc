@@ -207,6 +207,20 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
   #endif
 }
 
+#elif 0 && _MSC_VER && _WIN32
+// On Windows, using a fixed TLS slot has better codegen than a thread-local 
+// but it might clash with an application trying to use the same slot. (so we disable this by default)
+#include <winternl.h>
+
+#define MI_HAS_TLS_SLOT
+#define MI_TLS_SLOT       63  // last available slot
+
+static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
+  return NtCurrentTeb()->TlsSlots[slot];
+}
+static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
+  NtCurrentTeb()->TlsSlots[slot] = value;
+}
 #endif
 
 // Do we have __builtin_thread_pointer? This would be the preferred way to get a unique thread id
