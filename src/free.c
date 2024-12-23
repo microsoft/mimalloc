@@ -210,9 +210,9 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) {
   if (mi_page_all_free(page))
   {
     // first remove it from the abandoned pages in the arena (if mapped, this waits for any readers to finish)
-      _mi_arena_page_unabandon(page);
+      _mi_arenas_page_unabandon(page);
     // we can free the page directly
-    _mi_arena_page_free(page);
+    _mi_arenas_page_free(page);
     return;
   }
 
@@ -240,7 +240,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) {
       {
         if (mi_page_queue(tagheap, page->block_size)->first != NULL) {  // don't reclaim for an block_size we don't use
           // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
-          _mi_arena_page_unabandon(page);
+          _mi_arenas_page_unabandon(page);
           _mi_heap_page_reclaim(tagheap, page);
           mi_heap_stat_counter_increase(tagheap, pages_reclaim_on_free, 1);
           return;
@@ -252,7 +252,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) {
   // 3. if the page is unmapped, try to reabandon so it can possibly be mapped and found for allocations
   if (!mi_page_is_used_at_frac(page,8) &&  // only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
     !mi_page_is_abandoned_mapped(page) && page->memid.memkind == MI_MEM_ARENA &&
-    _mi_arena_page_try_reabandon_to_mapped(page))
+    _mi_arenas_page_try_reabandon_to_mapped(page))
   {
     return;
   }

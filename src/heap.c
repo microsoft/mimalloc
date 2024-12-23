@@ -211,7 +211,7 @@ mi_heap_t* _mi_heap_create(int heap_tag, bool allow_destroy, mi_arena_id_t arena
   else {
     // heaps associated wita a specific arena are allocated in that arena
     // note: takes up at least one slice which is quite wasteful...
-    heap = (mi_heap_t*)_mi_arena_alloc(_mi_subproc(), _mi_align_up(sizeof(mi_heap_t),MI_ARENA_MIN_OBJ_SIZE), true, true, _mi_arena_from_id(arena_id), tld->thread_seq, &memid);
+    heap = (mi_heap_t*)_mi_arenas_alloc(_mi_subproc(), _mi_align_up(sizeof(mi_heap_t),MI_ARENA_MIN_OBJ_SIZE), true, true, _mi_arena_from_id(arena_id), tld->thread_seq, &memid);
   }
   if (heap==NULL) {
     _mi_error_message(ENOMEM, "unable to allocate heap meta-data\n");
@@ -341,7 +341,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   page->next = NULL;
   page->prev = NULL;
   mi_page_set_heap(page, NULL);
-  _mi_arena_page_free(page);
+  _mi_arenas_page_free(page);
 
   return true; // keep going
 }

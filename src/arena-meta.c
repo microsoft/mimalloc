@@ -72,9 +72,9 @@ static mi_meta_page_t* mi_meta_page_zalloc(void) {
   // allocate a fresh arena slice
   // note: careful with _mi_subproc as it may recurse into mi_tld and meta_page_zalloc again..
   mi_memid_t memid;
-  uint8_t* base = (uint8_t*)_mi_arena_alloc_aligned(_mi_subproc(), MI_META_PAGE_SIZE, MI_META_PAGE_ALIGN, 0,
-                                                                   true /* commit*/, (MI_SECURE==0) /* allow large? */,
-                                                                   NULL /* req arena */, 0 /* thread_seq */, &memid);
+  uint8_t* base = (uint8_t*)_mi_arenas_alloc_aligned(_mi_subproc(), MI_META_PAGE_SIZE, MI_META_PAGE_ALIGN, 0,
+                                                                    true /* commit*/, (MI_SECURE==0) /* allow large? */,
+                                                                    NULL /* req arena */, 0 /* thread_seq */, &memid);
   if (base == NULL) return NULL;
   mi_assert_internal(_mi_is_aligned(base,MI_META_PAGE_ALIGN));
   if (!memid.initially_zero) {
@@ -165,7 +165,7 @@ mi_decl_noinline void _mi_meta_free(void* p, size_t size, mi_memid_t memid) {
     mi_bitmap_setN(&mpage->blocks_free, block_idx, block_count,NULL);
   }
   else {
-    _mi_arena_free(p,size,memid);
+    _mi_arenas_free(p,size,memid);
   }
 }
 
