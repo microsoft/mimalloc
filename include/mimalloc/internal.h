@@ -164,6 +164,7 @@ void          _mi_arena_field_cursor_done(mi_arena_field_cursor_t* current);
 // "segment-map.c"
 void        _mi_segment_map_allocated_at(const mi_segment_t* segment);
 void        _mi_segment_map_freed_at(const mi_segment_t* segment);
+void        _mi_segment_map_destroy(void);
 
 // "segment.c"
 mi_page_t*  _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld);
