@@ -583,6 +583,7 @@ static mi_page_t* mi_arena_page_try_find_abandoned(mi_subproc_t* subproc, size_t
 #define MI_ARENA_GUARD_PAGE_SIZE  (4*MI_KiB)
 #endif
 
+// Allocate a fresh page
 static mi_page_t* mi_arena_page_alloc_fresh(mi_subproc_t* subproc, size_t slice_count, size_t block_size, size_t block_alignment,
                                             mi_arena_t* req_arena, size_t tseq)
 {
@@ -622,10 +623,10 @@ static mi_page_t* mi_arena_page_alloc_fresh(mi_subproc_t* subproc, size_t slice_
   mi_assert_internal(!os_align || _mi_is_aligned((uint8_t*)page + page_alignment, block_alignment));
 
   // guard page at the end
-  const size_t page_body_size = mi_size_of_slices(slice_count) - MI_ARENA_GUARD_PAGE_SIZE;
+  const size_t page_noguard_size = mi_size_of_slices(slice_count) - MI_ARENA_GUARD_PAGE_SIZE;
   #if MI_SECURE >= 2
   if (memid.initially_committed && !memid.is_pinned) {
-    _mi_os_decommit((uint8_t*)page + page_body_size, MI_ARENA_GUARD_PAGE_SIZE);
+    _mi_os_decommit((uint8_t*)page + page_noguard_size, MI_ARENA_GUARD_PAGE_SIZE);
   }
   #endif
 
@@ -639,7 +640,7 @@ static mi_page_t* mi_arena_page_alloc_fresh(mi_subproc_t* subproc, size_t slice_
   }
   #if MI_DEBUG > 1
   if (memid.initially_zero) {
-    if (!mi_mem_is_zero(page, page_body_size)) {
+    if (!mi_mem_is_zero(page, page_noguard_size)) {
       _mi_error_message(EFAULT, "internal error: page memory was not zero initialized.\n");
       memid.initially_zero = false;
       _mi_memzero_aligned(page, sizeof(*page));
@@ -669,7 +670,7 @@ static mi_page_t* mi_arena_page_alloc_fresh(mi_subproc_t* subproc, size_t slice_
     // otherwise start after the info
     block_start = mi_page_info_size();
   }
-  const size_t reserved    = (os_align ? 1 : (page_body_size - block_start) / block_size);
+  const size_t reserved    = (os_align ? 1 : (page_noguard_size - block_start) / block_size);
   mi_assert_internal(reserved > 0 && reserved <= UINT16_MAX);
   page->reserved = (uint16_t)reserved;
   page->page_start = (uint8_t*)page + block_start;
@@ -695,7 +696,8 @@ static mi_page_t* mi_arena_page_alloc_fresh(mi_subproc_t* subproc, size_t slice_
   return page;
 }
 
-static mi_page_t* mi_arena_page_allocN(mi_heap_t* heap, size_t slice_count, size_t block_size) {
+// Allocate a regular small/medium/large page.
+static mi_page_t* mi_arena_page_regular_alloc(mi_heap_t* heap, size_t slice_count, size_t block_size) {
   mi_arena_t* req_arena = heap->exclusive_arena;
   mi_tld_t* const tld = heap->tld;
 
@@ -716,21 +718,22 @@ static mi_page_t* mi_arena_page_allocN(mi_heap_t* heap, size_t slice_count, size
   return NULL;
 }
 
-
-static mi_page_t* mi_singleton_page_alloc(mi_heap_t* heap, size_t block_size, size_t block_alignment) {
+// Allocate a page containing one block (very large, or with large alignment)
+static mi_page_t* mi_arena_page_singleton_alloc(mi_heap_t* heap, size_t block_size, size_t block_alignment) {
   mi_arena_t* req_arena = heap->exclusive_arena;
   mi_tld_t* const tld = heap->tld;
   const bool os_align = (block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN);
   const size_t info_size = (os_align ? MI_PAGE_ALIGN : mi_page_info_size());
-  const size_t slice_count = mi_slice_count_of_size(info_size + block_size + MI_ARENA_GUARD_PAGE_SIZE);
+  #if MI_ARENA_GUARD_PAGE_SIZE == 0
+  const size_t slice_count = mi_slice_count_of_size(info_size + block_size);
+  #else
+  const size_t slice_count = mi_slice_count_of_size(_mi_align_up(info_size + block_size, MI_ARENA_GUARD_PAGE_SIZE) + MI_ARENA_GUARD_PAGE_SIZE);
+  #endif
 
   mi_page_t* page = mi_arena_page_alloc_fresh(tld->subproc, slice_count, block_size, block_alignment, req_arena, tld->thread_seq);
   if (page == NULL) return NULL;
 
-  mi_assert(page != NULL);
   mi_assert(page->reserved == 1);
-  mi_assert_internal(_mi_ptr_page(page)==page);
-  mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
   _mi_page_init(heap, page);
 
   return page;
@@ -741,19 +744,19 @@ mi_page_t* _mi_arena_page_alloc(mi_heap_t* heap, size_t block_size, size_t block
   mi_page_t* page;
   if mi_unlikely(block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN) {
     mi_assert_internal(_mi_is_power_of_two(block_alignment));
-    page = mi_singleton_page_alloc(heap, block_size, block_alignment);
+    page = mi_arena_page_singleton_alloc(heap, block_size, block_alignment);
   }
   else if (block_size <= MI_SMALL_MAX_OBJ_SIZE) {
-    page = mi_arena_page_allocN(heap, mi_slice_count_of_size(MI_SMALL_PAGE_SIZE), block_size);
+    page = mi_arena_page_regular_alloc(heap, mi_slice_count_of_size(MI_SMALL_PAGE_SIZE), block_size);
   }
   else if (block_size <= MI_MEDIUM_MAX_OBJ_SIZE) {
-    page = mi_arena_page_allocN(heap, mi_slice_count_of_size(MI_MEDIUM_PAGE_SIZE), block_size);
+    page = mi_arena_page_regular_alloc(heap, mi_slice_count_of_size(MI_MEDIUM_PAGE_SIZE), block_size);
   }
   else if (block_size <= MI_LARGE_MAX_OBJ_SIZE) {
-    page = mi_arena_page_allocN(heap, mi_slice_count_of_size(MI_LARGE_PAGE_SIZE), block_size);
+    page = mi_arena_page_regular_alloc(heap, mi_slice_count_of_size(MI_LARGE_PAGE_SIZE), block_size);
   }
   else {
-    page = mi_singleton_page_alloc(heap, block_size, block_alignment);
+    page = mi_arena_page_singleton_alloc(heap, block_size, block_alignment);
   }
   // mi_assert_internal(page == NULL || _mi_page_segment(page)->subproc == tld->subproc);
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
