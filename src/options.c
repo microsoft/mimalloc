@@ -102,6 +102,14 @@ typedef struct mi_option_desc_s {
 #endif
 #endif
 
+#ifndef MI_DEFAULT_PAGEMAP_COMMIT
+#if defined(__APPLE__)
+#define MI_DEFAULT_PAGEMAP_COMMIT 1
+#else
+#define MI_DEFAULT_PAGEMAP_COMMIT 0
+#endif
+#endif
+
 
 static mi_option_desc_t options[_mi_option_last] =
 {
@@ -165,7 +173,8 @@ static mi_option_desc_t options[_mi_option_last] =
   { 2,   UNINIT, MI_OPTION(full_page_retain) },
   { 4,   UNINIT, MI_OPTION(max_page_candidates) },
   { 0,   UNINIT, MI_OPTION(max_vabits) },
-  { 0,   UNINIT, MI_OPTION(debug_commit_full_pagemap) },
+  { MI_DEFAULT_PAGEMAP_COMMIT, 
+         UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

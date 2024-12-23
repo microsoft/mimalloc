@@ -445,6 +445,7 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
 #if MI_PAGE_MAP_FLAT
 
 // flat page-map committed on demand
+// single indirection and low commit, but large initial virtual reserve (4 GiB with 48 bit virtual addresses)
 extern uint8_t* _mi_page_map;
 
 static inline size_t _mi_page_map_index(const void* p) {
@@ -471,6 +472,8 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
 #else
 
 // 2-level page map:
+// double indirection but low commit and low virtual reserve.
+// 
 // The page-map is usually 4 MiB and points to sub maps of 64 KiB. 
 // The page-map is committed on-demand (in 64 KiB) parts (and sub-maps are committed on-demand as well)
 // One sub page-map = 64 KiB => covers 2^13 * 2^16 = 2^32 = 512 MiB address space
