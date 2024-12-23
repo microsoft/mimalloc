@@ -82,7 +82,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_block_size(page) > 0);
   mi_assert_internal(page->used <= page->capacity);
   mi_assert_internal(page->capacity <= page->reserved);
-  
+
   // const size_t bsize = mi_page_block_size(page);
   // uint8_t* start = mi_page_start(page);
   //mi_assert_internal(start + page->capacity*page->block_size == page->top);
@@ -475,7 +475,7 @@ static mi_decl_noinline void mi_heap_generic_collect(mi_heap_t* heap) {
 
 static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* const page, const size_t bsize, const size_t extend, mi_stats_t* const stats) {
   MI_UNUSED(stats);
-  #if (MI_SECURE<=2)
+  #if (MI_SECURE<3)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -533,7 +533,7 @@ static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* co
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend, mi_stats_t* const stats)
 {
   MI_UNUSED(stats);
-  #if (MI_SECURE <= 2)
+  #if (MI_SECURE<3)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -561,7 +561,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 ----------------------------------------------------------- */
 
 #define MI_MAX_EXTEND_SIZE    (4*1024)      // heuristic, one OS page seems to work well.
-#if (MI_SECURE>0)
+#if (MI_SECURE>=3)
 #define MI_MIN_EXTEND         (8*MI_SECURE) // extend at least by this many
 #else
 #define MI_MIN_EXTEND         (1)
@@ -574,7 +574,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 // extra test in malloc? or cache effects?)
 static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
-  #if (MI_SECURE<=2)
+  #if (MI_SECURE<3)
   mi_assert(page->free == NULL);
   mi_assert(page->local_free == NULL);
   if (page->free != NULL) return;
@@ -605,7 +605,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_internal(extend < (1UL<<16));
 
   // and append the extend the free list
-  if (extend < MI_MIN_SLICES || MI_SECURE==0) { //!mi_option_is_enabled(mi_option_secure)) {
+  if (extend < MI_MIN_SLICES || MI_SECURE<3) { //!mi_option_is_enabled(mi_option_secure)) {
     mi_page_free_list_extend(page, bsize, extend, &heap->tld->stats );
   }
   else {
@@ -621,7 +621,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
 void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
   mi_assert(page != NULL);
   mi_page_set_heap(page, heap);
-  
+
   size_t page_size;
   uint8_t* page_start = mi_page_area(page, &page_size); MI_UNUSED(page_start);
   mi_track_mem_noaccess(page_start,page_size);
@@ -653,7 +653,7 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
   #endif
   mi_assert_internal(page->block_size_shift == 0 || (mi_page_block_size(page) == ((size_t)1 << page->block_size_shift)));
   mi_assert_expensive(mi_page_is_valid_init(page));
-  
+
   // initialize an initial free list
   mi_page_extend_free(heap,page);
   mi_assert(mi_page_immediate_available(page));
@@ -740,7 +740,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
   } // for each page
 
   mi_debug_heap_stat_counter_increase(heap, searches, count);
-  
+
   // set the page to the best candidate
   if (page_candidate != NULL) {
     page = page_candidate;

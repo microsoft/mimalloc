@@ -46,11 +46,13 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
 // #define MI_STAT 1
 
-// Define MI_SECURE to enable security mitigations
-// #define MI_SECURE 1  // guard page around metadata
-// #define MI_SECURE 2  // guard page around each mimalloc page
-// #define MI_SECURE 3  // encode free lists (detect corrupted free list (buffer overflow), and invalid pointer free)
-// #define MI_SECURE 4  // checks for double free. (may be more expensive)
+// Define MI_SECURE to enable security mitigations. The lowest two have minimal performance impact:
+//   #define MI_SECURE 1  // guard page around metadata
+//   #define MI_SECURE 2  // guard page around each mimalloc page (can fragment VMA's with large heaps..)
+// 
+// The next two levels can have more performance cost:
+//   #define MI_SECURE 3  // randomize allocations, encode free lists (detect corrupted free list (buffer overflow), and invalid pointer free)
+//   #define MI_SECURE 4  // checks for double free. (may be more expensive)
 
 #if !defined(MI_SECURE)
 #define MI_SECURE 0
