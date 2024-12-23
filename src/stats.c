@@ -47,11 +47,11 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
 
 
 // Adjust stats to compensate; for example before committing a range,
-// first adjust downwards with parts that were already committed so 
+// first adjust downwards with parts that were already committed so
 // we avoid double counting.
 static void mi_stat_adjust_mt(mi_stat_count_t* stat, int64_t amount, bool on_alloc) {
   if (amount == 0) return;
-  // adjust atomically 
+  // adjust atomically
   mi_atomic_addi64_relaxed(&stat->current, amount);
   mi_atomic_addi64_relaxed((on_alloc ? &stat->allocated : &stat->freed), amount);
 }
@@ -74,7 +74,7 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount) {
 
 void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {
   stat->count++;
-  stat->total += amount;  
+  stat->total += amount;
 }
 
 void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount) {
@@ -150,7 +150,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   mi_stat_counter_add(&stats->page_no_retire, &src->page_no_retire, 1);
   mi_stat_counter_add(&stats->searches, &src->searches, 1);
   mi_stat_counter_add(&stats->normal_count, &src->normal_count, 1);
-  mi_stat_counter_add(&stats->huge_count, &src->huge_count, 1);  
+  mi_stat_counter_add(&stats->huge_count, &src->huge_count, 1);
   mi_stat_counter_add(&stats->guarded_alloc_count, &src->guarded_alloc_count, 1);
 #if MI_STAT>1
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
@@ -347,7 +347,7 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   #endif
   #if MI_STAT
   mi_stat_print(&stats->normal, "normal", (stats->normal_count.count == 0 ? 1 : -(stats->normal.allocated / stats->normal_count.count)), out, arg);
-  mi_stat_print(&stats->huge, "huge", (stats->huge_count.count == 0 ? 1 : -(stats->huge.allocated / stats->huge_count.count)), out, arg);  
+  mi_stat_print(&stats->huge, "huge", (stats->huge_count.count == 0 ? 1 : -(stats->huge.allocated / stats->huge_count.count)), out, arg);
   mi_stat_count_t total = { 0,0,0,0 };
   mi_stat_add(&total, &stats->normal, 1);
   mi_stat_add(&total, &stats->huge, 1);
@@ -408,7 +408,7 @@ static mi_msecs_t mi_process_start; // = 0
 
 // return thread local stats
 static mi_stats_t* mi_get_tld_stats(void) {
-  return &_mi_tld()->stats;
+  return &mi_heap_get_default()->tld->stats;
 }
 
 void mi_stats_reset(void) mi_attr_noexcept {
@@ -492,7 +492,7 @@ mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, s
   pinfo.page_faults    = 0;
 
   _mi_prim_process_info(&pinfo);
-  
+
   if (elapsed_msecs!=NULL)  *elapsed_msecs  = (pinfo.elapsed < 0 ? 0 : (pinfo.elapsed < (mi_msecs_t)PTRDIFF_MAX ? (size_t)pinfo.elapsed : PTRDIFF_MAX));
   if (user_msecs!=NULL)     *user_msecs     = (pinfo.utime < 0 ? 0 : (pinfo.utime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)pinfo.utime : PTRDIFF_MAX));
   if (system_msecs!=NULL)   *system_msecs   = (pinfo.stime < 0 ? 0 : (pinfo.stime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)pinfo.stime : PTRDIFF_MAX));

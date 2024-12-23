@@ -923,7 +923,7 @@ void _mi_arenas_page_unabandon(mi_page_t* page) {
   Arena free
 ----------------------------------------------------------- */
 static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_t slices);
-static void mi_arenas_try_purge(bool force, bool visit_all);
+static void mi_arenas_try_purge(bool force, bool visit_all, mi_tld_t* tld);
 
 void _mi_arenas_free(void* p, size_t size, mi_memid_t memid) {
   if (p==NULL) return;
@@ -979,12 +979,12 @@ void _mi_arenas_free(void* p, size_t size, mi_memid_t memid) {
   }
 
   // try to purge expired decommits
-  mi_arenas_try_purge(false, false);
+  // mi_arenas_try_purge(false, false, NULL);
 }
 
 // Purge the arenas; if `force_purge` is true, amenable parts are purged even if not yet expired
-void _mi_arenas_collect(bool force_purge) {
-  mi_arenas_try_purge(force_purge, force_purge /* visit all? */);
+void _mi_arenas_collect(bool force_purge, mi_tld_t* tld) {
+  mi_arenas_try_purge(force_purge, force_purge /* visit all? */, tld);
 }
 
 
@@ -1038,9 +1038,9 @@ static void mi_arenas_unsafe_destroy(mi_subproc_t* subproc) {
 
 // destroy owned arenas; this is unsafe and should only be done using `mi_option_destroy_on_exit`
 // for dynamic libraries that are unloaded and need to release all their allocated memory.
-void _mi_arenas_unsafe_destroy_all(void) {
+void _mi_arenas_unsafe_destroy_all(mi_tld_t* tld) {
   mi_arenas_unsafe_destroy(_mi_subproc());
-  _mi_arenas_collect(true /* force purge */);  // purge non-owned arenas
+  _mi_arenas_collect(true /* force purge */, tld);  // purge non-owned arenas
 }
 
 
@@ -1551,13 +1551,12 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
 }
 
 
-static void mi_arenas_try_purge(bool force, bool visit_all)
+static void mi_arenas_try_purge(bool force, bool visit_all, mi_tld_t* tld)
 {
   const long delay = mi_arena_purge_delay();
   if (_mi_preloading() || delay <= 0) return;  // nothing will be scheduled
 
   // check if any arena needs purging?
-  mi_tld_t* tld = _mi_tld();
   mi_subproc_t* subproc = tld->subproc;
   const mi_msecs_t now = _mi_clock_now();
   mi_msecs_t arenas_expire = mi_atomic_load_acquire(&subproc->purge_expire);

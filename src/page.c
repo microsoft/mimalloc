@@ -252,7 +252,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   else {
     mi_page_queue_remove(pq, page);
     mi_page_set_heap(page, NULL);
-    _mi_arenas_page_abandon(page);
+    _mi_arenas_page_abandon(page);    
   }
 }
 
@@ -356,8 +356,10 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   mi_page_queue_remove(pq, page);
 
   // and free it
+  mi_heap_t* heap = page->heap;
   mi_page_set_heap(page,NULL);
   _mi_arenas_page_free(page);
+  _mi_arenas_collect(false, heap->tld);  // allow purging
 }
 
 #define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX   // should be less than size for MI_BIN_HUGE

@@ -120,7 +120,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
 
   // collect arenas (this is program wide so don't force purges on abandonment of threads)
-  _mi_arenas_collect(collect == MI_FORCE /* force purge? */);
+  _mi_arenas_collect(collect == MI_FORCE /* force purge? */, heap->tld);
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
@@ -204,7 +204,7 @@ mi_heap_t* _mi_heap_create(int heap_tag, bool allow_destroy, mi_arena_id_t arena
   mi_assert(heap_tag >= 0 && heap_tag < 256);
   // allocate and initialize a heap
   mi_memid_t memid;
-  mi_heap_t* heap; 
+  mi_heap_t* heap;
   if (arena_id == _mi_arena_id_none()) {
     heap = (mi_heap_t*)_mi_meta_zalloc(sizeof(mi_heap_t), &memid);
   }
@@ -444,7 +444,7 @@ void mi_heap_delete(mi_heap_t* heap)
 
   // abandon all pages
   _mi_heap_collect_abandon(heap);
-  
+
   mi_assert_internal(heap->page_count==0);
   mi_heap_free(heap,true);
 }
@@ -471,7 +471,7 @@ void mi_heap_unload(mi_heap_t* heap) {
     _mi_warning_message("cannot unload heaps that are not associated with an exclusive arena\n");
     return;
   }
-  
+
   // abandon all pages so all thread'id in the pages are cleared
   _mi_heap_collect_abandon(heap);
   mi_assert_internal(heap->page_count==0);
@@ -485,7 +485,7 @@ void mi_heap_unload(mi_heap_t* heap) {
 }
 
 bool mi_heap_reload(mi_heap_t* heap, mi_arena_id_t arena_id) {
-  mi_assert(mi_heap_is_initialized(heap));  
+  mi_assert(mi_heap_is_initialized(heap));
   if (heap==NULL || !mi_heap_is_initialized(heap)) return false;
   if (heap->exclusive_arena == NULL) {
     _mi_warning_message("cannot reload heaps that were not associated with an exclusive arena\n");
@@ -503,8 +503,8 @@ bool mi_heap_reload(mi_heap_t* heap, mi_arena_id_t arena_id) {
 
   mi_assert_internal(heap->page_count==0);
 
-  // re-associate from the current thread-local and static state
-  heap->tld = _mi_tld();
+  // re-associate with the current thread-local and static state
+  heap->tld = mi_heap_get_default()->tld;
 
   // reinit direct pages (as we may be in a different process)
   mi_assert_internal(heap->page_count == 0);
