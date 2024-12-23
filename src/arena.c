@@ -41,7 +41,6 @@ typedef struct mi_arena_s {
   size_t              info_slices;          // initial slices reserved for the arena bitmaps
   int                 numa_node;            // associated NUMA node
   bool                is_exclusive;         // only allow allocations if specifically for this arena
-  bool                is_large;             // memory area consists of large- or huge OS pages (always committed)
   _Atomic(mi_msecs_t) purge_expire;         // expiration time when slices can be purged from `slices_purge`.
 
   mi_bitmap_t*        slices_free;          // is the slice free?
@@ -333,8 +332,8 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
   Arena iteration
 ----------------------------------------------------------- */
 
-static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_t* req_arena, int numa_node, bool allow_large) {
-  if (!allow_large && arena->is_large) return false;
+static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_t* req_arena, int numa_node, bool allow_pinned) {
+  if (!allow_pinned && arena->memid.is_pinned) return false;
   if (!mi_arena_id_is_suitable(arena, req_arena)) return false;
   if (req_arena == NULL) { // if not specific, check numa affinity
     const bool numa_suitable = (numa_node < 0 || arena->numa_node < 0 || arena->numa_node == numa_node);
@@ -1104,7 +1103,7 @@ static mi_bitmap_t* mi_arena_bitmap_init(size_t slice_count, uint8_t** base) {
 }
 
 
-static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t size, bool is_large, int numa_node, bool exclusive, mi_memid_t memid, mi_arena_id_t* arena_id) mi_attr_noexcept
+static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t size, int numa_node, bool exclusive, mi_memid_t memid, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
   mi_assert(!is_large || (memid.initially_committed && memid.is_pinned));
   mi_assert(_mi_is_aligned(start,MI_ARENA_SLICE_SIZE));
@@ -1154,8 +1153,7 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
   arena->is_exclusive = exclusive;
   arena->slice_count  = slice_count;
   arena->info_slices  = info_slices;
-  arena->numa_node    = numa_node; // TODO: or get the current numa node if -1? (now it allows anyone to allocate on -1)
-  arena->is_large     = is_large;
+  arena->numa_node    = numa_node; // TODO: or get the current numa node if -1? (now it allows anyone to allocate on -1)  
   arena->purge_expire = 0;
   // mi_lock_init(&arena->abandoned_visit_lock);
 
@@ -1190,14 +1188,14 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
 }
 
 
-bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
+bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
   mi_memid_t memid = _mi_memid_create(MI_MEM_EXTERNAL);
   memid.mem.os.base = start;
   memid.mem.os.size = size;
   memid.initially_committed = is_committed;
   memid.initially_zero = is_zero;
-  memid.is_pinned = is_large;
-  return mi_manage_os_memory_ex2(_mi_subproc(), start, size, is_large, numa_node, exclusive, memid, arena_id);
+  memid.is_pinned = is_pinned;
+  return mi_manage_os_memory_ex2(_mi_subproc(), start, size, numa_node, exclusive, memid, arena_id);
 }
 
 // Reserve a range of regular OS memory
@@ -1207,13 +1205,12 @@ static int mi_reserve_os_memory_ex2(mi_subproc_t* subproc, size_t size, bool com
   mi_memid_t memid;
   void* start = _mi_os_alloc_aligned(size, MI_ARENA_SLICE_ALIGN, commit, allow_large, &memid);
   if (start == NULL) return ENOMEM;
-  const bool is_large = memid.is_pinned; // todo: use separate is_large field?
-  if (!mi_manage_os_memory_ex2(subproc, start, size, is_large, -1 /* numa node */, exclusive, memid, arena_id)) {
+  if (!mi_manage_os_memory_ex2(subproc, start, size, -1 /* numa node */, exclusive, memid, arena_id)) {
     _mi_os_free_ex(start, size, commit, memid);
     _mi_verbose_message("failed to reserve %zu KiB memory\n", _mi_divide_up(size, 1024));
     return ENOMEM;
   }
-  _mi_verbose_message("reserved %zu KiB memory%s\n", _mi_divide_up(size, 1024), is_large ? " (in large os pages)" : "");
+  _mi_verbose_message("reserved %zu KiB memory%s\n", _mi_divide_up(size, 1024), memid.is_pinned ? " (in large os pages)" : "");
   // mi_debug_show_arenas(true, true, false);
 
   return 0;
@@ -1373,7 +1370,7 @@ int mi_reserve_huge_os_pages_at_ex(size_t pages, int numa_node, size_t timeout_m
   }
   _mi_verbose_message("numa node %i: reserved %zu GiB huge pages (of the %zu GiB requested)\n", numa_node, pages_reserved, pages);
 
-  if (!mi_manage_os_memory_ex2(_mi_subproc(), p, hsize, true, numa_node, exclusive, memid, arena_id)) {
+  if (!mi_manage_os_memory_ex2(_mi_subproc(), p, hsize, numa_node, exclusive, memid, arena_id)) {
     _mi_os_free(p, hsize, memid);
     return ENOMEM;
   }

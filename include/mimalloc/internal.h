@@ -143,8 +143,8 @@ mi_arena_id_t _mi_arena_id_none(void);
 mi_arena_t*   _mi_arena_from_id(mi_arena_id_t id);
 bool          _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_t* request_arena);
 
-void*         _mi_arenas_alloc(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
-void*         _mi_arenas_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
+void*         _mi_arenas_alloc(mi_subproc_t* subproc, size_t size, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
+void*         _mi_arenas_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
 void          _mi_arenas_free(void* p, size_t size, mi_memid_t memid);
 bool          _mi_arenas_contain(const void* p);
 void          _mi_arenas_collect(bool force_purge, mi_tld_t* tld);

@@ -274,7 +274,7 @@ mi_decl_export int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa
 mi_decl_export int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msecs) mi_attr_noexcept;
 
 mi_decl_export int  mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept;
-mi_decl_export bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept;
+mi_decl_export bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_pinned /* cannot decommit/reset? */, bool is_zero, int numa_node) mi_attr_noexcept;
 
 mi_decl_export void mi_debug_show_arenas(bool show_pages, bool show_inuse, bool show_committed) mi_attr_noexcept;
 
@@ -283,7 +283,7 @@ typedef void* mi_arena_id_t;
 mi_decl_export void* mi_arena_area(mi_arena_id_t arena_id, size_t* size);
 mi_decl_export int   mi_reserve_huge_os_pages_at_ex(size_t pages, int numa_node, size_t timeout_msecs, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
 mi_decl_export int   mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
-mi_decl_export bool  mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
+mi_decl_export bool  mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
 
 #if MI_MALLOC_VERSION >= 182
 // Create a heap that only allocates in the specified arena
