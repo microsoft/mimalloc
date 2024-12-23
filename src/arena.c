@@ -42,7 +42,6 @@ typedef struct mi_arena_s {
   int                 numa_node;            // associated NUMA node
   bool                is_exclusive;         // only allow allocations if specifically for this arena
   bool                is_large;             // memory area consists of large- or huge OS pages (always committed)
-  long                purge_delay;          // from the options, but allows setting per arena
   _Atomic(mi_msecs_t) purge_expire;         // expiration time when slices can be purged from `slices_purge`.
 
   mi_bbitmap_t*       slices_free;          // is the slice free? (a binned bitmap with size classes)
@@ -1168,7 +1167,6 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
   arena->numa_node    = numa_node; // TODO: or get the current numa node if -1? (now it allows anyone to allocate on -1)
   arena->is_large     = is_large;
   arena->purge_expire = 0;
-  arena->purge_delay  = mi_option_get(mi_option_purge_delay) * mi_option_get(mi_option_arena_purge_mult);
   // mi_lock_init(&arena->abandoned_visit_lock);
 
   // init bitmaps
@@ -1467,14 +1465,9 @@ int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserv
   Arena purge
 ----------------------------------------------------------- */
 
-static long mi_arena_purge_delay(mi_arena_t* arena) {
+static long mi_arena_purge_delay(void) {
   // <0 = no purging allowed, 0=immediate purging, >0=milli-second delay
-  if (arena==NULL) {
-    return (mi_option_get(mi_option_purge_delay) * mi_option_get(mi_option_arena_purge_mult));
-  }
-  else {
-    return arena->purge_delay;
-  }
+  return (mi_option_get(mi_option_purge_delay) * mi_option_get(mi_option_arena_purge_mult));  
 }
 
 // reset or decommit in an arena and update the commit bitmap
@@ -1504,7 +1497,7 @@ static bool mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_c
 // Schedule a purge. This is usually delayed to avoid repeated decommit/commit calls.
 // Note: assumes we (still) own the area as we may purge immediately
 static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
-  const long delay = mi_arena_purge_delay(arena);
+  const long delay = mi_arena_purge_delay();
   if (arena->memid.is_pinned || delay < 0 || _mi_preloading()) return;  // is purging allowed at all?
 
   mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
@@ -1588,7 +1581,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
   // go through all purge info's  (with max MI_BFIELD_BITS ranges at a time)
   // this also clears those ranges atomically (so any newly freed blocks will get purged next
   // time around)
-  mi_purge_visit_info_t vinfo = { now, mi_arena_purge_delay(arena), true /*all?*/, false /*any?*/};
+  mi_purge_visit_info_t vinfo = { now, mi_arena_purge_delay(), true /*all?*/, false /*any?*/};
   _mi_bitmap_forall_setc_ranges(arena->slices_purge, &mi_arena_try_purge_visitor, arena, &vinfo);
 
   return vinfo.any_purged;
@@ -1597,7 +1590,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
 
 static void mi_arenas_try_purge(bool force, bool visit_all)
 {
-  const long delay = mi_arena_purge_delay(NULL);
+  const long delay = mi_arena_purge_delay();
   if (_mi_preloading() || delay <= 0) return;  // nothing will be scheduled
 
   // check if any arena needs purging?
