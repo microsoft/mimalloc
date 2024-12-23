@@ -663,9 +663,6 @@ void mi_cdecl _mi_process_done(void) {
   if (process_done) return;
   process_done = true;
 
-  // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
-  _mi_prim_thread_done_auto_done();
-
   #ifndef MI_SKIP_COLLECT_ON_EXIT
     #if (MI_DEBUG || !defined(MI_SHARED_LIB))
     // free all memory if possible on process exit. This is not needed for a stand-alone process
@@ -683,6 +680,10 @@ void mi_cdecl _mi_process_done(void) {
     _mi_heap_unsafe_destroy_all();     // forcefully release all memory held by all heaps (of this thread only!)
     _mi_arena_unsafe_destroy_all();
   }
+
+  // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
+  // this must be done after _mi_heap_unsafe_destroy_all, which accesses the default heap
+  _mi_prim_thread_done_auto_done();
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
     mi_stats_print(NULL);
