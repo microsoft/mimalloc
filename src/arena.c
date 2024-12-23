@@ -176,10 +176,6 @@ static size_t mi_memid_size(mi_memid_t memid) {
 /* -----------------------------------------------------------
   Arena Allocation
 ----------------------------------------------------------- */
-static long mi_arena_purge_delay(void) {
-  // <0 = no purging allowed, 0=immediate purging, >0=milli-second delay
-  return (mi_option_get(mi_option_purge_delay) * mi_option_get(mi_option_arena_purge_mult));
-}
 
 static mi_decl_noinline void* mi_arena_try_alloc_at(
   mi_arena_t* arena, size_t slice_count, bool commit, size_t tseq, mi_memid_t* memid)
