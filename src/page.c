@@ -252,7 +252,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   else {
     mi_page_queue_remove(pq, page);
     mi_page_set_heap(page, NULL);
-    _mi_arena_page_abandon(page);
+    _mi_arenas_page_abandon(page);
   }
 }
 
@@ -264,7 +264,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   mi_assert_internal(mi_heap_contains_queue(heap, pq));
   mi_assert_internal(page_alignment > 0 || block_size > MI_LARGE_MAX_OBJ_SIZE || block_size == pq->block_size);
   #endif
-  mi_page_t* page = _mi_arena_page_alloc(heap, block_size, page_alignment);
+  mi_page_t* page = _mi_arenas_page_alloc(heap, block_size, page_alignment);
   if (page == NULL) {
     // out-of-memory
     return NULL;
@@ -357,7 +357,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
 
   // and free it
   mi_page_set_heap(page,NULL);
-  _mi_arena_page_free(page);
+  _mi_arenas_page_free(page);
 }
 
 #define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX   // should be less than size for MI_BIN_HUGE
