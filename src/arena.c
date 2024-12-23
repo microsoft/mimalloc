@@ -42,6 +42,7 @@ typedef struct mi_arena_s {
   int                 numa_node;            // associated NUMA node
   bool                is_exclusive;         // only allow allocations if specifically for this arena
   bool                is_large;             // memory area consists of large- or huge OS pages (always committed)
+  long                purge_delay;          // from the options, but allows setting per arena
   _Atomic(mi_msecs_t) purge_expire;         // expiration time when slices can be purged from `slices_purge`.
 
   mi_bbitmap_t*       slices_free;          // is the slice free? (a binned bitmap with size classes)
@@ -797,6 +798,7 @@ void _mi_arenas_page_free(mi_page_t* page) {
   #endif
 
   // recommit guard page at the end?
+  // we must do this since we may later allocate large spans over this page and cannot have a guard page in between
   #if MI_SECURE >= 2
   if (!page->memid.is_pinned) {
     _mi_os_commit((uint8_t*)page + mi_memid_size(page->memid) - MI_ARENA_GUARD_PAGE_SIZE, MI_ARENA_GUARD_PAGE_SIZE, NULL);
@@ -1051,7 +1053,7 @@ void _mi_arenas_unsafe_destroy_all(void) {
   Add an arena.
 ----------------------------------------------------------- */
 
-static bool mi_arena_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_t* arena_id) {
+static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_t* arena_id) {
   mi_assert_internal(arena != NULL);
   mi_assert_internal(arena->slice_count > 0);
   if (arena_id != NULL) { *arena_id = NULL; }
@@ -1093,7 +1095,7 @@ static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_bas
   const size_t size = base_size + bitmaps_size;
 
   const size_t os_page_size = _mi_os_page_size();
-  const size_t info_size = _mi_align_up(size, os_page_size) + os_page_size; // + guard page
+  const size_t info_size = _mi_align_up(size, os_page_size) + MI_ARENA_GUARD_PAGE_SIZE;
   const size_t info_slices = mi_slice_count_of_size(info_size);
 
   if (bitmap_base != NULL) *bitmap_base = base_size;
@@ -1142,18 +1144,19 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
 
   mi_arena_t* arena = (mi_arena_t*)start;
 
-  // commit & zero if needed
-  const size_t os_page_size = _mi_os_page_size();  
+  // commit & zero if needed  
   if (!memid.initially_committed) {
-    // security: always leave a guard OS page decommitted at the end (already part of info_slices)
-    _mi_os_commit(arena, mi_size_of_slices(info_slices) - os_page_size, NULL);
+    // if MI_SECURE, leave a guard OS page decommitted at the end 
+    _mi_os_commit(arena, mi_size_of_slices(info_slices) - MI_ARENA_GUARD_PAGE_SIZE, NULL);
   }
   else if (!memid.is_pinned) {
-    // security: decommit a guard OS page at the end of the arena info
-    _mi_os_decommit((uint8_t*)arena + mi_size_of_slices(info_slices) - os_page_size, os_page_size);
+    #if MI_SECURE > 0
+    // if MI_SECURE, decommit a guard OS page at the end of the arena info
+    _mi_os_decommit((uint8_t*)arena + mi_size_of_slices(info_slices) - MI_ARENA_GUARD_PAGE_SIZE, MI_ARENA_GUARD_PAGE_SIZE);
+    #endif  
   }
   if (!memid.initially_zero) {
-    _mi_memzero(arena, mi_size_of_slices(info_slices) - os_page_size);
+    _mi_memzero(arena, mi_size_of_slices(info_slices) - MI_ARENA_GUARD_PAGE_SIZE);
   }
 
   // init
@@ -1165,6 +1168,7 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
   arena->numa_node    = numa_node; // TODO: or get the current numa node if -1? (now it allows anyone to allocate on -1)
   arena->is_large     = is_large;
   arena->purge_expire = 0;
+  arena->purge_delay  = mi_option_get(mi_option_purge_delay) * mi_option_get(mi_option_arena_purge_mult);
   // mi_lock_init(&arena->abandoned_visit_lock);
 
   // init bitmaps
@@ -1194,7 +1198,7 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
     mi_bitmap_setN(arena->slices_dirty, 0, info_slices, NULL);
   }
 
-  return mi_arena_add(subproc, arena, arena_id);
+  return mi_arenas_add(subproc, arena, arena_id);
 }
 
 
@@ -1463,6 +1467,16 @@ int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserv
   Arena purge
 ----------------------------------------------------------- */
 
+static long mi_arena_purge_delay(mi_arena_t* arena) {
+  // <0 = no purging allowed, 0=immediate purging, >0=milli-second delay
+  if (arena==NULL) {
+    return (mi_option_get(mi_option_purge_delay) * mi_option_get(mi_option_arena_purge_mult));
+  }
+  else {
+    return arena->purge_delay;
+  }
+}
+
 // reset or decommit in an arena and update the commit bitmap
 // assumes we own the area (i.e. slices_free is claimed by us)
 // returns if the memory is no longer committed (versus reset which keeps the commit)
@@ -1490,8 +1504,8 @@ static bool mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_c
 // Schedule a purge. This is usually delayed to avoid repeated decommit/commit calls.
 // Note: assumes we (still) own the area as we may purge immediately
 static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
-  const long delay = mi_arena_purge_delay();
-  if (delay < 0 || _mi_preloading()) return;  // is purging allowed at all?
+  const long delay = mi_arena_purge_delay(arena);
+  if (arena->memid.is_pinned || delay < 0 || _mi_preloading()) return;  // is purging allowed at all?
 
   mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
   if (delay == 0) {
@@ -1574,7 +1588,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
   // go through all purge info's  (with max MI_BFIELD_BITS ranges at a time)
   // this also clears those ranges atomically (so any newly freed blocks will get purged next
   // time around)
-  mi_purge_visit_info_t vinfo = { now, mi_arena_purge_delay(), true /*all?*/, false /*any?*/};
+  mi_purge_visit_info_t vinfo = { now, mi_arena_purge_delay(arena), true /*all?*/, false /*any?*/};
   _mi_bitmap_forall_setc_ranges(arena->slices_purge, &mi_arena_try_purge_visitor, arena, &vinfo);
 
   return vinfo.any_purged;
@@ -1583,7 +1597,8 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
 
 static void mi_arenas_try_purge(bool force, bool visit_all)
 {
-  if (_mi_preloading() || mi_arena_purge_delay() <= 0) return;  // nothing will be scheduled
+  const long delay = mi_arena_purge_delay(NULL);
+  if (_mi_preloading() || delay <= 0) return;  // nothing will be scheduled
 
   // check if any arena needs purging?
   mi_tld_t* tld = _mi_tld();
@@ -1600,7 +1615,7 @@ static void mi_arenas_try_purge(bool force, bool visit_all)
   mi_atomic_guard(&purge_guard)
   {
     // increase global expire: at most one purge per delay cycle
-    mi_atomic_store_release(&subproc->purge_expire, now + mi_arena_purge_delay());
+    mi_atomic_store_release(&subproc->purge_expire, now + delay);
     const size_t arena_start = tld->thread_seq % max_arena;
     size_t max_purge_count = (visit_all ? max_arena : 2);
     bool all_visited = true;
@@ -1720,7 +1735,7 @@ mi_decl_export bool mi_arena_reload(void* start, size_t size, mi_arena_id_t* are
 
   arena->is_exclusive = true;
   arena->subproc = _mi_subproc();
-  if (!mi_arena_add(arena->subproc, arena, arena_id)) {
+  if (!mi_arenas_add(arena->subproc, arena, arena_id)) {
     return false;
   }
   mi_arena_pages_reregister(arena);
