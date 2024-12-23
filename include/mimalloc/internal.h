@@ -435,13 +435,14 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
 
 
 /* -----------------------------------------------------------
-  Pages
+  The page map maps addresses to `mi_page_t` pointers
 ----------------------------------------------------------- */
 
 #if MI_PAGE_MAP_FLAT
 
-// flat page-map committed on demand
+// flat page-map committed on demand, using one byte per slice (64 KiB).
 // single indirection and low commit, but large initial virtual reserve (4 GiB with 48 bit virtual addresses)
+// used by default on <= 40 bit virtual address spaces.
 extern uint8_t* _mi_page_map;
 
 static inline size_t _mi_page_map_index(const void* p) {
@@ -468,26 +469,23 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
 #else
 
 // 2-level page map:
-// double indirection but low commit and low virtual reserve.
-// 
-// The page-map is usually 4 MiB and points to sub maps of 64 KiB. 
-// The page-map is committed on-demand (in 64 KiB) parts (and sub-maps are committed on-demand as well)
-// One sub page-map = 64 KiB => covers 2^13 * 2^16 = 2^32 = 512 MiB address space
-// The page-map needs 48-16-13 = 19 bits => 2^19 sub map pointers = 4 MiB size.
-// (Choosing a MI_PAGE_MAP_SUB_SHIFT of 16 gives slightly better code but will commit the initial sub-map at 512 KiB)
-
+// double indirection, but low commit and low virtual reserve.
+//
+// the page-map is usually 4 MiB and points to sub maps of 64 KiB.
+// the page-map is committed on-demand (in 64 KiB parts) (and sub-maps are committed on-demand as well)
+// one sub page-map = 64 KiB => covers 2^(16-3) * 2^16 = 2^29 = 512 MiB address space
+// the page-map needs 48-(16+13) = 19 bits => 2^19 sub map pointers = 4 MiB size.
 #define MI_PAGE_MAP_SUB_SHIFT     (13)
 #define MI_PAGE_MAP_SUB_COUNT     (MI_ZU(1) << MI_PAGE_MAP_SUB_SHIFT)
-
 #define MI_PAGE_MAP_SHIFT         (MI_MAX_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT)
 #define MI_PAGE_MAP_COUNT         (MI_ZU(1) << MI_PAGE_MAP_SHIFT)
 
 extern mi_page_t*** _mi_page_map;
 
 static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
-  const uintptr_t u = (uintptr_t)p / MI_ARENA_SLICE_SIZE;
-  if (sub_idx != NULL) { *sub_idx = (uint32_t)u % MI_PAGE_MAP_SUB_COUNT; }
-  return (size_t)(u / MI_PAGE_MAP_SUB_COUNT);
+  const size_t u = (size_t)((uintptr_t)p / MI_ARENA_SLICE_SIZE);
+  if (sub_idx != NULL) { *sub_idx = u % MI_PAGE_MAP_SUB_COUNT; }
+  return (u / MI_PAGE_MAP_SUB_COUNT);
 }
 
 static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
