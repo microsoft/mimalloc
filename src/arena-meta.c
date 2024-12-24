@@ -25,12 +25,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_META_PAGE_SIZE         MI_ARENA_SLICE_SIZE
 #define MI_META_PAGE_ALIGN        MI_ARENA_SLICE_ALIGN
 
-#if MI_SECURE 
-#define MI_META_PAGE_GUARD_SIZE   (4*MI_KiB)
-#else
-#define MI_META_PAGE_GUARD_SIZE   (0)
-#endif
-
 #define MI_META_BLOCK_SIZE        (128)                       // large enough such that META_MAX_SIZE > 4k (even on 32-bit)
 #define MI_META_BLOCK_ALIGN       MI_META_BLOCK_SIZE
 #define MI_META_BLOCKS_PER_PAGE   (MI_ARENA_SLICE_SIZE / MI_META_BLOCK_SIZE)  // 1024
@@ -47,7 +41,7 @@ static mi_decl_cache_align _Atomic(mi_meta_page_t*)  mi_meta_pages = MI_ATOMIC_V
 
 #if MI_DEBUG > 1
 static mi_meta_page_t* mi_meta_page_of_ptr(void* p, size_t* block_idx) {
-  mi_meta_page_t* mpage = (mi_meta_page_t*)((uint8_t*)mi_align_down_ptr(p,MI_META_PAGE_ALIGN) + MI_META_PAGE_GUARD_SIZE);
+  mi_meta_page_t* mpage = (mi_meta_page_t*)((uint8_t*)mi_align_down_ptr(p,MI_META_PAGE_ALIGN) + _mi_os_secure_guard_page_size());
   if (block_idx != NULL) {
     *block_idx = ((uint8_t*)p - (uint8_t*)mpage) / MI_META_BLOCK_SIZE;
   }
@@ -60,9 +54,9 @@ static mi_meta_page_t* mi_meta_page_next( mi_meta_page_t* mpage ) {
 }
 
 static void* mi_meta_block_start( mi_meta_page_t* mpage, size_t block_idx ) {
-  mi_assert_internal(_mi_is_aligned((uint8_t*)mpage - MI_META_PAGE_GUARD_SIZE, MI_META_PAGE_ALIGN));
+  mi_assert_internal(_mi_is_aligned((uint8_t*)mpage - _mi_os_secure_guard_page_size(), MI_META_PAGE_ALIGN));
   mi_assert_internal(block_idx < MI_META_BLOCKS_PER_PAGE);
-  void* p = ((uint8_t*)mpage - MI_META_PAGE_GUARD_SIZE + (block_idx * MI_META_BLOCK_SIZE));
+  void* p = ((uint8_t*)mpage - _mi_os_secure_guard_page_size() + (block_idx * MI_META_BLOCK_SIZE));
   mi_assert_internal(mpage == mi_meta_page_of_ptr(p,NULL));
   return p;
 }
@@ -82,20 +76,18 @@ static mi_meta_page_t* mi_meta_page_zalloc(void) {
   }
 
   // guard pages
-  #if MI_SECURE 
-  if (!memid.is_pinned) {
-    _mi_os_decommit(base, MI_META_PAGE_GUARD_SIZE);
-    _mi_os_decommit(base + MI_META_PAGE_SIZE - MI_META_PAGE_GUARD_SIZE, MI_META_PAGE_GUARD_SIZE);
-  }
+  #if MI_SECURE >= 1
+  _mi_os_secure_guard_page_set_at(base, memid.is_pinned);
+  _mi_os_secure_guard_page_set_before(base + MI_META_PAGE_SIZE, memid.is_pinned);
   #endif
-
+  
   // initialize the page and free block bitmap
-  mi_meta_page_t* mpage = (mi_meta_page_t*)(base + MI_META_PAGE_GUARD_SIZE);
+  mi_meta_page_t* mpage = (mi_meta_page_t*)(base + _mi_os_secure_guard_page_size());
   mpage->memid = memid;
   mi_bitmap_init(&mpage->blocks_free, MI_META_BLOCKS_PER_PAGE, true /* already_zero */);
   const size_t mpage_size  = offsetof(mi_meta_page_t,blocks_free) + mi_bitmap_size(MI_META_BLOCKS_PER_PAGE, NULL);
   const size_t info_blocks = _mi_divide_up(mpage_size,MI_META_BLOCK_SIZE);
-  const size_t guard_blocks = _mi_divide_up(MI_META_PAGE_GUARD_SIZE, MI_META_BLOCK_SIZE);
+  const size_t guard_blocks = _mi_divide_up(_mi_os_secure_guard_page_size(), MI_META_BLOCK_SIZE);
   mi_assert_internal(info_blocks + 2*guard_blocks < MI_META_BLOCKS_PER_PAGE);  
   mi_bitmap_unsafe_setN(&mpage->blocks_free, info_blocks + guard_blocks, MI_META_BLOCKS_PER_PAGE - info_blocks - 2*guard_blocks);
 

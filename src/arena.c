@@ -576,12 +576,6 @@ static mi_page_t* mi_arenas_page_try_find_abandoned(mi_subproc_t* subproc, size_
   return NULL;
 }
 
-#if MI_SECURE < 2
-#define MI_ARENA_GUARD_PAGE_SIZE  (0)
-#else
-#define MI_ARENA_GUARD_PAGE_SIZE  (4*MI_KiB)
-#endif
-
 // Allocate a fresh page
 static mi_page_t* mi_arenas_page_alloc_fresh(mi_subproc_t* subproc, size_t slice_count, size_t block_size, size_t block_alignment,
                                             mi_arena_t* req_arena, size_t tseq)
@@ -621,11 +615,14 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_subproc_t* subproc, size_t slice
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(!os_align || _mi_is_aligned((uint8_t*)page + page_alignment, block_alignment));
 
-  // guard page at the end
-  const size_t page_noguard_size = mi_size_of_slices(slice_count) - MI_ARENA_GUARD_PAGE_SIZE;
-  #if MI_SECURE >= 2
-  if (memid.initially_committed && !memid.is_pinned) {
-    _mi_os_decommit((uint8_t*)page + page_noguard_size, MI_ARENA_GUARD_PAGE_SIZE);
+  // guard page at the end of mimalloc page?
+  #if MI_SECURE < 2
+  const size_t page_noguard_size = mi_size_of_slices(slice_count);
+  #else
+  mi_assert(mi_size_of_slices(slice_count) > _mi_os_secure_guard_page_size());
+  const size_t page_noguard_size = mi_size_of_slices(slice_count) - _mi_os_secure_guard_page_size();
+  if (memid.initially_committed) {
+    _mi_os_secure_guard_page_set_at((uint8_t*)page + page_noguard_size, memid.is_pinned);
   }
   #endif
 
@@ -795,7 +792,7 @@ void _mi_arenas_page_free(mi_page_t* page) {
   // we must do this since we may later allocate large spans over this page and cannot have a guard page in between
   #if MI_SECURE >= 2
   if (!page->memid.is_pinned) {
-    _mi_os_commit((uint8_t*)page + mi_memid_size(page->memid) - MI_ARENA_GUARD_PAGE_SIZE, MI_ARENA_GUARD_PAGE_SIZE, NULL);
+    _mi_os_secure_guard_page_reset_before((uint8_t*)page + mi_memid_size(page->memid));
   }
   #endif
 
@@ -1089,7 +1086,7 @@ static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_bas
   const size_t size = base_size + bitmaps_size;
 
   const size_t os_page_size = _mi_os_page_size();
-  const size_t info_size = _mi_align_up(size, os_page_size) + MI_ARENA_GUARD_PAGE_SIZE;
+  const size_t info_size = _mi_align_up(size, os_page_size) + _mi_os_secure_guard_page_size();
   const size_t info_slices = mi_slice_count_of_size(info_size);
 
   if (bitmap_base != NULL) *bitmap_base = base_size;
@@ -1105,7 +1102,6 @@ static mi_bitmap_t* mi_arena_bitmap_init(size_t slice_count, uint8_t** base) {
 
 static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t size, int numa_node, bool exclusive, mi_memid_t memid, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
-  mi_assert(!is_large || (memid.initially_committed && memid.is_pinned));
   mi_assert(_mi_is_aligned(start,MI_ARENA_SLICE_SIZE));
   mi_assert(start!=NULL);
   if (start==NULL) return false;
@@ -1134,17 +1130,15 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
 
   // commit & zero if needed  
   if (!memid.initially_committed) {
-    // if MI_SECURE, leave a guard OS page decommitted at the end 
-    _mi_os_commit(arena, mi_size_of_slices(info_slices) - MI_ARENA_GUARD_PAGE_SIZE, NULL);
+    // leave a guard OS page decommitted at the end 
+    _mi_os_commit(arena, mi_size_of_slices(info_slices) - _mi_os_secure_guard_page_size(), NULL);
   }
-  else if (!memid.is_pinned) {
-    #if MI_SECURE > 0
-    // if MI_SECURE, decommit a guard OS page at the end of the arena info
-    _mi_os_decommit((uint8_t*)arena + mi_size_of_slices(info_slices) - MI_ARENA_GUARD_PAGE_SIZE, MI_ARENA_GUARD_PAGE_SIZE);
-    #endif  
+  else {
+    // if MI_SECURE, set a guard page at the end
+    _mi_os_secure_guard_page_set_before((uint8_t*)arena + mi_size_of_slices(info_slices), memid.is_pinned);
   }
   if (!memid.initially_zero) {
-    _mi_memzero(arena, mi_size_of_slices(info_slices) - MI_ARENA_GUARD_PAGE_SIZE);
+    _mi_memzero(arena, mi_size_of_slices(info_slices) - _mi_os_secure_guard_page_size());
   }
 
   // init
