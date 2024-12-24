@@ -46,8 +46,12 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
 // #define MI_STAT 1
 
-// Define MI_SECURE to enable security mitigations. The lowest two have minimal performance impact:
+// Define MI_SECURE to enable security mitigations. Level 1 has minimal performance impact,
+// but protects most metadata with guard pages:
 //   #define MI_SECURE 1  // guard page around metadata
+// 
+// Level 2 has more performance impact but protect well against various buffer overflows 
+// by surrounding all mimalloc pages with guard pages:
 //   #define MI_SECURE 2  // guard page around each mimalloc page (can fragment VMA's with large heaps..)
 // 
 // The next two levels can have more performance cost:
@@ -125,7 +129,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SMALL_PAGE_SIZE                MI_ARENA_MIN_OBJ_SIZE
 #define MI_MEDIUM_PAGE_SIZE               (8*MI_SMALL_PAGE_SIZE)                   // 512 KiB  (=byte in the bitmap)
 #define MI_LARGE_PAGE_SIZE                (MI_SIZE_SIZE*MI_MEDIUM_PAGE_SIZE)       // 4 MiB    (=word in the bitmap)
-
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)

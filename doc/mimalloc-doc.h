@@ -431,12 +431,11 @@ int  mi_reserve_os_memory(size_t size, bool commit, bool allow_large);
 /// @param start       Start of the memory area
 /// @param size        The size of the memory area.
 /// @param is_committed Is the area already committed?
-/// @param is_large    Does it consist of large OS pages? Set this to \a true as well for memory
-///                    that should not be decommitted or protected (like rdma etc.)
+/// @param is_pinned   Can the memory not be decommitted or reset? (usually the case for large OS pages)
 /// @param is_zero     Does the area consists of zero's?
 /// @param numa_node   Possible associated numa node or `-1`.
 /// @return \a true if successful, and \a false on error.
-bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node);
+bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node);
 
 /// Reserve \a pages of huge OS pages (1GiB) evenly divided over \a numa_nodes nodes,
 /// but stops after at most `timeout_msecs` seconds.
@@ -589,7 +588,7 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc);
 
 /// Allocate \a size bytes aligned by \a alignment.
 /// @param size  number of bytes to allocate.
-/// @param alignment  the minimal alignment of the allocated memory.       
+/// @param alignment  the minimal alignment of the allocated memory.
 /// @returns pointer to the allocated memory or \a NULL if out of memory,
 /// or if the alignment is not a power of 2 (including 0). The \a size is unrestricted
 /// (and does not have to be an integral multiple of the \a alignment).

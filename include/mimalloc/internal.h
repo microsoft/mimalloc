@@ -116,6 +116,7 @@ void          _mi_os_free(void* p, size_t size, mi_memid_t memid);
 void          _mi_os_free_ex(void* p, size_t size, bool still_committed, mi_memid_t memid);
 
 size_t        _mi_os_page_size(void);
+size_t        _mi_os_guard_page_size(void);
 size_t        _mi_os_good_alloc_size(size_t size);
 bool          _mi_os_has_overcommit(void);
 bool          _mi_os_has_virtual_reserve(void);
@@ -128,6 +129,13 @@ bool          _mi_os_protect(void* addr, size_t size);
 bool          _mi_os_unprotect(void* addr, size_t size);
 bool          _mi_os_purge(void* p, size_t size);
 bool          _mi_os_purge_ex(void* p, size_t size, bool allow_reset);
+
+size_t        _mi_os_secure_guard_page_size(void);
+bool          _mi_os_secure_guard_page_set_at(void* addr, bool is_pinned);
+bool          _mi_os_secure_guard_page_set_before(void* addr, bool is_pinned);
+bool          _mi_os_secure_guard_page_reset_at(void* addr);
+bool          _mi_os_secure_guard_page_reset_before(void* addr);
+
 
 void*         _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid);
 void*         _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
@@ -143,8 +151,8 @@ mi_arena_id_t _mi_arena_id_none(void);
 mi_arena_t*   _mi_arena_from_id(mi_arena_id_t id);
 bool          _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_t* request_arena);
 
-void*         _mi_arenas_alloc(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
-void*         _mi_arenas_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
+void*         _mi_arenas_alloc(mi_subproc_t* subproc, size_t size, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
+void*         _mi_arenas_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
 void          _mi_arenas_free(void* p, size_t size, mi_memid_t memid);
 bool          _mi_arenas_contain(const void* p);
 void          _mi_arenas_collect(bool force_purge, mi_tld_t* tld);
@@ -435,13 +443,14 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
 
 
 /* -----------------------------------------------------------
-  Pages
+  The page map maps addresses to `mi_page_t` pointers
 ----------------------------------------------------------- */
 
 #if MI_PAGE_MAP_FLAT
 
-// flat page-map committed on demand
+// flat page-map committed on demand, using one byte per slice (64 KiB).
 // single indirection and low commit, but large initial virtual reserve (4 GiB with 48 bit virtual addresses)
+// used by default on <= 40 bit virtual address spaces.
 extern uint8_t* _mi_page_map;
 
 static inline size_t _mi_page_map_index(const void* p) {
@@ -468,26 +477,23 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
 #else
 
 // 2-level page map:
-// double indirection but low commit and low virtual reserve.
-// 
-// The page-map is usually 4 MiB and points to sub maps of 64 KiB. 
-// The page-map is committed on-demand (in 64 KiB) parts (and sub-maps are committed on-demand as well)
-// One sub page-map = 64 KiB => covers 2^13 * 2^16 = 2^32 = 512 MiB address space
-// The page-map needs 48-16-13 = 19 bits => 2^19 sub map pointers = 4 MiB size.
-// (Choosing a MI_PAGE_MAP_SUB_SHIFT of 16 gives slightly better code but will commit the initial sub-map at 512 KiB)
-
+// double indirection, but low commit and low virtual reserve.
+//
+// the page-map is usually 4 MiB and points to sub maps of 64 KiB.
+// the page-map is committed on-demand (in 64 KiB parts) (and sub-maps are committed on-demand as well)
+// one sub page-map = 64 KiB => covers 2^(16-3) * 2^16 = 2^29 = 512 MiB address space
+// the page-map needs 48-(16+13) = 19 bits => 2^19 sub map pointers = 4 MiB size.
 #define MI_PAGE_MAP_SUB_SHIFT     (13)
 #define MI_PAGE_MAP_SUB_COUNT     (MI_ZU(1) << MI_PAGE_MAP_SUB_SHIFT)
-
 #define MI_PAGE_MAP_SHIFT         (MI_MAX_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT)
 #define MI_PAGE_MAP_COUNT         (MI_ZU(1) << MI_PAGE_MAP_SHIFT)
 
 extern mi_page_t*** _mi_page_map;
 
 static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
-  const uintptr_t u = (uintptr_t)p / MI_ARENA_SLICE_SIZE;
-  if (sub_idx != NULL) { *sub_idx = (uint32_t)u % MI_PAGE_MAP_SUB_COUNT; }
-  return (size_t)(u / MI_PAGE_MAP_SUB_COUNT);
+  const size_t u = (size_t)((uintptr_t)p / MI_ARENA_SLICE_SIZE);
+  if (sub_idx != NULL) { *sub_idx = u % MI_PAGE_MAP_SUB_COUNT; }
+  return (u / MI_PAGE_MAP_SUB_COUNT);
 }
 
 static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
