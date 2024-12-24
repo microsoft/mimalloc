@@ -280,7 +280,7 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
 
   if (arena_count >= 1 && arena_count <= 128) {
     // scale up the arena sizes exponentially every 4 entries
-    const size_t multiplier = (size_t)1 << _mi_clamp(arena_count/2, 0, 16);
+    const size_t multiplier = (size_t)1 << _mi_clamp(arena_count/4, 0, 16);
     size_t reserve = 0;
     if (!mi_mul_overflow(multiplier, arena_reserve, &reserve)) {
       arena_reserve = reserve;
