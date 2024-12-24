@@ -251,8 +251,10 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   }
   else {
     mi_page_queue_remove(pq, page);
+    mi_tld_t* tld = page->heap->tld;
     mi_page_set_heap(page, NULL);
-    _mi_arenas_page_abandon(page);    
+    _mi_arenas_page_abandon(page);  
+    _mi_arenas_collect(false, false, tld); // allow purging
   }
 }
 
@@ -263,7 +265,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   mi_assert_internal(pq != NULL);
   mi_assert_internal(mi_heap_contains_queue(heap, pq));
   mi_assert_internal(page_alignment > 0 || block_size > MI_LARGE_MAX_OBJ_SIZE || block_size == pq->block_size);
-  #endif
+  #endif  
   mi_page_t* page = _mi_arenas_page_alloc(heap, block_size, page_alignment);
   if (page == NULL) {
     // out-of-memory
@@ -359,7 +361,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   mi_heap_t* heap = page->heap;
   mi_page_set_heap(page,NULL);
   _mi_arenas_page_free(page);
-  _mi_arenas_collect(false, heap->tld);  // allow purging
+  _mi_arenas_collect(false, false, heap->tld);  // allow purging
 }
 
 #define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX   // should be less than size for MI_BIN_HUGE
@@ -606,6 +608,17 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_internal(extend > 0 && extend + page->capacity <= page->reserved);
   mi_assert_internal(extend < (1UL<<16));
 
+  // commit on demand?
+  if (page->slice_committed > 0) {
+    const size_t needed_size = (page->capacity + extend)*bsize;
+    const size_t needed_commit = _mi_align_up( mi_page_slice_offset_of(page, needed_size), MI_PAGE_MIN_COMMIT_SIZE );
+    if (needed_commit > page->slice_committed) {      
+      mi_assert_internal(((needed_commit - page->slice_committed) % _mi_os_page_size()) == 0);
+      _mi_os_commit(mi_page_slice_start(page) + page->slice_committed, needed_commit - page->slice_committed, NULL);
+      page->slice_committed = needed_commit;
+    }
+  }
+
   // and append the extend the free list
   if (extend < MI_MIN_SLICES || MI_SECURE<3) { //!mi_option_is_enabled(mi_option_secure)) {
     mi_page_free_list_extend(page, bsize, extend, &heap->tld->stats );
@@ -635,8 +648,8 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
   #endif
   #if MI_DEBUG>2
   if (page->memid.initially_zero) {
-    mi_track_mem_defined(page->page_start, page_size);
-    mi_assert_expensive(mi_mem_is_zero(page_start, page_size));
+    mi_track_mem_defined(page->page_start, mi_page_committed(page));
+    mi_assert_expensive(mi_mem_is_zero(page_start, mi_page_committed(page)));
   }
   #endif
 

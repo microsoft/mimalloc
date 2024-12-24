@@ -139,6 +139,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // We never allocate more than PTRDIFF_MAX (see also <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
 #define MI_MAX_ALLOC_SIZE        PTRDIFF_MAX
 
+// Minimal commit for a page on-demand commit (should be >= OS page size, and >= MI_ARENA_SLICE_SIZE for correct stats)
+#define MI_PAGE_MIN_COMMIT_SIZE  MI_ARENA_SLICE_SIZE
+
 // ------------------------------------------------------
 // Arena's are large reserved areas of memory allocated from
 // the OS that are managed by mimalloc to efficiently
@@ -290,7 +293,7 @@ typedef struct mi_page_s {
   _Atomic(mi_page_flags_t)  xflags;            // `in_full_queue` and `has_aligned` flags
 
   size_t                    block_size;        // size available in each block (always `>0`)
-  uint8_t*                  page_start;        // start of the blocks
+  uint8_t*                  page_start;        // start of the blocks  
   mi_heaptag_t              heap_tag;          // tag of the owning heap, used to separate heaps by object type
   bool                      free_is_zero;      // `true` if the blocks in the free list are zero initialized
                                                // padding
@@ -301,6 +304,7 @@ typedef struct mi_page_s {
   mi_heap_t*                heap;              // the heap owning this page (or NULL for abandoned pages)
   struct mi_page_s*         next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*         prev;              // previous page owned by the heap with the same `block_size`
+  size_t                    slice_committed;   // committed size relative to the first arena slice of the page data
   mi_memid_t                memid;             // provenance of the page memory
 } mi_page_t;
 
@@ -322,9 +326,9 @@ typedef struct mi_page_s {
 
 // The max object size are checked to not waste more than 12.5% internally over the page sizes.
 // (Except for large pages since huge objects are allocated in 4MiB chunks)
-#define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)   // < 11 KiB
-#define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)  // < 128 KiB
-#define MI_LARGE_MAX_OBJ_SIZE             ((MI_LARGE_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)   // < 1 MiB
+#define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)   // < 8 KiB
+#define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)  // < 64 KiB
+#define MI_LARGE_MAX_OBJ_SIZE             ((MI_LARGE_PAGE_SIZE-MI_PAGE_INFO_SIZE)/4)   // < 512 KiB
 #define MI_LARGE_MAX_OBJ_WSIZE            (MI_LARGE_MAX_OBJ_SIZE/MI_SIZE_SIZE)
 
 

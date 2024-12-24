@@ -35,6 +35,7 @@ const mi_page_t _mi_page_empty = {
   #endif
   NULL,                   // xheap
   NULL, NULL,             // next, prev
+  MI_ARENA_SLICE_SIZE,    // page_committed
   MI_MEMID_STATIC         // memid
 };
 
