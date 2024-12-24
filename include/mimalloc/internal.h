@@ -128,7 +128,8 @@ bool          _mi_os_decommit(void* addr, size_t size);
 bool          _mi_os_protect(void* addr, size_t size);
 bool          _mi_os_unprotect(void* addr, size_t size);
 bool          _mi_os_purge(void* p, size_t size);
-bool          _mi_os_purge_ex(void* p, size_t size, bool allow_reset);
+bool          _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stats_size);
+bool          _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size);
 
 size_t        _mi_os_secure_guard_page_size(void);
 bool          _mi_os_secure_guard_page_set_at(void* addr, bool is_pinned);
@@ -155,7 +156,7 @@ void*         _mi_arenas_alloc(mi_subproc_t* subproc, size_t size, bool commit, 
 void*         _mi_arenas_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
 void          _mi_arenas_free(void* p, size_t size, mi_memid_t memid);
 bool          _mi_arenas_contain(const void* p);
-void          _mi_arenas_collect(bool force_purge, mi_tld_t* tld);
+void          _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld);
 void          _mi_arenas_unsafe_destroy_all(mi_tld_t* tld);
 
 mi_page_t*    _mi_arenas_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
@@ -534,9 +535,12 @@ static inline uint8_t* mi_page_start(const mi_page_t* page) {
   return page->page_start;
 }
 
+static inline size_t mi_page_size(const mi_page_t* page) {
+  return mi_page_block_size(page) * page->reserved;
+}
 
 static inline uint8_t* mi_page_area(const mi_page_t* page, size_t* size) {
-  if (size) { *size = mi_page_block_size(page) * page->reserved; }
+  if (size) { *size = mi_page_size(page); }
   return mi_page_start(page);
 }
 
@@ -562,6 +566,21 @@ static inline bool mi_page_is_singleton(const mi_page_t* page) {
 // This may still include internal padding due to alignment and rounding up size classes.
 static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
   return mi_page_block_size(page) - MI_PADDING_SIZE;
+}
+
+// This may change if we locate page info outside the page data slices
+static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
+  return (uint8_t*)page;
+}
+
+// This gives the offset relative to the start slice of a page. This may change if we ever
+// locate page info outside the page-data itself.
+static inline size_t mi_page_slice_offset_of(const mi_page_t* page, size_t offset_relative_to_page_start) {
+  return (page->page_start - mi_page_slice_start(page)) + offset_relative_to_page_start;
+}
+
+static inline size_t mi_page_committed(const mi_page_t* page) {
+  return (page->slice_committed == 0 ? mi_page_size(page) : page->slice_committed - (page->page_start - mi_page_slice_start(page)));
 }
 
 static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {

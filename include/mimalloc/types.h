@@ -139,6 +139,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // We never allocate more than PTRDIFF_MAX (see also <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
 #define MI_MAX_ALLOC_SIZE        PTRDIFF_MAX
 
+// Minimal commit for a page on-demand commit (should be >= OS page size, and >= MI_ARENA_SLICE_SIZE for correct stats)
 #define MI_PAGE_MIN_COMMIT_SIZE  MI_ARENA_SLICE_SIZE
 
 // ------------------------------------------------------
@@ -303,7 +304,7 @@ typedef struct mi_page_s {
   mi_heap_t*                heap;              // the heap owning this page (or NULL for abandoned pages)
   struct mi_page_s*         next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*         prev;              // previous page owned by the heap with the same `block_size`
-  size_t                    page_committed;    // committed size relative to `page_start`. 
+  size_t                    slice_committed;   // committed size relative to the first arena slice of the page data
   mi_memid_t                memid;             // provenance of the page memory
 } mi_page_t;
 

@@ -144,7 +144,7 @@ static mi_option_desc_t options[_mi_option_last] =
 #else
   { 1, UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
 #endif
-  { 250, UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
+  { 0,   UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
   { 0,   UNINIT, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.
   { 0,   UNINIT, MI_OPTION_LEGACY(disallow_os_alloc,limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)
   { 100, UNINIT, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose
@@ -175,7 +175,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0,   UNINIT, MI_OPTION(max_vabits) },
   { MI_DEFAULT_PAGEMAP_COMMIT, 
          UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
-  { 0,   UNINIT, MI_OPTION(page_commit_on_demand) },
+  { 1,   UNINIT, MI_OPTION(page_commit_on_demand) },
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

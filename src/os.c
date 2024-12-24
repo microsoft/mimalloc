@@ -429,9 +429,9 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
   return mi_os_page_align_areax(true, addr, size, newsize);
 }
 
-bool _mi_os_commit(void* addr, size_t size, bool* is_zero) {
+bool _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size) {
   if (is_zero != NULL) { *is_zero = false; }
-  mi_os_stat_increase(committed, size);  // use size for precise commit vs. decommit
+  mi_os_stat_increase(committed, stat_size);  // use size for precise commit vs. decommit
   mi_os_stat_counter_increase(commit_calls, 1);
 
   // page align range
@@ -458,9 +458,13 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero) {
   return true;
 }
 
-static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit) {
+bool _mi_os_commit(void* addr, size_t size, bool* is_zero) {
+  return _mi_os_commit_ex(addr, size, is_zero, size);
+}
+
+static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit, size_t stats_size) {
   mi_assert_internal(needs_recommit!=NULL);
-  mi_os_stat_decrease(committed, size);
+  mi_os_stat_decrease(committed, stats_size);
 
   // page align
   size_t csize;
@@ -479,7 +483,7 @@ static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit) {
 
 bool _mi_os_decommit(void* addr, size_t size) {
   bool needs_recommit;
-  return mi_os_decommit_ex(addr, size, &needs_recommit);
+  return mi_os_decommit_ex(addr, size, &needs_recommit, size);
 }
 
 
@@ -509,7 +513,7 @@ bool _mi_os_reset(void* addr, size_t size) {
 
 // either resets or decommits memory, returns true if the memory needs
 // to be recommitted if it is to be re-used later on.
-bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset)
+bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stats_size)
 {
   if (mi_option_get(mi_option_purge_delay) < 0) return false;  // is purging allowed?
   mi_os_stat_counter_increase(purge_calls, 1);
@@ -519,7 +523,7 @@ bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset)
     !_mi_preloading())                                     // don't decommit during preloading (unsafe)
   {
     bool needs_recommit = true;
-    mi_os_decommit_ex(p, size, &needs_recommit);
+    mi_os_decommit_ex(p, size, &needs_recommit, stats_size);
     return needs_recommit;
   }
   else {
@@ -533,7 +537,7 @@ bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset)
 // either resets or decommits memory, returns true if the memory needs
 // to be recommitted if it is to be re-used later on.
 bool _mi_os_purge(void* p, size_t size) {
-  return _mi_os_purge_ex(p, size, true);
+  return _mi_os_purge_ex(p, size, true, size);
 }
 
 
