@@ -606,6 +606,18 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_internal(extend > 0 && extend + page->capacity <= page->reserved);
   mi_assert_internal(extend < (1UL<<16));
 
+  // commit on demand?
+  if (page->page_committed > 0) {
+    const size_t needed_size = (page->capacity + extend)*bsize;
+    if (needed_size > page->page_committed) {
+      size_t commit_size = _mi_align_up(needed_size, MI_PAGE_MIN_COMMIT_SIZE);
+      const size_t max_size = page->reserved * bsize;
+      if (commit_size > max_size) { commit_size = max_size; }
+      mi_assert(commit_size > page->page_committed);
+      _mi_os_commit(mi_page_start(page) + page->page_committed, commit_size - page->page_committed, NULL);
+    }
+  }
+
   // and append the extend the free list
   if (extend < MI_MIN_SLICES || MI_SECURE<3) { //!mi_option_is_enabled(mi_option_secure)) {
     mi_page_free_list_extend(page, bsize, extend, &heap->tld->stats );
@@ -635,8 +647,8 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
   #endif
   #if MI_DEBUG>2
   if (page->memid.initially_zero) {
-    mi_track_mem_defined(page->page_start, page_size);
-    mi_assert_expensive(mi_mem_is_zero(page_start, page_size));
+    mi_track_mem_defined(page->page_start, (page->page_committed == 0 ? page_size : page->page_committed));
+    mi_assert_expensive(mi_mem_is_zero(page_start, (page->page_committed == 0 ? page_size : page->page_committed)));
   }
   #endif
 
