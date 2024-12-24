@@ -123,7 +123,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
     //mi_assert_internal(!_mi_process_is_initialized);
     {
       mi_page_queue_t* pq = mi_page_queue_of(page);
-      mi_assert_internal(mi_page_queue_contains(pq, page));
+      mi_assert_internal(mi_page_is_huge(page) || mi_page_queue_contains(pq, page));
       mi_assert_internal(pq->block_size==mi_page_block_size(page) || mi_page_is_huge(page) || mi_page_is_in_full(page));
       // mi_assert_internal(mi_heap_contains_queue(mi_page_heap(page),pq));
     }
@@ -298,7 +298,7 @@ static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
   mi_page_t* page = mi_page_fresh_alloc(heap, pq, pq->block_size, 0);
   if (page==NULL) return NULL;
   mi_assert_internal(pq->block_size==mi_page_block_size(page));
-  mi_assert_internal(pq==mi_heap_page_queue_of(heap, page));
+  mi_assert_internal(mi_page_is_huge(page) || pq==mi_heap_page_queue_of(heap, page));
   return page;
 }
 
