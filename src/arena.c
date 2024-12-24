@@ -720,10 +720,10 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_heap_t* heap, size_t block_s
   mi_tld_t* const tld = heap->tld;
   const bool os_align = (block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN);
   const size_t info_size = (os_align ? MI_PAGE_ALIGN : mi_page_info_size());
-  #if MI_ARENA_GUARD_PAGE_SIZE == 0
+  #if MI_SECURE < 2
   const size_t slice_count = mi_slice_count_of_size(info_size + block_size);
   #else
-  const size_t slice_count = mi_slice_count_of_size(_mi_align_up(info_size + block_size, MI_ARENA_GUARD_PAGE_SIZE) + MI_ARENA_GUARD_PAGE_SIZE);
+  const size_t slice_count = mi_slice_count_of_size(_mi_align_up(info_size + block_size, _mi_os_secure_guard_page_size()) + _mi_os_secure_guard_page_size());
   #endif
 
   mi_page_t* page = mi_arenas_page_alloc_fresh(tld->subproc, slice_count, block_size, block_alignment, req_arena, tld->thread_seq);
