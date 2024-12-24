@@ -1551,7 +1551,7 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_tld_t* tld)
   mi_subproc_t* subproc = tld->subproc;
   const mi_msecs_t now = _mi_clock_now();
   mi_msecs_t arenas_expire = mi_atomic_load_acquire(&subproc->purge_expire);
-  if (!force && (arenas_expire == 0 || arenas_expire < now)) return;
+  if (!force && (arenas_expire == 0 || arenas_expire > now)) return;
 
   const size_t max_arena = mi_arenas_get_count(subproc);
   if (max_arena == 0) return;
