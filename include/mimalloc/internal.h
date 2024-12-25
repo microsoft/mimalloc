@@ -121,7 +121,7 @@ bool        _mi_os_decommit(void* addr, size_t size);
 bool        _mi_os_protect(void* addr, size_t size);
 bool        _mi_os_unprotect(void* addr, size_t size);
 bool        _mi_os_purge(void* p, size_t size);
-bool        _mi_os_purge_ex(void* p, size_t size, bool allow_reset);
+bool        _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stat_size);
 
 void*       _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid);
 void*       _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
