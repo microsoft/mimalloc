@@ -706,9 +706,10 @@ static inline bool mi_page_is_huge(const mi_page_t* page) {
           (mi_memkind_is_os(page->memid.memkind) && page->memid.mem.os.base < (void*)page));
 }
 
-
 static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size) {
-  return &((mi_heap_t*)heap)->pages[_mi_bin(size)];
+  mi_page_queue_t* const pq = &((mi_heap_t*)heap)->pages[_mi_bin(size)];
+  if (size <= MI_LARGE_MAX_OBJ_SIZE) { mi_assert_internal(pq->block_size <= MI_LARGE_MAX_OBJ_SIZE); } 
+  return pq;  
 }
 
 

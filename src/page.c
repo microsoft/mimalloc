@@ -883,18 +883,15 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_a
 // Allocate a page
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
 static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size, size_t huge_alignment) mi_attr_noexcept {
-  mi_page_queue_t* pq = mi_page_queue(heap, (huge_alignment ? MI_LARGE_MAX_OBJ_SIZE+1 : size));
+  const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
+  if mi_unlikely(req_size > MI_MAX_ALLOC_SIZE) {
+    _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
+    return NULL;
+  }
+  mi_page_queue_t* pq = mi_page_queue(heap, (huge_alignment > 0 ? MI_LARGE_MAX_OBJ_SIZE+1 : size));
   // huge allocation?
-  if mi_unlikely(mi_page_queue_is_huge(pq)) {
-    const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
-    //if mi_unlikely(req_size > (MI_LARGE_MAX_OBJ_SIZE - MI_PADDING_SIZE) || huge_alignment > 0) {
-    if mi_unlikely(req_size > MI_MAX_ALLOC_SIZE) {
-      _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
-      return NULL;
-    }
-    else {
-      return mi_huge_page_alloc(heap,size,huge_alignment,pq);
-    }
+  if mi_unlikely(mi_page_queue_is_huge(pq) || req_size > MI_MAX_ALLOC_SIZE) {
+    return mi_huge_page_alloc(heap,size,huge_alignment,pq);
   }
   else {
     // otherwise find a page with free blocks in our size segregated queues

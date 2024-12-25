@@ -328,7 +328,7 @@ typedef struct mi_page_s {
 // (Except for large pages since huge objects are allocated in 4MiB chunks)
 #define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)   // < 8 KiB
 #define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)  // < 64 KiB
-#define MI_LARGE_MAX_OBJ_SIZE             ((MI_LARGE_PAGE_SIZE-MI_PAGE_INFO_SIZE)/4)   // < 512 KiB
+#define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/4)   // <= 512 KiB // note: this must be a nice power of 2 or we get rounding issues with _mi_bin 
 #define MI_LARGE_MAX_OBJ_WSIZE            (MI_LARGE_MAX_OBJ_SIZE/MI_SIZE_SIZE)
 
 
