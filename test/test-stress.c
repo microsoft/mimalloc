@@ -64,6 +64,7 @@ static bool   main_participates = false;       // main thread participates as a 
 #define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
+
 #ifndef NDEBUG
 #define HEAP_WALK             // walk the heap objects?
 #endif
@@ -223,7 +224,7 @@ static void test_stress(void) {
     run_os_threads(THREADS, &stress);
     #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     // switch between arena and OS allocation for testing
-    mi_option_set_enabled(mi_option_disallow_arena_alloc, (n%2)==1);
+    // mi_option_set_enabled(mi_option_disallow_arena_alloc, (n%2)==1);
     #endif
     #ifdef HEAP_WALK
     size_t total = 0;
@@ -237,7 +238,7 @@ static void test_stress(void) {
     }
     #ifndef NDEBUG
     //mi_collect(false);
-    //mi_debug_show_arenas();
+    //mi_debug_show_arenas(true);
     #endif
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
@@ -315,7 +316,7 @@ int main(int argc, char** argv) {
 
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
-  mi_debug_show_arenas(true,true,true);
+  mi_debug_show_arenas(true);
   mi_collect(true);
   #endif  
 #endif

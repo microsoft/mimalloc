@@ -474,8 +474,7 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks) 
     // we need to ensure we do not try to reset (as that may be invalid for uncommitted memory),
     // and also undo the decommit stats (as it was already adjusted)
     mi_assert_internal(mi_option_is_enabled(mi_option_purge_decommits));
-    needs_recommit = _mi_os_purge_ex(p, size, false /* allow reset? */);
-    if (needs_recommit) { _mi_stat_increase(&_mi_stats_main.committed, size); }
+    needs_recommit = _mi_os_purge_ex(p, size, false /* allow reset? */, 0);    
   }
 
   // clear the purged blocks
@@ -912,11 +911,11 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
   return inuse_count;
 }
 
-void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge) mi_attr_noexcept {
+void mi_debug_show_arenas(bool show_inuse) mi_attr_noexcept {
   size_t max_arenas = mi_atomic_load_relaxed(&mi_arena_count);
   size_t inuse_total = 0;
-  size_t abandoned_total = 0;
-  size_t purge_total = 0;
+  //size_t abandoned_total = 0;
+  //size_t purge_total = 0;
   for (size_t i = 0; i < max_arenas; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
     if (arena == NULL) break;
@@ -927,16 +926,16 @@ void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge)
     if (arena->blocks_committed != NULL) {
       mi_debug_show_bitmap("  ", "committed blocks", arena->block_count, arena->blocks_committed, arena->field_count);
     }
-    if (show_abandoned) {
-      abandoned_total += mi_debug_show_bitmap("  ", "abandoned blocks", arena->block_count, arena->blocks_abandoned, arena->field_count);
-    }
-    if (show_purge && arena->blocks_purge != NULL) {
-      purge_total += mi_debug_show_bitmap("  ", "purgeable blocks", arena->block_count, arena->blocks_purge, arena->field_count);
-    }
+    //if (show_abandoned) {
+    //  abandoned_total += mi_debug_show_bitmap("  ", "abandoned blocks", arena->block_count, arena->blocks_abandoned, arena->field_count);
+    //}
+    //if (show_purge && arena->blocks_purge != NULL) {
+    //  purge_total += mi_debug_show_bitmap("  ", "purgeable blocks", arena->block_count, arena->blocks_purge, arena->field_count);
+    //}
   }
   if (show_inuse)     _mi_verbose_message("total inuse blocks    : %zu\n", inuse_total);
-  if (show_abandoned) _mi_verbose_message("total abandoned blocks: %zu\n", abandoned_total);
-  if (show_purge)     _mi_verbose_message("total purgeable blocks: %zu\n", purge_total);
+  //if (show_abandoned) _mi_verbose_message("total abandoned blocks: %zu\n", abandoned_total);
+  //if (show_purge)     _mi_verbose_message("total purgeable blocks: %zu\n", purge_total);
 }
 
 
