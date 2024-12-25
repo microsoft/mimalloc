@@ -728,7 +728,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
         page_candidate = page;
       }
       // prefer to reuse fuller pages (in the hope the less used page gets freed)
-      else if (page->used >= page_candidate->used && !mi_page_is_mostly_used(page) && !mi_page_is_expandable(page)) {
+      else if (page->used >= page_candidate->used && !mi_page_is_mostly_used(page)) { // && !mi_page_is_expandable(page)) {
         page_candidate = page;
       }
       // if we find a non-expandable candidate, or searched for N pages, return with the best candidate
