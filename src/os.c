@@ -9,7 +9,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/atomic.h"
 #include "mimalloc/prim.h"
 
-#define os_stats    (&_mi_stats_main)
+#define mi_os_stat_increase(stat,amount)      _mi_stat_increase(&_mi_stats_main.stat, amount)
+#define mi_os_stat_decrease(stat,amount)      _mi_stat_decrease(&_mi_stats_main.stat, amount)
+#define mi_os_stat_counter_increase(stat,inc) _mi_stat_counter_increase(&_mi_stats_main.stat, inc)
 
 /* -----------------------------------------------------------
   Initialization.
@@ -171,9 +173,9 @@ static void mi_os_prim_free(void* addr, size_t size, size_t commit_size) {
     _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
   if (commit_size > 0) {
-    _mi_stat_decrease(&os_stats->committed, commit_size);
+    mi_os_stat_decrease(committed, commit_size);
   }
-  _mi_stat_decrease(&os_stats->reserved, size);
+  mi_os_stat_decrease(reserved, size);
 }
 
 void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t memid) {
@@ -236,11 +238,11 @@ static void* mi_os_prim_alloc_at(void* hint_addr, size_t size, size_t try_alignm
 
 
 
-  mi_stat_counter_increase(os_stats->mmap_calls, 1);
+  mi_os_stat_counter_increase(mmap_calls, 1);
   if (p != NULL) {
-    _mi_stat_increase(&os_stats->reserved, size);
+    mi_os_stat_increase(reserved, size);
     if (commit) {
-      _mi_stat_increase(&os_stats->committed, size);
+      mi_os_stat_increase(committed, size);
       // seems needed for asan (or `mimalloc-test-api` fails)
       #ifdef MI_TRACK_ASAN
       if (*is_zero) { mi_track_mem_defined(p,size); }
@@ -357,7 +359,8 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   if (p != NULL) {
     *memid = _mi_memid_create_os(commit, os_is_zero, os_is_large);
     memid->mem.os.base = os_base;
-    memid->mem.os.alignment = alignment;
+    // memid->mem.os.alignment = alignment;
+    memid->mem.os.size += ((uint8_t*)p - (uint8_t*)os_base);  // todo: return from prim_alloc_aligned
   }
   return p;
 }
@@ -425,10 +428,10 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
   return mi_os_page_align_areax(true, addr, size, newsize);
 }
 
-bool _mi_os_commit(void* addr, size_t size, bool* is_zero) {
+bool _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size) {
   if (is_zero != NULL) { *is_zero = false; }
-  _mi_stat_increase(&os_stats->committed, size);  // use size for precise commit vs. decommit
-  _mi_stat_counter_increase(&os_stats->commit_calls, 1);
+  mi_os_stat_increase(committed, stat_size);  // use size for precise commit vs. decommit
+  mi_os_stat_counter_increase(commit_calls, 1);
 
   // page align range
   size_t csize;
@@ -492,8 +495,8 @@ bool _mi_os_reset(void* addr, size_t size) {
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return true;  // || _mi_os_is_huge_reserved(addr)
-  _mi_stat_increase(&os_stats->reset, csize);
-  _mi_stat_counter_increase(&os_stats->reset_calls, 1);
+  mi_os_stat_increase(reset, csize);
+  mi_os_stat_counter_increase(reset_calls, 1);
 
   #if (MI_DEBUG>1) && !MI_SECURE && !MI_TRACK_ENABLED // && !MI_TSAN
   memset(start, 0, csize); // pretend it is eagerly reset
@@ -509,17 +512,17 @@ bool _mi_os_reset(void* addr, size_t size) {
 
 // either resets or decommits memory, returns true if the memory needs
 // to be recommitted if it is to be re-used later on.
-bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset)
+bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stat_size)
 {
   if (mi_option_get(mi_option_purge_delay) < 0) return false;  // is purging allowed?
-  _mi_stat_counter_increase(&os_stats->purge_calls, 1);
-  _mi_stat_increase(&os_stats->purged, size);
+  mi_os_stat_counter_increase(purge_calls, 1);
+  mi_os_stat_increase(purged, size);
 
   if (mi_option_is_enabled(mi_option_purge_decommits) &&   // should decommit?
     !_mi_preloading())                                     // don't decommit during preloading (unsafe)
   {
     bool needs_recommit = true;
-    mi_os_decommit_ex(p, size, &needs_recommit);
+    mi_os_decommit_ex(p, size, &needs_recommit, stat_size);
     return needs_recommit;
   }
   else {
@@ -533,7 +536,7 @@ bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset)
 // either resets or decommits memory, returns true if the memory needs
 // to be recommitted if it is to be re-used later on.
 bool _mi_os_purge(void* p, size_t size) {
-  return _mi_os_purge_ex(p, size, true);
+  return _mi_os_purge_ex(p, size, true, size);
 }
 
 
@@ -648,8 +651,8 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
 
     // success, record it
     page++;  // increase before timeout check (see issue #711)
-    _mi_stat_increase(&os_stats->committed, MI_HUGE_OS_PAGE_SIZE);
-    _mi_stat_increase(&os_stats->reserved, MI_HUGE_OS_PAGE_SIZE);
+    mi_os_stat_increase(committed, MI_HUGE_OS_PAGE_SIZE);
+    mi_os_stat_increase(reserved, MI_HUGE_OS_PAGE_SIZE);
 
     // check for timeout
     if (max_msecs > 0) {

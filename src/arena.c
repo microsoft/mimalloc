@@ -474,8 +474,7 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks) 
     // we need to ensure we do not try to reset (as that may be invalid for uncommitted memory),
     // and also undo the decommit stats (as it was already adjusted)
     mi_assert_internal(mi_option_is_enabled(mi_option_purge_decommits));
-    needs_recommit = _mi_os_purge_ex(p, size, false /* allow reset? */);
-    if (needs_recommit) { _mi_stat_increase(&_mi_stats_main.committed, size); }
+    needs_recommit = _mi_os_purge_ex(p, size, false /* allow reset? */, 0);    
   }
 
   // clear the purged blocks
