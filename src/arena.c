@@ -832,9 +832,14 @@ void _mi_arenas_page_free(mi_page_t* page) {
       const size_t total_slices = page->slice_committed / MI_ARENA_SLICE_SIZE;  // conservative
       //mi_assert_internal(mi_bitmap_is_clearN(arena->slices_committed, page->memid.mem.arena.slice_index, total_slices));
       mi_assert_internal(page->memid.mem.arena.slice_count >= total_slices);
-      mi_assert_internal(total_slices > 0);
       if (total_slices > 0) {
         mi_bitmap_setN(arena->slices_committed, page->memid.mem.arena.slice_index, total_slices, NULL);
+      }
+      // any left over?
+      const size_t extra = page->slice_committed % MI_ARENA_SLICE_SIZE;
+      if (extra > 0) {
+        // pretend it was decommitted already
+        mi_os_stat_decrease(committed, extra);
       }
     }
     else {
@@ -1308,7 +1313,7 @@ static void mi_debug_color(char* buf, size_t* k, mi_ansi_color_t color) {
 }
 
 static int mi_page_commit_usage(mi_page_t* page) {
-  if (mi_page_size(page) <= MI_PAGE_MIN_COMMIT_SIZE) return 100;
+  // if (mi_page_size(page) <= MI_PAGE_MIN_COMMIT_SIZE) return 100;
   const size_t committed_size = mi_page_committed(page);
   const size_t used_size = page->used * mi_page_block_size(page);
   return (int)(used_size * 100 / committed_size);
