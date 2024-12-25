@@ -97,7 +97,7 @@ const mi_page_t _mi_page_empty = {
 // may lead to allocation itself on some platforms)
 // --------------------------------------------------------
 
-static mi_decl_cache_align mi_subproc_t subproc_main = { };  // note: empty initializer to prevent running the constructor (in C++ compilation)
+static mi_decl_cache_align mi_subproc_t subproc_main = { 0 };  // note: empty initializer to prevent running the constructor (in C++ compilation)
 
 static mi_decl_cache_align mi_tld_t tld_empty = {
   0,                      // thread_id
