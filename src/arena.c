@@ -1400,14 +1400,14 @@ void mi_debug_show_arenas(bool show_pages) mi_attr_noexcept {
   mi_subproc_t* subproc = _mi_subproc();
   size_t max_arenas = mi_arenas_get_count(subproc);
   //size_t free_total = 0;
-  size_t slice_total = 0;
+  //size_t slice_total = 0;
   //size_t abandoned_total = 0;
   size_t page_total = 0;
   for (size_t i = 0; i < max_arenas; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &subproc->arenas[i]);
     if (arena == NULL) break;
     mi_assert(arena->subproc == subproc);
-    slice_total += arena->slice_count;
+    // slice_total += arena->slice_count;
     _mi_output_message("arena %zu at %p: %zu slices (%zu MiB)%s, subproc: %p\n", i, arena, arena->slice_count, mi_size_of_slices(arena->slice_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""), arena->subproc);
     //if (show_inuse) {
     //  free_total += mi_debug_show_bitmap("in-use slices", arena->slice_count, arena->slices_free, true, NULL);
