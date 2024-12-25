@@ -123,7 +123,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
     //mi_assert_internal(!_mi_process_is_initialized);
     {
       mi_page_queue_t* pq = mi_page_queue_of(page);
-      mi_assert_internal(mi_page_is_huge(page) || mi_page_queue_contains(pq, page));
+      mi_assert_internal(mi_page_queue_contains(pq, page));
       mi_assert_internal(pq->block_size==mi_page_block_size(page) || mi_page_is_huge(page) || mi_page_is_in_full(page));
       // mi_assert_internal(mi_heap_contains_queue(mi_page_heap(page),pq));
     }
@@ -298,7 +298,7 @@ static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
   mi_page_t* page = mi_page_fresh_alloc(heap, pq, pq->block_size, 0);
   if (page==NULL) return NULL;
   mi_assert_internal(pq->block_size==mi_page_block_size(page));
-  mi_assert_internal(mi_page_is_huge(page) || pq==mi_heap_page_queue_of(heap, page));
+  mi_assert_internal(pq==mi_heap_page_queue_of(heap, page));
   return page;
 }
 
@@ -794,8 +794,9 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
 
 
 // Find a page with free blocks of `size`.
-static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, size_t size) {
-  mi_page_queue_t* pq = mi_page_queue(heap, size);
+static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, mi_page_queue_t* pq) {
+  // mi_page_queue_t* pq = mi_page_queue(heap, size);
+  mi_assert_internal(!mi_page_queue_is_huge(pq));
 
   // check the first page: we even do this with candidate search or otherwise we re-search every time
   mi_page_t* page = pq->first;
@@ -853,13 +854,13 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
 // Huge pages contain just one block, and the segment contains just that page.
 // Huge pages are also use if the requested alignment is very large (> MI_BLOCK_ALIGNMENT_MAX)
 // so their size is not always `> MI_LARGE_OBJ_SIZE_MAX`.
-static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_alignment) {
-  size_t block_size = _mi_os_good_alloc_size(size);
-  mi_assert_internal(mi_bin(block_size) == MI_BIN_HUGE || page_alignment > 0);
+static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_alignment, mi_page_queue_t* pq) {
+  const size_t block_size = _mi_os_good_alloc_size(size);
+  // mi_assert_internal(mi_bin(block_size) == MI_BIN_HUGE || page_alignment > 0);
   #if MI_HUGE_PAGE_ABANDON
-  mi_page_queue_t* pq = NULL;
+  #error todo.
   #else
-  mi_page_queue_t* pq = mi_page_queue(heap, MI_LARGE_MAX_OBJ_SIZE+1);  // always in the huge queue regardless of the block size
+  // mi_page_queue_t* pq = mi_page_queue(heap, MI_LARGE_MAX_OBJ_SIZE+1);  // always in the huge queue regardless of the block size
   mi_assert_internal(mi_page_queue_is_huge(pq));
   #endif
   mi_page_t* page = mi_page_fresh_alloc(heap, pq, block_size, page_alignment);
@@ -882,15 +883,17 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_a
 // Allocate a page
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
 static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size, size_t huge_alignment) mi_attr_noexcept {
+  mi_page_queue_t* pq = mi_page_queue(heap, (huge_alignment ? MI_LARGE_MAX_OBJ_SIZE+1 : size));
   // huge allocation?
-  const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
-  if mi_unlikely(req_size > (MI_LARGE_MAX_OBJ_SIZE - MI_PADDING_SIZE) || huge_alignment > 0) {
+  if mi_unlikely(mi_page_queue_is_huge(pq)) {
+    const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
+    //if mi_unlikely(req_size > (MI_LARGE_MAX_OBJ_SIZE - MI_PADDING_SIZE) || huge_alignment > 0) {
     if mi_unlikely(req_size > MI_MAX_ALLOC_SIZE) {
       _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
       return NULL;
     }
     else {
-      return mi_huge_page_alloc(heap,size,huge_alignment);
+      return mi_huge_page_alloc(heap,size,huge_alignment,pq);
     }
   }
   else {
@@ -898,7 +901,7 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size, size_t huge_alignme
     #if MI_PADDING
     mi_assert_internal(size >= MI_PADDING_SIZE);
     #endif
-    return mi_find_free_page(heap, size);
+    return mi_find_free_page(heap, pq);
   }
 }
 

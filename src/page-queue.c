@@ -156,7 +156,7 @@ static mi_page_queue_t* mi_heap_page_queue_of(mi_heap_t* heap, const mi_page_t* 
 static mi_page_queue_t* mi_page_queue_of(const mi_page_t* page) {
   mi_heap_t* heap = mi_page_heap(page);
   mi_page_queue_t* pq = mi_heap_page_queue_of(heap, page);
-  mi_assert_expensive(mi_page_is_huge(page) || mi_page_queue_contains(pq, page));
+  mi_assert_expensive(mi_page_queue_contains(pq, page));
   return pq;
 }
 
@@ -210,7 +210,7 @@ static bool mi_page_queue_is_empty(mi_page_queue_t* queue) {
 
 static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  mi_assert_expensive(mi_page_is_huge(page) || mi_page_queue_contains(queue, page));
+  mi_assert_expensive(mi_page_queue_contains(queue, page));
   mi_assert_internal(mi_page_block_size(page) == queue->block_size ||
                       (mi_page_is_huge(page) && mi_page_queue_is_huge(queue)) ||
                         (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
