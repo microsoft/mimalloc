@@ -171,7 +171,18 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
     char c;
     MI_NEXTC();
     if (c != '%') {
-      if ((c >= ' ' && c <= '~') || c=='\n' || c=='\r' || c=='\t') { // output visible ascii or standard control only
+      if (c == '\\') {
+        MI_NEXTC();
+        switch (c) {
+        case 'e': mi_outc('\x1B', &out, end); break;
+        case 't': mi_outc('\t', &out, end); break;
+        case 'n': mi_outc('\n', &out, end); break;
+        case 'r': mi_outc('\r', &out, end); break;
+        case '\\': mi_outc('\\', &out, end); break;
+        default: /* ignore */ break;
+        }
+      }
+      else if ((c >= ' ' && c <= '~') || c=='\n' || c=='\r' || c=='\t' || c=='\x1b') { // output visible ascii or standard control only
         mi_outc(c, &out, end);
       }
     }
@@ -199,7 +210,10 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
       }
 
       char* start = out;
-      if (c == 's') {
+      if (c == '%') {
+        mi_outc('%', &out, end);
+      }
+      else if (c == 's') {
         // string
         const char* s = va_arg(args, const char*);
         mi_outs(s, &out, end);
