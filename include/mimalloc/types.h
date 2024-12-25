@@ -49,11 +49,11 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define MI_SECURE to enable security mitigations. Level 1 has minimal performance impact,
 // but protects most metadata with guard pages:
 //   #define MI_SECURE 1  // guard page around metadata
-// 
-// Level 2 has more performance impact but protect well against various buffer overflows 
+//
+// Level 2 has more performance impact but protect well against various buffer overflows
 // by surrounding all mimalloc pages with guard pages:
 //   #define MI_SECURE 2  // guard page around each mimalloc page (can fragment VMA's with large heaps..)
-// 
+//
 // The next two levels can have more performance cost:
 //   #define MI_SECURE 3  // randomize allocations, encode free lists (detect corrupted free list (buffer overflow), and invalid pointer free)
 //   #define MI_SECURE 4  // checks for double free. (may be more expensive)
@@ -293,7 +293,7 @@ typedef struct mi_page_s {
   _Atomic(mi_page_flags_t)  xflags;            // `in_full_queue` and `has_aligned` flags
 
   size_t                    block_size;        // size available in each block (always `>0`)
-  uint8_t*                  page_start;        // start of the blocks  
+  uint8_t*                  page_start;        // start of the blocks
   mi_heaptag_t              heap_tag;          // tag of the owning heap, used to separate heaps by object type
   bool                      free_is_zero;      // `true` if the blocks in the free list are zero initialized
                                                // padding
@@ -328,7 +328,7 @@ typedef struct mi_page_s {
 // (Except for large pages since huge objects are allocated in 4MiB chunks)
 #define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)   // < 8 KiB
 #define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)  // < 64 KiB
-#define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/4)   // <= 512 KiB // note: this must be a nice power of 2 or we get rounding issues with _mi_bin 
+#define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/4)   // <= 512 KiB // note: this must be a nice power of 2 or we get rounding issues with _mi_bin
 #define MI_LARGE_MAX_OBJ_WSIZE            (MI_LARGE_MAX_OBJ_SIZE/MI_SIZE_SIZE)
 
 

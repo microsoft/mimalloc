@@ -246,7 +246,15 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
   }
   else {
     // no need to commit, but check if already fully committed
+    // commit requested, but the range may not be committed as a whole: ensure it is committed now
     memid->initially_committed = mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count);
+    if (!memid->initially_committed) {
+      // partly committed.. adjust stats
+      size_t already_committed_count = 0;
+      mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed_count);
+      mi_bitmap_clearN(arena->slices_committed, slice_index, slice_count);
+      mi_os_stat_decrease(committed, mi_size_of_slices(already_committed_count));
+    }
   }
 
   mi_assert_internal(mi_bitmap_is_clearN(arena->slices_free, slice_index, slice_count));
@@ -304,8 +312,8 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
   // on an OS with overcommit (Linux) we don't count the commit yet as it is on-demand. Once a slice
   // is actually allocated for the first time it will be counted.
   const bool adjust = (overcommit && arena_commit);
-  if (adjust) { 
-    mi_subproc_stat_adjust_decrease( subproc, committed, arena_reserve, true /* on alloc */); 
+  if (adjust) {
+    mi_subproc_stat_adjust_decrease( subproc, committed, arena_reserve, true /* on alloc */);
   }
   // and try to reserve the arena
   int err = mi_reserve_os_memory_ex2(subproc, arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
@@ -824,6 +832,7 @@ void _mi_arenas_page_free(mi_page_t* page) {
       const size_t total_slices = page->slice_committed / MI_ARENA_SLICE_SIZE;  // conservative
       //mi_assert_internal(mi_bitmap_is_clearN(arena->slices_committed, page->memid.mem.arena.slice_index, total_slices));
       mi_assert_internal(page->memid.mem.arena.slice_count >= total_slices);
+      mi_assert_internal(total_slices > 0);
       if (total_slices > 0) {
         mi_bitmap_setN(arena->slices_committed, page->memid.mem.arena.slice_index, total_slices, NULL);
       }

@@ -708,8 +708,8 @@ static inline bool mi_page_is_huge(const mi_page_t* page) {
 
 static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size) {
   mi_page_queue_t* const pq = &((mi_heap_t*)heap)->pages[_mi_bin(size)];
-  if (size <= MI_LARGE_MAX_OBJ_SIZE) { mi_assert_internal(pq->block_size <= MI_LARGE_MAX_OBJ_SIZE); } 
-  return pq;  
+  if (size <= MI_LARGE_MAX_OBJ_SIZE) { mi_assert_internal(pq->block_size <= MI_LARGE_MAX_OBJ_SIZE); }
+  return pq;
 }
 
 
