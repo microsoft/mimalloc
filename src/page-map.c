@@ -160,6 +160,7 @@ mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_att
 #else
 
 // A 2-level page map
+#define MI_PAGE_MAP_SUB_SIZE    (MI_PAGE_MAP_SUB_COUNT * sizeof(mi_page_t*))
 
 mi_decl_cache_align mi_page_t*** _mi_page_map;
 static void*        mi_page_map_max_address;
@@ -167,6 +168,7 @@ static mi_memid_t   mi_page_map_memid;
 
 static _Atomic(mi_bfield_t)  mi_page_map_commit; 
 
+static mi_page_t** mi_page_map_ensure_committed(size_t idx);
 static mi_page_t** mi_page_map_ensure_at(size_t idx);
 static inline void mi_page_map_set_range(mi_page_t* page, size_t idx, size_t sub_idx, size_t slice_count);
 
@@ -200,16 +202,17 @@ bool _mi_page_map_init(void) {
   }
   mi_atomic_store_release(&mi_page_map_commit, (commit ? ~MI_ZU(0) : MI_ZU(0)));
 
-  // commit the first part so NULL pointers get resolved without an access violation
-  mi_page_map_ensure_at(0);
-  
-  // note: for the NULL range we only commit one OS page
-  // mi_page_map_set_range(NULL, 0, 0, 1);
-  _mi_page_map[0] = (mi_page_t**)((uint8_t*)_mi_page_map + page_map_size);
+  // note: for the NULL range we only commit one OS page (in the map and sub)
   if (!mi_page_map_memid.initially_committed) {
-    _mi_os_commit(_mi_page_map[0], os_page_size, NULL);
+    _mi_os_commit(&_mi_page_map[0], os_page_size, NULL);  // commit first part of the map
   }
-  _mi_page_map[0][0] = NULL;
+  _mi_page_map[0] = (mi_page_t**)((uint8_t*)_mi_page_map + page_map_size);  // we reserved 2 subs at the end already
+  if (!mi_page_map_memid.initially_committed) {
+    _mi_os_commit(_mi_page_map[0], os_page_size, NULL);   // only first OS page
+  }
+  if (!mi_page_map_memid.initially_zero) {
+    _mi_page_map[0][0] = NULL;
+  }
 
   mi_assert_internal(_mi_ptr_page(NULL)==NULL);
   return true;
