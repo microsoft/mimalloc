@@ -139,8 +139,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // We never allocate more than PTRDIFF_MAX (see also <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
 #define MI_MAX_ALLOC_SIZE        PTRDIFF_MAX
 
-// Minimal commit for a page on-demand commit (should be >= OS page size, and >= MI_ARENA_SLICE_SIZE for correct stats)
-#define MI_PAGE_MIN_COMMIT_SIZE  MI_ARENA_SLICE_SIZE
+// Minimal commit for a page on-demand commit (should be >= OS page size)
+#define MI_PAGE_MIN_COMMIT_SIZE  MI_ARENA_SLICE_SIZE // (4*MI_KiB) 
 
 // ------------------------------------------------------
 // Arena's are large reserved areas of memory allocated from
