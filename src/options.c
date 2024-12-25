@@ -170,8 +170,8 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
   { 0,   UNINIT, MI_OPTION(target_segments_per_thread) }, // abandon segments beyond this point, or 0 to disable.
   { 1,   UNINIT, MI_OPTION_LEGACY(reclaim_on_free, abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
-  { 2,   UNINIT, MI_OPTION(full_page_retain) },
-  { 4,   UNINIT, MI_OPTION(max_page_candidates) },
+  { 2,   UNINIT, MI_OPTION(page_full_retain) },
+  { 4,   UNINIT, MI_OPTION(page_max_candidates) },
   { 0,   UNINIT, MI_OPTION(max_vabits) },
   { MI_DEFAULT_PAGEMAP_COMMIT, 
          UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?

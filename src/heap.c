@@ -170,8 +170,8 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint
   heap->tld        = tld;  // avoid reading the thread-local tld during initialization
   heap->exclusive_arena    = _mi_arena_from_id(arena_id);
   heap->allow_page_reclaim = !noreclaim;
-  heap->allow_page_abandon = (!noreclaim && mi_option_get(mi_option_full_page_retain) >= 0);
-  heap->full_page_retain = mi_option_get_clamp(mi_option_full_page_retain, -1, 32);
+  heap->allow_page_abandon = (!noreclaim && mi_option_get(mi_option_page_full_retain) >= 0);
+  heap->full_page_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
   heap->tag        = heap_tag;
   if (heap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our heap.
