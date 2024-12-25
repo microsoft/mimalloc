@@ -238,7 +238,7 @@ static void test_stress(void) {
     }
     #ifndef NDEBUG
     //mi_collect(false);
-    //mi_debug_show_arenas();
+    //mi_debug_show_arenas(true);
     #endif
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
@@ -316,7 +316,7 @@ int main(int argc, char** argv) {
 
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
-  mi_debug_show_arenas(true,true,true);
+  mi_debug_show_arenas(true);
   mi_collect(true);
   #endif  
 #endif
