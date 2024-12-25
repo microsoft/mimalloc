@@ -48,7 +48,7 @@ static int ITER    = 20;
 static int THREADS = 32;
 static int SCALE   = 50;
 static int ITER    = 50;
-#elif 1
+#elif 0
 static int THREADS = 32;
 static int SCALE   = 25;
 static int ITER    = 50;
@@ -82,6 +82,7 @@ static bool   main_participates = false;       // main thread participates as a 
 #define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
+
 #ifndef NDEBUG
 #define xHEAP_WALK             // walk the heap objects?
 #endif
