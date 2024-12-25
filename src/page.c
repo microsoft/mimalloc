@@ -721,7 +721,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
       // we prefer non-expandable pages with high usage as candidates (to reduce commit, and increase chances of free-ing up pages)
       if (page_candidate == NULL) {
         page_candidate = page;
-        candidate_limit = _mi_option_get_fast(mi_option_max_page_candidates);
+        candidate_limit = _mi_option_get_fast(mi_option_page_max_candidates);
       }
       else if (mi_page_all_free(page_candidate)) {
         _mi_page_free(page_candidate, pq);

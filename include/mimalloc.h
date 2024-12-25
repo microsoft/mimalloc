@@ -396,8 +396,8 @@ typedef enum mi_option_e {
   mi_option_guarded_sample_seed,        // can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
   mi_option_target_segments_per_thread, // experimental (=0)
   mi_option_reclaim_on_free,            // allow to reclaim an abandoned segment on a free (=1)
-  mi_option_full_page_retain,           // retain N full pages per size class (=2)
-  mi_option_max_page_candidates,        // max candidate pages to consider for allocation (=4)
+  mi_option_page_full_retain,           // retain N full pages per size class (=2)
+  mi_option_page_max_candidates,        // max candidate pages to consider for allocation (=4)
   mi_option_max_vabits,                 // max user space virtual address bits to consider (=48)
   mi_option_pagemap_commit,             // commit the full pagemap (to always catch invalid pointer uses) (=0)
   mi_option_page_commit_on_demand,      // commit page memory on-demand
