@@ -145,7 +145,7 @@ bool _mi_prim_thread_is_in_threadpool(void);
         || (defined(__OpenBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
       )
 
-#define MI_HAS_TLS_SLOT
+#define MI_HAS_TLS_SLOT    1
 
 static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
   void* res;
@@ -295,7 +295,7 @@ static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
   return (uintptr_t)__builtin_thread_pointer();
 }
 
-#elif defined(MI_HAS_TLS_SLOT)
+#elif MI_HAS_TLS_SLOT
 
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
   #if defined(__BIONIC__)
@@ -360,14 +360,14 @@ static inline mi_heap_t* mi_prim_get_default_heap(void);
 #endif
 
 
-#if defined(MI_TLS_SLOT)
+#if MI_TLS_SLOT
 # if !defined(MI_HAS_TLS_SLOT)
 #  error "trying to use a TLS slot for the default heap, but the mi_prim_tls_slot primitives are not defined"
 # endif
 
 static inline mi_heap_t* mi_prim_get_default_heap(void) {
   mi_heap_t* heap = (mi_heap_t*)mi_prim_tls_slot(MI_TLS_SLOT);
-  #if MI_TLS_SLOT == 1   // check if the TLS slot is initialized
+  #if MI_HAS_TLS_SLOT == 1   // check if the TLS slot is initialized
   if mi_unlikely(heap == NULL) {
     #ifdef __GNUC__
     __asm(""); // prevent conditional load of the address of _mi_heap_empty
