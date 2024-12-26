@@ -438,7 +438,7 @@ static inline bool mi_heap_is_backing(const mi_heap_t* heap) {
 
 static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
   mi_assert_internal(heap != NULL);
-  return (heap != &_mi_heap_empty);
+  return (heap != NULL && heap != &_mi_heap_empty);
 }
 
 static inline uintptr_t _mi_ptr_cookie(const void* p) {

@@ -3,11 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.12.35527.113
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mimalloc", "mimalloc.vcxproj", "{ABB5EAE7-B3E6-432E-B636-333449892EA6}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mimalloc-lib", "mimalloc-lib.vcxproj", "{ABB5EAE7-B3E6-432E-B636-333449892EA6}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mimalloc-test", "mimalloc-test.vcxproj", "{FEF7858F-750E-4C21-A04D-22707CC66878}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mimalloc-override", "mimalloc-override.vcxproj", "{ABB5EAE7-B3E6-432E-B636-333449892EA7}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mimalloc-override-dll", "mimalloc-override-dll.vcxproj", "{ABB5EAE7-B3E6-432E-B636-333449892EA7}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mimalloc-override-test", "mimalloc-override-test.vcxproj", "{FEF7868F-750E-4C21-A04D-22707CC66879}"
 EndProject
