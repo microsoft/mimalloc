@@ -120,16 +120,14 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 // Is this thread part of a thread pool?
 bool _mi_prim_thread_is_in_threadpool(void);
 
-//-------------------------------------------------------------------
-// Thread id: `_mi_prim_thread_id()`
-//
-// Getting the thread id should be performant as it is called in the
-// fast path of `_mi_free` and we specialize for various platforms as
-// inlined definitions. Regular code should call `init.c:_mi_thread_id()`.
-// We only require _mi_prim_thread_id() to return a unique id
-// for each thread (unequal to zero).
-//-------------------------------------------------------------------
 
+
+//-------------------------------------------------------------------
+// Access to TLS (thread local storage) slots.
+// We need fast access to both a unique thread id (in `free.c:mi_free`) and
+// to a thread-local heap pointer (in `alloc.c:mi_malloc`). 
+// To achieve this we use specialized code for various platforms.
+//-------------------------------------------------------------------
 
 // On some libc + platform combinations we can directly access a thread-local storage (TLS) slot.
 // The TLS layout depends on both the OS and libc implementation so we use specific tests for each main platform.
@@ -211,7 +209,7 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 #elif _WIN32 && MI_WIN_USE_FIXED_TLS && !defined(MI_WIN_USE_FLS)
 
 // On windows we can store the thread-local heap at a fixed TLS slot to avoid
-// thread-local initialization checks in the fast path. This use a fixed location
+// thread-local initialization checks in the fast path. This uses a fixed location
 // in the TCB though (last user-reserved slot by default) which may clash with other applications.
 
 #define MI_HAS_TLS_SLOT      2              // 2 = we can reliable initialize the slot (saving a test on each malloc)
@@ -240,6 +238,18 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 }
 
 #endif
+
+
+
+//-------------------------------------------------------------------
+// Get a fast unique thread id.
+//
+// Getting the thread id should be performant as it is called in the
+// fast path of `_mi_free` and we specialize for various platforms as
+// inlined definitions. Regular code should call `init.c:_mi_thread_id()`.
+// We only require _mi_prim_thread_id() to return a unique id
+// for each thread (unequal to zero).
+//-------------------------------------------------------------------
 
 
 // Do we have __builtin_thread_pointer? This would be the preferred way to get a unique thread id
@@ -312,7 +322,8 @@ static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
 
 
 /* ----------------------------------------------------------------------------------------
-The thread local default heap: `_mi_prim_get_default_heap()`
+Get the thread local default heap: `_mi_prim_get_default_heap()`
+
 This is inlined here as it is on the fast path for allocation functions.
 
 On most platforms (Windows, Linux, FreeBSD, NetBSD, etc), this just returns a
