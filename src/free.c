@@ -48,10 +48,10 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 }
 
 // Forward declaration for multi-threaded collect
-static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page);
+static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noexcept;
 
 // Free a block multi-threaded
-static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block)
+static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block) mi_attr_noexcept
 {
   // adjust stats (after padding check and potentially recursive `mi_free` above)
   mi_stat_free(page, block);    // stat_free may access the padding
@@ -195,7 +195,7 @@ void mi_free(void* p) mi_attr_noexcept
 // ------------------------------------------------------
 
 
-static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) {
+static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noexcept {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
 
