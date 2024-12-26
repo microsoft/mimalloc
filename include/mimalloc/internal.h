@@ -31,16 +31,19 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
 #define mi_decl_weak
+#define mi_decl_hidden
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
 #define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
 #define mi_decl_weak            __attribute__((weak))
+#define mi_decl_hidden          __attribute__((visibility("hidden")))
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_cache_align
 #define mi_decl_weak
+#define mi_decl_hidden
 #endif
 
 #if defined(__EMSCRIPTEN__) && !defined(__wasi__)
@@ -87,7 +90,7 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 
 // init.c
 extern mi_decl_cache_align mi_stats_t       _mi_stats_main;
-extern mi_decl_cache_align const mi_page_t  _mi_page_empty;
+extern mi_decl_hidden mi_decl_cache_align const mi_page_t  _mi_page_empty;
 void        _mi_process_load(void);
 void mi_cdecl _mi_process_done(void);
 bool        _mi_is_redirected(void);
@@ -430,7 +433,7 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
   Heap functions
 ------------------------------------------------------------------------------------------- */
 
-extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
+extern mi_decl_hidden const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
 
 static inline bool mi_heap_is_backing(const mi_heap_t* heap) {
   return (heap->tld->heap_backing == heap);
@@ -442,7 +445,7 @@ static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
 }
 
 static inline uintptr_t _mi_ptr_cookie(const void* p) {
-  extern mi_heap_t _mi_heap_main;
+  extern mi_decl_hidden mi_heap_t _mi_heap_main;
   mi_assert_internal(_mi_heap_main.cookie != 0);
   return ((uintptr_t)p ^ _mi_heap_main.cookie);
 }
@@ -891,7 +894,7 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
 int    _mi_os_numa_node_get(void);
 size_t _mi_os_numa_node_count_get(void);
 
-extern _Atomic(size_t) _mi_numa_node_count;
+extern mi_decl_hidden _Atomic(size_t) _mi_numa_node_count;
 static inline int _mi_os_numa_node(void) {
   if mi_likely(mi_atomic_load_relaxed(&_mi_numa_node_count) == 1) { return 0; }
   else return _mi_os_numa_node_get();
