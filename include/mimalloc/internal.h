@@ -31,16 +31,19 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_align(a)        __declspec(align(a))
 #define mi_decl_weak
+#define mi_decl_hidden
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
 #define mi_decl_align(a)        __attribute__((aligned(a)))
 #define mi_decl_weak            __attribute__((weak))
+#define mi_decl_hidden          __attribute__((visibility("hidden")))
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_align(a)
 #define mi_decl_weak
+#define mi_decl_hidden
 #endif
 
 #define mi_decl_cache_align     mi_decl_align(64)
@@ -90,8 +93,9 @@ uintptr_t     _mi_os_random_weak(uintptr_t extra_seed);
 static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 
 // init.c
-extern mi_decl_cache_align const mi_page_t  _mi_page_empty;
+extern mi_decl_hidden mi_decl_cache_align const mi_page_t  _mi_page_empty;
 void          _mi_process_load(void);
+
 void mi_cdecl _mi_process_done(void);
 bool          _mi_is_redirected(void);
 bool          _mi_allocator_init(const char** message);
@@ -417,7 +421,7 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
   Heap functions
 ------------------------------------------------------------------------------------------- */
 
-extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
+extern mi_decl_hidden const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value of the thread local default heap
 
 static inline bool mi_heap_is_backing(const mi_heap_t* heap) {
   return (heap->tld->heap_backing == heap);
@@ -452,7 +456,7 @@ static inline mi_page_t* _mi_heap_get_free_small_page(mi_heap_t* heap, size_t si
 // flat page-map committed on demand, using one byte per slice (64 KiB).
 // single indirection and low commit, but large initial virtual reserve (4 GiB with 48 bit virtual addresses)
 // used by default on <= 40 bit virtual address spaces.
-extern uint8_t* _mi_page_map;
+extern mi_decl_hidden uint8_t* _mi_page_map;
 
 static inline size_t _mi_page_map_index(const void* p) {
   return (size_t)((uintptr_t)p >> MI_ARENA_SLICE_SHIFT);
@@ -489,7 +493,7 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
 #define MI_PAGE_MAP_SHIFT         (MI_MAX_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT)
 #define MI_PAGE_MAP_COUNT         (MI_ZU(1) << MI_PAGE_MAP_SHIFT)
 
-extern mi_page_t*** _mi_page_map;
+extern mi_decl_hidden mi_page_t*** _mi_page_map;
 
 static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
   const size_t u = (size_t)((uintptr_t)p / MI_ARENA_SLICE_SIZE);
@@ -1007,7 +1011,7 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
 int    _mi_os_numa_node_get(void);
 size_t _mi_os_numa_node_count_get(void);
 
-extern _Atomic(size_t) _mi_numa_node_count;
+extern mi_decl_hidden _Atomic(size_t) _mi_numa_node_count;
 static inline int _mi_os_numa_node(void) {
   if mi_likely(mi_atomic_load_relaxed(&_mi_numa_node_count) == 1) { return 0; }
   else return _mi_os_numa_node_get();
