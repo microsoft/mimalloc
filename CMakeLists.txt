@@ -19,6 +19,7 @@ option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" ON)
 option(MI_WIN_REDIRECT      "Use redirection module ('mimalloc-redirect') on Windows if compiling mimalloc as a DLL" ON)
+option(MI_WIN_USE_FIXED_TLS "Use a fixed TLS slot on Windows to avoid extra tests in the malloc fast path" OFF)
 option(MI_LOCAL_DYNAMIC_TLS "Use local-dynamic-tls, a slightly slower but dlopen-compatible thread local storage mechanism (Unix)" OFF)
 option(MI_LIBC_MUSL         "Set this when linking with musl libc" OFF)
 option(MI_BUILD_SHARED      "Build shared library" ON)
@@ -35,7 +36,7 @@ option(MI_NO_THP            "Disable transparent huge pages support on Linux/And
 option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
 
 # deprecated options
-option(MI_WIN_USE_FLS       "Use Fiber local storage on Windows to detect thread termination" OFF)
+option(MI_WIN_USE_FLS       "Use Fiber local storage on Windows to detect thread termination (deprecated)" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
 
@@ -90,7 +91,7 @@ endif()
 
 if (CMAKE_GENERATOR MATCHES "^Visual Studio.*$")
   message(STATUS "Note: when building with Visual Studio the build type is specified when building.")
-  message(STATUS "For example: 'cmake --build . --config=Release")  
+  message(STATUS "For example: 'cmake --build . --config=Release")
 endif()
 
 if("${CMAKE_BINARY_DIR}" MATCHES ".*(S|s)ecure$")
@@ -322,8 +323,13 @@ if(MI_LIBC_MUSL)
 endif()
 
 if(MI_WIN_USE_FLS)
-  message(STATUS "Use the Fiber API to detect thread termination (MI_WIN_USE_FLS=ON)")
+  message(STATUS "Use the Fiber API to detect thread termination (deprecated) (MI_WIN_USE_FLS=ON)")
   list(APPEND mi_defines MI_WIN_USE_FLS=1)
+endif()
+
+if(MI_WIN_USE_FIXED_TLS)
+  message(STATUS "Use fixed TLS slot on Windows to avoid extra tests in the malloc fast path (MI_WIN_USE_FIXED_TLS=ON)")
+  list(APPEND mi_defines MI_WIN_USE_FIXED_TLS=1)
 endif()
 
 # Determine architecture
@@ -543,7 +549,7 @@ if(MI_BUILD_SHARED)
     elseif(MI_ARCH STREQUAL "x64")
       set(MIMALLOC_REDIRECT_SUFFIX "")
       if(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
-        message(STATUS "Note: x64 code emulated on Windows for arm64 should use an arm64ec build of 'mimalloc-override.dll'") 
+        message(STATUS "Note: x64 code emulated on Windows for arm64 should use an arm64ec build of 'mimalloc-override.dll'")
         message(STATUS "      with 'mimalloc-redirect-arm64ec.dll'. See the 'bin\\readme.md' for more information.")
       endif()
     elseif(MI_ARCH STREQUAL "x86")
@@ -667,7 +673,7 @@ endif()
 # -----------------------------------------------------------------------------
 if (MI_OVERRIDE)
   if (MI_BUILD_SHARED)
-    target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)    
+    target_compile_definitions(mimalloc PRIVATE MI_MALLOC_OVERRIDE)
   endif()
   if(NOT WIN32)
     # It is only possible to override malloc on Windows when building as a DLL.

@@ -622,6 +622,11 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   MI_UNUSED(reserved);
   MI_UNUSED(module);
+  #if MI_TLS_SLOT >= 2
+  if ((reason==DLL_PROCESS_ATTACH || reason==DLL_THREAD_ATTACH) && mi_prim_get_default_heap() == NULL) {
+    _mi_heap_set_default_direct((mi_heap_t*)&_mi_heap_empty);
+  }
+  #endif
   if (reason==DLL_PROCESS_ATTACH) {
     _mi_process_load();
   }
@@ -630,7 +635,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   }
   else if (reason==DLL_THREAD_DETACH && !_mi_is_redirected()) {
     _mi_thread_done(NULL);
-  }
+  }    
 }
 
 
@@ -783,6 +788,11 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #endif
   mi_decl_export void _mi_redirect_entry(DWORD reason) {
     // called on redirection; careful as this may be called before DllMain
+    #if MI_TLS_SLOT >= 2
+    if ((reason==DLL_PROCESS_ATTACH || reason==DLL_THREAD_ATTACH) && mi_prim_get_default_heap() == NULL) {
+      _mi_heap_set_default_direct((mi_heap_t*)&_mi_heap_empty);
+    }
+    #endif
     if (reason == DLL_PROCESS_ATTACH) {
       mi_redirected = true;
     }
