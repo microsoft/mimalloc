@@ -279,7 +279,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="mimalloc.vcxproj">
+    <ProjectReference Include="mimalloc-lib.vcxproj">
       <Project>{abb5eae7-b3e6-432e-b636-333449892ea6}</Project>
     </ProjectReference>
   </ItemGroup>

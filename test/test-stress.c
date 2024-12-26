@@ -57,7 +57,7 @@ static int ITER    = 50;
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 50;      // scaling factor
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
-#endif  
+#endif
 
 
 
@@ -256,11 +256,11 @@ static void test_stress(void) {
     }
     #ifndef NDEBUG
     //mi_collect(false);
-    //mi_debug_show_arenas();
+    //mi_debug_show_arenas(true);
     #endif
     #if !defined(NDEBUG) || defined(MI_TSAN)
-    if ((n + 1) % 10 == 0) { 
-      printf("- iterations left: %3d\n", ITER - (n + 1)); 
+    if ((n + 1) % 10 == 0) {
+      printf("- iterations left: %3d\n", ITER - (n + 1));
       mi_debug_show_arenas(true);
       //mi_collect(true);
       //mi_debug_show_arenas(true);
@@ -274,7 +274,7 @@ static void test_stress(void) {
       free_items(p);
     }
   }
-} 
+}
 
 #ifndef STRESS
 static void leak(intptr_t tid) {
@@ -350,17 +350,9 @@ int main(int argc, char** argv) {
 
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
-  //mi_debug_show_arenas(true);
   mi_debug_show_arenas(true);
-  //mi_collect(true);
-  //mi_debug_show_arenas(true);
-  #else
-  //mi_collect(true);
-  mi_debug_show_arenas(true);
-  mi_stats_print(NULL);
+  mi_collect(true);
   #endif
-#else
-  mi_stats_print(NULL);  // so we see rss/commit/elapsed
 #endif
   mi_stats_print(NULL);
   //bench_end_program();

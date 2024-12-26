@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2023, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2024, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -130,6 +130,7 @@ bool _mi_prim_thread_is_in_threadpool(void);
 // for each thread (unequal to zero).
 //-------------------------------------------------------------------
 
+
 // On some libc + platform combinations we can directly access a thread-local storage (TLS) slot.
 // The TLS layout depends on both the OS and libc implementation so we use specific tests for each main platform.
 // If you test on another platform and it works please send a PR :-)
@@ -207,21 +208,39 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
   #endif
 }
 
-#elif 0 && _MSC_VER && _WIN32
-// On Windows, using a fixed TLS slot has better codegen than a thread-local 
-// but it might clash with an application trying to use the same slot. (so we disable this by default)
-#include <winternl.h>
+#elif _WIN32 && MI_WIN_USE_FIXED_TLS && !defined(MI_WIN_USE_FLS)
 
-#define MI_HAS_TLS_SLOT
-#define MI_TLS_SLOT       63  // last available slot
+// On windows we can store the thread-local heap at a fixed TLS slot to avoid
+// thread-local initialization checks in the fast path. This use a fixed location
+// in the TCB though (last user-reserved slot by default) which may clash with other applications.
+
+#define MI_HAS_TLS_SLOT      2              // 2 = we can reliable initialize the slot (saving a test on each malloc)
+
+#if MI_WIN_USE_FIXED_TLS > 1
+#define MI_TLS_SLOT     (MI_WIN_USE_FIXED_TLS)
+#elif MI_SIZE_SIZE == 4
+#define MI_TLS_SLOT     (0x710)             // Last user-reserved slot <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
+// #define MI_TLS_SLOT  (0xF0C)             // Last TlsSlot (might clash with other app reserved slot)
+#else
+#define MI_TLS_SLOT     (0x888)             // Last user-reserved slot <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
+// #define MI_TLS_SLOT  (0x1678)            // Last TlsSlot (might clash with other app reserved slot)
+#endif
 
 static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
-  return NtCurrentTeb()->TlsSlots[slot];
+  #if (_M_X64 || _M_AMD64) && !defined(_M_ARM64EC)
+  return (void*)__readgsqword((unsigned long)slot);   // direct load at offset from gs
+  #elif _M_IX86 && !defined(_M_ARM64EC)
+  return (void*)__readfsdword((unsigned long)slot);   // direct load at offset from fs
+  #else
+  return ((void**)NtCurrentTeb())[slot / sizeof(void*)];
+  #endif
 }
 static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
-  NtCurrentTeb()->TlsSlots[slot] = value;
+  ((void**)NtCurrentTeb())[slot / sizeof(void*)] = value;
 }
+
 #endif
+
 
 // Do we have __builtin_thread_pointer? This would be the preferred way to get a unique thread id
 // but unfortunately, it seems we cannot test for this reliably at this time (see issue #883)
@@ -337,12 +356,14 @@ static inline mi_heap_t* mi_prim_get_default_heap(void);
 
 static inline mi_heap_t* mi_prim_get_default_heap(void) {
   mi_heap_t* heap = (mi_heap_t*)mi_prim_tls_slot(MI_TLS_SLOT);
+  #if MI_TLS_SLOT == 1   // check if the TLS slot is initialized
   if mi_unlikely(heap == NULL) {
     #ifdef __GNUC__
     __asm(""); // prevent conditional load of the address of _mi_heap_empty
     #endif
     heap = (mi_heap_t*)&_mi_heap_empty;
   }
+  #endif
   return heap;
 }
 

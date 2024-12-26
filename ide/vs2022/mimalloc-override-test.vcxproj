@@ -344,7 +344,7 @@
     <ClCompile Include="..\..\test\main-override.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="mimalloc-override.vcxproj">
+    <ProjectReference Include="mimalloc-override-dll.vcxproj">
       <Project>{abb5eae7-b3e6-432e-b636-333449892ea7}</Project>
     </ProjectReference>
   </ItemGroup>

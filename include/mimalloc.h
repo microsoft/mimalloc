@@ -326,7 +326,7 @@ mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, 
 //mi_decl_export void  mi_os_decommit(void* p, size_t size);
 
 mi_decl_export bool  mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t* accessed_size, size_t* size);
-mi_decl_export bool  mi_arena_reload(void* start, size_t size, mi_arena_id_t* arena_id); 
+mi_decl_export bool  mi_arena_reload(void* start, size_t size, mi_arena_id_t* arena_id);
 mi_decl_export bool  mi_heap_reload(mi_heap_t* heap, mi_arena_id_t arena);
 mi_decl_export void  mi_heap_unload(mi_heap_t* heap);
 

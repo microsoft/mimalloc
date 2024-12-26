@@ -19,6 +19,7 @@ option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" ON)
 option(MI_WIN_REDIRECT      "Use redirection module ('mimalloc-redirect') on Windows if compiling mimalloc as a DLL" ON)
+option(MI_WIN_USE_FIXED_TLS "Use a fixed TLS slot on Windows to avoid extra tests in the malloc fast path" OFF)
 option(MI_LOCAL_DYNAMIC_TLS "Use local-dynamic-tls, a slightly slower but dlopen-compatible thread local storage mechanism (Unix)" OFF)
 option(MI_LIBC_MUSL         "Enable this when linking with musl libc" OFF)
 
@@ -40,7 +41,7 @@ option(MI_NO_THP            "Disable transparent huge pages support on Linux/And
 option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
 
 # deprecated options
-option(MI_WIN_USE_FLS       "Use Fiber local storage on Windows to detect thread termination" OFF)
+option(MI_WIN_USE_FLS       "Use Fiber local storage on Windows to detect thread termination (deprecated)" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
 
@@ -327,8 +328,13 @@ if(MI_LIBC_MUSL)
 endif()
 
 if(MI_WIN_USE_FLS)
-  message(STATUS "Use the Fiber API to detect thread termination (MI_WIN_USE_FLS=ON)")
+  message(STATUS "Use the Fiber API to detect thread termination (deprecated) (MI_WIN_USE_FLS=ON)")
   list(APPEND mi_defines MI_WIN_USE_FLS=1)
+endif()
+
+if(MI_WIN_USE_FIXED_TLS)
+  message(STATUS "Use fixed TLS slot on Windows to avoid extra tests in the malloc fast path (MI_WIN_USE_FIXED_TLS=ON)")
+  list(APPEND mi_defines MI_WIN_USE_FIXED_TLS=1)
 endif()
 
 # Determine architecture
@@ -424,7 +430,7 @@ if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914) # vs2017+
 endif()
 
 if(MINGW)
-  add_definitions(-D_WIN32_WINNT=0x600)
+  add_definitions(-D_WIN32_WINNT=0x601)                # issue #976
 endif()
 
 if(MI_OPT_ARCH_FLAGS)
