@@ -92,6 +92,8 @@ typedef int32_t  mi_ssize_t;
 
 #if MI_ARCH_X64 && defined(__AVX2__)
 #include <immintrin.h>
+#elif MI_ARCH_ARM64 && MI_OPT_SIMD
+#include <arm_neon.h>
 #endif
 #if defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
 #include <intrin.h>
