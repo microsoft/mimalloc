@@ -868,6 +868,13 @@ static inline bool mi_bchunk_all_are_clear_relaxed(mi_bchunk_t* chunk) {
   const __m256i vec1 = _mm256_load_si256((const __m256i*)chunk->bfields);
   const __m256i vec2 = _mm256_load_si256(((const __m256i*)chunk->bfields)+1);
   return (mi_mm256_is_zero(_mm256_or_si256(vec1,vec2)));
+  #elif MI_OPT_SIMD && (MI_BCHUNK_BITS==512) && MI_ARCH_ARM64
+  const uint64x2_t v0 = vld1q_u64((uint64_t*)chunk->bfields); 
+  const uint64x2_t v1 = vld1q_u64((uint64_t*)chunk->bfields + 2);    
+  const uint64x2_t v2 = vld1q_u64((uint64_t*)chunk->bfields + 4);    
+  const uint64x2_t v3 = vld1q_u64((uint64_t*)chunk->bfields + 6);    
+  const uint64x2_t v  = vorrq_u64(vorrq_u64(v0,v1),vorrq_u64(v2,v3));    
+  return (vmaxvq_u32(vreinterpretq_u32_u64(v)) == 0);
   #else
   for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
     if (mi_atomic_load_relaxed(&chunk->bfields[i]) != 0) return false;
@@ -875,7 +882,6 @@ static inline bool mi_bchunk_all_are_clear_relaxed(mi_bchunk_t* chunk) {
   return true;
   #endif
 }
-
 
 static bool mi_bchunk_bsr(mi_bchunk_t* chunk, size_t* pidx) {
   for (size_t i = MI_BCHUNK_FIELDS; i > 0; ) {
