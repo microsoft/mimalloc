@@ -581,6 +581,27 @@ static inline bool mi_bchunk_try_find_and_clear(mi_bchunk_t* chunk, size_t* pidx
     // try again
     // note: there must be an atomic release/acquire in between or otherwise the registers may not be reloaded
   }
+  #elif MI_OPT_SIMD && (MI_BCHUNK_BITS==512) && MI_ARCH_ARM64
+  while(true) {
+    // a cache line is 64b so we can just as well load all at the same time (?)
+    const uint64x2_t vzero1_lo = vceqzq_u64(vld1q_u64((uint64_t*)chunk->bfields));        // 2x64 bit is_zero
+    const uint64x2_t vzero1_hi = vceqzq_u64(vld1q_u64((uint64_t*)chunk->bfields + 2));    // 2x64 bit is_zero
+    const uint64x2_t vzero2_lo = vceqzq_u64(vld1q_u64((uint64_t*)chunk->bfields + 4));    // 2x64 bit is_zero
+    const uint64x2_t vzero2_hi = vceqzq_u64(vld1q_u64((uint64_t*)chunk->bfields + 6));    // 2x64 bit is_zero
+    const uint32x4_t vzero1    = vuzp1q_u32(vreinterpretq_u32_u64(vzero1_lo),vreinterpretq_u32_u64(vzero1_hi)); // unzip even elements: narrow to 4x32 bit is_zero ()
+    const uint32x4_t vzero2    = vuzp1q_u32(vreinterpretq_u32_u64(vzero2_lo),vreinterpretq_u32_u64(vzero2_hi)); // unzip even elements: narrow to 4x32 bit is_zero ()
+    const uint32x4_t vzero1x   = vreinterpretq_u32_u64(vshrq_n_u64(vreinterpretq_u64_u32(vzero1), 24));        // shift-right 2x32bit elem by 24: lo 16 bits contain the 2 lo bytes
+    const uint32x4_t vzero2x   = vreinterpretq_u32_u64(vshrq_n_u64(vreinterpretq_u64_u32(vzero2), 24));        
+    const uint16x8_t vzero12   = vreinterpretq_u16_u32(vuzp1q_u32(vzero1x,vzero2x));                           // unzip even 32-bit elements into one vector
+    const uint8x8_t  vzero     = vmovn_u32(vzero12);                                                           // narrow the bottom 16-bits
+    const uint64_t mask = ~vget_lane_u64(vreinterpret_u64_u8(vzero), 0);  // 1 byte for each bfield (0xFF => bfield has a bit set)
+    if (mask==0) return false;
+    mi_assert_internal((mi_ctz(mask)%8) == 0); // tzcnt == 0, 8, 16, 24 , ..
+    const size_t chunk_idx = mi_ctz(mask) / 8;
+    if (mi_bchunk_try_find_and_clear_at(chunk, chunk_idx, pidx, true)) return true;
+    // try again
+    // note: there must be an atomic release/acquire in between or otherwise the registers may not be reloaded
+  }
   #else
   // try first to find a field that is not all set (to reduce fragmentation)
   for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
