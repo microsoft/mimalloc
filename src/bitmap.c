@@ -603,10 +603,10 @@ static inline bool mi_bchunk_try_find_and_clear(mi_bchunk_t* chunk, size_t* pidx
     // note: there must be an atomic release/acquire in between or otherwise the registers may not be reloaded
   }
   #else
-  // try first to find a field that is not all set (to reduce fragmentation)
-  for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
-    if (mi_bchunk_try_find_and_clear_at(chunk, i, pidx, false /* don't consider allset fields */)) return true;
-  }
+  // try first to find a field that is not all set (to reduce fragmentation) (not needed for binned bitmaps)
+  // for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
+  //   if (mi_bchunk_try_find_and_clear_at(chunk, i, pidx, false /* don't consider allset fields */)) return true;
+  // }
   for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
     if (mi_bchunk_try_find_and_clear_at(chunk, i, pidx, true)) return true;
   }
@@ -673,10 +673,10 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clear8(mi_bchunk_t* chunk, s
     // note: there must be an atomic release/acquire in between or otherwise the registers may not be reloaded  }
   }
   #else
-    // first skip allset fields to reduce fragmentation
-    for(int i = 0; i < MI_BCHUNK_FIELDS; i++) {
-      if (mi_bchunk_try_find_and_clear8_at(chunk, i, pidx, false /* don't allow allset fields */)) return true;
-    }
+    // first skip allset fields to reduce fragmentation (not needed for binned bitmaps)
+    // for(int i = 0; i < MI_BCHUNK_FIELDS; i++) {
+    //   if (mi_bchunk_try_find_and_clear8_at(chunk, i, pidx, false /* don't allow allset fields */)) return true;
+    // }
     for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
       if (mi_bchunk_try_find_and_clear8_at(chunk, i, pidx, true /* allow allset fields */)) return true;
     }
@@ -876,6 +876,13 @@ static inline bool mi_bchunk_all_are_clear_relaxed(mi_bchunk_t* chunk) {
   const __m256i vec1 = _mm256_load_si256((const __m256i*)chunk->bfields);
   const __m256i vec2 = _mm256_load_si256(((const __m256i*)chunk->bfields)+1);
   return (mi_mm256_is_zero(_mm256_or_si256(vec1,vec2)));
+  #elif MI_OPT_SIMD && (MI_BCHUNK_BITS==512) && MI_ARCH_ARM64
+  const uint64x2_t v0 = vld1q_u64((uint64_t*)chunk->bfields); 
+  const uint64x2_t v1 = vld1q_u64((uint64_t*)chunk->bfields + 2);    
+  const uint64x2_t v2 = vld1q_u64((uint64_t*)chunk->bfields + 4);    
+  const uint64x2_t v3 = vld1q_u64((uint64_t*)chunk->bfields + 6);    
+  const uint64x2_t v  = vorrq_u64(vorrq_u64(v0,v1),vorrq_u64(v2,v3));    
+  return (vmaxvq_u32(vreinterpretq_u32_u64(v)) == 0);
   #else
   for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
     if (mi_atomic_load_relaxed(&chunk->bfields[i]) != 0) return false;
@@ -894,6 +901,13 @@ static inline bool mi_bchunk_all_are_set_relaxed(mi_bchunk_t* chunk) {
   const __m256i vec1 = _mm256_load_si256((const __m256i*)chunk->bfields);
   const __m256i vec2 = _mm256_load_si256(((const __m256i*)chunk->bfields)+1);
   return (mi_mm256_is_ones(_mm256_and_si256(vec1, vec2)));
+#elif MI_OPT_SIMD && (MI_BCHUNK_BITS==512) && MI_ARCH_ARM64
+  const uint64x2_t v0 = vld1q_u64((uint64_t*)chunk->bfields); 
+  const uint64x2_t v1 = vld1q_u64((uint64_t*)chunk->bfields + 2);    
+  const uint64x2_t v2 = vld1q_u64((uint64_t*)chunk->bfields + 4);    
+  const uint64x2_t v3 = vld1q_u64((uint64_t*)chunk->bfields + 6);    
+  const uint64x2_t v  = vandq_u64(vandq_u64(v0,v1),vandq_u64(v2,v3));    
+  return (vminvq_u32(vreinterpretq_u32_u64(v)) == 0xFFFFFFFFUL);     
 #else
   for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
     if (~mi_atomic_load_relaxed(&chunk->bfields[i]) != 0) return false;
