@@ -762,7 +762,7 @@ void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount, size_t all
 
             // collect abandoned segments (in particular, purge expired parts of segments in the abandoned segment list)
             // note: forced purge can be quite expensive if many threads are created/destroyed so we do not force on abandonment
-            _mi_abandoned_collect(heap, true /* force? */, &heap->tld->segments);
+            _mi_abandoned_collect(heap, false /* force? */, &heap->tld->segments);
         }
     }
 }

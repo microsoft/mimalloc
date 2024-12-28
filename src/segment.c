@@ -1588,7 +1588,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
         mi_segment_t* segment_to_return = mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
         if (segment_to_return != NULL) {
           if (best_candidate_segment != NULL) {
-            mi_segment_try_purge(best_candidate_segment, true /* true force? */, tld->stats);
+            mi_segment_try_purge(best_candidate_segment, false /* true force? */, tld->stats);
             _mi_arena_segment_mark_abandoned(best_candidate_segment);
           }
           mi_segment_increment_reclaimed_stats();
@@ -1613,7 +1613,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
           segment_to_abandon = segment;
         }
 
-        mi_segment_try_purge(segment_to_abandon, true /* true force? */, tld->stats); // force purge if needed as we may not visit soon again
+        mi_segment_try_purge(segment_to_abandon, false /* true force? */, tld->stats); // force purge if needed as we may not visit soon again
         _mi_arena_segment_mark_abandoned(segment_to_abandon);
       }
 
