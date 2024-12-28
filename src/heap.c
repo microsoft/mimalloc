@@ -732,8 +732,7 @@ static mi_decl_noinline void mi_segment_visit_pages(mi_heap_t* heap, mi_segment_
 void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount, size_t alloc_block_size) {
     bool segmentsDropped = false;
 
-    while (heap->tld->segments.count >= targetSegmentCount) {
-
+    do {
         // 1. Find a segment to drop (abandon) using the Full Page queue
         mi_segment_t* segmentToAbandon = mi_heap_get_segment_to_drop(heap, targetSegmentCount, alloc_block_size);
         if (segmentToAbandon == NULL) {
@@ -752,7 +751,7 @@ void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount, size_t all
         // This will effectively abandon the segment.
         mi_collect_t collect = MI_ABANDON;
         mi_segment_visit_pages(heap, segmentToAbandon, &mi_heap_page_collect, &collect);
-    }
+    } while (heap->tld->segments.count >= targetSegmentCount);
 
     if (segmentsDropped) {
         mi_msecs_t now_msec = _mi_clock_now();
