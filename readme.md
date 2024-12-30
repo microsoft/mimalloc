@@ -253,7 +253,7 @@ to link with the static library. See `test\CMakeLists.txt` for an example.
 
 For best performance in C++ programs, it is also recommended to override the
 global `new` and `delete` operators. For convenience, mimalloc provides
-[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
+[`mimalloc-new-delete.h`](include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
 In C++, mimalloc also provides the `mi_stl_allocator` struct which implements the `std::allocator`
 interface.
 
@@ -458,7 +458,7 @@ There are four requirements to make the overriding work well:
 
 For best performance on Windows with C++, it
 is also recommended to also override the `new`/`delete` operations (by including
-[`mimalloc-new-delete.h`](../include/mimalloc-new-delete.h) 
+[`mimalloc-new-delete.h`](include/mimalloc-new-delete.h) 
 a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
@@ -487,7 +487,7 @@ object file. For example:
 Another way to override statically that works on all platforms, is to
 link statically to mimalloc (as shown in the introduction) and include a
 header file in each source file that re-defines `malloc` etc. to `mi_malloc`.
-This is provided by [`mimalloc-override.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-override.h). This only works reliably though if all sources are
+This is provided by [`mimalloc-override.h`](include/mimalloc-override.h). This only works reliably though if all sources are
 under your control or otherwise mixing of pointers from different heaps may occur!
 
 
