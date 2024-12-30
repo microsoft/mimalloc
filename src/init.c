@@ -663,15 +663,20 @@ void mi_cdecl _mi_process_done(void) {
   if (process_done) return;
   process_done = true;
 
+  // get the default heap so we don't need to acces thread locals anymore
+  mi_heap_t* heap = mi_prim_get_default_heap();  // use prim to not initialize any heap
+  mi_assert_internal(heap != NULL);
+
   // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
   _mi_prim_thread_done_auto_done();
+
 
   #ifndef MI_SKIP_COLLECT_ON_EXIT
     #if (MI_DEBUG || !defined(MI_SHARED_LIB))
     // free all memory if possible on process exit. This is not needed for a stand-alone process
     // but should be done if mimalloc is statically linked into another shared library which
     // is repeatedly loaded/unloaded, see issue #281.
-    mi_collect(true /* force */ );
+    mi_heap_collect(heap, true /* force */ );
     #endif
   #endif
 
@@ -679,8 +684,8 @@ void mi_cdecl _mi_process_done(void) {
   // since after process_done there might still be other code running that calls `free` (like at_exit routines,
   // or C-runtime termination code.
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
-    mi_collect(true /* force */);
-    _mi_heap_unsafe_destroy_all();     // forcefully release all memory held by all heaps (of this thread only!)
+    mi_heap_collect(heap, true /* force */);
+    _mi_heap_unsafe_destroy_all(heap);     // forcefully release all memory held by all heaps (of this thread only!)
     _mi_arena_unsafe_destroy_all();
     _mi_segment_map_unsafe_destroy();
   }

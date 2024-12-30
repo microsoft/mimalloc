@@ -216,7 +216,7 @@ void        _mi_heap_destroy_pages(mi_heap_t* heap);
 void        _mi_heap_collect_abandon(mi_heap_t* heap);
 void        _mi_heap_set_default_direct(mi_heap_t* heap);
 bool        _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid);
-void        _mi_heap_unsafe_destroy_all(void);
+void        _mi_heap_unsafe_destroy_all(mi_heap_t* heap);
 mi_heap_t*  _mi_heap_by_tag(mi_heap_t* heap, uint8_t tag);
 void        _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
 bool        _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
