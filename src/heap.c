@@ -59,7 +59,7 @@ static bool mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   MI_UNUSED(pq);
   mi_assert_internal(mi_page_heap(page) == heap);
   mi_segment_t* segment = _mi_page_segment(page);
-  mi_assert_internal(segment->thread_id == heap->thread_id);
+  mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == heap->thread_id);
   mi_assert_expensive(_mi_page_is_valid(page));
   return true;
 }
