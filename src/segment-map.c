@@ -22,7 +22,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #elif (MI_INTPTR_SIZE > 4)
 #define MI_SEGMENT_MAP_MAX_ADDRESS    (48*1024ULL*MI_GiB)   // 48 TiB
 #else
-#define MI_SEGMENT_MAP_MAX_ADDRESS    (MAX_UINT32)
+#define MI_SEGMENT_MAP_MAX_ADDRESS    (UINT32_MAX)
 #endif
 
 #define MI_SEGMENT_MAP_PART_SIZE      (MI_INTPTR_SIZE*MI_KiB - 128)      // 128 > sizeof(mi_memid_t) ! 
@@ -55,11 +55,12 @@ static mi_segmap_part_t* mi_segment_map_index_of(const mi_segment_t* segment, bo
   if (part == NULL) {
     if (!create_on_demand) return NULL;
     mi_memid_t memid;
-    part = (mi_segmap_part_t*)_mi_os_alloc(sizeof(mi_segmap_part_t), &memid, NULL);
+    part = (mi_segmap_part_t*)_mi_os_alloc(sizeof(mi_segmap_part_t), &memid);
     if (part == NULL) return NULL;
+    part->memid = memid;
     mi_segmap_part_t* expected = NULL;
     if (!mi_atomic_cas_ptr_strong_release(mi_segmap_part_t, &mi_segment_map[segindex], &expected, part)) {
-      _mi_os_free(part, sizeof(mi_segmap_part_t), memid, NULL);
+      _mi_os_free(part, sizeof(mi_segmap_part_t), memid);
       part = expected;
       if (part == NULL) return NULL;
     }
@@ -123,4 +124,13 @@ static bool mi_is_valid_pointer(const void* p) {
 
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
   return mi_is_valid_pointer(p);
+}
+
+void _mi_segment_map_unsafe_destroy(void) {
+  for (size_t i = 0; i < MI_SEGMENT_MAP_MAX_PARTS; i++) {
+    mi_segmap_part_t* part = mi_atomic_exchange_ptr_relaxed(mi_segmap_part_t, &mi_segment_map[i], NULL);
+    if (part != NULL) {
+      _mi_os_free(part, sizeof(mi_segmap_part_t), part->memid);
+    }
+  }
 }

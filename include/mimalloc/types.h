@@ -72,6 +72,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
+// Use guard pages behind objects of a certain size (set by the MIMALLOC_DEBUG_GUARDED_MIN/MAX options)
+// Padding should be disabled when using guard pages
+// #define MI_GUARDED 1
+#if defined(MI_GUARDED)
+#define MI_PADDING  0
+#endif
+
 // Reserve extra padding at the end of each block to be more resilient against heap block overflows.
 // The padding can detect buffer overflow on free.
 #if !defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1 || (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW))
@@ -225,6 +232,13 @@ typedef struct mi_block_s {
   mi_encoded_t next;
 } mi_block_t;
 
+#if MI_GUARDED
+// we always align guarded pointers in a block at an offset
+// the block `next` field is then used as a tag to distinguish regular offset aligned blocks from guarded ones
+#define MI_BLOCK_TAG_ALIGNED   ((mi_encoded_t)(0))
+#define MI_BLOCK_TAG_GUARDED   (~MI_BLOCK_TAG_ALIGNED)
+#endif
+
 
 // The delayed flags are used for efficient multi-threaded free-ing
 typedef enum mi_delayed_e {
@@ -248,7 +262,7 @@ typedef union mi_page_flags_s {
 #else
 // under thread sanitizer, use a byte for each flag to suppress warning, issue #130
 typedef union mi_page_flags_s {
-  uint16_t full_aligned;
+  uint32_t full_aligned;
   struct {
     uint8_t in_full;
     uint8_t has_aligned;
@@ -363,7 +377,7 @@ static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
 
 typedef struct mi_memid_os_info {
   void*         base;               // actual base address of the block (used for offset aligned allocations)
-  size_t        alignment;          // alignment at allocation
+  size_t        size;               // full allocation size
 } mi_memid_os_info_t;
 
 typedef struct mi_memid_arena_info {
@@ -402,7 +416,8 @@ typedef struct mi_segment_s {
   // segment fields
   struct mi_segment_s* next;             // must be the first (non-constant) segment field  -- see `segment.c:segment_init`
   struct mi_segment_s* prev;
-  bool                 was_reclaimed;    // true if it was reclaimed (used to limit on-free reclamation)
+  bool                 was_reclaimed;    // true if it was reclaimed (used to limit reclaim-on-free reclamation)
+  bool                 dont_free;        // can be temporarily true to ensure the segment is not freed
 
   size_t               abandoned;        // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
   size_t               abandoned_visits; // count how often this segment is visited for reclaiming (to force reclaim if it is too long)
@@ -488,6 +503,13 @@ struct mi_heap_s {
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
   uint8_t               tag;                                 // custom tag, can be used for separating heaps based on the object types
+  #if MI_GUARDED
+  size_t                guarded_size_min;                    // minimal size for guarded objects
+  size_t                guarded_size_max;                    // maximal size for guarded objects
+  size_t                guarded_sample_rate;                 // sample rate (set to 0 to disable guarded pages)
+  size_t                guarded_sample_seed;                 // starting sample count
+  size_t                guarded_sample_count;                // current sample count (counting down to 0)
+  #endif
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
   mi_page_queue_t       pages[MI_BIN_FULL + 1];              // queue of pages for each size class (or "bin")
 };
@@ -580,24 +602,34 @@ typedef struct mi_stats_s {
   mi_stat_counter_t arena_count;
   mi_stat_counter_t arena_crossover_count;
   mi_stat_counter_t arena_rollback_count;
+  mi_stat_counter_t guarded_alloc_count;
 #if MI_STAT>1
   mi_stat_count_t normal_bins[MI_BIN_HUGE+1];
 #endif
 } mi_stats_t;
 
 
+// add to stat keeping track of the peak
 void _mi_stat_increase(mi_stat_count_t* stat, size_t amount);
 void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
+// adjust stat in special cases to compensate for double counting
+void _mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount);
+void _mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount);
+// counters can just be increased
 void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 
 #if (MI_STAT)
 #define mi_stat_increase(stat,amount)         _mi_stat_increase( &(stat), amount)
 #define mi_stat_decrease(stat,amount)         _mi_stat_decrease( &(stat), amount)
 #define mi_stat_counter_increase(stat,amount) _mi_stat_counter_increase( &(stat), amount)
+#define mi_stat_adjust_increase(stat,amount)  _mi_stat_adjust_increase( &(stat), amount)
+#define mi_stat_adjust_decrease(stat,amount)  _mi_stat_adjust_decrease( &(stat), amount)
 #else
-#define mi_stat_increase(stat,amount)         (void)0
-#define mi_stat_decrease(stat,amount)         (void)0
-#define mi_stat_counter_increase(stat,amount) (void)0
+#define mi_stat_increase(stat,amount)         ((void)0)
+#define mi_stat_decrease(stat,amount)         ((void)0)
+#define mi_stat_counter_increase(stat,amount) ((void)0)
+#define mi_stat_adjuct_increase(stat,amount)  ((void)0)
+#define mi_stat_adjust_decrease(stat,amount)  ((void)0)
 #endif
 
 #define mi_heap_stat_counter_increase(heap,stat,amount)  mi_stat_counter_increase( (heap)->tld->stats.stat, amount)
@@ -633,12 +665,6 @@ typedef struct mi_segment_queue_s {
   mi_segment_t* last;
 } mi_segment_queue_t;
 
-// OS thread local data
-typedef struct mi_os_tld_s {
-  size_t                region_idx;   // start point for next allocation
-  mi_stats_t*           stats;        // points to tld stats
-} mi_os_tld_t;
-
 // Segments thread local data
 typedef struct mi_segments_tld_s {
   mi_segment_queue_t  small_free;   // queue of segments with free small pages
@@ -651,7 +677,6 @@ typedef struct mi_segments_tld_s {
   size_t              reclaim_count;// number of reclaimed (abandoned) segments
   mi_subproc_t*       subproc;      // sub-process this thread belongs to.
   mi_stats_t*         stats;        // points to tld stats
-  mi_os_tld_t*        os;           // points to os tld
 } mi_segments_tld_t;
 
 // Thread local data
@@ -661,7 +686,6 @@ struct mi_tld_s {
   mi_heap_t*          heap_backing;  // backing heap of this thread (cannot be deleted)
   mi_heap_t*          heaps;         // list of heaps in this thread (so we can abandon all when the thread terminates)
   mi_segments_tld_t   segments;      // segment tld
-  mi_os_tld_t         os;            // os tld
   mi_stats_t          stats;         // statistics
 };
 

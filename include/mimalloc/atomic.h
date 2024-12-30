@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2023 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2024 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -72,6 +72,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_atomic_load_relaxed(p)                mi_atomic(load_explicit)(p,mi_memory_order(relaxed))
 #define mi_atomic_store_release(p,x)             mi_atomic(store_explicit)(p,x,mi_memory_order(release))
 #define mi_atomic_store_relaxed(p,x)             mi_atomic(store_explicit)(p,x,mi_memory_order(relaxed))
+#define mi_atomic_exchange_relaxed(p,x)          mi_atomic(exchange_explicit)(p,x,mi_memory_order(relaxed))
 #define mi_atomic_exchange_release(p,x)          mi_atomic(exchange_explicit)(p,x,mi_memory_order(release))
 #define mi_atomic_exchange_acq_rel(p,x)          mi_atomic(exchange_explicit)(p,x,mi_memory_order(acq_rel))
 #define mi_atomic_cas_weak_release(p,exp,des)    mi_atomic_cas_weak(p,exp,des,mi_memory_order(release),mi_memory_order(relaxed))
@@ -110,6 +111,7 @@ static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)*p, intptr_t sub);
 #define mi_atomic_cas_ptr_weak_release(tp,p,exp,des)    mi_atomic_cas_weak_release(p,exp,(tp*)des)
 #define mi_atomic_cas_ptr_weak_acq_rel(tp,p,exp,des)    mi_atomic_cas_weak_acq_rel(p,exp,(tp*)des)
 #define mi_atomic_cas_ptr_strong_release(tp,p,exp,des)  mi_atomic_cas_strong_release(p,exp,(tp*)des)
+#define mi_atomic_exchange_ptr_relaxed(tp,p,x)          mi_atomic_exchange_relaxed(p,(tp*)x)
 #define mi_atomic_exchange_ptr_release(tp,p,x)          mi_atomic_exchange_release(p,(tp*)x)
 #define mi_atomic_exchange_ptr_acq_rel(tp,p,x)          mi_atomic_exchange_acq_rel(p,(tp*)x)
 #else
@@ -118,6 +120,7 @@ static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)*p, intptr_t sub);
 #define mi_atomic_cas_ptr_weak_release(tp,p,exp,des)    mi_atomic_cas_weak_release(p,exp,des)
 #define mi_atomic_cas_ptr_weak_acq_rel(tp,p,exp,des)    mi_atomic_cas_weak_acq_rel(p,exp,des)
 #define mi_atomic_cas_ptr_strong_release(tp,p,exp,des)  mi_atomic_cas_strong_release(p,exp,des)
+#define mi_atomic_exchange_ptr_relaxed(tp,p,x)          mi_atomic_exchange_relaxed(p,x)
 #define mi_atomic_exchange_ptr_release(tp,p,x)          mi_atomic_exchange_release(p,x)
 #define mi_atomic_exchange_ptr_acq_rel(tp,p,x)          mi_atomic_exchange_acq_rel(p,x)
 #endif
@@ -402,19 +405,46 @@ static inline void mi_atomic_yield(void) {
 
 
 // ----------------------------------------------------------------------
-// Locks are only used for abandoned segment visiting in `arena.c`
+// Locks 
+// These do not have to be recursive and should be light-weight 
+// in-process only locks. Only used for reserving arena's and to 
+// maintain the abandoned list.
 // ----------------------------------------------------------------------
+#if _MSC_VER
+#pragma warning(disable:26110)  // unlock with holding lock
+#endif
+
+#define mi_lock(lock)    for(bool _go = (mi_lock_acquire(lock),true); _go; (mi_lock_release(lock), _go=false) )
 
 #if defined(_WIN32)
 
+#if 1
+#define mi_lock_t  SRWLOCK   // slim reader-writer lock
+
+static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+  return TryAcquireSRWLockExclusive(lock);
+}
+static inline void mi_lock_acquire(mi_lock_t* lock) {
+  AcquireSRWLockExclusive(lock);
+}
+static inline void mi_lock_release(mi_lock_t* lock) {
+  ReleaseSRWLockExclusive(lock);
+}
+static inline void mi_lock_init(mi_lock_t* lock) {
+  InitializeSRWLock(lock);
+}
+static inline void mi_lock_done(mi_lock_t* lock) {
+  (void)(lock);
+}
+
+#else
 #define mi_lock_t  CRITICAL_SECTION
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return TryEnterCriticalSection(lock);
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_lock_acquire(mi_lock_t* lock) {
   EnterCriticalSection(lock);
-  return true;
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   LeaveCriticalSection(lock);
@@ -426,16 +456,22 @@ static inline void mi_lock_done(mi_lock_t* lock) {
   DeleteCriticalSection(lock);
 }
 
+#endif
 
 #elif defined(MI_USE_PTHREADS)
+
+void _mi_error_message(int err, const char* fmt, ...);
 
 #define mi_lock_t  pthread_mutex_t
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return (pthread_mutex_trylock(lock) == 0);
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
-  return (pthread_mutex_lock(lock) == 0);
+static inline void mi_lock_acquire(mi_lock_t* lock) {
+  const int err = pthread_mutex_lock(lock);
+  if (err != 0) {
+    _mi_error_message(err, "internal error: lock cannot be acquired\n");
+  }
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   pthread_mutex_unlock(lock);
@@ -447,18 +483,16 @@ static inline void mi_lock_done(mi_lock_t* lock) {
   pthread_mutex_destroy(lock);
 }
 
-/*
 #elif defined(__cplusplus)
 
 #include <mutex>
 #define mi_lock_t  std::mutex
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
-  return lock->lock_try_acquire();
+  return lock->try_lock();
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_lock_acquire(mi_lock_t* lock) {
   lock->lock();
-  return true;
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   lock->unlock();
@@ -469,7 +503,6 @@ static inline void mi_lock_init(mi_lock_t* lock) {
 static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
 }
-*/
 
 #else
 
@@ -482,12 +515,11 @@ static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   uintptr_t expected = 0;
   return mi_atomic_cas_strong_acq_rel(lock, &expected, (uintptr_t)1);
 }
-static inline bool mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_lock_acquire(mi_lock_t* lock) {
   for (int i = 0; i < 1000; i++) {  // for at most 1000 tries?
-    if (mi_lock_try_acquire(lock)) return true;
+    if (mi_lock_try_acquire(lock)) return;
     mi_atomic_yield();
   }
-  return true;
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   mi_atomic_store_release(lock, (uintptr_t)0);
@@ -500,8 +532,6 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 }
 
 #endif
-
-
 
 
 #endif // __MIMALLOC_ATOMIC_H
