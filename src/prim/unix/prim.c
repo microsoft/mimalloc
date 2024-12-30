@@ -248,7 +248,7 @@ static int unix_mmap_fd(void) {
   #if defined(VM_MAKE_TAG)
   // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
   int os_tag = (int)mi_option_get(mi_option_os_tag);
-  if (os_tag < 100 || os_tag > 255) { os_tag = 100; }
+  if (os_tag < 100 || os_tag > 255) { os_tag = 254; }
   return VM_MAKE_TAG(os_tag);
   #else
   return -1;
