@@ -147,7 +147,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   UNINIT, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)
   { 400, UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
 #if defined(MI_VISIT_ABANDONED)
-  { 1,   INITIALIZED, MI_OPTION(visit_abandoned) },     // allow visiting heap blocks in abandonded segments; requires taking locks during reclaim.
+  { 1,   INITIALIZED, MI_OPTION(visit_abandoned) },     // allow visiting heap blocks in abandoned segments; requires taking locks during reclaim.
 #else
   { 0,   UNINIT, MI_OPTION(visit_abandoned) },
 #endif
@@ -368,7 +368,7 @@ static _Atomic(size_t) warning_count; // = 0;  // when >= max_warning_count stop
 // (recursively) invoke malloc again to allocate space for the thread local
 // variables on demand. This is why we use a _mi_preloading test on such
 // platforms. However, C code generator may move the initial thread local address
-// load before the `if` and we therefore split it out in a separate funcion.
+// load before the `if` and we therefore split it out in a separate function.
 static mi_decl_thread bool recurse = false;
 
 static mi_decl_noinline bool mi_recurse_enter_prim(void) {

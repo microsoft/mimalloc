@@ -32,7 +32,7 @@ static uint8_t* mi_segment_raw_page_start(const mi_segment_t* segment, const mi_
   (i.e. we are careful to not touch the memory until we actually allocate a block there)
 
   If a  thread ends, it "abandons" pages that still contain live blocks.
-  Such segments are abondoned and these can be reclaimed by still running threads,
+  Such segments are abandoned and these can be reclaimed by still running threads,
   (much like work-stealing).
 -------------------------------------------------------------------------------- */
 
@@ -276,7 +276,7 @@ static bool mi_page_ensure_committed(mi_segment_t* segment, mi_page_t* page, mi_
 
 // we re-use the `free` field for the expiration counter. Since this is a
 // a pointer size field while the clock is always 64-bit we need to guard
-// against overflow, we use substraction to check for expiry which works
+// against overflow, we use subtraction to check for expiry which works
 // as long as the reset delay is under (2^30 - 1) milliseconds (~12 days)
 static uint32_t mi_page_get_expire( mi_page_t* page ) {
   return (uint32_t)((uintptr_t)page->free);
@@ -294,7 +294,7 @@ static void mi_page_purge_set_expire(mi_page_t* page) {
 
 // we re-use the `free` field for the expiration counter. Since this is a
 // a pointer size field while the clock is always 64-bit we need to guard
-// against overflow, we use substraction to check for expiry which work
+// against overflow, we use subtraction to check for expiry which work
 // as long as the reset delay is under (2^30 - 1) milliseconds (~12 days)
 static bool mi_page_purge_is_expired(mi_page_t* page, mi_msecs_t now) {
   int32_t expire = (int32_t)mi_page_get_expire(page);
@@ -789,7 +789,7 @@ When a block is freed in an abandoned segment, the segment
 is reclaimed into that thread.
 
 Moreover, if threads are looking for a fresh segment, they
-will first consider abondoned segments -- these can be found
+will first consider abandoned segments -- these can be found
 by scanning the arena memory
 (segments outside arena memoryare only reclaimed by a free).
 ----------------------------------------------------------- */
@@ -1016,7 +1016,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
   {
     mi_assert(segment->subproc == heap->tld->segments.subproc); // cursor only visits segments in our sub-process
     segment->abandoned_visits++;
-    // todo: should we respect numa affinity for abondoned reclaim? perhaps only for the first visit?
+    // todo: should we respect numa affinity for abandoned reclaim? perhaps only for the first visit?
     // todo: an arena exclusive heap will potentially visit many abandoned unsuitable segments and use many tries
     // Perhaps we can skip non-suitable ones in a better way?
     bool is_suitable = _mi_heap_memid_is_suitable(heap, segment->memid);
