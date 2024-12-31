@@ -257,7 +257,7 @@ typedef enum mi_delayed_e {
   MI_USE_DELAYED_FREE   = 0, // push on the owning heap thread delayed list
   MI_DELAYED_FREEING    = 1, // temporary: another thread is accessing the owning heap
   MI_NO_DELAYED_FREE    = 2, // optimize: push on page local thread free queue if another block is already in the heap thread delayed free list
-  MI_NEVER_DELAYED_FREE = 3  // sticky: used for abondoned pages without a owning heap; this only resets on page reclaim
+  MI_NEVER_DELAYED_FREE = 3  // sticky: used for abandoned pages without a owning heap; this only resets on page reclaim
 } mi_delayed_t;
 
 

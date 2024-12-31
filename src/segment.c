@@ -150,6 +150,23 @@ size_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, size_t* idx) {
 
 /* --------------------------------------------------------------------------------
   Segment allocation
+  We allocate pages inside bigger "segments" (32 MiB on 64-bit). This is to avoid
+  splitting VMA's on Linux and reduce fragmentation on other OS's.
+  Each thread owns its own segments.
+
+  Currently we have:
+  - small pages (64KiB) 
+  - medium pages (512KiB)
+  - large pages (4MiB),
+  - huge segments have 1 page in one segment that can be larger than `MI_SEGMENT_SIZE`.
+    it is used for blocks `> MI_LARGE_OBJ_SIZE_MAX` or with alignment `> MI_BLOCK_ALIGNMENT_MAX`.
+
+  The memory for a segment is usually committed on demand.
+  (i.e. we are careful to not touch the memory until we actually allocate a block there)
+
+  If a  thread ends, it "abandons" pages that still contain live blocks.
+  Such segments are abandoned and these can be reclaimed by still running threads,
+  (much like work-stealing).
 -------------------------------------------------------------------------------- */
 
 
@@ -1068,7 +1085,7 @@ When a block is freed in an abandoned segment, the segment
 is reclaimed into that thread.
 
 Moreover, if threads are looking for a fresh segment, they
-will first consider abondoned segments -- these can be found
+will first consider abandoned segments -- these can be found
 by scanning the arena memory
 (segments outside arena memoryare only reclaimed by a free).
 ----------------------------------------------------------- */
@@ -1324,7 +1341,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
   {
     mi_assert(segment->subproc == heap->tld->segments.subproc); // cursor only visits segments in our sub-process
     segment->abandoned_visits++;
-    // todo: should we respect numa affinity for abondoned reclaim? perhaps only for the first visit?
+    // todo: should we respect numa affinity for abandoned reclaim? perhaps only for the first visit?
     // todo: an arena exclusive heap will potentially visit many abandoned unsuitable segments and use many tries
     // Perhaps we can skip non-suitable ones in a better way?
     bool is_suitable = _mi_heap_memid_is_suitable(heap, segment->memid);

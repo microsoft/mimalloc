@@ -10,7 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 // --------------------------------------------------------------------------
-// This file contains the interal API's of mimalloc and various utility
+// This file contains the internal API's of mimalloc and various utility
 // functions and macros.
 // --------------------------------------------------------------------------
 
@@ -167,6 +167,7 @@ void          _mi_arena_field_cursor_done(mi_arena_field_cursor_t* current);
 // "segment-map.c"
 void        _mi_segment_map_allocated_at(const mi_segment_t* segment);
 void        _mi_segment_map_freed_at(const mi_segment_t* segment);
+void        _mi_segment_map_unsafe_destroy(void);
 
 // "segment.c"
 mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment, mi_segments_tld_t* tld);
@@ -217,7 +218,7 @@ void        _mi_heap_destroy_pages(mi_heap_t* heap);
 void        _mi_heap_collect_abandon(mi_heap_t* heap);
 void        _mi_heap_set_default_direct(mi_heap_t* heap);
 bool        _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid);
-void        _mi_heap_unsafe_destroy_all(void);
+void        _mi_heap_unsafe_destroy_all(mi_heap_t* heap);
 mi_heap_t*  _mi_heap_by_tag(mi_heap_t* heap, uint8_t tag);
 void        _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
 bool        _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);

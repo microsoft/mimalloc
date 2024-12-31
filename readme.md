@@ -12,7 +12,7 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.1.7` (2024-05-21).  
+Latest release tag: `v2.1.7` (2024-05-21).
 Latest v1 tag: `v1.8.7` (2024-05-21).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
@@ -77,7 +77,7 @@ Enjoy!
 
 ### Releases
 
-Note: the `v2.x` version has a different algorithm for managing internal mimalloc pages (as slices) that tends to use reduce 
+Note: the `v2.x` version has a different algorithm for managing internal mimalloc pages (as slices) that tends to use reduce
 memory usage
   and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
   (see [below](#performance)); please report if you observe any significant performance regression.
@@ -87,18 +87,18 @@ memory usage
 * 2024-05-13, `v1.8.6`, `v2.1.6`: Fix build errors on various (older) platforms. Refactored aligned allocation.
 * 2024-04-22, `v1.8.4`, `v2.1.4`: Fixes various bugs and build issues. Add `MI_LIBC_MUSL` cmake flag for musl builds.
   Free-ing code is refactored into a separate module (`free.c`). Mimalloc page info is simplified with the block size
-  directly available (and new `block_size_shift` to improve aligned block free-ing). 
+  directly available (and new `block_size_shift` to improve aligned block free-ing).
   New approach to collection of abandoned segments: When
   a thread terminates the segments it owns are abandoned (containing still live objects) and these can be
-  reclaimed by other threads. We no longer use a list of abandoned segments but this is now done using bitmaps in arena's 
+  reclaimed by other threads. We no longer use a list of abandoned segments but this is now done using bitmaps in arena's
   which is more concurrent (and more aggressive). Abandoned memory can now also be reclaimed if a thread frees an object in
   an abandoned page (which can be disabled using `mi_option_abandoned_reclaim_on_free`). The option `mi_option_max_segment_reclaim`
   gives a maximum percentage of abandoned segments that can be reclaimed per try (=10%).
 
-* 2023-04-24, `v1.8.2`, `v2.1.2`: Fixes build issues on freeBSD, musl, and C17 (UE 5.1.1). Reduce code size/complexity 
+* 2023-04-24, `v1.8.2`, `v2.1.2`: Fixes build issues on freeBSD, musl, and C17 (UE 5.1.1). Reduce code size/complexity
   by removing regions and segment-cache's and only use arenas with improved memory purging -- this may improve memory
   usage as well for larger services. Renamed options for consistency. Improved Valgrind and ASAN checking.
-  
+
 * 2023-04-03, `v1.8.1`, `v2.1.1`: Fixes build issues on some platforms.
 
 * 2023-03-29, `v1.8.0`, `v2.1.0`: Improved support dynamic overriding on Windows 11. Improved tracing precision
@@ -106,14 +106,14 @@ memory usage
   abstraction layer to make it easier to port and separate platform dependent code (in `src/prim`). Fixed C++ STL compilation on older Microsoft C++ compilers, and various small bug fixes.
 
 * 2022-12-23, `v1.7.9`, `v2.0.9`: Supports building with [asan](#asan) and improved [Valgrind](#valgrind) support.
-  Support arbitrary large alignments (in particular for `std::pmr` pools). 
-  Added C++ STL allocators attached to a specific heap (thanks @vmarkovtsev). 
-  Heap walks now visit all object (including huge objects). Support Windows nano server containers (by Johannes Schindelin,@dscho). 
+  Support arbitrary large alignments (in particular for `std::pmr` pools).
+  Added C++ STL allocators attached to a specific heap (thanks @vmarkovtsev).
+  Heap walks now visit all object (including huge objects). Support Windows nano server containers (by Johannes Schindelin,@dscho).
   Various small bug fixes.
 
 * 2022-11-03, `v1.7.7`, `v2.0.7`: Initial support for [Valgrind](#valgrind) for leak testing and heap block overflow
   detection. Initial
-  support for attaching heaps to a speficic memory area (only in v2). Fix `realloc` behavior for zero size blocks, remove restriction to integral multiple of the alignment in `alloc_align`, improved aligned allocation performance, reduced contention with many threads on few processors (thank you @dposluns!), vs2022 support, support `pkg-config`, .
+  support for attaching heaps to a specific memory area (only in v2). Fix `realloc` behavior for zero size blocks, remove restriction to integral multiple of the alignment in `alloc_align`, improved aligned allocation performance, reduced contention with many threads on few processors (thank you @dposluns!), vs2022 support, support `pkg-config`, .
 
 * 2022-04-14, `v1.7.6`, `v2.0.6`: fix fallback path for aligned OS allocation on Windows, improve Windows aligned allocation
   even when compiling with older SDK's, fix dynamic overriding on macOS Monterey, fix MSVC C++ dynamic overriding, fix
@@ -253,7 +253,7 @@ to link with the static library. See `test\CMakeLists.txt` for an example.
 
 For best performance in C++ programs, it is also recommended to override the
 global `new` and `delete` operators. For convenience, mimalloc provides
-[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
+[`mimalloc-new-delete.h`](include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
 In C++, mimalloc also provides the `mi_stl_allocator` struct which implements the `std::allocator`
 interface.
 
@@ -308,14 +308,14 @@ You can set further options either programmatically (using [`mi_option_set`](htt
 
 Advanced options:
 
-- `MIMALLOC_ARENA_EAGER_COMMIT=2`: turns on eager commit for the large arenas (usually 1GiB) from which mimalloc 
-   allocates segments and pages. Set this to 2 (default) to 
-   only enable this on overcommit systems (e.g. Linux). Set this to 1 to enable explicitly on other systems 
-   as well (like Windows or macOS) which may improve performance (as the whole arena is committed at once). 
-   Note that eager commit only increases the commit but not the actual the peak resident set 
+- `MIMALLOC_ARENA_EAGER_COMMIT=2`: turns on eager commit for the large arenas (usually 1GiB) from which mimalloc
+   allocates segments and pages. Set this to 2 (default) to
+   only enable this on overcommit systems (e.g. Linux). Set this to 1 to enable explicitly on other systems
+   as well (like Windows or macOS) which may improve performance (as the whole arena is committed at once).
+   Note that eager commit only increases the commit but not the actual the peak resident set
    (rss) so it is generally ok to enable this.
-- `MIMALLOC_PURGE_DELAY=N`: the delay in `N` milli-seconds (by default `10`) after which mimalloc will purge 
-   OS pages that are not in use. This signals to the OS that the underlying physical memory can be reused which 
+- `MIMALLOC_PURGE_DELAY=N`: the delay in `N` milli-seconds (by default `10`) after which mimalloc will purge
+   OS pages that are not in use. This signals to the OS that the underlying physical memory can be reused which
    can reduce memory fragmentation especially in long running (server) programs. Setting `N` to `0` purges immediately when
    a page becomes unused which can improve memory usage but also decreases performance. Setting `N` to a higher
    value like `100` can improve performance (sometimes by a lot) at the cost of potentially using more memory at times.
@@ -323,7 +323,7 @@ Advanced options:
 - `MIMALLOC_PURGE_DECOMMITS=1`: By default "purging" memory means unused memory is decommitted (`MEM_DECOMMIT` on Windows,
    `MADV_DONTNEED` (which decresease rss immediately) on `mmap` systems). Set this to 0 to instead "reset" unused
    memory on a purge (`MEM_RESET` on Windows, generally `MADV_FREE` (which does not decrease rss immediately) on `mmap` systems).
-   Mimalloc generally does not "free" OS memory but only "purges" OS memory, in other words, it tries to keep virtual 
+   Mimalloc generally does not "free" OS memory but only "purges" OS memory, in other words, it tries to keep virtual
    address ranges and decommits within those ranges (to make the underlying physical memory available to other processes).
 
 Further options for large workloads and services:
@@ -333,14 +333,14 @@ Further options for large workloads and services:
    the actual NUMA nodes is fine and will only cause threads to potentially allocate more memory across actual NUMA
    nodes (but this can happen in any case as NUMA local allocation is always a best effort but not guaranteed).
 - `MIMALLOC_ALLOW_LARGE_OS_PAGES=1`: use large OS pages (2 or 4MiB) when available; for some workloads this can significantly
-   improve performance. When this option is disabled, it also disables transparent huge pages (THP) for the process 
+   improve performance. When this option is disabled, it also disables transparent huge pages (THP) for the process
    (on Linux and Android). Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
    to explicitly give permissions for large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
    the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
-   can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead whenever possible).   
+   can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead whenever possible).
 - `MIMALLOC_RESERVE_HUGE_OS_PAGES=N`: where `N` is the number of 1GiB _huge_ OS pages. This reserves the huge pages at
    startup and sometimes this can give a large (latency) performance improvement on big workloads.
-   Usually it is better to not use `MIMALLOC_ALLOW_LARGE_OS_PAGES=1` in combination with this setting. Just like large 
+   Usually it is better to not use `MIMALLOC_ALLOW_LARGE_OS_PAGES=1` in combination with this setting. Just like large
    OS pages, use with care as reserving
    contiguous physical memory can take a long time when memory is fragmented (but reserving the huge pages is done at
    startup only once).
@@ -458,7 +458,7 @@ There are four requirements to make the overriding work well:
 
 For best performance on Windows with C++, it
 is also recommended to also override the `new`/`delete` operations (by including
-[`mimalloc-new-delete.h`](../include/mimalloc-new-delete.h) 
+[`mimalloc-new-delete.h`](include/mimalloc-new-delete.h)
 a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
@@ -487,16 +487,16 @@ object file. For example:
 Another way to override statically that works on all platforms, is to
 link statically to mimalloc (as shown in the introduction) and include a
 header file in each source file that re-defines `malloc` etc. to `mi_malloc`.
-This is provided by [`mimalloc-override.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-override.h). This only works reliably though if all sources are
+This is provided by [`mimalloc-override.h`](include/mimalloc-override.h). This only works reliably though if all sources are
 under your control or otherwise mixing of pointers from different heaps may occur!
 
 
 # Tools
 
 Generally, we recommend using the standard allocator with memory tracking tools, but mimalloc
-can also be build to support the [address sanitizer][asan] or the excellent [Valgrind] tool. 
+can also be build to support the [address sanitizer][asan] or the excellent [Valgrind] tool.
 Moreover, it can be build to support Windows event tracing ([ETW]).
-This has a small performance overhead but does allow detecting memory leaks and byte-precise 
+This has a small performance overhead but does allow detecting memory leaks and byte-precise
 buffer overflows directly on final executables. See also the `test/test-wrong.c` file to test with various tools.
 
 ## Valgrind
@@ -523,9 +523,13 @@ you also need to tell `valgrind` to not intercept those calls itself, and use:
 
 By setting the `MIMALLOC_SHOW_STATS` environment variable you can check that mimalloc is indeed
 used and not the standard allocator. Even though the [Valgrind option][valgrind-soname]
-is called `--soname-synonyms`, this also
-works when overriding with a static library or object file. Unfortunately, it is not possible to
-dynamically override mimalloc using `LD_PRELOAD` together with `valgrind`.
+is called `--soname-synonyms`, this also works when overriding with a static library or object file.
+To dynamically override mimalloc using `LD_PRELOAD` together with `valgrind`, use:
+
+```
+> valgrind --trace-children=yes --soname-synonyms=somalloc=*mimalloc* /usr/bin/env LD_PRELOAD=/usr/lib/libmimalloc.so -- <myprogram>
+```
+
 See also the `test/test-wrong.c` file to test with `valgrind`.
 
 Valgrind support is in its initial development -- please report any issues.
@@ -541,7 +545,7 @@ To build with the address sanitizer, use the `-DMI_TRACK_ASAN=ON` cmake option:
 > cmake ../.. -DMI_TRACK_ASAN=ON
 ```
 
-This can also be combined with secure mode or debug mode. 
+This can also be combined with secure mode or debug mode.
 You can then run your programs as:'
 
 ```
@@ -549,7 +553,7 @@ You can then run your programs as:'
 ```
 
 When you link a program with an address sanitizer build of mimalloc, you should
-generally compile that program too with the address sanitizer enabled. 
+generally compile that program too with the address sanitizer enabled.
 For example, assuming you build mimalloc in `out/debug`:
 
 ```
@@ -558,23 +562,23 @@ clang -g -o test-wrong -Iinclude test/test-wrong.c out/debug/libmimalloc-asan-de
 
 Since the address sanitizer redirects the standard allocation functions, on some platforms (macOSX for example)
 it is required to compile mimalloc with `-DMI_OVERRIDE=OFF`.
-Adress sanitizer support is in its initial development -- please report any issues.
+Address sanitizer support is in its initial development -- please report any issues.
 
 [asan]: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
 ## ETW
 
 Event tracing for Windows ([ETW]) provides a high performance way to capture all allocations though
-mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACK_ETW=ON` cmake option. 
+mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACK_ETW=ON` cmake option.
 
-You can then capture an allocation trace using the Windows performance recorder (WPR), using the 
+You can then capture an allocation trace using the Windows performance recorder (WPR), using the
 `src/prim/windows/etw-mimalloc.wprp` profile. In an admin prompt, you can use:
 ```
 > wpr -start src\prim\windows\etw-mimalloc.wprp -filemode
 > <my_mimalloc_program>
 > wpr -stop <my_mimalloc_program>.etl
-``` 
-and then open `<my_mimalloc_program>.etl` in the Windows Performance Analyzer (WPA), or 
+```
+and then open `<my_mimalloc_program>.etl` in the Windows Performance Analyzer (WPA), or
 use a tool like [TraceControl] that is specialized for analyzing mimalloc traces.
 
 [ETW]: https://learn.microsoft.com/en-us/windows-hardware/test/wpt/event-tracing-for-windows

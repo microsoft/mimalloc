@@ -22,7 +22,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // --------------------------------------------------------------------------------------------
 // Atomics
 // We need to be portable between C, C++, and MSVC.
-// We base the primitives on the C/C++ atomics and create a mimimal wrapper for MSVC in C compilation mode.
+// We base the primitives on the C/C++ atomics and create a minimal wrapper for MSVC in C compilation mode.
 // This is why we try to use only `uintptr_t` and `<type>*` as atomic types.
 // To gain better insight in the range of used atomics, we use explicitly named memory order operations
 // instead of passing the memory order as a parameter.
@@ -72,6 +72,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_atomic_load_relaxed(p)                mi_atomic(load_explicit)(p,mi_memory_order(relaxed))
 #define mi_atomic_store_release(p,x)             mi_atomic(store_explicit)(p,x,mi_memory_order(release))
 #define mi_atomic_store_relaxed(p,x)             mi_atomic(store_explicit)(p,x,mi_memory_order(relaxed))
+#define mi_atomic_exchange_relaxed(p,x)          mi_atomic(exchange_explicit)(p,x,mi_memory_order(relaxed))
 #define mi_atomic_exchange_release(p,x)          mi_atomic(exchange_explicit)(p,x,mi_memory_order(release))
 #define mi_atomic_exchange_acq_rel(p,x)          mi_atomic(exchange_explicit)(p,x,mi_memory_order(acq_rel))
 #define mi_atomic_cas_weak_release(p,exp,des)    mi_atomic_cas_weak(p,exp,des,mi_memory_order(release),mi_memory_order(relaxed))
@@ -110,6 +111,7 @@ static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)*p, intptr_t sub);
 #define mi_atomic_cas_ptr_weak_release(tp,p,exp,des)    mi_atomic_cas_weak_release(p,exp,(tp*)des)
 #define mi_atomic_cas_ptr_weak_acq_rel(tp,p,exp,des)    mi_atomic_cas_weak_acq_rel(p,exp,(tp*)des)
 #define mi_atomic_cas_ptr_strong_release(tp,p,exp,des)  mi_atomic_cas_strong_release(p,exp,(tp*)des)
+#define mi_atomic_exchange_ptr_relaxed(tp,p,x)          mi_atomic_exchange_relaxed(p,(tp*)x)
 #define mi_atomic_exchange_ptr_release(tp,p,x)          mi_atomic_exchange_release(p,(tp*)x)
 #define mi_atomic_exchange_ptr_acq_rel(tp,p,x)          mi_atomic_exchange_acq_rel(p,(tp*)x)
 #else
@@ -118,6 +120,7 @@ static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)*p, intptr_t sub);
 #define mi_atomic_cas_ptr_weak_release(tp,p,exp,des)    mi_atomic_cas_weak_release(p,exp,des)
 #define mi_atomic_cas_ptr_weak_acq_rel(tp,p,exp,des)    mi_atomic_cas_weak_acq_rel(p,exp,des)
 #define mi_atomic_cas_ptr_strong_release(tp,p,exp,des)  mi_atomic_cas_strong_release(p,exp,des)
+#define mi_atomic_exchange_ptr_relaxed(tp,p,x)          mi_atomic_exchange_relaxed(p,x)
 #define mi_atomic_exchange_ptr_release(tp,p,x)          mi_atomic_exchange_release(p,x)
 #define mi_atomic_exchange_ptr_acq_rel(tp,p,x)          mi_atomic_exchange_acq_rel(p,x)
 #endif

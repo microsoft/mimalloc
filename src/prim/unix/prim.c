@@ -27,6 +27,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf
 #include <fcntl.h>     // open, close, read, access
+#include <stdlib.h>    // getenv, arc4random_buf
 
 #if defined(__linux__)
   #include <features.h>
@@ -247,7 +248,7 @@ static int unix_mmap_fd(void) {
   #if defined(VM_MAKE_TAG)
   // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
   int os_tag = (int)mi_option_get(mi_option_os_tag);
-  if (os_tag < 100 || os_tag > 255) { os_tag = 100; }
+  if (os_tag < 100 || os_tag > 255) { os_tag = 254; }
   return VM_MAKE_TAG(os_tag);
   #else
   return -1;
@@ -766,7 +767,7 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
 #include <CommonCrypto/CommonRandom.h>
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
-  // We prefere CCRandomGenerateBytes as it returns an error code while arc4random_buf
+  // We prefer CCRandomGenerateBytes as it returns an error code while arc4random_buf
   // may fail silently on macOS. See PR #390, and <https://opensource.apple.com/source/Libc/Libc-1439.40.11/gen/FreeBSD/arc4random.c.auto.html>
   return (CCRandomGenerateBytes(buf, buf_len) == kCCSuccess);
 }
@@ -776,7 +777,6 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
       defined(__sun) || \
       (defined(__APPLE__) && (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_7))
 
-#include <stdlib.h>
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   arc4random_buf(buf, buf_len);
   return true;

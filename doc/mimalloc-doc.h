@@ -883,7 +883,7 @@ typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* a
 bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block_visit_fun* visitor, void* arg);
 
 /// @brief Visit all areas and blocks in abandoned heaps.
-/// @param subproc_id The sub-process id associated with the abandonded heaps.
+/// @param subproc_id The sub-process id associated with the abandoned heaps.
 /// @param heap_tag Visit only abandoned memory with the specified heap tag, use -1 to visit all abandoned memory.
 /// @param visit_blocks If \a true visits all allocated blocks, otherwise
 ///                         \a visitor is only called for every heap area.
@@ -1139,7 +1139,7 @@ to link with the static library. See `test\CMakeLists.txt` for an example.
 
 ### C++
 For best performance in C++ programs, it is also recommended to override the
-global `new` and `delete` operators. For convience, mimalloc provides
+global `new` and `delete` operators. For convenience, mimalloc provides
 [`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
 
 In C++, mimalloc also provides the `mi_stl_allocator` struct which implements the `std::allocator`
