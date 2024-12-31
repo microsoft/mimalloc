@@ -100,9 +100,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 
-// ------------------------------------------------------
+// --------------------------------------------------------------
 // Sizes of internal data-structures
-// ------------------------------------------------------
+// (comments specify sizes on 64-bit, usually 32-bit is halved)
+// --------------------------------------------------------------
 
 // Sizes are for 64-bit
 #ifndef MI_ARENA_SLICE_SHIFT
@@ -116,19 +117,19 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_BCHUNK_BITS_SHIFT              (6 + MI_SIZE_SHIFT)         // optimized for 512 bits per chunk (avx512)
 #endif
 
-#define MI_BCHUNK_BITS                    (1 << MI_BCHUNK_BITS_SHIFT)
-#define MI_ARENA_SLICE_SIZE               (MI_ZU(1) << MI_ARENA_SLICE_SHIFT)
+#define MI_BCHUNK_BITS                    (1 << MI_BCHUNK_BITS_SHIFT)         // sub-bitmaps are "bchunks" of 512 bits
+#define MI_ARENA_SLICE_SIZE               (MI_ZU(1) << MI_ARENA_SLICE_SHIFT)  // arena's allocate in slices of 64 KiB
 #define MI_ARENA_SLICE_ALIGN              (MI_ARENA_SLICE_SIZE)
 
-#define MI_ARENA_MIN_OBJ_SLICES           (1)
-#define MI_ARENA_MAX_OBJ_SLICES           (MI_BCHUNK_BITS)      // 32 MiB (for now, cannot cross chunk boundaries)
+#define MI_ARENA_MIN_OBJ_SLICES           (1)                         
+#define MI_ARENA_MAX_OBJ_SLICES           (MI_BCHUNK_BITS)            // 32 MiB (for now, cannot cross chunk boundaries)
 
 #define MI_ARENA_MIN_OBJ_SIZE             (MI_ARENA_MIN_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
 #define MI_ARENA_MAX_OBJ_SIZE             (MI_ARENA_MAX_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
 
-#define MI_SMALL_PAGE_SIZE                MI_ARENA_MIN_OBJ_SIZE
-#define MI_MEDIUM_PAGE_SIZE               (8*MI_SMALL_PAGE_SIZE)                   // 512 KiB  (=byte in the bitmap)
-#define MI_LARGE_PAGE_SIZE                (MI_SIZE_SIZE*MI_MEDIUM_PAGE_SIZE)       // 4 MiB    (=word in the bitmap)
+#define MI_SMALL_PAGE_SIZE                MI_ARENA_MIN_OBJ_SIZE                    // 64 KiB
+#define MI_MEDIUM_PAGE_SIZE               (8*MI_SMALL_PAGE_SIZE)                   // 512 KiB  (=byte in the bchunk bitmap)
+#define MI_LARGE_PAGE_SIZE                (MI_SIZE_SIZE*MI_MEDIUM_PAGE_SIZE)       // 4 MiB    (=word in the bchunk bitmap)
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
 #define MI_BIN_HUGE  (73U)
@@ -272,7 +273,7 @@ typedef uint8_t mi_heaptag_t;
 //
 // Notes:
 // - Non-atomic fields can only be accessed if having ownership (low bit of `xthread_free`).
-// - If a page is not part of a heap it is called "abandoned" -- in
+// - If a page is not part of a heap it is called "abandoned"  (`heap==NULL`) -- in
 //   that case the `xthreadid` is 0 or 1 (1 is for abandoned pages that
 //   are in the abandoned page lists of an arena, these are called "mapped" abandoned pages).
 // - The layout is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
@@ -304,7 +305,7 @@ typedef struct mi_page_s {
   mi_heap_t*                heap;              // the heap owning this page (or NULL for abandoned pages)
   struct mi_page_s*         next;              // next page owned by the heap with the same `block_size`
   struct mi_page_s*         prev;              // previous page owned by the heap with the same `block_size`
-  size_t                    slice_committed;   // committed size relative to the first arena slice of the page data
+  size_t                    slice_committed;   // committed size relative to the first arena slice of the page data (or 0 if the page is fully committed already)
   mi_memid_t                memid;             // provenance of the page memory
 } mi_page_t;
 
@@ -315,7 +316,7 @@ typedef struct mi_page_s {
 
 #define MI_PAGE_ALIGN                     MI_ARENA_SLICE_ALIGN // pages must be aligned on this for the page map.
 #define MI_PAGE_MIN_START_BLOCK_ALIGN     MI_MAX_ALIGN_SIZE    // minimal block alignment for the first block in a page (16b)
-#define MI_PAGE_MAX_START_BLOCK_ALIGN2    MI_KiB               // maximal block alignment for "power of 2"-sized blocks
+#define MI_PAGE_MAX_START_BLOCK_ALIGN2    MI_KiB               // maximal block alignment for "power of 2"-sized blocks (such that we guarantee natural alignment)
 #define MI_PAGE_MAX_OVERALLOC_ALIGN       MI_ARENA_SLICE_SIZE  // (64 KiB) limit for which we overallocate in arena pages, beyond this use OS allocation
 
 #if (MI_ENCODE_FREELIST || MI_PADDING) && MI_SIZE_SIZE == 8
@@ -328,7 +329,7 @@ typedef struct mi_page_s {
 // (Except for large pages since huge objects are allocated in 4MiB chunks)
 #define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)   // < 8 KiB
 #define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)  // < 64 KiB
-#define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/4)   // <= 512 KiB // note: this must be a nice power of 2 or we get rounding issues with _mi_bin
+#define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/4)   // <= 512 KiB // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
 #define MI_LARGE_MAX_OBJ_WSIZE            (MI_LARGE_MAX_OBJ_SIZE/MI_SIZE_SIZE)
 
 
