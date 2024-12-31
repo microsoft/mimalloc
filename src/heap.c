@@ -396,9 +396,10 @@ void mi_heap_destroy(mi_heap_t* heap) {
 }
 
 // forcefully destroy all heaps in the current thread
-void _mi_heap_unsafe_destroy_all(void) {
-  mi_heap_t* bheap = mi_heap_get_backing();
-  mi_heap_t* curr = bheap->tld->heaps;
+void _mi_heap_unsafe_destroy_all(mi_heap_t* heap) {
+  mi_assert_internal(heap != NULL);
+  if (heap == NULL) return;
+  mi_heap_t* curr = heap->tld->heaps;
   while (curr != NULL) {
     mi_heap_t* next = curr->next;
     if (!curr->allow_page_reclaim) {
