@@ -76,7 +76,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   mi_heap_t * heap = mi_heap_new();
   void* allocation_ptrs[ALLOCATION_POINTERS] = {NULL};
 
-  for(int i = 0; i < size; i = i + FUZZING_OPERATION_DATA_SIZE) {
+  for(size_t i = 0; i < size; i = i + FUZZING_OPERATION_DATA_SIZE) {
     fuzzing_operation_t operation = {0, {0,0}, FREE};
     init_fuzzing_operation(&operation, data + i, size - i);
 
