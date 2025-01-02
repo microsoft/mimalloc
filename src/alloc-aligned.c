@@ -78,7 +78,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
   }
   else {
     // otherwise over-allocate
-    oversize = size + alignment - 1;
+    oversize = (size < MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : size) + alignment - 1;  // adjust for size <= 16; with size 0 and aligment 64k, we would allocate a 64k block and pointing just beyond that.
     p = mi_heap_malloc_zero_no_guarded(heap, oversize, zero);
     if (p == NULL) return NULL;
   }
