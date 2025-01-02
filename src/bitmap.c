@@ -289,6 +289,7 @@ static inline bool mi_bchunk_setNX(mi_bchunk_t* chunk, size_t cidx, size_t n, si
     const size_t m = MI_BFIELD_BITS - idx;  // bits to clear in the first field
     mi_assert_internal(m < n);
     mi_assert_internal(i < MI_BCHUNK_FIELDS - 1);
+    mi_assert_internal(idx + m <= MI_BFIELD_BITS);
     size_t already_set1;
     const bool all_set1 = mi_bfield_atomic_set_mask(&chunk->bfields[i], mi_bfield_mask(m, idx), &already_set1);
     mi_assert_internal(n - m > 0);
@@ -800,7 +801,7 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
     if (i < MI_BCHUNK_FIELDS-1) {
       const size_t post = mi_bfield_clz(~b);
       if (post > 0) {
-        const size_t pre = mi_bfield_ctz(mi_atomic_load_relaxed(&chunk->bfields[i+1]));
+        const size_t pre = mi_bfield_ctz(~mi_atomic_load_relaxed(&chunk->bfields[i+1]));
         if (post + pre <= n) {
           // it fits -- try to claim it atomically
           const size_t cidx = (i*MI_BFIELD_BITS) + (MI_BFIELD_BITS - post);
