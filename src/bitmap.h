@@ -191,7 +191,7 @@ static inline bool mi_bitmap_try_clear(mi_bitmap_t* bitmap, size_t idx) {
 // Specialized versions for common bit sequence sizes
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clear(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx);  // 1-bit
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clear8(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx); // 8-bits
-mi_decl_nodiscard bool mi_bitmap_try_find_and_clearX(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx); // MI_BFIELD_BITS
+// mi_decl_nodiscard bool mi_bitmap_try_find_and_clearX(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx); // MI_BFIELD_BITS
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clearNX(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx); // < MI_BFIELD_BITS
 mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN_(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx); // > MI_BFIELD_BITS <= MI_BCHUNK_BITS
 
@@ -200,7 +200,7 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_clearN_(mi_bitmap_t* bitmap, size_
 mi_decl_nodiscard static inline bool mi_bitmap_try_find_and_clearN(mi_bitmap_t* bitmap, size_t n, size_t tseq, size_t* pidx) {
   if (n==1) return mi_bitmap_try_find_and_clear(bitmap, tseq, pidx);               // small pages
   if (n==8) return mi_bitmap_try_find_and_clear8(bitmap, tseq, pidx);              // medium pages
-  if (n==MI_BFIELD_BITS) return mi_bitmap_try_find_and_clearX(bitmap, tseq, pidx); // large pages
+  // if (n==MI_BFIELD_BITS) return mi_bitmap_try_find_and_clearX(bitmap, tseq, pidx); // large pages
   if (n == 0 || n > MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
   if (n < MI_BFIELD_BITS) return mi_bitmap_try_find_and_clearNX(bitmap, tseq, n, pidx);
   return mi_bitmap_try_find_and_clearN_(bitmap, tseq, n, pidx);
