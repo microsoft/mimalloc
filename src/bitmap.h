@@ -175,7 +175,6 @@ static inline bool mi_bitmap_is_clear(mi_bitmap_t* bitmap, size_t idx) {
   return mi_bitmap_is_clearN(bitmap, idx, 1);
 }
 
-
 // Called once a bit is cleared to see if the memory slice can be claimed.
 typedef bool (mi_claim_fun_t)(size_t slice_index, mi_arena_t* arena, mi_heaptag_t heap_tag, bool* keep_set);
 

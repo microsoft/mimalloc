@@ -289,6 +289,7 @@ static inline bool mi_bchunk_setNX(mi_bchunk_t* chunk, size_t cidx, size_t n, si
     const size_t m = MI_BFIELD_BITS - idx;  // bits to clear in the first field
     mi_assert_internal(m < n);
     mi_assert_internal(i < MI_BCHUNK_FIELDS - 1);
+    mi_assert_internal(idx + m <= MI_BFIELD_BITS);
     size_t already_set1;
     const bool all_set1 = mi_bfield_atomic_set_mask(&chunk->bfields[i], mi_bfield_mask(m, idx), &already_set1);
     mi_assert_internal(n - m > 0);
@@ -800,7 +801,7 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
     if (i < MI_BCHUNK_FIELDS-1) {
       const size_t post = mi_bfield_clz(~b);
       if (post > 0) {
-        const size_t pre = mi_bfield_ctz(mi_atomic_load_relaxed(&chunk->bfields[i+1]));
+        const size_t pre = mi_bfield_ctz(~mi_atomic_load_relaxed(&chunk->bfields[i+1]));
         if (post + pre <= n) {
           // it fits -- try to claim it atomically
           const size_t cidx = (i*MI_BFIELD_BITS) + (MI_BFIELD_BITS - post);
@@ -1551,14 +1552,16 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
   const mi_bfield_t cmap_mask  = mi_bfield_mask(cmap_max_count,0);
   const size_t cmap_cycle      = cmap_acc+1;
   const mi_bbin_t bbin = mi_bbin_of(n);
-  // visit bins from largest size bin up to the NONE bin
-  for(int bin = bbin; bin >= MI_BBIN_SMALL; bin--)  // no need to traverse for MI_BBIN_NONE as anyone can allocate in MI_BBIN_SMALL
-  // const mi_bbin_t bin = bbin;
+  // visit bins from smallest to largest (to reduce fragmentation on the larger blocks)
+  for(int bin = MI_BBIN_SMALL; bin <= bbin; bin++)  // no need to traverse for MI_BBIN_NONE as anyone can allocate in MI_BBIN_SMALL
+      // (int bin = bbin; bin >= MI_BBIN_SMALL; bin--)  // visit bins from largest size bin up to the NONE bin
   {
     mi_bfield_cycle_iterate(cmap_mask, tseq, cmap_cycle, cmap_idx, X)
     {
       // don't search into non-accessed memory until we tried other size bins as well
-      if (bin > MI_BBIN_SMALL && cmap_idx > cmap_acc) {
+      if (bin < bbin && cmap_idx > cmap_acc) 
+         // (bin > MI_BBIN_SMALL && cmap_idx > cmap_acc) // large to small
+      {
         break;
       }
 
@@ -1572,8 +1575,10 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
         mi_assert_internal(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
         // only in the current size class!
         const mi_bbin_t chunk_bin = (mi_bbin_t)mi_atomic_load_relaxed(&bbitmap->chunk_bins[chunk_idx]);
-        if // (bin >= chunk_bin) {
-           ((mi_bbin_t)bin == chunk_bin || (bin <= MI_BBIN_SMALL && chunk_bin <= MI_BBIN_SMALL)) {
+        if ((mi_bbin_t)bin == chunk_bin || (bin == bbin && chunk_bin == MI_BBIN_NONE)) // only allow NONE at the final run
+           // ((mi_bbin_t)bin == chunk_bin || (bin <= MI_BBIN_SMALL && chunk_bin <= MI_BBIN_SMALL)) {  largest to smallest
+
+        {
           mi_bchunk_t* chunk = &bbitmap->chunks[chunk_idx];
           size_t cidx;
           if ((*on_find)(chunk, n, &cidx)) {
