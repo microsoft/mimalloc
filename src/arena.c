@@ -1325,10 +1325,10 @@ static int mi_page_commit_usage(mi_page_t* page) {
   return (int)(used_size * 100 / committed_size);
 }
 
-static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k, mi_arena_t* arena, size_t slice_index) {
+static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k, mi_arena_t* arena, size_t slice_index, long* pbit_of_page, mi_ansi_color_t* pcolor_of_page ) {
   size_t bit_set_count = 0;
-  long bit_of_page = 0;
-  mi_ansi_color_t color = MI_GRAY;
+  long bit_of_page = *pbit_of_page;
+  mi_ansi_color_t color = *pcolor_of_page;
   mi_ansi_color_t prev_color = MI_GRAY;
   for (int bit = 0; bit < MI_BFIELD_BITS; bit++, bit_of_page--) {
     bool is_set = ((((mi_bfield_t)1 << bit) & field) != 0);
@@ -1337,9 +1337,9 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k,
     if (is_set) {
       mi_assert_internal(bit_of_page <= 0);
       bit_set_count++;
-      mi_page_t* page = (mi_page_t*)start;
       c = 'p';
       color = MI_GRAY;
+      mi_page_t* page = (mi_page_t*)start;
       if (mi_page_is_abandoned_mapped(page)) { c = 'a'; }
       else if (mi_page_is_abandoned(page)) { c = (mi_page_is_singleton(page) ? 's' : 'f'); }
       int commit_usage = mi_page_commit_usage(page);
@@ -1368,7 +1368,9 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k,
     }
     buf[*k] = c; *k += 1;
   }
-  mi_debug_color(buf, k, MI_GRAY);
+  mi_debug_color(buf, k, MI_GRAY);  
+  *pbit_of_page = bit_of_page;
+  *pcolor_of_page = color;
   return bit_set_count;
 }
 
@@ -1400,6 +1402,8 @@ static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_
     buf[k++] = chunk_kind;
     buf[k++] = ' ';
 
+    long bit_of_page = 0;
+    mi_ansi_color_t color_of_page = MI_GRAY;
     for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
       if (j > 0 && (j % MI_FIELDS_PER_LINE) == 0) {
         // buf[k++] = '\n'; _mi_memset(buf+k,' ',7); k += 7;
@@ -1410,7 +1414,7 @@ static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_
       if (bit_count < slice_count) {
         mi_bfield_t bfield = chunk->bfields[j];
         if (invert) bfield = ~bfield;
-        size_t xcount = (arena!=NULL ? mi_debug_show_page_bfield(bfield, buf, &k, arena, bit_count)
+        size_t xcount = (arena!=NULL ? mi_debug_show_page_bfield(bfield, buf, &k, arena, bit_count, &bit_of_page, &color_of_page)
                                      : mi_debug_show_bfield(bfield, buf, &k));
         if (invert) xcount = MI_BFIELD_BITS - xcount;
         bit_set_count += xcount;
