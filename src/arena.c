@@ -773,9 +773,9 @@ mi_page_t* _mi_arenas_page_alloc(mi_heap_t* heap, size_t block_size, size_t bloc
   else if (block_size <= MI_MEDIUM_MAX_OBJ_SIZE) {
     page = mi_arenas_page_regular_alloc(heap, mi_slice_count_of_size(MI_MEDIUM_PAGE_SIZE), block_size);
   }
-  else if (block_size <= MI_LARGE_MAX_OBJ_SIZE) {
-    page = mi_arenas_page_regular_alloc(heap, mi_slice_count_of_size(MI_LARGE_PAGE_SIZE), block_size);
-  }
+  //else if (block_size <= MI_LARGE_MAX_OBJ_SIZE) {
+  //  page = mi_arenas_page_regular_alloc(heap, mi_slice_count_of_size(MI_LARGE_PAGE_SIZE), block_size);
+  // }
   else {
     page = mi_arenas_page_singleton_alloc(heap, block_size, block_alignment);
   }
@@ -1390,10 +1390,10 @@ static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_
     char chunk_kind = ' ';
     if (chunk_bins != NULL) {
       switch (mi_atomic_load_relaxed(&chunk_bins[i])) {
-        // case MI_BBIN_SMALL: chunk_kind  = 'S'; break;
+        case MI_BBIN_SMALL:  chunk_kind = 'S'; break;
         case MI_BBIN_MEDIUM: chunk_kind = 'M'; break;
-        case MI_BBIN_LARGE: chunk_kind  = 'L'; break;
-        case MI_BBIN_OTHER: chunk_kind  = 'O'; break;
+        case MI_BBIN_LARGE:  chunk_kind = 'L'; break;
+        case MI_BBIN_OTHER:  chunk_kind = 'X'; break;
         // case MI_BBIN_NONE: chunk_kind = 'N'; break;
       }
     }

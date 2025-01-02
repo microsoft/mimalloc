@@ -214,21 +214,18 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
 ---------------------------------------------------------------------------- */
 
 // Size bins; larger bins are allowed to go into smaller bins.
-// Since LARGE and MEDIUM are aligned (on word and byte boundaries respectively),
-// they are larger than OTHER even though those can contain very large objects (but we
-// don't want those in the MEDIUM or LARGE bins as these are variable size).
 // SMALL can only be in small (and NONE), so they cannot fragment the larger bins.
 typedef enum mi_bbin_e {
   MI_BBIN_NONE,     // no bin assigned yet (the chunk is completely free)
   MI_BBIN_SMALL,    // slice_count == 1
-  MI_BBIN_OTHER,    // slice_count: any other from the other bins, and 1 <= slice_count <= MI_BCHUNK_BITS
   MI_BBIN_MEDIUM,   // slice_count == 8
-  MI_BBIN_LARGE,    // slice_count == MI_BFIELD_BITS
+  MI_BBIN_LARGE,    // slice_count == MI_BFIELD_BITS  -- not used for now!
+  MI_BBIN_OTHER,    // slice_count: any other from the other bins, and 1 <= slice_count <= MI_BCHUNK_BITS
   MI_BBIN_COUNT
 } mi_bbin_t;
 
 static inline mi_bbin_t mi_bbin_of(size_t n) {
-  return (n==1 ? MI_BBIN_SMALL : (n==8 ? MI_BBIN_MEDIUM : (n==64 ? MI_BBIN_LARGE : MI_BBIN_OTHER)));
+  return (n==1 ? MI_BBIN_SMALL : (n==8 ? MI_BBIN_MEDIUM : MI_BBIN_OTHER)); // (n==64 ? MI_BBIN_LARGE : MI_BBIN_OTHER)));
 }
 
 // An atomic "binned" bitmap for the free slices where we keep chunks reserved for particalar size classes
@@ -293,7 +290,7 @@ bool mi_bbitmap_try_clearN(mi_bbitmap_t* bbitmap, size_t idx, size_t n);
 // Specialized versions for common bit sequence sizes
 bool mi_bbitmap_try_find_and_clear(mi_bbitmap_t* bbitmap, size_t tseq, size_t* pidx);  // 1-bit
 bool mi_bbitmap_try_find_and_clear8(mi_bbitmap_t* bbitmap, size_t tseq, size_t* pidx); // 8-bits
-bool mi_bbitmap_try_find_and_clearX(mi_bbitmap_t* bbitmap, size_t tseq, size_t* pidx); // MI_BFIELD_BITS
+// bool mi_bbitmap_try_find_and_clearX(mi_bbitmap_t* bbitmap, size_t tseq, size_t* pidx); // MI_BFIELD_BITS
 bool mi_bbitmap_try_find_and_clearNX(mi_bbitmap_t* bbitmap, size_t n, size_t tseq, size_t* pidx); // < MI_BFIELD_BITS
 bool mi_bbitmap_try_find_and_clearN_(mi_bbitmap_t* bbitmap, size_t n, size_t tseq, size_t* pidx); // > MI_BFIELD_BITS <= MI_BCHUNK_BITS
 
@@ -302,9 +299,9 @@ bool mi_bbitmap_try_find_and_clearN_(mi_bbitmap_t* bbitmap, size_t n, size_t tse
 mi_decl_nodiscard static inline bool mi_bbitmap_try_find_and_clearN(mi_bbitmap_t* bbitmap, size_t n, size_t tseq, size_t* pidx) {
   if (n==1) return mi_bbitmap_try_find_and_clear(bbitmap, tseq, pidx);               // small pages
   if (n==8) return mi_bbitmap_try_find_and_clear8(bbitmap, tseq, pidx);              // medium pages
-  if (n==MI_BFIELD_BITS) return mi_bbitmap_try_find_and_clearX(bbitmap, tseq, pidx); // large pages
-  if (n == 0 || n > MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
-  if (n < MI_BFIELD_BITS) return mi_bbitmap_try_find_and_clearNX(bbitmap, tseq, n, pidx);
+  // if (n==MI_BFIELD_BITS) return mi_bbitmap_try_find_and_clearX(bbitmap, tseq, pidx); // large pages
+  if (n==0 || n>MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
+  if (n<=MI_BFIELD_BITS) return mi_bbitmap_try_find_and_clearNX(bbitmap, tseq, n, pidx);
   return mi_bbitmap_try_find_and_clearN_(bbitmap, tseq, n, pidx);
 }
 
