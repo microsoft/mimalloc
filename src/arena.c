@@ -799,10 +799,22 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id, mi_stats_t*
 static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int numa_node, bool exclusive, mi_memid_t memid, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
-  if (size < MI_ARENA_BLOCK_SIZE) return false;
-
+  if (size < MI_ARENA_BLOCK_SIZE) {
+    _mi_warning_message("the arena size is too small (memory at %p with size %zu)\n", start, size);
+    return false;
+  }
   if (is_large) {
     mi_assert_internal(memid.initially_committed && memid.is_pinned);
+  }
+  if (!_mi_is_aligned(start, MI_SEGMENT_ALIGN)) {
+    void* const aligned_start = mi_align_up_ptr(start, MI_SEGMENT_ALIGN);
+    const size_t diff = (uint8_t*)aligned_start - (uint8_t*)start;
+    if (diff >= size || (size - diff) < MI_ARENA_BLOCK_SIZE) {
+      _mi_warning_message("after alignment, the size of the arena becomes too small (memory at %p with size %zu)\n", start, size);
+      return false;
+    }
+    start = aligned_start;
+    size = size - diff;
   }
 
   const size_t bcount = size / MI_ARENA_BLOCK_SIZE;
