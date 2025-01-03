@@ -1173,7 +1173,7 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
   while(_bcount##SUF > 0) { \
     _bcount##SUF--;\
     if (_b##SUF==0) { _b##SUF = bfield & ~_cycle_mask##SUF; } /* process [0,start> + [cycle, MI_BFIELD_BITS> next */ \
-    size_t name_idx; \
+    /* size_t name_idx; */ \
     bool _found##SUF = mi_bfield_find_least_bit(_b##SUF,&name_idx); \
     mi_assert_internal(_found##SUF); MI_UNUSED(_found##SUF); \
     { \
@@ -1209,6 +1209,7 @@ static inline bool mi_bitmap_find(mi_bitmap_t* bitmap, size_t tseq, size_t n, si
     const mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
     size_t hi;
     if (mi_bfield_find_highest_bit(cmap_entry, &hi)) {
+      size_t eidx = 0;
       mi_bfield_cycle_iterate(cmap_entry, tseq%8, hi+1, eidx, Y) // reduce the tseq to 8 bins to reduce using extra memory (see `mstress`)
       {
         mi_assert_internal(eidx <= MI_BFIELD_BITS);
@@ -1556,6 +1557,7 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
   for(mi_bbin_t bin = MI_BBIN_SMALL; bin <= bbin; bin = mi_bbin_inc(bin))  // no need to traverse for MI_BBIN_NONE as anyone can allocate in MI_BBIN_SMALL
       // (int bin = bbin; bin >= MI_BBIN_SMALL; bin--)  // visit bins from largest size bin up to the NONE bin
   {
+    size_t cmap_idx = 0;
     mi_bfield_cycle_iterate(cmap_mask, tseq, cmap_cycle, cmap_idx, X)
     {
       // don't search into non-accessed memory until we tried other size bins as well
@@ -1568,6 +1570,7 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
       // and for each chunkmap entry we iterate over its bits to find the chunks
       const mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bbitmap->chunkmap.bfields[cmap_idx]);
       const size_t cmap_entry_cycle = (cmap_idx != cmap_acc ? MI_BFIELD_BITS : cmap_acc_bits);
+      size_t eidx = 0;
       mi_bfield_cycle_iterate(cmap_entry, tseq%8, cmap_entry_cycle, eidx, Y) // reduce the tseq to 8 bins to reduce using extra memory (see `mstress`)
       {
         mi_assert_internal(eidx <= MI_BFIELD_BITS);
@@ -1577,7 +1580,6 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
         const mi_bbin_t chunk_bin = (mi_bbin_t)mi_atomic_load_relaxed(&bbitmap->chunk_bins[chunk_idx]);
         if ((mi_bbin_t)bin == chunk_bin || (bin == bbin && chunk_bin == MI_BBIN_NONE)) // only allow NONE at the final run
            // ((mi_bbin_t)bin == chunk_bin || (bin <= MI_BBIN_SMALL && chunk_bin <= MI_BBIN_SMALL)) {  largest to smallest
-
         {
           mi_bchunk_t* chunk = &bbitmap->chunks[chunk_idx];
           size_t cidx;
