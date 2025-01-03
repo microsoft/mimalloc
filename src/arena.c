@@ -1149,15 +1149,20 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
 {
   mi_assert(_mi_is_aligned(start,MI_ARENA_SLICE_SIZE));
   mi_assert(start!=NULL);
+  if (arena_id != NULL) { *arena_id = _mi_arena_id_none(); }
   if (start==NULL) return false;
   if (!_mi_is_aligned(start,MI_ARENA_SLICE_SIZE)) {
-    // todo: use alignment in memid to align to slice size first?
-    _mi_warning_message("cannot use OS memory since it is not aligned to %zu KiB (address %p)", MI_ARENA_SLICE_SIZE/MI_KiB, start);
-    return false;
+    // we can align the start since the memid tracks the real base of the memory.
+    void* const aligned_start = _mi_align_up_ptr(start, MI_ARENA_SLICE_SIZE);
+    const size_t diff = (uint8_t*)aligned_start - (uint8_t*)start;
+    if (diff >= size || (size - diff) < MI_ARENA_SLICE_SIZE) {
+      _mi_warning_message("after alignment, the size of the arena becomes too small (memory at %p with size %zu)\n", start, size);
+      return false;
+    }
+    start = aligned_start;
+    size = size - diff;
   }
-
-  if (arena_id != NULL) { *arena_id = _mi_arena_id_none(); }
-
+  
   const size_t slice_count = _mi_align_down(size / MI_ARENA_SLICE_SIZE, MI_BCHUNK_BITS);
   if (slice_count > MI_BITMAP_MAX_BIT_COUNT) {  // 16 GiB for now
     // todo: allow larger areas (either by splitting it up in arena's or having larger arena's)
