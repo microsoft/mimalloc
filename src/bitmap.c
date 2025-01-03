@@ -1181,7 +1181,7 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
   while(_bcount##SUF > 0) { \
     _bcount##SUF--;\
     if (_b##SUF==0) { _b##SUF = bfield & ~_cycle_mask##SUF; } /* process [0,start> + [cycle, MI_BFIELD_BITS> next */ \
-    size_t name_idx; \
+    /* size_t name_idx; */ \
     bool _found##SUF = mi_bfield_find_least_bit(_b##SUF,&name_idx); \
     mi_assert_internal(_found##SUF); MI_UNUSED(_found##SUF); \
     { \
@@ -1221,11 +1221,13 @@ static inline bool mi_bitmap_find(mi_bitmap_t* bitmap, size_t tseq, size_t n, si
   mi_assert_internal(MI_BFIELD_BITS >= MI_BCHUNK_FIELDS);
   const mi_bfield_t cmap_mask  = mi_bfield_mask(cmap_max_count,0);
   const size_t cmap_cycle      = cmap_acc+1;
+  size_t cmap_idx = 0;
   mi_bfield_cycle_iterate(cmap_mask, tseq, cmap_cycle, cmap_idx, X)
   {
     // and for each chunkmap entry we iterate over its bits to find the chunks
     mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[cmap_idx]);
     size_t cmap_entry_cycle = (cmap_idx != cmap_acc ? MI_BFIELD_BITS : cmap_acc_bits);
+    size_t eidx = 0;
     mi_bfield_cycle_iterate(cmap_entry, tseq%8, cmap_entry_cycle, eidx, Y) // reduce the tseq to 8 bins to reduce using extra memory (see `mstress`)
     {
       mi_assert_internal(eidx <= MI_BFIELD_BITS);
