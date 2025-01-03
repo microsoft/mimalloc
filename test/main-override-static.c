@@ -1,3 +1,6 @@
+#if _WIN32
+#include <windows.h>
+#endif
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
@@ -22,12 +25,14 @@ static void negative_stat(void);
 static void alloc_huge(void);
 static void test_heap_walk(void);
 static void test_canary_leak(void);
+static void test_manage_os_memory(void);
 // static void test_large_pages(void);
 
 
 int main() {
   mi_version();
   mi_stats_reset();
+  test_manage_os_memory();
   // test_large_pages();
   // detect double frees and heap corruption
   // double_free1();
@@ -241,6 +246,34 @@ static void test_canary_leak(void) {
   puts(p);
   free(p);
 }
+
+#if _WIN32
+static void test_manage_os_memory(void) {
+  size_t size = 256 * 1024 * 1024;
+  void* ptr = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); 
+  mi_arena_id_t arena_id;
+  mi_manage_os_memory_ex(ptr, size, true /* committed */, true /* pinned */, false /* is zero */, -1 /* numa node */, true /* exclusive */, &arena_id);
+  mi_heap_t* cuda_heap = mi_heap_new_in_arena(arena_id);    // you can do this in any thread
+
+  // now allocate only in the cuda arena
+  void* p1 = mi_heap_malloc(cuda_heap, 8);
+  int* p2 = mi_heap_malloc_tp(cuda_heap, int);
+  *p2 = 42;
+  
+  // and maybe set the cuda heap as the default heap? (but careful as now `malloc` will allocate in the cuda heap as well)
+  {
+    mi_heap_t* prev_default_heap = mi_heap_set_default(cuda_heap);
+    void* p3 = mi_malloc(8);  // allocate in the cuda heap 
+    mi_free(p3);
+  }
+  mi_free(p1);
+  mi_free(p2);
+}
+#else
+static void test_manage_os_memory(void) {
+  // empty
+}
+#endif
 
 // Experiment with huge OS pages
 #if 0
