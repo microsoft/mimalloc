@@ -241,13 +241,15 @@ typedef struct mi_block_s {
 } mi_block_t;
 
 
-// The `in_full` and `has_aligned` page flags are put in the same field
-// to efficiently test if both are false (`full_aligned == 0`) in the `mi_free` routine.
+// The `in_full` and `has_aligned` page flags are put in the bottom bits of the thread_id (for fast test in `mi_free`)
 // `has_aligned` is true if the page has pointers at an offset in a block (so we unalign before free-ing)
 // `in_full_queue` is true if the page is full and resides in the full queue (so we move it to a regular queue on free-ing)
-#define MI_PAGE_IN_FULL_QUEUE  MI_ZU(0x01)
-#define MI_PAGE_HAS_ALIGNED    MI_ZU(0x02)
+#define MI_PAGE_IN_FULL_QUEUE         MI_ZU(0x01)
+#define MI_PAGE_HAS_ALIGNED           MI_ZU(0x02)
+#define MI_PAGE_IS_ABANDONED_MAPPED   MI_ZU(0x04)
+#define MI_PAGE_FLAG_MASK             MI_ZU(0x07)
 typedef size_t mi_page_flags_t;
+
 
 // Thread free list.
 // Points to a list of blocks that are freed by other threads.
@@ -296,7 +298,6 @@ typedef struct mi_page_s {
 
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads
-  _Atomic(mi_page_flags_t)  xflags;            // `in_full_queue` and `has_aligned` flags
 
   size_t                    block_size;        // size available in each block (always `>0`)
   uint8_t*                  page_start;        // start of the blocks
