@@ -773,9 +773,11 @@ mi_page_t* _mi_arenas_page_alloc(mi_heap_t* heap, size_t block_size, size_t bloc
   else if (block_size <= MI_MEDIUM_MAX_OBJ_SIZE) {
     page = mi_arenas_page_regular_alloc(heap, mi_slice_count_of_size(MI_MEDIUM_PAGE_SIZE), block_size);
   }
+  #if MI_ENABLE_LARGE_PAGES
   else if (block_size <= MI_LARGE_MAX_OBJ_SIZE) {
     page = mi_arenas_page_regular_alloc(heap, mi_slice_count_of_size(MI_LARGE_PAGE_SIZE), block_size);
   }
+  #endif
   else {
     page = mi_arenas_page_singleton_alloc(heap, block_size, block_alignment);
   }
