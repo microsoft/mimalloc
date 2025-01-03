@@ -210,11 +210,9 @@ bool _mi_page_map_init(void) {
   if (!mi_page_map_memid.initially_committed) {
     _mi_os_commit(_mi_page_map[0], os_page_size, NULL);   // only first OS page
   }
-  if (!mi_page_map_memid.initially_zero) {
-    _mi_page_map[0][0] = NULL;
-  }
-
-  mi_assert_internal(_mi_ptr_page(NULL)==NULL);
+  _mi_page_map[0][0] = (mi_page_t*)&_mi_page_empty;       // caught in `mi_free`
+  
+  mi_assert_internal(_mi_ptr_page(NULL)==&_mi_page_empty);
   return true;
 }
 

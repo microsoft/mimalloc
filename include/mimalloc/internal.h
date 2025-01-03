@@ -622,9 +622,14 @@ static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned) {
 }
 
 
-// Thread id of thread that owns this page
-static inline mi_threadid_t mi_page_thread_id(const mi_page_t* page) {
+// Thread id of thread that owns this page (with flags in the bottom 2 bits)
+static inline mi_threadid_t mi_page_xthread_id(const mi_page_t* page) {
   return mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id);
+}
+
+// Plain thread id of the thread that owns this page
+static inline mi_threadid_t mi_page_thread_id(const mi_page_t* page) {
+  return (mi_page_xthread_id(page) & ~MI_PAGE_FLAG_MASK);
 }
 
 // Thread free access
@@ -695,19 +700,21 @@ static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
 
 static inline bool mi_page_is_abandoned(const mi_page_t* page) {
   // note: the xheap field of an abandoned heap is set to the subproc (for fast reclaim-on-free)
-  return (mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id) <= 1);
+  return (mi_page_xthread_id(page) <= MI_PAGE_IS_ABANDONED_MAPPED);
 }
 
 static inline bool mi_page_is_abandoned_mapped(const mi_page_t* page) {
-  return (mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id) == 1);
+  return (mi_page_xthread_id(page) == MI_PAGE_IS_ABANDONED_MAPPED);
 }
 
 static inline void mi_page_set_abandoned_mapped(mi_page_t* page) {
-  mi_atomic_or_relaxed(&page->xthread_id, (uintptr_t)1);
+  mi_assert_internal(mi_page_is_abandoned(page));
+  mi_atomic_or_relaxed(&page->xthread_id, MI_PAGE_IS_ABANDONED_MAPPED);
 }
 
 static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
-  mi_atomic_and_relaxed(&page->xthread_id, ~(uintptr_t)1);
+  mi_assert_internal(mi_page_is_abandoned_mapped(page));
+  mi_atomic_and_relaxed(&page->xthread_id, ~MI_PAGE_IS_ABANDONED_MAPPED);
 }
 
 
@@ -766,15 +773,15 @@ static inline bool _mi_page_unown(mi_page_t* page) {
 // Page flags
 //-----------------------------------------------------------
 static inline mi_page_flags_t mi_page_flags(const mi_page_t* page) {
-  return mi_atomic_load_relaxed(&((mi_page_t*)page)->xflags);
+  return (mi_page_xthread_id(page) & MI_PAGE_FLAG_MASK);
 }
 
 static inline void mi_page_flags_set(mi_page_t* page, bool set, mi_page_flags_t newflag) {
   if (set) {
-    mi_atomic_or_relaxed(&page->xflags, newflag);
+    mi_atomic_or_relaxed(&page->xthread_id, newflag);
   }
   else {
-    mi_atomic_and_relaxed(&page->xflags, ~newflag);
+    mi_atomic_and_relaxed(&page->xthread_id, ~newflag);
   }
 }
 
