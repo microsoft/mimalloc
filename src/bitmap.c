@@ -1553,7 +1553,7 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
   const size_t cmap_cycle      = cmap_acc+1;
   const mi_bbin_t bbin = mi_bbin_of(n);
   // visit bins from smallest to largest (to reduce fragmentation on the larger blocks)
-  for(int bin = MI_BBIN_SMALL; bin <= bbin; bin++)  // no need to traverse for MI_BBIN_NONE as anyone can allocate in MI_BBIN_SMALL
+  for(mi_bbin_t bin = MI_BBIN_SMALL; bin <= bbin; bin = mi_bbin_inc(bin))  // no need to traverse for MI_BBIN_NONE as anyone can allocate in MI_BBIN_SMALL
       // (int bin = bbin; bin >= MI_BBIN_SMALL; bin--)  // visit bins from largest size bin up to the NONE bin
   {
     mi_bfield_cycle_iterate(cmap_mask, tseq, cmap_cycle, cmap_idx, X)

@@ -219,12 +219,21 @@ typedef enum mi_bbin_e {
   MI_BBIN_SMALL,    // slice_count == 1
   MI_BBIN_OTHER,    // slice_count: any other from the other bins, and 1 <= slice_count <= MI_BCHUNK_BITS
   MI_BBIN_MEDIUM,   // slice_count == 8
-  MI_BBIN_LARGE,    // slice_count == MI_BFIELD_BITS  -- not used for now!
+  MI_BBIN_LARGE,    // slice_count == MI_BFIELD_BITS  -- only used if MI_ENABLE_LARGE_PAGES is 1
   MI_BBIN_COUNT
 } mi_bbin_t;
 
-static inline mi_bbin_t mi_bbin_of(size_t n) {
-  return (n==1 ? MI_BBIN_SMALL : (n==8 ? MI_BBIN_MEDIUM : MI_BBIN_OTHER)); // (n==64 ? MI_BBIN_LARGE : MI_BBIN_OTHER)));
+static inline mi_bbin_t mi_bbin_inc(mi_bbin_t bbin) {
+  return (mi_bbin_t)((int)bbin + 1);
+}
+
+static inline mi_bbin_t mi_bbin_of(size_t slice_count) {
+  if (slice_count==1) return MI_BBIN_SMALL;
+  if (slice_count==8) return MI_BBIN_MEDIUM;
+  #if MI_ENABLE_LARGE_PAGES
+  if (slice_count==MI_BFIELD_BITS) return MI_BBIN_LARGE;
+  #endif
+  return MI_BBIN_OTHER;
 }
 
 // An atomic "binned" bitmap for the free slices where we keep chunks reserved for particalar size classes
