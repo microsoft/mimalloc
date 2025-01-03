@@ -176,18 +176,16 @@ void mi_free(void* p) mi_attr_noexcept
     // page is local, but is full or contains (inner) aligned blocks; use generic path
     mi_free_generic_local(page, p);
   }
-  else {
-      // free-ing in a page owned by a heap in another thread, or on abandoned page (not belonging to a heap)
-    if ((xtid & MI_PAGE_FLAG_MASK) == 0) {         // `tid!=mi_page_thread_id(page) && mi_page_flags(page)==0`
-      // blocks are aligned (and not a full page)
-      mi_block_t* const block = (mi_block_t*)p;
-      mi_free_block_mt(page,block);
-    }
-    else {
-      // page is full or contains (inner) aligned blocks; use generic multi-thread path
-      mi_free_generic_mt(page, p);
-    }
+  // free-ing in a page owned by a heap in another thread, or on abandoned page (not belonging to a heap)
+  else if ((xtid & MI_PAGE_FLAG_MASK) == 0) {         // `tid!=mi_page_thread_id(page) && mi_page_flags(page)==0`
+    // blocks are aligned (and not a full page)
+    mi_block_t* const block = (mi_block_t*)p;
+    mi_free_block_mt(page,block);
   }
+  else {
+    // page is full or contains (inner) aligned blocks; use generic multi-thread path
+    mi_free_generic_mt(page, p);
+  }  
 }
 
 
