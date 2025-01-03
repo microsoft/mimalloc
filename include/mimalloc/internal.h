@@ -38,6 +38,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
 #define mi_decl_weak            __attribute__((weak))
 #define mi_decl_hidden          __attribute__((visibility("hidden")))
+#elif __cplusplus >= 201103L    // c++11
+#define mi_decl_noinline
+#define mi_decl_thread          thread_local
+#define mi_decl_cache_align     alignas(MI_CACHE_LINE)
+#define mi_decl_weak
+#define mi_decl_hidden
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
