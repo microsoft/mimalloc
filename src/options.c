@@ -79,7 +79,7 @@ typedef struct mi_option_desc_s {
 #endif
 
 #ifndef MI_DEFAULT_ALLOW_LARGE_OS_PAGES
-#define MI_DEFAULT_ALLOW_LARGE_OS_PAGES 0
+#define MI_DEFAULT_ALLOW_LARGE_OS_PAGES 1
 #endif
 
 #ifndef MI_DEFAULT_RESERVE_HUGE_OS_PAGES
@@ -143,7 +143,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { MI_DEFAULT_ARENA_RESERVE, UNINIT, MI_OPTION(arena_reserve) }, // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
   { 10,  UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
   { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
-  { 1,   UNINIT, MI_OPTION(abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
+  { 0,   UNINIT, MI_OPTION(abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
   { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   UNINIT, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)
   { 400, UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
 #if defined(MI_VISIT_ABANDONED)

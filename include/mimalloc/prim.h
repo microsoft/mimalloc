@@ -211,7 +211,7 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 // thread-local initialization checks in the fast path. This uses a fixed location
 // in the TCB though (last user-reserved slot by default) which may clash with other applications.
 
-#define MI_HAS_TLS_SLOT      2              // 2 = we can reliable initialize the slot (saving a test on each malloc)
+#define MI_HAS_TLS_SLOT      2              // 2 = we can reliably initialize the slot (saving a test on each malloc)
 
 #if MI_WIN_USE_FIXED_TLS > 1
 #define MI_TLS_SLOT     (MI_WIN_USE_FIXED_TLS)
