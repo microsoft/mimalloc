@@ -241,9 +241,10 @@ typedef struct mi_block_s {
 } mi_block_t;
 
 
-// The `in_full` and `has_aligned` page flags are put in the bottom bits of the thread_id (for fast test in `mi_free`)
+// The page flags are put in the bottom 3 bits of the thread_id (for a fast test in `mi_free`)
 // `has_aligned` is true if the page has pointers at an offset in a block (so we unalign before free-ing)
 // `in_full_queue` is true if the page is full and resides in the full queue (so we move it to a regular queue on free-ing)
+// `is_abandoned_mapped` is true if the page is abandoned (thread_id==0) and it is in an arena so can be quickly found for reuse ("mapped")
 #define MI_PAGE_IN_FULL_QUEUE         MI_ZU(0x01)
 #define MI_PAGE_HAS_ALIGNED           MI_ZU(0x02)
 #define MI_PAGE_IS_ABANDONED_MAPPED   MI_ZU(0x04)
@@ -253,10 +254,9 @@ typedef size_t mi_page_flags_t;
 
 // Thread free list.
 // Points to a list of blocks that are freed by other threads.
-// The low-bit is set if the page is owned by the current thread. (`mi_page_is_owned`).
+// The least-bit is set if the page is owned by the current thread. (`mi_page_is_owned`).
 // Ownership is required before we can read any non-atomic fields in the page.
-// This way we can push a block on the thread free list and try to claim ownership
-// atomically in `free.c:mi_free_block_mt`.
+// This way we can push a block on the thread free list and try to claim ownership atomically in `free.c:mi_free_block_mt`.
 typedef uintptr_t mi_thread_free_t;
 
 // A heap can serve only specific objects signified by its heap tag (e.g. various object types in CPython)
@@ -281,13 +281,14 @@ typedef uint8_t mi_heaptag_t;
 // Notes:
 // - Non-atomic fields can only be accessed if having ownership (low bit of `xthread_free`).
 // - If a page is not part of a heap it is called "abandoned"  (`heap==NULL`) -- in
-//   that case the `xthreadid` is 0 or 1 (1 is for abandoned pages that
+//   that case the `xthreadid` is 0 or 4 (4 is for abandoned pages that
 //   are in the abandoned page lists of an arena, these are called "mapped" abandoned pages).
+// - page flags are in the bottom 3 bits of `xthread_id` for the fast path in `mi_free`.
 // - The layout is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
 // - Using `uint16_t` does not seem to slow things down
 
 typedef struct mi_page_s {
-  _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= heap->thread_id, or 0 or 1 if abandoned)
+  _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= heap->thread_id (or 0 if abandoned) | page_flags)
 
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
   uint16_t                  used;              // number of blocks in use (including blocks in `thread_free`)

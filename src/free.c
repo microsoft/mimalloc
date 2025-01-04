@@ -167,18 +167,18 @@ void mi_free(void* p) mi_attr_noexcept
   #endif
 
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ mi_page_xthread_id(page));
-  if mi_likely(xtid == 0) {                        // thread-local free?  `tid==mi_page_thread_id(page) && mi_page_flags(page)==0`
+  if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
     mi_block_t* const block = (mi_block_t*)p;
     mi_free_block_local(page, block, true /* track stats */, false /* no need to check if the page is full */);
   }
-  else if (xtid <= MI_PAGE_FLAG_MASK) { // `tid= = mi_page_thread_id(page) && mi_page_flags(page)!=0`
+  else if (xtid <= MI_PAGE_FLAG_MASK) {            // `tid == mi_page_thread_id(page) && mi_page_flags(page) != 0`
     // page is local, but is full or contains (inner) aligned blocks; use generic path
     mi_free_generic_local(page, p);
   }
-  // free-ing in a page owned by a heap in another thread, or on abandoned page (not belonging to a heap)
-  else if ((xtid & MI_PAGE_FLAG_MASK) == 0) {         // `tid!=mi_page_thread_id(page) && mi_page_flags(page)==0`
-    // blocks are aligned (and not a full page)
+  // free-ing in a page owned by a heap in another thread, or an abandoned page (not belonging to a heap)
+  else if ((xtid & MI_PAGE_FLAG_MASK) == 0) {      // `tid != mi_page_thread_id(page) && mi_page_flags(page) == 0`
+    // blocks are aligned (and not a full page); push on the thread_free list
     mi_block_t* const block = (mi_block_t*)p;
     mi_free_block_mt(page,block);
   }
