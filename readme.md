@@ -12,8 +12,8 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.1.7` (2024-05-21).
-Latest v1 tag: `v1.8.7` (2024-05-21).
+Latest release tag: `v2.1.8` (2025-01-03).
+Latest v1 tag: `v1.8.8` (2024-01-03).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -22,7 +22,7 @@ without code changes, for example, on dynamically linked ELF-based systems (Linu
 ```
 It also includes a robust way to override the default allocator in [Windows](#override_on_windows). Notable aspects of the design include:
 
-- __small and consistent__: the library is about 8k LOC using simple and
+- __small and consistent__: the library is about 10k LOC using simple and
   consistent data structures. This makes it very suitable
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for
@@ -70,18 +70,23 @@ Enjoy!
 
 ### Branches
 
-* `master`: latest stable release (based on `dev-slice`).
+* `master`: latest stable release (based on `dev2`).
 * `dev`: development branch for mimalloc v1. Use this branch for submitting PR's.
-* `dev-slice`: development branch for mimalloc v2. This branch is downstream of `dev` (and is essentially equal to `dev` except for
-`src/segment.c`)
+* `dev2`: development branch for mimalloc v2. This branch is downstream of `dev` 
+         (and is essentially equal to `dev` except for `src/segment.c`). Uses larger sliced segments to manage
+         mimalloc pages what can reduce fragmentation.
+* `dev3`: development branch for mimalloc v3-alpha. This branch is downstream of `dev`. This is still experimental,
+          but simplifies previous versions by having no segments any more. This improves sharing of memory 
+          between threads, and on certain large workloads uses less memory with less fragmentation.
 
 ### Releases
 
-Note: the `v2.x` version has a different algorithm for managing internal mimalloc pages (as slices) that tends to use reduce
-memory usage
-  and fragmentation compared to mimalloc `v1.x` (especially for large workloads). Should otherwise have similar performance
-  (see [below](#performance)); please report if you observe any significant performance regression.
-
+* 2025-01-03, `v1.8.8`, `v2.1.8`, `v3.0-alpha`: Interim release. Support Windows arm64. New guarded build that can place OS 
+  guard pages behind objects to catch buffer overflows as they occur. 
+  Many small fixes: build on Windows arm64, cygwin, riscV, and dragonfly; fix Windows static library initialization to account for
+  thread local destructors (in Rust/C++); macOS tag change; macOS TLS slot fix; improve stats; 
+  consistent mimalloc.dll on Windows (instead of mimalloc-override.dll); fix mimalloc-redirect on Win11 H2; 
+  add 0-byte to canary; upstream CPython fixes; reduce .bss size; allow fixed TLS slot on Windows for improved performance.
 * 2024-05-21, `v1.8.7`, `v2.1.7`: Fix build issues on less common platforms. Started upstreaming patches
   from the CPython [integration](https://github.com/python/cpython/issues/113141#issuecomment-2119255217). Upstream `vcpkg` patches.
 * 2024-05-13, `v1.8.6`, `v2.1.6`: Fix build errors on various (older) platforms. Refactored aligned allocation.
@@ -166,7 +171,7 @@ in the entire program.
 
 ## Linux, macOS, BSD, etc.
 
-We use [`cmake`](https://cmake.org)<sup>1</sup> as the build system:
+We use [`cmake`](https://cmake.org) as the build system:
 
 ```
 > mkdir -p out/release
@@ -189,34 +194,39 @@ maintains detailed statistics as:
 > cmake -DCMAKE_BUILD_TYPE=Debug ../..
 > make
 ```
+
 This will name the shared library as `libmimalloc-debug.so`.
 
-Finally, you can build a _secure_ version that uses guard pages, encrypted
-free lists, etc., as:
+Finally, you can build a _secure_ version that uses guard pages, encrypted free lists, etc., as:
+
 ```
 > mkdir -p out/secure
 > cd out/secure
 > cmake -DMI_SECURE=ON ../..
 > make
 ```
+
 This will name the shared library as `libmimalloc-secure.so`.
 Use `cmake ../.. -LH` to see all the available build options.
 
 The examples use the default compiler. If you like to use another, use:
+
 ```
 > CC=clang CXX=clang++ cmake ../..
 ```
 
 ## Cmake with Visual Studio
 
-You can also use cmake on Windows. Open a Visual Studio development prompt 
+You can also use cmake on Windows. Open a Visual Studio 2022 development prompt 
 and invoke `cmake` with the right [generator](https://cmake.org/cmake/help/latest/generator/Visual%20Studio%2017%202022.html) 
 and architecture, like:
+
 ```
 > cmake ..\.. -G "Visual Studio 17 2022" -A x64 -DMI_OVERRIDE=ON
 ```
 
 The cmake build type is specified when actually building, for example:
+
 ```
 > cmake --build . --config=Release
 ```
@@ -239,7 +249,7 @@ mimalloc uses only safe OS calls (`mmap` and `VirtualAlloc`) and can co-exist
 with other allocators linked to the same program.
 If you use `cmake`, you can simply use:
 ```
-find_package(mimalloc 1.4 REQUIRED)
+find_package(mimalloc 1.8 REQUIRED)
 ```
 in your `CMakeLists.txt` to find a locally installed mimalloc. Then use either:
 ```
@@ -380,12 +390,38 @@ As always, evaluate with care as part of an overall security strategy as all of 
 
 ## Debug Mode
 
-When _mimalloc_ is built using debug mode, various checks are done at runtime to catch development errors.
+When _mimalloc_ is built using debug mode, (`-DCMAKE_BUILD_TYPE=Debug`), 
+various checks are done at runtime to catch development errors.
 
 - Statistics are maintained in detail for each object size. They can be shown using `MIMALLOC_SHOW_STATS=1` at runtime.
 - All objects have padding at the end to detect (byte precise) heap block overflows.
 - Double free's, and freeing invalid heap pointers are detected.
 - Corrupted free-lists and some forms of use-after-free are detected.
+
+## Guarded Mode
+
+<span id="guarded">_mimalloc_ can be build in guarded mode using the `-DMI_GUARDED=ON` flags in `cmake`.</span>
+This enables placing OS guard pages behind certain object allocations to catch buffer overflows as they occur.
+This can be invaluable to catch buffer-overflow bugs in large programs. However, it also means that any object
+allocated with a guard page takes at least 8 KiB memory for the guard page and its alignment. As such, allocating
+a guard page for every allocation may be too expensive both in terms of memory, and in terms of performance with
+many system calls. Therefore, there are various environment variables (and options) to tune this:
+
+- `MIMALLOC_GUARDED_SAMPLE_RATE=N`: Set the sample rate to `N` (by default 4000). This mode places a guard page
+  behind every `N` suitable object allocations (per thread). Since the performance in guarded mode without placing
+  guard pages is close to release mode, this can be used to enable guard pages even in production to catch latent 
+  buffer overflow bugs. Set the sample rate to `1` to guard every object, and to `0` to place no guard pages at all.
+
+- `MIMALLOC_GUARDED_SAMPLE_SEED=N`: Start sampling at `N` (by default random). Can be used to reproduce a buffer
+  overflow if needed.
+
+- `MIMALLOC_GUARDED_MIN=N`, `MIMALLOC_GUARDED_MAX=N`: Minimal and maximal _rounded_ object sizes for which a guard 
+  page is considered (`0` and `1GiB` respectively). If you suspect a buffer overflow occurs with an object of size
+  141, set the minimum and maximum to `148` and the sample rate to `1` to have all of those guarded.
+
+- `MIMALLOC_GUARDED_PRECISE=1`: If we have an object of size 13, we would usually place it an aligned 16 bytes in
+  front of the guard page. Using `MIMALLOC_GUARDED_PRECISE` places it exactly 13 bytes before a page so that even
+  a 1 byte overflow is detected. This violates the C/C++ minimal alignment guarantees though so use with care.
 
 
 # Overriding Standard Malloc
@@ -447,7 +483,7 @@ There are four requirements to make the overriding work well:
    similarly, `#pragma comment(linker, "/include:mi_version")` in some source file). 
    See the `mimalloc-test-override` project for an example on how to use this. 
 
-3. The `mimalloc-redirect.dll` must be put in the same folder as the main 
+3. The `mimalloc-redirect.dll` must be put in the same directory as the main 
    `mimalloc.dll` at runtime (as it is a dependency of that DLL).
    The redirection DLL ensures that all calls to the C runtime malloc API get 
    redirected to mimalloc functions (which reside in `mimalloc.dll`).
@@ -480,6 +516,7 @@ an object file instead of a library file as linkers give preference to
 that over archives to resolve symbols. To ensure that the standard
 malloc interface resolves to the _mimalloc_ library, link it as the first
 object file. For example:
+
 ```
 > gcc -o myprogram mimalloc.o  myfile1.c ...
 ```
@@ -487,7 +524,8 @@ object file. For example:
 Another way to override statically that works on all platforms, is to
 link statically to mimalloc (as shown in the introduction) and include a
 header file in each source file that re-defines `malloc` etc. to `mi_malloc`.
-This is provided by [`mimalloc-override.h`](include/mimalloc-override.h). This only works reliably though if all sources are
+This is provided by [`mimalloc-override.h`](include/mimalloc-override.h). This only works 
+reliably though if all sources are
 under your control or otherwise mixing of pointers from different heaps may occur!
 
 
