@@ -272,7 +272,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   protect_flags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
   #endif
   // huge page allocation
-  if ((large_only || _mi_os_use_large_page(size, try_alignment)) && allow_large) {
+  if (allow_large && (large_only || (_mi_os_use_large_page(size, try_alignment) && mi_option_get(mi_option_allow_large_os_pages) == 1))) {
     static _Atomic(size_t) large_page_try_ok; // = 0;
     size_t try_ok = mi_atomic_load_acquire(&large_page_try_ok);
     if (!large_only && try_ok > 0) {
@@ -293,7 +293,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       #endif
       #ifdef MAP_HUGE_1GB
       static bool mi_huge_pages_available = true;
-      if ((size % MI_GiB) == 0 && mi_huge_pages_available) {
+      if (large_only && (size % MI_GiB) == 0 && mi_huge_pages_available) {
         lflags |= MAP_HUGE_1GB;
       }
       else
@@ -313,7 +313,9 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         #ifdef MAP_HUGE_1GB
         if (p == NULL && (lflags & MAP_HUGE_1GB) == MAP_HUGE_1GB) {
           mi_huge_pages_available = false; // don't try huge 1GiB pages again
-          _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
+          if (large_only) {
+            _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
+          }
           lflags = ((lflags & ~MAP_HUGE_1GB) | MAP_HUGE_2MB);
           p = unix_mmap_prim(addr, size, try_alignment, protect_flags, lflags, lfd);
         }
