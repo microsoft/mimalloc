@@ -16,13 +16,22 @@
     <ClCompile Include="..\..\src\arena.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\arena-abandoned.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\bitmap.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\free.c">
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\heap.c">
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\init.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\libc.c">
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\options.c">
@@ -55,18 +64,12 @@
     <ClCompile Include="..\..\src\stats.c">
       <Filter>Sources</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\libc.c">
-      <Filter>Sources</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\free.c">
-      <Filter>Sources</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\src\bitmap.h">
+    <ClInclude Include="..\..\include\mimalloc\atomic.h">
       <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\include\mimalloc\atomic.h">
+    <ClInclude Include="..\..\src\bitmap.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mimalloc\internal.h">
@@ -93,10 +96,10 @@
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Headers">
-      <UniqueIdentifier>{dd2da697-c33c-4348-bf80-a802ebaa06fb}</UniqueIdentifier>
+      <UniqueIdentifier>{1430490c-e711-4ace-a1b8-36f4d5105873}</UniqueIdentifier>
     </Filter>
     <Filter Include="Sources">
-      <UniqueIdentifier>{8027057b-4b93-4321-b93c-d51dd0c8077b}</UniqueIdentifier>
+      <UniqueIdentifier>{461c78ef-04b0-44d1-a0ca-7d488abaa592}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

@@ -16,6 +16,9 @@
     <ClCompile Include="..\..\src\arena.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\arena-abandoned.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\bitmap.c">
       <Filter>Sources</Filter>
     </ClCompile>
@@ -23,6 +26,9 @@
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\init.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\libc.c">
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\options.c">
@@ -53,9 +59,6 @@
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\stats.c">
-      <Filter>Sources</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\libc.c">
       <Filter>Sources</Filter>
     </ClCompile>
   </ItemGroup>
@@ -96,15 +99,15 @@
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Headers">
-      <UniqueIdentifier>{9ef1cf48-7bb2-4af1-8cc1-603486e08a7a}</UniqueIdentifier>
+      <UniqueIdentifier>{262c6c21-e270-4ba6-bd63-4ac999307e4e}</UniqueIdentifier>
     </Filter>
     <Filter Include="Sources">
-      <UniqueIdentifier>{cfcf1674-81e3-487a-a8dd-5f956ae4007d}</UniqueIdentifier>
+      <UniqueIdentifier>{94b40bdc-a741-45dd-81aa-c05fabcd2970}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\include\mimalloc-etw-gen.man">
-      <Filter>Headers</Filter>
+      <Filter>Sources</Filter>
     </None>
   </ItemGroup>
 </Project>
