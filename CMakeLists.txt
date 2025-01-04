@@ -532,7 +532,7 @@ endif()
 
 message(STATUS "")
 message(STATUS "Library base name: ${mi_basename}")
-message(STATUS "Version          : ${mi_version}")
+message(STATUS "Version          : ${mi_version}.${mi_version_patch}")
 message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
 if(MI_USE_CXX)
   message(STATUS "C++ Compiler     : ${CMAKE_CXX_COMPILER}")
