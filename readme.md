@@ -81,7 +81,7 @@ Enjoy!
 
 ### Releases
 
-* 2025-01-03, `v1.8.9`, `v2.1.9`, `v3.0-alpha`: Interim release. Support Windows arm64. New [guarded](#guarded) build that can place OS 
+* 2025-01-03, `v1.8.9`, `v2.1.9`, `v3.0.1-alpha`: Interim release. Support Windows arm64. New [guarded](#guarded) build that can place OS 
   guard pages behind objects to catch buffer overflows as they occur. 
   Many small fixes: build on Windows arm64, cygwin, riscV, and dragonfly; fix Windows static library initialization to account for
   thread local destructors (in Rust/C++); macOS tag change; macOS TLS slot fix; improve stats; 
