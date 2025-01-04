@@ -1231,8 +1231,9 @@ Further options for large workloads and services:
    the actual NUMA nodes is fine and will only cause threads to potentially allocate more memory across actual NUMA
    nodes (but this can happen in any case as NUMA local allocation is always a best effort but not guaranteed).
 - `MIMALLOC_ALLOW_LARGE_OS_PAGES=1`: use large OS pages (2 or 4MiB) when available; for some workloads this can significantly
-   improve performance. When this option is disabled, it also disables transparent huge pages (THP) for the process
-   (on Linux and Android). Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
+   improve performance. When this option is disabled (default), it also disables transparent huge pages (THP) for the process
+   (on Linux and Android). On Linux the default setting is 2 -- this enables the use of large pages through THP only.
+   Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
    to explicitly give permissions for large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
    the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
    can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead whenever possible).
