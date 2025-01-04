@@ -12,8 +12,8 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.1.8` (2025-01-03).  
-Latest v1 tag: `v1.8.8` (2024-01-03).
+Latest release tag: `v2.1.9` (2025-01-03).  
+Latest v1 tag: `v1.8.9` (2024-01-03).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -81,7 +81,7 @@ Enjoy!
 
 ### Releases
 
-* 2025-01-03, `v1.8.8`, `v2.1.8`, `v3.0-alpha`: Interim release. Support Windows arm64. New [guarded](#guarded) build that can place OS 
+* 2025-01-03, `v1.8.9`, `v2.1.9`, `v3.0-alpha`: Interim release. Support Windows arm64. New [guarded](#guarded) build that can place OS 
   guard pages behind objects to catch buffer overflows as they occur. 
   Many small fixes: build on Windows arm64, cygwin, riscV, and dragonfly; fix Windows static library initialization to account for
   thread local destructors (in Rust/C++); macOS tag change; macOS TLS slot fix; improve stats; 
@@ -342,9 +342,10 @@ Further options for large workloads and services:
    at runtime. Setting `N` to 1 may avoid problems in some virtual environments. Also, setting it to a lower number than
    the actual NUMA nodes is fine and will only cause threads to potentially allocate more memory across actual NUMA
    nodes (but this can happen in any case as NUMA local allocation is always a best effort but not guaranteed).
-- `MIMALLOC_ALLOW_LARGE_OS_PAGES=1`: use large OS pages (2 or 4MiB) when available; for some workloads this can significantly
-   improve performance. When this option is disabled, it also disables transparent huge pages (THP) for the process
-   (on Linux and Android). Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
+- `MIMALLOC_ALLOW_LARGE_OS_PAGES=0`: Set to 1 to use large OS pages (2 or 4MiB) when available; for some workloads this can significantly
+   improve performance. When this option is disabled (default), it also disables transparent huge pages (THP) for the process
+   (on Linux and Android). On Linux the default setting is 2 -- this enables the use of large pages through THP only.
+   Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
    to explicitly give permissions for large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
    the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
    can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead whenever possible).
