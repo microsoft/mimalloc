@@ -8,7 +8,8 @@ trigger:
     include:
     - master
     - dev
-    - dev-slice
+    - dev2
+    - dev3
   tags:
     include:
     - v*
