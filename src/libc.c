@@ -84,8 +84,8 @@ bool _mi_getenv(const char* name, char* result, size_t result_size) {
 // This is mostly to avoid calling these when libc is not yet
 // initialized (and to reduce dependencies)
 //
-// format:      d i, p, x, u, s
-// type:        z l ll L
+// format:      d i, p x u, s
+// prec:        z l ll L
 // width:       10
 // align-left:  -
 // fill:        0
@@ -160,8 +160,8 @@ static void mi_out_num(uintmax_t x, size_t base, char prefix, char** out, char* 
 
 #define MI_NEXTC()  c = *in; if (c==0) break; in++;
 
-void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
-  if (buf == NULL || bufsize == 0 || fmt == NULL) return;
+int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
+  if (buf == NULL || bufsize == 0 || fmt == NULL) return 0;
   buf[bufsize - 1] = 0;
   char* const end = buf + (bufsize - 1);
   const char* in = fmt;
@@ -279,13 +279,15 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
   }
   mi_assert_internal(out <= end);
   *out = 0;
+  return (int)(out - buf);
 }
 
-void _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...) {
+int _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  _mi_vsnprintf(buf, buflen, fmt, args);
+  const int written = _mi_vsnprintf(buf, buflen, fmt, args);
   va_end(args);
+  return written;
 }
 
 

@@ -67,8 +67,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // "libc.c"
 #include <stdarg.h>
-void          _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args);
-void          _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...);
+int           _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args);
+int           _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...);
 char          _mi_toupper(char c);
 int           _mi_strnicmp(const char* s, const char* t, size_t n);
 void          _mi_strlcpy(char* dest, const char* src, size_t dest_size);

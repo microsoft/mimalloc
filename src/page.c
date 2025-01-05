@@ -253,7 +253,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
     mi_page_queue_remove(pq, page);
     mi_tld_t* tld = page->heap->tld;
     mi_page_set_heap(page, NULL);
-    _mi_arenas_page_abandon(page);  
+    _mi_arenas_page_abandon(page);
     _mi_arenas_collect(false, false, tld); // allow purging
   }
 }
@@ -265,7 +265,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   mi_assert_internal(pq != NULL);
   mi_assert_internal(mi_heap_contains_queue(heap, pq));
   mi_assert_internal(page_alignment > 0 || block_size > MI_LARGE_MAX_OBJ_SIZE || block_size == pq->block_size);
-  #endif  
+  #endif
   mi_page_t* page = _mi_arenas_page_alloc(heap, block_size, page_alignment);
   if (page == NULL) {
     // out-of-memory
@@ -612,7 +612,7 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
   if (page->slice_committed > 0) {
     const size_t needed_size = (page->capacity + extend)*bsize;
     const size_t needed_commit = _mi_align_up( mi_page_slice_offset_of(page, needed_size), MI_PAGE_MIN_COMMIT_SIZE );
-    if (needed_commit > page->slice_committed) {      
+    if (needed_commit > page->slice_committed) {
       mi_assert_internal(((needed_commit - page->slice_committed) % _mi_os_page_size()) == 0);
       _mi_os_commit(mi_page_slice_start(page) + page->slice_committed, needed_commit - page->slice_committed, NULL);
       page->slice_committed = needed_commit;
@@ -957,7 +957,6 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   }
   // move singleton pages to the full queue
   if (page->reserved == page->used) {
-    mi_assert_internal(page->reserved == 1);
     mi_page_to_full(page, mi_page_queue_of(page));
   }
   return p;
