@@ -164,6 +164,7 @@ uint8_t*   _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* 
 void       _mi_abandoned_reclaim_all(mi_heap_t* heap, mi_segments_tld_t* tld);
 void       _mi_abandoned_await_readers(void);
 void       _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld);
+void       _mi_abandoned_collect_clamp(mi_heap_t* heap, bool force, long max_segment_count, mi_segments_tld_t* tld);
 bool       _mi_segment_attempt_reclaim(mi_heap_t* heap, mi_segment_t* segment);
 
 // "page.c"
@@ -600,6 +601,10 @@ static inline bool mi_page_mostly_used(const mi_page_t* page) {
 
 static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size) {
   return &((mi_heap_t*)heap)->pages[_mi_bin(size)];
+}
+
+static inline mi_page_queue_t* mi_queue_of_page(const mi_heap_t* heap, const mi_page_t* page) {
+  return &((mi_heap_t*)heap)->pages[page->bin_index];
 }
 
 

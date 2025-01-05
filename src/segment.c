@@ -1298,7 +1298,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
         hasUsedSmallPage = true;
       }
       if (mi_page_has_any_available(page)) {
-        free_space_mask |= mi_free_space_mask_from_blocksize(slice->block_size);
+        free_space_mask |= page->free_space_bit;
       }
     }
     slice = slice + slice->slice_count;
@@ -1408,10 +1408,10 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t slices_needed, s
           // a page has available free blocks of the right size
           has_page = true;
           *hasExactPage = true;
-          free_space_mask |= mi_free_space_mask_from_blocksize(page->block_size);
+          free_space_mask |= page->free_space_bit;
         }
         else if (mi_page_has_any_available(page)) {
-          free_space_mask |= mi_free_space_mask_from_blocksize(page->block_size);
+          free_space_mask |= page->free_space_bit;
         }
       }
     }
@@ -1560,7 +1560,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
   size_t free_space_mask = mi_free_space_mask_from_blocksize(block_size);
   mi_page_kind_t target_page_kind = mi_page_kind_from_size(block_size);
   mi_segment_t* best_candidate_segment = NULL;
-  int candidates_to_check = 8;
+  long candidates_to_check = mi_option_get(mi_option_max_candidate_segments_to_check);
 
   mi_arena_field_cursor_t current; _mi_arena_field_cursor_init2(heap, &current, free_space_mask);
   while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL))
@@ -1642,13 +1642,12 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
   return NULL;
 }
 
-
-void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
+void _mi_abandoned_collect_clamp(mi_heap_t* heap, bool force, long max_segment_count, mi_segments_tld_t* tld)
 {
   mi_segment_t* segment;
   bool hasExactPage = false;
   mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, &current);
-  long max_tries = (force ? (long)_mi_arena_segment_abandoned_count() : 1024);  // limit latency
+  long max_tries = (force ? (long)_mi_arena_segment_abandoned_count() : max_segment_count);  // limit latency
   while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL)) {
     mi_segment_check_free(segment,0,0,&hasExactPage,tld); // try to free up pages (due to concurrent frees)
     if (segment->used == 0) {
@@ -1664,6 +1663,11 @@ void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
       _mi_arena_segment_mark_abandoned(segment);
     }
   }
+}
+
+void _mi_abandoned_collect(mi_heap_t* heap, bool force, mi_segments_tld_t* tld)
+{
+  _mi_abandoned_collect_clamp(heap, force, 1024, tld);
 }
 
 /* -----------------------------------------------------------

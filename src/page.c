@@ -264,7 +264,7 @@ void _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page) {
   #endif
 
   // TODO: push on full queue immediately if it is full?
-  mi_page_queue_t* pq = mi_page_queue(heap, mi_page_block_size(page));
+  mi_page_queue_t* pq = mi_queue_of_page(heap, page);
   mi_page_queue_push(heap, pq, page);
   mi_assert_expensive(_mi_page_is_valid(page));
 }
@@ -302,7 +302,7 @@ static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
   mi_page_t* page = mi_page_fresh_alloc(heap, pq, pq->block_size, 0);
   if (page==NULL) return NULL;
   mi_assert_internal(pq->block_size==mi_page_block_size(page));
-  mi_assert_internal(pq==mi_page_queue(heap, mi_page_block_size(page)));
+  mi_assert_internal(pq==mi_queue_of_page(heap, page));
   return page;
 }
 
@@ -686,6 +686,9 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   else {
     page->block_size_shift = 0;
   }
+
+  page->bin_index = mi_bin(page->block_size);
+  page->free_space_bit = mi_free_space_mask_from_blocksize(page->block_size);
 
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);

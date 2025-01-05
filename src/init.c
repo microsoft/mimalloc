@@ -26,6 +26,8 @@ const mi_page_t _mi_page_empty = {
   0,       // used
   0,       // block size shift
   0,       // heap tag
+  0,       // bin index
+  0,       // free space bit
   0,       // block_size
   NULL,    // page_start
   #if (MI_PADDING || MI_ENCODE_FREELIST)

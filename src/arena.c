@@ -824,25 +824,23 @@ void _mi_arena_segment_mark_abandoned(mi_segment_t* segment)
 
 // start a cursor at a randomized arena
 void _mi_arena_field_cursor_init(mi_heap_t* heap, mi_arena_field_cursor_t* current) {
-  const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
-
-  if (heap != NULL) {
-    current->start = (max_arena == 0 ? 0 : (mi_arena_id_t)( _mi_heap_random_next(heap) % max_arena));
-  }
-  else {
-    current->start = 0;
-  }
-
-  current->count = 0;
-  current->bitmap_idx = 0;  
-  current->free_space_mask = MI_FREE_SPACE_MASK_ANY;
+  _mi_arena_field_cursor_init2(heap, current, MI_FREE_SPACE_MASK_ANY);
 }
 
 void _mi_arena_field_cursor_init2(mi_heap_t* heap, mi_arena_field_cursor_t* current, size_t free_space_mask) {
     const size_t max_arena = mi_atomic_load_relaxed(&mi_arena_count);
-    current->start = (max_arena == 0 ? 0 : (mi_arena_id_t)(_mi_heap_random_next(heap) % max_arena));
-    current->count = 0;
+
+    current->start = 0;
     current->bitmap_idx = 0;
+    if (heap != NULL) {
+      current->start = (max_arena == 0 ? 0 : (mi_arena_id_t)( _mi_heap_random_next(heap) % max_arena));
+      mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[current->start]);
+      if (arena != NULL) {
+        current->bitmap_idx = _mi_heap_random_next(heap) % (arena->field_count * MI_BITMAP_FIELD_BITS);
+      }
+    }
+
+    current->count = 0;
     current->free_space_mask = free_space_mask;
 }
 

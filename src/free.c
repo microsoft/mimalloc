@@ -287,7 +287,7 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_segment_t* seg
     #endif
   }
 
-  size_t size_mask = mi_free_space_mask_from_blocksize(page->block_size);
+  size_t size_mask = page->free_space_bit;
   size_t new_free_space_mask;
   size_t old_free_space_mask = mi_atomic_load_relaxed(&segment->free_space_mask);
   do {

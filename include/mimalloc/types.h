@@ -327,6 +327,8 @@ typedef struct mi_page_s {
   uint8_t               block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
   uint8_t               heap_tag;          // tag of the owning heap, used for separated heaps by object type
                                            // padding
+  uint8_t               bin_index;         // bin index of the page queue this page belongs to
+  size_t                free_space_bit;    // a bit/mask for marking quickly free_space_mask of the owning segment
   size_t                block_size;        // size available in each block (always `>0`)
   uint8_t*              page_start;        // start of the page area containing the blocks
 
@@ -504,7 +506,6 @@ typedef struct mi_page_queue_s {
   mi_page_t* first;
   mi_page_t* last;
   size_t     block_size;
-  size_t     allocationCount;
 } mi_page_queue_t;
 
 #define MI_BIN_FULL  (MI_BIN_HUGE+1)
