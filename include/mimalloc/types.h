@@ -270,16 +270,19 @@ typedef uint8_t mi_heaptag_t;
 // The `local_free` and `thread_free` lists are migrated to the `free` list
 // when it is exhausted. The separate `local_free` list is necessary to
 // implement a monotonic heartbeat. The `thread_free` list is needed for
-// avoiding atomic operations in the common case.
+// avoiding atomic operations when allocating from the owning thread.
 //
 // `used - |thread_free|` == actual blocks that are in use (alive)
 // `used - |thread_free| + |free| + |local_free| == capacity`
 //
-// We don't count `freed` (as |free|) but use `used` to reduce
+// We don't count "freed" (as |free|) but use only the `used` field to reduce
 // the number of memory accesses in the `mi_page_all_free` function(s).
+// Use `_mi_page_free_collect` to collect the thread_free list and update the `used` count.
 //
 // Notes:
-// - Non-atomic fields can only be accessed if having ownership (low bit of `xthread_free`).
+// - Non-atomic fields can only be accessed if having _ownership_ (low bit of `xthread_free` is 1).
+//   Combining the `thread_free` list with an ownership bit allows a concurrent `free` to atomically
+//   free an object and (re)claim ownership if the page was abandoned.
 // - If a page is not part of a heap it is called "abandoned"  (`heap==NULL`) -- in
 //   that case the `xthreadid` is 0 or 4 (4 is for abandoned pages that
 //   are in the abandoned page lists of an arena, these are called "mapped" abandoned pages).
@@ -288,17 +291,17 @@ typedef uint8_t mi_heaptag_t;
 // - Using `uint16_t` does not seem to slow things down
 
 typedef struct mi_page_s {
-  _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= heap->thread_id (or 0 if abandoned) | page_flags)
+  _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `heap->thread_id (or 0 if abandoned) | page_flags`)
 
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
   uint16_t                  used;              // number of blocks in use (including blocks in `thread_free`)
-  uint16_t                  capacity;          // number of blocks committed (must be the first field for proper zero-initialisation)
+  uint16_t                  capacity;          // number of blocks committed
   uint16_t                  reserved;          // number of blocks reserved in memory
   uint8_t                   block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
   uint8_t                   retire_expire;     // expiration count for retired blocks
 
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
-  _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads
+  _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads (= `mi_block_t* | (1 if owned)`)
 
   size_t                    block_size;        // size available in each block (always `>0`)
   uint8_t*                  page_start;        // start of the blocks
@@ -333,12 +336,15 @@ typedef struct mi_page_s {
 #endif
 
 // The max object size are checked to not waste more than 12.5% internally over the page sizes.
-// (Except for large pages since huge objects are allocated in 4MiB chunks)
 #define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)   // < 8 KiB
+#if MI_ENABLE_LARGE_PAGES
 #define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)  // < 64 KiB
-#define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/4)    // <= 512 KiB // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
+#define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/8)    // <= 256 KiB // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
+#else
+#define MI_MEDIUM_MAX_OBJ_SIZE            (MI_MEDIUM_PAGE_SIZE/8)   // <= 64 KiB
+#define MI_LARGE_MAX_OBJ_SIZE             MI_MEDIUM_MAX_OBJ_SIZE    // <= 64 KiB // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
+#endif
 #define MI_LARGE_MAX_OBJ_WSIZE            (MI_LARGE_MAX_OBJ_SIZE/MI_SIZE_SIZE)
-
 
 #if (MI_LARGE_MAX_OBJ_WSIZE >= 655360)
 #error "mimalloc internal: define more bins"
@@ -352,7 +358,7 @@ typedef struct mi_page_s {
 typedef enum mi_page_kind_e {
   MI_PAGE_SMALL,    // small blocks go into 64KiB pages
   MI_PAGE_MEDIUM,   // medium blocks go into 512KiB pages
-  MI_PAGE_LARGE,    // larger blocks go into 4MiB pages
+  MI_PAGE_LARGE,    // larger blocks go into 4MiB pages (if `MI_ENABLE_LARGE_PAGES==1`)
   MI_PAGE_SINGLETON // page containing a single block.
                     // used for blocks `> MI_LARGE_MAX_OBJ_SIZE` or an aligment `> MI_PAGE_MAX_OVERALLOC_ALIGN`.
 } mi_page_kind_t;
