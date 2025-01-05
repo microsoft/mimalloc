@@ -927,7 +927,8 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
   return inuse_count;
 }
 
-void mi_debug_show_arenas(bool show_inuse) mi_attr_noexcept {
+void mi_debug_show_arenas(void) mi_attr_noexcept {
+  const bool show_inuse = true;
   size_t max_arenas = mi_atomic_load_relaxed(&mi_arena_count);
   size_t inuse_total = 0;
   //size_t abandoned_total = 0;
