@@ -1377,10 +1377,9 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k,
   return bit_set_count;
 }
 
-#define MI_FIELDS_PER_LINE  (4)
-
-static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_t chunk_count, mi_bchunk_t* chunks, _Atomic(uint8_t)* chunk_bins, bool invert, mi_arena_t* arena) {
-  _mi_output_message("\x1B[37m%s (use/commit: \x1B[31m0 - 25%%\x1B[33m - 50%%\x1B[36m - 75%%\x1B[32m - 100%%\x1B[0m)\n", header);
+static size_t mi_debug_show_chunks(const char* header1, const char* header2, const char* header3, size_t slice_count, size_t chunk_count, mi_bchunk_t* chunks, _Atomic(uint8_t)* chunk_bins, bool invert, mi_arena_t* arena, bool narrow) {
+  _mi_output_message("\x1B[37m%s%s%s (use/commit: \x1B[31m0 - 25%%\x1B[33m - 50%%\x1B[36m - 75%%\x1B[32m - 100%%\x1B[0m)\n", header1, header2, header3);
+  const size_t fields_per_line = (narrow ? 2 : 4);
   size_t bit_count = 0;
   size_t bit_set_count = 0;
   for (size_t i = 0; i < chunk_count && bit_count < slice_count; i++) {
@@ -1408,7 +1407,7 @@ static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_
     long bit_of_page = 0;
     mi_ansi_color_t color_of_page = MI_GRAY;
     for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
-      if (j > 0 && (j % MI_FIELDS_PER_LINE) == 0) {
+      if (j > 0 && (j % fields_per_line) == 0) {
         // buf[k++] = '\n'; _mi_memset(buf+k,' ',7); k += 7;
         _mi_output_message("  %s\n\x1B[37m", buf);
         _mi_memzero(buf, sizeof(buf));
@@ -1435,20 +1434,11 @@ static size_t mi_debug_show_chunks(const char* header, size_t slice_count, size_
   return bit_set_count;
 }
 
-//static size_t mi_debug_show_bitmap(const char* header, size_t slice_count, mi_bitmap_t* bitmap, bool invert, mi_arena_t* arena) {
-//  return mi_debug_show_chunks(header, slice_count, mi_bitmap_chunk_count(bitmap), &bitmap->chunks[0], NULL, invert, arena);
-//}
-
-static size_t mi_debug_show_bitmap_binned(const char* header, size_t slice_count, mi_bitmap_t* bitmap, _Atomic(uint8_t)* chunk_bins, bool invert, mi_arena_t* arena) {
-  return mi_debug_show_chunks(header, slice_count, mi_bitmap_chunk_count(bitmap), &bitmap->chunks[0], chunk_bins, invert, arena);
+static size_t mi_debug_show_bitmap_binned(const char* header1, const char* header2, const char* header3, size_t slice_count, mi_bitmap_t* bitmap, _Atomic(uint8_t)* chunk_bins, bool invert, mi_arena_t* arena, bool narrow) {
+  return mi_debug_show_chunks(header1, header2, header3, slice_count, mi_bitmap_chunk_count(bitmap), &bitmap->chunks[0], chunk_bins, invert, arena, narrow);
 }
 
-//static size_t mi_debug_show_bbitmap(const char* header, size_t slice_count, mi_bbitmap_t* bbitmap, bool invert, mi_arena_t* arena) {
-//  return mi_debug_show_chunks(header, slice_count, mi_bbitmap_chunk_count(bbitmap), &bbitmap->chunks[0], &bbitmap->chunk_bins[0], invert, arena);
-//}
-
-
-void mi_debug_show_arenas(bool show_pages) mi_attr_noexcept {
+void mi_debug_show_arenas(bool show_pages, bool narrow) mi_attr_noexcept {
   mi_subproc_t* subproc = _mi_subproc();
   size_t max_arenas = mi_arenas_get_count(subproc);
   //size_t free_total = 0;
@@ -1472,7 +1462,10 @@ void mi_debug_show_arenas(bool show_pages) mi_attr_noexcept {
     //  purge_total += mi_debug_show_bitmap("purgeable slices", arena->slice_count, arena->slices_purge, false, NULL);
     //}
     if (show_pages) {
-      page_total += mi_debug_show_bitmap_binned("pages (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info, m:heap-meta-data, ~:free-purgable, _:free-committed, .:free-reserved) (chunk bin: S:small, M:medium, L:large, X:other)", arena->slice_count, arena->pages, arena->slices_free->chunk_bins, false, arena);
+      const char* header1 = "pages (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info, m:meta-data, ~:free-purgable, _:free-committed, .:free-reserved)";
+      const char* header2 = (narrow ? "\n      " : " ");
+      const char* header3 = "(chunk bin: S:small, M : medium, L : large, X : other)";
+      page_total += mi_debug_show_bitmap_binned(header1, header2, header3, arena->slice_count, arena->pages, arena->slices_free->chunk_bins, false, arena, narrow);
     }
   }
   // if (show_inuse)     _mi_output_message("total inuse slices    : %zu\n", slice_total - free_total);
