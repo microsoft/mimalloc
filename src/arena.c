@@ -1438,7 +1438,7 @@ static size_t mi_debug_show_bitmap_binned(const char* header1, const char* heade
   return mi_debug_show_chunks(header1, header2, header3, slice_count, mi_bitmap_chunk_count(bitmap), &bitmap->chunks[0], chunk_bins, invert, arena, narrow);
 }
 
-void mi_debug_show_arenas(bool show_pages, bool narrow) mi_attr_noexcept {
+static void mi_debug_show_arenas_ex(bool show_pages, bool narrow) mi_attr_noexcept {
   mi_subproc_t* subproc = _mi_subproc();
   size_t max_arenas = mi_arenas_get_count(subproc);
   //size_t free_total = 0;
@@ -1471,6 +1471,10 @@ void mi_debug_show_arenas(bool show_pages, bool narrow) mi_attr_noexcept {
   // if (show_inuse)     _mi_output_message("total inuse slices    : %zu\n", slice_total - free_total);
   // if (show_abandoned) _mi_verbose_message("total abandoned slices: %zu\n", abandoned_total);
   if (show_pages)     _mi_output_message("total pages in arenas: %zu\n", page_total);
+}
+
+void mi_debug_show_arenas(void) mi_attr_noexcept {
+  mi_debug_show_arenas_ex(true /* show pages */, false /* narrow? */);
 }
 
 
