@@ -1317,12 +1317,7 @@ typedef enum mi_ansi_color_e {
 } mi_ansi_color_t;
 
 static void mi_debug_color(char* buf, size_t* k, mi_ansi_color_t color) {
-  buf[*k] = '\x1b';
-  buf[*k+1] = '[';
-  buf[*k+2] = (char)(((int)color / 10) + '0');
-  buf[*k+3] = (char)(((int)color % 10) + '0');
-  buf[*k+4] = 'm';
-  *k += 5;
+  *k += _mi_snprintf(buf + *k, 32, "\x1B[%dm", (int)color);
 }
 
 static int mi_page_commit_usage(mi_page_t* page) {
@@ -1347,13 +1342,14 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k,
       c = 'p';
       color = MI_GRAY;
       mi_page_t* page = (mi_page_t*)start;
-      if (mi_page_is_abandoned_mapped(page)) { c = 'a'; }
-      else if (mi_page_is_abandoned(page)) { c = (mi_page_is_singleton(page) ? 's' : 'f'); }
+      if (mi_page_is_singleton(page)) { c = 's'; }
+      else if (mi_page_is_full(page)) { c = 'f'; }
+      if (!mi_page_is_abandoned(page)) { c = _mi_toupper(c); }
       int commit_usage = mi_page_commit_usage(page);
       if (commit_usage < 25) { color = MI_MAROON; }
       else if (commit_usage < 50) { color = MI_ORANGE; }
       else if (commit_usage < 75) { color = MI_TEAL; }
-      else color = MI_DARKGREEN;
+      else color = MI_DARKGREEN; 
       bit_of_page = (long)page->memid.mem.arena.slice_count;
     }
     else {
@@ -1476,7 +1472,7 @@ void mi_debug_show_arenas(bool show_pages) mi_attr_noexcept {
     //  purge_total += mi_debug_show_bitmap("purgeable slices", arena->slice_count, arena->slices_purge, false, NULL);
     //}
     if (show_pages) {
-      page_total += mi_debug_show_bitmap_binned("pages (p:page, a:abandoned, f:full-abandoned, s:singleton-abandoned, i:arena-info, m:heap-meta-data, ~:free-purgable, _:free-committed, .:free-reserved)", arena->slice_count, arena->pages, arena->slices_free->chunk_bins, false, arena);
+      page_total += mi_debug_show_bitmap_binned("pages (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info, m:heap-meta-data, ~:free-purgable, _:free-committed, .:free-reserved) (chunk bin: S:small, M:medium, L:large, X:other)", arena->slice_count, arena->pages, arena->slices_free->chunk_bins, false, arena);
     }
   }
   // if (show_inuse)     _mi_output_message("total inuse slices    : %zu\n", slice_total - free_total);
