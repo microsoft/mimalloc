@@ -412,7 +412,7 @@ void _mi_page_force_abandon(mi_page_t* page) {
 
   // ensure this page is no longer in the heap delayed free list
   _mi_heap_delayed_free_all(heap);
-  // We can still access the page meta-info even if it is freed as we ensure 
+  // We can still access the page meta-info even if it is freed as we ensure
   // in `mi_segment_force_abandon` that the segment is not freed (yet)
   if (page->capacity == 0) return; // it may have been freed now
 
@@ -1023,7 +1023,6 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   }
   // move singleton pages to the full queue
   if (page->reserved == page->used) {
-    mi_assert_internal(page->reserved == 1);
     mi_page_to_full(page, mi_page_queue_of(page));
   }
   return p;
