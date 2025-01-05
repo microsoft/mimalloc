@@ -304,10 +304,11 @@ int main(int argc, char** argv) {
   #endif
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     mi_option_set(mi_option_arena_reserve, 32 * 1024 /* in kib = 32MiB */);
-    //mi_option_set(mi_option_purge_delay,10);
+    mi_option_set(mi_option_purge_delay,1);
   #endif
   #if defined(NDEBUG) && !defined(USE_STD_MALLOC)
     // mi_option_set(mi_option_purge_delay,-1);
+    mi_option_set(mi_option_reclaim_on_free, 0);
   #endif
   #ifndef USE_STD_MALLOC
     mi_stats_reset();
@@ -350,7 +351,7 @@ int main(int argc, char** argv) {
 
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
-  mi_debug_show_arenas(true);
+  mi_debug_show_arenas();
   mi_collect(true);
   #endif
 #endif
