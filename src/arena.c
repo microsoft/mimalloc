@@ -181,7 +181,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
 {
   size_t slice_index;
   if (!mi_bbitmap_try_find_and_clearN(arena->slices_free, slice_count, tseq, &slice_index)) return NULL;
-  
+
   // claimed it!
   void* p = mi_arena_slice_start(arena, slice_index);
   *memid = mi_memid_create_arena(arena, slice_index, slice_count);
@@ -417,7 +417,7 @@ static mi_decl_noinline void* mi_arenas_try_alloc(
   mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid)
 {
   mi_assert(slice_count <= MI_ARENA_MAX_OBJ_SLICES);
-  mi_assert(alignment <= MI_ARENA_SLICE_ALIGN);  
+  mi_assert(alignment <= MI_ARENA_SLICE_ALIGN);
   void* p;
 
   // try to find free slices in the arena's
@@ -1170,7 +1170,7 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
     start = aligned_start;
     size = size - diff;
   }
-  
+
   const size_t slice_count = _mi_align_down(size / MI_ARENA_SLICE_SIZE, MI_BCHUNK_BITS);
   if (slice_count > MI_BITMAP_MAX_BIT_COUNT) {  // 16 GiB for now
     // todo: allow larger areas (either by splitting it up in arena's or having larger arena's)
@@ -1349,7 +1349,7 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k,
       if (commit_usage < 25) { color = MI_MAROON; }
       else if (commit_usage < 50) { color = MI_ORANGE; }
       else if (commit_usage < 75) { color = MI_TEAL; }
-      else color = MI_DARKGREEN; 
+      else color = MI_DARKGREEN;
       bit_of_page = (long)page->memid.mem.arena.slice_count;
     }
     else {
@@ -1371,7 +1371,7 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k,
     }
     buf[*k] = c; *k += 1;
   }
-  mi_debug_color(buf, k, MI_GRAY);  
+  mi_debug_color(buf, k, MI_GRAY);
   *pbit_of_page = bit_of_page;
   *pcolor_of_page = color;
   return bit_set_count;
