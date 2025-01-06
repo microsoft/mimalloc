@@ -115,14 +115,14 @@ static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)*p, intptr_t sub);
 #define mi_atomic_exchange_ptr_release(tp,p,x)          mi_atomic_exchange_release(p,(tp*)x)
 #define mi_atomic_exchange_ptr_acq_rel(tp,p,x)          mi_atomic_exchange_acq_rel(p,(tp*)x)
 #else
-#define mi_atomic_store_ptr_release(tp,p,x)             mi_atomic_store_release(p,x)
-#define mi_atomic_store_ptr_relaxed(tp,p,x)             mi_atomic_store_relaxed(p,x)
-#define mi_atomic_cas_ptr_weak_release(tp,p,exp,des)    mi_atomic_cas_weak_release(p,exp,des)
-#define mi_atomic_cas_ptr_weak_acq_rel(tp,p,exp,des)    mi_atomic_cas_weak_acq_rel(p,exp,des)
-#define mi_atomic_cas_ptr_strong_release(tp,p,exp,des)  mi_atomic_cas_strong_release(p,exp,des)
-#define mi_atomic_exchange_ptr_relaxed(tp,p,x)          mi_atomic_exchange_relaxed(p,x)
-#define mi_atomic_exchange_ptr_release(tp,p,x)          mi_atomic_exchange_release(p,x)
-#define mi_atomic_exchange_ptr_acq_rel(tp,p,x)          mi_atomic_exchange_acq_rel(p,x)
+#define mi_atomic_store_ptr_release(tp,p,x)             (tp*)mi_atomic_store_release(p,x)
+#define mi_atomic_store_ptr_relaxed(tp,p,x)             (tp*)mi_atomic_store_relaxed(p,x)
+#define mi_atomic_cas_ptr_weak_release(tp,p,exp,des)    (tp*)mi_atomic_cas_weak_release(p,exp,des)
+#define mi_atomic_cas_ptr_weak_acq_rel(tp,p,exp,des)    (tp*)mi_atomic_cas_weak_acq_rel(p,exp,des)
+#define mi_atomic_cas_ptr_strong_release(tp,p,exp,des)  (tp*)mi_atomic_cas_strong_release(p,exp,des)
+#define mi_atomic_exchange_ptr_relaxed(tp,p,x)          (tp*)mi_atomic_exchange_relaxed(p,x)
+#define mi_atomic_exchange_ptr_release(tp,p,x)          (tp*)mi_atomic_exchange_release(p,x)
+#define mi_atomic_exchange_ptr_acq_rel(tp,p,x)          (tp*)mi_atomic_exchange_acq_rel(p,x)
 #endif
 
 // These are used by the statistics
@@ -145,7 +145,13 @@ static inline void mi_atomic_maxi64_relaxed(volatile int64_t* p, int64_t x) {
 
 
 #elif defined(_MSC_VER)
-
+#ifdef __clang__ // clang_cl
+#if defined(__cplusplus)
+#define mi_atomic_exchange_ptr_relaxed(tp,p,x)          mi_atomic_exchange_relaxed(p,(tp*)x)
+#else
+#define mi_atomic_exchange_ptr_relaxed(tp,p,x)          (tp*)mi_atomic_exchange_relaxed(p,x)
+#endif
+#endif
 // Legacy MSVC plain C compilation wrapper that uses Interlocked operations to model C11 atomics.
 #include <intrin.h>
 #ifdef _WIN64

@@ -128,7 +128,7 @@ mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_att
 
 void _mi_segment_map_unsafe_destroy(void) {
   for (size_t i = 0; i < MI_SEGMENT_MAP_MAX_PARTS; i++) {
-    mi_segmap_part_t* part = mi_atomic_exchange_ptr_relaxed(mi_segmap_part_t, &mi_segment_map[i], NULL);
+    mi_segmap_part_t* part = mi_atomic_exchange_ptr_relaxed(mi_segmap_part_t, &mi_segment_map[i], 0);
     if (part != NULL) {
       _mi_os_free(part, sizeof(mi_segmap_part_t), part->memid);
     }
