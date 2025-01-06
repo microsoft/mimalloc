@@ -107,10 +107,17 @@ endif()
 # -----------------------------------------------------------------------------
 # Process options
 # -----------------------------------------------------------------------------
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+  set(MI_CLANG_CL "ON")
+endif()
 
 # put -Wall early so other warnings can be disabled selectively
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
-  list(APPEND mi_cflags -Wall -Wextra -Wpedantic)
+  if (MI_CLANG_CL)
+    list(APPEND mi_cflags -W)
+  else()
+    list(APPEND mi_cflags -Wall -Wextra -Wpedantic)
+  endif()
 endif()
 if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     list(APPEND mi_cflags -Wall -Wextra)
@@ -376,7 +383,7 @@ endif()
 # endif()
 
 # Compiler flags
-if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
+if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU" AND NOT MI_CLANG_CL)
   list(APPEND mi_cflags -Wno-unknown-pragmas -fvisibility=hidden)
   if(NOT MI_USE_CXX)
     list(APPEND mi_cflags -Wstrict-prototypes)
@@ -390,7 +397,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "Intel")
   list(APPEND mi_cflags -fvisibility=hidden)
 endif()
 
-if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
+if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku" AND NOT MI_CLANG_CL)
   if(MI_LOCAL_DYNAMIC_TLS)
     list(APPEND mi_cflags -ftls-model=local-dynamic)
   else()
@@ -409,6 +416,9 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel")
   if(MI_OVERRIDE)
     list(APPEND mi_cflags -fno-builtin-malloc)
   endif()
+endif()
+
+if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
   if(MI_OPT_ARCH)
     if(MI_ARCH STREQUAL "x64")
       set(MI_OPT_ARCH_FLAGS "-march=haswell;-mavx2;-mtune=native")    # fast bit scan (since 2013)
@@ -420,7 +430,7 @@ endif()
 
 if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914) # vs2017+
   list(APPEND mi_cflags /Zc:__cplusplus)
-  if(MI_OPT_ARCH)
+  if(MI_OPT_ARCH AND NOT MI_CLANG_CL)
     if(MI_ARCH STREQUAL "x64")
       set(MI_OPT_ARCH_FLAGS "/arch:AVX2")
     elseif(MI_ARCH STREQUAL "arm64")
