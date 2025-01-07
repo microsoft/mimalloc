@@ -1420,9 +1420,16 @@ void mi_bbitmap_unsafe_setN(mi_bbitmap_t* bbitmap, size_t idx, size_t n) {
 
 
 /* --------------------------------------------------------------------------------
- binned bitmap chunkmap
+ binned bitmap used to track free slices
 -------------------------------------------------------------------------------- */
 
+// Assign a specific size bin to a chunk
+static void mi_bbitmap_set_chunk_bin(mi_bbitmap_t* bbitmap, size_t chunk_idx, mi_bbin_t bin) {
+  mi_assert_internal(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
+  mi_atomic_store_release(&bbitmap->chunk_bins[chunk_idx], (uint8_t)bin);
+}
+
+// Track the index of the highest chunk that is accessed.
 static void mi_bbitmap_chunkmap_set_max(mi_bbitmap_t* bbitmap, size_t chunk_idx) {
   size_t oldmax = mi_atomic_load_relaxed(&bbitmap->chunk_max_accessed);
   if mi_unlikely(chunk_idx > oldmax) {
@@ -1430,12 +1437,13 @@ static void mi_bbitmap_chunkmap_set_max(mi_bbitmap_t* bbitmap, size_t chunk_idx)
   }
 }
 
+// Set a bit in the chunkmap
 static void mi_bbitmap_chunkmap_set(mi_bbitmap_t* bbitmap, size_t chunk_idx, bool check_all_set) {
   mi_assert(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
   if (check_all_set) {
     if (mi_bchunk_all_are_set_relaxed(&bbitmap->chunks[chunk_idx])) {
       // all slices are free in this chunk: return back to the NONE bin
-      mi_atomic_store_release(&bbitmap->chunk_bins[chunk_idx], MI_BBIN_NONE);
+      mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx, MI_BBIN_NONE);
     }
   }
   mi_bchunk_set(&bbitmap->chunkmap, chunk_idx, NULL);
@@ -1449,19 +1457,13 @@ static bool mi_bbitmap_chunkmap_try_clear(mi_bbitmap_t* bbitmap, size_t chunk_id
   // clear the chunkmap bit
   mi_bchunk_clear(&bbitmap->chunkmap, chunk_idx, NULL);
   // .. but a concurrent set may have happened in between our all-clear test and the clearing of the
-  // bit in the mask. We check again to catch this situation.
+  // bit in the mask. We check again to catch this situation. (note: mi_bchunk_clear must be acq-rel)
   if (!mi_bchunk_all_are_clear_relaxed(&bbitmap->chunks[chunk_idx])) {
     mi_bchunk_set(&bbitmap->chunkmap, chunk_idx, NULL);
     return false;
   }
   mi_bbitmap_chunkmap_set_max(bbitmap, chunk_idx);
   return true;
-}
-
-// Assign from the NONE bin to a specific size bin
-static void mi_bbitmap_set_chunk_bin(mi_bbitmap_t* bbitmap, size_t chunk_idx, mi_bbin_t bin) {
-  mi_assert_internal(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
-  mi_atomic_store_release(&bbitmap->chunk_bins[chunk_idx], (uint8_t)bin);
 }
 
 
