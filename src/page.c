@@ -780,7 +780,6 @@ mi_page_kind_t mi_page_kind_from_size(size_t block_size)
   return kind;
 }
 
-void mi_allocation_stats_large_bin_increment(size_t block_size);
 static mi_page_t* mi_find_free_page_from_large_bin(mi_heap_t* heap, mi_page_queue_t* pq);
 
 // Find a page with free blocks of `page->block_size`.
@@ -854,7 +853,6 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
       // Try using a page from a large bind (the next size bin) before allocating a new page
       page = mi_find_free_page_from_large_bin(heap, pq);
       if (page != NULL) {
-        mi_allocation_stats_large_bin_increment(pq->block_size);
         return page;
       }
     }
