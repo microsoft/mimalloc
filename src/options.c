@@ -144,7 +144,7 @@ static mi_option_desc_t options[_mi_option_last] =
 #else
   { 1, UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
 #endif
-  { 0,   UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
+  { 2500,UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
   { 0,   UNINIT, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.
   { 0,   UNINIT, MI_OPTION_LEGACY(disallow_os_alloc,limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)
   { 100, UNINIT, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose
@@ -169,7 +169,7 @@ static mi_option_desc_t options[_mi_option_last] =
          UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)
   { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
   { 0,   UNINIT, MI_OPTION(target_segments_per_thread) }, // abandon segments beyond this point, or 0 to disable.
-  { 1,   UNINIT, MI_OPTION_LEGACY(reclaim_on_free, abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
+  { 0,   UNINIT, MI_OPTION_LEGACY(reclaim_on_free, abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
   { 2,   UNINIT, MI_OPTION(page_full_retain) },
   { 4,   UNINIT, MI_OPTION(page_max_candidates) },
   { 0,   UNINIT, MI_OPTION(max_vabits) },
