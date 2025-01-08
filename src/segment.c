@@ -1044,6 +1044,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t block_size, 
     else {
       // otherwise, mark it back as abandoned
       // todo: reset delayed pages in the segment?
+      max_tries++; // don't count this as a try since it was not suitable
       _mi_arena_segment_mark_abandoned(segment);
     }
   }
