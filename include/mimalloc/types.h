@@ -426,7 +426,7 @@ struct mi_heap_s {
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   size_t                generic_count;                       // how often is mimalloc_generic invoked?
   mi_heap_t*            next;                                // list of heaps per thread
-  long                  full_page_retain;                    // how many full pages can be retained per queue (before abondoning them)
+  long                  page_full_retain;                    // how many full pages can be retained per queue (before abondoning them)
   bool                  allow_page_reclaim;                  // `true` if this heap should not reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this heap can abandon pages to reduce memory footprint
   uint8_t               tag;                                 // custom tag, can be used for separating heaps based on the object types

@@ -680,7 +680,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
   size_t count = 0;
   #endif
   long candidate_limit = 0;          // we reset this on the first candidate to limit the search
-  long full_page_retain = heap->full_page_retain;
+  long page_full_retain = heap->page_full_retain;
   mi_page_t* page_candidate = NULL;  // a page with free space
   mi_page_t* page = pq->first;
 
@@ -703,8 +703,8 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
     // if the page is completely full, move it to the `mi_pages_full`
     // queue so we don't visit long-lived pages too often.
     if (!immediate_available && !mi_page_is_expandable(page)) {
-      full_page_retain--;
-      if (full_page_retain < 0) {
+      page_full_retain--;
+      if (page_full_retain < 0) {
         mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
         mi_page_to_full(page, pq);
       }

@@ -167,7 +167,7 @@ mi_heap_t* mi_heap_get_backing(void) {
 }
 
 // todo: make order of parameters consistent (but would that break compat with CPython?)
-void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint8_t heap_tag, mi_tld_t* tld)
+void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool allow_destroy, uint8_t heap_tag, mi_tld_t* tld)
 {
   mi_assert_internal(heap!=NULL);
   mi_memid_t memid = heap->memid;
@@ -175,17 +175,17 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint
   heap->memid = memid;
   heap->tld        = tld;  // avoid reading the thread-local tld during initialization
   heap->exclusive_arena    = _mi_arena_from_id(arena_id);
-  heap->allow_page_reclaim = !noreclaim;
-  heap->allow_page_abandon = (!noreclaim && mi_option_get(mi_option_page_full_retain) >= 0);
-  heap->full_page_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
+  heap->allow_page_reclaim = (!allow_destroy && mi_option_is_enabled(mi_option_reclaim_on_free));
+  heap->allow_page_abandon = (!allow_destroy && mi_option_get(mi_option_page_full_retain) >= 0);
+  heap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
   heap->tag        = heap_tag;
   if (heap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our heap.
-    // (but abandoning is good in this case)
     heap->allow_page_reclaim = false;
-    // and halve the full page retain (possibly to 0)
-    if (heap->full_page_retain >= 0) {
-      heap->full_page_retain = heap->full_page_retain / 4;
+    // .. but abandoning is good in this case: quarter the full page retain (possibly to 0)
+    // (so blocked threads do not hold on to too much memory)
+    if (heap->page_full_retain >= 0) {
+      heap->page_full_retain = heap->page_full_retain / 4;
     }
   }
 
@@ -236,12 +236,12 @@ mi_decl_nodiscard mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi
 }
 
 mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id) {
-  return mi_heap_new_ex(0 /* default heap tag */, false /* don't allow `mi_heap_destroy` */, arena_id);
+  return mi_heap_new_ex(0 /* default heap tag */, false /* allow destroy? */, arena_id);
 }
 
 mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
   // don't reclaim abandoned memory or otherwise destroy is unsafe
-  return mi_heap_new_ex(0 /* default heap tag */, true /* no reclaim */, _mi_arena_id_none());
+  return mi_heap_new_ex(0 /* default heap tag */, true /* allow destroy? */, _mi_arena_id_none());
 }
 
 bool _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid) {

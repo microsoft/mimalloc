@@ -250,8 +250,8 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noe
 
   // 3. if the page is unmapped, try to reabandon so it can possibly be mapped and found for allocations
   if (!mi_page_is_used_at_frac(page,8) &&  // only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
-    !mi_page_is_abandoned_mapped(page) && page->memid.memkind == MI_MEM_ARENA &&
-    _mi_arenas_page_try_reabandon_to_mapped(page))
+      !mi_page_is_abandoned_mapped(page) && page->memid.memkind == MI_MEM_ARENA &&
+      _mi_arenas_page_try_reabandon_to_mapped(page))
   {
     return;
   }
