@@ -102,6 +102,7 @@ const mi_page_t _mi_page_empty = {
     SQNULL(   192), SQNULL(   224), SQNULL(   256), SQNULL(   320), SQNULL(   384), SQNULL(   448), SQNULL(   512), SQNULL(   640), /* 32 */ \
     SQNULL(   768), SQNULL(   896), SQNULL(  1024) /* 35 */ }
 
+#define MI_SEGMENT_SPAN_QUEUESS_EMPTY  { MI_SEGMENT_SPAN_QUEUES_EMPTY, MI_SEGMENT_SPAN_QUEUES_EMPTY, MI_SEGMENT_SPAN_QUEUES_EMPTY }
 
 // --------------------------------------------------------
 // Statically allocate an empty heap as the initial
@@ -140,7 +141,7 @@ mi_decl_cache_align static const mi_tld_t tld_empty = {
   0,
   false,
   NULL, NULL,
-  { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, &mi_subproc_default, tld_empty_stats }, // segments
+  { MI_SEGMENT_SPAN_QUEUESS_EMPTY, 0, 0, 0, 0, 0, &mi_subproc_default, tld_empty_stats }, // segments
   { MI_STATS_NULL }       // stats
 };
 
@@ -156,7 +157,7 @@ extern mi_heap_t _mi_heap_main;
 static mi_decl_cache_align mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main, & _mi_heap_main,
-  { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, &mi_subproc_default, &tld_main.stats }, // segments
+  { MI_SEGMENT_SPAN_QUEUESS_EMPTY, 0, 0, 0, 0, 0, &mi_subproc_default, &tld_main.stats }, // segments
   { MI_STATS_NULL }       // stats
 };
 

@@ -366,8 +366,13 @@ typedef enum mi_page_kind_e {
                     // used for blocks `> MI_LARGE_OBJ_SIZE_MAX` or an aligment `> MI_BLOCK_ALIGNMENT_MAX`.
 } mi_page_kind_t;
 
+// We bin the segments as well to reduce fragmentation over the long run
+// where some small pages can prevent a large page from fitting
+// (note: this currently matches the pages but this does not have to be (so it's its own separate type))
 typedef enum mi_segment_kind_e {
-  MI_SEGMENT_NORMAL, // MI_SEGMENT_SIZE size with pages inside.
+  MI_SEGMENT_SMALL,  // for small pages and up
+  MI_SEGMENT_MEDIUM, // for medium pages and up
+  MI_SEGMENT_LARGE,  // for large pages and up
   MI_SEGMENT_HUGE,   // segment with just one huge page inside.
 } mi_segment_kind_t;
 
@@ -728,7 +733,7 @@ typedef struct mi_span_queue_s {
 
 // Segments thread local data
 typedef struct mi_segments_tld_s {
-  mi_span_queue_t     spans[MI_SEGMENT_BIN_MAX+1];  // free slice spans inside segments
+  mi_span_queue_t     spans[MI_SEGMENT_HUGE][MI_SEGMENT_BIN_MAX+1];  // free slice spans inside segments per segment_kind up to (but not including) MI_SEGMENT_HUGE.
   size_t              count;        // current number of segments;
   size_t              peak_count;   // peak number of segments
   size_t              current_size; // current size of all segments
