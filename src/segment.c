@@ -1367,6 +1367,7 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
     }
     else {
       // otherwise, push on the visited list so it gets not looked at too quickly again
+      max_tries++; // don't count this as a try since it was not suitable
       mi_segment_try_purge(segment, false /* true force? */); // force purge if needed as we may not visit soon again
       _mi_arena_segment_mark_abandoned(segment);
     }
