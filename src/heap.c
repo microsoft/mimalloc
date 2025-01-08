@@ -177,15 +177,15 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool allow_destroy, 
   heap->exclusive_arena    = _mi_arena_from_id(arena_id);
   heap->allow_page_reclaim = (!allow_destroy && mi_option_is_enabled(mi_option_reclaim_on_free));
   heap->allow_page_abandon = (!allow_destroy && mi_option_get(mi_option_page_full_retain) >= 0);
-  heap->full_page_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
+  heap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
   heap->tag        = heap_tag;
   if (heap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our heap.
     heap->allow_page_reclaim = false;
     // .. but abandoning is good in this case: quarter the full page retain (possibly to 0)
     // (so blocked threads do not hold on to too much memory)
-    if (heap->full_page_retain >= 0) {
-      heap->full_page_retain = heap->full_page_retain / 4;
+    if (heap->page_full_retain >= 0) {
+      heap->page_full_retain = heap->page_full_retain / 4;
     }
   }
 

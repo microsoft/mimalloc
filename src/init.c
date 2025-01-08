@@ -261,7 +261,7 @@ static void mi_heap_main_init(void) {
     _mi_heap_guarded_init(&heap_main);
     heap_main.allow_page_reclaim = mi_option_is_enabled(mi_option_reclaim_on_free);
     heap_main.allow_page_abandon = (mi_option_get(mi_option_page_full_retain) >= 0);
-    heap_main.full_page_retain   = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
+    heap_main.page_full_retain   = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
   }
 }
 
