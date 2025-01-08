@@ -482,9 +482,6 @@
     <ClCompile Include="..\..\src\segment.c" />
     <ClCompile Include="..\..\src\stats.c" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="..\..\include\mimalloc-etw-gen.man" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
