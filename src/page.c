@@ -436,7 +436,7 @@ void _mi_heap_collect_retired(mi_heap_t* heap, bool force) {
   heap->page_retired_max = max;
 }
 
-
+/*
 static void mi_heap_collect_full_pages(mi_heap_t* heap) {
   // note: normally full pages get immediately abandoned and the full queue is always empty
   // this path is only used if abandoning is disabled due to a destroy-able heap or options
@@ -457,15 +457,8 @@ static void mi_heap_collect_full_pages(mi_heap_t* heap) {
     page = next;
   }
 }
+*/
 
-static mi_decl_noinline void mi_heap_generic_collect(mi_heap_t* heap) {
-  // call potential deferred free routines
-  _mi_deferred_free(heap, false);
-  // collect retired pages
-  _mi_heap_collect_retired(heap, false);
-  // collect full pages that had concurrent free's
-  mi_heap_collect_full_pages(heap);
-}
 
 /* -----------------------------------------------------------
   Initialize the initial free list in a page.
@@ -921,14 +914,13 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   // collect every N generic mallocs
   if mi_unlikely(heap->generic_count++ > 10000) {
     heap->generic_count = 0;
-    mi_heap_generic_collect(heap);
+    mi_heap_collect(heap, false /* force? */);
   }
 
   // find (or allocate) a page of the right size
   mi_page_t* page = mi_find_page(heap, size, huge_alignment);
   if mi_unlikely(page == NULL) { // first time out of memory, try to collect and retry the allocation once more
-    mi_heap_generic_collect(heap);
-    mi_heap_collect(heap, true /* force */);
+    mi_heap_collect(heap, true /* force? */);
     page = mi_find_page(heap, size, huge_alignment);
   }
 

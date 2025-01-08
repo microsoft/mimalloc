@@ -123,7 +123,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // collect arenas (this is program wide so don't force purges on abandonment of threads)  
   //mi_atomic_storei64_release(&heap->tld->subproc->purge_expire, 1); 
-  _mi_arenas_collect(collect == MI_FORCE /* force purge? */, true /* visit all? */, heap->tld);
+  _mi_arenas_collect(collect == MI_FORCE /* force purge? */, collect >= MI_FORCE /* visit all? */, heap->tld);
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
