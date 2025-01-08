@@ -221,6 +221,11 @@ bool mi_get_segment_stats(size_t* abandoned, size_t* reclaimed, size_t* reclaim_
     return true;
 }
 
+size_t mi_get_debug_stat_version()
+{
+    return 20250108;
+}
+
 /* -----------------------------------------------------------
   Statistics operations
 ----------------------------------------------------------- */

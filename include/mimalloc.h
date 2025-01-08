@@ -385,6 +385,8 @@ mi_decl_export bool mi_get_segment_stats(size_t* abandoned, size_t* reclaimed, s
   mi_allocation_counter_t* free_space_in_segments, int free_space_in_segments_count,
   mi_allocation_counter_t* allocated_memory, int allocated_memory_count);
 
+mi_decl_export size_t mi_get_debug_stat_version();
+
 
 // -------------------------------------------------------------------------------------------------------
 // "mi" prefixed implementations of various posix, Unix, Windows, and C++ allocation functions.
