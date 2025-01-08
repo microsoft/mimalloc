@@ -105,9 +105,4 @@
       <UniqueIdentifier>{94b40bdc-a741-45dd-81aa-c05fabcd2970}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
-  <ItemGroup>
-    <None Include="..\..\include\mimalloc-etw-gen.man">
-      <Filter>Sources</Filter>
-    </None>
-  </ItemGroup>
 </Project>
