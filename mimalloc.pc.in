@@ -6,6 +6,6 @@ Name: @PROJECT_NAME@
 Description: A compact general purpose allocator with excellent performance
 Version: @PACKAGE_VERSION@
 URL: https://github.com/microsoft/mimalloc/
-Libs: -L${libdir} -l@mi_pc_libname@
+Libs: -L${libdir} -l@mi_libname@
 Libs.private: @mi_pc_libraries@
 Cflags: -I${includedir}

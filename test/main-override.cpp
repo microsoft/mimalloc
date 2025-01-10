@@ -37,9 +37,9 @@ static void test_thread_local();      // issue #944
 static void test_mixed1();             // issue #942
 static void test_stl_allocators();
 
-#if _WIN32
+#if x_WIN32
 #include "main-override-dep.h"
-static void test_dep();               // issue #981: test overriding in another DLL 
+static void test_dep();               // issue #981: test overriding in another DLL
 #else
 static void test_dep() { };
 #endif
@@ -50,7 +50,7 @@ int main() {
   test_mixed1();
 
   test_dep();
-  
+
   //test_std_string();
   //test_thread_local();
   // heap_thread_free_huge();
@@ -59,7 +59,7 @@ int main() {
   heap_no_delete();
   heap_late_free();
   padding_shrink();
-  
+
   tsan_numa_test();
   */
   /*
@@ -112,8 +112,10 @@ static void various_tests() {
   t->~Test();
   delete[] tbuf;
 
+  #if _WIN32
   const char* ptr = ::_Getdays();  // test _base overrid
   free((void*)ptr);
+  #endif
 }
 
 class Static {
@@ -143,7 +145,7 @@ static bool test_stl_allocator1() {
 struct some_struct { int i; int j; double z; };
 
 
-#if _WIN32
+#if x_WIN32
 static void test_dep()
 {
   TestAllocInDll t;
@@ -236,7 +238,7 @@ static void test_mixed0() {
     std::cout << "Running on " << threads.size() << " threads took " << duration
               << std::endl;
 }
-#endif 
+#endif
 
 void asd() {
   void* p = malloc(128);
@@ -401,7 +403,7 @@ static void test_mt_shutdown()
 
 // issue #372
 static void fail_aslr() {
-  size_t sz = (4ULL << 40); // 4TiB
+  size_t sz = (size_t)(4ULL << 40); // 4TiB
   void* p = malloc(sz);
   printf("pointer p: %p: area up to %p\n", p, (uint8_t*)p + sz);
   *(int*)0x5FFFFFFF000 = 0;  // should segfault
