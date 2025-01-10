@@ -231,6 +231,14 @@ The cmake build type is specified when actually building, for example:
 > cmake --build . --config=Release
 ```
 
+You can also install the [LLVM toolset](https://learn.microsoft.com/en-us/cpp/build/clang-support-msbuild?view=msvc-170#install-1) 
+on Windows to build with the `clang-cl` compiler directly:
+
+```
+> cmake ../.. -G "Visual Studio 17 2022" -T ClangCl
+```
+
+
 ## Single source
 
 You can also directly build the single `src/static.c` file as part of your project without
