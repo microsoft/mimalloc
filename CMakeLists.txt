@@ -580,7 +580,15 @@ endif()
 
 # static library
 if (MI_BUILD_STATIC)
+  if(WIN32)
+    # When building both static and shared libraries on Windows, a static library should use a
+    # different output name to avoid the conflict with the import library of a shared one.
+    string(REPLACE "mimalloc" "mimalloc-static" mi_static_libname ${mi_basename})
+  else()
+    set(mi_static_libname "${mi_basename}")
+  endif()
   add_library(mimalloc-static STATIC ${mi_sources})
+  set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_static_libname})
   set_property(TARGET mimalloc-static PROPERTY POSITION_INDEPENDENT_CODE ON)
   target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
   target_compile_options(mimalloc-static PRIVATE ${mi_cflags} ${mi_cflags_static})
@@ -589,15 +597,6 @@ if (MI_BUILD_STATIC)
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${mi_install_incdir}>
   )
-  if(WIN32)
-    # When building both static and shared libraries on Windows, a static library should use a
-    # different output name to avoid the conflict with the import library of a shared one.
-    string(REPLACE "mimalloc" "mimalloc-static" mi_output_name ${mi_basename})
-    set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_output_name})
-  else()
-    set_target_properties(mimalloc-static PROPERTIES OUTPUT_NAME ${mi_basename})
-  endif()
-
   install(TARGETS mimalloc-static EXPORT mimalloc DESTINATION ${mi_install_objdir} LIBRARY)
   install(EXPORT mimalloc DESTINATION ${mi_install_cmakedir})
 endif()
@@ -640,18 +639,24 @@ if (MI_BUILD_OBJECT)
 endif()
 
 # pkg-config file support
-set(pc_libraries "")
+set(mi_pc_libraries "")
 foreach(item IN LISTS mi_libraries)
   if(item MATCHES " *[-].*")
-    set(pc_libraries "${pc_libraries} ${item}")
+    set(mi_pc_libraries "${mi_pc_libraries} ${item}")
   else()
-    set(pc_libraries "${pc_libraries} -l${item}")
+    set(mi_pc_libraries "${mi_pc_libraries} -l${item}")
   endif()
 endforeach()
 
+if(MI_BUILD_STATIC)  # prefer static linking with pkg-config
+  set(mi_pc_libname "${mi_static_libname}")
+else()
+  set(mi_pc_libname "${mi_basename}")
+endif()
+
 include("cmake/JoinPaths.cmake")
-join_paths(includedir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_INCLUDEDIR}")
-join_paths(libdir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_LIBDIR}")
+join_paths(mi_pc_includedir "\${prefix}" "${CMAKE_INSTALL_INCLUDEDIR}")
+join_paths(mi_pc_libdir "\${prefix}" "${CMAKE_INSTALL_LIBDIR}")
 
 configure_file(mimalloc.pc.in mimalloc.pc @ONLY)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mimalloc.pc"
