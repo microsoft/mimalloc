@@ -99,7 +99,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ENCODE_FREELIST  1
 #endif
 
-// Enable large pages for objects between 64KiB and 256KiB. 
+// Enable large pages for objects between 64KiB and 256KiB.
 // Disabled by default as for many workloads the block sizes above 64 KiB are quite random which can lead to too many partially used large pages.
 #ifndef MI_ENABLE_LARGE_PAGES
 #define MI_ENABLE_LARGE_PAGES  0
@@ -126,7 +126,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ARENA_SLICE_SIZE               (MI_ZU(1) << MI_ARENA_SLICE_SHIFT)  // arena's allocate in slices of 64 KiB
 #define MI_ARENA_SLICE_ALIGN              (MI_ARENA_SLICE_SIZE)
 
-#define MI_ARENA_MIN_OBJ_SLICES           (1)                         
+#define MI_ARENA_MIN_OBJ_SLICES           (1)
 #define MI_ARENA_MAX_OBJ_SLICES           (MI_BCHUNK_BITS)            // 32 MiB (for now, cannot cross chunk boundaries)
 
 #define MI_ARENA_MIN_OBJ_SIZE             (MI_ARENA_MIN_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
@@ -147,7 +147,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_MAX_ALLOC_SIZE        PTRDIFF_MAX
 
 // Minimal commit for a page on-demand commit (should be >= OS page size)
-#define MI_PAGE_MIN_COMMIT_SIZE  MI_ARENA_SLICE_SIZE // (4*MI_KiB) 
+#define MI_PAGE_MIN_COMMIT_SIZE  MI_ARENA_SLICE_SIZE // (4*MI_KiB)
 
 // ------------------------------------------------------
 // Arena's are large reserved areas of memory allocated from
