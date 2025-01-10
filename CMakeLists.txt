@@ -35,6 +35,10 @@ option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead
 option(MI_NO_THP            "Disable transparent huge pages support on Linux/Android for the mimalloc process only" OFF)
 option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
 
+# negated options for vcpkg features
+option(MI_NO_USE_CXX        "Use plain C compilation (has priority over MI_USE_CXX)" OFF)
+option(MI_NO_OPT_ARCH       "Do not use architecture specific optimizations (like '-march=armv8.1-a' for example) (has priority over MI_OPT_ARCH)" OFF)
+
 # deprecated options
 option(MI_WIN_USE_FLS       "Use Fiber local storage on Windows to detect thread termination (deprecated)" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
@@ -120,6 +124,15 @@ endif()
 if(CMAKE_C_COMPILER_ID MATCHES "Intel")
     list(APPEND mi_cflags -Wall)
 endif()
+
+# negative overrides (mainly to support vcpkg features)
+if(MI_NO_USE_CXX) 
+  set(MI_USE_CXX "OFF")
+endif()
+if(MI_NO_OPT_ARCH)
+  set(MI_OPT_ARCH "OFF")
+endif()
+
 
 if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
