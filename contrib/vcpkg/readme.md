@@ -7,12 +7,14 @@ your own variant.
 For example, you can edit the [`portfile.cmake`](portfile.cmake) 
 to check out a specific commit, version, or branch of mimalloc, or set further options. 
 You can install such custom port as:
+
 ```sh
-$ vcpkg install mimalloc --overlay-ports=./contrib/vcpkg
+$ vcpkg install mimalloc[override] --recurse --overlay-ports=./contrib/vcpkg
 ```
 
 This will also show the correct sha512 hash if you use a custom version.
-See the vcpkg [documentation](https://learn.microsoft.com/en-us/vcpkg/produce/update-package-version) for more information.
+Another way is to refer to the overlay from the [vcpkg-configuration.json](https://learn.microsoft.com/en-us/vcpkg/reference/vcpkg-configuration-json) file.
+See also the vcpkg [documentation](https://learn.microsoft.com/en-us/vcpkg/produce/update-package-version) for more information.
 
 
 # Using mimalloc from vcpkg
@@ -24,6 +26,8 @@ you can use mimalloc from the `CMakeLists.txt` as:
 find_package(mimalloc CONFIG REQUIRED)
 target_link_libraries(main PRIVATE mimalloc)
 ```
+
+See [`test/CMakeLists.txt](../../test/CMakeLists.txt) for more examples.
 
 
 # Acknowledgements

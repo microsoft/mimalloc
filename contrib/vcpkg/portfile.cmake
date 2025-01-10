@@ -2,14 +2,14 @@ vcpkg_from_github(
   OUT_SOURCE_PATH SOURCE_PATH
   REPO microsoft/mimalloc
   HEAD_REF master
-  
+
   # The "REF" can be a commit hash, branch name (dev2), or a version (v2.2.1).
   # REF "v${VERSION}"
-  REF 3f91c9f937d9a7b26c130393925e7364a26c7880
+  REF be05b232e8a51e076aae6d8f4a5c3049ce51cb01
 
-  # The sha512 is the hash of the tar.gz bundle. 
-  # (To get the sha512, run `./vcpkg install mimalloc --overlay-ports=<dir of this file>` and copy the sha from the error message.)
-  SHA512 bb29283e95786c064ce6fa5a36488dafa85f7e979afe3d8fc1361997c978d13557ed27904dda9b8d29c576ad32d7dff5c674dc60c7a5891224e3f1f56bbae73c
+  # The sha512 is the hash of the tar.gz bundle.
+  # (To get the sha512, run `vcpkg install mimalloc[override] --overlay-ports=<dir of this file>` and copy the sha from the error message.)
+  SHA512 24f640db050d6263e557fe9d024e6c0435762118605c0d04801efbcb32e96382b0b995000715fc0c2dcd67c67825a100a6690ecf0ef097b0a3ae107a82d74f7d
 )
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
@@ -19,7 +19,7 @@ vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
     secure      MI_SECURE
     override    MI_OVERRIDE
     xmalloc     MI_XMALLOC
-    asm         MI_SEE_ASM    
+    asm         MI_SEE_ASM
 )
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" MI_BUILD_STATIC)
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" MI_BUILD_SHARED)

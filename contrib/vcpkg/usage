@@ -15,7 +15,6 @@ And use mimalloc in your sources as:
     return 0;
   }
 
-When dynamically overriding on Windows, ensure `mimalloc.dll` is linked
-through some call to the mimalloc API, e.g. `mi_version()`, and that 
-the `mimalloc-redirect.dll` is in the same directory.
+When dynamically overriding on Windows, ensure `mimalloc.dll` is linked through some call to
+mimalloc (e.g. `mi_version()`), and that the `mimalloc-redirect.dll` is in the same directory.
 See https://github.com/microsoft/mimalloc/blob/dev/bin/readme.md for detailed information.
