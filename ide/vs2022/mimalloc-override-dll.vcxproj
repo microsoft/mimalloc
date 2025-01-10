@@ -180,6 +180,7 @@
       </ModuleDefinitionFile>
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect32.dll" "$(OutputPath)"</Command>
@@ -208,6 +209,7 @@
       </ModuleDefinitionFile>
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect.dll" "$(OutputPath)"</Command>
@@ -236,6 +238,7 @@
       </ModuleDefinitionFile>
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect-arm64.dll" "$(OutputPath)"</Command>
@@ -264,6 +267,7 @@
       </ModuleDefinitionFile>
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect-arm64ec.dll" "$(OutputPath)"</Command>
@@ -296,6 +300,7 @@
       </ModuleDefinitionFile>
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect32.dll" "$(OutputPath)"</Command>
@@ -328,6 +333,7 @@
       </ModuleDefinitionFile>
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect.dll" "$(OutputPath)"</Command>
@@ -361,6 +367,7 @@
       </ModuleDefinitionFile>
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect-arm64.dll" "$(OutputPath)"</Command>
@@ -394,6 +401,7 @@
       </ModuleDefinitionFile>
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect-arm64ec.dll" "$(OutputPath)"</Command>

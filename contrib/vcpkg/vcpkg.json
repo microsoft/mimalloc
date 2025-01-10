@@ -1,0 +1,36 @@
+{
+  "name": "mimalloc",
+  "version": "1.9.2",
+  "port-version": 2,
+  "description": "Compact general purpose allocator with excellent performance",
+  "homepage": "https://github.com/microsoft/mimalloc",
+  "license": "MIT",
+  "supports": "!uwp",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ],
+  "features": {
+    "c": {
+      "description": "Use C11 compilation (this can still override new/delete)"
+    },    
+    "override": {
+      "description": "Override the standard malloc/free interface"
+    },
+    "secure": {
+      "description": "Use full security mitigations (like guard pages and randomization)"
+    },
+    "xmalloc": {
+      "description": "If out-of-memory, call abort() instead of returning NULL"
+    },
+    "asm": {
+      "description": "Generate assembly files"
+    }   
+  }
+}
