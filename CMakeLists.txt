@@ -385,7 +385,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU" AND NOT MI_CLANG_CL)
   endif()
   if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
     list(APPEND mi_cflags -Wno-static-in-inline)
-  endif()  
+  endif()
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "Intel")
@@ -422,7 +422,7 @@ if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
   list(APPEND mi_cflags /Zc:__cplusplus)
   if(MI_OPT_ARCH AND NOT MI_CLANG_CL)
     if(MI_ARCH STREQUAL "arm64")
-      set(MI_OPT_ARCH_FLAGS "/arch:armv8.1")           # fast atomics      
+      set(MI_OPT_ARCH_FLAGS "/arch:armv8.1")           # fast atomics
     endif()
   endif()
 endif()
@@ -479,8 +479,7 @@ endif()
 # -----------------------------------------------------------------------------
 
 # dynamic/shared library and symlinks always go to /usr/local/lib equivalent
-set(mi_install_libdir       "${CMAKE_INSTALL_LIBDIR}")
-set(mi_install_bindir       "${CMAKE_INSTALL_BINDIR}")
+# we use ${CMAKE_INSTALL_BINDIR} and ${CMAKE_INSTALL_LIBDIR}.
 
 # static libraries and object files, includes, and cmake config files
 # are either installed at top level, or use versioned directories for side-by-side installation (default)
@@ -572,10 +571,10 @@ if(MI_BUILD_SHARED)
     add_custom_command(TARGET mimalloc POST_BUILD
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll" $<TARGET_FILE_DIR:mimalloc>
       COMMENT "Copy mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll to output directory")
-    install(FILES "$<TARGET_FILE_DIR:mimalloc>/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll" DESTINATION ${mi_install_bindir})
+    install(FILES "$<TARGET_FILE_DIR:mimalloc>/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll" DESTINATION ${CMAKE_INSTALL_BINDIR})
   endif()
 
-  install(TARGETS mimalloc EXPORT mimalloc ARCHIVE DESTINATION ${mi_install_libdir} RUNTIME DESTINATION ${mi_install_bindir} LIBRARY DESTINATION ${mi_install_libdir})
+  install(TARGETS mimalloc EXPORT mimalloc ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(EXPORT mimalloc DESTINATION ${mi_install_cmakedir})
 endif()
 
