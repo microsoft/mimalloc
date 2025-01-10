@@ -28,7 +28,7 @@ target_link_libraries(main PRIVATE mimalloc)
 
 # Acknowledgements
 
-The original port for vckpg was contributed by various people, including: @vicroms, @myd7349, @PhoubeHui, @LilyWangL,
+The original port for vckpg was contributed by many people, including: @vicroms, @myd7349, @PhoubeHui, @LilyWangL,
 @JonLiu1993, @RT2Code, Remy Tassoux, @wangao, @BillyONeal, @jiayuehua, @dg0yt, @gerar-ryan-immersaview, @nickdademo, 
 and @jimwang118 -- Thank you so much!
 

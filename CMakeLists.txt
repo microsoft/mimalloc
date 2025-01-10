@@ -634,7 +634,7 @@ if (MI_BUILD_OBJECT)
   )
 
   # Copy the generated object file (`static.o`) to the output directory (as `mimalloc.o`)
-  if(WIN32)
+  if(CMAKE_GENERATOR MATCHES "^Visual Studio.*$")
     set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/mimalloc-obj.dir/$<CONFIG>/static${CMAKE_C_OUTPUT_EXTENSION}")
   else()
     set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}")
