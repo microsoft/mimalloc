@@ -19,7 +19,9 @@ endif()
 find_package(mimalloc 1.9 CONFIG REQUIRED)
 message(STATUS "Found mimalloc installed at: ${MIMALLOC_LIBRARY_DIR} (${MIMALLOC_VERSION_DIR})")
 
-# overriding with a dynamic library
+
+# link with a dynamic shared library
+# use `LD_PRELOAD` to actually override malloc/free at runtime with mimalloc
 add_executable(dynamic-override  main-override.c)
 target_link_libraries(dynamic-override PUBLIC mimalloc)
 
