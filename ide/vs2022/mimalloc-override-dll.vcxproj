@@ -181,6 +181,7 @@
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
+      <ProgramDatabaseFile>$(OutDir)$(TargetName).dll.pdb</ProgramDatabaseFile>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect32.dll" "$(OutputPath)"</Command>
@@ -210,6 +211,7 @@
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
+      <ProgramDatabaseFile>$(OutDir)$(TargetName).dll.pdb</ProgramDatabaseFile>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect.dll" "$(OutputPath)"</Command>
@@ -239,6 +241,7 @@
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
+      <ProgramDatabaseFile>$(OutDir)$(TargetName).dll.pdb</ProgramDatabaseFile>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect-arm64.dll" "$(OutputPath)"</Command>
@@ -268,6 +271,7 @@
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
+      <ProgramDatabaseFile>$(OutDir)$(TargetName).dll.pdb</ProgramDatabaseFile>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect-arm64ec.dll" "$(OutputPath)"</Command>
@@ -301,6 +305,7 @@
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
+      <ProgramDatabaseFile>$(OutDir)$(TargetName).dll.pdb</ProgramDatabaseFile>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect32.dll" "$(OutputPath)"</Command>
@@ -334,6 +339,7 @@
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
+      <ProgramDatabaseFile>$(OutDir)$(TargetName).dll.pdb</ProgramDatabaseFile>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect.dll" "$(OutputPath)"</Command>
@@ -368,6 +374,7 @@
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
+      <ProgramDatabaseFile>$(OutDir)$(TargetName).dll.pdb</ProgramDatabaseFile>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect-arm64.dll" "$(OutputPath)"</Command>
@@ -402,6 +409,7 @@
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <ImportLibrary>$(OutDir)$(TargetName).dll.lib</ImportLibrary>
+      <ProgramDatabaseFile>$(OutDir)$(TargetName).dll.pdb</ProgramDatabaseFile>
     </Link>
     <PostBuildEvent>
       <Command>COPY /Y "$(ProjectDir)..\..\bin\mimalloc-redirect-arm64ec.dll" "$(OutputPath)"</Command>
