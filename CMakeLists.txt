@@ -126,7 +126,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "Intel")
 endif()
 
 # negative overrides (mainly to support vcpkg features)
-if(MI_NO_USE_CXX) 
+if(MI_NO_USE_CXX)
   set(MI_USE_CXX "OFF")
 endif()
 if(MI_NO_OPT_ARCH)
@@ -568,10 +568,13 @@ if(MI_BUILD_SHARED)
   install(EXPORT mimalloc DESTINATION ${mi_install_cmakedir})
 
   if(WIN32)
-    # On windows, the import library name for the dll would clash with the static mimalloc.lib
-    # so we postfix the dll import library with `.dll.lib`.
+    # On windows, the import library name for the dll would clash with the static mimalloc.lib library
+    # so we postfix the dll import library with `.dll.lib` (and also the .pdb debug file)
     set_property(TARGET mimalloc PROPERTY ARCHIVE_OUTPUT_NAME "${mi_libname}.dll" )
     install(FILES "$<TARGET_FILE_DIR:mimalloc>/${mi_libname}.dll.lib" DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    set_property(TARGET mimalloc PROPERTY PDB_NAME "${mi_libname}.dll")
+    # don't try to install the pdb since it may not be generated depending on the configuration
+    # install(FILES "$<TARGET_FILE_DIR:mimalloc>/${mi_libname}.dll.pdb" DESTINATION ${CMAKE_INSTALL_LIBDIR})
   endif()
   if(WIN32 AND MI_WIN_REDIRECT)
     # On windows, link and copy the mimalloc redirection dll too.
