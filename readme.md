@@ -165,8 +165,8 @@ mimalloc is used in various large scale low-latency services and programs, for e
 ## Windows
 
 Open `ide/vs2022/mimalloc.sln` in Visual Studio 2022 and build.
-The `mimalloc` project builds a static library (in `out/msvc-x64`), while the
-`mimalloc-override` project builds a DLL for overriding malloc
+The `mimalloc-lib` project builds a static library (in `out/msvc-x64`), while the
+`mimalloc-override-dll` project builds a DLL for overriding malloc
 in the entire program.
 
 ## Linux, macOS, BSD, etc.
@@ -475,16 +475,15 @@ the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-i
 
 # Windows Override
 
-<span id="override_on_windows">Dynamically overriding on mimalloc on Windows</span> 
-is robust and has the particular advantage to be able to redirect all malloc/free calls 
-that go through the (dynamic) C runtime allocator, including those from other DLL's or 
-libraries. As it intercepts all allocation calls on a low level, it can be used reliably 
-on large programs that include other 3rd party components.
+<span id="override_on_windows">We use a separate redirection DLL to override mimalloc on Windows</span> 
+such that we redirect all malloc/free calls that go through the (dynamic) C runtime allocator, 
+including those from other DLL's or libraries. As it intercepts all allocation calls on a low level, 
+it can be used reliably on large programs that include other 3rd party components.
 There are four requirements to make the overriding work well:
 
 1. Use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
 
-2. Link your program explicitly with the `mimalloc.lib` export library for the `mimalloc.dll`.
+2. Link your program explicitly with the `mimalloc.dll.lib` export library for the `mimalloc.dll`.
    (which must be compiled with `-DMI_OVERRIDE=ON`, which is the default though).
    To ensure the `mimalloc.dll` is actually loaded at run-time it is easiest 
    to insert some call to the mimalloc API in the `main` function, like `mi_version()`
@@ -501,9 +500,8 @@ There are four requirements to make the overriding work well:
    list of the final executable (so it can intercept all potential allocations).
    You can use `minject -l <exe>` to check this if needed.
 
-For best performance on Windows with C++, it
-is also recommended to also override the `new`/`delete` operations (by including
-[`mimalloc-new-delete.h`](include/mimalloc-new-delete.h)
+For best performance on Windows with C++, it is also recommended to also override 
+the `new`/`delete` operations (by including [`mimalloc-new-delete.h`](include/mimalloc-new-delete.h)
 a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
