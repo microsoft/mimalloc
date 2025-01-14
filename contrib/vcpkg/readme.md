@@ -9,7 +9,7 @@ to check out a specific commit, version, or branch of mimalloc, or set further o
 You can install such custom port as:
 
 ```sh
-$ vcpkg install mimalloc[override] --recurse --overlay-ports=./contrib/vcpkg
+$ vcpkg install "mimalloc[override]" --recurse --overlay-ports=./contrib/vcpkg
 ```
 
 This will also show the correct sha512 hash if you use a custom version.
