@@ -5,11 +5,11 @@ vcpkg_from_github(
 
   # The "REF" can be a commit hash, branch name (dev2), or a version (v2.2.1).
   # REF "v${VERSION}"
-  REF be05b232e8a51e076aae6d8f4a5c3049ce51cb01
+  REF 866ce5b89db1dbc3e66bbf89041291fd16329518
 
   # The sha512 is the hash of the tar.gz bundle.
   # (To get the sha512, run `vcpkg install mimalloc[override] --overlay-ports=<dir of this file>` and copy the sha from the error message.)
-  SHA512 24f640db050d6263e557fe9d024e6c0435762118605c0d04801efbcb32e96382b0b995000715fc0c2dcd67c67825a100a6690ecf0ef097b0a3ae107a82d74f7d
+  SHA512 0b0e5ff823c49b9534b8c32800679806c5d7c29020af058da043c3e6e36ae3c32a1cdd5a21ece97dd60bc7dd4703967f683beac435dbb8514638a6cc55e5dea8
 )
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
