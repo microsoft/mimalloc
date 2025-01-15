@@ -25,6 +25,23 @@ There are four requirements to make the overriding work well:
    list of the final executable (so it can intercept all potential allocations).
    You can use `minject -l <exe>` to check this if needed.
 
+```cpp
+┌──────────────┐                                                    
+│ Your Program │                                                    
+└────┬─────────┘                                                    
+     │                                                              
+     │ mi_version()  ┌───────────────┐     ┌───────────────────────┐
+     ├──────────────►│ mimalloc.dll  ├────►│ mimalloc-redirect.dll │
+     │               └──────┬────────┘     └───────────────────────┘
+     │                      ▼                                       
+     │ malloc() etc. ┌──────────────┐                               
+     ├──────────────►│ ucrtbase.dll │                               
+     │               └──────────────┘                               
+     │                                                              
+     │                                                              
+     └──────────────► ...                                           
+```
+
 For best performance on Windows with C++, it
 is also recommended to also override the `new`/`delete` operations (by including
 [`mimalloc-new-delete.h`](../include/mimalloc-new-delete.h) 
