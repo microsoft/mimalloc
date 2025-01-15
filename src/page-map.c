@@ -296,12 +296,16 @@ void _mi_page_map_register(mi_page_t* page) {
 
 void _mi_page_map_unregister(mi_page_t* page) {
   mi_assert_internal(_mi_page_map != NULL);
+  mi_assert_internal(page != NULL);
+  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_page_map != NULL);  
+  if mi_unlikely(_mi_page_map == NULL) return;
   // get index and count
   size_t slice_count;
   size_t sub_idx;
   const size_t idx = mi_page_map_get_idx(page, &sub_idx, &slice_count);
   // unset the offsets
-  mi_page_map_set_range(page, idx, sub_idx, slice_count);
+  mi_page_map_set_range(NULL, idx, sub_idx, slice_count);
 }
 
 void _mi_page_map_unregister_range(void* start, size_t size) {
