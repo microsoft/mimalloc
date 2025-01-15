@@ -315,10 +315,10 @@ void _mi_page_map_unregister_range(void* start, size_t size) {
   mi_page_map_set_range(NULL, idx, sub_idx, slice_count);  // todo: avoid committing if not already committed?
 }
 
-
+// Return the empty page for the NULL pointer to match the behaviour of `_mi_ptr_page`
 mi_page_t* _mi_safe_ptr_page(const void* p) {
   if mi_unlikely(p >= mi_page_map_max_address) return NULL;
-  if (p == NULL) return (mi_page_t*)&_mi_page_empty; // to match mi_free expectation
+  if (p == NULL) return (mi_page_t*)&_mi_page_empty; // to match `_mi_ptr_page` (see `mi_free` as well)
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p,&sub_idx);
   if mi_unlikely(!mi_page_map_is_committed(idx,NULL)) return NULL;
@@ -328,7 +328,7 @@ mi_page_t* _mi_safe_ptr_page(const void* p) {
 }
 
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept {
-  return (_mi_safe_ptr_page(p) != NULL);
+  return (p != NULL && _mi_safe_ptr_page(p) != NULL);
 }
 
 #endif
