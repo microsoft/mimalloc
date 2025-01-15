@@ -305,7 +305,7 @@ void _mi_page_map_unregister(mi_page_t* page) {
   size_t sub_idx;
   const size_t idx = mi_page_map_get_idx(page, &sub_idx, &slice_count);
   // unset the offsets
-  mi_page_map_set_range(NULL, idx, sub_idx, slice_count);
+  // mi_page_map_set_range(NULL, idx, sub_idx, slice_count);
 }
 
 void _mi_page_map_unregister_range(void* start, size_t size) {
@@ -318,6 +318,7 @@ void _mi_page_map_unregister_range(void* start, size_t size) {
 
 mi_page_t* _mi_safe_ptr_page(const void* p) {
   if mi_unlikely(p >= mi_page_map_max_address) return NULL;
+  if (p == NULL) return (mi_page_t*)&_mi_page_empty; // to match mi_free expectation
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p,&sub_idx);
   if mi_unlikely(!mi_page_map_is_committed(idx,NULL)) return NULL;
