@@ -834,7 +834,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 #endif
 
 bool _mi_prim_thread_is_in_threadpool(void) {
-  #if (MI_ARCH_X64 || MI_ARCH_X86)
+  #if (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64)
   if (win_major_version >= 6) {
     // check if this thread belongs to a windows threadpool
     // see: <https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/teb/index.htm>
