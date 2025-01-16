@@ -25,7 +25,7 @@ There are four requirements to make the overriding work well:
    list of the final executable (so it can intercept all potential allocations).
    You can use `minject -l <exe>` to check this if needed.
 
-```cpp
+```csharp
 ┌──────────────┐                                                    
 │ Your Program │                                                    
 └────┬─────────┘                                                    
