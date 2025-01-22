@@ -205,9 +205,8 @@ static inline size_t mi_ctz(size_t x) {
   #elif mi_has_builtinz(ctz)
     return (x!=0 ? (size_t)mi_builtinz(ctz)(x) : MI_SIZE_BITS);
   #elif defined(__GNUC__) && (MI_ARCH_X64 || MI_ARCH_X86)
-    if (x==0) return MI_SIZE_BITS;
-    size_t r;
-    __asm ("bsf\t%1, %0" : "=r"(r) : "r"(x) : "cc");
+    size_t r = MI_SIZE_BITS;  // bsf leaves destination unmodified if the argument is 0 (see <https://github.com/llvm/llvm-project/pull/102885>)
+    __asm ("bsf\t%1, %0" : "+r"(r) : "r"(x) : "cc");
     return r;
   #elif MI_HAS_FAST_POPCOUNT
     return (x!=0 ? (mi_popcount(x^(x-1))-1) : MI_SIZE_BITS);
