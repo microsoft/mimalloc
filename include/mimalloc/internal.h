@@ -789,7 +789,7 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
 }
 
 static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
-  mi_assert_internal(!mi_page_is_in_full(page));
+  // mi_assert_internal(!mi_page_is_in_full(page));  // can happen when destroying pages on heap_destroy
   // only the aligned flag is retained (and in particular clear the abandoned-mapped flag).
   const mi_page_flags_t flags = (mi_page_has_aligned(page) ? MI_PAGE_HAS_ALIGNED : 0);
   const mi_threadid_t tid = (heap == NULL ? 0 : heap->tld->thread_id) | flags;
