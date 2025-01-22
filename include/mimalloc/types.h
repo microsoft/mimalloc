@@ -242,16 +242,18 @@ typedef struct mi_block_s {
 } mi_block_t;
 
 
-// The page flags are put in the bottom 3 bits of the thread_id (for a fast test in `mi_free`)
+// The page flags are put in the bottom 2 bits of the thread_id (for a fast test in `mi_free`)
 // `has_aligned` is true if the page has pointers at an offset in a block (so we unalign before free-ing)
 // `in_full_queue` is true if the page is full and resides in the full queue (so we move it to a regular queue on free-ing)
-// `is_abandoned_mapped` is true if the page is abandoned (thread_id==0) and it is in an arena so can be quickly found for reuse ("mapped")
 #define MI_PAGE_IN_FULL_QUEUE         MI_ZU(0x01)
 #define MI_PAGE_HAS_ALIGNED           MI_ZU(0x02)
-#define MI_PAGE_IS_ABANDONED_MAPPED   MI_ZU(0x04)   // must be highest flag (see `internal.h:mi_page_is_abandoned_mapped`)
-#define MI_PAGE_FLAG_MASK             MI_ZU(0x07)
+#define MI_PAGE_FLAG_MASK             MI_ZU(0x03)
 typedef size_t mi_page_flags_t;
 
+// There are two special threadid's: 0 for abandoned threads, and 4 for abandoned & mapped threads -- 
+// abandoned-mapped pages are abandoned but also mapped in an arena so can be quickly found for reuse.
+#define MI_THREADID_ABANDONED         MI_ZU(0)
+#define MI_THREADID_ABANDONED_MAPPED  (MI_PAGE_FLAG_MASK + 1)
 
 // Thread free list.
 // Points to a list of blocks that are freed by other threads.
@@ -292,7 +294,7 @@ typedef uint8_t mi_heaptag_t;
 // - Using `uint16_t` does not seem to slow things down
 
 typedef struct mi_page_s {
-  _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `heap->thread_id (or 0 if abandoned) | page_flags`)
+  _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `heap->thread_id (or 0 or 4 if abandoned) | page_flags`)
 
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
   uint16_t                  used;              // number of blocks in use (including blocks in `thread_free`)
