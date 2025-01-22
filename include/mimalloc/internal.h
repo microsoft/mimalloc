@@ -597,19 +597,6 @@ static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
   return page->heap;
 }
 
-static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
-  if (heap != NULL) {
-    page->heap = heap;
-    page->heap_tag = heap->tag;
-    mi_atomic_store_release(&page->xthread_id, heap->tld->thread_id);
-  }
-  else {
-    page->heap = NULL;
-    mi_atomic_store_release(&page->xthread_id,0);
-  }
-}
-
-
 // Thread free flag helpers
 static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
   return (mi_block_t*)(tf & ~1);
@@ -700,11 +687,11 @@ static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
 
 static inline bool mi_page_is_abandoned(const mi_page_t* page) {
   // note: the xheap field of an abandoned heap is set to the subproc (for fast reclaim-on-free)
-  return (mi_page_xthread_id(page) <= MI_PAGE_IS_ABANDONED_MAPPED);
+  return (mi_page_thread_id(page) == 0);
 }
 
 static inline bool mi_page_is_abandoned_mapped(const mi_page_t* page) {
-  return (mi_page_xthread_id(page) == MI_PAGE_IS_ABANDONED_MAPPED);
+  return ((mi_page_xthread_id(page) & ~(MI_PAGE_IS_ABANDONED_MAPPED - 1)) == MI_PAGE_IS_ABANDONED_MAPPED);
 }
 
 static inline void mi_page_set_abandoned_mapped(mi_page_t* page) {
@@ -800,6 +787,22 @@ static inline bool mi_page_has_aligned(const mi_page_t* page) {
 static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
   mi_page_flags_set(page, has_aligned, MI_PAGE_HAS_ALIGNED);
 }
+
+static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
+  mi_assert_internal(!mi_page_is_in_full(page));
+  // only the aligned flag is retained (and in particular clear the abandoned-mapped flag).
+  const mi_page_flags_t flags = (mi_page_has_aligned(page) ? MI_PAGE_HAS_ALIGNED : 0);
+  const mi_threadid_t tid = (heap == NULL ? 0 : heap->tld->thread_id) | flags;
+  if (heap != NULL) {
+    page->heap = heap;
+    page->heap_tag = heap->tag;    
+  }
+  else {
+    page->heap = NULL;
+  }
+  mi_atomic_store_release(&page->xthread_id, tid);
+}
+
 
 /* -------------------------------------------------------------------
   Guarded objects

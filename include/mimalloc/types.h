@@ -248,7 +248,7 @@ typedef struct mi_block_s {
 // `is_abandoned_mapped` is true if the page is abandoned (thread_id==0) and it is in an arena so can be quickly found for reuse ("mapped")
 #define MI_PAGE_IN_FULL_QUEUE         MI_ZU(0x01)
 #define MI_PAGE_HAS_ALIGNED           MI_ZU(0x02)
-#define MI_PAGE_IS_ABANDONED_MAPPED   MI_ZU(0x04)
+#define MI_PAGE_IS_ABANDONED_MAPPED   MI_ZU(0x04)   // must be highest flag (see `internal.h:mi_page_is_abandoned_mapped`)
 #define MI_PAGE_FLAG_MASK             MI_ZU(0x07)
 typedef size_t mi_page_flags_t;
 
