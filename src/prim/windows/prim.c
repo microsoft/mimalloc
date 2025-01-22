@@ -63,7 +63,7 @@ static PGetNumaNodeProcessorMaskEx  pGetNumaNodeProcessorMaskEx = NULL;
 static PGetNumaProcessorNode        pGetNumaProcessorNode = NULL;
 
 // Available after Windows XP
-typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory( PULONGLONG TotalMemoryInKilobytes );
+typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
 
 //---------------------------------------------
 // Enable large page support dynamically (if possible)
