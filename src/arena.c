@@ -1833,9 +1833,15 @@ mi_decl_export bool mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t*
   // find accessed size
   size_t asize;
   // scan the commit map for the highest entry
+  // scan the commit map for the highest entry
   size_t idx;
-  if (mi_bitmap_bsr(arena->slices_committed, &idx)) {
-    asize = (idx + 1)* MI_ARENA_SLICE_SIZE;
+  //if (mi_bitmap_bsr(arena->slices_committed, &idx)) {
+  //  asize = (idx + 1)* MI_ARENA_SLICE_SIZE;
+  //}
+  if (mi_bitmap_bsr(arena->pages, &idx)) {
+    mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, idx);
+    const size_t page_slice_count = page->memid.mem.arena.slice_count;
+    asize = mi_size_of_slices(idx + page_slice_count);
   }
   else {
     asize = mi_arena_info_slices(arena) * MI_ARENA_SLICE_SIZE;
