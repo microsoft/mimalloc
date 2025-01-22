@@ -153,11 +153,11 @@ static inline bool mi_bfield_atomic_setX(_Atomic(mi_bfield_t)*b, size_t* already
   return (old==0);
 }
 
-static inline bool mi_bfield_atomic_clearX(_Atomic(mi_bfield_t)*b, bool* all_clear) {
-  const mi_bfield_t old = mi_atomic_exchange_release(b, mi_bfield_zero());
-  if (all_clear!=NULL) { *all_clear = true; }
-  return (~old==0);
-}
+// static inline bool mi_bfield_atomic_clearX(_Atomic(mi_bfield_t)*b, bool* all_clear) {
+//   const mi_bfield_t old = mi_atomic_exchange_release(b, mi_bfield_zero());
+//   if (all_clear!=NULL) { *all_clear = true; }
+//   return (~old==0);
+// }
 
 // ------- mi_bfield_atomic_try_clear ---------------------------------------
 
@@ -434,12 +434,12 @@ static inline bool mi_bchunk_try_clearNX(mi_bchunk_t* chunk, size_t cidx, size_t
 }
 
 // Clear a full aligned bfield.
-static inline bool mi_bchunk_try_clearX(mi_bchunk_t* chunk, size_t cidx, bool* pmaybe_all_clear) {
-  mi_assert_internal(cidx < MI_BCHUNK_BITS);
-  mi_assert_internal((cidx%MI_BFIELD_BITS) == 0);
-  const size_t i = cidx / MI_BFIELD_BITS;
-  return mi_bfield_atomic_try_clearX(&chunk->bfields[i], pmaybe_all_clear);
-}
+// static inline bool mi_bchunk_try_clearX(mi_bchunk_t* chunk, size_t cidx, bool* pmaybe_all_clear) {
+//   mi_assert_internal(cidx < MI_BCHUNK_BITS);
+//   mi_assert_internal((cidx%MI_BFIELD_BITS) == 0);
+//   const size_t i = cidx / MI_BFIELD_BITS;
+//   return mi_bfield_atomic_try_clearX(&chunk->bfields[i], pmaybe_all_clear);
+// }
 
 // Try to atomically clear a sequence of `n` bits within a chunk.
 // Returns true if all bits transitioned from 1 to 0,
@@ -717,6 +717,7 @@ static inline bool mi_bchunk_try_find_and_clear_8(mi_bchunk_t* chunk, size_t n, 
 // set `*pidx` to its bit index (0 <= *pidx < MI_BCHUNK_BITS) on success.
 // Used to find large size pages in the free blocks.
 // todo: try neon version
+/*
 static mi_decl_noinline  bool mi_bchunk_try_find_and_clearX(mi_bchunk_t* chunk, size_t* pidx) {
   #if MI_OPT_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==512)
   while (true) {
@@ -759,6 +760,7 @@ static inline bool mi_bchunk_try_find_and_clear_X(mi_bchunk_t* chunk, size_t n, 
   mi_assert_internal(n==MI_BFIELD_BITS); MI_UNUSED(n);
   return mi_bchunk_try_find_and_clearX(chunk, pidx);
 }
+*/
 
 // find a sequence of `n` bits in a chunk with `0 < n <= MI_BFIELD_BITS` with all bits set,
 // and try to clear them atomically.
