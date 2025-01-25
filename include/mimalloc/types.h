@@ -24,6 +24,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
 #include "atomic.h"   // _Atomic
+#include "stats.h"
 
 #ifdef _MSC_VER
 #pragma warning(disable:4214) // bitfield is not int
@@ -199,9 +200,6 @@ typedef int32_t  mi_ssize_t;
 #define MI_MEDIUM_OBJ_SIZE_MAX            (MI_MEDIUM_PAGE_SIZE/8)  // 64 KiB
 #define MI_LARGE_OBJ_SIZE_MAX             (MI_LARGE_PAGE_SIZE/4)   // 1 MiB
 #define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)
-
-// Maximum number of size classes. (spaced exponentially in 12.5% increments)
-#define MI_BIN_HUGE  (73U)
 
 #if (MI_LARGE_OBJ_WSIZE_MAX >= 655360)
 #error "mimalloc internal: define more bins"
@@ -552,62 +550,8 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line
 
 // ------------------------------------------------------
 // Statistics
+// declare statistics functions here (not stats.h) to avoid exposing these to library consumers
 // ------------------------------------------------------
-
-#ifndef MI_STAT
-#if (MI_DEBUG>0)
-#define MI_STAT 2
-#else
-#define MI_STAT 0
-#endif
-#endif
-
-typedef struct mi_stat_count_s {
-  int64_t allocated;
-  int64_t freed;
-  int64_t peak;
-  int64_t current;
-} mi_stat_count_t;
-
-typedef struct mi_stat_counter_s {
-  int64_t total;
-  int64_t count;
-} mi_stat_counter_t;
-
-typedef struct mi_stats_s {
-  mi_stat_count_t segments;
-  mi_stat_count_t pages;
-  mi_stat_count_t reserved;
-  mi_stat_count_t committed;
-  mi_stat_count_t reset;
-  mi_stat_count_t purged;
-  mi_stat_count_t page_committed;
-  mi_stat_count_t segments_abandoned;
-  mi_stat_count_t pages_abandoned;
-  mi_stat_count_t threads;
-  mi_stat_count_t normal;
-  mi_stat_count_t huge;
-  mi_stat_count_t giant;
-  mi_stat_count_t malloc;
-  mi_stat_count_t segments_cache;
-  mi_stat_counter_t pages_extended;
-  mi_stat_counter_t mmap_calls;
-  mi_stat_counter_t commit_calls;
-  mi_stat_counter_t reset_calls;
-  mi_stat_counter_t purge_calls;
-  mi_stat_counter_t page_no_retire;
-  mi_stat_counter_t searches;
-  mi_stat_counter_t normal_count;
-  mi_stat_counter_t huge_count;
-  mi_stat_counter_t arena_count;
-  mi_stat_counter_t arena_crossover_count;
-  mi_stat_counter_t arena_rollback_count;
-  mi_stat_counter_t guarded_alloc_count;
-#if MI_STAT>1
-  mi_stat_count_t normal_bins[MI_BIN_HUGE+1];
-#endif
-} mi_stats_t;
-
 
 // add to stat keeping track of the peak
 void _mi_stat_increase(mi_stat_count_t* stat, size_t amount);
@@ -635,7 +579,6 @@ void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 #define mi_heap_stat_counter_increase(heap,stat,amount)  mi_stat_counter_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_increase(heap,stat,amount)  mi_stat_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_decrease(heap,stat,amount)  mi_stat_decrease( (heap)->tld->stats.stat, amount)
-
 
 // ------------------------------------------------------
 // Sub processes do not reclaim or visit segments
