@@ -131,6 +131,9 @@ void       _mi_arena_unsafe_destroy_all(mi_stats_t* stats);
 
 bool       _mi_arena_segment_clear_abandoned(mi_segment_t* segment);
 void       _mi_arena_segment_mark_abandoned(mi_segment_t* segment);
+void       _mi_arena_segment_abandon_begin(mi_segment_t* segment);
+void       _mi_arena_segment_abandon_end(mi_segment_t* segment);
+void       _mi_arena_segment_abandoned_mark_free_page(mi_segment_t* segment, size_t free_space_mask);
 size_t     _mi_arena_segment_abandoned_count(void);
 
 typedef struct mi_arena_field_cursor_s { // abstract

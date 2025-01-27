@@ -38,6 +38,8 @@ typedef uintptr_t mi_block_info_t;
 #define MI_ARENA_MIN_OBJ_SIZE (MI_ARENA_BLOCK_SIZE/2)  // 32MiB
 #define MI_MAX_ARENAS         (112)                    // not more than 126 (since we use 7 bits in the memid and an arena index + 1)
 
+typedef _Atomic(size_t) mi_abandoned_segment_state_t;
+
 // A memory arena descriptor
 typedef struct mi_arena_s {
   mi_arena_id_t id;                       // arena id; 0 for non-specific
@@ -55,7 +57,7 @@ typedef struct mi_arena_s {
   mi_bitmap_field_t* blocks_dirty;        // are the blocks potentially non-zero?
   mi_bitmap_field_t* blocks_committed;    // are the blocks committed? (can be NULL for memory that cannot be decommitted)
   mi_bitmap_field_t* blocks_purge;        // blocks that can be (reset) decommitted. (can be NULL for memory that cannot be (reset) decommitted)
-  mi_bitmap_field_t* blocks_abandoned;    // blocks that start with an abandoned segment. (This crosses API's but it is convenient to have here)
+  mi_abandoned_segment_state_t* abandoned_segments;    // state and free space data of abandoned segment. (This crosses API's but it is convenient to have here)
   mi_bitmap_field_t  blocks_inuse[1];     // in-place bitmap of in-use blocks (of size `field_count`)
   // do not add further fields here as the dirty, committed, purged, and abandoned bitmaps follow the inuse bitmap fields.
 } mi_arena_t;
@@ -764,9 +766,21 @@ size_t _mi_arena_segment_abandoned_count(void) {
   return mi_atomic_load_relaxed(&abandoned_count);
 }
 
+static bool _mi_arena_segment_clear_abandoned_state(mi_abandoned_segment_state_t* abandoned_state)
+{
+  size_t prev_state = mi_atomic_and_acq_rel(abandoned_state, ~MI_FREE_SPACE_MASK_ABANDONED);
+  return (prev_state & MI_FREE_SPACE_MASK_ABANDONED) != 0;
+}
+
+static bool _mi_arena_segment_set_abandoned_state(mi_abandoned_segment_state_t* abandoned_state, size_t free_space_mask)
+{
+  size_t prev_state = mi_atomic_or_acq_rel(abandoned_state, MI_FREE_SPACE_MASK_ABANDONED | free_space_mask);
+  return (prev_state & MI_FREE_SPACE_MASK_ABANDONED) == 0;
+}
+
 // reclaim a specific abandoned segment; `true` on success.
 // sets the thread_id.
-bool _mi_arena_segment_clear_abandoned(mi_segment_t* segment ) 
+bool _mi_arena_segment_clear_abandoned(mi_segment_t* segment)
 {
   if (segment->memid.memkind != MI_MEM_ARENA) {
     // not in an arena, consider it un-abandoned now.
@@ -780,22 +794,21 @@ bool _mi_arena_segment_clear_abandoned(mi_segment_t* segment )
       return false;
     }
   }
-  // arena segment: use the blocks_abandoned bitmap.
+
   size_t arena_idx;
   size_t bitmap_idx;
   mi_arena_memid_indices(segment->memid, &arena_idx, &bitmap_idx);
   mi_assert_internal(arena_idx < MI_MAX_ARENAS);
   mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
   mi_assert_internal(arena != NULL);
-  bool was_marked = _mi_bitmap_unclaim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx);
+
+  bool was_marked = _mi_arena_segment_clear_abandoned_state(&arena->abandoned_segments[bitmap_idx]);
   if (was_marked) { 
     mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == 0);
     mi_atomic_decrement_relaxed(&abandoned_count); 
     mi_atomic_store_release(&segment->thread_id, _mi_thread_id());
   }
-  // mi_assert_internal(was_marked);
   mi_assert_internal(!was_marked || _mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
-  //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
   return was_marked;
 }
 
@@ -816,10 +829,80 @@ void _mi_arena_segment_mark_abandoned(mi_segment_t* segment)
   mi_assert_internal(arena_idx < MI_MAX_ARENAS);
   mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
   mi_assert_internal(arena != NULL);
-  const bool was_unmarked = _mi_bitmap_claim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx, NULL);
-  if (was_unmarked) { mi_atomic_increment_relaxed(&abandoned_count); }
+  const bool was_unmarked = _mi_arena_segment_set_abandoned_state(&arena->abandoned_segments[bitmap_idx], segment->free_space_mask);
   mi_assert_internal(was_unmarked);
+  if (was_unmarked) { mi_atomic_increment_relaxed(&abandoned_count); }
   mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
+}
+
+// starts the abandonment process for a segment
+void _mi_arena_segment_abandon_begin(mi_segment_t* segment)
+{
+  if (segment->memid.memkind != MI_MEM_ARENA) {
+    mi_atomic_store_release(&segment->thread_id, 0);
+    return; // not in an arena
+  }
+
+  size_t arena_idx;
+  size_t bitmap_idx;
+  mi_arena_memid_indices(segment->memid, &arena_idx, &bitmap_idx);
+  mi_assert_internal(arena_idx < MI_MAX_ARENAS);
+  mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
+  mi_assert_internal(arena != NULL);
+
+  // Clear the free space mask in preparation for abandoning the segment
+  mi_atomic_store_relaxed(&arena->abandoned_segments[bitmap_idx], 0);
+  mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
+  // thread_id must be zero'ed after clearing the free space mask in the abandoned state
+  mi_atomic_store_release(&segment->thread_id, 0);
+}
+
+// completes the abandonment process for a segment
+// updates the free space mask and sets its state to abandoned.
+void _mi_arena_segment_abandon_end(mi_segment_t* segment)
+{
+  mi_assert_internal(segment->used == segment->abandoned);
+  if (segment->memid.memkind != MI_MEM_ARENA) {
+    // not in an arena; count it as abandoned and return
+    mi_atomic_increment_relaxed(&abandoned_count);
+    return;
+  }
+
+  size_t arena_idx;
+  size_t bitmap_idx;
+  mi_arena_memid_indices(segment->memid, &arena_idx, &bitmap_idx);
+  mi_assert_internal(arena_idx < MI_MAX_ARENAS);
+  mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
+  mi_assert_internal(arena != NULL);
+
+  const bool was_unmarked = _mi_arena_segment_set_abandoned_state(&arena->abandoned_segments[bitmap_idx], segment->free_space_mask);
+  mi_assert_internal(was_unmarked);
+  if (was_unmarked) { mi_atomic_increment_relaxed(&abandoned_count); }
+  mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
+}
+
+// updates the free space mask for a segment
+void _mi_arena_segment_abandoned_mark_free_page(mi_segment_t* segment, size_t free_space_bit)
+{
+  if (segment->memid.memkind != MI_MEM_ARENA) {
+    return; // not in an arena; nothing needs to be done here
+  }
+
+  size_t arena_idx;
+  size_t bitmap_idx;
+  mi_arena_memid_indices(segment->memid, &arena_idx, &bitmap_idx);
+  mi_assert_internal(arena_idx < MI_MAX_ARENAS);
+  mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
+  mi_assert_internal(arena != NULL);
+
+  size_t old_state = mi_atomic_load_relaxed(&arena->abandoned_segments[bitmap_idx]);
+  size_t new_state;
+  do {
+      if ((old_state & free_space_bit) != 0) {
+          break;
+      }
+      new_state = old_state | free_space_bit;
+  } while (!mi_atomic_cas_weak_release(&arena->abandoned_segments[bitmap_idx], &old_state, new_state));
 }
 
 // start a cursor at a randomized arena
@@ -836,7 +919,7 @@ void _mi_arena_field_cursor_init2(mi_heap_t* heap, mi_arena_field_cursor_t* curr
       current->start = (max_arena == 0 ? 0 : (mi_arena_id_t)( _mi_heap_random_next(heap) % max_arena));
       mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[current->start]);
       if (arena != NULL) {
-        current->bitmap_idx = _mi_heap_random_next(heap) % (arena->field_count * MI_BITMAP_FIELD_BITS);
+        current->bitmap_idx = _mi_heap_random_next(heap) % arena->block_count;
       }
     }
 
@@ -853,42 +936,34 @@ mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* pr
 
   int count = previous->count;
   size_t space_mask = previous->free_space_mask;
-  size_t field_idx = mi_bitmap_index_field(previous->bitmap_idx);
-  size_t bit_idx = mi_bitmap_index_bit_in_field(previous->bitmap_idx) + 1;
+  size_t abandoned_idx = previous->bitmap_idx + 1;
   // visit arena's (from previous)
-  for (; count < max_arena; count++, field_idx = 0, bit_idx = 0) {
+  for (; count < max_arena; count++, abandoned_idx = 0) {
     mi_arena_id_t arena_idx = previous->start + count;
     if (arena_idx >= max_arena) { arena_idx = arena_idx % max_arena; } // wrap around
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
     if (arena != NULL) {
       // visit the abandoned fields (starting at previous_idx)
-      for ( ; field_idx < arena->field_count; field_idx++, bit_idx = 0) {
-        size_t field = mi_atomic_load_relaxed(&arena->blocks_abandoned[field_idx]);
-        if mi_unlikely(field != 0) { // skip zero fields quickly
-          // visit each set bit in the field  (todo: maybe use `ctz` here?)
-          for ( ; bit_idx < MI_BITMAP_FIELD_BITS; bit_idx++) {
-            // pre-check if the bit is set
-            size_t mask = ((size_t)1 << bit_idx);
-            if mi_unlikely((field & mask) == mask) {
-              mi_bitmap_index_t bitmap_idx = mi_bitmap_index_create(field_idx, bit_idx);
-              // try to reclaim it atomically
-              if (_mi_bitmap_unclaim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx)) {
-
-                mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, bitmap_idx));
-                mi_segment_t* segment = (mi_segment_t*)mi_arena_block_start(arena, bitmap_idx);
-                if ((segment->free_space_mask & space_mask) != 0) {
-                  mi_atomic_decrement_relaxed(&abandoned_count);
-                  previous->bitmap_idx = bitmap_idx;
-                  previous->count = count;
-                  mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == 0);
-                  //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
-                  return segment;
-                }
-                else {
-                    // mark abandoned again
-                    _mi_bitmap_claim(arena->blocks_abandoned, arena->field_count, 1, bitmap_idx, NULL);
-                }
-              }
+      for ( ; abandoned_idx < arena->block_count; abandoned_idx++) {
+        size_t abandoned_state = mi_atomic_load_relaxed(&arena->abandoned_segments[abandoned_idx]);
+        if mi_unlikely((abandoned_state & MI_FREE_SPACE_MASK_ABANDONED) != 0 && (abandoned_state & space_mask) != 0) {
+          // try to reclaim it atomically
+          if (_mi_arena_segment_clear_abandoned_state(&arena->abandoned_segments[abandoned_idx])) {
+            // Need to re-check whether the free space has not changed
+            abandoned_state = mi_atomic_load_relaxed(&arena->abandoned_segments[abandoned_idx]);
+            if mi_likely((abandoned_state & space_mask) != 0) {
+              mi_assert_internal(_mi_bitmap_is_claimed(arena->blocks_inuse, arena->field_count, 1, abandoned_idx));
+              mi_segment_t* segment = (mi_segment_t*)mi_arena_block_start(arena, abandoned_idx);
+                mi_atomic_decrement_relaxed(&abandoned_count);
+                previous->bitmap_idx = abandoned_idx;
+                previous->count = count;
+                mi_assert_internal(mi_atomic_load_relaxed(&segment->thread_id) == 0);
+                //mi_assert_internal(arena->blocks_committed == NULL || _mi_bitmap_is_claimed(arena->blocks_committed, arena->field_count, 1, bitmap_idx));
+                return segment;
+            }
+            else {
+              // mark abandoned again
+              _mi_arena_segment_set_abandoned_state(&arena->abandoned_segments[abandoned_idx], 0);
             }
           }
         }
@@ -901,46 +976,26 @@ mi_segment_t* _mi_arena_segment_clear_abandoned_next(mi_arena_field_cursor_t* pr
   return NULL;
 }
 
-// NOTE: This function has RACE CONDITION. It access abandoned segments WITHOUT clearing the abandoned bit.
-// This can result in touching a segment object that has been freed and cause a crash.
-// This function is strictly for experimental purpose to be able to calculate free space in segments quickly
-// without performing numerous interlock operations while traversing through ALL abandoned segments.
-// It should be deleted after the experiment is done.
-size_t _mi_arena_segment_abandoned_free_space_stats_next(mi_arena_field_cursor_t* previous) 
+size_t _mi_arena_segment_abandoned_free_space_stats_next(mi_arena_field_cursor_t* previous)
 {
   const int max_arena = (int)mi_atomic_load_relaxed(&mi_arena_count);
   if (max_arena <= 0 || mi_atomic_load_relaxed(&abandoned_count) == 0) return MI_FREE_SPACE_MASK_ALL;
 
   int count = previous->count;
-  size_t field_idx = mi_bitmap_index_field(previous->bitmap_idx);
-  size_t bit_idx = mi_bitmap_index_bit_in_field(previous->bitmap_idx) + 1;
+  size_t abandoned_idx = previous->bitmap_idx + 1;
   // visit arena's (from previous)
-  for (; count < max_arena; count++, field_idx = 0, bit_idx = 0) {
+  for (; count < max_arena; count++, abandoned_idx = 0) {
     mi_arena_id_t arena_idx = previous->start + count;
     if (arena_idx >= max_arena) { arena_idx = arena_idx % max_arena; } // wrap around
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[arena_idx]);
     if (arena != NULL) {
       // visit the abandoned fields (starting at previous_idx)
-      for ( ; field_idx < arena->field_count; field_idx++, bit_idx = 0) {
-        size_t field = mi_atomic_load_relaxed(&arena->blocks_abandoned[field_idx]);
-        if mi_unlikely(field != 0) { // skip zero fields quickly
-          // visit each set bit in the field  (todo: maybe use `ctz` here?)
-          for ( ; bit_idx < MI_BITMAP_FIELD_BITS; bit_idx++) {
-            // pre-check if the bit is set
-            size_t mask = ((size_t)1 << bit_idx);
-            if mi_unlikely((field & mask) == mask) {
-              mi_bitmap_index_t bitmap_idx = mi_bitmap_index_create(field_idx, bit_idx);
-              
-              // *** THIS CAN CAUSE A CRASH: the segment can be freed while we access it's fields.
-              mi_segment_t* segment = (mi_segment_t*)mi_arena_block_start(arena, bitmap_idx);
-              size_t free_space_mask = mi_atomic_load_relaxed(&segment->free_space_mask) & MI_FREE_SPACE_MASK_ANY;
-
-              previous->bitmap_idx = bitmap_idx;
-              previous->count = count;
-
-              return free_space_mask;
-            }
-          }
+      for ( ; abandoned_idx < arena->block_count; abandoned_idx++) {
+        size_t abandoned_state = mi_atomic_load_relaxed(&arena->abandoned_segments[abandoned_idx]);
+        if mi_unlikely((abandoned_state & MI_FREE_SPACE_MASK_ABANDONED) != 0) {
+          previous->bitmap_idx = abandoned_idx;
+          previous->count = count;
+          return abandoned_state & MI_FREE_SPACE_MASK_ANY;
         }
       }
     }
@@ -950,7 +1005,6 @@ size_t _mi_arena_segment_abandoned_free_space_stats_next(mi_arena_field_cursor_t
   previous->count = 0;
   return MI_FREE_SPACE_MASK_ALL;
 }
-
 
 /* -----------------------------------------------------------
   Add an arena.
@@ -985,8 +1039,9 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
 
   const size_t bcount = size / MI_ARENA_BLOCK_SIZE;
   const size_t fields = _mi_divide_up(bcount, MI_BITMAP_FIELD_BITS);
-  const size_t bitmaps = (memid.is_pinned ? 3 : 5);
-  const size_t asize  = sizeof(mi_arena_t) + (bitmaps*fields*sizeof(mi_bitmap_field_t));
+  const size_t bitmaps = (memid.is_pinned ? 2 : 4);
+  const size_t abandoned_state_size = sizeof(mi_abandoned_segment_state_t) * bcount;
+  const size_t asize  = sizeof(mi_arena_t) + (bitmaps*fields*sizeof(mi_bitmap_field_t)) + abandoned_state_size;
   mi_memid_t meta_memid;
   mi_arena_t* arena   = (mi_arena_t*)mi_arena_meta_zalloc(asize, &meta_memid, &_mi_stats_main); // TODO: can we avoid allocating from the OS?
   if (arena == NULL) return false;
@@ -1006,10 +1061,11 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
   arena->purge_expire = 0;
   arena->search_idx   = 0;
   // consequetive bitmaps
-  arena->blocks_dirty     = &arena->blocks_inuse[fields];     // just after inuse bitmap
-  arena->blocks_abandoned = &arena->blocks_inuse[2 * fields]; // just after dirty bitmap
-  arena->blocks_committed = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[3*fields]); // just after abandoned bitmap
-  arena->blocks_purge     = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[4*fields]); // just after committed bitmap
+  size_t array_offset = fields;
+  arena->blocks_dirty     = &arena->blocks_inuse[array_offset];     // just after inuse bitmap
+  arena->blocks_committed = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[array_offset += fields]); // just after inuse bitmap
+  arena->blocks_purge     = (arena->memid.is_pinned ? NULL : &arena->blocks_inuse[array_offset += fields]); // just after committed bitmap
+  arena->abandoned_segments  = (mi_abandoned_segment_state_t*)&arena->blocks_inuse[array_offset += fields]; // just after purge bitmap
   // initialize committed bitmap?
   if (arena->blocks_committed != NULL && arena->memid.initially_committed) {
     memset((void*)arena->blocks_committed, 0xFF, fields*sizeof(mi_bitmap_field_t)); // cast to void* to avoid atomic warning
@@ -1092,6 +1148,32 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
   return inuse_count;
 }
 
+static size_t mi_debug_show_abandoned(const char* prefix, const char* header, size_t block_count, mi_abandoned_segment_state_t* abandoned) {
+  _mi_verbose_message("%s%s:\n", prefix, header);
+  size_t inuse_count = 0;
+  char buf[MI_BITMAP_FIELD_BITS + 1];
+  size_t buf_size = sizeof(buf) / sizeof(buf[0]);
+  size_t buf_index = 0;
+
+  _mi_memzero(&buf[0], sizeof(buf[0]) * buf_size);
+  for (size_t i = 0; i < block_count; i++) {
+    bool inuse = ((abandoned[i] & MI_FREE_SPACE_MASK_ABANDONED) != 0);
+    if (inuse) inuse_count++;
+    
+    buf[buf_index++] = (inuse ? 'x' : '.');
+    if (buf_index == (buf_size - 1) || (i == (block_count - 1))) {
+      buf[buf_index] = 0;
+      _mi_verbose_message("%s  %s\n", prefix, buf);
+      _mi_memzero(&buf[0], sizeof(buf[0]) * buf_size);
+      buf_index = 0;
+    }
+
+  }
+
+  _mi_verbose_message("%s  total ('x'): %zu\n", prefix, inuse_count);
+  return inuse_count;
+}
+
 void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge) mi_attr_noexcept {
   size_t max_arenas = mi_atomic_load_relaxed(&mi_arena_count);
   size_t inuse_total = 0;
@@ -1108,7 +1190,7 @@ void mi_debug_show_arenas(bool show_inuse, bool show_abandoned, bool show_purge)
       mi_debug_show_bitmap("  ", "committed blocks", arena->block_count, arena->blocks_committed, arena->field_count);
     }
     if (show_abandoned) {
-      abandoned_total += mi_debug_show_bitmap("  ", "abandoned blocks", arena->block_count, arena->blocks_abandoned, arena->field_count);      
+      abandoned_total += mi_debug_show_abandoned("  ", "abandoned blocks", arena->block_count, arena->abandoned_segments);      
     }
     if (show_purge && arena->blocks_purge != NULL) {
       purge_total += mi_debug_show_bitmap("  ", "purgeable blocks", arena->block_count, arena->blocks_purge, arena->field_count);

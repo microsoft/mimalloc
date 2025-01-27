@@ -1106,11 +1106,15 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
 }
 
 
-static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
+void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
   MI_UNUSED(force);
   mi_assert_internal(segment != NULL);
   mi_assert_internal(segment->next == NULL);
   mi_assert_internal(segment->used == 0);
+
+  if (tld->freeing_segments_disabled) {
+    return;
+  }
 
   // Remove the free pages
   mi_slice_t* slice = &segment->slices[0];
@@ -1277,8 +1281,9 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(segment->abandoned_visits == 0);
   mi_assert_expensive(mi_segment_is_valid(segment,tld));
 
-  size_t free_space_mask = MI_FREE_SPACE_MASK_ABANDONED;
-  mi_atomic_exchange_acq_rel(&segment->free_space_mask, free_space_mask);
+  size_t free_space_mask = 0;
+  segment->free_space_mask = 0;
+  _mi_arena_segment_abandon_begin(segment);
 
   // remove the free pages from the free page queues
   bool hasUsedSmallPage = false;
@@ -1320,7 +1325,14 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
     segment->was_reclaimed = false;
   }
 
-  mi_atomic_or_acq_rel(&segment->free_space_mask, free_space_mask);
+  if (!hasUsedSmallPage && (segment->page_kind == MI_PAGE_MEDIUM || segment->page_kind == MI_PAGE_LARGE)) {
+    // Clear out small object free space created by fragmented free slices
+    size_t small_free_space_mask = mi_free_space_mask_from_blocksize(MI_SMALL_OBJ_SIZE_MAX);
+    small_free_space_mask = small_free_space_mask | (small_free_space_mask - 1);
+    free_space_mask &= ~small_free_space_mask;
+  }
+
+  segment->free_space_mask = free_space_mask;
 
   if (segment == tld->medium_segment) {
     tld->medium_segment = NULL;
@@ -1329,14 +1341,7 @@ static void mi_segment_abandon(mi_segment_t* segment, mi_segments_tld_t* tld) {
     tld->large_segment = NULL;
   }
 
-  if (!hasUsedSmallPage && (segment->page_kind == MI_PAGE_MEDIUM || segment->page_kind == MI_PAGE_LARGE)) {
-    // Clear out small object free space created by fragmented free slices
-    free_space_mask = mi_free_space_mask_from_blocksize(MI_SMALL_OBJ_SIZE_MAX);
-    free_space_mask = free_space_mask | (free_space_mask - 1);
-    mi_atomic_and_acq_rel(&segment->free_space_mask, ~free_space_mask);
-  }
-
-  _mi_arena_segment_mark_abandoned(segment);
+  _mi_arena_segment_abandon_end(segment);
 }
 
 void _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld) {
@@ -1376,8 +1381,10 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t slices_needed, s
   bool hasUsedSmallPage = false;
   size_t free_space_mask = 0;
 
+  if (hasExactPage) {
+    *hasExactPage = false;
+  }
   // for all slices
-  *hasExactPage = false;
   const mi_slice_t* end;
   mi_slice_t* slice = mi_slices_start_iterate(segment, &end);
   while (slice < end) {
@@ -1407,8 +1414,11 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t slices_needed, s
         if (mi_page_block_size(page) == block_size && mi_page_has_any_available(page)) {
           // a page has available free blocks of the right size
           has_page = true;
-          *hasExactPage = true;
           free_space_mask |= page->free_space_bit;
+          if (hasExactPage) {
+            *hasExactPage = true;
+            break;
+          }
         }
         else if (mi_page_has_any_available(page)) {
           free_space_mask |= page->free_space_bit;
@@ -1432,9 +1442,7 @@ static bool mi_segment_check_free(mi_segment_t* segment, size_t slices_needed, s
     free_space_mask &= ~small_free_space_mask;
   }
 
-  if (free_space_mask != 0) {
-      mi_atomic_or_acq_rel(&segment->free_space_mask, free_space_mask);
-  }
+  segment->free_space_mask = free_space_mask;
   return has_page;
 }
 
@@ -1588,7 +1596,6 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
         mi_segment_t* segment_to_return = mi_segment_reclaim(segment, heap, block_size, reclaimed, tld);
         if (segment_to_return != NULL) {
           if (best_candidate_segment != NULL) {
-            mi_segment_try_purge(best_candidate_segment, false /* true force? */, tld->stats);
             _mi_arena_segment_mark_abandoned(best_candidate_segment);
           }
           mi_segment_increment_reclaimed_stats();
@@ -1613,7 +1620,6 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
           segment_to_abandon = segment;
         }
 
-        mi_segment_try_purge(segment_to_abandon, false /* true force? */, tld->stats); // force purge if needed as we may not visit soon again
         _mi_arena_segment_mark_abandoned(segment_to_abandon);
       }
 
@@ -1645,11 +1651,10 @@ static mi_segment_t* mi_segment_try_reclaim(mi_heap_t* heap, size_t needed_slice
 void _mi_abandoned_collect_clamp(mi_heap_t* heap, bool force, long max_segment_count, mi_segments_tld_t* tld)
 {
   mi_segment_t* segment;
-  bool hasExactPage = false;
   mi_arena_field_cursor_t current; _mi_arena_field_cursor_init(heap, &current);
   long max_tries = (force ? (long)_mi_arena_segment_abandoned_count() : max_segment_count);  // limit latency
   while ((max_tries-- > 0) && ((segment = _mi_arena_segment_clear_abandoned_next(&current)) != NULL)) {
-    mi_segment_check_free(segment,0,0,&hasExactPage,tld); // try to free up pages (due to concurrent frees)
+    mi_segment_check_free(segment,0,0,NULL,tld); // try to free up pages (due to concurrent frees)
     if (segment->used == 0) {
       // free the segment (by forced reclaim) to make it available to other threads.
       // note: we could in principle optimize this by skipping reclaim and directly

@@ -287,15 +287,9 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_segment_t* seg
     #endif
   }
 
-  size_t size_mask = page->free_space_bit;
-  size_t new_free_space_mask;
-  size_t old_free_space_mask = mi_atomic_load_relaxed(&segment->free_space_mask);
-  do {
-      if (((old_free_space_mask & MI_FREE_SPACE_MASK_ABANDONED) == 0) || ((old_free_space_mask & size_mask) != 0)) {
-          break;
-      }
-      new_free_space_mask = old_free_space_mask | size_mask;
-  } while (!mi_atomic_cas_weak_release(&segment->free_space_mask, &old_free_space_mask, new_free_space_mask));
+  if (segment->thread_id == 0) {
+    _mi_arena_segment_abandoned_mark_free_page(segment, page->free_space_bit);
+  }
 
   // and finally free the actual block by pushing it on the owning heap
   // thread_delayed free list (or heap delayed free list)

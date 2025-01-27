@@ -658,6 +658,7 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_vis
 
 mi_segment_t* mi_segments_get_segment_to_drop_by_slice(mi_segments_tld_t* tld, size_t alloc_block_size);
 const mi_slice_t* mi_segment_slices_end(const mi_segment_t* segment);
+void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld);
 
 static mi_segment_t* mi_heap_get_segment_to_drop(mi_heap_t* heap, size_t targetSegmentCount, size_t alloc_block_size) {
     mi_segment_t* segment = NULL;
@@ -732,6 +733,18 @@ static mi_decl_noinline void mi_segment_visit_pages(mi_heap_t* heap, mi_segment_
     }
 }
 
+static void mi_heap_disable_segment_freeing(mi_heap_t* heap)
+{
+  mi_assert_internal(heap->tld->segments.freeing_segments_disabled == false);
+  heap->tld->segments.freeing_segments_disabled = true;
+}
+
+static void mi_heap_enable_segment_freeing(mi_heap_t* heap)
+{
+  mi_assert_internal(heap->tld->segments.freeing_segments_disabled == true);
+  heap->tld->segments.freeing_segments_disabled = false;
+}
+
 void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount, size_t alloc_block_size) {
     bool segmentsDropped = false;
 
@@ -748,13 +761,24 @@ void mi_heap_drop_segment(mi_heap_t* heap, size_t targetSegmentCount, size_t all
 
         // 3. free all current thread delayed blocks.
         // (when abandoning, after this there are no more thread-delayed references into the pages.)
+        // Also, make sure that the state of the heap remains consistent while collecting and freeing pages;
+        // otherwise the heap can free the segment that we hold a reference to (i.e. segmentToAbandon can get freed)
+        mi_heap_disable_segment_freeing(heap);
         _mi_heap_delayed_free_all(heap);
+        mi_heap_enable_segment_freeing(heap);
 
-        // 4. collect all pages in the selected segment owned by this thread
+        // 4. Either free the selected segment if it does not have any used pages or
+        // collect all pages in the selected segment owned by this thread.
         // This will effectively abandon the segment.
-        mi_collect_t collect = MI_ABANDON;
-        bool collect_free_pages = false;
-        mi_segment_visit_pages(heap, segmentToAbandon, &mi_heap_page_collect, &collect, &collect_free_pages);
+        if (segmentToAbandon->used == 0) {
+            // no used pages; simply free the segment
+            mi_segment_free(segmentToAbandon, false, &heap->tld->segments);
+        }
+        else {
+            mi_collect_t collect = MI_ABANDON;
+            bool collect_free_pages = false;
+            mi_segment_visit_pages(heap, segmentToAbandon, &mi_heap_page_collect, &collect, &collect_free_pages);
+        }
     } while (heap->tld->segments.count >= targetSegmentCount);
 
     if (segmentsDropped) {

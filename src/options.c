@@ -94,9 +94,9 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0,   UNINIT, MI_OPTION(disallow_arena_alloc) },     // 1 = do not use arena's for allocation (except if using specific arena id's)
   { 400, UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
   { 5,   UNINIT, MI_OPTION(max_segments_per_heap) },    // max number of segments that heap can own.
-  { 16,  UNINIT, MI_OPTION(heap_collect_abandoned_interval) }, // delay (ms) in between collecting abandoned segments when a heap drops excessive segments.
-  { 16,  UNINIT, MI_OPTION(heap_collect_abandoned_count) },    // number of abandoned segments to collect when a heap drops excessive segments
-  { 3,   UNINIT, MI_OPTION(max_candidate_segments_to_check) }, // max number of abandoned segments to check before selecting one to reclaim.
+  { 1,  UNINIT, MI_OPTION(heap_collect_abandoned_interval) }, // delay (ms) in between collecting abandoned segments when a heap drops excessive segments.
+  { 4,  UNINIT, MI_OPTION(heap_collect_abandoned_count) },    // number of abandoned segments to collect when a heap drops excessive segments
+  { 5,   UNINIT, MI_OPTION(max_candidate_segments_to_check) }, // max number of abandoned segments to check before selecting one to reclaim.
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

@@ -709,6 +709,7 @@ typedef struct mi_segments_tld_s {
   mi_span_queue_t     large_spans[MI_SEGMENT_BIN_MAX+1];  // free slice spans inside large segments
   mi_segment_t*       medium_segment;
   mi_segment_t*       large_segment;
+  bool                freeing_segments_disabled; // used to ensure the state of the heap remains consistent while the excess of segments is being dropped
   size_t              count;        // current number of segments;
   size_t              peak_count;   // peak number of segments
   size_t              current_size; // current size of all segments
