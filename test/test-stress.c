@@ -308,7 +308,7 @@ int main(int argc, char** argv) {
   #endif
   #if defined(NDEBUG) && !defined(USE_STD_MALLOC)
     // mi_option_set(mi_option_purge_delay,-1);
-    mi_option_set(mi_option_reclaim_on_free, 0);
+    mi_option_set(mi_option_page_reclaim_on_free, 0);
   #endif
   #ifndef USE_STD_MALLOC
     mi_stats_reset();

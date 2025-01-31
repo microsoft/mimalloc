@@ -217,7 +217,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noe
 
   // 2. if the page is not too full, we can try to reclaim it for ourselves
   // note: this seems a bad idea but it speeds up some benchmarks (like `larson`) quite a bit.
-  if (_mi_option_get_fast(mi_option_reclaim_on_free) != 0 &&
+  if (_mi_option_get_fast(mi_option_page_reclaim_on_free) != 0 &&
       !mi_page_is_used_at_frac(page,8) 
       // && !mi_page_is_abandoned_mapped(page)
      )
@@ -237,7 +237,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noe
           (_mi_arena_memid_is_suitable(page->memid, tagheap->exclusive_arena))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
          )
       {
-        if (mi_page_queue(tagheap, page->block_size)->first != NULL) {  // don't reclaim for an block_size we don't use
+        if (mi_page_queue(tagheap, page->block_size)->first != NULL) {  // don't reclaim for a block_size we don't use
           // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
           _mi_arenas_page_unabandon(page);
           _mi_heap_page_reclaim(tagheap, page);

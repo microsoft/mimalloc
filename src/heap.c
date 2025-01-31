@@ -175,7 +175,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool allow_destroy, 
   heap->memid = memid;
   heap->tld        = tld;  // avoid reading the thread-local tld during initialization
   heap->exclusive_arena    = _mi_arena_from_id(arena_id);
-  heap->allow_page_reclaim = (!allow_destroy && mi_option_is_enabled(mi_option_reclaim_on_free));
+  heap->allow_page_reclaim = (!allow_destroy && mi_option_is_enabled(mi_option_page_reclaim_on_free));
   heap->allow_page_abandon = (!allow_destroy && mi_option_get(mi_option_page_full_retain) >= 0);
   heap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
   heap->tag        = heap_tag;
