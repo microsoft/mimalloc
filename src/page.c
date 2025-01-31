@@ -680,7 +680,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
   size_t count = 0;
   #endif
   long candidate_limit = 0;          // we reset this on the first candidate to limit the search
-  long page_full_retain = heap->page_full_retain;
+  long page_full_retain = (pq->block_size > MI_SMALL_MAX_OBJ_SIZE ? 0 : heap->page_full_retain); // only retain small pages
   mi_page_t* page_candidate = NULL;  // a page with free space
   mi_page_t* page = pq->first;
 
