@@ -597,57 +597,12 @@ static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
   return page->heap;
 }
 
-// Thread free flag helpers
-static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
-  return (mi_block_t*)(tf & ~1);
-}
-static inline bool mi_tf_is_owned(mi_thread_free_t tf) {
-  return ((tf & 1) == 1);
-}
-static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned) {
-  return (mi_thread_free_t)((uintptr_t)block | (owned ? 1 : 0));
-}
-
-
-// Thread id of thread that owns this page (with flags in the bottom 2 bits)
-static inline mi_threadid_t mi_page_xthread_id(const mi_page_t* page) {
-  return mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id);
-}
-
-// Plain thread id of the thread that owns this page
-static inline mi_threadid_t mi_page_thread_id(const mi_page_t* page) {
-  return (mi_page_xthread_id(page) & ~MI_PAGE_FLAG_MASK);
-}
-
-// Thread free access
-static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
-  return mi_tf_block(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
-}
-
-// Owned?
-static inline bool mi_page_is_owned(const mi_page_t* page) {
-  return mi_tf_is_owned(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
-}
-
-
-//static inline mi_thread_free_t mi_tf_set_delayed(mi_thread_free_t tf, mi_delayed_t delayed) {
-//  return mi_tf_make(mi_tf_block(tf),delayed);
-//}
-//static inline mi_thread_free_t mi_tf_set_block(mi_thread_free_t tf, mi_block_t* block) {
-//  return mi_tf_make(block, mi_tf_delayed(tf));
-//}
 
 // are all blocks in a page freed?
 // note: needs up-to-date used count, (as the `xthread_free` list may not be empty). see `_mi_page_collect_free`.
 static inline bool mi_page_all_free(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
   return (page->used == 0);
-}
-
-// are there any available blocks?
-static inline bool mi_page_has_any_available(const mi_page_t* page) {
-  mi_assert_internal(page != NULL && page->reserved > 0);
-  return (page->used < page->reserved || (mi_page_thread_free(page) != NULL));
 }
 
 // are there immediately available blocks, i.e. blocks available on the free list.
@@ -685,25 +640,6 @@ static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
   return (page->reserved - page->used <= frac);
 }
 
-static inline bool mi_page_is_abandoned(const mi_page_t* page) {
-  // note: the xheap field of an abandoned heap is set to the subproc (for fast reclaim-on-free)
-  return (mi_page_thread_id(page) == 0);
-}
-
-static inline bool mi_page_is_abandoned_mapped(const mi_page_t* page) {
-  return ((mi_page_xthread_id(page) & ~(MI_PAGE_IS_ABANDONED_MAPPED - 1)) == MI_PAGE_IS_ABANDONED_MAPPED);
-}
-
-static inline void mi_page_set_abandoned_mapped(mi_page_t* page) {
-  mi_assert_internal(mi_page_is_abandoned(page));
-  mi_atomic_or_relaxed(&page->xthread_id, MI_PAGE_IS_ABANDONED_MAPPED);
-}
-
-static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
-  mi_assert_internal(mi_page_is_abandoned_mapped(page));
-  mi_atomic_and_relaxed(&page->xthread_id, ~MI_PAGE_IS_ABANDONED_MAPPED);
-}
-
 
 static inline bool mi_page_is_huge(const mi_page_t* page) {
   return (page->block_size > MI_LARGE_MAX_OBJ_SIZE ||
@@ -717,6 +653,109 @@ static inline mi_page_queue_t* mi_page_queue(const mi_heap_t* heap, size_t size)
 }
 
 
+//-----------------------------------------------------------
+// Page thread id and flags
+//-----------------------------------------------------------
+
+// Thread id of thread that owns this page (with flags in the bottom 2 bits)
+static inline mi_threadid_t mi_page_xthread_id(const mi_page_t* page) {
+  return mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id);
+}
+
+// Plain thread id of the thread that owns this page
+static inline mi_threadid_t mi_page_thread_id(const mi_page_t* page) {
+  return (mi_page_xthread_id(page) & ~MI_PAGE_FLAG_MASK);
+}
+
+static inline mi_page_flags_t mi_page_flags(const mi_page_t* page) {
+  return (mi_page_xthread_id(page) & MI_PAGE_FLAG_MASK);
+}
+
+static inline void mi_page_flags_set(mi_page_t* page, bool set, mi_page_flags_t newflag) {
+  if (set) { mi_atomic_or_relaxed(&page->xthread_id, newflag); }
+      else { mi_atomic_and_relaxed(&page->xthread_id, ~newflag); }
+}
+
+static inline bool mi_page_is_in_full(const mi_page_t* page) {
+  return ((mi_page_flags(page) & MI_PAGE_IN_FULL_QUEUE) != 0);
+}
+
+static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
+  mi_page_flags_set(page, in_full, MI_PAGE_IN_FULL_QUEUE);
+}
+
+static inline bool mi_page_has_aligned(const mi_page_t* page) {
+  return ((mi_page_flags(page) & MI_PAGE_HAS_ALIGNED) != 0);
+}
+
+static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
+  mi_page_flags_set(page, has_aligned, MI_PAGE_HAS_ALIGNED);
+}
+
+static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
+  // mi_assert_internal(!mi_page_is_in_full(page));  // can happen when destroying pages on heap_destroy
+  const mi_threadid_t tid = (heap == NULL ? MI_THREADID_ABANDONED : heap->tld->thread_id) | mi_page_flags(page);
+  if (heap != NULL) {
+    page->heap = heap;
+    page->heap_tag = heap->tag;    
+  }
+  else {
+    page->heap = NULL;
+  }
+  mi_atomic_store_release(&page->xthread_id, tid);
+}
+
+static inline bool mi_page_is_abandoned(const mi_page_t* page) {
+  // note: the xheap field of an abandoned heap is set to the subproc (for fast reclaim-on-free)
+  return (mi_page_thread_id(page) <= MI_THREADID_ABANDONED_MAPPED);
+}
+
+static inline bool mi_page_is_abandoned_mapped(const mi_page_t* page) {
+  return (mi_page_thread_id(page) == MI_THREADID_ABANDONED_MAPPED);
+}
+
+static inline void mi_page_set_abandoned_mapped(mi_page_t* page) {
+  mi_assert_internal(mi_page_is_abandoned(page));
+  mi_atomic_or_relaxed(&page->xthread_id, MI_THREADID_ABANDONED_MAPPED);
+}
+
+static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
+  mi_assert_internal(mi_page_is_abandoned_mapped(page));
+  mi_atomic_and_relaxed(&page->xthread_id, MI_PAGE_FLAG_MASK);
+}
+
+//-----------------------------------------------------------
+// Thread free list and ownership
+//-----------------------------------------------------------
+
+// Thread free flag helpers
+static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
+  return (mi_block_t*)(tf & ~1);
+}
+static inline bool mi_tf_is_owned(mi_thread_free_t tf) {
+  return ((tf & 1) == 1);
+}
+static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned) {
+  return (mi_thread_free_t)((uintptr_t)block | (owned ? 1 : 0));
+}
+
+// Thread free access
+static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
+  return mi_tf_block(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
+}
+
+// are there any available blocks?
+static inline bool mi_page_has_any_available(const mi_page_t* page) {
+  mi_assert_internal(page != NULL && page->reserved > 0);
+  return (page->used < page->reserved || (mi_page_thread_free(page) != NULL));
+}
+
+
+// Owned?
+static inline bool mi_page_is_owned(const mi_page_t* page) {
+  return mi_tf_is_owned(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
+}
+
 // Unown a page that is currently owned
 static inline void _mi_page_unown_unconditional(mi_page_t* page) {
   mi_assert_internal(mi_page_is_owned(page));
@@ -724,7 +763,6 @@ static inline void _mi_page_unown_unconditional(mi_page_t* page) {
   const uintptr_t old = mi_atomic_and_acq_rel(&page->xthread_free, ~((uintptr_t)1));
   mi_assert_internal((old&1)==1); MI_UNUSED(old);
 }
-
 
 // get ownership if it is not yet owned
 static inline bool mi_page_try_claim_ownership(mi_page_t* page) {
@@ -754,53 +792,6 @@ static inline bool _mi_page_unown(mi_page_t* page) {
     tf_new = mi_tf_create(NULL, false);
   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
   return false;
-}
-
-//-----------------------------------------------------------
-// Page flags
-//-----------------------------------------------------------
-static inline mi_page_flags_t mi_page_flags(const mi_page_t* page) {
-  return (mi_page_xthread_id(page) & MI_PAGE_FLAG_MASK);
-}
-
-static inline void mi_page_flags_set(mi_page_t* page, bool set, mi_page_flags_t newflag) {
-  if (set) {
-    mi_atomic_or_relaxed(&page->xthread_id, newflag);
-  }
-  else {
-    mi_atomic_and_relaxed(&page->xthread_id, ~newflag);
-  }
-}
-
-static inline bool mi_page_is_in_full(const mi_page_t* page) {
-  return ((mi_page_flags(page) & MI_PAGE_IN_FULL_QUEUE) != 0);
-}
-
-static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
-  mi_page_flags_set(page, in_full, MI_PAGE_IN_FULL_QUEUE);
-}
-
-static inline bool mi_page_has_aligned(const mi_page_t* page) {
-  return ((mi_page_flags(page) & MI_PAGE_HAS_ALIGNED) != 0);
-}
-
-static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
-  mi_page_flags_set(page, has_aligned, MI_PAGE_HAS_ALIGNED);
-}
-
-static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
-  // mi_assert_internal(!mi_page_is_in_full(page));  // can happen when destroying pages on heap_destroy
-  // only the aligned flag is retained (and in particular clear the abandoned-mapped flag).
-  const mi_page_flags_t flags = (mi_page_has_aligned(page) ? MI_PAGE_HAS_ALIGNED : 0);
-  const mi_threadid_t tid = (heap == NULL ? 0 : heap->tld->thread_id) | flags;
-  if (heap != NULL) {
-    page->heap = heap;
-    page->heap_tag = heap->tag;    
-  }
-  else {
-    page->heap = NULL;
-  }
-  mi_atomic_store_release(&page->xthread_id, tid);
 }
 
 
