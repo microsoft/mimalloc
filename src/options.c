@@ -150,11 +150,11 @@ static mi_option_desc_t options[_mi_option_last] =
   { 100, UNINIT, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose
   { 32,  UNINIT, MI_OPTION(max_errors) },               // maximum errors that are output
   { 32,  UNINIT, MI_OPTION(max_warnings) },             // maximum warnings that are output
-  { 10,  UNINIT, MI_OPTION(max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.
+  { 10,  UNINIT, MI_OPTION(deprecated_max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.
   { 0,   UNINIT, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
   { MI_DEFAULT_ARENA_RESERVE, UNINIT, MI_OPTION(arena_reserve) }, // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
   { 1,   UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
-  { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
+  { 1,   UNINIT, MI_OPTION_LEGACY(deprecated_purge_extend_delay, decommit_extend_delay) },
   { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   UNINIT, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)
   { 400, UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
 #if defined(MI_VISIT_ABANDONED)
@@ -168,9 +168,8 @@ static mi_option_desc_t options[_mi_option_last] =
   { MI_DEFAULT_GUARDED_SAMPLE_RATE,
          UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)
   { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
-  { 0,   UNINIT, MI_OPTION(target_segments_per_thread) }, // abandon segments beyond this point, or 0 to disable.
-  { 0,   UNINIT, MI_OPTION_LEGACY(reclaim_on_free, abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
-  { 0,   UNINIT, MI_OPTION(page_full_retain) },
+  { 1,   UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
+  { 2,   UNINIT, MI_OPTION(page_full_retain) },
   { 4,   UNINIT, MI_OPTION(page_max_candidates) },
   { 0,   UNINIT, MI_OPTION(max_vabits) },
   { MI_DEFAULT_PAGEMAP_COMMIT, 

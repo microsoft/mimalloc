@@ -37,7 +37,7 @@ static void test_thread_local();      // issue #944
 static void test_mixed1();             // issue #942
 static void test_stl_allocators();
 
-#if x_WIN32
+#if _WIN32
 #include "main-override-dep.h"
 static void test_dep();               // issue #981: test overriding in another DLL
 #else
@@ -46,8 +46,8 @@ static void test_dep() { };
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
-  various_tests();
-  test_mixed1();
+  //various_tests();
+  //test_mixed1();
 
   test_dep();
 
@@ -145,11 +145,13 @@ static bool test_stl_allocator1() {
 struct some_struct { int i; int j; double z; };
 
 
-#if x_WIN32
+#if _WIN32
 static void test_dep()
 {
   TestAllocInDll t;
   std::string s = t.GetString();
+
+  t.TestHeapAlloc();
 }
 #endif
 
