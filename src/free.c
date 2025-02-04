@@ -48,7 +48,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 }
 
 // Forward declaration for multi-threaded collect
-static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noexcept;
+static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free) mi_attr_noexcept;
 
 // Free a block multi-threaded
 static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block) mi_attr_noexcept
@@ -69,14 +69,14 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block) mi_attr_
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {
     mi_block_set_next(page, block, mi_tf_block(tf_old));
-    tf_new = mi_tf_create(block, true /* always owned: try to claim it if abandoned */);
+    tf_new = mi_tf_create(block, true /* always use owned: try to claim it if the page is abandoned */);
   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new)); // todo: release is enough?
 
   // and atomically try to collect the page if it was abandoned
   const bool is_owned_now = !mi_tf_is_owned(tf_old);
   if (is_owned_now) {
     mi_assert_internal(mi_page_is_abandoned(page));
-    mi_free_try_collect_mt(page);
+    mi_free_try_collect_mt(page,block);
   }
 }
 
@@ -194,18 +194,20 @@ void mi_free(void* p) mi_attr_noexcept
 // ------------------------------------------------------
 
 
-static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noexcept {
+static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free) mi_attr_noexcept {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
 
   // we own the page now..
   // safe to collect the thread atomic free list
-  _mi_page_free_collect(page, false);  // update `used` count
+  // use the `_partly` version to avoid atomic operations since we already have the `mt_free` pointing into the thread free list
+  _mi_page_free_collect_partly(page, mt_free);
+
   #if MI_DEBUG > 1
   if (mi_page_is_singleton(page)) { mi_assert_internal(mi_page_all_free(page)); }
   #endif
 
-  // 1. free if the page is free now
+  // 1. free if the page is free now  (this is updated by `_mi_page_free_collect_partly`)
   if (mi_page_all_free(page))
   {
     // first remove it from the abandoned pages in the arena (if mapped, this waits for any readers to finish)

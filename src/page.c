@@ -137,9 +137,39 @@ bool _mi_page_is_valid(mi_page_t* page) {
   Page collect the `local_free` and `thread_free` lists
 ----------------------------------------------------------- */
 
-// Collect the local `thread_free` list using an atomic exchange.
-static void _mi_page_thread_free_collect(mi_page_t* page)
+static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
 {
+  if (head == NULL) return;
+
+  // find the last block in the list -- also to get a proper use count (without data races)
+  size_t max_count = page->capacity; // cannot collect more than capacity
+  size_t count = 1;
+  mi_block_t* last = head;
+  mi_block_t* next;
+  while ((next = mi_block_next(page, last)) != NULL && count <= max_count) {
+    count++;
+    last = next;
+  }
+
+  // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
+  if (count > max_count) {
+    _mi_error_message(EFAULT, "corrupted thread-free list\n");
+    return; // the thread-free items cannot be freed
+  }
+
+  // and append the current local free list
+  mi_block_set_next(page, last, page->local_free);
+  page->local_free = head;
+
+  // update counts now
+  mi_assert_internal(count <= UINT16_MAX);
+  page->used = page->used - (uint16_t)count;
+}
+
+// Collect the local `thread_free` list using an atomic exchange.
+static void mi_page_thread_free_collect(mi_page_t* page)
+{
+  // atomically capture the thread free list
   mi_block_t* head;
   mi_thread_free_t tfreex;
   mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
@@ -150,35 +180,15 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));  // release is enough?
   mi_assert_internal(head != NULL);
 
-  // find the tail -- also to get a proper count (without data races)
-  size_t max_count = page->capacity; // cannot collect more than capacity
-  size_t count = 1;
-  mi_block_t* tail = head;
-  mi_block_t* next;
-  while( (next = mi_block_next(page,tail)) != NULL && count <= max_count) {
-    count++;
-    tail = next;
-  }
-
-  // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
-  if (count > max_count) {
-    _mi_error_message(EFAULT, "corrupted thread-free list\n");
-    return; // the thread-free items cannot be freed
-  }
-
-  // and append the current local free list
-  mi_block_set_next(page,tail, page->local_free);
-  page->local_free = head;
-
-  // update counts now
-  page->used -= (uint16_t)count;
+  // and move it to the local list
+  mi_page_thread_collect_to_local(page, head);
 }
 
 void _mi_page_free_collect(mi_page_t* page, bool force) {
   mi_assert_internal(page!=NULL);
 
   // collect the thread free list
-  _mi_page_thread_free_collect(page);
+  mi_page_thread_free_collect(page);
 
   // and the local free list
   if (page->local_free != NULL) {
@@ -205,6 +215,23 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
   mi_assert_internal(!force || page->local_free == NULL);
 }
 
+// collect elements in the thread-free list starting at `head`.
+void _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
+  if (head == NULL) return;
+  mi_block_t* next = mi_block_next(page,head);  // we cannot collect the head element itself as `page->thread_free` may point at it (and we want to avoid atomic ops)
+  if (next != NULL) {
+    mi_page_thread_collect_to_local(page, next);
+    if (page->local_free != NULL && page->free == NULL) {
+      page->free = page->local_free;
+      page->local_free = NULL;
+      page->free_is_zero = false;
+    }
+  }
+  if (page->used == 1) {
+    // all elements are free'd since we skipped the `head` element itself
+    _mi_page_free_collect(page, false);  // collect the final element
+  }
+}
 
 
 /* -----------------------------------------------------------
@@ -333,9 +360,8 @@ static void mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
     // abandon full pages
     _mi_page_abandon(page, pq);
   }
-  else {
+  else if (!mi_page_is_in_full(page)) {
     // put full pages in a heap local queue
-    if (mi_page_is_in_full(page)) return;
     mi_page_queue_enqueue_from(&mi_page_heap(page)->pages[MI_BIN_FULL], pq, page);
     _mi_page_free_collect(page, false);  // try to collect right away in case another thread freed just before MI_USE_DELAYED_FREE was set
   }
