@@ -217,12 +217,13 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     return;
   }
 
+  const bool too_full = mi_page_is_used_at_frac(page, 8);  // more than 7/8th of the page is in use?
+
   // 2. if the page is not too full, we can try to reclaim it for ourselves
   // note: this seems a bad idea but it speeds up some benchmarks (like `larson`) quite a bit.
-  if (_mi_option_get_fast(mi_option_page_reclaim_on_free) != 0 &&
-      page->block_size <= MI_SMALL_MAX_OBJ_SIZE &&                    // only for small sized blocks
-      !mi_page_is_used_at_frac(page,8)                                // and not too full
-      // && !mi_page_is_abandoned_mapped(page)
+  if (!too_full &&
+      _mi_option_get_fast(mi_option_page_reclaim_on_free) != 0 &&
+      page->block_size <= MI_SMALL_MAX_OBJ_SIZE         // only for small sized blocks
      )
   {
     // the page has still some blocks in use (but not too many)
@@ -252,7 +253,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
   }
 
   // 3. if the page is unmapped, try to reabandon so it can possibly be mapped and found for allocations
-  if (!mi_page_is_used_at_frac(page,8) &&  // only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
+  if (!too_full &&  // only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
       !mi_page_is_abandoned_mapped(page) && page->memid.memkind == MI_MEM_ARENA &&
       _mi_arenas_page_try_reabandon_to_mapped(page))
   {
