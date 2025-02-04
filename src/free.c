@@ -185,7 +185,7 @@ void mi_free(void* p) mi_attr_noexcept
   else {
     // page is full or contains (inner) aligned blocks; use generic multi-thread path
     mi_free_generic_mt(page, p);
-  }  
+  }
 }
 
 
@@ -218,7 +218,8 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noe
   // 2. if the page is not too full, we can try to reclaim it for ourselves
   // note: this seems a bad idea but it speeds up some benchmarks (like `larson`) quite a bit.
   if (_mi_option_get_fast(mi_option_page_reclaim_on_free) != 0 &&
-      !mi_page_is_used_at_frac(page,8) 
+      page->block_size <= MI_SMALL_MAX_OBJ_SIZE &&                    // only for small sized blocks
+      !mi_page_is_used_at_frac(page,8)                                // and not too full
       // && !mi_page_is_abandoned_mapped(page)
      )
   {
@@ -228,11 +229,11 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noe
     // note: don't use `mi_heap_get_default()` as we may just have terminated this thread and we should
     // not reinitialize the heap for this thread. (can happen due to thread-local destructors for example -- issue #944)
     mi_heap_t* const heap = mi_prim_get_default_heap();
-    if (heap != (mi_heap_t*)&_mi_heap_empty)  // we did not already terminate our thread (can this happen?
+    if (mi_heap_is_initialized(heap))  // we did not already terminate our thread
     {
       mi_heap_t* const tagheap = _mi_heap_by_tag(heap, page->heap_tag);
       if ((tagheap != NULL) &&                         // don't reclaim across heap object types
-          (tagheap->allow_page_reclaim) &&             // we are allowed to reclaim abandoned pages
+          (tagheap->allow_page_reclaim) &&             // and we are allowed to reclaim abandoned pages
           // (page->subproc == tagheap->tld->subproc) &&  // don't reclaim across sub-processes; todo: make this check faster (integrate with _mi_heap_by_tag ? )
           (_mi_arena_memid_is_suitable(page->memid, tagheap->exclusive_arena))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
          )

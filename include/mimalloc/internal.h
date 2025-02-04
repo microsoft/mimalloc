@@ -433,7 +433,7 @@ static inline bool mi_heap_is_backing(const mi_heap_t* heap) {
   return (heap->tld->heap_backing == heap);
 }
 
-static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
+static inline bool mi_heap_is_initialized(const mi_heap_t* heap) {
   mi_assert_internal(heap != NULL);
   return (heap != NULL && heap != &_mi_heap_empty);
 }
