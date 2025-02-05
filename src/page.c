@@ -278,10 +278,11 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   }
   else {
     mi_page_queue_remove(pq, page);
-    mi_tld_t* tld = page->heap->tld;
+    mi_heap_t* heap = page->heap;
     mi_page_set_heap(page, NULL);
-    _mi_arenas_page_abandon(page,tld);
-    _mi_arenas_collect(false, false, tld); // allow purging
+    page->heap = heap; // dont set heap to NULL so we can reclaim_on_free within the same heap
+    _mi_arenas_page_abandon(page, heap->tld);
+    _mi_arenas_collect(false, false, heap->tld); // allow purging
   }
 }
 
@@ -717,7 +718,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
     count++;
     #endif
     candidate_limit--;
-    
+
     // search up to N pages for a best candidate
 
     // is the local free list non-empty?
@@ -744,7 +745,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
         page_candidate = page;
         candidate_limit = _mi_option_get_fast(mi_option_page_max_candidates);
       }
-      else if (mi_page_all_free(page_candidate)) { 
+      else if (mi_page_all_free(page_candidate)) {
         _mi_page_free(page_candidate, pq);
         page_candidate = page;
       }
