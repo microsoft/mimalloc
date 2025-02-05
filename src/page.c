@@ -175,7 +175,7 @@ static void mi_page_thread_free_collect(mi_page_t* page)
   mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
   do {
     head = mi_tf_block(tfree);
-    if (head == NULL) return; // return if the list is empty
+    if mi_likely(head == NULL) return; // return if the list is empty
     tfreex = mi_tf_create(NULL,mi_tf_is_owned(tfree));  // set the thread free list to NULL
   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));  // release is enough?
   mi_assert_internal(head != NULL);
@@ -717,14 +717,16 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
     count++;
     #endif
     candidate_limit--;
-
-    // collect freed blocks by us and other threads
-    _mi_page_free_collect(page, false);
-
+    
     // search up to N pages for a best candidate
 
     // is the local free list non-empty?
-    const bool immediate_available = mi_page_immediate_available(page);
+    bool immediate_available = mi_page_immediate_available(page);
+    if (!immediate_available) {
+      // collect freed blocks by us and other threads to we get a proper use count
+      _mi_page_free_collect(page, false);
+      immediate_available = mi_page_immediate_available(page);
+    }
 
     // if the page is completely full, move it to the `mi_pages_full`
     // queue so we don't visit long-lived pages too often.
@@ -742,7 +744,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
         page_candidate = page;
         candidate_limit = _mi_option_get_fast(mi_option_page_max_candidates);
       }
-      else if (mi_page_all_free(page_candidate)) {
+      else if (mi_page_all_free(page_candidate)) { 
         _mi_page_free(page_candidate, pq);
         page_candidate = page;
       }
