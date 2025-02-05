@@ -357,6 +357,18 @@ mi_subproc_t* _mi_subproc(void) {
 }
 
 
+mi_tld_t* _mi_thread_tld(void) mi_attr_noexcept {
+  // should work without doing initialization (as it may be called from `_mi_tld -> mi_tld_alloc ... -> os_alloc -> _mi_subproc()`
+  mi_heap_t* heap = mi_prim_get_default_heap();
+  if (heap == NULL) {
+    return &tld_empty;
+  }
+  else {
+    return heap->tld;
+  }
+}
+
+
 /* -----------------------------------------------------------
   Sub process
 ----------------------------------------------------------- */

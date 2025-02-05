@@ -563,8 +563,9 @@ static mi_page_t* mi_arenas_page_try_find_abandoned(mi_subproc_t* subproc, size_
       mi_assert_internal(mi_page_is_abandoned(page));
       mi_assert_internal(mi_arena_has_page(arena,page));
       mi_atomic_decrement_relaxed(&subproc->abandoned_count[bin]);
-      mi_subproc_stat_decrease( arena->subproc, pages_abandoned, 1);
-      mi_subproc_stat_counter_increase(arena->subproc, pages_reclaim_on_alloc, 1);
+      mi_tld_t* tld = _mi_thread_tld();
+      mi_tld_stat_decrease( tld, pages_abandoned, 1);
+      mi_tld_stat_counter_increase( tld, pages_reclaim_on_alloc, 1);
 
       _mi_page_free_collect(page, false);  // update `used` count
       mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
@@ -855,7 +856,7 @@ void _mi_arenas_page_free(mi_page_t* page) {
   Arena abandon
 ----------------------------------------------------------- */
 
-void _mi_arenas_page_abandon(mi_page_t* page) {
+void _mi_arenas_page_abandon(mi_page_t* page, mi_tld_t* tld) {
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(mi_page_is_owned(page));
@@ -878,7 +879,7 @@ void _mi_arenas_page_abandon(mi_page_t* page) {
     const bool wasclear = mi_bitmap_set(arena->pages_abandoned[bin], slice_index);
     MI_UNUSED(wasclear); mi_assert_internal(wasclear);
     mi_atomic_increment_relaxed(&arena->subproc->abandoned_count[bin]);
-    mi_subproc_stat_increase(arena->subproc, pages_abandoned, 1);
+    mi_tld_stat_increase(tld, pages_abandoned, 1);
   }
   else {
     // page is full (or a singleton), or the page is OS/externally allocated
@@ -894,7 +895,7 @@ void _mi_arenas_page_abandon(mi_page_t* page) {
         subproc->os_abandoned_pages = page;
       }
     }
-    mi_subproc_stat_increase(_mi_subproc(), pages_abandoned, 1);
+    mi_tld_stat_increase(tld, pages_abandoned, 1);
   }
   _mi_page_unown(page);
 }
@@ -912,10 +913,10 @@ bool _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page) {
     return false;
   }
   else {
-    mi_subproc_t* subproc = _mi_subproc();
-    mi_subproc_stat_counter_increase( subproc, pages_reabandon_full, 1);
-    mi_subproc_stat_adjust_decrease( subproc, pages_abandoned, 1, true /* on alloc */);  // adjust as we are not abandoning fresh
-    _mi_arenas_page_abandon(page);
+    mi_tld_t* tld = _mi_thread_tld();
+    mi_tld_stat_counter_increase( tld, pages_reabandon_full, 1);
+    mi_tld_stat_adjust_decrease( tld, pages_abandoned, 1, true /* on alloc */);  // adjust as we are not abandoning fresh
+    _mi_arenas_page_abandon(page,tld);
     return true;
   }
 }
@@ -942,14 +943,14 @@ void _mi_arenas_page_unabandon(mi_page_t* page) {
     mi_bitmap_clear_once_set(arena->pages_abandoned[bin], slice_index);
     mi_page_clear_abandoned_mapped(page);
     mi_atomic_decrement_relaxed(&arena->subproc->abandoned_count[bin]);
-    mi_subproc_stat_decrease(arena->subproc, pages_abandoned, 1);
+    mi_tld_stat_decrease(_mi_thread_tld(), pages_abandoned, 1);
   }
   else {
     // page is full (or a singleton), page is OS allocated
-    mi_subproc_t* subproc = _mi_subproc();
-    mi_subproc_stat_decrease(_mi_subproc(), pages_abandoned, 1);
+    mi_tld_stat_decrease(_mi_thread_tld(), pages_abandoned, 1);
     // if not an arena page, remove from the subproc os pages list
     if (page->memid.memkind != MI_MEM_ARENA && mi_option_is_enabled(mi_option_visit_abandoned)) {
+      mi_subproc_t* subproc = _mi_subproc();
       mi_lock(&subproc->os_abandoned_pages_lock) {
         if (page->prev != NULL) { page->prev->next = page->next; }
         if (page->next != NULL) { page->next->prev = page->prev; }

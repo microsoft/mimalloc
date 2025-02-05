@@ -152,6 +152,12 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   mi_stat_counter_add(&stats->normal_count, &src->normal_count, 1);
   mi_stat_counter_add(&stats->huge_count, &src->huge_count, 1);
   mi_stat_counter_add(&stats->guarded_alloc_count, &src->guarded_alloc_count, 1);
+
+  mi_stat_counter_add(&stats->pages_extended, &src->pages_extended, 1);
+  mi_stat_counter_add(&stats->pages_reclaim_on_alloc, &src->pages_reclaim_on_alloc, 1);
+  mi_stat_counter_add(&stats->pages_reclaim_on_free, &src->pages_reclaim_on_free, 1);
+  mi_stat_counter_add(&stats->pages_reabandon_full, &src->pages_reabandon_full, 1);
+  mi_stat_counter_add(&stats->pages_unabandon_busy_wait, &src->pages_unabandon_busy_wait, 1);
 #if MI_STAT>1
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
     if (src->normal_bins[i].allocated > 0 || src->normal_bins[i].freed > 0) {

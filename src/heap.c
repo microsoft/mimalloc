@@ -115,14 +115,14 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // collect retired pages
   _mi_heap_collect_retired(heap, force);
-  
+
   // if (_mi_is_main_thread()) { mi_debug_show_arenas(true, false, false); }
-  
+
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
 
-  // collect arenas (this is program wide so don't force purges on abandonment of threads)  
-  //mi_atomic_storei64_release(&heap->tld->subproc->purge_expire, 1); 
+  // collect arenas (this is program wide so don't force purges on abandonment of threads)
+  //mi_atomic_storei64_release(&heap->tld->subproc->purge_expire, 1);
   _mi_arenas_collect(collect == MI_FORCE /* force purge? */, collect >= MI_FORCE /* visit all? */, heap->tld);
 }
 
