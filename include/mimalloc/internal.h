@@ -116,6 +116,7 @@ mi_subproc_t* _mi_subproc_main(void);
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
+mi_tld_t*     _mi_thread_tld(void) mi_attr_noexcept;
 void          _mi_heap_guarded_init(mi_heap_t* heap);
 
 // os.c
@@ -171,7 +172,7 @@ void          _mi_arenas_unsafe_destroy_all(mi_tld_t* tld);
 
 mi_page_t*    _mi_arenas_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
 void          _mi_arenas_page_free(mi_page_t* page);
-void          _mi_arenas_page_abandon(mi_page_t* page);
+void          _mi_arenas_page_abandon(mi_page_t* page, mi_tld_t* tld);
 void          _mi_arenas_page_unabandon(mi_page_t* page);
 bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page);
 
@@ -199,7 +200,8 @@ void          _mi_heap_collect_retired(mi_heap_t* heap, bool force);
 size_t        _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append);
 void          _mi_deferred_free(mi_heap_t* heap, bool force);
 
-void          _mi_page_free_collect(mi_page_t* page,bool force);
+void          _mi_page_free_collect(mi_page_t* page, bool force);
+void          _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
 void          _mi_page_init(mi_heap_t* heap, mi_page_t* page);
 
 size_t        _mi_bin_size(uint8_t bin); // for stats
@@ -433,7 +435,7 @@ static inline bool mi_heap_is_backing(const mi_heap_t* heap) {
   return (heap->tld->heap_backing == heap);
 }
 
-static inline bool mi_heap_is_initialized(mi_heap_t* heap) {
+static inline bool mi_heap_is_initialized(const mi_heap_t* heap) {
   mi_assert_internal(heap != NULL);
   return (heap != NULL && heap != &_mi_heap_empty);
 }

@@ -48,7 +48,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 }
 
 // Forward declaration for multi-threaded collect
-static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noexcept;
+static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free) mi_attr_noexcept;
 
 // Free a block multi-threaded
 static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block) mi_attr_noexcept
@@ -69,14 +69,14 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block) mi_attr_
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {
     mi_block_set_next(page, block, mi_tf_block(tf_old));
-    tf_new = mi_tf_create(block, true /* always owned: try to claim it if abandoned */);
+    tf_new = mi_tf_create(block, true /* always use owned: try to claim it if the page is abandoned */);
   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new)); // todo: release is enough?
 
   // and atomically try to collect the page if it was abandoned
   const bool is_owned_now = !mi_tf_is_owned(tf_old);
   if (is_owned_now) {
     mi_assert_internal(mi_page_is_abandoned(page));
-    mi_free_try_collect_mt(page);
+    mi_free_try_collect_mt(page,block);
   }
 }
 
@@ -185,7 +185,7 @@ void mi_free(void* p) mi_attr_noexcept
   else {
     // page is full or contains (inner) aligned blocks; use generic multi-thread path
     mi_free_generic_mt(page, p);
-  }  
+  }
 }
 
 
@@ -194,18 +194,20 @@ void mi_free(void* p) mi_attr_noexcept
 // ------------------------------------------------------
 
 
-static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noexcept {
+static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free) mi_attr_noexcept {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
 
   // we own the page now..
   // safe to collect the thread atomic free list
-  _mi_page_free_collect(page, false);  // update `used` count
+  // use the `_partly` version to avoid atomic operations since we already have the `mt_free` pointing into the thread free list
+  _mi_page_free_collect_partly(page, mt_free);
+
   #if MI_DEBUG > 1
   if (mi_page_is_singleton(page)) { mi_assert_internal(mi_page_all_free(page)); }
   #endif
 
-  // 1. free if the page is free now
+  // 1. free if the page is free now  (this is updated by `_mi_page_free_collect_partly`)
   if (mi_page_all_free(page))
   {
     // first remove it from the abandoned pages in the arena (if mapped, this waits for any readers to finish)
@@ -215,11 +217,13 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noe
     return;
   }
 
+  const bool too_full = mi_page_is_used_at_frac(page, 8);  // more than 7/8th of the page is in use?
+
   // 2. if the page is not too full, we can try to reclaim it for ourselves
   // note: this seems a bad idea but it speeds up some benchmarks (like `larson`) quite a bit.
-  if (_mi_option_get_fast(mi_option_page_reclaim_on_free) != 0 &&
-      !mi_page_is_used_at_frac(page,8) 
-      // && !mi_page_is_abandoned_mapped(page)
+  if (!too_full &&
+      _mi_option_get_fast(mi_option_page_reclaim_on_free) != 0 &&
+      page->block_size <= MI_SMALL_MAX_OBJ_SIZE         // only for small sized blocks
      )
   {
     // the page has still some blocks in use (but not too many)
@@ -228,11 +232,11 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noe
     // note: don't use `mi_heap_get_default()` as we may just have terminated this thread and we should
     // not reinitialize the heap for this thread. (can happen due to thread-local destructors for example -- issue #944)
     mi_heap_t* const heap = mi_prim_get_default_heap();
-    if (heap != (mi_heap_t*)&_mi_heap_empty)  // we did not already terminate our thread (can this happen?
+    if (mi_heap_is_initialized(heap))  // we did not already terminate our thread
     {
       mi_heap_t* const tagheap = _mi_heap_by_tag(heap, page->heap_tag);
       if ((tagheap != NULL) &&                         // don't reclaim across heap object types
-          (tagheap->allow_page_reclaim) &&             // we are allowed to reclaim abandoned pages
+          (tagheap->allow_page_reclaim) &&             // and we are allowed to reclaim abandoned pages
           // (page->subproc == tagheap->tld->subproc) &&  // don't reclaim across sub-processes; todo: make this check faster (integrate with _mi_heap_by_tag ? )
           (_mi_arena_memid_is_suitable(page->memid, tagheap->exclusive_arena))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
          )
@@ -249,7 +253,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page) mi_attr_noe
   }
 
   // 3. if the page is unmapped, try to reabandon so it can possibly be mapped and found for allocations
-  if (!mi_page_is_used_at_frac(page,8) &&  // only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
+  if (!too_full &&  // only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
       !mi_page_is_abandoned_mapped(page) && page->memid.memkind == MI_MEM_ARENA &&
       _mi_arenas_page_try_reabandon_to_mapped(page))
   {

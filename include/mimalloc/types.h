@@ -544,13 +544,20 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_subproc_stat_adjust_increase(subproc,stat,amnt,b)    __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amnt, b)
 #define mi_subproc_stat_adjust_decrease(subproc,stat,amnt,b)    __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amnt, b)
 
+#define mi_tld_stat_counter_increase(tld,stat,amount)           __mi_stat_counter_increase( &(tld)->stats.stat, amount)
+#define mi_tld_stat_increase(tld,stat,amount)                   __mi_stat_increase( &(tld)->stats.stat, amount)
+#define mi_tld_stat_decrease(tld,stat,amount)                   __mi_stat_decrease( &(tld)->stats.stat, amount)
+#define mi_tld_stat_adjust_increase(tld,stat,amnt,b)            __mi_stat_adjust_increase( &(tld)->stats.stat, amnt, b)
+#define mi_tld_stat_adjust_decrease(tld,stat,amnt,b)            __mi_stat_adjust_decrease( &(tld)->stats.stat, amnt, b)
+
+
 #define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
 #define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
 #define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
 
-#define mi_heap_stat_counter_increase(heap,stat,amount)         __mi_stat_counter_increase( &(heap)->tld->stats.stat, amount)
-#define mi_heap_stat_increase(heap,stat,amount)                 __mi_stat_increase( &(heap)->tld->stats.stat, amount)
-#define mi_heap_stat_decrease(heap,stat,amount)                 __mi_stat_decrease( &(heap)->tld->stats.stat, amount)
+#define mi_heap_stat_counter_increase(heap,stat,amount)         mi_tld_stat_counter_increase(heap->tld, stat, amount)
+#define mi_heap_stat_increase(heap,stat,amount)                 mi_tld_stat_increase( heap->tld, stat, amount)
+#define mi_heap_stat_decrease(heap,stat,amount)                 mi_tld_stat_decrease( heap->tld, stat, amount)
 
 #define mi_debug_heap_stat_counter_increase(heap,stat,amount)   mi_debug_stat_counter_increase( (heap)->tld->stats.stat, amount)
 #define mi_debug_heap_stat_increase(heap,stat,amount)           mi_debug_stat_increase( (heap)->tld->stats.stat, amount)
