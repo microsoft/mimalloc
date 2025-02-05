@@ -280,7 +280,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
     mi_page_queue_remove(pq, page);
     mi_tld_t* tld = page->heap->tld;
     mi_page_set_heap(page, NULL);
-    _mi_arenas_page_abandon(page);
+    _mi_arenas_page_abandon(page,tld);
     _mi_arenas_collect(false, false, tld); // allow purging
   }
 }
