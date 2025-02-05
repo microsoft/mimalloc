@@ -168,7 +168,7 @@ static size_t mi_page_full_size(mi_page_t* page) {
     mi_assert_internal((uint8_t*)page->memid.mem.os.base <= (uint8_t*)page);
     const ptrdiff_t presize = (uint8_t*)page - (uint8_t*)page->memid.mem.os.base;
     mi_assert_internal((ptrdiff_t)page->memid.mem.os.size >= presize);
-    return (presize > page->memid.mem.os.size ? 0 : page->memid.mem.os.size - presize);
+    return (presize > (ptrdiff_t)page->memid.mem.os.size ? 0 : page->memid.mem.os.size - presize);
   }
   else {
     return 0;
