@@ -168,13 +168,13 @@ static mi_option_desc_t options[_mi_option_last] =
   { MI_DEFAULT_GUARDED_SAMPLE_RATE,
          UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)
   { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
-  { 0,   UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
-  { 2,   UNINIT, MI_OPTION(page_full_retain) },
-  { 4,   UNINIT, MI_OPTION(page_max_candidates) },
-  { 0,   UNINIT, MI_OPTION(max_vabits) },
+  { 0,   UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free: -1 = disable completely, 0 = only reclaim into the originating heap, 1 = reclaim on free across heaps
+  { 2,   UNINIT, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues
+  { 4,   UNINIT, MI_OPTION(page_max_candidates) },      // max search to find a best page candidate
+  { 0,   UNINIT, MI_OPTION(max_vabits) },               // max virtual address space bits
   { MI_DEFAULT_PAGEMAP_COMMIT, 
          UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
-  { 2,   UNINIT, MI_OPTION(page_commit_on_demand) },
+  { 2,   UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this on overcommit systems (like Linux))
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

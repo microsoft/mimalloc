@@ -217,43 +217,40 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     return;
   }
 
-  const bool too_full = mi_page_is_used_at_frac(page, 8);  // more than 7/8th of the page is in use?
-
   // 2. if the page is not too full, we can try to reclaim it for ourselves
-  // note: this seems a bad idea but it speeds up some benchmarks (like `larson`) quite a bit.
-  if (!too_full &&
-      _mi_option_get_fast(mi_option_page_reclaim_on_free) != 0 &&
-      page->block_size <= MI_SMALL_MAX_OBJ_SIZE         // only for small sized blocks
-     )
+  // note: 
+  // we only reclaim if the page originated from our heap (the heap field is preserved on abandonment)
+  // to avoid claiming arbitrary object sizes and limit indefinite expansion. 
+  // this helps benchmarks like `larson`
+  const long reclaim_on_free = _mi_option_get_fast(mi_option_page_reclaim_on_free);
+  if (reclaim_on_free >= 0 && page->block_size <= MI_SMALL_MAX_OBJ_SIZE)       // only for small sized blocks
   {
     // the page has still some blocks in use (but not too many)
     // reclaim in our heap if compatible, or otherwise abandon again
     // todo: optimize this check further?
     // note: don't use `mi_heap_get_default()` as we may just have terminated this thread and we should
     // not reinitialize the heap for this thread. (can happen due to thread-local destructors for example -- issue #944)
-    mi_heap_t* const heap = mi_prim_get_default_heap();
-    if (mi_heap_is_initialized(heap))  // we did not already terminate our thread
-    {
-      mi_heap_t* const tagheap = _mi_heap_by_tag(heap, page->heap_tag);
-      if ((tagheap != NULL) &&                         // don't reclaim across heap object types
-          (tagheap->allow_page_reclaim) &&             // and we are allowed to reclaim abandoned pages
-          // (page->subproc == tagheap->tld->subproc) &&  // don't reclaim across sub-processes; todo: make this check faster (integrate with _mi_heap_by_tag ? )
-          (_mi_arena_memid_is_suitable(page->memid, tagheap->exclusive_arena))  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
-         )
-      {
-        if (mi_page_queue(tagheap, page->block_size)->first != NULL) {  // don't reclaim for a block_size we don't use
-          // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
-          _mi_arenas_page_unabandon(page);
-          _mi_heap_page_reclaim(tagheap, page);
-          mi_heap_stat_counter_increase(tagheap, pages_reclaim_on_free, 1);
-          return;
-        }
+    mi_heap_t* heap = mi_prim_get_default_heap();
+    if (heap != page->heap) {                     
+      if (mi_heap_is_initialized(heap)) {               
+        heap = _mi_heap_by_tag(heap, page->heap_tag);
       }
+    }
+    if (heap != NULL && heap->allow_page_reclaim &&
+        (heap == page->heap || (reclaim_on_free == 1 && !mi_page_is_used_at_frac(page, 8))) &&  // only reclaim if we were the originating heap, or if reclaim_on_free == 1 and the pages is not too full
+        _mi_arena_memid_is_suitable(page->memid,heap->exclusive_arena)  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
+       ) 
+    {
+      // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
+      _mi_arenas_page_unabandon(page);
+      _mi_heap_page_reclaim(heap, page);
+      mi_heap_stat_counter_increase(heap, pages_reclaim_on_free, 1);
+      return;      
     }
   }
 
   // 3. if the page is unmapped, try to reabandon so it can possibly be mapped and found for allocations
-  if (!too_full &&  // only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
+  if (!mi_page_is_used_at_frac(page, 8) &&  // only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
       !mi_page_is_abandoned_mapped(page) && page->memid.memkind == MI_MEM_ARENA &&
       _mi_arenas_page_try_reabandon_to_mapped(page))
   {
