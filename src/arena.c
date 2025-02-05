@@ -160,12 +160,15 @@ static mi_arena_t* mi_page_arena(mi_page_t* page, size_t* slice_index, size_t* s
   return mi_arena_from_memid(page->memid, slice_index, slice_count);
 }
 
-static size_t mi_memid_size(mi_memid_t memid) {
-  if (memid.memkind == MI_MEM_ARENA) {
-    return memid.mem.arena.slice_count * MI_ARENA_SLICE_SIZE;
+static size_t mi_page_full_size(mi_page_t* page) {  
+  if (page->memid.memkind == MI_MEM_ARENA) {
+    return page->memid.mem.arena.slice_count * MI_ARENA_SLICE_SIZE;
   }
-  else if (mi_memid_is_os(memid) || memid.memkind == MI_MEM_EXTERNAL) {
-    return memid.mem.os.size;
+  else if (mi_memid_is_os(page->memid) || page->memid.memkind == MI_MEM_EXTERNAL) {
+    mi_assert_internal((uint8_t*)page->memid.mem.os.base <= (uint8_t*)page);
+    const ptrdiff_t presize = (uint8_t*)page - (uint8_t*)page->memid.mem.os.base;
+    mi_assert_internal((ptrdiff_t)page->memid.mem.os.size >= presize);
+    return (presize > page->memid.mem.os.size ? 0 : page->memid.mem.os.size - presize);
   }
   else {
     return 0;
@@ -820,7 +823,7 @@ void _mi_arenas_page_free(mi_page_t* page) {
   // we must do this since we may later allocate large spans over this page and cannot have a guard page in between
   #if MI_SECURE >= 2
   if (!page->memid.is_pinned) {
-    _mi_os_secure_guard_page_reset_before((uint8_t*)page + mi_memid_size(page->memid));
+    _mi_os_secure_guard_page_reset_before((uint8_t*)page + mi_page_full_size(page));
   }
   #endif
 
@@ -831,7 +834,7 @@ void _mi_arenas_page_free(mi_page_t* page) {
     mi_bitmap_clear(arena->pages, page->memid.mem.arena.slice_index);
     if (page->slice_committed > 0) {
       // if committed on-demand, set the commit bits to account commit properly
-      mi_assert_internal(mi_memid_size(page->memid) >= page->slice_committed);
+      mi_assert_internal(mi_page_full_size(page) >= page->slice_committed);
       const size_t total_slices = page->slice_committed / MI_ARENA_SLICE_SIZE;  // conservative
       //mi_assert_internal(mi_bitmap_is_clearN(arena->slices_committed, page->memid.mem.arena.slice_index, total_slices));
       mi_assert_internal(page->memid.mem.arena.slice_count >= total_slices);
@@ -849,7 +852,7 @@ void _mi_arenas_page_free(mi_page_t* page) {
       mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, page->memid.mem.arena.slice_index, page->memid.mem.arena.slice_count));
     }
   }
-  _mi_arenas_free(page, mi_memid_size(page->memid), page->memid);
+  _mi_arenas_free(page, mi_page_full_size(page), page->memid);
 }
 
 /* -----------------------------------------------------------
