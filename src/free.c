@@ -217,17 +217,13 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     return;
   }
 
-  // 2. if the page is not too full, we can try to reclaim it for ourselves
-  // note: 
-  // we only reclaim if the page originated from our heap (the heap field is preserved on abandonment)
-  // to avoid claiming arbitrary object sizes and limit indefinite expansion. 
-  // this helps benchmarks like `larson`
+  // 2. we can try to reclaim the page for ourselves
+  // note:  we only reclaim if the page originated from our heap (the heap field is preserved on abandonment)
+  // to avoid claiming arbitrary object sizes and limit indefinite expansion. This helps benchmarks like `larson`
   const long reclaim_on_free = _mi_option_get_fast(mi_option_page_reclaim_on_free);
   if (reclaim_on_free >= 0 && page->block_size <= MI_SMALL_MAX_OBJ_SIZE)       // only for small sized blocks
   {
-    // the page has still some blocks in use (but not too many)
-    // reclaim in our heap if compatible, or otherwise abandon again
-    // todo: optimize this check further?
+    // get our heap (with the right tag)
     // note: don't use `mi_heap_get_default()` as we may just have terminated this thread and we should
     // not reinitialize the heap for this thread. (can happen due to thread-local destructors for example -- issue #944)
     mi_heap_t* heap = mi_prim_get_default_heap();
@@ -236,16 +232,20 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
         heap = _mi_heap_by_tag(heap, page->heap_tag);
       }
     }
-    if (heap != NULL && heap->allow_page_reclaim &&
-        (heap == page->heap || (reclaim_on_free == 1 && !mi_page_is_used_at_frac(page, 8))) &&  // only reclaim if we were the originating heap, or if reclaim_on_free == 1 and the pages is not too full
-        _mi_arena_memid_is_suitable(page->memid,heap->exclusive_arena)  // don't reclaim across unsuitable arena's; todo: inline arena_is_suitable (?)
-       ) 
-    {
-      // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
-      _mi_arenas_page_unabandon(page);
-      _mi_heap_page_reclaim(heap, page);
-      mi_heap_stat_counter_increase(heap, pages_reclaim_on_free, 1);
-      return;      
+    // can we reclaim?
+    if (heap != NULL && heap->allow_page_reclaim) {
+      if (heap == page->heap ||                  // only reclaim if we were the originating heap,
+          (reclaim_on_free == 1 &&               // OR if the reclaim option across heaps is enabled
+           !mi_page_is_used_at_frac(page, 8) &&  //    and the page is not too full
+           _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable    
+         )
+      {
+        // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
+        _mi_arenas_page_unabandon(page);
+        _mi_heap_page_reclaim(heap, page);
+        mi_heap_stat_counter_increase(heap, pages_reclaim_on_free, 1);
+        return;
+      }
     }
   }
 
