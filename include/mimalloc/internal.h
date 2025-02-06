@@ -492,7 +492,7 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
 // 2-level page map:
 // double indirection, but low commit and low virtual reserve.
 //
-// the page-map is usually 4 MiB and points to sub maps of 64 KiB.
+// the page-map is usually 4 MiB (for 48 bits virtual addresses) and points to sub maps of 64 KiB.
 // the page-map is committed on-demand (in 64 KiB parts) (and sub-maps are committed on-demand as well)
 // one sub page-map = 64 KiB => covers 2^(16-3) * 2^16 = 2^29 = 512 MiB address space
 // the page-map needs 48-(16+13) = 19 bits => 2^19 sub map pointers = 4 MiB size.
@@ -519,7 +519,7 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p, &sub_idx);
   mi_page_t** const sub = _mi_page_map[idx];
-  if mi_unlikely(sub == NULL) return NULL;
+  if mi_unlikely(sub == NULL) return (mi_page_t*)&_mi_page_empty;
   return sub[sub_idx];
 }
 

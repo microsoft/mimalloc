@@ -123,6 +123,10 @@ static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_
 // free a pointer owned by another thread (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, void* p) mi_attr_noexcept {
   if (p==NULL) return;  // a NULL pointer is seen as abandoned (tid==0) with a full flag set
+  #if !MI_PAGE_MAP_FLAT
+  if (page==&_mi_page_empty) return;  // an invalid pointer may lead to using the empty page
+  #endif
+  mi_assert_internal(p!=NULL && page != NULL && page != &_mi_page_empty);
   mi_block_t* const block = _mi_page_ptr_unalign(page, p); // don't check `has_aligned` flag to avoid a race (issue #865)
   mi_block_check_unguard(page, block, p);
   mi_free_block_mt(page, block);
@@ -135,10 +139,9 @@ void mi_decl_noinline _mi_free_generic(mi_page_t* page, bool is_local, void* p) 
 }
 
 
-// Get the segment data belonging to a pointer
-// This is just a single `and` in release mode but does further checks in debug mode
-// (and secure mode) to see if this was a valid pointer.
-static inline mi_page_t* mi_checked_ptr_page(const void* p, const char* msg)
+// Get the page belonging to a pointer
+// Does further checks in debug mode to see if this was a valid pointer.
+static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
 {
   MI_UNUSED_RELEASE(msg);
   #if MI_DEBUG
@@ -146,9 +149,14 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p, const char* msg)
     _mi_error_message(EINVAL, "%s: invalid (unaligned) pointer: %p\n", msg, p);
     return NULL;
   }
-  mi_page_t* const page = _mi_safe_ptr_page(p);
-  if (page == NULL && p != NULL) {
-    _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);
+  mi_page_t* page = _mi_safe_ptr_page(p);
+  if (page == NULL) {
+    if (p != NULL) {
+      _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);
+    }
+    #if !MI_PAGE_MAP_FLAT
+    page = (mi_page_t*)&_mi_page_empty;
+    #endif
   }
   return page;
   #else
@@ -160,12 +168,13 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p, const char* msg)
 // Fast path written carefully to prevent register spilling on the stack
 void mi_free(void* p) mi_attr_noexcept
 {
-  mi_page_t* const page = mi_checked_ptr_page(p,"mi_free");
+  mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");
 
-  #if MI_PAGE_MAP_FLAT                  // if not flat, NULL will point to `_mi_page_empty` and get to `mi_free_generic_mt`
+  #if MI_PAGE_MAP_FLAT  // if not flat, p==NULL leads to `_mi_page_empty` which leads to `mi_free_generic_mt`
   if mi_unlikely(page==NULL) return;
   #endif
-
+  mi_assert_internal(page!=NULL);
+  
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ mi_page_xthread_id(page));
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
@@ -283,7 +292,7 @@ static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_page_t* p
 }
 
 static inline size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noexcept {
-  const mi_page_t* const page = mi_checked_ptr_page(p,msg);
+  const mi_page_t* const page = mi_validate_ptr_page(p,msg);
   if mi_unlikely(page==NULL) return 0;
   if mi_likely(!mi_page_has_aligned(page)) {
     const mi_block_t* block = (const mi_block_t*)p;
