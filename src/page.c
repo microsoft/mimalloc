@@ -279,7 +279,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   else {
     mi_page_queue_remove(pq, page);
     mi_heap_t* heap = page->heap;
-    mi_page_set_heap(page, NULL);  
+    mi_page_set_heap(page, NULL);
     page->heap = heap; // dont set heap to NULL so we can reclaim_on_free within the same heap
     _mi_arenas_page_abandon(page, heap->tld);
     _mi_arenas_collect(false, false, heap->tld); // allow purging
@@ -358,11 +358,11 @@ static void mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
 
   mi_heap_t* heap = mi_page_heap(page);
   if (heap->allow_page_abandon) {
-    // abandon full pages
+    // abandon full pages (this is the usual case in order to allow for sharing of memory between heaps)
     _mi_page_abandon(page, pq);
   }
   else if (!mi_page_is_in_full(page)) {
-    // put full pages in a heap local queue
+    // put full pages in a heap local queue (this is for heaps that cannot abandon, for example, if the heap can be destroyed)
     mi_page_queue_enqueue_from(&mi_page_heap(page)->pages[MI_BIN_FULL], pq, page);
     _mi_page_free_collect(page, false);  // try to collect right away in case another thread freed just before MI_USE_DELAYED_FREE was set
   }

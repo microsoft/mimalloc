@@ -220,7 +220,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
   if (mi_page_all_free(page))
   {
     // first remove it from the abandoned pages in the arena (if mapped, this waits for any readers to finish)
-      _mi_arenas_page_unabandon(page);
+    _mi_arenas_page_unabandon(page);
     // we can free the page directly
     _mi_arenas_page_free(page);
     return;
@@ -244,8 +244,9 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     // can we reclaim?
     if (heap != NULL && heap->allow_page_reclaim) {
       if (heap == page->heap ||                  // only reclaim if we were the originating heap,
-          (reclaim_on_free == 1 &&               // OR if the reclaim option across heaps is enabled
+          (reclaim_on_free == 1 &&               // OR if the reclaim across heaps is allowed
            !mi_page_is_used_at_frac(page, 8) &&  //    and the page is not too full
+           !heap->tld->is_in_threadpool &&       //    and not part of a threadpool
            _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable    
          )
       {

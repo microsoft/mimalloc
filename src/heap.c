@@ -181,10 +181,10 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool allow_destroy, 
   heap->tag        = heap_tag;
   if (heap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our heap.
-    heap->allow_page_reclaim = false;
-    // .. but abandoning is good in this case: quarter the full page retain (possibly to 0)
+    // this is checked in `free.c:mi_free_try_collect_mt`
+    // .. but abandoning is good in this case: halve the full page retain (possibly to 0)
     // (so blocked threads do not hold on to too much memory)
-    if (heap->page_full_retain >= 0) {
+    if (heap->page_full_retain > 0) {
       heap->page_full_retain = heap->page_full_retain / 4;
     }
   }
