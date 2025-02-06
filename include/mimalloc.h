@@ -394,8 +394,8 @@ typedef enum mi_option_e {
   mi_option_guarded_precise,            // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
   mi_option_guarded_sample_rate,        // 1 out of N allocations in the min/max range will be guarded (=1000)
   mi_option_guarded_sample_seed,        // can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
-  mi_option_page_reclaim_on_free,       // allow to reclaim an abandoned segment on a free (=1)
-  mi_option_page_full_retain,           // retain N full pages per size class (=2)
+  mi_option_page_reclaim_on_free,       // reclaim abandoned pages on a free (=0). -1 disallowr always, 0 allows if the page originated from the current heap, 1 allow always
+  mi_option_page_full_retain,           // retain N full (small) pages per size class (=2)
   mi_option_page_max_candidates,        // max candidate pages to consider for allocation (=4)
   mi_option_max_vabits,                 // max user space virtual address bits to consider (=48)
   mi_option_pagemap_commit,             // commit the full pagemap (to always catch invalid pointer uses) (=0)
