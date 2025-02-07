@@ -804,7 +804,7 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
       const size_t post = mi_bfield_clz(~b);
       if (post > 0) {
         const size_t pre = mi_bfield_ctz(~mi_atomic_load_relaxed(&chunk->bfields[i+1]));
-        if (post + pre <= n) {
+        if (post + pre >= n) {
           // it fits -- try to claim it atomically
           const size_t cidx = (i*MI_BFIELD_BITS) + (MI_BFIELD_BITS - post);
           if (mi_bchunk_try_clearNX(chunk, cidx, n, NULL)) {
