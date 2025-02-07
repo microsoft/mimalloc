@@ -773,9 +773,10 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
   for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
     mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
     size_t idx;
+    
     // is there a range inside the field?
     while (mi_bfield_find_least_bit(b, &idx)) { // find least 1-bit
-      if (idx + n > MI_BFIELD_BITS) break; // too short, maybe cross over, or continue with the next field
+      if (idx + n > MI_BFIELD_BITS) break; // too short: maybe cross over, or continue with the next field
 
       const size_t bmask = mask<<idx;
       mi_assert_internal(bmask>>idx == mask);
@@ -792,15 +793,16 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
         }
       }
       else {
-        // advance
-        const size_t ones = mi_bfield_ctz(~(b>>idx));  // skip all ones (since it didn't fit the mask)
-        mi_assert_internal(ones>0);
-        b = b & ~mi_bfield_mask(ones, idx);            // clear the ones
+        // advance by clearing the least run of ones, for example, with n>=4, idx=2:
+        // b             = 1111 1101 1010 1100
+        // .. + (1<<idx) = 1111 1101 1011 0000
+        // .. & b        = 1111 1101 1010 0000
+        b = b & (b + (mi_bfield_one() << idx));               
       }
     }
 
     // check if we can cross into the next bfield
-    if (i < MI_BCHUNK_FIELDS-1) {
+    if (b!=0 && i < MI_BCHUNK_FIELDS-1) {
       const size_t post = mi_bfield_clz(~b);
       if (post > 0) {
         const size_t pre = mi_bfield_ctz(~mi_atomic_load_relaxed(&chunk->bfields[i+1]));

@@ -137,7 +137,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
   Page collect the `local_free` and `thread_free` lists
 ----------------------------------------------------------- */
 
-static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
+static mi_decl_noinline void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
 {
   if (head == NULL) return;
 
@@ -167,7 +167,7 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
 }
 
 // Collect the local `thread_free` list using an atomic exchange.
-static void mi_page_thread_free_collect(mi_page_t* page)
+static mi_decl_noinline void mi_page_thread_free_collect(mi_page_t* page)
 {
   // atomically capture the thread free list
   mi_block_t* head;
