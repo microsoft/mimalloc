@@ -62,6 +62,9 @@ static PGetNumaProcessorNodeEx      pGetNumaProcessorNodeEx = NULL;
 static PGetNumaNodeProcessorMaskEx  pGetNumaNodeProcessorMaskEx = NULL;
 static PGetNumaProcessorNode        pGetNumaProcessorNode = NULL;
 
+// Available after Windows XP
+typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
+
 //---------------------------------------------
 // Enable large page support dynamically (if possible)
 //---------------------------------------------
@@ -123,13 +126,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     const size_t vbits = MI_INTPTR_BITS - mi_clz((uintptr_t)si.lpMaximumApplicationAddress);
     config->virtual_address_bits = vbits;
   }
-  // get physical memory
-  ULONGLONG memInKiB = 0;
-  if (GetPhysicallyInstalledSystemMemory(&memInKiB)) {
-    if (memInKiB > 0 && memInKiB < (SIZE_MAX / MI_KiB)) {
-      config->physical_memory = (size_t)memInKiB * MI_KiB;
-    }
-  }
+
   // get the VirtualAlloc2 function
   HINSTANCE  hDll;
   hDll = LoadLibrary(TEXT("kernelbase.dll"));
@@ -152,8 +149,19 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     pGetNumaProcessorNodeEx = (PGetNumaProcessorNodeEx)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNodeEx");
     pGetNumaNodeProcessorMaskEx = (PGetNumaNodeProcessorMaskEx)(void (*)(void))GetProcAddress(hDll, "GetNumaNodeProcessorMaskEx");
     pGetNumaProcessorNode = (PGetNumaProcessorNode)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNode");
+    // Get physical memory (not available on XP, so check dynamically)
+    PGetPhysicallyInstalledSystemMemory pGetPhysicallyInstalledSystemMemory = (PGetPhysicallyInstalledSystemMemory)(void (*)(void))GetProcAddress(hDll,"GetPhysicallyInstalledSystemMemory");
+    if (pGetPhysicallyInstalledSystemMemory != NULL) {
+      ULONGLONG memInKiB = 0;
+      if ((*pGetPhysicallyInstalledSystemMemory)(&memInKiB)) {
+        if (memInKiB > 0 && memInKiB < (SIZE_MAX / MI_KiB)) {
+          config->physical_memory = (size_t)memInKiB * MI_KiB;
+        }
+      }
+    }
     FreeLibrary(hDll);
   }
+  // Enable large/huge OS page support?
   if (mi_option_is_enabled(mi_option_allow_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     win_enable_large_os_pages(&config->large_page_size);
   }
