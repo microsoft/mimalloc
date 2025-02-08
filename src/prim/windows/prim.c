@@ -127,9 +127,11 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_partial_free = false;
   config->has_virtual_reserve = true;
   // windows version
-  const DWORD win_version = GetVersion();
-  win_major_version = (DWORD)(LOBYTE(LOWORD(win_version)));
-  win_minor_version = (DWORD)(HIBYTE(LOWORD(win_version)));
+  OSVERSIONINFOW version{sizeof(version)};
+  if (GetVersionExW(&version)) {
+      win_major_version = version.dwMajorVersion;
+      win_minor_version = version.dwMinorVersion;
+  }
   // get the page size
   SYSTEM_INFO si;
   GetSystemInfo(&si);
