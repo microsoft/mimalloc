@@ -169,7 +169,7 @@ static inline bool mi_bfield_atomic_try_clear_mask_of(_Atomic(mi_bfield_t)*b, mi
   mi_assert_internal(mask != 0);
   // try to atomically clear the mask bits
   do {
-    if ((expect & mask) != mask) {
+    if ((expect & mask) != mask) {  // are all bits still set?
       if (all_clear != NULL) { *all_clear = (expect == 0); }
       return false;
     }
