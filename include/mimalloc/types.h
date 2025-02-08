@@ -99,7 +99,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ENCODE_FREELIST  1
 #endif
 
-// Enable large pages for objects between 64KiB and 256KiB.
+// Enable large pages for objects between 64KiB and 512KiB.
 // Disabled by default as for many workloads the block sizes above 64 KiB are quite random which can lead to too many partially used large pages.
 #ifndef MI_ENABLE_LARGE_PAGES
 #define MI_ENABLE_LARGE_PAGES  0
@@ -342,7 +342,7 @@ typedef struct mi_page_s {
 #define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_INFO_SIZE)/4)   // < 16 KiB
 #if MI_ENABLE_LARGE_PAGES
 #define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_INFO_SIZE)/4)  // < 128 KiB
-#define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/8)    // <= 256 KiB // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
+#define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/8)    // <= 512KiB // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
 #else
 #define MI_MEDIUM_MAX_OBJ_SIZE            (MI_MEDIUM_PAGE_SIZE/4)   // <= 128 KiB
 #define MI_LARGE_MAX_OBJ_SIZE             MI_MEDIUM_MAX_OBJ_SIZE    // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`

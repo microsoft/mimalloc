@@ -201,7 +201,7 @@ void mi_free(void* p) mi_attr_noexcept
 // ------------------------------------------------------
 // Multi-threaded Free (`_mt`)
 // ------------------------------------------------------
-
+static bool mi_page_unown_from_free(mi_page_t* page, mi_block_t* mt_free);
 
 static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free) mi_attr_noexcept {
   mi_assert_internal(mi_page_is_owned(page));
@@ -269,7 +269,36 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
 
 
   // not reclaimed or free'd, unown again
-  _mi_page_unown(page);
+  // _mi_page_unown(page);
+  mi_page_unown_from_free(page, mt_free);
+}
+
+
+// release ownership of a page. This may free the page if all (other) blocks were concurrently
+// freed in the meantime. Returns true if the page was freed.
+// This is a specialized version of `mi_page_unown` to (try to) avoid calling `mi_page_free_collect` again.
+static bool mi_page_unown_from_free(mi_page_t* page, mi_block_t* mt_free) {
+  mi_assert_internal(mi_page_is_owned(page));
+  mi_assert_internal(mi_page_is_abandoned(page));
+  mi_assert_internal(mt_free != NULL);
+  mi_assert_internal(page->used > 1);
+  mi_thread_free_t tf_expect = mi_tf_create(mt_free, true);
+  mi_thread_free_t tf_new    = mi_tf_create(mt_free, false);
+  while mi_unlikely(!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_expect, tf_new)) {
+    mi_assert_internal(mi_tf_is_owned(tf_expect));
+    while (mi_tf_block(tf_expect) != NULL) {
+      _mi_page_free_collect(page,false);  // update used
+      if (mi_page_all_free(page)) {   // it may become free just before unowning it
+        _mi_arenas_page_unabandon(page);
+        _mi_arenas_page_free(page);
+        return true;
+      }
+      tf_expect = mi_atomic_load_relaxed(&page->xthread_free);
+    }
+    mi_assert_internal(mi_tf_block(tf_expect)==NULL);
+    tf_new = mi_tf_create(NULL, false);
+  }
+  return false;
 }
 
 
