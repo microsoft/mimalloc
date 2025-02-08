@@ -137,7 +137,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
   Page collect the `local_free` and `thread_free` lists
 ----------------------------------------------------------- */
 
-static mi_decl_noinline void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
+static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
 {
   if (head == NULL) return;
 
@@ -167,7 +167,7 @@ static mi_decl_noinline void mi_page_thread_collect_to_local(mi_page_t* page, mi
 }
 
 // Collect the local `thread_free` list using an atomic exchange.
-static mi_decl_noinline void mi_page_thread_free_collect(mi_page_t* page)
+static void mi_page_thread_free_collect(mi_page_t* page)
 {
   // atomically capture the thread free list
   mi_block_t* head;
@@ -215,11 +215,17 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
   mi_assert_internal(!force || page->local_free == NULL);
 }
 
-// collect elements in the thread-free list starting at `head`.
+// Collect elements in the thread-free list starting at `head`. This is an optimized
+// version of `_mi_page_free_collect` to be used from `free.c:_mi_free_collect_mt` that avoids atomic access to `xthread_free`.
+// 
+// `head` must be in the `xthread_free` list. It will not collect `head` itself
+// so the `used` count is not fully updated in general. However, if the `head` is
+// the last remaining element, it will be collected and the used count will become `0` (so `mi_page_all_free` becomes true).
 void _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
   if (head == NULL) return;
-  mi_block_t* next = mi_block_next(page,head);  // we cannot collect the head element itself as `page->thread_free` may point at it (and we want to avoid atomic ops)
+  mi_block_t* next = mi_block_next(page,head);  // we cannot collect the head element itself as `page->thread_free` may point to it (and we want to avoid atomic ops)
   if (next != NULL) {
+    mi_block_set_next(page, head, NULL);
     mi_page_thread_collect_to_local(page, next);
     if (page->local_free != NULL && page->free == NULL) {
       page->free = page->local_free;
@@ -229,6 +235,8 @@ void _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
   }
   if (page->used == 1) {
     // all elements are free'd since we skipped the `head` element itself
+    mi_assert_internal(mi_tf_block(mi_atomic_load_relaxed(&page->xthread_free)) == head);
+    mi_assert_internal(mi_block_next(page,head) == NULL);
     _mi_page_free_collect(page, false);  // collect the final element
   }
 }
@@ -816,31 +824,25 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
 
 
 // Find a page with free blocks of `size`.
-static inline mi_page_t* mi_find_free_page(mi_heap_t* heap, mi_page_queue_t* pq) {
+static mi_page_t* mi_find_free_page(mi_heap_t* heap, mi_page_queue_t* pq) {
   // mi_page_queue_t* pq = mi_page_queue(heap, size);
   mi_assert_internal(!mi_page_queue_is_huge(pq));
 
   // check the first page: we even do this with candidate search or otherwise we re-search every time
   mi_page_t* page = pq->first;
-  if (page != NULL) {
-   #if (MI_SECURE>=3) // in secure mode, we extend half the time to increase randomness
+  if mi_likely(page != NULL && mi_page_immediate_available(page)) {
+    #if (MI_SECURE>=3) // in secure mode, we extend half the time to increase randomness
     if (page->capacity < page->reserved && ((_mi_heap_random_next(heap) & 1) == 1)) {
       mi_page_extend_free(heap, page);
       mi_assert_internal(mi_page_immediate_available(page));
     }
-    else
-   #endif
-    {
-      _mi_page_free_collect(page,false);
-    }
-
-    if (mi_page_immediate_available(page)) {
-      page->retire_expire = 0;
-      return page; // fast path
-    }
+    #endif
+    page->retire_expire = 0;
+    return page; // fast path
   }
-
-  return mi_page_queue_find_free_ex(heap, pq, true);
+  else {
+    return mi_page_queue_find_free_ex(heap, pq, true);
+  }
 }
 
 
