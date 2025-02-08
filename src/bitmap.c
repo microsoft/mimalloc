@@ -184,7 +184,7 @@ static inline bool mi_bfield_atomic_try_clear_mask(_Atomic(mi_bfield_t)* b, mi_b
   return mi_bfield_atomic_try_clear_mask_of(b, mask, expect, all_clear);
 }
 
-
+/*
 // Tries to clear a bit atomically. Returns `true` if the bit transitioned from 1 to 0
 // and `false` otherwise leaving the bfield `b` as-is.
 // `all_clear` is set to true if the new bfield became zero (and false otherwise)
@@ -203,6 +203,7 @@ static inline bool mi_bfield_atomic_try_clear8(_Atomic(mi_bfield_t)*b, size_t id
   const mi_bfield_t mask = ((mi_bfield_t)0xFF)<<idx;
   return mi_bfield_atomic_try_clear_mask(b, mask, all_clear);
 }
+*/
 
 // Try to clear a full field of bits atomically, and return true all bits transitioned from all 1's to 0's.
 // and false otherwise leaving the bit field as-is.
