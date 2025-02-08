@@ -425,8 +425,13 @@ endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
   if(MI_OPT_ARCH)
-    if(MI_ARCH STREQUAL "arm64")
-      set(MI_OPT_ARCH_FLAGS "-march=armv8.1-a")         # fast atomics
+    if(APPLE AND CMAKE_C_COMPILER_ID STREQUAL "AppleClang" AND CMAKE_OSX_ARCHITECTURES)   # to support multi-arch binaries (#999)
+      set(MI_OPT_ARCH_FLAGS "")
+      if("arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
+        list(APPEND MI_OPT_ARCH_FLAGS "-Xarch_arm64;-march=armv8.1-a")
+      endif()
+    elseif(MI_ARCH STREQUAL "arm64")
+      set(MI_OPT_ARCH_FLAGS "-march=armv8.1-a")  # fast atomics
     endif()
   endif()
 endif()
