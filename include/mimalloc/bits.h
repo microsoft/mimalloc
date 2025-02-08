@@ -199,6 +199,8 @@ static inline size_t mi_ctz(size_t x) {
     size_t r;
     __asm ("tzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
     return r;
+  #elif defined(_MSC_VER) && MI_ARCH_X64 && defined(__BMI1__) 
+    return _tzcnt_u64(x);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long idx;
     return (mi_msc_builtinz(_BitScanForward)(&idx, x) ? (size_t)idx : MI_SIZE_BITS);
@@ -221,6 +223,8 @@ static inline size_t mi_clz(size_t x) {
     size_t r;
     __asm ("lzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
     return r;
+  #elif defined(_MSC_VER) && MI_ARCH_X64 && defined(__BMI1__) 
+    return _lzcnt_u64(x);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long idx;
     return (mi_msc_builtinz(_BitScanReverse)(&idx, x) ? MI_SIZE_BITS - 1 - (size_t)idx : MI_SIZE_BITS);
@@ -254,7 +258,7 @@ static inline bool mi_bsf(size_t x, size_t* idx) {
     bool is_zero;
     __asm ( "tzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc" );
     return !is_zero;
-  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+  #elif 0 && defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long i;
     return (mi_msc_builtinz(_BitScanForward)(&i, x) ? (*idx = (size_t)i, true) : false);
   #else
@@ -271,7 +275,7 @@ static inline bool mi_bsr(size_t x, size_t* idx) {
     bool is_zero;
     __asm ("lzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc");
     return !is_zero;
-  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+  #elif 0 && defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long i;
     return (mi_msc_builtinz(_BitScanReverse)(&i, x) ? (*idx = (size_t)i, true) : false);
   #else

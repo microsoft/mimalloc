@@ -127,9 +127,11 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_partial_free = false;
   config->has_virtual_reserve = true;
   // windows version
-  const DWORD win_version = GetVersion();
-  win_major_version = (DWORD)(LOBYTE(LOWORD(win_version)));
-  win_minor_version = (DWORD)(HIBYTE(LOWORD(win_version)));
+  OSVERSIONINFOW version; _mi_memzero_var(version);
+  if (GetVersionExW(&version)) {
+    win_major_version = version.dwMajorVersion;
+    win_minor_version = version.dwMinorVersion;
+  }
   // get the page size
   SYSTEM_INFO si;
   GetSystemInfo(&si);
@@ -668,7 +670,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
   // Windows DLL: easy to hook into process_init and thread_done
-  __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
+  BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     mi_win_main((PVOID)inst,reason,reserved);
     return TRUE;
   }
