@@ -271,10 +271,6 @@ void mi_bbitmap_unsafe_setN(mi_bbitmap_t* bbitmap, size_t idx, size_t n);
 // `n` cannot cross chunk boundaries (and `n <= MI_BCHUNK_BITS`)!
 bool mi_bbitmap_setN(mi_bbitmap_t* bbitmap, size_t idx, size_t n);
 
-// Clear a sequence of `n` bits in the bitmap; returns `true` if atomically transitioned from all 1's to 0's
-// `n` cannot cross chunk boundaries (and `n <= MI_BCHUNK_BITS`)!
-bool mi_bbitmap_clearN(mi_bbitmap_t* bbitmap, size_t idx, size_t n);
-
 
 // Is a sequence of n bits already all set/cleared?
 bool mi_bbitmap_is_xsetN(mi_xset_t set, mi_bbitmap_t* bbitmap, size_t idx, size_t n);

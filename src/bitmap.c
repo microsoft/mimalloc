@@ -167,14 +167,13 @@ static inline bool mi_bfield_atomic_setX(_Atomic(mi_bfield_t)*b, size_t* already
 // `all_clear` is set to `true` if the new bfield became zero.
 static inline bool mi_bfield_atomic_try_clear_mask_of(_Atomic(mi_bfield_t)*b, mi_bfield_t mask, mi_bfield_t expect, bool* all_clear) {
   mi_assert_internal(mask != 0);
-  mi_assert_internal((expect & mask) == mask);
   // try to atomically clear the mask bits
-  while mi_unlikely(!mi_atomic_cas_strong_acq_rel(b, &expect, expect & ~mask)) { 
+  do {
     if ((expect & mask) != mask) {
       if (all_clear != NULL) { *all_clear = (expect == 0); }
       return false;
     }
-  } 
+  } while (!mi_atomic_cas_weak_acq_rel(b, &expect, expect & ~mask));
   if (all_clear != NULL) { *all_clear = ((expect & ~mask) == 0);  }
   return true;
 }
@@ -696,10 +695,6 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clear8(mi_bchunk_t* chunk, s
     // note: there must be an atomic release/acquire in between or otherwise the registers may not be reloaded  }
   }
   #else
-    // first skip allset fields to reduce fragmentation (not needed for binned bitmaps)
-    // for(int i = 0; i < MI_BCHUNK_FIELDS; i++) {
-    //   if (mi_bchunk_try_find_and_clear8_at(chunk, i, pidx, false /* don't allow allset fields */)) return true;
-    // }
     for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
       if (mi_bchunk_try_find_and_clear8_at(chunk, i, pidx)) return true;
     }
@@ -891,15 +886,6 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clearN_(mi_bchunk_t* chunk, 
   return false;
 }
 
-
-//static inline bool mi_bchunk_try_find_and_clearN(mi_bchunk_t* chunk, size_t n, size_t* pidx) {
-//  if (n==1) return mi_bchunk_try_find_and_clear(chunk, pidx);         // small pages
-//  if (n==8) return mi_bchunk_try_find_and_clear8(chunk, pidx);        // medium pages
-//  // if (n==MI_BFIELD_BITS) return mi_bchunk_try_find_and_clearX(chunk, pidx);  // large pages
-//  if (n==0 || n > MI_BCHUNK_BITS) return false;  // cannot be more than a chunk
-//  if (n<=MI_BFIELD_BITS) return mi_bchunk_try_find_and_clearNX(chunk, n, pidx);
-//  return mi_bchunk_try_find_and_clearN_(chunk, n, pidx);
-//}
 
 
 // ------- mi_bchunk_clear_once_set ---------------------------------------
