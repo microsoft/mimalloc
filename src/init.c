@@ -246,8 +246,6 @@ static void mi_tld_main_init(void) {
 // Initialization of the (statically allocated) main heap, and the main tld and subproc.
 static void mi_heap_main_init(void) {
   if (heap_main.cookie == 0) {
-    mi_subproc_main_init();
-    mi_tld_main_init();
     // heap
     heap_main.cookie = 1;
     #if defined(__APPLE__) || defined(_WIN32) && !defined(MI_SHARED_LIB)
@@ -262,6 +260,9 @@ static void mi_heap_main_init(void) {
     heap_main.allow_page_reclaim = (mi_option_get(mi_option_page_reclaim_on_free) >= 0);
     heap_main.allow_page_abandon = (mi_option_get(mi_option_page_full_retain) >= 0);
     heap_main.page_full_retain   = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
+
+    mi_subproc_main_init();
+    mi_tld_main_init();    
   }
 }
 
@@ -666,14 +667,16 @@ void mi_process_init(void) mi_attr_noexcept {
   if (!mi_atomic_once(&process_init)) return;
   _mi_process_is_initialized = true;
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
-  mi_process_setup_auto_thread_done();
-
+ 
   mi_detect_cpu_features();
-  mi_subproc_main_init();
-  mi_tld_main_init();
-  mi_heap_main_init();
   _mi_os_init();
   _mi_page_map_init();
+  mi_heap_main_init();
+  mi_tld_main_init();
+  // the following two can potentially allocate (on freeBSD for locks and thread keys)
+  mi_subproc_main_init();
+  mi_process_setup_auto_thread_done();
+
   #if MI_DEBUG
   _mi_verbose_message("debug level : %d\n", MI_DEBUG);
   #endif
