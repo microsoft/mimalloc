@@ -18,11 +18,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "track.h"
 #include "bits.h"
 
-#if (MI_DEBUG>0)
-#define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
-#else
-#define mi_trace_message(...)
-#endif
+#define mi_decl_cache_align     mi_decl_align(64)
 
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
@@ -52,18 +48,31 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_hidden
 #endif
 
-#define mi_decl_cache_align     mi_decl_align(64)
+#if (defined(__GNUC__) && (__GNUC__ >= 7)) || defined(__clang__) // includes clang and icc
+#define mi_decl_maybe_unused    __attribute__((unused))
+#elif __cplusplus >= 201703L    // c++17
+#define mi_decl_maybe_unused    [[maybe_unused]]
+#else 
+#define mi_decl_maybe_unused
+#endif
+
+#if defined(__cplusplus)
+#define mi_decl_externc         extern "C"
+#else
+#define mi_decl_externc
+#endif
 
 
 #if defined(__EMSCRIPTEN__) && !defined(__wasi__)
 #define __wasi__
 #endif
 
-#if defined(__cplusplus)
-#define mi_decl_externc       extern "C"
+#if (MI_DEBUG>0)
+#define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
 #else
-#define mi_decl_externc
+#define mi_trace_message(...)
 #endif
+
 
 // "libc.c"
 #include <stdarg.h>
