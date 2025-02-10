@@ -30,6 +30,10 @@ jobs:
         BuildType: release
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
         MSBuildConfiguration: Release
+      Release SIMD:
+        BuildType: release-simd
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_OPT_SIMD=ON -DMI_WIN_USE_FIXED_TLS=ON
+        MSBuildConfiguration: Release
       Secure:
         BuildType: secure
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
