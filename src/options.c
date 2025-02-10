@@ -172,9 +172,9 @@ static mi_option_desc_t options[_mi_option_last] =
   { 2,   UNINIT, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues
   { 4,   UNINIT, MI_OPTION(page_max_candidates) },      // max search to find a best page candidate
   { 0,   UNINIT, MI_OPTION(max_vabits) },               // max virtual address space bits
-  { MI_DEFAULT_PAGEMAP_COMMIT,
+  { MI_DEFAULT_PAGEMAP_COMMIT, 
          UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
-  { 2,   UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this on overcommit systems (like Linux))
+  { 0,   UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this on overcommit systems (like Linux))
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
