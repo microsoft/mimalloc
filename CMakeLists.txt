@@ -713,17 +713,18 @@ if (MI_BUILD_TESTS)
   enable_testing()
 
   # static link tests
-  if(MI_BUILD_STATIC)
-    foreach(TEST_NAME api api-fill stress)
-      add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
-      target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
-      target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
-      target_include_directories(mimalloc-test-${TEST_NAME} PRIVATE include)
+  foreach(TEST_NAME api api-fill stress)
+    add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
+    target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
+    target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
+    target_include_directories(mimalloc-test-${TEST_NAME} PRIVATE include)
+    if(MI_BUILD_SHARED AND (MI_TRACK_ASAN OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
+      target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE mimalloc ${mi_libraries})
+    else()
       target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE mimalloc-static ${mi_libraries})
-
-      add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
-    endforeach()
-  endif()
+    endif()
+    add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
+  endforeach()
 
   # dynamic override test
   if(MI_BUILD_SHARED AND NOT (WIN32 OR MI_TRACK_ASAN OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
