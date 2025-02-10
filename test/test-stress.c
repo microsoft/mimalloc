@@ -354,8 +354,8 @@ int main(int argc, char** argv) {
   mi_debug_show_arenas();
   mi_collect(true);
   #endif
-#endif
   mi_stats_print(NULL);
+#endif
   //bench_end_program();
   return 0;
 }
