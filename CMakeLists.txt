@@ -712,15 +712,32 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mimalloc.pc"
 if (MI_BUILD_TESTS)
   enable_testing()
 
-  foreach(TEST_NAME api api-fill stress)
-    add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
-    target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
-    target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
-    target_include_directories(mimalloc-test-${TEST_NAME} PRIVATE include)
-    target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE mimalloc ${mi_libraries})
+  # static link tests
+  if(MI_BUILD_STATIC)
+    foreach(TEST_NAME api api-fill stress)
+      add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
+      target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
+      target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
+      target_include_directories(mimalloc-test-${TEST_NAME} PRIVATE include)
+      target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE mimalloc-static ${mi_libraries})
 
-    add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
-  endforeach()
+      add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
+    endforeach()
+  endif()
+
+  # dynamic override test
+  if(MI_BUILD_SHARED AND NOT WIN32)
+    add_executable(mimalloc-test-stress-dynamic test/test-stress.c)
+    target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
+    target_compile_options(mimalloc-test-stress-dynamic PRIVATE ${mi_cflags})
+    target_include_directories(mimalloc-test-stress-dynamic PRIVATE include)
+    if(APPLE)
+      set(LD_PRELOAD "DYLD_INSERT_LIBRARIES")
+    else()
+      set(LD_PRELOAD "LD_PRELOAD")    
+    endif()
+    add_test(NAME test-stress-dynamic COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_SHOW_STATS=1 ${LD_PRELOAD}=$<TARGET_FILE:mimalloc> $<TARGET_FILE:mimalloc-test-stress-dynamic>)
+  endif()
 endif()
 
 # -----------------------------------------------------------------------------
