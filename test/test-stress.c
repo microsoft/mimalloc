@@ -261,7 +261,9 @@ static void test_stress(void) {
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) {
       printf("- iterations left: %3d\n", ITER - (n + 1));
+      #ifndef USE_STD_MALLOC
       mi_debug_show_arenas();
+      #endif
       //mi_collect(true);
       //mi_debug_show_arenas();
     }
