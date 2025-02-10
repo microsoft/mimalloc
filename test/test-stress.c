@@ -300,7 +300,17 @@ static void test_leak(void) {
 }
 #endif
 
+#if defined(USE_STD_MALLOC) && defined(MI_LINK_VERSION)
+#ifdef __cplusplus
+extern "C"
+#endif
+int mi_version(void);
+#endif
+
 int main(int argc, char** argv) {
+  #ifdef MI_LINK_VERSION
+    mi_version();
+  #endif
   #ifdef HEAP_WALK
     mi_option_enable(mi_option_visit_abandoned);
   #endif
