@@ -261,7 +261,9 @@ static void test_stress(void) {
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) {
       printf("- iterations left: %3d\n", ITER - (n + 1));
+      #ifndef USE_STD_MALLOC
       mi_debug_show_arenas();
+      #endif
       //mi_collect(true);
       //mi_debug_show_arenas();
     }
@@ -298,7 +300,17 @@ static void test_leak(void) {
 }
 #endif
 
+#if defined(USE_STD_MALLOC) && defined(MI_LINK_VERSION)
+#ifdef __cplusplus
+extern "C"
+#endif
+int mi_version(void);
+#endif
+
 int main(int argc, char** argv) {
+  #ifdef MI_LINK_VERSION
+    mi_version();
+  #endif
   #ifdef HEAP_WALK
     mi_option_enable(mi_option_visit_abandoned);
   #endif
