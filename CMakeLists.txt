@@ -726,11 +726,12 @@ if (MI_BUILD_TESTS)
   endif()
 
   # dynamic override test
-  if(MI_BUILD_SHARED AND NOT WIN32)
+  if(MI_BUILD_SHARED AND NOT (WIN32 OR MI_TRACK_ASAN OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
     add_executable(mimalloc-test-stress-dynamic test/test-stress.c)
     target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
     target_compile_options(mimalloc-test-stress-dynamic PRIVATE ${mi_cflags})
     target_include_directories(mimalloc-test-stress-dynamic PRIVATE include)
+    target_link_libraries(mimalloc-test-stress-dynamic PRIVATE ${mi_libraries})  # pthread
     if(APPLE)
       set(LD_PRELOAD "DYLD_INSERT_LIBRARIES")
     else()
