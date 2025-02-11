@@ -205,6 +205,10 @@ mi_heap_t* mi_heap_get_backing(void) {
   return bheap;
 }
 
+void mi_heap_set_in_threadpool(void) mi_attr_noexcept {
+  // nothing
+}
+
 void _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag) {
   _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(mi_heap_t));
   heap->tld = tld;
