@@ -143,7 +143,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     #if defined(_SC_PHYS_PAGES)
     long pphys = sysconf(_SC_PHYS_PAGES);
     if (pphys > 0 && (size_t)pphys < (SIZE_MAX/(size_t)psize)) {
-      config->physical_memory = (size_t)pphys * (size_t)psize;
+      config->physical_memory_in_kib = (size_t)pphys * ((size_t)psize / MI_KiB);
     }
     #endif
   }

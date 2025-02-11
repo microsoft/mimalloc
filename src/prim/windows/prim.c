@@ -155,7 +155,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
       ULONGLONG memInKiB = 0;
       if ((*pGetPhysicallyInstalledSystemMemory)(&memInKiB)) {
         if (memInKiB > 0 && memInKiB < (SIZE_MAX / MI_KiB)) {
-          config->physical_memory = (size_t)memInKiB * MI_KiB;
+          config->physical_memory_in_kib = memInKiB;
         }
       }
     }
@@ -643,7 +643,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   }
   else if (reason==DLL_THREAD_DETACH && !_mi_is_redirected()) {
     _mi_thread_done(NULL);
-  }    
+  }
 }
 
 
