@@ -174,7 +174,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
       ULONGLONG memInKiB = 0;
       if ((*pGetPhysicallyInstalledSystemMemory)(&memInKiB)) {
         if (memInKiB > 0 && memInKiB <= SIZE_MAX) {
-          config->physical_memory_in_kib = memInKiB;
+          config->physical_memory_in_kib = (size_t)memInKiB;
         }
       }
     }
