@@ -40,7 +40,7 @@ bool _mi_page_map_init(void) {
   }
 
   // Allocate the page map and commit bits
-  mi_page_map_max_address = (void*)(MI_PU(1) << vbits);
+  mi_page_map_max_address = (void*)(vbits >= MI_SIZE_BITS ? (SIZE_MAX - MI_ARENA_SLICE_SIZE + 1) : (MI_PU(1) << vbits));
   const size_t page_map_size = (MI_ZU(1) << (vbits - MI_ARENA_SLICE_SHIFT));
   const bool commit = (page_map_size <= 1*MI_MiB || mi_option_is_enabled(mi_option_pagemap_commit)); // _mi_os_has_overcommit(); // commit on-access on Linux systems?
   const size_t commit_bits = _mi_divide_up(page_map_size, MI_PAGE_MAP_ENTRIES_PER_COMMIT_BIT);
@@ -183,7 +183,7 @@ bool _mi_page_map_init(void) {
 
   // Allocate the page map and commit bits
   mi_assert(MI_MAX_VABITS >= vbits);
-  mi_page_map_max_address = (void*)(MI_PU(1) << vbits);
+  mi_page_map_max_address = (void*)(vbits >= MI_SIZE_BITS ? (SIZE_MAX - MI_ARENA_SLICE_SIZE + 1) : (MI_PU(1) << vbits));
   const size_t page_map_count = (MI_ZU(1) << (vbits - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT));
   mi_assert(page_map_count <= MI_PAGE_MAP_COUNT);
   const size_t os_page_size = _mi_os_page_size();
