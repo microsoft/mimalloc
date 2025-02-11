@@ -22,14 +22,14 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // OS memory configuration
 typedef struct mi_os_mem_config_s {
-  size_t  page_size;            // default to 4KiB
-  size_t  large_page_size;      // 0 if not supported, usually 2MiB (4MiB on Windows)
-  size_t  alloc_granularity;    // smallest allocation size (usually 4KiB, on Windows 64KiB)
-  size_t  physical_memory;      // physical memory size
-  size_t  virtual_address_bits; // usually 48 or 56 bits on 64-bit systems. (used to determine secure randomization)
-  bool    has_overcommit;       // can we reserve more memory than can be actually committed?
-  bool    has_partial_free;     // can allocated blocks be freed partially? (true for mmap, false for VirtualAlloc)
-  bool    has_virtual_reserve;  // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
+  size_t  page_size;              // default to 4KiB
+  size_t  large_page_size;        // 0 if not supported, usually 2MiB (4MiB on Windows)
+  size_t  alloc_granularity;      // smallest allocation size (usually 4KiB, on Windows 64KiB)
+  size_t  physical_memory_in_kib; // physical memory size in KiB
+  size_t  virtual_address_bits;   // usually 48 or 56 bits on 64-bit systems. (used to determine secure randomization)
+  bool    has_overcommit;         // can we reserve more memory than can be actually committed?
+  bool    has_partial_free;       // can allocated blocks be freed partially? (true for mmap, false for VirtualAlloc)
+  bool    has_virtual_reserve;    // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
 } mi_os_mem_config_t;
 
 // Initialize
@@ -124,7 +124,7 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 //-------------------------------------------------------------------
 // Access to TLS (thread local storage) slots.
 // We need fast access to both a unique thread id (in `free.c:mi_free`) and
-// to a thread-local heap pointer (in `alloc.c:mi_malloc`). 
+// to a thread-local heap pointer (in `alloc.c:mi_malloc`).
 // To achieve this we use specialized code for various platforms.
 //-------------------------------------------------------------------
 

@@ -18,17 +18,17 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 #ifndef MI_DEFAULT_VIRTUAL_ADDRESS_BITS
 #if MI_INTPTR_SIZE < 8
-#define MI_DEFAULT_VIRTUAL_ADDRESS_BITS   32
+#define MI_DEFAULT_VIRTUAL_ADDRESS_BITS     32
 #else
-#define MI_DEFAULT_VIRTUAL_ADDRESS_BITS   48
+#define MI_DEFAULT_VIRTUAL_ADDRESS_BITS     48
 #endif
 #endif
 
-#ifndef MI_DEFAULT_PHYSICAL_MEMORY
+#ifndef MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB
 #if MI_INTPTR_SIZE < 8
-#define MI_DEFAULT_PHYSICAL_MEMORY    4*MI_GiB
+#define MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB   4*MI_MiB    // 4 GiB
 #else
-#define MI_DEFAULT_PHYSICAL_MEMORY    32*MI_GiB
+#define MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB   32*MI_MiB   // 32 GiB
 #endif
 #endif
 
@@ -36,7 +36,7 @@ static mi_os_mem_config_t mi_os_mem_config = {
   4096,     // page size
   0,        // large page size (usually 2MiB)
   4096,     // allocation granularity
-  MI_DEFAULT_PHYSICAL_MEMORY,
+  MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB,
   MI_DEFAULT_VIRTUAL_ADDRESS_BITS,
   true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
   false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
