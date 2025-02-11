@@ -213,8 +213,8 @@ void        _mi_deferred_free(mi_heap_t* heap, bool force);
 void        _mi_page_free_collect(mi_page_t* page,bool force);
 void        _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback from segments
 
-size_t      _mi_bin_size(uint8_t bin);           // for stats
-uint8_t     _mi_bin(size_t size);                // for stats
+size_t      _mi_bin_size(size_t bin);            // for stats
+size_t      _mi_bin(size_t size);                // for stats
 
 // "heap.c"
 void        _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag);
@@ -839,21 +839,21 @@ static inline size_t _mi_os_numa_node_count(void) {
 
 #include <limits.h>       // LONG_MAX
 #define MI_HAVE_FAST_BITSCAN
-static inline size_t mi_clz(uintptr_t x) {
-  if (x==0) return MI_INTPTR_BITS;
-#if (INTPTR_MAX == LONG_MAX)
-  return __builtin_clzl(x);
-#else
-  return __builtin_clzll(x);
-#endif
+static inline size_t mi_clz(size_t x) {
+  if (x==0) return MI_SIZE_BITS;
+  #if (SIZE_MAX == ULONG_MAX)
+    return __builtin_clzl(x);
+  #else
+    return __builtin_clzll(x);
+  #endif
 }
-static inline size_t mi_ctz(uintptr_t x) {
-  if (x==0) return MI_INTPTR_BITS;
-#if (INTPTR_MAX == LONG_MAX)
-  return __builtin_ctzl(x);
-#else
-  return __builtin_ctzll(x);
-#endif
+static inline size_t mi_ctz(size_t x) {
+  if (x==0) return MI_SIZE_BITS;
+  #if (SIZE_MAX == ULONG_MAX)
+    return __builtin_ctzl(x);
+  #else
+    return __builtin_ctzll(x);
+  #endif
 }
 
 #elif defined(_MSC_VER)
@@ -861,24 +861,24 @@ static inline size_t mi_ctz(uintptr_t x) {
 #include <limits.h>       // LONG_MAX
 #include <intrin.h>       // BitScanReverse64
 #define MI_HAVE_FAST_BITSCAN
-static inline size_t mi_clz(uintptr_t x) {
-  if (x==0) return MI_INTPTR_BITS;
+static inline size_t mi_clz(size_t x) {
+  if (x==0) return MI_SIZE_BITS;
   unsigned long idx;
-#if (INTPTR_MAX == LONG_MAX)
-  _BitScanReverse(&idx, x);
-#else
-  _BitScanReverse64(&idx, x);
-#endif
-  return ((MI_INTPTR_BITS - 1) - idx);
+  #if (SIZE_MAX == ULONG_MAX)
+    _BitScanReverse(&idx, x);
+  #else
+    _BitScanReverse64(&idx, x);
+  #endif
+  return ((MI_SIZE_BITS - 1) - idx);
 }
-static inline size_t mi_ctz(uintptr_t x) {
-  if (x==0) return MI_INTPTR_BITS;
+static inline size_t mi_ctz(size_t x) {
+  if (x==0) return MI_SIZE_BITS;
   unsigned long idx;
-#if (INTPTR_MAX == LONG_MAX)
-  _BitScanForward(&idx, x);
-#else
-  _BitScanForward64(&idx, x);
-#endif
+  #if (SIZE_MAX == ULONG_MAX)
+    _BitScanForward(&idx, x);
+  #else
+    _BitScanForward64(&idx, x);
+  #endif
   return idx;
 }
 
@@ -941,9 +941,9 @@ static inline size_t mi_clz(size_t x) {
 
 #endif
 
-// "bit scan reverse": Return index of the highest bit (or MI_INTPTR_BITS if `x` is zero)
-static inline size_t mi_bsr(uintptr_t x) {
-  return (x==0 ? MI_INTPTR_BITS : MI_INTPTR_BITS - 1 - mi_clz(x));
+// "bit scan reverse": Return index of the highest bit (or MI_SIZE_BITS if `x` is zero)
+static inline size_t mi_bsr(size_t x) {
+  return (x==0 ? MI_SIZE_BITS : MI_SIZE_BITS - 1 - mi_clz(x));
 }
 
 

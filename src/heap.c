@@ -552,7 +552,7 @@ void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
 
 static void mi_get_fast_divisor(size_t divisor, uint64_t* magic, size_t* shift) {
   mi_assert_internal(divisor > 0 && divisor <= UINT32_MAX);
-  *shift = MI_INTPTR_BITS - mi_clz(divisor - 1);
+  *shift = MI_SIZE_BITS - mi_clz(divisor - 1);
   *magic = ((((uint64_t)1 << 32) * (((uint64_t)1 << *shift) - divisor)) / divisor + 1);
 }
 

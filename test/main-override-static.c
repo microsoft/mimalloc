@@ -33,7 +33,7 @@ int main() {
   mi_version();
   mi_stats_reset();
   
-  mi_bins();
+  // mi_bins();
 
   // test_manage_os_memory();
   // test_large_pages();
@@ -315,7 +315,7 @@ static void test_large_pages(void) {
 // bin size experiments
 // ------------------------------
 
-#if 1
+#if 0
 #include <stdint.h>
 #include <stdbool.h>
 
