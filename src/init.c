@@ -602,6 +602,12 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   _mi_prim_thread_associate_default_heap(heap);
 }
 
+void mi_thread_set_in_threadpool(void) mi_attr_noexcept {
+  mi_tld_t* tld = mi_tld();
+  if (tld!=NULL) { 
+    tld->is_in_threadpool = true;
+  }
+}
 
 // --------------------------------------------------------
 // Run functions on process init/done, and thread init/done
