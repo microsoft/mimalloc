@@ -58,26 +58,22 @@ static inline bool mi_page_queue_is_special(const mi_page_queue_t* pq) {
 // We use `wsize` for the size in "machine word sizes",
 // i.e. byte size == `wsize*sizeof(void*)`.
 static inline uint8_t mi_bin(size_t size) {
-  size_t wsize = _mi_wsize_from_size(size);
-  uint8_t bin;
-  if (wsize <= 1) {
-    bin = 1;
+  size_t wsize = _mi_wsize_from_size(size);  
+#if defined(MI_ALIGN4W)
+  if mi_likely(wsize <= 4) {
+    return (wsize <= 1 ? 1 : (wsize+1)&~1); // round to double word sizes
   }
-  #if defined(MI_ALIGN4W)
-  else if (wsize <= 4) {
-    bin = (uint8_t)((wsize+1)&~1); // round to double word sizes
+#elif defined(MI_ALIGN2W)
+  if mi_likely(wsize <= 8) {
+    return (wsize <= 1 ? 1 : (wsize+1)&~1); // round to double word sizes
   }
-  #elif defined(MI_ALIGN2W)
-  else if (wsize <= 8) {
-    bin = (uint8_t)((wsize+1)&~1); // round to double word sizes
+#else
+  if mi_likely(wsize <= 8) {
+    return (wsize == 0 ? 1 : wsize);
   }
-  #else
-  else if (wsize <= 8) {
-    bin = (uint8_t)wsize;
-  }
-  #endif
-  else if (wsize > MI_LARGE_OBJ_WSIZE_MAX) {
-    bin = MI_BIN_HUGE;
+#endif
+  else if mi_unlikely(wsize > MI_LARGE_OBJ_WSIZE_MAX) {
+    return MI_BIN_HUGE;
   }
   else {
     #if defined(MI_ALIGN4W)
@@ -85,15 +81,14 @@ static inline uint8_t mi_bin(size_t size) {
     #endif
     wsize--;
     // find the highest bit
-    uint8_t b = (uint8_t)mi_bsr(wsize);  // note: wsize != 0
+    const size_t b = mi_bsr(wsize);  // note: wsize != 0
     // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin
-    bin = ((b << 2) + (uint8_t)((wsize >> (b - 2)) & 0x03)) - 3;
-    mi_assert_internal(bin < MI_BIN_HUGE);
+    const size_t bin = ((b << 2) + ((wsize >> (b - 2)) & 0x03)) - 3;
+    mi_assert_internal(bin > 0 && bin < MI_BIN_HUGE);
+    return bin;
   }
-  mi_assert_internal(bin > 0 && bin <= MI_BIN_HUGE);
-  return bin;
 }
 
 
