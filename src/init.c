@@ -138,7 +138,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   MI_MEMID_STATIC
 };
 
-extern mi_heap_t heap_main;
+static mi_decl_cache_align mi_heap_t heap_main;
 
 static mi_decl_cache_align mi_tld_t tld_main = {
   0,                      // thread_id
@@ -153,7 +153,7 @@ static mi_decl_cache_align mi_tld_t tld_main = {
   MI_MEMID_STATIC         // memid
 };
 
-mi_decl_cache_align mi_heap_t heap_main = {
+static mi_decl_cache_align mi_heap_t heap_main = {
   &tld_main,              // thread local data
   NULL,                   // exclusive arena
   0,                      // initial cookie
@@ -266,7 +266,7 @@ static void mi_heap_main_init(void) {
   }
 }
 
-mi_heap_t* heap_main_get(void) {
+mi_heap_t* _mi_heap_main_get(void) {
   mi_heap_main_init();
   return &heap_main;
 }

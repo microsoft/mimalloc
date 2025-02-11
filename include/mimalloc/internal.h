@@ -127,6 +127,7 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
 mi_tld_t*     _mi_thread_tld(void) mi_attr_noexcept;
 void          _mi_heap_guarded_init(mi_heap_t* heap);
+mi_heap_t*    _mi_heap_main_get(void);
 
 // os.c
 void          _mi_os_init(void);                                            // called from process init
