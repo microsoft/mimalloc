@@ -389,6 +389,7 @@ typedef struct mi_tld_s mi_tld_t;
 typedef struct mi_page_queue_s {
   mi_page_t* first;
   mi_page_t* last;
+  size_t     count;
   size_t     block_size;
 } mi_page_queue_t;
 
