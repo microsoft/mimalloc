@@ -52,7 +52,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_maybe_unused    __attribute__((unused))
 #elif __cplusplus >= 201703L    // c++17
 #define mi_decl_maybe_unused    [[maybe_unused]]
-#else 
+#else
 #define mi_decl_maybe_unused
 #endif
 
@@ -214,8 +214,8 @@ void          _mi_page_free_collect(mi_page_t* page, bool force);
 void          _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
 void          _mi_page_init(mi_heap_t* heap, mi_page_t* page);
 
-size_t        _mi_bin_size(uint8_t bin); // for stats
-uint8_t       _mi_bin(size_t size);      // for stats
+size_t        _mi_bin_size(size_t bin);            // for stats
+size_t        _mi_bin(size_t size);                // for stats
 
 // "heap.c"
 mi_heap_t*    _mi_heap_create(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id, mi_tld_t* tld);
@@ -654,7 +654,7 @@ static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
 
 
 static inline bool mi_page_is_huge(const mi_page_t* page) {
-  return (mi_page_is_singleton(page) && 
+  return (mi_page_is_singleton(page) &&
           (page->block_size > MI_LARGE_MAX_OBJ_SIZE ||
            (mi_memkind_is_os(page->memid.memkind) && page->memid.mem.os.base < (void*)page)));
 }
@@ -710,7 +710,7 @@ static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   const mi_threadid_t tid = (heap == NULL ? MI_THREADID_ABANDONED : heap->tld->thread_id) | mi_page_flags(page);
   if (heap != NULL) {
     page->heap = heap;
-    page->heap_tag = heap->tag;    
+    page->heap_tag = heap->tag;
   }
   else {
     page->heap = NULL;
