@@ -138,7 +138,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   MI_MEMID_STATIC
 };
 
-extern mi_heap_t heap_main;
+extern mi_decl_hidden mi_decl_cache_align mi_heap_t heap_main;
 
 static mi_decl_cache_align mi_tld_t tld_main = {
   0,                      // thread_id
@@ -266,7 +266,7 @@ static void mi_heap_main_init(void) {
   }
 }
 
-mi_heap_t* heap_main_get(void) {
+mi_heap_t* _mi_heap_main_get(void) {
   mi_heap_main_init();
   return &heap_main;
 }
@@ -602,6 +602,12 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   _mi_prim_thread_associate_default_heap(heap);
 }
 
+void mi_thread_set_in_threadpool(void) mi_attr_noexcept {
+  mi_tld_t* tld = mi_tld();
+  if (tld!=NULL) { 
+    tld->is_in_threadpool = true;
+  }
+}
 
 // --------------------------------------------------------
 // Run functions on process init/done, and thread init/done
@@ -611,6 +617,11 @@ static bool os_preloading = true;    // true until this module is initialized
 // Returns true if this module has not been initialized; Don't use C runtime routines until it returns false.
 bool mi_decl_noinline _mi_preloading(void) {
   return os_preloading;
+}
+
+// Returns true if mimalloc was redirected
+mi_decl_nodiscard bool mi_is_redirected(void) mi_attr_noexcept {
+  return _mi_is_redirected();
 }
 
 // Called once by the process loader from `src/prim/prim.c`
