@@ -307,8 +307,8 @@ mi_decl_export bool mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int he
 mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed);
 mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max);
 
-// Experimental: communicate that the thread associated with the heap runs in a threadpool
-mi_decl_export void mi_heap_set_in_threadpool(void) mi_attr_noexcept;  
+// Experimental: communicate that the thread is part of a threadpool
+mi_decl_export void mi_thread_set_in_threadpool(void) mi_attr_noexcept;  
 
 // Experimental: create a new heap with a specified heap tag. Set `allow_destroy` to false to allow the thread
 // to reclaim abandoned memory (with a compatible heap_tag and arena_id) but in that case `mi_heap_destroy` will
