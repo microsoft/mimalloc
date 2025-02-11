@@ -112,7 +112,7 @@ const mi_page_t _mi_page_empty = {
 // may lead to allocation itself on some platforms)
 // --------------------------------------------------------
 
-mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
+mi_decl_hidden mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,
   MI_ATOMIC_VAR_INIT(NULL),
   0,                // tid
@@ -151,7 +151,7 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 // the thread-local default heap for allocation
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 
-extern mi_heap_t _mi_heap_main;
+extern mi_decl_hidden mi_heap_t _mi_heap_main;
 
 static mi_decl_cache_align mi_tld_t tld_main = {
   0, false,
@@ -581,6 +581,11 @@ static bool os_preloading = true;    // true until this module is initialized
 // Returns true if this module has not been initialized; Don't use C runtime routines until it returns false.
 bool mi_decl_noinline _mi_preloading(void) {
   return os_preloading;
+}
+
+// Returns true if mimalloc was redirected
+mi_decl_nodiscard bool mi_is_redirected(void) mi_attr_noexcept {
+  return _mi_is_redirected();
 }
 
 // Called once by the process loader from `src/prim/prim.c`
