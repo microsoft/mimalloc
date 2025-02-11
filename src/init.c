@@ -619,6 +619,11 @@ bool mi_decl_noinline _mi_preloading(void) {
   return os_preloading;
 }
 
+// Returns true if mimalloc was redirected
+mi_decl_nodiscard bool mi_is_redirected(void) mi_attr_noexcept {
+  return _mi_is_redirected();
+}
+
 // Called once by the process loader from `src/prim/prim.c`
 void _mi_process_load(void) {
   mi_heap_main_init();
