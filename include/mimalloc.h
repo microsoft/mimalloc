@@ -149,7 +149,6 @@ typedef void (mi_cdecl mi_error_fun)(int err, void* arg);
 mi_decl_export void mi_register_error(mi_error_fun* fun, void* arg);
 
 mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
-mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexcept;
 mi_decl_export int  mi_version(void)          mi_attr_noexcept;
 mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
 mi_decl_export void mi_stats_merge(void)      mi_attr_noexcept;
@@ -292,16 +291,25 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t a
 #endif
 
 
-// Experimental: allow sub-processes whose memory segments stay separated (and no reclamation between them)
-// Used for example for separate interpreter's in one process.
+// Experimental: allow sub-processes whose memory areas stay separated (and no reclamation between them)
+// Used for example for separate interpreters in one process.
 typedef void* mi_subproc_id_t;
 mi_decl_export mi_subproc_id_t mi_subproc_main(void);
 mi_decl_export mi_subproc_id_t mi_subproc_new(void);
 mi_decl_export void mi_subproc_delete(mi_subproc_id_t subproc);
 mi_decl_export void mi_subproc_add_current_thread(mi_subproc_id_t subproc); // this should be called right after a thread is created (and no allocation has taken place yet)
 
-// Experimental: visit abandoned heap areas (from threads that have been terminated)
+// Experimental: visit abandoned heap areas (that are not owned by a specific heap)
 mi_decl_export bool mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
+
+// Experimental: objects followed by a guard page.
+// A sample rate of 0 disables guarded objects, while 1 uses a guard page for every object.
+// A seed of 0 uses a random start point. Only objects within the size bound are eligable for guard pages.
+mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed);
+mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max);
+
+// Experimental: communicate that the thread is part of a threadpool
+mi_decl_export void mi_thread_set_in_threadpool(void) mi_attr_noexcept;  
 
 // Experimental: create a new heap with a specified heap tag. Set `allow_destroy` to false to allow the thread
 // to reclaim abandoned memory (with a compatible heap_tag and arena_id) but in that case `mi_heap_destroy` will
@@ -310,12 +318,8 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_ex(int heap_tag, bool al
 
 // deprecated
 mi_decl_export int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
+mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexcept;
 
-// Experimental: objects followed by a guard page.
-// A sample rate of 0 disables guarded objects, while 1 uses a guard page for every object.
-// A seed of 0 uses a random start point. Only objects within the size bound are eligable for guard pages.
-mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed);
-mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max);
 
 
 // ------------------------------------------------------
