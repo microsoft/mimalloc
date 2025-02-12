@@ -32,7 +32,10 @@ static void test_manage_os_memory(void);
 int main() {
   mi_version();
   mi_stats_reset();
-  test_manage_os_memory();
+
+  // mi_bins();
+
+  // test_manage_os_memory();
   // test_large_pages();
   // detect double frees and heap corruption
   // double_free1();
@@ -40,7 +43,7 @@ int main() {
   // corrupt_free();
   // block_overflow1();
   // block_overflow2();
-  test_canary_leak();
+  // test_canary_leak();
   // test_aslr();
   // invalid_free();
   // test_reserved();
@@ -48,7 +51,6 @@ int main() {
   // test_heap_walk();
   // alloc_huge();
 
-  // mi_bins();
 
   void* p1 = malloc(78);
   void* p2 = malloc(24);
@@ -191,7 +193,7 @@ static void test_reserved(void) {
 #define KiB 1024ULL
 #define MiB (KiB*KiB)
 #define GiB (MiB*KiB)
-  mi_reserve_os_memory(4*GiB, false, true);
+  mi_reserve_os_memory(3*GiB, false, true);
   void* p1 = malloc(100);
   void* p2 = malloc(100000);
   void* p3 = malloc(2*GiB);
@@ -249,7 +251,7 @@ static void test_canary_leak(void) {
 #if _WIN32
 static void test_manage_os_memory(void) {
   size_t size = 256 * 1024 * 1024;
-  void* ptr = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); 
+  void* ptr = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
   mi_arena_id_t arena_id;
   mi_manage_os_memory_ex(ptr, size, true /* committed */, true /* pinned */, false /* is zero */, -1 /* numa node */, true /* exclusive */, &arena_id);
   mi_heap_t* cuda_heap = mi_heap_new_in_arena(arena_id);    // you can do this in any thread
@@ -258,11 +260,11 @@ static void test_manage_os_memory(void) {
   void* p1 = mi_heap_malloc(cuda_heap, 8);
   int* p2 = mi_heap_malloc_tp(cuda_heap, int);
   *p2 = 42;
-  
+
   // and maybe set the cuda heap as the default heap? (but careful as now `malloc` will allocate in the cuda heap as well)
   {
     mi_heap_t* prev_default_heap = mi_heap_set_default(cuda_heap);
-    void* p3 = mi_malloc(8);  // allocate in the cuda heap 
+    void* p3 = mi_malloc(8);  // allocate in the cuda heap
     mi_free(p3);
   }
   mi_free(p1);
@@ -373,31 +375,34 @@ static inline size_t _mi_wsize_from_size(size_t size) {
   return (size + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
 }
 
+// #define MI_ALIGN2W
+
 // Return the bin for a given field size.
 // Returns MI_BIN_HUGE if the size is too large.
 // We use `wsize` for the size in "machine word sizes",
 // i.e. byte size == `wsize*sizeof(void*)`.
-extern inline uint8_t _mi_bin8(size_t size) {
-  size_t wsize = _mi_wsize_from_size(size);
-  uint8_t bin;
-  if (wsize <= 1) {
+static inline size_t mi_bin(size_t wsize) {
+  // size_t wsize = _mi_wsize_from_size(size);
+  // size_t bin;
+  /*if (wsize <= 1) {
     bin = 1;
   }
+  */
 #if defined(MI_ALIGN4W)
-  else if (wsize <= 4) {
-    bin = (uint8_t)((wsize+1)&~1); // round to double word sizes
+  if (wsize <= 4) {
+    return (wsize <= 1 ? 1 : (wsize+1)&~1); // round to double word sizes
   }
 #elif defined(MI_ALIGN2W)
-  else if (wsize <= 8) {
-    bin = (uint8_t)((wsize+1)&~1); // round to double word sizes
+  if (wsize <= 8) {
+    return (wsize <= 1 ? 1 : (wsize+1)&~1); // round to double word sizes
   }
 #else
-  else if (wsize <= 8) {
-    bin = (uint8_t)wsize;
+  if (wsize <= 8) {
+    return (wsize == 0 ? 1 : wsize);
   }
 #endif
   else if (wsize > MI_LARGE_WSIZE_MAX) {
-    bin = MI_BIN_HUGE;
+    return MI_BIN_HUGE;
   }
   else {
 #if defined(MI_ALIGN4W)
@@ -405,16 +410,18 @@ extern inline uint8_t _mi_bin8(size_t size) {
 #endif
     wsize--;
     // find the highest bit
-    size_t idx; 
+    size_t idx;
     mi_bsr(wsize, &idx);
     uint8_t b = (uint8_t)idx;
     // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin
-    bin = ((b << 2) + (uint8_t)((wsize >> (b - 2)) & 0x03)) - 3;
+    const size_t bin = ((b << 2) + ((wsize >> (b - 2)) & 0x03)) - 3;
+    assert(bin > 0 && bin < MI_BIN_HUGE);
+    return bin;
   }
-  return bin;
 }
+
 
 static inline uint8_t _mi_bin4(size_t size) {
   size_t wsize = _mi_wsize_from_size(size);
@@ -477,7 +484,7 @@ static size_t _mi_binx8(size_t bsize) {
 }
 
 
-static inline size_t mi_bin(size_t wsize) {
+static inline size_t mi_binx(size_t wsize) {
   uint8_t bin;
   if (wsize <= 1) {
     bin = 1;
@@ -491,7 +498,7 @@ static inline size_t mi_bin(size_t wsize) {
     assert(wsize>0);
     // find the highest bit
     uint8_t b = (uint8_t)(MI_SIZE_BITS - 1 - mi_clz(wsize));
-    
+
     // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin

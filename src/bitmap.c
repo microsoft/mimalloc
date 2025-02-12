@@ -765,7 +765,7 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
     mi_bfield_t b0 = mi_atomic_load_relaxed(&chunk->bfields[i]);
     mi_bfield_t b = b0;
     size_t idx;
-    
+
     // is there a range inside the field?
     while (mi_bfield_find_least_bit(b, &idx)) { // find least 1-bit
       if (idx + n > MI_BFIELD_BITS) break; // too short: maybe cross over, or continue with the next field
@@ -789,7 +789,7 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
         // b             = 1111 1101 1010 1100
         // .. + (1<<idx) = 1111 1101 1011 0000
         // .. & b        = 1111 1101 1010 0000
-        b = b & (b + (mi_bfield_one() << idx));               
+        b = b & (b + (mi_bfield_one() << idx));
       }
     }
 
@@ -1550,7 +1550,7 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
     mi_bfield_cycle_iterate(cmap_mask, tseq, cmap_cycle, cmap_idx, X)
     {
       // don't search into non-accessed memory until we tried other size bins as well
-      if (bin < bbin && cmap_idx > cmap_acc) 
+      if (bin < bbin && cmap_idx > cmap_acc)
          // (bin > MI_BBIN_SMALL && cmap_idx > cmap_acc) // large to small
       {
         break;

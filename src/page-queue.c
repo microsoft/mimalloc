@@ -61,44 +61,38 @@ static inline size_t mi_page_queue_count(const mi_page_queue_t* pq) {
 // Returns MI_BIN_HUGE if the size is too large.
 // We use `wsize` for the size in "machine word sizes",
 // i.e. byte size == `wsize*sizeof(void*)`.
-static inline uint8_t mi_bin(size_t size) {
+static mi_decl_noinline size_t mi_bin(size_t size) {
   size_t wsize = _mi_wsize_from_size(size);
-  uint8_t bin;
-  if (wsize <= 1) {
-    bin = 1;
+#if defined(MI_ALIGN4W)
+  if mi_likely(wsize <= 4) {
+    return (wsize <= 1 ? 1 : (wsize+1)&~1); // round to double word sizes
   }
-  #if defined(MI_ALIGN4W)
-  else if (wsize <= 4) {
-    bin = (uint8_t)((wsize+1)&~1); // round to double word sizes
+#elif defined(MI_ALIGN2W)
+  if mi_likely(wsize <= 8) {
+    return (wsize <= 1 ? 1 : (wsize+1)&~1); // round to double word sizes
   }
-  #elif defined(MI_ALIGN2W)
-  else if (wsize <= 8) {
-    bin = (uint8_t)((wsize+1)&~1); // round to double word sizes
+#else
+  if mi_likely(wsize <= 8) {
+    return (wsize == 0 ? 1 : wsize);
   }
-  #else
-  else if (wsize <= 8) {
-    bin = (uint8_t)wsize;
-  }
-  #endif
-  else if (wsize > MI_LARGE_MAX_OBJ_WSIZE) {
-    bin = MI_BIN_HUGE;
+#endif
+  else if mi_unlikely(wsize > MI_LARGE_MAX_OBJ_WSIZE) {
+    return MI_BIN_HUGE;
   }
   else {
     #if defined(MI_ALIGN4W)
     if (wsize <= 16) { wsize = (wsize+3)&~3; } // round to 4x word sizes
     #endif
     wsize--;
-    mi_assert_internal(wsize!=0);
-    // find the highest bit position
-    uint8_t b = (uint8_t)(MI_SIZE_BITS - 1 - mi_clz(wsize));
+    // find the highest bit
+    const size_t b = (MI_SIZE_BITS - 1 - mi_clz(wsize));  // note: wsize != 0
     // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin
-    bin = ((b << 2) + (uint8_t)((wsize >> (b - 2)) & 0x03)) - 3;
-    mi_assert_internal(bin < MI_BIN_HUGE);
+    const size_t bin = ((b << 2) + ((wsize >> (b - 2)) & 0x03)) - 3;
+    mi_assert_internal(bin > 0 && bin < MI_BIN_HUGE);
+    return bin;
   }
-  mi_assert_internal(bin > 0 && bin <= MI_BIN_HUGE);
-  return bin;
 }
 
 
@@ -107,11 +101,11 @@ static inline uint8_t mi_bin(size_t size) {
   Queue of pages with free blocks
 ----------------------------------------------------------- */
 
-uint8_t _mi_bin(size_t size) {
+size_t _mi_bin(size_t size) {
   return mi_bin(size);
 }
 
-size_t _mi_bin_size(uint8_t bin) {
+size_t _mi_bin_size(size_t bin) {
   return _mi_heap_empty.pages[bin].block_size;
 }
 
@@ -167,7 +161,7 @@ bool _mi_page_queue_is_valid(mi_heap_t* heap, const mi_page_queue_t* pq) {
 
 static mi_page_queue_t* mi_heap_page_queue_of(mi_heap_t* heap, const mi_page_t* page) {
   mi_assert_internal(heap!=NULL);
-  uint8_t bin = (mi_page_is_in_full(page) ? MI_BIN_FULL : (mi_page_is_huge(page) ? MI_BIN_HUGE : mi_bin(mi_page_block_size(page))));
+  size_t bin = (mi_page_is_in_full(page) ? MI_BIN_FULL : (mi_page_is_huge(page) ? MI_BIN_HUGE : mi_bin(mi_page_block_size(page))));
   mi_assert_internal(bin <= MI_BIN_FULL);
   mi_page_queue_t* pq = &heap->pages[bin];
   mi_assert_internal((mi_page_block_size(page) == pq->block_size) ||
@@ -209,7 +203,7 @@ static inline void mi_heap_queue_first_update(mi_heap_t* heap, const mi_page_que
   }
   else {
     // find previous size; due to minimal alignment upto 3 previous bins may need to be skipped
-    uint8_t bin = mi_bin(size);
+    size_t bin = mi_bin(size);
     const mi_page_queue_t* prev = pq - 1;
     while( bin == mi_bin(prev->block_size) && prev > &heap->pages[0]) {
       prev--;

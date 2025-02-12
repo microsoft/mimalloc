@@ -142,7 +142,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   }
   // get virtual address bits
   if ((uintptr_t)si.lpMaximumApplicationAddress > 0) {
-    const size_t vbits = MI_INTPTR_BITS - mi_clz((uintptr_t)si.lpMaximumApplicationAddress);
+    const size_t vbits = MI_SIZE_BITS - mi_clz((uintptr_t)si.lpMaximumApplicationAddress);
     config->virtual_address_bits = vbits;
   }
 
