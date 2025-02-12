@@ -63,7 +63,7 @@ static bool mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
 static bool mi_heap_is_valid(mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL);
   mi_heap_visit_pages(heap, &mi_heap_page_is_valid, NULL, NULL);
-  for (int bin = 0; bin < MI_BIN_COUNT; bin++) {
+  for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
     mi_assert_internal(_mi_page_queue_is_valid(heap, &heap->pages[bin]));
   }
   return true;
