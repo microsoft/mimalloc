@@ -141,12 +141,21 @@ static bool mi_heap_contains_queue(const mi_heap_t* heap, const mi_page_queue_t*
 #endif
 
 bool _mi_page_queue_is_valid(mi_heap_t* heap, const mi_page_queue_t* pq) {
+  MI_UNUSED_RELEASE(heap);
   if (pq==NULL) return false;
-  size_t count = 0;
-  mi_page_t* prev = NULL;
+  size_t count = 0; MI_UNUSED_RELEASE(count);
+  mi_page_t* prev = NULL; MI_UNUSED_RELEASE(prev);
   for (mi_page_t* page = pq->first; page != NULL; page = page->next) {
     mi_assert_internal(page->prev == prev);
-    mi_assert_internal(mi_page_block_size(page) == pq->block_size);
+    if (mi_page_is_in_full(page)) {
+      mi_assert_internal(_mi_wsize_from_size(pq->block_size) == MI_LARGE_MAX_OBJ_WSIZE + 2); 
+    }
+    else if (mi_page_is_huge(page)) {
+      mi_assert_internal(_mi_wsize_from_size(pq->block_size) == MI_LARGE_MAX_OBJ_WSIZE + 1); 
+    }
+    else {
+      mi_assert_internal(mi_page_block_size(page) == pq->block_size);
+    }
     mi_assert_internal(page->heap == heap);
     if (page->next == NULL) {
       mi_assert_internal(pq->last == page);
