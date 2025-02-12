@@ -32,7 +32,10 @@ static void test_manage_os_memory(void);
 int main() {
   mi_version();
   mi_stats_reset();
-  test_manage_os_memory();
+  
+  // mi_bins();
+
+  // test_manage_os_memory();
   // test_large_pages();
   // detect double frees and heap corruption
   // double_free1();
@@ -40,7 +43,7 @@ int main() {
   // corrupt_free();
   // block_overflow1();
   // block_overflow2();
-  test_canary_leak();
+  // test_canary_leak();
   // test_aslr();
   // invalid_free();
   // test_reserved();
@@ -397,31 +400,34 @@ static inline size_t _mi_wsize_from_size(size_t size) {
   return (size + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
 }
 
+// #define MI_ALIGN2W
+
 // Return the bin for a given field size.
 // Returns MI_BIN_HUGE if the size is too large.
 // We use `wsize` for the size in "machine word sizes",
 // i.e. byte size == `wsize*sizeof(void*)`.
-extern inline uint8_t _mi_bin8(size_t size) {
-  size_t wsize = _mi_wsize_from_size(size);
-  uint8_t bin;
-  if (wsize <= 1) {
+static inline size_t mi_bin(size_t wsize) {
+  // size_t wsize = _mi_wsize_from_size(size);
+  // size_t bin;
+  /*if (wsize <= 1) {
     bin = 1;
   }
+  */
 #if defined(MI_ALIGN4W)
-  else if (wsize <= 4) {
-    bin = (uint8_t)((wsize+1)&~1); // round to double word sizes
+  if (wsize <= 4) {
+    return (wsize <= 1 ? 1 : (wsize+1)&~1); // round to double word sizes
   }
 #elif defined(MI_ALIGN2W)
-  else if (wsize <= 8) {
-    bin = (uint8_t)((wsize+1)&~1); // round to double word sizes
+  if (wsize <= 8) {
+    return (wsize <= 1 ? 1 : (wsize+1)&~1); // round to double word sizes
   }
 #else
-  else if (wsize <= 8) {
-    bin = (uint8_t)wsize;
+  if (wsize <= 8) {
+    return (wsize == 0 ? 1 : wsize);
   }
 #endif
   else if (wsize > MI_LARGE_WSIZE_MAX) {
-    bin = MI_BIN_HUGE;
+    return MI_BIN_HUGE;
   }
   else {
 #if defined(MI_ALIGN4W)
@@ -429,14 +435,16 @@ extern inline uint8_t _mi_bin8(size_t size) {
 #endif
     wsize--;
     // find the highest bit
-    uint8_t b = mi_bsr32((uint32_t)wsize);
+    const size_t b = _mi_bsr(wsize);  // note: wsize != 0
     // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
     // - adjust with 3 because we use do not round the first 8 sizes
     //   which each get an exact bin
-    bin = ((b << 2) + (uint8_t)((wsize >> (b - 2)) & 0x03)) - 3;
+    const size_t bin = ((b << 2) + ((wsize >> (b - 2)) & 0x03)) - 3;
+    assert(bin > 0 && bin < MI_BIN_HUGE);
+    return bin;
   }
-  return bin;
 }
+
 
 static inline uint8_t _mi_bin4(size_t size) {
   size_t wsize = _mi_wsize_from_size(size);
@@ -493,7 +501,7 @@ static size_t _mi_binx8(size_t bsize) {
 }
 
 
-static inline size_t mi_bin(size_t wsize) {
+static inline size_t mi_binx(size_t wsize) {
   uint8_t bin;
   if (wsize <= 1) {
     bin = 1;
