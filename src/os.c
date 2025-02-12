@@ -15,11 +15,11 @@ terms of the MIT license. A copy of the license can be found in the file
 /* -----------------------------------------------------------
   Initialization.
 ----------------------------------------------------------- */
-#ifndef MI_DEFAULT_PHYSICAL_MEMORY
+#ifndef MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB
 #if MI_INTPTR_SIZE < 8
-#define MI_DEFAULT_PHYSICAL_MEMORY    4*MI_GiB
+#define MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB   4*MI_MiB    // 4 GiB
 #else
-#define MI_DEFAULT_PHYSICAL_MEMORY    32*MI_GiB
+#define MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB   32*MI_MiB   // 32 GiB
 #endif
 #endif
 
@@ -27,8 +27,8 @@ static mi_os_mem_config_t mi_os_mem_config = {
   4096,     // page size
   0,        // large page size (usually 2MiB)
   4096,     // allocation granularity
-  MI_DEFAULT_PHYSICAL_MEMORY,
-  MI_MAX_VABITS,  // in `bits.h`
+  MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB,
+  MI_MAX_VABITS, // in `bits.h`
   true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
   false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
   true      // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)

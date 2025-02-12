@@ -202,13 +202,16 @@ void mi_free(void* p) mi_attr_noexcept
 // Multi-threaded Free (`_mt`)
 // ------------------------------------------------------
 static bool mi_page_unown_from_free(mi_page_t* page, mi_block_t* mt_free);
-static bool inline mi_page_queue_len_is_atmost( mi_heap_t* heap, size_t block_size, size_t atmost) {  
+static inline bool mi_page_queue_len_is_atmost( mi_heap_t* heap, size_t block_size, size_t atmost) {  
   mi_page_queue_t* const pq = mi_page_queue(heap,block_size);
   mi_assert_internal(pq!=NULL);
+  return (pq->count <= atmost);
+  /*
   for(mi_page_t* p = pq->first; p!=NULL; p = p->next, atmost--) {
     if (atmost == 0) { return false; }
   }
   return true;
+  */
 }
 
 static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free) mi_attr_noexcept {

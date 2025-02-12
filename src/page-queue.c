@@ -49,6 +49,10 @@ static inline bool mi_page_queue_is_special(const mi_page_queue_t* pq) {
   return (pq->block_size > MI_LARGE_MAX_OBJ_SIZE);
 }
 
+static inline size_t mi_page_queue_count(const mi_page_queue_t* pq) {
+  return pq->count;
+}
+
 /* -----------------------------------------------------------
   Bins
 ----------------------------------------------------------- */
@@ -142,6 +146,25 @@ static bool mi_heap_contains_queue(const mi_heap_t* heap, const mi_page_queue_t*
 }
 #endif
 
+bool _mi_page_queue_is_valid(mi_heap_t* heap, const mi_page_queue_t* pq) {
+  if (pq==NULL) return false;
+  size_t count = 0;
+  mi_page_t* prev = NULL;
+  for (mi_page_t* page = pq->first; page != NULL; page = page->next) {
+    mi_assert_internal(page->prev == prev);
+    mi_assert_internal(mi_page_block_size(page) == pq->block_size);
+    mi_assert_internal(page->heap == heap);
+    if (page->next == NULL) {
+      mi_assert_internal(pq->last == page);
+    }
+    count++;
+    prev = page;
+  }
+  mi_assert_internal(pq->count == count);
+  return true;
+}
+
+
 static mi_page_queue_t* mi_heap_page_queue_of(mi_heap_t* heap, const mi_page_t* page) {
   mi_assert_internal(heap!=NULL);
   uint8_t bin = (mi_page_is_in_full(page) ? MI_BIN_FULL : (mi_page_is_huge(page) ? MI_BIN_HUGE : mi_bin(mi_page_block_size(page))));
@@ -211,6 +234,7 @@ static bool mi_page_queue_is_empty(mi_page_queue_t* queue) {
 static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(mi_page_queue_contains(queue, page));
+  mi_assert_internal(queue->count >= 1);
   mi_assert_internal(mi_page_block_size(page) == queue->block_size ||
                       (mi_page_is_huge(page) && mi_page_queue_is_huge(queue)) ||
                         (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
@@ -225,6 +249,7 @@ static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
     mi_heap_queue_first_update(heap,queue);
   }
   heap->page_count--;
+  queue->count--;
   page->next = NULL;
   page->prev = NULL;
   mi_page_set_in_full(page,false);
@@ -253,6 +278,7 @@ static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_
   else {
     queue->first = queue->last = page;
   }
+  queue->count++;
 
   // update direct
   mi_heap_queue_first_update(heap, queue);
@@ -279,6 +305,7 @@ static void mi_page_queue_push_at_end(mi_heap_t* heap, mi_page_queue_t* queue, m
   else {
     queue->first = queue->last = page;
   }
+  queue->count++;
 
   // update direct
   if (queue->first == page) {
@@ -298,6 +325,7 @@ static void mi_page_queue_move_to_front(mi_heap_t* heap, mi_page_queue_t* queue,
 
 static void mi_page_queue_enqueue_from_ex(mi_page_queue_t* to, mi_page_queue_t* from, bool enqueue_at_end, mi_page_t* page) {
   mi_assert_internal(page != NULL);
+  mi_assert_internal(from->count >= 1);
   mi_assert_expensive(mi_page_queue_contains(from, page));
   mi_assert_expensive(!mi_page_queue_contains(to, page));
   const size_t bsize = mi_page_block_size(page);
@@ -320,8 +348,10 @@ static void mi_page_queue_enqueue_from_ex(mi_page_queue_t* to, mi_page_queue_t* 
     mi_assert_internal(mi_heap_contains_queue(heap, from));
     mi_heap_queue_first_update(heap, from);
   }
+  from->count--;
 
   // insert into `to`
+  to->count++;
   if (enqueue_at_end) {
     // enqueue at the end
     page->prev = to->last;
@@ -378,15 +408,16 @@ static void mi_page_queue_enqueue_from_full(mi_page_queue_t* to, mi_page_queue_t
 size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append) {
   mi_assert_internal(mi_heap_contains_queue(heap,pq));
   mi_assert_internal(pq->block_size == append->block_size);
-
+  
   if (append->first==NULL) return 0;
-
+  
   // set append pages to new heap and count
   size_t count = 0;
   for (mi_page_t* page = append->first; page != NULL; page = page->next) {
     mi_page_set_heap(page, heap);
     count++;
   }
+  mi_assert_internal(count == append->count);
 
   if (pq->last==NULL) {
     // take over afresh
@@ -403,5 +434,7 @@ size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue
     append->first->prev = pq->last;
     pq->last = append->last;
   }
+  pq->count += append->count;
+
   return count;
 }
