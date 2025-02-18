@@ -231,9 +231,8 @@ static inline size_t mi_clz(size_t x) {
   #elif mi_has_builtinz(clz)
     return (x!=0 ? (size_t)mi_builtinz(clz)(x) : MI_SIZE_BITS);
   #elif defined(__GNUC__) && (MI_ARCH_X64 || MI_ARCH_X86)
-    if (x==0) return MI_SIZE_BITS;
-    size_t r;
-    __asm ("bsr\t%1, %0" : "=r"(r) : "r"(x) : "cc");
+    size_t r = MI_SIZE_BITS; // bsr leaves destination unmodified if the argument is 0 (see <https://github.com/llvm/llvm-project/pull/102885>)
+    __asm ("bsr\t%1, %0" : "+r"(r) : "r"(x) : "cc");
     return (MI_SIZE_BITS - 1 - r);
   #else
     #define MI_HAS_FAST_BITSCAN  0
@@ -270,12 +269,7 @@ static inline bool mi_bsf(size_t x, size_t* idx) {
 // return false if `x==0` (with `*idx` undefined) and true otherwise,
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
 static inline bool mi_bsr(size_t x, size_t* idx) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)  && (!defined(__clang_major__) || __clang_major__ >= 9)
-    // on x64 the carry flag is set on zero which gives better codegen
-    bool is_zero;
-    __asm ("lzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc");
-    return !is_zero;
-  #elif 0 && defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+  #if 0 && defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long i;
     return (mi_msc_builtinz(_BitScanReverse)(&i, x) ? (*idx = (size_t)i, true) : false);
   #else
