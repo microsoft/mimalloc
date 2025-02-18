@@ -30,7 +30,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SEGMENT_MAP_PART_ENTRIES   (MI_SEGMENT_MAP_PART_SIZE / MI_INTPTR_SIZE)
 #define MI_SEGMENT_MAP_PART_BIT_SPAN  (MI_SEGMENT_ALIGN)
 #define MI_SEGMENT_MAP_PART_SPAN      (MI_SEGMENT_MAP_PART_BITS * MI_SEGMENT_MAP_PART_BIT_SPAN)
+
+#if MI_SEGMENT_MAP_PART_SPAN > MI_SEGMENT_MAP_MAX_ADDRESS
+#define MI_SEGMENT_MAP_MAX_PARTS      (1)
+#else
 #define MI_SEGMENT_MAP_MAX_PARTS      ((MI_SEGMENT_MAP_MAX_ADDRESS / MI_SEGMENT_MAP_PART_SPAN) + 1)
+#endif
 
 // A part of the segment map.
 typedef struct mi_segmap_part_s {
