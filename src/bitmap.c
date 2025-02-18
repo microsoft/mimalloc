@@ -49,7 +49,7 @@ static inline bool mi_bfield_find_least_bit(mi_bfield_t x, size_t* idx) {
 // return false if `x==0` (with `*idx` undefined) and true otherwise,
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
 static inline bool mi_bfield_find_highest_bit(mi_bfield_t x, size_t* idx) {
-  return mi_bsf(x, idx);
+  return mi_bsr(x, idx);
 }
 
 
