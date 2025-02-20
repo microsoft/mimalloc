@@ -195,19 +195,24 @@ size_t _mi_clz_generic(size_t x);
 size_t _mi_ctz_generic(size_t x);
 
 static inline size_t mi_ctz(size_t x) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 tzcnt is defined for 0
-    size_t r;
-    __asm ("tzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
+  #if defined(__GNUC__) && MI_ARCH_X64
+    // tzcnt is interpreted as bsf if BMI1 is not supported (pre-haswell)
+    // tzcnt sets carry-flag on zero, while bsf sets the zero-flag
+    // tzcnt sets the result to MI_SIZE_BITS if the argument 0 
+    // bsf leaves destination _unmodified_ if the argument is 0 (both AMD and Intel now, see <https://github.com/llvm/llvm-project/pull/102885>)
+    // so we always initialize r to MI_SIZE_BITS to work correctly on all cpu's without branching
+    size_t r = MI_SIZE_BITS;
+    __asm ("tzcnt\t%1, %0" : "+r"(r) : "r"(x) : "cc");  // use '+r' to keep the assignment to r in case this becomes bsf on older cpu's
     return r;
-  #elif defined(_MSC_VER) && MI_ARCH_X64 && defined(__BMI1__) 
-    return _tzcnt_u64(x);
+  #elif mi_has_builtinz(ctz)
+    return (x!=0 ? (size_t)mi_builtinz(ctz)(x) : MI_SIZE_BITS);
+  #elif defined(_MSC_VER) && MI_ARCH_X64 && defined(__BMI1__)
+    return (x!=0 ? _tzcnt_u64(x) : MI_SIZE_BITS);  // ensure it still works on older cpu's as well
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long idx;
     return (mi_msc_builtinz(_BitScanForward)(&idx, x) ? (size_t)idx : MI_SIZE_BITS);
-  #elif mi_has_builtinz(ctz)
-    return (x!=0 ? (size_t)mi_builtinz(ctz)(x) : MI_SIZE_BITS);
-  #elif defined(__GNUC__) && (MI_ARCH_X64 || MI_ARCH_X86)
-    size_t r = MI_SIZE_BITS;  // bsf leaves destination unmodified if the argument is 0 (see <https://github.com/llvm/llvm-project/pull/102885>)
+  #elif defined(__GNUC__) && MI_ARCH_X86
+    size_t r = MI_SIZE_BITS;
     __asm ("bsf\t%1, %0" : "+r"(r) : "r"(x) : "cc");
     return r;
   #elif MI_HAS_FAST_POPCOUNT
@@ -219,20 +224,21 @@ static inline size_t mi_ctz(size_t x) {
 }
 
 static inline size_t mi_clz(size_t x) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 lzcnt is defined for 0
+  // we don't optimize to lzcnt as there are still non BMI1 cpu's around (like Intel Celeron, see issue #1016)
+  // on pre-haswell cpu's lzcnt gets executed as bsr which is not equivalent (at it returns the bit position)
+  #if 0 && defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 lzcnt is defined for 0
     size_t r;
     __asm ("lzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
     return r;
-  #elif defined(_MSC_VER) && MI_ARCH_X64 && defined(__BMI1__) 
-    return _lzcnt_u64(x);
+  #elif mi_has_builtinz(clz)
+    return (x!=0 ? (size_t)mi_builtinz(clz)(x) : MI_SIZE_BITS);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long idx;
     return (mi_msc_builtinz(_BitScanReverse)(&idx, x) ? MI_SIZE_BITS - 1 - (size_t)idx : MI_SIZE_BITS);
-  #elif mi_has_builtinz(clz)
-    return (x!=0 ? (size_t)mi_builtinz(clz)(x) : MI_SIZE_BITS);
   #elif defined(__GNUC__) && (MI_ARCH_X64 || MI_ARCH_X86)
-    size_t r = MI_SIZE_BITS; // bsr leaves destination unmodified if the argument is 0 (see <https://github.com/llvm/llvm-project/pull/102885>)
-    __asm ("bsr\t%1, %0" : "+r"(r) : "r"(x) : "cc");
+    if (x==0) return MI_SIZE_BITS;
+    size_t r;
+    __asm ("bsr\t%1, %0" : "=r"(r) : "r"(x) : "cc");
     return (MI_SIZE_BITS - 1 - r);
   #else
     #define MI_HAS_FAST_BITSCAN  0
@@ -252,12 +258,13 @@ static inline size_t mi_clz(size_t x) {
 // return false if `x==0` (with `*idx` undefined) and true otherwise,
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
 static inline bool mi_bsf(size_t x, size_t* idx) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) && (!defined(__clang_major__) || __clang_major__ >= 9)
+  // see note in `mi_ctz` 
+  #if 0 && defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) && (!defined(__clang_major__) || __clang_major__ >= 9)
     // on x64 the carry flag is set on zero which gives better codegen
     bool is_zero;
     __asm ( "tzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc" );
     return !is_zero;
-  #elif 0 && defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long i;
     return (mi_msc_builtinz(_BitScanForward)(&i, x) ? (*idx = (size_t)i, true) : false);
   #else
