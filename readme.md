@@ -20,7 +20,8 @@ without code changes, for example, on dynamically linked ELF-based systems (Linu
 ```
 > LD_PRELOAD=/usr/lib/libmimalloc.so  myprogram
 ```
-It also includes a robust way to override the default allocator in [Windows](#override_on_windows). Notable aspects of the design include:
+It also includes a way to dynamically override the default allocator in [Windows](#override_on_windows). 
+Notable aspects of the design include:
 
 - __small and consistent__: the library is about 10k LOC using simple and
   consistent data structures. This makes it very suitable
@@ -478,7 +479,7 @@ the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-i
 <span id="override_on_windows">We use a separate redirection DLL to override mimalloc on Windows</span> 
 such that we redirect all malloc/free calls that go through the (dynamic) C runtime allocator, 
 including those from other DLL's or libraries. As it intercepts all allocation calls on a low level, 
-it can be used reliably on large programs that include other 3rd party components.
+it can be used on large programs that include other 3rd party components.
 There are four requirements to make the overriding work well:
 
 1. Use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
