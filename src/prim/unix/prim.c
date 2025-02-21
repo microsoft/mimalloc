@@ -190,6 +190,8 @@ int _mi_prim_free(void* addr, size_t size ) {
 static int unix_madvise(void* addr, size_t size, int advice) {
   #if defined(__sun)
   int res = madvise((caddr_t)addr, size, advice);  // Solaris needs cast (issue #520)
+  #elif defined(__QNX__)
+  int res = posix_madvise(addr, size, advice);
   #else
   int res = madvise(addr, size, advice);
   #endif
@@ -411,7 +413,11 @@ int _mi_prim_commit(void* start, size_t size, bool* is_zero) {
 int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   int err = 0;
   // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
+  #if defined(__QNX__)
+  err = posix_madvise(start, size, POSIX_MADV_DONTNEED);
+  #else
   err = unix_madvise(start, size, MADV_DONTNEED);
+  #endif
   #if !MI_DEBUG && !MI_SECURE
     *needs_recommit = false;
   #else
@@ -443,6 +449,8 @@ int _mi_prim_reset(void* start, size_t size) {
     mi_atomic_store_release(&advice, (size_t)MADV_DONTNEED);
     err = unix_madvise(start, size, MADV_DONTNEED);
   }
+  #elif defined(__QNX__)
+  int err = posix_madvise(start, size, POSIX_MADV_DONTNEED);
   #else
   int err = unix_madvise(start, size, MADV_DONTNEED);
   #endif
