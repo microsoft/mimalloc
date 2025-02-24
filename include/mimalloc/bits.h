@@ -197,9 +197,9 @@ size_t _mi_ctz_generic(size_t x);
 static inline size_t mi_ctz(size_t x) {
   #if defined(__GNUC__) && MI_ARCH_X64
     // tzcnt is interpreted as bsf if BMI1 is not supported (pre-haswell)
-    // tzcnt sets carry-flag on zero, while bsf sets the zero-flag
-    // tzcnt sets the result to MI_SIZE_BITS if the argument 0 
-    // bsf leaves destination _unmodified_ if the argument is 0 (both AMD and Intel now, see <https://github.com/llvm/llvm-project/pull/102885>)
+    // if the argument is zero:
+    // - tzcnt: sets carry-flag, and returns MI_SIZE_BITS
+    // - bsf  : sets zero-flag, and leaves the destination _unmodified_ (on both AMD and Intel now, see <https://github.com/llvm/llvm-project/pull/102885>)
     // so we always initialize r to MI_SIZE_BITS to work correctly on all cpu's without branching
     size_t r = MI_SIZE_BITS;
     __asm ("tzcnt\t%1, %0" : "+r"(r) : "r"(x) : "cc");  // use '+r' to keep the assignment to r in case this becomes bsf on older cpu's
@@ -207,7 +207,7 @@ static inline size_t mi_ctz(size_t x) {
   #elif mi_has_builtinz(ctz)
     return (x!=0 ? (size_t)mi_builtinz(ctz)(x) : MI_SIZE_BITS);
   #elif defined(_MSC_VER) && MI_ARCH_X64 && defined(__BMI1__)
-    return (x!=0 ? _tzcnt_u64(x) : MI_SIZE_BITS);  // ensure it still works on older cpu's as well
+    return (x!=0 ? _tzcnt_u64(x) : MI_SIZE_BITS);  // ensure it still works on non-BMI1 cpu's as well
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long idx;
     return (mi_msc_builtinz(_BitScanForward)(&idx, x) ? (size_t)idx : MI_SIZE_BITS);
@@ -224,7 +224,7 @@ static inline size_t mi_ctz(size_t x) {
 }
 
 static inline size_t mi_clz(size_t x) {
-  // we don't optimize to lzcnt as there are still non BMI1 cpu's around (like Intel Celeron, see issue #1016)
+  // we don't optimize anymore to lzcnt as there are still non BMI1 cpu's around (like Intel Celeron, see issue #1016)
   // on pre-haswell cpu's lzcnt gets executed as bsr which is not equivalent (at it returns the bit position)
   #if 0 && defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 lzcnt is defined for 0
     size_t r;
@@ -258,7 +258,7 @@ static inline size_t mi_clz(size_t x) {
 // return false if `x==0` (with `*idx` undefined) and true otherwise,
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
 static inline bool mi_bsf(size_t x, size_t* idx) {
-  // see note in `mi_ctz` 
+  // we don't optimize anymore to lzcnt so we run correctly on older cpu's as well
   #if 0 && defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) && (!defined(__clang_major__) || __clang_major__ >= 9)
     // on x64 the carry flag is set on zero which gives better codegen
     bool is_zero;
