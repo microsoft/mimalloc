@@ -3,7 +3,7 @@
 <span id="override_on_windows">We use a separate redirection DLL to override mimalloc on Windows</span> 
 such that we redirect all malloc/free calls that go through the (dynamic) C runtime allocator, 
 including those from other DLL's or libraries. As it intercepts all allocation calls on a low level, 
-it can be used reliably on large programs that include other 3rd party components.
+it can be used on large programs that include other 3rd party components.
 There are four requirements to make the overriding work well:
 
 1. Use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
