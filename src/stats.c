@@ -399,6 +399,7 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
 
 static mi_msecs_t mi_process_start; // = 0
 
+
 static mi_stats_t* mi_stats_get_default(void) {
   mi_heap_t* heap = mi_heap_get_default();
   return &heap->tld->stats;
@@ -440,6 +441,13 @@ void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
   _mi_stats_print(mi_stats_get_default(), out, arg);
 }
 
+const mi_stats_t*  mi_thread_heap_stats(const mi_heap_t* heap) mi_attr_noexcept {
+  return &heap->tld->stats;
+}
+
+const mi_stats_t* mi_thread_stats(void) mi_attr_noexcept {
+	return mi_thread_heap_stats(mi_heap_get_default());
+}
 
 // ----------------------------------------------------------------
 // Basic timer for convenience; use milli-seconds to avoid doubles
