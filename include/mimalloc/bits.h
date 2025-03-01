@@ -195,7 +195,11 @@ size_t _mi_clz_generic(size_t x);
 size_t _mi_ctz_generic(size_t x);
 
 static inline size_t mi_ctz(size_t x) {
-  #if defined(__GNUC__) && MI_ARCH_X64
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)  
+    size_t r;
+    __asm ("tzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
+    return r;
+  #elif defined(__GNUC__) && MI_ARCH_X64
     // tzcnt is interpreted as bsf if BMI1 is not supported (pre-haswell)
     // if the argument is zero:
     // - tzcnt: sets carry-flag, and returns MI_SIZE_BITS
@@ -226,7 +230,7 @@ static inline size_t mi_ctz(size_t x) {
 static inline size_t mi_clz(size_t x) {
   // we don't optimize anymore to lzcnt as there are still non BMI1 cpu's around (like Intel Celeron, see issue #1016)
   // on pre-haswell cpu's lzcnt gets executed as bsr which is not equivalent (at it returns the bit position)
-  #if 0 && defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 lzcnt is defined for 0
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 lzcnt is defined for 0
     size_t r;
     __asm ("lzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
     return r;
@@ -259,7 +263,7 @@ static inline size_t mi_clz(size_t x) {
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
 static inline bool mi_bsf(size_t x, size_t* idx) {
   // we don't optimize anymore to lzcnt so we run correctly on older cpu's as well
-  #if 0 && defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) && (!defined(__clang_major__) || __clang_major__ >= 9)
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) && (!defined(__clang_major__) || __clang_major__ >= 9)
     // on x64 the carry flag is set on zero which gives better codegen
     bool is_zero;
     __asm ( "tzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc" );
@@ -276,7 +280,7 @@ static inline bool mi_bsf(size_t x, size_t* idx) {
 // return false if `x==0` (with `*idx` undefined) and true otherwise,
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
 static inline bool mi_bsr(size_t x, size_t* idx) {
-  #if 0 && defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+  #if defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long i;
     return (mi_msc_builtinz(_BitScanReverse)(&i, x) ? (*idx = (size_t)i, true) : false);
   #else
