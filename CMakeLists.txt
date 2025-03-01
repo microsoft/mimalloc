@@ -85,7 +85,7 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/.git/index")
     execute_process(COMMAND ${GIT_EXECUTABLE} "describe" OUTPUT_VARIABLE mi_git_describe RESULT_VARIABLE mi_git_res ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
     if(mi_git_res EQUAL "0")
       list(APPEND mi_defines "MI_GIT_DESCRIBE=${mi_git_describe}")
-      list(APPEND CMAKE_CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/.git/index") # add to dependencies so we rebuild if the git rev changes
+      set_property(GLOBAL APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/.git/index") # add to dependencies so we rebuild if the git rev changes
     endif()
   endif()
 endif()
