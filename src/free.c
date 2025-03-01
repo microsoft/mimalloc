@@ -239,33 +239,36 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
 
   // 2. we can try to reclaim the page for ourselves
   // note:  we only reclaim if the page originated from our heap (the heap field is preserved on abandonment)
-  // to avoid claiming arbitrary object sizes and limit indefinite expansion. This helps benchmarks like `larson`
-  const long reclaim_on_free = _mi_option_get_fast(mi_option_page_reclaim_on_free);
-  if (reclaim_on_free >= 0 && page->block_size <= MI_SMALL_MAX_OBJ_SIZE)       // only for small sized blocks
+  // to avoid claiming arbitrary object sizes and limit indefinite expansion. This helps benchmarks like `larson`  
+  if (page->block_size <= MI_SMALL_MAX_OBJ_SIZE)       // only for small sized blocks
   {
-    // get our heap (with the right tag)
-    // note: don't use `mi_heap_get_default()` as we may just have terminated this thread and we should
-    // not reinitialize the heap for this thread. (can happen due to thread-local destructors for example -- issue #944)
-    mi_heap_t* heap = mi_prim_get_default_heap();
-    if (heap != page->heap) {                     
-      if (mi_heap_is_initialized(heap)) {               
-        heap = _mi_heap_by_tag(heap, page->heap_tag);
+    const long reclaim_on_free = _mi_option_get_fast(mi_option_page_reclaim_on_free);
+    if (reclaim_on_free >= 0) {                        // and reclaiming is allowed
+      // get our heap (with the right tag)
+      // note: don't use `mi_heap_get_default()` as we may just have terminated this thread and we should
+      // not reinitialize the heap for this thread. (can happen due to thread-local destructors for example -- issue #944)
+      mi_heap_t* heap = mi_prim_get_default_heap();
+      if (heap != page->heap) {
+        if (mi_heap_is_initialized(heap)) {
+          heap = _mi_heap_by_tag(heap, page->heap_tag);
+        }
       }
-    }
-    // can we reclaim?
-    if (heap != NULL && heap->allow_page_reclaim) {
-      if ((heap == page->heap && mi_page_queue_len_is_atmost(heap, page->block_size, 4)) ||  // only reclaim if we were the originating heap, and we have at most N pages already
+      // can we reclaim into this heap?
+      if (heap != NULL && heap->allow_page_reclaim) {
+        const long reclaim_max = _mi_option_get_fast(mi_option_page_reclaim_max);
+        if ((heap == page->heap && mi_page_queue_len_is_atmost(heap, page->block_size, reclaim_max)) ||  // only reclaim if we were the originating heap, and we have at most N pages already
           (reclaim_on_free == 1 &&               // OR if the reclaim across heaps is allowed
-           !mi_page_is_used_at_frac(page, 8) &&  //    and the page is not too full
-           !heap->tld->is_in_threadpool &&       //    and not part of a threadpool
-           _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable    
-         )
-      {
-        // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
-        _mi_arenas_page_unabandon(page);
-        _mi_heap_page_reclaim(heap, page);
-        mi_heap_stat_counter_increase(heap, pages_reclaim_on_free, 1);
-        return;
+            !mi_page_is_used_at_frac(page, 8) &&  //    and the page is not too full
+            !heap->tld->is_in_threadpool &&       //    and not part of a threadpool
+            _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable    
+          )
+        {
+          // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
+          _mi_arenas_page_unabandon(page);
+          _mi_heap_page_reclaim(heap, page);
+          mi_heap_stat_counter_increase(heap, pages_reclaim_on_free, 1);
+          return;
+        }
       }
     }
   }
