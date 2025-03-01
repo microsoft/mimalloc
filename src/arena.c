@@ -1481,6 +1481,10 @@ void mi_debug_show_arenas(void) mi_attr_noexcept {
   mi_debug_show_arenas_ex(true /* show pages */, false /* narrow? */);
 }
 
+void mi_arenas_print(void) mi_attr_noexcept {
+  mi_debug_show_arenas();
+}
+
 
 /* -----------------------------------------------------------
   Reserve a huge page arena.

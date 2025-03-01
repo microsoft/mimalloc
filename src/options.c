@@ -189,12 +189,7 @@ void _mi_options_init(void) {
   mi_add_stderr_output(); // now it safe to use stderr for output
   for(int i = 0; i < _mi_option_last; i++ ) {
     mi_option_t option = (mi_option_t)i;
-    long l = mi_option_get(option); MI_UNUSED(l); // initialize
-    // if (option != mi_option_verbose)
-    {
-      mi_option_desc_t* desc = &options[option];
-      _mi_verbose_message("option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : ""));
-    }
+    mi_option_get(option); // initialize    
   }
   mi_max_error_count = mi_option_get(mi_option_max_errors);
   mi_max_warning_count = mi_option_get(mi_option_max_warnings);
@@ -205,6 +200,26 @@ void _mi_options_init(void) {
       _mi_warning_message("option 'allow_large_os_pages' is disabled to allow for guarded objects\n");
     }
   }
+  #endif
+  mi_options_print();
+}
+
+void mi_options_print(void) mi_attr_noexcept 
+{
+  // show version
+  const int vermajor = MI_MALLOC_VERSION/100;
+  const int verminor = (MI_MALLOC_VERSION%100)/10;
+  const int verpatch = (MI_MALLOC_VERSION%10);
+  _mi_verbose_message("v%i.%i.%i (built on %s, %s)\n", vermajor, verminor, verpatch, __DATE__, __TIME__);
+
+  // show options
+  for (int i = 0; i < _mi_option_last; i++) {
+    mi_option_t option = (mi_option_t)i;
+    mi_option_get(option);
+    mi_option_desc_t* desc = &options[option];
+    _mi_verbose_message("option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : ""));
+  }  
+  #if MI_GUARDED
   _mi_verbose_message("guarded build: %s\n", mi_option_get(mi_option_guarded_sample_rate) != 0 ? "enabled" : "disabled");
   #endif
 }
