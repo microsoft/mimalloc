@@ -84,8 +84,11 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/.git/index")
   if(GIT_FOUND)
     execute_process(COMMAND ${GIT_EXECUTABLE} "describe" OUTPUT_VARIABLE mi_git_describe RESULT_VARIABLE mi_git_res ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
     if(mi_git_res EQUAL "0")
+      message(STATUS, "git describe: ${mi_git_describe}")
       list(APPEND mi_defines "MI_GIT_DESCRIBE=${mi_git_describe}")
-      set_property(GLOBAL APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/.git/index") # add to dependencies so we rebuild if the git rev changes
+      # add to dependencies so we rebuild if the git head commit changes
+      # todo: this doesn't seem to work?
+      set_property(GLOBAL APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/.git/index")
     endif()
   endif()
 endif()
