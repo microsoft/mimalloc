@@ -175,7 +175,7 @@ void _mi_options_init(void) {
   mi_add_stderr_output(); // now it safe to use stderr for output
   for(int i = 0; i < _mi_option_last; i++ ) {
     mi_option_t option = (mi_option_t)i;
-    mi_option_get(option); // initialize    
+    long l = mi_option_get(option); MI_UNUSED(l); // initialize
   }
   mi_max_error_count = mi_option_get(mi_option_max_errors);
   mi_max_warning_count = mi_option_get(mi_option_max_warnings);
@@ -190,23 +190,46 @@ void _mi_options_init(void) {
   mi_options_print();
 }
 
-void mi_options_print(void) mi_attr_noexcept 
+#define mi_stringifyx(str)  #str                // and stringify
+#define mi_stringify(str)   mi_stringifyx(str)  // expand
+
+void mi_options_print(void) mi_attr_noexcept
 {
   // show version
   const int vermajor = MI_MALLOC_VERSION/100;
   const int verminor = (MI_MALLOC_VERSION%100)/10;
   const int verpatch = (MI_MALLOC_VERSION%10);
-  _mi_verbose_message("v%i.%i.%i (built on %s, %s)\n", vermajor, verminor, verpatch, __DATE__, __TIME__);
+  _mi_verbose_message("v%i.%i.%i%s%s (built on %s, %s)\n", vermajor, verminor, verpatch,
+      #if defined(MI_CMAKE_BUILD_TYPE)
+      ", " mi_stringify(MI_CMAKE_BUILD_TYPE)
+      #else
+      ""
+      #endif
+      ,
+      #if defined(MI_GIT_DESCRIBE)
+      ", git " mi_stringify(MI_GIT_DESCRIBE)
+      #else
+      ""
+      #endif
+      , __DATE__, __TIME__);
 
   // show options
   for (int i = 0; i < _mi_option_last; i++) {
     mi_option_t option = (mi_option_t)i;
-    mi_option_get(option);
+    long l = mi_option_get(option); MI_UNUSED(l); // possibly initialize
     mi_option_desc_t* desc = &options[option];
     _mi_verbose_message("option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : ""));
-  }  
+  }
+
+  // show build configuration
+  _mi_verbose_message("debug level : %d\n", MI_DEBUG );
+  _mi_verbose_message("secure level: %d\n", MI_SECURE );
+  _mi_verbose_message("mem tracking: %s\n", MI_TRACK_TOOL);
   #if MI_GUARDED
   _mi_verbose_message("guarded build: %s\n", mi_option_get(mi_option_guarded_sample_rate) != 0 ? "enabled" : "disabled");
+  #endif
+  #if MI_TSAN
+  _mi_verbose_message("thread santizer enabled\n");
   #endif
 }
 

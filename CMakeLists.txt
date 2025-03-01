@@ -78,6 +78,18 @@ else()
  set(mi_defines "")
 endif()
 
+# pass git revision as a define
+if(EXISTS "${CMAKE_SOURCE_DIR}/.git/index")
+  find_package(Git)
+  if(GIT_FOUND)
+    execute_process(COMMAND ${GIT_EXECUTABLE} "describe" OUTPUT_VARIABLE mi_git_describe RESULT_VARIABLE mi_git_res ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(mi_git_res EQUAL "0")
+      list(APPEND mi_defines "MI_GIT_DESCRIBE=${mi_git_describe}")
+      list(APPEND CMAKE_CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/.git/index") # add to dependencies so we rebuild if the git rev changes
+    endif()
+  endif()
+endif()
+
 # -----------------------------------------------------------------------------
 # Convenience: set default build type and compiler depending on the build directory
 # -----------------------------------------------------------------------------
@@ -492,6 +504,7 @@ else()
   endif()
 endif()
 
+
 # -----------------------------------------------------------------------------
 # Install and output names
 # -----------------------------------------------------------------------------
@@ -522,6 +535,7 @@ if(MI_TRACK_ASAN)
   set(mi_libname "${mi_libname}-asan")
 endif()
 string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
+list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE_LC}")  #todo: multi-config project needs $<CONFIG> ?
 if(NOT(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel|none)$"))
   set(mi_libname "${mi_libname}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
 endif()
