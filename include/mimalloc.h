@@ -153,6 +153,7 @@ mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
 mi_decl_export void mi_stats_merge(void)      mi_attr_noexcept;
 mi_decl_export void mi_stats_print(void* out) mi_attr_noexcept;  // backward compatibility: `out` is ignored and should be NULL
 mi_decl_export void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
+mi_decl_export void mi_options_print(void)    mi_attr_noexcept;
 
 mi_decl_export void mi_process_init(void)     mi_attr_noexcept;
 mi_decl_export void mi_thread_init(void)      mi_attr_noexcept;
@@ -269,13 +270,14 @@ mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_block
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export bool mi_is_redirected(void) mi_attr_noexcept;
 
-mi_decl_export int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t timeout_msecs) mi_attr_noexcept;
-mi_decl_export int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msecs) mi_attr_noexcept;
+mi_decl_export int   mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t timeout_msecs) mi_attr_noexcept;
+mi_decl_export int   mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msecs) mi_attr_noexcept;
 
-mi_decl_export int  mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept;
-mi_decl_export bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept;
+mi_decl_export int   mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept;
+mi_decl_export bool  mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept;
 
-mi_decl_export void mi_debug_show_arenas(void) mi_attr_noexcept;
+mi_decl_export void  mi_debug_show_arenas(void) mi_attr_noexcept;
+mi_decl_export void  mi_arenas_print(void) mi_attr_noexcept;
 
 // Experimental: heaps associated with specific memory arena's
 typedef int mi_arena_id_t;
