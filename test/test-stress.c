@@ -331,9 +331,9 @@ int main(int argc, char** argv) {
   #ifndef NDEBUG
   mi_debug_show_arenas();
   mi_collect(true);
-  const char* json = mi_stats_get_json(0, NULL);
+  char* json = mi_stats_get_json(0, NULL);
   if (json != NULL) {
-    puts(json);
+    fputs(json,stderr);
     mi_free(json);
   }
   #endif

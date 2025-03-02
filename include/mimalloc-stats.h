@@ -92,8 +92,8 @@ typedef struct mi_stats_s
 extern "C" {
 #endif
 
-mi_decl_export void        mi_stats_get( size_t stats_size, mi_stats_t* stats ) mi_attr_noexcept;
-mi_decl_export const char* mi_stats_get_json( size_t buf_size, char* buf ) mi_attr_noexcept;    // use mi_free to free the result if the input buf == NULL
+mi_decl_export void  mi_stats_get( size_t stats_size, mi_stats_t* stats ) mi_attr_noexcept;
+mi_decl_export char* mi_stats_get_json( size_t buf_size, char* buf ) mi_attr_noexcept;    // use mi_free to free the result if the input buf == NULL
 
 #ifdef __cplusplus
 }

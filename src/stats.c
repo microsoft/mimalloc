@@ -539,7 +539,7 @@ static void mi_heap_buf_print_counter_value(mi_heap_buf_t* hbuf, const char* nam
 #define MI_STAT_COUNT(stat)    mi_heap_buf_print_count_value(&hbuf, #stat, &stats->stat);
 #define MI_STAT_COUNTER(stat)  mi_heap_buf_print_counter_value(&hbuf, #stat, &stats->stat);
 
-const char* mi_stats_get_json(size_t output_size, char* output_buf) mi_attr_noexcept {
+char* mi_stats_get_json(size_t output_size, char* output_buf) mi_attr_noexcept {
   mi_heap_buf_t hbuf = { NULL, 0, 0, true };
   if (output_size > 0 && output_buf != NULL) {
     _mi_memzero(output_buf, output_size);
