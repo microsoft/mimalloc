@@ -116,7 +116,7 @@ static void* alloc_items(size_t items, random_t r) {
     else if (chance(10, r) && allow_large_objects) items *= 1000;  // 0.1% huge
     else items *= 100;                                             // 1% large objects;
   }
-  if (items == 40) items++;              // pthreads uses that size for stack increases
+  if (items>=32 && items<=40) items*=2;              // pthreads uses 320b allocations (this shows that more clearly in the stats)
   if (use_one_size > 0) items = (use_one_size / sizeof(uintptr_t));
   if (items==0) items = 1;
   uintptr_t* p = (uintptr_t*)custom_calloc(items,sizeof(uintptr_t));
