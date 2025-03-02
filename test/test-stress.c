@@ -322,9 +322,6 @@ int main(int argc, char** argv) {
     // mi_option_set(mi_option_purge_delay,-1);
     mi_option_set(mi_option_page_reclaim_on_free, 0);
   #endif
-  #ifndef USE_STD_MALLOC
-    mi_stats_reset();
-  #endif
 
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
   if (argc >= 2) {
@@ -346,6 +343,11 @@ int main(int argc, char** argv) {
     allow_large_objects = true;
   }
   printf("Using %d threads with a %d%% load-per-thread and %d iterations %s\n", THREADS, SCALE, ITER, (allow_large_objects ? "(allow large objects)" : ""));
+
+  #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
+  mi_stats_reset();
+  #endif
+
   //mi_reserve_os_memory(1024*1024*1024ULL, false, true);
   //int res = mi_reserve_huge_os_pages(4,1);
   //printf("(reserve huge: %i\n)", res);
