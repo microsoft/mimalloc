@@ -291,6 +291,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   mi_assert_internal(full_block_size >= block_size);
   mi_page_init(heap, page, full_block_size, heap->tld);
   mi_heap_stat_increase(heap, pages, 1);
+  mi_heap_stat_increase(heap, page_bins[mi_page_bin(page)], 1);
   if (pq != NULL) { mi_page_queue_push(heap, pq, page); }
   mi_assert_expensive(_mi_page_is_valid(page));
   return page;
@@ -438,14 +439,14 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   // no more aligned blocks in here
   mi_page_set_has_aligned(page, false);
 
-  mi_heap_t* heap = mi_page_heap(page);
-
   // remove from the page list
   // (no need to do _mi_heap_delayed_free first as all blocks are already free)
+  mi_heap_t* heap = mi_page_heap(page);
   mi_segments_tld_t* segments_tld = &heap->tld->segments;
   mi_page_queue_remove(pq, page);
 
   // and free it
+  mi_heap_stat_decrease(heap, page_bins[mi_page_bin(page)], 1);
   mi_page_set_heap(page,NULL);
   _mi_segment_page_free(page, force, segments_tld);
 }
@@ -477,7 +478,7 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   const size_t bsize = mi_page_block_size(page);
   if mi_likely( /* bsize < MI_MAX_RETIRE_SIZE && */ !mi_page_queue_is_special(pq)) {  // not full or huge queue?
     if (pq->last==page && pq->first==page) { // the only page in the queue?
-      mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
+      mi_stat_counter_increase(_mi_stats_main.pages_retire,1);
       page->retire_expire = (bsize <= MI_SMALL_OBJ_SIZE_MAX ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
       mi_heap_t* heap = mi_page_heap(page);
       mi_assert_internal(pq >= heap->pages);
@@ -814,7 +815,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
     page = next;
   } // for each page
 
-  mi_heap_stat_counter_increase(heap, searches, count);
+  mi_heap_stat_counter_increase(heap, page_searches, count);
 
   // set the page to the best candidate
   if (page_candidate != NULL) {
@@ -936,13 +937,14 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size, size_t 
     }
 
     const size_t bsize = mi_page_usable_block_size(page);  // note: not `mi_page_block_size` to account for padding
-    if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
-      mi_heap_stat_increase(heap, large, bsize);
-      mi_heap_stat_counter_increase(heap, large_count, 1);
+    /*if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+      mi_heap_stat_increase(heap, malloc_large, bsize);
+      mi_heap_stat_counter_increase(heap, malloc_large_count, 1);
     }
-    else {
-      mi_heap_stat_increase(heap, huge, bsize);
-      mi_heap_stat_counter_increase(heap, huge_count, 1);
+    else */
+    {
+      mi_heap_stat_increase(heap, malloc_huge, bsize);
+      mi_heap_stat_counter_increase(heap, malloc_huge_count, 1);
     }
   }
   return page;

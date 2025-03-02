@@ -58,7 +58,7 @@ static inline bool mi_page_queue_is_special(const mi_page_queue_t* pq) {
 // We use `wsize` for the size in "machine word sizes",
 // i.e. byte size == `wsize*sizeof(void*)`.
 static inline size_t mi_bin(size_t size) {
-  size_t wsize = _mi_wsize_from_size(size);  
+  size_t wsize = _mi_wsize_from_size(size);
 #if defined(MI_ALIGN4W)
   if mi_likely(wsize <= 4) {
     return (wsize <= 1 ? 1 : (wsize+1)&~1); // round to double word sizes
@@ -140,10 +140,15 @@ static inline bool mi_page_is_large_or_huge(const mi_page_t* page) {
   return (mi_page_block_size(page) > MI_MEDIUM_OBJ_SIZE_MAX || mi_page_is_huge(page));
 }
 
+static size_t mi_page_bin(const mi_page_t* page) {
+  const size_t bin = (mi_page_is_in_full(page) ? MI_BIN_FULL : (mi_page_is_huge(page) ? MI_BIN_HUGE : mi_bin(mi_page_block_size(page))));
+  mi_assert_internal(bin <= MI_BIN_FULL);
+  return bin;
+}
+
 static mi_page_queue_t* mi_heap_page_queue_of(mi_heap_t* heap, const mi_page_t* page) {
   mi_assert_internal(heap!=NULL);
-  size_t bin = (mi_page_is_in_full(page) ? MI_BIN_FULL : (mi_page_is_huge(page) ? MI_BIN_HUGE : mi_bin(mi_page_block_size(page))));
-  mi_assert_internal(bin <= MI_BIN_FULL);
+  const size_t bin = mi_page_bin(page);
   mi_page_queue_t* pq = &heap->pages[bin];
   mi_assert_internal((mi_page_block_size(page) == pq->block_size) ||
                        (mi_page_is_large_or_huge(page) && mi_page_queue_is_huge(pq)) ||
@@ -317,8 +322,8 @@ static void mi_page_queue_enqueue_from_ex(mi_page_queue_t* to, mi_page_queue_t* 
       page->prev = to->first;
       page->next = next;
       to->first->next = page;
-      if (next != NULL) { 
-        next->prev = page; 
+      if (next != NULL) {
+        next->prev = page;
       }
       else {
         to->last = page;
