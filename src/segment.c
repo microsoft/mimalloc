@@ -155,7 +155,7 @@ size_t _mi_commit_mask_next_run(const mi_commit_mask_t* cm, size_t* idx) {
   Each thread owns its own segments.
 
   Currently we have:
-  - small pages (64KiB) 
+  - small pages (64KiB)
   - medium pages (512KiB)
   - large pages (4MiB),
   - huge segments have 1 page in one segment that can be larger than `MI_SEGMENT_SIZE`.
@@ -975,7 +975,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   mi_assert_internal(segment != NULL);
   mi_assert_internal(segment->next == NULL);
   mi_assert_internal(segment->used == 0);
-  
+
   // in `mi_segment_force_abandon` we set this to true to ensure the segment's memory stays valid
   if (segment->dont_free) return;
 
@@ -1000,7 +1000,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   mi_assert_internal(page_count == 2); // first page is allocated by the segment itself
 
   // stats
-  _mi_stat_decrease(&tld->stats->page_committed, mi_segment_info_size(segment));
+  // _mi_stat_decrease(&tld->stats->page_committed, mi_segment_info_size(segment));
 
   // return it to the OS
   mi_segment_os_free(segment, tld);
