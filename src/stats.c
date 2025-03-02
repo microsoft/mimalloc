@@ -63,7 +63,7 @@ void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
 
 
 // must be thread safe as it is called from stats_merge
-static void mi_stat_add(mi_stat_count_t* stat, const mi_stat_count_t* src) {
+static void mi_stat_count_add(mi_stat_count_t* stat, const mi_stat_count_t* src) {
   if (stat==src) return;
   if (src->total!=0)   { mi_atomic_addi64_relaxed(&stat->total, src->total); }
   if (src->current!=0) { mi_atomic_addi64_relaxed(&stat->current, src->current); }
@@ -78,57 +78,28 @@ static void mi_stat_counter_add(mi_stat_counter_t* stat, const mi_stat_counter_t
   if (src->total!=0) { mi_atomic_addi64_relaxed(&stat->total, src->total); }
 }
 
+#define MI_STAT_COUNT(stat)    mi_stat_count_add(&stats->stat, &src->stat);
+#define MI_STAT_COUNTER(stat)  mi_stat_counter_add(&stats->stat, &src->stat);
+
 // must be thread safe as it is called from stats_merge
 static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   if (stats==src) return;
-  mi_stat_add(&stats->pages, &src->pages);
-  mi_stat_add(&stats->reserved, &src->reserved);
-  mi_stat_add(&stats->committed, &src->committed);
-  mi_stat_add(&stats->reset, &src->reset);
-  mi_stat_add(&stats->purged, &src->purged);
-  mi_stat_add(&stats->page_committed, &src->page_committed);
-  mi_stat_add(&stats->pages_abandoned, &src->pages_abandoned);
-  mi_stat_add(&stats->threads, &src->threads);
-  mi_stat_add(&stats->malloc_normal, &src->malloc_normal);
-  mi_stat_add(&stats->malloc_huge, &src->malloc_huge);
-  mi_stat_add(&stats->malloc_requested, &src->malloc_requested);
 
-  mi_stat_counter_add(&stats->mmap_calls, &src->mmap_calls);
-  mi_stat_counter_add(&stats->commit_calls, &src->commit_calls);
-  mi_stat_counter_add(&stats->reset_calls, &src->reset_calls);
-  mi_stat_counter_add(&stats->purge_calls, &src->purge_calls);
-  mi_stat_counter_add(&stats->arena_count, &src->arena_count);
-  mi_stat_counter_add(&stats->malloc_normal_count, &src->malloc_normal_count);
-  mi_stat_counter_add(&stats->malloc_huge_count, &src->malloc_huge_count);
-  mi_stat_counter_add(&stats->malloc_guarded_count, &src->malloc_guarded_count);
+  // copy all fields
+  MI_STAT_FIELDS()
 
-  mi_stat_counter_add(&stats->arena_rollback_count, &src->arena_rollback_count);
-  mi_stat_counter_add(&stats->pages_extended, &src->pages_extended);
-  mi_stat_counter_add(&stats->pages_retire, &src->pages_retire);
-  mi_stat_counter_add(&stats->page_searches, &src->page_searches);
-
-  mi_stat_add(&stats->segments, &src->segments);
-  mi_stat_add(&stats->segments_abandoned, &src->segments_abandoned);
-  mi_stat_add(&stats->segments_cache, &src->segments_cache);
-
-  mi_stat_counter_add(&stats->pages_reclaim_on_alloc, &src->pages_reclaim_on_alloc);
-  mi_stat_counter_add(&stats->pages_reclaim_on_free, &src->pages_reclaim_on_free);
-  mi_stat_counter_add(&stats->pages_reabandon_full, &src->pages_reabandon_full);
-  mi_stat_counter_add(&stats->pages_unabandon_busy_wait, &src->pages_unabandon_busy_wait);
-
-#if MI_STAT>1
+  #if MI_STAT>1
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
-    // if (src->normal_bins[i].total != 0 && src->normal_bins[i].current != 0) {
-    mi_stat_add(&stats->malloc_bins[i], &src->malloc_bins[i]);
-    //}
+    mi_stat_count_add(&stats->malloc_bins[i], &src->malloc_bins[i]);
   }
+  #endif
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
-    // if (src->normal_bins[i].total != 0 && src->normal_bins[i].current != 0) {
-    mi_stat_add(&stats->page_bins[i], &src->page_bins[i]);
-    //}
-  }
-#endif
+    mi_stat_count_add(&stats->page_bins[i], &src->page_bins[i]);    
+  }  
 }
+
+#undef MI_STAT_COUNT
+#undef MI_STAT_COUNTER
 
 /* -----------------------------------------------------------
   Display statistics
@@ -318,8 +289,8 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_print(&stats->malloc_normal, "normal", (stats->malloc_normal_count.total == 0 ? 1 : -1), out, arg);
   mi_stat_print(&stats->malloc_huge, "huge", (stats->malloc_huge_count.total == 0 ? 1 : -1), out, arg);
   mi_stat_count_t total = { 0,0,0 };
-  mi_stat_add(&total, &stats->malloc_normal);
-  mi_stat_add(&total, &stats->malloc_huge);
+  mi_stat_count_add(&total, &stats->malloc_normal);
+  mi_stat_count_add(&total, &stats->malloc_huge);
   mi_stat_print_ex(&total, "total", 1, out, arg, "");
   #endif
   #if MI_STAT>1
@@ -465,4 +436,160 @@ mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, s
   if (current_commit!=NULL) *current_commit = pinfo.current_commit;
   if (peak_commit!=NULL)    *peak_commit    = pinfo.peak_commit;
   if (page_faults!=NULL)    *page_faults    = pinfo.page_faults;
+}
+
+
+// --------------------------------------------------------
+// Return statistics
+// --------------------------------------------------------
+
+void mi_stats_get(size_t stats_size, mi_stats_t* stats) mi_attr_noexcept {
+  if (stats == NULL || stats_size == 0) return;
+  _mi_memzero(stats, stats_size);
+  const size_t size = (stats_size > sizeof(mi_stats_t) ? sizeof(mi_stats_t) : stats_size);
+  _mi_memcpy(stats, &_mi_stats_main, size);
+  stats->version = MI_STAT_VERSION;
+}
+
+
+// --------------------------------------------------------
+// Statics in json format
+// --------------------------------------------------------
+
+typedef struct mi_heap_buf_s {
+  char*   buf;
+  size_t  size;
+  size_t  used;
+  bool    can_realloc;
+} mi_heap_buf_t;
+
+static bool mi_heap_buf_expand(mi_heap_buf_t* hbuf) {
+  if (hbuf==NULL) return false;
+  if (hbuf->buf != NULL && hbuf->size>0) {
+    hbuf->buf[hbuf->size-1] = 0;
+  }
+  if (hbuf->size > SIZE_MAX/2 || !hbuf->can_realloc) return false;
+  const size_t newsize = (hbuf->size == 0 ? 2*MI_KiB : 2*hbuf->size);
+  char* const  newbuf  = (char*)mi_rezalloc(hbuf->buf, newsize);
+  if (newbuf == NULL) return false;
+  hbuf->buf = newbuf;
+  hbuf->size = newsize;
+  return true;
+}
+
+static void mi_heap_buf_print(mi_heap_buf_t* hbuf, const char* msg) {
+  if (msg==NULL || hbuf==NULL) return;
+  if (hbuf->used + 1 >= hbuf->size && !hbuf->can_realloc) return;
+  for (const char* src = msg; *src != 0; src++) {
+    char c = *src;
+    if (hbuf->used + 1 >= hbuf->size) {
+      if (!mi_heap_buf_expand(hbuf)) return;
+    }
+    mi_assert_internal(hbuf->used < hbuf->size);
+    hbuf->buf[hbuf->used++] = c;
+  }
+  mi_assert_internal(hbuf->used < hbuf->size);
+  hbuf->buf[hbuf->used] = 0;
+}
+
+static void mi_heap_buf_print_count_bin(mi_heap_buf_t* hbuf, const char* prefix, mi_stat_count_t* stat, size_t bin, bool add_comma) {
+  const size_t binsize = _mi_bin_size(bin);
+  const size_t pagesize = (binsize <= MI_SMALL_OBJ_SIZE_MAX ? MI_SMALL_PAGE_SIZE :
+                            (binsize <= MI_MEDIUM_OBJ_SIZE_MAX ? MI_MEDIUM_PAGE_SIZE :
+                              (binsize <= MI_LARGE_OBJ_SIZE_MAX ? MI_LARGE_PAGE_SIZE : 0)));
+  char buf[128];
+  _mi_snprintf(buf, 128, "%s{ \"total\": %lld, \"peak\": %lld, \"current\": %lld, \"block_size\": %zu, \"page_size\": %zu }%s\n", prefix, stat->total, stat->peak, stat->current, binsize, pagesize, (add_comma ? "," : ""));
+  buf[127] = 0;
+  mi_heap_buf_print(hbuf, buf);
+}
+
+static void mi_heap_buf_print_count(mi_heap_buf_t* hbuf, const char* prefix, mi_stat_count_t* stat, bool add_comma) {
+  char buf[128];
+  _mi_snprintf(buf, 128, "%s{ \"total\": %lld, \"peak\": %lld, \"current\": %lld }%s\n", prefix, stat->total, stat->peak, stat->current, (add_comma ? "," : ""));
+  buf[127] = 0;
+  mi_heap_buf_print(hbuf, buf);
+}
+
+static void mi_heap_buf_print_count_value(mi_heap_buf_t* hbuf, const char* name, mi_stat_count_t* stat) {
+  char buf[128];
+  _mi_snprintf(buf, 128, "  \"%s\": ", name);
+  buf[127] = 0;
+  mi_heap_buf_print(hbuf, buf);
+  mi_heap_buf_print_count(hbuf, "", stat, true);
+}
+
+static void mi_heap_buf_print_value(mi_heap_buf_t* hbuf, const char* name, int64_t val) {
+  char buf[128];
+  _mi_snprintf(buf, 128, "  \"%s\": %lld,\n", name, val);
+  buf[127] = 0;
+  mi_heap_buf_print(hbuf, buf);
+}
+
+static void mi_heap_buf_print_size(mi_heap_buf_t* hbuf, const char* name, size_t val, bool add_comma) {
+  char buf[128];
+  _mi_snprintf(buf, 128, "    \"%s\": %zu%s\n", name, val, (add_comma ? "," : ""));
+  buf[127] = 0;
+  mi_heap_buf_print(hbuf, buf);
+}
+
+static void mi_heap_buf_print_counter_value(mi_heap_buf_t* hbuf, const char* name, mi_stat_counter_t* stat) {
+  mi_heap_buf_print_value(hbuf, name, stat->total);
+}
+
+#define MI_STAT_COUNT(stat)    mi_heap_buf_print_count_value(&hbuf, #stat, &stats->stat);
+#define MI_STAT_COUNTER(stat)  mi_heap_buf_print_counter_value(&hbuf, #stat, &stats->stat);
+
+const char* mi_stats_get_json(size_t output_size, char* output_buf) mi_attr_noexcept {
+  mi_heap_buf_t hbuf = { NULL, 0, 0, true };
+  if (output_size > 0 && output_buf != NULL) {
+    _mi_memzero(output_buf, output_size);
+    hbuf.buf = output_buf;
+    hbuf.size = output_size;
+    hbuf.can_realloc = false;
+  }
+  else {
+    if (!mi_heap_buf_expand(&hbuf)) return NULL;
+  }
+  mi_heap_buf_print(&hbuf, "{\n");
+  mi_heap_buf_print_value(&hbuf, "version", MI_STAT_VERSION);
+  mi_heap_buf_print_value(&hbuf, "mimalloc_version", MI_MALLOC_VERSION);
+
+  // process info
+  mi_heap_buf_print(&hbuf, "  \"process\": {\n");
+  size_t elapsed;
+  size_t user_time;
+  size_t sys_time;
+  size_t current_rss;
+  size_t peak_rss;
+  size_t current_commit;
+  size_t peak_commit;
+  size_t page_faults;
+  mi_process_info(&elapsed, &user_time, &sys_time, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
+  mi_heap_buf_print_size(&hbuf, "elapsed_msecs", elapsed, true);
+  mi_heap_buf_print_size(&hbuf, "user_msecs", user_time, true);
+  mi_heap_buf_print_size(&hbuf, "system_msecs", sys_time, true);
+  mi_heap_buf_print_size(&hbuf, "page_faults", page_faults, true);
+  mi_heap_buf_print_size(&hbuf, "rss_current", current_rss, true);
+  mi_heap_buf_print_size(&hbuf, "rss_peak", peak_rss, true);
+  mi_heap_buf_print_size(&hbuf, "commit_current", current_commit, true);
+  mi_heap_buf_print_size(&hbuf, "commit_peak", peak_commit, false);
+  mi_heap_buf_print(&hbuf, "  },\n");
+
+  // statistics
+  mi_stats_t* stats = &_mi_stats_main;
+  MI_STAT_FIELDS()
+
+  // size bins
+  mi_heap_buf_print(&hbuf, "  \"malloc_bins\": [\n");
+  for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
+    mi_heap_buf_print_count_bin(&hbuf, "    ", &stats->malloc_bins[i], i, i!=MI_BIN_HUGE);
+  }
+  mi_heap_buf_print(&hbuf, "  ],\n");
+  mi_heap_buf_print(&hbuf, "  \"page_bins\": [\n");
+  for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
+    mi_heap_buf_print_count_bin(&hbuf, "    ", &stats->page_bins[i], i, i!=MI_BIN_HUGE);
+  }
+  mi_heap_buf_print(&hbuf, "  ]\n");  
+  mi_heap_buf_print(&hbuf, "}\n");
+  return hbuf.buf;
 }

@@ -21,6 +21,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // --------------------------------------------------------------------------
 
 
+#include <mimalloc-stats.h>
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
 #include "atomic.h"   // _Atomic
@@ -515,135 +516,10 @@ struct mi_heap_s {
 };
 
 
-
-// ------------------------------------------------------
-// Debug
-// ------------------------------------------------------
-
-#if !defined(MI_DEBUG_UNINIT)
-#define MI_DEBUG_UNINIT     (0xD0)
-#endif
-#if !defined(MI_DEBUG_FREED)
-#define MI_DEBUG_FREED      (0xDF)
-#endif
-#if !defined(MI_DEBUG_PADDING)
-#define MI_DEBUG_PADDING    (0xDE)
-#endif
-
-#if (MI_DEBUG)
-// use our own assertion to print without memory allocation
-void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line, const char* func );
-#define mi_assert(expr)     ((expr) ? (void)0 : _mi_assert_fail(#expr,__FILE__,__LINE__,__func__))
-#else
-#define mi_assert(x)
-#endif
-
-#if (MI_DEBUG>1)
-#define mi_assert_internal    mi_assert
-#else
-#define mi_assert_internal(x)
-#endif
-
-#if (MI_DEBUG>2)
-#define mi_assert_expensive   mi_assert
-#else
-#define mi_assert_expensive(x)
-#endif
-
-// ------------------------------------------------------
-// Statistics
-// ------------------------------------------------------
-
-#ifndef MI_STAT
-#if (MI_DEBUG>0)
-#define MI_STAT 2
-#else
-#define MI_STAT 0
-#endif
-#endif
-
-typedef struct mi_stat_count_s {
-  int64_t total;
-  int64_t peak;
-  int64_t current;
-} mi_stat_count_t;
-
-typedef struct mi_stat_counter_s {
-  int64_t total;
-} mi_stat_counter_t;
-
-typedef struct mi_stats_s {
-  mi_stat_count_t   pages;                    // count of mimalloc pages
-  mi_stat_count_t   reserved;                 // reserved memory bytes
-  mi_stat_count_t   committed;                // committed bytes
-  mi_stat_count_t   reset;                    // reset bytes
-  mi_stat_count_t   purged;                   // purged bytes
-  mi_stat_count_t   page_committed;           // committed memory inside pages
-  mi_stat_count_t   pages_abandoned;          // abandonded pages count
-  mi_stat_count_t   threads;                  // number of threads
-  mi_stat_count_t   malloc_normal;            // allocated bytes <= MI_LARGE_OBJ_SIZE_MAX
-  mi_stat_count_t   malloc_huge;              // allocated bytes in huge pages
-  mi_stat_count_t   malloc_requested;         // malloc requested bytes
-
-  mi_stat_counter_t mmap_calls;
-  mi_stat_counter_t commit_calls;
-  mi_stat_counter_t reset_calls;
-  mi_stat_counter_t purge_calls;
-  mi_stat_counter_t arena_count;              // number of memory arena's
-  mi_stat_counter_t malloc_normal_count;      // number of blocks <= MI_LARGE_OBJ_SIZE_MAX
-  mi_stat_counter_t malloc_huge_count;        // number of huge bloks
-  mi_stat_counter_t malloc_guarded_count;     // number of allocations with guard pages
-
-  // internal statistics
-  mi_stat_counter_t arena_rollback_count;
-  mi_stat_counter_t pages_extended;           // number of page extensions
-  mi_stat_counter_t pages_retire;             // number of pages that are retired
-  mi_stat_counter_t page_searches;            // searches for a fresh page
-  // only on v1 and v2
-  mi_stat_count_t   segments;
-  mi_stat_count_t   segments_abandoned;
-  mi_stat_count_t   segments_cache;
-  mi_stat_count_t   _segments_reserved;
-  // only on v3
-  mi_stat_counter_t pages_reclaim_on_alloc;
-  mi_stat_counter_t pages_reclaim_on_free;
-  mi_stat_counter_t pages_reabandon_full;
-  mi_stat_counter_t pages_unabandon_busy_wait;
-
-  // future extension
-  mi_stat_count_t   _stat_reserved[4];
-  mi_stat_counter_t _stat_counter_reserved[4];
-
-  // size segregated statistics
-  mi_stat_count_t   malloc_bins[MI_BIN_HUGE+1];   // allocation per size bin
-  mi_stat_count_t   page_bins[MI_BIN_HUGE+1];     // pages allocated per size bin
-} mi_stats_t;
-
-
-// add to stat keeping track of the peak
-void _mi_stat_increase(mi_stat_count_t* stat, size_t amount);
-void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
-// counters can just be increased
-void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
-
-#if (MI_STAT)
-#define mi_stat_increase(stat,amount)         _mi_stat_increase( &(stat), amount)
-#define mi_stat_decrease(stat,amount)         _mi_stat_decrease( &(stat), amount)
-#define mi_stat_counter_increase(stat,amount) _mi_stat_counter_increase( &(stat), amount)
-#else
-#define mi_stat_increase(stat,amount)         ((void)0)
-#define mi_stat_decrease(stat,amount)         ((void)0)
-#define mi_stat_counter_increase(stat,amount) ((void)0)
-#endif
-
-#define mi_heap_stat_counter_increase(heap,stat,amount)  mi_stat_counter_increase( (heap)->tld->stats.stat, amount)
-#define mi_heap_stat_increase(heap,stat,amount)  mi_stat_increase( (heap)->tld->stats.stat, amount)
-#define mi_heap_stat_decrease(heap,stat,amount)  mi_stat_decrease( (heap)->tld->stats.stat, amount)
-
-
 // ------------------------------------------------------
 // Sub processes do not reclaim or visit segments
-// from other sub processes
+// from other sub processes. These are essentially the
+// static variables of a process.
 // ------------------------------------------------------
 
 struct mi_subproc_s {
@@ -655,6 +531,7 @@ struct mi_subproc_s {
   mi_segment_t*      abandoned_os_list_tail;  // the tail-end of the list
   mi_memid_t         memid;                   // provenance of this memory block
 };
+
 
 // ------------------------------------------------------
 // Thread Local data
@@ -692,5 +569,74 @@ struct mi_tld_s {
   mi_segments_tld_t   segments;      // segment tld
   mi_stats_t          stats;         // statistics
 };
+
+
+
+// ------------------------------------------------------
+// Debug
+// ------------------------------------------------------
+
+#if !defined(MI_DEBUG_UNINIT)
+#define MI_DEBUG_UNINIT     (0xD0)
+#endif
+#if !defined(MI_DEBUG_FREED)
+#define MI_DEBUG_FREED      (0xDF)
+#endif
+#if !defined(MI_DEBUG_PADDING)
+#define MI_DEBUG_PADDING    (0xDE)
+#endif
+
+#if (MI_DEBUG)
+// use our own assertion to print without memory allocation
+void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line, const char* func );
+#define mi_assert(expr)     ((expr) ? (void)0 : _mi_assert_fail(#expr,__FILE__,__LINE__,__func__))
+#else
+#define mi_assert(x)
+#endif
+
+#if (MI_DEBUG>1)
+#define mi_assert_internal    mi_assert
+#else
+#define mi_assert_internal(x)
+#endif
+
+#if (MI_DEBUG>2)
+#define mi_assert_expensive   mi_assert
+#else
+#define mi_assert_expensive(x)
+#endif
+
+
+// ------------------------------------------------------
+// Statistics
+// ------------------------------------------------------
+#ifndef MI_STAT
+#if (MI_DEBUG>0)
+#define MI_STAT 2
+#else
+#define MI_STAT 0
+#endif
+#endif
+
+// add to stat keeping track of the peak
+void _mi_stat_increase(mi_stat_count_t* stat, size_t amount);
+void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
+// counters can just be increased
+void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
+
+#if (MI_STAT)
+#define mi_stat_increase(stat,amount)         _mi_stat_increase( &(stat), amount)
+#define mi_stat_decrease(stat,amount)         _mi_stat_decrease( &(stat), amount)
+#define mi_stat_counter_increase(stat,amount) _mi_stat_counter_increase( &(stat), amount)
+#else
+#define mi_stat_increase(stat,amount)         ((void)0)
+#define mi_stat_decrease(stat,amount)         ((void)0)
+#define mi_stat_counter_increase(stat,amount) ((void)0)
+#endif
+
+#define mi_heap_stat_counter_increase(heap,stat,amount)  mi_stat_counter_increase( (heap)->tld->stats.stat, amount)
+#define mi_heap_stat_increase(heap,stat,amount)  mi_stat_increase( (heap)->tld->stats.stat, amount)
+#define mi_heap_stat_decrease(heap,stat,amount)  mi_stat_decrease( (heap)->tld->stats.stat, amount)
+
 
 #endif

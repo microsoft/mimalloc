@@ -36,7 +36,7 @@ static int ITER    = 400;
 static int THREADS = 8;
 static int SCALE   = 25;
 static int ITER    = 20;
-#elif defined(MI_GUARDED)     // with debug guard pages reduce parameters to stay within the azure pipeline limits
+#elif 1 || defined(MI_GUARDED)     // with debug guard pages reduce parameters to stay within the azure pipeline limits
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
@@ -61,6 +61,7 @@ static bool   main_participates = false;       // main thread participates as a 
 #define custom_free(p)        free(p)
 #else
 #include <mimalloc.h>
+#include <mimalloc-stats.h>
 #define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
@@ -330,8 +331,15 @@ int main(int argc, char** argv) {
   #ifndef NDEBUG
   mi_debug_show_arenas();
   mi_collect(true);
+  
+  const char* json = mi_stats_get_json(0, NULL);
+  if (json != NULL) {
+    puts(json);
+    mi_free(json);
+  }
+  
   #endif
-  mi_stats_print(NULL);
+  mi_stats_print(NULL);  
 #endif
   //bench_end_program();
   return 0;
