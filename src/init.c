@@ -647,14 +647,6 @@ void mi_process_init(void) mi_attr_noexcept {
   mi_detect_cpu_features();
   _mi_os_init();
   mi_heap_main_init();
-  #if MI_DEBUG
-  _mi_verbose_message("debug level : %d\n", MI_DEBUG);
-  #endif
-  _mi_verbose_message("secure level: %d\n", MI_SECURE);
-  _mi_verbose_message("mem tracking: %s\n", MI_TRACK_TOOL);
-  #if MI_TSAN
-  _mi_verbose_message("thread santizer enabled\n");
-  #endif
   mi_thread_init();
 
   #if defined(_WIN32)
