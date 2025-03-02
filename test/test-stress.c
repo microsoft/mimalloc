@@ -285,9 +285,6 @@ int main(int argc, char** argv) {
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     mi_option_set(mi_option_arena_reserve, 32 * 1024 /* in kib = 32MiB */);
   #endif
-  #ifndef USE_STD_MALLOC
-    mi_stats_reset();
-  #endif
 
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
   if (argc >= 2) {
@@ -320,9 +317,9 @@ int main(int argc, char** argv) {
   
   //mi_reserve_os_memory(512ULL << 20, true, true);
 
-#if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
+  #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
   mi_stats_reset();
-#endif
+  #endif
 
 #ifdef STRESS
   test_stress();

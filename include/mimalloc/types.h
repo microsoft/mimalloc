@@ -622,15 +622,13 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line
 #endif
 
 typedef struct mi_stat_count_s {
-  int64_t allocated;
-  int64_t freed;
+  int64_t total;
   int64_t peak;
   int64_t current;
 } mi_stat_count_t;
 
 typedef struct mi_stat_counter_s {
   int64_t total;
-  int64_t count;
 } mi_stat_counter_t;
 
 typedef struct mi_stats_s {
