@@ -38,10 +38,8 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   else {
     // add thread local
     stat->current += amount;
-    if (stat->current > stat->peak) stat->peak = stat->current;
-    if (amount > 0) {
-      stat->total += amount;
-    }
+    if (stat->current > stat->peak) { stat->peak = stat->current; }
+    if (amount > 0) { stat->total += amount; }
   }
 }
 
@@ -67,16 +65,17 @@ void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
 // must be thread safe as it is called from stats_merge
 static void mi_stat_add(mi_stat_count_t* stat, const mi_stat_count_t* src) {
   if (stat==src) return;
-  if (src->total==0) return;
-  mi_atomic_addi64_relaxed( &stat->total, src->total);
-  mi_atomic_addi64_relaxed( &stat->current, src->current);
+  if (src->total!=0)   { mi_atomic_addi64_relaxed(&stat->total, src->total); }
+  if (src->current!=0) { mi_atomic_addi64_relaxed(&stat->current, src->current); }
   // peak scores do really not work across threads ... we use conservative max
-  mi_atomic_maxi64_relaxed( &stat->peak, src->peak); // or: mi_atomic_addi64_relaxed( &stat->peak, src->peak);  
+  if (src->peak > stat->peak) {
+    mi_atomic_maxi64_relaxed(&stat->peak, src->peak); // or: mi_atomic_addi64_relaxed( &stat->peak, src->peak);  
+  }
 }
 
 static void mi_stat_counter_add(mi_stat_counter_t* stat, const mi_stat_counter_t* src) {
   if (stat==src) return;
-  mi_atomic_addi64_relaxed( &stat->total, src->total);  
+  if (src->total!=0) { mi_atomic_addi64_relaxed(&stat->total, src->total); }
 }
 
 // must be thread safe as it is called from stats_merge
@@ -113,9 +112,9 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   mi_stat_counter_add(&stats->guarded_alloc_count, &src->guarded_alloc_count);
 #if MI_STAT>1
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
-    if (src->normal_bins[i].total > 0) {
-      mi_stat_add(&stats->normal_bins[i], &src->normal_bins[i]);
-    }
+    // if (src->normal_bins[i].total != 0 && src->normal_bins[i].current != 0) {
+    mi_stat_add(&stats->normal_bins[i], &src->normal_bins[i]);
+    //}
   }
 #endif
 }
