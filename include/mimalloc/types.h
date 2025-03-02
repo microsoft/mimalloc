@@ -250,7 +250,7 @@ typedef struct mi_block_s {
 #define MI_PAGE_FLAG_MASK             MI_ZU(0x03)
 typedef size_t mi_page_flags_t;
 
-// There are two special threadid's: 0 for abandoned threads, and 4 for abandoned & mapped threads -- 
+// There are two special threadid's: 0 for abandoned threads, and 4 for abandoned & mapped threads --
 // abandoned-mapped pages are abandoned but also mapped in an arena so can be quickly found for reuse.
 #define MI_THREADID_ABANDONED         MI_ZU(0)
 #define MI_THREADID_ABANDONED_MAPPED  (MI_PAGE_FLAG_MASK + 1)
@@ -459,15 +459,13 @@ struct mi_heap_s {
 #endif
 
 typedef struct mi_stat_count_s {
-  int64_t allocated;
-  int64_t freed;
+  int64_t total;
   int64_t peak;
   int64_t current;
 } mi_stat_count_t;
 
 typedef struct mi_stat_counter_s {
   int64_t total;
-  int64_t count;
 } mi_stat_counter_t;
 
 typedef struct mi_stats_s {
@@ -510,11 +508,13 @@ void __mi_stat_increase(mi_stat_count_t* stat, size_t amount);
 void __mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
 void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount);
 void __mi_stat_decrease_mt(mi_stat_count_t* stat, size_t amount);
-// adjust stat in special cases to compensate for double counting
-void __mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount, bool on_alloc);
-void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount, bool on_free);
-void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, size_t amount, bool on_alloc);
-void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount, bool on_free);
+
+// adjust stat in special cases to compensate for double counting (and does not adjust peak values and can decrease the total)
+void __mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount);
+
 // counters can just be increased
 void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
@@ -526,8 +526,6 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_debug_stat_increase_mt(stat,amount)                  __mi_stat_increase_mt( &(stat), amount)
 #define mi_debug_stat_decrease_mt(stat,amount)                  __mi_stat_decrease_mt( &(stat), amount)
 #define mi_debug_stat_counter_increase_mt(stat,amount)          __mi_stat_counter_increase_mt( &(stat), amount)
-#define mi_debug_stat_adjust_increase_mt(stat,amnt,b)           __mi_stat_adjust_increase_mt( &(stat), amnt, b)
-#define mi_debug_stat_adjust_decrease_mt(stat,amnt,b)           __mi_stat_adjust_decrease_mt( &(stat), amnt, b)
 #else
 #define mi_debug_stat_increase(stat,amount)                     ((void)0)
 #define mi_debug_stat_decrease(stat,amount)                     ((void)0)
@@ -535,22 +533,19 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_debug_stat_increase_mt(stat,amount)                  ((void)0)
 #define mi_debug_stat_decrease_mt(stat,amount)                  ((void)0)
 #define mi_debug_stat_counter_increase_mt(stat,amount)          ((void)0)
-#define mi_debug_stat_adjust_increase(stat,amnt,b)              ((void)0)
-#define mi_debug_stat_adjust_decrease(stat,amnt,b)              ((void)0)
 #endif
 
 #define mi_subproc_stat_counter_increase(subproc,stat,amount)   __mi_stat_counter_increase_mt( &(subproc)->stats.stat, amount)
 #define mi_subproc_stat_increase(subproc,stat,amount)           __mi_stat_increase_mt( &(subproc)->stats.stat, amount)
 #define mi_subproc_stat_decrease(subproc,stat,amount)           __mi_stat_decrease_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_adjust_increase(subproc,stat,amnt,b)    __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amnt, b)
-#define mi_subproc_stat_adjust_decrease(subproc,stat,amnt,b)    __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amnt, b)
+#define mi_subproc_stat_adjust_increase(subproc,stat,amnt)      __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amnt)
+#define mi_subproc_stat_adjust_decrease(subproc,stat,amnt)      __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amnt)
 
 #define mi_tld_stat_counter_increase(tld,stat,amount)           __mi_stat_counter_increase( &(tld)->stats.stat, amount)
 #define mi_tld_stat_increase(tld,stat,amount)                   __mi_stat_increase( &(tld)->stats.stat, amount)
 #define mi_tld_stat_decrease(tld,stat,amount)                   __mi_stat_decrease( &(tld)->stats.stat, amount)
-#define mi_tld_stat_adjust_increase(tld,stat,amnt,b)            __mi_stat_adjust_increase( &(tld)->stats.stat, amnt, b)
-#define mi_tld_stat_adjust_decrease(tld,stat,amnt,b)            __mi_stat_adjust_decrease( &(tld)->stats.stat, amnt, b)
-
+#define mi_tld_stat_adjust_increase(tld,stat,amnt)              __mi_stat_adjust_increase( &(tld)->stats.stat, amnt)
+#define mi_tld_stat_adjust_decrease(tld,stat,amnt)              __mi_stat_adjust_decrease( &(tld)->stats.stat, amnt)
 
 #define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
 #define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)

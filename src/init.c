@@ -65,11 +65,11 @@ const mi_page_t _mi_page_empty = {
     QNULL(MI_LARGE_MAX_OBJ_WSIZE + 1  /* 655360, Huge queue */), \
     QNULL(MI_LARGE_MAX_OBJ_WSIZE + 2) /* Full queue */ }
 
-#define MI_STAT_COUNT_NULL()  {0,0,0,0}
+#define MI_STAT_COUNT_NULL()  {0,0,0}
 
 // Empty statistics
 #if MI_STAT>1
-#define MI_STAT_COUNT_END_NULL()  , { MI_STAT_COUNT_NULL(), MI_INIT32(MI_STAT_COUNT_NULL) }
+#define MI_STAT_COUNT_END_NULL()  , { MI_INIT64(MI_STAT_COUNT_NULL), MI_INIT8(MI_STAT_COUNT_NULL), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL() }
 #else
 #define MI_STAT_COUNT_END_NULL()
 #endif
@@ -81,10 +81,10 @@ const mi_page_t _mi_page_empty = {
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }  \
+  { 0 }, { 0 }, { 0 }, { 0 }, \
+  { 0 }, { 0 }, { 0 }, { 0 }, \
+  { 0 }, { 0 }, { 0 }, { 0 }, \
+  { 0 }, { 0 }, { 0 }, { 0 }  \
   MI_STAT_COUNT_END_NULL()
 
 // --------------------------------------------------------
@@ -262,7 +262,7 @@ static void mi_heap_main_init(void) {
     heap_main.page_full_retain   = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
 
     mi_subproc_main_init();
-    mi_tld_main_init();    
+    mi_tld_main_init();
   }
 }
 
@@ -604,7 +604,7 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
 
 void mi_thread_set_in_threadpool(void) mi_attr_noexcept {
   mi_tld_t* tld = mi_tld();
-  if (tld!=NULL) { 
+  if (tld!=NULL) {
     tld->is_in_threadpool = true;
   }
 }
@@ -678,7 +678,7 @@ void mi_process_init(void) mi_attr_noexcept {
   if (!mi_atomic_once(&process_init)) return;
   _mi_process_is_initialized = true;
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
- 
+
   mi_detect_cpu_features();
   _mi_os_init();
   _mi_page_map_init();

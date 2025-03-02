@@ -160,7 +160,7 @@ static mi_arena_t* mi_page_arena(mi_page_t* page, size_t* slice_index, size_t* s
   return mi_arena_from_memid(page->memid, slice_index, slice_count);
 }
 
-static size_t mi_page_full_size(mi_page_t* page) {  
+static size_t mi_page_full_size(mi_page_t* page) {
   if (page->memid.memkind == MI_MEM_ARENA) {
     return page->memid.mem.arena.slice_count * MI_ARENA_SLICE_SIZE;
   }
@@ -209,10 +209,6 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
       // we set the bits first since we own these slices (they are no longer free)
       size_t already_committed_count = 0;
       mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed_count);
-      // adjust the stats so we don't double count the commits
-      //if (already_committed_count > 0) {
-      //  mi_subproc_stat_adjust_decrease(arena->subproc, committed, mi_size_of_slices(already_committed_count), true /* on alloc */);
-      //}
       // now actually commit
       bool commit_zero = false;
       if (!_mi_os_commit_ex(p, mi_size_of_slices(slice_count), &commit_zero, mi_size_of_slices(slice_count - already_committed_count))) {
@@ -315,20 +311,18 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
   // on an OS with overcommit (Linux) we don't count the commit yet as it is on-demand. Once a slice
   // is actually allocated for the first time it will be counted.
   const bool adjust = (overcommit && arena_commit);
-  if (adjust) {
-    mi_subproc_stat_adjust_decrease( subproc, committed, arena_reserve, true /* on alloc */);
-  }
+  if (adjust) { mi_subproc_stat_adjust_decrease( subproc, committed, arena_reserve); }
   // and try to reserve the arena
   int err = mi_reserve_os_memory_ex2(subproc, arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
   if (err != 0) {
-    if (adjust) { mi_subproc_stat_adjust_increase( subproc, committed, arena_reserve, true); } // roll back
+    if (adjust) { mi_subproc_stat_adjust_increase( subproc, committed, arena_reserve); } // roll back
     // failed, try a smaller size?
     const size_t small_arena_reserve = (MI_SIZE_BITS == 32 ? 128*MI_MiB : 1*MI_GiB);
-    if (adjust) { mi_subproc_stat_adjust_decrease( subproc, committed, arena_reserve, true); }
+    if (adjust) { mi_subproc_stat_adjust_decrease( subproc, committed, arena_reserve); }
     if (arena_reserve > small_arena_reserve) {
       // try again
       err = mi_reserve_os_memory_ex(small_arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
-      if (err != 0 && adjust) { mi_subproc_stat_adjust_increase( subproc, committed, arena_reserve, true); } // roll back
+      if (err != 0 && adjust) { mi_subproc_stat_adjust_increase( subproc, committed, arena_reserve); } // roll back
     }
   }
   return (err==0);
@@ -918,7 +912,7 @@ bool _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page) {
   else {
     mi_tld_t* tld = _mi_thread_tld();
     mi_tld_stat_counter_increase( tld, pages_reabandon_full, 1);
-    mi_tld_stat_adjust_decrease( tld, pages_abandoned, 1, true /* on alloc */);  // adjust as we are not abandoning fresh
+    mi_tld_stat_adjust_decrease( tld, pages_abandoned, 1);  // adjust as we are not abandoning fresh
     _mi_arenas_page_abandon(page,tld);
     return true;
   }
