@@ -69,26 +69,22 @@ const mi_page_t _mi_page_empty = {
 #define MI_STAT_COUNT_NULL()  {0,0,0}
 
 // Empty statistics
-#if MI_STAT>1
-#define MI_STAT_COUNT_END_NULL()  , { MI_STAT_COUNT_NULL(), MI_INIT32(MI_STAT_COUNT_NULL) }
-#else
-#define MI_STAT_COUNT_END_NULL()
-#endif
-
 #define MI_STATS_NULL  \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   { 0 }, { 0 }, { 0 }, { 0 }, \
   { 0 }, { 0 }, { 0 }, { 0 }, \
+  \
   { 0 }, { 0 }, { 0 }, { 0 }, \
-  { 0 } \
-  MI_STAT_COUNT_END_NULL()
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  { 0 }, { 0 }, { 0 }, { 0 }, \
+  \
+  { MI_INIT4(MI_STAT_COUNT_NULL) }, \
+  { { 0 }, { 0 }, { 0 }, { 0 } }, \
+  \
+  { MI_INIT74(MI_STAT_COUNT_NULL) }, \
+  { MI_INIT74(MI_STAT_COUNT_NULL) }
 
 // --------------------------------------------------------
 // Statically allocate an empty heap as the initial

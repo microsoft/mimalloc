@@ -521,17 +521,17 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   const size_t bsize = mi_page_usable_block_size(page);
 #if (MI_STAT>1)
   const size_t usize = mi_page_usable_size_of(page, block);
-  mi_heap_stat_decrease(heap, malloc, usize);
+  mi_heap_stat_decrease(heap, malloc_requested, usize);
 #endif
   if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
-    mi_heap_stat_decrease(heap, normal, bsize);
+    mi_heap_stat_decrease(heap, malloc_normal, bsize);
 #if (MI_STAT > 1)
-    mi_heap_stat_decrease(heap, normal_bins[_mi_bin(bsize)], 1);
+    mi_heap_stat_decrease(heap, malloc_bins[_mi_bin(bsize)], 1);
 #endif
   }
   else {
     const size_t bpsize = mi_page_block_size(page);  // match stat in page.c:mi_huge_page_alloc
-    mi_heap_stat_decrease(heap, huge, bpsize);
+    mi_heap_stat_decrease(heap, malloc_huge, bpsize);
   }
 }
 #else

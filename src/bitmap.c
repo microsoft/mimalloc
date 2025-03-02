@@ -242,7 +242,6 @@ static bool mi_bitmap_try_find_claim_field_across(mi_bitmap_t bitmap, size_t bit
   } while (!mi_atomic_cas_strong_acq_rel(field, &map, newmap));
 
   // claimed!
-  mi_stat_counter_increase(_mi_stats_main.arena_crossover_count,1);
   *bitmap_idx = mi_bitmap_index_create(idx, initial_idx);
   return true;
 

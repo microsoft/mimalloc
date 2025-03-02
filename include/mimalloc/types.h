@@ -573,37 +573,50 @@ typedef struct mi_stat_counter_s {
 } mi_stat_counter_t;
 
 typedef struct mi_stats_s {
-  mi_stat_count_t segments;
-  mi_stat_count_t pages;
-  mi_stat_count_t reserved;
-  mi_stat_count_t committed;
-  mi_stat_count_t reset;
-  mi_stat_count_t purged;
-  mi_stat_count_t page_committed;
-  mi_stat_count_t segments_abandoned;
-  mi_stat_count_t pages_abandoned;
-  mi_stat_count_t threads;
-  mi_stat_count_t normal;
-  mi_stat_count_t huge;
-  mi_stat_count_t giant;
-  mi_stat_count_t malloc;
-  mi_stat_count_t segments_cache;
-  mi_stat_counter_t pages_extended;
+  mi_stat_count_t   pages;                    // count of mimalloc pages
+  mi_stat_count_t   reserved;                 // reserved memory bytes
+  mi_stat_count_t   committed;                // committed bytes
+  mi_stat_count_t   reset;                    // reset bytes
+  mi_stat_count_t   purged;                   // purged bytes
+  mi_stat_count_t   page_committed;           // committed memory inside pages
+  mi_stat_count_t   pages_abandoned;          // abandonded pages count
+  mi_stat_count_t   threads;                  // number of threads
+  mi_stat_count_t   malloc_normal;            // allocated bytes <= MI_LARGE_OBJ_SIZE_MAX
+  mi_stat_count_t   malloc_huge;              // allocated bytes in huge pages
+  mi_stat_count_t   malloc_requested;         // malloc requested bytes
+
   mi_stat_counter_t mmap_calls;
   mi_stat_counter_t commit_calls;
   mi_stat_counter_t reset_calls;
   mi_stat_counter_t purge_calls;
-  mi_stat_counter_t page_no_retire;
-  mi_stat_counter_t searches;
-  mi_stat_counter_t normal_count;
-  mi_stat_counter_t huge_count;
-  mi_stat_counter_t arena_count;
-  mi_stat_counter_t arena_crossover_count;
+  mi_stat_counter_t arena_count;              // number of memory arena's
+  mi_stat_counter_t malloc_normal_count;      // number of blocks <= MI_LARGE_OBJ_SIZE_MAX
+  mi_stat_counter_t malloc_huge_count;        // number of huge bloks
+  mi_stat_counter_t malloc_guarded_count;     // number of allocations with guard pages
+
+  // internal statistics
   mi_stat_counter_t arena_rollback_count;
-  mi_stat_counter_t guarded_alloc_count;
-#if MI_STAT>1
-  mi_stat_count_t normal_bins[MI_BIN_HUGE+1];
-#endif
+  mi_stat_counter_t pages_extended;           // number of page extensions
+  mi_stat_counter_t pages_retire;             // number of pages that are retired
+  mi_stat_counter_t page_searches;            // searches for a fresh page
+  // only on v1 and v2
+  mi_stat_count_t   segments;
+  mi_stat_count_t   segments_abandoned;
+  mi_stat_count_t   segments_cache;
+  mi_stat_count_t   _segments_reserved;
+  // only on v3
+  mi_stat_counter_t pages_reclaim_on_alloc;
+  mi_stat_counter_t pages_reclaim_on_free;
+  mi_stat_counter_t pages_reabandon_full;
+  mi_stat_counter_t pages_unabandon_busy_wait;
+
+  // future extension
+  mi_stat_count_t   _stat_reserved[4];
+  mi_stat_counter_t _stat_counter_reserved[4];
+
+  // size segregated statistics
+  mi_stat_count_t   malloc_bins[MI_BIN_HUGE+1];   // allocation per size bin
+  mi_stat_count_t   page_bins[MI_BIN_HUGE+1];     // pages allocated per size bin
 } mi_stats_t;
 
 

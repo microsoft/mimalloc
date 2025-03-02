@@ -311,7 +311,7 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #define MI_INIT64(x)  MI_INIT32(x),MI_INIT32(x)
 #define MI_INIT128(x) MI_INIT64(x),MI_INIT64(x)
 #define MI_INIT256(x) MI_INIT128(x),MI_INIT128(x)
-
+#define MI_INIT74(x)  MI_INIT64(x),MI_INIT8(x),x(),x()
 
 #include <string.h>
 // initialize a local variable to zero; use memset as compilers optimize constant sized memset's

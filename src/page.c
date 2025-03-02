@@ -473,7 +473,7 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   const size_t bsize = mi_page_block_size(page);
   if mi_likely( /* bsize < MI_MAX_RETIRE_SIZE && */ !mi_page_queue_is_special(pq)) {  // not full or huge queue?
     if (pq->last==page && pq->first==page) { // the only page in the queue?
-      mi_stat_counter_increase(_mi_stats_main.page_no_retire,1);
+      mi_stat_counter_increase(_mi_stats_main.pages_retire,1);
       page->retire_expire = (bsize <= MI_SMALL_OBJ_SIZE_MAX ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
       mi_heap_t* heap = mi_page_heap(page);
       mi_assert_internal(pq >= heap->pages);
@@ -809,7 +809,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
     page = next;
   } // for each page
 
-  mi_heap_stat_counter_increase(heap, searches, count);
+  mi_heap_stat_counter_increase(heap, page_searches, count);
 
   // set the page to the best candidate
   if (page_candidate != NULL) {
@@ -922,8 +922,8 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_a
     mi_assert_internal(_mi_page_segment(page)->thread_id==0); // abandoned, not in the huge queue
     mi_page_set_heap(page, NULL);
     #endif
-    mi_heap_stat_increase(heap, huge, mi_page_block_size(page));
-    mi_heap_stat_counter_increase(heap, huge_count, 1);
+    mi_heap_stat_increase(heap, malloc_huge, mi_page_block_size(page));
+    mi_heap_stat_counter_increase(heap, malloc_huge_count, 1);
   }
   return page;
 }

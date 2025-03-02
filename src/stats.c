@@ -81,39 +81,50 @@ static void mi_stat_counter_add(mi_stat_counter_t* stat, const mi_stat_counter_t
 // must be thread safe as it is called from stats_merge
 static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   if (stats==src) return;
-  mi_stat_add(&stats->segments, &src->segments);
   mi_stat_add(&stats->pages, &src->pages);
   mi_stat_add(&stats->reserved, &src->reserved);
   mi_stat_add(&stats->committed, &src->committed);
   mi_stat_add(&stats->reset, &src->reset);
   mi_stat_add(&stats->purged, &src->purged);
   mi_stat_add(&stats->page_committed, &src->page_committed);
-
   mi_stat_add(&stats->pages_abandoned, &src->pages_abandoned);
-  mi_stat_add(&stats->segments_abandoned, &src->segments_abandoned);
   mi_stat_add(&stats->threads, &src->threads);
+  mi_stat_add(&stats->malloc_normal, &src->malloc_normal);
+  mi_stat_add(&stats->malloc_huge, &src->malloc_huge);
+  mi_stat_add(&stats->malloc_requested, &src->malloc_requested);
 
-  mi_stat_add(&stats->malloc, &src->malloc);
-  mi_stat_add(&stats->segments_cache, &src->segments_cache);
-  mi_stat_add(&stats->normal, &src->normal);
-  mi_stat_add(&stats->huge, &src->huge);
-  mi_stat_add(&stats->giant, &src->giant);
-
-  mi_stat_counter_add(&stats->pages_extended, &src->pages_extended);
   mi_stat_counter_add(&stats->mmap_calls, &src->mmap_calls);
   mi_stat_counter_add(&stats->commit_calls, &src->commit_calls);
   mi_stat_counter_add(&stats->reset_calls, &src->reset_calls);
   mi_stat_counter_add(&stats->purge_calls, &src->purge_calls);
+  mi_stat_counter_add(&stats->arena_count, &src->arena_count);
+  mi_stat_counter_add(&stats->malloc_normal_count, &src->malloc_normal_count);
+  mi_stat_counter_add(&stats->malloc_huge_count, &src->malloc_huge_count);
+  mi_stat_counter_add(&stats->malloc_guarded_count, &src->malloc_guarded_count);
 
-  mi_stat_counter_add(&stats->page_no_retire, &src->page_no_retire);
-  mi_stat_counter_add(&stats->searches, &src->searches);
-  mi_stat_counter_add(&stats->normal_count, &src->normal_count);
-  mi_stat_counter_add(&stats->huge_count, &src->huge_count);
-  mi_stat_counter_add(&stats->guarded_alloc_count, &src->guarded_alloc_count);
+  mi_stat_counter_add(&stats->arena_rollback_count, &src->arena_rollback_count);
+  mi_stat_counter_add(&stats->pages_extended, &src->pages_extended);
+  mi_stat_counter_add(&stats->pages_retire, &src->pages_retire);
+  mi_stat_counter_add(&stats->page_searches, &src->page_searches);
+
+  mi_stat_add(&stats->segments, &src->segments);
+  mi_stat_add(&stats->segments_abandoned, &src->segments_abandoned);
+  mi_stat_add(&stats->segments_cache, &src->segments_cache);
+
+  mi_stat_counter_add(&stats->pages_reclaim_on_alloc, &src->pages_reclaim_on_alloc);
+  mi_stat_counter_add(&stats->pages_reclaim_on_free, &src->pages_reclaim_on_free);
+  mi_stat_counter_add(&stats->pages_reabandon_full, &src->pages_reabandon_full);
+  mi_stat_counter_add(&stats->pages_unabandon_busy_wait, &src->pages_unabandon_busy_wait);
+
 #if MI_STAT>1
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
     // if (src->normal_bins[i].total != 0 && src->normal_bins[i].current != 0) {
-    mi_stat_add(&stats->normal_bins[i], &src->normal_bins[i]);
+    mi_stat_add(&stats->malloc_bins[i], &src->malloc_bins[i]);
+    //}
+  }
+  for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
+    // if (src->normal_bins[i].total != 0 && src->normal_bins[i].current != 0) {
+    mi_stat_add(&stats->page_bins[i], &src->page_bins[i]);
     //}
   }
 #endif
@@ -301,18 +312,18 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   // and print using that
   mi_print_header(out,arg);
   #if MI_STAT>1
-  mi_stats_print_bins(stats->normal_bins, MI_BIN_HUGE, "normal",out,arg);
+  mi_stats_print_bins(stats->malloc_bins, MI_BIN_HUGE, "normal",out,arg);
   #endif
   #if MI_STAT
-  mi_stat_print(&stats->normal, "normal", (stats->normal_count.total == 0 ? 1 : -1), out, arg);
-  mi_stat_print(&stats->huge, "huge", (stats->huge_count.total == 0 ? 1 : -1), out, arg);
+  mi_stat_print(&stats->malloc_normal, "normal", (stats->malloc_normal_count.total == 0 ? 1 : -1), out, arg);
+  mi_stat_print(&stats->malloc_huge, "huge", (stats->malloc_huge_count.total == 0 ? 1 : -1), out, arg);
   mi_stat_count_t total = { 0,0,0 };
-  mi_stat_add(&total, &stats->normal);
-  mi_stat_add(&total, &stats->huge);
+  mi_stat_add(&total, &stats->malloc_normal);
+  mi_stat_add(&total, &stats->malloc_huge);
   mi_stat_print_ex(&total, "total", 1, out, arg, "");
   #endif
   #if MI_STAT>1
-  mi_stat_print_ex(&stats->malloc, "malloc req", 1, out, arg, "");
+  mi_stat_print_ex(&stats->malloc_requested, "malloc req", 1, out, arg, "");
   _mi_fprintf(out, arg, "\n");
   #endif
   mi_stat_print_ex(&stats->reserved, "reserved", 1, out, arg, "");
@@ -326,17 +337,17 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_print(&stats->pages, "pages", -1, out, arg);
   mi_stat_print(&stats->pages_abandoned, "-abandoned", -1, out, arg);
   mi_stat_counter_print(&stats->pages_extended, "-extended", out, arg);
-  mi_stat_counter_print(&stats->page_no_retire, "-noretire", out, arg);
+  mi_stat_counter_print(&stats->pages_retire, "-retire", out, arg);
   mi_stat_counter_print(&stats->arena_count, "arenas", out, arg);
-  mi_stat_counter_print(&stats->arena_crossover_count, "-crossover", out, arg);
+  // mi_stat_counter_print(&stats->arena_crossover_count, "-crossover", out, arg);
   mi_stat_counter_print(&stats->arena_rollback_count, "-rollback", out, arg);
   mi_stat_counter_print(&stats->mmap_calls, "mmaps", out, arg);
   mi_stat_counter_print(&stats->commit_calls, "commits", out, arg);
   mi_stat_counter_print(&stats->reset_calls, "resets", out, arg);
   mi_stat_counter_print(&stats->purge_calls, "purges", out, arg);
-  mi_stat_counter_print(&stats->guarded_alloc_count, "guarded", out, arg);
+  mi_stat_counter_print(&stats->malloc_guarded_count, "guarded", out, arg);
   mi_stat_print(&stats->threads, "threads", -1, out, arg);
-  mi_stat_counter_print_avg(&stats->searches, "searches", out, arg);
+  mi_stat_counter_print_avg(&stats->page_searches, "searches", out, arg);
   _mi_fprintf(out, arg, "%10s: %5zu\n", "numa nodes", _mi_os_numa_node_count());
 
   size_t elapsed;
