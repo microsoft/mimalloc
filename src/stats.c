@@ -69,7 +69,7 @@ static void mi_stat_add(mi_stat_count_t* stat, const mi_stat_count_t* src) {
   if (src->current!=0) { mi_atomic_addi64_relaxed(&stat->current, src->current); }
   // peak scores do really not work across threads ... we use conservative max
   if (src->peak > stat->peak) {
-    mi_atomic_maxi64_relaxed(&stat->peak, src->peak); // or: mi_atomic_addi64_relaxed( &stat->peak, src->peak);  
+    mi_atomic_maxi64_relaxed(&stat->peak, src->peak); // or: mi_atomic_addi64_relaxed( &stat->peak, src->peak);
   }
 }
 
@@ -108,7 +108,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   mi_stat_counter_add(&stats->page_no_retire, &src->page_no_retire);
   mi_stat_counter_add(&stats->searches, &src->searches);
   mi_stat_counter_add(&stats->normal_count, &src->normal_count);
-  mi_stat_counter_add(&stats->huge_count, &src->huge_count);  
+  mi_stat_counter_add(&stats->huge_count, &src->huge_count);
   mi_stat_counter_add(&stats->guarded_alloc_count, &src->guarded_alloc_count);
 #if MI_STAT>1
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
@@ -305,21 +305,21 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   #endif
   #if MI_STAT
   mi_stat_print(&stats->normal, "normal", (stats->normal_count.total == 0 ? 1 : -1), out, arg);
-  mi_stat_print(&stats->huge, "huge", (stats->huge_count.total == 0 ? 1 : -1), out, arg);  
+  mi_stat_print(&stats->huge, "huge", (stats->huge_count.total == 0 ? 1 : -1), out, arg);
   mi_stat_count_t total = { 0,0,0 };
   mi_stat_add(&total, &stats->normal);
   mi_stat_add(&total, &stats->huge);
-  mi_stat_print(&total, "total", 1, out, arg);
+  mi_stat_print_ex(&total, "total", 1, out, arg, "");
   #endif
   #if MI_STAT>1
-  mi_stat_print(&stats->malloc, "malloc req", 1, out, arg);
+  mi_stat_print_ex(&stats->malloc, "malloc req", 1, out, arg, "");
   _mi_fprintf(out, arg, "\n");
   #endif
   mi_stat_print_ex(&stats->reserved, "reserved", 1, out, arg, "");
   mi_stat_print_ex(&stats->committed, "committed", 1, out, arg, "");
   mi_stat_peak_print(&stats->reset, "reset", 1, out, arg );
   mi_stat_peak_print(&stats->purged, "purged", 1, out, arg );
-  mi_stat_print(&stats->page_committed, "touched", 1, out, arg);
+  mi_stat_print_ex(&stats->page_committed, "touched", 1, out, arg, "");
   mi_stat_print(&stats->segments, "segments", -1, out, arg);
   mi_stat_print(&stats->segments_abandoned, "-abandoned", -1, out, arg);
   mi_stat_print(&stats->segments_cache, "-cached", -1, out, arg);
@@ -445,7 +445,7 @@ mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, s
   pinfo.page_faults    = 0;
 
   _mi_prim_process_info(&pinfo);
-  
+
   if (elapsed_msecs!=NULL)  *elapsed_msecs  = (pinfo.elapsed < 0 ? 0 : (pinfo.elapsed < (mi_msecs_t)PTRDIFF_MAX ? (size_t)pinfo.elapsed : PTRDIFF_MAX));
   if (user_msecs!=NULL)     *user_msecs     = (pinfo.utime < 0 ? 0 : (pinfo.utime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)pinfo.utime : PTRDIFF_MAX));
   if (system_msecs!=NULL)   *system_msecs   = (pinfo.stime < 0 ? 0 : (pinfo.stime < (mi_msecs_t)PTRDIFF_MAX ? (size_t)pinfo.stime : PTRDIFF_MAX));

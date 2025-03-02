@@ -652,7 +652,7 @@ static mi_segment_t* mi_segment_alloc(size_t required, mi_page_kind_t page_kind,
 static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t* tld) {
   MI_UNUSED(force);
   mi_assert(segment != NULL);
-  
+
   // in `mi_segment_force_abandon` we set this to true to ensure the segment's memory stays valid
   if (segment->dont_free) return;
 
@@ -664,7 +664,7 @@ static void mi_segment_free(mi_segment_t* segment, bool force, mi_segments_tld_t
   mi_assert_expensive(!mi_segment_queue_contains(&tld->medium_free, segment));
   mi_assert(segment->next == NULL);
   mi_assert(segment->prev == NULL);
-  _mi_stat_decrease(&tld->stats->page_committed, segment->segment_info_size);
+  // _mi_stat_decrease(&tld->stats->page_committed, segment->segment_info_size);
 
   // return it to the OS
   mi_segment_os_free(segment, segment->segment_size, tld);
@@ -1062,7 +1062,7 @@ static void mi_segment_force_abandon(mi_segment_t* segment, mi_segments_tld_t* t
 {
   mi_assert_internal(segment->abandoned < segment->used);
   mi_assert_internal(!segment->dont_free);
-  
+
   // ensure the segment does not get free'd underneath us (so we can check if a page has been freed in `mi_page_force_abandon`)
   segment->dont_free = true;
 
