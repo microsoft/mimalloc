@@ -162,6 +162,7 @@ static mi_option_desc_t options[_mi_option_last] =
          UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)
   { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
   { 0,   UNINIT, MI_OPTION(target_segments_per_thread) }, // abandon segments beyond this point, or 0 to disable.
+  { 10000, UNINIT, MI_OPTION(generic_collect) },          // collect heaps every N (=10000) generic allocation calls
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

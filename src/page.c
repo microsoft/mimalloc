@@ -970,11 +970,23 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   }
   mi_assert_internal(mi_heap_is_initialized(heap));
 
-  // call potential deferred free routines
-  _mi_deferred_free(heap, false);
+  // do administrative tasks every N generic mallocs
+  if mi_unlikely(++heap->generic_count >= 100) {
+    heap->generic_collect_count += heap->generic_count;
+    heap->generic_count = 0;
+    // call potential deferred free routines
+    _mi_deferred_free(heap, false);
 
-  // free delayed frees from other threads (but skip contended ones)
-  _mi_heap_delayed_free_partial(heap);
+    // free delayed frees from other threads (but skip contended ones)
+    _mi_heap_delayed_free_partial(heap);
+    
+    // collect every once in a while (10000 by default)
+    const long generic_collect = mi_option_get_clamp(mi_option_generic_collect, 1, 1000000L);    
+    if (heap->generic_collect_count >= generic_collect) {
+      heap->generic_collect_count = 0;
+      mi_heap_collect(heap, false /* force? */);
+    }
+  }
 
   // find (or allocate) a page of the right size
   mi_page_t* page = mi_find_page(heap, size, huge_alignment);
