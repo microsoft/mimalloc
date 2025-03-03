@@ -427,6 +427,7 @@
     <ClInclude Include="..\..\include\mimalloc-etw.h" />
     <ClInclude Include="..\..\include\mimalloc-new-delete.h" />
     <ClInclude Include="..\..\include\mimalloc-override.h" />
+    <ClInclude Include="..\..\include\mimalloc-stats.h" />
     <ClInclude Include="..\..\include\mimalloc\atomic.h" />
     <ClInclude Include="..\..\include\mimalloc\internal.h" />
     <ClInclude Include="..\..\include\mimalloc\prim.h" />

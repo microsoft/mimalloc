@@ -96,6 +96,9 @@
     <ClInclude Include="..\..\include\mimalloc\prim.h">
       <Filter>Headers</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc-stats.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Headers">
