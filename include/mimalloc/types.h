@@ -19,6 +19,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // --------------------------------------------------------------------------
 
 
+#include <mimalloc-stats.h>
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
 #include <errno.h>    // error codes
@@ -447,9 +448,114 @@ struct mi_heap_s {
 
 
 // ------------------------------------------------------
-// Statistics
+// Sub processes do not reclaim or visit segments
+// from other sub processes. These are essentially the
+// static variables of a process.
 // ------------------------------------------------------
 
+#define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
+                                // 160 arenas is enough for ~2 TiB memory
+
+typedef struct mi_subproc_s {
+  _Atomic(size_t)       arena_count;                    // current count of arena's
+  _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
+  mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
+  _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
+
+  _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages for this sub-process
+  mi_page_t*            os_abandoned_pages;             // list of pages that OS allocated and not in an arena (only used if `mi_option_visit_abandoned` is on)
+  mi_lock_t             os_abandoned_pages_lock;        // lock for the os abandoned pages list (this lock protects list operations)
+
+  mi_memid_t            memid;                          // provenance of this memory block (meta or OS)
+  mi_stats_t            stats;                          // sub-process statistics (tld stats are merged in on thread termination)
+} mi_subproc_t;
+
+
+
+// ------------------------------------------------------
+// Thread Local data
+// ------------------------------------------------------
+
+// Milliseconds as in `int64_t` to avoid overflows
+typedef int64_t  mi_msecs_t;
+
+// Thread local data
+struct mi_tld_s {
+  mi_threadid_t         thread_id;            // thread id of this thread
+  size_t                thread_seq;           // thread sequence id (linear count of created threads)
+  mi_subproc_t*         subproc;              // sub-process this thread belongs to.
+  mi_heap_t*            heap_backing;         // backing heap of this thread (cannot be deleted)
+  mi_heap_t*            heaps;                // list of heaps in this thread (so we can abandon all when the thread terminates)
+  unsigned long long    heartbeat;            // monotonic heartbeat count
+  bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
+  bool                  is_in_threadpool;     // true if this thread is part of a threadpool (and can run arbitrary tasks)
+  mi_stats_t            stats;                // statistics
+  mi_memid_t            memid;                // provenance of the tld memory itself (meta or OS)
+};
+
+
+/* -----------------------------------------------------------
+  Error codes passed to `_mi_fatal_error`
+  All are recoverable but EFAULT is a serious error and aborts by default in secure mode.
+  For portability define undefined error codes using common Unix codes:
+  <https://www-numi.fnal.gov/offline_software/srt_public_context/WebDocs/Errors/unix_system_errors.html>
+----------------------------------------------------------- */
+
+#ifndef EAGAIN         // double free
+#define EAGAIN (11)
+#endif
+#ifndef ENOMEM         // out of memory
+#define ENOMEM (12)
+#endif
+#ifndef EFAULT         // corrupted free-list or meta-data
+#define EFAULT (14)
+#endif
+#ifndef EINVAL         // trying to free an invalid pointer
+#define EINVAL (22)
+#endif
+#ifndef EOVERFLOW      // count*size overflow
+#define EOVERFLOW (75)
+#endif
+
+
+// ------------------------------------------------------
+// Debug
+// ------------------------------------------------------
+
+#if !defined(MI_DEBUG_UNINIT)
+#define MI_DEBUG_UNINIT     (0xD0)
+#endif
+#if !defined(MI_DEBUG_FREED)
+#define MI_DEBUG_FREED      (0xDF)
+#endif
+#if !defined(MI_DEBUG_PADDING)
+#define MI_DEBUG_PADDING    (0xDE)
+#endif
+
+#if (MI_DEBUG)
+// use our own assertion to print without memory allocation
+void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line, const char* func );
+#define mi_assert(expr)     ((expr) ? (void)0 : _mi_assert_fail(#expr,__FILE__,__LINE__,__func__))
+#else
+#define mi_assert(x)
+#endif
+
+#if (MI_DEBUG>1)
+#define mi_assert_internal    mi_assert
+#else
+#define mi_assert_internal(x)
+#endif
+
+#if (MI_DEBUG>2)
+#define mi_assert_expensive   mi_assert
+#else
+#define mi_assert_expensive(x)
+#endif
+
+
+// ------------------------------------------------------
+// Statistics
+// ------------------------------------------------------
 #ifndef MI_STAT
 #if (MI_DEBUG>0)
 #define MI_STAT 2
@@ -457,50 +563,6 @@ struct mi_heap_s {
 #define MI_STAT 0
 #endif
 #endif
-
-typedef struct mi_stat_count_s {
-  int64_t total;
-  int64_t peak;
-  int64_t current;
-} mi_stat_count_t;
-
-typedef struct mi_stat_counter_s {
-  int64_t total;
-} mi_stat_counter_t;
-
-typedef struct mi_stats_s {
-  mi_stat_count_t   pages;
-  mi_stat_count_t   reserved;
-  mi_stat_count_t   committed;
-  mi_stat_count_t   reset;
-  mi_stat_count_t   purged;
-  mi_stat_count_t   page_committed;
-  mi_stat_count_t   pages_abandoned;
-  mi_stat_count_t   threads;
-  mi_stat_count_t   normal;
-  mi_stat_count_t   huge;
-  mi_stat_count_t   giant;
-  mi_stat_count_t   malloc;
-  mi_stat_counter_t pages_extended;
-  mi_stat_counter_t pages_reclaim_on_alloc;
-  mi_stat_counter_t pages_reclaim_on_free;
-  mi_stat_counter_t pages_reabandon_full;
-  mi_stat_counter_t pages_unabandon_busy_wait;
-  mi_stat_counter_t mmap_calls;
-  mi_stat_counter_t commit_calls;
-  mi_stat_counter_t reset_calls;
-  mi_stat_counter_t purge_calls;
-  mi_stat_counter_t arena_purges;
-  mi_stat_counter_t page_no_retire;
-  mi_stat_counter_t searches;
-  mi_stat_counter_t normal_count;
-  mi_stat_counter_t huge_count;
-  mi_stat_counter_t arena_count;
-  mi_stat_counter_t guarded_alloc_count;
-#if MI_STAT>1
-  mi_stat_count_t normal_bins[MI_BIN_COUNT];
-#endif
-} mi_stats_t;
 
 
 // add to stat keeping track of the peak
@@ -558,92 +620,5 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_debug_heap_stat_counter_increase(heap,stat,amount)   mi_debug_stat_counter_increase( (heap)->tld->stats.stat, amount)
 #define mi_debug_heap_stat_increase(heap,stat,amount)           mi_debug_stat_increase( (heap)->tld->stats.stat, amount)
 #define mi_debug_heap_stat_decrease(heap,stat,amount)           mi_debug_stat_decrease( (heap)->tld->stats.stat, amount)
-
-
-// ------------------------------------------------------
-// Sub processes use separate arena's and no heaps/pages/blocks
-// are shared between sub processes.
-// The subprocess structure contains essentially all static variables (except per subprocess :-))
-//
-// Each thread should belong to one sub-process only
-// ------------------------------------------------------
-
-#define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
-                                // 160 arenas is enough for ~2 TiB memory
-
-typedef struct mi_subproc_s {
-  _Atomic(size_t)       arena_count;                    // current count of arena's
-  _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
-  mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
-  _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
-
-  _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages for this sub-process
-  mi_page_t*            os_abandoned_pages;             // list of pages that OS allocated and not in an arena (only used if `mi_option_visit_abandoned` is on)
-  mi_lock_t             os_abandoned_pages_lock;        // lock for the os abandoned pages list (this lock protects list operations)
-
-  mi_memid_t            memid;                          // provenance of this memory block (meta or OS)
-  mi_stats_t            stats;                          // sub-process statistics (tld stats are merged in on thread termination)
-} mi_subproc_t;
-
-
-// ------------------------------------------------------
-// Thread Local data
-// ------------------------------------------------------
-
-// Milliseconds as in `int64_t` to avoid overflows
-typedef int64_t  mi_msecs_t;
-
-// Thread local data
-struct mi_tld_s {
-  mi_threadid_t         thread_id;            // thread id of this thread
-  size_t                thread_seq;           // thread sequence id (linear count of created threads)
-  mi_subproc_t*         subproc;              // sub-process this thread belongs to.
-  mi_heap_t*            heap_backing;         // backing heap of this thread (cannot be deleted)
-  mi_heap_t*            heaps;                // list of heaps in this thread (so we can abandon all when the thread terminates)
-  unsigned long long    heartbeat;            // monotonic heartbeat count
-  bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
-  bool                  is_in_threadpool;     // true if this thread is part of a threadpool (and can run arbitrary tasks)
-  mi_stats_t            stats;                // statistics
-  mi_memid_t            memid;                // provenance of the tld memory itself (meta or OS)
-};
-
-
-/* -----------------------------------------------------------
-  Error codes passed to `_mi_fatal_error`
-  All are recoverable but EFAULT is a serious error and aborts by default in secure mode.
-  For portability define undefined error codes using common Unix codes:
-  <https://www-numi.fnal.gov/offline_software/srt_public_context/WebDocs/Errors/unix_system_errors.html>
------------------------------------------------------------ */
-
-#ifndef EAGAIN         // double free
-#define EAGAIN (11)
-#endif
-#ifndef ENOMEM         // out of memory
-#define ENOMEM (12)
-#endif
-#ifndef EFAULT         // corrupted free-list or meta-data
-#define EFAULT (14)
-#endif
-#ifndef EINVAL         // trying to free an invalid pointer
-#define EINVAL (22)
-#endif
-#ifndef EOVERFLOW      // count*size overflow
-#define EOVERFLOW (75)
-#endif
-
-// ------------------------------------------------------
-// Debug
-// ------------------------------------------------------
-
-#ifndef MI_DEBUG_UNINIT
-#define MI_DEBUG_UNINIT     (0xD0)
-#endif
-#ifndef MI_DEBUG_FREED
-#define MI_DEBUG_FREED      (0xDF)
-#endif
-#ifndef MI_DEBUG_PADDING
-#define MI_DEBUG_PADDING    (0xDE)
-#endif
-
 
 #endif // MI_TYPES_H

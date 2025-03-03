@@ -87,11 +87,11 @@ extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_
   #if (MI_STAT>0)
   const size_t bsize = mi_page_usable_block_size(page);
   if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
-    mi_heap_stat_increase(heap, normal, bsize);
-    mi_heap_stat_counter_increase(heap, normal_count, 1);
+    mi_heap_stat_increase(heap, malloc_normal, bsize);
+    mi_heap_stat_counter_increase(heap, malloc_normal_count, 1);
     #if (MI_STAT>1)
     const size_t bin = _mi_bin(bsize);
-    mi_heap_stat_increase(heap, normal_bins[bin], 1);
+    mi_heap_stat_increase(heap, malloc_bins[bin], 1);
     #endif
   }
   #endif
@@ -153,7 +153,7 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   #if MI_STAT>1
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
-    mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
+    mi_heap_stat_increase(heap, malloc_requested, mi_usable_size(p));
   }
   #endif
   #if MI_DEBUG>3
@@ -195,7 +195,7 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
     #if MI_STAT>1
     if (p != NULL) {
       if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
-      mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
+      mi_heap_stat_increase(heap, malloc_requested, mi_usable_size(p));
     }
     #endif
     #if MI_DEBUG>3
@@ -272,7 +272,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
   // if p == NULL then behave as malloc.
   // else if size == 0 then reallocate to a zero-sized block (and don't return NULL, just as mi_malloc(0)).
   // (this means that returning NULL always indicates an error, and `p` will not have been freed in that case.)
-  const size_t size = (p==NULL ? 0 : _mi_usable_size(p,"mi_realloc")); 
+  const size_t size = (p==NULL ? 0 : _mi_usable_size(p,"mi_realloc"));
   if mi_unlikely(newsize <= size && newsize >= (size / 2) && newsize > 0) {  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
     mi_assert_internal(p!=NULL);
     // todo: do not track as the usable size is still the same in the free; adjust potential padding?
@@ -646,7 +646,7 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
     // give up to place it right in front of the guard page if the offset is too large for unalignment
     offset = MI_PAGE_MAX_OVERALLOC_ALIGN;
   }
-  void* p = (uint8_t*)block + offset;  
+  void* p = (uint8_t*)block + offset;
   mi_track_align(block, p, offset, obj_size);
   mi_track_mem_defined(block, sizeof(mi_block_t));
   return p;
@@ -668,7 +668,7 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   void* const p = mi_block_ptr_set_guarded(block, obj_size);
 
   // stats
-  mi_track_malloc(p, size, zero);  
+  mi_track_malloc(p, size, zero);
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
     #if MI_STAT>1

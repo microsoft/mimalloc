@@ -663,6 +663,7 @@ endif()
 install(FILES include/mimalloc.h DESTINATION ${mi_install_incdir})
 install(FILES include/mimalloc-override.h DESTINATION ${mi_install_incdir})
 install(FILES include/mimalloc-new-delete.h DESTINATION ${mi_install_incdir})
+install(FILES include/mimalloc-stats.h DESTINATION ${mi_install_incdir})
 install(FILES cmake/mimalloc-config.cmake DESTINATION ${mi_install_cmakedir})
 install(FILES cmake/mimalloc-config-version.cmake DESTINATION ${mi_install_cmakedir})
 

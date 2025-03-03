@@ -174,7 +174,7 @@ void mi_free(void* p) mi_attr_noexcept
   if mi_unlikely(page==NULL) return;
   #endif
   mi_assert_internal(page!=NULL);
-  
+
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ mi_page_xthread_id(page));
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
@@ -202,7 +202,7 @@ void mi_free(void* p) mi_attr_noexcept
 // Multi-threaded Free (`_mt`)
 // ------------------------------------------------------
 static bool mi_page_unown_from_free(mi_page_t* page, mi_block_t* mt_free);
-static inline bool mi_page_queue_len_is_atmost( mi_heap_t* heap, size_t block_size, size_t atmost) {  
+static inline bool mi_page_queue_len_is_atmost( mi_heap_t* heap, size_t block_size, size_t atmost) {
   mi_page_queue_t* const pq = mi_page_queue(heap,block_size);
   mi_assert_internal(pq!=NULL);
   return (pq->count <= atmost);
@@ -239,7 +239,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
 
   // 2. we can try to reclaim the page for ourselves
   // note:  we only reclaim if the page originated from our heap (the heap field is preserved on abandonment)
-  // to avoid claiming arbitrary object sizes and limit indefinite expansion. This helps benchmarks like `larson`  
+  // to avoid claiming arbitrary object sizes and limit indefinite expansion. This helps benchmarks like `larson`
   if (page->block_size <= MI_SMALL_MAX_OBJ_SIZE)       // only for small sized blocks
   {
     const long reclaim_on_free = _mi_option_get_fast(mi_option_page_reclaim_on_free);
@@ -260,7 +260,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
           (reclaim_on_free == 1 &&               // OR if the reclaim across heaps is allowed
             !mi_page_is_used_at_frac(page, 8) &&  //    and the page is not too full
             !heap->tld->is_in_threadpool &&       //    and not part of a threadpool
-            _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable    
+            _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable
           )
         {
           // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
@@ -540,17 +540,17 @@ void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   const size_t bsize = mi_page_usable_block_size(page);
   #if (MI_STAT>1)
   const size_t usize = mi_page_usable_size_of(page, block);
-  mi_heap_stat_decrease(heap, malloc, usize);
+  mi_heap_stat_decrease(heap, malloc_requested, usize);
   #endif
   if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
-    mi_heap_stat_decrease(heap, normal, bsize);
+    mi_heap_stat_decrease(heap, malloc_normal, bsize);
     #if (MI_STAT > 1)
-    mi_heap_stat_decrease(heap, normal_bins[_mi_bin(bsize)], 1);
+    mi_heap_stat_decrease(heap, malloc_bins[_mi_bin(bsize)], 1);
     #endif
   }
   else {
     const size_t bpsize = mi_page_block_size(page);  // match stat in page.c:mi_huge_page_alloc
-    mi_heap_stat_decrease(heap, huge, bpsize);
+    mi_heap_stat_decrease(heap, malloc_huge, bpsize);
   }
 }
 #else

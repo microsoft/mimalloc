@@ -148,10 +148,10 @@ bool _mi_page_queue_is_valid(mi_heap_t* heap, const mi_page_queue_t* pq) {
   for (mi_page_t* page = pq->first; page != NULL; page = page->next) {
     mi_assert_internal(page->prev == prev);
     if (mi_page_is_in_full(page)) {
-      mi_assert_internal(_mi_wsize_from_size(pq->block_size) == MI_LARGE_MAX_OBJ_WSIZE + 2); 
+      mi_assert_internal(_mi_wsize_from_size(pq->block_size) == MI_LARGE_MAX_OBJ_WSIZE + 2);
     }
     else if (mi_page_is_huge(page)) {
-      mi_assert_internal(_mi_wsize_from_size(pq->block_size) == MI_LARGE_MAX_OBJ_WSIZE + 1); 
+      mi_assert_internal(_mi_wsize_from_size(pq->block_size) == MI_LARGE_MAX_OBJ_WSIZE + 1);
     }
     else {
       mi_assert_internal(mi_page_block_size(page) == pq->block_size);
@@ -168,10 +168,15 @@ bool _mi_page_queue_is_valid(mi_heap_t* heap, const mi_page_queue_t* pq) {
 }
 
 
+static size_t mi_page_bin(const mi_page_t* page) {
+  const size_t bin = (mi_page_is_in_full(page) ? MI_BIN_FULL : (mi_page_is_huge(page) ? MI_BIN_HUGE : mi_bin(mi_page_block_size(page))));
+  mi_assert_internal(bin <= MI_BIN_FULL);
+  return bin;
+}
+
 static mi_page_queue_t* mi_heap_page_queue_of(mi_heap_t* heap, const mi_page_t* page) {
   mi_assert_internal(heap!=NULL);
-  size_t bin = (mi_page_is_in_full(page) ? MI_BIN_FULL : (mi_page_is_huge(page) ? MI_BIN_HUGE : mi_bin(mi_page_block_size(page))));
-  mi_assert_internal(bin <= MI_BIN_FULL);
+  const size_t bin = mi_page_bin(page);
   mi_page_queue_t* pq = &heap->pages[bin];
   mi_assert_internal((mi_page_block_size(page) == pq->block_size) ||
                        (mi_page_is_huge(page) && mi_page_queue_is_huge(pq)) ||
@@ -411,9 +416,9 @@ static void mi_page_queue_enqueue_from_full(mi_page_queue_t* to, mi_page_queue_t
 size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue_t* append) {
   mi_assert_internal(mi_heap_contains_queue(heap,pq));
   mi_assert_internal(pq->block_size == append->block_size);
-  
+
   if (append->first==NULL) return 0;
-  
+
   // set append pages to new heap and count
   size_t count = 0;
   for (mi_page_t* page = append->first; page != NULL; page = page->next) {

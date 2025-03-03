@@ -217,7 +217,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
 
 // Collect elements in the thread-free list starting at `head`. This is an optimized
 // version of `_mi_page_free_collect` to be used from `free.c:_mi_free_collect_mt` that avoids atomic access to `xthread_free`.
-// 
+//
 // `head` must be in the `xthread_free` list. It will not collect `head` itself
 // so the `used` count is not fully updated in general. However, if the `head` is
 // the last remaining element, it will be collected and the used count will become `0` (so `mi_page_all_free` becomes true).
@@ -324,6 +324,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   }
   mi_heap_stat_increase(heap, pages, 1);
   mi_assert_internal(pq!=NULL || mi_page_block_size(page) >= block_size);
+  mi_heap_stat_increase(heap, page_bins[mi_page_bin(page)], 1);
   mi_assert_expensive(_mi_page_is_valid(page));
   return page;
 }
@@ -394,6 +395,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
 
   // and free it
   mi_heap_t* heap = page->heap;
+  mi_heap_stat_decrease(heap, page_bins[mi_page_bin(page)], 1);
   mi_page_set_heap(page,NULL);
   _mi_arenas_page_free(page);
   _mi_arenas_collect(false, false, heap->tld);  // allow purging
@@ -427,7 +429,7 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   if mi_likely( /* bsize < MI_MAX_RETIRE_SIZE && */ !mi_page_queue_is_special(pq)) {  // not full or huge queue?
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_heap_t* heap = mi_page_heap(page);
-      mi_debug_heap_stat_counter_increase(heap, page_no_retire, 1);
+      mi_debug_heap_stat_counter_increase(heap, pages_retire, 1);
       page->retire_expire = (bsize <= MI_SMALL_MAX_OBJ_SIZE ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
       mi_assert_internal(pq >= heap->pages);
       const size_t index = pq - heap->pages;
@@ -784,7 +786,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
     page = next;
   } // for each page
 
-  mi_debug_heap_stat_counter_increase(heap, searches, count);
+  mi_heap_stat_counter_increase(heap, page_searches, count);
 
   // set the page to the best candidate
   if (page_candidate != NULL) {
@@ -897,8 +899,8 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_a
     mi_assert_internal(mi_page_is_abandoned(page));
     mi_page_set_heap(page, NULL);
     #endif
-    mi_heap_stat_increase(heap, huge, mi_page_block_size(page));
-    mi_heap_stat_counter_increase(heap, huge_count, 1);
+    mi_heap_stat_increase(heap, malloc_huge, mi_page_block_size(page));
+    mi_heap_stat_counter_increase(heap, malloc_huge_count, 1);
   }
   return page;
 }

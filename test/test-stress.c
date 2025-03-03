@@ -79,6 +79,7 @@ static bool   main_participates = false;       // main thread participates as a 
 #define custom_free(p)        free(p)
 #else
 #include <mimalloc.h>
+#include <mimalloc-stats.h>
 #define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
@@ -134,7 +135,7 @@ static void* alloc_items(size_t items, random_t r) {
     else if (chance(10, r) && allow_large_objects) items *= 1000;  // 0.1% huge
     else items *= 100;                                             // 1% large objects;
   }
-  if (items == 40) items++;              // pthreads uses that size for stack increases
+  if (items>=32 && items<=40) items*=2;              // pthreads uses 320b allocations (this shows that more clearly in the stats)
   if (use_one_size > 0) items = (use_one_size / sizeof(uintptr_t));
   if (items==0) items = 1;
   uintptr_t* p = (uintptr_t*)custom_calloc(items,sizeof(uintptr_t));
@@ -367,8 +368,13 @@ int main(int argc, char** argv) {
   #ifndef NDEBUG
   mi_debug_show_arenas();
   mi_collect(true);
+  char* json = mi_stats_get_json(0, NULL);
+  if (json != NULL) {
+    fputs(json,stderr);
+    mi_free(json);
+  }
   #endif
-  mi_stats_print(NULL);
+  mi_stats_print(NULL);  
 #endif
   //bench_end_program();
   return 0;
