@@ -139,10 +139,11 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
-#define MI_BIN_HUGE  (73U)
+#if MI_BIN_HUGE != 73U
+#error "mimalloc internal: expecting 73 bins"
+#endif
 #define MI_BIN_FULL  (MI_BIN_HUGE+1)
 #define MI_BIN_COUNT (MI_BIN_FULL+1)
-
 
 // We never allocate more than PTRDIFF_MAX (see also <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
 #define MI_MAX_ALLOC_SIZE        PTRDIFF_MAX
@@ -428,7 +429,8 @@ struct mi_heap_s {
   size_t                page_count;                          // total number of pages in the `pages` queues.
   size_t                page_retired_min;                    // smallest retired index (retired pages are fully free, but still in the page queues)
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
-  size_t                generic_count;                       // how often is mimalloc_generic invoked?
+  long                  generic_count;                       // how often is `_mi_malloc_generic` called?
+  long                  generic_collect_count;               // how often is `_mi_malloc_generic` called without collecting?
   mi_heap_t*            next;                                // list of heaps per thread
   long                  page_full_retain;                    // how many full pages can be retained per queue (before abondoning them)
   bool                  allow_page_reclaim;                  // `true` if this heap should not reclaim abandoned pages

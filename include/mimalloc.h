@@ -310,7 +310,7 @@ mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t samp
 mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max);
 
 // Experimental: communicate that the thread is part of a threadpool
-mi_decl_export void mi_thread_set_in_threadpool(void) mi_attr_noexcept;  
+mi_decl_export void mi_thread_set_in_threadpool(void) mi_attr_noexcept;
 
 // Experimental: create a new heap with a specified heap tag. Set `allow_destroy` to false to allow the thread
 // to reclaim abandoned memory (with a compatible heap_tag and arena_id) but in that case `mi_heap_destroy` will
@@ -400,6 +400,7 @@ typedef enum mi_option_e {
   mi_option_guarded_precise,            // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
   mi_option_guarded_sample_rate,        // 1 out of N allocations in the min/max range will be guarded (=1000)
   mi_option_guarded_sample_seed,        // can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
+  mi_option_generic_collect,            // collect heaps every N (=10000) generic allocation calls
   mi_option_page_reclaim_on_free,       // reclaim abandoned pages on a free (=0). -1 disallowr always, 0 allows if the page originated from the current heap, 1 allow always
   mi_option_page_full_retain,           // retain N full (small) pages per size class (=2)
   mi_option_page_max_candidates,        // max candidate pages to consider for allocation (=4)

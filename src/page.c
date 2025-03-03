@@ -713,9 +713,7 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
 static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try)
 {
   // search through the pages in "next fit" order
-  #if MI_STAT
   size_t count = 0;
-  #endif
   long candidate_limit = 0;          // we reset this on the first candidate to limit the search
   long page_full_retain = (pq->block_size > MI_SMALL_MAX_OBJ_SIZE ? 0 : heap->page_full_retain); // only retain small pages
   mi_page_t* page_candidate = NULL;  // a page with free space
@@ -724,9 +722,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
   while (page != NULL)
   {
     mi_page_t* next = page->next; // remember next (as this page can move to another queue)
-    #if MI_STAT
     count++;
-    #endif
     candidate_limit--;
 
     // search up to N pages for a best candidate
@@ -944,10 +940,19 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   }
   mi_assert_internal(mi_heap_is_initialized(heap));
 
-  // collect every N generic mallocs
-  if mi_unlikely(heap->generic_count++ > 10000) {
+  // do administrative tasks every N generic mallocs
+  if mi_unlikely(++heap->generic_count >= 1000) {
+    heap->generic_collect_count += heap->generic_count;
     heap->generic_count = 0;
-    mi_heap_collect(heap, false /* force? */);
+    // call potential deferred free routines
+    _mi_deferred_free(heap, false);
+
+    // collect every once in a while (10000 by default)
+    const long generic_collect = mi_option_get_clamp(mi_option_generic_collect, 1, 1000000L);
+    if (heap->generic_collect_count >= generic_collect) {
+      heap->generic_collect_count = 0;
+      mi_heap_collect(heap, false /* force? */);
+    }
   }
 
   // find (or allocate) a page of the right size

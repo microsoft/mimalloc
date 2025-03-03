@@ -75,9 +75,9 @@ const mi_page_t _mi_page_empty = {
   { 0 }, { 0 }, { 0 }, { 0 }, \
   { 0 }, { 0 }, { 0 }, { 0 }, \
   \
-  { 0 }, { 0 }, { 0 }, { 0 }, \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  { 0 }, { 0 }, { 0 }, { 0 }, \
+  { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
+  MI_INIT4(MI_STAT_COUNT_NULL), \
+  { 0 }, { 0 }, { 0 }, { 0 },  \
   \
   { MI_INIT4(MI_STAT_COUNT_NULL) }, \
   { { 0 }, { 0 }, { 0 }, { 0 } }, \
@@ -122,7 +122,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   { {0}, {0}, 0, true },  // random
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
-  0,                      // generic count
+  0, 0,                   // generic count
   NULL,                   // next
   0,                      // full page retain
   false,                  // can reclaim
@@ -159,7 +159,7 @@ mi_decl_cache_align mi_heap_t heap_main = {
   { {0x846ca68b}, {0}, 0, true },  // random
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
-  0,                      // generic count
+  0, 0,                   // generic count
   NULL,                   // next heap
   2,                      // full page retain
   true,                   // allow page reclaim
