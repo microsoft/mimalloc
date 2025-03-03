@@ -554,7 +554,8 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
 
   // reset expire (if not already set concurrently)
   mi_atomic_casi64_strong_acq_rel(&arena->purge_expire, &expire, (mi_msecs_t)0);
-  
+  _mi_stat_counter_increase(&_mi_stats_main.arena_purges, 1);
+
   // potential purges scheduled, walk through the bitmap
   bool any_purged = false;
   bool full_purge = true;

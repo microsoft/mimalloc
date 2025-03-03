@@ -205,7 +205,9 @@ typedef int32_t  mi_ssize_t;
 #define MI_LARGE_OBJ_WSIZE_MAX            (MI_LARGE_OBJ_SIZE_MAX/MI_INTPTR_SIZE)
 
 // Maximum number of size classes. (spaced exponentially in 12.5% increments)
-#define MI_BIN_HUGE  (73U)
+#if MI_BIN_HUGE != 73U
+#error "mimalloc internal: expecting 73 bins"
+#endif
 
 #if (MI_MEDIUM_OBJ_WSIZE_MAX >= 655360)
 #error "mimalloc internal: define more bins"
@@ -560,6 +562,8 @@ struct mi_heap_s {
   size_t                page_count;                          // total number of pages in the `pages` queues.
   size_t                page_retired_min;                    // smallest retired index (retired pages are fully free, but still in the page queues)
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
+  long                  generic_count;                       // how often is `_mi_malloc_generic` called?
+  long                  generic_collect_count;               // how often is `_mi_malloc_generic` called without collecting?
   mi_heap_t*            next;                                // list of heaps per thread
   bool                  no_reclaim;                          // `true` if this heap should not reclaim abandoned pages
   uint8_t               tag;                                 // custom tag, can be used for separating heaps based on the object types

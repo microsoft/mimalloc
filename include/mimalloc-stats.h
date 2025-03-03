@@ -49,6 +49,7 @@ typedef struct mi_stat_counter_s {
   \
   /* internal statistics */ \
   MI_STAT_COUNTER(arena_rollback_count) \
+  MI_STAT_COUNTER(arena_purges) \
   MI_STAT_COUNTER(pages_extended)           /* number of page extensions */ \
   MI_STAT_COUNTER(pages_retire)             /* number of pages that are retired */ \
   MI_STAT_COUNTER(page_searches)            /* searches for a fresh page */ \
