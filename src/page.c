@@ -943,8 +943,8 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size, size_t 
     }
     else */
     {
-      mi_heap_stat_increase(heap, malloc_huge, bsize);
-      mi_heap_stat_counter_increase(heap, malloc_huge_count, 1);
+      _mi_stat_increase(&heap->tld->stats.malloc_huge, bsize);
+      _mi_stat_counter_increase(&heap->tld->stats.malloc_huge_count, 1);
     }
   }
   return page;
