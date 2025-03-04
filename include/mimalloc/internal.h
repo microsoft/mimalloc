@@ -77,6 +77,7 @@ bool        _mi_getenv(const char* name, char* result, size_t result_size);
 // "options.c"
 void        _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
 void        _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
+void        _mi_message(const char* fmt, ...);
 void        _mi_warning_message(const char* fmt, ...);
 void        _mi_verbose_message(const char* fmt, ...);
 void        _mi_trace_message(const char* fmt, ...);
