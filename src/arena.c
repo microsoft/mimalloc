@@ -1376,7 +1376,7 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k,
 }
 
 static size_t mi_debug_show_chunks(const char* header1, const char* header2, const char* header3, size_t slice_count, size_t chunk_count, mi_bchunk_t* chunks, _Atomic(uint8_t)* chunk_bins, bool invert, mi_arena_t* arena, bool narrow) {
-  _mi_output_message("\x1B[37m%s%s%s (use/commit: \x1B[31m0 - 25%%\x1B[33m - 50%%\x1B[36m - 75%%\x1B[32m - 100%%\x1B[0m)\n", header1, header2, header3);
+  _mi_raw_message("\x1B[37m%s%s%s (use/commit: \x1B[31m0 - 25%%\x1B[33m - 50%%\x1B[36m - 75%%\x1B[32m - 100%%\x1B[0m)\n", header1, header2, header3);
   const size_t fields_per_line = (narrow ? 2 : 4);
   size_t bit_count = 0;
   size_t bit_set_count = 0;
@@ -1407,7 +1407,7 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
     for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
       if (j > 0 && (j % fields_per_line) == 0) {
         // buf[k++] = '\n'; _mi_memset(buf+k,' ',7); k += 7;
-        _mi_output_message("  %s\n\x1B[37m", buf);
+        _mi_raw_message("  %s\n\x1B[37m", buf);
         _mi_memzero(buf, sizeof(buf));
         _mi_memset(buf, ' ', 5); k = 5;
       }
@@ -1426,9 +1426,9 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
       }
       bit_count += MI_BFIELD_BITS;
     }
-    _mi_output_message("  %s\n\x1B[37m", buf);
+    _mi_raw_message("  %s\n\x1B[37m", buf);
   }
-  _mi_output_message("\x1B[0m  total ('x'): %zu\n", bit_set_count);
+  _mi_raw_message("\x1B[0m  total ('x'): %zu\n", bit_set_count);
   return bit_set_count;
 }
 
@@ -1448,7 +1448,7 @@ static void mi_debug_show_arenas_ex(bool show_pages, bool narrow) mi_attr_noexce
     if (arena == NULL) break;
     mi_assert(arena->subproc == subproc);
     // slice_total += arena->slice_count;
-    _mi_output_message("arena %zu at %p: %zu slices (%zu MiB)%s, subproc: %p\n", i, arena, arena->slice_count, mi_size_of_slices(arena->slice_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""), arena->subproc);
+    _mi_raw_message("arena %zu at %p: %zu slices (%zu MiB)%s, subproc: %p\n", i, arena, arena->slice_count, mi_size_of_slices(arena->slice_count)/MI_MiB, (arena->memid.is_pinned ? ", pinned" : ""), arena->subproc);
     //if (show_inuse) {
     //  free_total += mi_debug_show_bbitmap("in-use slices", arena->slice_count, arena->slices_free, true, NULL);
     //}
@@ -1466,9 +1466,9 @@ static void mi_debug_show_arenas_ex(bool show_pages, bool narrow) mi_attr_noexce
       page_total += mi_debug_show_bitmap_binned(header1, header2, header3, arena->slice_count, arena->pages, arena->slices_free->chunk_bins, false, arena, narrow);
     }
   }
-  // if (show_inuse)     _mi_output_message("total inuse slices    : %zu\n", slice_total - free_total);
-  // if (show_abandoned) _mi_verbose_message("total abandoned slices: %zu\n", abandoned_total);
-  if (show_pages)     _mi_output_message("total pages in arenas: %zu\n", page_total);
+  // if (show_inuse)     _mi_raw_message("total inuse slices    : %zu\n", slice_total - free_total);
+  // if (show_abandoned) _mi_raw_message("total abandoned slices: %zu\n", abandoned_total);
+  if (show_pages) _mi_raw_message("total pages in arenas: %zu\n", page_total);
 }
 
 void mi_debug_show_arenas(void) mi_attr_noexcept {

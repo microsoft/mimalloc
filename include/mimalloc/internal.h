@@ -89,10 +89,11 @@ bool          _mi_getenv(const char* name, char* result, size_t result_size);
 // "options.c"
 void          _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
 void          _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
+void          _mi_raw_message(const char* fmt, ...);  
+void          _mi_message(const char* fmt, ...);
 void          _mi_warning_message(const char* fmt, ...);
 void          _mi_verbose_message(const char* fmt, ...);
 void          _mi_trace_message(const char* fmt, ...);
-void          _mi_output_message(const char* fmt, ...);
 void          _mi_options_init(void);
 long          _mi_option_get_fast(mi_option_t option);
 void          _mi_error_message(int err, const char* fmt, ...);
