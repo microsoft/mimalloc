@@ -218,39 +218,39 @@ static inline bool mi_bfield_atomic_try_clearX(_Atomic(mi_bfield_t)*b, bool* all
 // ------- mi_bfield_atomic_is_set ---------------------------------------
 
 // Check if a bit is set
-static inline bool mi_bfield_atomic_is_set(_Atomic(mi_bfield_t)*b, const size_t idx) {
+static inline bool mi_bfield_atomic_is_set(const _Atomic(mi_bfield_t)*b, const size_t idx) {
   const mi_bfield_t x = mi_atomic_load_relaxed(b);
   return ((x & mi_bfield_mask(1,idx)) != 0);
 }
 
 // Check if a bit is clear
-static inline bool mi_bfield_atomic_is_clear(_Atomic(mi_bfield_t)*b, const size_t idx) {
+static inline bool mi_bfield_atomic_is_clear(const _Atomic(mi_bfield_t)*b, const size_t idx) {
   const mi_bfield_t x = mi_atomic_load_relaxed(b);
   return ((x & mi_bfield_mask(1, idx)) == 0);
 }
 
 // Check if a bit is xset
-static inline bool mi_bfield_atomic_is_xset(mi_xset_t set, _Atomic(mi_bfield_t)*b, const size_t idx) {
+static inline bool mi_bfield_atomic_is_xset(mi_xset_t set, const _Atomic(mi_bfield_t)*b, const size_t idx) {
   if (set) return mi_bfield_atomic_is_set(b, idx);
       else return mi_bfield_atomic_is_clear(b, idx);
 }
 
 // Check if all bits corresponding to a mask are set.
-static inline bool mi_bfield_atomic_is_set_mask(_Atomic(mi_bfield_t)* b, mi_bfield_t mask) {
+static inline bool mi_bfield_atomic_is_set_mask(const _Atomic(mi_bfield_t)* b, mi_bfield_t mask) {
   mi_assert_internal(mask != 0);
   const mi_bfield_t x = mi_atomic_load_relaxed(b);
   return ((x & mask) == mask);
 }
 
 // Check if all bits corresponding to a mask are clear.
-static inline bool mi_bfield_atomic_is_clear_mask(_Atomic(mi_bfield_t)* b, mi_bfield_t mask) {
+static inline bool mi_bfield_atomic_is_clear_mask(const _Atomic(mi_bfield_t)* b, mi_bfield_t mask) {
   mi_assert_internal(mask != 0);
   const mi_bfield_t x = mi_atomic_load_relaxed(b);
   return ((x & mask) == 0);
 }
 
 // Check if all bits corresponding to a mask are set/cleared.
-static inline bool mi_bfield_atomic_is_xset_mask(mi_xset_t set, _Atomic(mi_bfield_t)* b, mi_bfield_t mask) {
+static inline bool mi_bfield_atomic_is_xset_mask(mi_xset_t set, const _Atomic(mi_bfield_t)* b, mi_bfield_t mask) {
   mi_assert_internal(mask != 0);
   if (set) return mi_bfield_atomic_is_set_mask(b, mask);
       else return mi_bfield_atomic_is_clear_mask(b, mask);
@@ -371,7 +371,7 @@ static inline bool mi_bchunk_clearN(mi_bchunk_t* chunk, size_t cidx, size_t n, b
 
 // Check if a sequence of `n` bits within a chunk are all set/cleared.
 // This can cross bfield's
-mi_decl_noinline static bool mi_bchunk_is_xsetN_(mi_xset_t set, mi_bchunk_t* chunk, size_t field_idx, size_t idx, size_t n) {
+mi_decl_noinline static bool mi_bchunk_is_xsetN_(mi_xset_t set, const mi_bchunk_t* chunk, size_t field_idx, size_t idx, size_t n) {
   mi_assert_internal((field_idx*MI_BFIELD_BITS) + idx + n <= MI_BCHUNK_BITS);
   while (n > 0) {
     size_t m = MI_BFIELD_BITS - idx;   // m is the bits to xset in this field
@@ -391,7 +391,7 @@ mi_decl_noinline static bool mi_bchunk_is_xsetN_(mi_xset_t set, mi_bchunk_t* chu
 }
 
 // Check if a sequence of `n` bits within a chunk are all set/cleared.
-static inline bool mi_bchunk_is_xsetN(mi_xset_t set, mi_bchunk_t* chunk, size_t cidx, size_t n) {
+static inline bool mi_bchunk_is_xsetN(mi_xset_t set, const mi_bchunk_t* chunk, size_t cidx, size_t n) {
   mi_assert_internal(cidx + n <= MI_BCHUNK_BITS);
   mi_assert_internal(n>0);
   if (n==0) return true;
@@ -1413,7 +1413,23 @@ void mi_bbitmap_unsafe_setN(mi_bbitmap_t* bbitmap, size_t idx, size_t n) {
 // Assign a specific size bin to a chunk
 static void mi_bbitmap_set_chunk_bin(mi_bbitmap_t* bbitmap, size_t chunk_idx, mi_bbin_t bin) {
   mi_assert_internal(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
-  mi_atomic_store_release(&bbitmap->chunk_bins[chunk_idx], (uint8_t)bin);
+  for (mi_bbin_t ibin = MI_BBIN_SMALL; ibin < MI_BBIN_NONE; ibin = mi_bbin_inc(ibin)) {
+    if (ibin == bin) {
+      mi_bchunk_set(& bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
+    }
+    else {
+      mi_bchunk_clear(&bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
+    }
+  }  
+}
+
+mi_bbin_t mi_bbitmap_debug_get_bin(const mi_bchunkmap_t* chunkmap_bins, size_t chunk_idx) {
+  for (mi_bbin_t ibin = MI_BBIN_SMALL; ibin < MI_BBIN_NONE; ibin = mi_bbin_inc(ibin)) {
+    if (mi_bchunk_is_xsetN(MI_BIT_SET, &chunkmap_bins[ibin], chunk_idx, 1)) {
+      return ibin;
+    }
+  }
+  return MI_BBIN_NONE;
 }
 
 // Track the index of the highest chunk that is accessed.
@@ -1542,62 +1558,59 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
   const mi_bfield_t cmap_mask  = mi_bfield_mask(cmap_max_count,0);
   const size_t cmap_cycle      = cmap_acc+1;
   const mi_bbin_t bbin = mi_bbin_of(n);
-  // visit bins from smallest to largest (to reduce fragmentation on the larger blocks)
-  for(mi_bbin_t bin = MI_BBIN_SMALL; bin <= bbin; bin = mi_bbin_inc(bin))  // no need to traverse for MI_BBIN_NONE as anyone can allocate in MI_BBIN_SMALL
-      // (int bin = bbin; bin >= MI_BBIN_SMALL; bin--)  // visit bins from largest size bin up to the NONE bin
+  // visit each cmap entry
+  size_t cmap_idx = 0;
+  mi_bfield_cycle_iterate(cmap_mask, tseq, cmap_cycle, cmap_idx, X)
   {
-    size_t cmap_idx = 0;
-    mi_bfield_cycle_iterate(cmap_mask, tseq, cmap_cycle, cmap_idx, X)
+    // and for each chunkmap entry we iterate over its bits to find the chunks
+    const mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bbitmap->chunkmap.bfields[cmap_idx]);
+    const size_t cmap_entry_cycle = (cmap_idx != cmap_acc ? MI_BFIELD_BITS : cmap_acc_bits);
+    if (cmap_entry == 0) continue;
+
+    // get size bin masks
+    mi_bfield_t cmap_bins[MI_BBIN_COUNT] = { 0 };
+    cmap_bins[MI_BBIN_NONE] = cmap_entry;
+    for (mi_bbin_t ibin = MI_BBIN_SMALL; ibin < MI_BBIN_NONE; ibin = mi_bbin_inc(ibin)) {
+      const mi_bfield_t cmap_bin = mi_atomic_load_relaxed(&bbitmap->chunkmap_bins[ibin].bfields[cmap_idx]);
+      cmap_bins[ibin] = cmap_bin & cmap_entry;
+      cmap_bins[MI_BBIN_NONE] &= ~cmap_bin;      // clear bits that are in an assigned size bin
+    }
+
+    // consider only chunks for a particular size bin at a time
+    for (mi_bbin_t ibin = MI_BBIN_SMALL; ibin <= MI_BBIN_NONE;
+          // skip from bbin to NONE (so, say, a SMALL will never be placed in a OTHER, MEDIUM, or LARGE chunk to reduce fragmentation)
+          ibin = (ibin == bbin ? MI_BBIN_NONE : mi_bbin_inc(ibin)))
     {
-      // don't search into non-accessed memory until we tried other size bins as well
-      if (bin < bbin && cmap_idx > cmap_acc)
-         // (bin > MI_BBIN_SMALL && cmap_idx > cmap_acc) // large to small
-      {
-        break;
-      }
-
-      // and for each chunkmap entry we iterate over its bits to find the chunks
-      const mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bbitmap->chunkmap.bfields[cmap_idx]);
-      const size_t cmap_entry_cycle = (cmap_idx != cmap_acc ? MI_BFIELD_BITS : cmap_acc_bits);
+      const mi_bfield_t cmap_bin = cmap_bins[ibin];      
       size_t eidx = 0;
-      mi_bfield_cycle_iterate(cmap_entry, tseq, cmap_entry_cycle, eidx, Y) 
+      mi_bfield_cycle_iterate(cmap_bin, tseq, cmap_entry_cycle, eidx, Y)  
       {
-        mi_assert_internal(eidx <= MI_BFIELD_BITS);
-        
-        // don't search into non-acgcessed memory until we tried other size bins as well
-        if (bin < bbin && eidx >= cmap_entry_cycle) break;
+        // assertion doesn't quite hold as the max_accessed may be out-of-date
+        // mi_assert_internal(cmap_entry_cycle > eidx || ibin == MI_BBIN_NONE);
 
-        // get the chunk idx
+        // get the chunk 
         const size_t chunk_idx = cmap_idx*MI_BFIELD_BITS + eidx;
-        mi_assert_internal(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
-        mi_assert_internal(bin >= bbin || chunk_idx <= chunk_acc);
-        
-        // only in the current size class!
-        const mi_bbin_t chunk_bin = (mi_bbin_t)mi_atomic_load_relaxed(&bbitmap->chunk_bins[chunk_idx]);
-        if ((mi_bbin_t)bin == chunk_bin || (bin == bbin && chunk_bin == MI_BBIN_NONE)) // only allow NONE at the final run
-           // ((mi_bbin_t)bin == chunk_bin || (bin <= MI_BBIN_SMALL && chunk_bin <= MI_BBIN_SMALL)) {  largest to smallest
-        {
-          mi_bchunk_t* chunk = &bbitmap->chunks[chunk_idx];
-          size_t cidx;
-          if ((*on_find)(chunk, n, &cidx)) {
-            if (cidx==0 && chunk_bin == MI_BBIN_NONE) { // only the first determines the size bin
-              // this chunk is now reserved for the `bbin` size class
-              mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx, bbin);
-            }
-            *pidx = (chunk_idx * MI_BCHUNK_BITS) + cidx;
-            mi_assert_internal(*pidx + n <= mi_bbitmap_max_bits(bbitmap));
-            return true;
+        mi_bchunk_t* chunk = &bbitmap->chunks[chunk_idx];
+
+        size_t cidx;
+        if ((*on_find)(chunk, n, &cidx)) {
+          if (cidx==0 && ibin == MI_BBIN_NONE) { // only the first block determines the size bin
+            // this chunk is now reserved for the `bbin` size class
+            mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx, bbin);
           }
-          else {
-            /* we may find that all are cleared only on a second iteration but that is ok as the chunkmap is a conservative approximation. */
-            mi_bbitmap_chunkmap_try_clear(bbitmap, chunk_idx);
-          }
+          *pidx = (chunk_idx * MI_BCHUNK_BITS) + cidx;
+          mi_assert_internal(*pidx + n <= mi_bbitmap_max_bits(bbitmap));
+          return true;
+        }
+        else {
+          /* we may find that all are cleared only on a second iteration but that is ok as the chunkmap is a conservative approximation. */
+          mi_bbitmap_chunkmap_try_clear(bbitmap, chunk_idx);
         }
       }
       mi_bfield_cycle_iterate_end(Y);
     }
-    mi_bfield_cycle_iterate_end(X);
   }
+  mi_bfield_cycle_iterate_end(X);
   return false;
 }
 

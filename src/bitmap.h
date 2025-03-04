@@ -215,16 +215,22 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
 // Size bins; larger bins are allowed to go into smaller bins.
 // SMALL can only be in small (and NONE), so they cannot fragment the larger bins.
 typedef enum mi_bbin_e {
-  MI_BBIN_NONE,     // no bin assigned yet (the chunk is completely free)
   MI_BBIN_SMALL,    // slice_count == 1
   MI_BBIN_OTHER,    // slice_count: any other from the other bins, and 1 <= slice_count <= MI_BCHUNK_BITS
   MI_BBIN_MEDIUM,   // slice_count == 8
   MI_BBIN_LARGE,    // slice_count == MI_BFIELD_BITS  -- only used if MI_ENABLE_LARGE_PAGES is 1
+  MI_BBIN_NONE,     // no bin assigned yet (the chunk is completely free)
   MI_BBIN_COUNT
 } mi_bbin_t;
 
 static inline mi_bbin_t mi_bbin_inc(mi_bbin_t bbin) {
+  mi_assert_internal(bbin < MI_BBIN_COUNT);
   return (mi_bbin_t)((int)bbin + 1);
+}
+
+static inline mi_bbin_t mi_bbin_dec(mi_bbin_t bbin) {
+  mi_assert_internal(bbin > MI_BBIN_NONE);
+  return (mi_bbin_t)((int)bbin - 1);
 }
 
 static inline mi_bbin_t mi_bbin_of(size_t slice_count) {
@@ -241,8 +247,8 @@ typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bbitmap_s {
   _Atomic(size_t)  chunk_count;         // total count of chunks (0 < N <= MI_BCHUNKMAP_BITS)
   _Atomic(size_t)  chunk_max_accessed;  // max chunk index that was once cleared or set
   size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc
-  mi_bchunkmap_t   chunkmap;
-  _Atomic(uint8_t) chunk_bins[MI_BITMAP_MAX_CHUNK_COUNT];        // 512b
+  mi_bchunkmap_t   chunkmap;                                    
+  mi_bchunkmap_t   chunkmap_bins[MI_BBIN_COUNT - 1];             // chunkmaps with bit set if the chunk is in that size class (except MI_BBIN_NONE)  
   mi_bchunk_t      chunks[MI_BITMAP_DEFAULT_CHUNK_COUNT];        // usually dynamic MI_BITMAP_MAX_CHUNK_COUNT
 } mi_bbitmap_t;
 
@@ -254,6 +260,8 @@ static inline size_t mi_bbitmap_chunk_count(const mi_bbitmap_t* bbitmap) {
 static inline size_t mi_bbitmap_max_bits(const mi_bbitmap_t* bbitmap) {
   return (mi_bbitmap_chunk_count(bbitmap) * MI_BCHUNK_BITS);
 }
+
+mi_bbin_t mi_bbitmap_debug_get_bin(const mi_bchunk_t* chunkmap_bins, size_t chunk_idx);
 
 size_t mi_bbitmap_size(size_t bit_count, size_t* chunk_count);
 
