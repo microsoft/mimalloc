@@ -157,7 +157,7 @@ static mi_decl_cache_align mi_tld_t tld_main = {
 mi_decl_cache_align mi_heap_t heap_main = {
   &tld_main,              // thread local data
   NULL,                   // exclusive arena
-  0,                      // preferred numa node 
+  0,                      // preferred numa node
   0,                      // initial cookie
   //{ 0, 0 },               // the key of the main heap can be fixed (unlike page keys that need to be secure!)
   { {0x846ca68b}, {0}, 0, true },  // random
@@ -690,15 +690,6 @@ void mi_process_init(void) mi_attr_noexcept {
   // the following two can potentially allocate (on freeBSD for locks and thread keys)
   mi_subproc_main_init();
   mi_process_setup_auto_thread_done();
-
-  #if MI_DEBUG
-  _mi_verbose_message("debug level : %d\n", MI_DEBUG);
-  #endif
-  _mi_verbose_message("secure level: %d\n", MI_SECURE);
-  _mi_verbose_message("mem tracking: %s\n", MI_TRACK_TOOL);
-  #if MI_TSAN
-  _mi_verbose_message("thread santizer enabled\n");
-  #endif
   mi_thread_init();
 
   #if defined(_WIN32) && defined(MI_WIN_USE_FLS)
