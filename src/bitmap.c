@@ -1560,7 +1560,7 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
       const mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bbitmap->chunkmap.bfields[cmap_idx]);
       const size_t cmap_entry_cycle = (cmap_idx != cmap_acc ? MI_BFIELD_BITS : cmap_acc_bits);
       size_t eidx = 0;
-      mi_bfield_cycle_iterate(cmap_entry, tseq%8, cmap_entry_cycle, eidx, Y) 
+      mi_bfield_cycle_iterate(cmap_entry, tseq, cmap_entry_cycle, eidx, Y) 
       {
         mi_assert_internal(eidx <= MI_BFIELD_BITS);
         
