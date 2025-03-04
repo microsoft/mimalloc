@@ -159,6 +159,8 @@ bool          _mi_os_secure_guard_page_set_before(void* addr, bool is_pinned);
 bool          _mi_os_secure_guard_page_reset_at(void* addr);
 bool          _mi_os_secure_guard_page_reset_before(void* addr);
 
+int           _mi_os_numa_node(void);
+size_t        _mi_os_numa_node_count(void);
 
 void*         _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid);
 void*         _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
@@ -174,8 +176,8 @@ mi_arena_id_t _mi_arena_id_none(void);
 mi_arena_t*   _mi_arena_from_id(mi_arena_id_t id);
 bool          _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_t* request_arena);
 
-void*         _mi_arenas_alloc(mi_subproc_t* subproc, size_t size, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
-void*         _mi_arenas_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, mi_memid_t* memid);
+void*         _mi_arenas_alloc(mi_subproc_t* subproc, size_t size, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid);
+void*         _mi_arenas_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid);
 void          _mi_arenas_free(void* p, size_t size, mi_memid_t memid);
 bool          _mi_arenas_contain(const void* p);
 void          _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld);
@@ -1024,24 +1026,6 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
   x ^= x >> 16;
 #endif
   return x;
-}
-
-// -------------------------------------------------------------------
-// Optimize numa node access for the common case (= one node)
-// -------------------------------------------------------------------
-
-int    _mi_os_numa_node_get(void);
-size_t _mi_os_numa_node_count_get(void);
-
-extern mi_decl_hidden _Atomic(size_t) _mi_numa_node_count;
-static inline int _mi_os_numa_node(void) {
-  if mi_likely(mi_atomic_load_relaxed(&_mi_numa_node_count) == 1) { return 0; }
-  else return _mi_os_numa_node_get();
-}
-static inline size_t _mi_os_numa_node_count(void) {
-  const size_t count = mi_atomic_load_relaxed(&_mi_numa_node_count);
-  if mi_likely(count > 0) { return count; }
-  else return _mi_os_numa_node_count_get();
 }
 
 

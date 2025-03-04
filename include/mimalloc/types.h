@@ -424,6 +424,7 @@ typedef struct mi_padding_s {
 struct mi_heap_s {
   mi_tld_t*             tld;                                 // thread-local data
   mi_arena_t*           exclusive_arena;                     // if the heap should only allocate from a specific arena (or NULL)
+  int                   numa_node;                           // preferred numa node (or -1 for no preference)
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   mi_random_ctx_t       random;                              // random number context used for secure allocation
   size_t                page_count;                          // total number of pages in the `pages` queues.
@@ -485,6 +486,7 @@ typedef int64_t  mi_msecs_t;
 struct mi_tld_s {
   mi_threadid_t         thread_id;            // thread id of this thread
   size_t                thread_seq;           // thread sequence id (linear count of created threads)
+  int                   numa_node;            // thread preferred numa node
   mi_subproc_t*         subproc;              // sub-process this thread belongs to.
   mi_heap_t*            heap_backing;         // backing heap of this thread (cannot be deleted)
   mi_heap_t*            heaps;                // list of heaps in this thread (so we can abandon all when the thread terminates)

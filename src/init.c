@@ -104,6 +104,7 @@ static mi_decl_cache_align mi_subproc_t subproc_main
 static mi_decl_cache_align mi_tld_t tld_empty = {
   0,                      // thread_id
   0,                      // thread_seq
+  0,                      // default numa node
   &subproc_main,          // subproc
   NULL,                   // heap_backing
   NULL,                   // heaps list
@@ -117,6 +118,7 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   &tld_empty,             // tld
   NULL,                   // exclusive_arena
+  0,                      // preferred numa node
   0,                      // cookie
   //{ 0, 0 },               // keys
   { {0}, {0}, 0, true },  // random
@@ -141,6 +143,7 @@ extern mi_decl_hidden mi_decl_cache_align mi_heap_t heap_main;
 static mi_decl_cache_align mi_tld_t tld_main = {
   0,                      // thread_id
   0,                      // thread_seq
+  0,                      // numa node
   &subproc_main,          // subproc
   &heap_main,             // heap_backing
   &heap_main,             // heaps list
@@ -154,6 +157,7 @@ static mi_decl_cache_align mi_tld_t tld_main = {
 mi_decl_cache_align mi_heap_t heap_main = {
   &tld_main,              // thread local data
   NULL,                   // exclusive arena
+  0,                      // preferred numa node 
   0,                      // initial cookie
   //{ 0, 0 },               // the key of the main heap can be fixed (unlike page keys that need to be secure!)
   { {0x846ca68b}, {0}, 0, true },  // random
@@ -306,6 +310,7 @@ static mi_tld_t* mi_tld_alloc(void) {
     tld->heap_backing = NULL;
     tld->heaps = NULL;
     tld->subproc = &subproc_main;
+    tld->numa_node = _mi_os_numa_node();
     tld->thread_id = _mi_prim_thread_id();
     tld->thread_seq = mi_atomic_add_acq_rel(&thread_total_count, 1);
     tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
