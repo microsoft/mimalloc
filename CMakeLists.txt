@@ -40,6 +40,8 @@ option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead
 option(MI_NO_THP            "Disable transparent huge pages support on Linux/Android for the mimalloc process only" OFF)
 option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
 
+option(MI_WIN_DBG_EXTS      "Build with windows debugger extension points")
+
 # negated options for vcpkg features
 option(MI_NO_USE_CXX        "Use plain C compilation (has priority over MI_USE_CXX)" OFF)
 option(MI_NO_OPT_ARCH       "Do not use architecture specific optimizations (like '-march=armv8.1-a' for example) (has priority over MI_OPT_ARCH)" OFF)
@@ -512,6 +514,9 @@ endfunction()
 
 if(WIN32)
   list(APPEND mi_libraries psapi shell32 user32 advapi32 bcrypt)
+  if(MI_WIN_DBG_EXTS)
+    list(APPEND mi_libraries dbgeng) # todo: only for the dll?
+  endif()
 else()
   find_link_library("pthread" MI_LIB_PTHREAD)
   if(MI_LIB_PTHREAD)
