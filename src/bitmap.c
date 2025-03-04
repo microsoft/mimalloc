@@ -1560,11 +1560,18 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
       const mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bbitmap->chunkmap.bfields[cmap_idx]);
       const size_t cmap_entry_cycle = (cmap_idx != cmap_acc ? MI_BFIELD_BITS : cmap_acc_bits);
       size_t eidx = 0;
-      mi_bfield_cycle_iterate(cmap_entry, tseq%8, cmap_entry_cycle, eidx, Y) // reduce the tseq to 8 bins to reduce using extra memory (see `mstress`)
+      mi_bfield_cycle_iterate(cmap_entry, tseq%8, cmap_entry_cycle, eidx, Y) 
       {
         mi_assert_internal(eidx <= MI_BFIELD_BITS);
+        
+        // don't search into non-acgcessed memory until we tried other size bins as well
+        if (bin < bbin && eidx >= cmap_entry_cycle) break;
+
+        // get the chunk idx
         const size_t chunk_idx = cmap_idx*MI_BFIELD_BITS + eidx;
         mi_assert_internal(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
+        mi_assert_internal(bin >= bbin || chunk_idx <= chunk_acc);
+        
         // only in the current size class!
         const mi_bbin_t chunk_bin = (mi_bbin_t)mi_atomic_load_relaxed(&bbitmap->chunk_bins[chunk_idx]);
         if ((mi_bbin_t)bin == chunk_bin || (bin == bbin && chunk_bin == MI_BBIN_NONE)) // only allow NONE at the final run
