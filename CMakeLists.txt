@@ -74,6 +74,10 @@ set(mi_sources
     src/stats.c
     src/prim/prim.c)
 
+if(WIN32 AND MI_WIN_DBG_EXTS)
+  list(APPEND mi_sources src/prim/windows/windbg/mimalloc_dbg.cpp)
+endif()
+
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
 set(mi_cflags_dynamic "")           # extra flags for a shared-object library build
@@ -252,6 +256,17 @@ if(MI_TRACK_ETW)
   if(MI_TRACK_ETW)
     message(STATUS "Compile with Windows event tracing support (MI_TRACK_ETW=ON)")
     list(APPEND mi_defines MI_TRACK_ETW=1)
+  endif()
+endif()
+
+if(MI_WIN_DBG_EXTS)
+  if(NOT WIN32)
+    set(MI_WIN_DBG_EXTS OFF)
+    message(WARNING "Can only enable Windows debbuger extension support on Windows (MI_WIN_DBG_EXTS=OFF)")
+  endif()
+  if(MI_WIN_DBG_EXTS)
+    message(STATUS "Compile with Windows debbuger extension support (MI_WIN_DBG_EXTS=ON)")
+    list(APPEND mi_defines MI_WIN_DBG_EXTS=1)
   endif()
 endif()
 

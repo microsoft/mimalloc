@@ -211,8 +211,7 @@
     <Lib>
       <AdditionalLibraryDirectories>
       </AdditionalLibraryDirectories>
-      <AdditionalDependencies>
-      </AdditionalDependencies>
+      <AdditionalDependencies>dbgeng.lib</AdditionalDependencies>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
@@ -477,6 +476,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|ARM64EC'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\..\src\page.c" />
+    <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_dbg.cpp" />
     <ClCompile Include="..\..\src\random.c" />
     <ClCompile Include="..\..\src\os.c" />
     <ClCompile Include="..\..\src\stats.c" />
@@ -493,6 +493,7 @@
     <ClInclude Include="..\..\include\mimalloc\track.h" />
     <ClInclude Include="..\..\include\mimalloc\types.h" />
     <ClInclude Include="..\..\src\bitmap.h" />
+    <ClInclude Include="..\..\src\prim\windows\windbg\mimalloc_dbg.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
