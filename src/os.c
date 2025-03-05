@@ -694,18 +694,19 @@ static void mi_os_free_huge_os_pages(void* p, size_t size) {
 Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
 
-static _Atomic(size_t)  _mi_numa_node_count; // = 0   // cache the node count
+static _Atomic(int)  _mi_numa_node_count; // = 0   // cache the node count
 
-size_t _mi_os_numa_node_count(void) {
+int _mi_os_numa_node_count(void) {
   size_t count = mi_atomic_load_acquire(&_mi_numa_node_count);
   if mi_unlikely(count <= 0) {
     long ncount = mi_option_get(mi_option_use_numa_nodes); // given explicitly?
-    if (ncount > 0) {
-      count = (size_t)ncount;
+    if (ncount > 0 && ncount < INT_MAX) {
+      count = (int)ncount;
     }
     else {
-      count = _mi_prim_numa_node_count(); // or detect dynamically
-      if (count == 0) { count = 1; }
+      const size_t n = _mi_prim_numa_node_count(); // or detect dynamically
+      if (n == 0 || n > INT_MAX) { count = 1; }
+                            else { count = (int)n; }
     }
     mi_atomic_store_release(&_mi_numa_node_count, count); // save it
     _mi_verbose_message("using %zd numa regions\n", count);
@@ -715,12 +716,13 @@ size_t _mi_os_numa_node_count(void) {
 
 
 static int mi_os_numa_node_get(void) {
-  size_t numa_count = _mi_os_numa_node_count();
+  int numa_count = _mi_os_numa_node_count();
   if (numa_count<=1) return 0; // optimize on single numa node systems: always node 0
   // never more than the node count and >= 0
-  size_t numa_node = _mi_prim_numa_node();
+  const size_t n = _mi_prim_numa_node();
+  int numa_node = (n < INT_MAX ? (int)n : 0);
   if (numa_node >= numa_count) { numa_node = numa_node % numa_count; }
-  return (int)numa_node;
+  return numa_node;
 }
 
 int _mi_os_numa_node(void) {

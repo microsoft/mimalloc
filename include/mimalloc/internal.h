@@ -160,7 +160,7 @@ bool          _mi_os_secure_guard_page_reset_at(void* addr);
 bool          _mi_os_secure_guard_page_reset_before(void* addr);
 
 int           _mi_os_numa_node(void);
-size_t        _mi_os_numa_node_count(void);
+int           _mi_os_numa_node_count(void);
 
 void*         _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid);
 void*         _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
