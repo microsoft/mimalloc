@@ -600,7 +600,7 @@ static void mi_detect_cpu_features(void) {
   int32_t cpu_info[4];
   __cpuid(cpu_info, 7);
   _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
-  _mi_cpu_has_erms = ((cpu_info[2] & (1 << 9)) != 0); // bit 9 of ECX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+  _mi_cpu_has_erms = ((cpu_info[1] & (1 << 9)) != 0); // bit 9 of EBX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
 }
 #else
 static void mi_detect_cpu_features(void) {
