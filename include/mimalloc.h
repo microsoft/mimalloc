@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 192   // major + 2 digits minor
+#define MI_MALLOC_VERSION 302   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -274,17 +274,17 @@ mi_decl_export int   mi_reserve_huge_os_pages_interleave(size_t pages, size_t nu
 mi_decl_export int   mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msecs) mi_attr_noexcept;
 
 mi_decl_export int   mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept;
-mi_decl_export bool  mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept;
+mi_decl_export bool  mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_pinned /* cannot decommit/reset? */, bool is_zero, int numa_node) mi_attr_noexcept;
 
 mi_decl_export void  mi_debug_show_arenas(void) mi_attr_noexcept;
 mi_decl_export void  mi_arenas_print(void) mi_attr_noexcept;
 
 // Experimental: heaps associated with specific memory arena's
-typedef int mi_arena_id_t;
+typedef void* mi_arena_id_t;
 mi_decl_export void* mi_arena_area(mi_arena_id_t arena_id, size_t* size);
 mi_decl_export int   mi_reserve_huge_os_pages_at_ex(size_t pages, int numa_node, size_t timeout_msecs, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
 mi_decl_export int   mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
-mi_decl_export bool  mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
+mi_decl_export bool  mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
 
 #if MI_MALLOC_VERSION >= 182
 // Create a heap that only allocates in the specified arena
@@ -321,6 +321,23 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_ex(int heap_tag, bool al
 mi_decl_export int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
 mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexcept;
 
+
+
+// experimental
+//mi_decl_export void* mi_os_alloc(size_t size, bool commit, size_t* full_size);
+//mi_decl_export void* mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, void** base, size_t* full_size);
+//mi_decl_export void* mi_os_alloc_aligned_allow_large(size_t size, size_t alignment, bool commit, bool* is_committed, bool* is_pinned, void** base, size_t* full_size);
+//mi_decl_export void  mi_os_free(void* p, size_t size);
+//mi_decl_export void  mi_os_commit(void* p, size_t size);
+//mi_decl_export void  mi_os_decommit(void* p, size_t size);
+
+mi_decl_export bool  mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t* accessed_size, size_t* size);
+mi_decl_export bool  mi_arena_reload(void* start, size_t size, mi_arena_id_t* arena_id);
+mi_decl_export bool  mi_heap_reload(mi_heap_t* heap, mi_arena_id_t arena);
+mi_decl_export void  mi_heap_unload(mi_heap_t* heap);
+
+// Is a pointer contained in the given arena area?
+mi_decl_export bool  mi_arena_contains(mi_arena_id_t arena_id, const void* p);
 
 
 // ------------------------------------------------------
@@ -370,12 +387,11 @@ typedef enum mi_option_e {
   mi_option_os_tag,                     // tag used for OS logging (macOS only for now) (=100)
   mi_option_max_errors,                 // issue at most N error messages
   mi_option_max_warnings,               // issue at most N warning messages
-  mi_option_max_segment_reclaim,        // max. percentage of the abandoned segments can be reclaimed per try (=10%)
+  mi_option_deprecated_max_segment_reclaim,  // max. percentage of the abandoned segments can be reclaimed per try (=10%)
   mi_option_destroy_on_exit,            // if set, release all memory on exit; sometimes used for dynamic unloading but can be unsafe
   mi_option_arena_reserve,              // initial memory size for arena reservation (= 1 GiB on 64-bit) (internally, this value is in KiB; use `mi_option_get_size`)
   mi_option_arena_purge_mult,           // multiplier for `purge_delay` for the purging delay for arenas (=10)
-  mi_option_purge_extend_delay,
-  mi_option_abandoned_reclaim_on_free,  // allow to reclaim an abandoned segment on a free (=1)
+  mi_option_deprecated_purge_extend_delay,
   mi_option_disallow_arena_alloc,       // 1 = do not use arena's for allocation (except if using specific arena id's)
   mi_option_retry_on_oom,               // retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries. (only on windows)
   mi_option_visit_abandoned,            // allow visiting heap blocks from abandoned threads (=0)
@@ -384,8 +400,14 @@ typedef enum mi_option_e {
   mi_option_guarded_precise,            // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
   mi_option_guarded_sample_rate,        // 1 out of N allocations in the min/max range will be guarded (=1000)
   mi_option_guarded_sample_seed,        // can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
-  mi_option_target_segments_per_thread, // experimental (=0)
   mi_option_generic_collect,            // collect heaps every N (=10000) generic allocation calls
+  mi_option_page_reclaim_on_free,       // reclaim abandoned pages on a free (=0). -1 disallowr always, 0 allows if the page originated from the current heap, 1 allow always
+  mi_option_page_full_retain,           // retain N full (small) pages per size class (=2)
+  mi_option_page_max_candidates,        // max candidate pages to consider for allocation (=4)
+  mi_option_max_vabits,                 // max user space virtual address bits to consider (=48)
+  mi_option_pagemap_commit,             // commit the full pagemap (to always catch invalid pointer uses) (=0)
+  mi_option_page_commit_on_demand,      // commit page memory on-demand
+  mi_option_page_reclaim_max,           // don't reclaim pages if we already own N pages (in that size class) (=16)
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,

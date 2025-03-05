@@ -102,6 +102,14 @@ typedef struct mi_option_desc_s {
 #endif
 #endif
 
+#ifndef MI_DEFAULT_PAGEMAP_COMMIT
+#if defined(__APPLE__)  // when overloading malloc, we still get mixed pointers sometimes on macOS; this avoids a bad access
+#define MI_DEFAULT_PAGEMAP_COMMIT 1
+#else
+#define MI_DEFAULT_PAGEMAP_COMMIT 0
+#endif
+#endif
+
 
 static mi_option_desc_t options[_mi_option_last] =
 {
@@ -136,18 +144,17 @@ static mi_option_desc_t options[_mi_option_last] =
 #else
   { 1, UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
 #endif
-  { 10,  UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
+  { 1000,UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
   { 0,   UNINIT, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.
   { 0,   UNINIT, MI_OPTION_LEGACY(disallow_os_alloc,limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)
   { 100, UNINIT, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose
   { 32,  UNINIT, MI_OPTION(max_errors) },               // maximum errors that are output
   { 32,  UNINIT, MI_OPTION(max_warnings) },             // maximum warnings that are output
-  { 10,  UNINIT, MI_OPTION(max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.
+  { 10,  UNINIT, MI_OPTION(deprecated_max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.
   { 0,   UNINIT, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
   { MI_DEFAULT_ARENA_RESERVE, UNINIT, MI_OPTION(arena_reserve) }, // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
-  { 10,  UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
-  { 1,   UNINIT, MI_OPTION_LEGACY(purge_extend_delay, decommit_extend_delay) },
-  { 0,   UNINIT, MI_OPTION(abandoned_reclaim_on_free) },// reclaim an abandoned segment on a free
+  { 1,   UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
+  { 1,   UNINIT, MI_OPTION_LEGACY(deprecated_purge_extend_delay, decommit_extend_delay) },
   { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   UNINIT, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)
   { 400, UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
 #if defined(MI_VISIT_ABANDONED)
@@ -161,8 +168,15 @@ static mi_option_desc_t options[_mi_option_last] =
   { MI_DEFAULT_GUARDED_SAMPLE_RATE,
          UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)
   { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
-  { 0,   UNINIT, MI_OPTION(target_segments_per_thread) }, // abandon segments beyond this point, or 0 to disable.
-  { 10000, UNINIT, MI_OPTION(generic_collect) },          // collect heaps every N (=10000) generic allocation calls
+  { 10000, UNINIT, MI_OPTION(generic_collect) },        // collect heaps every N (=10000) generic allocation calls
+  { 0,   UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim abandoned pages on a free: -1 = disable completely, 0 = only reclaim into the originating heap, 1 = reclaim on free across heaps
+  { 2,   UNINIT, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues
+  { 4,   UNINIT, MI_OPTION(page_max_candidates) },      // max search to find a best page candidate
+  { 0,   UNINIT, MI_OPTION(max_vabits) },               // max virtual address space bits
+  { MI_DEFAULT_PAGEMAP_COMMIT,
+         UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
+  { 0,   UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
+  { 16,  UNINIT, MI_OPTION(page_reclaim_max) },         // don't reclaim pages if we already own N pages (in that size class)
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -455,7 +469,7 @@ void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* me
 // Define our own limited `fprintf` that avoids memory allocation.
 // We do this using `_mi_vsnprintf` with a limited buffer.
 static void mi_vfprintf( mi_output_fun* out, void* arg, const char* prefix, const char* fmt, va_list args ) {
-  char buf[512];
+  char buf[992];
   if (fmt==NULL) return;
   if (!mi_recurse_enter()) return;
   _mi_vsnprintf(buf, sizeof(buf)-1, fmt, args);
@@ -479,6 +493,13 @@ static void mi_vfprintf_thread(mi_output_fun* out, void* arg, const char* prefix
   else {
     mi_vfprintf(out, arg, prefix, fmt, args);
   }
+}
+
+void _mi_raw_message(const char* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  mi_vfprintf(NULL, NULL, NULL, fmt, args);
+  va_end(args);
 }
 
 void _mi_message(const char* fmt, ...) {
