@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.18)
 project(libmimalloc C CXX)
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)  # Ensure C++20 is required
+set(CMAKE_CXX_EXTENSIONS OFF)        # Use strict C++20 without compiler-specific extensions
 
 option(MI_SECURE            "Use full security mitigations (like guard pages, allocation randomization, double-free mitigation, and free-list corruption detection)" OFF)
 option(MI_DEBUG_FULL        "Use full internal heap invariant checking in DEBUG mode (expensive)" OFF)
@@ -40,7 +42,7 @@ option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead
 option(MI_NO_THP            "Disable transparent huge pages support on Linux/Android for the mimalloc process only" OFF)
 option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
 
-option(MI_WIN_DBG_EXTS      "Build with windows debugger extension points")
+option(MI_WIN_DBG_EXTS      "Build with windows debugger extension points" ON)
 
 # negated options for vcpkg features
 option(MI_NO_USE_CXX        "Use plain C compilation (has priority over MI_USE_CXX)" OFF)
@@ -73,13 +75,6 @@ set(mi_sources
     src/random.c
     src/stats.c
     src/prim/prim.c)
-
-if(WIN32 AND MI_WIN_DBG_EXTS)
-  list(APPEND mi_sources src/prim/windows/windbg/mimalloc_windbg.cpp)
-  list(APPEND mi_sources src/prim/windows/windbg/mimalloc_windbg_arenas.cpp)
-  list(APPEND mi_sources src/prim/windows/windbg/mimalloc_windbg_options.cpp)
-  list(APPEND mi_sources src/prim/windows/windbg/mimalloc_windbg_utils.cpp)
-endif()
 
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
@@ -160,6 +155,11 @@ if(MI_NO_OPT_ARCH)
   set(MI_OPT_ARCH "OFF")
 endif()
 
+if(MSVC)
+    add_compile_options(/std:c++20)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    add_compile_options(-std=c++20)
+endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
@@ -271,6 +271,13 @@ if(MI_WIN_DBG_EXTS)
     message(STATUS "Compile with Windows debbuger extension support (MI_WIN_DBG_EXTS=ON)")
     list(APPEND mi_defines MI_WIN_DBG_EXTS=1)
   endif()
+endif()
+
+if(WIN32 AND MI_WIN_DBG_EXTS)
+  list(APPEND mi_sources ${PROJECT_SOURCE_DIR}/src/prim/windows/windbg/mimalloc_windbg.cpp)
+  list(APPEND mi_sources ${PROJECT_SOURCE_DIR}/src/prim/windows/windbg/mimalloc_windbg_arenas.cpp)
+  list(APPEND mi_sources ${PROJECT_SOURCE_DIR}/src/prim/windows/windbg/mimalloc_windbg_options.cpp)
+  list(APPEND mi_sources ${PROJECT_SOURCE_DIR}/src/prim/windows/windbg/mimalloc_windbg_utils.cpp)
 endif()
 
 if(MI_GUARDED)

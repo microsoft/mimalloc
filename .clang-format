@@ -22,7 +22,7 @@ BraceWrapping:
   AfterClass: false
   AfterControlStatement: false
   AfterEnum: false
-  AfterFunction: true
+  AfterFunction: false
   AfterNamespace: false
   AfterObjCDeclaration: false
   AfterStruct: false
@@ -105,6 +105,6 @@ SpacesInCStyleCastParentheses: false
 SpacesInContainerLiterals: true
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
-Standard: Cpp20
+Standard: Cpp11
 TabWidth: 4
 UseTab: Never

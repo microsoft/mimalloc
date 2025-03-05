@@ -109,8 +109,3 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_help(PDEBUG_CLIENT Client, 
 extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_stats(PDEBUG_CLIENT client, PCSTR args) {
     return S_OK;
 }
-
-extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_options(PDEBUG_CLIENT client, PCSTR args) {
-    mi_options_print();
-    return S_OK;
-}
