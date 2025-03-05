@@ -476,7 +476,9 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|ARM64EC'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\..\src\page.c" />
-    <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_dbg.cpp" />
+    <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg.cpp" />
+    <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_arenas.cpp" />
+    <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_utils.cpp" />
     <ClCompile Include="..\..\src\random.c" />
     <ClCompile Include="..\..\src\os.c" />
     <ClCompile Include="..\..\src\stats.c" />
@@ -493,7 +495,7 @@
     <ClInclude Include="..\..\include\mimalloc\track.h" />
     <ClInclude Include="..\..\include\mimalloc\types.h" />
     <ClInclude Include="..\..\src\bitmap.h" />
-    <ClInclude Include="..\..\src\prim\windows\windbg\mimalloc_dbg.h" />
+    <ClInclude Include="..\..\src\prim\windows\windbg\mimalloc_windbg_utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

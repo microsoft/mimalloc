@@ -75,7 +75,10 @@ set(mi_sources
     src/prim/prim.c)
 
 if(WIN32 AND MI_WIN_DBG_EXTS)
-  list(APPEND mi_sources src/prim/windows/windbg/mimalloc_dbg.cpp)
+  list(APPEND mi_sources src/prim/windows/windbg/mimalloc_windbg.cpp)
+  list(APPEND mi_sources src/prim/windows/windbg/mimalloc_windbg_arenas.cpp)
+  list(APPEND mi_sources src/prim/windows/windbg/mimalloc_windbg_options.cpp)
+  list(APPEND mi_sources src/prim/windows/windbg/mimalloc_windbg_utils.cpp)
 endif()
 
 set(mi_cflags "")
