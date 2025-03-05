@@ -905,7 +905,7 @@ int mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noe
 ----------------------------------------------------------- */
 
 static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_t block_count, mi_bitmap_field_t* fields, size_t field_count ) {
-  _mi_verbose_message("%s%s:\n", prefix, header);
+  _mi_message("%s%s:\n", prefix, header);
   size_t bcount = 0;
   size_t inuse_count = 0;
   for (size_t i = 0; i < field_count; i++) {
@@ -922,9 +922,9 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
       }
     }
     buf[MI_BITMAP_FIELD_BITS] = 0;
-    _mi_verbose_message("%s  %s\n", prefix, buf);
+    _mi_message("%s  %s\n", prefix, buf);
   }
-  _mi_verbose_message("%s  total ('x'): %zu\n", prefix, inuse_count);
+  _mi_message("%s  total ('x'): %zu\n", prefix, inuse_count);
   return inuse_count;
 }
 
@@ -937,7 +937,7 @@ void mi_debug_show_arenas(void) mi_attr_noexcept {
   for (size_t i = 0; i < max_arenas; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
     if (arena == NULL) break;
-    _mi_verbose_message("arena %zu: %zu blocks of size %zuMiB (in %zu fields) %s\n", i, arena->block_count, MI_ARENA_BLOCK_SIZE / MI_MiB, arena->field_count, (arena->memid.is_pinned ? ", pinned" : ""));
+    _mi_message("arena %zu: %zu blocks of size %zuMiB (in %zu fields) %s\n", i, arena->block_count, MI_ARENA_BLOCK_SIZE / MI_MiB, arena->field_count, (arena->memid.is_pinned ? ", pinned" : ""));
     if (show_inuse) {
       inuse_total += mi_debug_show_bitmap("  ", "inuse blocks", arena->block_count, arena->blocks_inuse, arena->field_count);
     }
@@ -951,9 +951,9 @@ void mi_debug_show_arenas(void) mi_attr_noexcept {
     //  purge_total += mi_debug_show_bitmap("  ", "purgeable blocks", arena->block_count, arena->blocks_purge, arena->field_count);
     //}
   }
-  if (show_inuse)     _mi_verbose_message("total inuse blocks    : %zu\n", inuse_total);
-  //if (show_abandoned) _mi_verbose_message("total abandoned blocks: %zu\n", abandoned_total);
-  //if (show_purge)     _mi_verbose_message("total purgeable blocks: %zu\n", purge_total);
+  if (show_inuse)     _mi_message("total inuse blocks    : %zu\n", inuse_total);
+  //if (show_abandoned) _mi_message("total abandoned blocks: %zu\n", abandoned_total);
+  //if (show_purge)     _mi_message("total purgeable blocks: %zu\n", purge_total);
 }
 
 
