@@ -188,7 +188,7 @@ void _mi_options_init(void) {
     }
   }
   #endif
-  if (!mi_option_is_enabled(mi_option_verbose)) { mi_options_print(); }
+  if (mi_option_is_enabled(mi_option_verbose)) { mi_options_print(); }
 }
 
 #define mi_stringifyx(str)  #str                // and stringify
