@@ -697,7 +697,7 @@ Support NUMA aware allocation
 static _Atomic(int)  _mi_numa_node_count; // = 0   // cache the node count
 
 int _mi_os_numa_node_count(void) {
-  size_t count = mi_atomic_load_acquire(&_mi_numa_node_count);
+  int count = mi_atomic_load_acquire(&_mi_numa_node_count);
   if mi_unlikely(count <= 0) {
     long ncount = mi_option_get(mi_option_use_numa_nodes); // given explicitly?
     if (ncount > 0 && ncount < INT_MAX) {
