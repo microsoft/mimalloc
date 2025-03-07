@@ -454,7 +454,7 @@ if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
 endif()
 
 if(MINGW)
-  add_definitions(-D_WIN32_WINNT=0x601)                # issue #976
+  add_definitions(-D_WIN32_WINNT=0x600)                # issue #976
 endif()
 
 if(MI_OPT_ARCH_FLAGS)
