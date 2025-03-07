@@ -94,12 +94,12 @@ void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount) {
 // must be thread safe as it is called from stats_merge
 static void mi_stat_count_add(mi_stat_count_t* stat, const mi_stat_count_t* src) {
   if (stat==src) return;
-  if (src->total!=0)   { mi_atomic_addi64_relaxed(&stat->total, src->total); }
-  if (src->current!=0) { mi_atomic_addi64_relaxed(&stat->current, src->current); }
-  // peak scores do really not work across threads ... we use conservative max
-  if (src->peak > stat->peak) {
-    mi_atomic_maxi64_relaxed(&stat->peak, src->peak); // or: mi_atomic_addi64_relaxed( &stat->peak, src->peak);
-  }
+  mi_atomic_void_addi64_relaxed(&stat->total, src->total); 
+  mi_atomic_void_addi64_relaxed(&stat->current, src->current); 
+  // peak scores do really not work across threads .. we just add them
+  mi_atomic_void_addi64_relaxed( &stat->peak, src->peak);
+  // or, take the max?
+  // mi_atomic_maxi64_relaxed(&stat->peak, src->peak);
 }
 
 static void mi_stat_counter_add(mi_stat_counter_t* stat, const mi_stat_counter_t* src) {
