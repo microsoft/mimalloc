@@ -18,6 +18,8 @@ vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
     guarded     MI_GUARDED
     secure      MI_SECURE
     override    MI_OVERRIDE
+    optarch     MI_OPT_ARCH
+    optsimd     MI_OPT_SIMD
     xmalloc     MI_XMALLOC
     asm         MI_SEE_ASM
 )
@@ -26,16 +28,14 @@ string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" MI_BUILD_SHARED)
 
 vcpkg_cmake_configure(
   SOURCE_PATH "${SOURCE_PATH}"
-  OPTIONS_RELEASE
-    -DMI_OPT_ARCH=ON
   OPTIONS
     -DMI_USE_CXX=ON
     -DMI_BUILD_TESTS=OFF
     -DMI_BUILD_OBJECT=ON
-    ${FEATURE_OPTIONS}
     -DMI_BUILD_STATIC=${MI_BUILD_STATIC}
     -DMI_BUILD_SHARED=${MI_BUILD_SHARED}
     -DMI_INSTALL_TOPLEVEL=ON
+    ${FEATURE_OPTIONS}
 )
 
 vcpkg_cmake_install()
