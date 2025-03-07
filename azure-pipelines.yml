@@ -32,7 +32,7 @@ jobs:
         MSBuildConfiguration: Release
       Release SIMD:
         BuildType: release-simd
-        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_OPT_SIMD=ON -DMI_WIN_USE_FIXED_TLS=ON
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_OPT_SIMD=ON -DMI_WIN_USE_FIXED_TLS=ON
         MSBuildConfiguration: Release
       Secure:
         BuildType: secure
@@ -97,7 +97,7 @@ jobs:
         CC: clang
         CXX: clang++
         BuildType: release-simd-clang
-        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_OPT_SIMD=ON
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_OPT_SIMD=ON
       Secure Clang:
         CC: clang
         CXX: clang++
@@ -159,7 +159,7 @@ jobs:
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
       Release SIMD:
         BuildType: release-simd
-        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_OPT_SIMD=ON
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_OPT_SIMD=ON
       Secure:
         BuildType: secure
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
