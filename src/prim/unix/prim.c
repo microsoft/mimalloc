@@ -62,7 +62,14 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/syscall.h>
 #endif
 
+#if !defined(MADV_DONTNEED) && defined(POSIX_MADV_DONTNEED)  // QNX
+#define MADV_DONTNEED  POSIX_MADV_DONTNEED
+#endif
+#if !defined(MADV_FREE) && defined(POSIX_MADV_FREE)  // QNX
+#define MADV_FREE  POSIX_MADV_FREE
+#endif
 
+  
 //------------------------------------------------------------------------------------
 // Use syscalls for some primitives to allow for libraries that override open/read/close etc.
 // and do allocation themselves; using syscalls prevents recursion when mimalloc is
@@ -190,6 +197,8 @@ int _mi_prim_free(void* addr, size_t size ) {
 static int unix_madvise(void* addr, size_t size, int advice) {
   #if defined(__sun)
   int res = madvise((caddr_t)addr, size, advice);  // Solaris needs cast (issue #520)
+  #elif defined(__QNX__)
+  int res = posix_madvise(addr, size, advice);
   #else
   int res = madvise(addr, size, advice);
   #endif
