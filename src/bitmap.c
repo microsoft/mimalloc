@@ -1557,7 +1557,7 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
   mi_assert_internal(MI_BFIELD_BITS >= MI_BCHUNK_FIELDS);
   const mi_bfield_t cmap_mask  = mi_bfield_mask(cmap_max_count,0);
   const size_t cmap_cycle      = cmap_acc+1;
-  const mi_bbin_t bbin = mi_bbin_of(n);
+  const mi_bbin_t bbin = mi_bbin_of(n); 
   // visit each cmap entry
   size_t cmap_idx = 0;
   mi_bfield_cycle_iterate(cmap_mask, tseq, cmap_cycle, cmap_idx, X)
@@ -1576,11 +1576,15 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
       cmap_bins[MI_BBIN_NONE] &= ~cmap_bin;      // clear bits that are in an assigned size bin
     }
 
-    // consider only chunks for a particular size bin at a time
+    // consider only chunks for a particular size bin at a time    
+    // this picks the best bin only within a cmap entry (~ 1GiB address space), but avoids multiple
+    // iterations through all entries.
+    mi_assert_internal(bbin < MI_BBIN_NONE);
     for (mi_bbin_t ibin = MI_BBIN_SMALL; ibin <= MI_BBIN_NONE;
           // skip from bbin to NONE (so, say, a SMALL will never be placed in a OTHER, MEDIUM, or LARGE chunk to reduce fragmentation)
           ibin = (ibin == bbin ? MI_BBIN_NONE : mi_bbin_inc(ibin)))
     {
+      mi_assert_internal(ibin < MI_BBIN_COUNT);
       const mi_bfield_t cmap_bin = cmap_bins[ibin];      
       size_t eidx = 0;
       mi_bfield_cycle_iterate(cmap_bin, tseq, cmap_entry_cycle, eidx, Y)  
@@ -1603,7 +1607,8 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
           return true;
         }
         else {
-          /* we may find that all are cleared only on a second iteration but that is ok as the chunkmap is a conservative approximation. */
+          // todo: should _on_find_ return a boolen if there is a chance all are clear to avoid calling `try_clear?`
+          // we may find that all are cleared only on a second iteration but that is ok as the chunkmap is a conservative approximation.
           mi_bbitmap_chunkmap_try_clear(bbitmap, chunk_idx);
         }
       }

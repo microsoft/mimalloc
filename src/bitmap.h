@@ -248,7 +248,7 @@ typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bbitmap_s {
   _Atomic(size_t)  chunk_max_accessed;  // max chunk index that was once cleared or set
   size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc
   mi_bchunkmap_t   chunkmap;                                    
-  mi_bchunkmap_t   chunkmap_bins[MI_BBIN_COUNT - 1];             // chunkmaps with bit set if the chunk is in that size class (except MI_BBIN_NONE)  
+  mi_bchunkmap_t   chunkmap_bins[MI_BBIN_COUNT - 1];             // chunkmaps with bit set if the chunk is in that size class (excluding MI_BBIN_NONE)  
   mi_bchunk_t      chunks[MI_BITMAP_DEFAULT_CHUNK_COUNT];        // usually dynamic MI_BITMAP_MAX_CHUNK_COUNT
 } mi_bbitmap_t;
 
