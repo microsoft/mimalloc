@@ -62,7 +62,14 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/syscall.h>
 #endif
 
+#if !defined(MADV_DONTNEED) && defined(POSIX_MADV_DONTNEED)  // QNX
+#define MADV_DONTNEED  POSIX_MADV_DONTNEED
+#endif
+#if !defined(MADV_FREE) && defined(POSIX_MADV_FREE)  // QNX
+#define MADV_FREE  POSIX_MADV_FREE
+#endif
 
+  
 //------------------------------------------------------------------------------------
 // Use syscalls for some primitives to allow for libraries that override open/read/close etc.
 // and do allocation themselves; using syscalls prevents recursion when mimalloc is
@@ -413,11 +420,7 @@ int _mi_prim_commit(void* start, size_t size, bool* is_zero) {
 int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   int err = 0;
   // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
-  #if defined(__QNX__)
-  err = posix_madvise(start, size, POSIX_MADV_DONTNEED);
-  #else
   err = unix_madvise(start, size, MADV_DONTNEED);
-  #endif
   #if !MI_DEBUG && !MI_SECURE
     *needs_recommit = false;
   #else
@@ -449,8 +452,6 @@ int _mi_prim_reset(void* start, size_t size) {
     mi_atomic_store_release(&advice, (size_t)MADV_DONTNEED);
     err = unix_madvise(start, size, MADV_DONTNEED);
   }
-  #elif defined(__QNX__)
-  int err = posix_madvise(start, size, POSIX_MADV_DONTNEED);
   #else
   int err = unix_madvise(start, size, MADV_DONTNEED);
   #endif
