@@ -63,23 +63,23 @@ void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
 
 
 // must be thread safe as it is called from stats_merge
-static void mi_stat_count_add(mi_stat_count_t* stat, const mi_stat_count_t* src) {
+static void mi_stat_count_add_mt(mi_stat_count_t* stat, const mi_stat_count_t* src) {
   if (stat==src) return;
-  mi_atomic_void_addi64_relaxed(&stat->total, src->total); 
-  mi_atomic_void_addi64_relaxed(&stat->current, src->current); 
+  mi_atomic_void_addi64_relaxed(&stat->total, &src->total); 
+  mi_atomic_void_addi64_relaxed(&stat->current, &src->current); 
   // peak scores do really not work across threads .. we just add them
-  mi_atomic_void_addi64_relaxed( &stat->peak, src->peak);
+  mi_atomic_void_addi64_relaxed( &stat->peak, &src->peak);
   // or, take the max?
   // mi_atomic_maxi64_relaxed(&stat->peak, src->peak);
 }
 
-static void mi_stat_counter_add(mi_stat_counter_t* stat, const mi_stat_counter_t* src) {
+static void mi_stat_counter_add_mt(mi_stat_counter_t* stat, const mi_stat_counter_t* src) {
   if (stat==src) return;
-  if (src->total!=0) { mi_atomic_addi64_relaxed(&stat->total, src->total); }
+  mi_atomic_void_addi64_relaxed(&stat->total, &src->total);
 }
 
-#define MI_STAT_COUNT(stat)    mi_stat_count_add(&stats->stat, &src->stat);
-#define MI_STAT_COUNTER(stat)  mi_stat_counter_add(&stats->stat, &src->stat);
+#define MI_STAT_COUNT(stat)    mi_stat_count_add_mt(&stats->stat, &src->stat);
+#define MI_STAT_COUNTER(stat)  mi_stat_counter_add_mt(&stats->stat, &src->stat);
 
 // must be thread safe as it is called from stats_merge
 static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
@@ -90,11 +90,11 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
 
   #if MI_STAT>1
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
-    mi_stat_count_add(&stats->malloc_bins[i], &src->malloc_bins[i]);
+    mi_stat_count_add_mt(&stats->malloc_bins[i], &src->malloc_bins[i]);
   }
   #endif
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
-    mi_stat_count_add(&stats->page_bins[i], &src->page_bins[i]);    
+    mi_stat_count_add_mt(&stats->page_bins[i], &src->page_bins[i]);    
   }  
 }
 
@@ -289,8 +289,8 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_print(&stats->malloc_normal, "normal", (stats->malloc_normal_count.total == 0 ? 1 : -1), out, arg);
   mi_stat_print(&stats->malloc_huge, "huge", (stats->malloc_huge_count.total == 0 ? 1 : -1), out, arg);
   mi_stat_count_t total = { 0,0,0 };
-  mi_stat_count_add(&total, &stats->malloc_normal);
-  mi_stat_count_add(&total, &stats->malloc_huge);
+  mi_stat_count_add_mt(&total, &stats->malloc_normal);
+  mi_stat_count_add_mt(&total, &stats->malloc_huge);
   mi_stat_print_ex(&total, "total", 1, out, arg, "");
   #endif
   #if MI_STAT>1
