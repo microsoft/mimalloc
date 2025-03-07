@@ -14,8 +14,7 @@ option(MI_XMALLOC           "Enable abort() call on memory allocation failure by
 option(MI_SHOW_ERRORS       "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
 option(MI_GUARDED           "Build with guard pages behind certain object allocations (implies MI_NO_PADDING=ON)" OFF)
 option(MI_USE_CXX           "Use the C++ compiler to compile the library (instead of the C compiler)" OFF)
-
-option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.1-a' (2016))" ON)
+option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.1-a' (2016))" OFF)
 option(MI_OPT_SIMD          "Use SIMD instructions (requires MI_OPT_ARCH to be enabled)" OFF)
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
@@ -125,9 +124,44 @@ if("${CMAKE_BINARY_DIR}" MATCHES ".*(S|s)ecure$")
   set(MI_SECURE "ON")
 endif()
 
+
+# Determine architecture
+set(MI_OPT_ARCH_FLAGS "")
+set(MI_ARCH "unknown")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86|i[3456]86)$" OR CMAKE_GENERATOR_PLATFORM MATCHES "^(x86|Win32)$")
+  set(MI_ARCH "x86")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|x64|amd64|AMD64)$" OR CMAKE_GENERATOR_PLATFORM STREQUAL "x64" OR "x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES) # must be before arm64
+  set(MI_ARCH "x64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|armv[89].?|ARM64)$" OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64" OR "arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
+  set(MI_ARCH "arm64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm|armv[34567]|ARM)$")
+  set(MI_ARCH "arm32")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(riscv|riscv32|riscv64)$")
+  if(CMAKE_SIZEOF_VOID_P==4)
+    set(MI_ARCH "riscv32")
+  else()
+    set(MI_ARCH "riscv64")
+  endif()
+else()
+  set(MI_ARCH ${CMAKE_SYSTEM_PROCESSOR})
+endif()
+message(STATUS "Architecture: ${MI_ARCH}") # (${CMAKE_SYSTEM_PROCESSOR}, ${CMAKE_GENERATOR_PLATFORM}, ${CMAKE_GENERATOR})")
+
+# negative overrides (mainly to support vcpkg features)
+if(MI_NO_USE_CXX)
+  set(MI_USE_CXX "OFF")
+endif()
+if(MI_NO_OPT_ARCH)
+  set(MI_OPT_ARCH "OFF")
+elseif(MI_ARCH STREQUAL "arm64")
+  set(MI_OPT_ARCH "ON")  # enable armv8.1-a by default on arm64 unless MI_NO_OPT_ARCH is set
+endif()
+
+
 # -----------------------------------------------------------------------------
 # Process options
 # -----------------------------------------------------------------------------
+
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
   set(MI_CLANG_CL "ON")
 endif()
@@ -147,30 +181,14 @@ if(CMAKE_C_COMPILER_ID MATCHES "Intel")
     list(APPEND mi_cflags -Wall)
 endif()
 
-# negative overrides (mainly to support vcpkg features)
-if(MI_NO_USE_CXX)
-  set(MI_USE_CXX "OFF")
-endif()
-if(MI_NO_OPT_ARCH)
-  set(MI_OPT_ARCH "OFF")
-endif()
-
 if(MSVC)
-    add_compile_options(/std:c++20)
+  add_compile_options(/std:c++20)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    add_compile_options(-std=c++20)
+  add_compile_options(-std=c++20)
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
-endif()
-
-if(CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo")
-  if (NOT MI_OPT_ARCH)
-    message(STATUS "Architecture specific optimizations are disabled (MI_OPT_ARCH=OFF)")
-  endif()
-#else()
-#  set(MI_OPT_ARCH OFF)
 endif()
 
 if(MI_OVERRIDE)
@@ -397,28 +415,6 @@ if(MI_WIN_USE_FIXED_TLS)
   list(APPEND mi_defines MI_WIN_USE_FIXED_TLS=1)
 endif()
 
-# Determine architecture
-set(MI_OPT_ARCH_FLAGS "")
-set(MI_ARCH "unknown")
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86|i[3456]86)$" OR CMAKE_GENERATOR_PLATFORM MATCHES "^(x86|Win32)$")
-  set(MI_ARCH "x86")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|x64|amd64|AMD64)$" OR CMAKE_GENERATOR_PLATFORM STREQUAL "x64" OR "x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES) # must be before arm64
-  set(MI_ARCH "x64")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|armv[89].?|ARM64)$" OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64" OR "arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
-  set(MI_ARCH "arm64")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm|armv[34567]|ARM)$")
-  set(MI_ARCH "arm32")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(riscv|riscv32|riscv64)$")
-  if(CMAKE_SIZEOF_VOID_P==4)
-    set(MI_ARCH "riscv32")
-  else()
-    set(MI_ARCH "riscv64")
-  endif()
-else()
-  set(MI_ARCH ${CMAKE_SYSTEM_PROCESSOR})
-endif()
-message(STATUS "Architecture: ${MI_ARCH}") # (${CMAKE_SYSTEM_PROCESSOR}, ${CMAKE_GENERATOR_PLATFORM}, ${CMAKE_GENERATOR})")
-
 # Check /proc/cpuinfo for an SV39 MMU and limit the virtual address bits.
 # (this will skip the aligned hinting in that case. Issue #939, #949)
 if (EXISTS /proc/cpuinfo)
@@ -475,7 +471,6 @@ endif()
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
   if(MI_OPT_ARCH)
     if(APPLE AND CMAKE_C_COMPILER_ID STREQUAL "AppleClang" AND CMAKE_OSX_ARCHITECTURES)   # to support multi-arch binaries (#999)
-      set(MI_OPT_ARCH_FLAGS "")
       if("arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
         list(APPEND MI_OPT_ARCH_FLAGS "-Xarch_arm64;-march=armv8.1-a")
       endif()
@@ -502,7 +497,7 @@ if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914) # vs2017+
 endif()
 
 if(MINGW)
-  add_definitions(-D_WIN32_WINNT=0x601)                # issue #976
+  add_definitions(-D_WIN32_WINNT=0x600)                # issue #976
 endif()
 
 if(MI_OPT_ARCH_FLAGS)

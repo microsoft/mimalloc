@@ -104,6 +104,7 @@ static mi_decl_cache_align mi_subproc_t subproc_main
 static mi_decl_cache_align mi_tld_t tld_empty = {
   0,                      // thread_id
   0,                      // thread_seq
+  0,                      // default numa node
   &subproc_main,          // subproc
   NULL,                   // heap_backing
   NULL,                   // heaps list
@@ -117,6 +118,7 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
 mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   &tld_empty,             // tld
   NULL,                   // exclusive_arena
+  0,                      // preferred numa node
   0,                      // cookie
   //{ 0, 0 },               // keys
   { {0}, {0}, 0, true },  // random
@@ -141,6 +143,7 @@ extern mi_decl_hidden mi_decl_cache_align mi_heap_t heap_main;
 static mi_decl_cache_align mi_tld_t tld_main = {
   0,                      // thread_id
   0,                      // thread_seq
+  0,                      // numa node
   &subproc_main,          // subproc
   &heap_main,             // heap_backing
   &heap_main,             // heaps list
@@ -154,6 +157,7 @@ static mi_decl_cache_align mi_tld_t tld_main = {
 mi_decl_cache_align mi_heap_t heap_main = {
   &tld_main,              // thread local data
   NULL,                   // exclusive arena
+  0,                      // preferred numa node
   0,                      // initial cookie
   //{ 0, 0 },               // the key of the main heap can be fixed (unlike page keys that need to be secure!)
   { {0x846ca68b}, {0}, 0, true },  // random
@@ -306,6 +310,7 @@ static mi_tld_t* mi_tld_alloc(void) {
     tld->heap_backing = NULL;
     tld->heaps = NULL;
     tld->subproc = &subproc_main;
+    tld->numa_node = _mi_os_numa_node();
     tld->thread_id = _mi_prim_thread_id();
     tld->thread_seq = mi_atomic_add_acq_rel(&thread_total_count, 1);
     tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
@@ -647,24 +652,51 @@ void _mi_process_load(void) {
   _mi_random_reinit_if_weak(&heap_main.random);
 }
 
-#if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
-#include <intrin.h>
+// CPU features
 mi_decl_cache_align bool _mi_cpu_has_fsrm = false;
 mi_decl_cache_align bool _mi_cpu_has_erms = false;
+mi_decl_cache_align bool _mi_cpu_has_popcnt = false;
+
+#if (MI_ARCH_X64 || MI_ARCH_X86)
+#if defined(__GNUC__)
+#include <cpuid.h>
+static bool mi_cpuid(uint32_t* regs4, uint32_t level) {
+  return (__get_cpuid(level, &regs4[0], &regs4[1], &regs4[2], &regs4[3]) == 1);
+}
+
+#elif defined(_MSC_VER)
+static bool mi_cpuid(uint32_t* regs4, uint32_t level) {
+  __cpuid((int32_t*)regs4, (int32_t)level);
+  return true;
+}
+#else
+static bool mi_cpuid(uint32_t* regs4, uint32_t level) {
+  MI_UNUSED(regs4); MI_UNUSED(level);
+  return false;
+}
+#endif
 
 static void mi_detect_cpu_features(void) {
   // FSRM for fast short rep movsb/stosb support (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017))
   // EMRS for fast enhanced rep movsb/stosb support
-  int32_t cpu_info[4];
-  __cpuid(cpu_info, 7);
-  _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
-  _mi_cpu_has_erms = ((cpu_info[2] & (1 << 9)) != 0); // bit 9 of ECX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+  uint32_t cpu_info[4];
+  if (mi_cpuid(cpu_info, 7)) {
+    _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+    _mi_cpu_has_erms = ((cpu_info[1] & (1 << 9)) != 0); // bit 9 of EBX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+  }
+  if (mi_cpuid(cpu_info, 1)) {
+    _mi_cpu_has_popcnt = ((cpu_info[2] & (1 << 23)) != 0); // bit 23 of ECX : see <https://en.wikipedia.org/wiki/CPUID#EAX=1:_Processor_Info_and_Feature_Bits>
+  }
 }
+
 #else
 static void mi_detect_cpu_features(void) {
-  // nothing
+  #if MI_ARCH_ARM64
+  _mi_cpu_has_popcnt = true;
+  #endif
 }
 #endif
+
 
 // Initialize the process; called by thread_init or the process loader
 void mi_process_init(void) mi_attr_noexcept {
@@ -685,15 +717,6 @@ void mi_process_init(void) mi_attr_noexcept {
   // the following two can potentially allocate (on freeBSD for locks and thread keys)
   mi_subproc_main_init();
   mi_process_setup_auto_thread_done();
-
-  #if MI_DEBUG
-  _mi_verbose_message("debug level : %d\n", MI_DEBUG);
-  #endif
-  _mi_verbose_message("secure level: %d\n", MI_SECURE);
-  _mi_verbose_message("mem tracking: %s\n", MI_TRACK_TOOL);
-  #if MI_TSAN
-  _mi_verbose_message("thread santizer enabled\n");
-  #endif
   mi_thread_init();
 
   #if defined(_WIN32) && defined(MI_WIN_USE_FLS)

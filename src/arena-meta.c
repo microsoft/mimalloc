@@ -64,11 +64,11 @@ static void* mi_meta_block_start( mi_meta_page_t* mpage, size_t block_idx ) {
 // allocate a fresh meta page and add it to the global list.
 static mi_meta_page_t* mi_meta_page_zalloc(void) {
   // allocate a fresh arena slice
-  // note: careful with _mi_subproc as it may recurse into mi_tld and meta_page_zalloc again..
+  // note: careful with _mi_subproc as it may recurse into mi_tld and meta_page_zalloc again.. (same with _mi_os_numa_node()...)
   mi_memid_t memid;
   uint8_t* base = (uint8_t*)_mi_arenas_alloc_aligned(_mi_subproc(), MI_META_PAGE_SIZE, MI_META_PAGE_ALIGN, 0,
                                                                     true /* commit*/, (MI_SECURE==0) /* allow large? */,
-                                                                    NULL /* req arena */, 0 /* thread_seq */, &memid);
+                                                                    NULL /* req arena */, 0 /* thread_seq */, -1 /* numa node */, &memid);
   if (base == NULL) return NULL;
   mi_assert_internal(_mi_is_aligned(base,MI_META_PAGE_ALIGN));
   if (!memid.initially_zero) {

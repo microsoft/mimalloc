@@ -175,7 +175,7 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0,   UNINIT, MI_OPTION(max_vabits) },               // max virtual address space bits
   { MI_DEFAULT_PAGEMAP_COMMIT,
          UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
-  { 0,   UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
+  { 1,   UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
   { 16,  UNINIT, MI_OPTION(page_reclaim_max) },         // don't reclaim pages if we already own N pages (in that size class)
 };
 

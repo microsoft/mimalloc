@@ -182,12 +182,13 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool allow_destroy, 
   mi_memid_t memid = heap->memid;
   _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(mi_heap_t));
   heap->memid = memid;
-  heap->tld        = tld;  // avoid reading the thread-local tld during initialization
+  heap->tld   = tld;  // avoid reading the thread-local tld during initialization
+  heap->tag   = heap_tag;
+  heap->numa_node = tld->numa_node;
   heap->exclusive_arena    = _mi_arena_from_id(arena_id);
   heap->allow_page_reclaim = (!allow_destroy && mi_option_get(mi_option_page_reclaim_on_free) >= 0);
   heap->allow_page_abandon = (!allow_destroy && mi_option_get(mi_option_page_full_retain) >= 0);
   heap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
-  heap->tag        = heap_tag;
   if (heap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our heap.
     // this is checked in `free.c:mi_free_try_collect_mt`
@@ -227,7 +228,7 @@ mi_heap_t* _mi_heap_create(int heap_tag, bool allow_destroy, mi_arena_id_t arena
   else {
     // heaps associated wita a specific arena are allocated in that arena
     // note: takes up at least one slice which is quite wasteful...
-    heap = (mi_heap_t*)_mi_arenas_alloc(_mi_subproc(), _mi_align_up(sizeof(mi_heap_t),MI_ARENA_MIN_OBJ_SIZE), true, true, _mi_arena_from_id(arena_id), tld->thread_seq, &memid);
+    heap = (mi_heap_t*)_mi_arenas_alloc(_mi_subproc(), _mi_align_up(sizeof(mi_heap_t),MI_ARENA_MIN_OBJ_SIZE), true, true, _mi_arena_from_id(arena_id), tld->thread_seq, tld->numa_node, &memid);
   }
   if (heap==NULL) {
     _mi_error_message(ENOMEM, "unable to allocate heap meta-data\n");
@@ -259,6 +260,11 @@ bool _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid) {
 
 uintptr_t _mi_heap_random_next(mi_heap_t* heap) {
   return _mi_random_next(&heap->random);
+}
+
+void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node) {
+  if (heap == NULL) return;
+  heap->numa_node = (numa_node < 0 ? -1 : numa_node % _mi_os_numa_node_count());
 }
 
 // zero out the page queues

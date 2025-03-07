@@ -343,10 +343,10 @@ typedef struct mi_page_s {
 // The max object size are checked to not waste more than 12.5% internally over the page sizes.
 #define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)   // < ~8 KiB
 #if MI_ENABLE_LARGE_PAGES
-#define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)  // < 64 KiB
+#define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_INFO_SIZE)/8)  // < ~64 KiB
 #define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/8)    // <= 512KiB // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
 #else
-#define MI_MEDIUM_MAX_OBJ_SIZE            (MI_MEDIUM_PAGE_SIZE/4)   // <= 128 KiB
+#define MI_MEDIUM_MAX_OBJ_SIZE            (MI_MEDIUM_PAGE_SIZE/8)   // <= 64 KiB
 #define MI_LARGE_MAX_OBJ_SIZE             MI_MEDIUM_MAX_OBJ_SIZE    // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
 #endif
 #define MI_LARGE_MAX_OBJ_WSIZE            (MI_LARGE_MAX_OBJ_SIZE/MI_SIZE_SIZE)
@@ -424,6 +424,7 @@ typedef struct mi_padding_s {
 struct mi_heap_s {
   mi_tld_t*             tld;                                 // thread-local data
   mi_arena_t*           exclusive_arena;                     // if the heap should only allocate from a specific arena (or NULL)
+  int                   numa_node;                           // preferred numa node (or -1 for no preference)
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   mi_random_ctx_t       random;                              // random number context used for secure allocation
   size_t                page_count;                          // total number of pages in the `pages` queues.
@@ -485,6 +486,7 @@ typedef int64_t  mi_msecs_t;
 struct mi_tld_s {
   mi_threadid_t         thread_id;            // thread id of this thread
   size_t                thread_seq;           // thread sequence id (linear count of created threads)
+  int                   numa_node;            // thread preferred numa node
   mi_subproc_t*         subproc;              // sub-process this thread belongs to.
   mi_heap_t*            heap_backing;         // backing heap of this thread (cannot be deleted)
   mi_heap_t*            heaps;                // list of heaps in this thread (so we can abandon all when the thread terminates)
