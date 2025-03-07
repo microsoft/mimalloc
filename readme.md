@@ -12,7 +12,7 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.0.2` (beta) (2025-03-06)
+Latest release   : `v3.0.2` (beta) (2025-03-06).  
 Latest v2 release: `v2.2.2` (2025-03-06).  
 Latest v1 release: `v1.9.2` (2024-03-06).
 
@@ -87,12 +87,13 @@ Enjoy!
 * 2025-03-06, `v1.9.2`, `v2.2.2`, `v3.0.2-beta`: Various small bug and build fixes. 
   Add `mi_options_print`, `mi_arenas_print`, and the experimental `mi_stat_get` and `mi_stat_get_json`. 
   Add `mi_thread_set_in_threadpool` and `mi_heap_set_numa_affinity` (v3 only). Add vcpkg portfile. 
-  On Windows, use `mimalloc.lib` for the static library, and `mimalloc.dll` for the dynamic override (which used to be `mimalloc-override.dll`) -- and use `mimalloc-dll.lib` for the export library of `mimalloc.dll`. Upgrade redirect to v1.3.2.  
+  Upgrade mimalloc-redirect to v1.3.2. `MI_OPT_ARCH` is off by default now but still assumes armv8.1-a on arm64
+  for fast atomic operations.
 * 2025-01-03, `v1.8.9`, `v2.1.9`, `v3.0.1-alpha`: Interim release. Support Windows arm64. New [guarded](#guarded) build that can place OS 
   guard pages behind objects to catch buffer overflows as they occur. 
   Many small fixes: build on Windows arm64, cygwin, riscV, and dragonfly; fix Windows static library initialization to account for
   thread local destructors (in Rust/C++); macOS tag change; macOS TLS slot fix; improve stats; 
-  consistent mimalloc.dll on Windows (instead of mimalloc-override.dll); fix mimalloc-redirect on Win11 H2; 
+  consistent `mimalloc.dll` on Windows (instead of `mimalloc-override.dll`); fix mimalloc-redirect on Win11 H2; 
   add 0-byte to canary; upstream CPython fixes; reduce .bss size; allow fixed TLS slot on Windows for improved performance.
 * 2024-05-21, `v1.8.7`, `v2.1.7`: Fix build issues on less common platforms. Started upstreaming patches
   from the CPython [integration](https://github.com/python/cpython/issues/113141#issuecomment-2119255217). Upstream `vcpkg` patches.
