@@ -355,7 +355,6 @@ size_t _mi_clz_generic(size_t x) {
 
 #endif // bit scan
 
-#if !MI_HAS_FAST_POPCOUNT
 
 #if MI_SIZE_SIZE == 4
 #define mi_mask_even_bits32      (0x55555555)
@@ -383,7 +382,7 @@ static size_t mi_popcount_generic32(uint32_t x) {
   return mi_byte_sum32(x);
 }
 
-size_t _mi_popcount_generic(size_t x) {
+mi_decl_noinline size_t _mi_popcount_generic(size_t x) {
   return mi_popcount_generic32(x);
 }
 
@@ -407,9 +406,8 @@ static size_t mi_popcount_generic64(uint64_t x) {
   return mi_byte_sum64(x);
 }
 
-size_t _mi_popcount_generic(size_t x) {
+mi_decl_noinline size_t _mi_popcount_generic(size_t x) {
   return mi_popcount_generic64(x);
 }
 #endif
 
-#endif // popcount

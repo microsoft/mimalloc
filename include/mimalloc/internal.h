@@ -256,25 +256,6 @@ bool          _mi_page_is_valid(mi_page_t* page);
 #endif
 
 
-// ------------------------------------------------------
-// Branches
-// ------------------------------------------------------
-
-#if defined(__GNUC__) || defined(__clang__)
-#define mi_unlikely(x)     (__builtin_expect(!!(x),false))
-#define mi_likely(x)       (__builtin_expect(!!(x),true))
-#elif (defined(__cplusplus) && (__cplusplus >= 202002L)) || (defined(_MSVC_LANG) && _MSVC_LANG >= 202002L)
-#define mi_unlikely(x)     (x) [[unlikely]]
-#define mi_likely(x)       (x) [[likely]]
-#else
-#define mi_unlikely(x)     (x)
-#define mi_likely(x)       (x)
-#endif
-
-#ifndef __has_builtin
-#define __has_builtin(x)  0
-#endif
-
 
 /* -----------------------------------------------------------
   Assertions
@@ -1037,10 +1018,10 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
 // (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017). See also issue #201 and pr #253.
 // ---------------------------------------------------------------------------------
 
-#if !MI_TRACK_ENABLED && defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
-#include <intrin.h>
+#if !MI_TRACK_ENABLED && defined(_WIN32) && (MI_ARCH_X64 || MI_ARCH_X86)
 extern bool _mi_cpu_has_fsrm;
 extern bool _mi_cpu_has_erms;
+
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
   if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
     __movsb((unsigned char*)dst, (const unsigned char*)src, n);

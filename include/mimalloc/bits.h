@@ -90,7 +90,7 @@ typedef int32_t  mi_ssize_t;
 #endif
 #endif
 
-#if MI_ARCH_X64 && defined(__AVX2__)
+#if (MI_ARCH_X86 || MI_ARCH_X64)
 #include <immintrin.h>
 #elif MI_ARCH_ARM64 && MI_OPT_SIMD
 #include <arm_neon.h>
@@ -134,6 +134,18 @@ typedef int32_t  mi_ssize_t;
   Builtin's
 -------------------------------------------------------------------------------- */
 
+#if defined(__GNUC__) || defined(__clang__)
+#define mi_unlikely(x)     (__builtin_expect(!!(x),false))
+#define mi_likely(x)       (__builtin_expect(!!(x),true))
+#elif (defined(__cplusplus) && (__cplusplus >= 202002L)) || (defined(_MSVC_LANG) && _MSVC_LANG >= 202002L)
+#define mi_unlikely(x)     (x) [[unlikely]]
+#define mi_likely(x)       (x) [[likely]]
+#else
+#define mi_unlikely(x)     (x)
+#define mi_likely(x)       (x)
+#endif
+
+
 #ifndef __has_builtin
 #define __has_builtin(x)  0
 #endif
@@ -171,14 +183,25 @@ typedef int32_t  mi_ssize_t;
 -------------------------------------------------------------------------------- */
 
 size_t _mi_popcount_generic(size_t x);
+extern bool _mi_cpu_has_popcnt;
 
 static inline size_t mi_popcount(size_t x) {
-  #if mi_has_builtinz(popcount)
+  #if defined(__GNUC__) && (MI_ARCH_X64 || MI_ARCH_X86)
+    #if !defined(__BMI1__)
+    if mi_unlikely(!_mi_cpu_has_popcnt) { return _mi_popcount_generic(x); }
+    #endif
+    size_t r;
+    __asm ("popcnt\t%1,%0" : "=r"(r) : "r"(x) : "cc");
+    return r;
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86)
+    #if !defined(__BMI1__)
+    if mi_unlikely(!_mi_cpu_has_popcnt) { return _mi_popcount_generic(x); }
+    #endif
+    return (size_t)mi_msc_builtinz(__popcnt)(x);
+  #elif defined(_MSC_VER) && MI_ARCH_ARM64
+    return (size_t)mi_msc_builtinz(__popcnt)(x);
+  #elif mi_has_builtinz(popcount)
     return mi_builtinz(popcount)(x);
-  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    return mi_msc_builtinz(__popcnt)(x);
-  #elif MI_ARCH_X64 && defined(__BMI1__)
-    return (size_t)_mm_popcnt_u64(x);
   #else
     #define MI_HAS_FAST_POPCOUNT  0
     return (x<=1 ? x : _mi_popcount_generic(x));

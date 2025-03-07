@@ -652,24 +652,51 @@ void _mi_process_load(void) {
   _mi_random_reinit_if_weak(&heap_main.random);
 }
 
-#if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
-#include <intrin.h>
+// CPU features
 mi_decl_cache_align bool _mi_cpu_has_fsrm = false;
 mi_decl_cache_align bool _mi_cpu_has_erms = false;
+mi_decl_cache_align bool _mi_cpu_has_popcnt = false;
+
+#if (MI_ARCH_X64 || MI_ARCH_X86)
+#if defined(__GNUC__)
+#include <cpuid.h>
+static bool mi_cpuid(uint32_t* regs4, uint32_t level) {
+  return (__get_cpuid(level, &regs4[0], &regs4[1], &regs4[2], &regs4[3]) == 1);
+}
+
+#elif defined(_MSC_VER)
+static bool mi_cpuid(uint32_t* regs4, uint32_t level) {
+  __cpuid((int32_t*)regs4, (int32_t)level);
+  return true;
+}
+#else
+static bool mi_cpuid(uint32_t* regs4, uint32_t level) {
+  MI_UNUSED(regs4); MI_UNUSED(level);
+  return false;
+}
+#endif
 
 static void mi_detect_cpu_features(void) {
   // FSRM for fast short rep movsb/stosb support (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017))
   // EMRS for fast enhanced rep movsb/stosb support
-  int32_t cpu_info[4];
-  __cpuid(cpu_info, 7);
-  _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
-  _mi_cpu_has_erms = ((cpu_info[1] & (1 << 9)) != 0); // bit 9 of EBX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+  uint32_t cpu_info[4];
+  if (mi_cpuid(cpu_info, 7)) {
+    _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+    _mi_cpu_has_erms = ((cpu_info[1] & (1 << 9)) != 0); // bit 9 of EBX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+  }
+  if (mi_cpuid(cpu_info, 1)) {
+    _mi_cpu_has_popcnt = ((cpu_info[2] & (1 << 23)) != 0); // bit 23 of ECX : see <https://en.wikipedia.org/wiki/CPUID#EAX=1:_Processor_Info_and_Feature_Bits>
+  }
 }
+
 #else
 static void mi_detect_cpu_features(void) {
-  // nothing
+  #if MI_ARCH_ARM64
+  _mi_cpu_has_popcnt = true;
+  #endif
 }
 #endif
+
 
 // Initialize the process; called by thread_init or the process loader
 void mi_process_init(void) mi_attr_noexcept {
