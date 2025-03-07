@@ -12,8 +12,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release tag: `v2.1.9` (2025-01-03).  
-Latest v1 tag: `v1.8.9` (2024-01-03).
+Latest release   : `v3.0.2` (beta) (2025-03-06)
+Latest v2 release: `v2.2.2` (2025-03-06).  
+Latest v1 release: `v1.9.2` (2024-03-06).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -71,17 +72,22 @@ Enjoy!
 
 ### Branches
 
-* `master`: latest stable release (based on `dev2`).
-* `dev`: development branch for mimalloc v1. Use this branch for submitting PR's.
+* `master`: latest stable release (still based on `dev2`).
+* `dev`:  development branch for mimalloc v1. Use this branch for submitting PR's.
 * `dev2`: development branch for mimalloc v2. This branch is downstream of `dev` 
-         (and is essentially equal to `dev` except for `src/segment.c`). Uses larger sliced segments to manage
-         mimalloc pages what can reduce fragmentation.
-* `dev3`: development branch for mimalloc v3-alpha. This branch is downstream of `dev`. This is still experimental,
-          but simplifies previous versions by having no segments any more. This improves sharing of memory 
-          between threads, and on certain large workloads uses less memory with less fragmentation.
+          (and is essentially equal to `dev` except for `src/segment.c`). Uses larger sliced segments to manage
+          mimalloc pages that can reduce fragmentation.
+* `dev3`: development branch for mimalloc v3-beta. This branch is downstream of `dev`. This version 
+          simplifies the lock-free ownership of previous versions, has no thread-local segments any more. 
+          This improves sharing of memory between threads, and on certain large workloads may use less memory 
+          with less fragmentation.
 
 ### Releases
 
+* 2025-03-06, `v1.9.2`, `v2.2.2`, `v3.0.2-beta`: Various small bug and build fixes. 
+  Add `mi_options_print`, `mi_arenas_print`, and the experimental `mi_stat_get` and `mi_stat_get_json`. 
+  Add `mi_thread_set_in_threadpool` and `mi_heap_set_numa_affinity` (v3 only). Add vcpkg portfile. 
+  On Windows, use `mimalloc.lib` for the static library, and `mimalloc.dll` for the dynamic override (which used to be `mimalloc-override.dll`) -- and use `mimalloc-dll.lib` for the export library of `mimalloc.dll`. Upgrade redirect to v1.3.2.  
 * 2025-01-03, `v1.8.9`, `v2.1.9`, `v3.0.1-alpha`: Interim release. Support Windows arm64. New [guarded](#guarded) build that can place OS 
   guard pages behind objects to catch buffer overflows as they occur. 
   Many small fixes: build on Windows arm64, cygwin, riscV, and dragonfly; fix Windows static library initialization to account for
@@ -167,7 +173,7 @@ mimalloc is used in various large scale low-latency services and programs, for e
 
 Open `ide/vs2022/mimalloc.sln` in Visual Studio 2022 and build.
 The `mimalloc-lib` project builds a static library (in `out/msvc-x64`), while the
-`mimalloc-override-dll` project builds a DLL for overriding malloc
+`mimalloc-override-dll` project builds DLL for overriding malloc
 in the entire program.
 
 ## Linux, macOS, BSD, etc.
@@ -240,13 +246,13 @@ on Windows to build with the `clang-cl` compiler directly:
 ```
 
 
-## Single source
+## Single Source
 
 You can also directly build the single `src/static.c` file as part of your project without
 needing `cmake` at all. Make sure to also add the mimalloc `include` directory to the include path.
 
 
-# Using the library
+# Using the Library
 
 The preferred usage is including `<mimalloc.h>`, linking with
 the shared- or static library, and using the `mi_malloc` API exclusively for allocation. For example,
@@ -474,7 +480,7 @@ Note that certain security restrictions may apply when doing this from
 the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
 
 
-# Windows Override
+### Dynamic Override on Windows
 
 <span id="override_on_windows">We use a separate redirection DLL to override mimalloc on Windows</span> 
 such that we redirect all malloc/free calls that go through the (dynamic) C runtime allocator, 
