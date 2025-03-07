@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['zero_20initialized_20re_2dallocation',['Zero initialized re-allocation',['../group__zeroinit.html',1,'']]]
+  ['the_20library_0',['Using the library',['../using.html',1,'']]],
+  ['typed_20macros_1',['Typed Macros',['../group__typed.html',1,'']]]
 ];

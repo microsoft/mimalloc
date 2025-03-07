@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // --------------------------------------------------------
 // This module defines various std libc functions to reduce
-// the dependency on libc, and also prevent errors caused 
+// the dependency on libc, and also prevent errors caused
 // by some libc implementations when called before `main`
 // executes (due to malloc redirection)
 // --------------------------------------------------------
@@ -83,7 +83,7 @@ bool _mi_getenv(const char* name, char* result, size_t result_size) {
 // Define our own limited `_mi_vsnprintf` and `_mi_snprintf`
 // This is mostly to avoid calling these when libc is not yet
 // initialized (and to reduce dependencies)
-// 
+//
 // format:      d i, p x u, s
 // prec:        z l ll L
 // width:       10
@@ -130,7 +130,7 @@ static void mi_out_alignright(char fill, char* start, size_t len, size_t extra, 
 }
 
 
-static void mi_out_num(uintptr_t x, size_t base, char prefix, char** out, char* end) 
+static void mi_out_num(uintmax_t x, size_t base, char prefix, char** out, char* end)
 {
   if (x == 0 || base == 0 || base > 16) {
     if (prefix != 0) { mi_outc(prefix, out, end); }
@@ -144,8 +144,8 @@ static void mi_out_num(uintptr_t x, size_t base, char prefix, char** out, char* 
       mi_outc((digit <= 9 ? '0' + digit : 'A' + digit - 10),out,end);
       x = x / base;
     }
-    if (prefix != 0) { 
-      mi_outc(prefix, out, end); 
+    if (prefix != 0) {
+      mi_outc(prefix, out, end);
     }
     size_t len = *out - start;
     // and reverse in-place
@@ -160,8 +160,8 @@ static void mi_out_num(uintptr_t x, size_t base, char prefix, char** out, char* 
 
 #define MI_NEXTC()  c = *in; if (c==0) break; in++;
 
-void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
-  if (buf == NULL || bufsize == 0 || fmt == NULL) return;
+int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
+  if (buf == NULL || bufsize == 0 || fmt == NULL) return 0;
   buf[bufsize - 1] = 0;
   char* const end = buf + (bufsize - 1);
   const char* in = fmt;
@@ -181,7 +181,7 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
       size_t width = 0;
       char   numtype = 'd';
       char   numplus = 0;
-      bool   alignright = true; 
+      bool   alignright = true;
       if (c == '+' || c == ' ') { numplus = c; MI_NEXTC(); }
       if (c == '-') { alignright = false; MI_NEXTC(); }
       if (c == '0') { fill = '0'; MI_NEXTC(); }
@@ -191,7 +191,7 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
           width = (10 * width) + (c - '0'); MI_NEXTC();
         }
         if (c == 0) break;  // extra check due to while
-      }      
+      }
       if (c == 'z' || c == 't' || c == 'L') { numtype = c; MI_NEXTC(); }
       else if (c == 'l') {
         numtype = c; MI_NEXTC();
@@ -206,12 +206,13 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
       }
       else if (c == 'p' || c == 'x' || c == 'u') {
         // unsigned
-        uintptr_t x = 0;
+        uintmax_t x = 0;
         if (c == 'x' || c == 'u') {
           if (numtype == 'z')       x = va_arg(args, size_t);
           else if (numtype == 't')  x = va_arg(args, uintptr_t); // unsigned ptrdiff_t
-          else if (numtype == 'L')  x = (uintptr_t)va_arg(args, unsigned long long);
-                               else x = va_arg(args, unsigned long);
+          else if (numtype == 'L')  x = va_arg(args, unsigned long long);
+          else if (numtype == 'l')  x = va_arg(args, unsigned long);
+                               else x = va_arg(args, unsigned int);
         }
         else if (c == 'p') {
           x = va_arg(args, uintptr_t);
@@ -228,20 +229,21 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
       }
       else if (c == 'i' || c == 'd') {
         // signed
-        intptr_t x = 0;
+        intmax_t x = 0;
         if (numtype == 'z')       x = va_arg(args, intptr_t );
         else if (numtype == 't')  x = va_arg(args, ptrdiff_t);
-        else if (numtype == 'L')  x = (intptr_t)va_arg(args, long long);
-                             else x = va_arg(args, long);
+        else if (numtype == 'L')  x = va_arg(args, long long);
+        else if (numtype == 'l')  x = va_arg(args, long);
+                             else x = va_arg(args, int);
         char pre = 0;
         if (x < 0) {
           pre = '-';
-          if (x > INTPTR_MIN) { x = -x; }
+          if (x > INTMAX_MIN) { x = -x; }
         }
         else if (numplus != 0) {
           pre = numplus;
         }
-        mi_out_num((uintptr_t)x, 10, pre, &out, end);
+        mi_out_num((uintmax_t)x, 10, pre, &out, end);
       }
       else if (c >= ' ' && c <= '~') {
         // unknown format
@@ -263,11 +265,13 @@ void _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
   }
   mi_assert_internal(out <= end);
   *out = 0;
+  return (int)(out - buf);
 }
 
-void _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...) {
+int _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  _mi_vsnprintf(buf, buflen, fmt, args);
+  const int written = _mi_vsnprintf(buf, buflen, fmt, args);
   va_end(args);
+  return written;
 }

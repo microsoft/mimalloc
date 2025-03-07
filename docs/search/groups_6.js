@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['runtime_20options_321',['Runtime Options',['../group__options.html',1,'']]]
+  ['initialized_20re_20allocation_0',['Zero initialized re-allocation',['../group__zeroinit.html',1,'']]],
+  ['introspection_1',['Heap Introspection',['../group__analysis.html',1,'']]]
 ];

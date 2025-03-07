@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['zero_20initialized_20re_2dallocation_323',['Zero initialized re-allocation',['../group__zeroinit.html',1,'']]]
+  ['options_0',['Runtime Options',['../group__options.html',1,'']]]
 ];
