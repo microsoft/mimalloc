@@ -15,29 +15,26 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arenas(PDEBUG_CLIENT c
     ULONG64 subprocMainAddr = 0;
     hr = GetSymbolOffset("subproc_main", subprocMainAddr);
     if (FAILED(hr) || subprocMainAddr == 0) {
-        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Could not locate mi_subproc_t.\n");
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Could not locate subproc_main.\n");
         return E_FAIL;
     }
 
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "mi_subproc_t found at 0x%llx\n\n", subprocMainAddr);
+    PrintLink(subprocMainAddr, std::format("dx -r1 (*((mimalloc!mi_subproc_s *)0x{:016X}))", subprocMainAddr), "subproc_main");
 
     mi_subproc_t subprocMain {};
     hr = ReadMemory(subprocMainAddr, &subprocMain, sizeof(mi_subproc_t));
     if (FAILED(hr)) {
-        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read mi_subproc_t at 0x%llx.\n", subprocMainAddr);
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read subproc_main at 0x%llx.\n", subprocMainAddr);
         return hr;
     }
 
     // Print results
     size_t arenaCount = subprocMain.arena_count.load();
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "Arena count: %llu\n\n", arenaCount);
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "Arena count: %llu\n", arenaCount);
 
     for (size_t i = 0; i < arenaCount; ++i) {
         ULONG64 arenaAddr = subprocMainAddr + offsetof(mi_subproc_t, arenas) + (i * sizeof(std::atomic<mi_arena_t*>));
-
-        // Print clickable Arena Index link
-        g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL,
-                                         "[0x%p] [<link cmd=\"!mi_dump_arena %p\">Arena %llu</link>]\n", (void*)arenaAddr, (void*)arenaAddr, i);
+        PrintLink(arenaAddr, std::format("!mi_dump_arena 0x{:016X}", arenaAddr), std::format("Arena {}", i));
     }
 
     return S_OK;
@@ -55,21 +52,31 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arena(PDEBUG_CLIENT cl
         return E_INVALIDARG;
     }
 
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "Dumping Arena at Address: 0x%016llx\n\n", arenaAddr);
+    ULONG64 arenaValueAddr = 0;
+    HRESULT hr = ReadMemory(arenaAddr, &arenaValueAddr, sizeof(ULONG64));
+    if (FAILED(hr) || arenaValueAddr == 0) {
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read mi_arena_t pointer at 0x%016llx.\n", arenaAddr);
+        return hr;
+    }
 
-    //// Read the `mi_arena_t` structure from the memory
-    // mi_arena_t arena{};
-    // HRESULT hr = ReadMemory(arenaAddr, &arena, sizeof(mi_arena_t));
-    // if (FAILED(hr))
-    //{
-    //     g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read mi_arena_t at 0x%016llx.\n", arenaAddr);
-    //     return hr;
-    // }
+    PrintLink(arenaAddr, std::format("dx -r1 ((mimalloc!mi_arena_s *)0x{:016X})", arenaValueAddr), std::format("Dumping Arena at Address: 0x{:016X}\n", arenaAddr));
 
-    // g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "  - Slice Count: %llu\n", arena.slice_count);
-    // g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "  - Info Slices: %llu\n", arena.info_slices);
-    // g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "  - NUMA Node: %d\n", arena.numa_node);
-    // g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "  - Exclusive: %s\n", arena.is_exclusive ? "Yes" : "No");
-    //
+    // Read the `mi_arena_t` structure from the memory
+    mi_arena_t arena {};
+    hr = ReadMemory(arenaValueAddr, &arena, sizeof(mi_arena_t));
+    if (FAILED(hr)) {
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read mi_arena_t at 0x%016llx.\n", arenaAddr);
+        return hr;
+    }
+
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Slice Count: %llu\n", arenaAddr + offsetof(mi_arena_t, slice_count), arena.slice_count);
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Info Slices: %llu\n", arenaAddr + offsetof(mi_arena_t, info_slices), arena.info_slices);
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - NUMA Node: %d\n", arenaAddr + offsetof(mi_arena_t, numa_node), arena.numa_node);
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Exclusive: %s\n", arenaAddr + offsetof(mi_arena_t, is_exclusive), arena.is_exclusive ? "Yes" : "No");
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Purge Expire: %d\n", arenaAddr + offsetof(mi_arena_t, purge_expire), arena.purge_expire.load());
+
+    // g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Slices Free (Count): %d\n", arena.slices_free->chunk_count.load());
+    // g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Slices Committed (Max Accessed): %d\n", arena.slices_committed.load());
+
     return S_OK;
 }

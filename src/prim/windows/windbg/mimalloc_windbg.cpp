@@ -67,7 +67,17 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK DebugExtensionInitialize(PULON
         nullptr);
 
     // Print the mimalloc base address, this indicates extension was load successfully
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "mimalloc.dll base address found: 0x%llx\n", g_MiMallocBase);
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "mimalloc.dll base address found: 0x%llx\n\n", g_MiMallocBase);
+
+    // show version
+    const int vermajor = MI_MALLOC_VERSION / 100;
+    const int verminor = (MI_MALLOC_VERSION % 100) / 10;
+    const int verpatch = (MI_MALLOC_VERSION % 10);
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "mimalloc %s\n", std::format("v{}.{}.{} (built on {}, {})\n", vermajor, verminor, verpatch, __DATE__, __TIME__).c_str());
+
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "Start here:\n");
+    g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_dump_options\">Dump Options</link>\n");
+    g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_dump_arenas\">Dump Arenas</link>\n");
 
     return S_OK;
 }
