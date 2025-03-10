@@ -112,16 +112,26 @@ terms of the MIT license. A copy of the license can be found in the file
 // (comments specify sizes on 64-bit, usually 32-bit is halved)
 // --------------------------------------------------------------
 
-// Sizes are for 64-bit
+// Main size parameter; determines max arena sizes and max arena object sizes etc.
 #ifndef MI_ARENA_SLICE_SHIFT
-#ifdef  MI_SMALL_PAGE_SHIFT   // backward compatibility
-#define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
-#else
-#define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
+  #ifdef  MI_SMALL_PAGE_SHIFT   // backward compatibility
+  #define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
+  #else
+  #define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
+  #endif
 #endif
+#if MI_ARENA_SLICE_SHIFT < 12
+#error Arena slices should be at least 4KiB
 #endif
+
 #ifndef MI_BCHUNK_BITS_SHIFT
-#define MI_BCHUNK_BITS_SHIFT              (6 + MI_SIZE_SHIFT)         // optimized for 512 bits per chunk (avx512)
+  #if MI_ARENA_SLICE_SHIFT <= 13    // <= 8KiB
+  #define MI_BCHUNK_BITS_SHIFT              (7)   // 128 bits
+  #elif MI_ARENA_SLICE_SHIFT < 16   // <= 32KiB
+  #define MI_BCHUNK_BITS_SHIFT              (8)   // 256 bits
+  #else 
+  #define MI_BCHUNK_BITS_SHIFT              (6 + MI_SIZE_SHIFT)       // 512 bits (or 256 on 32-bit)
+  #endif
 #endif
 
 #define MI_BCHUNK_BITS                    (1 << MI_BCHUNK_BITS_SHIFT)         // sub-bitmaps are "bchunks" of 512 bits
@@ -133,6 +143,10 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define MI_ARENA_MIN_OBJ_SIZE             (MI_ARENA_MIN_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
 #define MI_ARENA_MAX_OBJ_SIZE             (MI_ARENA_MAX_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
+
+#if MI_ARENA_MAX_OBJ_SIZE < MI_SIZE_SIZE*1024
+#error maximum object size may be too small to hold local thread data  
+#endif
 
 #define MI_SMALL_PAGE_SIZE                MI_ARENA_MIN_OBJ_SIZE                    // 64 KiB
 #define MI_MEDIUM_PAGE_SIZE               (8*MI_SMALL_PAGE_SIZE)                   // 512 KiB  (=byte in the bchunk bitmap)

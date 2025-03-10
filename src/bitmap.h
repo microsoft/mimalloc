@@ -256,7 +256,9 @@ static inline mi_bbin_t mi_bbin_of(size_t slice_count) {
 typedef mi_decl_bchunk_align struct mi_bbitmap_s {
   _Atomic(size_t)  chunk_count;         // total count of chunks (0 < N <= MI_BCHUNKMAP_BITS)
   _Atomic(size_t)  chunk_max_accessed;  // max chunk index that was once cleared or set
-  size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc
+  #if (MI_BCHUNK_SIZE / MI_SIZE_SIZE) > 2
+  size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc by aligning manually
+  #endif
   mi_bchunkmap_t   chunkmap;                                    
   mi_bchunkmap_t   chunkmap_bins[MI_BBIN_COUNT - 1];             // chunkmaps with bit set if the chunk is in that size class (excluding MI_BBIN_NONE)  
   mi_bchunk_t      chunks[MI_BITMAP_DEFAULT_CHUNK_COUNT];        // usually dynamic MI_BITMAP_MAX_CHUNK_COUNT

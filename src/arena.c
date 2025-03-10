@@ -1190,6 +1190,10 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
     _mi_warning_message("cannot use OS memory since it is not large enough (size %zu KiB, minimum required is %zu KiB)", size/MI_KiB, mi_size_of_slices(info_slices+1)/MI_KiB);
     return false;
   }
+  else if (info_slices >= MI_ARENA_MAX_OBJ_SLICES) {
+    _mi_warning_message("cannot use OS memory since it is too large with respect to the maximum object size (size %zu MiB, meta-info slices %zu, maximum object slices are %zu)", size/MI_MiB, info_slices, MI_ARENA_MAX_OBJ_SLICES);
+    return false;
+  }
 
   mi_arena_t* arena = (mi_arena_t*)start;
 

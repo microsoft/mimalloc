@@ -1373,7 +1373,7 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
 
 
 size_t mi_bbitmap_size(size_t bit_count, size_t* pchunk_count) {
-  mi_assert_internal((bit_count % MI_BCHUNK_BITS) == 0);
+  // mi_assert_internal((bit_count % MI_BCHUNK_BITS) == 0);
   bit_count = _mi_align_up(bit_count, MI_BCHUNK_BITS);
   mi_assert_internal(bit_count <= MI_BITMAP_MAX_BIT_COUNT);
   mi_assert_internal(bit_count > 0);
