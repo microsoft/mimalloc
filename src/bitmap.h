@@ -71,8 +71,18 @@ typedef size_t mi_bfield_t;
 #define MI_BCHUNK_FIELDS             (MI_BCHUNK_BITS / MI_BFIELD_BITS)  // 8 on both 64- and 32-bit
 
 
+// some compiler (msvc in C mode) cannot have expressions in the alignment attribute
+#if MI_BCHUNK_SIZE==64
+#define mi_decl_bchunk_align  mi_decl_align(64)
+#elif MI_BCHUNK_SIZE==32
+#define mi_decl_bchunk_align  mi_decl_align(32)
+#else
+#define mi_decl_bchunk_align  mi_decl_align(MI_BCHUNK_SIZE)
+#endif
+ 
+
 // A bitmap chunk contains 512 bits on 64-bit  (256 on 32-bit)
-typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bchunk_s {
+typedef mi_decl_bchunk_align struct mi_bchunk_s {
   _Atomic(mi_bfield_t) bfields[MI_BCHUNK_FIELDS];
 } mi_bchunk_t;
 
@@ -96,7 +106,7 @@ typedef mi_bchunk_t mi_bchunkmap_t;
 
 
 // An atomic bitmap
-typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bitmap_s {
+typedef mi_decl_bchunk_align struct mi_bitmap_s {
   _Atomic(size_t)  chunk_count;         // total count of chunks (0 < N <= MI_BCHUNKMAP_BITS)
   size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 1];    // suppress warning on msvc
   mi_bchunkmap_t   chunkmap;
@@ -243,7 +253,7 @@ static inline mi_bbin_t mi_bbin_of(size_t slice_count) {
 }
 
 // An atomic "binned" bitmap for the free slices where we keep chunks reserved for particalar size classes
-typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bbitmap_s {
+typedef mi_decl_bchunk_align struct mi_bbitmap_s {
   _Atomic(size_t)  chunk_count;         // total count of chunks (0 < N <= MI_BCHUNKMAP_BITS)
   _Atomic(size_t)  chunk_max_accessed;  // max chunk index that was once cleared or set
   size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc

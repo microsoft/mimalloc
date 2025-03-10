@@ -22,6 +22,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <mimalloc-stats.h>
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
+#include <limits.h>   // SIZE_MAX etc.
 #include <errno.h>    // error codes
 #include "bits.h"     // size defines (MI_INTPTR_SIZE etc), bit operations
 #include "atomic.h"   // _Atomic primitives

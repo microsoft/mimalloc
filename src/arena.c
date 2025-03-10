@@ -1684,7 +1684,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
   if (!force && (expire == 0 || expire > now)) return false;
 
   // reset expire
-  mi_atomic_store_release(&arena->purge_expire, (mi_msecs_t)0);
+  mi_atomic_storei64_release(&arena->purge_expire, (mi_msecs_t)0);
   mi_subproc_stat_counter_increase(arena->subproc, arena_purges, 1);
 
   // go through all purge info's  (with max MI_BFIELD_BITS ranges at a time)
@@ -1706,7 +1706,7 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_tld_t* tld)
   // check if any arena needs purging?
   mi_subproc_t* subproc = tld->subproc;
   const mi_msecs_t now = _mi_clock_now();
-  const mi_msecs_t arenas_expire = mi_atomic_load_acquire(&subproc->purge_expire);
+  const mi_msecs_t arenas_expire = mi_atomic_loadi64_acquire(&subproc->purge_expire);
   if (!visit_all && !force && (arenas_expire == 0 || arenas_expire > now)) return;
 
   const size_t max_arena = mi_arenas_get_count(subproc);
@@ -1717,7 +1717,7 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_tld_t* tld)
   mi_atomic_guard(&purge_guard)
   {
     // increase global expire: at most one purge per delay cycle
-    if (arenas_expire > now) { mi_atomic_store_release(&subproc->purge_expire, now + (delay/10)); }
+    if (arenas_expire > now) { mi_atomic_storei64_release(&subproc->purge_expire, now + (delay/10)); }
     const size_t arena_start = tld->thread_seq % max_arena;
     size_t max_purge_count = (visit_all ? max_arena : (max_arena/4)+1);
     bool all_visited = true;
@@ -1738,7 +1738,7 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_tld_t* tld)
       }
     }
     if (all_visited && !any_purged) {
-      mi_atomic_store_release(&subproc->purge_expire, 0);
+      mi_atomic_storei64_release(&subproc->purge_expire, 0);
     }
   }
 }
