@@ -292,10 +292,11 @@ if(MI_WIN_DBG_EXTS)
 endif()
 
 if(WIN32 AND MI_WIN_DBG_EXTS)
-  list(APPEND mi_sources ${PROJECT_SOURCE_DIR}/src/prim/windows/windbg/mimalloc_windbg.cpp)
   list(APPEND mi_sources ${PROJECT_SOURCE_DIR}/src/prim/windows/windbg/mimalloc_windbg_arenas.cpp)
+  list(APPEND mi_sources ${PROJECT_SOURCE_DIR}/src/prim/windows/windbg/mimalloc_windbg_help.cpp)
   list(APPEND mi_sources ${PROJECT_SOURCE_DIR}/src/prim/windows/windbg/mimalloc_windbg_options.cpp)
   list(APPEND mi_sources ${PROJECT_SOURCE_DIR}/src/prim/windows/windbg/mimalloc_windbg_utils.cpp)
+  list(APPEND mi_sources ${PROJECT_SOURCE_DIR}/src/prim/windows/windbg/mimalloc_windbg.cpp)
 endif()
 
 if(MI_GUARDED)

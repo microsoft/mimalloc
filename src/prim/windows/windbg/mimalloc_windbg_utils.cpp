@@ -23,6 +23,7 @@ HRESULT FindMimallocBase() {
     return g_DebugSymbols->GetModuleByModuleName("mimalloc", 0, NULL, &g_MiMallocBase);
 }
 
+// Function to get the offset of a symbol in the debuggee process
 HRESULT GetSymbolOffset(const char* symbolName, ULONG64& outOffset) {
     // Ensure debug interfaces are valid
     if (!g_DebugSymbols || g_MiMallocBase == 0) {
@@ -43,6 +44,7 @@ HRESULT GetSymbolOffset(const char* symbolName, ULONG64& outOffset) {
     return S_OK;
 }
 
+// Function to read memory from the debuggee process
 HRESULT ReadMemory(const char* symbolName, void* outBuffer, size_t bufferSize) {
     if (!g_DataSpaces) {
         return E_FAIL;
@@ -65,6 +67,7 @@ HRESULT ReadMemory(const char* symbolName, void* outBuffer, size_t bufferSize) {
     return S_OK;
 }
 
+// Function to read memory from a specific address
 HRESULT ReadMemory(ULONG64 address, void* outBuffer, size_t bufferSize) {
     if (!g_DataSpaces) {
         return E_FAIL;
@@ -80,6 +83,7 @@ HRESULT ReadMemory(ULONG64 address, void* outBuffer, size_t bufferSize) {
     return S_OK;
 }
 
+// Function to read a string from the debuggee process
 HRESULT ReadString(const char* symbolName, std::string& outBuffer) {
     if (!g_DataSpaces) {
         return E_FAIL;
@@ -115,4 +119,20 @@ HRESULT ReadString(const char* symbolName, std::string& outBuffer) {
     }
 
     return S_OK;
+}
+
+// Helper function to count the number of set bits in a mi_bitmap_t.
+// This implementation assumes that the bitmap is organized into chunks,
+// and that each chunk contains MI_BCHUNK_FIELDS of type mi_bfield_t (usually a 64-bit word).
+// It uses the popcount64 function (which uses __popcnt64 on MSVC) to count bits.
+size_t mi_bitmap_count(mi_bitmap_t* bmp) {
+    size_t chunkCount = bmp->chunk_count.load();
+    size_t totalCount = 0;
+    for (size_t i = 0; i < chunkCount; i++) {
+        for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
+            mi_bfield_t field = bmp->chunks[i].bfields[j];
+            totalCount += (size_t)popcount64(field);
+        }
+    }
+    return totalCount;
 }

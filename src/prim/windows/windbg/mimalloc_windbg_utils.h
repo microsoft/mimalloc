@@ -30,12 +30,31 @@ HRESULT GetSymbolOffset(const char* symbolName, ULONG64& outOffset);
 HRESULT ReadMemory(const char* symbolName, void* outBuffer, size_t bufferSize);
 HRESULT ReadMemory(ULONG64 address, void* outBuffer, size_t bufferSize);
 HRESULT ReadString(const char* symbolName, std::string& outBuffer);
+size_t mi_bitmap_count(mi_bitmap_t* bmp);
 
 inline void PrintLink(ULONG64 addr, std::string cmd, std::string linkText, std::string extraText = "") {
     g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL,
                                      std::format("[0x{:016X}] <link cmd=\"{}\">{}</link> {}\n", addr, cmd, linkText, extraText).c_str());
 }
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+static inline int popcount64(uint64_t x) {
+    return (int)__popcnt64(x);
+}
+#else
+// Portable fallback: count bits in a 64-bit value.
+static inline int popcount64(uint64_t x) {
+    int count = 0;
+    while (x) {
+        count += x & 1;
+        x >>= 1;
+    }
+    return count;
+}
+#endif
+
+// TODO Remove the code below once it is avaialble in the mimalloc header
 typedef struct mi_arena_s {
     mi_memid_t memid;      // memid of the memory area
     mi_subproc_t* subproc; // subprocess this arena belongs to (`this 'in' this->subproc->arenas`)
