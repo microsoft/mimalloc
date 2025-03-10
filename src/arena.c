@@ -1298,6 +1298,20 @@ int mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noe
 /* -----------------------------------------------------------
   Debugging
 ----------------------------------------------------------- */
+
+// Return idx of the slice past the last used slice 
+static size_t mi_arena_used_slices(mi_arena_t* arena) {
+  size_t idx;
+  if (mi_bitmap_bsr(arena->pages, &idx)) {
+    mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, idx);
+    const size_t page_slice_count = page->memid.mem.arena.slice_count;
+    return (idx + page_slice_count);
+  }
+  else {
+    return mi_arena_info_slices(arena);
+  }
+}
+
 static size_t mi_debug_show_bfield(mi_bfield_t field, char* buf, size_t* k) {
   size_t bit_set_count = 0;
   for (int bit = 0; bit < MI_BFIELD_BITS; bit++) {
@@ -1388,13 +1402,24 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k,
   return bit_set_count;
 }
 
-static size_t mi_debug_show_chunks(const char* header1, const char* header2, const char* header3, size_t slice_count, size_t chunk_count, mi_bchunk_t* chunks, mi_bchunkmap_t* chunk_bins, bool invert, mi_arena_t* arena, bool narrow) {
+static size_t mi_debug_show_chunks(const char* header1, const char* header2, const char* header3, 
+                                   size_t slice_count, size_t chunk_count, 
+                                   mi_bchunk_t* chunks, mi_bchunkmap_t* chunk_bins, bool invert, mi_arena_t* arena, bool narrow) 
+{
   _mi_raw_message("\x1B[37m%s%s%s (use/commit: \x1B[31m0 - 25%%\x1B[33m - 50%%\x1B[36m - 75%%\x1B[32m - 100%%\x1B[0m)\n", header1, header2, header3);
   const size_t fields_per_line = (narrow ? 2 : 4);
+  const size_t used_slice_count = mi_arena_used_slices(arena);
   size_t bit_count = 0;
   size_t bit_set_count = 0;
-  for (size_t i = 0; i < chunk_count && bit_count < slice_count; i++) {
+  for (size_t i = 0; i < chunk_count && bit_count < slice_count; i++) {    
     char buf[5*MI_BCHUNK_BITS + 64]; _mi_memzero(buf, sizeof(buf));
+    if (bit_count > used_slice_count) {
+      const size_t diff = chunk_count - 1 - i;
+      bit_count += diff*MI_BCHUNK_BITS;
+      _mi_raw_message("  ...\n");
+      i = chunk_count-1;
+    }
+
     size_t k = 0;
     mi_bchunk_t* chunk = &chunks[i];
 
@@ -1847,30 +1872,22 @@ mi_decl_export bool mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t*
   }
 
   // find accessed size
-  size_t asize;
-  // scan the commit map for the highest entry
-  // scan the commit map for the highest entry
-  size_t idx;
-  //if (mi_bitmap_bsr(arena->slices_committed, &idx)) {
-  //  asize = (idx + 1)* MI_ARENA_SLICE_SIZE;
-  //}
-  if (mi_bitmap_bsr(arena->pages, &idx)) {
-    mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, idx);
-    const size_t page_slice_count = page->memid.mem.arena.slice_count;
-    asize = mi_size_of_slices(idx + page_slice_count);
-  }
-  else {
-    asize = mi_arena_info_slices(arena) * MI_ARENA_SLICE_SIZE;
-  }
+  const size_t asize = mi_size_of_slices(mi_arena_used_slices(arena));  
   if (base != NULL) { *base = (void*)arena; }
   if (full_size != NULL) { *full_size = arena->memid.mem.os.size;  }
   if (accessed_size != NULL) { *accessed_size = asize; }
 
+  // adjust abandoned page count
+  mi_subproc_t* const subproc = arena->subproc;
+  for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
+    const size_t count = mi_bitmap_popcount(arena->pages_abandoned[bin]);
+    if (count > 0) { mi_atomic_decrement_acq_rel(&subproc->abandoned_count[bin]); }
+  }
+
   // unregister the pages
   _mi_page_map_unregister_range(arena, asize);
 
-  // set the entry to NULL
-  mi_subproc_t* subproc = arena->subproc;
+  // set arena entry to NULL
   const size_t count = mi_arenas_get_count(subproc);
   for(size_t i = 0; i < count; i++) {
     if (mi_arena_from_index(subproc, i) == arena) {
@@ -1908,12 +1925,20 @@ mi_decl_export bool mi_arena_reload(void* start, size_t size, mi_arena_id_t* are
     return false;
   }
 
+  // re-initialize
   arena->is_exclusive = true;
   arena->subproc = _mi_subproc();
   if (!mi_arenas_add(arena->subproc, arena, arena_id)) {
     return false;
   }
   mi_arena_pages_reregister(arena);
+
+  // adjust abandoned page count
+  for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
+    const size_t count = mi_bitmap_popcount(arena->pages_abandoned[bin]);
+    if (count > 0) { mi_atomic_decrement_acq_rel(&arena->subproc->abandoned_count[bin]); }
+  }
+
   return true;
 }
 

@@ -961,6 +961,16 @@ static bool mi_bchunk_bsr(mi_bchunk_t* chunk, size_t* pidx) {
   return false;
 }
 
+static size_t mi_bchunk_popcount(mi_bchunk_t* chunk) {
+  size_t popcount = 0;
+  for (size_t i = 0; i < MI_BCHUNK_FIELDS; i++) {
+    const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
+    popcount += mi_bfield_popcount(b);
+  }
+  return popcount;
+}
+
+
 /* --------------------------------------------------------------------------------
  bitmap chunkmap
 -------------------------------------------------------------------------------- */
@@ -1283,6 +1293,25 @@ bool mi_bitmap_bsr(mi_bitmap_t* bitmap, size_t* idx) {
   }
   return false;
 }
+
+// Return count of all set bits in a bitmap.
+size_t mi_bitmap_popcount(mi_bitmap_t* bitmap) {
+  // for all chunkmap entries
+  size_t popcount = 0;
+  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  for (size_t i = 0; i < chunkmap_max; i++) {
+    mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
+    size_t cmap_idx;
+    // for each chunk (corresponding to a set bit in a chunkmap entry)
+    while (mi_bfield_foreach_bit(&cmap_entry, &cmap_idx)) {
+      const size_t chunk_idx = i*MI_BFIELD_BITS + cmap_idx;
+      // count bits in a chunk
+      popcount += mi_bchunk_popcount(&bitmap->chunks[chunk_idx]);
+    }
+  }
+  return popcount;
+}
+
 
 
 // Clear a bit once it is set.

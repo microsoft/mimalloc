@@ -206,6 +206,9 @@ void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx);
 // Used for unloading arena's
 bool mi_bitmap_bsr(mi_bitmap_t* bitmap, size_t* idx);
 
+// Return count of all set bits in a bitmap.
+size_t mi_bitmap_popcount(mi_bitmap_t* bitmap);
+
 
 typedef bool (mi_forall_set_fun_t)(size_t slice_index, size_t slice_count, mi_arena_t* arena, void* arg2);
 
