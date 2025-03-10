@@ -43,6 +43,8 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arenas(PDEBUG_CLIENT c
     size_t totalCommittedPages = 0;
     size_t totalAbandonedPages = 0;
 
+    std::vector<float> potentialFragmentation;
+    std::vector<float> highAbandonedPagesRatio;
     for (size_t i = 0; i < arenaCount; ++i) {
         ULONG64 arenaAddr = subprocMainAddr + offsetof(mi_subproc_t, arenas) + (i * sizeof(std::atomic<mi_arena_t*>));
         ULONG64 arenaValueAddr = 0;
@@ -83,6 +85,7 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arenas(PDEBUG_CLIENT c
         totalCommittedPages += committedPages;
 
         // For abandoned pages, iterate over each bin (0 to MI_BIN_COUNT - 1).
+        size_t abandonedPages = 0;
         for (int bin = 0; bin < MI_BIN_COUNT; bin++) {
             ULONG64 itemAdr = reinterpret_cast<ULONG64>(arena.pages_abandoned[bin]);
             mi_bitmap_t abandonedBmp {};
@@ -92,9 +95,21 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arenas(PDEBUG_CLIENT c
                 return hr;
             }
 
-            size_t abandonedPages = mi_bitmap_count(&abandonedBmp);
-            totalAbandonedPages += abandonedPages;
+            abandonedPages = mi_bitmap_count(&abandonedBmp);
         }
+
+        totalAbandonedPages += abandonedPages;
+
+        // --- Anomaly Detection ---
+        float pctCommittedSlices = (arena.slice_count > 0) ? (committed * 100.0 / arena.slice_count) : 0.0;
+        potentialFragmentation.push_back(pctCommittedSlices);
+
+        float abandonedPagesRatio = 0.0;
+        if (committedPages > 0 && abandonedPages > 0) {
+            abandonedPagesRatio = (abandonedPages * 100.0) / committedPages;
+        }
+
+        highAbandonedPagesRatio.push_back(abandonedPagesRatio);
     }
 
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\nTotal Arenas: %d\n", arenaCount);
@@ -111,6 +126,19 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arenas(PDEBUG_CLIENT c
     for (size_t i = 0; i < arenaCount; ++i) {
         ULONG64 arenaAddr = subprocMainAddr + offsetof(mi_subproc_t, arenas) + (i * sizeof(std::atomic<mi_arena_t*>));
         PrintLink(arenaAddr, std::format("!mi_dump_arena 0x{:016X}", arenaAddr), std::format("Arena {}", i));
+
+        if (potentialFragmentation[i] < MinCommittedSlicesPct) {
+            g_DebugControl->Output(DEBUG_OUTPUT_ERROR, " Warning: Low committed slices percentage (%.2f%%). Potential fragmentation detected.\n", potentialFragmentation[i]);
+        }
+
+        if (highAbandonedPagesRatio[i] > MaxAbandonedPagesRatio) {
+            g_DebugControl->Output(DEBUG_OUTPUT_ERROR, " Warning: High ratio of abandoned pages (%.2f%%). Possible memory leak or delayed decommitment.\n",
+                                   highAbandonedPagesRatio[i]);
+        }
+
+        if (potentialFragmentation[i] < MinCommittedSlicesPct || highAbandonedPagesRatio[i] > MaxAbandonedPagesRatio) {
+            g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
+        }
     }
 
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
@@ -191,6 +219,7 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arena(PDEBUG_CLIENT cl
     totalCommittedPages += committedPages;
 
     // For abandoned pages, iterate over each bin (0 to MI_BIN_COUNT - 1).
+    size_t abandonedPages = 0;
     for (int bin = 0; bin < MI_BIN_COUNT; bin++) {
         ULONG64 itemAdr = reinterpret_cast<ULONG64>(arena.pages_abandoned[bin]);
         mi_bitmap_t abandonedBmp {};
@@ -200,9 +229,10 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arena(PDEBUG_CLIENT cl
             return hr;
         }
 
-        size_t abandonedPages = mi_bitmap_count(&abandonedBmp);
-        totalAbandonedPages += abandonedPages;
+        abandonedPages = mi_bitmap_count(&abandonedBmp);
     }
+
+    totalAbandonedPages += abandonedPages;
 
     // Summary that aids in detecting fragmentation or undercommitment.
     double pctCommitted = (totalSlices > 0) ? (totalCommittedSlices * 100.0 / totalSlices) : 0.0;
@@ -213,5 +243,22 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arena(PDEBUG_CLIENT cl
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\nAggregated Page Statistics:\n%s\n", pageStats.c_str());
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
 
+    // --- Anomaly Detection ---
+    float pctCommittedSlices = (arena.slice_count > 0) ? (committed * 100.0 / arena.slice_count) : 0.0;
+
+    float abandonedPagesRatio = 0.0;
+    if (committedPages > 0 && abandonedPages > 0) {
+        abandonedPagesRatio = (abandonedPages * 100.0) / committedPages;
+    }
+
+    if (pctCommittedSlices < MinCommittedSlicesPct) {
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, " Warning: Low committed slices percentage (%.2f%%). Potential fragmentation detected.\n", pctCommittedSlices);
+    }
+
+    if (abandonedPagesRatio > MaxAbandonedPagesRatio) {
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, " Warning: High ratio of abandoned pages (%.2f%%). Possible memory leak or delayed decommitment.\n", abandonedPagesRatio);
+    }
+
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
     return S_OK;
 }

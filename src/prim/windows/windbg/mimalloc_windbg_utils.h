@@ -25,6 +25,9 @@ extern IDebugControl4* g_DebugControl;
 extern IDebugSymbols3* g_DebugSymbols;
 extern IDebugDataSpaces* g_DataSpaces;
 
+constexpr double MinCommittedSlicesPct = 60.0; // if below threshold, potential fragmentation.
+constexpr double MaxAbandonedPagesRatio = 0.4; // If abandoned pages exceed 40% of committed pages.
+
 HRESULT FindMimallocBase();
 HRESULT GetSymbolOffset(const char* symbolName, ULONG64& outOffset);
 HRESULT ReadMemory(const char* symbolName, void* outBuffer, size_t bufferSize);
