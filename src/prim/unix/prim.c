@@ -218,7 +218,9 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
         _mi_trace_message("unable to directly request aligned OS memory (error: %d (0x%x), size: 0x%zx bytes, alignment: 0x%zx, hint address: %p)\n", err, err, size, try_alignment, addr);
       }
       if (p!=MAP_FAILED) {
+#if (defined(__linux__) || defined(__ANDROID__)) 
         prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, p, size, "mimalloc");
+#endif
         return p;
       }
       // fall back to regular mmap
@@ -246,7 +248,9 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
         _mi_trace_message("unable to directly request hinted aligned OS memory (error: %d (0x%x), size: 0x%zx bytes, alignment: 0x%zx, hint address: %p)\n", err, err, size, try_alignment, hint);
       }
       if (p!=MAP_FAILED) {
+#if (defined(__linux__) || defined(__ANDROID__)) 
         prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, p, size, "mimalloc");
+#endif
         return p;
       }
       // fall back to regular mmap
@@ -255,7 +259,9 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
   #endif
   // regular mmap
   p = mmap(addr, size, protect_flags, flags, fd, 0);
+#if (defined(__linux__) || defined(__ANDROID__)) 
   prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, p, size, "mimalloc");
+#endif
   if (p!=MAP_FAILED) return p;
   // failed to allocate
   return NULL;
