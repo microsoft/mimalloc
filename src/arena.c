@@ -103,6 +103,10 @@ static bool mi_arena_has_page(mi_arena_t* arena, mi_page_t* page) {
 }
 #endif
 
+size_t mi_arena_min_alignment() {
+  return MI_ARENA_SLICE_ALIGN;
+}
+
 /* -----------------------------------------------------------
   Util
 ----------------------------------------------------------- */
