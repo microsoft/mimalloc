@@ -242,6 +242,10 @@ static inline bool mi_memid_needs_no_free(mi_memid_t memid) {
   return mi_memkind_needs_no_free(memid.memkind);
 }
 
+static inline mi_arena_t* mi_memid_arena(mi_memid_t memid) {
+  return (memid.memkind == MI_MEM_ARENA ? memid.mem.arena.arena : NULL);
+}
+
 // ------------------------------------------------------
 // Mimalloc pages contain allocated blocks
 // ------------------------------------------------------
