@@ -150,14 +150,14 @@ bool          _mi_os_decommit(void* addr, size_t size);
 bool          _mi_os_protect(void* addr, size_t size);
 bool          _mi_os_unprotect(void* addr, size_t size);
 bool          _mi_os_purge(void* p, size_t size);
-bool          _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stats_size);
+bool          _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stats_size, mi_commit_fun_t* commit_fun, void* commit_fun_arg);
 bool          _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size);
 
 size_t        _mi_os_secure_guard_page_size(void);
-bool          _mi_os_secure_guard_page_set_at(void* addr, bool is_pinned);
-bool          _mi_os_secure_guard_page_set_before(void* addr, bool is_pinned);
-bool          _mi_os_secure_guard_page_reset_at(void* addr);
-bool          _mi_os_secure_guard_page_reset_before(void* addr);
+bool          _mi_os_secure_guard_page_set_at(void* addr, mi_memid_t memid);
+bool          _mi_os_secure_guard_page_set_before(void* addr, mi_memid_t memid);
+bool          _mi_os_secure_guard_page_reset_at(void* addr, mi_memid_t memid);
+bool          _mi_os_secure_guard_page_reset_before(void* addr, mi_memid_t memid);
 
 int           _mi_os_numa_node(void);
 int           _mi_os_numa_node_count(void);

@@ -330,10 +330,15 @@ mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexce
 
 
 // experimental
+typedef bool (mi_cdecl mi_commit_fun_t)(bool commit, void* start, size_t size, bool* is_zero, void* user_arg);
+mi_decl_export bool  mi_manage_memory(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive,
+                                      mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id) mi_attr_noexcept;
+
 mi_decl_export bool  mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t* accessed_size, size_t* size);
-mi_decl_export bool  mi_arena_reload(void* start, size_t size, mi_arena_id_t* arena_id);
+mi_decl_export bool  mi_arena_reload(void* start, size_t size, mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id);
 mi_decl_export bool  mi_heap_reload(mi_heap_t* heap, mi_arena_id_t arena);
 mi_decl_export void  mi_heap_unload(mi_heap_t* heap);
+
 
 // Is a pointer contained in the given arena area?
 mi_decl_export bool  mi_arena_contains(mi_arena_id_t arena_id, const void* p);
