@@ -202,10 +202,11 @@ void mi_free(void* p) mi_attr_noexcept
 // Multi-threaded Free (`_mt`)
 // ------------------------------------------------------
 static bool mi_page_unown_from_free(mi_page_t* page, mi_block_t* mt_free);
-static inline bool mi_page_queue_len_is_atmost( mi_heap_t* heap, size_t block_size, size_t atmost) {
+static inline bool mi_page_queue_len_is_lower_as( mi_heap_t* heap, size_t block_size, long atmost) {
+  if (atmost <= 0) { return false; }
   mi_page_queue_t* const pq = mi_page_queue(heap,block_size);
   mi_assert_internal(pq!=NULL);
-  return (pq->count <= atmost);
+  return (pq->count < (size_t)atmost);
   /*
   for(mi_page_t* p = pq->first; p!=NULL; p = p->next, atmost--) {
     if (atmost == 0) { return false; }
@@ -256,12 +257,12 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
       // can we reclaim into this heap?
       if (heap != NULL && heap->allow_page_reclaim) {
         const long reclaim_max = _mi_option_get_fast(mi_option_page_reclaim_max);
-        if ((heap == page->heap && mi_page_queue_len_is_atmost(heap, page->block_size, reclaim_max)) ||  // only reclaim if we were the originating heap, and we have at most N pages already
-          (reclaim_on_free == 1 &&               // OR if the reclaim across heaps is allowed
-            !mi_page_is_used_at_frac(page, 8) &&  //    and the page is not too full
-            !heap->tld->is_in_threadpool &&       //    and not part of a threadpool
-            _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable
-          )
+        if ((heap == page->heap && mi_page_queue_len_is_lower_as(heap, page->block_size, reclaim_max)) ||  // only reclaim if we were the originating heap, and we have at most N pages already
+            (reclaim_on_free == 1 &&               // OR if the reclaim across heaps is allowed
+             !mi_page_is_used_at_frac(page, 8) &&  //    and the page is not too full
+             !heap->tld->is_in_threadpool &&       //    and not part of a threadpool
+             _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable
+           )
         {
           // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
           _mi_arenas_page_unabandon(page);
