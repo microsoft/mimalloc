@@ -83,7 +83,8 @@ const mi_page_t _mi_page_empty = {
   { { 0 }, { 0 }, { 0 }, { 0 } }, \
   \
   { MI_INIT74(MI_STAT_COUNT_NULL) }, \
-  { MI_INIT74(MI_STAT_COUNT_NULL) }
+  { MI_INIT74(MI_STAT_COUNT_NULL) }, \
+  { MI_INIT5(MI_STAT_COUNT_NULL) }
 
 // --------------------------------------------------------
 // Statically allocate an empty heap as the initial

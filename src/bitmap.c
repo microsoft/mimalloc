@@ -1444,10 +1444,12 @@ static void mi_bbitmap_set_chunk_bin(mi_bbitmap_t* bbitmap, size_t chunk_idx, mi
   mi_assert_internal(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
   for (mi_bbin_t ibin = MI_BBIN_SMALL; ibin < MI_BBIN_NONE; ibin = mi_bbin_inc(ibin)) {
     if (ibin == bin) {
-      mi_bchunk_set(& bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
+      const bool was_clear = mi_bchunk_set(& bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
+      if (was_clear) { mi_os_stat_increase(chunk_bins[ibin],1); }
     }
     else {
-      mi_bchunk_clear(&bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
+      const bool was_set = mi_bchunk_clear(&bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
+      if (was_set) { mi_os_stat_decrease(chunk_bins[ibin],1); }
     }
   }  
 }
