@@ -225,25 +225,25 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
   much fragmentation since we keep chunks for larger blocks separate.
 ---------------------------------------------------------------------------- */
 
-// mi_bbin_t is defined in mimalloc-stats.h
+// mi_chunkbin_t is defined in mimalloc-stats.h
 
-static inline mi_bbin_t mi_bbin_inc(mi_bbin_t bbin) {
-  mi_assert_internal(bbin < MI_BBIN_COUNT);
-  return (mi_bbin_t)((int)bbin + 1);
+static inline mi_chunkbin_t mi_chunkbin_inc(mi_chunkbin_t bbin) {
+  mi_assert_internal(bbin < MI_CBIN_COUNT);
+  return (mi_chunkbin_t)((int)bbin + 1);
 }
 
-static inline mi_bbin_t mi_bbin_dec(mi_bbin_t bbin) {
-  mi_assert_internal(bbin > MI_BBIN_NONE);
-  return (mi_bbin_t)((int)bbin - 1);
+static inline mi_chunkbin_t mi_chunkbin_dec(mi_chunkbin_t bbin) {
+  mi_assert_internal(bbin > MI_CBIN_NONE);
+  return (mi_chunkbin_t)((int)bbin - 1);
 }
 
-static inline mi_bbin_t mi_bbin_of(size_t slice_count) {
-  if (slice_count==1) return MI_BBIN_SMALL;
-  if (slice_count==8) return MI_BBIN_MEDIUM;
+static inline mi_chunkbin_t mi_chunkbin_of(size_t slice_count) {
+  if (slice_count==1) return MI_CBIN_SMALL;
+  if (slice_count==8) return MI_CBIN_MEDIUM;
   #if MI_ENABLE_LARGE_PAGES
-  if (slice_count==MI_BFIELD_BITS) return MI_BBIN_LARGE;
+  if (slice_count==MI_BFIELD_BITS) return MI_CBIN_LARGE;
   #endif
-  return MI_BBIN_OTHER;
+  return MI_CBIN_OTHER;
 }
 
 // An atomic "binned" bitmap for the free slices where we keep chunks reserved for particalar size classes
@@ -254,7 +254,7 @@ typedef mi_decl_bchunk_align struct mi_bbitmap_s {
   size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc by aligning manually
   #endif
   mi_bchunkmap_t   chunkmap;                                    
-  mi_bchunkmap_t   chunkmap_bins[MI_BBIN_COUNT - 1];             // chunkmaps with bit set if the chunk is in that size class (excluding MI_BBIN_NONE)  
+  mi_bchunkmap_t   chunkmap_bins[MI_CBIN_COUNT - 1];             // chunkmaps with bit set if the chunk is in that size class (excluding MI_CBIN_NONE)  
   mi_bchunk_t      chunks[MI_BITMAP_DEFAULT_CHUNK_COUNT];        // usually dynamic MI_BITMAP_MAX_CHUNK_COUNT
 } mi_bbitmap_t;
 
@@ -267,7 +267,7 @@ static inline size_t mi_bbitmap_max_bits(const mi_bbitmap_t* bbitmap) {
   return (mi_bbitmap_chunk_count(bbitmap) * MI_BCHUNK_BITS);
 }
 
-mi_bbin_t mi_bbitmap_debug_get_bin(const mi_bchunk_t* chunkmap_bins, size_t chunk_idx);
+mi_chunkbin_t mi_bbitmap_debug_get_bin(const mi_bchunk_t* chunkmap_bins, size_t chunk_idx);
 
 size_t mi_bbitmap_size(size_t bit_count, size_t* chunk_count);
 

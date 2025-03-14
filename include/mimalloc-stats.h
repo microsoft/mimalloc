@@ -66,14 +66,14 @@ typedef struct mi_stat_counter_s {
 
 
 // Size bins for chunks
-typedef enum mi_bbin_e {
-  MI_BBIN_SMALL,    // slice_count == 1
-  MI_BBIN_OTHER,    // slice_count: any other from the other bins, and 1 <= slice_count <= MI_BCHUNK_BITS
-  MI_BBIN_MEDIUM,   // slice_count == 8
-  MI_BBIN_LARGE,    // slice_count == MI_SIZE_BITS  (only used if MI_ENABLE_LARGE_PAGES is 1)
-  MI_BBIN_NONE,     // no bin assigned yet (the chunk is completely free)
-  MI_BBIN_COUNT
-} mi_bbin_t;
+typedef enum mi_chunkbin_e {
+  MI_CBIN_SMALL,    // slice_count == 1
+  MI_CBIN_OTHER,    // slice_count: any other from the other bins, and 1 <= slice_count <= MI_BCHUNK_BITS
+  MI_CBIN_MEDIUM,   // slice_count == 8
+  MI_CBIN_LARGE,    // slice_count == MI_SIZE_BITS  (only used if MI_ENABLE_LARGE_PAGES is 1)
+  MI_CBIN_NONE,     // no bin assigned yet (the chunk is completely free)
+  MI_CBIN_COUNT
+} mi_chunkbin_t;
 
 
 // Define the statistics structure
@@ -94,7 +94,7 @@ typedef struct mi_stats_s
   // size segregated statistics
   mi_stat_count_t   malloc_bins[MI_BIN_HUGE+1];   // allocation per size bin
   mi_stat_count_t   page_bins[MI_BIN_HUGE+1];     // pages allocated per size bin
-  mi_stat_count_t   chunk_bins[MI_BBIN_COUNT];    // chunks per page sizes
+  mi_stat_count_t   chunk_bins[MI_CBIN_COUNT];    // chunks per page sizes
 } mi_stats_t;
 
 #undef MI_STAT_COUNT

@@ -1541,12 +1541,12 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
     char chunk_kind = ' ';
     if (chunk_bins != NULL) {
       switch (mi_bbitmap_debug_get_bin(chunk_bins,i)) {
-        case MI_BBIN_SMALL:  chunk_kind = 'S'; break;
-        case MI_BBIN_MEDIUM: chunk_kind = 'M'; break;
-        case MI_BBIN_LARGE:  chunk_kind = 'L'; break;
-        case MI_BBIN_OTHER:  chunk_kind = 'X'; break;
+        case MI_CBIN_SMALL:  chunk_kind = 'S'; break;
+        case MI_CBIN_MEDIUM: chunk_kind = 'M'; break;
+        case MI_CBIN_LARGE:  chunk_kind = 'L'; break;
+        case MI_CBIN_OTHER:  chunk_kind = 'X'; break;
         default: chunk_kind = ' '; break; // suppress warning
-        // case MI_BBIN_NONE: chunk_kind = 'N'; break;
+        // case MI_CBIN_NONE: chunk_kind = 'N'; break;
       }
     }
     buf[k++] = chunk_kind;
