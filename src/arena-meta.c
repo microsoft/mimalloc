@@ -25,10 +25,15 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_META_PAGE_SIZE         MI_ARENA_SLICE_SIZE
 #define MI_META_PAGE_ALIGN        MI_ARENA_SLICE_ALIGN
 
-#define MI_META_BLOCK_SIZE        (128)                       // large enough such that META_MAX_SIZE >= 4k (even on 32-bit)
+// large enough such that META_MAX_SIZE > 4k (even on 32-bit)
+#define MI_META_BLOCK_SIZE        (1 << (16 - MI_BCHUNK_BITS_SHIFT))        // 128 on 64-bit
 #define MI_META_BLOCK_ALIGN       MI_META_BLOCK_SIZE
 #define MI_META_BLOCKS_PER_PAGE   (MI_META_PAGE_SIZE / MI_META_BLOCK_SIZE)  // 512
 #define MI_META_MAX_SIZE          (MI_BCHUNK_SIZE * MI_META_BLOCK_SIZE)
+
+#if MI_META_MAX_SIZE <= 4096
+#error "max meta object size should be at least 4KiB"
+#endif
 
 typedef struct mi_meta_page_s  {
   _Atomic(struct mi_meta_page_s*)  next;    // a linked list of meta-data pages (never released)
@@ -77,8 +82,8 @@ static mi_meta_page_t* mi_meta_page_zalloc(void) {
 
   // guard pages
   #if MI_SECURE >= 1
-  _mi_os_secure_guard_page_set_at(base, memid.is_pinned);
-  _mi_os_secure_guard_page_set_before(base + MI_META_PAGE_SIZE, memid.is_pinned);
+  _mi_os_secure_guard_page_set_at(base, memid);
+  _mi_os_secure_guard_page_set_before(base + MI_META_PAGE_SIZE, memid);
   #endif
   
   // initialize the page and free block bitmap

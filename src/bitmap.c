@@ -961,6 +961,16 @@ static bool mi_bchunk_bsr(mi_bchunk_t* chunk, size_t* pidx) {
   return false;
 }
 
+static size_t mi_bchunk_popcount(mi_bchunk_t* chunk) {
+  size_t popcount = 0;
+  for (size_t i = 0; i < MI_BCHUNK_FIELDS; i++) {
+    const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
+    popcount += mi_bfield_popcount(b);
+  }
+  return popcount;
+}
+
+
 /* --------------------------------------------------------------------------------
  bitmap chunkmap
 -------------------------------------------------------------------------------- */
@@ -1284,6 +1294,25 @@ bool mi_bitmap_bsr(mi_bitmap_t* bitmap, size_t* idx) {
   return false;
 }
 
+// Return count of all set bits in a bitmap.
+size_t mi_bitmap_popcount(mi_bitmap_t* bitmap) {
+  // for all chunkmap entries
+  size_t popcount = 0;
+  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  for (size_t i = 0; i < chunkmap_max; i++) {
+    mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
+    size_t cmap_idx;
+    // for each chunk (corresponding to a set bit in a chunkmap entry)
+    while (mi_bfield_foreach_bit(&cmap_entry, &cmap_idx)) {
+      const size_t chunk_idx = i*MI_BFIELD_BITS + cmap_idx;
+      // count bits in a chunk
+      popcount += mi_bchunk_popcount(&bitmap->chunks[chunk_idx]);
+    }
+  }
+  return popcount;
+}
+
+
 
 // Clear a bit once it is set.
 void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx) {
@@ -1373,7 +1402,7 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
 
 
 size_t mi_bbitmap_size(size_t bit_count, size_t* pchunk_count) {
-  mi_assert_internal((bit_count % MI_BCHUNK_BITS) == 0);
+  // mi_assert_internal((bit_count % MI_BCHUNK_BITS) == 0);
   bit_count = _mi_align_up(bit_count, MI_BCHUNK_BITS);
   mi_assert_internal(bit_count <= MI_BITMAP_MAX_BIT_COUNT);
   mi_assert_internal(bit_count > 0);
@@ -1411,25 +1440,27 @@ void mi_bbitmap_unsafe_setN(mi_bbitmap_t* bbitmap, size_t idx, size_t n) {
 -------------------------------------------------------------------------------- */
 
 // Assign a specific size bin to a chunk
-static void mi_bbitmap_set_chunk_bin(mi_bbitmap_t* bbitmap, size_t chunk_idx, mi_bbin_t bin) {
+static void mi_bbitmap_set_chunk_bin(mi_bbitmap_t* bbitmap, size_t chunk_idx, mi_chunkbin_t bin) {
   mi_assert_internal(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
-  for (mi_bbin_t ibin = MI_BBIN_SMALL; ibin < MI_BBIN_NONE; ibin = mi_bbin_inc(ibin)) {
+  for (mi_chunkbin_t ibin = MI_CBIN_SMALL; ibin < MI_CBIN_NONE; ibin = mi_chunkbin_inc(ibin)) {
     if (ibin == bin) {
-      mi_bchunk_set(& bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
+      const bool was_clear = mi_bchunk_set(& bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
+      if (was_clear) { mi_os_stat_increase(chunk_bins[ibin],1); }
     }
     else {
-      mi_bchunk_clear(&bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
+      const bool was_set = mi_bchunk_clear(&bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
+      if (was_set) { mi_os_stat_decrease(chunk_bins[ibin],1); }
     }
   }  
 }
 
-mi_bbin_t mi_bbitmap_debug_get_bin(const mi_bchunkmap_t* chunkmap_bins, size_t chunk_idx) {
-  for (mi_bbin_t ibin = MI_BBIN_SMALL; ibin < MI_BBIN_NONE; ibin = mi_bbin_inc(ibin)) {
+mi_chunkbin_t mi_bbitmap_debug_get_bin(const mi_bchunkmap_t* chunkmap_bins, size_t chunk_idx) {
+  for (mi_chunkbin_t ibin = MI_CBIN_SMALL; ibin < MI_CBIN_NONE; ibin = mi_chunkbin_inc(ibin)) {
     if (mi_bchunk_is_xsetN(MI_BIT_SET, &chunkmap_bins[ibin], chunk_idx, 1)) {
       return ibin;
     }
   }
-  return MI_BBIN_NONE;
+  return MI_CBIN_NONE;
 }
 
 // Track the index of the highest chunk that is accessed.
@@ -1446,7 +1477,7 @@ static void mi_bbitmap_chunkmap_set(mi_bbitmap_t* bbitmap, size_t chunk_idx, boo
   if (check_all_set) {
     if (mi_bchunk_all_are_set_relaxed(&bbitmap->chunks[chunk_idx])) {
       // all slices are free in this chunk: return back to the NONE bin
-      mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx, MI_BBIN_NONE);
+      mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx, MI_CBIN_NONE);
     }
   }
   mi_bchunk_set(&bbitmap->chunkmap, chunk_idx, NULL);
@@ -1557,7 +1588,7 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
   mi_assert_internal(MI_BFIELD_BITS >= MI_BCHUNK_FIELDS);
   const mi_bfield_t cmap_mask  = mi_bfield_mask(cmap_max_count,0);
   const size_t cmap_cycle      = cmap_acc+1;
-  const mi_bbin_t bbin = mi_bbin_of(n); 
+  const mi_chunkbin_t bbin = mi_chunkbin_of(n); 
   // visit each cmap entry
   size_t cmap_idx = 0;
   mi_bfield_cycle_iterate(cmap_mask, tseq, cmap_cycle, cmap_idx, X)
@@ -1568,29 +1599,29 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
     if (cmap_entry == 0) continue;
 
     // get size bin masks
-    mi_bfield_t cmap_bins[MI_BBIN_COUNT] = { 0 };
-    cmap_bins[MI_BBIN_NONE] = cmap_entry;
-    for (mi_bbin_t ibin = MI_BBIN_SMALL; ibin < MI_BBIN_NONE; ibin = mi_bbin_inc(ibin)) {
+    mi_bfield_t cmap_bins[MI_CBIN_COUNT] = { 0 };
+    cmap_bins[MI_CBIN_NONE] = cmap_entry;
+    for (mi_chunkbin_t ibin = MI_CBIN_SMALL; ibin < MI_CBIN_NONE; ibin = mi_chunkbin_inc(ibin)) {
       const mi_bfield_t cmap_bin = mi_atomic_load_relaxed(&bbitmap->chunkmap_bins[ibin].bfields[cmap_idx]);
       cmap_bins[ibin] = cmap_bin & cmap_entry;
-      cmap_bins[MI_BBIN_NONE] &= ~cmap_bin;      // clear bits that are in an assigned size bin
+      cmap_bins[MI_CBIN_NONE] &= ~cmap_bin;      // clear bits that are in an assigned size bin
     }
 
     // consider only chunks for a particular size bin at a time    
     // this picks the best bin only within a cmap entry (~ 1GiB address space), but avoids multiple
     // iterations through all entries.
-    mi_assert_internal(bbin < MI_BBIN_NONE);
-    for (mi_bbin_t ibin = MI_BBIN_SMALL; ibin <= MI_BBIN_NONE;
+    mi_assert_internal(bbin < MI_CBIN_NONE);
+    for (mi_chunkbin_t ibin = MI_CBIN_SMALL; ibin <= MI_CBIN_NONE;
           // skip from bbin to NONE (so, say, a SMALL will never be placed in a OTHER, MEDIUM, or LARGE chunk to reduce fragmentation)
-          ibin = (ibin == bbin ? MI_BBIN_NONE : mi_bbin_inc(ibin)))
+          ibin = (ibin == bbin ? MI_CBIN_NONE : mi_chunkbin_inc(ibin)))
     {
-      mi_assert_internal(ibin < MI_BBIN_COUNT);
+      mi_assert_internal(ibin < MI_CBIN_COUNT);
       const mi_bfield_t cmap_bin = cmap_bins[ibin];      
       size_t eidx = 0;
       mi_bfield_cycle_iterate(cmap_bin, tseq, cmap_entry_cycle, eidx, Y)  
       {
         // assertion doesn't quite hold as the max_accessed may be out-of-date
-        // mi_assert_internal(cmap_entry_cycle > eidx || ibin == MI_BBIN_NONE);
+        // mi_assert_internal(cmap_entry_cycle > eidx || ibin == MI_CBIN_NONE);
 
         // get the chunk 
         const size_t chunk_idx = cmap_idx*MI_BFIELD_BITS + eidx;
@@ -1598,7 +1629,7 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
 
         size_t cidx;
         if ((*on_find)(chunk, n, &cidx)) {
-          if (cidx==0 && ibin == MI_BBIN_NONE) { // only the first block determines the size bin
+          if (cidx==0 && ibin == MI_CBIN_NONE) { // only the first block determines the size bin
             // this chunk is now reserved for the `bbin` size class
             mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx, bbin);
           }

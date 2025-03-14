@@ -106,6 +106,7 @@ size_t _mi_bin(size_t size) {
 }
 
 size_t _mi_bin_size(size_t bin) {
+  mi_assert_internal(bin <= MI_BIN_HUGE);
   return _mi_heap_empty.pages[bin].block_size;
 }
 

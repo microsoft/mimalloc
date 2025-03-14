@@ -479,6 +479,11 @@ mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, s
 // Return statistics
 // --------------------------------------------------------
 
+size_t mi_stats_get_bin_size(size_t bin) mi_attr_noexcept {
+  if (bin > MI_BIN_HUGE) return 0;
+  return _mi_bin_size(bin);
+}
+
 void mi_stats_get(size_t stats_size, mi_stats_t* stats) mi_attr_noexcept {
   if (stats == NULL || stats_size == 0) return;
   _mi_memzero(stats, stats_size);
@@ -529,7 +534,7 @@ static void mi_heap_buf_print(mi_heap_buf_t* hbuf, const char* msg) {
 }
 
 static void mi_heap_buf_print_count_bin(mi_heap_buf_t* hbuf, const char* prefix, mi_stat_count_t* stat, size_t bin, bool add_comma) {
-  const size_t binsize = _mi_bin_size(bin);
+  const size_t binsize = mi_stats_get_bin_size(bin);
   const size_t pagesize = (binsize <= MI_SMALL_MAX_OBJ_SIZE ? MI_SMALL_PAGE_SIZE :
                             (binsize <= MI_MEDIUM_MAX_OBJ_SIZE ? MI_MEDIUM_PAGE_SIZE :
                               (binsize <= MI_LARGE_MAX_OBJ_SIZE ? MI_LARGE_PAGE_SIZE : 0)));

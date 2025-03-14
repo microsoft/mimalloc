@@ -429,7 +429,9 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   if mi_likely( /* bsize < MI_MAX_RETIRE_SIZE && */ !mi_page_queue_is_special(pq)) {  // not full or huge queue?
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_heap_t* heap = mi_page_heap(page);
-      mi_debug_heap_stat_counter_increase(heap, pages_retire, 1);
+      #if MI_STAT>0
+      mi_heap_stat_counter_increase(heap, pages_retire, 1);
+      #endif
       page->retire_expire = (bsize <= MI_SMALL_MAX_OBJ_SIZE ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
       mi_assert_internal(pq >= heap->pages);
       const size_t index = pq - heap->pages;
@@ -618,7 +620,9 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
   size_t page_size;
   //uint8_t* page_start =
   mi_page_area(page, &page_size);
-  mi_debug_heap_stat_counter_increase(heap, pages_extended, 1);
+  #if MI_STAT>0
+  mi_heap_stat_counter_increase(heap, pages_extended, 1);
+  #endif
 
   // calculate the extend count
   const size_t bsize = mi_page_block_size(page);
@@ -658,7 +662,9 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;
-  mi_debug_heap_stat_increase(heap, page_committed, extend * bsize);
+  #if MI_STAT>0
+  mi_heap_stat_increase(heap, page_committed, extend * bsize);
+  #endif
   mi_assert_expensive(mi_page_is_valid_init(page));
 }
 

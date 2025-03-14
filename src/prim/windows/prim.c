@@ -848,7 +848,7 @@ bool _mi_prim_thread_is_in_threadpool(void) {
   if (win_major_version >= 6) {
     // check if this thread belongs to a windows threadpool
     // see: <https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/teb/index.htm>
-    _TEB* const teb = NtCurrentTeb();
+    struct _TEB* const teb = NtCurrentTeb();
     void* const pool_data = *((void**)((uint8_t*)teb + (MI_SIZE_BITS == 32 ? 0x0F90 : 0x1778)));
     return (pool_data != NULL);
   }

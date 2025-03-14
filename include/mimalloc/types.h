@@ -22,6 +22,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <mimalloc-stats.h>
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
+#include <limits.h>   // SIZE_MAX etc.
 #include <errno.h>    // error codes
 #include "bits.h"     // size defines (MI_INTPTR_SIZE etc), bit operations
 #include "atomic.h"   // _Atomic primitives
@@ -75,6 +76,15 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
+// Statistics (0=only essential, 1=normal, 2=more fine-grained (expensive) tracking)
+#ifndef MI_STAT
+#if (MI_DEBUG>0)
+#define MI_STAT 2
+#else
+#define MI_STAT 0
+#endif
+#endif
+
 // Use guard pages behind objects of a certain size (set by the MIMALLOC_DEBUG_GUARDED_MIN/MAX options)
 // Padding should be disabled when using guard pages
 // #define MI_GUARDED 1
@@ -111,16 +121,26 @@ terms of the MIT license. A copy of the license can be found in the file
 // (comments specify sizes on 64-bit, usually 32-bit is halved)
 // --------------------------------------------------------------
 
-// Sizes are for 64-bit
+// Main size parameter; determines max arena sizes and max arena object sizes etc.
 #ifndef MI_ARENA_SLICE_SHIFT
-#ifdef  MI_SMALL_PAGE_SHIFT   // backward compatibility
-#define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
-#else
-#define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
+  #ifdef  MI_SMALL_PAGE_SHIFT   // backward compatibility
+  #define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
+  #else
+  #define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
+  #endif
 #endif
+#if MI_ARENA_SLICE_SHIFT < 12
+#error Arena slices should be at least 4KiB
 #endif
+
 #ifndef MI_BCHUNK_BITS_SHIFT
-#define MI_BCHUNK_BITS_SHIFT              (6 + MI_SIZE_SHIFT)         // optimized for 512 bits per chunk (avx512)
+  #if MI_ARENA_SLICE_SHIFT <= 13    // <= 8KiB
+  #define MI_BCHUNK_BITS_SHIFT              (7)   // 128 bits
+  #elif MI_ARENA_SLICE_SHIFT < 16   // <= 32KiB
+  #define MI_BCHUNK_BITS_SHIFT              (8)   // 256 bits
+  #else 
+  #define MI_BCHUNK_BITS_SHIFT              (6 + MI_SIZE_SHIFT)       // 512 bits (or 256 on 32-bit)
+  #endif
 #endif
 
 #define MI_BCHUNK_BITS                    (1 << MI_BCHUNK_BITS_SHIFT)         // sub-bitmaps are "bchunks" of 512 bits
@@ -132,6 +152,10 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define MI_ARENA_MIN_OBJ_SIZE             (MI_ARENA_MIN_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
 #define MI_ARENA_MAX_OBJ_SIZE             (MI_ARENA_MAX_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
+
+#if MI_ARENA_MAX_OBJ_SIZE < MI_SIZE_SIZE*1024
+#error maximum object size may be too small to hold local thread data  
+#endif
 
 #define MI_SMALL_PAGE_SIZE                MI_ARENA_MIN_OBJ_SIZE                    // 64 KiB
 #define MI_MEDIUM_PAGE_SIZE               (8*MI_SMALL_PAGE_SIZE)                   // 512 KiB  (=byte in the bchunk bitmap)
@@ -151,6 +175,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Minimal commit for a page on-demand commit (should be >= OS page size)
 #define MI_PAGE_MIN_COMMIT_SIZE  MI_ARENA_SLICE_SIZE // (4*MI_KiB)
 
+
 // ------------------------------------------------------
 // Arena's are large reserved areas of memory allocated from
 // the OS that are managed by mimalloc to efficiently
@@ -158,8 +183,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // mimalloc pages.
 // ------------------------------------------------------
 
-// A large memory arena where pages are allocated in.
-typedef struct mi_arena_s mi_arena_t;     // defined in `arena.c`
+// A large memory arena where pages are allocated in. 
+typedef struct mi_arena_s mi_arena_t;     // defined below
 
 
 // ---------------------------------------------------------------
@@ -226,6 +251,11 @@ static inline bool mi_memid_is_os(mi_memid_t memid) {
 static inline bool mi_memid_needs_no_free(mi_memid_t memid) {
   return mi_memkind_needs_no_free(memid.memkind);
 }
+
+static inline mi_arena_t* mi_memid_arena(mi_memid_t memid) {
+  return (memid.memkind == MI_MEM_ARENA ? memid.mem.arena.arena : NULL);
+}
+
 
 // ------------------------------------------------------
 // Mimalloc pages contain allocated blocks
@@ -385,7 +415,7 @@ typedef enum mi_page_kind_e {
 // ------------------------------------------------------
 
 // Thread local data
-typedef struct mi_tld_s mi_tld_t;
+typedef struct mi_tld_s mi_tld_t;   // defined below
 
 // Pages of a certain block size are held in a queue.
 typedef struct mi_page_queue_s {
@@ -451,9 +481,11 @@ struct mi_heap_s {
 
 
 // ------------------------------------------------------
-// Sub processes do not reclaim or visit segments
-// from other sub processes. These are essentially the
-// static variables of a process.
+// Sub processes do not reclaim or visit pages from other sub processes. 
+// These are essentially the static variables of a process, and
+// usually there is only one subprocess. This can be used for example
+// by CPython to have seperate interpreters within one process.
+// Each thread can only belong to one subprocess.
 // ------------------------------------------------------
 
 #define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
@@ -498,6 +530,50 @@ struct mi_tld_s {
 };
 
 
+/* ----------------------------------------------------------------------------
+  Arenas are fixed area's of OS memory from which we can allocate
+  large blocks (>= MI_ARENA_MIN_BLOCK_SIZE).
+  In contrast to the rest of mimalloc, the arenas are shared between
+  threads and need to be accessed using atomic operations (using atomic `mi_bitmap_t`'s).
+
+  Arenas are also used to for huge OS page (1GiB) reservations or for reserving
+  OS memory upfront which can be improve performance or is sometimes needed
+  on embedded devices. We can also employ this with WASI or `sbrk` systems
+  to reserve large arenas upfront and be able to reuse the memory more effectively.
+-----------------------------------------------------------------------------*/
+
+#define MI_ARENA_BIN_COUNT      (MI_BIN_COUNT)
+#define MI_ARENA_MIN_SIZE       (MI_BCHUNK_BITS * MI_ARENA_SLICE_SIZE)           // 32 MiB (or 8 MiB on 32-bit)
+#define MI_ARENA_MAX_SIZE       (MI_BITMAP_MAX_BIT_COUNT * MI_ARENA_SLICE_SIZE)
+
+typedef struct mi_bitmap_s  mi_bitmap_t;    // atomic bitmap  (defined in `src/bitmap.h`)
+typedef struct mi_bbitmap_s mi_bbitmap_t;   // atomic binned bitmap (defined in `src/bitmap.h`)
+
+// A memory arena
+typedef struct mi_arena_s {
+  mi_memid_t          memid;                // provenance of the memory area
+  mi_subproc_t*       subproc;              // subprocess this arena belongs to (`this 'element-of' this->subproc->arenas`)
+
+  size_t              slice_count;          // total size of the area in arena slices (of `MI_ARENA_SLICE_SIZE`)
+  size_t              info_slices;          // initial slices reserved for the arena bitmaps
+  int                 numa_node;            // associated NUMA node
+  bool                is_exclusive;         // only allow allocations if specifically for this arena
+  _Atomic(mi_msecs_t) purge_expire;         // expiration time when slices can be purged from `slices_purge`.
+  mi_commit_fun_t*    commit_fun;           // custom commit/decommit memory
+  void*               commit_fun_arg;       // user argument for a custom commit function
+
+  mi_bbitmap_t*       slices_free;          // is the slice free? (a binned bitmap with size classes)
+  mi_bitmap_t*        slices_committed;     // is the slice committed? (i.e. accessible)
+  mi_bitmap_t*        slices_dirty;         // is the slice potentially non-zero?
+  mi_bitmap_t*        slices_purge;         // slices that can be purged
+  mi_bitmap_t*        pages;                // all registered pages (abandoned and owned)
+  mi_bitmap_t*        pages_abandoned[MI_ARENA_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)
+                                            // the full queue contains abandoned full pages
+  // followed by the bitmaps (whose sizes depend on the arena size)
+  // note: when adding bitmaps revise `mi_arena_info_slices_needed`
+} mi_arena_t;
+
+
 /* -----------------------------------------------------------
   Error codes passed to `_mi_fatal_error`
   All are recoverable but EFAULT is a serious error and aborts by default in secure mode.
@@ -521,10 +597,9 @@ struct mi_tld_s {
 #define EOVERFLOW (75)
 #endif
 
-
-// ------------------------------------------------------
-// Debug
-// ------------------------------------------------------
+/* -----------------------------------------------------------
+  Debug constants
+----------------------------------------------------------- */
 
 #if !defined(MI_DEBUG_UNINIT)
 #define MI_DEBUG_UNINIT     (0xD0)
@@ -536,93 +611,5 @@ struct mi_tld_s {
 #define MI_DEBUG_PADDING    (0xDE)
 #endif
 
-#if (MI_DEBUG)
-// use our own assertion to print without memory allocation
-void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line, const char* func );
-#define mi_assert(expr)     ((expr) ? (void)0 : _mi_assert_fail(#expr,__FILE__,__LINE__,__func__))
-#else
-#define mi_assert(x)
-#endif
-
-#if (MI_DEBUG>1)
-#define mi_assert_internal    mi_assert
-#else
-#define mi_assert_internal(x)
-#endif
-
-#if (MI_DEBUG>2)
-#define mi_assert_expensive   mi_assert
-#else
-#define mi_assert_expensive(x)
-#endif
-
-
-// ------------------------------------------------------
-// Statistics
-// ------------------------------------------------------
-#ifndef MI_STAT
-#if (MI_DEBUG>0)
-#define MI_STAT 2
-#else
-#define MI_STAT 0
-#endif
-#endif
-
-
-// add to stat keeping track of the peak
-void __mi_stat_increase(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_decrease_mt(mi_stat_count_t* stat, size_t amount);
-
-// adjust stat in special cases to compensate for double counting (and does not adjust peak values and can decrease the total)
-void __mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount);
-
-// counters can just be increased
-void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
-void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
-
-#if (MI_STAT)
-#define mi_debug_stat_increase(stat,amount)                     __mi_stat_increase( &(stat), amount)
-#define mi_debug_stat_decrease(stat,amount)                     __mi_stat_decrease( &(stat), amount)
-#define mi_debug_stat_counter_increase(stat,amount)             __mi_stat_counter_increase( &(stat), amount)
-#define mi_debug_stat_increase_mt(stat,amount)                  __mi_stat_increase_mt( &(stat), amount)
-#define mi_debug_stat_decrease_mt(stat,amount)                  __mi_stat_decrease_mt( &(stat), amount)
-#define mi_debug_stat_counter_increase_mt(stat,amount)          __mi_stat_counter_increase_mt( &(stat), amount)
-#else
-#define mi_debug_stat_increase(stat,amount)                     ((void)0)
-#define mi_debug_stat_decrease(stat,amount)                     ((void)0)
-#define mi_debug_stat_counter_increase(stat,amount)             ((void)0)
-#define mi_debug_stat_increase_mt(stat,amount)                  ((void)0)
-#define mi_debug_stat_decrease_mt(stat,amount)                  ((void)0)
-#define mi_debug_stat_counter_increase_mt(stat,amount)          ((void)0)
-#endif
-
-#define mi_subproc_stat_counter_increase(subproc,stat,amount)   __mi_stat_counter_increase_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_increase(subproc,stat,amount)           __mi_stat_increase_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_decrease(subproc,stat,amount)           __mi_stat_decrease_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_adjust_increase(subproc,stat,amnt)      __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amnt)
-#define mi_subproc_stat_adjust_decrease(subproc,stat,amnt)      __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amnt)
-
-#define mi_tld_stat_counter_increase(tld,stat,amount)           __mi_stat_counter_increase( &(tld)->stats.stat, amount)
-#define mi_tld_stat_increase(tld,stat,amount)                   __mi_stat_increase( &(tld)->stats.stat, amount)
-#define mi_tld_stat_decrease(tld,stat,amount)                   __mi_stat_decrease( &(tld)->stats.stat, amount)
-#define mi_tld_stat_adjust_increase(tld,stat,amnt)              __mi_stat_adjust_increase( &(tld)->stats.stat, amnt)
-#define mi_tld_stat_adjust_decrease(tld,stat,amnt)              __mi_stat_adjust_decrease( &(tld)->stats.stat, amnt)
-
-#define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
-#define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
-#define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
-
-#define mi_heap_stat_counter_increase(heap,stat,amount)         mi_tld_stat_counter_increase(heap->tld, stat, amount)
-#define mi_heap_stat_increase(heap,stat,amount)                 mi_tld_stat_increase( heap->tld, stat, amount)
-#define mi_heap_stat_decrease(heap,stat,amount)                 mi_tld_stat_decrease( heap->tld, stat, amount)
-
-#define mi_debug_heap_stat_counter_increase(heap,stat,amount)   mi_debug_stat_counter_increase( (heap)->tld->stats.stat, amount)
-#define mi_debug_heap_stat_increase(heap,stat,amount)           mi_debug_stat_increase( (heap)->tld->stats.stat, amount)
-#define mi_debug_heap_stat_decrease(heap,stat,amount)           mi_debug_stat_decrease( (heap)->tld->stats.stat, amount)
 
 #endif // MI_TYPES_H

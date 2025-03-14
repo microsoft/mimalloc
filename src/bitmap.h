@@ -71,8 +71,18 @@ typedef size_t mi_bfield_t;
 #define MI_BCHUNK_FIELDS             (MI_BCHUNK_BITS / MI_BFIELD_BITS)  // 8 on both 64- and 32-bit
 
 
+// some compiler (msvc in C mode) cannot have expressions in the alignment attribute
+#if MI_BCHUNK_SIZE==64
+#define mi_decl_bchunk_align  mi_decl_align(64)
+#elif MI_BCHUNK_SIZE==32
+#define mi_decl_bchunk_align  mi_decl_align(32)
+#else
+#define mi_decl_bchunk_align  mi_decl_align(MI_BCHUNK_SIZE)
+#endif
+ 
+
 // A bitmap chunk contains 512 bits on 64-bit  (256 on 32-bit)
-typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bchunk_s {
+typedef mi_decl_bchunk_align struct mi_bchunk_s {
   _Atomic(mi_bfield_t) bfields[MI_BCHUNK_FIELDS];
 } mi_bchunk_t;
 
@@ -96,7 +106,7 @@ typedef mi_bchunk_t mi_bchunkmap_t;
 
 
 // An atomic bitmap
-typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bitmap_s {
+typedef mi_decl_bchunk_align struct mi_bitmap_s {
   _Atomic(size_t)  chunk_count;         // total count of chunks (0 < N <= MI_BCHUNKMAP_BITS)
   size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 1];    // suppress warning on msvc
   mi_bchunkmap_t   chunkmap;
@@ -196,6 +206,9 @@ void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx);
 // Used for unloading arena's
 bool mi_bitmap_bsr(mi_bitmap_t* bitmap, size_t* idx);
 
+// Return count of all set bits in a bitmap.
+size_t mi_bitmap_popcount(mi_bitmap_t* bitmap);
+
 
 typedef bool (mi_forall_set_fun_t)(size_t slice_index, size_t slice_count, mi_arena_t* arena, void* arg2);
 
@@ -212,43 +225,36 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
   much fragmentation since we keep chunks for larger blocks separate.
 ---------------------------------------------------------------------------- */
 
-// Size bins; larger bins are allowed to go into smaller bins.
-// SMALL can only be in small (and NONE), so they cannot fragment the larger bins.
-typedef enum mi_bbin_e {
-  MI_BBIN_SMALL,    // slice_count == 1
-  MI_BBIN_OTHER,    // slice_count: any other from the other bins, and 1 <= slice_count <= MI_BCHUNK_BITS
-  MI_BBIN_MEDIUM,   // slice_count == 8
-  MI_BBIN_LARGE,    // slice_count == MI_BFIELD_BITS  -- only used if MI_ENABLE_LARGE_PAGES is 1
-  MI_BBIN_NONE,     // no bin assigned yet (the chunk is completely free)
-  MI_BBIN_COUNT
-} mi_bbin_t;
+// mi_chunkbin_t is defined in mimalloc-stats.h
 
-static inline mi_bbin_t mi_bbin_inc(mi_bbin_t bbin) {
-  mi_assert_internal(bbin < MI_BBIN_COUNT);
-  return (mi_bbin_t)((int)bbin + 1);
+static inline mi_chunkbin_t mi_chunkbin_inc(mi_chunkbin_t bbin) {
+  mi_assert_internal(bbin < MI_CBIN_COUNT);
+  return (mi_chunkbin_t)((int)bbin + 1);
 }
 
-static inline mi_bbin_t mi_bbin_dec(mi_bbin_t bbin) {
-  mi_assert_internal(bbin > MI_BBIN_NONE);
-  return (mi_bbin_t)((int)bbin - 1);
+static inline mi_chunkbin_t mi_chunkbin_dec(mi_chunkbin_t bbin) {
+  mi_assert_internal(bbin > MI_CBIN_NONE);
+  return (mi_chunkbin_t)((int)bbin - 1);
 }
 
-static inline mi_bbin_t mi_bbin_of(size_t slice_count) {
-  if (slice_count==1) return MI_BBIN_SMALL;
-  if (slice_count==8) return MI_BBIN_MEDIUM;
+static inline mi_chunkbin_t mi_chunkbin_of(size_t slice_count) {
+  if (slice_count==1) return MI_CBIN_SMALL;
+  if (slice_count==8) return MI_CBIN_MEDIUM;
   #if MI_ENABLE_LARGE_PAGES
-  if (slice_count==MI_BFIELD_BITS) return MI_BBIN_LARGE;
+  if (slice_count==MI_BFIELD_BITS) return MI_CBIN_LARGE;
   #endif
-  return MI_BBIN_OTHER;
+  return MI_CBIN_OTHER;
 }
 
 // An atomic "binned" bitmap for the free slices where we keep chunks reserved for particalar size classes
-typedef mi_decl_align(MI_BCHUNK_SIZE) struct mi_bbitmap_s {
+typedef mi_decl_bchunk_align struct mi_bbitmap_s {
   _Atomic(size_t)  chunk_count;         // total count of chunks (0 < N <= MI_BCHUNKMAP_BITS)
   _Atomic(size_t)  chunk_max_accessed;  // max chunk index that was once cleared or set
-  size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc
+  #if (MI_BCHUNK_SIZE / MI_SIZE_SIZE) > 2
+  size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc by aligning manually
+  #endif
   mi_bchunkmap_t   chunkmap;                                    
-  mi_bchunkmap_t   chunkmap_bins[MI_BBIN_COUNT - 1];             // chunkmaps with bit set if the chunk is in that size class (excluding MI_BBIN_NONE)  
+  mi_bchunkmap_t   chunkmap_bins[MI_CBIN_COUNT - 1];             // chunkmaps with bit set if the chunk is in that size class (excluding MI_CBIN_NONE)  
   mi_bchunk_t      chunks[MI_BITMAP_DEFAULT_CHUNK_COUNT];        // usually dynamic MI_BITMAP_MAX_CHUNK_COUNT
 } mi_bbitmap_t;
 
@@ -261,7 +267,7 @@ static inline size_t mi_bbitmap_max_bits(const mi_bbitmap_t* bbitmap) {
   return (mi_bbitmap_chunk_count(bbitmap) * MI_BCHUNK_BITS);
 }
 
-mi_bbin_t mi_bbitmap_debug_get_bin(const mi_bchunk_t* chunkmap_bins, size_t chunk_idx);
+mi_chunkbin_t mi_bbitmap_debug_get_bin(const mi_bchunk_t* chunkmap_bins, size_t chunk_idx);
 
 size_t mi_bbitmap_size(size_t bit_count, size_t* chunk_count);
 

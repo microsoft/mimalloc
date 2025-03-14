@@ -264,27 +264,28 @@ typedef struct mi_heap_area_s {
 
 typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
 
-mi_decl_export bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
+mi_decl_export bool   mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
 // Advanced
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export bool mi_is_redirected(void) mi_attr_noexcept;
 
-mi_decl_export int   mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t timeout_msecs) mi_attr_noexcept;
-mi_decl_export int   mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msecs) mi_attr_noexcept;
+mi_decl_export int    mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t timeout_msecs) mi_attr_noexcept;
+mi_decl_export int    mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msecs) mi_attr_noexcept;
 
-mi_decl_export int   mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept;
-mi_decl_export bool  mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_pinned /* cannot decommit/reset? */, bool is_zero, int numa_node) mi_attr_noexcept;
+mi_decl_export int    mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept;
+mi_decl_export bool   mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_pinned /* cannot decommit/reset? */, bool is_zero, int numa_node) mi_attr_noexcept;
 
-mi_decl_export void  mi_debug_show_arenas(void) mi_attr_noexcept;
-mi_decl_export void  mi_arenas_print(void) mi_attr_noexcept;
+mi_decl_export void   mi_debug_show_arenas(void) mi_attr_noexcept;
+mi_decl_export void   mi_arenas_print(void) mi_attr_noexcept;
+mi_decl_export size_t mi_arena_min_alignment(void);
 
 // Advanced: heaps associated with specific memory arena's
 typedef void* mi_arena_id_t;
-mi_decl_export void* mi_arena_area(mi_arena_id_t arena_id, size_t* size);
-mi_decl_export int   mi_reserve_huge_os_pages_at_ex(size_t pages, int numa_node, size_t timeout_msecs, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
-mi_decl_export int   mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
-mi_decl_export bool  mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
+mi_decl_export void*  mi_arena_area(mi_arena_id_t arena_id, size_t* size);
+mi_decl_export int    mi_reserve_huge_os_pages_at_ex(size_t pages, int numa_node, size_t timeout_msecs, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
+mi_decl_export int    mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
+mi_decl_export bool   mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
 
 #if MI_MALLOC_VERSION >= 182
 // Create a heap that only allocates in the specified arena
@@ -329,10 +330,15 @@ mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexce
 
 
 // experimental
+typedef bool (mi_cdecl mi_commit_fun_t)(bool commit, void* start, size_t size, bool* is_zero, void* user_arg);
+mi_decl_export bool  mi_manage_memory(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive,
+                                      mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id) mi_attr_noexcept;
+
 mi_decl_export bool  mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t* accessed_size, size_t* size);
-mi_decl_export bool  mi_arena_reload(void* start, size_t size, mi_arena_id_t* arena_id);
+mi_decl_export bool  mi_arena_reload(void* start, size_t size, mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id);
 mi_decl_export bool  mi_heap_reload(mi_heap_t* heap, mi_arena_id_t arena);
 mi_decl_export void  mi_heap_unload(mi_heap_t* heap);
+
 
 // Is a pointer contained in the given arena area?
 mi_decl_export bool  mi_arena_contains(mi_arena_id_t arena_id, const void* p);
