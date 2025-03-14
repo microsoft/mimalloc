@@ -323,6 +323,27 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 
 
 /* -----------------------------------------------------------
+  Options (exposed for the debugger)
+----------------------------------------------------------- */
+typedef enum mi_option_init_e {
+  MI_OPTION_UNINIT,       // not yet initialized
+  MI_OPTION_DEFAULTED,    // not found in the environment, use default value
+  MI_OPTION_INITIALIZED   // found in environment or set explicitly
+} mi_option_init_t;
+
+typedef struct mi_option_desc_s {
+  long              value;  // the value
+  mi_option_init_t  init;   // is it initialized yet? (from the environment)
+  mi_option_t       option; // for debugging: the option index should match the option
+  const char*       name;   // option name without `mimalloc_` prefix
+  const char*       legacy_name; // potential legacy option name
+} mi_option_desc_t;
+
+// the static options
+extern mi_decl_hidden mi_option_desc_t mi_options[_mi_option_last];
+
+
+/* -----------------------------------------------------------
   Inlined definitions
 ----------------------------------------------------------- */
 #define MI_UNUSED(x)     (void)(x)

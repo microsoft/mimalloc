@@ -30,19 +30,7 @@ int mi_version(void) mi_attr_noexcept {
 // concurrently initialized, but an initializing data race
 // is ok since they resolve to the same value.
 // --------------------------------------------------------
-typedef enum mi_init_e {
-  UNINIT,       // not yet initialized
-  DEFAULTED,    // not found in the environment, use default value
-  INITIALIZED   // found in environment or set explicitly
-} mi_init_t;
 
-typedef struct mi_option_desc_s {
-  long        value;  // the value
-  mi_init_t   init;   // is it initialized yet? (from the environment)
-  mi_option_t option; // for debugging: the option index should match the option
-  const char* name;   // option name without `mimalloc_` prefix
-  const char* legacy_name; // potential legacy option name
-} mi_option_desc_t;
 
 #define MI_OPTION(opt)                  mi_option_##opt, #opt, NULL
 #define MI_OPTION_LEGACY(opt,legacy)    mi_option_##opt, #opt, #legacy
@@ -110,73 +98,73 @@ typedef struct mi_option_desc_s {
 #endif
 #endif
 
-
-static mi_option_desc_t options[_mi_option_last] =
+// Static options (only exposed for the debugger)
+mi_option_desc_t mi_options[_mi_option_last] =
 {
   // stable options
 #if MI_DEBUG || defined(MI_SHOW_ERRORS)
-  { 1, UNINIT, MI_OPTION(show_errors) },
+  { 1, MI_OPTION_UNINIT, MI_OPTION(show_errors) },
 #else
-  { 0, UNINIT, MI_OPTION(show_errors) },
+  { 0, MI_OPTION_UNINIT, MI_OPTION(show_errors) },
 #endif
-  { 0, UNINIT, MI_OPTION(show_stats) },
-  { MI_DEFAULT_VERBOSE, UNINIT, MI_OPTION(verbose) },
+  { 0, MI_OPTION_UNINIT, MI_OPTION(show_stats) },
+  { MI_DEFAULT_VERBOSE, MI_OPTION_UNINIT, MI_OPTION(verbose) },
 
   // some of the following options are experimental and not all combinations are allowed.
   { MI_DEFAULT_EAGER_COMMIT,
-       UNINIT, MI_OPTION(eager_commit) },               // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
+       MI_OPTION_UNINIT, MI_OPTION(eager_commit) },               // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
   { MI_DEFAULT_ARENA_EAGER_COMMIT,
-       UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
-  { 1, UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },        // purge decommits memory (instead of reset) (note: on linux this uses MADV_DONTNEED for decommit)
+       MI_OPTION_UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
+  { 1, MI_OPTION_UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },        // purge decommits memory (instead of reset) (note: on linux this uses MADV_DONTNEED for decommit)
   { MI_DEFAULT_ALLOW_LARGE_OS_PAGES,
-       UNINIT, MI_OPTION_LEGACY(allow_large_os_pages,large_os_pages) },    // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
+       MI_OPTION_UNINIT, MI_OPTION_LEGACY(allow_large_os_pages,large_os_pages) },    // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { MI_DEFAULT_RESERVE_HUGE_OS_PAGES,
-       UNINIT, MI_OPTION(reserve_huge_os_pages) },      // per 1GiB huge pages
-  {-1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) },   // reserve huge pages at node N
+       MI_OPTION_UNINIT, MI_OPTION(reserve_huge_os_pages) },      // per 1GiB huge pages
+  {-1, MI_OPTION_UNINIT, MI_OPTION(reserve_huge_os_pages_at) },   // reserve huge pages at node N
   { MI_DEFAULT_RESERVE_OS_MEMORY,
-       UNINIT, MI_OPTION(reserve_os_memory)     },      // reserve N KiB OS memory in advance (use `option_get_size`)
-  { 0, UNINIT, MI_OPTION(deprecated_segment_cache) },   // cache N segments per thread
-  { 0, UNINIT, MI_OPTION(deprecated_page_reset) },      // reset page memory on free
-  { 0, UNINIT, MI_OPTION(abandoned_page_purge) },       // purge free page memory when a thread terminates
-  { 0, UNINIT, MI_OPTION(deprecated_segment_reset) },   // reset segment memory on free (needs eager commit)
+       MI_OPTION_UNINIT, MI_OPTION(reserve_os_memory)     },      // reserve N KiB OS memory in advance (use `option_get_size`)
+  { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_segment_cache) },   // cache N segments per thread
+  { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_page_reset) },      // reset page memory on free
+  { 0, MI_OPTION_UNINIT, MI_OPTION(abandoned_page_purge) },       // purge free page memory when a thread terminates
+  { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_segment_reset) },   // reset segment memory on free (needs eager commit)
 #if defined(__NetBSD__)
-  { 0, UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed
+  { 0, MI_OPTION_UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed
 #else
-  { 1, UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
+  { 1, MI_OPTION_UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
 #endif
-  { 1000,UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
-  { 0,   UNINIT, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.
-  { 0,   UNINIT, MI_OPTION_LEGACY(disallow_os_alloc,limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)
-  { 100, UNINIT, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose
-  { 32,  UNINIT, MI_OPTION(max_errors) },               // maximum errors that are output
-  { 32,  UNINIT, MI_OPTION(max_warnings) },             // maximum warnings that are output
-  { 10,  UNINIT, MI_OPTION(deprecated_max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.
-  { 0,   UNINIT, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
-  { MI_DEFAULT_ARENA_RESERVE, UNINIT, MI_OPTION(arena_reserve) }, // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
-  { 1,   UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
-  { 1,   UNINIT, MI_OPTION_LEGACY(deprecated_purge_extend_delay, decommit_extend_delay) },
-  { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   UNINIT, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)
-  { 400, UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
+  { 1000,MI_OPTION_UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.
+  { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(disallow_os_alloc,limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)
+  { 100, MI_OPTION_UNINIT, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose
+  { 32,  MI_OPTION_UNINIT, MI_OPTION(max_errors) },               // maximum errors that are output
+  { 32,  MI_OPTION_UNINIT, MI_OPTION(max_warnings) },             // maximum warnings that are output
+  { 10,  MI_OPTION_UNINIT, MI_OPTION(deprecated_max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
+  { MI_DEFAULT_ARENA_RESERVE, MI_OPTION_UNINIT, MI_OPTION(arena_reserve) }, // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
+  { 1,   MI_OPTION_UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
+  { 1,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(deprecated_purge_extend_delay, decommit_extend_delay) },
+  { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   MI_OPTION_UNINIT, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)
+  { 400, MI_OPTION_UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
 #if defined(MI_VISIT_ABANDONED)
-  { 1,   INITIALIZED, MI_OPTION(visit_abandoned) },     // allow visiting heap blocks in abandoned segments; requires taking locks during reclaim.
+  { 1,   MI_OPTION_INITIALIZED, MI_OPTION(visit_abandoned) },     // allow visiting heap blocks in abandoned segments; requires taking locks during reclaim.
 #else
-  { 0,   UNINIT, MI_OPTION(visit_abandoned) },
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(visit_abandoned) },
 #endif
-  { 0,   UNINIT, MI_OPTION(guarded_min) },              // only used when building with MI_GUARDED: minimal rounded object size for guarded objects
-  { MI_GiB, UNINIT, MI_OPTION(guarded_max) },           // only used when building with MI_GUARDED: maximal rounded object size for guarded objects
-  { 0,   UNINIT, MI_OPTION(guarded_precise) },          // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_min) },              // only used when building with MI_GUARDED: minimal rounded object size for guarded objects
+  { MI_GiB, MI_OPTION_UNINIT, MI_OPTION(guarded_max) },           // only used when building with MI_GUARDED: maximal rounded object size for guarded objects
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_precise) },          // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
   { MI_DEFAULT_GUARDED_SAMPLE_RATE,
-         UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)
-  { 0,   UNINIT, MI_OPTION(guarded_sample_seed)},
-  { 10000, UNINIT, MI_OPTION(generic_collect) },        // collect heaps every N (=10000) generic allocation calls
-  { 0,   UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim abandoned pages on a free: -1 = disable completely, 0 = only reclaim into the originating heap, 1 = reclaim on free across heaps
-  { 2,   UNINIT, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues
-  { 4,   UNINIT, MI_OPTION(page_max_candidates) },      // max search to find a best page candidate
-  { 0,   UNINIT, MI_OPTION(max_vabits) },               // max virtual address space bits
+         MI_OPTION_UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_sample_seed)},
+  { 10000, MI_OPTION_UNINIT, MI_OPTION(generic_collect) },        // collect heaps every N (=10000) generic allocation calls
+  { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim abandoned pages on a free: -1 = disable completely, 0 = only reclaim into the originating heap, 1 = reclaim on free across heaps
+  { 2,   MI_OPTION_UNINIT, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues
+  { 4,   MI_OPTION_UNINIT, MI_OPTION(page_max_candidates) },      // max search to find a best page candidate
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(max_vabits) },               // max virtual address space bits
   { MI_DEFAULT_PAGEMAP_COMMIT,
-         UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
-  { 0,   UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
-  { 16,  UNINIT, MI_OPTION(page_reclaim_max) },         // don't reclaim pages if we already own N pages (in that size class)
+         MI_OPTION_UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
+  { 16,  MI_OPTION_UNINIT, MI_OPTION(page_reclaim_max) },         // don't reclaim pages if we already own N pages (in that size class)
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -232,7 +220,7 @@ void mi_options_print(void) mi_attr_noexcept
   for (int i = 0; i < _mi_option_last; i++) {
     mi_option_t option = (mi_option_t)i;
     long l = mi_option_get(option); MI_UNUSED(l); // possibly initialize
-    mi_option_desc_t* desc = &options[option];
+    mi_option_desc_t* desc = &mi_options[option];
     _mi_message("option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : ""));
   }
 
@@ -250,9 +238,9 @@ void mi_options_print(void) mi_attr_noexcept
 
 long _mi_option_get_fast(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
-  mi_option_desc_t* desc = &options[option];
+  mi_option_desc_t* desc = &mi_options[option];
   mi_assert(desc->option == option);  // index should match the option
-  //mi_assert(desc->init != UNINIT);
+  //mi_assert(desc->init != MI_OPTION_UNINIT);
   return desc->value;
 }
 
@@ -260,9 +248,9 @@ long _mi_option_get_fast(mi_option_t option) {
 mi_decl_nodiscard long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
   if (option < 0 || option >= _mi_option_last) return 0;
-  mi_option_desc_t* desc = &options[option];
+  mi_option_desc_t* desc = &mi_options[option];
   mi_assert(desc->option == option);  // index should match the option
-  if mi_unlikely(desc->init == UNINIT) {
+  if mi_unlikely(desc->init == MI_OPTION_UNINIT) {
     mi_option_init(desc);
   }
   return desc->value;
@@ -285,10 +273,10 @@ mi_decl_nodiscard size_t mi_option_get_size(mi_option_t option) {
 void mi_option_set(mi_option_t option, long value) {
   mi_assert(option >= 0 && option < _mi_option_last);
   if (option < 0 || option >= _mi_option_last) return;
-  mi_option_desc_t* desc = &options[option];
+  mi_option_desc_t* desc = &mi_options[option];
   mi_assert(desc->option == option);  // index should match the option
   desc->value = value;
-  desc->init = INITIALIZED;
+  desc->init = MI_OPTION_INITIALIZED;
   // ensure min/max range; be careful to not recurse.
   if (desc->option == mi_option_guarded_min && _mi_option_get_fast(mi_option_guarded_max) < value) {
     mi_option_set(mi_option_guarded_max, value);
@@ -301,8 +289,8 @@ void mi_option_set(mi_option_t option, long value) {
 void mi_option_set_default(mi_option_t option, long value) {
   mi_assert(option >= 0 && option < _mi_option_last);
   if (option < 0 || option >= _mi_option_last) return;
-  mi_option_desc_t* desc = &options[option];
-  if (desc->init != INITIALIZED) {
+  mi_option_desc_t* desc = &mi_options[option];
+  if (desc->init != MI_OPTION_INITIALIZED) {
     desc->value = value;
   }
 }
@@ -634,11 +622,11 @@ static void mi_option_init(mi_option_desc_t* desc) {
     buf[len] = 0;
     if (buf[0] == 0 || strstr("1;TRUE;YES;ON", buf) != NULL) {
       desc->value = 1;
-      desc->init = INITIALIZED;
+      desc->init = MI_OPTION_INITIALIZED;
     }
     else if (strstr("0;FALSE;NO;OFF", buf) != NULL) {
       desc->value = 0;
-      desc->init = INITIALIZED;
+      desc->init = MI_OPTION_INITIALIZED;
     }
     else {
       char* end = buf;
@@ -663,7 +651,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
       }
       else {
         // set `init` first to avoid recursion through _mi_warning_message on mimalloc_verbose.
-        desc->init = DEFAULTED;
+        desc->init = MI_OPTION_DEFAULTED;
         if (desc->option == mi_option_verbose && desc->value == 0) {
           // if the 'mimalloc_verbose' env var has a bogus value we'd never know
           // (since the value defaults to 'off') so in that case briefly enable verbose
@@ -676,9 +664,9 @@ static void mi_option_init(mi_option_desc_t* desc) {
         }
       }
     }
-    mi_assert_internal(desc->init != UNINIT);
+    mi_assert_internal(desc->init != MI_OPTION_UNINIT);
   }
   else if (!_mi_preloading()) {
-    desc->init = DEFAULTED;
+    desc->init = MI_OPTION_DEFAULTED;
   }
 }
