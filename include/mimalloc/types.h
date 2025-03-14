@@ -76,6 +76,15 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
+// Statistics (0=only essential, 1=normal, 2=more fine-grained (expensive) tracking)
+#ifndef MI_STAT
+#if (MI_DEBUG>0)
+#define MI_STAT 2
+#else
+#define MI_STAT 0
+#endif
+#endif
+
 // Use guard pages behind objects of a certain size (set by the MIMALLOC_DEBUG_GUARDED_MIN/MAX options)
 // Padding should be disabled when using guard pages
 // #define MI_GUARDED 1
@@ -565,7 +574,6 @@ typedef struct mi_arena_s {
 } mi_arena_t;
 
 
-
 /* -----------------------------------------------------------
   Error codes passed to `_mi_fatal_error`
   All are recoverable but EFAULT is a serious error and aborts by default in secure mode.
@@ -589,10 +597,9 @@ typedef struct mi_arena_s {
 #define EOVERFLOW (75)
 #endif
 
-
-// ------------------------------------------------------
-// Debug
-// ------------------------------------------------------
+/* -----------------------------------------------------------
+  Debug constants
+----------------------------------------------------------- */
 
 #if !defined(MI_DEBUG_UNINIT)
 #define MI_DEBUG_UNINIT     (0xD0)
@@ -604,93 +611,5 @@ typedef struct mi_arena_s {
 #define MI_DEBUG_PADDING    (0xDE)
 #endif
 
-#if (MI_DEBUG)
-// use our own assertion to print without memory allocation
-void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line, const char* func );
-#define mi_assert(expr)     ((expr) ? (void)0 : _mi_assert_fail(#expr,__FILE__,__LINE__,__func__))
-#else
-#define mi_assert(x)
-#endif
-
-#if (MI_DEBUG>1)
-#define mi_assert_internal    mi_assert
-#else
-#define mi_assert_internal(x)
-#endif
-
-#if (MI_DEBUG>2)
-#define mi_assert_expensive   mi_assert
-#else
-#define mi_assert_expensive(x)
-#endif
-
-
-// ------------------------------------------------------
-// Statistics
-// ------------------------------------------------------
-#ifndef MI_STAT
-#if (MI_DEBUG>0)
-#define MI_STAT 2
-#else
-#define MI_STAT 0
-#endif
-#endif
-
-
-// add to stat keeping track of the peak
-void __mi_stat_increase(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_decrease_mt(mi_stat_count_t* stat, size_t amount);
-
-// adjust stat in special cases to compensate for double counting (and does not adjust peak values and can decrease the total)
-void __mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount);
-
-// counters can just be increased
-void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
-void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
-
-#if (MI_STAT)
-#define mi_debug_stat_increase(stat,amount)                     __mi_stat_increase( &(stat), amount)
-#define mi_debug_stat_decrease(stat,amount)                     __mi_stat_decrease( &(stat), amount)
-#define mi_debug_stat_counter_increase(stat,amount)             __mi_stat_counter_increase( &(stat), amount)
-#define mi_debug_stat_increase_mt(stat,amount)                  __mi_stat_increase_mt( &(stat), amount)
-#define mi_debug_stat_decrease_mt(stat,amount)                  __mi_stat_decrease_mt( &(stat), amount)
-#define mi_debug_stat_counter_increase_mt(stat,amount)          __mi_stat_counter_increase_mt( &(stat), amount)
-#else
-#define mi_debug_stat_increase(stat,amount)                     ((void)0)
-#define mi_debug_stat_decrease(stat,amount)                     ((void)0)
-#define mi_debug_stat_counter_increase(stat,amount)             ((void)0)
-#define mi_debug_stat_increase_mt(stat,amount)                  ((void)0)
-#define mi_debug_stat_decrease_mt(stat,amount)                  ((void)0)
-#define mi_debug_stat_counter_increase_mt(stat,amount)          ((void)0)
-#endif
-
-#define mi_subproc_stat_counter_increase(subproc,stat,amount)   __mi_stat_counter_increase_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_increase(subproc,stat,amount)           __mi_stat_increase_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_decrease(subproc,stat,amount)           __mi_stat_decrease_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_adjust_increase(subproc,stat,amnt)      __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amnt)
-#define mi_subproc_stat_adjust_decrease(subproc,stat,amnt)      __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amnt)
-
-#define mi_tld_stat_counter_increase(tld,stat,amount)           __mi_stat_counter_increase( &(tld)->stats.stat, amount)
-#define mi_tld_stat_increase(tld,stat,amount)                   __mi_stat_increase( &(tld)->stats.stat, amount)
-#define mi_tld_stat_decrease(tld,stat,amount)                   __mi_stat_decrease( &(tld)->stats.stat, amount)
-#define mi_tld_stat_adjust_increase(tld,stat,amnt)              __mi_stat_adjust_increase( &(tld)->stats.stat, amnt)
-#define mi_tld_stat_adjust_decrease(tld,stat,amnt)              __mi_stat_adjust_decrease( &(tld)->stats.stat, amnt)
-
-#define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
-#define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
-#define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
-
-#define mi_heap_stat_counter_increase(heap,stat,amount)         mi_tld_stat_counter_increase(heap->tld, stat, amount)
-#define mi_heap_stat_increase(heap,stat,amount)                 mi_tld_stat_increase( heap->tld, stat, amount)
-#define mi_heap_stat_decrease(heap,stat,amount)                 mi_tld_stat_decrease( heap->tld, stat, amount)
-
-#define mi_debug_heap_stat_counter_increase(heap,stat,amount)   mi_debug_stat_counter_increase( (heap)->tld->stats.stat, amount)
-#define mi_debug_heap_stat_increase(heap,stat,amount)           mi_debug_stat_increase( (heap)->tld->stats.stat, amount)
-#define mi_debug_heap_stat_decrease(heap,stat,amount)           mi_debug_stat_decrease( (heap)->tld->stats.stat, amount)
 
 #endif // MI_TYPES_H
