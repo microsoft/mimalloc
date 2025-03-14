@@ -166,6 +166,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Minimal commit for a page on-demand commit (should be >= OS page size)
 #define MI_PAGE_MIN_COMMIT_SIZE  MI_ARENA_SLICE_SIZE // (4*MI_KiB)
 
+
 // ------------------------------------------------------
 // Arena's are large reserved areas of memory allocated from
 // the OS that are managed by mimalloc to efficiently
@@ -173,8 +174,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // mimalloc pages.
 // ------------------------------------------------------
 
-// A large memory arena where pages are allocated in.
-typedef struct mi_arena_s mi_arena_t;     // defined in `arena.c`
+// A large memory arena where pages are allocated in. 
+typedef struct mi_arena_s mi_arena_t;     // defined below
 
 
 // ---------------------------------------------------------------
@@ -245,6 +246,7 @@ static inline bool mi_memid_needs_no_free(mi_memid_t memid) {
 static inline mi_arena_t* mi_memid_arena(mi_memid_t memid) {
   return (memid.memkind == MI_MEM_ARENA ? memid.mem.arena.arena : NULL);
 }
+
 
 // ------------------------------------------------------
 // Mimalloc pages contain allocated blocks
@@ -404,7 +406,7 @@ typedef enum mi_page_kind_e {
 // ------------------------------------------------------
 
 // Thread local data
-typedef struct mi_tld_s mi_tld_t;
+typedef struct mi_tld_s mi_tld_t;   // defined below
 
 // Pages of a certain block size are held in a queue.
 typedef struct mi_page_queue_s {
@@ -470,9 +472,11 @@ struct mi_heap_s {
 
 
 // ------------------------------------------------------
-// Sub processes do not reclaim or visit segments
-// from other sub processes. These are essentially the
-// static variables of a process.
+// Sub processes do not reclaim or visit pages from other sub processes. 
+// These are essentially the static variables of a process, and
+// usually there is only one subprocess. This can be used for example
+// by CPython to have seperate interpreters within one process.
+// Each thread can only belong to one subprocess.
 // ------------------------------------------------------
 
 #define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
@@ -515,6 +519,51 @@ struct mi_tld_s {
   mi_stats_t            stats;                // statistics
   mi_memid_t            memid;                // provenance of the tld memory itself (meta or OS)
 };
+
+
+/* ----------------------------------------------------------------------------
+  Arenas are fixed area's of OS memory from which we can allocate
+  large blocks (>= MI_ARENA_MIN_BLOCK_SIZE).
+  In contrast to the rest of mimalloc, the arenas are shared between
+  threads and need to be accessed using atomic operations (using atomic `mi_bitmap_t`'s).
+
+  Arenas are also used to for huge OS page (1GiB) reservations or for reserving
+  OS memory upfront which can be improve performance or is sometimes needed
+  on embedded devices. We can also employ this with WASI or `sbrk` systems
+  to reserve large arenas upfront and be able to reuse the memory more effectively.
+-----------------------------------------------------------------------------*/
+
+#define MI_ARENA_BIN_COUNT      (MI_BIN_COUNT)
+#define MI_ARENA_MIN_SIZE       (MI_BCHUNK_BITS * MI_ARENA_SLICE_SIZE)           // 32 MiB (or 8 MiB on 32-bit)
+#define MI_ARENA_MAX_SIZE       (MI_BITMAP_MAX_BIT_COUNT * MI_ARENA_SLICE_SIZE)
+
+typedef struct mi_bitmap_s  mi_bitmap_t;    // atomic bitmap  (defined in `src/bitmap.h`)
+typedef struct mi_bbitmap_s mi_bbitmap_t;   // atomic binned bitmap (defined in `src/bitmap.h`)
+
+// A memory arena
+typedef struct mi_arena_s {
+  mi_memid_t          memid;                // provenance of the memory area
+  mi_subproc_t*       subproc;              // subprocess this arena belongs to (`this 'element-of' this->subproc->arenas`)
+
+  size_t              slice_count;          // total size of the area in arena slices (of `MI_ARENA_SLICE_SIZE`)
+  size_t              info_slices;          // initial slices reserved for the arena bitmaps
+  int                 numa_node;            // associated NUMA node
+  bool                is_exclusive;         // only allow allocations if specifically for this arena
+  _Atomic(mi_msecs_t) purge_expire;         // expiration time when slices can be purged from `slices_purge`.
+  mi_commit_fun_t*    commit_fun;           // custom commit/decommit memory
+  void*               commit_fun_arg;       // user argument for a custom commit function
+
+  mi_bbitmap_t*       slices_free;          // is the slice free? (a binned bitmap with size classes)
+  mi_bitmap_t*        slices_committed;     // is the slice committed? (i.e. accessible)
+  mi_bitmap_t*        slices_dirty;         // is the slice potentially non-zero?
+  mi_bitmap_t*        slices_purge;         // slices that can be purged
+  mi_bitmap_t*        pages;                // all registered pages (abandoned and owned)
+  mi_bitmap_t*        pages_abandoned[MI_ARENA_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)
+                                            // the full queue contains abandoned full pages
+  // followed by the bitmaps (whose sizes depend on the arena size)
+  // note: when adding bitmaps revise `mi_arena_info_slices_needed`
+} mi_arena_t;
+
 
 
 /* -----------------------------------------------------------

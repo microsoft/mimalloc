@@ -100,6 +100,7 @@ typedef struct mi_stats_s
 #undef MI_STAT_COUNT
 #undef MI_STAT_COUNTER
 
+
 // Exported definitions
 #ifdef __cplusplus
 extern "C" {
