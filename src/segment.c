@@ -524,6 +524,22 @@ void _mi_segments_collect(bool force, mi_segments_tld_t* tld) {
   mi_pages_try_purge(force,tld);
   #if MI_DEBUG>=2
   if (!_mi_is_main_thread()) {
+    if (tld->pages_purge.first != NULL) {
+      mi_page_t* p = tld->pages_purge.first;
+      _mi_warning_message("pages_purge list is not empty. First page: %p\n", (void*)tld->pages_purge.first);
+      while (p != NULL) {
+        mi_assert_internal(p->segment_in_use);
+        p = p->next;
+      }
+    }
+    if (tld->pages_purge.last != NULL) {
+      mi_page_t* p = tld->pages_purge.last;
+      _mi_warning_message("pages_purge list is not empty. Last page: %p\n", (void*)tld->pages_purge.last);
+      while (p != NULL) {
+        mi_assert_internal(p->segment_in_use);
+        p = p->prev;
+      }
+    }
     mi_assert_internal(tld->pages_purge.first == NULL);
     mi_assert_internal(tld->pages_purge.last == NULL);
   }
