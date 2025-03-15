@@ -1423,7 +1423,7 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
   size_t bit_set_count = 0;
   for (size_t i = 0; i < chunk_count && bit_count < slice_count; i++) {    
     char buf[5*MI_BCHUNK_BITS + 64]; _mi_memzero(buf, sizeof(buf));
-    if (bit_count > used_slice_count) {
+    if (bit_count > used_slice_count && i+2 < chunk_count) {
       const size_t diff = chunk_count - 1 - i;
       bit_count += diff*MI_BCHUNK_BITS;
       _mi_raw_message("  |\n");
