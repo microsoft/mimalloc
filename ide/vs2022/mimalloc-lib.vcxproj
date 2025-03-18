@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|ARM64">
@@ -478,6 +478,10 @@
     <ClCompile Include="..\..\src\page.c" />
     <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg.cpp" />
     <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_arenas.cpp" />
+    <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_help.cpp" />
+    <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_options.cpp" />
+    <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_settings.cpp" />
+    <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_stats.cpp" />
     <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_utils.cpp" />
     <ClCompile Include="..\..\src\random.c" />
     <ClCompile Include="..\..\src\os.c" />
