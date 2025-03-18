@@ -13,7 +13,7 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_options(PDEBUG_CLIENT 
     HRESULT hr = S_OK;
 
     ULONG64 optionsAddr = 0;
-    hr = GetSymbolOffset("options", optionsAddr);
+    hr = GetSymbolOffset("mi_options", optionsAddr);
     if (FAILED(hr) || optionsAddr == 0) {
         g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Could not locate optionsAddr.\n");
         return E_FAIL;

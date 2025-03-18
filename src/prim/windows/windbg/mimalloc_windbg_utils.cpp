@@ -6,6 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc_windbg_utils.h"
+#include <array>
 
 ULONG64 g_MiMallocBase = 0;
 
@@ -135,4 +136,29 @@ size_t mi_bitmap_count(mi_bitmap_t* bmp) {
         }
     }
     return totalCount;
+}
+
+std::string FormatSize(std::size_t bytes) {
+    constexpr std::array<const char*, 6> suffixes = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
+    double size = static_cast<double>(bytes);
+    int index = 0;
+
+    while (size >= 1024.0 && index < suffixes.size() - 1) {
+        size /= 1024.0;
+        ++index;
+    }
+
+    return std::format("{:.2f} {}", size, suffixes[index]);
+}
+
+std::string FormatNumber(double num) {
+    constexpr std::array<const char*, 5> suffixes = {"", "K", "M", "B", "T"};
+    int index = 0;
+
+    while (num >= 1000.0 && index < suffixes.size() - 1) {
+        num /= 1000.0;
+        ++index;
+    }
+
+    return std::format("{:.1f}{}", num, suffixes[index]);
 }
