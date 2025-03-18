@@ -7,6 +7,30 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc_windbg_utils.h"
 
+void PrintArenaSummary(double totalSlices, double totalCommittedSlices, double totalCommittedPages, double totalAbandonedPages) {
+    double pctCommitted = (totalSlices > 0) ? (totalCommittedSlices * 100.0 / totalSlices) : 0.0;
+    const auto arenaStats = std::format(" Total Slices: {}\n Committed Slices: {} ({}%)", totalSlices, totalCommittedSlices, pctCommitted);
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\nAggregated Arena Statistics:\n%s\n", arenaStats.c_str());
+
+    const auto pageStats = std::format(" Committed Pages: {}\n Abandoned Pages: {}", totalCommittedPages, totalAbandonedPages);
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\nAggregated Page Statistics:\n%s\n", pageStats.c_str());
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
+}
+
+void PrintAnomalyDetectionIfNeeded(double potentialFragmentation, double highAbandonedPagesRatio) {
+    if (potentialFragmentation < MinCommittedSlicesPct) {
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, " Warning: Low committed slices percentage (%.2f%%). Potential fragmentation detected.\n", potentialFragmentation);
+    }
+
+    if (highAbandonedPagesRatio > MaxAbandonedPagesRatio) {
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, " Warning: High ratio of abandoned pages (%.2f%%). Possible memory leak or delayed decommitment.\n", highAbandonedPagesRatio);
+    }
+
+    if (potentialFragmentation < MinCommittedSlicesPct || highAbandonedPagesRatio > MaxAbandonedPagesRatio) {
+        g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
+    }
+}
+
 /*
 Command: !mi_dump_arenas
     - Arenas are a fundamental component of mimalloc’s memory management.
@@ -115,30 +139,13 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arenas(PDEBUG_CLIENT c
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\nTotal Arenas: %d\n", arenaCount);
 
     // Summary that aids in detecting fragmentation or undercommitment.
-    double pctCommitted = (totalSlices > 0) ? (totalCommittedSlices * 100.0 / totalSlices) : 0.0;
-    const auto arenaStats = std::format(" Total Slices: {}\n Committed Slices: {} ({}%)", totalSlices, totalCommittedSlices, pctCommitted);
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\nAggregated Arena Statistics:\n%s\n", arenaStats.c_str());
-
-    const auto pageStats = std::format(" Committed Pages: {}\n Abandoned Pages: {}", totalCommittedPages, totalAbandonedPages);
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\nAggregated Page Statistics:\n%s\n", pageStats.c_str());
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
+    PrintArenaSummary(totalSlices, totalCommittedSlices, totalCommittedPages, totalAbandonedPages);
 
     for (size_t i = 0; i < arenaCount; ++i) {
         ULONG64 arenaAddr = subprocMainAddr + offsetof(mi_subproc_t, arenas) + (i * sizeof(std::atomic<mi_arena_t*>));
         PrintLink(arenaAddr, std::format("!mi_dump_arena 0x{:016X}", arenaAddr), std::format("Arena {}", i));
 
-        if (potentialFragmentation[i] < MinCommittedSlicesPct) {
-            g_DebugControl->Output(DEBUG_OUTPUT_ERROR, " Warning: Low committed slices percentage (%.2f%%). Potential fragmentation detected.\n", potentialFragmentation[i]);
-        }
-
-        if (highAbandonedPagesRatio[i] > MaxAbandonedPagesRatio) {
-            g_DebugControl->Output(DEBUG_OUTPUT_ERROR, " Warning: High ratio of abandoned pages (%.2f%%). Possible memory leak or delayed decommitment.\n",
-                                   highAbandonedPagesRatio[i]);
-        }
-
-        if (potentialFragmentation[i] < MinCommittedSlicesPct || highAbandonedPagesRatio[i] > MaxAbandonedPagesRatio) {
-            g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
-        }
+        PrintAnomalyDetectionIfNeeded(potentialFragmentation[i], highAbandonedPagesRatio[i]);
     }
 
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
@@ -235,13 +242,7 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arena(PDEBUG_CLIENT cl
     totalAbandonedPages += abandonedPages;
 
     // Summary that aids in detecting fragmentation or undercommitment.
-    double pctCommitted = (totalSlices > 0) ? (totalCommittedSlices * 100.0 / totalSlices) : 0.0;
-    const auto arenaStats = std::format(" Total Slices: {}\n Committed Slices: {} ({}%)", totalSlices, totalCommittedSlices, pctCommitted);
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\nAggregated Arena Statistics:\n%s\n", arenaStats.c_str());
-
-    const auto pageStats = std::format(" Committed Pages: {}\n Abandoned Pages: {}", totalCommittedPages, totalAbandonedPages);
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\nAggregated Page Statistics:\n%s\n", pageStats.c_str());
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
+    PrintArenaSummary(totalSlices, totalCommittedSlices, totalCommittedPages, totalAbandonedPages);
 
     // --- Anomaly Detection ---
     float pctCommittedSlices = (arena.slice_count > 0) ? (committed * 100.0 / arena.slice_count) : 0.0;
@@ -251,13 +252,7 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arena(PDEBUG_CLIENT cl
         abandonedPagesRatio = (abandonedPages * 100.0) / committedPages;
     }
 
-    if (pctCommittedSlices < MinCommittedSlicesPct) {
-        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, " Warning: Low committed slices percentage (%.2f%%). Potential fragmentation detected.\n", pctCommittedSlices);
-    }
-
-    if (abandonedPagesRatio > MaxAbandonedPagesRatio) {
-        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, " Warning: High ratio of abandoned pages (%.2f%%). Possible memory leak or delayed decommitment.\n", abandonedPagesRatio);
-    }
+    PrintAnomalyDetectionIfNeeded(pctCommittedSlices, abandonedPagesRatio);
 
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
     return S_OK;

@@ -79,6 +79,7 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK DebugExtensionInitialize(PULON
     g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_dump_options\">Dump Options</link>\n");
     g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_dump_arenas\">Dump Arenas</link>\n");
     g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_dump_stats\">Dump Statistics</link>\n");
+    g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_show_extension_settings\">Show Extension Settings</link>\n");
     g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_show_help\">Show Help commands</link>\n");
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
 
