@@ -652,15 +652,16 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
   if (p==NULL) return;
   if (size==0) return;
   const bool all_committed = (committed_size == size);
+  const bool decommitted_size = (committed_size <= size ? size - committed_size : 0);
 
   // need to set all memory to undefined as some parts may still be marked as no_access (like padding etc.)
   mi_track_mem_undefined(p,size);
 
   if (mi_memkind_is_os(memid.memkind)) {
     // was a direct OS allocation, pass through
-    if (!all_committed && committed_size > 0) {
-      // if partially committed, adjust the committed stats (as `_mi_os_free` will increase decommit by the full size)
-      _mi_stat_decrease(&_mi_stats_main.committed, committed_size);
+    if (!all_committed && decommitted_size > 0) {
+      // if partially committed, adjust the committed stats (as `_mi_os_free` will decrease commit by the full size)
+      _mi_stat_increase(&_mi_stats_main.committed, decommitted_size);
     }
     _mi_os_free(p, size, memid);
   }
@@ -699,7 +700,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
         mi_track_mem_noaccess(p,size);
         if (committed_size > 0) {
           // if partially committed, adjust the committed stats (is it will be recommitted when re-using)
-          // in the delayed purge, we now need to not count a decommit if the range is not marked as committed.
+          // in the delayed purge, we do no longer decrease the commit if the range is not marked entirely as committed.
           _mi_stat_decrease(&_mi_stats_main.committed, committed_size);
         }
         // note: if not all committed, it may be that the purge will reset/decommit the entire range
