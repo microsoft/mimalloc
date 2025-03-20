@@ -259,7 +259,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
 
   // set the dirty bits (todo: no need for an atomic op here?)
   if (arena->memid.initially_zero && arena->blocks_dirty != NULL) {
-    memid->initially_zero = _mi_bitmap_claim_across(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL);
+    memid->initially_zero = _mi_bitmap_claim_across(arena->blocks_dirty, arena->field_count, needed_bcount, bitmap_index, NULL, NULL);
   }
 
   // set commit state
@@ -271,10 +271,14 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
     // commit requested, but the range may not be committed as a whole: ensure it is committed now
     memid->initially_committed = true;
     bool any_uncommitted;
-    _mi_bitmap_claim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted);
+    size_t already_committed = 0;
+    _mi_bitmap_claim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted, &already_committed);
     if (any_uncommitted) {
+      mi_assert_internal(already_committed < needed_bcount);
+      const size_t commit_size = mi_arena_block_size(needed_bcount);
+      const size_t stat_commit_size = commit_size - mi_arena_block_size(already_committed);
       bool commit_zero = false;
-      if (!_mi_os_commit(p, mi_arena_block_size(needed_bcount), &commit_zero)) {
+      if (!_mi_os_commit_ex(p, commit_size, &commit_zero, stat_commit_size)) {
         memid->initially_committed = false;
       }
       else {
@@ -284,7 +288,14 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
   }
   else {
     // no need to commit, but check if already fully committed
-    memid->initially_committed = _mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
+    size_t already_committed = 0;
+    memid->initially_committed = _mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &already_committed);
+    if (!memid->initially_committed && already_committed > 0) {
+      // partially committed: as it will be committed at some time, adjust the stats and pretend the range is fully uncommitted.
+      mi_assert_internal(already_committed < needed_bcount);
+      _mi_stat_decrease(&_mi_stats_main.committed, mi_arena_block_size(already_committed));
+      _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
+    }
   }
 
   return p;
@@ -468,17 +479,19 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks) 
   const size_t size = mi_arena_block_size(blocks);
   void* const p = mi_arena_block_start(arena, bitmap_idx);
   bool needs_recommit;
-  if (_mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx)) {
+  size_t already_committed = 0;
+  if (_mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx, &already_committed)) {
     // all blocks are committed, we can purge freely
+    mi_assert_internal(already_committed == blocks);
     needs_recommit = _mi_os_purge(p, size);
   }
   else {
     // some blocks are not committed -- this can happen when a partially committed block is freed
     // in `_mi_arena_free` and it is conservatively marked as uncommitted but still scheduled for a purge
-    // we need to ensure we do not try to reset (as that may be invalid for uncommitted memory),
-    // and also undo the decommit stats (as it was already adjusted)
+    // we need to ensure we do not try to reset (as that may be invalid for uncommitted memory).
+    mi_assert_internal(already_committed < blocks);
     mi_assert_internal(mi_option_is_enabled(mi_option_purge_decommits));
-    needs_recommit = _mi_os_purge_ex(p, size, false /* allow reset? */, 0);    
+    needs_recommit = _mi_os_purge_ex(p, size, false /* allow reset? */, mi_arena_block_size(already_committed));    
   }
 
   // clear the purged blocks
@@ -512,7 +525,7 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t bitmap_idx, size_t
     else {
       // already an expiration was set
     }
-    _mi_bitmap_claim_across(arena->blocks_purge, arena->field_count, blocks, bitmap_idx, NULL);
+    _mi_bitmap_claim_across(arena->blocks_purge, arena->field_count, blocks, bitmap_idx, NULL, NULL);
   }
 }
 
@@ -652,7 +665,7 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
   if (p==NULL) return;
   if (size==0) return;
   const bool all_committed = (committed_size == size);
-  const bool decommitted_size = (committed_size <= size ? size - committed_size : 0);
+  const size_t decommitted_size = (committed_size <= size ? size - committed_size : 0);
 
   // need to set all memory to undefined as some parts may still be marked as no_access (like padding etc.)
   mi_track_mem_undefined(p,size);
@@ -695,14 +708,14 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
       mi_assert_internal(arena->blocks_purge != NULL);
 
       if (!all_committed) {
-        // mark the entire range as no longer committed (so we recommit the full range when re-using)
+        // mark the entire range as no longer committed (so we will recommit the full range when re-using)
         _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx);
         mi_track_mem_noaccess(p,size);
-        if (committed_size > 0) {
+        //if (committed_size > 0) {
           // if partially committed, adjust the committed stats (is it will be recommitted when re-using)
           // in the delayed purge, we do no longer decrease the commit if the range is not marked entirely as committed.
           _mi_stat_decrease(&_mi_stats_main.committed, committed_size);
-        }
+        //}
         // note: if not all committed, it may be that the purge will reset/decommit the entire range
         // that contains already decommitted parts. Since purge consistently uses reset or decommit that
         // works (as we should never reset decommitted parts).
