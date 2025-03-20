@@ -7,9 +7,9 @@ trigger:
   branches:
     include:
     - master
-    - dev
-    - dev2
     - dev3
+    - dev2
+    - dev
   tags:
     include:
     - v*
@@ -37,6 +37,14 @@ jobs:
       Secure:
         BuildType: secure
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+        MSBuildConfiguration: Release
+      Debug x86:
+        BuildType: debug
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -A Win32
+        MSBuildConfiguration: Debug
+      Release x86:
+        BuildType: release
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -A Win32
         MSBuildConfiguration: Release
   steps:
   - task: CMake@1
