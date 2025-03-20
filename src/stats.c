@@ -30,6 +30,7 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   {
     // add atomically (for abandoned pages)
     int64_t current = mi_atomic_addi64_relaxed(&stat->current, amount);
+    // if (stat == &_mi_stats_main.committed) { mi_assert_internal(current + amount >= 0); };
     mi_atomic_maxi64_relaxed(&stat->peak, current + amount);
     if (amount > 0) {
       mi_atomic_addi64_relaxed(&stat->total,amount);

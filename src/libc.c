@@ -275,3 +275,60 @@ int _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...) {
   va_end(args);
   return written;
 }
+
+
+#if MI_SIZE_SIZE == 4
+#define mi_mask_even_bits32      (0x55555555)
+#define mi_mask_even_pairs32     (0x33333333)
+#define mi_mask_even_nibbles32   (0x0F0F0F0F)
+
+// sum of all the bytes in `x` if it is guaranteed that the sum < 256!
+static size_t mi_byte_sum32(uint32_t x) {
+  // perform `x * 0x01010101`: the highest byte contains the sum of all bytes.
+  x += (x << 8);
+  x += (x << 16);
+  return (size_t)(x >> 24);
+}
+
+static size_t mi_popcount_generic32(uint32_t x) {
+  // first count each 2-bit group `a`, where: a==0b00 -> 00, a==0b01 -> 01, a==0b10 -> 01, a==0b11 -> 10
+  // in other words, `a - (a>>1)`; to do this in parallel, we need to mask to prevent spilling a bit pair
+  // into the lower bit-pair:
+  x = x - ((x >> 1) & mi_mask_even_bits32);
+  // add the 2-bit pair results
+  x = (x & mi_mask_even_pairs32) + ((x >> 2) & mi_mask_even_pairs32);
+  // add the 4-bit nibble results
+  x = (x + (x >> 4)) & mi_mask_even_nibbles32;
+  // each byte now has a count of its bits, we can sum them now:
+  return mi_byte_sum32(x);
+}
+
+mi_decl_noinline size_t _mi_popcount_generic(size_t x) {
+  return mi_popcount_generic32(x);
+}
+
+#else
+#define mi_mask_even_bits64      (0x5555555555555555)
+#define mi_mask_even_pairs64     (0x3333333333333333)
+#define mi_mask_even_nibbles64   (0x0F0F0F0F0F0F0F0F)
+
+// sum of all the bytes in `x` if it is guaranteed that the sum < 256!
+static size_t mi_byte_sum64(uint64_t x) {
+  x += (x << 8);
+  x += (x << 16);
+  x += (x << 32);
+  return (size_t)(x >> 56);
+}
+
+static size_t mi_popcount_generic64(uint64_t x) {
+  x = x - ((x >> 1) & mi_mask_even_bits64);
+  x = (x & mi_mask_even_pairs64) + ((x >> 2) & mi_mask_even_pairs64);
+  x = (x + (x >> 4)) & mi_mask_even_nibbles64;
+  return mi_byte_sum64(x);
+}
+
+mi_decl_noinline size_t _mi_popcount_generic(size_t x) {
+  return mi_popcount_generic64(x);
+}
+#endif
+
