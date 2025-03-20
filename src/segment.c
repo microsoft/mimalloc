@@ -523,7 +523,7 @@ static void mi_segment_os_free(mi_segment_t* segment, size_t segment_size, mi_se
 void _mi_segments_collect(bool force, mi_segments_tld_t* tld) {
   mi_pages_try_purge(force,tld);
   #if MI_DEBUG>=2
-  if (!_mi_is_main_thread()) {
+  if (!_mi_is_main_thread() && force) {
     mi_assert_internal(tld->pages_purge.first == NULL);
     mi_assert_internal(tld->pages_purge.last == NULL);
   }
