@@ -31,11 +31,12 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(__linux__)
   #include <features.h>
+  #include <linux/prctl.h>  // PR_SET_VMA
   //#if defined(MI_NO_THP)
-  #include <sys/prctl.h>  // THP disable
+  #include <sys/prctl.h>    // THP disable
   //#endif
   #if defined(__GLIBC__)
-  #include <linux/mman.h> // linux mmap flags
+  #include <linux/mman.h>   // linux mmap flags
   #else
   #include <sys/mman.h>
   #endif
@@ -207,7 +208,17 @@ static int unix_madvise(void* addr, size_t size, int advice) {
   return (res==0 ? 0 : errno);
 }
 
-static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
+static void* unix_mmap_prim(void* addr, size_t size, int protect_flags, int flags, int fd) {
+  void* p = mmap(addr, size, protect_flags, flags, fd, 0 /* offset */);
+  #if (defined(__linux__) && defined(PR_SET_VMA))
+  if (p!=MAP_FAILED && p!=NULL) {
+    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, p, size, "mimalloc");
+  }
+  #endif
+  return p;
+}
+
+static void* unix_mmap_prim_aligned(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd) {
   MI_UNUSED(try_alignment);
   void* p = NULL;
   #if defined(MAP_ALIGNED)  // BSD
@@ -215,7 +226,7 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
     size_t idx;
     size_t n = mi_bsr(try_alignment, &idx);
     if (((size_t)1 << n) == try_alignment && n >= 12 && n <= 30) {  // alignment is a power of 2 and 4096 <= alignment <= 1GiB
-      p = mmap(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd, 0);
+      p = unix_mmap_prim(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd);
       if (p==MAP_FAILED || !_mi_is_aligned(p,try_alignment)) {
         int err = errno;
         _mi_trace_message("unable to directly request aligned OS memory (error: %d (0x%x), size: 0x%zx bytes, alignment: 0x%zx, hint address: %p)\n", err, err, size, try_alignment, addr);
@@ -226,7 +237,7 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
   }
   #elif defined(MAP_ALIGN)  // Solaris
   if (addr == NULL && try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0) {
-    p = mmap((void*)try_alignment, size, protect_flags, flags | MAP_ALIGN, fd, 0);  // addr parameter is the required alignment
+    p = unix_mmap_prim((void*)try_alignment, size, protect_flags, flags | MAP_ALIGN, fd);  // addr parameter is the required alignment
     if (p!=MAP_FAILED) return p;
     // fall back to regular mmap
   }
@@ -236,7 +247,7 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
   if (addr == NULL) {
     void* hint = _mi_os_get_aligned_hint(try_alignment, size);
     if (hint != NULL) {
-      p = mmap(hint, size, protect_flags, flags, fd, 0);
+      p = unix_mmap_prim(hint, size, protect_flags, flags, fd);
       if (p==MAP_FAILED || !_mi_is_aligned(p,try_alignment)) {
         #if MI_TRACK_ENABLED  // asan sometimes does not instrument errno correctly?
         int err = 0;
@@ -251,7 +262,7 @@ static void* unix_mmap_prim(void* addr, size_t size, size_t try_alignment, int p
   }
   #endif
   // regular mmap
-  p = mmap(addr, size, protect_flags, flags, fd, 0);
+  p = unix_mmap_prim(addr, size, protect_flags, flags, fd);
   if (p!=MAP_FAILED) return p;
   // failed to allocate
   return NULL;
@@ -322,7 +333,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       if (large_only || lflags != flags) {
         // try large OS page allocation
         *is_large = true;
-        p = unix_mmap_prim(addr, size, try_alignment, protect_flags, lflags, lfd);
+        p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags, lfd);
         #ifdef MAP_HUGE_1GB
         if (p == NULL && (lflags & MAP_HUGE_1GB) == MAP_HUGE_1GB) {
           mi_huge_pages_available = false; // don't try huge 1GiB pages again
@@ -330,7 +341,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
             _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
           }
           lflags = ((lflags & ~MAP_HUGE_1GB) | MAP_HUGE_2MB);
-          p = unix_mmap_prim(addr, size, try_alignment, protect_flags, lflags, lfd);
+          p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags, lfd);
         }
         #endif
         if (large_only) return p;
@@ -343,7 +354,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   // regular allocation
   if (p == NULL) {
     *is_large = false;
-    p = unix_mmap_prim(addr, size, try_alignment, protect_flags, flags, fd);
+    p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, flags, fd);
     if (p != NULL) {
       #if defined(MADV_HUGEPAGE)
       // Many Linux systems don't allow MAP_HUGETLB but they support instead
