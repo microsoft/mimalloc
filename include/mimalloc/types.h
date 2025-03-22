@@ -683,22 +683,25 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line
 // add to stat keeping track of the peak
 void _mi_stat_increase(mi_stat_count_t* stat, size_t amount);
 void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
+void _mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount);
 // counters can just be increased
 void _mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 
 #if (MI_STAT)
 #define mi_stat_increase(stat,amount)         _mi_stat_increase( &(stat), amount)
 #define mi_stat_decrease(stat,amount)         _mi_stat_decrease( &(stat), amount)
+#define mi_stat_adjust_decrease(stat,amount)  _mi_stat_adjust_decrease( &(stat), amount)
 #define mi_stat_counter_increase(stat,amount) _mi_stat_counter_increase( &(stat), amount)
 #else
 #define mi_stat_increase(stat,amount)         ((void)0)
 #define mi_stat_decrease(stat,amount)         ((void)0)
+#define mi_stat_adjust_decrease(stat,amount)  ((void)0)
 #define mi_stat_counter_increase(stat,amount) ((void)0)
 #endif
 
 #define mi_heap_stat_counter_increase(heap,stat,amount)  mi_stat_counter_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_increase(heap,stat,amount)  mi_stat_increase( (heap)->tld->stats.stat, amount)
 #define mi_heap_stat_decrease(heap,stat,amount)  mi_stat_decrease( (heap)->tld->stats.stat, amount)
-
+#define mi_heap_stat_adjust_decrease(heap,stat,amount)  mi_stat_adjust_decrease( (heap)->tld->stats.stat, amount)
 
 #endif
