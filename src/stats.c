@@ -62,6 +62,25 @@ void _mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
 }
 
 
+static void mi_stat_adjust(mi_stat_count_t* stat, int64_t amount) {
+  if (amount == 0) return;
+  if mi_unlikely(mi_is_in_main(stat))
+  {
+    // adjust atomically 
+    mi_atomic_addi64_relaxed(&stat->current, amount);
+    mi_atomic_addi64_relaxed(&stat->total,amount);
+  }
+  else {
+    // adjust local
+    stat->current += amount;
+    stat->total += amount;
+  }
+}
+
+void _mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount) {
+  mi_stat_adjust(stat, -((int64_t)amount));
+}
+
 
 // must be thread safe as it is called from stats_merge
 static void mi_stat_count_add_mt(mi_stat_count_t* stat, const mi_stat_count_t* src) {
@@ -199,6 +218,13 @@ static void mi_stat_peak_print(const mi_stat_count_t* stat, const char* msg, int
   _mi_fprintf(out, arg, "\n");
 }
 
+static void mi_stat_total_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg) {
+  _mi_fprintf(out, arg, "%10s:", msg);
+  _mi_fprintf(out, arg, "%12s", " ");  // no peak
+  mi_print_amount(stat->total, unit, out, arg);
+  _mi_fprintf(out, arg, "\n");
+}
+
 static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg ) {
   _mi_fprintf(out, arg, "%10s:", msg);
   mi_print_amount(stat->total, -1, out, arg);
@@ -295,7 +321,7 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_print_ex(&total, "total", 1, out, arg, "");
   #endif
   #if MI_STAT>1
-  mi_stat_peak_print(&stats->malloc_requested, "malloc req", 1, out, arg);
+  mi_stat_total_print(&stats->malloc_requested, "malloc req", 1, out, arg);
   _mi_fprintf(out, arg, "\n");
   #endif
   mi_stat_print_ex(&stats->reserved, "reserved", 1, out, arg, "");
