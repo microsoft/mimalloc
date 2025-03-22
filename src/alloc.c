@@ -92,6 +92,7 @@ extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_
     #if (MI_STAT>1)
     const size_t bin = _mi_bin(bsize);
     mi_heap_stat_increase(heap, malloc_bins[bin], 1);
+    mi_heap_stat_increase(heap, malloc_requested, size - MI_PADDING_SIZE);
     #endif
   }
   #endif
@@ -150,12 +151,6 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   void* const p = _mi_page_malloc_zero(heap, page, size + MI_PADDING_SIZE, zero);
   mi_track_malloc(p,size,zero);
 
-  #if MI_STAT>1
-  if (p != NULL) {
-    if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
-    mi_heap_stat_increase(heap, malloc_requested, mi_usable_size(p));
-  }
-  #endif
   #if MI_DEBUG>3
   if (p != NULL && zero) {
     mi_assert_expensive(mi_mem_is_zero(p, size));
@@ -192,12 +187,6 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
     void* const p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE, zero, huge_alignment);  // note: size can overflow but it is detected in malloc_generic
     mi_track_malloc(p,size,zero);
 
-    #if MI_STAT>1
-    if (p != NULL) {
-      if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
-      mi_heap_stat_increase(heap, malloc_requested, mi_usable_size(p));
-    }
-    #endif
     #if MI_DEBUG>3
     if (p != NULL && zero) {
       mi_assert_expensive(mi_mem_is_zero(p, size));
@@ -672,7 +661,8 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
     #if MI_STAT>1
-    mi_heap_stat_increase(heap, malloc_requested, mi_usable_size(p));
+    mi_heap_stat_adjust_decrease(heap, malloc_requested, req_size);
+    mi_heap_stat_increase(heap, malloc_requested, size);
     #endif
     mi_heap_stat_counter_increase(heap, malloc_guarded_count, 1);
   }
