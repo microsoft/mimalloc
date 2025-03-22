@@ -551,6 +551,21 @@ static void mi_heap_buf_print_count_bin(mi_heap_buf_t* hbuf, const char* prefix,
   mi_heap_buf_print(hbuf, buf);
 }
 
+static void mi_heap_buf_print_count_cbin(mi_heap_buf_t* hbuf, const char* prefix, mi_stat_count_t* stat, mi_chunkbin_t bin, bool add_comma) {
+  const char* cbin = " ";
+  switch(bin) {
+    case MI_CBIN_SMALL: cbin = "S"; break;
+    case MI_CBIN_MEDIUM: cbin = "M"; break;
+    case MI_CBIN_LARGE: cbin = "L"; break;
+    case MI_CBIN_OTHER: cbin = "X"; break;
+    default: cbin = " "; break;
+  }
+  char buf[128];
+  _mi_snprintf(buf, 128, "%s{ \"total\": %lld, \"peak\": %lld, \"current\": %lld, \"bin\": \"%s\" }%s\n", prefix, stat->total, stat->peak, stat->current, cbin, (add_comma ? "," : ""));
+  buf[127] = 0;
+  mi_heap_buf_print(hbuf, buf);
+}
+
 static void mi_heap_buf_print_count(mi_heap_buf_t* hbuf, const char* prefix, mi_stat_count_t* stat, bool add_comma) {
   char buf[128];
   _mi_snprintf(buf, 128, "%s{ \"total\": %lld, \"peak\": %lld, \"current\": %lld }%s\n", prefix, stat->total, stat->peak, stat->current, (add_comma ? "," : ""));
@@ -636,6 +651,11 @@ char* mi_stats_get_json(size_t output_size, char* output_buf) mi_attr_noexcept {
   mi_heap_buf_print(&hbuf, "  \"page_bins\": [\n");
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
     mi_heap_buf_print_count_bin(&hbuf, "    ", &stats->page_bins[i], i, i!=MI_BIN_HUGE);
+  }
+  mi_heap_buf_print(&hbuf, "  ],\n");
+  mi_heap_buf_print(&hbuf, "  \"chunk_bins\": [\n");
+  for (size_t i = 0; i < MI_CBIN_COUNT; i++) {
+    mi_heap_buf_print_count_cbin(&hbuf, "    ", &stats->chunk_bins[i], (mi_chunkbin_t)i, i!=MI_CBIN_COUNT-1);
   }
   mi_heap_buf_print(&hbuf, "  ]\n");
   mi_heap_buf_print(&hbuf, "}\n");
