@@ -65,27 +65,26 @@ const mi_page_t _mi_page_empty = {
     QNULL(MI_LARGE_MAX_OBJ_WSIZE + 1  /* 655360, Huge queue */), \
     QNULL(MI_LARGE_MAX_OBJ_WSIZE + 2) /* Full queue */ }
 
-#define MI_STAT_COUNT_NULL()  {0,0,0,0}
+#define MI_STAT_COUNT_NULL()  {0,0,0}
 
 // Empty statistics
-#if MI_STAT>1
-#define MI_STAT_COUNT_END_NULL()  , { MI_STAT_COUNT_NULL(), MI_INIT32(MI_STAT_COUNT_NULL) }
-#else
-#define MI_STAT_COUNT_END_NULL()
-#endif
-
 #define MI_STATS_NULL  \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, \
-  { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }  \
-  MI_STAT_COUNT_END_NULL()
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  { 0 }, { 0 }, { 0 }, { 0 }, \
+  { 0 }, { 0 }, { 0 }, { 0 }, \
+  \
+  { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
+  MI_INIT4(MI_STAT_COUNT_NULL), \
+  { 0 }, { 0 }, { 0 }, { 0 },  \
+  \
+  { MI_INIT4(MI_STAT_COUNT_NULL) }, \
+  { { 0 }, { 0 }, { 0 }, { 0 } }, \
+  \
+  { MI_INIT74(MI_STAT_COUNT_NULL) }, \
+  { MI_INIT74(MI_STAT_COUNT_NULL) }, \
+  { MI_INIT5(MI_STAT_COUNT_NULL) }
 
 // --------------------------------------------------------
 // Statically allocate an empty heap as the initial
@@ -112,7 +111,7 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
   0,                      // heartbeat
   false,                  // recurse
   false,                  // is_in_threadpool
-  { MI_STATS_NULL },      // stats
+  { MI_STAT_VERSION, MI_STATS_NULL },      // stats
   MI_MEMID_STATIC         // memid
 };
 
@@ -149,7 +148,7 @@ static mi_decl_cache_align mi_tld_t tld_main = {
   0,                      // heartbeat
   false,                  // recurse
   false,                  // is_in_threadpool
-  { MI_STATS_NULL },      // stats
+  { MI_STAT_VERSION, MI_STATS_NULL },      // stats
   MI_MEMID_STATIC         // memid
 };
 
@@ -186,7 +185,7 @@ mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
 
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
-mi_stats_t _mi_stats_main = { MI_STATS_NULL };
+mi_stats_t _mi_stats_main = { MI_STAT_VERSION, MI_STATS_NULL };
 
 #if MI_GUARDED
 mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed) {

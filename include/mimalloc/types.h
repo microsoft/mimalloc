@@ -18,7 +18,7 @@ terms of the MIT license. A copy of the license can be found in the file
 //                  using plain "page" for mimalloc pages (`mi_page_t`).
 // --------------------------------------------------------------------------
 
-
+#include <mimalloc-stats.h>
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
 #include <errno.h>    // error codes
@@ -71,6 +71,15 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_DEBUG 2
 #else
 #define MI_DEBUG 0
+#endif
+#endif
+
+// Statistics (0=only essential, 1=normal, 2=more fine-grained (expensive) tracking)
+#ifndef MI_STAT
+#if (MI_DEBUG>0)
+#define MI_STAT 2
+#else
+#define MI_STAT 0
 #endif
 #endif
 
@@ -444,125 +453,6 @@ struct mi_heap_s {
   mi_page_queue_t       pages[MI_BIN_COUNT];                 // queue of pages for each size class (or "bin")
   mi_memid_t            memid;                               // provenance of the heap struct itself (meta or os)
 };
-
-
-// ------------------------------------------------------
-// Statistics
-// ------------------------------------------------------
-
-#ifndef MI_STAT
-#if (MI_DEBUG>0)
-#define MI_STAT 2
-#else
-#define MI_STAT 0
-#endif
-#endif
-
-typedef struct mi_stat_count_s {
-  int64_t allocated;
-  int64_t freed;
-  int64_t peak;
-  int64_t current;
-} mi_stat_count_t;
-
-typedef struct mi_stat_counter_s {
-  int64_t total;
-  int64_t count;
-} mi_stat_counter_t;
-
-typedef struct mi_stats_s {
-  mi_stat_count_t   pages;
-  mi_stat_count_t   reserved;
-  mi_stat_count_t   committed;
-  mi_stat_count_t   reset;
-  mi_stat_count_t   purged;
-  mi_stat_count_t   page_committed;
-  mi_stat_count_t   pages_abandoned;
-  mi_stat_count_t   threads;
-  mi_stat_count_t   normal;
-  mi_stat_count_t   huge;
-  mi_stat_count_t   giant;
-  mi_stat_count_t   malloc;
-  mi_stat_counter_t pages_extended;
-  mi_stat_counter_t pages_reclaim_on_alloc;
-  mi_stat_counter_t pages_reclaim_on_free;
-  mi_stat_counter_t pages_reabandon_full;
-  mi_stat_counter_t pages_unabandon_busy_wait;
-  mi_stat_counter_t mmap_calls;
-  mi_stat_counter_t commit_calls;
-  mi_stat_counter_t reset_calls;
-  mi_stat_counter_t purge_calls;
-  mi_stat_counter_t arena_purges;
-  mi_stat_counter_t page_no_retire;
-  mi_stat_counter_t searches;
-  mi_stat_counter_t normal_count;
-  mi_stat_counter_t huge_count;
-  mi_stat_counter_t arena_count;
-  mi_stat_counter_t guarded_alloc_count;
-#if MI_STAT>1
-  mi_stat_count_t normal_bins[MI_BIN_COUNT];
-#endif
-} mi_stats_t;
-
-
-// add to stat keeping track of the peak
-void __mi_stat_increase(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_decrease_mt(mi_stat_count_t* stat, size_t amount);
-// adjust stat in special cases to compensate for double counting
-void __mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount, bool on_alloc);
-void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount, bool on_free);
-void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, size_t amount, bool on_alloc);
-void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount, bool on_free);
-// counters can just be increased
-void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
-void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
-
-#if (MI_STAT)
-#define mi_debug_stat_increase(stat,amount)                     __mi_stat_increase( &(stat), amount)
-#define mi_debug_stat_decrease(stat,amount)                     __mi_stat_decrease( &(stat), amount)
-#define mi_debug_stat_counter_increase(stat,amount)             __mi_stat_counter_increase( &(stat), amount)
-#define mi_debug_stat_increase_mt(stat,amount)                  __mi_stat_increase_mt( &(stat), amount)
-#define mi_debug_stat_decrease_mt(stat,amount)                  __mi_stat_decrease_mt( &(stat), amount)
-#define mi_debug_stat_counter_increase_mt(stat,amount)          __mi_stat_counter_increase_mt( &(stat), amount)
-#define mi_debug_stat_adjust_increase_mt(stat,amnt,b)           __mi_stat_adjust_increase_mt( &(stat), amnt, b)
-#define mi_debug_stat_adjust_decrease_mt(stat,amnt,b)           __mi_stat_adjust_decrease_mt( &(stat), amnt, b)
-#else
-#define mi_debug_stat_increase(stat,amount)                     ((void)0)
-#define mi_debug_stat_decrease(stat,amount)                     ((void)0)
-#define mi_debug_stat_counter_increase(stat,amount)             ((void)0)
-#define mi_debug_stat_increase_mt(stat,amount)                  ((void)0)
-#define mi_debug_stat_decrease_mt(stat,amount)                  ((void)0)
-#define mi_debug_stat_counter_increase_mt(stat,amount)          ((void)0)
-#define mi_debug_stat_adjust_increase(stat,amnt,b)              ((void)0)
-#define mi_debug_stat_adjust_decrease(stat,amnt,b)              ((void)0)
-#endif
-
-#define mi_subproc_stat_counter_increase(subproc,stat,amount)   __mi_stat_counter_increase_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_increase(subproc,stat,amount)           __mi_stat_increase_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_decrease(subproc,stat,amount)           __mi_stat_decrease_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_adjust_increase(subproc,stat,amnt,b)    __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amnt, b)
-#define mi_subproc_stat_adjust_decrease(subproc,stat,amnt,b)    __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amnt, b)
-
-#define mi_tld_stat_counter_increase(tld,stat,amount)           __mi_stat_counter_increase( &(tld)->stats.stat, amount)
-#define mi_tld_stat_increase(tld,stat,amount)                   __mi_stat_increase( &(tld)->stats.stat, amount)
-#define mi_tld_stat_decrease(tld,stat,amount)                   __mi_stat_decrease( &(tld)->stats.stat, amount)
-#define mi_tld_stat_adjust_increase(tld,stat,amnt,b)            __mi_stat_adjust_increase( &(tld)->stats.stat, amnt, b)
-#define mi_tld_stat_adjust_decrease(tld,stat,amnt,b)            __mi_stat_adjust_decrease( &(tld)->stats.stat, amnt, b)
-
-
-#define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
-#define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
-#define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
-
-#define mi_heap_stat_counter_increase(heap,stat,amount)         mi_tld_stat_counter_increase(heap->tld, stat, amount)
-#define mi_heap_stat_increase(heap,stat,amount)                 mi_tld_stat_increase( heap->tld, stat, amount)
-#define mi_heap_stat_decrease(heap,stat,amount)                 mi_tld_stat_decrease( heap->tld, stat, amount)
-
-#define mi_debug_heap_stat_counter_increase(heap,stat,amount)   mi_debug_stat_counter_increase( (heap)->tld->stats.stat, amount)
-#define mi_debug_heap_stat_increase(heap,stat,amount)           mi_debug_stat_increase( (heap)->tld->stats.stat, amount)
-#define mi_debug_heap_stat_decrease(heap,stat,amount)           mi_debug_stat_decrease( (heap)->tld->stats.stat, amount)
 
 
 // ------------------------------------------------------

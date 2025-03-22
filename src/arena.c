@@ -316,19 +316,19 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
   // is actually allocated for the first time it will be counted.
   const bool adjust = (overcommit && arena_commit);
   if (adjust) {
-    mi_subproc_stat_adjust_decrease( subproc, committed, arena_reserve, true /* on alloc */);
+    mi_subproc_stat_adjust_decrease( subproc, committed, arena_reserve);
   }
   // and try to reserve the arena
   int err = mi_reserve_os_memory_ex2(subproc, arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
   if (err != 0) {
-    if (adjust) { mi_subproc_stat_adjust_increase( subproc, committed, arena_reserve, true); } // roll back
+    if (adjust) { mi_subproc_stat_adjust_increase( subproc, committed, arena_reserve); } // roll back
     // failed, try a smaller size?
     const size_t small_arena_reserve = (MI_SIZE_BITS == 32 ? 128*MI_MiB : 1*MI_GiB);
-    if (adjust) { mi_subproc_stat_adjust_decrease( subproc, committed, arena_reserve, true); }
+    if (adjust) { mi_subproc_stat_adjust_decrease( subproc, committed, arena_reserve); }
     if (arena_reserve > small_arena_reserve) {
       // try again
       err = mi_reserve_os_memory_ex(small_arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
-      if (err != 0 && adjust) { mi_subproc_stat_adjust_increase( subproc, committed, arena_reserve, true); } // roll back
+      if (err != 0 && adjust) { mi_subproc_stat_adjust_increase( subproc, committed, arena_reserve); } // roll back
     }
   }
   return (err==0);
@@ -918,7 +918,7 @@ bool _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page) {
   else {
     mi_tld_t* tld = _mi_thread_tld();
     mi_tld_stat_counter_increase( tld, pages_reabandon_full, 1);
-    mi_tld_stat_adjust_decrease( tld, pages_abandoned, 1, true /* on alloc */);  // adjust as we are not abandoning fresh
+    mi_tld_stat_adjust_decrease( tld, pages_abandoned, 1 );  // adjust as we are not abandoning fresh
     _mi_arenas_page_abandon(page,tld);
     return true;
   }
@@ -1398,10 +1398,10 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
     char chunk_kind = ' ';
     if (chunk_bins != NULL) {
       switch (mi_atomic_load_relaxed(&chunk_bins[i])) {
-        case MI_BBIN_SMALL:  chunk_kind = 'S'; break;
-        case MI_BBIN_MEDIUM: chunk_kind = 'M'; break;
-        case MI_BBIN_LARGE:  chunk_kind = 'L'; break;
-        case MI_BBIN_OTHER:  chunk_kind = 'X'; break;
+        case MI_CBIN_SMALL:  chunk_kind = 'S'; break;
+        case MI_CBIN_MEDIUM: chunk_kind = 'M'; break;
+        case MI_CBIN_LARGE:  chunk_kind = 'L'; break;
+        case MI_CBIN_OTHER:  chunk_kind = 'X'; break;
         // case MI_BBIN_NONE: chunk_kind = 'N'; break;
       }
     }

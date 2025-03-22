@@ -427,7 +427,9 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   if mi_likely( /* bsize < MI_MAX_RETIRE_SIZE && */ !mi_page_queue_is_special(pq)) {  // not full or huge queue?
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_heap_t* heap = mi_page_heap(page);
-      mi_debug_heap_stat_counter_increase(heap, page_no_retire, 1);
+      #if MI_STAT>0
+      mi_heap_stat_counter_increase(heap, pages_retire, 1);
+      #endif
       page->retire_expire = (bsize <= MI_SMALL_MAX_OBJ_SIZE ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
       mi_assert_internal(pq >= heap->pages);
       const size_t index = pq - heap->pages;
@@ -616,7 +618,9 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
   size_t page_size;
   //uint8_t* page_start =
   mi_page_area(page, &page_size);
-  mi_debug_heap_stat_counter_increase(heap, pages_extended, 1);
+  #if MI_STAT>0
+  mi_heap_stat_counter_increase(heap, pages_extended, 1);
+  #endif
 
   // calculate the extend count
   const size_t bsize = mi_page_block_size(page);
@@ -656,7 +660,9 @@ static void mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;
-  mi_debug_heap_stat_increase(heap, page_committed, extend * bsize);
+  #if MI_STAT>0
+  mi_heap_stat_increase(heap, page_committed, extend * bsize);
+  #endif
   mi_assert_expensive(mi_page_is_valid_init(page));
 }
 
@@ -711,9 +717,7 @@ void _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
 static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* pq, bool first_try)
 {
   // search through the pages in "next fit" order
-  #if MI_STAT
   size_t count = 0;
-  #endif
   long candidate_limit = 0;          // we reset this on the first candidate to limit the search
   long page_full_retain = (pq->block_size > MI_SMALL_MAX_OBJ_SIZE ? 0 : heap->page_full_retain); // only retain small pages
   mi_page_t* page_candidate = NULL;  // a page with free space
@@ -722,9 +726,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
   while (page != NULL)
   {
     mi_page_t* next = page->next; // remember next (as this page can move to another queue)
-    #if MI_STAT
     count++;
-    #endif
     candidate_limit--;
 
     // search up to N pages for a best candidate
@@ -784,7 +786,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, m
     page = next;
   } // for each page
 
-  mi_debug_heap_stat_counter_increase(heap, searches, count);
+  mi_heap_stat_counter_increase(heap, page_searches, count);
 
   // set the page to the best candidate
   if (page_candidate != NULL) {
@@ -897,8 +899,8 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_a
     mi_assert_internal(mi_page_is_abandoned(page));
     mi_page_set_heap(page, NULL);
     #endif
-    mi_heap_stat_increase(heap, huge, mi_page_block_size(page));
-    mi_heap_stat_counter_increase(heap, huge_count, 1);
+    mi_heap_stat_increase(heap, malloc_huge, mi_page_block_size(page));
+    mi_heap_stat_counter_increase(heap, malloc_huge_count, 1);
   }
   return page;
 }

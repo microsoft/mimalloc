@@ -299,6 +299,47 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line
 
 
 /* -----------------------------------------------------------
+  Statistics (in `stats.c`)
+----------------------------------------------------------- */
+
+// add to stat keeping track of the peak
+void __mi_stat_increase(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_decrease_mt(mi_stat_count_t* stat, size_t amount);
+
+// adjust stat in special cases to compensate for double counting (and does not adjust peak values and can decrease the total)
+void __mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount);
+
+// counters can just be increased
+void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
+void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
+
+#define mi_subproc_stat_counter_increase(subproc,stat,amount)   __mi_stat_counter_increase_mt( &(subproc)->stats.stat, amount)
+#define mi_subproc_stat_increase(subproc,stat,amount)           __mi_stat_increase_mt( &(subproc)->stats.stat, amount)
+#define mi_subproc_stat_decrease(subproc,stat,amount)           __mi_stat_decrease_mt( &(subproc)->stats.stat, amount)
+#define mi_subproc_stat_adjust_increase(subproc,stat,amnt)      __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amnt)
+#define mi_subproc_stat_adjust_decrease(subproc,stat,amnt)      __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amnt)
+
+#define mi_tld_stat_counter_increase(tld,stat,amount)           __mi_stat_counter_increase( &(tld)->stats.stat, amount)
+#define mi_tld_stat_increase(tld,stat,amount)                   __mi_stat_increase( &(tld)->stats.stat, amount)
+#define mi_tld_stat_decrease(tld,stat,amount)                   __mi_stat_decrease( &(tld)->stats.stat, amount)
+#define mi_tld_stat_adjust_increase(tld,stat,amnt)              __mi_stat_adjust_increase( &(tld)->stats.stat, amnt)
+#define mi_tld_stat_adjust_decrease(tld,stat,amnt)              __mi_stat_adjust_decrease( &(tld)->stats.stat, amnt)
+
+#define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
+#define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
+#define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
+
+#define mi_heap_stat_counter_increase(heap,stat,amount)         mi_tld_stat_counter_increase(heap->tld, stat, amount)
+#define mi_heap_stat_increase(heap,stat,amount)                 mi_tld_stat_increase( heap->tld, stat, amount)
+#define mi_heap_stat_decrease(heap,stat,amount)                 mi_tld_stat_decrease( heap->tld, stat, amount)
+
+
+/* -----------------------------------------------------------
   Inlined definitions
 ----------------------------------------------------------- */
 #define MI_UNUSED(x)     (void)(x)
@@ -316,6 +357,8 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line
 #define MI_INIT128(x) MI_INIT64(x),MI_INIT64(x)
 #define MI_INIT256(x) MI_INIT128(x),MI_INIT128(x)
 
+#define MI_INIT74(x)  MI_INIT64(x),MI_INIT8(x),x(),x()
+#define MI_INIT5(x)   MI_INIT4(x),x()
 
 #include <string.h>
 // initialize a local variable to zero; use memset as compilers optimize constant sized memset's

@@ -212,28 +212,26 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
   much fragmentation since we keep chunks for larger blocks separate.
 ---------------------------------------------------------------------------- */
 
-// Size bins; larger bins are allowed to go into smaller bins.
-// SMALL can only be in small (and NONE), so they cannot fragment the larger bins.
-typedef enum mi_bbin_e {
-  MI_BBIN_NONE,     // no bin assigned yet (the chunk is completely free)
-  MI_BBIN_SMALL,    // slice_count == 1
-  MI_BBIN_OTHER,    // slice_count: any other from the other bins, and 1 <= slice_count <= MI_BCHUNK_BITS
-  MI_BBIN_MEDIUM,   // slice_count == 8
-  MI_BBIN_LARGE,    // slice_count == MI_BFIELD_BITS  -- only used if MI_ENABLE_LARGE_PAGES is 1
-  MI_BBIN_COUNT
-} mi_bbin_t;
 
-static inline mi_bbin_t mi_bbin_inc(mi_bbin_t bbin) {
-  return (mi_bbin_t)((int)bbin + 1);
+// mi_chunkbin_t is defined in mimalloc-stats.h
+
+static inline mi_chunkbin_t mi_chunkbin_inc(mi_chunkbin_t bbin) {
+  mi_assert_internal(bbin < MI_CBIN_COUNT);
+  return (mi_chunkbin_t)((int)bbin + 1);
 }
 
-static inline mi_bbin_t mi_bbin_of(size_t slice_count) {
-  if (slice_count==1) return MI_BBIN_SMALL;
-  if (slice_count==8) return MI_BBIN_MEDIUM;
+static inline mi_chunkbin_t mi_chunkbin_dec(mi_chunkbin_t bbin) {
+  mi_assert_internal(bbin > MI_CBIN_NONE);
+  return (mi_chunkbin_t)((int)bbin - 1);
+}
+
+static inline mi_chunkbin_t mi_chunkbin_of(size_t slice_count) {
+  if (slice_count==1) return MI_CBIN_SMALL;
+  if (slice_count==8) return MI_CBIN_MEDIUM;
   #if MI_ENABLE_LARGE_PAGES
-  if (slice_count==MI_BFIELD_BITS) return MI_BBIN_LARGE;
+  if (slice_count==MI_BFIELD_BITS) return MI_CBIN_LARGE;
   #endif
-  return MI_BBIN_OTHER;
+  return MI_CBIN_OTHER;
 }
 
 // An atomic "binned" bitmap for the free slices where we keep chunks reserved for particalar size classes
