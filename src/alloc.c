@@ -661,9 +661,10 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
     #if MI_STAT>1
-    mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
+    mi_heap_stat_decrease(heap, malloc_requested, req_size);
+    mi_heap_stat_increase(heap, malloc_requested, size);
     #endif
-    mi_heap_stat_counter_increase(heap, guarded_alloc_count, 1);
+    mi_heap_stat_counter_increase(heap, malloc_guarded_count, 1);
   }
   #if MI_DEBUG>3
   if (p != NULL && zero) {

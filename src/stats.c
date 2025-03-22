@@ -645,7 +645,7 @@ char* mi_stats_get_json(size_t output_size, char* output_buf) mi_attr_noexcept {
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
     mi_heap_buf_print_count_bin(&hbuf, "    ", &stats->page_bins[i], i, i!=MI_BIN_HUGE);
   }
-  mi_heap_buf_print(&hbuf, "  ]\n");
+  mi_heap_buf_print(&hbuf, "  ],\n");
   mi_heap_buf_print(&hbuf, "  \"chunk_bins\": [\n");
   for (size_t i = 0; i < MI_CBIN_COUNT; i++) {
     mi_heap_buf_print_count_cbin(&hbuf, "    ", &stats->chunk_bins[i], (mi_chunkbin_t)i, i!=MI_CBIN_COUNT-1);

@@ -193,9 +193,6 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
       const bool is_aligned = (((uintptr_t)page->free + offset) & align_mask)==0;
       if mi_likely(is_aligned)
       {
-        #if MI_STAT>1
-        mi_heap_stat_increase(heap, malloc_requested, size);
-        #endif
         void* p = (zero ? _mi_page_malloc_zeroed(heap,page,padsize) : _mi_page_malloc(heap,page,padsize)); // call specific page malloc for better codegen
         mi_assert_internal(p != NULL);
         mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
