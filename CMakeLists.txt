@@ -34,6 +34,7 @@ option(MI_NO_PADDING        "Force no use of padding even in DEBUG mode etc." OF
 option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
 option(MI_NO_THP            "Disable transparent huge pages support on Linux/Android for the mimalloc process only" OFF)
 option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
+option(MI_STAT_LEVEL        "Optionally override stats level to 1 or 2 when debug not enable" 0)
 
 # negated options for vcpkg features
 option(MI_NO_USE_CXX        "Use plain C compilation (has priority over MI_USE_CXX)" OFF)
@@ -77,6 +78,10 @@ if(MI_EXTRA_CPPDEFS)
 else()
  set(mi_defines "")
 endif()
+
+if (MI_STAT_LEVEL GREATER 0)
+  add_compile_definitions(MI_STAT=${MI_STAT_LEVEL})
+endif ()
 
 # pass git revision as a define
 if(EXISTS "${CMAKE_SOURCE_DIR}/.git/index")

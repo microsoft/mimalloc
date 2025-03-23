@@ -88,6 +88,17 @@ typedef struct mi_stats_s
 #undef MI_STAT_COUNT
 #undef MI_STAT_COUNTER
 
+typedef struct mi_os_stats_s {
+  mi_stat_count_t reserved;
+  mi_stat_count_t committed;
+  mi_stat_count_t reset;
+  mi_stat_count_t purged;
+  mi_stat_counter_t mmap_calls;
+  mi_stat_counter_t commit_calls;
+  mi_stat_counter_t reset_calls;
+  mi_stat_counter_t purge_calls;
+} mi_os_stats_t;
+
 // Exported definitions
 #ifdef __cplusplus
 extern "C" {
@@ -95,6 +106,15 @@ extern "C" {
 
 mi_decl_export void  mi_stats_get( size_t stats_size, mi_stats_t* stats ) mi_attr_noexcept;
 mi_decl_export char* mi_stats_get_json( size_t buf_size, char* buf ) mi_attr_noexcept;    // use mi_free to free the result if the input buf == NULL
+																																												
+// returns the thread local stats for the current thread local heap. Memory returned is non-owned.
+mi_decl_export const mi_stats_t*  mi_thread_stats(void) mi_attr_noexcept;
+
+// returns the thread local stats for the given heap. Memory returned is non-owned.
+mi_decl_export const mi_stats_t*  mi_thread_heap_stats(const mi_heap_t* heap) mi_attr_noexcept;
+
+// returns stats related to os memory subsystem.
+mi_decl_export mi_os_stats_t  mi_os_stats(void) mi_attr_noexcept;
 
 #ifdef __cplusplus
 }

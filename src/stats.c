@@ -118,6 +118,22 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   }  
 }
 
+static void mi_stat_atomic_copy(mi_stat_count_t* dst, const mi_stat_count_t* src) {
+  if (dst==src) return;
+  if (src->total==0) return;
+
+  dst->total = (mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&src->total)));
+  dst->current = (mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&src->current)));
+  dst->peak =  (mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&src->peak)));
+}
+
+static void mi_stat_counter_atomic_copy(mi_stat_counter_t* dst, const mi_stat_counter_t* src) {
+  if (dst==src) return;
+  if (src->total==0) return;
+
+  dst->total = (mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&src->total)));
+}
+
 #undef MI_STAT_COUNT
 #undef MI_STAT_COUNTER
 
@@ -411,6 +427,30 @@ void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
   _mi_stats_print(mi_stats_get_default(), out, arg);
 }
 
+const mi_stats_t*  mi_thread_heap_stats(const mi_heap_t* heap) mi_attr_noexcept {
+  return &heap->tld->stats;
+}
+
+const mi_stats_t* mi_thread_stats(void) mi_attr_noexcept {
+  return mi_thread_heap_stats(mi_heap_get_default());
+}
+
+mi_os_stats_t mi_os_stats(void) mi_attr_noexcept {
+  mi_os_stats_t stats;
+  memset(&stats, 0, sizeof(mi_os_stats_t));
+
+  mi_stat_atomic_copy(&stats.reserved, &_mi_stats_main.reserved);
+  mi_stat_atomic_copy(&stats.committed, &_mi_stats_main.committed);
+  mi_stat_atomic_copy(&stats.reset, &_mi_stats_main.reset);
+  mi_stat_atomic_copy(&stats.purged, &_mi_stats_main.purged);
+
+  mi_stat_counter_atomic_copy(&stats.mmap_calls, &_mi_stats_main.mmap_calls);
+  mi_stat_counter_atomic_copy(&stats.commit_calls, &_mi_stats_main.commit_calls);
+  mi_stat_counter_atomic_copy(&stats.reset_calls, &_mi_stats_main.reset_calls);
+  mi_stat_counter_atomic_copy(&stats.purge_calls, &_mi_stats_main.purge_calls);
+
+  return stats;
+}
 
 // ----------------------------------------------------------------
 // Basic timer for convenience; use milli-seconds to avoid doubles
