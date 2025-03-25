@@ -584,7 +584,7 @@ if(MI_BUILD_SHARED)
   install(TARGETS mimalloc EXPORT mimalloc ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(EXPORT mimalloc DESTINATION ${mi_install_cmakedir})
 
-  if(WIN32)
+  if(WIN32 AND NOT MINGW)
     # On windows, the import library name for the dll would clash with the static mimalloc.lib library
     # so we postfix the dll import library with `.dll.lib` (and also the .pdb debug file)
     set_property(TARGET mimalloc PROPERTY ARCHIVE_OUTPUT_NAME "${mi_libname}.dll" )
@@ -594,6 +594,9 @@ if(MI_BUILD_SHARED)
     # install(FILES "$<TARGET_FILE_DIR:mimalloc>/${mi_libname}.dll.pdb" DESTINATION ${CMAKE_INSTALL_LIBDIR})
   endif()
   if(WIN32 AND MI_WIN_REDIRECT)
+    if(MINGW)
+      set_property(TARGET mimalloc PROPERTY PREFIX "")
+    endif()
     # On windows, link and copy the mimalloc redirection dll too.
     if(CMAKE_GENERATOR_PLATFORM STREQUAL "arm64ec")
       set(MIMALLOC_REDIRECT_SUFFIX "-arm64ec")
