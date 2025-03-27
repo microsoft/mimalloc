@@ -386,7 +386,7 @@ static inline void mi_atomic_yield(void) {
 static inline void mi_atomic_yield(void) {
   __asm__ volatile("wfe");
 }
-#elif (defined(__arm__) && __ARM_ARCH__ >= 7)
+#elif (defined(__arm__) && __ARM_ARCH >= 7)
 static inline void mi_atomic_yield(void) {
   __asm__ volatile("yield" ::: "memory");
 }

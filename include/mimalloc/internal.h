@@ -320,7 +320,7 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_heap_stat_counter_increase(heap,stat,amount)         mi_tld_stat_counter_increase(heap->tld, stat, amount)
 #define mi_heap_stat_increase(heap,stat,amount)                 mi_tld_stat_increase( heap->tld, stat, amount)
 #define mi_heap_stat_decrease(heap,stat,amount)                 mi_tld_stat_decrease( heap->tld, stat, amount)
-
+#define mi_heap_stat_adjust_decrease(heap,stat,amount)          mi_tld_stat_adjust_decrease( heap->tld, stat, amount)
 
 /* -----------------------------------------------------------
   Options (exposed for the debugger)

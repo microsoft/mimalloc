@@ -69,10 +69,10 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_DEBUG 2  // + internal assertion checks
 // #define MI_DEBUG 3  // + extensive internal invariant checking (cmake -DMI_DEBUG_FULL=ON)
 #if !defined(MI_DEBUG)
-#if !defined(NDEBUG) || defined(_DEBUG)
-#define MI_DEBUG 2
-#else
+#if defined(MI_BUILD_RELEASE) || defined(NDEBUG)
 #define MI_DEBUG 0
+#else
+#define MI_DEBUG 2
 #endif
 #endif
 

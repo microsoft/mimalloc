@@ -532,16 +532,14 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
 
 // only maintain stats for smaller objects if requested
 #if (MI_STAT>0)
-void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
-  #if (MI_STAT < 2)
+static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(block);
-  #endif
   mi_heap_t* const heap = mi_heap_get_default();
   const size_t bsize = mi_page_usable_block_size(page);
-  #if (MI_STAT>1)
-  const size_t usize = mi_page_usable_size_of(page, block);
-  mi_heap_stat_decrease(heap, malloc_requested, usize);
-  #endif
+  // #if (MI_STAT>1)
+  // const size_t usize = mi_page_usable_size_of(page, block);
+  // mi_heap_stat_decrease(heap, malloc_requested, usize);
+  // #endif
   if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
     mi_heap_stat_decrease(heap, malloc_normal, bsize);
     #if (MI_STAT > 1)

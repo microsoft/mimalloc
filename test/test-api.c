@@ -203,8 +203,15 @@ int main(void) {
   CHECK_BODY("malloc-aligned9") { // test large alignments
     bool ok = true;
     void* p[8];
+    const int max_align_shift = 
+      #if SIZE_MAX > UINT32_MAX
+      28
+      #else
+      20
+      #endif
+      ;
     size_t sizes[8] = { 8, 512, 1024 * 1024, MI_PAGE_MAX_OVERALLOC_ALIGN, MI_PAGE_MAX_OVERALLOC_ALIGN + 1, 2 * MI_PAGE_MAX_OVERALLOC_ALIGN, 8 * MI_PAGE_MAX_OVERALLOC_ALIGN, 0 };
-    for (int i = 0; i < 28 && ok; i++) {
+    for (int i = 0; i < max_align_shift && ok; i++) {
       int align = (1 << i);
       for (int j = 0; j < 8 && ok; j++) {
         p[j] = mi_zalloc_aligned(sizes[j], align);
