@@ -84,6 +84,9 @@ Enjoy!
 
 ### Releases
 
+* 2025-03-28, `v1.9.3`, `v2.2.3`, `v3.0.3-beta`: Various small bug and build fixes, including:
+  fix arm32 pre v7 builds, fix mingw build, get runtime statistics, improve statistic commit counts, 
+  fix execution on non BMI1 x64 systems. 
 * 2025-03-06, `v1.9.2`, `v2.2.2`, `v3.0.2-beta`: Various small bug and build fixes. 
   Add `mi_options_print`, `mi_arenas_print`, and the experimental `mi_stat_get` and `mi_stat_get_json`. 
   Add `mi_thread_set_in_threadpool` and `mi_heap_set_numa_affinity` (v3 only). Add vcpkg portfile. 
