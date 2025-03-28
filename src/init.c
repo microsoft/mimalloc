@@ -108,7 +108,7 @@ const mi_page_t _mi_page_empty = {
 // may lead to allocation itself on some platforms)
 // --------------------------------------------------------
 
-mi_decl_hidden mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
+mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   NULL,
   MI_ATOMIC_VAR_INIT(NULL),
   0,                // tid

@@ -127,6 +127,7 @@ bool        _mi_os_has_virtual_reserve(void);
 
 bool        _mi_os_reset(void* addr, size_t size);
 bool        _mi_os_commit(void* p, size_t size, bool* is_zero);
+bool        _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size);
 bool        _mi_os_decommit(void* addr, size_t size);
 bool        _mi_os_protect(void* addr, size_t size);
 bool        _mi_os_unprotect(void* addr, size_t size);
@@ -1030,6 +1031,21 @@ static inline size_t mi_bsr(size_t x) {
   return (x==0 ? MI_SIZE_BITS : MI_SIZE_BITS - 1 - mi_clz(x));
 }
 
+size_t _mi_popcount_generic(size_t x);
+
+static inline size_t mi_popcount(size_t x) {
+  if (x<=1) return x;
+  if (x==SIZE_MAX) return MI_SIZE_BITS;
+  #if defined(__GNUC__)
+    #if (SIZE_MAX == ULONG_MAX)
+      return __builtin_popcountl(x);
+    #else
+      return __builtin_popcountll(x);
+    #endif
+  #else
+    return _mi_popcount_generic(x);
+  #endif
+}
 
 // ---------------------------------------------------------------------------------
 // Provide our own `_mi_memcpy` for potential performance optimizations.

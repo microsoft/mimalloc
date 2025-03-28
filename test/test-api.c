@@ -203,7 +203,11 @@ int main(void) {
   CHECK_BODY("malloc-aligned9") { // test large alignments
     bool ok = true;
     void* p[8];
-    size_t sizes[8] = { 8, 512, 1024 * 1024, MI_BLOCK_ALIGNMENT_MAX, MI_BLOCK_ALIGNMENT_MAX + 1, 2 * MI_BLOCK_ALIGNMENT_MAX, 8 * MI_BLOCK_ALIGNMENT_MAX, 0 };
+    size_t sizes[8] = { 8, 512, 1024 * 1024, MI_BLOCK_ALIGNMENT_MAX, MI_BLOCK_ALIGNMENT_MAX + 1, 
+      #if SIZE_MAX > UINT32_MAX
+      2 * MI_BLOCK_ALIGNMENT_MAX, 8 * MI_BLOCK_ALIGNMENT_MAX, 
+      #endif
+      0 };
     for (int i = 0; i < 28 && ok; i++) {
       int align = (1 << i);
       for (int j = 0; j < 8 && ok; j++) {
