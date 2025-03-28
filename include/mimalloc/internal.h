@@ -339,10 +339,6 @@ typedef struct mi_option_desc_s {
   const char*       legacy_name; // potential legacy option name
 } mi_option_desc_t;
 
-// the static options
-extern mi_decl_hidden mi_option_desc_t mi_options[_mi_option_last];
-
-
 /* -----------------------------------------------------------
   Inlined definitions
 ----------------------------------------------------------- */

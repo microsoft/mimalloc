@@ -98,8 +98,8 @@ int mi_version(void) mi_attr_noexcept {
 #endif
 #endif
 
-// Static options (only exposed for the debugger)
-mi_option_desc_t mi_options[_mi_option_last] =
+// Static options 
+static mi_option_desc_t mi_options[_mi_option_last] =
 {
   // stable options
 #if MI_DEBUG || defined(MI_SHOW_ERRORS)
@@ -329,7 +329,7 @@ static void mi_cdecl mi_out_stderr(const char* msg, void* arg) {
 #ifndef MI_MAX_DELAY_OUTPUT
 #define MI_MAX_DELAY_OUTPUT ((size_t)(16*1024))
 #endif
-static char out_buf[MI_MAX_DELAY_OUTPUT+1];
+static char mi_output_buffer[MI_MAX_DELAY_OUTPUT+1];
 static _Atomic(size_t) out_len;
 
 static void mi_cdecl mi_out_buf(const char* msg, void* arg) {
@@ -345,7 +345,8 @@ static void mi_cdecl mi_out_buf(const char* msg, void* arg) {
   if (start+n >= MI_MAX_DELAY_OUTPUT) {
     n = MI_MAX_DELAY_OUTPUT-start-1;
   }
-  _mi_memcpy(&out_buf[start], msg, n);
+  mi_assert_internal(start + n <= MI_MAX_DELAY_OUTPUT);
+  _mi_memcpy(&mi_output_buffer[start], msg, n);
 }
 
 static void mi_out_buf_flush(mi_output_fun* out, bool no_more_buf, void* arg) {
@@ -354,10 +355,10 @@ static void mi_out_buf_flush(mi_output_fun* out, bool no_more_buf, void* arg) {
   size_t count = mi_atomic_add_acq_rel(&out_len, (no_more_buf ? MI_MAX_DELAY_OUTPUT : 1));
   // and output the current contents
   if (count>MI_MAX_DELAY_OUTPUT) count = MI_MAX_DELAY_OUTPUT;
-  out_buf[count] = 0;
-  out(out_buf,arg);
+  mi_output_buffer[count] = 0;
+  out(mi_output_buffer,arg);
   if (!no_more_buf) {
-    out_buf[count] = '\n'; // if continue with the buffer, insert a newline
+    mi_output_buffer[count] = '\n'; // if continue with the buffer, insert a newline
   }
 }
 
