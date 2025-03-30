@@ -227,12 +227,14 @@ static void mi_stat_peak_print(const mi_stat_count_t* stat, const char* msg, int
   _mi_fprintf(out, arg, "\n");
 }
 
+#if MI_STAT>1
 static void mi_stat_total_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg) {
   _mi_fprintf(out, arg, "%10s:", msg);
   _mi_fprintf(out, arg, "%12s", " ");  // no peak
   mi_print_amount(stat->total, unit, out, arg);
   _mi_fprintf(out, arg, "\n");
 }
+#endif
 
 static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg ) {
   _mi_fprintf(out, arg, "%10s:", msg);
