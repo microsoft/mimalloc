@@ -161,7 +161,7 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
 void mi_free(void* p) mi_attr_noexcept
 {
   mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");
-  if mi_unlikely(page==NULL) return;
+  if mi_unlikely(page==NULL) return;  // page will be NULL if p==NULL
   mi_assert_internal(p!=NULL && page!=NULL);
   
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ mi_page_xthread_id(page));

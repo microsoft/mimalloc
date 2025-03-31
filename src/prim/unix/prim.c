@@ -31,10 +31,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(__linux__)
   #include <features.h>
-  #include <linux/prctl.h>  // PR_SET_VMA
-  //#if defined(MI_NO_THP)
-  #include <sys/prctl.h>    // THP disable
-  //#endif
+  #include <sys/prctl.h>    // THP disable, PR_SET_VMA
   #if defined(__GLIBC__)
   #include <linux/mman.h>   // linux mmap flags
   #else
@@ -210,7 +207,7 @@ static int unix_madvise(void* addr, size_t size, int advice) {
 
 static void* unix_mmap_prim(void* addr, size_t size, int protect_flags, int flags, int fd) {
   void* p = mmap(addr, size, protect_flags, flags, fd, 0 /* offset */);
-  #if (defined(__linux__) && defined(PR_SET_VMA))
+  #if defined(__linux__) && defined(PR_SET_VMA)
   if (p!=MAP_FAILED && p!=NULL) {
     prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, p, size, "mimalloc");
   }
