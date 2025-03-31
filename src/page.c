@@ -324,6 +324,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   }
   mi_heap_stat_increase(heap, pages, 1);
   mi_assert_internal(pq!=NULL || mi_page_block_size(page) >= block_size);
+  mi_heap_stat_increase(heap, page_bins[mi_page_bin(page)], 1);
   mi_assert_expensive(_mi_page_is_valid(page));
   return page;
 }
@@ -394,6 +395,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
 
   // and free it
   mi_heap_t* heap = page->heap;
+  mi_heap_stat_decrease(heap, page_bins[mi_page_bin(page)], 1);
   mi_page_set_heap(page,NULL);
   _mi_arenas_page_free(page);
   _mi_arenas_collect(false, false, heap->tld);  // allow purging

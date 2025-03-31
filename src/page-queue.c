@@ -167,6 +167,11 @@ bool _mi_page_queue_is_valid(mi_heap_t* heap, const mi_page_queue_t* pq) {
   return true;
 }
 
+static size_t mi_page_bin(const mi_page_t* page) {
+  const size_t bin = (mi_page_is_in_full(page) ? MI_BIN_FULL : (mi_page_is_huge(page) ? MI_BIN_HUGE : mi_bin(mi_page_block_size(page))));
+  mi_assert_internal(bin <= MI_BIN_FULL);
+  return bin;
+}
 
 static mi_page_queue_t* mi_heap_page_queue_of(mi_heap_t* heap, const mi_page_t* page) {
   mi_assert_internal(heap!=NULL);
