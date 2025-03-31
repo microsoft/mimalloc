@@ -573,7 +573,8 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p, &sub_idx);
   mi_page_t** const sub = _mi_page_map[idx];
-  if mi_unlikely(sub == NULL) return (mi_page_t*)&_mi_page_empty;
+  if mi_unlikely (sub == NULL || *sub == NULL)
+    return (mi_page_t *)&_mi_page_empty;
   return sub[sub_idx];
 }
 
