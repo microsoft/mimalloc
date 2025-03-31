@@ -12,9 +12,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.0.2` (beta) (2025-03-06).  
-Latest v2 release: `v2.2.2` (2025-03-06).  
-Latest v1 release: `v1.9.2` (2024-03-06).
+Latest release   : `v3.0.3` (beta) (2025-03-28).  
+Latest v2 release: `v2.2.3` (2025-03-28).  
+Latest v1 release: `v1.9.3` (2024-03-28).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -84,6 +84,9 @@ Enjoy!
 
 ### Releases
 
+* 2025-03-28, `v1.9.3`, `v2.2.3`, `v3.0.3` (beta): Various small bug and build fixes, including:
+  fix arm32 pre v7 builds, fix mingw build, get runtime statistics, improve statistic commit counts, 
+  fix execution on non BMI1 x64 systems. 
 * 2025-03-06, `v1.9.2`, `v2.2.2`, `v3.0.2-beta`: Various small bug and build fixes. 
   Add `mi_options_print`, `mi_arenas_print`, and the experimental `mi_stat_get` and `mi_stat_get_json`. 
   Add `mi_thread_set_in_threadpool` and `mi_heap_set_numa_affinity` (v3 only). Add vcpkg portfile. 

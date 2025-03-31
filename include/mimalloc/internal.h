@@ -339,10 +339,6 @@ typedef struct mi_option_desc_s {
   const char*       legacy_name; // potential legacy option name
 } mi_option_desc_t;
 
-// the static options
-extern mi_decl_hidden mi_option_desc_t mi_options[_mi_option_last];
-
-
 /* -----------------------------------------------------------
   Inlined definitions
 ----------------------------------------------------------- */
@@ -570,14 +566,14 @@ static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
 static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p, &sub_idx);
-  return _mi_page_map[idx][sub_idx];
+  return _mi_page_map[idx][sub_idx];  // NULL if p==NULL
 }
 
 static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p, &sub_idx);
   mi_page_t** const sub = _mi_page_map[idx];
-  if mi_unlikely(sub == NULL) return (mi_page_t*)&_mi_page_empty;
+  if mi_unlikely(sub == NULL) return NULL;
   return sub[sub_idx];
 }
 
