@@ -115,6 +115,7 @@ static inline void mi_block_check_unguard(mi_page_t* page, mi_block_t* block, vo
 
 // free a local pointer  (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_attr_noexcept {
+  mi_assert_internal(p!=NULL && page != NULL);
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(page, p) : (mi_block_t*)p);
   mi_block_check_unguard(page, block, p);
   mi_free_block_local(page, block, true /* track stats */, true /* check for a full page */);
@@ -122,11 +123,7 @@ static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_
 
 // free a pointer owned by another thread (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, void* p) mi_attr_noexcept {
-  if (p==NULL) return;  // a NULL pointer is seen as abandoned (tid==0) with a full flag set
-  #if !MI_PAGE_MAP_FLAT
-  if (page==&_mi_page_empty) return;  // an invalid pointer may lead to using the empty page
-  #endif
-  mi_assert_internal(p!=NULL && page != NULL && page != &_mi_page_empty);
+  mi_assert_internal(p!=NULL && page != NULL);
   mi_block_t* const block = _mi_page_ptr_unalign(page, p); // don't check `has_aligned` flag to avoid a race (issue #865)
   mi_block_check_unguard(page, block, p);
   mi_free_block_mt(page, block);
@@ -150,13 +147,8 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
     return NULL;
   }
   mi_page_t* page = _mi_safe_ptr_page(p);
-  if (page == NULL) {
-    if (p != NULL) {
-      _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);
-    }
-    #if !MI_PAGE_MAP_FLAT
-    page = (mi_page_t*)&_mi_page_empty;
-    #endif
+  if (p != NULL && page == NULL) {
+    _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);    
   }
   return page;
   #else
@@ -169,12 +161,9 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
 void mi_free(void* p) mi_attr_noexcept
 {
   mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");
-
-  #if MI_PAGE_MAP_FLAT  // if not flat, p==NULL leads to `_mi_page_empty` which leads to `mi_free_generic_mt`
   if mi_unlikely(page==NULL) return;
-  #endif
-  mi_assert_internal(page!=NULL);
-
+  mi_assert_internal(p!=NULL && page!=NULL);
+  
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ mi_page_xthread_id(page));
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
