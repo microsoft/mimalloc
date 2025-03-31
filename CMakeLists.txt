@@ -750,8 +750,8 @@ if (MI_BUILD_TESTS)
     endif()
     target_compile_options(mimalloc-test-stress-dynamic PRIVATE ${mi_cflags})
     target_include_directories(mimalloc-test-stress-dynamic PRIVATE include)
-    target_link_libraries(mimalloc-test-stress-dynamic PRIVATE mimalloc ${mi_libraries})  # mi_version
     if(WIN32)
+      target_link_libraries(mimalloc-test-stress-dynamic PRIVATE mimalloc ${mi_libraries})  # mi_version    
       add_test(NAME test-stress-dynamic COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_SHOW_STATS=1 $<TARGET_FILE:mimalloc-test-stress-dynamic>)
     else()
       if(APPLE)
