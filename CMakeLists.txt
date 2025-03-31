@@ -745,13 +745,11 @@ if (MI_BUILD_TESTS)
   if(MI_BUILD_SHARED AND NOT (MI_TRACK_ASAN OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
     add_executable(mimalloc-test-stress-dynamic test/test-stress.c)
     target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
-    if(WIN32)
-      target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE "MI_LINK_VERSION=1")
-    endif()
     target_compile_options(mimalloc-test-stress-dynamic PRIVATE ${mi_cflags})
     target_include_directories(mimalloc-test-stress-dynamic PRIVATE include)
     if(WIN32)
-      target_link_libraries(mimalloc-test-stress-dynamic PRIVATE mimalloc ${mi_libraries})  # mi_version
+      target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE "MI_LINK_VERSION=1")  # link mi_version
+      target_link_libraries(mimalloc-test-stress-dynamic PRIVATE mimalloc ${mi_libraries})  # link mi_version
       add_test(NAME test-stress-dynamic COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_VERBOSE=1 $<TARGET_FILE:mimalloc-test-stress-dynamic>)
     else()
       if(APPLE)
