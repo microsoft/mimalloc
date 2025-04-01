@@ -52,6 +52,17 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK DebugExtensionInitialize(PULON
         return hr;
     }
 
+    // Query for the IDebugSystemObjects4 interface
+    hr = g_DebugClient->QueryInterface(__uuidof(IDebugSystemObjects4), (void**)&g_DebugSystemObjects);
+    if (FAILED(hr)) {
+        g_DebugSymbols->Release();
+        g_DebugControl->Release();
+        g_DebugClient->Release();
+        g_DataSpaces->Release();
+
+        return hr;
+    }
+
     // Find mimalloc base address at startup
     hr = FindMimallocBase();
     if (FAILED(hr) || g_MiMallocBase == 0) {
@@ -80,6 +91,7 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK DebugExtensionInitialize(PULON
     g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_dump_arenas\">Dump Arenas</link>\n");
     g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_dump_stats\">Dump Statistics</link>\n");
     g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_show_extension_settings\">Show Extension Settings</link>\n");
+    g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_dump_process_info\">Dump Process Info</link>\n");
     g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL, "<link cmd=\"!mi_show_help\">Show Help commands</link>\n");
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
 

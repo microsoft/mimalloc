@@ -14,6 +14,7 @@ IDebugClient* g_DebugClient = nullptr;
 IDebugControl4* g_DebugControl = nullptr;
 IDebugSymbols3* g_DebugSymbols = nullptr;
 IDebugDataSpaces* g_DataSpaces = nullptr;
+IDebugSystemObjects4* g_DebugSystemObjects = nullptr;
 
 // Function to find mimalloc.dll base address at startup
 HRESULT FindMimallocBase() {
@@ -39,6 +40,37 @@ HRESULT GetSymbolOffset(const char* symbolName, ULONG64& outOffset) {
     HRESULT hr = g_DebugSymbols->GetOffsetByName(fullSymbol.c_str(), &outOffset);
     if (FAILED(hr) || outOffset == 0) {
         g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to locate symbol: %s\n", fullSymbol.c_str());
+        return E_FAIL;
+    }
+
+    return S_OK;
+}
+
+// Function to get the offset of a nt symbol in the debuggee process
+HRESULT GetNtSymbolOffset(const char* typeName, const char* fieldName, ULONG& outOffset) {
+    // Ensure debug interfaces are valid
+    if (!g_DebugSymbols || g_MiMallocBase == 0) {
+        return E_FAIL;
+    }
+
+    ULONG index = 0;
+    ULONG64 base = 0;
+    HRESULT hr = g_DebugSymbols->GetModuleByModuleName("ntdll", 0, &index, &base);
+    if (FAILED(hr) || index == 0 || base == 0) {
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to locate module name for ntdll");
+        return E_FAIL;
+    }
+
+    ULONG typeId = 0;
+    hr = g_DebugSymbols->GetTypeId(base, typeName, &typeId);
+    if (FAILED(hr) || typeId == 0) {
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to locate type id for: %s\n", typeName);
+        return E_FAIL;
+    }
+
+    hr = g_DebugSymbols->GetFieldTypeAndOffset(base, typeId, fieldName, nullptr, &outOffset);
+    if (FAILED(hr) || outOffset == 0) {
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to locate symbol: %s\n", fieldName);
         return E_FAIL;
     }
 
@@ -119,6 +151,24 @@ HRESULT ReadString(const char* symbolName, std::string& outBuffer) {
         return hr;
     }
 
+    return S_OK;
+}
+
+HRESULT ReadWideString(ULONG64 address, std::wstring& outString, size_t maxLength) {
+    if (!g_DataSpaces) {
+        return E_FAIL;
+    }
+
+    WCHAR buffer[1025] = {0}; // max 1024 chars + null terminator
+    size_t readLength = min(maxLength, 1024);
+
+    HRESULT hr = g_DataSpaces->ReadVirtual(address, buffer, (ULONG)(readLength * sizeof(WCHAR)), nullptr);
+    if (FAILED(hr)) {
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read string from address 0x%llx.\n", address);
+        return hr;
+    }
+
+    outString = buffer;
     return S_OK;
 }
 

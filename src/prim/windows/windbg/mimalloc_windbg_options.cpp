@@ -12,6 +12,8 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_options(PDEBUG_CLIENT 
 
     HRESULT hr = S_OK;
 
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
+
     ULONG64 optionsAddr = 0;
     hr = GetSymbolOffset("mi_options", optionsAddr);
     if (FAILED(hr) || optionsAddr == 0) {
