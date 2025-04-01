@@ -8,6 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc_windbg_utils.h"
 
 extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_options(PDEBUG_CLIENT client, PCSTR args) {
+    UNREFERENCED_PARAMETER(client);
     UNREFERENCED_PARAMETER(args);
 
     HRESULT hr = S_OK;

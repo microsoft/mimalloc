@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 Command: !mi_dump_process_info
 */
 extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_process_info(PDEBUG_CLIENT client, PCSTR args) {
+    UNREFERENCED_PARAMETER(client);
     UNREFERENCED_PARAMETER(args);
 
     HRESULT hr = S_OK;
@@ -72,12 +73,17 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_process_info(PDEBUG_CL
     }
 
     // Read the command line string
-    std::wstring commandLine;
-    hr = ReadWideString(cmdLine.Buffer, commandLine, cmdLine.Length / sizeof(WCHAR));
+    std::wstring commandLineWide;
+    hr = ReadWideString(cmdLine.Buffer, commandLineWide, cmdLine.Length / sizeof(WCHAR));
     if (FAILED(hr)) {
         g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read CommandLine string.\n");
         return hr;
     }
+
+    // Convert wide string to narrow string
+    std::string commandLine;
+    commandLine.resize(cmdLine.Length / sizeof(WCHAR) + 1); // +1 for null terminator
+    WideCharToMultiByte(CP_UTF8, 0, commandLineWide.c_str(), -1, commandLine.data(), commandLine.size(), nullptr, nullptr);
 
     // Get Processor Type (x86, x64, ARM64, etc.)
     ULONG processorType = 0;
@@ -103,7 +109,7 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_process_info(PDEBUG_CL
     }
 
     // Output debuggee process info
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "Debugging Process (From Debuggee Context):\n");
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "Process Info:\n");
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "  Process ID       : %u (0x%X)\n", processId, processId);
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "  Command Line     : %s\n", commandLine.c_str());
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "  Architecture     : %s\n", arch);

@@ -11,9 +11,8 @@ terms of the MIT license. A copy of the license can be found in the file
 Command: !mi_show_extension_settings
 */
 extern "C" __declspec(dllexport) HRESULT CALLBACK mi_show_extension_settings(PDEBUG_CLIENT client, PCSTR args) {
+    UNREFERENCED_PARAMETER(client);
     UNREFERENCED_PARAMETER(args);
-
-    HRESULT hr = S_OK;
 
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
 
@@ -38,6 +37,8 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_show_extension_settings(PDE
 Command: !mi_set_extension_setting
 */
 extern "C" __declspec(dllexport) HRESULT CALLBACK mi_set_extension_setting(PDEBUG_CLIENT client, PCSTR args) {
+    UNREFERENCED_PARAMETER(client);
+
     if (!args || !*args) {
         g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "Usage: !mi_set_extension_setting <setting> <value>\n");
         return E_INVALIDARG;
@@ -45,16 +46,17 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_set_extension_setting(PDEBU
 
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
 
-    char fieldName[64];
-    char valueStr[64];
+    char fieldName[64] = {};
+    char valueStr[64] = {};
+
+    memset(fieldName, 0, sizeof(fieldName));
+    memset(valueStr, 0, sizeof(valueStr));
 
     // Parse the input arguments
     if (sscanf_s(args, "%63s %63s", fieldName, (unsigned)_countof(fieldName), valueStr, (unsigned)_countof(valueStr)) != 2) {
         g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Invalid input format. Expected: !mi_set_extension_setting <setting> <value>\n");
         return E_INVALIDARG;
     }
-
-    HRESULT hr = S_OK;
 
     // Update the setting based on the field name
     if (strcmp(fieldName, "MinCommittedSlicesPct") == 0) {

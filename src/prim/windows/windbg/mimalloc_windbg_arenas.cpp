@@ -38,6 +38,7 @@ Command: !mi_dump_arenas
       including fragmentation and leaks.
 */
 extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arenas(PDEBUG_CLIENT client, PCSTR args) {
+    UNREFERENCED_PARAMETER(client);
     UNREFERENCED_PARAMETER(args);
 
     HRESULT hr = S_OK;
@@ -52,66 +53,66 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arenas(PDEBUG_CLIENT c
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
     PrintLink(subprocMainAddr, std::format("dx -r1 (*((mimalloc!mi_subproc_s *)0x{:016X}))", subprocMainAddr), "subproc_main");
 
-    mi_subproc_t subprocMain {};
-    hr = ReadMemory(subprocMainAddr, &subprocMain, sizeof(mi_subproc_t));
+    auto subprocMain = std::make_unique<mi_subproc_t>();
+    hr = ReadMemory(subprocMainAddr, subprocMain.get(), sizeof(mi_subproc_t));
     if (FAILED(hr)) {
         g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read subproc_main at 0x%llx.\n", subprocMainAddr);
         return hr;
     }
 
     // Print results
-    size_t arenaCount = subprocMain.arena_count.load();
+    size_t arenaCount = subprocMain->arena_count.load();
 
-    size_t totalSlices = 0;
-    size_t totalCommittedSlices = 0;
-    size_t totalCommittedPages = 0;
-    size_t totalAbandonedPages = 0;
+    double totalSlices = 0.0;
+    double totalCommittedSlices = 0.0;
+    double totalCommittedPages = 0.0;
+    double totalAbandonedPages = 0.0;
 
-    std::vector<float> potentialFragmentation;
-    std::vector<float> highAbandonedPagesRatio;
+    std::vector<double> potentialFragmentation;
+    std::vector<double> highAbandonedPagesRatio;
     for (size_t i = 0; i < arenaCount; ++i) {
         ULONG64 arenaAddr = subprocMainAddr + offsetof(mi_subproc_t, arenas) + (i * sizeof(std::atomic<mi_arena_t*>));
         ULONG64 arenaValueAddr = 0;
-        HRESULT hr = ReadMemory(arenaAddr, &arenaValueAddr, sizeof(ULONG64));
+        hr = ReadMemory(arenaAddr, &arenaValueAddr, sizeof(ULONG64));
         if (FAILED(hr) || arenaValueAddr == 0) {
             g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read mi_arena_t pointer at 0x%016llx.\n", arenaAddr);
             return hr;
         }
 
-        mi_arena_t arena {};
-        hr = ReadMemory(arenaValueAddr, &arena, sizeof(mi_arena_t));
+        auto arena = std::make_unique<mi_arena_t>();
+        hr = ReadMemory(arenaValueAddr, arena.get(), sizeof(mi_arena_t));
         if (FAILED(hr)) {
             g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read mi_arena_t at 0x%016llx.\n", arenaAddr);
             return hr;
         }
 
-        totalSlices += arena.slice_count;
+        totalSlices += arena->slice_count;
 
         // Count committed slices using the bitmap in arena->slices_committed.
-        mi_bitmap_t slicesCommitted {};
-        hr = ReadMemory(reinterpret_cast<ULONG64>(arena.slices_committed), &slicesCommitted, sizeof(mi_bitmap_t));
+        auto slicesCommitted = std::make_unique<mi_bitmap_t>();
+        hr = ReadMemory(reinterpret_cast<ULONG64>(arena->slices_committed), slicesCommitted.get(), sizeof(mi_bitmap_t));
         if (FAILED(hr) || arenaValueAddr == 0) {
-            g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read arena.slices_committed pointer at 0x%016llx.\n", reinterpret_cast<ULONG64>(arena.slices_committed));
+            g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read arena.slices_committed pointer at 0x%016llx.\n", reinterpret_cast<ULONG64>(arena->slices_committed));
             return hr;
         }
 
-        size_t committed = mi_bitmap_count(&slicesCommitted);
+        size_t committed = mi_bitmap_count(slicesCommitted.get());
         totalCommittedSlices += committed;
 
         // Count committed pages using the bitmap in arena->pages.
-        mi_bitmap_t pages {};
-        hr = ReadMemory(reinterpret_cast<ULONG64>(arena.pages), &pages, sizeof(mi_bitmap_t));
+        auto pages = std::make_unique<mi_bitmap_t>();
+        hr = ReadMemory(reinterpret_cast<ULONG64>(arena->pages), pages.get(), sizeof(mi_bitmap_t));
         if (FAILED(hr) || arenaValueAddr == 0) {
-            g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read pages pointer at 0x%016llx.\n", reinterpret_cast<ULONG64>(arena.pages));
+            g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read pages pointer at 0x%016llx.\n", reinterpret_cast<ULONG64>(arena->pages));
             return hr;
         }
-        size_t committedPages = mi_bitmap_count(&pages);
+        size_t committedPages = mi_bitmap_count(pages.get());
         totalCommittedPages += committedPages;
 
         // For abandoned pages, iterate over each bin (0 to MI_BIN_COUNT - 1).
         size_t abandonedPages = 0;
         for (int bin = 0; bin < MI_BIN_COUNT; bin++) {
-            ULONG64 itemAdr = reinterpret_cast<ULONG64>(arena.pages_abandoned[bin]);
+            ULONG64 itemAdr = reinterpret_cast<ULONG64>(arena->pages_abandoned[bin]);
             mi_bitmap_t abandonedBmp {};
             hr = ReadMemory(itemAdr, &abandonedBmp, sizeof(mi_bitmap_t));
             if (FAILED(hr) || arenaValueAddr == 0) {
@@ -125,10 +126,10 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arenas(PDEBUG_CLIENT c
         totalAbandonedPages += abandonedPages;
 
         // --- Anomaly Detection ---
-        float pctCommittedSlices = (arena.slice_count > 0) ? (committed * 100.0 / arena.slice_count) : 0.0;
+        auto pctCommittedSlices = (arena->slice_count > 0) ? (committed * 100.0 / arena->slice_count) : 0.0;
         potentialFragmentation.push_back(pctCommittedSlices);
 
-        float abandonedPagesRatio = 0.0;
+        auto abandonedPagesRatio = 0.0;
         if (committedPages > 0 && abandonedPages > 0) {
             abandonedPagesRatio = (abandonedPages * 100.0) / committedPages;
         }
@@ -163,6 +164,8 @@ Command: !mi_dump_arena <arena_address>
       critical components of the arena.
 */
 extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arena(PDEBUG_CLIENT client, PCSTR args) {
+    UNREFERENCED_PARAMETER(client);
+
     if (!args || !*args) {
         g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "Usage: !mi_dump_arena <arena_address>\n");
         return E_INVALIDARG;
@@ -184,51 +187,51 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arena(PDEBUG_CLIENT cl
     PrintLink(arenaAddr, std::format("dx -r1 ((mimalloc!mi_arena_s *)0x{:016X})", arenaValueAddr), std::format("Dumping Arena at Address: 0x{:016X}\n", arenaAddr));
 
     // Read the `mi_arena_t` structure from the memory
-    mi_arena_t arena {};
-    hr = ReadMemory(arenaValueAddr, &arena, sizeof(mi_arena_t));
+    auto arena = std::make_unique<mi_arena_t>();
+    hr = ReadMemory(arenaValueAddr, arena.get(), sizeof(mi_arena_t));
     if (FAILED(hr)) {
         g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read mi_arena_t at 0x%016llx.\n", arenaAddr);
         return hr;
     }
 
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Slice Count: %llu\n", arenaAddr + offsetof(mi_arena_t, slice_count), arena.slice_count);
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Info Slices: %llu\n", arenaAddr + offsetof(mi_arena_t, info_slices), arena.info_slices);
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - NUMA Node: %d\n", arenaAddr + offsetof(mi_arena_t, numa_node), arena.numa_node);
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Exclusive: %s\n", arenaAddr + offsetof(mi_arena_t, is_exclusive), arena.is_exclusive ? "Yes" : "No");
-    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Purge Expire: %d\n", arenaAddr + offsetof(mi_arena_t, purge_expire), arena.purge_expire.load());
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Slice Count: %llu\n", arenaAddr + offsetof(mi_arena_t, slice_count), arena->slice_count);
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Info Slices: %llu\n", arenaAddr + offsetof(mi_arena_t, info_slices), arena->info_slices);
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - NUMA Node: %d\n", arenaAddr + offsetof(mi_arena_t, numa_node), arena->numa_node);
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Exclusive: %s\n", arenaAddr + offsetof(mi_arena_t, is_exclusive), arena->is_exclusive ? "Yes" : "No");
+    g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "[0x%p]   - Purge Expire: %d\n", arenaAddr + offsetof(mi_arena_t, purge_expire), arena->purge_expire.load());
 
-    size_t totalSlices = 0;
-    size_t totalCommittedSlices = 0;
-    size_t totalCommittedPages = 0;
-    size_t totalAbandonedPages = 0;
+    double totalSlices = 0.0;
+    double totalCommittedSlices = 0.0;
+    double totalCommittedPages = 0.0;
+    double totalAbandonedPages = 0.0;
 
-    totalSlices += arena.slice_count;
+    totalSlices += arena->slice_count;
 
     // Count committed slices using the bitmap in arena->slices_committed.
-    mi_bitmap_t slicesCommitted {};
-    hr = ReadMemory(reinterpret_cast<ULONG64>(arena.slices_committed), &slicesCommitted, sizeof(mi_bitmap_t));
+    auto slicesCommitted = std::make_unique<mi_bitmap_t>();
+    hr = ReadMemory(reinterpret_cast<ULONG64>(arena->slices_committed), slicesCommitted.get(), sizeof(mi_bitmap_t));
     if (FAILED(hr) || arenaValueAddr == 0) {
-        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read arena.slices_committed pointer at 0x%016llx.\n", reinterpret_cast<ULONG64>(arena.slices_committed));
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read arena.slices_committed pointer at 0x%016llx.\n", reinterpret_cast<ULONG64>(arena->slices_committed));
         return hr;
     }
 
-    size_t committed = mi_bitmap_count(&slicesCommitted);
+    size_t committed = mi_bitmap_count(slicesCommitted.get());
     totalCommittedSlices += committed;
 
     // Count committed pages using the bitmap in arena->pages.
-    mi_bitmap_t pages {};
-    hr = ReadMemory(reinterpret_cast<ULONG64>(arena.pages), &pages, sizeof(mi_bitmap_t));
+    auto pages = std::make_unique<mi_bitmap_t>();
+    hr = ReadMemory(reinterpret_cast<ULONG64>(arena->pages), pages.get(), sizeof(mi_bitmap_t));
     if (FAILED(hr) || arenaValueAddr == 0) {
-        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read pages pointer at 0x%016llx.\n", reinterpret_cast<ULONG64>(arena.pages));
+        g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "ERROR: Failed to read pages pointer at 0x%016llx.\n", reinterpret_cast<ULONG64>(arena->pages));
         return hr;
     }
-    size_t committedPages = mi_bitmap_count(&pages);
+    size_t committedPages = mi_bitmap_count(pages.get());
     totalCommittedPages += committedPages;
 
     // For abandoned pages, iterate over each bin (0 to MI_BIN_COUNT - 1).
     size_t abandonedPages = 0;
     for (int bin = 0; bin < MI_BIN_COUNT; bin++) {
-        ULONG64 itemAdr = reinterpret_cast<ULONG64>(arena.pages_abandoned[bin]);
+        ULONG64 itemAdr = reinterpret_cast<ULONG64>(arena->pages_abandoned[bin]);
         mi_bitmap_t abandonedBmp {};
         hr = ReadMemory(itemAdr, &abandonedBmp, sizeof(mi_bitmap_t));
         if (FAILED(hr) || arenaValueAddr == 0) {
@@ -245,9 +248,9 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_arena(PDEBUG_CLIENT cl
     PrintArenaSummary(totalSlices, totalCommittedSlices, totalCommittedPages, totalAbandonedPages);
 
     // --- Anomaly Detection ---
-    float pctCommittedSlices = (arena.slice_count > 0) ? (committed * 100.0 / arena.slice_count) : 0.0;
+    auto pctCommittedSlices = (arena->slice_count > 0) ? (committed * 100.0 / arena->slice_count) : 0.0;
 
-    float abandonedPagesRatio = 0.0;
+    double abandonedPagesRatio = 0.0;
     if (committedPages > 0 && abandonedPages > 0) {
         abandonedPagesRatio = (abandonedPages * 100.0) / committedPages;
     }

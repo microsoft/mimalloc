@@ -11,9 +11,8 @@ terms of the MIT license. A copy of the license can be found in the file
 Command: !mi_show_help
 */
 extern "C" __declspec(dllexport) HRESULT CALLBACK mi_show_help(PDEBUG_CLIENT client, PCSTR args) {
+    UNREFERENCED_PARAMETER(client);
     UNREFERENCED_PARAMETER(args);
-
-    HRESULT hr = S_OK;
 
     g_DebugControl->Output(DEBUG_OUTPUT_NORMAL, "\n");
 

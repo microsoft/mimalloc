@@ -32,8 +32,8 @@ static inline double MaxAbandonedPagesRatio = 0.4; // If abandoned pages exceed 
 HRESULT FindMimallocBase();
 HRESULT GetSymbolOffset(const char* symbolName, ULONG64& outOffset);
 HRESULT GetNtSymbolOffset(const char* typeName, const char* fieldName, ULONG& outOffset);
-HRESULT ReadMemory(const char* symbolName, void* outBuffer, size_t bufferSize);
-HRESULT ReadMemory(ULONG64 address, void* outBuffer, size_t bufferSize);
+HRESULT ReadMemory(const char* symbolName, void* outBuffer, ULONG bufferSize);
+HRESULT ReadMemory(ULONG64 address, void* outBuffer, ULONG bufferSize);
 HRESULT ReadString(const char* symbolName, std::string& outBuffer);
 HRESULT ReadWideString(ULONG64 address, std::wstring& outString, size_t maxLength = 1024);
 size_t mi_bitmap_count(mi_bitmap_t* bmp);

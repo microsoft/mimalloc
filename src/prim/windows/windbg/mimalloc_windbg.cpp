@@ -71,7 +71,7 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK DebugExtensionInitialize(PULON
 
     // Register output callbacks
     mi_register_output(
-        [](const char* msg, void* arg) {
+        []([[maybe_unused]] const char* msg, [[maybe_unused]] void* arg) {
             g_DebugControl->Output(DEBUG_OUTPUT_ERROR, msg);
             g_DebugControl->Output(DEBUG_OUTPUT_ERROR, "\n");
         },

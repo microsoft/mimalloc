@@ -6,7 +6,6 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc_windbg_utils.h"
-#include <array>
 
 ULONG64 g_MiMallocBase = 0;
 
@@ -78,7 +77,7 @@ HRESULT GetNtSymbolOffset(const char* typeName, const char* fieldName, ULONG& ou
 }
 
 // Function to read memory from the debuggee process
-HRESULT ReadMemory(const char* symbolName, void* outBuffer, size_t bufferSize) {
+HRESULT ReadMemory(const char* symbolName, void* outBuffer, ULONG bufferSize) {
     if (!g_DataSpaces) {
         return E_FAIL;
     }
@@ -101,7 +100,7 @@ HRESULT ReadMemory(const char* symbolName, void* outBuffer, size_t bufferSize) {
 }
 
 // Function to read memory from a specific address
-HRESULT ReadMemory(ULONG64 address, void* outBuffer, size_t bufferSize) {
+HRESULT ReadMemory(ULONG64 address, void* outBuffer, ULONG bufferSize) {
     if (!g_DataSpaces) {
         return E_FAIL;
     }
@@ -132,7 +131,7 @@ HRESULT ReadString(const char* symbolName, std::string& outBuffer) {
 
     // Step 2: Read the actual string data from the debuggee memory
     char tempChar = 0;
-    size_t length = 0;
+    ULONG length = 0;
 
     do {
         hr = g_DataSpaces->ReadVirtual(stringPtr + length, &tempChar, sizeof(char), nullptr);
@@ -189,11 +188,12 @@ size_t mi_bitmap_count(mi_bitmap_t* bmp) {
 }
 
 std::string FormatSize(std::size_t bytes) {
-    constexpr std::array<const char*, 6> suffixes = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
+    const char* suffixes[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
+    constexpr int maxIndex = static_cast<int>(std::size(suffixes)) - 1;
     double size = static_cast<double>(bytes);
     int index = 0;
 
-    while (size >= 1024.0 && index < suffixes.size() - 1) {
+    while (size >= 1024.0 && index < maxIndex) {
         size /= 1024.0;
         ++index;
     }
@@ -202,10 +202,11 @@ std::string FormatSize(std::size_t bytes) {
 }
 
 std::string FormatNumber(double num) {
-    constexpr std::array<const char*, 5> suffixes = {"", "K", "M", "B", "T"};
+    const char* suffixes[] = {"", "K", "M", "B", "T"};
+    constexpr int maxIndex = static_cast<int>(std::size(suffixes)) - 1;
     int index = 0;
 
-    while (num >= 1000.0 && index < suffixes.size() - 1) {
+    while (num >= 1000.0 && index < maxIndex) {
         num /= 1000.0;
         ++index;
     }

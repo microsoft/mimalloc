@@ -481,6 +481,7 @@
     <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_help.cpp" />
     <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_options.cpp" />
     <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_settings.cpp" />
+    <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_process_info.cpp" />
     <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_stats.cpp" />
     <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_utils.cpp" />
     <ClCompile Include="..\..\src\random.c" />

@@ -79,6 +79,9 @@
     <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_settings.cpp">
       <Filter>Sources\Windbg</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_process_info.cpp">
+      <Filter>Sources\Windbg</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\prim\windows\windbg\mimalloc_windbg_stats.cpp">
       <Filter>Sources\Windbg</Filter>
     </ClCompile>

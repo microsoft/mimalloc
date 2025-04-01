@@ -45,6 +45,7 @@ Command: !mi_dump_stats
     -
 */
 extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_stats(PDEBUG_CLIENT client, PCSTR args) {
+    UNREFERENCED_PARAMETER(client);
     UNREFERENCED_PARAMETER(args);
 
     HRESULT hr = S_OK;
