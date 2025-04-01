@@ -187,12 +187,12 @@ size_t mi_bitmap_count(mi_bitmap_t* bmp) {
     return totalCount;
 }
 
-std::string FormatSize(std::size_t bytes) {
+std::string FormatSize(int64_t value) {
     const char* suffixes[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
     constexpr int maxIndex = static_cast<int>(std::size(suffixes)) - 1;
-    double size = static_cast<double>(bytes);
     int index = 0;
 
+    double size = static_cast<double>(value);
     while (size >= 1024.0 && index < maxIndex) {
         size /= 1024.0;
         ++index;
@@ -201,11 +201,12 @@ std::string FormatSize(std::size_t bytes) {
     return std::format("{:.2f} {}", size, suffixes[index]);
 }
 
-std::string FormatNumber(double num) {
+std::string FormatNumber(int64_t value) {
     const char* suffixes[] = {"", "K", "M", "B", "T"};
     constexpr int maxIndex = static_cast<int>(std::size(suffixes)) - 1;
     int index = 0;
 
+    double num = static_cast<double>(value);
     while (num >= 1000.0 && index < maxIndex) {
         num /= 1000.0;
         ++index;

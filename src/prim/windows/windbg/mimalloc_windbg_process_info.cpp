@@ -83,7 +83,7 @@ extern "C" __declspec(dllexport) HRESULT CALLBACK mi_dump_process_info(PDEBUG_CL
     // Convert wide string to narrow string
     std::string commandLine;
     commandLine.resize(cmdLine.Length / sizeof(WCHAR) + 1); // +1 for null terminator
-    WideCharToMultiByte(CP_UTF8, 0, commandLineWide.c_str(), -1, commandLine.data(), commandLine.size(), nullptr, nullptr);
+    WideCharToMultiByte(CP_UTF8, 0, commandLineWide.c_str(), -1, commandLine.data(), static_cast<int>(commandLine.size()), nullptr, nullptr);
 
     // Get Processor Type (x86, x64, ARM64, etc.)
     ULONG processorType = 0;

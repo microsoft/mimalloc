@@ -37,8 +37,8 @@ HRESULT ReadMemory(ULONG64 address, void* outBuffer, ULONG bufferSize);
 HRESULT ReadString(const char* symbolName, std::string& outBuffer);
 HRESULT ReadWideString(ULONG64 address, std::wstring& outString, size_t maxLength = 1024);
 size_t mi_bitmap_count(mi_bitmap_t* bmp);
-std::string FormatSize(std::size_t bytes);
-std::string FormatNumber(double num);
+std::string FormatSize(int64_t bytes);
+std::string FormatNumber(int64_t num);
 
 inline void PrintLink(ULONG64 addr, std::string cmd, std::string linkText, std::string extraText = "") {
     g_DebugControl->ControlledOutput(DEBUG_OUTCTL_AMBIENT_DML, DEBUG_OUTPUT_NORMAL,
