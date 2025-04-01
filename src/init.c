@@ -207,6 +207,7 @@ static void mi_heap_main_init(void) {
   if (_mi_heap_main.cookie == 0) {
     _mi_heap_main.thread_id = _mi_thread_id();
     _mi_heap_main.cookie = 1;
+    mi_thread_init();
     #if defined(_WIN32) && !defined(MI_SHARED_LIB)
       _mi_random_init_weak(&_mi_heap_main.random);    // prevent allocation failure during bcrypt dll initialization with static linking
     #else
