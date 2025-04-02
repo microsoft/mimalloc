@@ -177,7 +177,7 @@ mimalloc is used in various large scale low-latency services and programs, for e
 
 Open `ide/vs2022/mimalloc.sln` in Visual Studio 2022 and build.
 The `mimalloc-lib` project builds a static library (in `out/msvc-x64`), while the
-`mimalloc-override-dll` project builds DLL for overriding malloc
+`mimalloc-override-dll` project builds a DLL for overriding malloc
 in the entire program.
 
 ## Linux, macOS, BSD, etc.
