@@ -177,7 +177,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "Intel")
     list(APPEND mi_cflags -Wall)
 endif()
 
-if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
+# force C++ compilation with msvc or clang-cl to use modern C++ atomics
+if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL)
   set(MI_USE_CXX "ON")
 endif()
 
