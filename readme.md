@@ -73,7 +73,7 @@ Enjoy!
 ### Branches
 
 * `master`: latest stable release (still based on `dev2`).
-* `dev`:  development branch for mimalloc v1. Use this branch for submitting PR's.
+* `dev`:  development branch for mimalloc v1. **Use this branch for submitting PR's**.
 * `dev2`: development branch for mimalloc v2. This branch is downstream of `dev` 
           (and is essentially equal to `dev` except for `src/segment.c`). Uses larger sliced segments to manage
           mimalloc pages that can reduce fragmentation.
@@ -84,7 +84,7 @@ Enjoy!
 
 ### Releases
 
-* 2025-03-28, `v1.9.3`, `v2.2.3`, `v3.0.3-beta`: Various small bug and build fixes, including:
+* 2025-03-28, `v1.9.3`, `v2.2.3`, `v3.0.3` (beta): Various small bug and build fixes, including:
   fix arm32 pre v7 builds, fix mingw build, get runtime statistics, improve statistic commit counts, 
   fix execution on non BMI1 x64 systems. 
 * 2025-03-06, `v1.9.2`, `v2.2.2`, `v3.0.2-beta`: Various small bug and build fixes. 
