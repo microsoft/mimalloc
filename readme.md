@@ -73,7 +73,7 @@ Enjoy!
 ### Branches
 
 * `master`: latest stable release (still based on `dev2`).
-* `dev`:  development branch for mimalloc v1. Use this branch for submitting PR's.
+* `dev`:  development branch for mimalloc v1. **Use this branch for submitting PR's**.
 * `dev2`: development branch for mimalloc v2. This branch is downstream of `dev` 
           (and is essentially equal to `dev` except for `src/segment.c`). Uses larger sliced segments to manage
           mimalloc pages that can reduce fragmentation.
