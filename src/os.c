@@ -109,7 +109,7 @@ size_t _mi_os_secure_guard_page_size(void) {
   return 0;
   #endif
 }
-  
+
 // In secure mode, try to decommit an area and output a warning if this fails.
 bool _mi_os_secure_guard_page_set_at(void* addr, mi_memid_t memid) {
   if (addr == NULL) return true;
@@ -718,30 +718,31 @@ static void mi_os_free_huge_os_pages(void* p, size_t size) {
   }
 }
 
+
 /* ----------------------------------------------------------------------------
 Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
 
-static _Atomic(int)  _mi_numa_node_count; // = 0   // cache the node count
+static _Atomic(size_t) mi_numa_node_count; // = 0   // cache the node count
 
 int _mi_os_numa_node_count(void) {
-  int count = mi_atomic_load_acquire(&_mi_numa_node_count);
-  if mi_unlikely(count <= 0) {
+  size_t count = mi_atomic_load_acquire(&mi_numa_node_count);
+  if mi_unlikely(count == 0) {
     long ncount = mi_option_get(mi_option_use_numa_nodes); // given explicitly?
     if (ncount > 0 && ncount < INT_MAX) {
-      count = (int)ncount;
+      count = (size_t)ncount;
     }
     else {
       const size_t n = _mi_prim_numa_node_count(); // or detect dynamically
       if (n == 0 || n > INT_MAX) { count = 1; }
-                            else { count = (int)n; }
+                            else { count = n; }
     }
-    mi_atomic_store_release(&_mi_numa_node_count, count); // save it
+    mi_atomic_store_release(&mi_numa_node_count, count); // save it
     _mi_verbose_message("using %zd numa regions\n", count);
   }
-  return count;
+  mi_assert_internal(count > 0 && count <= INT_MAX);
+  return (int)count;
 }
-
 
 static int mi_os_numa_node_get(void) {
   int numa_count = _mi_os_numa_node_count();
@@ -754,11 +755,13 @@ static int mi_os_numa_node_get(void) {
 }
 
 int _mi_os_numa_node(void) {
-  if mi_likely(mi_atomic_load_relaxed(&_mi_numa_node_count) == 1) { return 0; }
-  else return mi_os_numa_node_get();
+  if mi_likely(mi_atomic_load_relaxed(&mi_numa_node_count) == 1) {
+    return 0;
+  }
+  else {
+    return mi_os_numa_node_get();
+  }
 }
-
-
 
 
 /* ----------------------------------------------------------------------------

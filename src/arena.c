@@ -385,7 +385,7 @@ static mi_decl_noinline void* mi_arenas_try_find_free(
   mi_assert(alignment <= MI_ARENA_SLICE_ALIGN);
   if (alignment > MI_ARENA_SLICE_ALIGN) return NULL;
 
-  // search arena's 
+  // search arena's
   mi_forall_suitable_arenas(subproc, req_arena, tseq, true /* only numa matching */, numa_node, allow_large, arena)
   {
     void* p = mi_arena_try_alloc_at(arena, slice_count, commit, tseq, memid);
@@ -400,7 +400,7 @@ static mi_decl_noinline void* mi_arenas_try_find_free(
     void* p = mi_arena_try_alloc_at(arena, slice_count, commit, tseq, memid);
     if (p != NULL) return p;
   }
-  mi_forall_suitable_arenas_end();  
+  mi_forall_suitable_arenas_end();
   return NULL;
 }
 
@@ -543,7 +543,7 @@ static mi_page_t* mi_arenas_page_try_find_abandoned(mi_subproc_t* subproc, size_
   // search arena's
   const bool allow_large = true;
   const int  any_numa = -1;
-  const bool match_numa = true;  
+  const bool match_numa = true;
   mi_forall_suitable_arenas(subproc, req_arena, tseq, match_numa, any_numa, allow_large, arena)
   {
     size_t slice_index;
@@ -611,7 +611,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_subproc_t* subproc, size_t slice
       page = (mi_page_t*)mi_arena_os_alloc_aligned(alloc_size, page_alignment, 0 /* align offset */, commit, allow_large, req_arena, &memid);
     }
   }
-  
+
   if (page == NULL) return NULL;
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(!os_align || _mi_is_aligned((uint8_t*)page + page_alignment, block_alignment));
@@ -1147,7 +1147,7 @@ static mi_bbitmap_t* mi_arena_bbitmap_init(size_t slice_count, uint8_t** base) {
 }
 
 
-static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t size, int numa_node, bool exclusive, 
+static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t size, int numa_node, bool exclusive,
                                     mi_memid_t memid, mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
   mi_assert(_mi_is_aligned(start,MI_ARENA_SLICE_SIZE));
@@ -1309,7 +1309,7 @@ int mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noe
   Debugging
 ----------------------------------------------------------- */
 
-// Return idx of the slice past the last used slice 
+// Return idx of the slice past the last used slice
 static size_t mi_arena_used_slices(mi_arena_t* arena) {
   size_t idx;
   if (mi_bitmap_bsr(arena->pages, &idx)) {
@@ -1412,16 +1412,16 @@ static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k,
   return bit_set_count;
 }
 
-static size_t mi_debug_show_chunks(const char* header1, const char* header2, const char* header3, 
-                                   size_t slice_count, size_t chunk_count, 
-                                   mi_bchunk_t* chunks, mi_bchunkmap_t* chunk_bins, bool invert, mi_arena_t* arena, bool narrow) 
+static size_t mi_debug_show_chunks(const char* header1, const char* header2, const char* header3,
+                                   size_t slice_count, size_t chunk_count,
+                                   mi_bchunk_t* chunks, mi_bchunkmap_t* chunk_bins, bool invert, mi_arena_t* arena, bool narrow)
 {
   _mi_raw_message("\x1B[37m%s%s%s (use/commit: \x1B[31m0 - 25%%\x1B[33m - 50%%\x1B[36m - 75%%\x1B[32m - 100%%\x1B[0m)\n", header1, header2, header3);
   const size_t fields_per_line = (narrow ? 2 : 4);
   const size_t used_slice_count = mi_arena_used_slices(arena);
   size_t bit_count = 0;
   size_t bit_set_count = 0;
-  for (size_t i = 0; i < chunk_count && bit_count < slice_count; i++) {    
+  for (size_t i = 0; i < chunk_count && bit_count < slice_count; i++) {
     char buf[5*MI_BCHUNK_BITS + 64]; _mi_memzero(buf, sizeof(buf));
     if (bit_count > used_slice_count && i+2 < chunk_count) {
       const size_t diff = chunk_count - 1 - i;
@@ -1882,7 +1882,7 @@ mi_decl_export bool mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t*
   }
 
   // find accessed size
-  const size_t asize = mi_size_of_slices(mi_arena_used_slices(arena));  
+  const size_t asize = mi_size_of_slices(mi_arena_used_slices(arena));
   if (base != NULL) { *base = (void*)arena; }
   if (full_size != NULL) { *full_size = arena->memid.mem.os.size;  }
   if (accessed_size != NULL) { *accessed_size = asize; }
