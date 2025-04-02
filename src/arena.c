@@ -1007,17 +1007,17 @@ int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t 
   if (pages == 0) return 0;
 
   // pages per numa node
-  size_t numa_count = (numa_nodes > 0 ? numa_nodes : _mi_os_numa_node_count());
-  if (numa_count <= 0) numa_count = 1;
+  int numa_count = (numa_nodes > 0 && numa_nodes <= INT_MAX ? (int)numa_nodes : _mi_os_numa_node_count());
+  if (numa_count == 0) numa_count = 1;
   const size_t pages_per = pages / numa_count;
   const size_t pages_mod = pages % numa_count;
   const size_t timeout_per = (timeout_msecs==0 ? 0 : (timeout_msecs / numa_count) + 50);
 
   // reserve evenly among numa nodes
-  for (size_t numa_node = 0; numa_node < numa_count && pages > 0; numa_node++) {
+  for (int numa_node = 0; numa_node < numa_count && pages > 0; numa_node++) {
     size_t node_pages = pages_per;  // can be 0
-    if (numa_node < pages_mod) node_pages++;
-    int err = mi_reserve_huge_os_pages_at(node_pages, (int)numa_node, timeout_per);
+    if ((size_t)numa_node < pages_mod) node_pages++;
+    int err = mi_reserve_huge_os_pages_at(node_pages, numa_node, timeout_per);
     if (err) return err;
     if (pages < node_pages) {
       pages = 0;
