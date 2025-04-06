@@ -31,11 +31,11 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(__linux__)
   #include <features.h>
-  #include <linux/prctl.h>  // PR_SET_VMA
   //#if defined(MI_NO_THP)
   #include <sys/prctl.h>    // THP disable
   //#endif
   #if defined(__GLIBC__)
+  #include <linux/prctl.h>  // PR_SET_VMA
   #include <linux/mman.h>   // linux mmap flags
   #else
   #include <sys/mman.h>
