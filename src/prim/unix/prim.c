@@ -31,11 +31,13 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(__linux__)
   #include <features.h>
-  #include <linux/prctl.h>  // PR_SET_VMA
   //#if defined(MI_NO_THP)
   #include <sys/prctl.h>    // THP disable
   //#endif
   #if defined(__GLIBC__)
+  #if !defined(PR_SET_VMA)
+  #include <linux/prctl.h>  // PR_SET_VMA
+  #endif
   #include <linux/mman.h>   // linux mmap flags
   #else
   #include <sys/mman.h>
@@ -70,7 +72,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MADV_FREE  POSIX_MADV_FREE
 #endif
 
-  
+
 //------------------------------------------------------------------------------------
 // Use syscalls for some primitives to allow for libraries that override open/read/close etc.
 // and do allocation themselves; using syscalls prevents recursion when mimalloc is
