@@ -84,7 +84,7 @@ Enjoy!
 
 ### Releases
 
-* 2025-03-28, `v1.9.3`, `v2.2.3`, `v3.0.3` (beta): Various small bug and build fixes, including:
+* 2025-03-28, `v1.9.3`, `v2.2.3`, `v3.0.3` (beta) : Various small bug and build fixes, including:
   fix arm32 pre v7 builds, fix mingw build, get runtime statistics, improve statistic commit counts, 
   fix execution on non BMI1 x64 systems. 
 * 2025-03-06, `v1.9.2`, `v2.2.2`, `v3.0.2-beta`: Various small bug and build fixes. 
@@ -177,7 +177,7 @@ mimalloc is used in various large scale low-latency services and programs, for e
 
 Open `ide/vs2022/mimalloc.sln` in Visual Studio 2022 and build.
 The `mimalloc-lib` project builds a static library (in `out/msvc-x64`), while the
-`mimalloc-override-dll` project builds DLL for overriding malloc
+`mimalloc-override-dll` project builds a DLL for overriding malloc
 in the entire program.
 
 ## Linux, macOS, BSD, etc.
