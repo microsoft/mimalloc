@@ -140,8 +140,10 @@ void*       _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t
 void*       _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 bool        _mi_os_use_large_page(size_t size, size_t alignment);
 size_t      _mi_os_large_page_size(void);
-
 void*       _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
+
+int         _mi_os_numa_node_count(void);
+int         _mi_os_numa_node(void);
 
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);
@@ -894,24 +896,6 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
   x ^= x >> 16;
 #endif
   return x;
-}
-
-// -------------------------------------------------------------------
-// Optimize numa node access for the common case (= one node)
-// -------------------------------------------------------------------
-
-int    _mi_os_numa_node_get(void);
-size_t _mi_os_numa_node_count_get(void);
-
-extern mi_decl_hidden _Atomic(size_t) _mi_numa_node_count;
-static inline int _mi_os_numa_node(void) {
-  if mi_likely(mi_atomic_load_relaxed(&_mi_numa_node_count) == 1) { return 0; }
-  else return _mi_os_numa_node_get();
-}
-static inline size_t _mi_os_numa_node_count(void) {
-  const size_t count = mi_atomic_load_relaxed(&_mi_numa_node_count);
-  if mi_likely(count > 0) { return count; }
-  else return _mi_os_numa_node_count_get();
 }
 
 
