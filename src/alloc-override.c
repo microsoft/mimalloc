@@ -9,11 +9,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "this file should be included from 'alloc.c' (so aliases can work)"
 #endif
 
-#if defined(MI_MALLOC_OVERRIDE) && defined(_WIN32) && !(defined(MI_SHARED_LIB) && defined(_DLL))
-#error "It is only possible to override "malloc" on Windows when building as a DLL (and linking the C runtime as a DLL)"
-#endif
 
-#if defined(MI_MALLOC_OVERRIDE) && !(defined(_WIN32))
+#if defined(MI_MALLOC_OVERRIDE) && !defined(_DLL)
 
 #if defined(__APPLE__)
 #include <AvailabilityMacros.h>
@@ -127,8 +124,197 @@ typedef void* mi_nothrow_t;
   };
 
 #elif defined(_MSC_VER)
-  // cannot override malloc unless using a dll.
-  // we just override new/delete which does work in a static library.
+  _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Size)
+  _ACRTIMP _CRTALLOCATOR
+  void* __cdecl _expand(
+      _Pre_notnull_           void*  _Block,
+      _In_ _CRT_GUARDOVERFLOW size_t _Size
+      )
+  {
+      return mi_expand(_Block, _Size);
+  }
+  _Check_return_
+  _ACRTIMP
+  size_t __cdecl _msize_base(
+      _Pre_notnull_ void* _Block
+      ) _CRT_NOEXCEPT
+  {
+      return mi_malloc_size(_Block);
+  }
+  _Check_return_
+  _ACRTIMP _CRT_HYBRIDPATCHABLE
+  size_t __cdecl _msize(
+      _Pre_notnull_ void* _Block
+      )
+  {
+      return mi_malloc_size(_Block);
+  }
+  _ACRTIMP
+  void __cdecl _free_base(
+      _Pre_maybenull_ _Post_invalid_ void* _Block
+      )
+  {
+      mi_free(_Block);
+  }
+  _ACRTIMP _CRT_HYBRIDPATCHABLE
+  void __cdecl free(
+      _Pre_maybenull_ _Post_invalid_ void* _Block
+      )
+  {
+      mi_free(_Block);
+  }
+  _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Size)
+  _ACRTIMP _CRTALLOCATOR _CRT_JIT_INTRINSIC _CRTRESTRICT _CRT_HYBRIDPATCHABLE
+  void* __cdecl malloc(
+      _In_ _CRT_GUARDOVERFLOW size_t _Size
+      )
+  {
+      return mi_malloc(_Size);
+  }
+  _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl _malloc_base(
+      _In_ size_t _Size
+      )
+  {
+      return mi_malloc(_Size);
+  }
+  _Success_(return != 0) _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl _realloc_base(
+      _Pre_maybenull_ _Post_invalid_  void*  _Block,
+      _In_                            size_t _Size
+      )
+  {
+      return mi_realloc(_Block, _Size);
+  }
+  _Success_(return != 0) _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT _CRT_HYBRIDPATCHABLE
+  void* __cdecl realloc(
+      _Pre_maybenull_ _Post_invalid_ void*  _Block,
+      _In_ _CRT_GUARDOVERFLOW        size_t _Size
+      )
+  {
+      return mi_realloc(_Block, _Size);
+  }
+  _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Count * _Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl _calloc_base(
+      _In_ size_t _Count,
+      _In_ size_t _Size
+      )
+  {
+      return mi_calloc(_Count, _Size);
+  }
+  _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Count * _Size)
+  _ACRTIMP _CRT_JIT_INTRINSIC _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl calloc(
+      _In_ _CRT_GUARDOVERFLOW size_t _Count,
+      _In_ _CRT_GUARDOVERFLOW size_t _Size
+      )
+  {
+      return mi_calloc(_Count, _Size);
+  }
+  _Success_(return != 0) _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Count * _Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl _recalloc_base(
+      _Pre_maybenull_ _Post_invalid_ void*  _Block,
+      _In_                           size_t _Count,
+      _In_                           size_t _Size
+      )
+  {
+      return mi_recalloc(_Block, _Count, _Size);
+  }
+  _Success_(return != 0) _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Count * _Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl _recalloc(
+      _Pre_maybenull_ _Post_invalid_ void*  _Block,
+      _In_ _CRT_GUARDOVERFLOW        size_t _Count,
+      _In_ _CRT_GUARDOVERFLOW        size_t _Size
+      )
+  {
+      return mi_recalloc(_Block, _Count, _Size);
+  }
+  _ACRTIMP
+  void __cdecl _aligned_free(
+      _Pre_maybenull_ _Post_invalid_ void* _Block
+      )
+  {
+      mi_free(_Block);
+  }
+  _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl _aligned_malloc(
+      _In_ _CRT_GUARDOVERFLOW size_t _Size,
+      _In_                    size_t _Alignment
+      )
+  {
+      return mi_malloc_aligned(_Size, _Alignment);
+  }
+  _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl _aligned_offset_malloc(
+      _In_ _CRT_GUARDOVERFLOW size_t _Size,
+      _In_                    size_t _Alignment,
+      _In_                    size_t _Offset
+      )
+  {
+      return mi_malloc_aligned_at(_Size, _Alignment, _Offset);
+  }
+  _Check_return_
+  _ACRTIMP
+  size_t __cdecl _aligned_msize(
+      _Pre_notnull_ void*  _Block,
+      _In_          size_t _Alignment,
+      _In_          size_t _Offset
+      )
+  {
+      return mi_malloc_size(_Block);
+  }
+  _Success_(return != 0) _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl _aligned_offset_realloc(
+      _Pre_maybenull_ _Post_invalid_ void*  _Block,
+      _In_ _CRT_GUARDOVERFLOW        size_t _Size,
+      _In_                           size_t _Alignment,
+      _In_                           size_t _Offset
+      )
+  {
+      return mi_realloc_aligned_at(_Block, _Size, _Alignment, _Offset);
+  }
+  _Success_(return != 0) _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Count * _Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl _aligned_offset_recalloc(
+      _Pre_maybenull_ _Post_invalid_ void*  _Block,
+      _In_ _CRT_GUARDOVERFLOW        size_t _Count,
+      _In_ _CRT_GUARDOVERFLOW        size_t _Size,
+      _In_                           size_t _Alignment,
+      _In_                           size_t _Offset
+      )
+  {
+      return mi_recalloc_aligned_at(_Block, _Count, _Size, _Alignment, _Offset);
+  }
+  _Success_(return != 0) _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl _aligned_realloc(
+      _Pre_maybenull_ _Post_invalid_ void*  _Block,
+      _In_ _CRT_GUARDOVERFLOW        size_t _Size,
+      _In_                           size_t _Alignment
+      )
+  {
+      return mi_realloc_aligned(_Block, _Size, _Alignment);
+  }
+  _Success_(return != 0) _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Count * _Size)
+  _ACRTIMP _CRTALLOCATOR _CRTRESTRICT
+  void* __cdecl _aligned_recalloc(
+      _Pre_maybenull_ _Post_invalid_ void*  _Block,
+      _In_ _CRT_GUARDOVERFLOW        size_t _Count,
+      _In_ _CRT_GUARDOVERFLOW        size_t _Size,
+      _In_                           size_t _Alignment
+      )
+  {
+      return mi_recalloc_aligned(_Block, _Count, _Size, _Alignment);
+  }
 #else
   // On all other systems forward allocation primitives to our API
   mi_decl_export void* malloc(size_t size)              MI_FORWARD1(mi_malloc, size)
@@ -276,7 +462,9 @@ extern "C" {
 void  cfree(void* p)                                    { mi_free(p); }
 void* pvalloc(size_t size)                              { return mi_pvalloc(size); }
 void* memalign(size_t alignment, size_t size)           { return mi_memalign(alignment, size); }
+#if !defined(_WIN32)
 void* _aligned_malloc(size_t alignment, size_t size)    { return mi_aligned_alloc(alignment, size); }
+#endif
 void* reallocarray(void* p, size_t count, size_t size)  { return mi_reallocarray(p, count, size); }
 // some systems define reallocarr so mark it as a weak symbol (#751)
 mi_decl_weak int reallocarr(void* p, size_t count, size_t size)    { return mi_reallocarr(p, count, size); }
@@ -311,4 +499,4 @@ mi_decl_weak int reallocarr(void* p, size_t count, size_t size)    { return mi_r
 #pragma GCC visibility pop
 #endif
 
-#endif // MI_MALLOC_OVERRIDE && !_WIN32
+#endif // MI_MALLOC_OVERRIDE
