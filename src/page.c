@@ -1016,6 +1016,16 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
     p = _mi_page_malloc_zero(heap, page, size, zero);
     mi_assert_internal(p != NULL);
   }
+
+#if MI_PADDING
+  mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)p + mi_page_usable_block_size(page));
+  size_t delta = padding->delta;
+
+  uint8_t* fill = (uint8_t*)padding - delta;
+  const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta);
+  mi_track_mem_noaccess(fill, maxpad + MI_PADDING_SIZE);
+#endif
+
   // move singleton pages to the full queue
   if (page->reserved == page->used) {
     mi_page_to_full(page, mi_page_queue_of(page));
