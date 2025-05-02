@@ -72,7 +72,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define MI_UNIX_LARGE_PAGE_SIZE (2*MI_MiB) // TODO: can we query the OS for this?
 
-  
+
 //------------------------------------------------------------------------------------
 // Use syscalls for some primitives to allow for libraries that override open/read/close etc.
 // and do allocation themselves; using syscalls prevents recursion when mimalloc is
@@ -223,8 +223,8 @@ static void* unix_mmap_prim_aligned(void* addr, size_t size, size_t try_alignmen
   void* p = NULL;
   #if defined(MAP_ALIGNED)  // BSD
   if (addr == NULL && try_alignment > 1 && (try_alignment % _mi_os_page_size()) == 0) {
-    size_t idx;
-    size_t n = mi_bsr(try_alignment, &idx);
+    size_t n = 0;
+    mi_bsr(try_alignment, &n);
     if (((size_t)1 << n) == try_alignment && n >= 12 && n <= 30) {  // alignment is a power of 2 and 4096 <= alignment <= 1GiB
       p = unix_mmap_prim(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd);
       if (p==MAP_FAILED || !_mi_is_aligned(p,try_alignment)) {
