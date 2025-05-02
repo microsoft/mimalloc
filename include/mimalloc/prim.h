@@ -209,19 +209,20 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 #elif _WIN32 && MI_WIN_USE_FIXED_TLS && !defined(MI_WIN_USE_FLS)
 
 // On windows we can store the thread-local heap at a fixed TLS slot to avoid
-// thread-local initialization checks in the fast path. This uses a fixed location
-// in the TCB though (last user-reserved slot by default) which may clash with other applications.
-
+// thread-local initialization checks in the fast path. 
+// We always use the second user TLS slot (the first one is always allocated already),
+// and at initialization (`windows/prim.c`) we call TlsAlloc and verify
+// we indeed get the second slot (and fail otherwise).
+// Todo: we could make the Tls slot completely dynamic but that would require
+// an extra read of the static Tls slot instead of using a constant offset.
 #define MI_HAS_TLS_SLOT      2              // 2 = we can reliably initialize the slot (saving a test on each malloc)
 
 #if MI_WIN_USE_FIXED_TLS > 1
 #define MI_TLS_SLOT     (MI_WIN_USE_FIXED_TLS)
 #elif MI_SIZE_SIZE == 4
-#define MI_TLS_SLOT     (0x710)             // Last user-reserved slot <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
-// #define MI_TLS_SLOT  (0xF0C)             // Last TlsSlot (might clash with other app reserved slot)
+#define MI_TLS_SLOT     (0x0E18)            // Second User TLS slot <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
 #else
-#define MI_TLS_SLOT     (0x888)             // Last user-reserved slot <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
-// #define MI_TLS_SLOT  (0x1678)            // Last TlsSlot (might clash with other app reserved slot)
+#define MI_TLS_SLOT     (0x1488)            // Second User TLS slot <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
 #endif
 
 static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {

@@ -150,7 +150,7 @@ static void test_dep()
 {
   TestAllocInDll t;
   std::string s = t.GetString();
-
+  std::cout << "test_dep GetString: " << s << "\n";
   t.TestHeapAlloc();
 }
 #endif
