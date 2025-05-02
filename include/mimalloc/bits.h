@@ -236,8 +236,8 @@ static inline size_t mi_ctz(size_t x) {
   #elif defined(_MSC_VER) && MI_ARCH_X64 && defined(__BMI1__)
     return (x!=0 ? _tzcnt_u64(x) : MI_SIZE_BITS);  // ensure it still works on non-BMI1 cpu's as well
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    unsigned long idx;
-    return (mi_msc_builtinz(_BitScanForward)(&idx, x) ? (size_t)idx : MI_SIZE_BITS);
+  if (x != 0) { unsigned long idx; mi_msc_builtinz(_BitScanForward)(&idx, x); return (size_t)idx; }
+  return MI_SIZE_BITS;
   #elif defined(__GNUC__) && MI_ARCH_X86
     size_t r = MI_SIZE_BITS;
     __asm ("bsf\t%1, %0" : "+r"(r) : "r"(x) : "cc");
@@ -260,8 +260,8 @@ static inline size_t mi_clz(size_t x) {
   #elif mi_has_builtinz(clz)
     return (x!=0 ? (size_t)mi_builtinz(clz)(x) : MI_SIZE_BITS);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    unsigned long idx;
-    return (mi_msc_builtinz(_BitScanReverse)(&idx, x) ? MI_SIZE_BITS - 1 - (size_t)idx : MI_SIZE_BITS);
+      if (x != 0) { unsigned long idx; mi_msc_builtinz(_BitScanReverse)(&idx, x); return (size_t)(MI_SIZE_BITS - 1 - idx); }
+      return MI_SIZE_BITS;
   #elif defined(__GNUC__) && (MI_ARCH_X64 || MI_ARCH_X86)
     if (x==0) return MI_SIZE_BITS;
     size_t r;
