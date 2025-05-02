@@ -631,8 +631,20 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   MI_UNUSED(reserved);
   MI_UNUSED(module);
   #if MI_TLS_SLOT >= 2
-  if ((reason==DLL_PROCESS_ATTACH || reason==DLL_THREAD_ATTACH) && mi_prim_get_default_heap() == NULL) {
-    _mi_heap_set_default_direct((mi_heap_t*)&_mi_heap_empty);
+  if (reason==DLL_PROCESS_ATTACH) {
+    const DWORD tls_slot = TlsAlloc();
+    if (tls_slot != 1) { 
+      _mi_error_message(EFAULT, "unable to allocate the second TLS slot (rebuild without MI_WIN_USE_FIXED_TLS?)\n"); 
+    }
+  }
+  if (reason==DLL_PROCESS_ATTACH || reason==DLL_THREAD_ATTACH) {
+    if (mi_prim_get_default_heap() == NULL) {
+      _mi_heap_set_default_direct((mi_heap_t*)&_mi_heap_empty);
+    }
+    #if MI_DEBUG
+    void* const p = TlsGetValue(1);
+    mi_assert_internal(p == (void*)&_mi_heap_empty);
+    #endif  
   }
   #endif
   if (reason==DLL_PROCESS_ATTACH) {

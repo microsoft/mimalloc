@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2023, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -152,8 +152,8 @@ static void mi_os_free_huge_os_pages(void* p, size_t size);
 
 static void mi_os_prim_free(void* addr, size_t size, size_t commit_size) {
   mi_assert_internal((size % _mi_os_page_size()) == 0);
-  if (addr == NULL || size == 0) return; // || _mi_os_is_huge_reserved(addr)
-  int err = _mi_prim_free(addr, size);
+  if (addr == NULL) return; // || _mi_os_is_huge_reserved(addr)
+  int err = _mi_prim_free(addr, size);  // allow size==0 (issue #1041)
   if (err != 0) {
     _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
@@ -171,10 +171,10 @@ void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t me
     void* base = addr;
     // different base? (due to alignment)
     if (memid.mem.os.base != base) {
-      mi_assert(memid.mem.os.base <= addr);      
+      mi_assert(memid.mem.os.base <= addr);
       base = memid.mem.os.base;
       const size_t diff = (uint8_t*)addr - (uint8_t*)memid.mem.os.base;
-      if (memid.mem.os.size==0) { 
+      if (memid.mem.os.size==0) {
         csize += diff;
       }
       if (still_committed) {
@@ -717,8 +717,8 @@ static int mi_os_numa_node_get(void) {
 }
 
 int _mi_os_numa_node(void) {
-  if mi_likely(mi_atomic_load_relaxed(&mi_numa_node_count) == 1) { 
-    return 0; 
+  if mi_likely(mi_atomic_load_relaxed(&mi_numa_node_count) == 1) {
+    return 0;
   }
   else {
     return mi_os_numa_node_get();
