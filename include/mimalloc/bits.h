@@ -236,8 +236,9 @@ static inline size_t mi_ctz(size_t x) {
   #elif defined(_MSC_VER) && MI_ARCH_X64 && defined(__BMI1__)
     return (x!=0 ? _tzcnt_u64(x) : MI_SIZE_BITS);  // ensure it still works on non-BMI1 cpu's as well
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    unsigned long idx;
-    return (mi_msc_builtinz(_BitScanForward)(&idx, x) ? (size_t)idx : MI_SIZE_BITS);
+    if (x==0) return MI_SIZE_BITS; // test explicitly for `x==0` to avoid codegen bug (issue #1071)    
+    unsigned long idx; mi_msc_builtinz(_BitScanForward)(&idx, x);
+    return (size_t)idx;
   #elif defined(__GNUC__) && MI_ARCH_X86
     size_t r = MI_SIZE_BITS;
     __asm ("bsf\t%1, %0" : "+r"(r) : "r"(x) : "cc");
@@ -260,8 +261,9 @@ static inline size_t mi_clz(size_t x) {
   #elif mi_has_builtinz(clz)
     return (x!=0 ? (size_t)mi_builtinz(clz)(x) : MI_SIZE_BITS);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    unsigned long idx;
-    return (mi_msc_builtinz(_BitScanReverse)(&idx, x) ? MI_SIZE_BITS - 1 - (size_t)idx : MI_SIZE_BITS);
+    if (x==0) return MI_SIZE_BITS; // test explicitly for `x==0` to avoid codegen bug (issue #1071)    
+    unsigned long idx; mi_msc_builtinz(_BitScanReverse)(&idx, x);
+    return (MI_SIZE_BITS - 1 - (size_t)idx);    
   #elif defined(__GNUC__) && (MI_ARCH_X64 || MI_ARCH_X86)
     if (x==0) return MI_SIZE_BITS;
     size_t r;
@@ -291,8 +293,10 @@ static inline bool mi_bsf(size_t x, size_t* idx) {
     __asm ( "tzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc" );
     return !is_zero;
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    unsigned long i;
-    return (mi_msc_builtinz(_BitScanForward)(&i, x) ? (*idx = (size_t)i, true) : false);
+    if (x==0) return false; // test explicitly for `x==0` to avoid codegen bug (issue #1071)    
+    unsigned long i; mi_msc_builtinz(_BitScanForward)(&i, x);
+    *idx = (size_t)i;
+    return true;
   #else
     return (x!=0 ? (*idx = mi_ctz(x), true) : false);
   #endif
@@ -303,8 +307,10 @@ static inline bool mi_bsf(size_t x, size_t* idx) {
 // with the `idx` is set to the bit index (`0 <= *idx < MI_BFIELD_BITS`).
 static inline bool mi_bsr(size_t x, size_t* idx) {
   #if defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    unsigned long i;
-    return (mi_msc_builtinz(_BitScanReverse)(&i, x) ? (*idx = (size_t)i, true) : false);
+    if (x==0) return false; // test explicitly for `x==0` to avoid codegen bug (issue #1071)    
+    unsigned long i; mi_msc_builtinz(_BitScanReverse)(&i, x);
+    *idx = (size_t)i;
+    return true;    
   #else
     return (x!=0 ? (*idx = MI_SIZE_BITS - 1 - mi_clz(x), true) : false);
   #endif
