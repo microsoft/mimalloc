@@ -112,7 +112,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   return true;
 }
 
-extern bool _mi_process_is_initialized;             // has mi_process_init been called?
+extern mi_decl_hidden bool _mi_process_is_initialized;             // has mi_process_init been called?
 
 bool _mi_page_is_valid(mi_page_t* page) {
   mi_assert_internal(mi_page_is_valid_init(page));
@@ -998,9 +998,9 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
 
     // free delayed frees from other threads (but skip contended ones)
     _mi_heap_delayed_free_partial(heap);
-    
+
     // collect every once in a while (10000 by default)
-    const long generic_collect = mi_option_get_clamp(mi_option_generic_collect, 1, 1000000L);    
+    const long generic_collect = mi_option_get_clamp(mi_option_generic_collect, 1, 1000000L);
     if (heap->generic_collect_count >= generic_collect) {
       heap->generic_collect_count = 0;
       mi_heap_collect(heap, false /* force? */);
