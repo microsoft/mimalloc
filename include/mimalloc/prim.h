@@ -208,7 +208,7 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 #elif _WIN32 && MI_WIN_USE_FIXED_TLS && !defined(MI_WIN_USE_FLS)
 
 // On windows we can store the thread-local heap at a fixed TLS slot to avoid
-// thread-local initialization checks in the fast path. 
+// thread-local initialization checks in the fast path.
 // We always use the second user TLS slot (the first one is always allocated already),
 // and at initialization (`windows/prim.c`) we call TlsAlloc and verify
 // we indeed get the second slot (and fail otherwise).
@@ -270,6 +270,9 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 
 
 // defined in `init.c`; do not use these directly
+#ifdef _MSC_VER
+__declspec(selectany)  // make it part of the comdat section to have faster TLS access (issue #1078)
+#endif
 extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
 extern bool _mi_process_is_initialized;             // has mi_process_init been called?
 
