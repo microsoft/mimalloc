@@ -1078,8 +1078,8 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
 // ---------------------------------------------------------------------------------
 
 #if !MI_TRACK_ENABLED && defined(_WIN32) && (MI_ARCH_X64 || MI_ARCH_X86)
-extern bool _mi_cpu_has_fsrm;
-extern bool _mi_cpu_has_erms;
+extern mi_decl_hidden bool _mi_cpu_has_fsrm;
+extern mi_decl_hidden bool _mi_cpu_has_erms;
 
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
   if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
