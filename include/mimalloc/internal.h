@@ -855,7 +855,7 @@ static inline size_t mi_clz(size_t x) {
   #else
     _BitScanReverse64(&idx, x);
   #endif
-  return ((MI_SIZE_BITS - 1) - idx);
+  return ((MI_SIZE_BITS - 1) - (size_t)idx);
 }
 static inline size_t mi_ctz(size_t x) {
   if (x==0) return MI_SIZE_BITS;
@@ -865,7 +865,7 @@ static inline size_t mi_ctz(size_t x) {
   #else
     _BitScanForward64(&idx, x);
   #endif
-  return idx;
+  return (size_t)idx;
 }
 
 #else
