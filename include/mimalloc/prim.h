@@ -210,19 +210,18 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 
 // On windows we can store the thread-local heap at a fixed TLS slot to avoid
 // thread-local initialization checks in the fast path.
-// We always use the second user TLS slot (the first one is always allocated already),
-// and at initialization (`windows/prim.c`) we call TlsAlloc and verify
-// we indeed get the second slot (and fail otherwise).
-// Todo: we could make the Tls slot completely dynamic but that would require
-// an extra read of the static Tls slot instead of using a constant offset.
+// We allocate a user TLS slot at process initialization (see `windows/prim.c`)
+// and store the offset `_mi_win_tls_offset`.
 #define MI_HAS_TLS_SLOT      2              // 2 = we can reliably initialize the slot (saving a test on each malloc)
+
+extern mi_decl_hidden size_t _mi_win_tls_offset;
 
 #if MI_WIN_USE_FIXED_TLS > 1
 #define MI_TLS_SLOT     (MI_WIN_USE_FIXED_TLS)
 #elif MI_SIZE_SIZE == 4
-#define MI_TLS_SLOT     (0x0E18)            // Second User TLS slot <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
+#define MI_TLS_SLOT     (0x0E10 + _mi_win_tls_offset)  // User TLS slots <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
 #else
-#define MI_TLS_SLOT     (0x1488)            // Second User TLS slot <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
+#define MI_TLS_SLOT     (0x1480 + _mi_win_tls_offset)  // User TLS slots <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
 #endif
 
 static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
@@ -271,9 +270,6 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 
 
 // defined in `init.c`; do not use these directly
-#ifdef _MSC_VER
-__declspec(selectany)  // make it part of the comdat section to have faster TLS access (issue #1078)
-#endif
 extern mi_decl_hidden mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
 extern mi_decl_hidden bool _mi_process_is_initialized;             // has mi_process_init been called?
 
