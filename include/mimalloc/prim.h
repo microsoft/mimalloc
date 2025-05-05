@@ -270,9 +270,6 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 
 
 // defined in `init.c`; do not use these directly
-#ifdef _MSC_VER
-__declspec(selectany)  // make it part of the comdat section to have faster TLS access (issue #1078)
-#endif
 extern mi_decl_hidden mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
 extern mi_decl_hidden bool _mi_process_is_initialized;             // has mi_process_init been called?
 
