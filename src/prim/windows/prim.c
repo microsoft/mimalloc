@@ -12,6 +12,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim.h"
 #include <stdio.h>   // fputs, stderr
 
+#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM)
+  #define MI_HAS_HUGE_PAGE_API
+  #define MI_HAS_CONSOLE_IO
+#endif
 
 //---------------------------------------------
 // Dynamically bind Windows API points for portability
@@ -46,9 +50,11 @@ typedef struct MI_MEM_ADDRESS_REQUIREMENTS_S {
 
 #include <winternl.h>
 typedef PVOID    (__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MI_MEM_EXTENDED_PARAMETER*, ULONG);
-typedef NTSTATUS (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*, ULONG, ULONG, MI_MEM_EXTENDED_PARAMETER*, ULONG);
 static PVirtualAlloc2 pVirtualAlloc2 = NULL;
+#ifdef MI_HAS_HUGE_PAGE_API
+typedef NTSTATUS (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*, ULONG, ULONG, MI_MEM_EXTENDED_PARAMETER*, ULONG);
 static PNtAllocateVirtualMemoryEx pNtAllocateVirtualMemoryEx = NULL;
+#endif
 
 // Similarly, GetNumaProcessorNodeEx is only supported since Windows 7
 typedef struct MI_PROCESSOR_NUMBER_S { WORD Group; BYTE Number; BYTE Reserved; } MI_PROCESSOR_NUMBER;
@@ -75,6 +81,7 @@ static bool win_enable_large_os_pages(size_t* large_page_size)
   if (large_initialized) return (_mi_os_large_page_size() > 0);
   large_initialized = true;
 
+#ifdef MI_HAS_HUGE_PAGE_API
   // Try to see if large OS pages are supported
   // To use large pages on Windows, we first need access permission
   // Set "Lock pages in memory" permission in the group policy editor
@@ -104,6 +111,10 @@ static bool win_enable_large_os_pages(size_t* large_page_size)
     _mi_warning_message("cannot enable large OS page support, error %lu\n", err);
   }
   return (ok!=0);
+#else
+  _mi_warning_message("large OS pages unsupported in this winapi partition\n");
+  return false;
+#endif
 }
 
 
@@ -136,12 +147,14 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     if (pVirtualAlloc2==NULL) pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2");
     FreeLibrary(hDll);
   }
+#ifdef MI_HAS_HUGE_PAGE_API
   // NtAllocateVirtualMemoryEx is used for huge page allocation
   hDll = LoadLibrary(TEXT("ntdll.dll"));
   if (hDll != NULL) {
     pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)(void (*)(void))GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
     FreeLibrary(hDll);
   }
+#endif
   // Try to use Win7+ numa API
   hDll = LoadLibrary(TEXT("kernel32.dll"));
   if (hDll != NULL) {
@@ -370,6 +383,7 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
   win_enable_large_os_pages(NULL);
 
   MI_MEM_EXTENDED_PARAMETER params[3] = { {{0,0},{0}},{{0,0},{0}},{{0,0},{0}} };
+#ifdef MI_HAS_HUGE_PAGE_API
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
   static bool mi_huge_pages_available = true;
   if (pNtAllocateVirtualMemoryEx != NULL && mi_huge_pages_available) {
@@ -393,6 +407,7 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
       _mi_warning_message("unable to allocate using huge (1GiB) pages, trying large (2MiB) pages instead (status 0x%lx)\n", err);
     }
   }
+#endif
   // on modern Windows try use VirtualAlloc2 for numa aware large OS page allocation
   if (pVirtualAlloc2 != NULL && numa_node >= 0) {
     params[0].Type.Type = MiMemExtendedParameterNumaNode;
@@ -447,6 +462,7 @@ size_t _mi_prim_numa_node_count(void) {
         if (affinity.Mask != 0) break;  // found the maximum non-empty node
       }
     }
+#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
     else {
       // Vista or earlier, use older API that is limited to 64 processors.
       ULONGLONG mask;
@@ -454,6 +470,7 @@ size_t _mi_prim_numa_node_count(void) {
         if (mask != 0) break; // found the maximum non-empty node
       };
     }
+#endif
     // max node was invalid or had no processor assigned, try again
     numa_max--;
   }
@@ -541,19 +558,26 @@ void _mi_prim_out_stderr( const char* msg )
   if (!_mi_preloading()) {
     // _cputs(msg);  // _cputs cannot be used as it aborts when failing to lock the console
     static HANDLE hcon = INVALID_HANDLE_VALUE;
+#ifdef MI_HAS_CONSOLE_IO
     static bool hconIsConsole;
+#endif
     if (hcon == INVALID_HANDLE_VALUE) {
-      CONSOLE_SCREEN_BUFFER_INFO sbi;
       hcon = GetStdHandle(STD_ERROR_HANDLE);
+#ifdef MI_HAS_CONSOLE_IO
+      CONSOLE_SCREEN_BUFFER_INFO sbi;
       hconIsConsole = ((hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
+#endif
     }
     const size_t len = _mi_strlen(msg);
     if (len > 0 && len < UINT32_MAX) {
       DWORD written = 0;
+      #ifdef MI_HAS_CONSOLE_IO
       if (hconIsConsole) {
         WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
       }
-      else if (hcon != INVALID_HANDLE_VALUE) {
+      else
+#endif
+      if (hcon != INVALID_HANDLE_VALUE) {
         // use direct write if stderr was redirected
         WriteFile(hcon, msg, (DWORD)len, &written, NULL);
       }
