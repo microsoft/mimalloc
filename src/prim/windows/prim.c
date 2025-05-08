@@ -646,7 +646,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 // Process & Thread Init/Done
 //----------------------------------------------------------------
 
-#if MI_HAS_TLS_SLOT
+#if MI_WIN_USE_FIXED_TLS==1
 mi_decl_cache_align size_t _mi_win_tls_offset = sizeof(void*);  // use 2nd slot by default
 #endif
 
@@ -654,6 +654,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   MI_UNUSED(reserved);
   MI_UNUSED(module);
   #if MI_HAS_TLS_SLOT >= 2  // we must initialize the TLS slot before any allocation
+  #if MI_WIN_USE_FIXED_TLS==1
   if (reason==DLL_PROCESS_ATTACH) {
     const DWORD tls_slot = TlsAlloc();
     if (tls_slot == TLS_OUT_OF_INDEXES) { 
@@ -661,11 +662,12 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     }
     _mi_win_tls_offset = (size_t)tls_slot * sizeof(void*);
   }
+  #endif
   if (reason==DLL_PROCESS_ATTACH || reason==DLL_THREAD_ATTACH) {
     if (mi_prim_get_default_heap() == NULL) {
       _mi_heap_set_default_direct((mi_heap_t*)&_mi_heap_empty);
     }
-    #if MI_DEBUG
+    #if MI_DEBUG && MI_WIN_USE_FIXED_TLS==1
     void* const p = TlsGetValue((DWORD)(_mi_win_tls_offset / sizeof(void*)));
     mi_assert_internal(p == (void*)&_mi_heap_empty);
     #endif  
