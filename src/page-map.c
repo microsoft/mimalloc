@@ -218,10 +218,14 @@ bool _mi_page_map_init(void) {
   if (!mi_page_map_memid.initially_committed) {
     _mi_os_commit(&_mi_page_map[0], os_page_size, NULL);  // commit first part of the map
   }
-  _mi_page_map[0] = (mi_page_t**)((uint8_t*)_mi_page_map + page_map_size);  // we reserved 2 sub maps at the end already
+  _mi_page_map[0] = (mi_page_t**)((uint8_t*)_mi_page_map + page_map_size);  // we reserved a submap part at the end already
   if (!mi_page_map_memid.initially_committed) {
     _mi_os_commit(_mi_page_map[0], os_page_size, NULL);   // only first OS page
   }
+  if (!mi_page_map_memid.initially_zero) {                // initialize first addresses with NULL
+    _mi_memzero_aligned(_mi_page_map[0], os_page_size);
+  }
+
   mi_assert_internal(_mi_ptr_page(NULL)==NULL);
   return true;
 }
@@ -271,19 +275,24 @@ static mi_page_t** mi_page_map_ensure_committed(size_t idx) {
 
 static mi_page_t** mi_page_map_ensure_at(size_t idx) {
   mi_page_t** sub = mi_page_map_ensure_committed(idx);
-  if mi_unlikely(sub == NULL) {
+  if mi_unlikely(sub == NULL || idx == 0 /* low addresses */) {
     // sub map not yet allocated, alloc now
     mi_memid_t memid;
-    sub = (mi_page_t**)_mi_os_alloc(MI_PAGE_MAP_SUB_COUNT * sizeof(mi_page_t*), &memid);
-    mi_page_t** expect = NULL;
-    if (!mi_atomic_cas_ptr_strong_acq_rel(mi_page_t*, ((_Atomic(mi_page_t**)*)&_mi_page_map[idx]), &expect, sub)) {
-      // another thread already allocated it.. free and continue
-      _mi_os_free(sub, MI_PAGE_MAP_SUB_COUNT * sizeof(mi_page_t*), memid);
-      sub = expect;
-      mi_assert_internal(sub!=NULL);
-    }
+    mi_page_t** expect = sub;
+    const size_t submap_size = MI_PAGE_MAP_SUB_COUNT * sizeof(mi_page_t*);
+    sub = (mi_page_t**)_mi_os_alloc(submap_size, &memid);
     if (sub == NULL) {
       _mi_error_message(EFAULT, "internal error: unable to extend the page map\n");
+      return NULL;
+    }
+    if (!memid.initially_zero) {
+      _mi_memzero_aligned(sub, submap_size);
+    }
+    if (!mi_atomic_cas_ptr_strong_acq_rel(mi_page_t*, ((_Atomic(mi_page_t**)*)&_mi_page_map[idx]), &expect, sub)) {
+      // another thread already allocated it.. free and continue
+      _mi_os_free(sub, submap_size, memid);
+      sub = expect;
+      mi_assert_internal(sub!=NULL);
     }
   }
   return sub;
