@@ -120,6 +120,7 @@ typedef int32_t  mi_ssize_t;
 #define MI_MAX_VABITS     (32)
 #endif
 
+
 // use a flat page-map (or a 2-level one)
 #ifndef MI_PAGE_MAP_FLAT
 #if MI_MAX_VABITS <= 40 && !defined(__APPLE__) 

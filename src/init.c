@@ -780,6 +780,7 @@ void mi_cdecl _mi_process_done(void) {
     mi_heap_collect(heap, true /* force */);
     _mi_heap_unsafe_destroy_all(heap);     // forcefully release all memory held by all heaps (of this thread only!)
     _mi_arenas_unsafe_destroy_all(heap->tld);
+    _mi_page_map_unsafe_destroy();
   }
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {

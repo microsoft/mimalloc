@@ -247,7 +247,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
       if (heap != NULL && heap->allow_page_reclaim &&
           (max_reclaim < 0 || mi_page_queue_len_is_atmost(heap, page->block_size, max_reclaim))) // we have less than N pages already
       {
-        if ((heap == page->heap) // always reclaim if we were the originating heap,
+        if ((heap == page->heap) // always reclaim if we were the originating heap (todo: maybe not if in a threadpool?)
             || // OR:
             (reclaim_on_free == 1 &&               // reclaim across heaps is allowed
               !mi_page_is_used_at_frac(page,8) &&  // and the page is not too full
