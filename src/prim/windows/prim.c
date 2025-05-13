@@ -644,12 +644,12 @@ static void mi_win_tls_init(DWORD reason) {
   #endif
   if (reason==DLL_PROCESS_ATTACH || reason==DLL_THREAD_ATTACH) {
     if (mi_prim_get_default_heap() == NULL) {
-      _mi_heap_set_default_direct((mi_heap_t*)&_mi_heap_empty);
+      _mi_heap_set_default_direct((mi_heap_t*)&_mi_heap_empty);  
+      #if MI_DEBUG && MI_WIN_USE_FIXED_TLS==1
+      void* const p = TlsGetValue((DWORD)(_mi_win_tls_offset / sizeof(void*)));
+      mi_assert_internal(p == (void*)&_mi_heap_empty);
+      #endif  
     }
-    #if MI_DEBUG && MI_WIN_USE_FIXED_TLS==1
-    void* const p = TlsGetValue((DWORD)(_mi_win_tls_offset / sizeof(void*)));
-    mi_assert_internal(p == (void*)&_mi_heap_empty);
-    #endif  
   }
   #else
   MI_UNUSED(reason);
