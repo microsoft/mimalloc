@@ -120,7 +120,7 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 // Is this thread part of a thread pool?
 bool _mi_prim_thread_is_in_threadpool(void);
 
-
+#define MI_WIN_USE_FIXED_TLS  1
 
 //-------------------------------------------------------------------
 // Access to TLS (thread local storage) slots.

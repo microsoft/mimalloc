@@ -647,18 +647,16 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 //----------------------------------------------------------------
 
 #if MI_WIN_USE_FIXED_TLS==1
-mi_decl_cache_align size_t _mi_win_tls_offset = sizeof(void*);  // use 2nd slot by default
+mi_decl_cache_align size_t _mi_win_tls_offset = 0;  
 #endif
 
-static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
-  MI_UNUSED(reserved);
-  MI_UNUSED(module);
+static void mi_win_tls_init(DWORD reason) {
   #if MI_HAS_TLS_SLOT >= 2  // we must initialize the TLS slot before any allocation
   #if MI_WIN_USE_FIXED_TLS==1
-  if (reason==DLL_PROCESS_ATTACH) {
-    const DWORD tls_slot = TlsAlloc();
-    if (tls_slot == TLS_OUT_OF_INDEXES) { 
-      _mi_error_message(EFAULT, "unable to allocate the a TLS slot (rebuild without MI_WIN_USE_FIXED_TLS?)\n"); 
+  if (reason==DLL_PROCESS_ATTACH && _mi_win_tls_offset == 0) {
+    const DWORD tls_slot = TlsAlloc();  // usually returns slot 1
+    if (tls_slot == TLS_OUT_OF_INDEXES) {
+      _mi_error_message(EFAULT, "unable to allocate the a TLS slot (rebuild without MI_WIN_USE_FIXED_TLS?)\n");
     }
     _mi_win_tls_offset = (size_t)tls_slot * sizeof(void*);
   }
@@ -672,7 +670,15 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     mi_assert_internal(p == (void*)&_mi_heap_empty);
     #endif  
   }
+  #else
+  MI_UNUSED(reason);
   #endif
+}
+
+static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
+  MI_UNUSED(reserved);
+  MI_UNUSED(module);
+  mi_win_tls_init(reason);
   if (reason==DLL_PROCESS_ATTACH) {
     _mi_process_load();
   }
@@ -834,11 +840,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #endif
   mi_decl_export void _mi_redirect_entry(DWORD reason) {
     // called on redirection; careful as this may be called before DllMain
-    #if MI_HAS_TLS_SLOT >= 2 // we must initialize the TLS slot before any allocation
-    if ((reason==DLL_PROCESS_ATTACH || reason==DLL_THREAD_ATTACH) && mi_prim_get_default_heap() == NULL) {
-      _mi_heap_set_default_direct((mi_heap_t*)&_mi_heap_empty);
-    }
-    #endif
+    mi_win_tls_init(reason);
     if (reason == DLL_PROCESS_ATTACH) {
       mi_redirected = true;
     }
