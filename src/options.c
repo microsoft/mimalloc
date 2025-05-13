@@ -99,7 +99,11 @@ int mi_version(void) mi_attr_noexcept {
 #endif
 
 #ifndef MI_DEFAULT_PAGE_MAX_RECLAIM
-#define MI_DEFAULT_PAGE_MAX_RECLAIM  4096
+#define MI_DEFAULT_PAGE_MAX_RECLAIM  (-1)               // unlimited
+#endif
+
+#ifndef MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM
+#define MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM  16
 #endif
 
 // Static options
@@ -169,7 +173,9 @@ static mi_option_desc_t mi_options[_mi_option_last] =
          MI_OPTION_UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
   { 0,   MI_OPTION_UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
   { MI_DEFAULT_PAGE_MAX_RECLAIM,
-         MI_OPTION_UNINIT, MI_OPTION(page_max_reclaim) },         // don't reclaim (small) pages if we already own N pages in that size class
+         MI_OPTION_UNINIT, MI_OPTION(page_max_reclaim) },         // don't reclaim (small) pages of the same originating heap if we already own N pages in that size class
+  { MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM,
+         MI_OPTION_UNINIT, MI_OPTION(page_cross_thread_max_reclaim) }, // don't reclaim (small) pages across threads if we already own N pages in that size class
 };
 
 static void mi_option_init(mi_option_desc_t* desc);

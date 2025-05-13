@@ -191,10 +191,11 @@ void mi_free(void* p) mi_attr_noexcept
 // Multi-threaded Free (`_mt`)
 // ------------------------------------------------------
 static bool mi_page_unown_from_free(mi_page_t* page, mi_block_t* mt_free);
-static inline bool mi_page_queue_len_is_atmost( mi_heap_t* heap, size_t block_size, size_t atmost) {
+static inline bool mi_page_queue_len_is_atmost( mi_heap_t* heap, size_t block_size, long atmost) {
+  if (atmost < 0) return true; // unlimited
   mi_page_queue_t* const pq = mi_page_queue(heap,block_size);
   mi_assert_internal(pq!=NULL);
-  return (pq->count <= atmost);
+  return (pq->count <= (size_t)atmost);
   /*
   for(mi_page_t* p = pq->first; p!=NULL; p = p->next, atmost--) {
     if (atmost == 0) { return false; }
@@ -242,14 +243,14 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
           heap = _mi_heap_by_tag(heap, page->heap_tag);
         }
       }
-      // can we reclaim into this heap?
-      const long max_reclaim = _mi_option_get_fast(mi_option_page_max_reclaim);
-      if (heap != NULL && heap->allow_page_reclaim &&
-          (max_reclaim < 0 || mi_page_queue_len_is_atmost(heap, page->block_size, max_reclaim))) // we have less than N pages already
+      // can we reclaim into this heap?      
+      if (heap != NULL && heap->allow_page_reclaim)      
       {
-        if ((heap == page->heap) // always reclaim if we were the originating heap (todo: maybe not if in a threadpool?)
+        if ((heap == page->heap &&  // always reclaim if we were the originating heap (todo: maybe not if in a threadpool?)
+             mi_page_queue_len_is_atmost(heap, page->block_size, _mi_option_get_fast(mi_option_page_max_reclaim))) 
             || // OR:
             (reclaim_on_free == 1 &&               // reclaim across heaps is allowed
+              mi_page_queue_len_is_atmost(heap, page->block_size, _mi_option_get_fast(mi_option_page_cross_thread_max_reclaim)) &&
               !mi_page_is_used_at_frac(page,8) &&  // and the page is not too full
               !heap->tld->is_in_threadpool &&      // and not part of a threadpool
               _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable
