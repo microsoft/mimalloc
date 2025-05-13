@@ -118,9 +118,6 @@ void _mi_prim_thread_done_auto_done(void);
 void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 
 
-
-#define MI_WIN_USE_FIXED_TLS  1
-
 //-------------------------------------------------------------------
 // Access to TLS (thread local storage) slots.
 // We need fast access to both a unique thread id (in `free.c:mi_free`) and
