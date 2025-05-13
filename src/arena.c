@@ -44,7 +44,7 @@ typedef struct mi_arena_s {
   mi_lock_t           abandoned_visit_lock; // lock is only used when abandoned segments are being visited
   _Atomic(size_t)     search_idx;           // optimization to start the search for free blocks
   _Atomic(mi_msecs_t) purge_expire;         // expiration time when blocks should be purged from `blocks_purge`.
-  
+
   mi_bitmap_field_t*  blocks_dirty;         // are the blocks potentially non-zero?
   mi_bitmap_field_t*  blocks_committed;     // are the blocks committed? (can be NULL for memory that cannot be decommitted)
   mi_bitmap_field_t*  blocks_purge;         // blocks that can be (reset) decommitted. (can be NULL for memory that cannot be (reset) decommitted)
@@ -365,7 +365,7 @@ static mi_decl_noinline void* mi_arena_try_alloc(int numa_node, size_t size, siz
 static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t *arena_id)
 {
   if (_mi_preloading()) return false;  // use OS only while pre loading
-  
+
   const size_t arena_count = mi_atomic_load_acquire(&mi_arena_count);
   if (arena_count > (MI_MAX_ARENAS - 4)) return false;
 
@@ -407,7 +407,7 @@ void* _mi_arena_alloc_aligned(size_t size, size_t alignment, size_t align_offset
 
   // try to allocate in an arena if the alignment is small enough and the object is not too small (as for heap meta data)
   if (!mi_option_is_enabled(mi_option_disallow_arena_alloc)) {  // is arena allocation allowed?
-    if (size >= MI_ARENA_MIN_OBJ_SIZE && alignment <= MI_SEGMENT_ALIGN && align_offset == 0) 
+    if (size >= MI_ARENA_MIN_OBJ_SIZE && alignment <= MI_SEGMENT_ALIGN && align_offset == 0)
     {
       void* p = mi_arena_try_alloc(numa_node, size, alignment, commit, allow_large, req_arena_id, memid);
       if (p != NULL) return p;
@@ -487,7 +487,7 @@ static void mi_arena_purge(mi_arena_t* arena, size_t bitmap_idx, size_t blocks) 
     // we need to ensure we do not try to reset (as that may be invalid for uncommitted memory).
     mi_assert_internal(already_committed < blocks);
     mi_assert_internal(mi_option_is_enabled(mi_option_purge_decommits));
-    needs_recommit = _mi_os_purge_ex(p, size, false /* allow reset? */, mi_arena_block_size(already_committed));    
+    needs_recommit = _mi_os_purge_ex(p, size, false /* allow reset? */, mi_arena_block_size(already_committed));
   }
 
   // clear the purged blocks
@@ -556,7 +556,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
 {
   // check pre-conditions
   if (arena->memid.is_pinned) return false;
-   
+
   // expired yet?
   mi_msecs_t expire = mi_atomic_loadi64_relaxed(&arena->purge_expire);
   if (!force && (expire == 0 || expire > now)) return false;
@@ -611,7 +611,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
   return any_purged;
 }
 
-static void mi_arenas_try_purge( bool force, bool visit_all ) 
+static void mi_arenas_try_purge( bool force, bool visit_all )
 {
   if (_mi_preloading() || mi_arena_purge_delay() <= 0) return;  // nothing will be scheduled
 
@@ -628,7 +628,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all )
   mi_atomic_guard(&purge_guard)
   {
     // increase global expire: at most one purge per delay cycle
-    mi_atomic_storei64_release(&mi_arenas_purge_expire, now + mi_arena_purge_delay());  
+    mi_atomic_storei64_release(&mi_arenas_purge_expire, now + mi_arena_purge_delay());
     size_t max_purge_count = (visit_all ? max_arena : 2);
     bool all_visited = true;
     for (size_t i = 0; i < max_arena; i++) {
@@ -947,7 +947,7 @@ void mi_debug_show_arenas(void) mi_attr_noexcept {
   for (size_t i = 0; i < max_arenas; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_relaxed(mi_arena_t, &mi_arenas[i]);
     if (arena == NULL) break;
-    _mi_message("arena %zu: %zu blocks of size %zuMiB (in %zu fields) %s\n", i, arena->block_count, MI_ARENA_BLOCK_SIZE / MI_MiB, arena->field_count, (arena->memid.is_pinned ? ", pinned" : ""));
+    _mi_message("arena %zu: %zu blocks of size %zuMiB (in %zu fields) %s\n", i, arena->block_count, (size_t)(MI_ARENA_BLOCK_SIZE / MI_MiB), arena->field_count, (arena->memid.is_pinned ? ", pinned" : ""));
     if (show_inuse) {
       inuse_total += mi_debug_show_bitmap("  ", "inuse blocks", arena->block_count, arena->blocks_inuse, arena->field_count);
     }
