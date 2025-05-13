@@ -411,7 +411,7 @@ typedef enum mi_option_e {
   mi_option_max_vabits,                 // max user space virtual address bits to consider (=48)
   mi_option_pagemap_commit,             // commit the full pagemap (to always catch invalid pointer uses) (=0)
   mi_option_page_commit_on_demand,      // commit page memory on-demand
-  mi_option_page_reclaim_max,           // don't reclaim pages if we already own N pages (in that size class) (=16)
+  mi_option_page_max_reclaim,           // don't reclaim pages if we already own N pages (in that size class) (=16)
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,

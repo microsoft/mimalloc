@@ -148,7 +148,7 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
   }
   mi_page_t* page = _mi_safe_ptr_page(p);
   if (p != NULL && page == NULL) {
-    _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);    
+    _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);
   }
   return page;
   #else
@@ -163,7 +163,7 @@ void mi_free(void* p) mi_attr_noexcept
   mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");
   if mi_unlikely(page==NULL) return;  // page will be NULL if p==NULL
   mi_assert_internal(p!=NULL && page!=NULL);
-  
+
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ mi_page_xthread_id(page));
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
@@ -219,7 +219,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
   // 1. free if the page is free now  (this is updated by `_mi_page_free_collect_partly`)
   if (mi_page_all_free(page))
   {
-    // first remove it from the abandoned pages in the arena (if mapped, this waits for any readers to finish)
+    // first remove it from the abandoned pages in the arena (if mapped, this might wait for any readers to finish)
     _mi_arenas_page_unabandon(page);
     // we can free the page directly
     _mi_arenas_page_free(page);
@@ -243,16 +243,19 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
         }
       }
       // can we reclaim into this heap?
-      if (heap != NULL && heap->allow_page_reclaim) {
-        const long reclaim_max = _mi_option_get_fast(mi_option_page_reclaim_max);
-        if ((heap == page->heap && mi_page_queue_len_is_atmost(heap, page->block_size, reclaim_max)) ||  // only reclaim if we were the originating heap, and we have at most N pages already
-          (reclaim_on_free == 1 &&               // OR if the reclaim across heaps is allowed
-            !mi_page_is_used_at_frac(page, 8) &&  //    and the page is not too full
-            !heap->tld->is_in_threadpool &&       //    and not part of a threadpool
-            _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable
+      const long max_reclaim = _mi_option_get_fast(mi_option_page_max_reclaim);
+      if (heap != NULL && heap->allow_page_reclaim &&
+          (max_reclaim < 0 || mi_page_queue_len_is_atmost(heap, page->block_size, max_reclaim))) // we have less than N pages already
+      {
+        if ((heap == page->heap) // always reclaim if we were the originating heap,
+            || // OR:
+            (reclaim_on_free == 1 &&               // reclaim across heaps is allowed
+              !mi_page_is_used_at_frac(page,8) &&  // and the page is not too full
+              !heap->tld->is_in_threadpool &&      // and not part of a threadpool
+              _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable
           )
         {
-          // first remove it from the abandoned pages in the arena -- this waits for any readers to finish
+          // first remove it from the abandoned pages in the arena -- this might wait for any readers to finish
           _mi_arenas_page_unabandon(page);
           _mi_heap_page_reclaim(heap, page);
           mi_heap_stat_counter_increase(heap, pages_reclaim_on_free, 1);

@@ -98,7 +98,11 @@ int mi_version(void) mi_attr_noexcept {
 #endif
 #endif
 
-// Static options 
+#ifndef MI_DEFAULT_PAGE_MAX_RECLAIM
+#define MI_DEFAULT_PAGE_MAX_RECLAIM  4096
+#endif
+
+// Static options
 static mi_option_desc_t mi_options[_mi_option_last] =
 {
   // stable options
@@ -157,14 +161,15 @@ static mi_option_desc_t mi_options[_mi_option_last] =
          MI_OPTION_UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)
   { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_sample_seed)},
   { 10000, MI_OPTION_UNINIT, MI_OPTION(generic_collect) },        // collect heaps every N (=10000) generic allocation calls
-  { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim abandoned pages on a free: -1 = disable completely, 0 = only reclaim into the originating heap, 1 = reclaim on free across heaps
+  { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim abandoned (small) pages on a free: -1 = disable completely, 0 = only reclaim into the originating heap, 1 = reclaim on free across heaps
   { 2,   MI_OPTION_UNINIT, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues
   { 4,   MI_OPTION_UNINIT, MI_OPTION(page_max_candidates) },      // max search to find a best page candidate
   { 0,   MI_OPTION_UNINIT, MI_OPTION(max_vabits) },               // max virtual address space bits
   { MI_DEFAULT_PAGEMAP_COMMIT,
          MI_OPTION_UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
   { 0,   MI_OPTION_UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
-  { 16,  MI_OPTION_UNINIT, MI_OPTION(page_reclaim_max) },         // don't reclaim pages if we already own N pages (in that size class)
+  { MI_DEFAULT_PAGE_MAX_RECLAIM,
+         MI_OPTION_UNINIT, MI_OPTION(page_max_reclaim) },         // don't reclaim (small) pages if we already own N pages in that size class
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
