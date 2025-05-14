@@ -120,7 +120,6 @@ void _mi_prim_thread_associate_default_heap(mi_heap_t* heap);
 // Is this thread part of a thread pool?
 bool _mi_prim_thread_is_in_threadpool(void);
 
-#define MI_WIN_USE_FIXED_TLS  1
 
 //-------------------------------------------------------------------
 // Access to TLS (thread local storage) slots.
@@ -212,7 +211,7 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 // thread-local initialization checks in the fast path.
 // We allocate a user TLS slot at process initialization (see `windows/prim.c`)
 // and store the offset `_mi_win_tls_offset`.
-#define MI_HAS_TLS_SLOT      2              // 2 = we can reliably initialize the slot (saving a test on each malloc)
+#define MI_HAS_TLS_SLOT  1              // 2 = we can reliably initialize the slot (saving a test on each malloc)
 
 extern mi_decl_hidden size_t _mi_win_tls_offset;
 
