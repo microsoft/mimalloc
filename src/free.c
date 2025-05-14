@@ -191,17 +191,11 @@ void mi_free(void* p) mi_attr_noexcept
 // Multi-threaded Free (`_mt`)
 // ------------------------------------------------------
 static bool mi_page_unown_from_free(mi_page_t* page, mi_block_t* mt_free);
+
 static inline bool mi_page_queue_len_is_atmost( mi_heap_t* heap, size_t block_size, long atmost) {
-  if (atmost < 0) return true; // unlimited
   mi_page_queue_t* const pq = mi_page_queue(heap,block_size);
   mi_assert_internal(pq!=NULL);
-  return (pq->count <= (size_t)atmost);
-  /*
-  for(mi_page_t* p = pq->first; p!=NULL; p = p->next, atmost--) {
-    if (atmost == 0) { return false; }
-  }
-  return true;
-  */
+  return (pq->count <= (size_t)atmost);  
 }
 
 static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free) mi_attr_noexcept {
@@ -228,8 +222,12 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
   }
 
   // 2. we can try to reclaim the page for ourselves
-  // note:  we only reclaim if the page originated from our heap (the heap field is preserved on abandonment)
-  // to avoid claiming arbitrary object sizes and limit indefinite expansion. This helps benchmarks like `larson`
+  // note: reclaiming can improve benchmarks like `larson` or `rbtree-ck` a lot even in the single-threaded case,
+  // since free-ing from an owned page avoids atomic operations. However, if we reclaim too eagerly in 
+  // a multi-threaded scenario we may start to hold on to too much memory and reduce reuse among threads.
+  // If the current heap is where the page originally came from, we reclaim much more eagerly while
+  // 'cross-thread' reclaiming on free is by default off (and we only 'reclaim' these by finding the abandoned 
+  // pages when we allocate a fresh page).
   if (page->block_size <= MI_SMALL_MAX_OBJ_SIZE)       // only for small sized blocks
   {
     const long reclaim_on_free = _mi_option_get_fast(mi_option_page_reclaim_on_free);
@@ -246,16 +244,21 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
       // can we reclaim into this heap?      
       if (heap != NULL && heap->allow_page_reclaim)      
       {
-        if ((heap == page->heap &&  // always reclaim if we were the originating heap (todo: maybe not if in a threadpool?)
-             mi_page_queue_len_is_atmost(heap, page->block_size, _mi_option_get_fast(mi_option_page_max_reclaim))) 
-            || // OR:
-            (reclaim_on_free == 1 &&               // reclaim across heaps is allowed
-              mi_page_queue_len_is_atmost(heap, page->block_size, _mi_option_get_fast(mi_option_page_cross_thread_max_reclaim)) &&
-              !mi_page_is_used_at_frac(page,8) &&  // and the page is not too full
-              !heap->tld->is_in_threadpool &&      // and not part of a threadpool
-              _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena))  // and the memory is suitable
-          )
-        {
+        long max_reclaim = 0;
+        if mi_likely(heap == page->heap) {  // did this page originate from the current heap?
+          // originating heap
+          max_reclaim = _mi_option_get_fast(heap->tld->is_in_threadpool ? mi_option_page_cross_thread_max_reclaim : mi_option_page_max_reclaim);          
+        }
+        else if (reclaim_on_free == 1 &&              // if cross-thread is allowed
+                 !heap->tld->is_in_threadpool &&      // and we are not part of a threadpool
+                 !mi_page_is_used_at_frac(page,8) &&  // and the page is not too full
+                 _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena)) {   // and it fits our memory
+          // across threads
+          max_reclaim = _mi_option_get_fast(mi_option_page_cross_thread_max_reclaim);
+        }
+        
+        if (max_reclaim < 0 || mi_page_queue_len_is_atmost(heap, page->block_size, max_reclaim)) { // are we within the reclaim limit?
+          // reclaim the page into this heap
           // first remove it from the abandoned pages in the arena -- this might wait for any readers to finish
           _mi_arenas_page_unabandon(page);
           _mi_heap_page_reclaim(heap, page);
