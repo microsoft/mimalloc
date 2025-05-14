@@ -208,7 +208,7 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 // thread-local initialization checks in the fast path.
 // We allocate a user TLS slot at process initialization (see `windows/prim.c`)
 // and store the offset `_mi_win_tls_offset`.
-#define MI_HAS_TLS_SLOT      2              // 2 = we can reliably initialize the slot (saving a test on each malloc)
+#define MI_HAS_TLS_SLOT  1              // 2 = we can reliably initialize the slot (saving a test on each malloc)
 
 extern mi_decl_hidden size_t _mi_win_tls_offset;
 

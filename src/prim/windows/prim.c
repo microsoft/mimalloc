@@ -631,18 +631,23 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 mi_decl_cache_align size_t _mi_win_tls_offset = 0;  
 #endif
 
+//static void mi_debug_out(const char* s) {
+//  HANDLE h = GetStdHandle(STD_ERROR_HANDLE);
+//  WriteConsole(h, s, (DWORD)_mi_strlen(s), NULL, NULL);
+//}
+
 static void mi_win_tls_init(DWORD reason) {
-  #if MI_HAS_TLS_SLOT >= 2  // we must initialize the TLS slot before any allocation
-  #if MI_WIN_USE_FIXED_TLS==1
-  if (reason==DLL_PROCESS_ATTACH && _mi_win_tls_offset == 0) {
-    const DWORD tls_slot = TlsAlloc();  // usually returns slot 1
-    if (tls_slot == TLS_OUT_OF_INDEXES) {
-      _mi_error_message(EFAULT, "unable to allocate the a TLS slot (rebuild without MI_WIN_USE_FIXED_TLS?)\n");
-    }
-    _mi_win_tls_offset = (size_t)tls_slot * sizeof(void*);
-  }
-  #endif
   if (reason==DLL_PROCESS_ATTACH || reason==DLL_THREAD_ATTACH) {
+    #if MI_WIN_USE_FIXED_TLS==1  // we must allocate a TLS slot dynamically
+    if (_mi_win_tls_offset == 0 && reason=DLL_PROCESS_ATTACH) {      
+      const DWORD tls_slot = TlsAlloc();  // usually returns slot 1
+      if (tls_slot == TLS_OUT_OF_INDEXES) {
+        _mi_error_message(EFAULT, "unable to allocate the a TLS slot (rebuild without MI_WIN_USE_FIXED_TLS?)\n");
+      }
+      _mi_win_tls_offset = (size_t)tls_slot * sizeof(void*);
+    }
+    #endif
+    #if MI_HAS_TLS_SLOT >= 2  // we must initialize the TLS slot before any allocation
     if (mi_prim_get_default_heap() == NULL) {
       _mi_heap_set_default_direct((mi_heap_t*)&_mi_heap_empty);  
       #if MI_DEBUG && MI_WIN_USE_FIXED_TLS==1
@@ -650,10 +655,8 @@ static void mi_win_tls_init(DWORD reason) {
       mi_assert_internal(p == (void*)&_mi_heap_empty);
       #endif  
     }
-  }
-  #else
-  MI_UNUSED(reason);
-  #endif
+    #endif  
+  }  
 }
 
 static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
@@ -676,7 +679,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
   // Windows DLL: easy to hook into process_init and thread_done
-  BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
+  BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {    
     mi_win_main((PVOID)inst,reason,reserved);
     return TRUE;
   }
