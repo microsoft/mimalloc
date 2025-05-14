@@ -658,7 +658,7 @@ mi_decl_cache_align size_t _mi_win_tls_offset = 0;
 static void mi_win_tls_init(DWORD reason) {
   if (reason==DLL_PROCESS_ATTACH || reason==DLL_THREAD_ATTACH) {
     #if MI_WIN_USE_FIXED_TLS==1  // we must allocate a TLS slot dynamically
-    if (_mi_win_tls_offset == 0 && reason=DLL_PROCESS_ATTACH) {      
+    if (_mi_win_tls_offset == 0 && reason == DLL_PROCESS_ATTACH) {
       const DWORD tls_slot = TlsAlloc();  // usually returns slot 1
       if (tls_slot == TLS_OUT_OF_INDEXES) {
         _mi_error_message(EFAULT, "unable to allocate the a TLS slot (rebuild without MI_WIN_USE_FIXED_TLS?)\n");
