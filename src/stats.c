@@ -407,10 +407,6 @@ void _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from) {
   }
 }
 
-void _mi_stats_merge_thread(mi_tld_t* tld) {
-  _mi_stats_merge_from( &tld->subproc->stats, &tld->stats );
-}
-
 void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
   _mi_stats_merge_from(&_mi_subproc()->stats, stats);
 }

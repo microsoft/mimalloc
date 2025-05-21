@@ -86,8 +86,11 @@ int main(void) {
   CHECK_BODY("malloc-nomem1") {
     result = (mi_malloc((size_t)PTRDIFF_MAX + (size_t)1) == NULL);
   };
-  CHECK_BODY("malloc-null") {
+  CHECK_BODY("malloc-free-null") {
     mi_free(NULL);
+  };
+  CHECK_BODY("malloc-free-invalid-low") {
+    mi_free((void*)(MI_ZU(0x0000000003990080))); // issue #1087
   };
   CHECK_BODY("calloc-overflow") {
     // use (size_t)&mi_calloc to get some number without triggering compiler warnings
