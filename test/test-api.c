@@ -166,7 +166,7 @@ int main(void) {
     void* p = mi_malloc_aligned(4097,4096);
     size_t usable = mi_usable_size(p);
     result = (usable >= 4097 && usable < 16000);
-    printf("malloc_aligned5: usable size: %zi\n", usable);
+    fprintf(stderr, "malloc_aligned5: usable size: %zi.  ", usable);
     mi_free(p);
   };
   /*
