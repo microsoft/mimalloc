@@ -388,7 +388,7 @@ static mi_msecs_t mi_process_start; // = 0
 
 // return thread local stats
 static mi_stats_t* mi_get_tld_stats(void) {
-  return &mi_heap_get_default()->tld->stats;
+  return &_mi_thread_tld()->stats;
 }
 
 void mi_stats_reset(void) mi_attr_noexcept {
@@ -609,6 +609,7 @@ static void mi_heap_buf_print_counter_value(mi_heap_buf_t* hbuf, const char* nam
 #define MI_STAT_COUNTER(stat)  mi_heap_buf_print_counter_value(&hbuf, #stat, &stats->stat);
 
 char* mi_stats_get_json(size_t output_size, char* output_buf) mi_attr_noexcept {
+  mi_stats_merge();
   mi_heap_buf_t hbuf = { NULL, 0, 0, true };
   if (output_size > 0 && output_buf != NULL) {
     _mi_memzero(output_buf, output_size);

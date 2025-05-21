@@ -375,7 +375,7 @@ int main(int argc, char** argv) {
   }
   #endif
   mi_collect(true);
-  mi_stats_print(NULL);  
+  mi_stats_print(NULL);
 #endif
   //bench_end_program();
   return 0;
