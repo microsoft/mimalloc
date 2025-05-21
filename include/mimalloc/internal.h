@@ -219,6 +219,7 @@ void        _mi_deferred_free(mi_heap_t* heap, bool force);
 void        _mi_page_free_collect(mi_page_t* page,bool force);
 void        _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback from segments
 
+size_t      _mi_page_bin(const mi_page_t* page); // for stats
 size_t      _mi_bin_size(size_t bin);            // for stats
 size_t      _mi_bin(size_t size);                // for stats
 
@@ -235,6 +236,7 @@ bool        _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* pa
 
 // "stats.c"
 void        _mi_stats_done(mi_stats_t* stats);
+void        _mi_stats_merge_thread(mi_tld_t* tld);
 mi_msecs_t  _mi_clock_now(void);
 mi_msecs_t  _mi_clock_end(mi_msecs_t start);
 mi_msecs_t  _mi_clock_start(void);
