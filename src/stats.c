@@ -397,6 +397,10 @@ void mi_stats_merge(void) mi_attr_noexcept {
   mi_stats_merge_from( mi_stats_get_default() );
 }
 
+void _mi_stats_merge_thread(mi_tld_t* tld) {
+  mi_stats_merge_from( &tld->stats );
+}
+
 void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
   mi_stats_merge_from(stats);
 }
@@ -500,7 +504,7 @@ static bool mi_heap_buf_expand(mi_heap_buf_t* hbuf) {
     hbuf->buf[hbuf->size-1] = 0;
   }
   if (hbuf->size > SIZE_MAX/2 || !hbuf->can_realloc) return false;
-  const size_t newsize = (hbuf->size == 0 ? 2*MI_KiB : 2*hbuf->size);
+  const size_t newsize = (hbuf->size == 0 ? mi_good_size(12*MI_KiB) : 2*hbuf->size);
   char* const  newbuf  = (char*)mi_rezalloc(hbuf->buf, newsize);
   if (newbuf == NULL) return false;
   hbuf->buf = newbuf;
