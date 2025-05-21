@@ -547,16 +547,16 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
 // 2-level page map:
 // double indirection, but low commit and low virtual reserve.
 //
-// the page-map is usually 4 MiB (for 48 bits virtual addresses) and points to sub maps of 64 KiB.
+// the page-map is usually 4 MiB (for 48 bit virtual addresses) and points to sub maps of 64 KiB.
 // the page-map is committed on-demand (in 64 KiB parts) (and sub-maps are committed on-demand as well)
 // one sub page-map = 64 KiB => covers 2^(16-3) * 2^16 = 2^29 = 512 MiB address space
-// the page-map needs 48-(16+13) = 19 bits => 2^19 sub map pointers = 4 MiB size.
+// the page-map needs 48-(16+13) = 19 bits => 2^19 sub map pointers = 2^22 bytes = 4 MiB reserved size.
 #define MI_PAGE_MAP_SUB_SHIFT     (13)
 #define MI_PAGE_MAP_SUB_COUNT     (MI_ZU(1) << MI_PAGE_MAP_SUB_SHIFT)
 #define MI_PAGE_MAP_SHIFT         (MI_MAX_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT)
 #define MI_PAGE_MAP_COUNT         (MI_ZU(1) << MI_PAGE_MAP_SHIFT)
 
-extern mi_decl_hidden mi_page_t*** _mi_page_map;
+extern mi_decl_hidden _Atomic(mi_page_t**)* _mi_page_map;
 
 static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
   const size_t u = (size_t)((uintptr_t)p / MI_ARENA_SLICE_SIZE);
@@ -564,16 +564,20 @@ static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
   return (u / MI_PAGE_MAP_SUB_COUNT);
 }
 
+static inline mi_page_t** _mi_page_map_at(size_t idx) {
+  return mi_atomic_load_ptr_relaxed(mi_page_t*, &_mi_page_map[idx]);
+}
+
 static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p, &sub_idx);
-  return _mi_page_map[idx][sub_idx];  // NULL if p==NULL
+  return (_mi_page_map_at(idx))[sub_idx];  // NULL if p==NULL
 }
 
 static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p, &sub_idx);
-  mi_page_t** const sub = _mi_page_map[idx];
+  mi_page_t** const sub = _mi_page_map_at(idx);
   if mi_unlikely(sub == NULL) return NULL;
   return sub[sub_idx];
 }
