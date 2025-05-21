@@ -89,9 +89,11 @@ int main(void) {
   CHECK_BODY("malloc-free-null") {
     mi_free(NULL);
   };
+  #if MI_INTPTR_BITS > 32
   CHECK_BODY("malloc-free-invalid-low") {
     mi_free((void*)(MI_ZU(0x0000000003990080))); // issue #1087
   };
+  #endif
   CHECK_BODY("calloc-overflow") {
     // use (size_t)&mi_calloc to get some number without triggering compiler warnings
     result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);
