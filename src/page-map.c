@@ -200,7 +200,8 @@ bool _mi_page_map_init(void) {
   mi_assert(mi_page_map_count <= MI_PAGE_MAP_COUNT);
   const size_t os_page_size = _mi_os_page_size();
   const size_t page_map_size = _mi_align_up( mi_page_map_count * sizeof(mi_page_t**), os_page_size);
-  const size_t reserve_size = page_map_size + os_page_size;
+  const size_t submap_size = MI_PAGE_MAP_SUB_SIZE;
+  const size_t reserve_size = page_map_size + submap_size;
   const bool commit = page_map_size <= 64*MI_KiB ||
                       mi_option_is_enabled(mi_option_pagemap_commit) || _mi_os_has_overcommit();
   _mi_page_map = (_Atomic(mi_page_t**)*)_mi_os_alloc_aligned(reserve_size, 1, commit, true /* allow large */, &mi_page_map_memid);
@@ -220,10 +221,10 @@ bool _mi_page_map_init(void) {
   }
   _mi_page_map[0] = (mi_page_t**)((uint8_t*)_mi_page_map + page_map_size);  // we reserved a submap part at the end already
   if (!mi_page_map_memid.initially_committed) {
-    _mi_os_commit(_mi_page_map[0], os_page_size, NULL);   // only first OS page
+    _mi_os_commit(_mi_page_map[0], submap_size, NULL);    // commit full submap (issue #1087)
   }
-  if (!mi_page_map_memid.initially_zero) {                // initialize first addresses with NULL
-    _mi_memzero_aligned(_mi_page_map[0], os_page_size);
+  if (!mi_page_map_memid.initially_zero) {                // initialize low addresses with NULL
+    _mi_memzero_aligned(_mi_page_map[0], submap_size);
   }
 
   mi_assert_internal(_mi_ptr_page(NULL)==NULL);
@@ -233,12 +234,12 @@ bool _mi_page_map_init(void) {
 void _mi_page_map_unsafe_destroy(void) {
   mi_assert_internal(_mi_page_map != NULL);
   if (_mi_page_map == NULL) return;
-  for (size_t idx = 1; idx < mi_page_map_count; idx++) {  // skip entry 0
+  for (size_t idx = 1; idx < mi_page_map_count; idx++) {  // skip entry 0 (as we allocate that submap at the end of the page_map)
     // free all sub-maps
     if (mi_page_map_is_committed(idx, NULL)) {
       mi_page_t** sub = _mi_page_map_at(idx);
       if (sub != NULL) {
-        mi_memid_t memid = _mi_memid_create_os(sub, MI_PAGE_MAP_SUB_COUNT * sizeof(mi_page_t*), true, false, false);
+        mi_memid_t memid = _mi_memid_create_os(sub, MI_PAGE_MAP_SUB_SIZE, true, false, false);
         _mi_os_free(memid.mem.os.base, memid.mem.os.size, memid);
         mi_atomic_store_ptr_release(mi_page_t*, &_mi_page_map[idx], NULL);
       }
@@ -279,7 +280,7 @@ static mi_page_t** mi_page_map_ensure_at(size_t idx) {
     // sub map not yet allocated, alloc now
     mi_memid_t memid;
     mi_page_t** expect = sub;
-    const size_t submap_size = MI_PAGE_MAP_SUB_COUNT * sizeof(mi_page_t*);
+    const size_t submap_size = MI_PAGE_MAP_SUB_SIZE;
     sub = (mi_page_t**)_mi_os_alloc(submap_size, &memid);
     if (sub == NULL) {
       _mi_error_message(EFAULT, "internal error: unable to extend the page map\n");
