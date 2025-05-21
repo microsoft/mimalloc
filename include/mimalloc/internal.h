@@ -589,7 +589,7 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
 
 static inline mi_page_t* _mi_ptr_page(const void* p) {
   mi_assert_internal(p==NULL || mi_is_in_heap_region(p));
-  #if MI_DEBUG || defined(__APPLE__)
+  #if MI_DEBUG || MI_SECURE || defined(__APPLE__)
   return _mi_checked_ptr_page(p);
   #else
   return _mi_unchecked_ptr_page(p);

@@ -50,7 +50,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Define MI_SECURE to enable security mitigations. Level 1 has minimal performance impact,
 // but protects most metadata with guard pages:
-//   #define MI_SECURE 1  // guard page around metadata
+//   #define MI_SECURE 1  // guard page around metadata; check pointer validity on free
 //
 // Level 2 has more performance impact but protect well against various buffer overflows
 // by surrounding all mimalloc pages with guard pages:

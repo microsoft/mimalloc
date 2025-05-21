@@ -123,11 +123,15 @@ typedef int32_t  mi_ssize_t;
 
 // use a flat page-map (or a 2-level one)
 #ifndef MI_PAGE_MAP_FLAT
-#if MI_MAX_VABITS <= 40 && !defined(__APPLE__) 
+#if MI_MAX_VABITS <= 40 && !MI_SECURE && !defined(__APPLE__) 
 #define MI_PAGE_MAP_FLAT  1
 #else
 #define MI_PAGE_MAP_FLAT  0
 #endif
+#endif
+
+#if MI_PAGE_MAP_FLAT && MI_SECURE
+#error should not use MI_PAGE_MAP_FLAT with a secure build
 #endif
 
 

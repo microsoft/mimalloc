@@ -202,8 +202,12 @@ bool _mi_page_map_init(void) {
   const size_t page_map_size = _mi_align_up( mi_page_map_count * sizeof(mi_page_t**), os_page_size);
   const size_t submap_size = MI_PAGE_MAP_SUB_SIZE;
   const size_t reserve_size = page_map_size + submap_size;
+  #if MI_SECURE
+  const bool commit = true;  // the whole page map is valid and we can reliably check any pointer
+  #else
   const bool commit = page_map_size <= 64*MI_KiB ||
                       mi_option_is_enabled(mi_option_pagemap_commit) || _mi_os_has_overcommit();
+  #endif
   _mi_page_map = (_Atomic(mi_page_t**)*)_mi_os_alloc_aligned(reserve_size, 1, commit, true /* allow large */, &mi_page_map_memid);
   if (_mi_page_map==NULL) {
     _mi_error_message(ENOMEM, "unable to reserve virtual memory for the page map (%zu KiB)\n", page_map_size / MI_KiB);
