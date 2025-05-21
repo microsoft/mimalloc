@@ -718,6 +718,7 @@ static void mi_segment_page_clear(mi_segment_t* segment, mi_page_t* page, mi_seg
   size_t inuse = page->capacity * mi_page_block_size(page);
   _mi_stat_decrease(&tld->stats->page_committed, inuse);
   _mi_stat_decrease(&tld->stats->pages, 1);
+  _mi_stat_decrease(&tld->stats->page_bins[_mi_page_bin(page)], 1);
 
   page->is_zero_init = false;
   page->segment_in_use = false;
