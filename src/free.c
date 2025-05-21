@@ -233,7 +233,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     // first remove it from the abandoned pages in the arena (if mapped, this waits for any readers to finish)
     _mi_arenas_page_unabandon(page);
     // we can free the page directly
-    _mi_arenas_page_free(page);
+    _mi_arenas_page_free(page,NULL);
     return;
   }
 
@@ -301,7 +301,7 @@ static bool mi_page_unown_from_free(mi_page_t* page, mi_block_t* mt_free) {
       _mi_page_free_collect(page,false);  // update used
       if (mi_page_all_free(page)) {   // it may become free just before unowning it
         _mi_arenas_page_unabandon(page);
-        _mi_arenas_page_free(page);
+        _mi_arenas_page_free(page,NULL);
         return true;
       }
       tf_expect = mi_atomic_load_relaxed(&page->xthread_free);

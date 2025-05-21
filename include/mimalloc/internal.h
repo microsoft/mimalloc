@@ -181,7 +181,7 @@ void          _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld
 void          _mi_arenas_unsafe_destroy_all(mi_tld_t* tld);
 
 mi_page_t*    _mi_arenas_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
-void          _mi_arenas_page_free(mi_page_t* page);
+void          _mi_arenas_page_free(mi_page_t* page, mi_tld_t* tld);
 void          _mi_arenas_page_abandon(mi_page_t* page, mi_tld_t* tld);
 void          _mi_arenas_page_unabandon(mi_page_t* page);
 bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page);
@@ -215,6 +215,7 @@ void          _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
 void          _mi_page_init(mi_heap_t* heap, mi_page_t* page);
 bool          _mi_page_queue_is_valid(mi_heap_t* heap, const mi_page_queue_t* pq);
 
+size_t        _mi_page_bin(const mi_page_t* page); // for stats
 size_t        _mi_bin_size(size_t bin);            // for stats
 size_t        _mi_bin(size_t size);                // for stats
 
@@ -840,7 +841,7 @@ static inline bool _mi_page_unown(mi_page_t* page) {
       _mi_page_free_collect(page, false);  // update used
       if (mi_page_all_free(page)) {        // it may become free just before unowning it
         _mi_arenas_page_unabandon(page);
-        _mi_arenas_page_free(page);
+        _mi_arenas_page_free(page,NULL);
         return true;
       }
       tf_old = mi_atomic_load_relaxed(&page->xthread_free);
