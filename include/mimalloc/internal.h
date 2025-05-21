@@ -219,6 +219,7 @@ void          _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
 void          _mi_page_init(mi_heap_t* heap, mi_page_t* page);
 bool          _mi_page_queue_is_valid(mi_heap_t* heap, const mi_page_queue_t* pq);
 
+size_t        _mi_page_bin(const mi_page_t* page); // for stats
 size_t        _mi_bin_size(size_t bin);            // for stats
 size_t        _mi_bin(size_t size);                // for stats
 
@@ -237,6 +238,7 @@ void          _mi_heap_page_reclaim(mi_heap_t* heap, mi_page_t* page);
 
 // "stats.c"
 void          _mi_stats_done(mi_stats_t* stats);
+void          _mi_stats_merge_thread(mi_tld_t* tld);
 void          _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from);
 mi_msecs_t    _mi_clock_now(void);
 mi_msecs_t    _mi_clock_end(mi_msecs_t start);
