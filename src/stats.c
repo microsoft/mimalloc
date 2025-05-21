@@ -391,6 +391,7 @@ void mi_stats_reset(void) mi_attr_noexcept {
 }
 
 void _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from) {
+  mi_assert_internal(to != NULL && from != NULL);
   if (to != from) {
     mi_stats_add(to, from);
     _mi_memzero(from, sizeof(mi_stats_t));
@@ -401,8 +402,13 @@ void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
   _mi_stats_merge_from(&_mi_subproc()->stats, stats);
 }
 
+void _mi_stats_merge_thread(mi_tld_t* tld) {
+  mi_assert_internal(tld != NULL && tld->subproc != NULL);
+  _mi_stats_merge_from( &tld->subproc->stats, &tld->stats );
+}
+
 void mi_stats_merge(void) mi_attr_noexcept {
-  _mi_stats_done( mi_get_tld_stats() );
+  _mi_stats_merge_thread( _mi_thread_tld() );
 }
 
 void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {

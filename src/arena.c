@@ -799,7 +799,7 @@ mi_page_t* _mi_arenas_page_alloc(mi_heap_t* heap, size_t block_size, size_t bloc
   return page;
 }
 
-void _mi_arenas_page_free(mi_page_t* page, mi_tld_t* tld /* can be NULL */) {
+void _mi_arenas_page_free(mi_page_t* page, mi_tld_t* stats_tld /* can be NULL */) {
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(mi_page_is_owned(page));
@@ -807,9 +807,14 @@ void _mi_arenas_page_free(mi_page_t* page, mi_tld_t* tld /* can be NULL */) {
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(page->next==NULL && page->prev==NULL);
 
-  if (tld==NULL) { tld = _mi_thread_tld(); }
-  mi_tld_stat_decrease(tld, page_bins[_mi_page_bin(page)], 1);
-  mi_tld_stat_decrease(tld, pages, 1);
+  if (stats_tld != NULL) { 
+    mi_tld_stat_decrease(stats_tld, page_bins[_mi_page_bin(page)], 1);
+    mi_tld_stat_decrease(stats_tld, pages, 1);
+  }
+  else {
+    mi_os_stat_decrease(page_bins[_mi_page_bin(page)], 1);
+    mi_os_stat_decrease(pages, 1);
+  }
 
   #if MI_DEBUG>1
   if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
