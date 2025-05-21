@@ -89,7 +89,7 @@ int main(void) {
   CHECK_BODY("malloc-free-null") {
     mi_free(NULL);
   };
-  #if MI_INTPTR_BITS >= 64
+  #if MI_INTPTR_BITS > 32
   CHECK_BODY("malloc-free-invalid-low") {
     mi_free((void*)(MI_ZU(0x0000000003990080))); // issue #1087
   };
