@@ -117,10 +117,10 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   // python/cpython#112532: we may be called from a thread that is not the owner of the heap
   // const bool is_main_thread = (_mi_is_main_thread() && heap->thread_id == _mi_thread_id());
 
+  // if (_mi_is_main_thread()) { mi_debug_show_arenas(true, false, false); }
+
   // collect retired pages
   _mi_heap_collect_retired(heap, force);
-
-  // if (_mi_is_main_thread()) { mi_debug_show_arenas(true, false, false); }
 
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
@@ -130,9 +130,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   _mi_arenas_collect(collect == MI_FORCE /* force purge? */, collect >= MI_FORCE /* visit all? */, heap->tld);
 
   // merge statistics
-  if (collect <= MI_FORCE) {
-    mi_stats_merge();
-  }
+  if (collect <= MI_FORCE) { _mi_stats_merge_thread(heap->tld); }
 }
 
 void _mi_heap_collect_abandon(mi_heap_t* heap) {
@@ -331,7 +329,6 @@ mi_heap_t* _mi_heap_by_tag(mi_heap_t* heap, uint8_t tag) {
 static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
   MI_UNUSED(arg1);
   MI_UNUSED(arg2);
-  MI_UNUSED(heap);
   MI_UNUSED(pq);
 
   // ensure no more thread_delayed_free will be added
@@ -363,7 +360,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   page->next = NULL;
   page->prev = NULL;
   mi_page_set_heap(page, NULL);
-  _mi_arenas_page_free(page);
+  _mi_arenas_page_free(page, heap->tld);
 
   return true; // keep going
 }

@@ -388,7 +388,7 @@ static mi_msecs_t mi_process_start; // = 0
 
 // return thread local stats
 static mi_stats_t* mi_get_tld_stats(void) {
-  return &mi_heap_get_default()->tld->stats;
+  return &_mi_thread_tld()->stats;
 }
 
 void mi_stats_reset(void) mi_attr_noexcept {
@@ -400,6 +400,7 @@ void mi_stats_reset(void) mi_attr_noexcept {
 }
 
 void _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from) {
+  mi_assert_internal(to != NULL && from != NULL);
   if (to != from) {
     mi_stats_add(to, from);
     _mi_memzero(from, sizeof(mi_stats_t));
@@ -410,8 +411,13 @@ void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
   _mi_stats_merge_from(&_mi_subproc()->stats, stats);
 }
 
+void _mi_stats_merge_thread(mi_tld_t* tld) {
+  mi_assert_internal(tld != NULL && tld->subproc != NULL);
+  _mi_stats_merge_from( &tld->subproc->stats, &tld->stats );
+}
+
 void mi_stats_merge(void) mi_attr_noexcept {
-  _mi_stats_done( mi_get_tld_stats() );
+  _mi_stats_merge_thread( _mi_thread_tld() );
 }
 
 void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
@@ -519,7 +525,7 @@ static bool mi_heap_buf_expand(mi_heap_buf_t* hbuf) {
     hbuf->buf[hbuf->size-1] = 0;
   }
   if (hbuf->size > SIZE_MAX/2 || !hbuf->can_realloc) return false;
-  const size_t newsize = (hbuf->size == 0 ? 2*MI_KiB : 2*hbuf->size);
+  const size_t newsize = (hbuf->size == 0 ? mi_good_size(12*MI_KiB) : 2*hbuf->size);
   char* const  newbuf  = (char*)mi_rezalloc(hbuf->buf, newsize);
   if (newbuf == NULL) return false;
   hbuf->buf = newbuf;
@@ -605,6 +611,7 @@ static void mi_heap_buf_print_counter_value(mi_heap_buf_t* hbuf, const char* nam
 #define MI_STAT_COUNTER(stat)  mi_heap_buf_print_counter_value(&hbuf, #stat, &stats->stat);
 
 char* mi_stats_get_json(size_t output_size, char* output_buf) mi_attr_noexcept {
+  mi_stats_merge();
   mi_heap_buf_t hbuf = { NULL, 0, 0, true };
   if (output_size > 0 && output_buf != NULL) {
     _mi_memzero(output_buf, output_size);

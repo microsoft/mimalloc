@@ -374,7 +374,8 @@ int main(int argc, char** argv) {
     mi_free(json);
   }
   #endif
-  mi_stats_print(NULL);  
+  mi_collect(true);
+  mi_stats_print(NULL);
 #endif
   //bench_end_program();
   return 0;

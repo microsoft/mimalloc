@@ -578,8 +578,8 @@ static mi_page_t* mi_arenas_page_try_find_abandoned(mi_subproc_t* subproc, size_
 }
 
 // Allocate a fresh page
-static mi_page_t* mi_arenas_page_alloc_fresh(mi_subproc_t* subproc, size_t slice_count, size_t block_size, size_t block_alignment,
-                                            mi_arena_t* req_arena, size_t tseq, int numa_node, bool commit)
+static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_size, size_t block_alignment,
+                                            mi_arena_t* req_arena, int numa_node, bool commit, mi_tld_t* tld)
 {
   const bool allow_large = (MI_SECURE < 2); // 2 = guard page at end of each arena page
   const bool os_align = (block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN);
@@ -593,7 +593,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_subproc_t* subproc, size_t slice
       !os_align &&                            // not large alignment
       slice_count <= MI_ARENA_MAX_OBJ_SLICES) // and not too large
   {
-    page = (mi_page_t*)mi_arenas_try_alloc(subproc, slice_count, page_alignment, commit, allow_large, req_arena, tseq, numa_node, &memid);
+    page = (mi_page_t*)mi_arenas_try_alloc(tld->subproc, slice_count, page_alignment, commit, allow_large, req_arena, tld->thread_seq, numa_node, &memid);
     if (page != NULL) {
       mi_assert_internal(mi_bitmap_is_clearN(memid.mem.arena.arena->pages, memid.mem.arena.slice_index, memid.mem.arena.slice_count));
       mi_bitmap_set(memid.mem.arena.arena->pages, memid.mem.arena.slice_index);
@@ -701,6 +701,11 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_subproc_t* subproc, size_t slice
 
   // register in the page map
   _mi_page_map_register(page);
+
+  // stats
+  mi_tld_stat_increase(tld, pages, 1);
+  mi_tld_stat_increase(tld, page_bins[_mi_page_bin(page)], 1);
+
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_block_size(page) == block_size);
@@ -724,7 +729,7 @@ static mi_page_t* mi_arenas_page_regular_alloc(mi_heap_t* heap, size_t slice_cou
   const long commit_on_demand = mi_option_get(mi_option_page_commit_on_demand);
   const bool commit = (slice_count <= mi_slice_count_of_size(MI_PAGE_MIN_COMMIT_SIZE) ||  // always commit small pages
                        (commit_on_demand == 2 && _mi_os_has_overcommit()) || (commit_on_demand == 0));
-  page = mi_arenas_page_alloc_fresh(tld->subproc, slice_count, block_size, 1, req_arena, tld->thread_seq, heap->numa_node, commit);
+  page = mi_arenas_page_alloc_fresh(slice_count, block_size, 1, req_arena, heap->numa_node, commit, tld);
   if (page != NULL) {
     mi_assert_internal(page->memid.memkind != MI_MEM_ARENA || page->memid.mem.arena.slice_count == slice_count);
     _mi_page_init(heap, page);
@@ -746,7 +751,7 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_heap_t* heap, size_t block_s
   const size_t slice_count = mi_slice_count_of_size(_mi_align_up(info_size + block_size, _mi_os_secure_guard_page_size()) + _mi_os_secure_guard_page_size());
   #endif
 
-  mi_page_t* page = mi_arenas_page_alloc_fresh(tld->subproc, slice_count, block_size, block_alignment, req_arena, tld->thread_seq, heap->numa_node, true /* commit singletons always */);
+  mi_page_t* page = mi_arenas_page_alloc_fresh(slice_count, block_size, block_alignment, req_arena, heap->numa_node, true /* commit singletons always */, tld);
   if (page == NULL) return NULL;
 
   mi_assert(page->reserved == 1);
@@ -785,13 +790,22 @@ mi_page_t* _mi_arenas_page_alloc(mi_heap_t* heap, size_t block_size, size_t bloc
   return page;
 }
 
-void _mi_arenas_page_free(mi_page_t* page) {
+void _mi_arenas_page_free(mi_page_t* page, mi_tld_t* stats_tld /* can be NULL */) {
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_all_free(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(page->next==NULL && page->prev==NULL);
+
+  if (stats_tld != NULL) { 
+    mi_tld_stat_decrease(stats_tld, page_bins[_mi_page_bin(page)], 1);
+    mi_tld_stat_decrease(stats_tld, pages, 1);
+  }
+  else {
+    mi_os_stat_decrease(page_bins[_mi_page_bin(page)], 1);
+    mi_os_stat_decrease(pages, 1);
+  }
 
   #if MI_DEBUG>1
   if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
