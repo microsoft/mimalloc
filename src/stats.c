@@ -386,6 +386,12 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
 
 static mi_msecs_t mi_process_start; // = 0
 
+// called on process init
+void _mi_stats_init(void) {
+  if (mi_process_start == 0) { mi_process_start = _mi_clock_start(); };
+}
+
+
 // return thread local stats
 static mi_stats_t* mi_get_tld_stats(void) {
   return &_mi_thread_tld()->stats;
@@ -396,8 +402,9 @@ void mi_stats_reset(void) mi_attr_noexcept {
   mi_subproc_t* subproc = _mi_subproc();
   if (stats != &subproc->stats) { _mi_memzero(stats, sizeof(mi_stats_t)); }
   _mi_memzero(&subproc->stats, sizeof(mi_stats_t));
-  if (mi_process_start == 0) { mi_process_start = _mi_clock_start(); };
+  _mi_stats_init();
 }
+
 
 void _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from) {
   mi_assert_internal(to != NULL && from != NULL);

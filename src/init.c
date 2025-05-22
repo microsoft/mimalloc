@@ -709,6 +709,7 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
 
   mi_detect_cpu_features();
+  _mi_stats_init();
   _mi_os_init();
   _mi_page_map_init();
   mi_heap_main_init();

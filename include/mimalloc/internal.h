@@ -237,6 +237,7 @@ bool          _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* 
 void          _mi_heap_page_reclaim(mi_heap_t* heap, mi_page_t* page);
 
 // "stats.c"
+void          _mi_stats_init(void);
 void          _mi_stats_done(mi_stats_t* stats);
 void          _mi_stats_merge_thread(mi_tld_t* tld);
 void          _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from);
