@@ -362,7 +362,7 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_counter_print(&stats->malloc_guarded_count, "guarded", out, arg);
   mi_stat_print(&stats->threads, "threads", -1, out, arg);
   mi_stat_counter_print_avg(&stats->page_searches, "searches", out, arg);
-  _mi_fprintf(out, arg, "%10s: %5zu\n", "numa nodes", _mi_os_numa_node_count());
+  _mi_fprintf(out, arg, "%10s: %5i\n", "numa nodes", _mi_os_numa_node_count());
 
   size_t elapsed;
   size_t user_time;
@@ -373,9 +373,9 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   size_t peak_commit;
   size_t page_faults;
   mi_process_info(&elapsed, &user_time, &sys_time, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
-  _mi_fprintf(out, arg, "%10s: %5ld.%03ld s\n", "elapsed", elapsed/1000, elapsed%1000);
-  _mi_fprintf(out, arg, "%10s: user: %ld.%03ld s, system: %ld.%03ld s, faults: %lu, rss: ", "process",
-              user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, (unsigned long)page_faults );
+  _mi_fprintf(out, arg, "%10s: %5zu.%03zu s\n", "elapsed", elapsed/1000, elapsed%1000);
+  _mi_fprintf(out, arg, "%10s: user: %zu.%03zu s, system: %zu.%03zu s, faults: %zu, rss: ", "process",
+              user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, page_faults );
   mi_printf_amount((int64_t)peak_rss, 1, out, arg, "%s");
   if (peak_commit > 0) {
     _mi_fprintf(out, arg, ", commit: ");
