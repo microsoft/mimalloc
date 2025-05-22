@@ -18,8 +18,7 @@ terms of the MIT license. A copy of the license can be found in the file
 //---------------------------------------------
 
 #if defined(_MSC_VER)
-#pragma warning(disable:28159)  // don't use GetVersion
-#pragma warning(disable:4996)   // don't use GetVersion
+#pragma warning(disable:4996)   // don't use GetVersionExW
 #endif
 
 static DWORD win_major_version = 6;
@@ -72,6 +71,8 @@ static PGetNumaProcessorNode        pGetNumaProcessorNode = NULL;
 
 // Available after Windows XP
 typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
+typedef BOOL (__stdcall* PGetVersionExW)(LPOSVERSIONINFOW lpVersionInformation);
+
 
 //---------------------------------------------
 // Enable large page support dynamically (if possible)
@@ -126,14 +127,9 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_overcommit = false;
   config->has_partial_free = false;
   config->has_virtual_reserve = true;
-  // windows version
-  OSVERSIONINFOW version; _mi_memzero_var(version);
-  if (GetVersionExW(&version)) {
-    win_major_version = version.dwMajorVersion;
-    win_minor_version = version.dwMinorVersion;
-  }
+  
   // get the page size
-  SYSTEM_INFO si;
+  SYSTEM_INFO si; _mi_memzero_var(si);
   GetSystemInfo(&si);
   if (si.dwPageSize > 0) { config->page_size = si.dwPageSize; }
   if (si.dwAllocationGranularity > 0) {
@@ -147,8 +143,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   }
 
   // get the VirtualAlloc2 function
-  HINSTANCE  hDll;
-  hDll = LoadLibrary(TEXT("kernelbase.dll"));
+  HINSTANCE hDll = LoadLibrary(TEXT("kernelbase.dll"));
   if (hDll != NULL) {
     // use VirtualAlloc2FromApp if possible as it is available to Windows store apps
     pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2FromApp");
@@ -176,6 +171,16 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
         if (memInKiB > 0 && memInKiB <= SIZE_MAX) {
           config->physical_memory_in_kib = (size_t)memInKiB;
         }
+      }
+    }
+    // Get Windows version
+    PGetVersionExW pGetVersionExW = (PGetVersionExW)(void (*)(void))GetProcAddress(hDll, "GetVersionExW");
+    if (pGetVersionExW != NULL) {
+      OSVERSIONINFOW version; _mi_memzero_var(version);
+      version.dwOSVersionInfoSize = sizeof(version);
+      if ((*pGetVersionExW)(&version)) {
+        win_major_version = version.dwMajorVersion;
+        win_minor_version = version.dwMinorVersion;
       }
     }
     FreeLibrary(hDll);
