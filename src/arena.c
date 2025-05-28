@@ -807,18 +807,27 @@ void _mi_arenas_page_free(mi_page_t* page, mi_tld_t* stats_tld /* can be NULL */
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(page->next==NULL && page->prev==NULL);
 
+  // statistics
+  const size_t block_size = mi_page_block_size(page);
   if (stats_tld != NULL) { 
     mi_tld_stat_decrease(stats_tld, page_bins[_mi_page_bin(page)], 1);
     mi_tld_stat_decrease(stats_tld, pages, 1);
+    if (block_size > MI_LARGE_MAX_OBJ_SIZE) {
+      mi_tld_stat_decrease(stats_tld, malloc_huge, block_size);
+    }
   }
   else {
     mi_os_stat_decrease(page_bins[_mi_page_bin(page)], 1);
     mi_os_stat_decrease(pages, 1);
+    if (block_size > MI_LARGE_MAX_OBJ_SIZE) {
+      mi_os_stat_decrease(malloc_huge, block_size);
+    }
   }
 
+  // assertions
   #if MI_DEBUG>1
   if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
-    size_t bin = _mi_bin(mi_page_block_size(page));
+    size_t bin = _mi_bin(block_size);
     size_t slice_index;
     size_t slice_count;
     mi_arena_t* arena = mi_page_arena(page, &slice_index, &slice_count);
