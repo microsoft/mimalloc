@@ -72,15 +72,14 @@ Enjoy!
 
 ### Branches
 
-* `master`: latest stable release (still based on `dev2`).
+* `main`: latest stable release (still based on `dev2`).
 * `dev`:  development branch for mimalloc v1. **Use this branch for submitting PR's**.
 * `dev2`: development branch for mimalloc v2. This branch is downstream of `dev` 
           (and is essentially equal to `dev` except for `src/segment.c`). Uses larger sliced segments to manage
           mimalloc pages that can reduce fragmentation.
-* `dev3`: development branch for mimalloc v3-beta. This branch is downstream of `dev`. This version 
+* `dev3`: development branch for mimalloc v3-beta. This branch is also downstream of `dev`. This version 
           simplifies the lock-free ownership of previous versions, has no thread-local segments any more. 
-          This improves sharing of memory between threads, and on certain large workloads may use less memory 
-          with less fragmentation.
+          This improves sharing of memory between threads, and on certain large workloads may use (much) less memory.
 
 ### Releases
 

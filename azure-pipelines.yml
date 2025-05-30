@@ -6,10 +6,8 @@
 trigger:
   branches:
     include:
-    - master
-    - dev3
-    - dev2
-    - dev
+    - main
+    - dev*
   tags:
     include:
     - v*
