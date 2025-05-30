@@ -8,7 +8,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_INTERNAL_H
 #define MIMALLOC_INTERNAL_H
 
-
 // --------------------------------------------------------------------------
 // This file contains the internal API's of mimalloc and various utility
 // functions and macros.
@@ -16,6 +15,11 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "types.h"
 #include "track.h"
+
+
+// --------------------------------------------------------------------------
+// Compiler defines
+// --------------------------------------------------------------------------
 
 #if (MI_DEBUG>0)
 #define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
@@ -30,37 +34,69 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_cache_align     __declspec(align(MI_CACHE_LINE))
+#define mi_decl_noreturn        __declspec(noreturn)
 #define mi_decl_weak
 #define mi_decl_hidden
+#define mi_decl_cold
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
 #define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
+#define mi_decl_noreturn        __attribute__((noreturn))
 #define mi_decl_weak            __attribute__((weak))
 #define mi_decl_hidden          __attribute__((visibility("hidden")))
+#if (__GNUC__ >= 4) || defined(__clang__)
+#define mi_decl_cold            __attribute__((cold))
+#else
+#define mi_decl_cold
+#endif
 #elif __cplusplus >= 201103L    // c++11
 #define mi_decl_noinline
 #define mi_decl_thread          thread_local
 #define mi_decl_cache_align     alignas(MI_CACHE_LINE)
+#define mi_decl_noreturn        [[noreturn]]
 #define mi_decl_weak
 #define mi_decl_hidden
+#define mi_decl_cold
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_cache_align
+#define mi_decl_noreturn        
 #define mi_decl_weak
 #define mi_decl_hidden
+#define mi_decl_cold
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#define mi_unlikely(x)     (__builtin_expect(!!(x),false))
+#define mi_likely(x)       (__builtin_expect(!!(x),true))
+#elif (defined(__cplusplus) && (__cplusplus >= 202002L)) || (defined(_MSVC_LANG) && _MSVC_LANG >= 202002L)
+#define mi_unlikely(x)     (x) [[unlikely]]
+#define mi_likely(x)       (x) [[likely]]
+#else
+#define mi_unlikely(x)     (x)
+#define mi_likely(x)       (x)
+#endif
+
+#ifndef __has_builtin
+#define __has_builtin(x)    0
+#endif
+
+#if defined(__cplusplus)
+#define mi_decl_externc     extern "C"
+#else
+#define mi_decl_externc
 #endif
 
 #if defined(__EMSCRIPTEN__) && !defined(__wasi__)
 #define __wasi__
 #endif
 
-#if defined(__cplusplus)
-#define mi_decl_externc       extern "C"
-#else
-#define mi_decl_externc
-#endif
+
+// --------------------------------------------------------------------------
+// Internal functions
+// --------------------------------------------------------------------------
 
 // "libc.c"
 #include    <stdarg.h>
@@ -256,26 +292,6 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #endif
 
 
-// ------------------------------------------------------
-// Branches
-// ------------------------------------------------------
-
-#if defined(__GNUC__) || defined(__clang__)
-#define mi_unlikely(x)     (__builtin_expect(!!(x),false))
-#define mi_likely(x)       (__builtin_expect(!!(x),true))
-#elif (defined(__cplusplus) && (__cplusplus >= 202002L)) || (defined(_MSVC_LANG) && _MSVC_LANG >= 202002L)
-#define mi_unlikely(x)     (x) [[unlikely]]
-#define mi_likely(x)       (x) [[likely]]
-#else
-#define mi_unlikely(x)     (x)
-#define mi_likely(x)       (x)
-#endif
-
-#ifndef __has_builtin
-#define __has_builtin(x)  0
-#endif
-
-
 /* -----------------------------------------------------------
   Error codes passed to `_mi_fatal_error`
   All are recoverable but EFAULT is a serious error and aborts by default in secure mode.
@@ -298,6 +314,32 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #ifndef EOVERFLOW      // count*size overflow
 #define EOVERFLOW (75)
 #endif
+
+
+// ------------------------------------------------------
+// Assertions
+// ------------------------------------------------------
+
+#if (MI_DEBUG)
+// use our own assertion to print without memory allocation
+mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line, const char* func) mi_attr_noexcept;
+#define mi_assert(expr)     ((expr) ? (void)0 : _mi_assert_fail(#expr,__FILE__,__LINE__,__func__))
+#else
+#define mi_assert(x)
+#endif
+
+#if (MI_DEBUG>1)
+#define mi_assert_internal    mi_assert
+#else
+#define mi_assert_internal(x)
+#endif
+
+#if (MI_DEBUG>2)
+#define mi_assert_expensive   mi_assert
+#else
+#define mi_assert_expensive(x)
+#endif
+
 
 
 /* -----------------------------------------------------------
