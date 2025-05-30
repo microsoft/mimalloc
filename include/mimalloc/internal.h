@@ -52,6 +52,32 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_hidden
 #endif
 
+#if (MI_DEBUG)
+#if defined(_MSC_VER)
+#define mi_decl_noreturn        __declspec(noreturn)
+#elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__)
+#define mi_decl_noreturn        __attribute__((__noreturn__))
+#else
+#define mi_decl_noreturn
+#endif
+
+/*
+ * 'cold' attribute seems to have been fully supported since GCC 4.x.
+ * See https://github.com/gcc-mirror/gcc/commit/52bf96d2f299e9e6.
+ */
+#if (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)
+#define mi_decl_cold            __attribute__((cold))
+#else
+#define mi_decl_cold
+#endif
+
+#if (defined(__GNUC__) && defined(__THROW))
+#define mi_decl_throw           __THROW
+#else
+#define mi_decl_throw
+#endif
+#endif
+
 #if defined(__EMSCRIPTEN__) && !defined(__wasi__)
 #define __wasi__
 #endif
