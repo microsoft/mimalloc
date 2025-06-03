@@ -280,19 +280,19 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       p = mi_os_prim_alloc(over_size, 1 /*alignment*/, false /* commit? */, false /* allow_large */, is_large, is_zero);
       if (p == NULL) return NULL;
 
-      // set p to the aligned part in the full region
-      // note: on Windows VirtualFree needs the actual base pointer
-      // this is handledby having the `base` field in the memid.
-      *base = p; // remember the base
-      p = _mi_align_up_ptr(p, alignment);
-
       // explicitly commit only the aligned part
+      void* const aligned_p = _mi_align_up_ptr(p, alignment);
       if (commit) {
-        if (!_mi_os_commit(p, size, NULL)) {
+        if (!_mi_os_commit(aligned_p, size, NULL)) {
           mi_os_prim_free(p, over_size, 0);
           return NULL;
         }
       }
+      
+      // note: on Windows VirtualFree needs the actual base pointer
+      // this is handled by having the `base` field in the memid.
+      *base = p;
+      p = aligned_p;
     }
     else  { // mmap can free inside an allocation
       // overallocate...
@@ -300,7 +300,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       if (p == NULL) return NULL;
 
       // and selectively unmap parts around the over-allocated area.
-      void* aligned_p = _mi_align_up_ptr(p, alignment);
+      void* const aligned_p = _mi_align_up_ptr(p, alignment);
       size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
       size_t mid_size = _mi_align_up(size, _mi_os_page_size());
       size_t post_size = over_size - pre_size - mid_size;
