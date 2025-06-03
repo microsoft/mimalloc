@@ -36,8 +36,7 @@ static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_sta
   return (mi_block_t*)((uint8_t*)page_start + (i * block_size));
 }
 
-//static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t size, mi_tld_t* tld);
-static mi_decl_nodiscard bool mi_page_extend_free(mi_heap_t* heap, mi_page_t* page);
+static bool mi_page_extend_free(mi_heap_t* heap, mi_page_t* page);
 
 #if (MI_DEBUG>=3)
 static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
@@ -842,7 +841,7 @@ static mi_page_t* mi_find_free_page(mi_heap_t* heap, mi_page_queue_t* pq) {
   if mi_likely(page != NULL && mi_page_immediate_available(page)) {
     #if (MI_SECURE>=3) // in secure mode, we extend half the time to increase randomness
     if (page->capacity < page->reserved && ((_mi_heap_random_next(heap) & 1) == 1)) {
-      mi_page_extend_free(heap, page);
+      mi_page_extend_free(heap, page)
       mi_assert_internal(mi_page_immediate_available(page));
     }
     #endif
