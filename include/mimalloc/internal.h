@@ -126,13 +126,13 @@ bool        _mi_os_has_overcommit(void);
 bool        _mi_os_has_virtual_reserve(void);
 
 bool        _mi_os_reset(void* addr, size_t size);
-bool        _mi_os_commit(void* p, size_t size, bool* is_zero);
-bool        _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size);
 bool        _mi_os_decommit(void* addr, size_t size);
-bool        _mi_os_protect(void* addr, size_t size);
 bool        _mi_os_unprotect(void* addr, size_t size);
 bool        _mi_os_purge(void* p, size_t size);
 bool        _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stat_size);
+mi_decl_nodiscard bool _mi_os_commit(void* p, size_t size, bool* is_zero);
+mi_decl_nodiscard bool _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size);
+mi_decl_nodiscard bool _mi_os_protect(void* addr, size_t size);
 
 void*       _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid);
 void*       _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
