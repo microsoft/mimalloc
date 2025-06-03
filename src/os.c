@@ -310,7 +310,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       // explicitly commit only the aligned part
       if (commit) {
         if (!_mi_os_commit(p, size, NULL)) {
-          mi_os_prim_free(p, size, size);
+          mi_os_prim_free(*base, size, size);
           return NULL;
         }
       }
