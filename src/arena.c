@@ -711,6 +711,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_si
   mi_assert_internal(mi_page_block_size(page) == block_size);
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(mi_page_is_owned(page));
+
   return page;
 }
 
@@ -730,13 +731,15 @@ static mi_page_t* mi_arenas_page_regular_alloc(mi_heap_t* heap, size_t slice_cou
   const bool commit = (slice_count <= mi_slice_count_of_size(MI_PAGE_MIN_COMMIT_SIZE) ||  // always commit small pages
                        (commit_on_demand == 2 && _mi_os_has_overcommit()) || (commit_on_demand == 0));
   page = mi_arenas_page_alloc_fresh(slice_count, block_size, 1, req_arena, heap->numa_node, commit, tld);
-  if (page != NULL) {
-    mi_assert_internal(page->memid.memkind != MI_MEM_ARENA || page->memid.mem.arena.slice_count == slice_count);
-    _mi_page_init(heap, page);
-    return page;
-  }
+  if (page == NULL) return NULL;
 
-  return NULL;
+  mi_assert_internal(page->memid.memkind != MI_MEM_ARENA || page->memid.mem.arena.slice_count == slice_count);
+  if (!_mi_page_init(heap, page)) {
+    _mi_arenas_free( page, mi_page_full_size(page), page->memid);
+    return NULL;
+  }
+  
+  return page;
 }
 
 // Allocate a page containing one block (very large, or with large alignment)
@@ -755,7 +758,10 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_heap_t* heap, size_t block_s
   if (page == NULL) return NULL;
 
   mi_assert(page->reserved == 1);
-  _mi_page_init(heap, page);
+  if (!_mi_page_init(heap, page)) {
+    _mi_arenas_free( page, mi_page_full_size(page), page->memid);
+    return NULL;
+  }
 
   return page;
 }
@@ -1204,11 +1210,16 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
     size_t commit_size = mi_size_of_slices(info_slices);
     // leave a guard OS page decommitted at the end?
     if (!memid.is_pinned) { commit_size -= _mi_os_secure_guard_page_size(); }
+    bool ok = false;
     if (commit_fun != NULL) {
-      (*commit_fun)(true /* commit */, arena, commit_size, NULL, commit_fun_arg);
+      ok = (*commit_fun)(true /* commit */, arena, commit_size, NULL, commit_fun_arg);
     }
     else {
-      _mi_os_commit(arena, commit_size, NULL);
+      ok = _mi_os_commit(arena, commit_size, NULL);
+    }
+    if (!ok) {
+      _mi_warning_message("unable to commit meta-data for OS memory");
+      return false;
     }
   }
   else if (!memid.is_pinned) {

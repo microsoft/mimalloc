@@ -186,7 +186,7 @@ static void mi_os_prim_free(void* addr, size_t size, size_t commit_size) {
 void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t memid) {
   if (mi_memkind_is_os(memid.memkind)) {
     size_t csize = memid.mem.os.size;
-    if (csize==0) { _mi_os_good_alloc_size(size); }
+    if (csize==0) { csize = _mi_os_good_alloc_size(size); }
     size_t commit_size = (still_committed ? csize : 0);
     void* base = addr;
     // different base? (due to alignment)
@@ -309,7 +309,10 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
 
       // explicitly commit only the aligned part
       if (commit) {
-        _mi_os_commit(p, size, NULL);
+        if (!_mi_os_commit(p, size, NULL)) {
+          mi_os_prim_free(*base, over_size, 0);
+          return NULL;
+        }
       }
     }
     else  { // mmap can free inside an allocation
