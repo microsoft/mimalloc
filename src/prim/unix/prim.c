@@ -433,6 +433,7 @@ int _mi_prim_commit(void* start, size_t size, bool* is_zero) {
 
   #if defined(__APPLE__)
     // MADV_FREE_REUSABLE is paired with MADV_FREE_REUSE for accounting
+    // if this memory was not marked as MADV_FREE_REUSABLE, this call is noop
     madvise(start, size, MADV_FREE_REUSE);
   #endif
   return err;
