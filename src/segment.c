@@ -182,7 +182,9 @@ static bool mi_page_not_in_queue(const mi_page_t* page, mi_segments_tld_t* tld) 
 
 static void mi_segment_protect_range(void* p, size_t size, bool protect) {
   if (protect) {
-    _mi_os_protect(p, size);
+    if (!_mi_os_protect(p, size)) {
+      _mi_error_message(EFAULT,"unable to protect segment memory at %p\n", p);
+    }
   }
   else {
     _mi_os_unprotect(p, size);
