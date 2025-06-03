@@ -606,7 +606,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 // Note: we also experimented with "bump" allocation on the first
 // allocations but this did not speed up any benchmark (due to an
 // extra test in malloc? or cache effects?)
-static mi_decl_nodiscard bool mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
+static bool mi_page_extend_free(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
   #if (MI_SECURE<3)
   mi_assert(page->free == NULL);
