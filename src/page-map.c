@@ -9,6 +9,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal.h"
 #include "bitmap.h"
 
+static void mi_page_map_cannot_commit(void) {
+  _mi_error_message(ENOMEM, "unable to commit the allocation page-map on-demand\n" );  
+}
+
 #if MI_PAGE_MAP_FLAT 
 
 // The page-map contains a byte for each 64kb slice in the address space.
@@ -57,7 +61,10 @@ bool _mi_page_map_init(void) {
   }
   if (bitmap_size > 0) {
     mi_page_map_commit = (mi_bitmap_t*)base;
-    _mi_os_commit(mi_page_map_commit, bitmap_size, NULL);
+    if (!_mi_os_commit(mi_page_map_commit, bitmap_size, NULL)) {
+      mi_page_map_cannot_commit();
+      return false;
+    }
     mi_bitmap_init(mi_page_map_commit, commit_bits, true);
   }
   _mi_page_map = base + bitmap_size;
@@ -84,7 +91,10 @@ static void mi_page_map_ensure_committed(size_t idx, size_t slice_count) {
         bool is_zero;
         uint8_t* const start = _mi_page_map + (i * MI_PAGE_MAP_ENTRIES_PER_COMMIT_BIT);
         const size_t   size  = MI_PAGE_MAP_ENTRIES_PER_COMMIT_BIT;
-        _mi_os_commit(start, size, &is_zero);
+        if (!_mi_os_commit(start, size, &is_zero)) {
+          mi_page_map_cannot_commit();
+          return;
+        }
         if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(start, size); }        
         mi_bitmap_set(mi_page_map_commit, i);
       }
@@ -204,11 +214,17 @@ bool _mi_page_map_init(void) {
 
   // note: for the NULL range we only commit one OS page (in the map and sub)
   if (!mi_page_map_memid.initially_committed) {
-    _mi_os_commit(&_mi_page_map[0], os_page_size, NULL);  // commit first part of the map
+    if (!_mi_os_commit(&_mi_page_map[0], os_page_size, NULL)) {  // commit first part of the map
+      mi_page_map_cannot_commit();
+      return false;
+    }
   }
   _mi_page_map[0] = (mi_page_t**)((uint8_t*)_mi_page_map + page_map_size);  // we reserved 2 sub maps at the end already
   if (!mi_page_map_memid.initially_committed) {
-    _mi_os_commit(_mi_page_map[0], os_page_size, NULL);   // only first OS page
+    if (!_mi_os_commit(_mi_page_map[0], os_page_size, NULL)) {   // only first OS page
+      mi_page_map_cannot_commit();
+      return false;
+    }
   }
   _mi_page_map[0][0] = (mi_page_t*)&_mi_page_empty;       // caught in `mi_free`
   
@@ -231,7 +247,10 @@ static mi_page_t** mi_page_map_ensure_committed(size_t idx) {
   size_t bit_idx;
   if mi_unlikely(!mi_page_map_is_committed(idx, &bit_idx)) {
     uint8_t* start = (uint8_t*)&_mi_page_map[bit_idx * MI_PAGE_MAP_ENTRIES_PER_CBIT];
-    _mi_os_commit(start, MI_PAGE_MAP_ENTRIES_PER_CBIT * sizeof(mi_page_t**), NULL);
+    if (!_mi_os_commit(start, MI_PAGE_MAP_ENTRIES_PER_CBIT * sizeof(mi_page_t**), NULL)) {
+      mi_page_map_cannot_commit();
+      return NULL;
+    }
     mi_atomic_or_acq_rel(&mi_page_map_commit, MI_ZU(1) << bit_idx);
   }
   return _mi_page_map[idx];

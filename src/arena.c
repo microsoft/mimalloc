@@ -686,7 +686,10 @@ static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_si
     commit_size = _mi_align_up(block_start + block_size, MI_PAGE_MIN_COMMIT_SIZE);
     if (commit_size > page_noguard_size) { commit_size = page_noguard_size; }
     bool is_zero;
-    _mi_os_commit(page, commit_size, &is_zero);
+    if (!_mi_os_commit(page, commit_size, &is_zero)) {
+      _mi_arenas_free( page, alloc_size, memid );
+      return NULL;
+    }
     if (!memid.initially_zero && !is_zero) {
       _mi_memzero_aligned(page, commit_size);
     }
@@ -741,7 +744,10 @@ static mi_page_t* mi_arenas_page_regular_alloc(mi_heap_t* heap, size_t slice_cou
   page = mi_arenas_page_alloc_fresh(slice_count, block_size, 1, req_arena, commit, tld);
   if (page != NULL) {
     mi_assert_internal(page->memid.memkind != MI_MEM_ARENA || page->memid.mem.arena.slice_count == slice_count);
-    _mi_page_init(heap, page);
+    if (!_mi_page_init(heap, page)) {
+      _mi_arenas_free( page, mi_page_full_size(page), page->memid );
+      return NULL;
+    }
     return page;
   }
 
@@ -764,7 +770,10 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_heap_t* heap, size_t block_s
   if (page == NULL) return NULL;
 
   mi_assert(page->reserved == 1);
-  _mi_page_init(heap, page);
+  if (!_mi_page_init(heap, page)) {
+    _mi_arenas_free(page, mi_page_full_size(page), page->memid);
+    return NULL;
+  }
 
   return page;
 }
@@ -1216,7 +1225,10 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
   // commit & zero if needed
   if (!memid.initially_committed) {
     // leave a guard OS page decommitted at the end
-    _mi_os_commit(arena, mi_size_of_slices(info_slices) - _mi_os_secure_guard_page_size(), NULL);
+    if (!_mi_os_commit(arena, mi_size_of_slices(info_slices) - _mi_os_secure_guard_page_size(), NULL)) {
+      _mi_warning_message("unable to commit meta data for provided OS memory");
+      return false;
+    }
   }
   else {
     // if MI_SECURE, set a guard page at the end

@@ -144,13 +144,13 @@ bool          _mi_os_has_virtual_reserve(void);
 size_t        _mi_os_virtual_address_bits(void);
 
 bool          _mi_os_reset(void* addr, size_t size);
-bool          _mi_os_commit(void* p, size_t size, bool* is_zero);
+mi_decl_nodiscard bool _mi_os_commit(void* p, size_t size, bool* is_zero);
 bool          _mi_os_decommit(void* addr, size_t size);
-bool          _mi_os_protect(void* addr, size_t size);
+mi_decl_nodiscard bool _mi_os_protect(void* addr, size_t size);
 bool          _mi_os_unprotect(void* addr, size_t size);
 bool          _mi_os_purge(void* p, size_t size);
 bool          _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stats_size);
-bool          _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size);
+mi_decl_nodiscard bool _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size);
 
 size_t        _mi_os_secure_guard_page_size(void);
 bool          _mi_os_secure_guard_page_set_at(void* addr, bool is_pinned);
@@ -212,7 +212,7 @@ void          _mi_deferred_free(mi_heap_t* heap, bool force);
 
 void          _mi_page_free_collect(mi_page_t* page, bool force);
 void          _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
-void          _mi_page_init(mi_heap_t* heap, mi_page_t* page);
+mi_decl_nodiscard bool _mi_page_init(mi_heap_t* heap, mi_page_t* page);
 bool          _mi_page_queue_is_valid(mi_heap_t* heap, const mi_page_queue_t* pq);
 
 size_t        _mi_page_bin(const mi_page_t* page); // for stats
