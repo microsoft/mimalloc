@@ -905,8 +905,8 @@ static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_a
     mi_assert_internal(mi_page_is_abandoned(page));
     mi_page_set_heap(page, NULL);
     #endif
-    mi_heap_stat_increase(heap, malloc_huge, mi_page_block_size(page));
-    mi_heap_stat_counter_increase(heap, malloc_huge_count, 1);
+    mi_os_stat_increase(malloc_huge, mi_page_block_size(page));
+    mi_os_stat_counter_increase(malloc_huge_count, 1);
   }
   return page;
 }

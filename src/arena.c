@@ -817,20 +817,17 @@ void _mi_arenas_page_free(mi_page_t* page, mi_tld_t* stats_tld /* can be NULL */
   mi_assert_internal(page->next==NULL && page->prev==NULL);
 
   // statistics
-  const size_t block_size = mi_page_block_size(page);
   if (stats_tld != NULL) { 
     mi_tld_stat_decrease(stats_tld, page_bins[_mi_page_bin(page)], 1);
     mi_tld_stat_decrease(stats_tld, pages, 1);
-    if (block_size > MI_LARGE_MAX_OBJ_SIZE) {
-      mi_tld_stat_decrease(stats_tld, malloc_huge, block_size);
-    }
   }
   else {
     mi_os_stat_decrease(page_bins[_mi_page_bin(page)], 1);
     mi_os_stat_decrease(pages, 1);
-    if (block_size > MI_LARGE_MAX_OBJ_SIZE) {
-      mi_os_stat_decrease(malloc_huge, block_size);
-    }
+  }
+  const size_t block_size = mi_page_block_size(page);
+  if (mi_page_is_huge(page)) {
+    mi_os_stat_decrease(malloc_huge, block_size);
   }
 
   // assertions
