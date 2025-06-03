@@ -677,7 +677,10 @@ static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_si
     commit_size = _mi_align_up(block_start + block_size, MI_PAGE_MIN_COMMIT_SIZE);
     if (commit_size > page_noguard_size) { commit_size = page_noguard_size; }
     bool is_zero;
-    mi_arena_commit( mi_memid_arena(memid), page, commit_size, &is_zero, 0);
+    if (!mi_arena_commit( mi_memid_arena(memid), page, commit_size, &is_zero, 0)) {
+        mi_os_prim_free(p, commit_size, commit_size);
+        return NULL;
+    }
     if (!memid.initially_zero && !is_zero) {
       _mi_memzero_aligned(page, commit_size);
     }
