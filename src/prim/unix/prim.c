@@ -440,18 +440,18 @@ int _mi_prim_commit(void* start, size_t size, bool* is_zero) {
 }
 
 int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
-  int err = 0;
   #if defined(__APPLE__)
     // On Apple platforms there is MADV_FREE_REUSABLE -- it marks memory as RESUABLE to reduce memory pressure.
-    err = unix_madvise(start, size, MADV_FREE_REUSABLE);
-    // if this fails - fallback to MADV_DONTNEED
-  #endif
-
-  if (err)
-  {
+    int err = unix_madvise(start, size, MADV_FREE_REUSABLE);
+    if (err != 0) // if MADV_FREE_REUSABLE fails - fallback to MADV_DONTNEED
+    {
+      // use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
+      err = unix_madvise(start, size, MADV_DONTNEED);
+    }
+  #else
     // use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
-    err = unix_madvise(start, size, MADV_DONTNEED);
-  }
+    int err = unix_madvise(start, size, MADV_DONTNEED);
+  #endif
 
   #if !MI_DEBUG && MI_SECURE<=2
     *needs_recommit = false;
@@ -474,28 +474,27 @@ int _mi_prim_reset(void* start, size_t size) {
   #if defined(__APPLE__)
     // On Apple platforms there is MADV_FREE_REUSABLE -- it marks memory as RESUABLE to reduce memory pressure.
     err = unix_madvise(start, size, MADV_FREE_REUSABLE);
+    if (err == 0)
+      return 0;
     // if this fails - fallback to MADV_FREE/MADV_DONTNEED
   #endif
 
-  if (err)
-  {
-    // We try to use `MADV_FREE` as that is the fastest. A drawback though is that it
-    // will not reduce the `rss` stats in tools like `top` even though the memory is available
-    // to other processes. With the default `MIMALLOC_PURGE_DECOMMITS=1` we ensure that by
-    // default `MADV_DONTNEED` is used though.
-    #if defined(MADV_FREE)
-      static _Atomic(size_t) advice = MI_ATOMIC_VAR_INIT(MADV_FREE);
-      int oadvice = (int)mi_atomic_load_relaxed(&advice);
-      while ((err = unix_madvise(start, size, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
-      if (err != 0 && errno == EINVAL && oadvice == MADV_FREE) {
-        // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
-        mi_atomic_store_release(&advice, (size_t)MADV_DONTNEED);
-        err = unix_madvise(start, size, MADV_DONTNEED);
-      }
-    #else
+  // We try to use `MADV_FREE` as that is the fastest. A drawback though is that it
+  // will not reduce the `rss` stats in tools like `top` even though the memory is available
+  // to other processes. With the default `MIMALLOC_PURGE_DECOMMITS=1` we ensure that by
+  // default `MADV_DONTNEED` is used though.
+  #if defined(MADV_FREE)
+    static _Atomic(size_t) advice = MI_ATOMIC_VAR_INIT(MADV_FREE);
+    int oadvice = (int)mi_atomic_load_relaxed(&advice);
+    while ((err = unix_madvise(start, size, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
+    if (err != 0 && errno == EINVAL && oadvice == MADV_FREE) {
+      // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
+      mi_atomic_store_release(&advice, (size_t)MADV_DONTNEED);
       err = unix_madvise(start, size, MADV_DONTNEED);
-    #endif
-  }
+    }
+  #else
+    err = unix_madvise(start, size, MADV_DONTNEED);
+  #endif
   return err;
 }
 
