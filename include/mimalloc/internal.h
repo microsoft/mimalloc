@@ -303,13 +303,13 @@ bool          _mi_page_is_valid(mi_page_t* page);
 #endif
 
 
-/* -----------------------------------------------------------
-   Assertions
------------------------------------------------------------ */
+// ------------------------------------------------------
+// Assertions
+// ------------------------------------------------------
 
 #if (MI_DEBUG)
 // use our own assertion to print without memory allocation
-void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line, const char* func);
+mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line, const char* func) mi_attr_noexcept;
 #define mi_assert(expr)     ((expr) ? (void)0 : _mi_assert_fail(#expr,__FILE__,__LINE__,__func__))
 #else
 #define mi_assert(x)
@@ -326,6 +326,7 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line
 #else
 #define mi_assert_expensive(x)
 #endif
+
 
 /* -----------------------------------------------------------
   Statistics (in `stats.c`)
@@ -384,30 +385,6 @@ typedef struct mi_option_desc_s {
   const char*       name;   // option name without `mimalloc_` prefix
   const char*       legacy_name; // potential legacy option name
 } mi_option_desc_t;
-
-// ------------------------------------------------------
-// Assertions
-// ------------------------------------------------------
-
-#if (MI_DEBUG)
-// use our own assertion to print without memory allocation
-mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line, const char* func) mi_attr_noexcept;
-#define mi_assert(expr)     ((expr) ? (void)0 : _mi_assert_fail(#expr,__FILE__,__LINE__,__func__))
-#else
-#define mi_assert(x)
-#endif
-
-#if (MI_DEBUG>1)
-#define mi_assert_internal    mi_assert
-#else
-#define mi_assert_internal(x)
-#endif
-
-#if (MI_DEBUG>2)
-#define mi_assert_expensive   mi_assert
-#else
-#define mi_assert_expensive(x)
-#endif
 
 
 
