@@ -78,10 +78,11 @@ bool _mi_page_map_init(void) {
   return true;
 }
 
-void _mi_page_map_unsafe_destroy(void) {
+void _mi_page_map_unsafe_destroy(mi_subproc_t* subproc) {
+  mi_assert_internal(subproc != NULL);
   mi_assert_internal(_mi_page_map != NULL);
   if (_mi_page_map == NULL) return;
-  _mi_os_free(mi_page_map_memid.mem.os.base, mi_page_map_memid.mem.os.size, mi_page_map_memid);
+  _mi_os_free_ex(mi_page_map_memid.mem.os.base, mi_page_map_memid.mem.os.size, true, mi_page_map_memid, subproc);
   _mi_page_map = NULL;
   mi_page_map_commit = NULL;
   mi_page_map_max_address = NULL;
