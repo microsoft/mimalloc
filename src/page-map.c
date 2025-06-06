@@ -265,7 +265,8 @@ bool _mi_page_map_init(void) {
 }
 
 
-void _mi_page_map_unsafe_destroy(void) {
+void _mi_page_map_unsafe_destroy(mi_subproc_t* subproc) {
+  mi_assert_internal(subproc != NULL);
   mi_assert_internal(_mi_page_map != NULL);
   if (_mi_page_map == NULL) return;
   for (size_t idx = 1; idx < mi_page_map_count; idx++) {  // skip entry 0 (as we allocate that submap at the end of the page_map)
@@ -274,12 +275,12 @@ void _mi_page_map_unsafe_destroy(void) {
       mi_page_t** sub = _mi_page_map_at(idx);
       if (sub != NULL) {
         mi_memid_t memid = _mi_memid_create_os(sub, MI_PAGE_MAP_SUB_SIZE, true, false, false);
-        _mi_os_free(memid.mem.os.base, memid.mem.os.size, memid);
+        _mi_os_free_ex(memid.mem.os.base, memid.mem.os.size, true, memid, subproc);  
         mi_atomic_store_ptr_release(mi_page_t*, &_mi_page_map[idx], NULL);
       }
     }
   }
-  _mi_os_free(_mi_page_map, mi_page_map_memid.mem.os.size, mi_page_map_memid);
+  _mi_os_free_ex(_mi_page_map, mi_page_map_memid.mem.os.size, true, mi_page_map_memid, subproc);
   _mi_page_map = NULL;
   mi_page_map_count = 0;
   mi_page_map_memid = _mi_memid_none();

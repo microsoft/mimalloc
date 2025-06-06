@@ -1074,6 +1074,7 @@ bool _mi_arenas_contain(const void* p) {
 // destroy owned arenas; this is unsafe and should only be done using `mi_option_destroy_on_exit`
 // for dynamic libraries that are unloaded and need to release all their allocated memory.
 static void mi_arenas_unsafe_destroy(mi_subproc_t* subproc) {
+  mi_assert_internal(subproc != NULL);
   const size_t max_arena = mi_arenas_get_count(subproc);
   size_t new_max_arena = 0;
   for (size_t i = 0; i < max_arena; i++) {
@@ -1082,7 +1083,7 @@ static void mi_arenas_unsafe_destroy(mi_subproc_t* subproc) {
       // mi_lock_done(&arena->abandoned_visit_lock);
       mi_atomic_store_ptr_release(mi_arena_t, &subproc->arenas[i], NULL);
       if (mi_memkind_is_os(arena->memid.memkind)) {
-        _mi_os_free(mi_arena_start(arena), mi_arena_size(arena), arena->memid);
+        _mi_os_free_ex(mi_arena_start(arena), mi_arena_size(arena), true, arena->memid, subproc); // pass `subproc` to avoid accessing the heap pointer (in `_mi_subproc()`)
       }
     }
   }
@@ -1096,7 +1097,7 @@ static void mi_arenas_unsafe_destroy(mi_subproc_t* subproc) {
 // destroy owned arenas; this is unsafe and should only be done using `mi_option_destroy_on_exit`
 // for dynamic libraries that are unloaded and need to release all their allocated memory.
 void _mi_arenas_unsafe_destroy_all(mi_tld_t* tld) {
-  mi_arenas_unsafe_destroy(_mi_subproc());
+  mi_arenas_unsafe_destroy(tld->subproc);
   _mi_arenas_collect(true /* force purge */, true /* visit all*/, tld);  // purge non-owned arenas
 }
 
@@ -1304,7 +1305,7 @@ static int mi_reserve_os_memory_ex2(mi_subproc_t* subproc, size_t size, bool com
   void* start = _mi_os_alloc_aligned(size, MI_ARENA_SLICE_ALIGN, commit, allow_large, &memid);
   if (start == NULL) return ENOMEM;
   if (!mi_manage_os_memory_ex2(subproc, start, size, -1 /* numa node */, exclusive, memid, NULL, NULL, arena_id)) {
-    _mi_os_free_ex(start, size, commit, memid);
+    _mi_os_free_ex(start, size, commit, memid, NULL);
     _mi_verbose_message("failed to reserve %zu KiB memory\n", _mi_divide_up(size, 1024));
     return ENOMEM;
   }
