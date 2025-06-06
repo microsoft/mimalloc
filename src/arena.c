@@ -76,7 +76,7 @@ size_t mi_arena_min_alignment(void) {
   return MI_ARENA_SLICE_ALIGN;
 }
 
-static bool mi_arena_commit(mi_arena_t* arena, void* start, size_t size, bool* is_zero, size_t already_committed) {
+mi_decl_nodiscard static bool mi_arena_commit(mi_arena_t* arena, void* start, size_t size, bool* is_zero, size_t already_committed) {
   if (arena != NULL && arena->commit_fun != NULL) {
     return (*arena->commit_fun)(true, start, size, is_zero, arena->commit_fun_arg);
   }
@@ -677,7 +677,10 @@ static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_si
     commit_size = _mi_align_up(block_start + block_size, MI_PAGE_MIN_COMMIT_SIZE);
     if (commit_size > page_noguard_size) { commit_size = page_noguard_size; }
     bool is_zero;
-    mi_arena_commit( mi_memid_arena(memid), page, commit_size, &is_zero, 0);
+    if (!mi_arena_commit( mi_memid_arena(memid), page, commit_size, &is_zero, 0)) {
+      _mi_arenas_free(page, alloc_size, memid);
+      return NULL;
+    }
     if (!memid.initially_zero && !is_zero) {
       _mi_memzero_aligned(page, commit_size);
     }
