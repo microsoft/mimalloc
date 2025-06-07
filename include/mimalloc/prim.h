@@ -59,7 +59,7 @@ int _mi_prim_commit(void* addr, size_t size, bool* is_zero);
 // pre: needs_recommit != NULL
 int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit);
 
-// Reset memory. The range keeps being accessible but the content might be reset.
+// Reset memory. The range keeps being accessible but the content might be reset to zero at any moment.
 // Returns error code or 0 on success.
 int _mi_prim_reset(void* addr, size_t size);
 

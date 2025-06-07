@@ -188,14 +188,9 @@ void* _mi_arena_meta_zalloc(size_t size, mi_memid_t* memid) {
   if (p != NULL) return p;
 
   // or fall back to the OS
-  p = _mi_os_alloc(size, memid);
+  p = _mi_os_zalloc(size, memid);
   if (p == NULL) return NULL;
 
-  // zero the OS memory if needed
-  if (!memid->initially_zero) {
-    _mi_memzero_aligned(p, size);
-    memid->initially_zero = true;
-  }
   return p;
 }
 

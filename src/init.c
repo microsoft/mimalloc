@@ -298,7 +298,6 @@ static _Atomic(mi_thread_data_t*) td_cache[TD_CACHE_SIZE];
 
 static mi_thread_data_t* mi_thread_data_zalloc(void) {
   // try to find thread metadata in the cache
-  bool is_zero = false;
   mi_thread_data_t* td = NULL;
   for (int i = 0; i < TD_CACHE_SIZE; i++) {
     td = mi_atomic_load_ptr_relaxed(mi_thread_data_t, &td_cache[i]);
@@ -306,32 +305,25 @@ static mi_thread_data_t* mi_thread_data_zalloc(void) {
       // found cached allocation, try use it
       td = mi_atomic_exchange_ptr_acq_rel(mi_thread_data_t, &td_cache[i], NULL);
       if (td != NULL) {
-        break;
+        _mi_memzero(td, offsetof(mi_thread_data_t,memid));
+        return td;
       }
     }
   }
 
   // if that fails, allocate as meta data
+  mi_memid_t memid;
+  td = (mi_thread_data_t*)_mi_os_zalloc(sizeof(mi_thread_data_t), &memid);
   if (td == NULL) {
-    mi_memid_t memid;
-    td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid);
+    // if this fails, try once more. (issue #257)
+    td = (mi_thread_data_t*)_mi_os_zalloc(sizeof(mi_thread_data_t), &memid);
     if (td == NULL) {
-      // if this fails, try once more. (issue #257)
-      td = (mi_thread_data_t*)_mi_os_alloc(sizeof(mi_thread_data_t), &memid);
-      if (td == NULL) {
-        // really out of memory
-        _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
-      }
-    }
-    if (td != NULL) {
-      td->memid = memid;
-      is_zero = memid.initially_zero;
+      // really out of memory
+      _mi_error_message(ENOMEM, "unable to allocate thread local heap metadata (%zu bytes)\n", sizeof(mi_thread_data_t));
+      return NULL;
     }
   }
-
-  if (td != NULL && !is_zero) {
-    _mi_memzero_aligned(td, offsetof(mi_thread_data_t,memid));
-  }
+  td->memid = memid;  
   return td;
 }
 

@@ -154,6 +154,7 @@ void        _mi_heap_guarded_init(mi_heap_t* heap);
 // os.c
 void        _mi_os_init(void);                                            // called from process init
 void*       _mi_os_alloc(size_t size, mi_memid_t* memid);
+void*       _mi_os_zalloc(size_t size, mi_memid_t* memid);
 void        _mi_os_free(void* p, size_t size, mi_memid_t memid);
 void        _mi_os_free_ex(void* p, size_t size, bool still_committed, mi_memid_t memid);
 
