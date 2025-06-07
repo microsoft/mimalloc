@@ -434,6 +434,7 @@ int _mi_prim_commit(void* start, size_t size, bool* is_zero) {
 }
 
 int _mi_prim_reuse(void* start, size_t size) {
+  MI_UNUSED(start); MI_UNUSED(size);
   #if defined(__APPLE__) && defined(MADV_FREE_REUSE)
   return unix_madvise(start, size, MADV_FREE_REUSE);
   #endif
