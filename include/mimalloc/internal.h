@@ -64,7 +64,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_align(a)
-#define mi_decl_noreturn        
+#define mi_decl_noreturn
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
@@ -152,9 +152,8 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 
 // init.c
 extern mi_decl_hidden mi_decl_cache_align const mi_page_t  _mi_page_empty;
-void          _mi_process_load(void);
-
-void mi_cdecl _mi_process_done(void);
+void          _mi_auto_process_init(void);
+void mi_cdecl _mi_auto_process_done(void) mi_attr_noexcept;
 bool          _mi_is_redirected(void);
 bool          _mi_allocator_init(const char** message);
 void          _mi_allocator_done(void);

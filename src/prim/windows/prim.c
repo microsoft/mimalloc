@@ -657,7 +657,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 //----------------------------------------------------------------
 
 #if MI_WIN_USE_FIXED_TLS==1
-mi_decl_cache_align size_t _mi_win_tls_offset = 0;  
+mi_decl_cache_align size_t _mi_win_tls_offset = 0;
 #endif
 
 //static void mi_debug_out(const char* s) {
@@ -678,14 +678,14 @@ static void mi_win_tls_init(DWORD reason) {
     #endif
     #if MI_HAS_TLS_SLOT >= 2  // we must initialize the TLS slot before any allocation
     if (mi_prim_get_default_heap() == NULL) {
-      _mi_heap_set_default_direct((mi_heap_t*)&_mi_heap_empty);  
+      _mi_heap_set_default_direct((mi_heap_t*)&_mi_heap_empty);
       #if MI_DEBUG && MI_WIN_USE_FIXED_TLS==1
       void* const p = TlsGetValue((DWORD)(_mi_win_tls_offset / sizeof(void*)));
       mi_assert_internal(p == (void*)&_mi_heap_empty);
-      #endif  
+      #endif
     }
-    #endif  
-  }  
+    #endif
+  }
 }
 
 static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
@@ -693,10 +693,10 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   MI_UNUSED(module);
   mi_win_tls_init(reason);
   if (reason==DLL_PROCESS_ATTACH) {
-    _mi_process_load();
+    _mi_auto_process_init();
   }
   else if (reason==DLL_PROCESS_DETACH) {
-    _mi_process_done();
+    _mi_auto_process_done();
   }
   else if (reason==DLL_THREAD_DETACH && !_mi_is_redirected()) {
     _mi_thread_done(NULL);
@@ -708,7 +708,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
   // Windows DLL: easy to hook into process_init and thread_done
-  BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {    
+  BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     mi_win_main((PVOID)inst,reason,reserved);
     return TRUE;
   }
@@ -786,7 +786,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 
     static int mi_process_attach(void) {
       mi_win_main(NULL,DLL_PROCESS_ATTACH,NULL);
-      atexit(&_mi_process_done);
+      atexit(&_mi_auto_process_done);
       return 0;
     }
     typedef int(*mi_crt_callback_t)(void);

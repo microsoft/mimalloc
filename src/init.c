@@ -627,7 +627,7 @@ mi_decl_nodiscard bool mi_is_redirected(void) mi_attr_noexcept {
 }
 
 // Called once by the process loader from `src/prim/prim.c`
-void _mi_process_load(void) {
+void _mi_auto_process_init(void) {
   mi_heap_main_init();
   #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
   volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
@@ -746,8 +746,8 @@ void mi_process_init(void) mi_attr_noexcept {
   }
 }
 
-// Called when the process is done (through `at_exit`)
-void mi_cdecl _mi_process_done(void) {
+// Called when the process is done (cdecl as it is used with `at_exit` on some platforms)
+void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   // only shutdown if we were initialized
   if (!_mi_process_is_initialized) return;
   // ensure we are called once
@@ -791,3 +791,7 @@ void mi_cdecl _mi_process_done(void) {
   os_preloading = true; // don't call the C runtime anymore
 }
 
+void mi_cdecl _mi_auto_process_done(void) mi_attr_noexcept {
+  if (_mi_option_get_fast(mi_option_destroy_on_exit)>1) return;
+  mi_process_done();
+}
