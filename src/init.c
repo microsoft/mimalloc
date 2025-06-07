@@ -642,7 +642,11 @@ void mi_process_init(void) mi_attr_noexcept {
   }
 }
 
-// Called when the process is done (through `at_exit`)
+void mi_cdecl mi_process_done(void) mi_attr_noexcept {
+  _mi_process_done();
+}
+
+// Called when the process is done (cdecl as it is used with `at_exit` on some platforms)
 void mi_cdecl _mi_process_done(void) {
   // only shutdown if we were initialized
   if (!_mi_process_is_initialized) return;
