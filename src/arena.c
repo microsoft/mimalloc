@@ -270,12 +270,12 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
   else if (commit) {
     // commit requested, but the range may not be committed as a whole: ensure it is committed now
     memid->initially_committed = true;
+    const size_t commit_size = mi_arena_block_size(needed_bcount);      
     bool any_uncommitted;
     size_t already_committed = 0;
     _mi_bitmap_claim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index, &any_uncommitted, &already_committed);
     if (any_uncommitted) {
       mi_assert_internal(already_committed < needed_bcount);
-      const size_t commit_size = mi_arena_block_size(needed_bcount);
       const size_t stat_commit_size = commit_size - mi_arena_block_size(already_committed);
       bool commit_zero = false;
       if (!_mi_os_commit_ex(p, commit_size, &commit_zero, stat_commit_size)) {
@@ -284,6 +284,10 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
       else {
         if (commit_zero) { memid->initially_zero = true; }
       }
+    }
+    else {
+      // all are already committed: signal that we are reusing memory in case it was purged before
+      _mi_os_reuse( p, commit_size );
     }
   }
   else {
