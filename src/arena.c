@@ -216,12 +216,13 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
       }
     }
     else {
-      // already fully commited.
+      // already fully committed.
+      _mi_os_reuse(p, mi_size_of_slices(slice_count));
       // if the OS has overcommit, and this is the first time we access these pages, then
       // count the commit now (as at arena reserve we didn't count those commits as these are on-demand)
       if (_mi_os_has_overcommit() && touched_slices > 0) {
         mi_subproc_stat_increase( arena->subproc, committed, mi_size_of_slices(touched_slices));
-      }
+      }      
     }
     // tool support
     if (memid->initially_zero) {

@@ -149,6 +149,11 @@ int _mi_prim_reset(void* addr, size_t size) {
   return 0;
 }
 
+int _mi_prim_reuse(void* addr, size_t size) {
+  MI_UNUSED(addr); MI_UNUSED(size);
+  return 0;
+}
+
 int _mi_prim_protect(void* addr, size_t size, bool protect) {
   MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(protect);
   return 0;
