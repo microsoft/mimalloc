@@ -443,18 +443,17 @@ int _mi_prim_reuse(void* start, size_t size) {
 
 int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   int err = 0;
-  #if !MI_DEBUG && MI_SECURE<=2
-    *needs_recommit = false;
-    #if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+  #if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
     // decommit on macOS: use MADV_FREE_REUSABLE as it does immediate rss accounting (issue #1097)
     err = unix_madvise(start, size, MADV_FREE_REUSABLE);
-    #else
+    if (err) { err = unix_madvise(start, size, MADV_DONTNEED); }
+  #else
     // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
     err = unix_madvise(start, size, MADV_DONTNEED);
-    #endif  
+  #endif  
+  #if !MI_DEBUG && MI_SECURE<=2
+    *needs_recommit = false;
   #else
-    // note: don't use MADV_FREE_REUSABLE as the range may contain protected areas
-    err = unix_madvise(start, size, MADV_DONTNEED);
     *needs_recommit = true;
     mprotect(start, size, PROT_NONE);
   #endif
@@ -470,10 +469,11 @@ int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
 
 int _mi_prim_reset(void* start, size_t size) {
   int err = 0;
-  #if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
-  // on macOS we try to use MADV_FREE_REUSABLE as it seems the fastest
+
+  // on macOS can use MADV_FREE_REUSABLE (but we disable this for now as it seems slower)
+  #if 0 && defined(__APPLE__) && defined(MADV_FREE_REUSABLE) 
   err = unix_madvise(start, size, MADV_FREE_REUSABLE);  
-  if (err == 0) return 0;
+  if (err==0) return 0;
   // fall through
   #endif
 
