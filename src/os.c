@@ -380,8 +380,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
 
   mi_assert_internal(memid->mem.os.size >= size);
   mi_assert_internal(_mi_is_aligned(p,alignment));
-  if (commit) { mi_assert_internal(memid->initially_committed); }
-  if (memid->initially_zero) { mi_assert_internal(memid->initially_committed); }
+  if (commit) { mi_assert_internal(memid->initially_committed); }  
   return p;
 }
 
