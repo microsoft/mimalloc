@@ -188,6 +188,7 @@ void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t me
   if (mi_memkind_is_os(memid.memkind)) {
     size_t csize = memid.mem.os.size;
     if (csize==0) { csize = _mi_os_good_alloc_size(size); }
+    mi_assert_internal(csize >= size);
     size_t commit_size = (still_committed ? csize : 0);
     void* base = addr;
     // different base? (due to alignment)
@@ -351,9 +352,11 @@ void* _mi_os_alloc(size_t size, mi_memid_t* memid) {
   bool os_is_large = false;
   bool os_is_zero  = false;
   void* p = mi_os_prim_alloc(size, 0, true, false, &os_is_large, &os_is_zero);
-  if (p != NULL) {
-    *memid = _mi_memid_create_os(p, size, true, os_is_zero, os_is_large);
-  }
+  if (p == NULL) return NULL;
+
+  *memid = _mi_memid_create_os(p, size, true, os_is_zero, os_is_large);  
+  mi_assert_internal(memid->mem.os.size >= size);
+  mi_assert_internal(memid->initially_committed);
   return p;
 }
 
@@ -368,25 +371,39 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   bool os_is_large = false;
   bool os_is_zero  = false;
   void* os_base = NULL;
-  void* p = mi_os_prim_alloc_aligned(size, alignment, commit, allow_large, &os_is_large, &os_is_zero, &os_base);
-  if (p != NULL) {
-    *memid = _mi_memid_create_os(p, size, commit, os_is_zero, os_is_large);
-    memid->mem.os.base = os_base;
-    memid->mem.os.size += ((uint8_t*)p - (uint8_t*)os_base);  // todo: return from prim_alloc_aligned?
-  }
+  void* p = mi_os_prim_alloc_aligned(size, alignment, commit, allow_large, &os_is_large, &os_is_zero, &os_base );
+  if (p == NULL) return NULL;
+
+  *memid = _mi_memid_create_os(p, size, commit, os_is_zero, os_is_large);
+  memid->mem.os.base = os_base;
+  memid->mem.os.size += ((uint8_t*)p - (uint8_t*)os_base);  // todo: return from prim_alloc_aligned?
+
+  mi_assert_internal(memid->mem.os.size >= size);
+  mi_assert_internal(_mi_is_aligned(p,alignment));
+  mi_assert_internal(!commit || memid->initially_committed);
+  mi_assert_internal(!memid->initially_zero || memid->initially_committed);
   return p;
 }
 
-void* _mi_os_zalloc(size_t size, mi_memid_t* memid) {
-  void* p = _mi_os_alloc(size, memid);
-  if (p == NULL) return NULL;
 
-  // zero the OS memory if needed
-  if (!memid->initially_zero) {
-    _mi_memzero_aligned(p, size);
-    memid->initially_zero = true;
+mi_decl_nodiscard static void* mi_os_ensure_zero(void* p, size_t size, mi_memid_t* memid) {
+  if (p==NULL || size==0 || memid->initially_zero) return p;
+  if (!memid->initially_committed) {
+    bool is_zero = false;
+    if (!_mi_os_commit(p, size, &is_zero)) {
+      _mi_os_free(p, size, *memid);
+      return NULL;
+    }
+    memid->initially_committed = true;
   }
+  _mi_memzero_aligned(p,size);
+  memid->initially_zero = true;
   return p;
+}
+
+void*  _mi_os_zalloc(size_t size, mi_memid_t* memid) {
+  void* p = _mi_os_alloc(size,memid);
+  return mi_os_ensure_zero(p, size, memid);
 }
 
 /* -----------------------------------------------------------

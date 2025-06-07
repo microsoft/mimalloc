@@ -297,13 +297,10 @@ static mi_page_t** mi_page_map_ensure_submap_at(size_t idx) {
     mi_memid_t memid;
     mi_page_t** expect = sub;
     const size_t submap_size = MI_PAGE_MAP_SUB_SIZE;
-    sub = (mi_page_t**)_mi_os_alloc(submap_size, &memid);
+    sub = (mi_page_t**)_mi_os_zalloc(submap_size, &memid);
     if (sub == NULL) {
       _mi_error_message(EFAULT, "internal error: unable to extend the page map\n");
       return NULL;
-    }
-    if (!memid.initially_zero) {
-      _mi_memzero_aligned(sub, submap_size);
     }
     if (!mi_atomic_cas_ptr_strong_acq_rel(mi_page_t*, &_mi_page_map[idx], &expect, sub)) {
       // another thread already allocated it.. free and continue
