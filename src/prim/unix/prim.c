@@ -433,13 +433,27 @@ int _mi_prim_commit(void* start, size_t size, bool* is_zero) {
   return err;
 }
 
+int _mi_prim_reuse(void* start, size_t size) {
+  #if defined(__APPLE__) && defined(MADV_FREE_REUSE)
+  return unix_madvise(start, size, MADV_FREE_REUSE);
+  #endif
+  return 0;
+}
+
 int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   int err = 0;
-  // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
-  err = unix_madvise(start, size, MADV_DONTNEED);
   #if !MI_DEBUG && MI_SECURE<=2
     *needs_recommit = false;
+    #if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+    // decommit on macOS: use MADV_FREE_REUSABLE as it does immediate rss accounting (issue #1097)
+    err = unix_madvise(start, size, MADV_FREE_REUSABLE);
+    #else
+    // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
+    err = unix_madvise(start, size, MADV_DONTNEED);
+    #endif  
   #else
+    // note: don't use MADV_FREE_REUSABLE as the range may contain protected areas
+    err = unix_madvise(start, size, MADV_DONTNEED);
     *needs_recommit = true;
     mprotect(start, size, PROT_NONE);
   #endif
@@ -454,14 +468,21 @@ int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
 }
 
 int _mi_prim_reset(void* start, size_t size) {
-  // We try to use `MADV_FREE` as that is the fastest. A drawback though is that it
+  int err = 0;
+  #if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+  // on macOS we try to use MADV_FREE_REUSABLE as it seems the fastest
+  err = unix_madvise(start, size, MADV_FREE_REUSABLE);  
+  if (err == 0) return 0;
+  // fall through
+  #endif
+
+  #if defined(MADV_FREE)
+  // Otherwise, we try to use `MADV_FREE` as that is the fastest. A drawback though is that it
   // will not reduce the `rss` stats in tools like `top` even though the memory is available
   // to other processes. With the default `MIMALLOC_PURGE_DECOMMITS=1` we ensure that by
   // default `MADV_DONTNEED` is used though.
-  #if defined(MADV_FREE)
   static _Atomic(size_t) advice = MI_ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
-  int err;
   while ((err = unix_madvise(start, size, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
   if (err != 0 && errno == EINVAL && oadvice == MADV_FREE) {
     // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
@@ -469,7 +490,7 @@ int _mi_prim_reset(void* start, size_t size) {
     err = unix_madvise(start, size, MADV_DONTNEED);
   }
   #else
-  int err = unix_madvise(start, size, MADV_DONTNEED);
+  err = unix_madvise(start, size, MADV_DONTNEED);
   #endif
   return err;
 }

@@ -167,6 +167,7 @@ bool        _mi_os_decommit(void* addr, size_t size);
 bool        _mi_os_unprotect(void* addr, size_t size);
 bool        _mi_os_purge(void* p, size_t size);
 bool        _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stat_size);
+void        _mi_os_reuse(void* p, size_t size);
 mi_decl_nodiscard bool _mi_os_commit(void* p, size_t size, bool* is_zero);
 mi_decl_nodiscard bool _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size);
 mi_decl_nodiscard bool _mi_os_protect(void* addr, size_t size);
