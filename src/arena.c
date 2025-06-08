@@ -216,20 +216,21 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
       // now actually commit
       bool commit_zero = false;
       if (!_mi_os_commit_ex(p, mi_size_of_slices(slice_count), &commit_zero, mi_size_of_slices(slice_count - already_committed_count))) {
-        memid->initially_committed = false;
+        // if the commit fails, roll back and return NULL
+        _mi_arenas_free(p, mi_size_of_slices(slice_count), *memid); // this will decommit as well (if partially committed)
+        return NULL;
       }
-      else {
-        // committed
-        if (commit_zero) { memid->initially_zero = true; }
-        #if MI_DEBUG > 1
-        if (memid->initially_zero) {
-          if (!mi_mem_is_zero(p, mi_size_of_slices(slice_count))) {
-            _mi_error_message(EFAULT, "interal error: arena allocation was not zero-initialized!\n");
-            memid->initially_zero = false;
-          }
+      
+      // committed
+      if (commit_zero) { memid->initially_zero = true; }
+      #if MI_DEBUG > 1
+      if (memid->initially_zero) {
+        if (!mi_mem_is_zero(p, mi_size_of_slices(slice_count))) {
+          _mi_error_message(EFAULT, "interal error: arena allocation was not zero-initialized!\n");
+          memid->initially_zero = false;
         }
-        #endif
       }
+      #endif    
     }
     else {
       // already fully commited.
