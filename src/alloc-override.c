@@ -71,24 +71,20 @@ typedef void* mi_nothrow_t;
   #define MI_INTERPOSE_FUN(oldfun,newfun) { (const void*)&newfun, (const void*)&oldfun }
   #define MI_INTERPOSE_MI(fun)            MI_INTERPOSE_FUN(fun,mi_##fun)
 
-  __attribute__((used)) static struct mi_interpose_s _mi_interposes[]  __attribute__((section("__DATA, __interpose"))) =
+  #define MI_INTERPOSE_DECLS(name)        __attribute__((used)) static struct mi_interpose_s name[]  __attribute__((section("__DATA, __interpose")))
+
+  MI_INTERPOSE_DECLS(_mi_interposes) =
   {
     MI_INTERPOSE_MI(malloc),
     MI_INTERPOSE_MI(calloc),
     MI_INTERPOSE_MI(realloc),
     MI_INTERPOSE_MI(strdup),
-    #if defined(MAC_OS_X_VERSION_10_7) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
-    MI_INTERPOSE_MI(strndup),
-    #endif
     MI_INTERPOSE_MI(realpath),
     MI_INTERPOSE_MI(posix_memalign),
     MI_INTERPOSE_MI(reallocf),
     MI_INTERPOSE_MI(valloc),
     MI_INTERPOSE_FUN(malloc_size,mi_malloc_size_checked),
     MI_INTERPOSE_MI(malloc_good_size),
-    #if defined(MAC_OS_X_VERSION_10_15) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_15
-    MI_INTERPOSE_MI(aligned_alloc),
-    #endif
     #ifdef MI_OSX_ZONE
     // we interpose malloc_default_zone in alloc-override-osx.c so we can use mi_free safely
     MI_INTERPOSE_MI(free),
@@ -98,6 +94,12 @@ typedef void* mi_nothrow_t;
     MI_INTERPOSE_FUN(free,mi_cfree), // use safe free that checks if pointers are from us
     MI_INTERPOSE_FUN(vfree,mi_cfree),
     #endif
+  };
+  MI_INTERPOSE_DECLS(_mi_interposes_10_7) __OSX_AVAILABLE(10.7) = {
+    MI_INTERPOSE_MI(strndup),
+  };
+  MI_INTERPOSE_DECLS(_mi_interposes_10_15) __OSX_AVAILABLE(10.15) = {
+    MI_INTERPOSE_MI(aligned_alloc),
   };
 
   #ifdef __cplusplus
