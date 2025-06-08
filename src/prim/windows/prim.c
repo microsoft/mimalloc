@@ -12,6 +12,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim.h"
 #include <stdio.h>   // fputs, stderr
 
+// xbox has no console IO
+#if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM)
+#define MI_HAS_CONSOLE_IO
+#endif
 
 //---------------------------------------------
 // Dynamically bind Windows API points for portability
@@ -45,22 +49,30 @@ typedef struct MI_MEM_ADDRESS_REQUIREMENTS_S {
 #define MI_MEM_EXTENDED_PARAMETER_NONPAGED_HUGE   0x00000010
 
 #include <winternl.h>
-typedef PVOID    (__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MI_MEM_EXTENDED_PARAMETER*, ULONG);
-typedef NTSTATUS (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*, ULONG, ULONG, MI_MEM_EXTENDED_PARAMETER*, ULONG);
+typedef PVOID (__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MI_MEM_EXTENDED_PARAMETER*, ULONG);
+typedef LONG  (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*, ULONG, ULONG, MI_MEM_EXTENDED_PARAMETER*, ULONG);  // avoid NTSTATUS as it is not defined on xbox (pr #1084)
 static PVirtualAlloc2 pVirtualAlloc2 = NULL;
 static PNtAllocateVirtualMemoryEx pNtAllocateVirtualMemoryEx = NULL;
 
-// Similarly, GetNumaProcessorNodeEx is only supported since Windows 7
+// Similarly, GetNumaProcessorNodeEx is only supported since Windows 7  (and GetNumaNodeProcessorMask is not supported on xbox)
 typedef struct MI_PROCESSOR_NUMBER_S { WORD Group; BYTE Number; BYTE Reserved; } MI_PROCESSOR_NUMBER;
 
 typedef VOID (__stdcall *PGetCurrentProcessorNumberEx)(MI_PROCESSOR_NUMBER* ProcNumber);
 typedef BOOL (__stdcall *PGetNumaProcessorNodeEx)(MI_PROCESSOR_NUMBER* Processor, PUSHORT NodeNumber);
 typedef BOOL (__stdcall* PGetNumaNodeProcessorMaskEx)(USHORT Node, PGROUP_AFFINITY ProcessorMask);
 typedef BOOL (__stdcall *PGetNumaProcessorNode)(UCHAR Processor, PUCHAR NodeNumber);
+typedef BOOL (__stdcall* PGetNumaNodeProcessorMask)(UCHAR Node, PULONGLONG ProcessorMask);
+typedef BOOL (__stdcall* PGetNumaHighestNodeNumber)(PULONG Node);
 static PGetCurrentProcessorNumberEx pGetCurrentProcessorNumberEx = NULL;
 static PGetNumaProcessorNodeEx      pGetNumaProcessorNodeEx = NULL;
 static PGetNumaNodeProcessorMaskEx  pGetNumaNodeProcessorMaskEx = NULL;
 static PGetNumaProcessorNode        pGetNumaProcessorNode = NULL;
+static PGetNumaNodeProcessorMask    pGetNumaNodeProcessorMask = NULL;
+static PGetNumaHighestNodeNumber    pGetNumaHighestNodeNumber = NULL;
+
+// Not available on xbox
+typedef SIZE_T(__stdcall* PGetLargePageMinimum)(VOID);
+static PGetLargePageMinimum pGetLargePageMinimum = NULL;
 
 // Available after Windows XP
 typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
@@ -74,6 +86,7 @@ static bool win_enable_large_os_pages(size_t* large_page_size)
   static bool large_initialized = false;
   if (large_initialized) return (_mi_os_large_page_size() > 0);
   large_initialized = true;
+  if (pGetLargePageMinimum==NULL) return false;  // no large page support (xbox etc.)
 
   // Try to see if large OS pages are supported
   // To use large pages on Windows, we first need access permission
@@ -92,8 +105,8 @@ static bool win_enable_large_os_pages(size_t* large_page_size)
       if (ok) {
         err = GetLastError();
         ok = (err == ERROR_SUCCESS);
-        if (ok && large_page_size != NULL) {
-          *large_page_size = GetLargePageMinimum();
+        if (ok && large_page_size != NULL && pGetLargePageMinimum != NULL) {
+          *large_page_size = (*pGetLargePageMinimum)();
         }
       }
     }
@@ -149,6 +162,9 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     pGetNumaProcessorNodeEx = (PGetNumaProcessorNodeEx)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNodeEx");
     pGetNumaNodeProcessorMaskEx = (PGetNumaNodeProcessorMaskEx)(void (*)(void))GetProcAddress(hDll, "GetNumaNodeProcessorMaskEx");
     pGetNumaProcessorNode = (PGetNumaProcessorNode)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNode");
+    pGetNumaNodeProcessorMask = (PGetNumaNodeProcessorMask)(void (*)(void))GetProcAddress(hDll, "GetNumaNodeProcessorMask");
+    pGetNumaHighestNodeNumber = (PGetNumaHighestNodeNumber)(void (*)(void))GetProcAddress(hDll, "GetNumaHighestNodeNumber");
+    pGetLargePageMinimum = (PGetLargePageMinimum)(void (*)(void))GetProcAddress(hDll, "GetLargePageMinimum");
     // Get physical memory (not available on XP, so check dynamically)
     PGetPhysicallyInstalledSystemMemory pGetPhysicallyInstalledSystemMemory = (PGetPhysicallyInstalledSystemMemory)(void (*)(void))GetProcAddress(hDll,"GetPhysicallyInstalledSystemMemory");
     if (pGetPhysicallyInstalledSystemMemory != NULL) {
@@ -388,7 +404,7 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
     }
     SIZE_T psize = size;
     void* base = hint_addr;
-    NTSTATUS err = (*pNtAllocateVirtualMemoryEx)(GetCurrentProcess(), &base, &psize, flags, PAGE_READWRITE, params, param_count);
+    LONG err = (*pNtAllocateVirtualMemoryEx)(GetCurrentProcess(), &base, &psize, flags, PAGE_READWRITE, params, param_count);
     if (err == 0 && base != NULL) {
       return base;
     }
@@ -442,9 +458,11 @@ size_t _mi_prim_numa_node(void) {
 
 size_t _mi_prim_numa_node_count(void) {
   ULONG numa_max = 0;
-  GetNumaHighestNodeNumber(&numa_max);
+  if (pGetNumaHighestNodeNumber!=NULL) {
+    (*pGetNumaHighestNodeNumber)(&numa_max);
+  }
   // find the highest node number that has actual processors assigned to it. Issue #282
-  while(numa_max > 0) {
+  while (numa_max > 0) {
     if (pGetNumaNodeProcessorMaskEx != NULL) {
       // Extended API is supported
       GROUP_AFFINITY affinity;
@@ -455,8 +473,10 @@ size_t _mi_prim_numa_node_count(void) {
     else {
       // Vista or earlier, use older API that is limited to 64 processors.
       ULONGLONG mask;
-      if (GetNumaNodeProcessorMask((UCHAR)numa_max, &mask)) {
-        if (mask != 0) break; // found the maximum non-empty node
+      if (pGetNumaNodeProcessorMask != NULL) {
+        if ((*pGetNumaNodeProcessorMask)((UCHAR)numa_max, &mask)) {
+          if (mask != 0) break; // found the maximum non-empty node
+        }
       };
     }
     // max node was invalid or had no processor assigned, try again
@@ -546,17 +566,21 @@ void _mi_prim_out_stderr( const char* msg )
   if (!_mi_preloading()) {
     // _cputs(msg);  // _cputs cannot be used as it aborts when failing to lock the console
     static HANDLE hcon = INVALID_HANDLE_VALUE;
-    static bool hconIsConsole;
+    static bool hconIsConsole = false;
     if (hcon == INVALID_HANDLE_VALUE) {
-      CONSOLE_SCREEN_BUFFER_INFO sbi;
       hcon = GetStdHandle(STD_ERROR_HANDLE);
+      #ifdef MI_HAS_CONSOLE_IO
+      CONSOLE_SCREEN_BUFFER_INFO sbi;
       hconIsConsole = ((hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
+      #endif  
     }
     const size_t len = _mi_strlen(msg);
     if (len > 0 && len < UINT32_MAX) {
       DWORD written = 0;
       if (hconIsConsole) {
+        #ifdef MI_HAS_CONSOLE_IO
         WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
+        #endif      
       }
       else if (hcon != INVALID_HANDLE_VALUE) {
         // use direct write if stderr was redirected
