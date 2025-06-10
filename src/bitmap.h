@@ -219,6 +219,9 @@ bool _mi_bitmap_forall_set(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_a
 bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg);
 
 
+// Count all set bits in given range in the bitmap. (cannot cross chunks)
+size_t mi_bitmap_popcountN( mi_bitmap_t* bitmap, size_t idx, size_t n);
+
 /* ----------------------------------------------------------------------------
   Binned concurrent bitmap
   Assigns a size class to each chunk such that small blocks don't cause too

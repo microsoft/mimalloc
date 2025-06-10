@@ -256,6 +256,11 @@ static inline bool mi_bfield_atomic_is_xset_mask(mi_xset_t set, const _Atomic(mi
       else return mi_bfield_atomic_is_clear_mask(b, mask);
 }
 
+// Count bits in a mask
+static inline size_t mi_bfield_atomic_popcount_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask) {
+  const mi_bfield_t x = mi_atomic_load_relaxed(b);
+  return mi_bfield_popcount(x & mask);
+}
 
 
 /* --------------------------------------------------------------------------------
@@ -364,6 +369,38 @@ static inline bool mi_bchunk_clearN(mi_bchunk_t* chunk, size_t cidx, size_t n, b
   // if (n==MI_BFIELD_BITS) return mi_bchunk_clearX(chunk, cidx, maybe_all_clear);
   // TODO: implement mi_bchunk_xsetNX instead of setNX
   return mi_bchunk_xsetN_(MI_BIT_CLEAR, chunk, cidx, n, NULL, maybe_all_clear);
+}
+
+// Check if a sequence of `n` bits within a chunk are all set/cleared.
+// This can cross bfield's
+mi_decl_noinline static size_t mi_bchunk_popcountN_(mi_bchunk_t* chunk, size_t field_idx, size_t idx, size_t n) {
+  mi_assert_internal((field_idx*MI_BFIELD_BITS) + idx + n <= MI_BCHUNK_BITS);
+  size_t count = 0;
+  while (n > 0) {
+    size_t m = MI_BFIELD_BITS - idx;   // m is the bits to xset in this field
+    if (m > n) { m = n; }
+    mi_assert_internal(idx + m <= MI_BFIELD_BITS);
+    mi_assert_internal(field_idx < MI_BCHUNK_FIELDS);
+    const size_t mask = mi_bfield_mask(m, idx);
+    count += mi_bfield_atomic_popcount_mask(&chunk->bfields[field_idx], mask);
+    // next field
+    field_idx++;
+    idx = 0;
+    n -= m;
+  }
+  return count;
+}
+
+// Count set bits a sequence of `n` bits.
+static inline size_t mi_bchunk_popcountN(mi_bchunk_t* chunk, size_t cidx, size_t n) {
+  mi_assert_internal(cidx + n <= MI_BCHUNK_BITS);
+  mi_assert_internal(n>0);
+  if (n==0) return 0;
+  const size_t i = cidx / MI_BFIELD_BITS;
+  const size_t idx = cidx % MI_BFIELD_BITS;
+  if (n==1) { return (mi_bfield_atomic_is_set(&chunk->bfields[i], idx) ? 1 : 0); }
+  if (idx + n <= MI_BFIELD_BITS) { return mi_bfield_atomic_popcount_mask(&chunk->bfields[i], mi_bfield_mask(n, idx)); }
+  return mi_bchunk_popcountN_(chunk, i, idx, n);
 }
 
 
@@ -1108,6 +1145,20 @@ bool mi_bitmap_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
   const bool were_allset = mi_bchunk_clearN(&bitmap->chunks[chunk_idx], cidx, n, &maybe_all_clear);
   if (maybe_all_clear) { mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx); }
   return were_allset;
+}
+
+// Count bits set in a range of `n` bits.
+// `n` cannot cross chunk boundaries (and `n <= MI_BCHUNK_BITS`)!
+size_t mi_bitmap_popcountN( mi_bitmap_t* bitmap, size_t idx, size_t n) {
+  mi_assert_internal(n>0);
+  mi_assert_internal(n<=MI_BCHUNK_BITS);
+
+  const size_t chunk_idx = idx / MI_BCHUNK_BITS;
+  const size_t cidx = idx % MI_BCHUNK_BITS;
+  mi_assert_internal(cidx + n <= MI_BCHUNK_BITS);  // don't cross chunks (for now)
+  mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
+  if (cidx + n > MI_BCHUNK_BITS) { n = MI_BCHUNK_BITS - cidx; }  // paranoia
+  return mi_bchunk_popcountN(&bitmap->chunks[chunk_idx], cidx, n);
 }
 
 
