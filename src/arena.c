@@ -188,25 +188,26 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
   }
 
   // set commit state
-  if (commit) {
-    memid->initially_committed = true;
-
+  if (commit) {        
     // commit requested, but the range may not be committed as a whole: ensure it is committed now
-    if (!mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count)) {
-      // not fully committed: commit the full range and set the commit bits
-      // we set the bits first since we own these slices (they are no longer free)
-      size_t already_committed_count = 0;
-      mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed_count);
-      // now actually commit
+    const size_t already_committed = mi_bitmap_popcountN(arena->slices_committed, slice_index, slice_count);
+    if (already_committed < slice_count) {  
+      // not all committed, try to commit now
       bool commit_zero = false;
-      if (!mi_arena_commit(arena, p, mi_size_of_slices(slice_count), &commit_zero, mi_size_of_slices(slice_count - already_committed_count))) {
-        // if the commit fails, we roll back
-        _mi_arenas_free( p, mi_size_of_slices(slice_count), *memid);  // this will uncommit as well
+      if (!_mi_os_commit_ex(p, mi_size_of_slices(slice_count), &commit_zero, mi_size_of_slices(slice_count - already_committed))) {
+        // if the commit fails, release ownership, and return NULL;
+        // note: this does not roll back dirty bits but that is ok.
+        mi_bbitmap_setN(arena->slices_free, slice_index, slice_count);
         return NULL;
       }
+      if (commit_zero) { 
+        memid->initially_zero = true; 
+      }
+            
+      // set the commit bits 
+      mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, NULL);      
       
       // committed
-      if (commit_zero) { memid->initially_zero = true; }
       #if MI_DEBUG > 1
       if (memid->initially_zero) {
         if (!mi_mem_is_zero(p, mi_size_of_slices(slice_count))) {
@@ -225,6 +226,10 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
         mi_subproc_stat_increase( arena->subproc, committed, mi_size_of_slices(touched_slices));
       }      
     }
+    
+    mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
+    memid->initially_committed = true;
+    
     // tool support
     if (memid->initially_zero) {
       mi_track_mem_defined(p, slice_count * MI_ARENA_SLICE_SIZE);
