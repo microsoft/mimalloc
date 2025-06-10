@@ -49,6 +49,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #if !defined(MAC_OS_X_VERSION_10_7)
   #define MAC_OS_X_VERSION_10_7   1070
   #endif
+  #include <sys/sysctl.h>
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
   #include <sys/param.h>
   #if __FreeBSD_version >= 1200000
@@ -119,43 +120,64 @@ static inline int mi_prim_access(const char *fpath, int mode) {
 
 static bool unix_detect_overcommit(void) {
   bool os_overcommit = true;
-#if defined(__linux__)
-  int fd = mi_prim_open("/proc/sys/vm/overcommit_memory", O_RDONLY);
-	if (fd >= 0) {
-    char buf[32];
-    ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
-    mi_prim_close(fd);
-    // <https://www.kernel.org/doc/Documentation/vm/overcommit-accounting>
-    // 0: heuristic overcommit, 1: always overcommit, 2: never overcommit (ignore NORESERVE)
-    if (nread >= 1) {
-      os_overcommit = (buf[0] == '0' || buf[0] == '1');
+  #if defined(__linux__)
+    int fd = mi_prim_open("/proc/sys/vm/overcommit_memory", O_RDONLY);
+    if (fd >= 0) {
+      char buf[32];
+      ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+      mi_prim_close(fd);
+      // <https://www.kernel.org/doc/Documentation/vm/overcommit-accounting>
+      // 0: heuristic overcommit, 1: always overcommit, 2: never overcommit (ignore NORESERVE)
+      if (nread >= 1) {
+        os_overcommit = (buf[0] == '0' || buf[0] == '1');
+      }
     }
-  }
-#elif defined(__FreeBSD__)
-  int val = 0;
-  size_t olen = sizeof(val);
-  if (sysctlbyname("vm.overcommit", &val, &olen, NULL, 0) == 0) {
-    os_overcommit = (val != 0);
-  }
-#else
-  // default: overcommit is true
-#endif
+  #elif defined(__FreeBSD__)
+    int val = 0;
+    size_t olen = sizeof(val);
+    if (sysctlbyname("vm.overcommit", &val, &olen, NULL, 0) == 0) {
+      os_overcommit = (val != 0);
+    }
+  #else
+    // default: overcommit is true
+  #endif
   return os_overcommit;
+}
+
+// try to detect the physical memory dynamically (if possible)
+static void unix_detect_physical_memory( size_t page_size, size_t* physical_memory_in_kib ) {
+  #if defined(CTL_HW) && (defined(HW_PHYSMEM64) || defined(HW_MEMSIZE))  // freeBSD, macOS
+    MI_UNUSED(page_size);
+    int64_t physical_memory = 0;
+    size_t length = sizeof(int64_t);
+    #if defined(HW_PHYSMEM64)
+    int mib[2] = { CTL_HW, HW_PHYSMEM64 };
+    #else
+    int mib[2] = { CTL_HW, HW_MEMSIZE };
+    #endif
+    const int err = sysctl(mib, 2, &physical_memory, &length, NULL, 0);
+    if (err == 0 && physical_memory > 0) {
+      const int64_t phys_in_kib = physical_memory / MI_KiB;
+      if (phys_in_kib > 0 && (uint64_t)phys_in_kib <= SIZE_MAX) {
+        *physical_memory_in_kib = (size_t)phys_in_kib;
+      }  
+    }
+  #elif defined(_SC_PHYS_PAGES)   // linux
+    const long pphys = sysconf(_SC_PHYS_PAGES);
+    const size_t psize_in_kib = page_size / MI_KiB;
+    if (psize_in_kib > 0 && pphys > 0 && (unsigned long)pphys < SIZE_MAX && (size_t)pphys <= (SIZE_MAX/psize_in_kib)) {
+      *physical_memory_in_kib = (size_t)pphys * psize_in_kib;
+    }  
+  #endif
 }
 
 void _mi_prim_mem_init( mi_os_mem_config_t* config )
 {
   long psize = sysconf(_SC_PAGESIZE);
-  if (psize > 0) {
+  if (psize > 0 && (unsigned long)psize < SIZE_MAX) {
     config->page_size = (size_t)psize;
     config->alloc_granularity = (size_t)psize;
-    #if defined(_SC_PHYS_PAGES)
-    long pphys = sysconf(_SC_PHYS_PAGES);
-    const size_t psize_in_kib = (size_t)psize / MI_KiB;
-    if (psize_in_kib > 0 && pphys > 0 && (size_t)pphys <= (SIZE_MAX/psize_in_kib)) {
-      config->physical_memory_in_kib = (size_t)pphys * psize_in_kib;
-    }
-    #endif
+    unix_detect_physical_memory(config->page_size, &config->physical_memory_in_kib);
   }
   config->large_page_size = MI_UNIX_LARGE_PAGE_SIZE;
   config->has_overcommit = unix_detect_overcommit();
