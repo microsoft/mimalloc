@@ -32,6 +32,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if defined(__linux__)
   #include <features.h>
   #include <sys/prctl.h>    // THP disable, PR_SET_VMA
+  #include <sys/sysinfo.h>  // sysinfo
   #if defined(__GLIBC__) && !defined(PR_SET_VMA)
   #include <linux/prctl.h>
   #endif
@@ -156,18 +157,25 @@ static void unix_detect_physical_memory( size_t page_size, size_t* physical_memo
     int mib[2] = { CTL_HW, HW_MEMSIZE };
     #endif
     const int err = sysctl(mib, 2, &physical_memory, &length, NULL, 0);
-    if (err == 0 && physical_memory > 0) {
+    if (err==0 && physical_memory > 0) {
       const int64_t phys_in_kib = physical_memory / MI_KiB;
       if (phys_in_kib > 0 && (uint64_t)phys_in_kib <= SIZE_MAX) {
         *physical_memory_in_kib = (size_t)phys_in_kib;
-      }  
+      }
     }
-  #elif defined(_SC_PHYS_PAGES)   // linux
+  #elif defined(__linux__)
+    MI_UNUSED(page_size);
+    struct sysinfo info; _mi_memzero_var(info);
+    const int err = sysinfo(&info);
+    if (err==0 && info.totalram > 0 && info.totalram <= SIZE_MAX) {
+      *physical_memory_in_kib = (size_t)info.totalram / MI_KiB;
+    }
+  #elif defined(_SC_PHYS_PAGES)  // do not use by default as it might cause allocation (by using `fopen` to parse /proc/meminfo) (issue #1100)
     const long pphys = sysconf(_SC_PHYS_PAGES);
     const size_t psize_in_kib = page_size / MI_KiB;
-    if (psize_in_kib > 0 && pphys > 0 && (unsigned long)pphys < SIZE_MAX && (size_t)pphys <= (SIZE_MAX/psize_in_kib)) {
+    if (psize_in_kib > 0 && pphys > 0 && (unsigned long)pphys <= SIZE_MAX && (size_t)pphys <= (SIZE_MAX/psize_in_kib)) {
       *physical_memory_in_kib = (size_t)pphys * psize_in_kib;
-    }  
+    }
   #endif
 }
 
@@ -472,7 +480,7 @@ int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   #else
     // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
     err = unix_madvise(start, size, MADV_DONTNEED);
-  #endif  
+  #endif
   #if !MI_DEBUG && MI_SECURE<=2
     *needs_recommit = false;
   #else
@@ -493,8 +501,8 @@ int _mi_prim_reset(void* start, size_t size) {
   int err = 0;
 
   // on macOS can use MADV_FREE_REUSABLE (but we disable this for now as it seems slower)
-  #if 0 && defined(__APPLE__) && defined(MADV_FREE_REUSABLE) 
-  err = unix_madvise(start, size, MADV_FREE_REUSABLE);  
+  #if 0 && defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+  err = unix_madvise(start, size, MADV_FREE_REUSABLE);
   if (err==0) return 0;
   // fall through
   #endif
