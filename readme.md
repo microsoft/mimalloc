@@ -12,9 +12,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.0.3` (beta) (2025-03-28).  
-Latest v2 release: `v2.2.3` (2025-03-28).  
-Latest v1 release: `v1.9.3` (2024-03-28).
+Latest release   : `v3.1.4` (beta) (2025-06-09).  
+Latest v2 release: `v2.2.4` (2025-06-09).  
+Latest v1 release: `v1.9.4` (2024-06-09).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -73,18 +73,22 @@ Enjoy!
 ### Branches
 
 * `main`: latest stable release (still based on `dev2`).
-* `dev`:  development branch for mimalloc v1. **Use this branch for submitting PR's**.
+* `dev`:  development branch for mimalloc v1. Use this branch for submitting PR's.
 * `dev2`: development branch for mimalloc v2. This branch is downstream of `dev` 
           (and is essentially equal to `dev` except for `src/segment.c`). Uses larger sliced segments to manage
           mimalloc pages that can reduce fragmentation.
-* `dev3`: development branch for mimalloc v3-beta. This branch is also downstream of `dev`. This version 
-          simplifies the lock-free ownership of previous versions, has no thread-local segments any more. 
-          This improves sharing of memory between threads, and on certain large workloads may use (much) less memory.
+* `dev3`: development branch for mimalloc v3 beta. This branch is downstream of `dev`. This version 
+          simplifies the lock-free ownership of previous versions, and improves sharing of memory between 
+          threads. On certain large workloads this version may use (much) less memory.
 
 ### Releases
 
-* 2025-03-28, `v1.9.3`, `v2.2.3`, `v3.0.3` (beta): Various small bug and build fixes, including:
-  fix arm32 pre-v7 builds, fix mingw build, get runtime statistics, improve statistic commit counts, 
+* 2025-06-09, `v1.9.4`, `v2.2.4`, `v3.1.4` (beta) : Some important bug fixes, including a case where OS memory
+  was not always fully released. Improved v3 performance, build on XBox, fix build on Android, support interpose 
+  for older macOS versions, use MADV_FREE_REUSABLE on macOS, always check commit success, better support for Windows 
+  fixed TLS offset, etc.
+* 2025-03-28, `v1.9.3`, `v2.2.3`, `v3.0.3` (beta) : Various small bug and build fixes, including:
+  fix arm32 pre v7 builds, fix mingw build, get runtime statistics, improve statistic commit counts, 
   fix execution on non BMI1 x64 systems. 
 * 2025-03-06, `v1.9.2`, `v2.2.2`, `v3.0.2-beta`: Various small bug and build fixes. 
   Add `mi_options_print`, `mi_arenas_print`, and the experimental `mi_stat_get` and `mi_stat_get_json`. 
@@ -176,7 +180,7 @@ mimalloc is used in various large scale low-latency services and programs, for e
 
 Open `ide/vs2022/mimalloc.sln` in Visual Studio 2022 and build.
 The `mimalloc-lib` project builds a static library (in `out/msvc-x64`), while the
-`mimalloc-override-dll` project builds DLL for overriding malloc
+`mimalloc-override-dll` project builds a DLL for overriding malloc
 in the entire program.
 
 ## Linux, macOS, BSD, etc.
