@@ -209,7 +209,7 @@ static inline size_t mi_popcount(size_t x) {
     return mi_builtinz(popcount)(x);
   #else
     #define MI_HAS_FAST_POPCOUNT  0
-    return (x<=1 ? x : _mi_popcount_generic(x));
+    return _mi_popcount_generic(x);
   #endif
 }
 

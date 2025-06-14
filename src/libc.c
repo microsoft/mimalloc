@@ -383,6 +383,8 @@ static size_t mi_popcount_generic32(uint32_t x) {
 }
 
 mi_decl_noinline size_t _mi_popcount_generic(size_t x) {
+  if (x<=1) return x;
+  if (~x==0) return MI_SIZE_BITS;
   return mi_popcount_generic32(x);
 }
 
@@ -407,6 +409,8 @@ static size_t mi_popcount_generic64(uint64_t x) {
 }
 
 mi_decl_noinline size_t _mi_popcount_generic(size_t x) {
+  if (x<=1) return x;
+  if (~x==0) return MI_SIZE_BITS;
   return mi_popcount_generic64(x);
 }
 #endif
