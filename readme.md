@@ -12,7 +12,7 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.1.4` (beta) (2025-06-09).  
+Latest release   : `v3.1.5` (beta) (2025-06-13).  
 Latest v2 release: `v2.2.4` (2025-06-09).  
 Latest v1 release: `v1.9.4` (2024-06-09).
 
@@ -83,6 +83,7 @@ Enjoy!
 
 ### Releases
 
+* 2025-06-13, `v3.1.5`: Bug fix release where memory was not always correctly committed (issue #1098).
 * 2025-06-09, `v1.9.4`, `v2.2.4`, `v3.1.4` (beta) : Some important bug fixes, including a case where OS memory
   was not always fully released. Improved v3 performance, build on XBox, fix build on Android, support interpose 
   for older macOS versions, use MADV_FREE_REUSABLE on macOS, always check commit success, better support for Windows 
@@ -103,53 +104,13 @@ Enjoy!
   add 0-byte to canary; upstream CPython fixes; reduce .bss size; allow fixed TLS slot on Windows for improved performance.
 * 2024-05-21, `v1.8.7`, `v2.1.7`: Fix build issues on less common platforms. Started upstreaming patches
   from the CPython [integration](https://github.com/python/cpython/issues/113141#issuecomment-2119255217). Upstream `vcpkg` patches.
-* 2024-05-13, `v1.8.6`, `v2.1.6`: Fix build errors on various (older) platforms. Refactored aligned allocation.
-* 2024-04-22, `v1.8.4`, `v2.1.4`: Fixes various bugs and build issues. Add `MI_LIBC_MUSL` cmake flag for musl builds.
-  Free-ing code is refactored into a separate module (`free.c`). Mimalloc page info is simplified with the block size
-  directly available (and new `block_size_shift` to improve aligned block free-ing).
-  New approach to collection of abandoned segments: When
-  a thread terminates the segments it owns are abandoned (containing still live objects) and these can be
-  reclaimed by other threads. We no longer use a list of abandoned segments but this is now done using bitmaps in arena's
-  which is more concurrent (and more aggressive). Abandoned memory can now also be reclaimed if a thread frees an object in
-  an abandoned page (which can be disabled using `mi_option_abandoned_reclaim_on_free`). The option `mi_option_max_segment_reclaim`
-  gives a maximum percentage of abandoned segments that can be reclaimed per try (=10%).
-
-* 2023-04-24, `v1.8.2`, `v2.1.2`: Fixes build issues on freeBSD, musl, and C17 (UE 5.1.1). Reduce code size/complexity
-  by removing regions and segment-cache's and only use arenas with improved memory purging -- this may improve memory
-  usage as well for larger services. Renamed options for consistency. Improved Valgrind and ASAN checking.
-
-* 2023-04-03, `v1.8.1`, `v2.1.1`: Fixes build issues on some platforms.
-
-* 2023-03-29, `v1.8.0`, `v2.1.0`: Improved support dynamic overriding on Windows 11. Improved tracing precision
-  with [asan](#asan) and [Valgrind](#valgrind), and added Windows event tracing [ETW](#ETW) (contributed by Xinglong He). Created an OS
-  abstraction layer to make it easier to port and separate platform dependent code (in `src/prim`). Fixed C++ STL compilation on older Microsoft C++ compilers, and various small bug fixes.
-
-* 2022-12-23, `v1.7.9`, `v2.0.9`: Supports building with [asan](#asan) and improved [Valgrind](#valgrind) support.
-  Support arbitrary large alignments (in particular for `std::pmr` pools).
-  Added C++ STL allocators attached to a specific heap (thanks @vmarkovtsev).
-  Heap walks now visit all object (including huge objects). Support Windows nano server containers (by Johannes Schindelin,@dscho).
-  Various small bug fixes.
-
-* 2022-11-03, `v1.7.7`, `v2.0.7`: Initial support for [Valgrind](#valgrind) for leak testing and heap block overflow
-  detection. Initial
-  support for attaching heaps to a specific memory area (only in v2). Fix `realloc` behavior for zero size blocks, remove restriction to integral multiple of the alignment in `alloc_align`, improved aligned allocation performance, reduced contention with many threads on few processors (thank you @dposluns!), vs2022 support, support `pkg-config`, .
-
-* 2022-04-14, `v1.7.6`, `v2.0.6`: fix fallback path for aligned OS allocation on Windows, improve Windows aligned allocation
-  even when compiling with older SDK's, fix dynamic overriding on macOS Monterey, fix MSVC C++ dynamic overriding, fix
-  warnings under Clang 14, improve performance if many OS threads are created and destroyed, fix statistics for large object
-  allocations, using MIMALLOC_VERBOSE=1 has no maximum on the number of error messages, various small fixes.
-
-* 2022-02-14, `v1.7.5`, `v2.0.5` (alpha): fix malloc override on
-  Windows 11, fix compilation with musl, potentially reduced
-  committed memory, add `bin/minject` for Windows,
-  improved wasm support, faster aligned allocation,
-  various small fixes.
 
 * [Older release notes](#older-release-notes)
 
 Special thanks to:
 
-* [David Carlier](https://devnexen.blogspot.com/) (@devnexen) for his many contributions, and making
+* Sergiy Kuryata for his contributions on reducing memory commit -- especially on Windows with the Windows thread pool (now implemented in v3).
+* [David Carlier](https://devnexen.blogspot.com/) (@devnexen) for his _many_ contributions, and making
   mimalloc work better on many less common operating systems, like Haiku, Dragonfly, etc.
 * Mary Feofanova (@mary3000), Evgeniy Moiseenko, and Manuel Pöter (@mpoeter) for making mimalloc TSAN checkable, and finding
   memory model bugs using the [genMC] model checker.
@@ -903,6 +864,48 @@ provided by the bot. You will only need to do this once across all repos using o
 
 
 # Older Release Notes
+
+* 2024-05-13, `v1.8.6`, `v2.1.6`: Fix build errors on various (older) platforms. Refactored aligned allocation.
+* 2024-04-22, `v1.8.4`, `v2.1.4`: Fixes various bugs and build issues. Add `MI_LIBC_MUSL` cmake flag for musl builds.
+  Free-ing code is refactored into a separate module (`free.c`). Mimalloc page info is simplified with the block size
+  directly available (and new `block_size_shift` to improve aligned block free-ing).
+  New approach to collection of abandoned segments: When
+  a thread terminates the segments it owns are abandoned (containing still live objects) and these can be
+  reclaimed by other threads. We no longer use a list of abandoned segments but this is now done using bitmaps in arena's
+  which is more concurrent (and more aggressive). Abandoned memory can now also be reclaimed if a thread frees an object in
+  an abandoned page (which can be disabled using `mi_option_abandoned_reclaim_on_free`). The option `mi_option_max_segment_reclaim`
+  gives a maximum percentage of abandoned segments that can be reclaimed per try (=10%).
+
+* 2023-04-24, `v1.8.2`, `v2.1.2`: Fixes build issues on freeBSD, musl, and C17 (UE 5.1.1). Reduce code size/complexity
+  by removing regions and segment-cache's and only use arenas with improved memory purging -- this may improve memory
+  usage as well for larger services. Renamed options for consistency. Improved Valgrind and ASAN checking.
+
+* 2023-04-03, `v1.8.1`, `v2.1.1`: Fixes build issues on some platforms.
+
+* 2023-03-29, `v1.8.0`, `v2.1.0`: Improved support dynamic overriding on Windows 11. Improved tracing precision
+  with [asan](#asan) and [Valgrind](#valgrind), and added Windows event tracing [ETW](#ETW) (contributed by Xinglong He). Created an OS
+  abstraction layer to make it easier to port and separate platform dependent code (in `src/prim`). Fixed C++ STL compilation on older Microsoft C++ compilers, and various small bug fixes.
+
+* 2022-12-23, `v1.7.9`, `v2.0.9`: Supports building with [asan](#asan) and improved [Valgrind](#valgrind) support.
+  Support arbitrary large alignments (in particular for `std::pmr` pools).
+  Added C++ STL allocators attached to a specific heap (thanks @vmarkovtsev).
+  Heap walks now visit all object (including huge objects). Support Windows nano server containers (by Johannes Schindelin,@dscho).
+  Various small bug fixes.
+
+* 2022-11-03, `v1.7.7`, `v2.0.7`: Initial support for [Valgrind](#valgrind) for leak testing and heap block overflow
+  detection. Initial
+  support for attaching heaps to a specific memory area (only in v2). Fix `realloc` behavior for zero size blocks, remove restriction to integral multiple of the alignment in `alloc_align`, improved aligned allocation performance, reduced contention with many threads on few processors (thank you @dposluns!), vs2022 support, support `pkg-config`, .
+
+* 2022-04-14, `v1.7.6`, `v2.0.6`: fix fallback path for aligned OS allocation on Windows, improve Windows aligned allocation
+  even when compiling with older SDK's, fix dynamic overriding on macOS Monterey, fix MSVC C++ dynamic overriding, fix
+  warnings under Clang 14, improve performance if many OS threads are created and destroyed, fix statistics for large object
+  allocations, using MIMALLOC_VERBOSE=1 has no maximum on the number of error messages, various small fixes.
+
+* 2022-02-14, `v1.7.5`, `v2.0.5` (alpha): fix malloc override on
+  Windows 11, fix compilation with musl, potentially reduced
+  committed memory, add `bin/minject` for Windows,
+  improved wasm support, faster aligned allocation,
+  various small fixes.
 
 * 2021-11-14, `v1.7.3`, `v2.0.3` (beta): improved WASM support, improved macOS support and performance (including
   M1), improved performance for v2 for large objects, Python integration improvements, more standard
