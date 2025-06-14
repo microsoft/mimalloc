@@ -471,7 +471,6 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
 
 bool _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size) {
   if (is_zero != NULL) { *is_zero = false; }
-  mi_os_stat_increase(committed, stat_size);  // use size for precise commit vs. decommit
   mi_os_stat_counter_increase(commit_calls, 1);
 
   // page align range
@@ -495,6 +494,7 @@ bool _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size) 
   if (os_is_zero) { mi_track_mem_defined(start,csize); }
              else { mi_track_mem_undefined(start,csize); }
   #endif
+  mi_os_stat_increase(committed, stat_size);  // use size for precise commit vs. decommit
   return true;
 }
 
