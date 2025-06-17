@@ -33,6 +33,7 @@ static void strdup_test();            // issue #445
 static void heap_thread_free_huge();
 static void test_std_string();        // issue #697
 static void test_thread_local();      // issue #944
+static void test_thread_leak();       // issue #1104
 // static void test_mixed0();             // issue #942
 static void test_mixed1();             // issue #942
 static void test_stl_allocators();
@@ -45,11 +46,12 @@ static void test_dep() { };
 #endif
 
 int main() {
-  mi_stats_reset();  // ignore earlier allocations
+  //mi_stats_reset();  // ignore earlier allocations
   //various_tests();
   //test_mixed1();
 
-  test_dep();
+  // test_dep();
+  test_thread_leak();
 
   //test_std_string();
   //test_thread_local();
@@ -68,7 +70,7 @@ int main() {
   test_mt_shutdown();
   */
   //fail_aslr();
-  mi_stats_print(NULL);
+  //mi_stats_print(NULL);
   return 0;
 }
 
@@ -375,6 +377,32 @@ static void heap_thread_free_huge() {
     shared_p = mi_malloc(1024 * 1024 * 1024);
     auto t1 = std::thread(heap_thread_free_huge_worker);
     t1.join();
+  }
+}
+
+static std::atomic<long> gsum;
+
+static void local_alloc() {
+  long sum = 0;
+  for(int i = 0; i < 1000000; i++) {
+    const int n = 1 + std::rand() % 1000;
+    uint8_t* p = (uint8_t*)calloc(n, 1);
+    p[0] = 1;
+    sum += p[std::rand() % n];
+    if ((std::rand() % 100) > 24) {
+      free(p);
+    }
+  }
+  gsum += sum;
+}
+
+static void test_thread_leak() {
+  std::vector<std::thread> threads;
+  for (int i=1; i<=100; ++i) {
+    threads.emplace_back(std::thread(&local_alloc));
+  }
+  for (auto& th : threads) {
+    th.join();
   }
 }
 
