@@ -277,7 +277,7 @@ static bool mi_page_map_ensure_at(size_t idx, mi_submap_t* submap) {
   if mi_unlikely(sub==NULL) {
     // sub map not yet allocated, allocate it now
     mi_memid_t memid;
-    sub = (mi_submap_t)_mi_os_alloc(MI_PAGE_MAP_SUB_SIZE, &memid);
+    sub = (mi_submap_t)_mi_os_zalloc(MI_PAGE_MAP_SUB_SIZE, &memid);
     if (sub==NULL) {
        _mi_warning_message("unable to extend the page map\n");
        return false;
