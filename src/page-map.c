@@ -32,7 +32,7 @@ static mi_memid_t   mi_page_map_memid;
 #define MI_PAGE_MAP_ENTRIES_PER_COMMIT_BIT   MI_ARENA_SLICE_SIZE
 static mi_bitmap_t* mi_page_map_commit; // one bit per committed 64 KiB entries
 
-static mi_decl_nodiscard bool mi_page_map_ensure_committed(size_t idx, size_t slice_count);
+mi_decl_nodiscard static bool mi_page_map_ensure_committed(size_t idx, size_t slice_count);
 
 bool _mi_page_map_init(void) {
   size_t vbits = (size_t)mi_option_get_clamp(mi_option_max_vabits, 0, MI_SIZE_BITS);
@@ -188,8 +188,8 @@ static mi_memid_t   mi_page_map_memid;
 
 static _Atomic(mi_bfield_t)  mi_page_map_commit; 
 
-static mi_decl_nodiscard bool mi_page_map_ensure_committed(size_t idx, mi_submap_t* submap);
-static mi_decl_nodiscard bool mi_page_map_ensure_at(size_t idx, mi_submap_t* submap);
+mi_decl_nodiscard static bool mi_page_map_ensure_committed(size_t idx, mi_submap_t* submap);
+mi_decl_nodiscard static bool mi_page_map_ensure_at(size_t idx, mi_submap_t* submap);
 static bool mi_page_map_set_range(mi_page_t* page, size_t idx, size_t sub_idx, size_t slice_count);
 
 bool _mi_page_map_init(void) {
