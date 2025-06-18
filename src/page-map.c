@@ -203,11 +203,7 @@ static mi_memid_t   mi_page_map_memid;
 // divide the main map in 64 (`MI_BFIELD_BITS`) parts commit those parts on demand
 static _Atomic(mi_bfield_t)  mi_page_map_commit;
 
-mi_decl_nodiscard static bool mi_page_map_ensure_committed(size_t idx, mi_submap_t* submap);
-mi_decl_nodiscard static bool mi_page_map_ensure_submap_at(size_t idx, mi_submap_t* submap);
-static bool mi_page_map_set_range(mi_page_t* page, size_t idx, size_t sub_idx, size_t slice_count);
-
-static inline bool mi_page_map_is_committed(size_t idx, size_t* pbit_idx) {
+mi_decl_nodiscard static inline bool mi_page_map_is_committed(size_t idx, size_t* pbit_idx) {
   mi_bfield_t commit = mi_atomic_load_relaxed(&mi_page_map_commit);
   const size_t bit_idx = idx/MI_PAGE_MAP_ENTRIES_PER_CBIT; 
   mi_assert_internal(bit_idx < MI_BFIELD_BITS);
@@ -215,7 +211,7 @@ static inline bool mi_page_map_is_committed(size_t idx, size_t* pbit_idx) {
   return ((commit & (MI_ZU(1) << bit_idx)) != 0);
 }
 
-static bool mi_page_map_ensure_committed(size_t idx, mi_submap_t* submap) {
+mi_decl_nodiscard static bool mi_page_map_ensure_committed(size_t idx, mi_submap_t* submap) {
   mi_assert_internal(submap!=NULL && *submap==NULL);
   size_t bit_idx;
   if mi_unlikely(!mi_page_map_is_committed(idx, &bit_idx)) {
@@ -313,7 +309,7 @@ void _mi_page_map_unsafe_destroy(mi_subproc_t* subproc) {
 }
 
 
-static bool mi_page_map_ensure_submap_at(size_t idx, mi_submap_t* submap) {
+mi_decl_nodiscard static bool mi_page_map_ensure_submap_at(size_t idx, mi_submap_t* submap) {
   mi_assert_internal(submap!=NULL && *submap==NULL);  
   mi_submap_t sub = NULL;
   if (!mi_page_map_ensure_committed(idx, &sub)) {
