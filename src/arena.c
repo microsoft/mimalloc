@@ -1088,9 +1088,8 @@ bool _mi_arenas_contain(const void* p) {
 // for dynamic libraries that are unloaded and need to release all their allocated memory.
 static void mi_arenas_unsafe_destroy(mi_subproc_t* subproc) {
   mi_assert_internal(subproc != NULL);
-  const size_t max_arena = mi_arenas_get_count(subproc);
-  size_t new_max_arena = 0;
-  for (size_t i = 0; i < max_arena; i++) {
+  const size_t arena_count = mi_arenas_get_count(subproc);
+  for (size_t i = 0; i < arena_count; i++) {
     mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &subproc->arenas[i]);
     if (arena != NULL) {
       // mi_lock_done(&arena->abandoned_visit_lock);
@@ -1100,10 +1099,9 @@ static void mi_arenas_unsafe_destroy(mi_subproc_t* subproc) {
       }
     }
   }
-
   // try to lower the max arena.
-  size_t expected = max_arena;
-  mi_atomic_cas_strong_acq_rel(&subproc->arena_count, &expected, new_max_arena);
+  size_t expected = arena_count;
+  mi_atomic_cas_strong_acq_rel(&subproc->arena_count, &expected, 0);
 }
 
 
@@ -1111,7 +1109,7 @@ static void mi_arenas_unsafe_destroy(mi_subproc_t* subproc) {
 // for dynamic libraries that are unloaded and need to release all their allocated memory.
 void _mi_arenas_unsafe_destroy_all(mi_subproc_t* subproc) {
   mi_arenas_unsafe_destroy(subproc);
-  mi_arenas_try_purge(true /* force purge */, true /* visit all*/, subproc, 0 /* thread seq */);  // purge non-owned arenas
+  // mi_arenas_try_purge(true /* force purge */, true /* visit all*/, subproc, 0 /* thread seq */);  // purge non-owned arenas
 }
 
 
