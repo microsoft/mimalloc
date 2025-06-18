@@ -223,7 +223,7 @@ void*         _mi_arenas_alloc_aligned(mi_subproc_t* subproc, size_t size, size_
 void          _mi_arenas_free(void* p, size_t size, mi_memid_t memid);
 bool          _mi_arenas_contain(const void* p);
 void          _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld);
-void          _mi_arenas_unsafe_destroy_all(mi_tld_t* tld);
+void          _mi_arenas_unsafe_destroy_all(mi_subproc_t* subproc);
 
 mi_page_t*    _mi_arenas_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
 void          _mi_arenas_page_free(mi_page_t* page, mi_tld_t* tld);
