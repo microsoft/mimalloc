@@ -680,7 +680,7 @@ void mi_process_init(void) mi_attr_noexcept {
  
   mi_detect_cpu_features();
   _mi_os_init();
-  _mi_page_map_init();
+  _mi_page_map_init(); // this could fail.. should we abort in that case?
   mi_heap_main_init();
   mi_tld_main_init();
   // the following two can potentially allocate (on freeBSD for locks and thread keys)

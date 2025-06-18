@@ -688,7 +688,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_si
     commit_size = _mi_align_up(block_start + block_size, MI_PAGE_MIN_COMMIT_SIZE);
     if (commit_size > page_noguard_size) { commit_size = page_noguard_size; }
     bool is_zero;
-    if (!_mi_os_commit(page, commit_size, &is_zero)) {
+    if mi_unlikely(!_mi_os_commit(page, commit_size, &is_zero)) {
       _mi_arenas_free( page, alloc_size, memid );
       return NULL;
     }
@@ -714,7 +714,10 @@ static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_si
   mi_page_try_claim_ownership(page);
 
   // register in the page map
-  _mi_page_map_register(page);
+  if mi_unlikely(!_mi_page_map_register(page)) {
+    _mi_arenas_free( page, alloc_size, memid );
+    return NULL;
+  }
 
   // stats
   mi_tld_stat_increase(tld, pages, 1);
@@ -1845,12 +1848,12 @@ static bool mi_arena_page_register(size_t slice_index, size_t slice_count, mi_ar
   mi_assert_internal(slice_count == 1);
   mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
   mi_assert_internal(mi_bitmap_is_setN(page->memid.mem.arena.arena->pages, page->memid.mem.arena.slice_index, 1));
-  _mi_page_map_register(page);
+  if (!_mi_page_map_register(page)) return false; // break
   mi_assert_internal(_mi_ptr_page(page)==page);
   return true;
 }
 
-static bool mi_arena_pages_reregister(mi_arena_t* arena) {
+static mi_decl_nodiscard bool mi_arena_pages_reregister(mi_arena_t* arena) {
   return _mi_bitmap_forall_set(arena->pages, &mi_arena_page_register, arena, NULL);
 }
 
@@ -1935,7 +1938,10 @@ mi_decl_export bool mi_arena_reload(void* start, size_t size, mi_arena_id_t* are
   if (!mi_arenas_add(arena->subproc, arena, arena_id)) {
     return false;
   }
-  mi_arena_pages_reregister(arena);
+  if (!mi_arena_pages_reregister(arena)) {
+    // todo: clear arena entry in the subproc?
+    return false;
+  }
   return true;
 }
 
