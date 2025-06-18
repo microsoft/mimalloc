@@ -1853,7 +1853,7 @@ static bool mi_arena_page_register(size_t slice_index, size_t slice_count, mi_ar
   return true;
 }
 
-static mi_decl_nodiscard bool mi_arena_pages_reregister(mi_arena_t* arena) {
+mi_decl_nodiscard static bool mi_arena_pages_reregister(mi_arena_t* arena) {
   return _mi_bitmap_forall_set(arena->pages, &mi_arena_page_register, arena, NULL);
 }
 
