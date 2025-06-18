@@ -224,8 +224,9 @@ static bool mi_page_map_ensure_committed(size_t idx, mi_submap_t* submap) {
       mi_page_map_cannot_commit();
       return false;
     }
+    mi_atomic_or_acq_rel(&mi_page_map_commit, MI_ZU(1) << bit_idx);
   }
-  *submap = _mi_page_map[idx];
+  *submap = mi_atomic_load_ptr_acquire(mi_page_t*, &_mi_page_map[idx]); // acquire _mi_page_map_at(idx);
   return true;
 }
 
@@ -295,7 +296,7 @@ void _mi_page_map_unsafe_destroy(mi_subproc_t* subproc) {
   for (size_t idx = 1; idx < mi_page_map_count; idx++) {  // skip entry 0 (as we allocate that submap at the end of the page_map)
     // free all sub-maps
     if (mi_page_map_is_committed(idx, NULL)) {
-      mi_page_t** sub = _mi_page_map_at(idx);
+      mi_submap_t sub = _mi_page_map_at(idx);
       if (sub != NULL) {
         mi_memid_t memid = _mi_memid_create_os(sub, MI_PAGE_MAP_SUB_SIZE, true, false, false);
         _mi_os_free_ex(memid.mem.os.base, memid.mem.os.size, true, memid, subproc);  

@@ -613,7 +613,7 @@ static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
   return (u / MI_PAGE_MAP_SUB_COUNT);
 }
 
-static inline mi_page_t** _mi_page_map_at(size_t idx) {
+static inline mi_submap_t _mi_page_map_at(size_t idx) {
   return mi_atomic_load_ptr_relaxed(mi_page_t*, &_mi_page_map[idx]);
 }
 
