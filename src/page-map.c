@@ -316,7 +316,7 @@ static bool mi_page_map_set_range_prim(mi_page_t* page, size_t idx, size_t sub_i
 
 static bool mi_page_map_set_range(mi_page_t* page, size_t idx, size_t sub_idx, size_t slice_count) {
   if mi_unlikely(!mi_page_map_set_range_prim(page,idx,sub_idx,slice_count)) {
-    // failed to commit, call again to reset the page pointer if needed
+    // failed to commit, call again to reset the page pointer (if needed)
     if (page!=NULL) {
       mi_page_map_set_range_prim(NULL,idx,sub_idx,slice_count);
     }
