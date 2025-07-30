@@ -313,7 +313,7 @@ typedef struct mi_page_s {
   uint8_t                   retire_expire;     // expiration count for retired blocks
 
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
-  _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads (= `mi_block_t* | (1 if owned)`)
+  uint64_t                  local_free_mask;   // mask of local free blocks (includes blocks in `free` and `local_free` lists)
 
   size_t                    block_size;        // size available in each block (always `>0`)
   uint8_t*                  page_start;        // start of the blocks
@@ -329,6 +329,10 @@ typedef struct mi_page_s {
   struct mi_page_s*         prev;              // previous page owned by the heap with the same `block_size`
   size_t                    slice_committed;   // committed size relative to the first arena slice of the page data (or 0 if the page is fully committed already)
   mi_memid_t                memid;             // provenance of the page memory
+
+  uint64_t                 reserved2;
+  _Atomic(mi_thread_free_t)xthread_free;      // list of deferred free blocks freed by other threads (= `mi_block_t* | (1 if owned)`)
+  _Atomic(uint64_t)        xthread_free_mask; // mask of deferred free blocks freed by other threads (free blocks in `xthread_free` list)
 } mi_page_t;
 
 

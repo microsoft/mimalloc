@@ -36,6 +36,8 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   #endif
   if (track_stats) { mi_track_free_size(block, mi_page_usable_size_of(page, block)); } // faster then mi_usable_size as we already know the page and that p is unaligned
 
+  mi_page_mark_block_as_free_local(page, block);
+
   // actual free: push on the local free list
   mi_block_set_next(page, block, page->local_free);
   page->local_free = block;
@@ -63,6 +65,8 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block) mi_attr_
   if (dbgsize > MI_MiB) { dbgsize = MI_MiB; }
   _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);
 #endif
+
+  mi_page_mark_block_as_free_xthread(page, block);
 
   // push atomically on the page thread free list
   mi_thread_free_t tf_new;
@@ -174,7 +178,9 @@ void mi_free(void* p) mi_attr_noexcept
   if mi_unlikely(page==NULL) return;
   #endif
   mi_assert_internal(page!=NULL);
-  
+
+  mi_page_poison_block(page, p); // poison the block before we free it (to avoid use-after-free)
+
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ mi_page_xthread_id(page));
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page

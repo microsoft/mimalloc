@@ -43,6 +43,8 @@ extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
 
+  mi_page_mark_block_as_allocated_local(page, block);
+
   // pop from the free list
   page->free = mi_block_next(page, block);
   page->used++;

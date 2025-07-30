@@ -36,6 +36,91 @@ static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_sta
   return (mi_block_t*)((uint8_t*)page_start + (i * block_size));
 }
 
+uint64_t mi_page_block_mask(const mi_page_t* page, void* block) {
+  mi_assert_internal(page != NULL);
+  uint64_t block_mask = 0;
+
+  // We can compute the block mask only if the page has <= 64 blocks
+  if (page->block_size >= 1024) {
+      int  block_index = (int)(((uint8_t*)block - page->page_start) / page->block_size);
+      block_mask = (1ULL << block_index);
+  }
+
+  return block_mask;
+}
+
+void mi_assert_block_is_available(const mi_page_t* page, void* block) {
+    mi_assert_internal(page != NULL);
+    mi_assert_internal(block != NULL);
+    mi_assert_internal(_mi_ptr_page(block) == page);
+
+    // The block must be marked as 'free' in the local free mask to be available for allocation.
+    // The xthread free mask does not matter here.
+    uint64_t block_mask = mi_page_block_mask(page, block);
+    mi_assert_release((block_mask == 0) || ((page->local_free_mask & block_mask) != 0));
+}
+
+void mi_assert_block_is_allocated(const mi_page_t* page, void* block) {
+    mi_assert_internal(page != NULL);
+    mi_assert_internal(block != NULL);
+    mi_assert_internal(_mi_ptr_page(block) == page);
+
+    uint64_t block_mask = mi_page_block_mask(page, block);
+    uint64_t block_free_mask = mi_atomic_load_relaxed(&page->xthread_free_mask) | page->local_free_mask;
+    mi_assert_release((block_free_mask & block_mask) == 0);
+}
+
+void mi_page_mark_block_as_allocated_local(mi_page_t* page, void* block) {
+    mi_assert_internal(page != NULL);
+    mi_assert_internal(block != NULL);
+    mi_assert_internal(_mi_ptr_page(block) == page);
+
+    mi_assert_block_is_available(page, block);
+
+    // mark the block as allocated in the local free mask
+    uint64_t block_mask = mi_page_block_mask(page, block);
+    page->local_free_mask &= ~block_mask;
+}
+
+void mi_page_mark_block_as_free_local(mi_page_t* page, void* block) {
+    mi_assert_internal(page != NULL);
+    mi_assert_internal(block != NULL);
+    mi_assert_internal(_mi_ptr_page(block) == page);
+
+    mi_assert_block_is_allocated(page, block);
+
+    // mark the block as free in the local free mask (i.e. the block is freed by the thread that owns the page)
+    uint64_t block_mask = mi_page_block_mask(page, block);
+    page->local_free_mask |= block_mask;
+}
+
+void mi_page_mark_block_as_free_xthread(mi_page_t* page, void* block) {
+  mi_assert_internal(page != NULL);
+  mi_assert_internal(block != NULL);
+  mi_assert_internal(_mi_ptr_page(block) == page);
+
+  mi_assert_block_is_allocated(page, block);
+
+  // mark the block as free on the heap owned by another thread
+  uint64_t block_mask = mi_page_block_mask(page, block);
+  mi_atomic_or_acq_rel(&page->xthread_free_mask, block_mask);
+}
+
+void mi_page_poison_block(const mi_page_t* page, void* block) {
+  mi_assert_internal(page != NULL);
+  mi_assert_internal(block != NULL);
+  mi_assert_internal(_mi_ptr_page(block) == page);
+  
+  size_t block_size = mi_page_block_size(page);
+  if (block_size >= 64) {
+      uint64_t* block_ptr = (uint64_t*)block;
+      block_ptr[0] = 0xDEADBEEFDEADBEEFULL;
+      block_ptr[1] = 0xDEADBEEFDEADBEEFULL;
+      block_ptr[2] = 0xDEADBEEFDEADBEEFULL;
+      block_ptr[3] = 0xDEADBEEFDEADBEEFULL;
+  }
+}
+
 static bool mi_page_extend_free(mi_heap_t* heap, mi_page_t* page);
 
 #if (MI_DEBUG>=3)
@@ -145,16 +230,23 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
   size_t count = 1;
   mi_block_t* last = head;
   mi_block_t* next;
+  uint64_t block_free_mask = mi_page_block_mask(page, head);
   while ((next = mi_block_next(page, last)) != NULL && count <= max_count) {
     count++;
+    block_free_mask |= mi_page_block_mask(page, next);
     last = next;
   }
 
   // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
   if (count > max_count) {
     _mi_error_message(EFAULT, "corrupted thread-free list\n");
+    mi_assert_release(false);
     return; // the thread-free items cannot be freed
   }
+
+  // Update the local free mask as blocks moved to the local free list
+  page->local_free_mask |= block_free_mask;
+  mi_atomic_and_acq_rel(&page->xthread_free_mask, ~block_free_mask);
 
   // and append the current local free list
   mi_block_set_next(page, last, page->local_free);

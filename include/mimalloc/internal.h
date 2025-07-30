@@ -219,6 +219,11 @@ size_t        _mi_page_bin(const mi_page_t* page); // for stats
 size_t        _mi_bin_size(size_t bin);            // for stats
 size_t        _mi_bin(size_t size);                // for stats
 
+void mi_page_mark_block_as_allocated_local(mi_page_t* page, void* block);
+void mi_page_mark_block_as_free_local(mi_page_t* page, void* block);
+void mi_page_mark_block_as_free_xthread(mi_page_t* page, void* block);
+void mi_page_poison_block(const mi_page_t* page, void* block);
+
 // "heap.c"
 mi_heap_t*    _mi_heap_create(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id, mi_tld_t* tld);
 void          _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag, mi_tld_t* tld);
@@ -298,6 +303,9 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned int line
 #else
 #define mi_assert_expensive(x)
 #endif
+
+#define mi_assert_release(x)  if(!(x)) {*(reinterpret_cast<char *>(0)) = 0;}
+
 
 
 /* -----------------------------------------------------------
@@ -755,7 +763,7 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
 
 static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   // mi_assert_internal(!mi_page_is_in_full(page));  // can happen when destroying pages on heap_destroy
-  const mi_threadid_t tid = (heap == NULL ? MI_THREADID_ABANDONED : heap->tld->thread_id) | mi_page_flags(page);
+  mi_threadid_t tid = (heap == NULL ? MI_THREADID_ABANDONED : heap->tld->thread_id) | mi_page_flags(page);
   if (heap != NULL) {
     page->heap = heap;
     page->heap_tag = heap->tag;
@@ -763,7 +771,10 @@ static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   else {
     page->heap = NULL;
   }
-  mi_atomic_store_release(&page->xthread_id, tid);
+
+  volatile mi_threadid_t prev_xthread_id = (mi_threadid_t)mi_atomic_exchange_release(&page->xthread_id, tid);
+  prev_xthread_id &= ~(MI_PAGE_FLAG_MASK | MI_THREADID_ABANDONED_MAPPED);
+  mi_assert_release((heap == NULL) || (prev_xthread_id == 0));
 }
 
 static inline bool mi_page_is_abandoned(const mi_page_t* page) {
