@@ -226,7 +226,7 @@ static inline size_t mi_clz(size_t x) {
     size_t r;
     __asm ("lzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
     return r;
-  #elif defined(_MSC_VER) && MI_ARCH_X64 && defined(__BMI1__) 
+  #elif defined(_MSC_VER) && !defined(__clang__) && MI_ARCH_X64 && defined(__BMI1__) 
     return _lzcnt_u64(x);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long idx;
