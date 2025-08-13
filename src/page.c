@@ -118,6 +118,25 @@ void mi_page_poison_block(const mi_page_t* page, void* block) {
       block_ptr[1] = 0xDEADBEEFDEADBEEFULL;
       block_ptr[2] = 0xDEADBEEFDEADBEEFULL;
       block_ptr[3] = 0xDEADBEEFDEADBEEFULL;
+      block_ptr[4] = 0xDEADBEEFDEADBEEFULL;
+      block_ptr[5] = 0xDEADBEEFDEADBEEFULL;
+      block_ptr[6] = 0xDEADBEEFDEADBEEFULL;
+      block_ptr[7] = 0xDEADBEEFDEADBEEFULL;
+
+      if (block_size >= 128) {
+          block_ptr[8] = 0xDEADBEEFDEADBEEFULL;
+          block_ptr[9] = 0xDEADBEEFDEADBEEFULL;
+          block_ptr[10] = 0xDEADBEEFDEADBEEFULL;
+          block_ptr[11] = 0xDEADBEEFDEADBEEFULL;
+
+          if (block_size >= 512) {
+              // Fill starting at 256th byte offset
+              block_ptr[32] = 0xDEADBEEFDEADBEEFULL;
+              block_ptr[33] = 0xDEADBEEFDEADBEEFULL;
+              block_ptr[34] = 0xDEADBEEFDEADBEEFULL;
+              block_ptr[35] = 0xDEADBEEFDEADBEEFULL;
+          }
+      }
   }
 }
 
