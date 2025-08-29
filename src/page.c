@@ -68,6 +68,12 @@ void mi_assert_block_is_allocated(const mi_page_t* page, void* block) {
     uint64_t block_mask = mi_page_block_mask(page, block);
     uint64_t block_free_mask = mi_atomic_load_relaxed(&page->xthread_free_mask) | page->local_free_mask;
     mi_assert_release((block_free_mask & block_mask) == 0);
+
+    // verify that the block is actually points to the start of a block
+    // and it is not an interior pointer
+    size_t diff = (uint8_t*)block - mi_page_start(page);
+    size_t adjust = diff % mi_page_block_size(page);
+    mi_assert_release(adjust == 0)
 }
 
 void mi_page_mark_block_as_allocated_local(mi_page_t* page, void* block) {
