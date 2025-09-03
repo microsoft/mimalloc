@@ -26,6 +26,7 @@ static void alloc_huge(void);
 static void test_heap_walk(void);
 static void test_canary_leak(void);
 static void test_manage_os_memory(void);
+static void test_interior_free(void);
 // static void test_large_pages(void);
 
 
@@ -43,14 +44,14 @@ int main() {
   // corrupt_free();
   // block_overflow1();
   // block_overflow2();
-  test_canary_leak();
+  // test_canary_leak();
   // test_aslr();
   // invalid_free();
   // test_reserved();
   // negative_stat();
   // test_heap_walk();
   // alloc_huge();
-
+  test_interior_free();
 
   void* p1 = malloc(78);
   void* p2 = malloc(24);
@@ -97,6 +98,11 @@ static void block_overflow2() {
   uint8_t* p = (uint8_t*)mi_malloc(16);
   p[17] = 0;
   free(p);
+}
+
+static void test_interior_free(void) {
+  void* p = mi_malloc(412);
+  mi_free((uint8_t*)p + 8);
 }
 
 // The double free samples come ArcHeap [1] by Insu Yun (issue #161)

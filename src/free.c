@@ -88,7 +88,7 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block) mi_attr_
 mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
 
-  size_t diff = (uint8_t*)p - mi_page_start(page);
+  const size_t diff = (uint8_t*)p - mi_page_start(page);
   size_t adjust;
   if mi_likely(page->block_size_shift != 0) {
     adjust = diff & (((size_t)1 << page->block_size_shift) - 1);
@@ -96,8 +96,8 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   else {
     adjust = diff % mi_page_block_size(page);
   }
-
-  return (mi_block_t*)((uintptr_t)p - adjust);
+  mi_assert_internal(adjust==0 || mi_page_has_aligned(page));
+  return (mi_block_t*)((uint8_t*)p - adjust);
 }
 
 // forward declaration for a MI_GUARDED build
@@ -115,7 +115,9 @@ static inline void mi_block_check_unguard(mi_page_t* page, mi_block_t* block, vo
 
 // free a local pointer  (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_attr_noexcept {
-  mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(page, p) : (mi_block_t*)p);
+  // temporary fix: always unalign regardless of the aligned flag
+  // mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(page, p) : (mi_block_t*)p);
+  mi_block_t* const block = _mi_page_ptr_unalign(page, p);
   mi_block_check_unguard(page, block, p);
   mi_free_block_local(page, block, true /* track stats */, true /* check for a full page */);
 }
@@ -164,6 +166,13 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
   #endif
 }
 
+static inline mi_block_t* mi_validate_page_block( const mi_page_t* page, void* p ) {
+  mi_assert_internal(p == (void*)_mi_page_ptr_unalign(page, p)); // check if it is not an interior pointer
+  // temporary fix: always unalign the pointer anyways
+  // return (mi_block_t*)p;
+  return _mi_page_ptr_unalign(page, p);
+}
+
 // Free a block
 // Fast path written carefully to prevent register spilling on the stack
 void mi_free(void* p) mi_attr_noexcept
@@ -178,7 +187,7 @@ void mi_free(void* p) mi_attr_noexcept
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ mi_page_xthread_id(page));
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
-    mi_block_t* const block = (mi_block_t*)p;
+    mi_block_t* const block = mi_validate_page_block(page,p);
     mi_free_block_local(page, block, true /* track stats */, false /* no need to check if the page is full */);
   }
   else if (xtid <= MI_PAGE_FLAG_MASK) {            // `tid == mi_page_thread_id(page) && mi_page_flags(page) != 0`
@@ -188,7 +197,7 @@ void mi_free(void* p) mi_attr_noexcept
   // free-ing in a page owned by a heap in another thread, or an abandoned page (not belonging to a heap)
   else if ((xtid & MI_PAGE_FLAG_MASK) == 0) {      // `tid != mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // blocks are aligned (and not a full page); push on the thread_free list
-    mi_block_t* const block = (mi_block_t*)p;
+    mi_block_t* const block = mi_validate_page_block(page,p);
     mi_free_block_mt(page,block);
   }
   else {
