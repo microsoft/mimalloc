@@ -114,10 +114,11 @@ static inline void mi_block_check_unguard(mi_page_t* page, mi_block_t* block, vo
 
 static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, void* p ) {
   mi_assert(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p); // should never be an interior pointer
-  #if SECURE > 0
+  #if MI_SECURE > 0
   // in secure mode we always unalign to guard against free-ing interior pointers
   return _mi_page_ptr_unalign(page,p);  
   #else
+  MI_UNUSED(page);  
   return (mi_block_t*)p;
   #endif
 }
