@@ -82,14 +82,19 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
     p = mi_heap_malloc_zero_no_guarded(heap, oversize, zero);
     if (p == NULL) return NULL;
   }
-  mi_page_t* page = _mi_ptr_page(p);
-
+  
   // .. and align within the allocation
   const uintptr_t align_mask = alignment - 1;  // for any x, `(x & align_mask) == (x % alignment)`
   const uintptr_t poffset = ((uintptr_t)p + offset) & align_mask;
   const uintptr_t adjust  = (poffset == 0 ? 0 : alignment - poffset);
   mi_assert_internal(adjust < alignment);
   void* aligned_p = (void*)((uintptr_t)p + adjust);
+
+  // note: after the above allocation, the page may be abandoned now (as it became full, see `page.c:_mi_malloc_generic`)
+  // and we no longer own it. We should be careful to only read constant fields in the page, 
+  // or use safe atomic access as in `mi_page_set_has_aligned`.
+  // (we can access the page though since the just allocated pointer keeps it alive)
+  mi_page_t* page = _mi_ptr_page(p);
   if (aligned_p != p) {
     mi_page_set_has_aligned(page, true);
     #if MI_GUARDED

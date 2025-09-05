@@ -763,7 +763,6 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
 
 static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   // mi_assert_internal(!mi_page_is_in_full(page));  // can happen when destroying pages on heap_destroy
-  mi_threadid_t tid = (heap == NULL ? MI_THREADID_ABANDONED : heap->tld->thread_id) | mi_page_flags(page);
   if (heap != NULL) {
     page->heap = heap;
     page->heap_tag = heap->tag;
@@ -772,8 +771,17 @@ static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
     page->heap = NULL;
   }
 
-  volatile mi_threadid_t prev_xthread_id = (mi_threadid_t)mi_atomic_exchange_release(&page->xthread_id, tid);
-  prev_xthread_id &= ~(MI_PAGE_FLAG_MASK | MI_THREADID_ABANDONED_MAPPED);
+  const mi_threadid_t tid = (heap == NULL ? MI_THREADID_ABANDONED : heap->tld->thread_id);
+  mi_assert_internal((tid & MI_PAGE_FLAG_MASK) == 0);
+  
+  // we need to use an atomic cas since a concurrent thread may still set the MI_PAGE_HAS_ALIGNED flag (see `alloc_aligned.c`).
+  mi_threadid_t xtid_old = mi_page_xthread_id(page);
+  mi_threadid_t xtid;
+  do {
+    xtid = tid | (xtid_old & MI_PAGE_FLAG_MASK);
+  } while (!mi_atomic_cas_weak_release(&page->xthread_id, &xtid_old, xtid));
+
+  volatile mi_threadid_t prev_xthread_id = xtid_old & ~(MI_PAGE_FLAG_MASK | MI_THREADID_ABANDONED_MAPPED);
   mi_assert_release((heap == NULL) || (prev_xthread_id == 0));
 }
 
