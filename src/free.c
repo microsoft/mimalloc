@@ -116,8 +116,8 @@ static inline void mi_block_check_unguard(mi_page_t* page, mi_block_t* block, vo
 // free a local pointer  (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_attr_noexcept {
   // temporary fix: always unalign regardless of the aligned flag
-  // mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(page, p) : (mi_block_t*)p);
-  mi_block_t* const block = _mi_page_ptr_unalign(page, p);
+  // mi_block_t* const block = _mi_page_ptr_unalign(page, p);
+  mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(page, p) : (mi_block_t*)p);
   mi_block_check_unguard(page, block, p);
   mi_free_block_local(page, block, true /* track stats */, true /* check for a full page */);
 }
@@ -168,9 +168,9 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
 
 static inline mi_block_t* mi_validate_page_block( const mi_page_t* page, void* p ) {
   mi_assert_internal(p == (void*)_mi_page_ptr_unalign(page, p)); // check if it is not an interior pointer
+  return (mi_block_t*)p;
   // temporary fix: always unalign the pointer anyways
-  // return (mi_block_t*)p;
-  return _mi_page_ptr_unalign(page, p);
+  // return _mi_page_ptr_unalign(page, p);
 }
 
 // Free a block
