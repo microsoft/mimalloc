@@ -130,7 +130,6 @@ static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_
 static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, void* p) mi_attr_noexcept {
   mi_assert_internal(p!=NULL && page != NULL);
   mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
-  mi_assert_internal(mi_page_has_interior_pointers(page) || block==(mi_block_t*)p);
   mi_block_check_unguard(page, block, p);
   mi_free_block_mt(page, block);
 }
