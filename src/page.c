@@ -993,8 +993,8 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
     p = _mi_page_malloc_zero(heap, page, size, zero);
     mi_assert_internal(p != NULL);
   }
-  // move singleton pages to the full queue
-  if (page->reserved == page->used) {
+  // move full pages to the full queue
+  if (mi_page_is_full(page)) {
     mi_page_to_full(page, mi_page_queue_of(page));
   }
   return p;
