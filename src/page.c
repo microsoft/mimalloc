@@ -702,7 +702,6 @@ mi_decl_nodiscard bool _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_internal(page->keys[0] != 0);
   mi_assert_internal(page->keys[1] != 0);
   #endif
-  mi_assert_internal(page->block_size_shift == 0 || (mi_page_block_size(page) == ((size_t)1 << page->block_size_shift)));
   mi_assert_expensive(mi_page_is_valid_init(page));
 
   // initialize an initial free list

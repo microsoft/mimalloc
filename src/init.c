@@ -21,7 +21,6 @@ const mi_page_t _mi_page_empty = {
   0,                      // used
   0,                      // capacity
   0,                      // reserved capacity
-  0,                      // block size shift
   0,                      // retire_expire
   NULL,                   // local_free
   MI_ATOMIC_VAR_INIT(0),  // xthread_free

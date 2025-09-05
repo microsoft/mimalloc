@@ -700,12 +700,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_si
   page->slice_committed = commit_size;
   page->memid = memid;
   page->free_is_zero = memid.initially_zero;
-  if (block_size > 0 && _mi_is_power_of_two(block_size)) {
-    page->block_size_shift = (uint8_t)mi_ctz(block_size);
-  }
-  else {
-    page->block_size_shift = 0;
-  }
+  
   // and own it
   mi_page_try_claim_ownership(page);
 

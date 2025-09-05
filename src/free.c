@@ -87,16 +87,10 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block) mi_attr_
 // deallocated (as the block we are freeing keeps it alive) and thus safe to read concurrently.
 mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
-
-  size_t diff = (uint8_t*)p - mi_page_start(page);
-  size_t adjust;
-  if mi_likely(page->block_size_shift != 0) {
-    adjust = diff & (((size_t)1 << page->block_size_shift) - 1);
-  }
-  else {
-    adjust = diff % mi_page_block_size(page);
-  }
-
+  
+  const size_t diff = (uint8_t*)p - mi_page_start(page);
+  const size_t block_size = mi_page_block_size(page);
+  const size_t adjust = (_mi_is_power_of_two(block_size) ? diff & (block_size - 1) : diff % block_size);
   return (mi_block_t*)((uintptr_t)p - adjust);
 }
 

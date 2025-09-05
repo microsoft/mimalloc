@@ -334,9 +334,8 @@ typedef struct mi_page_s {
   uint16_t                  used;              // number of blocks in use (including blocks in `thread_free`)
   uint16_t                  capacity;          // number of blocks committed
   uint16_t                  reserved;          // number of blocks reserved in memory
-  uint8_t                   block_size_shift;  // if not zero, then `(1 << block_size_shift) == block_size` (only used for fast path in `free.c:_mi_page_ptr_unalign`)
   uint8_t                   retire_expire;     // expiration count for retired blocks
-
+                                               // padding  
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads (= `mi_block_t* | (1 if owned)`)
 
