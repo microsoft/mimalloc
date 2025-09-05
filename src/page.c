@@ -385,7 +385,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   // mi_assert_internal(mi_page_thread_free_flag(page)!=MI_DELAYED_FREEING);
 
   // no more aligned blocks in here
-  mi_page_set_has_aligned(page, false);
+  mi_page_set_has_interior_pointers(page, false);
 
   // remove from the page list
   // (no need to do _mi_heap_delayed_free first as all blocks are already free)
@@ -412,7 +412,7 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(mi_page_all_free(page));
 
-  mi_page_set_has_aligned(page, false);
+  mi_page_set_has_interior_pointers(page, false);
 
   // don't retire too often..
   // (or we end up retiring and re-allocating most of the time)
@@ -697,7 +697,7 @@ mi_decl_nodiscard bool _mi_page_init(mi_heap_t* heap, mi_page_t* page) {
   mi_assert_internal(page->next == NULL);
   mi_assert_internal(page->prev == NULL);
   mi_assert_internal(page->retire_expire == 0);
-  mi_assert_internal(!mi_page_has_aligned(page));
+  mi_assert_internal(!mi_page_has_interior_pointers(page));
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   mi_assert_internal(page->keys[0] != 0);
   mi_assert_internal(page->keys[1] != 0);

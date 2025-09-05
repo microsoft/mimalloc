@@ -795,12 +795,12 @@ static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
   mi_page_flags_set(page, in_full, MI_PAGE_IN_FULL_QUEUE);
 }
 
-static inline bool mi_page_has_aligned(const mi_page_t* page) {
-  return ((mi_page_flags(page) & MI_PAGE_HAS_ALIGNED) != 0);
+static inline bool mi_page_has_interior_pointers(const mi_page_t* page) {
+  return ((mi_page_flags(page) & MI_PAGE_HAS_INTERIOR_POINTERS) != 0);
 }
 
-static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
-  mi_page_flags_set(page, has_aligned, MI_PAGE_HAS_ALIGNED);
+static inline void mi_page_set_has_interior_pointers(mi_page_t* page, bool has_aligned) {
+  mi_page_flags_set(page, has_aligned, MI_PAGE_HAS_INTERIOR_POINTERS);
 }
 
 static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
@@ -815,7 +815,7 @@ static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   const mi_threadid_t tid = (heap == NULL ? MI_THREADID_ABANDONED : heap->tld->thread_id);
   mi_assert_internal((tid & MI_PAGE_FLAG_MASK) == 0);
   
-  // we need to use an atomic cas since a concurrent thread may still set the MI_PAGE_HAS_ALIGNED flag (see `alloc_aligned.c`).
+  // we need to use an atomic cas since a concurrent thread may still set the MI_PAGE_HAS_INTERIOR_POINTERS flag (see `alloc_aligned.c`).
   mi_threadid_t xtid_old = mi_page_xthread_id(page);
   mi_threadid_t xtid;
   do {

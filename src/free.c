@@ -112,11 +112,21 @@ static inline void mi_block_check_unguard(mi_page_t* page, mi_block_t* block, vo
 }
 #endif
 
+static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, void* p ) {
+  mi_assert(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p); // should never be an interior pointer
+  #if SECURE > 0
+  // in secure mode we always unalign to guard against free-ing interior pointers
+  return _mi_page_ptr_unalign(page,p);  
+  #else
+  return (mi_block_t*)p;
+  #endif
+}
+
 
 // free a local pointer  (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_attr_noexcept {
   mi_assert_internal(p!=NULL && page != NULL);
-  mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(page, p) : (mi_block_t*)p);
+  mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
   mi_block_check_unguard(page, block, p);
   mi_free_block_local(page, block, true /* track stats */, true /* check for a full page */);
 }
@@ -124,7 +134,8 @@ static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_
 // free a pointer owned by another thread (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, void* p) mi_attr_noexcept {
   mi_assert_internal(p!=NULL && page != NULL);
-  mi_block_t* const block = _mi_page_ptr_unalign(page, p); // don't check `has_aligned` flag to avoid a race (issue #865)
+  mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
+  mi_assert_internal(!mi_page_has_interior_pointers(page) || block==(mi_block_t*)p);
   mi_block_check_unguard(page, block, p);
   mi_free_block_mt(page, block);
 }
@@ -167,7 +178,7 @@ void mi_free(void* p) mi_attr_noexcept
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ mi_page_xthread_id(page));
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
-    mi_block_t* const block = (mi_block_t*)p;
+    mi_block_t* const block = mi_validate_block_from_ptr(page,p);
     mi_free_block_local(page, block, true /* track stats */, false /* no need to check if the page is full */);
   }
   else if (xtid <= MI_PAGE_FLAG_MASK) {            // `tid == mi_page_thread_id(page) && mi_page_flags(page) != 0`
@@ -177,7 +188,7 @@ void mi_free(void* p) mi_attr_noexcept
   // free-ing in a page owned by a heap in another thread, or an abandoned page (not belonging to a heap)
   else if ((xtid & MI_PAGE_FLAG_MASK) == 0) {      // `tid != mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // blocks are aligned (and not a full page); push on the thread_free list
-    mi_block_t* const block = (mi_block_t*)p;
+    mi_block_t* const block = mi_validate_block_from_ptr(page,p);
     mi_free_block_mt(page,block);
   }
   else {
@@ -334,7 +345,7 @@ static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_page_t* p
 static inline size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noexcept {
   const mi_page_t* const page = mi_validate_ptr_page(p,msg);
   if mi_unlikely(page==NULL) return 0;
-  if mi_likely(!mi_page_has_aligned(page)) {
+  if mi_likely(!mi_page_has_interior_pointers(page)) {
     const mi_block_t* block = (const mi_block_t*)p;
     return mi_page_usable_size_of(page, block);
   }
@@ -562,7 +573,7 @@ void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
 static void mi_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
   MI_UNUSED(p);
   mi_assert_internal(mi_block_ptr_is_guarded(block, p));
-  mi_assert_internal(mi_page_has_aligned(page));
+  mi_assert_internal(mi_page_has_interior_pointers(page));
   mi_assert_internal((uint8_t*)p - (uint8_t*)block >= (ptrdiff_t)sizeof(mi_block_t));
   mi_assert_internal(block->next == MI_BLOCK_TAG_GUARDED);
 

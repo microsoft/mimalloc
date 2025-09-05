@@ -276,17 +276,18 @@ typedef struct mi_block_s {
 
 
 // The page flags are put in the bottom 2 bits of the thread_id (for a fast test in `mi_free`)
-// `has_aligned` is true if the page has pointers at an offset in a block (so we unalign before free-ing)
+// If `has_interior_pointers` is true if the page has pointers at an offset in a block (so we have to unalign to the block start before free-ing)
 // `in_full_queue` is true if the page is full and resides in the full queue (so we move it to a regular queue on free-ing)
-#define MI_PAGE_IN_FULL_QUEUE         MI_ZU(0x01)
-#define MI_PAGE_HAS_ALIGNED           MI_ZU(0x02)
-#define MI_PAGE_FLAG_MASK             MI_ZU(0x03)
+#define MI_PAGE_IN_FULL_QUEUE           MI_ZU(0x01)
+#define MI_PAGE_HAS_INTERIOR_POINTERS   MI_ZU(0x02)
+#define MI_PAGE_FLAG_MASK               MI_ZU(0x03)
 typedef size_t mi_page_flags_t;
 
 // There are two special threadid's: 0 for abandoned threads, and 4 for abandoned & mapped threads --
-// abandoned-mapped pages are abandoned but also mapped in an arena so can be quickly found for reuse.
-#define MI_THREADID_ABANDONED         MI_ZU(0)
-#define MI_THREADID_ABANDONED_MAPPED  (MI_PAGE_FLAG_MASK + 1)
+// abandoned-mapped pages are abandoned but also mapped in an arena (in `mi_arena_t.pages_abandoned`) 
+// so these can be quickly found for reuse.
+#define MI_THREADID_ABANDONED           MI_ZU(0)
+#define MI_THREADID_ABANDONED_MAPPED    (MI_PAGE_FLAG_MASK + 1)
 
 // Thread free list.
 // Points to a list of blocks that are freed by other threads.
@@ -321,7 +322,7 @@ typedef uint8_t mi_heaptag_t;
 //   free an object and (re)claim ownership if the page was abandoned.
 // - If a page is not part of a heap it is called "abandoned"  (`heap==NULL`) -- in
 //   that case the `xthreadid` is 0 or 4 (4 is for abandoned pages that
-//   are in the abandoned page lists of an arena, these are called "mapped" abandoned pages).
+//   are in the `pages_abandoned` lists of an arena, these are called "mapped" abandoned pages).
 // - page flags are in the bottom 3 bits of `xthread_id` for the fast path in `mi_free`.
 // - The layout is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
 // - Using `uint16_t` does not seem to slow things down
