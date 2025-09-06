@@ -58,34 +58,29 @@ extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_
   // allow use of the block internally
   // note: when tracking we need to avoid ever touching the MI_PADDING since
   // that is tracked by valgrind etc. as non-accessible (through the red-zone, see `mimalloc/track.h`)
-  mi_track_mem_undefined(block, mi_page_usable_block_size(page));
+  const size_t bsize = mi_page_usable_block_size(page);
+  mi_track_mem_undefined(block, bsize);
 
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
-    mi_assert_internal(page->block_size != 0); // do not call with zero'ing for huge blocks (see _mi_malloc_generic)
-    mi_assert_internal(!mi_page_is_huge(page));
-    #if MI_PADDING
-    mi_assert_internal(page->block_size >= MI_PADDING_SIZE);
-    #endif
     if (page->free_is_zero) {
       block->next = 0;
-      mi_track_mem_defined(block, page->block_size - MI_PADDING_SIZE);
+      mi_track_mem_defined(block, bsize);
     }
     else {
-      _mi_memzero_aligned(block, page->block_size - MI_PADDING_SIZE);
+      _mi_memzero_aligned(block, bsize);
     }
   }
 
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
   if (!zero && !mi_page_is_huge(page)) {
-    memset(block, MI_DEBUG_UNINIT, mi_page_usable_block_size(page));
+    memset(block, MI_DEBUG_UNINIT, bsize);
   }
   #elif (MI_SECURE!=0)
   if (!zero) { block->next = 0; } // don't leak internal data
   #endif
 
-  #if (MI_STAT>0)
-  const size_t bsize = mi_page_usable_block_size(page);
+  #if (MI_STAT>0)  
   if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
     mi_heap_stat_increase(heap, malloc_normal, bsize);
     mi_heap_stat_counter_increase(heap, malloc_normal_count, 1);
@@ -98,10 +93,10 @@ extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_
   #endif
 
   #if MI_PADDING // && !MI_TRACK_ENABLED
-    mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + mi_page_usable_block_size(page));
+    mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + bsize);
     ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
     #if (MI_DEBUG>=2)
-    mi_assert_internal(delta >= 0 && mi_page_usable_block_size(page) >= (size - MI_PADDING_SIZE + delta));
+    mi_assert_internal(delta >= 0 && bsize >= (size - MI_PADDING_SIZE + delta));
     #endif
     mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
     padding->canary = mi_ptr_encode_canary(page,block,page->keys);

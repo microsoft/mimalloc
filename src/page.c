@@ -982,17 +982,9 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   mi_assert_internal(_mi_ptr_page(page)==page);
 
   // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc)
-  void* p;
-  if mi_unlikely(zero && mi_page_is_huge(page)) {
-    // note: we cannot call _mi_page_malloc with zeroing for huge blocks; we zero it afterwards in that case.
-    p = _mi_page_malloc(heap, page, size);
-    mi_assert_internal(p != NULL);
-    _mi_memzero_aligned(p, mi_page_usable_block_size(page));
-  }
-  else {
-    p = _mi_page_malloc_zero(heap, page, size, zero);
-    mi_assert_internal(p != NULL);
-  }
+  void* const p = _mi_page_malloc_zero(heap, page, size, zero);
+  mi_assert_internal(p != NULL);
+  
   // move full pages to the full queue
   if (mi_page_is_full(page)) {
     mi_page_to_full(page, mi_page_queue_of(page));
