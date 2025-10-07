@@ -45,6 +45,7 @@ option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode 
 option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
 
 include(CheckLinkerFlag)    # requires cmake 3.18
+include(CheckCCompilerFlag)
 include(CheckIncludeFiles)
 include(GNUInstallDirs)
 include("cmake/mimalloc-config-version.cmake")
@@ -147,6 +148,8 @@ if(MI_NO_OPT_ARCH)
   set(MI_OPT_ARCH "OFF")
 elseif(MI_ARCH STREQUAL "arm64")
   set(MI_OPT_ARCH "ON")  # enable armv8.1-a by default on arm64 unless MI_NO_OPT_ARCH is set
+elseif(MI_ARCH STREQUAL "riscv64")
+  set(MI_OPT_ARCH "ON")  # enable rv64gc_zihintpause by default on riscv64 unless MI_NO_OPT_ARCH is set
 endif()
 
 
@@ -441,7 +444,14 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
       endif()
     elseif(MI_ARCH STREQUAL "arm64")
       set(MI_OPT_ARCH_FLAGS "-march=armv8.1-a")  # fast atomics
-    endif()
+    elseif(MI_ARCH STREQUAL "riscv64")
+      check_c_compiler_flag("-march=rv64gc_zihintpause" MI_HAS_RISCV_PAUSE) # fast atomcs 
+      if(MI_HAS_RISCV_PAUSE)
+        set(MI_OPT_ARCH_FLAGS "-march=rv64gc_zihintpause")  # fast atomics
+      else()
+        set(MI_OPT_ARCH_FLAGS "-march=rv64gc")
+      endif()
+    endif() 
   endif()
 endif()
 
