@@ -22,6 +22,7 @@ option(MI_WIN_USE_FIXED_TLS "Use a fixed TLS slot on Windows to avoid extra test
 option(MI_LOCAL_DYNAMIC_TLS "Use local-dynamic-tls, a slightly slower but dlopen-compatible thread local storage mechanism (Unix)" OFF)
 option(MI_LIBC_MUSL         "Enable this when linking with musl libc" OFF)
 
+option(MI_DEBUG_ASSERT      "Enable assertion checks (even in RELEASE builds). Enabled by default in DEBUG mode" OFF)
 option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
 option(MI_TRACK_VALGRIND    "Compile with Valgrind support (adds a small overhead)" OFF)
@@ -302,6 +303,9 @@ endif()
 if(MI_DEBUG_FULL)
   message(STATUS "Set debug level to full internal invariant checking (MI_DEBUG_FULL=ON)")
   list(APPEND mi_defines MI_DEBUG=3)   # full invariant checking
+elseif(MI_DEBUG_ASSERT)
+  message(STATUS "Set debug level to 2 for assertion checking (MI_DEBUG_ASSERT=ON)")
+  list(APPEND mi_defines MI_DEBUG=2)   # (internal) assertion checking
 endif()
 
 if(MI_NO_PADDING)
