@@ -741,55 +741,6 @@ static inline bool mi_bchunk_try_find_and_clear_8(mi_bchunk_t* chunk, size_t n, 
 }
 
 
-// find least aligned bfield in a chunk with all bits set, and try unset it atomically
-// set `*pidx` to its bit index (0 <= *pidx < MI_BCHUNK_BITS) on success.
-// Used to find large size pages in the free blocks.
-// todo: try neon version
-/*
-static mi_decl_noinline  bool mi_bchunk_try_find_and_clearX(mi_bchunk_t* chunk, size_t* pidx) {
-  #if MI_OPT_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==512)
-  while (true) {
-    // since a cache-line is 64b, load all at once
-    const __m256i vec1 = _mm256_load_si256((const __m256i*)chunk->bfields);
-    const __m256i vec2 = _mm256_load_si256((const __m256i*)chunk->bfields+1);
-    const __m256i cmpv = mi_mm256_ones();
-    const __m256i vcmp1 = _mm256_cmpeq_epi64(vec1, cmpv); // (bfield == ~0 ? -1 : 0)
-    const __m256i vcmp2 = _mm256_cmpeq_epi64(vec2, cmpv); // (bfield == ~0 ? -1 : 0)
-    const uint32_t mask1 = _mm256_movemask_epi8(vcmp1);    // mask of most significant bit of each byte
-    const uint32_t mask2 = _mm256_movemask_epi8(vcmp2);    // mask of most significant bit of each byte
-    const uint64_t mask = ((uint64_t)mask2 << 32) | mask1;
-    // mask is inverted, so each 8-bits are set iff the corresponding elem64 has all bits set (and thus can be cleared)
-    if (mask==0) return false;
-    mi_assert_internal((_tzcnt_u64(mask)%8) == 0); // tzcnt == 0, 8, 16, 24 , ..
-    const size_t chunk_idx = _tzcnt_u64(mask) / 8;
-    mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
-    if mi_likely(mi_bfield_atomic_try_clearX(&chunk->bfields[chunk_idx],NULL)) {
-      *pidx = chunk_idx*MI_BFIELD_BITS;
-      mi_assert_internal(*pidx + MI_BFIELD_BITS <= MI_BCHUNK_BITS);
-      return true;
-    }
-    // try again
-    // note: there must be an atomic release/acquire in between or otherwise the registers may not be reloaded
-  }
-#else
-  for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
-    const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
-    if (~b==0 && mi_bfield_atomic_try_clearX(&chunk->bfields[i], NULL)) {
-      *pidx = i*MI_BFIELD_BITS;
-      mi_assert_internal(*pidx + MI_BFIELD_BITS <= MI_BCHUNK_BITS);
-      return true;
-    }
-  }
-  return false;
-#endif
-}
-
-static inline bool mi_bchunk_try_find_and_clear_X(mi_bchunk_t* chunk, size_t n, size_t* pidx) {
-  mi_assert_internal(n==MI_BFIELD_BITS); MI_UNUSED(n);
-  return mi_bchunk_try_find_and_clearX(chunk, pidx);
-}
-*/
-
 // find a sequence of `n` bits in a chunk with `0 < n <= MI_BFIELD_BITS` with all bits set,
 // and try to clear them atomically.
 // set `*pidx` to its bit index (0 <= *pidx <= MI_BCHUNK_BITS - n) on success.
