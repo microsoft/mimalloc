@@ -852,7 +852,7 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
   return false;
 }
 
-// find a sequence of `n` bits in a chunk with `n < MI_BCHUNK_BITS` with all bits set,
+// find a sequence of `n` bits in a chunk with `n <= MI_BCHUNK_BITS` with all bits set,
 // and try to clear them atomically.
 // set `*pidx` to its bit index (0 <= *pidx <= MI_BCHUNK_BITS - n) on success.
 // This can cross bfield boundaries.
@@ -870,15 +870,15 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clearN_(mi_bchunk_t* chunk, 
     // first field
     mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
     size_t ones = mi_bfield_clz(~b);
+    
     cidx = (i*MI_BFIELD_BITS) + (MI_BFIELD_BITS - ones);  // start index
     if (ones >= m) {
-      // we found enough bits!
+      // we found enough bits already!
       m = 0;
     }
-    else {
+    else if (ones > 0) {
+      // keep scanning further fields until we have enough bits
       m -= ones;
-
-      // keep scanning further fields?
       size_t j = 1;   // field count from i
       while (i+j < MI_BCHUNK_FIELDS) {
         mi_assert_internal(m > 0);
