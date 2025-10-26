@@ -317,13 +317,13 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
   int err = mi_reserve_os_memory_ex2(subproc, arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
   if (err != 0) {
     if (adjust) { mi_subproc_stat_adjust_increase( subproc, committed, arena_reserve); } // roll back
-    // failed, try a smaller size?
-    const size_t small_arena_reserve = (MI_SIZE_BITS == 32 ? 128*MI_MiB : 1*MI_GiB);
-    if (adjust) { mi_subproc_stat_adjust_decrease( subproc, committed, arena_reserve); }
-    if (arena_reserve > small_arena_reserve) {
+    // failed to allocate: try a smaller size arena as fallback?
+    const size_t small_arena_reserve = 4 * MI_ARENA_MIN_SIZE; // 128 MiB (or 32 MiB on 32-bit)
+    if (arena_reserve > small_arena_reserve && small_arena_reserve > req_size) {
       // try again
-      err = mi_reserve_os_memory_ex(small_arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
-      if (err != 0 && adjust) { mi_subproc_stat_adjust_increase( subproc, committed, arena_reserve); } // roll back
+      if (adjust) { mi_subproc_stat_adjust_decrease(subproc, committed, small_arena_reserve); }
+      err = mi_reserve_os_memory_ex2(subproc, small_arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id);
+      if (err != 0 && adjust) { mi_subproc_stat_adjust_increase( subproc, committed, small_arena_reserve); } // roll back
     }
   }
   return (err==0);
