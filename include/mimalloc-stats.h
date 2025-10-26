@@ -71,6 +71,7 @@ typedef enum mi_chunkbin_e {
   MI_CBIN_OTHER,    // slice_count: any other from the other bins, and 1 <= slice_count <= MI_BCHUNK_BITS
   MI_CBIN_MEDIUM,   // slice_count == 8
   MI_CBIN_LARGE,    // slice_count == MI_SIZE_BITS  (only used if MI_ENABLE_LARGE_PAGES is 1)
+  MI_CBIN_HUGE,     // slice_count > MI_BCHUNK_BITS
   MI_CBIN_NONE,     // no bin assigned yet (the chunk is completely free)
   MI_CBIN_COUNT
 } mi_chunkbin_t;

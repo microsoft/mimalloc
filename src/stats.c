@@ -94,8 +94,8 @@ void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount) {
 // must be thread safe as it is called from stats_merge
 static void mi_stat_count_add_mt(mi_stat_count_t* stat, const mi_stat_count_t* src) {
   if (stat==src) return;
-  mi_atomic_void_addi64_relaxed(&stat->total, &src->total); 
-  mi_atomic_void_addi64_relaxed(&stat->current, &src->current); 
+  mi_atomic_void_addi64_relaxed(&stat->total, &src->total);
+  mi_atomic_void_addi64_relaxed(&stat->current, &src->current);
   // peak scores do really not work across threads .. we just add them
   mi_atomic_void_addi64_relaxed( &stat->peak, &src->peak);
   // or, take the max?
@@ -569,10 +569,11 @@ static void mi_heap_buf_print_count_bin(mi_heap_buf_t* hbuf, const char* prefix,
 static void mi_heap_buf_print_count_cbin(mi_heap_buf_t* hbuf, const char* prefix, mi_stat_count_t* stat, mi_chunkbin_t bin, bool add_comma) {
   const char* cbin = " ";
   switch(bin) {
-    case MI_CBIN_SMALL: cbin = "S"; break;
+    case MI_CBIN_SMALL:  cbin = "S"; break;
     case MI_CBIN_MEDIUM: cbin = "M"; break;
-    case MI_CBIN_LARGE: cbin = "L"; break;
-    case MI_CBIN_OTHER: cbin = "X"; break;
+    case MI_CBIN_LARGE:  cbin = "L"; break;
+    case MI_CBIN_HUGE:   cbin = "H"; break;
+    case MI_CBIN_OTHER:  cbin = "X"; break;
     default: cbin = " "; break;
   }
   char buf[128];

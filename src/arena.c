@@ -211,7 +211,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
       #if MI_DEBUG > 1
       if (memid->initially_zero) {
         if (!mi_mem_is_zero(p, mi_size_of_slices(slice_count))) {
-          _mi_error_message(EFAULT, "interal error: arena allocation was not zero-initialized!\n");
+          _mi_error_message(EFAULT, "internal error: arena allocation was not zero-initialized!\n");
           memid->initially_zero = false;
         }
       }
@@ -394,7 +394,7 @@ static mi_decl_noinline void* mi_arenas_try_find_free(
   mi_subproc_t* subproc, size_t slice_count, size_t alignment,
   bool commit, bool allow_large, mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid)
 {
-  mi_assert_internal(slice_count <= mi_slice_count_of_size(MI_ARENA_MAX_OBJ_SIZE));
+  // mi_assert_internal(slice_count <= mi_slice_count_of_size(MI_ARENA_MAX_CHUNK_OBJ_SIZE));
   mi_assert(alignment <= MI_ARENA_SLICE_ALIGN);
   if (alignment > MI_ARENA_SLICE_ALIGN) return NULL;
 
@@ -424,9 +424,12 @@ static mi_decl_noinline void* mi_arenas_try_alloc(
   bool commit, bool allow_large,
   mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid)
 {
-  mi_assert(slice_count <= MI_ARENA_MAX_OBJ_SLICES);
+  // mi_assert(slice_count <= MI_ARENA_MAX_CHUNK_OBJ_SLICES);
   mi_assert(alignment <= MI_ARENA_SLICE_ALIGN);
   void* p;
+
+  // not too large?
+  if (slice_count * MI_ARENA_SLICE_SIZE > MI_ARENA_MAX_SIZE) return NULL;
 
   // try to find free slices in the arena's
   p = mi_arenas_try_find_free(subproc, slice_count, alignment, commit, allow_large, req_arena, tseq, numa_node, memid);
@@ -490,7 +493,7 @@ void* _mi_arenas_alloc_aligned( mi_subproc_t* subproc,
 
   // try to allocate in an arena if the alignment is small enough and the object is not too small (as for heap meta data)
   if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) &&           // is arena allocation allowed?
-      size >= MI_ARENA_MIN_OBJ_SIZE && size <= MI_ARENA_MAX_CHUNK_OBJ_SIZE &&  // and not too small/large
+      size >= MI_ARENA_MIN_OBJ_SIZE && size <= MI_ARENA_MAX_OBJ_SIZE &&               // and not too small or too large
       alignment <= MI_ARENA_SLICE_ALIGN && align_offset == 0)            // and good alignment
   {
     const size_t slice_count = mi_slice_count_of_size(size);
@@ -602,9 +605,9 @@ static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_si
   mi_memid_t memid = _mi_memid_none();
   mi_page_t* page = NULL;
   const size_t alloc_size = mi_size_of_slices(slice_count);
-  if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) && // allowed to allocate from arena's?
-      !os_align &&                                  // not large alignment
-      slice_count <= MI_ARENA_MAX_CHUNK_OBJ_SLICES) // and not too large
+  if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) &&      // allowed to allocate from arena's?
+      !os_align &&                                                  // not large alignment
+      slice_count <= (MI_ARENA_MAX_OBJ_SIZE / MI_ARENA_SLICE_SIZE)) // and not too large
   {
     page = (mi_page_t*)mi_arenas_try_alloc(tld->subproc, slice_count, page_alignment, commit, allow_large, req_arena, tld->thread_seq, numa_node, &memid);
     if (page != NULL) {
@@ -1459,6 +1462,8 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
   const size_t used_slice_count = mi_arena_used_slices(arena);
   size_t bit_count = 0;
   size_t bit_set_count = 0;
+  long bit_of_page = 0;
+  mi_ansi_color_t color_of_page = MI_GRAY;
   for (size_t i = 0; i < chunk_count && bit_count < slice_count; i++) {
     char buf[5*MI_BCHUNK_BITS + 64]; _mi_memzero(buf, sizeof(buf));
     if (bit_count > used_slice_count && i+2 < chunk_count) {
@@ -1481,6 +1486,7 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
         case MI_CBIN_SMALL:  chunk_kind = 'S'; break;
         case MI_CBIN_MEDIUM: chunk_kind = 'M'; break;
         case MI_CBIN_LARGE:  chunk_kind = 'L'; break;
+        case MI_CBIN_HUGE:   chunk_kind = 'H'; break;
         case MI_CBIN_OTHER:  chunk_kind = 'X'; break;
         default: chunk_kind = ' '; break; // suppress warning
         // case MI_CBIN_NONE: chunk_kind = 'N'; break;
@@ -1489,8 +1495,6 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
     buf[k++] = chunk_kind;
     buf[k++] = ' ';
 
-    long bit_of_page = 0;
-    mi_ansi_color_t color_of_page = MI_GRAY;
     for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
       if (j > 0 && (j % fields_per_line) == 0) {
         // buf[k++] = '\n'; _mi_memset(buf+k,' ',7); k += 7;
@@ -1715,7 +1719,8 @@ typedef struct mi_purge_visit_info_s {
 } mi_purge_visit_info_t;
 
 static bool mi_arena_try_purge_range(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
-  if (mi_bbitmap_try_clearN(arena->slices_free, slice_index, slice_count)) {
+  mi_assert(slice_count < MI_BCHUNK_BITS);
+  if (mi_bbitmap_try_clearNC(arena->slices_free, slice_index, slice_count)) {
     // purge
     bool decommitted = mi_arena_purge(arena, slice_index, slice_count); MI_UNUSED(decommitted);
     mi_assert_internal(!decommitted || mi_bitmap_is_clearN(arena->slices_committed, slice_index, slice_count));
