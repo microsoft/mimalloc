@@ -285,6 +285,11 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
     }
   }
 
+  // try to accommodate the requested size for huge allocations
+  if (arena_reserve < req_size) {
+    arena_reserve = _mi_align_up(req_size, MI_ARENA_MAX_OBJ_SIZE);
+  }
+
   // check arena bounds
   const size_t min_reserve = MI_ARENA_MIN_SIZE;
   const size_t max_reserve = MI_ARENA_MAX_SIZE;   // 16 GiB
@@ -295,7 +300,8 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
     arena_reserve = max_reserve;
   }
 
-  if (arena_reserve < req_size) return false;  // should be able to at least handle the current allocation size
+  // should be able to at least handle the current allocation size
+  if (arena_reserve < req_size) return false;  
 
   // commit eagerly?
   bool arena_commit = false;
