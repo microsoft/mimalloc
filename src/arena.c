@@ -287,7 +287,7 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
 
   // try to accommodate the requested size for huge allocations
   if (arena_reserve < req_size) {
-    arena_reserve = _mi_align_up(req_size, MI_ARENA_MAX_OBJ_SIZE);
+    arena_reserve = _mi_align_up(req_size + MI_ARENA_MAX_CHUNK_OBJ_SIZE, MI_ARENA_MAX_CHUNK_OBJ_SIZE); // over-reserve for meta-info
   }
 
   // check arena bounds
@@ -490,7 +490,7 @@ void* _mi_arenas_alloc_aligned( mi_subproc_t* subproc,
 
   // try to allocate in an arena if the alignment is small enough and the object is not too small (as for heap meta data)
   if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) &&           // is arena allocation allowed?
-      size >= MI_ARENA_MIN_OBJ_SIZE && size <= MI_ARENA_MAX_OBJ_SIZE &&  // and not too small/large
+      size >= MI_ARENA_MIN_OBJ_SIZE && size <= MI_ARENA_MAX_CHUNK_OBJ_SIZE &&  // and not too small/large
       alignment <= MI_ARENA_SLICE_ALIGN && align_offset == 0)            // and good alignment
   {
     const size_t slice_count = mi_slice_count_of_size(size);
@@ -603,8 +603,8 @@ static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_si
   mi_page_t* page = NULL;
   const size_t alloc_size = mi_size_of_slices(slice_count);
   if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) && // allowed to allocate from arena's?
-      !os_align &&                            // not large alignment
-      slice_count <= MI_ARENA_MAX_OBJ_SLICES) // and not too large
+      !os_align &&                                  // not large alignment
+      slice_count <= MI_ARENA_MAX_CHUNK_OBJ_SLICES) // and not too large
   {
     page = (mi_page_t*)mi_arenas_try_alloc(tld->subproc, slice_count, page_alignment, commit, allow_large, req_arena, tld->thread_seq, numa_node, &memid);
     if (page != NULL) {
@@ -1211,8 +1211,8 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
     _mi_warning_message("cannot use OS memory since it is not large enough (size %zu KiB, minimum required is %zu KiB)", size/MI_KiB, mi_size_of_slices(info_slices+1)/MI_KiB);
     return false;
   }
-  else if (info_slices >= MI_ARENA_MAX_OBJ_SLICES) {
-    _mi_warning_message("cannot use OS memory since it is too large with respect to the maximum object size (size %zu MiB, meta-info slices %zu, maximum object slices are %zu)", size/MI_MiB, info_slices, MI_ARENA_MAX_OBJ_SLICES);
+  else if (info_slices >= MI_ARENA_MAX_CHUNK_OBJ_SLICES) {
+    _mi_warning_message("cannot use OS memory since it is too large with respect to the maximum object size (size %zu MiB, meta-info slices %zu, maximum object slices are %zu)", size/MI_MiB, info_slices, MI_ARENA_MAX_CHUNK_OBJ_SLICES);
     return false;
   }
 
