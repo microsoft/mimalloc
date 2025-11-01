@@ -16,8 +16,8 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Import mimalloc (if installed)
-find_package(mimalloc 2.2 CONFIG REQUIRED)
-message(STATUS "Found mimalloc installed at: ${MIMALLOC_LIBRARY_DIR} (${MIMALLOC_VERSION_DIR})")
+find_package(mimalloc CONFIG REQUIRED)
+message(STATUS "Found mimalloc ${mimalloc_VERSION} installed at: ${MIMALLOC_LIBRARY_DIR} (${MIMALLOC_VERSION_DIR})")
 
 
 # link with a dynamic shared library
