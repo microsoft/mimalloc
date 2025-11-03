@@ -1082,7 +1082,7 @@ bool mi_bitmap_setN(mi_bitmap_t* bitmap, size_t idx, size_t n, size_t* palready_
     const size_t m = (cidx + n > MI_BCHUNK_BITS ? MI_BCHUNK_BITS - cidx : n);
     size_t _already_set = 0;
     were_allclear = mi_bchunk_setN(&bitmap->chunks[chunk_idx], cidx, m, &_already_set) && were_allclear;
-    already_set = already_set + _already_set;
+    already_set += _already_set;
     mi_bitmap_chunkmap_set(bitmap, chunk_idx); // set afterwards
     mi_assert_internal(m <= n);
     n -= m;
@@ -1589,7 +1589,7 @@ bool mi_bbitmap_try_clearNC(mi_bbitmap_t* bbitmap, size_t idx, size_t n) {
   mi_assert_internal(cidx + n <= MI_BCHUNK_BITS);  // don't cross chunks (for now)
   mi_assert_internal(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
   if (cidx + n > MI_BCHUNK_BITS) return false;
-  bool maybe_all_clear;
+  bool maybe_all_clear = false;
   const bool cleared = mi_bchunk_try_clearN(&bbitmap->chunks[chunk_idx], cidx, n, &maybe_all_clear);
   if (cleared && maybe_all_clear) { mi_bbitmap_chunkmap_try_clear(bbitmap, chunk_idx); }
   // note: we don't set the size class for an explicit try_clearN (only used by purging)
