@@ -305,7 +305,10 @@ static void mi_heap_free(mi_heap_t* heap, bool do_free_mem) {
 
   // and free the used memory
   if (do_free_mem) {
-    _mi_meta_free(heap, sizeof(*heap), heap->memid);
+    const size_t actual_size = (heap->memid.memkind == MI_MEM_ARENA
+                                 ? (size_t)heap->memid.mem.arena.slice_count * MI_ARENA_SLICE_SIZE
+                                 : sizeof(*heap));
+    _mi_meta_free(heap, actual_size, heap->memid);
   }
 }
 
