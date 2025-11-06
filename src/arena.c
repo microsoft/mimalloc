@@ -795,6 +795,9 @@ mi_page_t* _mi_arenas_page_alloc(mi_heap_t* heap, size_t block_size, size_t bloc
   else {
     page = mi_arenas_page_singleton_alloc(heap, block_size, block_alignment);
   }
+  if mi_unlikely(page == NULL) {
+    return NULL;
+  }
   // mi_assert_internal(page == NULL || _mi_page_segment(page)->subproc == tld->subproc);
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(page)==page);
