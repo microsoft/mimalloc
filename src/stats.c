@@ -86,10 +86,14 @@ void _mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount) {
 static void mi_stat_count_add_mt(mi_stat_count_t* stat, const mi_stat_count_t* src) {
   if (stat==src) return;
   mi_atomic_void_addi64_relaxed(&stat->total, &src->total); 
-  
-  int64_t prev_current = mi_atomic_addi64_relaxed(&stat->current, src->current);
+  const int64_t prev_current = mi_atomic_addi64_relaxed(&stat->current, src->current);
 
-  // global current plus thread peak approximates new global peak
+  // Global current plus thread peak approximates new global peak
+  // note: peak scores do really not work across threads.
+  // we used to just add them together but that often overestimates in practice.
+  // similarly, max does not seem to work well. The current approach
+  // by Artem Kharytoniuk (@artem-lunarg) seems to work better, see PR#1112 
+  // for a longer description.
   mi_atomic_maxi64_relaxed(&stat->peak, prev_current + src->peak);
 }
 
