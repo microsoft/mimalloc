@@ -50,6 +50,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #else
 // Use C11 atomics
 #include <stdatomic.h>
+#include <stdbool.h> // bool
 #define  mi_atomic(name)          atomic_##name
 #define  mi_memory_order(name)    memory_order_##name
 #if (__STDC_VERSION__ >= 201710L) // c17, see issue #735
