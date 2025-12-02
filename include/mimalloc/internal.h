@@ -687,13 +687,6 @@ static inline bool mi_page_is_expandable(const mi_page_t* page) {
   return (page->capacity < page->reserved);
 }
 
-
-static inline bool mi_page_is_full(mi_page_t* page) {
-  bool full = (page->reserved == page->used);
-  mi_assert_internal(!full || page->free == NULL);
-  return full;
-}
-
 // is more than 7/8th of a page in use?
 static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
@@ -874,6 +867,11 @@ static inline bool _mi_page_unown(mi_page_t* page) {
   return false;
 }
 
+static inline bool mi_page_is_full(mi_page_t* page) {
+    bool full = (page->reserved == page->used) && (mi_page_thread_free(page) == NULL);
+    mi_assert_internal(!full || page->free == NULL);
+    return full;
+}
 
 /* -------------------------------------------------------------------
   Guarded objects
