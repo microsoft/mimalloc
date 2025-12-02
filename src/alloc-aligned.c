@@ -25,6 +25,13 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
   return ok;
 }
 
+static bool mi_malloc_is_os_page_aligned(size_t size, size_t alignment) {
+  if ((size < MI_OS_PAGE_SIZE) || (alignment != MI_OS_PAGE_SIZE)) return false;
+  const size_t bsize = mi_good_size(size);
+  const bool ok = (bsize && MI_OS_PAGE_SIZE_MASK) == 0;
+  return ok;
+}
+
 #if MI_GUARDED
 static mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, size_t size, size_t alignment, bool zero) mi_attr_noexcept {
   // use over allocation for guarded blocksl
@@ -151,7 +158,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_generic(mi_heap_t* 
   // use regular allocation if it is guaranteed to fit the alignment constraints.
   // this is important to try as the fast path in `mi_heap_malloc_zero_aligned` only works when there exist
   // a page with the right block size, and if we always use the over-alloc fallback that would never happen.
-  if (offset == 0 && mi_malloc_is_naturally_aligned(size,alignment)) {
+  if (offset == 0 && (mi_malloc_is_naturally_aligned(size,alignment) || mi_malloc_is_os_page_aligned(size,alignment))) {
     void* p = mi_heap_malloc_zero_no_guarded(heap, size, zero);
     mi_assert_internal(p == NULL || ((uintptr_t)p % alignment) == 0);
     const bool is_aligned_or_null = (((uintptr_t)p) & (alignment-1))==0;
