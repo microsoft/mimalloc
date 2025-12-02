@@ -933,6 +933,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_tld_t* tld) {
   _mi_page_unown(page);
 }
 
+// this is called from `free.c:mi_free_try_collect_mt` only.
 bool _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page) {
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(page)==page);

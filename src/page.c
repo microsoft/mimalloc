@@ -163,6 +163,7 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
 
   // update counts now
   mi_assert_internal(count <= UINT16_MAX);
+  mi_assert_internal(page->used >= (uint16_t)count);
   page->used = page->used - (uint16_t)count;
 }
 
