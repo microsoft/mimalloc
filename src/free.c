@@ -167,6 +167,7 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
 }
 
 static inline mi_block_t* mi_validate_page_block( const mi_page_t* page, void* p ) {
+  MI_UNUSED_RELEASE(page);
   mi_assert_internal(p == (void*)_mi_page_ptr_unalign(page, p)); // check if it is not an interior pointer
   return (mi_block_t*)p;
   // temporary fix: always unalign the pointer anyways
