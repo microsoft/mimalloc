@@ -671,9 +671,15 @@ static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_si
   if (os_align) {
     block_start = MI_PAGE_ALIGN;
   }
-  else if (_mi_is_power_of_two(block_size) && block_size <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
-    // naturally align all power-of-2 blocks
-    block_start = _mi_align_up(mi_page_info_size(), block_size);
+  else if (_mi_is_power_of_two(block_size)) {
+    if (block_size <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
+      // naturally align all power-of-2 blocks
+      block_start = _mi_align_up(mi_page_info_size(), block_size);
+    }
+    else {
+      // otherwise align large power-of-2 blocks on OS page boundary (4096 bytes)
+      block_start = _mi_align_up(mi_page_info_size(), 4 * MI_KiB);
+    }
   }
   else {
     // otherwise start after the info
