@@ -37,6 +37,7 @@ static void test_thread_leak();       // issue #1104
 // static void test_mixed0();             // issue #942
 static void test_mixed1();             // issue #942
 static void test_stl_allocators();
+static void test_join();              // issue #1177
 
 #if _WIN32
 #include "main-override-dep.h"
@@ -51,7 +52,8 @@ int main() {
   //test_mixed1();
 
   // test_dep();
-  test_thread_leak();
+  // test_thread_leak();
+  test_join();
 
   //test_std_string();
   //test_thread_local();
@@ -477,4 +479,13 @@ void test_thread_local()
         mi_stats_print(NULL);
     }
     return;
+}
+
+// issue #1177
+thread_local void* s_ptr = mi_malloc(1);
+
+void test_join() {
+  std::thread thread([]() { mi_free(s_ptr); });
+  thread.join();
+  mi_free(s_ptr);  
 }
