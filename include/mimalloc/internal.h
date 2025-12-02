@@ -697,6 +697,7 @@ static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
 // is more than (n-1)/n'th of a page in use?
 static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
   if (page==NULL) return true;
+  if (page->reserved < n) return false;
   uint16_t frac = page->reserved / n;
   return (page->reserved - page->used <= frac);
 }
