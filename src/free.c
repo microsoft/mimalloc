@@ -281,13 +281,20 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
   }
 
   // 3. if the page is unmapped, try to reabandon so it can possibly be mapped and found for allocations
-  if (!mi_page_is_used_at_frac(page, 8) &&  // only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
-      !mi_page_is_abandoned_mapped(page) && page->memid.memkind == MI_MEM_ARENA &&
-      _mi_arenas_page_try_reabandon_to_mapped(page))
+  // We only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
+  // (but we only do this for smaller blocks where page->reserved > 16 to not waste too much space)
+  if ((page->reserved <= 16 || !mi_page_is_mostly_used(page)) &&  
+      page->memid.memkind == MI_MEM_ARENA && !mi_page_is_abandoned_mapped(page))
   {
-    return;
+    if (mi_page_is_full(page)) { // a page might still look full as we only did a `_mi_page_collect_free_partly`.      
+      // update the used count to maintain the invariant that abandoned mapped pages are not full.
+      _mi_page_free_collect(page,false);
+      mi_assert_internal(!mi_page_is_full(page));
+    }
+    if (_mi_arenas_page_try_reabandon_to_mapped(page)) {
+      return;
+    }
   }
-
 
   // not reclaimed or free'd, unown again
   // _mi_page_unown(page);
