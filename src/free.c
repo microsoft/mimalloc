@@ -290,8 +290,9 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
       // update the used count to maintain the invariant that abandoned mapped pages are not full.
       _mi_page_free_collect(page,false);
       mi_assert_internal(!mi_page_is_full(page));
+      // note: this may cause the page to become fully freed; `mi_page_unown_from_free` takes care of this as well.
     }
-    if (_mi_arenas_page_try_reabandon_to_mapped(page)) {
+    if (!mi_page_all_free(page) && _mi_arenas_page_try_reabandon_to_mapped(page)) {  
       return;
     }
   }
