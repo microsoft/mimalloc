@@ -397,7 +397,7 @@ bool test_heap2(void) {
 
 bool test_heap_arena_destroy(void) {
   mi_arena_id_t arena_id = NULL;
-  if (mi_reserve_os_memory_ex(32 * 1024 * 1024, true, false, true, &arena_id) != 0) {
+  if (mi_reserve_os_memory_ex(64 * 1024 * 1024, true, false, true, &arena_id) != 0) {
     return false;
   }
   mi_heap_t* heap = mi_heap_new_ex(0, true, arena_id);
@@ -410,7 +410,7 @@ bool test_heap_arena_destroy(void) {
 
 bool test_heap_arena_delete(void) {
   mi_arena_id_t arena_id = NULL;
-  if (mi_reserve_os_memory_ex(32 * 1024 * 1024, true, false, true, &arena_id) != 0) {
+  if (mi_reserve_os_memory_ex(64 * 1024 * 1024, true, false, true, &arena_id) != 0) {
     return false;
   }
   mi_heap_t* heap = mi_heap_new_ex(0, true, arena_id);

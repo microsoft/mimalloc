@@ -52,7 +52,7 @@ size_t _mi_os_large_page_size(void) {
 
 size_t _mi_os_guard_page_size(void) {
   const size_t gsize = _mi_os_page_size();
-  mi_assert(gsize <= (MI_ARENA_SLICE_SIZE/8));
+  mi_assert(gsize <= (MI_ARENA_SLICE_SIZE/4)); // issue #1166
   return gsize;
 }
 
