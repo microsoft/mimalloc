@@ -818,48 +818,15 @@ static inline bool mi_page_has_any_available(const mi_page_t* page) {
   return (page->used < page->reserved || (mi_page_thread_free(page) != NULL));
 }
 
-
 // Owned?
 static inline bool mi_page_is_owned(const mi_page_t* page) {
   return mi_tf_is_owned(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
-}
-
-// Unown a page that is currently owned
-static inline void _mi_page_unown_unconditional(mi_page_t* page) {
-  mi_assert_internal(mi_page_is_owned(page));
-  mi_assert_internal(mi_page_thread_id(page)==0);
-  const uintptr_t old = mi_atomic_and_acq_rel(&page->xthread_free, ~((uintptr_t)1));
-  mi_assert_internal((old&1)==1); MI_UNUSED(old);
 }
 
 // get ownership if it is not yet owned
 static inline bool mi_page_try_claim_ownership(mi_page_t* page) {
   const uintptr_t old = mi_atomic_or_acq_rel(&page->xthread_free, 1);
   return ((old&1)==0);
-}
-
-// release ownership of a page. This may free the page if all blocks were concurrently
-// freed in the meantime. Returns true if the page was freed.
-static inline bool _mi_page_unown(mi_page_t* page) {
-  mi_assert_internal(mi_page_is_owned(page));
-  mi_assert_internal(mi_page_is_abandoned(page));
-  mi_thread_free_t tf_new;
-  mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
-  do {
-    mi_assert_internal(mi_tf_is_owned(tf_old));
-    while mi_unlikely(mi_tf_block(tf_old) != NULL) {
-      _mi_page_free_collect(page, false);  // update used
-      if (mi_page_all_free(page)) {        // it may become free just before unowning it
-        _mi_arenas_page_unabandon(page);
-        _mi_arenas_page_free(page,NULL);
-        return true;
-      }
-      tf_old = mi_atomic_load_relaxed(&page->xthread_free);
-    }
-    mi_assert_internal(mi_tf_block(tf_old)==NULL);
-    tf_new = mi_tf_create(NULL, false);
-  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
-  return false;
 }
 
 

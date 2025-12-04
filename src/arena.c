@@ -514,12 +514,37 @@ void* _mi_arenas_alloc(mi_subproc_t* subproc, size_t size, bool commit, bool all
   Arena page allocation
 ----------------------------------------------------------- */
 
+// release ownership of a page. This may free the page if all blocks were concurrently
+// freed in the meantime. Returns true if the page was freed.
+static bool mi_abandoned_page_unown(mi_page_t* page) {
+  mi_assert_internal(mi_page_is_owned(page));
+  mi_assert_internal(mi_page_is_abandoned(page));
+  mi_thread_free_t tf_new;
+  mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
+  do {
+    mi_assert_internal(mi_tf_is_owned(tf_old));
+    while mi_unlikely(mi_tf_block(tf_old) != NULL) {
+      _mi_page_free_collect(page, false);  // update used
+      if (mi_page_all_free(page)) {        // it may become free just before unowning it
+        _mi_arenas_page_unabandon(page);
+        _mi_arenas_page_free(page,NULL);
+        return true;
+      }
+      tf_old = mi_atomic_load_relaxed(&page->xthread_free);
+    }
+    mi_assert_internal(mi_tf_block(tf_old)==NULL);
+    tf_new = mi_tf_create(NULL, false);
+  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
+  return false;
+}
+
+
 static bool mi_arena_try_claim_abandoned(size_t slice_index, mi_arena_t* arena, mi_heaptag_t heap_tag, bool* keep_abandoned) {
   // found an abandoned page of the right size
   mi_page_t* const page  = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
   // can we claim ownership?
   if (!mi_page_try_claim_ownership(page)) {
-    // there was a concurrent free ..
+    // there was a concurrent free that reclaims this page ..
     // we need to keep it in the abandoned map as the free will call `mi_arena_page_unabandon`,
     // and wait for readers (us!) to finish. This is why it is very important to set the abandoned
     // bit again (or otherwise the unabandon will never stop waiting).
@@ -532,7 +557,7 @@ static bool mi_arena_try_claim_abandoned(size_t slice_index, mi_arena_t* arena, 
     // (an unown might free the page, and depending on that we can keep it in the abandoned map or not)
     // note: a minor wrinkle: the page will still be mapped but the abandoned map entry is (temporarily) clear at this point.
     //       so we cannot check in `mi_arenas_free` for this invariant to hold.
-    const bool freed = _mi_page_unown(page);
+    const bool freed = mi_abandoned_page_unown(page);
     *keep_abandoned = !freed;
     return false;
   }
@@ -938,7 +963,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_tld_t* tld) {
     }
     mi_tld_stat_increase(tld, pages_abandoned, 1);
   }
-  _mi_page_unown(page);
+  mi_abandoned_page_unown(page);
 }
 
 // this is called from `free.c:mi_free_try_collect_mt` only.
