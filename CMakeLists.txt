@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(libmimalloc C CXX)
+project(libmimalloc C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -147,20 +147,42 @@ message(STATUS "Architecture: ${MI_ARCH}") # (${CMAKE_SYSTEM_PROCESSOR}, ${CMAKE
 if(MI_NO_USE_CXX)
   set(MI_USE_CXX "OFF")
 endif()
+
 if(MI_NO_OPT_ARCH)
   set(MI_OPT_ARCH "OFF")
 elseif(MI_ARCH STREQUAL "arm64")
   set(MI_OPT_ARCH "ON")  # enable armv8.1-a by default on arm64 unless MI_NO_OPT_ARCH is set
 endif()
 
+# -----------------------------------------------------------------------------
+# Enable the C++ compiler early on if needed
+# -----------------------------------------------------------------------------
+
+# clang-cl detection on windows
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+  set(MI_CLANG_CL "ON")
+endif()
+
+# force C++ compilation with msvc or clang-cl to use modern C++ atomics
+if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL)
+  set(MI_USE_CXX "ON")
+elseif(MI_DEBUG_UBSAN AND CMAKE_BUILD_TYPE MATCHES "Debug")  # ubsan needs C++
+  set(MI_USE_CXX "ON")
+endif()
+
+# enable C++ ?
+if(MI_USE_CXX)
+  enable_language(CXX)
+  message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Intel" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM")
+    list(APPEND mi_cflags -Kc++)
+  endif()
+endif()
+
 
 # -----------------------------------------------------------------------------
 # Process options
 # -----------------------------------------------------------------------------
-
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
-  set(MI_CLANG_CL "ON")
-endif()
 
 # put -Wall early so other warnings can be disabled selectively
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
@@ -177,9 +199,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "Intel")
     list(APPEND mi_cflags -Wall)
 endif()
 
-# force C++ compilation with msvc or clang-cl to use modern C++ atomics
-if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL)
-  set(MI_USE_CXX "ON")
+if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang|Clang")
+  list(APPEND mi_cflags -Wno-deprecated)
 endif()
 
 if(MI_OVERRIDE)
@@ -188,7 +209,7 @@ if(MI_OVERRIDE)
     if(MI_OSX_ZONE)
       # use zone's on macOS
       message(STATUS "  Use malloc zone to override malloc (MI_OSX_ZONE=ON)")
-      list(APPEND mi_sources src/prim/osx/alloc-override-zone.c)
+      list(APPEND mi_sources src/prim/osx/alloc-override-zone.c)      
       list(APPEND mi_defines MI_OSX_ZONE=1)
       if (NOT MI_OSX_INTERPOSE)
         message(STATUS "  WARNING: zone overriding usually also needs interpose (use -DMI_OSX_INTERPOSE=ON)")
@@ -336,33 +357,21 @@ if(MI_DEBUG_TSAN)
 endif()
 
 if(MI_DEBUG_UBSAN)
-  if(CMAKE_BUILD_TYPE MATCHES "Debug")
-    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-      message(STATUS "Build with undefined-behavior sanitizer (MI_DEBUG_UBSAN=ON)")
-      list(APPEND mi_defines MI_UBSAN=1)
-      list(APPEND mi_cflags -fsanitize=undefined -g -fno-sanitize-recover=undefined)
-      list(APPEND mi_libraries -fsanitize=undefined)
-      if (NOT MI_USE_CXX)
-        message(STATUS "(switch to use C++ due to MI_DEBUG_UBSAN)")
-        set(MI_USE_CXX "ON")
+  if(CMAKE_BUILD_TYPE MATCHES "Debug")    
+    if(MI_USE_CXX)
+      if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(STATUS "Build with undefined-behavior sanitizer (MI_DEBUG_UBSAN=ON)")
+        list(APPEND mi_defines MI_UBSAN=1)
+        list(APPEND mi_cflags -fsanitize=undefined -g -fno-sanitize-recover=undefined)
+        list(APPEND mi_libraries -fsanitize=undefined)        
+      else()
+        message(WARNING "Can only use undefined-behavior sanitizer with clang++ (MI_DEBUG_UBSAN=ON but ignored)")
       endif()
     else()
-      message(WARNING "Can only use undefined-behavior sanitizer with clang++ (MI_DEBUG_UBSAN=ON but ignored)")
+      message(WARNING "Can only use undefined-behavior sanitizer with a C++ build (MI_USE_CXX=ON)")
     endif()
   else()
     message(WARNING "Can only use undefined-behavior sanitizer with a debug build (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
-  endif()
-endif()
-
-if(MI_USE_CXX)
-  message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
-  set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill test/test-stress PROPERTIES LANGUAGE CXX )
-  if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang|Clang")
-    list(APPEND mi_cflags -Wno-deprecated)
-  endif()
-  if(CMAKE_CXX_COMPILER_ID MATCHES "Intel" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM")
-    list(APPEND mi_cflags -Kc++)
   endif()
 endif()
 
@@ -520,6 +529,12 @@ else()
   if(MI_LIB_ATOMIC)
     list(APPEND mi_libraries "${MI_LIB_ATOMIC}")
   endif()
+endif()
+
+# set language for source files now
+if(MI_USE_CXX)
+  set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill test/test-stress PROPERTIES LANGUAGE CXX )
 endif()
 
 
