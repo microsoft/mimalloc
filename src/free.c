@@ -268,7 +268,7 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(!mi_page_all_free(page));
-  mi_assert_internal(page->block_size <= MI_SMALL_MAX_OBJ_SIZE);
+  mi_assert_internal(page->block_size <= MI_SMALL_SIZE_MAX);
   mi_assert_internal(reclaim_on_free >= 0);
 
   // get our heap (with the right tag)
@@ -321,7 +321,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
   mi_assert_internal(mt_free != NULL);
 
   // we own the page now, and it is safe to collect the thread atomic free list
-  if (page->block_size <= MI_SMALL_MAX_OBJ_SIZE) {
+  if (page->block_size <= MI_SMALL_SIZE_MAX) {
     // use the `_partly` version to avoid atomic operations since we already have the `mt_free` pointing into the thread free list
     // (after this the `used` count might be too high (as some blocks may have been concurrently added to the thread free list and are yet uncounted).
     //  however, if the page became completely free, the used count is guaranteed to be 0.)
@@ -341,7 +341,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
   
   // try to: 1. free it, 2. reclaim it, or 3. reabandon it to be mapped
   if (mi_abandoned_page_try_free(page)) return;
-  if (page->block_size <= MI_SMALL_MAX_OBJ_SIZE && reclaim_on_free >= 0) {  // early test for better codegen
+  if (page->block_size <= MI_SMALL_SIZE_MAX && reclaim_on_free >= 0) {  // early test for better codegen
     if (mi_abandoned_page_try_reclaim(page, reclaim_on_free)) return;
   }
   if (mi_abandoned_page_try_reabandon_to_mapped(page)) return;
