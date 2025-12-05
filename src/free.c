@@ -239,15 +239,14 @@ static bool mi_abandoned_page_try_reabandon_to_mapped(mi_page_t* page)
 
 // Release ownership of a page. This may free or reabandond the page if other blocks are concurrently
 // freed in the meantime. Returns `true` if the page was freed.
-// By passing the captured `mt_free`, we can often avoid calling `mi_page_free_collect`.
-static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* mt_free) {
+// By passing the captured `expected_thread_free`, we can often avoid calling `mi_page_free_collect`.
+static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* expected_thread_free) {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
-  mi_assert_internal(mt_free != NULL);
   mi_assert_internal(!mi_page_all_free(page));
   // try to cas atomically the original free list (`mt_free`) back with the ownership cleared.
-  mi_thread_free_t tf_expect = mi_tf_create(mt_free, true);
-  mi_thread_free_t tf_new    = mi_tf_create(mt_free, false);
+  mi_thread_free_t tf_expect = mi_tf_create(expected_thread_free, true);
+  mi_thread_free_t tf_new    = mi_tf_create(expected_thread_free, false);
   while mi_unlikely(!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_expect, tf_new)) {
     mi_assert_internal(mi_tf_is_owned(tf_expect));
     // while the xthread_free list is not empty..
@@ -333,13 +332,13 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     // use the `_partly` version to avoid atomic operations since we already have the `mt_free` pointing into the thread free list
     // (after this the `used` count might be too high (as some blocks may have been concurrently added to the thread free list and are yet uncounted).
     //  however, if the page became completely free, the used count is guaranteed to be 0.)
+    mi_assert_internal(page->reserved>=16); // below this even one freed block goes from full to no longer mostly used.
     _mi_page_free_collect_partly(page, mt_free);    
   }
   else {
     // for larger blocks we use the regular collect 
-    // note: this means for blocks larger than ~8 KiB (1/8th of a slice) we have !mi_page_is_mostly_used when even a single block is free.
-    //       (and thus, those can be reabandoned to mapped)
     _mi_page_free_collect(page,false /* no force */);
+    mt_free = NULL; // expected page->xthread_free value after collection
   }
   const long reclaim_on_free = _mi_option_get_fast(mi_option_page_reclaim_on_free);  
   #if MI_DEBUG > 1
