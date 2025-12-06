@@ -85,7 +85,7 @@ static bool   main_participates = false;       // main thread participates as a 
 #define custom_free(p)        mi_free(p)
 
 #ifndef NDEBUG
-#define xHEAP_WALK             // walk the heap objects?
+#define xHEAP_WALK             // walk the theap objects?
 #endif
 #endif
 
@@ -163,8 +163,8 @@ static void free_items(void* p) {
 }
 
 #ifdef HEAP_WALK
-static bool visit_blocks(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
-  (void)(heap); (void)(area);
+static bool visit_blocks(const mi_theap_t* theap, const mi_theap_area_t* area, void* block, size_t block_size, void* arg) {
+  (void)(theap); (void)(area);
   size_t* total = (size_t*)arg;
   if (block != NULL) {
     *total += block_size;
@@ -218,9 +218,9 @@ static void stress(intptr_t tid) {
   }
 
   #ifdef HEAP_WALK
-  // walk the heap
+  // walk the theap
   size_t total = 0;
-  mi_heap_visit_blocks(mi_heap_get_default(), true, visit_blocks, &total);
+  mi_theap_visit_blocks(mi_theap_get_default(), true, visit_blocks, &total);
   #endif
 
   // free everything that is left

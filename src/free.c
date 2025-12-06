@@ -87,7 +87,7 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block) mi_attr_
 // deallocated (as the block we are freeing keeps it alive) and thus safe to read concurrently.
 mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
-  
+
   const size_t diff = (uint8_t*)p - mi_page_start(page);
   const size_t block_size = mi_page_block_size(page);
   const size_t adjust = (_mi_is_power_of_two(block_size) ? diff & (block_size - 1) : diff % block_size);
@@ -110,9 +110,9 @@ static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, voi
   mi_assert(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p); // should never be an interior pointer
   #if MI_SECURE > 0
   // in secure mode we always unalign to guard against free-ing interior pointers
-  return _mi_page_ptr_unalign(page,p);  
+  return _mi_page_ptr_unalign(page,p);
   #else
-  MI_UNUSED(page);  
+  MI_UNUSED(page);
   return (mi_block_t*)p;
   #endif
 }
@@ -179,7 +179,7 @@ void mi_free(void* p) mi_attr_noexcept
     // page is local, but is full or contains (inner) aligned blocks; use generic path
     mi_free_generic_local(page, p);
   }
-  // free-ing in a page owned by a heap in another thread, or an abandoned page (not belonging to a heap)
+  // free-ing in a page owned by a theap in another thread, or an abandoned page (not belonging to a theap)
   else if ((xtid & MI_PAGE_FLAG_MASK) == 0) {      // `tid != mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // blocks are aligned (and not a full page); push on the thread_free list
     mi_block_t* const block = mi_validate_block_from_ptr(page,p);
@@ -193,30 +193,30 @@ void mi_free(void* p) mi_attr_noexcept
 
 
 // --------------------------------------------------------------------------------------------
-// `mi_free_try_collect_mt`: Potentially collect a page in a free in an abandoned page. 
+// `mi_free_try_collect_mt`: Potentially collect a page in a free in an abandoned page.
 // 1. if the page becomes empty, free it
-// 2. if it can be reclaimed, reclaim it in our heap
-// 3. if it went to < 7/8th used, re-abandon to be mapped (so it can be found by heaps looking for free pages)
+// 2. if it can be reclaimed, reclaim it in our theap
+// 3. if it went to < 7/8th used, re-abandon to be mapped (so it can be found by theaps looking for free pages)
 // --------------------------------------------------------------------------------------------
 
-// Helper for mi_free_try_collect_mt: free if the page has no more used blocks (this is updated by `_mi_page_free_collect(_partly)`)  
-static bool mi_abandoned_page_try_free(mi_page_t* page) 
+// Helper for mi_free_try_collect_mt: free if the page has no more used blocks (this is updated by `_mi_page_free_collect(_partly)`)
+static bool mi_abandoned_page_try_free(mi_page_t* page)
 {
   if (!mi_page_all_free(page)) return false;
-  // first remove it from the abandoned pages in the arena (if mapped, this might wait for any readers to finish)  
-  _mi_arenas_page_unabandon(page); 
+  // first remove it from the abandoned pages in the arena (if mapped, this might wait for any readers to finish)
+  _mi_arenas_page_unabandon(page);
   _mi_arenas_page_free(page,NULL); // we can now free the page directly
-  return true;  
+  return true;
 }
 
 // Helper for mi_free_try_collect_mt: try if we can reabandon a previously abandoned mostly full page to be mapped
-static bool mi_abandoned_page_try_reabandon_to_mapped(mi_page_t* page) 
+static bool mi_abandoned_page_try_reabandon_to_mapped(mi_page_t* page)
 {
   // if the page is unmapped, try to reabandon so it can possibly be mapped and found for allocations
   // We only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
   if (mi_page_is_mostly_used(page)) return false;   // not too full
   if (page->memid.memkind != MI_MEM_ARENA || mi_page_is_abandoned_mapped(page)) return false;  // and not already mapped (or unmappable)
-  
+
   mi_assert(!mi_page_is_full(page));
   return _mi_arenas_page_try_reabandon_to_mapped(page);
 }
@@ -237,7 +237,7 @@ static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* mt_fr
     // while the xthread_free list is not empty..
     while (mi_tf_block(tf_expect) != NULL) {
       // if there were concurrent updates to the thread-free list, we retry to free or reabandon to mapped (if it became !mosty_used).
-      _mi_page_free_collect(page,false);  // update used count 
+      _mi_page_free_collect(page,false);  // update used count
       if (mi_abandoned_page_try_free(page)) return;
       if (mi_abandoned_page_try_reabandon_to_mapped(page)) return;
       // otherwise continue un-owning
@@ -249,21 +249,21 @@ static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* mt_fr
   }
 }
 
-static inline bool mi_page_queue_len_is_atmost( mi_heap_t* heap, size_t block_size, long atmost) {
+static inline bool mi_page_queue_len_is_atmost( mi_theap_t* theap, size_t block_size, long atmost) {
   if (atmost < 0) return false;
-  mi_page_queue_t* const pq = mi_page_queue(heap,block_size);
+  mi_page_queue_t* const pq = mi_page_queue(theap,block_size);
   mi_assert_internal(pq!=NULL);
-  return (pq->count <= (size_t)atmost);  
+  return (pq->count <= (size_t)atmost);
 }
 
-// Helper for mi_free_try_collect_mt:  try to reclaim the page for ourselves  
-static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long reclaim_on_free) mi_attr_noexcept 
+// Helper for mi_free_try_collect_mt:  try to reclaim the page for ourselves
+static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long reclaim_on_free) mi_attr_noexcept
 {
   // note: reclaiming can improve benchmarks like `larson` or `rbtree-ck` a lot even in the single-threaded case,
-  // since free-ing from an owned page avoids atomic operations. However, if we reclaim too eagerly in 
+  // since free-ing from an owned page avoids atomic operations. However, if we reclaim too eagerly in
   // a multi-threaded scenario we may start to hold on to too much memory and reduce reuse among threads.
-  // If the current heap is where the page originally came from, we reclaim much more eagerly while
-  // 'cross-thread' reclaiming on free is by default off (and we only 'reclaim' these by finding the abandoned 
+  // If the current theap is where the page originally came from, we reclaim much more eagerly while
+  // 'cross-thread' reclaiming on free is by default off (and we only 'reclaim' these by finding the abandoned
   // pages when we allocate a fresh page).
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
@@ -271,50 +271,44 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
   mi_assert_internal(page->block_size <= MI_SMALL_SIZE_MAX);
   mi_assert_internal(reclaim_on_free >= 0);
 
-  // get our heap (with the right tag)
-  // note: don't use `mi_heap_get_default()` as we may just have terminated this thread and we should
-  // not reinitialize the heap for this thread. (can happen due to thread-local destructors for example -- issue #944)
-  mi_heap_t* heap = mi_prim_get_default_heap();
-  if (heap != page->heap) {
-    if (mi_heap_is_initialized(heap)) {
-      heap = _mi_heap_by_tag(heap, page->heap_tag);
-    }
-  }
-  // can we reclaim into this heap?      
-  if (heap==NULL || !heap->allow_page_reclaim) {
-    return false;
-  }
-
+  // get our theap (with the right tag)
+  // note: don't use `mi_heap_theap()` as we may just have terminated this thread and we should
+  // not reinitialize the theap for this thread. (can happen due to thread-local destructors for example -- issue #944)
+  mi_heap_t* const heap = mi_page_heap(page);
+  mi_theap_t* const theap = _mi_prim_heap_get_theap(heap);
+  if (theap==NULL || !theap->allow_page_reclaim) return false;
+  
+  // todo: cache `is_in_threadpool` and `exclusive_arena` directly in the theap for performance?
   // set max_reclaim limit
   long max_reclaim = 0;
-  if mi_likely(heap == page->heap) {  // did this page originate from the current heap?
-    // originating heap
-    max_reclaim = _mi_option_get_fast(heap->tld->is_in_threadpool ? mi_option_page_cross_thread_max_reclaim : mi_option_page_max_reclaim);          
+  if mi_likely(theap == page->theap) {  // did this page originate from the current theap? (and thus allocated from this thread)
+    // originating theap
+    max_reclaim = _mi_option_get_fast(theap->tld->is_in_threadpool ? mi_option_page_cross_thread_max_reclaim : mi_option_page_max_reclaim);
   }
   else if (reclaim_on_free == 1 &&               // if cross-thread is allowed
-            !heap->tld->is_in_threadpool &&      // and we are not part of a threadpool
+            !theap->tld->is_in_threadpool &&      // and we are not part of a threadpool
             !mi_page_is_mostly_used(page) &&     // and the page is not too full
             _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena)) {   // and it fits our memory
     // across threads
     max_reclaim = _mi_option_get_fast(mi_option_page_cross_thread_max_reclaim);
   }
-  
+
   // are we within the reclaim limit?
-  if (max_reclaim >= 0 && !mi_page_queue_len_is_atmost(heap, page->block_size, max_reclaim)) {
+  if (max_reclaim >= 0 && !mi_page_queue_len_is_atmost(theap, page->block_size, max_reclaim)) {
     return false;
   }
 
-  // reclaim the page into this heap
+  // reclaim the page into this theap
   // first remove it from the abandoned pages in the arena -- this might wait for any readers to finish
   _mi_arenas_page_unabandon(page);
-  _mi_heap_page_reclaim(heap, page);
-  mi_heap_stat_counter_increase(heap, pages_reclaim_on_free, 1);
+  _mi_theap_page_reclaim(theap, page);
+  mi_theap_stat_counter_increase(theap, pages_reclaim_on_free, 1);
   return true;
 }
 
 
-// We freed a block in an abandoned page (that was not owned). Try to collect 
-static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free) mi_attr_noexcept 
+// We freed a block in an abandoned page (that was not owned). Try to collect
+static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free) mi_attr_noexcept
 {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
@@ -325,27 +319,27 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     // use the `_partly` version to avoid atomic operations since we already have the `mt_free` pointing into the thread free list
     // (after this the `used` count might be too high (as some blocks may have been concurrently added to the thread free list and are yet uncounted).
     //  however, if the page became completely free, the used count is guaranteed to be 0.)
-    _mi_page_free_collect_partly(page, mt_free);    
+    _mi_page_free_collect_partly(page, mt_free);
   }
   else {
-    // for larger blocks we use the regular collect 
+    // for larger blocks we use the regular collect
     // note: this means for blocks larger than ~8 KiB (1/8th of a slice) we have !mi_page_is_mostly_used when even a single block is free.
     //       (and thus, those can be reabandoned to mapped)
     _mi_page_free_collect(page,false /* no force */);
   }
-  const long reclaim_on_free = _mi_option_get_fast(mi_option_page_reclaim_on_free);  
+  const long reclaim_on_free = _mi_option_get_fast(mi_option_page_reclaim_on_free);
   #if MI_DEBUG > 1
   if (mi_page_is_singleton(page)) { mi_assert_internal(mi_page_all_free(page)); }
-  if (mi_page_is_full(page))      { mi_assert(mi_page_is_mostly_used(page)); }    
+  if (mi_page_is_full(page))      { mi_assert(mi_page_is_mostly_used(page)); }
   #endif
-  
+
   // try to: 1. free it, 2. reclaim it, or 3. reabandon it to be mapped
   if (mi_abandoned_page_try_free(page)) return;
   if (page->block_size <= MI_SMALL_SIZE_MAX && reclaim_on_free >= 0) {  // early test for better codegen
     if (mi_abandoned_page_try_reclaim(page, reclaim_on_free)) return;
   }
   if (mi_abandoned_page_try_reabandon_to_mapped(page)) return;
-  
+
   // otherwise unown the page again
   mi_abandoned_page_unown_from_free(page, mt_free);
 }
@@ -466,7 +460,7 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 
 
 // ---------------------------------------------------------------------------
-// Check for heap block overflow by setting up padding at the end of the block
+// Check for theap block overflow by setting up padding at the end of the block
 // ---------------------------------------------------------------------------
 
 #if MI_PADDING // && !MI_TRACK_ENABLED
@@ -494,7 +488,7 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
 }
 
 // When a non-thread-local block is freed, it becomes part of the thread delayed free
-// list that is freed later by the owning heap. If the exact usable size is too small to
+// list that is freed later by the owning theap. If the exact usable size is too small to
 // contain the pointer for the delayed list, then shrink the padding (by decreasing delta)
 // so it will later not trigger an overflow error in `mi_free_block`.
 void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
@@ -555,7 +549,7 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
   size_t size;
   size_t wrong;
   if (!mi_verify_padding(page,block,&size,&wrong)) {
-    _mi_error_message(EFAULT, "buffer overflow in heap block %p of size %zu: write after %zu bytes\n", block, size, wrong );
+    _mi_error_message(EFAULT, "buffer overflow in theap block %p of size %zu: write after %zu bytes\n", block, size, wrong );
   }
 }
 
@@ -572,21 +566,21 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
 #if (MI_STAT>0)
 static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(block);
-  mi_heap_t* const heap = mi_heap_get_default();
+  mi_theap_t* const theap = mi_theap_get_default();
   const size_t bsize = mi_page_usable_block_size(page);
   // #if (MI_STAT>1)
   // const size_t usize = mi_page_usable_size_of(page, block);
-  // mi_heap_stat_decrease(heap, malloc_requested, usize);
+  // mi_theap_stat_decrease(theap, malloc_requested, usize);
   // #endif
   if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
-    mi_heap_stat_decrease(heap, malloc_normal, bsize);
+    mi_theap_stat_decrease(theap, malloc_normal, bsize);
     #if (MI_STAT > 1)
-    mi_heap_stat_decrease(heap, malloc_bins[_mi_bin(bsize)], 1);
+    mi_theap_stat_decrease(theap, malloc_bins[_mi_bin(bsize)], 1);
     #endif
   }
   else {
     const size_t bpsize = mi_page_block_size(page);  // match stat in page.c:mi_huge_page_alloc
-    mi_heap_stat_decrease(heap, malloc_huge, bpsize);
+    mi_theap_stat_decrease(theap, malloc_huge, bpsize);
   }
 }
 #else

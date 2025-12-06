@@ -26,7 +26,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "arena.c"
 #include "arena-meta.c"
 #include "bitmap.c"
-#include "heap.c"
+#include "theap.c"
 #include "init.c"
 #include "libc.c"
 #include "options.c"

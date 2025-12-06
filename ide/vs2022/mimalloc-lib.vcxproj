@@ -450,7 +450,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|ARM64EC'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="..\..\src\heap.c" />
+    <ClCompile Include="..\..\src\theap.c" />
     <ClCompile Include="..\..\src\init.c" />
     <ClCompile Include="..\..\src\libc.c" />
     <ClCompile Include="..\..\src\page-map.c" />

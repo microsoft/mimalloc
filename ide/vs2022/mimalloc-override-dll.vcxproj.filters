@@ -19,7 +19,7 @@
     <ClCompile Include="..\..\src\bitmap.c">
       <Filter>Sources</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\heap.c">
+    <ClCompile Include="..\..\src\theap.c">
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\init.c">

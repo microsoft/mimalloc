@@ -74,3 +74,29 @@ void _mi_allocator_done(void) {
   // nothing to do
 }
 #endif
+
+#ifndef MI_PRIM_HAS_THREAD_LOCAL
+static inline mi_thread_local_t _mi_prim_thread_local_create(void) {
+  pthread_key_t key = 0;
+  int err = pthread_key_create(&key, NULL);
+  if (err) {
+    _mi_error_message(EFAULT, "cannot create dynamic thread local variables (reduce number of heaps?)");
+    return 0;
+  }
+  else {
+    return (mi_thread_local_t)(key+1);
+  }
+}
+static inline void  _mi_prim_thread_local_free(mi_thread_local_t key) {
+  if (key==0) return;
+  pthread_key_delete(key-1);
+}
+static inline void* _mi_prim_thread_local_get(mi_thread_local_t key) {
+  if (key==0) return NULL;
+  return pthread_getspecific(key-1);
+}
+static inline void  _mi_prim_thread_local_set(mi_thread_local_t key, void* value) {
+  if (key==0) return;
+  pthread_setspecific(key-1, value);
+}
+#endif

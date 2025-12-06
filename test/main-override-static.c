@@ -23,7 +23,7 @@ static void test_process_info(void);
 static void test_reserved(void);
 static void negative_stat(void);
 static void alloc_huge(void);
-static void test_heap_walk(void);
+static void test_theap_walk(void);
 static void test_canary_leak(void);
 static void test_manage_os_memory(void);
 // static void test_large_pages(void);
@@ -37,7 +37,7 @@ int main() {
 
   // test_manage_os_memory();
   // test_large_pages();
-  // detect double frees and heap corruption
+  // detect double frees and theap corruption
   // double_free1();
   // double_free2();
   // corrupt_free();
@@ -48,7 +48,7 @@ int main() {
   // invalid_free();
   // test_reserved();
   // negative_stat();
-  // test_heap_walk();
+  // test_theap_walk();
   // alloc_huge();
 
 
@@ -59,8 +59,8 @@ int main() {
   char* s = strdup("hello\n");
   free(p2);
 
-  mi_heap_t* h = mi_heap_new();
-  mi_heap_set_default(h);
+  mi_theap_t* h = mi_theap_new();
+  mi_theap_set_default(h);
 
   p2 = malloc(16);
   p1 = realloc(p1, 32);
@@ -137,7 +137,7 @@ static void double_free2() {
 }
 
 
-// Try to corrupt the heap through buffer overflow
+// Try to corrupt the theap through buffer overflow
 #define N   256
 #define SZ  64
 
@@ -220,7 +220,7 @@ static void alloc_huge(void) {
   mi_free(p);
 }
 
-static bool test_visit(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
+static bool test_visit(const mi_theap_t* theap, const mi_theap_area_t* area, void* block, size_t block_size, void* arg) {
   if (block == NULL) {
     printf("visiting an area with blocks of size %zu (including padding)\n", area->full_block_size);
   }
@@ -230,13 +230,13 @@ static bool test_visit(const mi_heap_t* heap, const mi_heap_area_t* area, void* 
   return true;
 }
 
-static void test_heap_walk(void) {
-  mi_heap_t* heap = mi_heap_new();
-  mi_heap_malloc(heap, 16*2097152);
-  mi_heap_malloc(heap, 2067152);
-  mi_heap_malloc(heap, 2097160);
-  mi_heap_malloc(heap, 24576);
-  mi_heap_visit_blocks(heap, true, &test_visit, NULL);
+static void test_theap_walk(void) {
+  mi_theap_t* theap = mi_theap_new();
+  mi_theap_malloc(theap, 16*2097152);
+  mi_theap_malloc(theap, 2067152);
+  mi_theap_malloc(theap, 2097160);
+  mi_theap_malloc(theap, 24576);
+  mi_theap_visit_blocks(theap, true, &test_visit, NULL);
 }
 
 static void test_canary_leak(void) {
@@ -254,17 +254,17 @@ static void test_manage_os_memory(void) {
   void* ptr = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
   mi_arena_id_t arena_id;
   mi_manage_os_memory_ex(ptr, size, true /* committed */, true /* pinned */, false /* is zero */, -1 /* numa node */, true /* exclusive */, &arena_id);
-  mi_heap_t* cuda_heap = mi_heap_new_in_arena(arena_id);    // you can do this in any thread
+  mi_theap_t* cuda_theap = mi_theap_new_in_arena(arena_id);    // you can do this in any thread
 
   // now allocate only in the cuda arena
-  void* p1 = mi_heap_malloc(cuda_heap, 8);
-  int* p2 = mi_heap_malloc_tp(cuda_heap, int);
+  void* p1 = mi_theap_malloc(cuda_theap, 8);
+  int* p2 = mi_theap_malloc_tp(cuda_theap, int);
   *p2 = 42;
 
-  // and maybe set the cuda heap as the default heap? (but careful as now `malloc` will allocate in the cuda heap as well)
+  // and maybe set the cuda theap as the default theap? (but careful as now `malloc` will allocate in the cuda theap as well)
   {
-    mi_heap_t* prev_default_heap = mi_heap_set_default(cuda_heap);
-    void* p3 = mi_malloc(8);  // allocate in the cuda heap
+    mi_theap_t* prev_default_theap = mi_theap_set_default(cuda_theap);
+    void* p3 = mi_malloc(8);  // allocate in the cuda theap
     mi_free(p3);
   }
   mi_free(p1);
