@@ -10,6 +10,8 @@
 #include <future>
 #include <iostream>
 #include <thread>
+#include <random>
+#include <chrono>
 #include <assert.h>
 
 #ifdef _WIN32
@@ -38,6 +40,8 @@ static void test_thread_leak();       // issue #1104
 static void test_mixed1();             // issue #942
 static void test_stl_allocators();
 static void test_join();              // issue #1177
+static void test_perf(void);          // issue #1104
+
 
 #if _WIN32
 #include "main-override-dep.h"
@@ -53,7 +57,9 @@ int main() {
 
   // test_dep();
   // test_thread_leak();
-  test_join();
+  // test_join();
+
+  test_perf();
 
   //test_std_string();
   //test_thread_local();
@@ -382,7 +388,7 @@ static void heap_thread_free_huge() {
   }
 }
 
-static std::atomic<long> gsum;
+static std::atomic<long> xgsum;
 
 static void local_alloc() {
   long sum = 0;
@@ -395,7 +401,7 @@ static void local_alloc() {
       free(p);
     }
   }
-  gsum += sum;
+  xgsum += sum;
 }
 
 static void test_thread_leak() {
@@ -488,4 +494,54 @@ void test_join() {
   std::thread thread([]() { mi_free(s_ptr); });
   thread.join();
   mi_free(s_ptr);  
+}
+
+
+static std::atomic<long> gsum;
+
+const int LEN[] = { 1000, 5000, 10000, 50000 };
+
+// adapted from example in
+// https://github.com/microsoft/mimalloc/issues/1104
+
+static void test_perf_local_alloc()
+{
+  // thread-local random number generator
+  std::minstd_rand rng(std::random_device{}());
+
+  long sum = 0;
+  for (int i = 0; i < 1000000; i++)
+  {
+    int len = LEN[rng() % 4];
+    int* p = (int*)mi_zalloc_aligned(len * sizeof(int), alignof(int));
+    p[0] = 1;
+    sum += p[rng() % len];
+    free(p);
+  }
+  std::cout << ".";
+  gsum += sum;
+}
+
+static void test_perf_run()
+{
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 24; ++i)
+  {
+    threads.emplace_back(std::thread(&test_perf_local_alloc));
+  }
+  for (auto& th : threads)
+  {
+    th.join();
+  }
+  std::cout << "\n";
+}
+
+void test_perf(void)
+{
+  auto start = std::chrono::high_resolution_clock::now();
+  test_perf_run();
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+  std::cout << "took: " << duration.count() << " ms\n";
+  std::cout << "gsum: " << gsum.load() << "\n";
 }
