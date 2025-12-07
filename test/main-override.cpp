@@ -10,6 +10,8 @@
 #include <future>
 #include <iostream>
 #include <thread>
+#include <random>
+#include <chrono>
 #include <assert.h>
 
 #ifdef _WIN32
@@ -36,6 +38,8 @@ static void test_thread_local();      // issue #944
 // static void test_mixed0();             // issue #942
 static void test_mixed1();             // issue #942
 static void test_stl_allocators();
+static void test_perf(void);          // issue #1104
+
 
 #if _WIN32
 #include "main-override-dep.h"
@@ -46,10 +50,11 @@ static void test_dep() { };
 
 int main() {
   mi_stats_reset();  // ignore earlier allocations
-  various_tests();
-  test_mixed1();
+  // various_tests();
+  // test_mixed1();
+  // test_dep();
 
-  test_dep();
+  test_perf();
 
   //test_std_string();
   //test_thread_local();
@@ -448,4 +453,55 @@ void test_thread_local()
         mi_stats_print(NULL);
     }
     return;
+}
+
+
+
+static std::atomic<long> gsum;
+
+const int LEN[] = { 1000, 5000, 10000, 50000 };
+
+// adapted from example in
+// https://github.com/microsoft/mimalloc/issues/1104
+
+static void test_perf_local_alloc()
+{
+  // thread-local random number generator
+  std::minstd_rand rng(std::random_device{}());
+
+  long sum = 0;
+  for (int i = 0; i < 1000000; i++)
+  {
+    int len = LEN[rng() % 4];
+    int* p = (int*)mi_zalloc_aligned(len * sizeof(int), alignof(int));
+    p[0] = 1;
+    sum += p[rng() % len];
+    free(p);
+  }
+  std::cout << ".";
+  gsum += sum;
+}
+
+static void test_perf_run()
+{
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 24; ++i)
+  {
+    threads.emplace_back(std::thread(&test_perf_local_alloc));
+  }
+  for (auto& th : threads)
+  {
+    th.join();
+  }
+  std::cout << "\n";
+}
+
+void test_perf(void)
+{
+  auto start = std::chrono::high_resolution_clock::now();
+  test_perf_run();
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+  std::cout << "took: " << duration.count() << " ms\n";
+  std::cout << "gsum: " << gsum.load() << "\n";
 }
