@@ -35,11 +35,11 @@ static void strdup_test();            // issue #445
 static void heap_thread_free_huge();
 static void test_std_string();        // issue #697
 static void test_thread_local();      // issue #944
-static void test_thread_leak();       // issue #1104
 // static void test_mixed0();             // issue #942
 static void test_mixed1();             // issue #942
 static void test_stl_allocators();
 static void test_join();              // issue #1177
+static void test_thread_leak(void);   // issue #1104
 static void test_perf(void);          // issue #1104
 
 
@@ -51,14 +51,14 @@ static void test_dep() { };
 #endif
 
 int main() {
-  //mi_stats_reset();  // ignore earlier allocations
+  mi_stats_reset();  // ignore earlier allocations
   //various_tests();
   //test_mixed1();
 
   // test_dep();
-  // test_thread_leak();
   // test_join();
 
+  // test_thread_leak();
   test_perf();
 
   //test_std_string();
@@ -78,7 +78,7 @@ int main() {
   test_mt_shutdown();
   */
   //fail_aslr();
-  //mi_stats_print(NULL);
+  mi_stats_print(NULL);
   return 0;
 }
 
@@ -414,7 +414,6 @@ static void test_thread_leak() {
   }
 }
 
-
 static void test_mt_shutdown()
 {
   const int threads = 5;
@@ -538,10 +537,6 @@ static void test_perf_run()
 
 void test_perf(void)
 {
-  auto start = std::chrono::high_resolution_clock::now();
   test_perf_run();
-  auto end = std::chrono::high_resolution_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-  std::cout << "took: " << duration.count() << " ms\n";
   std::cout << "gsum: " << gsum.load() << "\n";
 }
