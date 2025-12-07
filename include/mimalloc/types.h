@@ -112,9 +112,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Enable large pages for objects between 64KiB and 512KiB.
-// Disabled by default as for many workloads the block sizes above 64 KiB are quite random which can lead to too many partially used large pages.
+// This should perhaps be disabled by default as for many workloads the block sizes above 64 KiB 
+// are quite random which can lead to too many partially used large pages (but see issue #1104).
 #ifndef MI_ENABLE_LARGE_PAGES
-#define MI_ENABLE_LARGE_PAGES  0
+#define MI_ENABLE_LARGE_PAGES  1
 #endif
 
 // --------------------------------------------------------------
