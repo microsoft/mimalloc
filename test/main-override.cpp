@@ -38,6 +38,7 @@ static void test_thread_local();      // issue #944
 // static void test_mixed0();             // issue #942
 static void test_mixed1();             // issue #942
 static void test_stl_allocators();
+static void test_thread_leak(void);   // issue #1104
 static void test_perf(void);          // issue #1104
 
 
@@ -54,6 +55,7 @@ int main() {
   // test_mixed1();
   // test_dep();
 
+  // test_thread_leak();
   test_perf();
 
   //test_std_string();
@@ -383,6 +385,33 @@ static void heap_thread_free_huge() {
 }
 
 
+static std::atomic<long> xgsum;
+
+static void local_alloc() {
+  long sum = 0;
+  for (int i = 0; i < 1000000; i++) {
+    const int n = 1 + std::rand() % 1000;
+    uint8_t* p = (uint8_t*)calloc(n, 1);
+    p[0] = 1;
+    sum += p[std::rand() % n];
+    if ((std::rand() % 100) > 24) {
+      free(p);
+    }
+  }
+  xgsum += sum;
+}
+
+static void test_thread_leak(void) {
+  std::vector<std::thread> threads;
+  for (int i = 1; i<=100; ++i) {
+    threads.emplace_back(std::thread(&local_alloc));
+  }
+  for (auto& th : threads) {
+    th.join();
+  }
+}
+
+
 static void test_mt_shutdown()
 {
   const int threads = 5;
@@ -498,10 +527,6 @@ static void test_perf_run()
 
 void test_perf(void)
 {
-  auto start = std::chrono::high_resolution_clock::now();
   test_perf_run();
-  auto end = std::chrono::high_resolution_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-  std::cout << "took: " << duration.count() << " ms\n";
   std::cout << "gsum: " << gsum.load() << "\n";
 }
