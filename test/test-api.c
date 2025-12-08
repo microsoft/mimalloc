@@ -327,6 +327,25 @@ int main(void) {
   };
 
   // ---------------------------------------------------
+  // Returned block sizes
+  // ---------------------------------------------------
+  CHECK_BODY("umalloc1") {
+    for(size_t size = 1; size <= 32*MI_MiB; size *= 2 ) {
+      size_t bsize;
+      void* p = mi_umalloc(size,&bsize);
+      assert(bsize >= size);
+      size_t pre_size;
+      size_t post_size;
+      p = mi_urealloc(p, size + 1024, &pre_size, &post_size);
+      assert(pre_size == bsize);
+      assert(post_size >= size + 1024);
+      size_t fsize;
+      mi_ufree(p,&fsize);
+      assert(fsize == post_size);
+    }
+  }
+
+  // ---------------------------------------------------
   // Heaps
   // ---------------------------------------------------
   CHECK("heap_destroy", test_heap1());
