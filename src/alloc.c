@@ -228,15 +228,15 @@ mi_decl_nodiscard mi_decl_restrict void* mi_calloc(size_t count, size_t size) mi
 }
 
 // Return usable size
-mi_decl_nodiscard extern inline mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* usable) mi_attr_noexcept {
+mi_decl_nodiscard mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* usable) mi_attr_noexcept {
   return mi_heap_malloc_small_zero(mi_prim_get_default_heap(), size, false, usable);
 }
 
-mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_umalloc(mi_heap_t* heap, size_t size, size_t* usable) mi_attr_noexcept {
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_umalloc(mi_heap_t* heap, size_t size, size_t* usable) mi_attr_noexcept {
   return _mi_heap_malloc_zero_ex(heap, size, false, 0, usable);
 }
 
-mi_decl_nodiscard extern inline mi_decl_restrict void* mi_umalloc(size_t size, size_t* usable) mi_attr_noexcept {
+mi_decl_nodiscard mi_decl_restrict void* mi_umalloc(size_t size, size_t* usable) mi_attr_noexcept {
   return mi_heap_umalloc(mi_prim_get_default_heap(), size, usable);
 }
 
@@ -244,7 +244,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_uzalloc(size_t size, size_t* usable)
   return _mi_heap_malloc_zero_ex(mi_prim_get_default_heap(), size, true, 0, usable);
 }
 
-mi_decl_nodiscard extern inline mi_decl_restrict void* mi_ucalloc(size_t count, size_t size, size_t* usable) mi_attr_noexcept {
+mi_decl_nodiscard mi_decl_restrict void* mi_ucalloc(size_t count, size_t size, size_t* usable) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(count,size,&total)) return NULL;
   return mi_uzalloc(total, usable);
