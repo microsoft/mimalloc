@@ -457,7 +457,7 @@ typedef struct mi_padding_s {
 struct mi_theap_s {
   mi_tld_t*             tld;                                 // thread-local data
   mi_heap_t*            heap;                                // the heap this theap belongs to.
-  int                   numa_node;                           // preferred numa node (or -1 for no preference)
+  // int                   numa_node;                           // preferred numa node (or -1 for no preference)
   unsigned long long    heartbeat;                           // monotonic heartbeat count
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   mi_random_ctx_t       random;                              // random number context used for secure allocation
@@ -514,6 +514,7 @@ typedef struct mi_heap_s {
   mi_thread_local_t     theap;
   struct mi_heap_s*     next;
   mi_arena_t*           exclusive_arena;                // if the heap should only allocate from a specific arena (or NULL)
+  int                   numa_node;
   long                  page_full_retain;               // how many full pages can be retained per queue (before abandoning them)
   bool                  allow_page_reclaim;             // `true` if this heap should not reclaim abandoned pages
   bool                  allow_page_abandon;             // `true` if this heap can abandon pages to reduce memory footprint
@@ -525,7 +526,8 @@ typedef struct mi_heap_s {
   mi_page_t*            os_abandoned_pages;             // list of pages that OS allocated and not in an arena (only used if `mi_option_visit_abandoned` is on)
   mi_lock_t             os_abandoned_pages_lock;        // lock for the os abandoned pages list (this lock protects list operations)
 
-  mi_arena_pages_t*     arena_pages[MI_MAX_ARENAS];     // track owned and abandoned pages in the arenas
+  _Atomic(mi_arena_pages_t*) arena_pages[MI_MAX_ARENAS]; // track owned and abandoned pages in the arenas
+  mi_lock_t             arena_pages_lock;                // lock to update the arena_pages array
 
   mi_memid_t            memid;
   mi_stats_t            stats;
@@ -573,10 +575,18 @@ struct mi_tld_s {
 typedef struct mi_bitmap_s  mi_bitmap_t;    // atomic bitmap  (defined in `src/bitmap.h`)
 typedef struct mi_bbitmap_s mi_bbitmap_t;   // atomic binned bitmap (defined in `src/bitmap.h`)
 
+typedef struct mi_arena_pages_s {
+  mi_bitmap_t* pages;                // all registered pages (abandoned and owned)
+  mi_bitmap_t* pages_abandoned[MI_ARENA_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)  
+  // followed by the bitmaps (whose sizes depend on the arena size)  
+} mi_arena_pages_t;
+
+
 // A memory arena
 typedef struct mi_arena_s {
   mi_memid_t          memid;                // provenance of the memory area
   mi_subproc_t*       subproc;              // subprocess this arena belongs to (`this 'element-of' this->subproc->arenas`)
+  size_t              arena_idx;            // index in the arenas array 
 
   size_t              slice_count;          // total size of the area in arena slices (of `MI_ARENA_SLICE_SIZE`)
   size_t              info_slices;          // initial slices reserved for the arena bitmaps
@@ -590,16 +600,12 @@ typedef struct mi_arena_s {
   mi_bitmap_t*        slices_committed;     // is the slice committed? (i.e. accessible)
   mi_bitmap_t*        slices_dirty;         // is the slice potentially non-zero?
   mi_bitmap_t*        slices_purge;         // slices that can be purged
+  mi_arena_pages_t    pages_main;           // arena page bitmaps for the main heap are allocated up front as well
                                               
   // followed by the bitmaps (whose sizes depend on the arena size)
   // note: when adding bitmaps revise `mi_arena_info_slices_needed`
 } mi_arena_t;
 
-typedef struct mi_arena_pages_s {
-  mi_bitmap_t*        pages;                // all registered pages (abandoned and owned)
-  mi_bitmap_t*        pages_abandoned[MI_ARENA_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)  
-  // followed by the bitmaps (whose sizes depend on the arena size)  
-} mi_arena_pages_t;
 
 
 /* -----------------------------------------------------------

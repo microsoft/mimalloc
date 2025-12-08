@@ -670,10 +670,11 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
 }
 
 // Initialize a fresh page (that is already partially initialized)
-mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
+mi_decl_nodiscard bool _mi_page_init(mi_heap_t* heap, mi_theap_t* theap, mi_page_t* page) {
   mi_assert(page != NULL);
+  page->heap = heap;
   mi_page_set_theap(page, theap);
-
+  
   size_t page_size;
   uint8_t* page_start = mi_page_area(page, &page_size); MI_UNUSED(page_start);
   mi_track_mem_noaccess(page_start,page_size);
@@ -690,6 +691,9 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   }
   #endif
 
+  mi_assert_internal(page->theap!=NULL);
+  mi_assert_internal(page->heap!=NULL);
+  mi_assert_internal(page->theap == _mi_heap_get_theap(page->heap));
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->used == 0);

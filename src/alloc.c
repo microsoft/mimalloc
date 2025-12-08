@@ -224,6 +224,9 @@ mi_decl_nodiscard mi_decl_restrict void* mi_zalloc(size_t size) mi_attr_noexcept
   return mi_theap_zalloc(mi_prim_get_default_theap(),size);
 }
 
+mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_theap_zalloc(_mi_prim_heap_theap(heap), size);
+}
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_calloc(mi_theap_t* theap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;

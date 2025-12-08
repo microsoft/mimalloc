@@ -262,7 +262,7 @@ void          _mi_deferred_free(mi_theap_t* theap, bool force);
 
 void          _mi_page_free_collect(mi_page_t* page, bool force);
 void          _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
-mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page);
+mi_decl_nodiscard bool _mi_page_init(mi_heap_t* heap, mi_theap_t* theap, mi_page_t* page);
 bool          _mi_page_queue_is_valid(mi_theap_t* theap, const mi_page_queue_t* pq);
 
 size_t        _mi_page_bin(const mi_page_t* page); // for stats
@@ -281,6 +281,14 @@ mi_theap_t*    _mi_theap_by_tag(mi_theap_t* theap, uint8_t tag);
 void          _mi_theap_area_init(mi_theap_area_t* area, mi_page_t* page);
 bool          _mi_theap_area_visit_blocks(const mi_theap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
 void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
+
+// "heap.c"
+mi_heap_t*    _mi_heap_main(void);
+bool          _mi_is_heap_main(const mi_heap_t* heap);
+mi_decl_preserve_all mi_theap_t* _mi_heap_get_or_init_theap(mi_heap_t* heap); // get (and possible create) the theap belonging to a heap
+mi_decl_preserve_all mi_theap_t* _mi_heap_get_theap(mi_heap_t* heap);         // get the theap for a heap without initializing (and return NULL in that case)
+
+
 
 // "stats.c"
 void          _mi_stats_init(void);
@@ -358,6 +366,12 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_subproc_stat_adjust_increase(subproc,stat,amnt)      __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amnt)
 #define mi_subproc_stat_adjust_decrease(subproc,stat,amnt)      __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amnt)
 
+#define mi_heap_stat_counter_increase(heap,stat,amount)         __mi_stat_counter_increase_mt( &(heap)->stats.stat, amount)
+#define mi_heap_stat_increase(heap,stat,amount)                 __mi_stat_increase_mt( &(heap)->stats.stat, amount)
+#define mi_heap_stat_decrease(heap,stat,amount)                 __mi_stat_decrease_mt( &(heap)->stats.stat, amount)
+#define mi_heap_stat_adjust_increase(heap,stat,amnt)            __mi_stat_adjust_increase_mt( &(heap)->stats.stat, amnt)
+#define mi_heap_stat_adjust_decrease(heap,stat,amnt)            __mi_stat_adjust_decrease_mt( &(heap)->stats.stat, amnt)
+
 #define mi_tld_stat_counter_increase(tld,stat,amount)           __mi_stat_counter_increase( &(tld)->stats.stat, amount)
 #define mi_tld_stat_increase(tld,stat,amount)                   __mi_stat_increase( &(tld)->stats.stat, amount)
 #define mi_tld_stat_decrease(tld,stat,amount)                   __mi_stat_decrease( &(tld)->stats.stat, amount)
@@ -368,10 +382,10 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
 #define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
 
-#define mi_theap_stat_counter_increase(theap,stat,amount)         mi_tld_stat_counter_increase(theap->tld, stat, amount)
-#define mi_theap_stat_increase(theap,stat,amount)                 mi_tld_stat_increase( theap->tld, stat, amount)
-#define mi_theap_stat_decrease(theap,stat,amount)                 mi_tld_stat_decrease( theap->tld, stat, amount)
-#define mi_theap_stat_adjust_decrease(theap,stat,amount)          mi_tld_stat_adjust_decrease( theap->tld, stat, amount)
+#define mi_theap_stat_counter_increase(theap,stat,amount)       mi_tld_stat_counter_increase(theap->tld, stat, amount)
+#define mi_theap_stat_increase(theap,stat,amount)               mi_tld_stat_increase( theap->tld, stat, amount)
+#define mi_theap_stat_decrease(theap,stat,amount)               mi_tld_stat_decrease( theap->tld, stat, amount)
+#define mi_theap_stat_adjust_decrease(theap,stat,amount)        mi_tld_stat_adjust_decrease( theap->tld, stat, amount)
 
 /* -----------------------------------------------------------
   Options (exposed for the debugger)
@@ -812,12 +826,7 @@ static inline void mi_page_set_has_interior_pointers(mi_page_t* page, bool has_a
 
 static inline void mi_page_set_theap(mi_page_t* page, mi_theap_t* theap) {
   // mi_assert_internal(!mi_page_is_in_full(page));  // can happen when destroying pages on theap_destroy
-  if (theap != NULL) {
-    page->theap = theap;    
-  }
-  else {
-    page->theap = NULL;
-  }
+  page->theap = theap;
   const mi_threadid_t tid = (theap == NULL ? MI_THREADID_ABANDONED : theap->tld->thread_id);
   mi_assert_internal((tid & MI_PAGE_FLAG_MASK) == 0);
 

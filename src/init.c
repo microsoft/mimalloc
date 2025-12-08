@@ -293,6 +293,15 @@ mi_theap_t* _mi_theap_main_get(void) {
   return &theap_main;
 }
 
+mi_heap_t* _mi_heap_main(void) {
+  mi_heap_main_init();
+  return &heap_main;
+}
+
+bool _mi_is_heap_main(const mi_heap_t* heap) {
+  return (heap == &heap_main);
+}
+
 
 /* -----------------------------------------------------------
   Thread local data

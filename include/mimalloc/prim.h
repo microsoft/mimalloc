@@ -438,8 +438,6 @@ static inline mi_theap_t* mi_prim_get_default_theap(void) {
 
 // Get (and possible create) the theap belonging to a heap
 // We cache the last accessed theap in `_mi_theap_cached` for better performance.
-mi_decl_preserve_all mi_theap_t* _mi_heap_get_or_init_theap(mi_heap_t* heap);
-
 static inline mi_theap_t* _mi_prim_heap_theap(mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached;
   if mi_unlikely(theap->heap!=heap) {
@@ -448,9 +446,6 @@ static inline mi_theap_t* _mi_prim_heap_theap(mi_heap_t* heap) {
   mi_assert(theap->heap==heap);
   return theap;
 }
-
-// Get the theap for a heap without initializing (and return NULL in that case)
-mi_decl_preserve_all mi_theap_t* _mi_heap_get_theap(mi_heap_t* heap);
 
 static inline mi_theap_t* _mi_prim_heap_get_theap(mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached;
