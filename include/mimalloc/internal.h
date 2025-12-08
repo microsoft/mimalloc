@@ -222,17 +222,17 @@ mi_arena_id_t _mi_arena_id_none(void);
 mi_arena_t*   _mi_arena_from_id(mi_arena_id_t id);
 bool          _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_t* request_arena);
 
-void*         _mi_arenas_alloc(mi_subproc_t* subproc, size_t size, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid);
-void*         _mi_arenas_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid);
+void*         _mi_arenas_alloc(mi_heap_t* heap, size_t size, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid);
+void*         _mi_arenas_alloc_aligned(mi_heap_t* heap, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid);
 void          _mi_arenas_free(void* p, size_t size, mi_memid_t memid);
 bool          _mi_arenas_contain(const void* p);
 void          _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld);
 void          _mi_arenas_unsafe_destroy_all(mi_subproc_t* subproc);
 
-mi_page_t*    _mi_arenas_page_alloc(mi_theap_t* theap, size_t block_size, size_t page_alignment);
-void          _mi_arenas_page_free(mi_page_t* page, mi_tld_t* tld);
-void          _mi_arenas_page_abandon(mi_page_t* page, mi_tld_t* tld);
-void          _mi_arenas_page_unabandon(mi_page_t* page);
+mi_page_t*    _mi_arenas_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
+void          _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx /* can be NULL */);
+void          _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap);
+void          _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx /* can be NULL */);
 bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page);
 
 // arena-meta.c
@@ -270,14 +270,14 @@ size_t        _mi_bin_size(size_t bin);            // for stats
 size_t        _mi_bin(size_t size);                // for stats
 
 // "theap.c"
-mi_theap_t*    _mi_theap_create(bool allow_destroy, mi_arena_id_t arena_id, mi_tld_t* tld);
-void          _mi_theap_init(mi_theap_t* theap, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag, mi_tld_t* tld);
-void          _mi_theap_destroy_pages(mi_theap_t* theap);
-void          _mi_theap_collect_abandon(mi_theap_t* theap);
+mi_theap_t*   _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld);
+//void          _mi_theap_init(mi_theap_t* theap, bool noreclaim, mi_tld_t* tld);
+//void          _mi_theap_destroy_pages(mi_theap_t* theap);
+//void          _mi_theap_collect_abandon(mi_theap_t* theap);
 void          _mi_theap_set_default_direct(mi_theap_t* theap);
-bool          _mi_theap_memid_is_suitable(mi_theap_t* theap, mi_memid_t memid);
+//bool          _mi_theap_memid_is_suitable(mi_theap_t* theap, mi_memid_t memid);
 void          _mi_theap_unsafe_destroy_all(mi_theap_t* theap);
-mi_theap_t*    _mi_theap_by_tag(mi_theap_t* theap, uint8_t tag);
+
 void          _mi_theap_area_init(mi_theap_area_t* area, mi_page_t* page);
 bool          _mi_theap_area_visit_blocks(const mi_theap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
 void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
@@ -552,9 +552,6 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
 
 extern mi_decl_hidden const mi_theap_t _mi_theap_empty;  // read-only empty theap, initial value of the thread local default theap
 
-static inline bool mi_theap_is_backing(const mi_theap_t* theap) {
-  return (theap->tld->theap_backing == theap);
-}
 
 static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {
   mi_assert_internal(theap != NULL);
@@ -721,14 +718,6 @@ static inline size_t mi_page_committed(const mi_page_t* page) {
   return (page->slice_committed == 0 ? mi_page_size(page) : page->slice_committed - (page->page_start - mi_page_slice_start(page)));
 }
 
-static inline mi_theap_t* mi_page_theap(const mi_page_t* page) {
-  return page->theap;
-}
-
-static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
-  return page->heap;
-}
-
 // are all blocks in a page freed?
 // note: needs up-to-date used count, (as the `xthread_free` list may not be empty). see `_mi_page_collect_free`.
 static inline bool mi_page_all_free(const mi_page_t* page) {
@@ -855,6 +844,24 @@ static inline void mi_page_set_abandoned_mapped(mi_page_t* page) {
 static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
   mi_assert_internal(mi_page_is_abandoned_mapped(page));
   mi_atomic_and_relaxed(&page->xthread_id, MI_PAGE_FLAG_MASK);
+}
+
+
+static inline mi_theap_t* mi_page_theap(const mi_page_t* page) {
+  mi_assert_internal(!mi_page_is_abandoned(page));
+  return page->theap;
+}
+
+static inline mi_tld_t* mi_page_tld(const mi_page_t* page) {
+  mi_assert_internal(!mi_page_is_abandoned(page));
+  mi_assert_internal(page->theap != NULL);
+  return page->theap->tld;
+}
+
+
+static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
+  mi_heap_t* const heap = page->heap;
+  return (heap==NULL ? _mi_heap_main() : heap);
 }
 
 //-----------------------------------------------------------

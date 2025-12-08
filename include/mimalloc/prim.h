@@ -450,9 +450,36 @@ static inline mi_theap_t* _mi_prim_heap_theap(mi_heap_t* heap) {
 static inline mi_theap_t* _mi_prim_heap_get_theap(mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached;
   if mi_unlikely(theap->heap!=heap) {
-    theap = _mi_theap_cached = _mi_heap_get_theap(heap);
+    theap = _mi_heap_get_theap(heap);  // don't update the cache on a query (?)
   }
   mi_assert(theap->heap==heap); 
+  return theap;
+}
+
+static inline mi_theap_t* _mi_page_associated_theap(mi_page_t* page) {
+  mi_heap_t* const heap = page->heap;
+  mi_theap_t* theap;
+  if mi_likely(heap==NULL) { 
+    theap = mi_prim_get_default_theap(); 
+  }
+  else {
+    theap = _mi_prim_heap_theap(heap);
+  }
+  mi_assert_internal(theap!=NULL && _mi_thread_tld()==theap->tld);
+  return theap;
+}
+
+// Find the associated theap or NULL if it does not exist (during shutdown)
+static inline mi_theap_t* _mi_page_get_associated_theap(mi_page_t* page) {
+  mi_heap_t* const heap = page->heap;
+  mi_theap_t* theap;
+  if mi_likely(heap==NULL) {
+    theap = mi_prim_get_default_theap();
+  }
+  else {
+    theap = _mi_prim_heap_get_theap(heap);
+  }
+  mi_assert_internal(theap==NULL || _mi_thread_tld()==theap->tld);
   return theap;
 }
 

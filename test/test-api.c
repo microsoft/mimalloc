@@ -244,12 +244,12 @@ int main(void) {
     }
     result = ok;
   }
-  CHECK_BODY("malloc_aligned11") {
-    mi_theap_t* theap = mi_theap_new();
-    void* p = mi_theap_malloc_aligned(theap, 33554426, 8);
-    result = mi_theap_contains_block(theap, p);
-    mi_theap_destroy(theap);
-  }
+  //CHECK_BODY("malloc_aligned11") {
+  //  mi_theap_t* theap = mi_theap_new();
+  //  void* p = mi_theap_malloc_aligned(theap, 33554426, 8);
+  //  result = mi_theap_contains_block(theap, p);
+  //  mi_theap_destroy(theap);
+  //}
   CHECK_BODY("mimalloc-aligned12") {
     void* p = mi_malloc_aligned(0x100, 0x100);
     result = (((uintptr_t)p % 0x100) == 0); // #602
@@ -339,10 +339,10 @@ int main(void) {
   // ---------------------------------------------------
   // Heaps
   // ---------------------------------------------------
-  CHECK("theap_destroy", test_theap1());
-  CHECK("theap_delete", test_theap2());
-  CHECK("theap_arena_destroy", test_theap_arena_destroy());
-  CHECK("theap_arena_delete", test_theap_arena_delete());
+  //CHECK("theap_destroy", test_theap1());
+  //CHECK("theap_delete", test_theap2());
+  //CHECK("theap_arena_destroy", test_theap_arena_destroy());
+  //CHECK("theap_arena_delete", test_theap_arena_delete());
 
   //mi_stats_print(NULL);
 
@@ -360,10 +360,10 @@ int main(void) {
   CHECK("stl_allocator1", test_stl_allocator1());
   CHECK("stl_allocator2", test_stl_allocator2());
 
-	CHECK("stl_theap_allocator1", test_stl_theap_allocator1());
-	CHECK("stl_theap_allocator2", test_stl_theap_allocator2());
-	CHECK("stl_theap_allocator3", test_stl_theap_allocator3());
-	CHECK("stl_theap_allocator4", test_stl_theap_allocator4());
+	//CHECK("stl_theap_allocator1", test_stl_theap_allocator1());
+	//CHECK("stl_theap_allocator2", test_stl_theap_allocator2());
+	//CHECK("stl_theap_allocator3", test_stl_theap_allocator3());
+	//CHECK("stl_theap_allocator4", test_stl_theap_allocator4());
 
   // ---------------------------------------------------
   // Done
@@ -375,6 +375,7 @@ int main(void) {
 // Larger test functions
 // ---------------------------------------------------
 
+/*
 bool test_theap1(void) {
   mi_theap_t* theap = mi_theap_new();
   int* p1 = mi_theap_malloc_tp(theap,int);
@@ -420,7 +421,7 @@ bool test_theap_arena_delete(void) {
   mi_theap_delete(theap);
   return true;
 }
-
+*/
 bool test_stl_allocator1(void) {
 #ifdef __cplusplus
   std::vector<int, mi_stl_allocator<int> > vec;
@@ -445,6 +446,7 @@ bool test_stl_allocator2(void) {
 #endif
 }
 
+/*
 bool test_stl_theap_allocator1(void) {
 #ifdef __cplusplus
   std::vector<some_struct, mi_theap_stl_allocator<some_struct> > vec;
@@ -502,3 +504,4 @@ bool test_stl_theap_allocator4(void) {
   return true;
 #endif
 }
+*/

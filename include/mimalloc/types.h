@@ -518,6 +518,7 @@ typedef struct mi_heap_s {
   long                  page_full_retain;               // how many full pages can be retained per queue (before abandoning them)
   bool                  allow_page_reclaim;             // `true` if this heap should not reclaim abandoned pages
   bool                  allow_page_abandon;             // `true` if this heap can abandon pages to reduce memory footprint
+  bool                  allow_destroy;
 
   mi_theap_t*           theaps;
   mi_lock_t             theaps_lock;
@@ -547,7 +548,6 @@ struct mi_tld_s {
   size_t                thread_seq;           // thread sequence id (linear count of created threads)
   int                   numa_node;            // thread preferred numa node
   mi_subproc_t*         subproc;              // sub-process this thread belongs to.
-  mi_theap_t*           theap_backing;        // backing theap of this thread (cannot be deleted)
   mi_theap_t*           theaps;               // list of theaps in this thread (so we can abandon all when the thread terminates)
   bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
   bool                  is_in_threadpool;     // true if this thread is part of a threadpool (and can run arbitrary tasks)

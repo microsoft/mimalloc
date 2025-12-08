@@ -106,7 +106,6 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
   0,                      // thread_seq
   0,                      // default numa node
   &subproc_main,          // subproc
-  NULL,                   // theap_backing
   NULL,                   // theaps list
   false,                  // recurse
   false,                  // is_in_threadpool
@@ -117,7 +116,6 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
 mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   &tld_empty,             // tld
   NULL,                   // heap
-  0,                      // preferred numa node
   0,                      // heartbeat
   0,                      // cookie
   { {0}, {0}, 0, true },  // random
@@ -146,7 +144,6 @@ static mi_decl_cache_align mi_tld_t tld_main = {
   0,                      // thread_seq
   0,                      // numa node
   &subproc_main,          // subproc
-  &theap_main,            // theap_backing
   &theap_main,            // theaps list
   false,                  // recurse
   false,                  // is_in_threadpool
@@ -157,7 +154,6 @@ static mi_decl_cache_align mi_tld_t tld_main = {
 mi_decl_cache_align mi_theap_t theap_main = {
   &tld_main,              // thread local data
   &heap_main,             // main heap
-  0,                      // preferred numa node
   0,                      // heartbeat
   0,                      // initial cookie
   { {0x846ca68b}, {0}, 0, true },  // random
@@ -187,9 +183,11 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
   return _mi_prim_thread_id();
 }
 
-// the thread-local default theap for allocation
+// the thread-local main theap for allocation
 mi_decl_thread mi_theap_t* _mi_theap_default = (mi_theap_t*)&_mi_theap_empty;
 
+// the last used non-main theap
+mi_decl_thread mi_theap_t* _mi_theap_cached = NULL;
 
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
@@ -336,7 +334,6 @@ static mi_tld_t* mi_tld_alloc(void) {
       return NULL;
     }
     tld->memid = memid;
-    tld->theap_backing = NULL;
     tld->theaps = NULL;
     tld->subproc = &subproc_main;
     tld->numa_node = _mi_os_numa_node();
@@ -477,7 +474,7 @@ static bool _mi_thread_theap_init(void) {
     mi_tld_t* tld = mi_tld_alloc();
 
     // allocate and initialize the theap
-    mi_theap_t* theap = _mi_theap_create(false /* allow destroy? */, _mi_arena_id_none(), tld);
+    mi_theap_t* theap = _mi_theap_create(&heap_main, tld);
 
     // associate the theap with this thread
     // (this is safe, on macOS for example, the theap is set in a dedicated TLS slot and thus does not cause recursive allocation)
@@ -495,33 +492,19 @@ static bool _mi_thread_theap_done(mi_theap_t* theap) {
   if (!mi_theap_is_initialized(theap)) return true;
 
   // reset default theap
-  _mi_theap_set_default_direct(_mi_is_main_thread() ? &theap_main : (mi_theap_t*)&_mi_theap_empty);
+  _mi_theap_set_default_direct((mi_theap_t*)&_mi_theap_empty);
 
-  // switch to backing theap
-  theap = theap->tld->theap_backing;
-  if (!mi_theap_is_initialized(theap)) return false;
-
-  // delete all non-backing theaps in this thread
+  // delete all theaps in this thread
   mi_theap_t* curr = theap->tld->theaps;
   while (curr != NULL) {
     mi_theap_t* next = curr->next; // save `next` as `curr` will be freed
     if (curr != theap) {
-      mi_assert_internal(!mi_theap_is_backing(curr));
       mi_theap_delete(curr);
     }
     curr = next;
   }
-  mi_assert_internal(theap->tld->theaps == theap && theap->next == NULL);
-  mi_assert_internal(mi_theap_is_backing(theap));
-
-  // collect if not the main thread
-  if (theap != &theap_main) {
-    _mi_theap_collect_abandon(theap);
-  }
-
-  // free theap meta data
-  _mi_meta_free(theap, sizeof(mi_theap_t), theap->memid);
-
+  mi_assert_internal(theap->tld->theaps == NULL);
+  
   if (theap == &theap_main) {
     #if 0
     // never free the main thread even in debug mode; if a dll is linked statically with mimalloc,

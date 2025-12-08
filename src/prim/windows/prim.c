@@ -699,7 +699,7 @@ bool _mi_prim_thread_is_in_threadpool(void) {
 
 #define MI_PRIM_HAS_THREAD_LOCAL  (1)
 
-static inline mi_thread_local_t _mi_prim_thread_local_create(void) {
+mi_thread_local_t _mi_prim_thread_local_create(void) {
   DWORD key = TlsAlloc();
   if (key==TLS_OUT_OF_INDEXES) {  // == (DWORD)(-1)
     _mi_error_message(EFAULT, "cannot create dynamic thread local variables (reduce number of heaps?)");
@@ -707,17 +707,20 @@ static inline mi_thread_local_t _mi_prim_thread_local_create(void) {
   }
   return (mi_thread_local_t)(key+1);
 }
-static inline void  _mi_prim_thread_local_free(mi_thread_local_t key) {
+
+void  _mi_prim_thread_local_free(mi_thread_local_t key) {
   if (key==0) return;
-  TlsFree(key-1);
+  TlsFree((DWORD)(key-1));
 }
-static inline void* _mi_prim_thread_local_get(mi_thread_local_t key) {
+
+void* _mi_prim_thread_local_get(mi_thread_local_t key) {
   if (key==0) return NULL;
-  return TlsGetValue(key-1);
+  return TlsGetValue((DWORD)(key-1));
 }
-static inline void  _mi_prim_thread_local_set(mi_thread_local_t key, void* value) {
+
+void  _mi_prim_thread_local_set(mi_thread_local_t key, void* value) {
   if (key==0) return;
-  TlsSetValue(key-1, value);
+  TlsSetValue((DWORD)(key-1), value);
 }
 
 

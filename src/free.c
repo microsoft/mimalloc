@@ -204,7 +204,7 @@ static bool mi_abandoned_page_try_free(mi_page_t* page)
 {
   if (!mi_page_all_free(page)) return false;
   // first remove it from the abandoned pages in the arena (if mapped, this might wait for any readers to finish)
-  _mi_arenas_page_unabandon(page);
+  _mi_arenas_page_unabandon(page,NULL);
   _mi_arenas_page_free(page,NULL); // we can now free the page directly
   return true;
 }
@@ -271,11 +271,10 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
   mi_assert_internal(page->block_size <= MI_SMALL_SIZE_MAX);
   mi_assert_internal(reclaim_on_free >= 0);
 
-  // get our theap (with the right tag)
+  // get our theap 
   // note: don't use `mi_heap_theap()` as we may just have terminated this thread and we should
   // not reinitialize the theap for this thread. (can happen due to thread-local destructors for example -- issue #944)
-  mi_heap_t* const heap = mi_page_heap(page);
-  mi_theap_t* const theap = _mi_prim_heap_get_theap(heap);
+  mi_theap_t* const theap = _mi_page_get_associated_theap(page);
   if (theap==NULL || !theap->allow_page_reclaim) return false;
   
   // todo: cache `is_in_threadpool` and `exclusive_arena` directly in the theap for performance?
@@ -288,7 +287,7 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
   else if (reclaim_on_free == 1 &&               // if cross-thread is allowed
             !theap->tld->is_in_threadpool &&      // and we are not part of a threadpool
             !mi_page_is_mostly_used(page) &&     // and the page is not too full
-            _mi_arena_memid_is_suitable(page->memid, heap->exclusive_arena)) {   // and it fits our memory
+            _mi_arena_memid_is_suitable(page->memid, theap->heap->exclusive_arena)) {   // and it fits our memory
     // across threads
     max_reclaim = _mi_option_get_fast(mi_option_page_cross_thread_max_reclaim);
   }
@@ -300,7 +299,7 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
 
   // reclaim the page into this theap
   // first remove it from the abandoned pages in the arena -- this might wait for any readers to finish
-  _mi_arenas_page_unabandon(page);
+  _mi_arenas_page_unabandon(page, theap);
   _mi_theap_page_reclaim(theap, page);
   mi_theap_stat_counter_increase(theap, pages_reclaim_on_free, 1);
   return true;

@@ -290,20 +290,20 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
     mi_theap_t* theap = page->theap;
     mi_page_set_theap(page, NULL);
     page->theap = theap; // dont set theap to NULL so we can reclaim_on_free within the same theap
-    _mi_arenas_page_abandon(page, theap->tld);
+    _mi_arenas_page_abandon(page, theap);
     _mi_arenas_collect(false, false, theap->tld); // allow purging
   }
 }
 
 
-// allocate a fresh page from a segment
+// allocate a fresh page from an arena
 static mi_page_t* mi_page_fresh_alloc(mi_theap_t* theap, mi_page_queue_t* pq, size_t block_size, size_t page_alignment) {
   #if !MI_HUGE_PAGE_ABANDON
   mi_assert_internal(pq != NULL);
   mi_assert_internal(mi_theap_contains_queue(theap, pq));
   mi_assert_internal(page_alignment > 0 || block_size > MI_LARGE_MAX_OBJ_SIZE || block_size == pq->block_size);
   #endif
-  mi_page_t* page = _mi_arenas_page_alloc(theap, block_size, page_alignment);
+  mi_page_t* page = _mi_arenas_page_alloc(theap->heap, block_size, page_alignment);
   if (page == NULL) {
     // out-of-memory
     return NULL;
@@ -393,10 +393,9 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   mi_page_queue_remove(pq, page);
 
   // and free it
-  mi_tld_t* const tld = page->theap->tld;
   mi_page_set_theap(page,NULL);
-  _mi_arenas_page_free(page,tld);
-  _mi_arenas_collect(false, false, tld);  // allow purging
+  _mi_arenas_page_free(page,mi_page_theap(page));
+  _mi_arenas_collect(false, false, mi_page_tld(page));  // allow purging
 }
 
 #define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX   // should be less than size for MI_BIN_HUGE
@@ -672,7 +671,7 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
 // Initialize a fresh page (that is already partially initialized)
 mi_decl_nodiscard bool _mi_page_init(mi_heap_t* heap, mi_theap_t* theap, mi_page_t* page) {
   mi_assert(page != NULL);
-  page->heap = heap;
+  page->heap = (_mi_is_heap_main(heap) ? NULL : heap); // faster for `mi_page_associated_theap`
   mi_page_set_theap(page, theap);
   
   size_t page_size;
@@ -692,8 +691,7 @@ mi_decl_nodiscard bool _mi_page_init(mi_heap_t* heap, mi_theap_t* theap, mi_page
   #endif
 
   mi_assert_internal(page->theap!=NULL);
-  mi_assert_internal(page->heap!=NULL);
-  mi_assert_internal(page->theap == _mi_heap_get_theap(page->heap));
+  mi_assert_internal(page->theap == mi_page_theap(page));
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->used == 0);
@@ -868,10 +866,10 @@ static mi_deferred_free_fun* volatile deferred_free = NULL;
 static _Atomic(void*) deferred_arg; // = NULL
 
 void _mi_deferred_free(mi_theap_t* theap, bool force) {
-  theap->tld->heartbeat++;
+  theap->heartbeat++;
   if (deferred_free != NULL && !theap->tld->recurse) {
     theap->tld->recurse = true;
-    deferred_free(force, theap->tld->heartbeat, mi_atomic_load_ptr_relaxed(void,&deferred_arg));
+    deferred_free(force, theap->heartbeat, mi_atomic_load_ptr_relaxed(void,&deferred_arg));
     theap->tld->recurse = false;
   }
 }

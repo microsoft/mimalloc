@@ -59,8 +59,8 @@ int main() {
   char* s = strdup("hello\n");
   free(p2);
 
-  mi_theap_t* h = mi_theap_new();
-  mi_theap_set_default(h);
+  // mi_theap_t* h = mi_theap_new();
+  // mi_theap_set_default(h);
 
   p2 = malloc(16);
   p1 = realloc(p1, 32);
