@@ -229,7 +229,7 @@ bool          _mi_arenas_contain(const void* p);
 void          _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld);
 void          _mi_arenas_unsafe_destroy_all(mi_subproc_t* subproc);
 
-mi_page_t*    _mi_arenas_page_alloc(mi_heap_t* heap, size_t block_size, size_t page_alignment);
+mi_page_t*    _mi_arenas_page_alloc(mi_theap_t* theap, size_t block_size, size_t page_alignment);
 void          _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx /* can be NULL */);
 void          _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap);
 void          _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx /* can be NULL */);
@@ -262,7 +262,7 @@ void          _mi_deferred_free(mi_theap_t* theap, bool force);
 
 void          _mi_page_free_collect(mi_page_t* page, bool force);
 void          _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
-mi_decl_nodiscard bool _mi_page_init(mi_heap_t* heap, mi_theap_t* theap, mi_page_t* page);
+mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page);
 bool          _mi_page_queue_is_valid(mi_theap_t* theap, const mi_page_queue_t* pq);
 
 size_t        _mi_page_bin(const mi_page_t* page); // for stats
@@ -849,6 +849,7 @@ static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
 
 static inline mi_theap_t* mi_page_theap(const mi_page_t* page) {
   mi_assert_internal(!mi_page_is_abandoned(page));
+  mi_assert_internal(page->theap != NULL);
   return page->theap;
 }
 

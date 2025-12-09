@@ -282,7 +282,9 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 
 // defined in `init.c`; do not use these directly
 extern mi_decl_hidden mi_decl_thread mi_theap_t* _mi_theap_default;  // default theap to allocate from
-extern mi_decl_hidden mi_decl_thread mi_theap_t* _mi_theap_cached;   // theap from the last heap
+extern mi_decl_hidden mi_decl_thread mi_theap_t* _mi_theap_main;     // theap belonging to the main heap
+extern mi_decl_hidden mi_decl_thread mi_theap_t* _mi_theap_cached;   // theap from the last used heap
+
 extern mi_decl_hidden bool _mi_process_is_initialized;               // has mi_process_init been called?
 
 static inline mi_threadid_t __mi_prim_thread_id(void) mi_attr_noexcept;

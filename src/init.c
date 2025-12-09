@@ -186,6 +186,9 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 // the thread-local main theap for allocation
 mi_decl_thread mi_theap_t* _mi_theap_default = (mi_theap_t*)&_mi_theap_empty;
 
+// the theap belonging to the main heap
+mi_decl_thread mi_theap_t* _mi_theap_main = (mi_theap_t*)&_mi_theap_empty;
+
 // the last used non-main theap
 mi_decl_thread mi_theap_t* _mi_theap_cached = NULL;
 
@@ -267,7 +270,7 @@ static void mi_theap_main_init(mi_heap_t* heap) {
 
 // Initialize main heap
 static void mi_heap_main_init(void) {
-  if (heap_main.memid.memkind != MI_MEM_STATIC) {
+  if mi_unlikely(heap_main.memid.memkind != MI_MEM_STATIC) {
     heap_main.memid = _mi_memid_create(MI_MEM_STATIC);
     heap_main.subproc = &subproc_main;
     heap_main.theaps = &theap_main;
@@ -487,34 +490,23 @@ static bool _mi_thread_theap_init(void) {
 }
 
 
-// Free the thread local default theap (called from `mi_thread_done`)
-static bool _mi_thread_theap_done(mi_theap_t* theap) {
-  if (!mi_theap_is_initialized(theap)) return true;
-
-  // reset default theap
+// Free the thread local theaps
+static void mi_thread_theaps_done(mi_tld_t* tld) 
+{  
+  // reset the thread local theaps
   _mi_theap_set_default_direct((mi_theap_t*)&_mi_theap_empty);
+  _mi_theap_main = (mi_theap_t*)&_mi_theap_empty;
+  _mi_theap_cached = NULL;
 
   // delete all theaps in this thread
-  mi_theap_t* curr = theap->tld->theaps;
+  mi_theap_t* curr = tld->theaps;
   while (curr != NULL) {
     mi_theap_t* next = curr->next; // save `next` as `curr` will be freed
-    if (curr != theap) {
-      mi_theap_delete(curr);
-    }
-    curr = next;
-  }
-  mi_assert_internal(theap->tld->theaps == NULL);
-  
-  if (theap == &theap_main) {
-    #if 0
-    // never free the main thread even in debug mode; if a dll is linked statically with mimalloc,
+    // never destroy theaps; if a dll is linked statically with mimalloc,
     // there may still be delete/free calls after the mi_fls_done is called. Issue #207
-    _mi_theap_destroy_pages(theap);
-    mi_assert_internal(theap->tld->theap_backing == &theap_main);
-    #endif
-  }
-
-  return false;
+    mi_theap_delete(curr);
+    curr = next;
+  }  
 }
 
 
@@ -569,29 +561,29 @@ void mi_thread_done(void) mi_attr_noexcept {
   _mi_thread_done(NULL);
 }
 
-void _mi_thread_done(mi_theap_t* theap)
-{
-  // calling with NULL implies using the default theap
-  if (theap == NULL) {
-    theap = mi_prim_get_default_theap();
-    if (theap == NULL) return;
+void _mi_thread_done(mi_theap_t* _theap_main)
+{ 
+  // NULL can be passed on some platforms
+  if (_theap_main==NULL) {
+    _theap_main = _mi_theap_main;
   }
 
   // prevent re-entrancy through theap_done/theap_set_default_direct (issue #699)
-  if (!mi_theap_is_initialized(theap)) {
+  if (!mi_theap_is_initialized(_theap_main)) {
     return;
   }
 
+  // note: we store the tld as we should avoid reading `thread_tld` at this point (to avoid reinitializing the thread local storage)
+  mi_tld_t* const tld = _theap_main->tld;
+
   // adjust stats
-  mi_subproc_stat_decrease(_mi_subproc_main(), threads, 1);
+  mi_subproc_stat_decrease(tld->subproc, threads, 1);
 
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local theaps...
-  if (theap->tld->thread_id != _mi_prim_thread_id()) return;
+  if (tld->thread_id != _mi_prim_thread_id()) return;
 
-  // abandon the thread local theap
-  // note: we store the tld as we should avoid reading `thread_tld` at this point (to avoid reinitializing the thread local storage)
-  mi_tld_t* tld = theap->tld;
-  _mi_thread_theap_done(theap);  // returns true if already ran
+  // delete the thread local theaps
+  mi_thread_theaps_done(tld); 
 
   // free thread local data
   mi_tld_free(tld);
@@ -609,9 +601,13 @@ void _mi_theap_set_default_direct(mi_theap_t* theap)  {
   _mi_theap_default = theap;
   #endif
 
-  // ensure the default theap is passed to `_mi_thread_done`
-  // setting to a non-NULL value also ensures `mi_thread_done` is called.
-  _mi_prim_thread_associate_default_theap(theap);
+  // set theap main if needed
+  if (_mi_is_heap_main(theap->heap)) {
+    // ensure the main theap is passed to `_mi_thread_done`
+    // setting to a non-NULL value also ensures `mi_thread_done` is called.
+    _mi_prim_thread_associate_default_theap(theap);
+    _mi_theap_main = theap;
+  }
 }
 
 void mi_thread_set_in_threadpool(void) mi_attr_noexcept {

@@ -303,7 +303,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_theap_t* theap, mi_page_queue_t* pq, si
   mi_assert_internal(mi_theap_contains_queue(theap, pq));
   mi_assert_internal(page_alignment > 0 || block_size > MI_LARGE_MAX_OBJ_SIZE || block_size == pq->block_size);
   #endif
-  mi_page_t* page = _mi_arenas_page_alloc(theap->heap, block_size, page_alignment);
+  mi_page_t* page = _mi_arenas_page_alloc(theap, block_size, page_alignment);
   if (page == NULL) {
     // out-of-memory
     return NULL;
@@ -393,9 +393,10 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   mi_page_queue_remove(pq, page);
 
   // and free it
+  mi_theap_t* theap = mi_page_theap(page); mi_assert_internal(theap!=NULL);
   mi_page_set_theap(page,NULL);
-  _mi_arenas_page_free(page,mi_page_theap(page));
-  _mi_arenas_collect(false, false, mi_page_tld(page));  // allow purging
+  _mi_arenas_page_free(page, theap);
+  _mi_arenas_collect(false, false, theap->tld);  // allow purging
 }
 
 #define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX   // should be less than size for MI_BIN_HUGE
@@ -669,9 +670,10 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
 }
 
 // Initialize a fresh page (that is already partially initialized)
-mi_decl_nodiscard bool _mi_page_init(mi_heap_t* heap, mi_theap_t* theap, mi_page_t* page) {
+mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert(page != NULL);
-  page->heap = (_mi_is_heap_main(heap) ? NULL : heap); // faster for `mi_page_associated_theap`
+  mi_assert(theap!=NULL);
+  page->heap = (_mi_is_heap_main(theap->heap) ? NULL : theap->heap); // faster for `mi_page_associated_theap`
   mi_page_set_theap(page, theap);
   
   size_t page_size;
