@@ -396,19 +396,15 @@ void _mi_stats_init(void) {
 }
 
 
-// return thread local stats
-static mi_stats_t* mi_get_tld_stats(void) {
-  return &_mi_thread_tld()->stats;
-}
-
+// todo: should be per heap
 void mi_stats_reset(void) mi_attr_noexcept {
-  mi_stats_t* stats = mi_get_tld_stats();
-  mi_subproc_t* subproc = _mi_subproc();
-  if (stats != &subproc->stats) { _mi_memzero(stats, sizeof(mi_stats_t)); }
-  _mi_memzero(&subproc->stats, sizeof(mi_stats_t));
+  mi_theap_t* theap = _mi_theap_default();
+  mi_stats_t* stats = &theap->stats;
+  mi_stats_t* heap_stats = &theap->heap->stats;
+  _mi_memzero(stats, sizeof(mi_stats_t));
+  _mi_memzero(heap_stats, sizeof(mi_stats_t));
   _mi_stats_init();
 }
-
 
 void _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from) {
   mi_assert_internal(to != NULL && from != NULL);
@@ -418,22 +414,24 @@ void _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from) {
   }
 }
 
-void _mi_stats_done(mi_stats_t* stats) {  // called from `mi_thread_done`
-  _mi_stats_merge_from(&_mi_subproc()->stats, stats);
+static mi_stats_t* mi_stats_merge_theap(mi_theap_t* theap) mi_attr_noexcept {
+  mi_stats_t* stats = &theap->stats;
+  mi_stats_t* heap_stats = &theap->heap->stats;
+  _mi_stats_merge_from( heap_stats, stats );
+  return heap_stats;
 }
 
-void _mi_stats_merge_thread(mi_tld_t* tld) {
-  mi_assert_internal(tld != NULL && tld->subproc != NULL);
-  _mi_stats_merge_from( &tld->subproc->stats, &tld->stats );
+mi_stats_t* _mi_heap_stats(mi_heap_t* heap) {
+  mi_theap_t* theap = _mi_heap_get_theap(heap);
+  return mi_stats_merge_theap(theap);
 }
 
-void mi_stats_merge(void) mi_attr_noexcept {
-  _mi_stats_merge_thread( _mi_thread_tld() );
+mi_stats_t* _mi_stats(void) {
+  return mi_stats_merge_theap(_mi_theap_default());
 }
 
 void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
-  mi_stats_merge();
-  _mi_stats_print(&_mi_subproc()->stats, out, arg);
+  _mi_stats_print(_mi_stats(), out, arg);
 }
 
 void mi_stats_print(void* out) mi_attr_noexcept {
@@ -442,7 +440,8 @@ void mi_stats_print(void* out) mi_attr_noexcept {
 }
 
 void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
-  _mi_stats_print(mi_get_tld_stats(), out, arg);
+  _mi_stats_print(&_mi_theap_default()->stats, out, arg);
+  _mi_stats();
 }
 
 
@@ -476,12 +475,12 @@ mi_msecs_t _mi_clock_end(mi_msecs_t start) {
 
 mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept
 {
-  mi_subproc_t* subproc = _mi_subproc();
+  mi_heap_t* const heap = _mi_heap_main();
   mi_process_info_t pinfo;
   _mi_memzero_var(pinfo);
   pinfo.elapsed        = _mi_clock_end(mi_process_start);
-  pinfo.current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&subproc->stats.committed.current)));
-  pinfo.peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&subproc->stats.committed.peak)));
+  pinfo.current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&heap->stats.committed.current)));
+  pinfo.peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&heap->stats.committed.peak)));
   pinfo.current_rss    = pinfo.current_commit;
   pinfo.peak_rss       = pinfo.peak_commit;
   pinfo.utime          = 0;
@@ -513,8 +512,8 @@ size_t mi_stats_get_bin_size(size_t bin) mi_attr_noexcept {
 void mi_stats_get(size_t stats_size, mi_stats_t* stats) mi_attr_noexcept {
   if (stats == NULL || stats_size == 0) return;
   _mi_memzero(stats, stats_size);
-  const size_t size = (stats_size > sizeof(mi_stats_t) ? sizeof(mi_stats_t) : stats_size);
-  _mi_memcpy(stats, &_mi_subproc()->stats, size);
+  const size_t size = (stats_size > sizeof(mi_stats_t) ? sizeof(mi_stats_t) : stats_size);  
+  _mi_memcpy(stats, _mi_stats(), size);
   stats->version = MI_STAT_VERSION;
 }
 
@@ -623,7 +622,6 @@ static void mi_theap_buf_print_counter_value(mi_theap_buf_t* hbuf, const char* n
 #define MI_STAT_COUNTER(stat)  mi_theap_buf_print_counter_value(&hbuf, #stat, &stats->stat);
 
 char* mi_stats_get_json(size_t output_size, char* output_buf) mi_attr_noexcept {
-  mi_stats_merge();
   mi_theap_buf_t hbuf = { NULL, 0, 0, true };
   if (output_size > 0 && output_buf != NULL) {
     _mi_memzero(output_buf, output_size);
@@ -660,7 +658,7 @@ char* mi_stats_get_json(size_t output_size, char* output_buf) mi_attr_noexcept {
   mi_theap_buf_print(&hbuf, "  },\n");
 
   // statistics
-  mi_stats_t* stats = &_mi_subproc()->stats;
+  mi_stats_t* stats = _mi_stats();
   MI_STAT_FIELDS()
 
   // size bins

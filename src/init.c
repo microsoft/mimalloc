@@ -109,7 +109,6 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
   NULL,                   // theaps list
   false,                  // recurse
   false,                  // is_in_threadpool
-  { MI_STAT_VERSION, MI_STATS_NULL },      // stats
   MI_MEMID_STATIC         // memid
 };
 
@@ -131,7 +130,8 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
-  MI_MEMID_STATIC
+  MI_MEMID_STATIC,
+  { MI_STAT_VERSION, MI_STATS_NULL },      // stats
 };
 
 // Heap for the main thread
@@ -147,7 +147,6 @@ static mi_decl_cache_align mi_tld_t tld_main = {
   &theap_main,            // theaps list
   false,                  // recurse
   false,                  // is_in_threadpool
-  { MI_STAT_VERSION, MI_STATS_NULL },      // stats
   MI_MEMID_STATIC         // memid
 };
 
@@ -169,7 +168,8 @@ mi_decl_cache_align mi_theap_t theap_main = {
   #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
-  MI_MEMID_STATIC
+  MI_MEMID_STATIC,
+  { MI_STAT_VERSION, MI_STATS_NULL },      // stats
 };
 
 mi_decl_cache_align mi_heap_t heap_main
@@ -184,13 +184,13 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 }
 
 // the thread-local main theap for allocation
-mi_decl_thread mi_theap_t* _mi_theap_default = (mi_theap_t*)&_mi_theap_empty;
+mi_decl_thread mi_theap_t* __mi_theap_default = (mi_theap_t*)&_mi_theap_empty;
 
 // the theap belonging to the main heap
-mi_decl_thread mi_theap_t* _mi_theap_main = (mi_theap_t*)&_mi_theap_empty;
+mi_decl_thread mi_theap_t* __mi_theap_main = NULL;
 
 // the last used non-main theap
-mi_decl_thread mi_theap_t* _mi_theap_cached = NULL;
+mi_decl_thread mi_theap_t* __mi_theap_cached = NULL;
 
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
@@ -238,6 +238,7 @@ void _mi_theap_guarded_init(mi_theap_t* theap) {
 static void mi_subproc_main_init(void) {
   if (subproc_main.memid.memkind != MI_MEM_STATIC) {
     subproc_main.memid = _mi_memid_create(MI_MEM_STATIC);
+    mi_atomic_store_release(&subproc_main.heap_main, &heap_main);
     mi_lock_init(&subproc_main.arena_reserve_lock);
   }
 }
@@ -288,7 +289,7 @@ static void mi_heap_main_init(void) {
   }
 }
 
-
+/*
 mi_theap_t* _mi_theap_main_get(void) {
   mi_heap_main_init();
   return &theap_main;
@@ -298,11 +299,7 @@ mi_heap_t* _mi_heap_main(void) {
   mi_heap_main_init();
   return &heap_main;
 }
-
-bool _mi_is_heap_main(const mi_heap_t* heap) {
-  return (heap == &heap_main);
-}
-
+*/
 
 /* -----------------------------------------------------------
   Thread local data
@@ -351,7 +348,6 @@ static mi_tld_t* mi_tld_alloc(void) {
 
 mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   if (tld != NULL && tld != MI_TLD_INVALID) {
-    _mi_stats_done(&tld->stats);
     _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);
   }
   #if 0
@@ -375,6 +371,18 @@ static mi_tld_t* mi_tld(void) {
   return tld;
 }
 
+mi_tld_t* _mi_thread_tld(void) mi_attr_noexcept {
+  // should work without doing initialization (as it may be called from `_mi_tld -> mi_tld_alloc ... -> os_alloc -> _mi_subproc()`
+  mi_theap_t* theap = mi_prim_get_default_theap();
+  if (theap == NULL) {
+    return &tld_empty;
+  }
+  else {
+    return theap->tld;
+  }
+}
+
+
 mi_subproc_t* _mi_subproc(void) {
   // should work without doing initialization (as it may be called from `_mi_tld -> mi_tld_alloc ... -> os_alloc -> _mi_subproc()`
   // todo: this will still fail on OS systems where the first access to a thread-local causes allocation.
@@ -389,16 +397,33 @@ mi_subproc_t* _mi_subproc(void) {
   }
 }
 
+/*
+mi_theap_t* _mi_theap_main_get(void) {
+  mi_heap_main_init();
+  return &theap_main;
+}
 
-mi_tld_t* _mi_thread_tld(void) mi_attr_noexcept {
-  // should work without doing initialization (as it may be called from `_mi_tld -> mi_tld_alloc ... -> os_alloc -> _mi_subproc()`
-  mi_theap_t* theap = mi_prim_get_default_theap();
-  if (theap == NULL) {
-    return &tld_empty;
-  }
-  else {
-    return theap->tld;
-  }
+mi_heap_t* _mi_heap_main(void) {
+  mi_heap_main_init();
+  return &heap_main;
+}
+
+bool _mi_is_heap_main(const mi_heap_t* heap) {
+  return (heap == &heap_main);
+}
+*/
+
+
+mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
+  return mi_atomic_load_relaxed(&subproc->heap_main);
+}
+
+mi_heap_t* _mi_heap_main(void) {
+  return _mi_subproc_heap_main(_mi_subproc()); // don't use _mi_theap_main() so this call works during process_init
+}
+
+bool _mi_is_heap_main(const mi_heap_t* heap) {
+  return (_mi_subproc_heap_main(heap->subproc) == heap);
 }
 
 /* -----------------------------------------------------------
@@ -407,10 +432,6 @@ mi_tld_t* _mi_thread_tld(void) mi_attr_noexcept {
 
 mi_subproc_t* _mi_subproc_main(void) {
   return &subproc_main;
-}
-
-mi_subproc_id_t mi_subproc_main(void) {
-  return NULL;
 }
 
 mi_subproc_id_t mi_subproc_new(void) {
@@ -439,7 +460,7 @@ void mi_subproc_delete(mi_subproc_id_t subproc_id) {
   //if (!safe_to_delete) return;
 
   // merge stats back into the main subproc?
-  _mi_stats_merge_from(&_mi_subproc_main()->stats, &subproc->stats);
+  _mi_stats_merge_from(&_mi_heap_main()->stats, &_mi_subproc_heap_main(subproc)->stats);
 
   // safe to release
   // todo: should we refcount subprocesses?
@@ -468,7 +489,6 @@ static bool _mi_thread_theap_init(void) {
     // the main theap is statically allocated
     mi_heap_main_init();
     _mi_theap_set_default_direct(&theap_main);
-    //mi_assert_internal(_mi_theap_default->tld->theap_backing == mi_prim_get_default_theap());
   }
   else {
     // allocates tld data
@@ -477,7 +497,7 @@ static bool _mi_thread_theap_init(void) {
     mi_tld_t* tld = mi_tld_alloc();
 
     // allocate and initialize the theap
-    mi_theap_t* theap = _mi_theap_create(&heap_main, tld);
+    mi_theap_t* theap = _mi_theap_create(_mi_heap_main(), tld);
 
     // associate the theap with this thread
     // (this is safe, on macOS for example, the theap is set in a dedicated TLS slot and thus does not cause recursive allocation)
@@ -495,8 +515,8 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
 {  
   // reset the thread local theaps
   _mi_theap_set_default_direct((mi_theap_t*)&_mi_theap_empty);
-  _mi_theap_main = (mi_theap_t*)&_mi_theap_empty;
-  _mi_theap_cached = NULL;
+  __mi_theap_main = (mi_theap_t*)&_mi_theap_empty;
+  __mi_theap_cached = NULL;
 
   // delete all theaps in this thread
   mi_theap_t* curr = tld->theaps;
@@ -553,7 +573,7 @@ void mi_thread_init(void) mi_attr_noexcept
   //  fiber/pthread key to a non-zero value, ensuring `_mi_thread_done` is called)
   if (_mi_thread_theap_init()) return;  // returns true if already initialized
 
-  mi_subproc_stat_increase(_mi_subproc_main(), threads, 1);
+  mi_heap_stat_increase(_mi_heap_main(), threads, 1);
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
@@ -565,7 +585,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 { 
   // NULL can be passed on some platforms
   if (_theap_main==NULL) {
-    _theap_main = _mi_theap_main;
+    _theap_main = __mi_theap_main;
   }
 
   // prevent re-entrancy through theap_done/theap_set_default_direct (issue #699)
@@ -577,7 +597,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
   mi_tld_t* const tld = _theap_main->tld;
 
   // adjust stats
-  mi_subproc_stat_decrease(tld->subproc, threads, 1);
+  mi_heap_stat_decrease(_mi_subproc_heap_main(tld->subproc), threads, 1);  // todo: or `_theap_main->heap`?
 
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local theaps...
   if (tld->thread_id != _mi_prim_thread_id()) return;
@@ -598,15 +618,16 @@ void _mi_theap_set_default_direct(mi_theap_t* theap)  {
   #elif defined(MI_TLS_PTHREAD)
   // we use _mi_theap_default_key
   #else
-  _mi_theap_default = theap;
+  __mi_theap_default = theap;
   #endif
 
   // set theap main if needed
-  if (_mi_is_heap_main(theap->heap)) {
+  if (mi_theap_is_initialized(theap) && _mi_is_heap_main(theap->heap)) {
+    // todo: is the main theap always
     // ensure the main theap is passed to `_mi_thread_done`
     // setting to a non-NULL value also ensures `mi_thread_done` is called.
     _mi_prim_thread_associate_default_theap(theap);
-    _mi_theap_main = theap;
+    __mi_theap_main = theap;
   }
 }
 
@@ -717,11 +738,10 @@ void mi_process_init(void) mi_attr_noexcept {
   mi_detect_cpu_features();
   _mi_stats_init();
   _mi_os_init();
-  _mi_page_map_init(); // this could fail.. should we abort in that case?
-  mi_heap_main_init();
-  mi_tld_main_init();
-  // the following two can potentially allocate (on freeBSD for locks and thread keys)
-  mi_subproc_main_init();
+  // the following can potentially allocate (on freeBSD for locks and thread keys)
+  // todo: do 2-phase so we can use stats at first, then later init locks?
+  mi_heap_main_init(); // before page_map_init so stats are working
+  _mi_page_map_init(); // todo: this could fail.. should we abort in that case?
   mi_process_setup_auto_thread_done();
   mi_thread_init();
 
@@ -790,7 +810,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   //_mi_page_map_unsafe_destroy(_mi_subproc_main());
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
-    _mi_stats_print(&_mi_subproc_main()->stats, NULL, NULL);  // use always main subproc at process exit to avoid dereferencing the theap (as it may be destroyed by now)
+    _mi_stats_print(&_mi_heap_main()->stats, NULL, NULL);  // use always main subproc at process exit to avoid dereferencing the theap (as it may be destroyed by now)
   }
   _mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", tld_main.thread_id);

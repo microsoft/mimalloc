@@ -646,9 +646,8 @@ static mi_page_t* mi_arenas_page_try_find_abandoned(mi_theap_t* theap, size_t sl
         mi_assert_internal(mi_page_is_abandoned(page));
         mi_assert_internal(mi_heap_has_page(heap, arena, page));
         mi_atomic_decrement_relaxed(&heap->abandoned_count[bin]);
-        mi_tld_t* tld = _mi_thread_tld();
-        mi_tld_stat_decrease(tld, pages_abandoned, 1);
-        mi_tld_stat_counter_increase(tld, pages_reclaim_on_alloc, 1);
+        mi_theap_stat_decrease(theap, pages_abandoned, 1);
+        mi_theap_stat_counter_increase(theap, pages_reclaim_on_alloc, 1);
 
         _mi_page_free_collect(page, false);  // update `used` count
         mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
@@ -811,8 +810,8 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   }
 
   // stats
-  mi_tld_stat_increase(tld, pages, 1);
-  mi_tld_stat_increase(tld, page_bins[_mi_page_bin(page)], 1);
+  mi_theap_stat_increase(theap, pages, 1);
+  mi_theap_stat_increase(theap, page_bins[_mi_page_bin(page)], 1);
 
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
@@ -918,8 +917,9 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
     mi_theap_stat_decrease(current_theapx, pages, 1);
   }
   else {
-    mi_os_stat_decrease(page_bins[_mi_page_bin(page)], 1);
-    mi_os_stat_decrease(pages, 1);
+    mi_heap_t* const heap = mi_page_heap(page);
+    mi_heap_stat_decrease(heap, page_bins[_mi_page_bin(page)], 1);
+    mi_heap_stat_decrease(heap, pages, 1);
   }
 
   #if MI_DEBUG>1
@@ -1701,7 +1701,7 @@ static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narro
 }
 
 void mi_debug_show_arenas(void) mi_attr_noexcept {
-  mi_debug_show_arenas_ex(_mi_heap_main(), true /* show pages */, false /* narrow? */);
+  mi_debug_show_arenas_ex(_mi_heap_main(), true /* show pages */, true /* narrow? */);
 }
 
 void mi_arenas_print(void) mi_attr_noexcept {

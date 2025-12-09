@@ -479,6 +479,7 @@ struct mi_theap_s {
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
   mi_page_queue_t       pages[MI_BIN_COUNT];                 // queue of pages for each size class (or "bin")
   mi_memid_t            memid;                               // provenance of the theap struct itself (meta or os)
+  mi_stats_t            stats;                               // thread-local statistics
 };
 
 
@@ -498,9 +499,8 @@ typedef struct mi_subproc_s {
   _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
   mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
   _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
-
-  mi_memid_t            memid;                          // provenance of this memory block (meta or OS)
-  mi_stats_t            stats;                          // sub-process statistics 
+  _Atomic(mi_heap_t*)   heap_main;                      // main heap for this sub process
+  mi_memid_t            memid;                          // provenance of this memory block (meta or OS)  
 } mi_subproc_t;
 
 
@@ -551,7 +551,6 @@ struct mi_tld_s {
   mi_theap_t*           theaps;               // list of theaps in this thread (so we can abandon all when the thread terminates)
   bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
   bool                  is_in_threadpool;     // true if this thread is part of a threadpool (and can run arbitrary tasks)
-  mi_stats_t            stats;                // statistics
   mi_memid_t            memid;                // provenance of the tld memory itself (meta or OS)
 };
 

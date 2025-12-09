@@ -168,12 +168,17 @@ void          _mi_thread_done(mi_theap_t* theap);
 
 mi_subproc_t* _mi_subproc(void);
 mi_subproc_t* _mi_subproc_main(void);
+mi_heap_t*    _mi_subproc_heap_main(mi_subproc_t* subproc);
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
 mi_tld_t*     _mi_thread_tld(void) mi_attr_noexcept;
 void          _mi_theap_guarded_init(mi_theap_t* theap);
-mi_theap_t*    _mi_theap_main_get(void);
+
+mi_heap_t*    _mi_heap_main(void);                      // main heap of this sub-process
+bool          _mi_is_heap_main(const mi_heap_t* heap);  
+mi_heap_t*    _mi_heap_process_main(void);              // main heap of the main sub-process
+
 
 // os.c
 void          _mi_os_init(void);                                            // called from process init
@@ -282,9 +287,8 @@ void          _mi_theap_area_init(mi_theap_area_t* area, mi_page_t* page);
 bool          _mi_theap_area_visit_blocks(const mi_theap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
 void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
 
+
 // "heap.c"
-mi_heap_t*    _mi_heap_main(void);
-bool          _mi_is_heap_main(const mi_heap_t* heap);
 mi_decl_preserve_all mi_theap_t* _mi_heap_get_or_init_theap(mi_heap_t* heap); // get (and possible create) the theap belonging to a heap
 mi_decl_preserve_all mi_theap_t* _mi_heap_get_theap(mi_heap_t* heap);         // get the theap for a heap without initializing (and return NULL in that case)
 
@@ -292,10 +296,11 @@ mi_decl_preserve_all mi_theap_t* _mi_heap_get_theap(mi_heap_t* heap);         //
 
 // "stats.c"
 void          _mi_stats_init(void);
-void          _mi_stats_done(mi_stats_t* stats);
 void          _mi_stats_print(mi_stats_t* stats, mi_output_fun* out, void* arg) mi_attr_noexcept;
-void          _mi_stats_merge_thread(mi_tld_t* tld);
 void          _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from);
+mi_stats_t*   _mi_heap_stats(mi_heap_t* heap);
+mi_stats_t*   _mi_stats(void);
+
 mi_msecs_t    _mi_clock_now(void);
 mi_msecs_t    _mi_clock_end(mi_msecs_t start);
 mi_msecs_t    _mi_clock_start(void);
@@ -360,32 +365,28 @@ void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount);
 void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 
-#define mi_subproc_stat_counter_increase(subproc,stat,amount)   __mi_stat_counter_increase_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_increase(subproc,stat,amount)           __mi_stat_increase_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_decrease(subproc,stat,amount)           __mi_stat_decrease_mt( &(subproc)->stats.stat, amount)
-#define mi_subproc_stat_adjust_increase(subproc,stat,amnt)      __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amnt)
-#define mi_subproc_stat_adjust_decrease(subproc,stat,amnt)      __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amnt)
-
 #define mi_heap_stat_counter_increase(heap,stat,amount)         __mi_stat_counter_increase_mt( &(heap)->stats.stat, amount)
 #define mi_heap_stat_increase(heap,stat,amount)                 __mi_stat_increase_mt( &(heap)->stats.stat, amount)
 #define mi_heap_stat_decrease(heap,stat,amount)                 __mi_stat_decrease_mt( &(heap)->stats.stat, amount)
 #define mi_heap_stat_adjust_increase(heap,stat,amnt)            __mi_stat_adjust_increase_mt( &(heap)->stats.stat, amnt)
 #define mi_heap_stat_adjust_decrease(heap,stat,amnt)            __mi_stat_adjust_decrease_mt( &(heap)->stats.stat, amnt)
 
-#define mi_tld_stat_counter_increase(tld,stat,amount)           __mi_stat_counter_increase( &(tld)->stats.stat, amount)
-#define mi_tld_stat_increase(tld,stat,amount)                   __mi_stat_increase( &(tld)->stats.stat, amount)
-#define mi_tld_stat_decrease(tld,stat,amount)                   __mi_stat_decrease( &(tld)->stats.stat, amount)
-#define mi_tld_stat_adjust_increase(tld,stat,amnt)              __mi_stat_adjust_increase( &(tld)->stats.stat, amnt)
-#define mi_tld_stat_adjust_decrease(tld,stat,amnt)              __mi_stat_adjust_decrease( &(tld)->stats.stat, amnt)
+#define mi_subproc_stat_counter_increase(subproc,stat,amount)   mi_heap_stat_counter_increase( _mi_subproc_heap_main(subproc), stat, amount)
+#define mi_subproc_stat_increase(subproc,stat,amount)           mi_heap_stat_increase( _mi_subproc_heap_main(subproc), stat, amount)
+#define mi_subproc_stat_decrease(subproc,stat,amount)           mi_heap_stat_decrease( _mi_subproc_heap_main(subproc), stat, amount)
+#define mi_subproc_stat_adjust_increase(subproc,stat,amnt)      mi_heap_stat_adjust_increase( _mi_subproc_heap_main(subproc), stat, amnt)
+#define mi_subproc_stat_adjust_decrease(subproc,stat,amnt)      mi_heap_stat_adjust_decrease( _mi_subproc_heap_main(subproc), stat, amnt)
 
 #define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
 #define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
 #define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
 
-#define mi_theap_stat_counter_increase(theap,stat,amount)       mi_tld_stat_counter_increase(theap->tld, stat, amount)
-#define mi_theap_stat_increase(theap,stat,amount)               mi_tld_stat_increase( theap->tld, stat, amount)
-#define mi_theap_stat_decrease(theap,stat,amount)               mi_tld_stat_decrease( theap->tld, stat, amount)
-#define mi_theap_stat_adjust_decrease(theap,stat,amount)        mi_tld_stat_adjust_decrease( theap->tld, stat, amount)
+#define mi_theap_stat_counter_increase(theap,stat,amount)       __mi_stat_counter_increase( &(theap)->stats.stat, amount)
+#define mi_theap_stat_increase(theap,stat,amount)               __mi_stat_increase( &(theap)->stats.stat, amount)
+#define mi_theap_stat_decrease(theap,stat,amount)               __mi_stat_decrease( &(theap)->stats.stat, amount)
+#define mi_theap_stat_adjust_increase(theap,stat,amnt)          __mi_stat_adjust_increase( &(theap)->stats.stat, amnt)
+#define mi_theap_stat_adjust_decrease(theap,stat,amnt)          __mi_stat_adjust_decrease( &(theap)->stats.stat, amnt)
+
 
 /* -----------------------------------------------------------
   Options (exposed for the debugger)
@@ -861,8 +862,10 @@ static inline mi_tld_t* mi_page_tld(const mi_page_t* page) {
 
 
 static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
-  mi_heap_t* const heap = page->heap;
-  return (heap==NULL ? _mi_heap_main() : heap);
+  mi_heap_t* heap = page->heap;
+  if mi_likely(heap==NULL) heap = _mi_heap_main();
+  mi_assert_internal(heap != NULL);
+  return heap;
 }
 
 //-----------------------------------------------------------

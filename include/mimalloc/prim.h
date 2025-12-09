@@ -281,9 +281,9 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 
 
 // defined in `init.c`; do not use these directly
-extern mi_decl_hidden mi_decl_thread mi_theap_t* _mi_theap_default;  // default theap to allocate from
-extern mi_decl_hidden mi_decl_thread mi_theap_t* _mi_theap_main;     // theap belonging to the main heap
-extern mi_decl_hidden mi_decl_thread mi_theap_t* _mi_theap_cached;   // theap from the last used heap
+extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default;  // default theap to allocate from
+extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main;     // theap belonging to the main heap
+extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached;   // theap from the last used heap
 
 extern mi_decl_hidden bool _mi_process_is_initialized;               // has mi_process_init been called?
 
@@ -432,25 +432,37 @@ static inline mi_theap_t* mi_prim_get_default_theap(void) {
   #if defined(MI_TLS_RECURSE_GUARD)
   if (mi_unlikely(!_mi_process_is_initialized)) return _mi_theap_main_get();
   #endif
-  return _mi_theap_default;
+  return __mi_theap_default;
 }
 
 #endif  // mi_prim_get_default_theap()
+
+static inline mi_theap_t* _mi_theap_default(void) {
+  return mi_prim_get_default_theap();
+}
+static inline mi_heap_t* _mi_heap_default(void) {
+  return mi_prim_get_default_theap()->heap;
+}
+static inline mi_theap_t* _mi_theap_main(void) {
+  mi_theap_t* const theap = __mi_theap_main;
+  mi_assert_internal(theap!=NULL);
+  return theap;
+}
 
 
 // Get (and possible create) the theap belonging to a heap
 // We cache the last accessed theap in `_mi_theap_cached` for better performance.
 static inline mi_theap_t* _mi_prim_heap_theap(mi_heap_t* heap) {
-  mi_theap_t* theap = _mi_theap_cached;
+  mi_theap_t* theap = __mi_theap_cached;
   if mi_unlikely(theap->heap!=heap) {
-    theap = _mi_theap_cached = _mi_heap_get_or_init_theap(heap);
+    theap = __mi_theap_cached = _mi_heap_get_or_init_theap(heap);
   }
   mi_assert(theap->heap==heap);
   return theap;
 }
 
 static inline mi_theap_t* _mi_prim_heap_get_theap(mi_heap_t* heap) {
-  mi_theap_t* theap = _mi_theap_cached;
+  mi_theap_t* theap = __mi_theap_cached;
   if mi_unlikely(theap->heap!=heap) {
     theap = _mi_heap_get_theap(heap);  // don't update the cache on a query (?)
   }
@@ -462,12 +474,12 @@ static inline mi_theap_t* _mi_page_associated_theap(mi_page_t* page) {
   mi_heap_t* const heap = page->heap;
   mi_theap_t* theap;
   if mi_likely(heap==NULL) { 
-    theap = mi_prim_get_default_theap(); 
+    theap = _mi_theap_main(); 
   }
   else {
     theap = _mi_prim_heap_theap(heap);
   }
-  mi_assert_internal(theap!=NULL && _mi_thread_tld()==theap->tld);
+  mi_assert_internal(theap!=NULL && _mi_thread_id()==theap->tld->thread_id);
   return theap;
 }
 
@@ -476,12 +488,12 @@ static inline mi_theap_t* _mi_page_get_associated_theap(mi_page_t* page) {
   mi_heap_t* const heap = page->heap;
   mi_theap_t* theap;
   if mi_likely(heap==NULL) {
-    theap = mi_prim_get_default_theap();
+    theap = _mi_theap_main();
   }
   else {
     theap = _mi_prim_heap_get_theap(heap);
   }
-  mi_assert_internal(theap==NULL || _mi_thread_tld()==theap->tld);
+  mi_assert_internal(theap==NULL || _mi_thread_id()==theap->tld->thread_id);
   return theap;
 }
 

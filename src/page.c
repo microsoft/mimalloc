@@ -507,8 +507,7 @@ static void mi_theap_collect_full_pages(mi_theap_t* theap) {
 #define MI_MAX_SLICES       (1UL << MI_MAX_SLICE_SHIFT)
 #define MI_MIN_SLICES       (2)
 
-static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* const page, const size_t bsize, const size_t extend, mi_stats_t* const stats) {
-  MI_UNUSED(stats);
+static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* const page, const size_t bsize, const size_t extend) {
   #if (MI_SECURE<3)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
@@ -564,9 +563,8 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
   page->free = free_start;
 }
 
-static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend, mi_stats_t* const stats)
+static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend)
 {
-  MI_UNUSED(stats);
   #if (MI_SECURE<3)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
@@ -655,10 +653,10 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
 
   // and append the extend the free list
   if (extend < MI_MIN_SLICES || MI_SECURE<3) { //!mi_option_is_enabled(mi_option_secure)) {
-    mi_page_free_list_extend(page, bsize, extend, &theap->tld->stats );
+    mi_page_free_list_extend(page, bsize, extend );
   }
   else {
-    mi_page_free_list_extend_secure(theap, page, bsize, extend, &theap->tld->stats);
+    mi_page_free_list_extend_secure(theap, page, bsize, extend);
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;
