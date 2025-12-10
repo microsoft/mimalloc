@@ -327,7 +327,7 @@ mi_decl_export void mi_subproc_delete(mi_subproc_id_t subproc);
 mi_decl_export void mi_subproc_add_current_thread(mi_subproc_id_t subproc); // this should be called right after a thread is created (and no allocation has taken place yet)
 
 // Advanced: visit abandoned theap areas (that are not owned by a specific theap)
-mi_decl_export bool mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int theap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
+mi_decl_export bool mi_abandoned_visit_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
 // Experimental: set numa-affinity of a theap
 mi_decl_export void mi_theap_set_numa_affinity(mi_theap_t* theap, int numa_node);

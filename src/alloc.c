@@ -697,7 +697,8 @@ void* _mi_externs[] = {
   (void*)&mi_zalloc_small,
   (void*)&mi_theap_malloc,
   (void*)&mi_theap_zalloc,
-  (void*)&mi_theap_malloc_small
+  (void*)&mi_theap_malloc_small,
+  (void*)&mi_heap_malloc
   // (void*)&mi_theap_alloc_new,
   // (void*)&mi_theap_alloc_new_n
 };

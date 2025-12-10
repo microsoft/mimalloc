@@ -557,16 +557,65 @@ void _mi_thread_done(mi_theap_t* _theap_main)
   mi_tld_free(tld);
 }
 
+
+mi_decl_preserve_all mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
+  return (mi_theap_t*)&_mi_theap_empty;
+}
+
+#if MI_TLS_MODEL_DYNAMIC_WIN32
+
+// only for win32 for now
+#if MI_SIZE_SIZE==4
+#define MI_TLS_USER_BASE  (0x0E10 / MI_SIZE_SIZE)
+#else
+#define MI_TLS_USER_BASE  (0x1480 / MI_SIZE_SIZE)
+#endif
+#define MI_TLS_USER_LAST_SLOT  (MI_TLS_USER_BASE + 63)
+
+// we initially use the last user slot so NULL is returned
+// when allocating a slot, we check we get a slot before the last one (so it wasn't used yet)
+size_t _mi_theap_default_slot = MI_TLS_USER_LAST_SLOT;
+size_t _mi_theap_cached_slot  = MI_TLS_USER_LAST_SLOT;
+
+mi_decl_preserve_all mi_theap_t* _mi_tls_slots_init(void) {
+  if (_mi_theap_default_slot==MI_TLS_USER_LAST_SLOT) {
+    _mi_theap_default_slot = TlsAlloc() + MI_TLS_USER_BASE;
+    _mi_theap_cached_slot = TlsAlloc() + MI_TLS_USER_BASE;
+    if (_mi_theap_cached_slot >= MI_TLS_USER_LAST_SLOT) {
+      _mi_error_message(EFAULT, "unable to allocate fast TLS user slot (%zu)\n", _mi_theap_cached_slot);
+    }
+  }
+  return (mi_theap_t*)&_mi_theap_empty;
+}
+
+#elif MI_TLS_MODEL_DYNAMIC_PTHREADS
+
+// only for pthreads for now
+size_t _mi_theap_default_key = 0;
+size_t _mi_theap_cached_key = 0;
+
+mi_decl_preserve_all mi_theap_t* _mi_tls_keys_init(void) {
+  if (_mi_theap_default_key==0) {
+    pthread_key_create(&_mi_theap_default_slot, NULL);
+    pthread_key_create(&_mi_theap_cached_slot, NULL);
+  }
+  return (mi_theap_t*)&_mi_theap_empty;
+}
+
+#endif
+
 void _mi_theap_set_default_direct(mi_theap_t* theap)  {
   mi_assert_internal(theap != NULL);
-  #if defined(MI_TLS_SLOT)
-  mi_prim_tls_slot_set(MI_TLS_SLOT,theap);
-  #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
-  *mi_prim_tls_pthread_theap_slot() = theap;
-  #elif defined(MI_TLS_PTHREAD)
-  // we use _mi_theap_default_key
-  #else
-  __mi_theap_default = theap;
+  #if MI_TLS_MODEL_THREAD_LOCAL
+    __mi_theap_default = theap;
+  #elif MI_TLS_MODEL_FIXED_SLOT
+    mi_prim_tls_slot_set(MI_TLS_FIXED_SLOT_DEFAULT, theap);
+  #elif MI_TLS_MODEL_DYNAMIC_WIN32
+    _mi_tls_slots_init();
+    mi_prim_tls_slot_set(_mi_theap_default_slot, theap);
+  #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
+    _mi_tls_keys_init();
+    pthread_setspecific(_mi_theap_default_key, theap);
   #endif
 
   // set theap main if needed

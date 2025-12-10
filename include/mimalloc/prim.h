@@ -133,6 +133,7 @@ void* _mi_prim_thread_local_get(mi_thread_local_t key);
 void  _mi_prim_thread_local_set(mi_thread_local_t key, void* value);
 
 
+
 //-------------------------------------------------------------------
 // Access to TLS (thread local storage) slots.
 // We need fast access to both a unique thread id (in `free.c:mi_free`) and
@@ -148,20 +149,27 @@ void  _mi_prim_thread_local_set(mi_thread_local_t key, void* value);
 // Note: we would like to prefer `__builtin_thread_pointer()` nowadays instead of using assembly,
 // but unfortunately we can not detect support reliably (see issue #883)
 // We also use it on Apple OS as we use a TLS slot for the default theap there.
-#if defined(__GNUC__) && ( \
+#if (defined(_WIN32)) || \
+    (defined(__GNUC__) && ( \
            (defined(__GLIBC__)   && (defined(__x86_64__) || defined(__i386__) || (defined(__arm__) && __ARM_ARCH >= 7) || defined(__aarch64__))) \
         || (defined(__APPLE__)   && (defined(__x86_64__) || defined(__aarch64__) || defined(__POWERPC__))) \
         || (defined(__BIONIC__)  && (defined(__x86_64__) || defined(__i386__) || (defined(__arm__) && __ARM_ARCH >= 7) || defined(__aarch64__))) \
         || (defined(__FreeBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
         || (defined(__OpenBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
-      )
-
-#define MI_HAS_TLS_SLOT    1
+      ))
 
 static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
   void* res;
   const size_t ofs = (slot*sizeof(void*));
-  #if defined(__i386__)
+  #if defined(_WIN32)
+    #if (_M_X64 || _M_AMD64) && !defined(_M_ARM64EC)
+      res = (void*)__readgsqword((unsigned long)ofs);   // direct load at offset from gs
+    #elif _M_IX86 && !defined(_M_ARM64EC)
+      res = (void*)__readfsdword((unsigned long)ofs);   // direct load at offset from fs
+    #else
+      res = ((void**)NtCurrentTeb())[slot]; MI_UNUSED(ofs);
+    #endif
+  #elif defined(__i386__)
     __asm__("movl %%gs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86 32-bit always uses GS
   #elif defined(__APPLE__) && defined(__x86_64__)
     __asm__("movq %%gs:%1, %0" : "=r" (res) : "m" (*((void**)ofs)) : );  // x86_64 macOSX uses GS
@@ -184,14 +192,24 @@ static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
   #elif defined(__APPLE__) && defined(__POWERPC__) // ppc, issue #781
     MI_UNUSED(ofs);
     res = pthread_getspecific(slot);
+  #else
+    #define MI_HAS_TLS_SLOT 0
+    MI_UNUSED(ofs);
+    res = NULL;
   #endif
   return res;
 }
 
+#ifndef MI_HAS_TLS_SLOT
+#define MI_HAS_TLS_SLOT 1
+#endif
+
 // setting a tls slot is only used on macOS for now
 static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
   const size_t ofs = (slot*sizeof(void*));
-  #if defined(__i386__)
+  #if defined(_WIN32)
+    ((void**)NtCurrentTeb())[slot] = value; MI_UNUSED(ofs);
+  #elif defined(__i386__)
     __asm__("movl %1,%%gs:%0" : "=m" (*((void**)ofs)) : "rn" (value) : );  // 32-bit always uses GS
   #elif defined(__APPLE__) && defined(__x86_64__)
     __asm__("movq %1,%%gs:%0" : "=m" (*((void**)ofs)) : "rn" (value) : );  // x86_64 macOS uses GS
@@ -214,42 +232,19 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
   #elif defined(__APPLE__) && defined(__POWERPC__) // ppc, issue #781
     MI_UNUSED(ofs);
     pthread_setspecific(slot, value);
-  #endif
-}
-
-#elif _WIN32 && MI_WIN_USE_FIXED_TLS && !defined(MI_WIN_USE_FLS)
-
-// On windows we can store the thread-local theap at a fixed TLS slot to avoid
-// thread-local initialization checks in the fast path.
-// We allocate a user TLS slot at process initialization (see `windows/prim.c`)
-// and store the offset `_mi_win_tls_offset`.
-#define MI_HAS_TLS_SLOT  1              // 2 = we can reliably initialize the slot (saving a test on each malloc)
-
-extern mi_decl_hidden size_t _mi_win_tls_offset;
-
-#if MI_WIN_USE_FIXED_TLS > 1
-#define MI_TLS_SLOT     (MI_WIN_USE_FIXED_TLS)
-#elif MI_SIZE_SIZE == 4
-#define MI_TLS_SLOT     (0x0E10 + _mi_win_tls_offset)  // User TLS slots <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
-#else
-#define MI_TLS_SLOT     (0x1480 + _mi_win_tls_offset)  // User TLS slots <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block>
-#endif
-
-static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
-  #if (_M_X64 || _M_AMD64) && !defined(_M_ARM64EC)
-  return (void*)__readgsqword((unsigned long)slot);   // direct load at offset from gs
-  #elif _M_IX86 && !defined(_M_ARM64EC)
-  return (void*)__readfsdword((unsigned long)slot);   // direct load at offset from fs
   #else
-  return ((void**)NtCurrentTeb())[slot / sizeof(void*)];
+    MI_UNUSED(ofs); MI_UNUSED(value);
   #endif
-}
-static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
-  ((void**)NtCurrentTeb())[slot / sizeof(void*)] = value;
 }
 
 #endif
 
+
+// defined in `init.c`; do not use these directly
+extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default;  // default theap to allocate from
+extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main;     // theap belonging to the main heap
+extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached;   // theap from the last used heap
+extern mi_decl_hidden bool _mi_process_is_initialized;                // has mi_process_init been called?
 
 
 //-------------------------------------------------------------------
@@ -278,16 +273,7 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
   #endif
 #endif
 
-
-
-// defined in `init.c`; do not use these directly
-extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default;  // default theap to allocate from
-extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main;     // theap belonging to the main heap
-extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached;   // theap from the last used heap
-
-extern mi_decl_hidden bool _mi_process_is_initialized;               // has mi_process_init been called?
-
-static inline mi_threadid_t __mi_prim_thread_id(void) mi_attr_noexcept;
+static inline mi_threadid_t __mi_prim_thread_id(void) mi_attr_noexcept; 
 
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
   const mi_threadid_t tid = __mi_prim_thread_id();
@@ -336,7 +322,7 @@ static inline mi_threadid_t __mi_prim_thread_id(void) mi_attr_noexcept {
 
 // otherwise use portable C, taking the address of a thread local variable (this is still very fast on most platforms).
 static inline mi_threadid_t __mi_prim_thread_id(void) mi_attr_noexcept {
-  return (uintptr_t)&_mi_theap_default;
+  return (uintptr_t)&__mi_theap_default;
 }
 
 #endif
@@ -344,98 +330,146 @@ static inline mi_threadid_t __mi_prim_thread_id(void) mi_attr_noexcept {
 
 
 /* ----------------------------------------------------------------------------------------
-Get the thread local default theap: `_mi_prim_get_default_theap()`
+Get the thread local default theap: `_mi_theap_default()` (and the cached heap `_mi_theap_cached`).
 
 This is inlined here as it is on the fast path for allocation functions.
+We have 4 models:
 
-On most platforms (Windows, Linux, FreeBSD, NetBSD, etc), this just returns a
-__thread local variable (`_mi_theap_default`). With the initial-exec TLS model this ensures
-that the storage will always be available (allocated on the thread stacks).
+- MI_TLS_MODEL_THREAD_LOCAL: use regular thread local (Linux)
+    On most platforms (Linux, FreeBSD, NetBSD, etc), this just returns a
+    __thread local variable (`__mi_theap_default`). With the initial-exec TLS model this ensures
+    that the storage will always be available and properly initialized (with an empty theap).
 
-On some platforms though we cannot use that when overriding `malloc` since the underlying
-TLS implementation (or the loader) will call itself `malloc` on a first access and recurse.
-We try to circumvent this in an efficient way:
-- macOSX : we use an unused TLS slot from the OS allocated slots (MI_TLS_SLOT). On OSX, the
-           loader itself calls `malloc` even before the modules are initialized.
-- OpenBSD: we use an unused slot from the pthread block (MI_TLS_PTHREAD_SLOT_OFS).
-- DragonFly: defaults are working but seem slow compared to freeBSD (see PR #323)
+- MI_TLS_MODEL_FIXED_SLOT: use a fixed slot in the TLS (macOS)
+    On some platforms the underlying TLS implementation (or the loader) will call itself `malloc` 
+    on a first access to a thread local and recurse in the MI_TLS_MODEL_THREAD_LOCAL.
+    We can get around this by reserving an unused TLS slot. 
+
+- MI_TLS_MODEL_DYNAMIC_WIN32: use a dynamically allocated slot with TlsAlloc. (Windows)
+    Windows unfortunately has slow thread locals and this is more efficient.
+
+- MI_TLS_MODEL_DYNAMIC_PTHREADS: use pthread_getspecific (slowish :-( )
+    Last resort if thread-locals recurse.
+    Try to use MI_TLS_MODEL_THREAD_LOCAL with MI_TLS_RECURSE_GUARD defined instead.
 ------------------------------------------------------------------------------------------- */
 
 static inline mi_theap_t* _mi_theap_default(void);
+static inline mi_theap_t* _mi_theap_cached(void);
 
-#if defined(MI_MALLOC_OVERRIDE)
-#if defined(__APPLE__) // macOS
-  #define MI_TLS_SLOT               89  // seems unused?
-  // other possible unused ones are 9, 29, __PTK_FRAMEWORK_JAVASCRIPTCORE_KEY4 (94), __PTK_FRAMEWORK_GC_KEY9 (112) and __PTK_FRAMEWORK_OLDGC_KEY9 (89)
+#if defined(_WIN32)
+  #define MI_TLS_MODEL_DYNAMIC_WIN32   1
+#elif defined(__APPLE__)  // macOS
+  #define MI_TLS_MODEL_FIXED_SLOT     1
+  #define MI_TLS_FIXED_SLOT_DEFAULT   108    // seems unused?
+  #define MI_TLS_FIXED_SLOT_CACHED    109
+  // we used before __PTK_FRAMEWORK_OLDGC_KEY9 (89) but that seems used now.
   // see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
-#elif defined(__OpenBSD__)
-  // use end bytes of a name; goes wrong if anyone uses names > 23 characters (ptrhread specifies 16)
-  // see <https://github.com/openbsd/src/blob/master/lib/libc/include/thread_private.h#L371>
-  #define MI_TLS_PTHREAD_SLOT_OFS   (6*sizeof(int) + 4*sizeof(void*) + 24)
-  // #elif defined(__DragonFly__)
-  // #warning "mimalloc is not working correctly on DragonFly yet."
-  // #define MI_TLS_PTHREAD_SLOT_OFS   (4 + 1*sizeof(void*))  // offset `uniqueid` (also used by gdb?) <https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/lib/libthread_xu/thread/thr_private.h#L458>
-#elif defined(__ANDROID__)
-  // See issue #381
-  #define MI_TLS_PTHREAD
-#endif
+#elif defined(__OpenBSD__) || defined(__ANDROID__)
+  #define MI_TLS_DYNAMIC_PTHREADS     1
+#else
+  #define MI_TLS_MODEL_THREAD_LOCAL   1
 #endif
 
+mi_decl_preserve_all mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void);
 
-#if MI_TLS_SLOT
-# if !defined(MI_HAS_TLS_SLOT)
-#  error "trying to use a TLS slot for the default theap, but the mi_prim_tls_slot primitives are not defined"
-# endif
+#if MI_TLS_MODEL_THREAD_LOCAL
 
-static inline mi_theap_t* _mi_theap_default(void) {
-  mi_theap_t* theap = (mi_theap_t*)mi_prim_tls_slot(MI_TLS_SLOT);
-  #if MI_HAS_TLS_SLOT == 1   // check if the TLS slot is initialized
-  if mi_unlikely(theap == NULL) {
-    #ifdef __GNUC__
-    __asm(""); // prevent conditional load of the address of _mi_theap_empty
-    #endif
-    theap = (mi_theap_t*)&_mi_theap_empty;
-  }
-  #endif
-  return theap;
-}
-
-#elif defined(MI_TLS_PTHREAD_SLOT_OFS)
-
-static inline mi_theap_t** mi_prim_tls_pthread_theap_slot(void) {
-  pthread_t self = pthread_self();
-  #if defined(__DragonFly__)
-  if (self==NULL) return NULL;
-  #endif
-  return (mi_theap_t**)((uint8_t*)self + MI_TLS_PTHREAD_SLOT_OFS);
-}
-
-static inline mi_theap_t* _mi_theap_default(void) {
-  mi_theap_t** ptheap = mi_prim_tls_pthread_theap_slot();
-  if mi_unlikely(ptheap == NULL) return _mi_theap_main_get();
-  mi_theap_t* theap = *ptheap;
-  if mi_unlikely(theap == NULL) return (mi_theap_t*)&_mi_theap_empty;
-  return theap;
-}
-
-#elif defined(MI_TLS_PTHREAD)
-
-extern mi_decl_hidden pthread_key_t _mi_theap_default_key;
-static inline mi_theap_t* _mi_theap_default(void) {
-  mi_theap_t* theap = (mi_unlikely(_mi_theap_default_key == (pthread_key_t)(-1)) ? _mi_theap_main_get() : (mi_theap_t*)pthread_getspecific(_mi_theap_default_key));
-  return (mi_unlikely(theap == NULL) ? (mi_theap_t*)&_mi_theap_empty : theap);
-}
-
-#else // default using a thread local variable; used on most platforms.
-
+// Thread local with an initial value (Linux). Very efficient.
 static inline mi_theap_t* _mi_theap_default(void) {
   #if defined(MI_TLS_RECURSE_GUARD)
-  if (mi_unlikely(!_mi_process_is_initialized)) return _mi_theap_main_get();
+  if (mi_unlikely(!_mi_process_is_initialized)) return _mi_theap_empty_get();
   #endif
   return __mi_theap_default;
 }
 
-#endif  // _mi_theap_default()
+static inline mi_theap_t* _mi_theap_cached(void) {
+  return __mi_theap_cached;
+}
+
+#elif MI_TLS_MODEL_FIXED_SLOT
+
+// Fixed TLS slot (macOS).
+static inline mi_theap_t* _mi_theap_default(void) {
+  mi_theap_t* theap = (mi_theap_t*)mi_prim_tls_slot(MI_TLS_FIXED_SLOT_DEFAULT);
+  if mi_likely(theap!=NULL) {
+    return theap;
+  }
+  else {
+    return _mi_theap_empty_get();
+  }
+}
+
+static inline mi_theap_t* _mi_theap_cached(void) {
+  mi_theap_t* theap = (mi_theap_t*)mi_prim_tls_slot(MI_TLS_FIXED_SLOT_CACHED);
+  if mi_likely(theap!=NULL) {
+    return theap;
+  }
+  else {
+    return _mi_theap_empty_get();
+  }
+}
+
+#elif MI_TLS_MODEL_DYNAMIC_WIN32
+
+// Dynamic TLS slot (windows)
+extern size_t _mi_theap_default_slot;
+extern size_t _mi_theap_cached_slot;
+
+mi_decl_preserve_all mi_theap_t* _mi_tls_slots_init(void);
+
+static inline mi_theap_t* _mi_theap_default(void) {  
+  mi_theap_t* theap = (mi_theap_t*)mi_prim_tls_slot(_mi_theap_default_slot); // valid initial "last user slot" so it return NULL at first
+  if mi_likely(theap!=NULL) {
+    return theap;
+  }
+  else {
+    return _mi_tls_slots_init();
+  }
+}
+
+static inline mi_theap_t* _mi_theap_cached(void) {
+  mi_theap_t* theap = (mi_theap_t*)mi_prim_tls_slot(_mi_theap_cached_slot);
+  if mi_likely(theap!=NULL) {
+    return theap;
+  }
+  else {
+    return _mi_tls_slots_init();
+  }
+}
+
+#elif MI_TLS_MODEL_DYNAMIC_PTHREADS
+
+// Dynamic pthread slot on less common platforms. This is not great.
+extern pthread_key_t _mi_theap_default_key;
+extern pthread_key_t _mi_theap_cached_key;
+
+mi_decl_preserve_all mi_theap_t* _mi_tls_keys_init(void);
+
+static inline mi_theap_t* _mi_theap_default(void) {
+  // no need to check as using a key 0 will return NULL from pthread_getspecific (not officially though..)
+  // if mi_unlikely(_mi_theap_default_key==0) { _mi_tls_keys_init(); }  
+  mi_theap_t* theap = (mi_theap_t*)pthread_getspecific(_mi_theap_default_key);
+  if mi_likely(theap!=NULL) {
+    return theap;
+  }
+  else {
+    return _mi_tls_keys_init();
+  }
+}
+
+static inline mi_theap_t* _mi_theap_cached(void) {
+  // no need to check as using a key 0 will return NULL from pthread_getspecific (not officially though..)
+  // if mi_unlikely(_mi_theap_cached_key==0) { _mi_tls_keys_init(); }
+  mi_theap_t* theap = (mi_theap_t*)pthread_getspecific(_mi_theap_cached_key);
+  if mi_likely(theap!=NULL) {
+    return theap;
+  }
+  else {
+    return _mi_tls_keys_init();
+  }
+}
+
+#endif
 
 
 static inline mi_heap_t* _mi_heap_default(void) {
@@ -452,16 +486,17 @@ static inline mi_theap_t* _mi_theap_main(void) {
 // Get (and possible create) the theap belonging to a heap
 // We cache the last accessed theap in `_mi_theap_cached` for better performance.
 static inline mi_theap_t* _mi_heap_theap(mi_heap_t* heap) {
-  mi_theap_t* theap = __mi_theap_cached;
-  if mi_unlikely(theap->heap!=heap) {
-    theap = __mi_theap_cached = _mi_heap_theap_get_or_init(heap);
+  mi_theap_t* theap = _mi_theap_cached();
+  if mi_likely(theap->heap==heap) {
+    return theap;
   }
-  mi_assert(theap->heap==heap);
-  return theap;
+  else {
+    return _mi_heap_theap_get_or_init(heap);
+  }
 }
 
 static inline mi_theap_t* _mi_heap_theap_peek(mi_heap_t* heap) {
-  mi_theap_t* theap = __mi_theap_cached;
+  mi_theap_t* theap = _mi_theap_cached();
   if mi_unlikely(theap->heap!=heap) {
     theap = _mi_heap_theap_get_peek(heap);  // don't update the cache on a query (?)
   }
