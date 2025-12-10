@@ -749,7 +749,7 @@ static void mi_win_tls_init(DWORD reason) {
     }
     #endif
     #if MI_HAS_TLS_SLOT >= 2  // we must initialize the TLS slot before any allocation
-    if (mi_prim_get_default_theap() == NULL) {
+    if (_mi_theap_default() == NULL) {
       _mi_theap_set_default_direct((mi_theap_t*)&_mi_theap_empty);
       #if MI_DEBUG && MI_WIN_USE_FIXED_TLS==1
       void* const p = TlsGetValue((DWORD)(_mi_win_tls_offset / sizeof(void*)));

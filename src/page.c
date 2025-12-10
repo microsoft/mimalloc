@@ -14,6 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
 #include "mimalloc/atomic.h"
+#include "mimalloc/prim.h"
 
 /* -----------------------------------------------------------
   Definition of page queues for each block size
@@ -946,8 +947,10 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_
 
   // initialize if necessary
   if mi_unlikely(!mi_theap_is_initialized(theap)) {
-    theap = mi_theap_get_default(); // calls mi_thread_init
+    mi_thread_init();
+    theap = _mi_theap_default();
     if mi_unlikely(!mi_theap_is_initialized(theap)) { return NULL; }
+    mi_assert_internal(_mi_theap_default()==theap);
   }
   mi_assert_internal(mi_theap_is_initialized(theap));
 

@@ -422,7 +422,7 @@ static mi_stats_t* mi_stats_merge_theap(mi_theap_t* theap) mi_attr_noexcept {
 }
 
 mi_stats_t* _mi_heap_stats(mi_heap_t* heap) {
-  mi_theap_t* theap = _mi_heap_get_theap(heap);
+  mi_theap_t* theap = _mi_heap_theap_peek(heap);
   return mi_stats_merge_theap(theap);
 }
 

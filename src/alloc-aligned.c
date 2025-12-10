@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
-#include "mimalloc/prim.h"  // mi_prim_get_default_theap
+#include "mimalloc/prim.h"  // _mi_theap_default
 
 #include <string.h>     // memset
 
@@ -249,27 +249,27 @@ mi_decl_nodiscard mi_decl_restrict void* mi_theap_calloc_aligned(mi_theap_t* the
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_malloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_malloc_aligned_at(mi_prim_get_default_theap(), size, alignment, offset);
+  return mi_theap_malloc_aligned_at(_mi_theap_default(), size, alignment, offset);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_malloc_aligned(size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_theap_malloc_aligned(mi_prim_get_default_theap(), size, alignment);
+  return mi_theap_malloc_aligned(_mi_theap_default(), size, alignment);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_zalloc_aligned_at(mi_prim_get_default_theap(), size, alignment, offset);
+  return mi_theap_zalloc_aligned_at(_mi_theap_default(), size, alignment, offset);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_aligned(size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_theap_zalloc_aligned(mi_prim_get_default_theap(), size, alignment);
+  return mi_theap_zalloc_aligned(_mi_theap_default(), size, alignment);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_calloc_aligned_at(size_t count, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_calloc_aligned_at(mi_prim_get_default_theap(), count, size, alignment, offset);
+  return mi_theap_calloc_aligned_at(_mi_theap_default(), count, size, alignment, offset);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_calloc_aligned(size_t count, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_theap_calloc_aligned(mi_prim_get_default_theap(), count, size, alignment);
+  return mi_theap_calloc_aligned(_mi_theap_default(), count, size, alignment);
 }
 
 
@@ -338,27 +338,27 @@ mi_decl_nodiscard void* mi_theap_recalloc_aligned(mi_theap_t* theap, void* p, si
 }
 
 mi_decl_nodiscard void* mi_realloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_realloc_aligned_at(mi_prim_get_default_theap(), p, newsize, alignment, offset);
+  return mi_theap_realloc_aligned_at(_mi_theap_default(), p, newsize, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_realloc_aligned(void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_theap_realloc_aligned(mi_prim_get_default_theap(), p, newsize, alignment);
+  return mi_theap_realloc_aligned(_mi_theap_default(), p, newsize, alignment);
 }
 
 mi_decl_nodiscard void* mi_rezalloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_rezalloc_aligned_at(mi_prim_get_default_theap(), p, newsize, alignment, offset);
+  return mi_theap_rezalloc_aligned_at(_mi_theap_default(), p, newsize, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_rezalloc_aligned(void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_theap_rezalloc_aligned(mi_prim_get_default_theap(), p, newsize, alignment);
+  return mi_theap_rezalloc_aligned(_mi_theap_default(), p, newsize, alignment);
 }
 
 mi_decl_nodiscard void* mi_recalloc_aligned_at(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_recalloc_aligned_at(mi_prim_get_default_theap(), p, newcount, size, alignment, offset);
+  return mi_theap_recalloc_aligned_at(_mi_theap_default(), p, newcount, size, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_recalloc_aligned(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_theap_recalloc_aligned(mi_prim_get_default_theap(), p, newcount, size, alignment);
+  return mi_theap_recalloc_aligned(_mi_theap_default(), p, newcount, size, alignment);
 }
 
 

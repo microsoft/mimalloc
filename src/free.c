@@ -274,7 +274,7 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
   // get our theap 
   // note: don't use `mi_heap_theap()` as we may just have terminated this thread and we should
   // not reinitialize the theap for this thread. (can happen due to thread-local destructors for example -- issue #944)
-  mi_theap_t* const theap = _mi_page_get_associated_theap(page);
+  mi_theap_t* const theap = _mi_page_associated_theap_peek(page);
   if (theap==NULL || !theap->allow_page_reclaim) return false;
   
   // todo: cache `is_in_threadpool` and `exclusive_arena` directly in the theap for performance?

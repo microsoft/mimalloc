@@ -37,7 +37,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_align(a)        __declspec(align(a))
 #define mi_decl_noreturn        __declspec(noreturn)
-#define mi_decl_preserve_all     
+#define mi_decl_preserve_all
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
@@ -59,7 +59,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          thread_local
 #define mi_decl_align(a)        alignas(a)
 #define mi_decl_noreturn        [[noreturn]]
-#define mi_decl_preserve_all     
+#define mi_decl_preserve_all
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
@@ -68,7 +68,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_align(a)
 #define mi_decl_noreturn
-#define mi_decl_preserve_all     
+#define mi_decl_preserve_all
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
@@ -172,12 +172,12 @@ mi_heap_t*    _mi_subproc_heap_main(mi_subproc_t* subproc);
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
-mi_tld_t*     _mi_thread_tld(void) mi_attr_noexcept;
 void          _mi_theap_guarded_init(mi_theap_t* theap);
 
 mi_heap_t*    _mi_heap_main(void);                      // main heap of this sub-process
-bool          _mi_is_heap_main(const mi_heap_t* heap);  
+bool          _mi_is_heap_main(const mi_heap_t* heap);
 mi_heap_t*    _mi_heap_process_main(void);              // main heap of the main sub-process
+mi_theap_t*   _mi_theap_default_safe(void);             // ensure the returned theap is initialized
 
 
 // os.c
@@ -289,8 +289,8 @@ void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
 
 
 // "heap.c"
-mi_decl_preserve_all mi_theap_t* _mi_heap_get_or_init_theap(mi_heap_t* heap); // get (and possible create) the theap belonging to a heap
-mi_decl_preserve_all mi_theap_t* _mi_heap_get_theap(mi_heap_t* heap);         // get the theap for a heap without initializing (and return NULL in that case)
+mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_or_init(mi_heap_t* heap); // get (and possible create) the theap belonging to a heap
+mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_peek(mi_heap_t* heap);    // get the theap for a heap without initializing (and return NULL in that case)
 
 
 
@@ -863,6 +863,7 @@ static inline mi_tld_t* mi_page_tld(const mi_page_t* page) {
 
 static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
   mi_heap_t* heap = page->heap;
+  // we use NULL for the main heap to make `_mi_page_get_associated_theap` fast in `free.c:mi_abandoned_page_try_reclaim`.
   if mi_likely(heap==NULL) heap = _mi_heap_main();
   mi_assert_internal(heap != NULL);
   return heap;

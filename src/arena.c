@@ -1044,7 +1044,7 @@ bool _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page) {
   }
   else {
     // do not use _mi_heap_theap as we may call this during shutdown of threads and don't want to reinitialize the theap
-    mi_theap_t* const theap = _mi_page_get_associated_theap(page);
+    mi_theap_t* const theap = _mi_page_associated_theap_peek(page);
     if (theap == NULL) {
       return false;
     }

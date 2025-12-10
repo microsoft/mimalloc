@@ -1,3 +1,4 @@
+
 /* ----------------------------------------------------------------------------
 Copyright (c) 2018-2024, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
@@ -160,11 +161,11 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_malloc_small(mi_
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc_small(size_t size) mi_attr_noexcept {
-  return mi_theap_malloc_small(mi_prim_get_default_theap(), size);
+  return mi_theap_malloc_small(_mi_theap_default(), size);
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_theap_malloc_small(_mi_prim_heap_theap(heap), size);  
+  return mi_theap_malloc_small(_mi_heap_theap(heap), size);
 }
 
 // The main allocation function
@@ -204,16 +205,16 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_malloc(mi_theap_
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc(size_t size) mi_attr_noexcept {
-  return mi_theap_malloc(mi_prim_get_default_theap(), size);
+  return mi_theap_malloc(_mi_theap_default(), size);
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_theap_malloc(_mi_prim_heap_theap(heap), size);
+  return mi_theap_malloc(_mi_heap_theap(heap), size);
 }
 
 // zero initialized small block
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_small(size_t size) mi_attr_noexcept {
-  return mi_theap_malloc_small_zero(mi_prim_get_default_theap(), size, true);
+  return mi_theap_malloc_small_zero(_mi_theap_default(), size, true);
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_zalloc(mi_theap_t* theap, size_t size) mi_attr_noexcept {
@@ -221,11 +222,11 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_zalloc(mi_theap_
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc(size_t size) mi_attr_noexcept {
-  return mi_theap_zalloc(mi_prim_get_default_theap(),size);
+  return mi_theap_zalloc(_mi_theap_default(),size);
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_theap_zalloc(_mi_prim_heap_theap(heap), size);
+  return mi_theap_zalloc(_mi_heap_theap(heap), size);
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_calloc(mi_theap_t* theap, size_t count, size_t size) mi_attr_noexcept {
@@ -235,7 +236,7 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_calloc(mi_theap_
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_calloc(size_t count, size_t size) mi_attr_noexcept {
-  return mi_theap_calloc(mi_prim_get_default_theap(),count,size);
+  return mi_theap_calloc(_mi_theap_default(),count,size);
 }
 
 // Uninitialized `calloc`
@@ -246,7 +247,7 @@ mi_decl_nodiscard extern mi_decl_restrict void* mi_theap_mallocn(mi_theap_t* the
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_mallocn(size_t count, size_t size) mi_attr_noexcept {
-  return mi_theap_mallocn(mi_prim_get_default_theap(),count,size);
+  return mi_theap_mallocn(_mi_theap_default(),count,size);
 }
 
 // Expand (or shrink) in place (or fail)
@@ -325,24 +326,24 @@ mi_decl_nodiscard void* mi_theap_recalloc(mi_theap_t* theap, void* p, size_t cou
 
 
 mi_decl_nodiscard void* mi_realloc(void* p, size_t newsize) mi_attr_noexcept {
-  return mi_theap_realloc(mi_prim_get_default_theap(),p,newsize);
+  return mi_theap_realloc(_mi_theap_default(),p,newsize);
 }
 
 mi_decl_nodiscard void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_noexcept {
-  return mi_theap_reallocn(mi_prim_get_default_theap(),p,count,size);
+  return mi_theap_reallocn(_mi_theap_default(),p,count,size);
 }
 
 // Reallocate but free `p` on errors
 mi_decl_nodiscard void* mi_reallocf(void* p, size_t newsize) mi_attr_noexcept {
-  return mi_theap_reallocf(mi_prim_get_default_theap(),p,newsize);
+  return mi_theap_reallocf(_mi_theap_default(),p,newsize);
 }
 
 mi_decl_nodiscard void* mi_rezalloc(void* p, size_t newsize) mi_attr_noexcept {
-  return mi_theap_rezalloc(mi_prim_get_default_theap(), p, newsize);
+  return mi_theap_rezalloc(_mi_theap_default(), p, newsize);
 }
 
 mi_decl_nodiscard void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_noexcept {
-  return mi_theap_recalloc(mi_prim_get_default_theap(), p, count, size);
+  return mi_theap_recalloc(_mi_theap_default(), p, count, size);
 }
 
 
@@ -363,7 +364,7 @@ mi_decl_nodiscard mi_decl_restrict char* mi_theap_strdup(mi_theap_t* theap, cons
 }
 
 mi_decl_nodiscard mi_decl_restrict char* mi_strdup(const char* s) mi_attr_noexcept {
-  return mi_theap_strdup(mi_prim_get_default_theap(), s);
+  return mi_theap_strdup(_mi_theap_default(), s);
 }
 
 // `strndup` using mi_malloc
@@ -378,7 +379,7 @@ mi_decl_nodiscard mi_decl_restrict char* mi_theap_strndup(mi_theap_t* theap, con
 }
 
 mi_decl_nodiscard mi_decl_restrict char* mi_strndup(const char* s, size_t n) mi_attr_noexcept {
-  return mi_theap_strndup(mi_prim_get_default_theap(),s,n);
+  return mi_theap_strndup(_mi_theap_default(),s,n);
 }
 
 #ifndef __wasi__
@@ -448,7 +449,7 @@ char* mi_theap_realpath(mi_theap_t* theap, const char* fname, char* resolved_nam
 #endif
 
 mi_decl_nodiscard mi_decl_restrict char* mi_realpath(const char* fname, char* resolved_name) mi_attr_noexcept {
-  return mi_theap_realpath(mi_prim_get_default_theap(),fname,resolved_name);
+  return mi_theap_realpath(_mi_theap_default(),fname,resolved_name);
 }
 #endif
 
@@ -528,7 +529,7 @@ mi_decl_export mi_decl_noinline void* mi_theap_try_new(mi_theap_t* theap, size_t
 }
 
 static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
-  return mi_theap_try_new(mi_prim_get_default_theap(), size, nothrow);
+  return mi_theap_try_new(_mi_theap_default(), size, nothrow);
 }
 
 
@@ -539,7 +540,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new(mi_theap_t* theap, s
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
-  return mi_theap_alloc_new(mi_prim_get_default_theap(), size);
+  return mi_theap_alloc_new(_mi_theap_default(), size);
 }
 
 
@@ -555,7 +556,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new_n(mi_theap_t* theap,
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_new_n(size_t count, size_t size) {
-  return mi_theap_alloc_new_n(mi_prim_get_default_theap(), count, size);
+  return mi_theap_alloc_new_n(_mi_theap_default(), count, size);
 }
 
 
@@ -665,7 +666,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   // stats
   mi_track_malloc(p, size, zero);
   if (p != NULL) {
-    if (!mi_theap_is_initialized(theap)) { theap = mi_prim_get_default_theap(); }
+    if (!mi_theap_is_initialized(theap)) { theap = _mi_theap_default(); }
     #if MI_STAT>1
     mi_theap_stat_adjust_decrease(theap, malloc_requested, req_size);
     mi_theap_stat_increase(theap, malloc_requested, size);
