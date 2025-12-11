@@ -169,7 +169,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
 {
   mi_assert_internal(theap!=NULL);
   mi_memid_t memid = theap->memid;
-  _mi_memcpy_aligned(theap, &__mi_theap_empty, sizeof(mi_theap_t));
+  _mi_memcpy_aligned(theap, &_mi_theap_empty, sizeof(mi_theap_t));
   theap->memid = memid;
   theap->heap  = heap;
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
@@ -245,7 +245,7 @@ static void mi_theap_reset_pages(mi_theap_t* theap) {
   mi_assert_internal(mi_theap_is_initialized(theap));
   // TODO: copy full empty theap instead?
   _mi_memset(&theap->pages_free_direct, 0, sizeof(theap->pages_free_direct));
-  _mi_memcpy_aligned(&theap->pages, &__mi_theap_empty.pages, sizeof(theap->pages));
+  _mi_memcpy_aligned(&theap->pages, &_mi_theap_empty.pages, sizeof(theap->pages));
   // theap->thread_delayed_free = NULL;
   theap->page_count = 0;
 }
@@ -438,7 +438,7 @@ void mi_theap_delete(mi_theap_t* theap)
 //  if (theap==NULL || !mi_theap_is_initialized(theap)) return NULL;
 //  mi_assert_expensive(mi_theap_is_valid(theap));
 //  mi_theap_t* old = _mi_theap_default();
-//  _mi_theap_set_default_direct(theap);
+//  _mi_theap_default_set(theap);
 //  return old;
 //}
 
@@ -780,7 +780,7 @@ mi_theap_t* _mi_heap_theap_get_or_init(mi_heap_t* heap)
   if mi_unlikely(theap==NULL) {
     theap = mi_heap_init_theap(heap);
   }
-  __mi_theap_cached = theap;
+  _mi_theap_cached_set(theap);
   return theap;
 }
 

@@ -399,6 +399,7 @@ void _mi_stats_init(void) {
 // todo: should be per heap
 void mi_stats_reset(void) mi_attr_noexcept {
   mi_theap_t* theap = _mi_theap_default();
+  if (!mi_theap_is_initialized(theap)) return; // can be if no allocation happened yet
   mi_stats_t* stats = &theap->stats;
   mi_stats_t* heap_stats = &theap->heap->stats;
   _mi_memzero(stats, sizeof(mi_stats_t));

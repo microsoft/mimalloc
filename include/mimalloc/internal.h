@@ -279,7 +279,8 @@ mi_theap_t*   _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld);
 //void          _mi_theap_init(mi_theap_t* theap, bool noreclaim, mi_tld_t* tld);
 //void          _mi_theap_destroy_pages(mi_theap_t* theap);
 //void          _mi_theap_collect_abandon(mi_theap_t* theap);
-void          _mi_theap_set_default_direct(mi_theap_t* theap);
+void          _mi_theap_default_set(mi_theap_t* theap);
+void          _mi_theap_cached_set(mi_theap_t* theap);
 //bool          _mi_theap_memid_is_suitable(mi_theap_t* theap, mi_memid_t memid);
 void          _mi_theap_unsafe_destroy_all(mi_theap_t* theap);
 
@@ -551,12 +552,12 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
   Heap functions
 ------------------------------------------------------------------------------------------- */
 
-extern mi_decl_hidden const mi_theap_t __mi_theap_empty;  // read-only empty theap, initial value of the thread local default theap
+extern mi_decl_hidden const mi_theap_t _mi_theap_empty;  // read-only empty theap, initial value of the thread local default theap
 
 
 static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {
   mi_assert_internal(theap != NULL);
-  return (theap != NULL && theap != &__mi_theap_empty);
+  return (theap != NULL && theap != &_mi_theap_empty);
 }
 
 static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t size) {

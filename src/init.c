@@ -112,7 +112,7 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
   MI_MEMID_STATIC         // memid
 };
 
-mi_decl_cache_align const mi_theap_t __mi_theap_empty = {
+mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   &tld_empty,             // tld
   NULL,                   // heap
   0,                      // heartbeat
@@ -183,15 +183,15 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
   return _mi_prim_thread_id();
 }
 
-// the thread-local main theap for allocation
-mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default = (mi_theap_t*)&__mi_theap_empty;
-
 // the theap belonging to the main heap
 mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main = NULL;
 
+#if MI_TLS_MODEL_THREAD_LOCAL
+// the thread-local main theap for allocation
+mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default = (mi_theap_t*)&_mi_theap_empty;
 // the last used non-main theap
-mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached = NULL;
-
+mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached = (mi_theap_t*)&_mi_theap_empty;
+#endif
 
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
@@ -455,7 +455,8 @@ static mi_theap_t* _mi_thread_init_theap_default(void) {
   }
   // associate the theap with this thread
   // (this is safe, on macOS for example, the theap is set in a dedicated TLS slot and thus does not cause recursive allocation)
-  _mi_theap_set_default_direct(theap);
+  _mi_theap_default_set(theap);
+  mi_assert_internal(_mi_theap_main()==theap);
   return theap;
 }
 
@@ -464,9 +465,9 @@ static mi_theap_t* _mi_thread_init_theap_default(void) {
 static void mi_thread_theaps_done(mi_tld_t* tld)
 {
   // reset the thread local theaps
-  _mi_theap_set_default_direct((mi_theap_t*)&__mi_theap_empty);
-  __mi_theap_cached = (mi_theap_t*)&__mi_theap_empty;
   __mi_theap_main = NULL; 
+  _mi_theap_default_set((mi_theap_t*)&_mi_theap_empty);
+  _mi_theap_cached_set((mi_theap_t*)&_mi_theap_empty);
   
   // delete all theaps in this thread
   mi_theap_t* curr = tld->theaps;
@@ -477,6 +478,7 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
     mi_theap_delete(curr);
     curr = next;
   }
+  mi_assert(!mi_theap_is_initialized(_mi_theap_default()));
 }
 
 
@@ -503,7 +505,7 @@ static void mi_process_setup_auto_thread_done(void) {
   if (tls_initialized) return;
   tls_initialized = true;
   _mi_prim_thread_init_auto_done();
-  _mi_theap_set_default_direct(&theap_main);
+  _mi_theap_default_set(&theap_main);
 }
 
 
@@ -560,7 +562,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 
 
 mi_decl_preserve_all mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
-  return (mi_theap_t*)&__mi_theap_empty;
+  return (mi_theap_t*)&_mi_theap_empty;
 }
 
 #if MI_TLS_MODEL_DYNAMIC_WIN32
@@ -586,7 +588,7 @@ mi_decl_preserve_all mi_theap_t* _mi_tls_slots_init(void) {
       _mi_error_message(EFAULT, "unable to allocate fast TLS user slot (%zu)\n", _mi_theap_cached_slot);
     }
   }
-  return (mi_theap_t*)&__mi_theap_empty;
+  return (mi_theap_t*)&_mi_theap_empty;
 }
 
 #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
@@ -600,17 +602,31 @@ mi_decl_preserve_all mi_theap_t* _mi_tls_keys_init(void) {
     pthread_key_create(&_mi_theap_default_key, NULL);
     pthread_key_create(&_mi_theap_cached_key, NULL);
   }
-  return (mi_theap_t*)&__mi_theap_empty;
+  return (mi_theap_t*)&_mi_theap_empty;
 }
 
 #endif
 
-void _mi_theap_set_default_direct(mi_theap_t* theap)  {
+void _mi_theap_cached_set(mi_theap_t* theap) {
+  #if MI_TLS_MODEL_THREAD_LOCAL
+    __mi_theap_cached = theap;
+  #elif MI_TLS_MODEL_FIXED_SLOT
+    mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_SLOT_CACHED, theap);
+  #elif MI_TLS_MODEL_DYNAMIC_WIN32
+    _mi_tls_slots_init();
+    mi_prim_tls_slot_set(_mi_theap_cached_slot, theap);
+  #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
+    _mi_tls_keys_init();
+    pthread_setspecific(_mi_theap_cached_key, theap);
+  #endif
+}
+
+void _mi_theap_default_set(mi_theap_t* theap)  {
   mi_assert_internal(theap != NULL);
   #if MI_TLS_MODEL_THREAD_LOCAL
     __mi_theap_default = theap;
   #elif MI_TLS_MODEL_FIXED_SLOT
-    mi_prim_tls_slot_set(MI_TLS_FIXED_SLOT_DEFAULT, theap);
+    mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_SLOT_DEFAULT, theap);    
   #elif MI_TLS_MODEL_DYNAMIC_WIN32
     _mi_tls_slots_init();
     mi_prim_tls_slot_set(_mi_theap_default_slot, theap);
@@ -659,7 +675,7 @@ void _mi_auto_process_init(void) {
   
   os_preloading = false;
   mi_assert_internal(_mi_is_main_thread());
-  if (__mi_theap_default == NULL) return;
+  if (__mi_theap_main == NULL) return;
   mi_process_init();
   if (_mi_is_redirected()) _mi_verbose_message("malloc is redirected.\n");
 
