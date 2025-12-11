@@ -112,7 +112,7 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
   MI_MEMID_STATIC         // memid
 };
 
-mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
+mi_decl_cache_align const mi_theap_t __mi_theap_empty = {
   &tld_empty,             // tld
   NULL,                   // heap
   0,                      // heartbeat
@@ -184,7 +184,7 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 }
 
 // the thread-local main theap for allocation
-mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default = (mi_theap_t*)&_mi_theap_empty;
+mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default = (mi_theap_t*)&__mi_theap_empty;
 
 // the theap belonging to the main heap
 mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main = NULL;
@@ -253,9 +253,9 @@ static void mi_tld_main_init(void) {
 
 // Initialization of the (statically allocated) main theap, and the main tld and subproc.
 static void mi_theap_main_init(mi_heap_t* heap) {
-  if (theap_main.cookie == 0) {
+  if mi_unlikely(theap_main.memid.memkind != MI_MEM_STATIC) {
     // theap
-    theap_main.cookie = 1;
+    theap_main.memid = _mi_memid_create(MI_MEM_STATIC);
     #if defined(__APPLE__) || defined(_WIN32) && !defined(MI_SHARED_LIB)
       _mi_random_init_weak(&theap_main.random);    // prevent allocation failure during bcrypt dll initialization with static linking
     #else
@@ -283,6 +283,7 @@ static void mi_heap_main_init(void) {
 
     mi_lock_init(&heap_main.theaps_lock);
     mi_lock_init(&heap_main.os_abandoned_pages_lock);
+    mi_lock_init(&heap_main.arena_pages_lock);
 
     mi_theap_main_init(&heap_main);
     mi_subproc_main_init();
@@ -463,10 +464,10 @@ static mi_theap_t* _mi_thread_init_theap_default(void) {
 static void mi_thread_theaps_done(mi_tld_t* tld)
 {
   // reset the thread local theaps
-  _mi_theap_set_default_direct((mi_theap_t*)&_mi_theap_empty);
-  __mi_theap_main = (mi_theap_t*)&_mi_theap_empty;
-  __mi_theap_cached = NULL;
-
+  _mi_theap_set_default_direct((mi_theap_t*)&__mi_theap_empty);
+  __mi_theap_cached = (mi_theap_t*)&__mi_theap_empty;
+  __mi_theap_main = NULL; 
+  
   // delete all theaps in this thread
   mi_theap_t* curr = tld->theaps;
   while (curr != NULL) {
@@ -559,7 +560,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 
 
 mi_decl_preserve_all mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
-  return (mi_theap_t*)&_mi_theap_empty;
+  return (mi_theap_t*)&__mi_theap_empty;
 }
 
 #if MI_TLS_MODEL_DYNAMIC_WIN32
@@ -574,8 +575,8 @@ mi_decl_preserve_all mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
 
 // we initially use the last user slot so NULL is returned
 // when allocating a slot, we check we get a slot before the last one (so it wasn't used yet)
-size_t _mi_theap_default_slot = MI_TLS_USER_LAST_SLOT;
-size_t _mi_theap_cached_slot  = MI_TLS_USER_LAST_SLOT;
+mi_decl_hidden size_t _mi_theap_default_slot = MI_TLS_USER_LAST_SLOT;
+mi_decl_hidden size_t _mi_theap_cached_slot  = MI_TLS_USER_LAST_SLOT;
 
 mi_decl_preserve_all mi_theap_t* _mi_tls_slots_init(void) {
   if (_mi_theap_default_slot==MI_TLS_USER_LAST_SLOT) {
@@ -585,21 +586,21 @@ mi_decl_preserve_all mi_theap_t* _mi_tls_slots_init(void) {
       _mi_error_message(EFAULT, "unable to allocate fast TLS user slot (%zu)\n", _mi_theap_cached_slot);
     }
   }
-  return (mi_theap_t*)&_mi_theap_empty;
+  return (mi_theap_t*)&__mi_theap_empty;
 }
 
 #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
 
 // only for pthreads for now
-size_t _mi_theap_default_key = 0;
-size_t _mi_theap_cached_key = 0;
+mi_decl_hidden size_t _mi_theap_default_key = 0;
+mi_decl_hidden size_t _mi_theap_cached_key = 0;
 
 mi_decl_preserve_all mi_theap_t* _mi_tls_keys_init(void) {
   if (_mi_theap_default_key==0) {
-    pthread_key_create(&_mi_theap_default_slot, NULL);
-    pthread_key_create(&_mi_theap_cached_slot, NULL);
+    pthread_key_create(&_mi_theap_default_key, NULL);
+    pthread_key_create(&_mi_theap_cached_key, NULL);
   }
-  return (mi_theap_t*)&_mi_theap_empty;
+  return (mi_theap_t*)&__mi_theap_empty;
 }
 
 #endif
@@ -650,15 +651,15 @@ mi_decl_nodiscard bool mi_is_redirected(void) mi_attr_noexcept {
 
 // Called once by the process loader from `src/prim/prim.c`
 void _mi_auto_process_init(void) {
-  mi_heap_main_init();
-  #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
-  volatile mi_theap_t* dummy = _mi_theap_default; // access TLS to allocate it before setting tls_initialized to true;
-  if (dummy == NULL) return;                    // use dummy or otherwise the access may get optimized away (issue #697)
-  #endif
+  // mi_heap_main_init();
+  // #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
+  // volatile mi_theap_t* dummy = __mi_theap_default; // access TLS to allocate it before setting tls_initialized to true;
+  // if (dummy == NULL) return;                       // use dummy or otherwise the access may get optimized away (issue #697)
+  // #endif
+  
   os_preloading = false;
   mi_assert_internal(_mi_is_main_thread());
-  _mi_options_init();
-  mi_process_setup_auto_thread_done();
+  if (__mi_theap_default == NULL) return;
   mi_process_init();
   if (_mi_is_redirected()) _mi_verbose_message("malloc is redirected.\n");
 
@@ -723,14 +724,15 @@ static void mi_detect_cpu_features(void) {
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   static mi_atomic_once_t process_init;
-	#if _MSC_VER < 1920
-	mi_heap_main_init(); // vs2017 can dynamically re-initialize theap_main
-	#endif
+	// #if _MSC_VER < 1920
+	// mi_heap_main_init(); // vs2017 can dynamically re-initialize theap_main
+	// #endif
   if (!mi_atomic_once(&process_init)) return;
   _mi_process_is_initialized = true;
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
 
   mi_detect_cpu_features();
+  _mi_options_init();  
   _mi_stats_init();
   _mi_os_init();
   // the following can potentially allocate (on freeBSD for locks and thread keys)

@@ -932,7 +932,7 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
     mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
     mi_assert_internal(page->slice_committed > 0 || mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));    
     mi_assert_internal(mi_bitmap_is_clearN(arena_pages->pages_abandoned[bin], slice_index, 1));
-    mi_assert_internal(mi_bitmap_is_setN(arena_pages->pages, page->memid.mem.arena.slice_index, 1));
+    mi_assert_internal(mi_bitmap_is_setN(arena_pages->pages, slice_index, 1));
     // note: we cannot check for `!mi_page_is_abandoned_and_mapped` since that may
     // be (temporarily) not true if the free happens while trying to reclaim
     // see `mi_arena_try_claim_abandoned`
@@ -951,17 +951,19 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   _mi_page_map_unregister(page);
   if (page->memid.memkind == MI_MEM_ARENA) {
     mi_arena_pages_t* arena_pages;
-    mi_arena_t* const arena = mi_page_arena_pages(page, NULL, NULL, &arena_pages);
+    size_t slice_index;
+    size_t slice_count; MI_UNUSED(slice_count);
+    mi_arena_t* const arena = mi_page_arena_pages(page, &slice_index, &slice_count, &arena_pages);
     mi_assert_internal(arena_pages!=NULL);
-    mi_bitmap_clear(arena_pages->pages, page->memid.mem.arena.slice_index);
+    mi_bitmap_clear(arena_pages->pages, slice_index);
     if (page->slice_committed > 0) {
       // if committed on-demand, set the commit bits to account commit properly
       mi_assert_internal(mi_page_full_size(page) >= page->slice_committed);
       const size_t total_slices = page->slice_committed / MI_ARENA_SLICE_SIZE;  // conservative
-      //mi_assert_internal(mi_bitmap_is_clearN(arena->slices_committed, page->memid.mem.arena.slice_index, total_slices));
-      mi_assert_internal(page->memid.mem.arena.slice_count >= total_slices);
+      //mi_assert_internal(mi_bitmap_is_clearN(arena->slices_committed, slice_index, total_slices));
+      mi_assert_internal(slice_count >= total_slices);
       if (total_slices > 0) {
-        mi_bitmap_setN(arena->slices_committed, page->memid.mem.arena.slice_index, total_slices, NULL);
+        mi_bitmap_setN(arena->slices_committed, slice_index, total_slices, NULL);
       }
       // any left over?
       const size_t extra = page->slice_committed % MI_ARENA_SLICE_SIZE;
@@ -971,7 +973,7 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
       }
     }
     else {
-      mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, page->memid.mem.arena.slice_index, page->memid.mem.arena.slice_count));
+      mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
     }
   }
   _mi_arenas_free(page, mi_page_full_size(page), page->memid);

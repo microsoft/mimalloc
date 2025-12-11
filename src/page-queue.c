@@ -107,7 +107,7 @@ size_t _mi_bin(size_t size) {
 
 size_t _mi_bin_size(size_t bin) {
   mi_assert_internal(bin <= MI_BIN_HUGE);
-  return _mi_theap_empty.pages[bin].block_size;
+  return __mi_theap_empty.pages[bin].block_size;
 }
 
 // Good size for allocation

@@ -551,12 +551,12 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
   Heap functions
 ------------------------------------------------------------------------------------------- */
 
-extern mi_decl_hidden const mi_theap_t _mi_theap_empty;  // read-only empty theap, initial value of the thread local default theap
+extern mi_decl_hidden const mi_theap_t __mi_theap_empty;  // read-only empty theap, initial value of the thread local default theap
 
 
 static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {
   mi_assert_internal(theap != NULL);
-  return (theap != NULL && theap != &_mi_theap_empty);
+  return (theap != NULL && theap != &__mi_theap_empty);
 }
 
 static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t size) {

@@ -169,7 +169,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
 {
   mi_assert_internal(theap!=NULL);
   mi_memid_t memid = theap->memid;
-  _mi_memcpy_aligned(theap, &_mi_theap_empty, sizeof(mi_theap_t));
+  _mi_memcpy_aligned(theap, &__mi_theap_empty, sizeof(mi_theap_t));
   theap->memid = memid;
   theap->heap  = heap;
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
@@ -221,7 +221,9 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   else {
     // theaps associated with a specific arena are allocated in that arena
     // note: takes up at least one slice which is quite wasteful...
-    theap = (mi_theap_t*)_mi_arenas_alloc(heap, _mi_align_up(sizeof(mi_theap_t),MI_ARENA_MIN_OBJ_SIZE), true, true, heap->exclusive_arena, tld->thread_seq, tld->numa_node, &memid);
+    const size_t size = _mi_align_up(sizeof(mi_theap_t),MI_ARENA_MIN_OBJ_SIZE);
+    theap = (mi_theap_t*)_mi_arenas_alloc(heap, size, true, true, heap->exclusive_arena, tld->thread_seq, tld->numa_node, &memid);
+    mi_assert_internal(memid.mem.os.size >= size);
   }
   if (theap==NULL) {
     _mi_error_message(ENOMEM, "unable to allocate theap meta-data\n");
@@ -243,7 +245,7 @@ static void mi_theap_reset_pages(mi_theap_t* theap) {
   mi_assert_internal(mi_theap_is_initialized(theap));
   // TODO: copy full empty theap instead?
   _mi_memset(&theap->pages_free_direct, 0, sizeof(theap->pages_free_direct));
-  _mi_memcpy_aligned(&theap->pages, &_mi_theap_empty.pages, sizeof(theap->pages));
+  _mi_memcpy_aligned(&theap->pages, &__mi_theap_empty.pages, sizeof(theap->pages));
   // theap->thread_delayed_free = NULL;
   theap->page_count = 0;
 }

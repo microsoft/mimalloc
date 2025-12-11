@@ -495,7 +495,7 @@ static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
 static inline void mi_lock_acquire(mi_lock_t* lock) {
   const int err = pthread_mutex_lock(lock);
   if (err != 0) {
-    _mi_error_message(err, "internal error: lock cannot be acquired\n");
+    _mi_error_message(err, "internal error: lock cannot be acquired (err %i)\n", err);
   }
 }
 static inline void mi_lock_release(mi_lock_t* lock) {

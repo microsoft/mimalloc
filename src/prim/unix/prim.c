@@ -927,7 +927,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 
 // use pthread local storage keys to detect thread ending
 // (and used with MI_TLS_PTHREADS for the default theap)
-pthread_key_t _mi_theap_default_key = (pthread_key_t)(-1);
+pthread_key_t _mi_heap_default_key = (pthread_key_t)(-1);
 
 static void mi_pthread_done(void* value) {
   if (value!=NULL) {
@@ -936,19 +936,19 @@ static void mi_pthread_done(void* value) {
 }
 
 void _mi_prim_thread_init_auto_done(void) {
-  mi_assert_internal(_mi_theap_default_key == (pthread_key_t)(-1));
-  pthread_key_create(&_mi_theap_default_key, &mi_pthread_done);
+  mi_assert_internal(_mi_heap_default_key == (pthread_key_t)(-1));
+  pthread_key_create(&_mi_heap_default_key, &mi_pthread_done);
 }
 
 void _mi_prim_thread_done_auto_done(void) {
-  if (_mi_theap_default_key != (pthread_key_t)(-1)) {  // do not leak the key, see issue #809
-    pthread_key_delete(_mi_theap_default_key);
+  if (_mi_heap_default_key != (pthread_key_t)(-1)) {  // do not leak the key, see issue #809
+    pthread_key_delete(_mi_heap_default_key);
   }
 }
 
 void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
-  if (_mi_theap_default_key != (pthread_key_t)(-1)) {  // can happen during recursive invocation on freeBSD
-    pthread_setspecific(_mi_theap_default_key, theap);
+  if (_mi_heap_default_key != (pthread_key_t)(-1)) {  // can happen during recursive invocation on freeBSD
+    pthread_setspecific(_mi_heap_default_key, theap);
   }
 }
 
