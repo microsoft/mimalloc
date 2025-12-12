@@ -191,7 +191,7 @@ mi_decl_nodiscard mi_decl_export void* mi_realloc_aligned_at(void* p, size_t new
 struct mi_heap_s;
 typedef struct mi_heap_s mi_heap_t;
 
-mi_decl_export mi_heap_t* mi_heap_default(void);
+mi_decl_export mi_heap_t* mi_heap_main(void);
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc(mi_heap_t* theap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
@@ -284,10 +284,10 @@ typedef struct mi_theap_area_s {
   size_t used;        // number of allocated blocks
   size_t block_size;  // size in bytes of each block
   size_t full_block_size; // size in bytes of a full block including padding and metadata.
-  int    theap_tag;    // theap tag associated with this area
+  void*  reserved1;   // internal
 } mi_theap_area_t;
 
-typedef bool (mi_cdecl mi_block_visit_fun)(const mi_theap_t* theap, const mi_theap_area_t* area, void* block, size_t block_size, void* arg);
+typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_theap_area_t* area, void* block, size_t block_size, void* arg);
 
 mi_decl_export bool   mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 

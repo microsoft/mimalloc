@@ -272,8 +272,7 @@ static void mi_theap_main_init(mi_heap_t* heap) {
 
 // Initialize main heap
 static void mi_heap_main_init(void) {
-  if mi_unlikely(heap_main.memid.memkind != MI_MEM_STATIC) {
-    heap_main.memid = _mi_memid_create(MI_MEM_STATIC);
+  if mi_unlikely(heap_main.subproc==NULL) {
     heap_main.subproc = &subproc_main;
     heap_main.theaps = &theap_main;
 
@@ -374,7 +373,7 @@ mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
   return mi_atomic_load_relaxed(&subproc->heap_main);
 }
 
-mi_heap_t* _mi_heap_main(void) {
+mi_heap_t* mi_heap_main(void) {
   return _mi_subproc_heap_main(_mi_subproc()); // don't use _mi_theap_main() so this call works during process_init
 }
 
@@ -416,7 +415,7 @@ void mi_subproc_delete(mi_subproc_id_t subproc_id) {
   //if (!safe_to_delete) return;
 
   // merge stats back into the main subproc?
-  _mi_stats_merge_from(&_mi_heap_main()->stats, &_mi_subproc_heap_main(subproc)->stats);
+  _mi_stats_merge_from(&mi_heap_main()->stats, &_mi_subproc_heap_main(subproc)->stats);
 
   // safe to release
   // todo: should we refcount subprocesses?
@@ -430,6 +429,7 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
   if (tld->subproc != &subproc_main) return;
   tld->subproc = _mi_subproc_from_id(subproc_id);
 }
+
 
 
 /* -----------------------------------------------------------
@@ -451,7 +451,7 @@ static mi_theap_t* _mi_thread_init_theap_default(void) {
     mi_tld_t* tld = mi_tld_alloc();
 
     // allocate and initialize the theap
-    theap = _mi_theap_create(_mi_heap_main(), tld);
+    theap = _mi_theap_create(mi_heap_main(), tld);
   }
   // associate the theap with this thread
   // (this is safe, on macOS for example, the theap is set in a dedicated TLS slot and thus does not cause recursive allocation)
@@ -524,7 +524,7 @@ void mi_thread_init(void) mi_attr_noexcept
   // initialize the default theap
   _mi_thread_init_theap_default();
 
-  mi_heap_stat_increase(_mi_heap_main(), threads, 1);
+  mi_heap_stat_increase(mi_heap_main(), threads, 1);
   //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
@@ -823,7 +823,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   //_mi_page_map_unsafe_destroy(_mi_subproc_main());
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
-    _mi_stats_print(&_mi_heap_main()->stats, NULL, NULL);  // use always main subproc at process exit to avoid dereferencing the theap (as it may be destroyed by now)
+    _mi_stats_print(&mi_heap_main()->stats, NULL, NULL);  // use always main subproc at process exit to avoid dereferencing the theap (as it may be destroyed by now)
   }
   _mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", tld_main.thread_id);

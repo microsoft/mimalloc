@@ -71,7 +71,7 @@ static mi_meta_page_t* mi_meta_page_zalloc(void) {
   // allocate a fresh arena slice
   // note: careful with _mi_subproc as it may recurse into mi_tld and meta_page_zalloc again.. (same with _mi_os_numa_node()...)
   mi_memid_t memid;
-  uint8_t* base = (uint8_t*)_mi_arenas_alloc_aligned(_mi_heap_main(), MI_META_PAGE_SIZE, MI_META_PAGE_ALIGN, 0,
+  uint8_t* base = (uint8_t*)_mi_arenas_alloc_aligned(mi_heap_main(), MI_META_PAGE_SIZE, MI_META_PAGE_ALIGN, 0,
                                                                     true /* commit*/, (MI_SECURE==0) /* allow large? */,
                                                                     NULL /* req arena */, 0 /* thread_seq */, -1 /* numa node */, &memid);
   if (base == NULL) return NULL;

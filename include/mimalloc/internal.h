@@ -170,13 +170,13 @@ mi_subproc_t* _mi_subproc(void);
 mi_subproc_t* _mi_subproc_main(void);
 mi_heap_t*    _mi_subproc_heap_main(mi_subproc_t* subproc);
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
+
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
 void          _mi_theap_guarded_init(mi_theap_t* theap);
 
-mi_heap_t*    _mi_heap_main(void);                      // main heap of this sub-process
 bool          _mi_is_heap_main(const mi_heap_t* heap);
-mi_heap_t*    _mi_heap_process_main(void);              // main heap of the main sub-process
+// mi_heap_t*    _mi_heap_process_main(void);              // main heap of the main sub-process
 mi_theap_t*   _mi_theap_default_safe(void);             // ensure the returned theap is initialized
 
 
@@ -290,8 +290,8 @@ void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
 
 
 // "heap.c"
-mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_or_init(mi_heap_t* heap); // get (and possible create) the theap belonging to a heap
-mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_peek(mi_heap_t* heap);    // get the theap for a heap without initializing (and return NULL in that case)
+mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap); // get (and possible create) the theap belonging to a heap
+mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap);    // get the theap for a heap without initializing (and return NULL in that case)
 
 
 
@@ -865,7 +865,7 @@ static inline mi_tld_t* mi_page_tld(const mi_page_t* page) {
 static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
   mi_heap_t* heap = page->heap;
   // we use NULL for the main heap to make `_mi_page_get_associated_theap` fast in `free.c:mi_abandoned_page_try_reclaim`.
-  if mi_likely(heap==NULL) heap = _mi_heap_main();
+  if mi_likely(heap==NULL) heap = mi_heap_main();
   mi_assert_internal(heap != NULL);
   return heap;
 }
@@ -901,8 +901,8 @@ static inline bool mi_page_is_owned(const mi_page_t* page) {
   return mi_tf_is_owned(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
 }
 
-// get ownership if it is not yet owned
-static inline bool mi_page_try_claim_ownership(mi_page_t* page) {
+// get ownership; returns true if the page was not owned before.
+static inline bool mi_page_claim_ownership(mi_page_t* page) {
   const uintptr_t old = mi_atomic_or_acq_rel(&page->xthread_free, 1);
   return ((old&1)==0);
 }

@@ -512,7 +512,7 @@ typedef size_t mi_thread_local_t;
 typedef struct mi_heap_s {
   mi_subproc_t*         subproc;
   mi_thread_local_t     theap;
-  struct mi_heap_s*     next;
+
   mi_arena_t*           exclusive_arena;                // if the heap should only allocate from a specific arena (or NULL)
   int                   numa_node;
   long                  page_full_retain;               // how many full pages can be retained per queue (before abandoning them)
@@ -530,7 +530,6 @@ typedef struct mi_heap_s {
   _Atomic(mi_arena_pages_t*) arena_pages[MI_MAX_ARENAS]; // track owned and abandoned pages in the arenas
   mi_lock_t             arena_pages_lock;                // lock to update the arena_pages array
 
-  mi_memid_t            memid;
   mi_stats_t            stats;
 } mi_heap_t;
 

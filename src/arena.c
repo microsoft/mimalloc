@@ -546,7 +546,7 @@ static bool mi_arena_try_claim_abandoned(size_t slice_index, mi_arena_t* arena, 
   // found an abandoned page of the right size
   mi_page_t* const page  = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
   // can we claim ownership?
-  if (!mi_page_try_claim_ownership(page)) {
+  if (!mi_page_claim_ownership(page)) {
     // there was a concurrent free that reclaims this page ..
     // we need to keep it in the abandoned map as the free will call `mi_arena_page_unabandon`,
     // and wait for readers (us!) to finish. This is why it is very important to set the abandoned
@@ -801,7 +801,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   page->free_is_zero = memid.initially_zero;
 
   // and own it
-  mi_page_try_claim_ownership(page);
+  mi_page_claim_ownership(page);
 
   // register in the page map
   if mi_unlikely(!_mi_page_map_register(page)) {
@@ -1311,7 +1311,7 @@ static mi_arena_pages_t* mi_arena_pages_alloc(mi_arena_t* arena) {
   const size_t slice_count = arena->slice_count;
   size_t bitmap_base = 0;
   const size_t size = mi_arena_pages_size(slice_count, &bitmap_base);
-  mi_arena_pages_t* arena_pages = (mi_arena_pages_t*)mi_heap_zalloc(_mi_heap_main(), size);
+  mi_arena_pages_t* arena_pages = (mi_arena_pages_t*)mi_heap_zalloc(mi_heap_main(), size);
   if (arena_pages==NULL) return NULL;
   uint8_t* base = (uint8_t*)arena_pages + bitmap_base;
   arena_pages->pages = mi_arena_bitmap_init(slice_count, &base);
@@ -1703,7 +1703,7 @@ static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narro
 }
 
 void mi_debug_show_arenas(void) mi_attr_noexcept {
-  mi_debug_show_arenas_ex(_mi_heap_main(), true /* show pages */, true /* narrow? */);
+  mi_debug_show_arenas_ex(mi_heap_main(), true /* show pages */, true /* narrow? */);
 }
 
 void mi_arenas_print(void) mi_attr_noexcept {
@@ -1964,17 +1964,18 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_subproc_t* subpro
   }
 }
 
+
 /* -----------------------------------------------------------
-  Visit abandoned pages
+  Visit all pages and blocks in a heap
 ----------------------------------------------------------- */
 
-typedef struct mi_abandoned_page_visit_info_s {
+typedef struct mi_heap_visit_info_s {
   mi_block_visit_fun* visitor;
   void* arg;
   bool visit_blocks;
-} mi_abandoned_page_visit_info_t;
+} mi_heap_visit_info_t;
 
-static bool abandoned_page_visit(mi_page_t* page, mi_abandoned_page_visit_info_t* vinfo) {
+static bool mi_heap_visit_page(mi_page_t* page, mi_heap_visit_info_t* vinfo) {
   mi_theap_area_t area;
   _mi_theap_area_init(&area, page);
   if (!vinfo->visitor(NULL, &area, NULL, area.block_size, vinfo->arg)) {
@@ -1988,31 +1989,33 @@ static bool abandoned_page_visit(mi_page_t* page, mi_abandoned_page_visit_info_t
   }
 }
 
-static bool abandoned_page_visit_at(size_t slice_index, size_t slice_count, mi_arena_t* arena, void* arg) {
+static bool mi_heap_visit_page_at(size_t slice_index, size_t slice_count, mi_arena_t* arena, void* arg) {
   MI_UNUSED(slice_count);
-  mi_abandoned_page_visit_info_t* vinfo = (mi_abandoned_page_visit_info_t*)arg;
-  mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, slice_index);
-  mi_assert_internal(mi_page_is_abandoned_mapped(page));
-  return abandoned_page_visit(page, vinfo);
+  mi_heap_visit_info_t* vinfo = (mi_heap_visit_info_t*)arg;
+  mi_page_t* page = (mi_page_t*)mi_arena_slice_start(arena, slice_index);  
+  return mi_heap_visit_page(page, vinfo);
 }
 
-// Visit all abandoned pages in this subproc.
-bool mi_abandoned_visit_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
-  mi_abandoned_page_visit_info_t visit_info = { visitor, arg, visit_blocks };
-  MI_UNUSED(visit_blocks); MI_UNUSED(visitor); MI_UNUSED(arg);
 
-  // visit abandoned pages in the arenas
-  // we don't have to claim because we assume we are the only thread running (in this subproc).
+bool mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+  // visit all pages in a heap
+  // we don't have to claim because we assume we are the only thread running (with this heap).
   // (but we could atomically claim as well by first doing abandoned_reclaim and afterwards reabandoning).
+  mi_heap_visit_info_t visit_info = { visitor, arg, visit_blocks };  
   bool ok = true;
   mi_forall_arenas(heap, NULL, 0, arena) {
     mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena); 
-    if (arena_pages != NULL) {
-      for (size_t bin = 0; ok && bin < MI_BIN_COUNT; bin++) {
-        // todo: if we had a single abandoned page map as well, this can be faster.
-        if (mi_atomic_load_relaxed(&heap->abandoned_count[bin]) > 0) {
-          ok = _mi_bitmap_forall_set(arena_pages->pages_abandoned[bin], &abandoned_page_visit_at, arena, &visit_info);
+    if (ok && arena_pages != NULL) {
+      if (abandoned_only) { 
+        for (size_t bin = 0; ok && bin < MI_BIN_COUNT; bin++) {
+          // todo: if we had a single abandoned page map as well, this can be faster.
+          if (mi_atomic_load_relaxed(&heap->abandoned_count[bin]) > 0) {
+            ok = _mi_bitmap_forall_set(arena_pages->pages_abandoned[bin], &mi_heap_visit_page_at, arena, &visit_info);
+          }
         }
+      }
+      else {
+        ok = _mi_bitmap_forall_set(arena_pages->pages, &mi_heap_visit_page_at, arena, &visit_info);
       }
     }
   }
@@ -2020,16 +2023,67 @@ bool mi_abandoned_visit_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visi
   if (!ok) return false;
 
   // visit abandoned pages in OS allocated memory
-  // (technically we don't need the lock as we assume we are the only thread running in this subproc)
+  // (technically we don't need the initial lock as we assume we are the only thread running in this subproc)
+  mi_page_t* page;
   mi_lock(&heap->os_abandoned_pages_lock) {
-    for (mi_page_t* page = heap->os_abandoned_pages; ok && page != NULL; page = page->next) {
-      ok = abandoned_page_visit(page, &visit_info);
-    }
+    page = heap->os_abandoned_pages;
   }
-
+  while (ok && page != NULL) {
+    mi_page_t* next = page->next;  // read upfront in case the visitor frees the page
+    ok = mi_heap_visit_page(page, &visit_info);
+    page = next;
+  }
+  
   return ok;
 }
 
+bool mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+  return mi_heap_visit_blocks(heap, true, visit_blocks, visitor, arg);
+}
+
+typedef struct mi_heap_delete_visit_info_s {
+  mi_heap_t* heap_target;
+} mi_heap_delete_visit_info_t;
+
+static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_theap_area_t* area, void* block, size_t block_size, void* arg) {
+  MI_UNUSED(block); MI_UNUSED(block_size);
+  mi_heap_t* const heap_target = (mi_heap_t*)arg;
+  mi_theap_t* const theap = _mi_heap_theap(heap);
+  mi_page_t* const page = (mi_page_t*)area->reserved1;  
+  
+  mi_page_claim_ownership(page);       // claim ownership
+  if (mi_page_is_abandoned(page)) {
+    _mi_arenas_page_unabandon(page,theap);
+  }
+  else {
+    mi_page_set_theap(page,NULL);      // set threadid to abandoned
+  }
+  mi_assert_internal(mi_page_is_abandoned(page));
+  mi_assert_internal(mi_page_is_owned(page));
+
+  if (page->used==0) {
+    // free the page
+    _mi_arenas_page_free(page, theap);
+  }
+  else if (heap_target==NULL) {
+    // destroy the page
+    page->used=0;                        // note: invariant `|local_free| + |free| == reserved - used`  does not hold in this case
+    _mi_arenas_page_free(page, theap);
+  }
+  else {
+    // move the page to `heap_target` as an abandoned page
+    mi_theap_t* const theap_target = _mi_heap_theap(heap_target);
+    page->heap = heap_target;
+    page->next = page->prev = NULL;
+    mi_page_set_theap(page,theap_target);
+    _mi_arenas_page_abandon(page,theap_target);
+  }
+  return true;
+}
+
+void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
+  mi_heap_visit_blocks(heap, false, false, &mi_heap_delete_page, heap_target);
+}
 
 /* -----------------------------------------------------------
   Unloading and reloading an arena.

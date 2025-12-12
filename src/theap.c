@@ -134,7 +134,7 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   _mi_arenas_collect(collect == MI_FORCE /* force purge? */, collect >= MI_FORCE /* visit all? */, theap->tld);
 
   // merge statistics
-  if (collect <= MI_FORCE) { mi_theap_merge_stats(theap); }
+  mi_theap_merge_stats(theap); 
 }
 
 void _mi_theap_collect_abandon(mi_theap_t* theap) {
@@ -175,13 +175,14 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
   theap->allow_page_reclaim = heap->allow_page_reclaim;
   theap->allow_page_abandon = heap->allow_page_abandon;
+  theap->page_full_retain = heap->page_full_retain;
   /*
   theap->numa_node = tld->numa_node;
   theap->exclusive_arena    = _mi_arena_from_id(arena_id);
   theap->allow_page_reclaim = (!allow_destroy && mi_option_get(mi_option_page_reclaim_on_free) >= 0);
   theap->allow_page_abandon = (!allow_destroy && mi_option_get(mi_option_page_full_retain) >= 0);
-  */
   theap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
+  */
   if (theap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our theap.
     // this is checked in `free.c:mi_free_try_collect_mt`
@@ -557,7 +558,9 @@ void _mi_theap_area_init(mi_theap_area_t* area, mi_page_t* page) {
   area->used = page->used;   // number of blocks in use (#553)
   area->block_size = ubsize;
   area->full_block_size = bsize;
+  area->reserved1 = page;
 }
+
 
 
 static void mi_get_fast_divisor(size_t divisor, uint64_t* magic, size_t* shift) {
@@ -584,14 +587,14 @@ bool _mi_theap_area_visit_blocks(const mi_theap_area_t* area, mi_page_t* page, m
 
   size_t psize;
   uint8_t* const pstart = mi_page_area(page, &psize);
-  mi_theap_t* const theap = mi_page_theap(page);
+  mi_heap_t* const heap = mi_page_heap(page);
   const size_t bsize    = mi_page_block_size(page);
   const size_t ubsize   = mi_page_usable_block_size(page); // without padding
 
   // optimize page with one block
   if (page->capacity == 1) {
     mi_assert_internal(page->used == 1 && page->free == NULL);
-    return visitor(mi_page_theap(page), area, pstart, ubsize, arg);
+    return visitor(heap, area, pstart, ubsize, arg);
   }
   mi_assert(bsize <= UINT32_MAX);
 
@@ -599,7 +602,7 @@ bool _mi_theap_area_visit_blocks(const mi_theap_area_t* area, mi_page_t* page, m
   if (page->used == page->capacity) {
     uint8_t* block = pstart;
     for (size_t i = 0; i < page->capacity; i++) {
-      if (!visitor(theap, area, block, ubsize, arg)) return false;
+      if (!visitor(heap, area, block, ubsize, arg)) return false;
       block += bsize;
     }
     return true;
@@ -654,7 +657,7 @@ bool _mi_theap_area_visit_blocks(const mi_theap_area_t* area, mi_page_t* page, m
         #if MI_DEBUG>1
         used_count++;
         #endif
-        if (!visitor(theap, area, block, ubsize, arg)) return false;
+        if (!visitor(heap, area, block, ubsize, arg)) return false;
         block += bsize;
       }
     }
@@ -666,7 +669,7 @@ bool _mi_theap_area_visit_blocks(const mi_theap_area_t* area, mi_page_t* page, m
         used_count++;
         #endif
         size_t bitidx = mi_ctz(m);
-        if (!visitor(theap, area, block + (bitidx * bsize), ubsize, arg)) return false;
+        if (!visitor(heap, area, block + (bitidx * bsize), ubsize, arg)) return false;
         m &= m - 1;  // clear least significant bit
       }
       block += bsize * MI_INTPTR_BITS;
@@ -711,7 +714,7 @@ typedef struct mi_visit_blocks_args_s {
 
 static bool mi_theap_area_visitor(const mi_theap_t* theap, const mi_theap_area_ex_t* xarea, void* arg) {
   mi_visit_blocks_args_t* args = (mi_visit_blocks_args_t*)arg;
-  if (!args->visitor(theap, &xarea->area, NULL, xarea->area.block_size, args->arg)) return false;
+  if (!args->visitor(theap->heap, &xarea->area, NULL, xarea->area.block_size, args->arg)) return false;
   if (args->visit_blocks) {
     return _mi_theap_area_visit_blocks(&xarea->area, xarea->page, args->visitor, args->arg);
   }
@@ -728,13 +731,18 @@ bool mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_
 
 
 
+/* -----------------------------------------------------------
+  Heap's
+----------------------------------------------------------- */
+
 void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node) {
   if (heap == NULL) return;
   heap->numa_node = (numa_node < 0 ? -1 : numa_node % _mi_os_numa_node_count());
 }
 
-static mi_theap_t* mi_heap_init_theap(mi_heap_t* heap)
+static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
 {
+  mi_heap_t* heap = (mi_heap_t*)const_heap;
   mi_assert_internal(heap!=NULL);
   mi_assert_internal(!_mi_is_heap_main(heap));
 
@@ -744,7 +752,7 @@ static mi_theap_t* mi_heap_init_theap(mi_heap_t* heap)
     // initialize thread locals
     heap->theap = _mi_prim_thread_local_create();
     if (heap->theap==0) {
-      _mi_error_message(ENOMEM, "unable to dynamically create a thread local for a heap\n");
+      _mi_error_message(EFAULT, "unable to dynamically create a thread local for a heap\n");
       return NULL;
     }
   }
@@ -756,7 +764,10 @@ static mi_theap_t* mi_heap_init_theap(mi_heap_t* heap)
   // create a fresh theap?
   if (theap==NULL) {
     theap = _mi_theap_create(heap, _mi_theap_default_safe()->tld);
-    if (theap==NULL) return NULL;
+    if (theap==NULL) {
+      _mi_error_message(EFAULT, "unable to allocate memory for a thread local heap\n");
+      return NULL;
+    }
     _mi_prim_thread_local_set(heap->theap, theap);
   }
   return theap;
@@ -764,7 +775,7 @@ static mi_theap_t* mi_heap_init_theap(mi_heap_t* heap)
 
 
 // get the theap for a heap without initializing (and return NULL in that case)
-mi_theap_t* _mi_heap_theap_get_peek(mi_heap_t* heap) {
+mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap) {
   if (heap==NULL || _mi_is_heap_main(heap)) {
     return _mi_theap_main();
   }
@@ -774,11 +785,12 @@ mi_theap_t* _mi_heap_theap_get_peek(mi_heap_t* heap) {
 }
 
 // get (and possibly create) the theap belonging to a heap
-mi_theap_t* _mi_heap_theap_get_or_init(mi_heap_t* heap)
+mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
 {
   mi_theap_t* theap = _mi_heap_theap_peek(heap);
   if mi_unlikely(theap==NULL) {
     theap = mi_heap_init_theap(heap);
+    if (theap==NULL) { return _mi_theap_empty_get(); }  // or abort since this will start to allocate in the main heap?
   }
   _mi_theap_cached_set(theap);
   return theap;
@@ -786,3 +798,28 @@ mi_theap_t* _mi_heap_theap_get_or_init(mi_heap_t* heap)
 
 
 
+mi_heap_t* mi_heap_new_ex(mi_arena_id_t exclusive_arena_id) {
+  // always allocate heap data in the (subprocess) main heap
+  mi_heap_t* heap_main = mi_heap_main();
+  // todo: allocate heap data in the exclusive arena ?
+  mi_heap_t* heap = (mi_heap_t*)mi_heap_zalloc( heap_main, sizeof(mi_heap_t) );
+  if (heap==NULL) return NULL;
+
+  // init fields
+  heap->subproc = heap_main->subproc;  
+  heap->exclusive_arena = _mi_arena_from_id(exclusive_arena_id);
+  heap->numa_node = -1; // no initial affinity
+  heap->allow_page_reclaim = heap_main->allow_page_reclaim;
+  heap->allow_page_abandon = heap_main->allow_page_abandon;
+  heap->page_full_retain = heap_main->page_full_retain;
+
+  mi_lock_init(&heap->theaps_lock);
+  mi_lock_init(&heap->os_abandoned_pages_lock);
+  mi_lock_init(&heap->arena_pages_lock);  
+
+  return heap;
+}
+
+void mi_heap_delete(mi_heap_t* heap) {
+  MI_UNUSED(heap);
+}
