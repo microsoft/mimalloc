@@ -29,7 +29,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Fast allocation in a page: just pop from the free list.
 // Fall back to generic allocation only if the list is empty.
 // Note: in release mode the (inlined) routine is about 7 instructions with a single test.
-extern inline void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept
+static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept
 {
   if (page->block_size != 0) { // not the empty theap
     mi_assert_internal(mi_page_block_size(page) >= size);
@@ -62,30 +62,11 @@ extern inline void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, siz
   const size_t bsize = mi_page_usable_block_size(page);
   mi_track_mem_undefined(block, bsize);
 
-  // zero the block? note: we need to zero the full block size (issue #63)
-  if mi_unlikely(zero) {
-    if (page->free_is_zero) {
-      block->next = 0;
-      mi_track_mem_defined(block, bsize);
-    }
-    else {
-      _mi_memzero_aligned(block, bsize);
-    }
-  }
-
-  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
-  if (!zero && !mi_page_is_huge(page)) {
-    memset(block, MI_DEBUG_UNINIT, bsize);
-  }
-  #elif (MI_SECURE!=0)
-  if (!zero) { block->next = 0; } // don't leak internal data
-  #endif
-
   #if (MI_STAT>0)
   if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
     mi_theap_stat_increase(theap, malloc_normal, bsize);
-    mi_theap_stat_counter_increase(theap, malloc_normal_count, 1);
     #if (MI_STAT>1)
+    mi_theap_stat_counter_increase(theap, malloc_normal_count, 1);
     const size_t bin = _mi_bin(bsize);
     mi_theap_stat_increase(theap, malloc_bins[bin], 1);
     mi_theap_stat_increase(theap, malloc_requested, size - MI_PADDING_SIZE);
@@ -93,6 +74,26 @@ extern inline void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, siz
   }
   #endif
 
+  // zero the block? note: we need to zero the full block size (issue #63)
+  if mi_likely(!zero) {
+    #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
+      if (!mi_page_is_huge(page)) { memset(block, MI_DEBUG_UNINIT, bsize); }
+    #endif
+    #if MI_SECURE
+      block->next = 0;  // don't leak internal data
+    #endif
+  }
+  else {
+    mi_assert_internal(bsize<=2*MI_SMALL_SIZE_MAX);  // allow faster zero'ing for small blocks
+    if (!page->free_is_zero) {
+      _mi_memzero_aligned_small(block, bsize);
+    } 
+    else {
+      block->next = 0;
+      mi_track_mem_defined(block, bsize);
+    }
+  }
+  
   #if MI_PADDING // && !MI_TRACK_ENABLED
     mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + bsize);
     ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
@@ -116,17 +117,28 @@ extern inline void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, siz
 
 // extra entries for improved efficiency in `alloc-aligned.c`.
 extern void* _mi_page_malloc(mi_theap_t* theap, mi_page_t* page, size_t size) mi_attr_noexcept {
-  return _mi_page_malloc_zero(theap,page,size,false);
+  return mi_page_malloc_zero(theap,page,size,false);
 }
 extern void* _mi_page_malloc_zeroed(mi_theap_t* theap, mi_page_t* page, size_t size) mi_attr_noexcept {
-  return _mi_page_malloc_zero(theap,page,size,true);
+  if mi_likely(size<=MI_SMALL_SIZE_MAX) {
+    return mi_page_malloc_zero(theap, page, size, true);
+  }
+  else {
+    void* p = mi_page_malloc_zero(theap, page, size, false);
+    if mi_likely(p!=NULL) { _mi_memzero_aligned(p, size); }
+    return p;
+  }
 }
 
 #if MI_GUARDED
 mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept;
 #endif
 
-static inline mi_decl_restrict void* mi_theap_malloc_small_zero(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept {
+// main allocation primitives for small and generic allocation
+
+// internal small size allocation
+static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_nonnull(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept 
+{
   mi_assert(theap != NULL);
   mi_assert(size <= MI_SMALL_SIZE_MAX);
   #if MI_DEBUG
@@ -134,17 +146,17 @@ static inline mi_decl_restrict void* mi_theap_malloc_small_zero(mi_theap_t* thea
   mi_assert(theap->tld->thread_id == 0 || theap->tld->thread_id == tid); // theaps are thread local
   #endif
   #if (MI_PADDING || MI_GUARDED)
-  if (size == 0) { size = sizeof(void*); }
+  if mi_unlikely(size == 0) { size = sizeof(void*); }
   #endif
   #if MI_GUARDED
-  if (mi_theap_malloc_use_guarded(theap,size)) {
+  if mi_unlikely(mi_theap_malloc_use_guarded(theap,size)) {
     return _mi_theap_malloc_guarded(theap, size, zero);
   }
   #endif
 
   // get page in constant time, and allocate from it
   mi_page_t* page = _mi_theap_get_free_small_page(theap, size + MI_PADDING_SIZE);
-  void* const p = _mi_page_malloc_zero(theap, page, size + MI_PADDING_SIZE, zero);
+  void* const p = mi_page_malloc_zero(theap, page, size + MI_PADDING_SIZE, zero);
   mi_track_malloc(p,size,zero);
 
   #if MI_DEBUG>3
@@ -155,44 +167,82 @@ static inline mi_decl_restrict void* mi_theap_malloc_small_zero(mi_theap_t* thea
   return p;
 }
 
+// internal generic allocation
+static mi_decl_forceinline void* mi_theap_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept 
+{
+  #if MI_GUARDED
+  if (huge_alignment==0 && mi_theap_malloc_use_guarded(theap, size)) {
+    return _mi_theap_malloc_guarded(theap, size, zero);
+  }
+  #endif
+  #if !MI_THEAP_CANBENULL
+  mi_assert(theap!=NULL);
+  #endif
+  mi_assert(theap==NULL || theap->tld->thread_id == 0 || theap->tld->thread_id == _mi_thread_id());   // theaps are thread local
+  void* const p = _mi_malloc_generic(theap, size + MI_PADDING_SIZE, zero, huge_alignment);  // note: size can overflow but it is detected in malloc_generic
+  mi_track_malloc(p, size, zero);
+
+  #if MI_DEBUG>3
+  if (p != NULL && zero) {
+    mi_assert_expensive(mi_mem_is_zero(p, size));
+  }
+  #endif
+  return p;
+}
+
+// internal small allocation
+static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept {
+  #if MI_THEAP_CANBENULL
+  if (theap!=NULL) {
+    return mi_theap_malloc_small_zero_nonnull(theap, size, zero);
+  }
+  else {
+    return mi_theap_malloc_generic(theap, size, zero, 0); // tailcall
+  }
+  #else
+  return mi_theap_malloc_small_zero_nonnull(theap, size, zero);
+  #endif
+}
+
+
 // allocate a small block
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_malloc_small(mi_theap_t* theap, size_t size) mi_attr_noexcept {
   return mi_theap_malloc_small_zero(theap, size, false);
 }
 
-mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc_small(size_t size) mi_attr_noexcept {
+mi_decl_nodiscard mi_decl_restrict void* mi_malloc_small(size_t size) mi_attr_noexcept {
   return mi_theap_malloc_small(_mi_theap_default(), size);
 }
 
-mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_theap_malloc_small(_mi_heap_theap(heap), size);
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_theap_malloc_small_zero_nonnull(_mi_heap_theap(heap), size, false);
 }
 
-// The main allocation function
-extern inline void* _mi_theap_malloc_zero_ex(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept {
+// The main internal allocation functions
+static mi_decl_forceinline void* mi_theap_malloc_zero_nonnull(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept {
   // fast path for small objects
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
     mi_assert_internal(huge_alignment == 0);
-    return mi_theap_malloc_small_zero(theap, size, zero);
+    return mi_theap_malloc_small_zero_nonnull(theap, size, zero);
   }
-  #if MI_GUARDED
-  else if (huge_alignment==0 && mi_theap_malloc_use_guarded(theap,size)) {
-    return _mi_theap_malloc_guarded(theap, size, zero);
-  }
-  #endif
   else {
-    // regular allocation
-    mi_assert(theap!=NULL);
-    mi_assert(theap->tld->thread_id == 0 || theap->tld->thread_id == _mi_thread_id());   // theaps are thread local
-    void* const p = _mi_malloc_generic(theap, size + MI_PADDING_SIZE, zero, huge_alignment);  // note: size can overflow but it is detected in malloc_generic
-    mi_track_malloc(p,size,zero);
+    return mi_theap_malloc_generic(theap, size, zero, huge_alignment);
+  }
+}
 
-    #if MI_DEBUG>3
-    if (p != NULL && zero) {
-      mi_assert_expensive(mi_mem_is_zero(p, size));
-    }
-    #endif
-    return p;
+extern mi_decl_forceinline void* _mi_theap_malloc_zero_ex(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept {
+  // fast path for small objects
+  #if MI_THEAP_CANBENULL
+  if mi_likely(theap!=NULL && size <= MI_SMALL_SIZE_MAX) 
+  #else
+  if mi_likely(size <= MI_SMALL_SIZE_MAX) 
+  #endif
+  {
+    mi_assert_internal(huge_alignment == 0);
+    return mi_theap_malloc_small_zero_nonnull(theap, size, zero);
+  }
+  else {
+    return mi_theap_malloc_generic(theap, size, zero, huge_alignment);
   }
 }
 
@@ -200,16 +250,18 @@ extern inline void* _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool z
   return _mi_theap_malloc_zero_ex(theap, size, zero, 0);
 }
 
+// Main allocation functions
+
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_malloc(mi_theap_t* theap, size_t size) mi_attr_noexcept {
   return _mi_theap_malloc_zero(theap, size, false);
 }
 
-mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc(size_t size) mi_attr_noexcept {
+mi_decl_nodiscard mi_decl_restrict void* mi_malloc(size_t size) mi_attr_noexcept {
   return mi_theap_malloc(_mi_theap_default(), size);
 }
 
-mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_theap_malloc(_mi_heap_theap(heap), size);
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_theap_malloc_zero_nonnull(_mi_heap_theap(heap), size, false, 0);
 }
 
 // zero initialized small block
@@ -225,8 +277,8 @@ mi_decl_nodiscard mi_decl_restrict void* mi_zalloc(size_t size) mi_attr_noexcept
   return mi_theap_zalloc(_mi_theap_default(),size);
 }
 
-mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_theap_zalloc(_mi_heap_theap(heap), size);
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_theap_malloc_zero_nonnull(_mi_heap_theap(heap), size, true, 0);
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_calloc(mi_theap_t* theap, size_t count, size_t size) mi_attr_noexcept {
@@ -240,7 +292,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_calloc(size_t count, size_t size) mi
 }
 
 // Uninitialized `calloc`
-mi_decl_nodiscard extern mi_decl_restrict void* mi_theap_mallocn(mi_theap_t* theap, size_t count, size_t size) mi_attr_noexcept {
+mi_decl_nodiscard mi_decl_restrict void* mi_theap_mallocn(mi_theap_t* theap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(count, size, &total)) return NULL;
   return mi_theap_malloc(theap, total);
@@ -689,16 +741,19 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
 #ifdef __cplusplus
 void* _mi_externs[] = {
   (void*)&_mi_page_malloc,
-  (void*)&_mi_page_malloc_zero,
+  (void*)&_mi_page_malloc_zeroed,
   (void*)&_mi_theap_malloc_zero,
   (void*)&_mi_theap_malloc_zero_ex,
-  (void*)&mi_malloc,
-  (void*)&mi_malloc_small,
-  (void*)&mi_zalloc_small,
   (void*)&mi_theap_malloc,
   (void*)&mi_theap_zalloc,
   (void*)&mi_theap_malloc_small,
-  (void*)&mi_heap_malloc
+  (void*)&mi_malloc,
+  (void*)&mi_malloc_small,
+  (void*)&mi_zalloc,
+  (void*)&mi_zalloc_small,
+  (void*)&mi_heap_malloc,
+  (void*)&mi_heap_malloc_small,
+  (void*)&mi_malloc_aligned
   // (void*)&mi_theap_alloc_new,
   // (void*)&mi_theap_alloc_new_n
 };

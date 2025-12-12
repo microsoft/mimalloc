@@ -173,7 +173,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t
 
 
 // Primitive aligned allocation
-static void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, const size_t size, const size_t alignment, const size_t offset, const bool zero) mi_attr_noexcept
+static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, const size_t size, const size_t alignment, const size_t offset, const bool zero) mi_attr_noexcept
 {
   // note: we don't require `size > offset`, we just guarantee that the address at offset is aligned regardless of the allocated size.
   if mi_unlikely(alignment == 0 || !_mi_is_power_of_two(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
@@ -192,19 +192,24 @@ static void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, const size
   // try first if there happens to be a small block available with just the right alignment
   // since most small power-of-2 blocks (under MI_PAGE_MAX_BLOCK_START_ALIGN2) are already
   // naturally aligned this can be often the case.
-  if mi_likely(size <= MI_SMALL_SIZE_MAX && alignment <= size) {
-    const uintptr_t align_mask = alignment-1;       // for any x, `(x & align_mask) == (x % alignment)`
-    const size_t padsize = size + MI_PADDING_SIZE;
-    mi_page_t* page = _mi_theap_get_free_small_page(theap, padsize);
-    if mi_likely(page->free != NULL) {
-      const bool is_aligned = (((uintptr_t)page->free + offset) & align_mask)==0;
-      if mi_likely(is_aligned)
-      {
-        void* p = (zero ? _mi_page_malloc_zeroed(theap,page,padsize) : _mi_page_malloc(theap,page,padsize)); // call specific page malloc for better codegen
-        mi_assert_internal(p != NULL);
-        mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
-        mi_track_malloc(p,size,zero);
-        return p;
+  #if MI_THEAP_CANBENULL
+  if mi_likely(theap!=NULL)
+  #endif
+  {
+    if mi_likely(size <= MI_SMALL_SIZE_MAX && alignment <= size) {
+      const uintptr_t align_mask = alignment-1;       // for any x, `(x & align_mask) == (x % alignment)`
+      const size_t padsize = size + MI_PADDING_SIZE;
+      mi_page_t* page = _mi_theap_get_free_small_page(theap, padsize);
+      if mi_likely(page->free != NULL) {
+        const bool is_aligned = (((uintptr_t)page->free + offset) & align_mask)==0;
+        if mi_likely(is_aligned)
+        {
+          void* p = (zero ? _mi_page_malloc_zeroed(theap, page, padsize) : _mi_page_malloc(theap, page, padsize)); // call specific page malloc for better codegen
+          mi_assert_internal(p != NULL);
+          mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
+          mi_track_malloc(p, size, zero);
+          return p;
+        }
       }
     }
   }

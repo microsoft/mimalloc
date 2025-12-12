@@ -2024,7 +2024,7 @@ bool mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_block
 
   // visit abandoned pages in OS allocated memory
   // (technically we don't need the initial lock as we assume we are the only thread running in this subproc)
-  mi_page_t* page;
+  mi_page_t* page = NULL;
   mi_lock(&heap->os_abandoned_pages_lock) {
     page = heap->os_abandoned_pages;
   }

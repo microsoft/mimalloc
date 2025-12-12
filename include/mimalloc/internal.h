@@ -33,6 +33,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
 #pragma warning(disable:26812)  // unscoped enum warning
+#define mi_decl_forceinline     __forceinline
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_align(a)        __declspec(align(a))
@@ -42,6 +43,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_hidden
 #define mi_decl_cold
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
+#define mi_decl_forceinline     __attribute__((always_inline))
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
 #define mi_decl_align(a)        __attribute__((aligned(a)))
@@ -55,6 +57,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_cold
 #endif
 #elif __cplusplus >= 201103L    // c++11
+#define mi_decl_forceinline     inline
 #define mi_decl_noinline
 #define mi_decl_thread          thread_local
 #define mi_decl_align(a)        alignas(a)
@@ -64,6 +67,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_hidden
 #define mi_decl_cold
 #else
+#define mi_decl_forceinline     inline
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_align(a)
@@ -307,7 +311,6 @@ mi_msecs_t    _mi_clock_end(mi_msecs_t start);
 mi_msecs_t    _mi_clock_start(void);
 
 // "alloc.c"
-void*         _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept;  // called from `_mi_malloc_generic`
 void*         _mi_page_malloc(mi_theap_t* theap, mi_page_t* page, size_t size) mi_attr_noexcept;                  // called from `_mi_theap_malloc_aligned`
 void*         _mi_page_malloc_zeroed(mi_theap_t* theap, mi_page_t* page, size_t size) mi_attr_noexcept;           // called from `_mi_theap_malloc_aligned`
 void*         _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept;
@@ -524,10 +527,13 @@ static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 }
 #else /* __builtin_umul_overflow is unavailable */
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
-  #define MI_MUL_COULD_OVERFLOW ((size_t)1 << (4*sizeof(size_t)))  // sqrt(SIZE_MAX)
-  *total = count * size;
-  // note: gcc/clang optimize this to directly check the overflow flag
-  return ((size >= MI_MUL_COULD_OVERFLOW || count >= MI_MUL_COULD_OVERFLOW) && size > 0 && (SIZE_MAX / size) < count);
+  *total = count*size;
+  if mi_likely(((size|count)>>(4*MI_SIZE_SIZE))==0) {  // did size and count fit both in the lower half bits of a size_t?
+    return false;
+  }
+  else {
+    return (size!=0 && (SIZE_MAX / size) < count);
+  }
 }
 #endif
 
@@ -537,14 +543,16 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
     *total = size;
     return false;
   }
-  else if mi_unlikely(mi_mul_overflow(count, size, total)) {
+  else if mi_likely(!mi_mul_overflow(count, size, total)) {
+    return false;
+  }
+  else {
     #if MI_DEBUG > 0
     _mi_error_message(EOVERFLOW, "allocation request is too large (%zu * %zu bytes)\n", count, size);
     #endif
     *total = SIZE_MAX;
     return true;
   }
-  else return false;
 }
 
 
@@ -1128,12 +1136,13 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
 // ---------------------------------------------------------------------------------
 // Provide our own `_mi_memcpy` for potential performance optimizations.
 //
-// For now, only on Windows with msvc/clang-cl we optimize to `rep movsb` if
-// we happen to run on x86/x64 cpu's that have "fast short rep movsb" (FSRM) support
+// For now, only on x64/x86 we optimize to `rep movsb/stosb`.
+// Generally, we check for "fast short rep movsb" (FSRM) or "fast enhanced rep movsb" (ERMS) support
 // (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017). See also issue #201 and pr #253.
 // ---------------------------------------------------------------------------------
 
 #if !MI_TRACK_ENABLED && defined(_WIN32) && (MI_ARCH_X64 || MI_ARCH_X86)
+
 extern mi_decl_hidden bool _mi_cpu_has_fsrm;
 extern mi_decl_hidden bool _mi_cpu_has_erms;
 
@@ -1145,6 +1154,7 @@ static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
     memcpy(dst, src, n);
   }
 }
+
 static inline void _mi_memset(void* dst, int val, size_t n) {
   if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
     __stosb((unsigned char*)dst, (uint8_t)val, n);
@@ -1153,13 +1163,62 @@ static inline void _mi_memset(void* dst, int val, size_t n) {
     memset(dst, val, n);
   }
 }
+
+static inline void _mi_memset_small(void* dst, int val, size_t n) {
+  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
+  __stosb((unsigned char*)dst, (uint8_t)val, n);
+}
+
+#elif !MI_TRACK_ENABLED && defined(__GNUC__) && (MI_ARCH_X64 || MI_ARCH_X86)
+
+extern mi_decl_hidden bool _mi_cpu_has_fsrm;
+extern mi_decl_hidden bool _mi_cpu_has_erms;
+
+static inline void _mi_movsb(void* dst, const void* src, size_t n) {
+  __asm volatile("rep movsb" : : "D"(dst), "S"(src), "c"(n) : "memory");
+}
+
+static inline void _mi_stosb(void* dst, uint8_t val, size_t n) {
+  __asm volatile("rep stosb" : : "D"(dst), "a"(val), "c"(n) : "memory");
+}
+
+static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
+  if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
+    _mi_movsb(dst,src,n);
+  }
+  else {
+    memcpy(dst,src,n);
+  }
+}
+
+static inline void _mi_memset(void* dst, int val, size_t n) {
+  if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
+    _mi_stosb(dst, (uint8_t)val, n);
+  }
+  else {
+    memset(dst,val,n);
+  }
+}
+
+static inline void _mi_memset_small(void* dst, int val, size_t n) {
+  _mi_stosb(dst,val,n);
+}
+
 #else
+
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
   memcpy(dst, src, n);
 }
+
 static inline void _mi_memset(void* dst, int val, size_t n) {
   memset(dst, val, n);
 }
+
+static inline void _mi_memset_small(void* dst, int val, size_t n) {
+  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
+  memset(dst, val, n);
+}
+
 #endif
 
 // -------------------------------------------------------------------------------
@@ -1168,6 +1227,7 @@ static inline void _mi_memset(void* dst, int val, size_t n) {
 // -------------------------------------------------------------------------------
 
 #if (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)
+
 // On GCC/CLang we provide a hint that the pointers are word aligned.
 static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
@@ -1181,7 +1241,15 @@ static inline void _mi_memset_aligned(void* dst, int val, size_t n) {
   void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
   _mi_memset(adst, val, n);
 }
+
+static inline void _mi_memset_aligned_small(void* dst, int val, size_t n) {
+  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
+  void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
+  _mi_memset_small(adst, val, n);
+}
+
 #else
+
 // Default fallback on `_mi_memcpy`
 static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
@@ -1192,14 +1260,31 @@ static inline void _mi_memset_aligned(void* dst, int val, size_t n) {
   mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
   _mi_memset(dst, val, n);
 }
+
+static inline void _mi_memset_aligned_small(void* dst, int val, size_t n) {
+  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
+  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
+  _mi_memset_small(dst, val, n);
+}
+
 #endif
 
 static inline void _mi_memzero(void* dst, size_t n) {
   _mi_memset(dst, 0, n);
 }
 
+static inline void _mi_memzero_small(void* dst, size_t n) {
+  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
+  _mi_memset_small(dst, 0, n);
+}
+
 static inline void _mi_memzero_aligned(void* dst, size_t n) {
   _mi_memset_aligned(dst, 0, n);
+}
+
+static inline void _mi_memzero_aligned_small(void* dst, size_t n) {
+  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
+  _mi_memset_aligned_small(dst, 0, n);
 }
 
 

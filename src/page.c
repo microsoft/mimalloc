@@ -988,7 +988,13 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_
   mi_assert_internal(_mi_ptr_page(page)==page);
 
   // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc)
-  void* const p = _mi_page_malloc_zero(theap, page, size, zero);
+  void* p; 
+  if mi_likely(!zero) {
+    p = _mi_page_malloc(theap, page, size);
+  }
+  else {
+    p = _mi_page_malloc_zeroed(theap, page, size);
+  }
   mi_assert_internal(p != NULL);
 
   // move full pages to the full queue
