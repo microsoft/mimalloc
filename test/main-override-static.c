@@ -220,7 +220,7 @@ static void alloc_huge(void) {
   mi_free(p);
 }
 
-static bool test_visit(const mi_theap_t* theap, const mi_theap_area_t* area, void* block, size_t block_size, void* arg) {
+static bool test_visit(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
   if (block == NULL) {
     printf("visiting an area with blocks of size %zu (including padding)\n", area->full_block_size);
   }
@@ -230,13 +230,13 @@ static bool test_visit(const mi_theap_t* theap, const mi_theap_area_t* area, voi
   return true;
 }
 
-static void test_theap_walk(void) {
-  mi_theap_t* theap = mi_theap_new();
-  mi_theap_malloc(theap, 16*2097152);
-  mi_theap_malloc(theap, 2067152);
-  mi_theap_malloc(theap, 2097160);
-  mi_theap_malloc(theap, 24576);
-  mi_theap_visit_blocks(theap, true, &test_visit, NULL);
+static void test_heap_walk(void) {
+  mi_heap_t* heap = mi_heap_new();
+  mi_heap_malloc(heap, 16*2097152);
+  mi_heap_malloc(heap, 2067152);
+  mi_heap_malloc(heap, 2097160);
+  mi_heap_malloc(heap, 24576);
+  mi_heap_visit_blocks(heap, true, &test_visit, NULL);
 }
 
 static void test_canary_leak(void) {

@@ -164,6 +164,9 @@ bool mi_bitmap_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n);
 // Is a sequence of n bits already all set/cleared?
 bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n);
 
+// Is the bitmap completely clear?
+bool mi_bitmap_is_all_clear(mi_bitmap_t* bitmap);
+
 // Is a sequence of n bits already set?
 // (Used to check if a memory range is already committed)
 static inline bool mi_bitmap_is_setN(mi_bitmap_t* bitmap, size_t idx, size_t n) {

@@ -284,6 +284,7 @@ size_t        _mi_bin(size_t size);                // for stats
 
 // "theap.c"
 mi_theap_t*   _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld);
+void          _mi_theap_delete(mi_theap_t* theap);
 //void          _mi_theap_init(mi_theap_t* theap, bool noreclaim, mi_tld_t* tld);
 //void          _mi_theap_destroy_pages(mi_theap_t* theap);
 //void          _mi_theap_collect_abandon(mi_theap_t* theap);
@@ -292,15 +293,20 @@ void          _mi_theap_cached_set(mi_theap_t* theap);
 //bool          _mi_theap_memid_is_suitable(mi_theap_t* theap, mi_memid_t memid);
 void          _mi_theap_unsafe_destroy_all(mi_theap_t* theap);
 
-void          _mi_theap_area_init(mi_theap_area_t* area, mi_page_t* page);
-bool          _mi_theap_area_visit_blocks(const mi_theap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
+void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
+bool          _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
 void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
 
-
-// "heap.c"
+// heaps
+// defined in "theap.c"
 mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap); // get (and possible create) the theap belonging to a heap
 mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap);    // get the theap for a heap without initializing (and return NULL in that case)
 
+// defined in "arena.c"
+void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);
+void          _mi_heap_destroy_pages(mi_heap_t* heap_from);
+bool          _mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
+bool          _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
 
 // "stats.c"

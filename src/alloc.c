@@ -595,6 +595,10 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
   return mi_theap_alloc_new(_mi_theap_default(), size);
 }
 
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
+  return mi_theap_alloc_new(_mi_heap_theap(heap), size);
+}
+
 
 mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new_n(mi_theap_t* theap, size_t count, size_t size) {
   size_t total;
@@ -609,6 +613,10 @@ mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new_n(mi_theap_t* theap,
 
 mi_decl_nodiscard mi_decl_restrict void* mi_new_n(size_t count, size_t size) {
   return mi_theap_alloc_new_n(_mi_theap_default(), count, size);
+}
+
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
+  return mi_theap_alloc_new_n(_mi_heap_theap(heap), count, size);
 }
 
 

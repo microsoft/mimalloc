@@ -101,6 +101,9 @@ static mi_decl_cache_align mi_subproc_t subproc_main
 = { 0 };   // C zero initialize
 #endif
 
+static mi_subproc_t* subprocs = &subproc_main;
+static mi_lock_t     subprocs_lock;
+
 static mi_decl_cache_align mi_tld_t tld_empty = {
   0,                      // thread_id
   0,                      // thread_seq
@@ -121,7 +124,8 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
   0, 0,                   // generic count
-  NULL,                   // next
+  NULL, NULL,             // tnext, tprev
+  NULL, NULL,             // hnext, hprev
   0,                      // full page retain
   false,                  // allow reclaim
   true,                   // allow abandon
@@ -143,7 +147,8 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
   0, 0,                   // generic count
-  NULL,                   // next
+  NULL, NULL,             // tnext, tprev
+  NULL, NULL,             // hnext, hprev
   0,                      // full page retain
   false,                  // allow reclaim
   true,                   // allow abandon
@@ -181,7 +186,8 @@ mi_decl_cache_align mi_theap_t theap_main = {
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
   0, 0,                   // generic count
-  NULL,                   // next theap
+  NULL, NULL,             // tnext, tprev
+  NULL, NULL,             // hnext, hprev
   2,                      // full page retain
   true,                   // allow page reclaim
   true,                   // allow page abandon
@@ -263,6 +269,8 @@ static void mi_subproc_main_init(void) {
     subproc_main.memid = _mi_memid_create(MI_MEM_STATIC);
     mi_atomic_store_release(&subproc_main.heap_main, &heap_main);
     mi_lock_init(&subproc_main.arena_reserve_lock);
+    mi_lock_init(&subproc_main.heaps_lock);
+    mi_lock_init(&subprocs_lock);
   }
 }
 
@@ -400,6 +408,7 @@ mi_heap_t* mi_heap_main(void) {
 }
 
 bool _mi_is_heap_main(const mi_heap_t* heap) {
+  mi_assert_internal(heap!=NULL);
   return (_mi_subproc_heap_main(heap->subproc) == heap);
 }
 
@@ -417,6 +426,13 @@ mi_subproc_id_t mi_subproc_new(void) {
   if (subproc == NULL) return NULL;
   subproc->memid = memid;
   mi_lock_init(&subproc->arena_reserve_lock);
+  mi_lock_init(&subproc->heaps_lock);
+  mi_lock(&subprocs_lock) {
+    // push on subproc list
+    subproc->next = subprocs;
+    if (subprocs!=NULL) { subprocs->prev = subproc; }
+    subprocs = subproc;
+  }
   return subproc;
 }
 
@@ -424,26 +440,59 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
   return (subproc_id == NULL ? &subproc_main : (mi_subproc_t*)subproc_id);
 }
 
-void mi_subproc_delete(mi_subproc_id_t subproc_id) {
-  if (subproc_id == NULL) return;
-  mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
-  //// check if there are os pages still..
-  //bool safe_to_delete = false;
-  //mi_lock(&subproc->os_abandoned_pages_lock) {
-  //  if (subproc->os_abandoned_pages == NULL) {
-  //    safe_to_delete = true;
-  //  }
-  //}
-  //if (!safe_to_delete) return;
-
+static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc) 
+{
+  // remove from the subproc list
+  mi_lock(&subprocs_lock) {
+    if (subproc->next!=NULL) { subproc->next->prev = subproc->prev;  }
+    if (subproc->prev!=NULL) { subproc->prev->next = subproc->next;  }
+                        else { mi_assert_internal(subprocs==subproc);  subprocs = subproc->next; }
+  }
+  
+  // destroy all subproc heaps 
+  mi_lock(&subproc->heaps_lock) {
+    mi_heap_t* heap = subproc->heaps;
+    while (heap != NULL) {
+      mi_heap_t* next = heap->next;
+      if (heap!=subproc->heap_main) {mi_heap_destroy(heap); }
+      heap = next;
+    }
+    mi_assert_internal(subproc->heaps == subproc->heap_main);
+    mi_heap_destroy(subproc->heap_main);
+  }
+  
   // merge stats back into the main subproc?
-  _mi_stats_merge_from(&mi_heap_main()->stats, &_mi_subproc_heap_main(subproc)->stats);
+  if (subproc!=&subproc_main) {
+    _mi_arenas_unsafe_destroy_all(subproc);
+    _mi_stats_merge_from(&subproc_main.stats, &subproc->stats);
 
-  // safe to release
-  // todo: should we refcount subprocesses?
-  mi_lock_done(&subproc->arena_reserve_lock);
-  _mi_meta_free(subproc, sizeof(mi_subproc_t), subproc->memid);
+    // safe to release
+    // todo: should we refcount subprocesses?
+    mi_lock_done(&subproc->arena_reserve_lock);
+    mi_lock_done(&subproc->heaps_lock);
+    _mi_meta_free(subproc, sizeof(mi_subproc_t), subproc->memid);
+  }  
 }
+
+void mi_subproc_destroy(mi_subproc_id_t subproc_id) {
+  if (subproc_id == NULL) return;
+  mi_subproc_unsafe_destroy(_mi_subproc_from_id(subproc_id));
+}
+
+static void mi_subprocs_unsafe_destroy_all(void) {
+  mi_lock(&subprocs_lock) {
+    mi_subproc_t* subproc = subprocs;
+    while (subproc!=NULL) {
+      mi_subproc_t* next = subproc->next;
+      if (subproc!=&subproc_main) {
+        mi_subproc_unsafe_destroy(subproc);
+      }
+      subproc = next;
+    }
+  }
+  mi_subproc_unsafe_destroy(&subproc_main);
+}
+
 
 void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
   mi_tld_t* const tld = _mi_theap_default_safe()->tld;
@@ -471,8 +520,7 @@ static mi_theap_t* _mi_thread_init_theap_default(void) {
     // note: we cannot access thread-locals yet as that can cause (recursive) allocation
     // (on macOS <= 14 for example where the loader allocates thread-local data on demand).
     mi_tld_t* tld = mi_tld_alloc();
-
-    // allocate and initialize the theap
+    // allocate and initialize the theap for the main heap
     theap = _mi_theap_create(mi_heap_main(), tld);
   }
   // associate the theap with this thread
@@ -494,10 +542,10 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
   // delete all theaps in this thread
   mi_theap_t* curr = tld->theaps;
   while (curr != NULL) {
-    mi_theap_t* next = curr->next; // save `next` as `curr` will be freed
+    mi_theap_t* next = curr->tnext; // save `tnext` as `curr` will be freed
     // never destroy theaps; if a dll is linked statically with mimalloc,
     // there may still be delete/free calls after the mi_fls_done is called. Issue #207
-    mi_theap_delete(curr);
+    _mi_theap_delete(curr);
     curr = next;
   }
   mi_assert(!mi_theap_is_initialized(_mi_theap_default()));
@@ -816,9 +864,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   if (process_done) return;
   process_done = true;
 
-  // get the default theap so we don't need to acces thread locals anymore
-  mi_theap_t* theap = _mi_theap_default();  // use prim to not initialize any theap
-  mi_assert_internal(theap != NULL);
+  mi_assert_internal(_mi_theap_default() != NULL);
 
   // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
   _mi_prim_thread_done_auto_done();
@@ -829,7 +875,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
     // free all memory if possible on process exit. This is not needed for a stand-alone process
     // but should be done if mimalloc is statically linked into another shared library which
     // is repeatedly loaded/unloaded, see issue #281.
-    mi_theap_collect(theap, true /* force */ );
+    mi_theap_collect(_mi_theap_default(), true /* force */);
     #endif
   #endif
 
@@ -837,16 +883,15 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   // since after process_done there might still be other code running that calls `free` (like at_exit routines,
   // or C-runtime termination code.
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
-    mi_theap_collect(theap, true /* force */);
-    _mi_theap_unsafe_destroy_all(theap);     // forcefully release all memory held by all theaps (of this thread only!)
-    _mi_arenas_unsafe_destroy_all(_mi_subproc_main());
+    mi_subprocs_unsafe_destroy_all(); 
     _mi_page_map_unsafe_destroy(_mi_subproc_main());
   }
   //_mi_page_map_unsafe_destroy(_mi_subproc_main());
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
-    _mi_stats_print(&mi_heap_main()->stats, NULL, NULL);  // use always main subproc at process exit to avoid dereferencing the theap (as it may be destroyed by now)
+    _mi_stats_print(&_mi_subproc_main()->stats, NULL, NULL);
   }
+  mi_lock_done(&subprocs_lock);
   _mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", tld_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore

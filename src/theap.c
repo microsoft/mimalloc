@@ -134,7 +134,7 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   _mi_arenas_collect(collect == MI_FORCE /* force purge? */, collect >= MI_FORCE /* visit all? */, theap->tld);
 
   // merge statistics
-  mi_theap_merge_stats(theap); 
+  mi_theap_merge_stats(theap);
 }
 
 void _mi_theap_collect_abandon(mi_theap_t* theap) {
@@ -176,13 +176,6 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   theap->allow_page_reclaim = heap->allow_page_reclaim;
   theap->allow_page_abandon = heap->allow_page_abandon;
   theap->page_full_retain = heap->page_full_retain;
-  /*
-  theap->numa_node = tld->numa_node;
-  theap->exclusive_arena    = _mi_arena_from_id(arena_id);
-  theap->allow_page_reclaim = (!allow_destroy && mi_option_get(mi_option_page_reclaim_on_free) >= 0);
-  theap->allow_page_abandon = (!allow_destroy && mi_option_get(mi_option_page_full_retain) >= 0);
-  theap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
-  */
   if (theap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our theap.
     // this is checked in `free.c:mi_free_try_collect_mt`
@@ -194,20 +187,30 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   }
 
   // push on the thread local theaps list
-  theap->next = theap->tld->theaps;
+  mi_theap_t* head = theap->tld->theaps;
+  theap->tprev = NULL;
+  theap->tnext = head;
+  if (head!=NULL) { head->tprev = theap; }
   theap->tld->theaps = theap;
 
   // initialize random
-  if (theap->next == NULL) {
+  if (head == NULL) {  // first theap in this thread?
     _mi_random_init(&theap->random);
   }
   else {
-    _mi_random_split(&theap->next->random, &theap->random);
+    _mi_random_split(&head->random, &theap->random);
   }
   theap->cookie  = _mi_theap_random_next(theap) | 1;
-  //theap->keys[0] = _mi_theap_random_next(theap);
-  //theap->keys[1] = _mi_theap_random_next(theap);*/
   _mi_theap_guarded_init(theap);
+
+  // push on the heap's theap list
+  mi_lock(&heap->theaps_lock) {
+    head = heap->theaps;
+    theap->hprev = NULL;
+    theap->hnext = head;
+    if (head!=NULL) { head->hprev = theap; }
+    heap->theaps = theap;
+  }
 }
 
 mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
@@ -216,7 +219,12 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   // allocate and initialize a theap
   mi_memid_t memid;
   mi_theap_t* theap;
-  if (heap->exclusive_arena == NULL) {
+  if (!_mi_is_heap_main(heap)) {
+    theap = (mi_theap_t*)mi_heap_zalloc(mi_heap_main(),sizeof(mi_theap_t));
+    memid = _mi_memid_create(MI_MEM_HEAP_MAIN);
+    memid.initially_zero = memid.initially_committed = true;
+  }
+  else if (heap->exclusive_arena == NULL) {
     theap = (mi_theap_t*)_mi_meta_zalloc(sizeof(mi_theap_t), &memid);
   }
   else {
@@ -239,44 +247,34 @@ uintptr_t _mi_theap_random_next(mi_theap_t* theap) {
   return _mi_random_next(&theap->random);
 }
 
-
-// zero out the page queues
-static void mi_theap_reset_pages(mi_theap_t* theap) {
-  mi_assert_internal(theap != NULL);
-  mi_assert_internal(mi_theap_is_initialized(theap));
-  // TODO: copy full empty theap instead?
-  _mi_memset(&theap->pages_free_direct, 0, sizeof(theap->pages_free_direct));
-  _mi_memcpy_aligned(&theap->pages, &_mi_theap_empty.pages, sizeof(theap->pages));
-  // theap->thread_delayed_free = NULL;
-  theap->page_count = 0;
-}
-
-// called from `mi_theap_destroy` and `mi_theap_delete` to free the internal theap resources.
+// called from `mi_theap_delete` to free the internal theap resources.
 static void mi_theap_free(mi_theap_t* theap, bool do_free_mem) {
   mi_assert(theap != NULL);
   mi_assert_internal(mi_theap_is_initialized(theap));
   if (theap==NULL || !mi_theap_is_initialized(theap)) return;
 
-  // merge stats to the main heap
+  // merge stats to the owning heap
   mi_theap_merge_stats(theap);
 
+  // remove ourselves from the heap theaps list
+  mi_lock(&theap->heap->theaps_lock) {
+    if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
+    if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
+                         else { mi_assert_internal(theap->heap->theaps == theap); theap->heap->theaps = theap->hnext; }
+  }
+
   // remove ourselves from the thread local theaps list
-  // linear search but we expect the number of theaps to be relatively small
-  mi_theap_t* prev = NULL;
-  mi_theap_t* curr = theap->tld->theaps;
-  while (curr != theap && curr != NULL) {
-    prev = curr;
-    curr = curr->next;
-  }
-  mi_assert_internal(curr == theap);
-  if (curr == theap) {
-    if (prev != NULL) { prev->next = theap->next; }
-                 else { theap->tld->theaps = theap->next; }
-  }
+  if (theap->tnext != NULL) { theap->tnext->tprev = theap->tprev;  }
+  if (theap->tprev != NULL) { theap->tprev->tnext = theap->tnext;  }
+                       else { mi_assert_internal(theap->tld->theaps == theap); theap->tld->theaps = theap->tnext; }
 
   // and free the used memory
   if (do_free_mem) {
-    if (theap->memid.memkind == MI_MEM_META) {
+    if (theap->memid.memkind == MI_MEM_HEAP_MAIN) {
+      mi_assert_internal(_mi_is_heap_main(mi_heap_of(theap)));
+      mi_free(theap);
+    }
+    else if (theap->memid.memkind == MI_MEM_META) {
       _mi_meta_free(theap, sizeof(*theap), theap->memid);
     }
     else {
@@ -289,6 +287,18 @@ static void mi_theap_free(mi_theap_t* theap, bool do_free_mem) {
 /* -----------------------------------------------------------
   Heap destroy
 ----------------------------------------------------------- */
+/*
+
+// zero out the page queues
+static void mi_theap_reset_pages(mi_theap_t* theap) {
+  mi_assert_internal(theap != NULL);
+  mi_assert_internal(mi_theap_is_initialized(theap));
+  // TODO: copy full empty theap instead?
+  _mi_memset(&theap->pages_free_direct, 0, sizeof(theap->pages_free_direct));
+  _mi_memcpy_aligned(&theap->pages, &_mi_theap_empty.pages, sizeof(theap->pages));
+  // theap->thread_delayed_free = NULL;
+  theap->page_count = 0;
+}
 
 static bool _mi_theap_page_destroy(mi_theap_t* theap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
   MI_UNUSED(arg1);
@@ -387,39 +397,14 @@ void _mi_theap_unsafe_destroy_all(mi_theap_t* theap) {
     curr = next;
   }
 }
+*/
 
 /* -----------------------------------------------------------
   Safe Heap delete
 ----------------------------------------------------------- */
 
-// Transfer the pages from one theap to the other
-//static void mi_theap_absorb(mi_theap_t* theap, mi_theap_t* from) {
-//  mi_assert_internal(theap!=NULL);
-//  if (from==NULL || from->page_count == 0) return;
-//
-//  // transfer all pages by appending the queues; this will set a new theap field
-//  for (size_t i = 0; i <= MI_BIN_FULL; i++) {
-//    mi_page_queue_t* pq = &theap->pages[i];
-//    mi_page_queue_t* append = &from->pages[i];
-//    size_t pcount = _mi_page_queue_append(theap, pq, append);
-//    theap->page_count += pcount;
-//    from->page_count -= pcount;
-//  }
-//  mi_assert_internal(from->page_count == 0);
-//
-//  // and reset the `from` theap
-//  mi_theap_reset_pages(from);
-//}
-
-//// are two theaps compatible with respect to theap-tag, exclusive arena etc.
-//static bool mi_theaps_are_compatible(mi_theap_t* theap1, mi_theap_t* theap2) {
-//  return (theap1->tag == theap2->tag &&                   // store same kind of objects
-//          theap1->tld->subproc == theap2->tld->subproc && // same sub-process
-//          theap1->arena_id == theap2->arena_id);          // same arena preference
-//}
-
 // Safe delete a theap without freeing any still allocated blocks in that theap.
-void mi_theap_delete(mi_theap_t* theap)
+void _mi_theap_delete(mi_theap_t* theap)
 {
   mi_assert(theap != NULL);
   mi_assert(mi_theap_is_initialized(theap));
@@ -433,20 +418,12 @@ void mi_theap_delete(mi_theap_t* theap)
   mi_theap_free(theap,true);
 }
 
-//mi_theap_t* mi_theap_set_default(mi_theap_t* theap) {
-//  mi_assert(theap != NULL);
-//  mi_assert(mi_theap_is_initialized(theap));
-//  if (theap==NULL || !mi_theap_is_initialized(theap)) return NULL;
-//  mi_assert_expensive(mi_theap_is_valid(theap));
-//  mi_theap_t* old = _mi_theap_default();
-//  _mi_theap_default_set(theap);
-//  return old;
-//}
 
 
 /* -----------------------------------------------------------
   Load/unload theaps
 ----------------------------------------------------------- */
+/*
 void mi_theap_unload(mi_theap_t* theap) {
   mi_assert(mi_theap_is_initialized(theap));
   mi_assert_expensive(mi_theap_is_valid(theap));
@@ -461,7 +438,7 @@ void mi_theap_unload(mi_theap_t* theap) {
   mi_assert_internal(theap->page_count==0);
 
   // remove from theap list
-  mi_theap_free(theap, false /* but don't actually free the memory */);
+  mi_theap_free(theap, false); // but don't actually free the memory
 
   // disassociate from the current thread-local and static state
   theap->tld = NULL;
@@ -497,10 +474,11 @@ bool mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena_id) {
   }
 
   // push on the thread local theaps list
-  theap->next = theap->tld->theaps;
+  theap->tnext = theap->tld->theaps;
   theap->tld->theaps = theap;
   return true;
 }
+*/
 
 /* -----------------------------------------------------------
   Analysis
@@ -549,7 +527,7 @@ bool mi_check_owned(const void* p) {
         enable visiting all blocks of all theaps across threads
 ----------------------------------------------------------- */
 
-void _mi_theap_area_init(mi_theap_area_t* area, mi_page_t* page) {
+void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
   const size_t bsize = mi_page_block_size(page);
   const size_t ubsize = mi_page_usable_block_size(page);
   area->reserved = page->reserved * bsize;
@@ -560,8 +538,6 @@ void _mi_theap_area_init(mi_theap_area_t* area, mi_page_t* page) {
   area->full_block_size = bsize;
   area->reserved1 = page;
 }
-
-
 
 static void mi_get_fast_divisor(size_t divisor, uint64_t* magic, size_t* shift) {
   mi_assert_internal(divisor > 0 && divisor <= UINT32_MAX);
@@ -575,7 +551,7 @@ static size_t mi_fast_divide(size_t n, uint64_t magic, size_t shift) {
   return (size_t)((hi + n) >> shift);
 }
 
-bool _mi_theap_area_visit_blocks(const mi_theap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg) {
+bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg) {
   mi_assert(area != NULL);
   if (area==NULL) return true;
   mi_assert(page != NULL);
@@ -683,7 +659,7 @@ bool _mi_theap_area_visit_blocks(const mi_theap_area_t* area, mi_page_t* page, m
 
 // Separate struct to keep `mi_page_t` out of the public interface
 typedef struct mi_theap_area_ex_s {
-  mi_theap_area_t area;
+  mi_heap_area_t area;
   mi_page_t* page;
 } mi_theap_area_ex_t;
 
@@ -695,7 +671,7 @@ static bool mi_theap_visit_areas_page(mi_theap_t* theap, mi_page_queue_t* pq, mi
   mi_theap_area_visit_fun* fun = (mi_theap_area_visit_fun*)vfun;
   mi_theap_area_ex_t xarea;
   xarea.page = page;
-  _mi_theap_area_init(&xarea.area, page);
+  _mi_heap_area_init(&xarea.area, page);
   return fun(theap, &xarea, arg);
 }
 
@@ -797,8 +773,7 @@ mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
 }
 
 
-
-mi_heap_t* mi_heap_new_ex(mi_arena_id_t exclusive_arena_id) {
+mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
   // always allocate heap data in the (subprocess) main heap
   mi_heap_t* heap_main = mi_heap_main();
   // todo: allocate heap data in the exclusive arena ?
@@ -806,7 +781,7 @@ mi_heap_t* mi_heap_new_ex(mi_arena_id_t exclusive_arena_id) {
   if (heap==NULL) return NULL;
 
   // init fields
-  heap->subproc = heap_main->subproc;  
+  heap->subproc = heap_main->subproc;
   heap->exclusive_arena = _mi_arena_from_id(exclusive_arena_id);
   heap->numa_node = -1; // no initial affinity
   heap->allow_page_reclaim = heap_main->allow_page_reclaim;
@@ -815,11 +790,76 @@ mi_heap_t* mi_heap_new_ex(mi_arena_id_t exclusive_arena_id) {
 
   mi_lock_init(&heap->theaps_lock);
   mi_lock_init(&heap->os_abandoned_pages_lock);
-  mi_lock_init(&heap->arena_pages_lock);  
+  mi_lock_init(&heap->arena_pages_lock);
+
+  // push onto the subproc heaps
+  mi_lock(&heap->subproc->heaps_lock) {
+    mi_heap_t* head = heap->subproc->heaps;
+    heap->prev = NULL;
+    heap->next = head;
+    if (head!=NULL) { head->next = heap;  }
+    heap->subproc->heaps = heap;
+  }
 
   return heap;
 }
 
+mi_heap_t* mi_heap_new(void) {
+  return mi_heap_new_in_arena(0);
+}
+
+// free the heap resources (assuming the pages are already moved/destroyed)
+static void mi_heap_free(mi_heap_t* heap) {
+  mi_assert_internal(heap!=NULL && !_mi_is_heap_main(heap));
+  // free all theaps belonging to this heap
+  mi_lock(&heap->theaps_lock) {
+    mi_theap_t* theap = heap->theaps;
+    while (theap != NULL) {
+      mi_theap_t* next = theap->hnext; // load upfront as the theap gets free'd
+      mi_theap_free(theap, true);      // note: enters same lock
+      theap = next;
+    }
+  }
+  // remove the heap from the subproc
+  _mi_stats_merge_from(&heap->subproc->stats, &heap->stats);
+  mi_lock(&heap->subproc->heaps_lock) {
+    if (heap->next!=NULL) { heap->next->prev = heap->prev; }
+    if (heap->prev!=NULL) { heap->prev->next = heap->next; }
+                     else { heap->subproc->heaps = heap->next; }
+  }
+
+  _mi_prim_thread_local_free(heap->theap);
+  mi_lock_done(&heap->theaps_lock);
+  mi_lock_done(&heap->os_abandoned_pages_lock);
+  mi_free(heap);
+}
+
 void mi_heap_delete(mi_heap_t* heap) {
-  MI_UNUSED(heap);
+  if (heap==NULL) return;
+  if (_mi_is_heap_main(heap)) {
+    _mi_warning_message("cannot delete the main heap\n");
+    return;
+  }
+  _mi_heap_move_pages(heap, mi_heap_main());
+  mi_heap_free(heap);
+}
+
+void mi_heap_destroy(mi_heap_t* heap) {
+  if (heap==NULL) return;
+  if (_mi_is_heap_main(heap)) {
+    _mi_warning_message("cannot destroy the main heap\n");
+    return;
+  }
+  _mi_heap_destroy_pages(heap);
+  mi_heap_free(heap);
+}
+
+mi_heap_t* mi_heap_of(void* p) {
+  mi_page_t* page = _mi_safe_ptr_page(p);
+  if (page==NULL) return NULL;
+  return mi_page_heap(page);
+}
+
+bool mi_heap_contains(void* p) {
+  return (mi_heap_of(p)!=NULL);
 }

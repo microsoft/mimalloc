@@ -1976,8 +1976,8 @@ typedef struct mi_heap_visit_info_s {
 } mi_heap_visit_info_t;
 
 static bool mi_heap_visit_page(mi_page_t* page, mi_heap_visit_info_t* vinfo) {
-  mi_theap_area_t area;
-  _mi_theap_area_init(&area, page);
+  mi_heap_area_t area;
+  _mi_heap_area_init(&area, page);
   if (!vinfo->visitor(NULL, &area, NULL, area.block_size, vinfo->arg)) {
     return false;
   }
@@ -1996,8 +1996,7 @@ static bool mi_heap_visit_page_at(size_t slice_index, size_t slice_count, mi_are
   return mi_heap_visit_page(page, vinfo);
 }
 
-
-bool mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+bool _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
   // visit all pages in a heap
   // we don't have to claim because we assume we are the only thread running (with this heap).
   // (but we could atomically claim as well by first doing abandoned_reclaim and afterwards reabandoning).
@@ -2037,25 +2036,29 @@ bool mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_block
   return ok;
 }
 
-bool mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
-  return mi_heap_visit_blocks(heap, true, visit_blocks, visitor, arg);
+bool _mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+  return _mi_heap_visit_blocks(heap, true, visit_blocks, visitor, arg);
 }
 
 typedef struct mi_heap_delete_visit_info_s {
-  mi_heap_t* heap_target;
+  mi_heap_t*  heap_target;
+  mi_theap_t* theap_target;
+  mi_theap_t* theap;
 } mi_heap_delete_visit_info_t;
 
-static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_theap_area_t* area, void* block, size_t block_size, void* arg) {
-  MI_UNUSED(block); MI_UNUSED(block_size);
-  mi_heap_t* const heap_target = (mi_heap_t*)arg;
-  mi_theap_t* const theap = _mi_heap_theap(heap);
-  mi_page_t* const page = (mi_page_t*)area->reserved1;  
+static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
+  MI_UNUSED(block); MI_UNUSED(block_size); MI_UNUSED(heap);
+  mi_heap_delete_visit_info_t* info = (mi_heap_delete_visit_info_t*)arg;
+  mi_heap_t*  const heap_target     = info->heap_target;
+  mi_theap_t* const theap           = info->theap;       mi_assert_internal(theap->heap == heap);
+  mi_page_t*  const page            = (mi_page_t*)area->reserved1;  
   
   mi_page_claim_ownership(page);       // claim ownership
   if (mi_page_is_abandoned(page)) {
     _mi_arenas_page_unabandon(page,theap);
   }
   else {
+    page->next = page->prev = NULL;    // yikes.. better not to try to access this from a thread later on..
     mi_page_set_theap(page,NULL);      // set threadid to abandoned
   }
   mi_assert_internal(mi_page_is_abandoned(page));
@@ -2072,17 +2075,47 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_theap_area_t* ar
   }
   else {
     // move the page to `heap_target` as an abandoned page
-    mi_theap_t* const theap_target = _mi_heap_theap(heap_target);
+    mi_theap_t* const theap_target = info->theap_target;
     page->heap = heap_target;
-    page->next = page->prev = NULL;
     mi_page_set_theap(page,theap_target);
     _mi_arenas_page_abandon(page,theap_target);
   }
   return true;
 }
 
-void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
-  mi_heap_visit_blocks(heap, false, false, &mi_heap_delete_page, heap_target);
+static void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
+  mi_theap_t* const theap_target = (heap_target != NULL ? _mi_heap_theap(heap_target) : NULL);
+  mi_theap_t* const theap = _mi_heap_theap(heap);
+  mi_heap_delete_visit_info_t info = { heap_target, theap_target, theap };
+  _mi_heap_visit_blocks(heap, false, false, &mi_heap_delete_page, &info);
+  #if MI_DEBUG>1
+  // no more arena pages?
+  for (size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
+    mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, NULL);
+    if (arena_pages!=NULL) {
+      mi_assert_internal(mi_bitmap_is_all_clear(arena_pages->pages));
+    }
+  }
+  // nor os abandoned pages?
+  mi_lock(&heap->os_abandoned_pages_lock) {
+    mi_assert_internal(heap->os_abandoned_pages == NULL);
+  }
+  // nor arena abandoned pages?
+  for (size_t i = 0; i < MI_BIN_COUNT; i++) {
+    mi_assert_internal(mi_atomic_load_relaxed(&heap->abandoned_count[i])==0);
+  }
+  #endif  
+}
+
+void _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to) {
+  if (_mi_is_heap_main(heap_from)) return;
+  if (heap_to==NULL) { heap_to = mi_heap_main(); }
+  mi_heap_delete_pages(heap_from, heap_to);
+}
+
+void _mi_heap_destroy_pages(mi_heap_t* heap_from) {
+  if (_mi_is_heap_main(heap_from)) return;
+  mi_heap_delete_pages(heap_from, NULL);
 }
 
 /* -----------------------------------------------------------

@@ -290,7 +290,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
     mi_page_queue_remove(pq, page);
     mi_theap_t* theap = page->theap;
     mi_page_set_theap(page, NULL);
-    page->theap = theap; // dont set theap to NULL so we can reclaim_on_free within the same theap
+    page->theap = theap; // don't actually set theap to NULL so we can reclaim_on_free within the same theap
     _mi_arenas_page_abandon(page, theap);
     _mi_arenas_collect(false, false, theap->tld); // allow purging
   }

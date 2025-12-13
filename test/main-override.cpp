@@ -169,28 +169,28 @@ static bool test_stl_allocator2() {
 
 #if MI_HAS_HEAP_STL_ALLOCATOR
 static bool test_stl_allocator3() {
-  std::vector<int, mi_theap_stl_allocator<int> > vec;
+  std::vector<int, mi_heap_stl_allocator<int> > vec;
   vec.push_back(1);
   vec.pop_back();
   return vec.size() == 0;
 }
 
 static bool test_stl_allocator4() {
-  std::vector<some_struct, mi_theap_stl_allocator<some_struct> > vec;
+  std::vector<some_struct, mi_heap_stl_allocator<some_struct> > vec;
   vec.push_back(some_struct());
   vec.pop_back();
   return vec.size() == 0;
 }
 
 static bool test_stl_allocator5() {
-  std::vector<int, mi_theap_destroy_stl_allocator<int> > vec;
+  std::vector<int, mi_heap_destroy_stl_allocator<int> > vec;
   vec.push_back(1);
   vec.pop_back();
   return vec.size() == 0;
 }
 
 static bool test_stl_allocator6() {
-  std::vector<some_struct, mi_theap_destroy_stl_allocator<some_struct> > vec;
+  std::vector<some_struct, mi_heap_destroy_stl_allocator<some_struct> > vec;
   vec.push_back(some_struct());
   vec.pop_back();
   return vec.size() == 0;
@@ -304,14 +304,14 @@ static void strdup_test() {
 }
 
 // Issue #202
-static void theap_no_delete_worker() {
-  mi_theap_t* theap = mi_theap_new();
-  void* q = mi_theap_malloc(theap, 1024); (void)(q);
-  // mi_theap_delete(theap); // uncomment to prevent assertion
+static void heap_no_delete_worker() {
+  mi_heap_t* heap = mi_heap_new();
+  void* q = mi_heap_malloc(heap, 1024); (void)(q);
+  // mi_heap_delete(heap); // uncomment to prevent assertion
 }
 
-static void theap_no_delete() {
-  auto t1 = std::thread(theap_no_delete_worker);
+static void heap_no_delete() {
+  auto t1 = std::thread(heap_no_delete_worker);
   t1.join();
 }
 
@@ -327,9 +327,9 @@ static void test_std_string() {
 static volatile void* global_p;
 
 static void t1main() {
-  mi_theap_t* theap = mi_theap_new();
-  global_p = mi_theap_malloc(theap, 1024);
-  mi_theap_delete(theap);
+  mi_heap_t* heap = mi_heap_new();
+  global_p = mi_heap_malloc(heap, 1024);
+  mi_heap_delete(heap);
 }
 
 static void theap_late_free() {

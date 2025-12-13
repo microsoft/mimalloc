@@ -1184,7 +1184,9 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
   return xset;
 }
 
-
+bool mi_bitmap_is_all_clear(mi_bitmap_t* bitmap) {
+  return mi_bitmap_is_xsetN(MI_BIT_CLEAR, bitmap, 0, mi_bitmap_max_bits(bitmap));
+}
 
 /* --------------------------------------------------------------------------------
   Iterate through a bfield

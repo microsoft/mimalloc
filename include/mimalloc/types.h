@@ -206,7 +206,8 @@ typedef enum mi_memkind_e {
   MI_MEM_OS,        // allocated from the OS
   MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
-  MI_MEM_ARENA      // allocated from an arena (the usual case) (`arena.c`)
+  MI_MEM_ARENA,     // allocated from an arena (the usual case) (`arena.c`)
+  MI_MEM_HEAP_MAIN  // allocated in the main heap (for theaps)
 } mi_memkind_t;
 
 static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
@@ -457,7 +458,6 @@ typedef struct mi_padding_s {
 struct mi_theap_s {
   mi_tld_t*             tld;                                 // thread-local data
   mi_heap_t*            heap;                                // the heap this theap belongs to.
-  // int                   numa_node;                           // preferred numa node (or -1 for no preference)
   unsigned long long    heartbeat;                           // monotonic heartbeat count
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   mi_random_ctx_t       random;                              // random number context used for secure allocation
@@ -466,7 +466,12 @@ struct mi_theap_s {
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   long                  generic_count;                       // how often is `_mi_malloc_generic` called?
   long                  generic_collect_count;               // how often is `_mi_malloc_generic` called without collecting?
-  mi_theap_t*           next;                                // list of theaps per thread  
+  
+  mi_theap_t*           tnext;                               // list of theaps in this thread
+  mi_theap_t*           tprev;
+  mi_theap_t*           hnext;                               // list of theaps of the `heap`
+  mi_theap_t*           hprev;
+  
   long                  page_full_retain;                    // how many full pages can be retained per queue (before abandoning them)
   bool                  allow_page_reclaim;                  // `true` if this theap should not reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
@@ -494,14 +499,21 @@ struct mi_theap_s {
 #define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
                                 // 160 arenas is enough for ~2 TiB memory
 
-typedef struct mi_subproc_s {
+typedef struct mi_subproc_s mi_subproc_t;
+struct mi_subproc_s {
+  mi_subproc_t*         next;                           // list of all sub-processes
+  mi_subproc_t*         prev;
+ 
   _Atomic(size_t)       arena_count;                    // current count of arena's
   _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
   mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
   _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
   _Atomic(mi_heap_t*)   heap_main;                      // main heap for this sub process
+  mi_heap_t*            heaps;                          // heaps belonging to this sub-process
+  mi_lock_t             heaps_lock;
+  mi_stats_t            stats;
   mi_memid_t            memid;                          // provenance of this memory block (meta or OS)  
-} mi_subproc_t;
+};
 
 
 struct mi_arena_pages_s;
@@ -512,6 +524,8 @@ typedef size_t mi_thread_local_t;
 typedef struct mi_heap_s {
   mi_subproc_t*         subproc;
   mi_thread_local_t     theap;
+  mi_heap_t*            next;                           // list of heaps in this subprocess
+  mi_heap_t*            prev;
 
   mi_arena_t*           exclusive_arena;                // if the heap should only allocate from a specific arena (or NULL)
   int                   numa_node;
