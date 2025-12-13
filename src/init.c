@@ -134,6 +134,28 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   { MI_STAT_VERSION, MI_STATS_NULL },      // stats
 };
 
+mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
+  &tld_empty,             // tld
+  NULL,                   // heap
+  0,                      // heartbeat
+  0,                      // cookie
+  { {0}, {0}, 0, true },  // random
+  0,                      // page count
+  MI_BIN_FULL, 0,         // page retired min/max
+  0, 0,                   // generic count
+  NULL,                   // next
+  0,                      // full page retain
+  false,                  // allow reclaim
+  true,                   // allow abandon
+  #if MI_GUARDED
+  0, 0, 0, 1,             // sample count is 1 so we never write to it (see `internal.h:mi_theap_malloc_use_guarded`)
+  #endif
+  MI_SMALL_PAGES_EMPTY,
+  MI_PAGE_QUEUES_EMPTY,
+  MI_MEMID_STATIC,
+  { MI_STAT_VERSION, MI_STATS_NULL },      // stats
+};
+
 // Heap for the main thread
 
 extern mi_decl_hidden mi_decl_cache_align mi_theap_t theap_main;

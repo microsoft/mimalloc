@@ -790,7 +790,7 @@ mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
   mi_theap_t* theap = _mi_heap_theap_peek(heap);
   if mi_unlikely(theap==NULL) {
     theap = mi_heap_init_theap(heap);
-    if (theap==NULL) { return _mi_theap_empty_get(); }  // or abort since this will start to allocate in the main heap?
+    if (theap==NULL) { return (mi_theap_t*)&_mi_theap_empty_wrong; }  // this will return NULL from page.c:_mi_malloc_generic
   }
   _mi_theap_cached_set(theap);
   return theap;

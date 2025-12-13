@@ -87,13 +87,13 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
     mi_assert_internal(bsize<=2*MI_SMALL_SIZE_MAX);  // allow faster zero'ing for small blocks
     if (!page->free_is_zero) {
       _mi_memzero_aligned_small(block, bsize);
-    } 
+    }
     else {
       block->next = 0;
       mi_track_mem_defined(block, bsize);
     }
   }
-  
+
   #if MI_PADDING // && !MI_TRACK_ENABLED
     mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + bsize);
     ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
@@ -137,7 +137,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
 // main allocation primitives for small and generic allocation
 
 // internal small size allocation
-static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_nonnull(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept 
+static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_nonnull(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept
 {
   mi_assert(theap != NULL);
   mi_assert(size <= MI_SMALL_SIZE_MAX);
@@ -168,14 +168,14 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_non
 }
 
 // internal generic allocation
-static mi_decl_forceinline void* mi_theap_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept 
+static mi_decl_forceinline void* mi_theap_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept
 {
   #if MI_GUARDED
   if (huge_alignment==0 && mi_theap_malloc_use_guarded(theap, size)) {
     return _mi_theap_malloc_guarded(theap, size, zero);
   }
   #endif
-  #if !MI_THEAP_CANBENULL
+  #if !MI_THEAP_INITASNULL
   mi_assert(theap!=NULL);
   #endif
   mi_assert(theap==NULL || theap->tld->thread_id == 0 || theap->tld->thread_id == _mi_thread_id());   // theaps are thread local
@@ -192,7 +192,7 @@ static mi_decl_forceinline void* mi_theap_malloc_generic(mi_theap_t* theap, size
 
 // internal small allocation
 static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept {
-  #if MI_THEAP_CANBENULL
+  #if MI_THEAP_INITASNULL
   if (theap!=NULL) {
     return mi_theap_malloc_small_zero_nonnull(theap, size, zero);
   }
@@ -232,10 +232,10 @@ static mi_decl_forceinline void* mi_theap_malloc_zero_nonnull(mi_theap_t* theap,
 
 extern mi_decl_forceinline void* _mi_theap_malloc_zero_ex(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept {
   // fast path for small objects
-  #if MI_THEAP_CANBENULL
-  if mi_likely(theap!=NULL && size <= MI_SMALL_SIZE_MAX) 
+  #if MI_THEAP_INITASNULL
+  if mi_likely(theap!=NULL && size <= MI_SMALL_SIZE_MAX)
   #else
-  if mi_likely(size <= MI_SMALL_SIZE_MAX) 
+  if mi_likely(size <= MI_SMALL_SIZE_MAX)
   #endif
   {
     mi_assert_internal(huge_alignment == 0);

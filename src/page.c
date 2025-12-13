@@ -674,7 +674,7 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert(theap!=NULL);
   page->heap = (_mi_is_heap_main(theap->heap) ? NULL : theap->heap); // faster for `mi_page_associated_theap`
   mi_page_set_theap(page, theap);
-  
+
   size_t page_size;
   uint8_t* page_start = mi_page_area(page, &page_size); MI_UNUSED(page_start);
   mi_track_mem_noaccess(page_start,page_size);
@@ -943,12 +943,17 @@ static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_align
 // very large requested alignments in which case we use a huge singleton page.
 void* _mi_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept
 {
-  #if !MI_THEAP_CANBENULL
+  #if !MI_THEAP_INITASNULL
   mi_assert_internal(theap != NULL);
   #endif
 
   // initialize if necessary
   if mi_unlikely(!mi_theap_is_initialized(theap)) {
+    if (theap==&_mi_theap_empty_wrong) {
+      // we were unable to allocate a theap for a first-class heap
+      return NULL;
+    }
+    // otherwise we initialize the thread and its default theap
     mi_thread_init();
     theap = _mi_theap_default();
     if mi_unlikely(!mi_theap_is_initialized(theap)) { return NULL; }
@@ -990,7 +995,7 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_
   mi_assert_internal(_mi_ptr_page(page)==page);
 
   // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc)
-  void* p; 
+  void* p;
   if mi_likely(!zero) {
     p = _mi_page_malloc(theap, page, size);
   }

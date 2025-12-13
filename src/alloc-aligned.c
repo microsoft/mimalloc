@@ -192,7 +192,7 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, con
   // try first if there happens to be a small block available with just the right alignment
   // since most small power-of-2 blocks (under MI_PAGE_MAX_BLOCK_START_ALIGN2) are already
   // naturally aligned this can be often the case.
-  #if MI_THEAP_CANBENULL
+  #if MI_THEAP_INITASNULL
   if mi_likely(theap!=NULL)
   #endif
   {

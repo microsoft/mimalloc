@@ -400,7 +400,7 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 
 #elif MI_TLS_MODEL_FIXED_SLOT
 // Fixed TLS slot (macOS).
-#define MI_THEAP_CANBENULL  1
+#define MI_THEAP_INITASNULL  1
 
 static inline mi_theap_t* _mi_theap_default(void) {
   return (mi_theap_t*)mi_prim_tls_slot(MI_TLS_MODEL_FIXED_SLOT_DEFAULT);
@@ -412,7 +412,7 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 
 #elif MI_TLS_MODEL_DYNAMIC_WIN32
 // Dynamic TLS slot (windows)
-#define MI_THEAP_CANBENULL  1
+#define MI_THEAP_INITASNULL  1
 
 extern mi_decl_hidden size_t _mi_theap_default_slot;
 extern mi_decl_hidden size_t _mi_theap_cached_slot;
@@ -427,7 +427,7 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 
 #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
 // Dynamic pthread slot on less common platforms. This is not too bad (but not great either).
-#define MI_THEAP_CANBENULL  1
+#define MI_THEAP_INITASNULL  1
 
 extern mi_decl_hidden pthread_key_t _mi_theap_default_key;
 extern mi_decl_hidden pthread_key_t _mi_theap_cached_key;
@@ -453,7 +453,7 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 
 static inline mi_heap_t* _mi_heap_default(void) {
   mi_theap_t* theap = _mi_theap_default();
-  #if MI_THEAP_CANBENULL
+  #if MI_THEAP_INITASNULL
   if mi_unlikely(theap==NULL) theap = __mi_theap_empty();
   #endif
   mi_assert_internal(theap!=NULL);
@@ -471,7 +471,7 @@ static inline mi_theap_t* _mi_theap_main(void) {
 // We cache the last accessed theap in `_mi_theap_cached` for better performance.
 static inline mi_theap_t* _mi_heap_theap(const mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached();
-  #if MI_THEAP_CANBENULL
+  #if MI_THEAP_INITASNULL
   if mi_unlikely(theap!=NULL && theap->heap==heap) return theap;
   #else
   if mi_likely(theap->heap==heap) return theap;
@@ -481,7 +481,7 @@ static inline mi_theap_t* _mi_heap_theap(const mi_heap_t* heap) {
 
 static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached();
-  #if MI_THEAP_CANBENULL
+  #if MI_THEAP_INITASNULL
   if mi_unlikely(theap==NULL || theap->heap!=heap)
   #else
   if mi_unlikely(theap->heap!=heap)
