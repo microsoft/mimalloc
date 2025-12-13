@@ -325,19 +325,10 @@ static void mi_heap_main_init(void) {
   Thread local data
 ----------------------------------------------------------- */
 
-// Count current and total created threads
-static _Atomic(size_t)  thread_count = MI_ATOMIC_VAR_INIT(1);
-static _Atomic(size_t)  thread_total_count;
-
-size_t  _mi_current_thread_count(void) {
-  return mi_atomic_load_relaxed(&thread_count);
-}
-
-
 // Allocate fresh tld
 static mi_tld_t* mi_tld_alloc(void) {
-  mi_atomic_increment_relaxed(&thread_count);
   if (_mi_is_main_thread()) {
+    mi_atomic_increment_relaxed(&tld_main.subproc->thread_count);
     return &tld_main;
   }
   else {
