@@ -943,7 +943,9 @@ static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_align
 // very large requested alignments in which case we use a huge singleton page.
 void* _mi_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept
 {
+  #if !MI_THEAP_CANBENULL
   mi_assert_internal(theap != NULL);
+  #endif
 
   // initialize if necessary
   if mi_unlikely(!mi_theap_is_initialized(theap)) {

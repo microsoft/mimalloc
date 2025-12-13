@@ -125,7 +125,7 @@ extern void* _mi_page_malloc_zeroed(mi_theap_t* theap, mi_page_t* page, size_t s
   }
   else {
     void* p = mi_page_malloc_zero(theap, page, size, false);
-    if mi_likely(p!=NULL) { _mi_memzero_aligned(p, size); }
+    if mi_likely(p!=NULL) { _mi_memzero_aligned(p, size - MI_PADDING_SIZE); } // todo: zero usable size?
     return p;
   }
 }

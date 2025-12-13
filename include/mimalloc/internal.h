@@ -48,7 +48,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          __thread
 #define mi_decl_align(a)        __attribute__((aligned(a)))
 #define mi_decl_noreturn        __attribute__((noreturn))
+#if NDEBUG
 #define mi_decl_preserve_all    __attribute__((preserve_all))
+#else
+#define mi_decl_preserve_all    // otherwise we get warnings in debug compilation
+#endif
 #define mi_decl_weak            __attribute__((weak))
 #define mi_decl_hidden          __attribute__((visibility("hidden")))
 #if (__GNUC__ >= 4) || defined(__clang__)
@@ -564,7 +568,6 @@ extern mi_decl_hidden const mi_theap_t _mi_theap_empty;  // read-only empty thea
 
 
 static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {
-  mi_assert_internal(theap != NULL);
   return (theap != NULL && theap != &_mi_theap_empty);
 }
 
