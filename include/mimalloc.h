@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2023, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 326   // major + 2 digits minor
+#define MI_MALLOC_VERSION 3206   // major + minor + 2 digits patch
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -358,22 +358,29 @@ mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexce
 
 
 // ------------------------------------------------------
-// Convenience
+// Typed allocation, type is always the first parameter
 // ------------------------------------------------------
 
-#define mi_malloc_tp(tp)                ((tp*)mi_malloc(sizeof(tp)))
-#define mi_zalloc_tp(tp)                ((tp*)mi_zalloc(sizeof(tp)))
-#define mi_calloc_tp(tp,n)              ((tp*)mi_calloc(n,sizeof(tp)))
-#define mi_mallocn_tp(tp,n)             ((tp*)mi_mallocn(n,sizeof(tp)))
-#define mi_reallocn_tp(p,tp,n)          ((tp*)mi_reallocn(p,n,sizeof(tp)))
-#define mi_recalloc_tp(p,tp,n)          ((tp*)mi_recalloc(p,n,sizeof(tp)))
+#define mi_malloc_tp(tp)                 ((tp*)mi_malloc(sizeof(tp)))
+#define mi_zalloc_tp(tp)                 ((tp*)mi_zalloc(sizeof(tp)))
+#define mi_calloc_tp(tp,n)               ((tp*)mi_calloc(n,sizeof(tp)))
+#define mi_mallocn_tp(tp,n)              ((tp*)mi_mallocn(n,sizeof(tp)))
+#define mi_reallocn_tp(tp,p,n)           ((tp*)mi_reallocn(p,n,sizeof(tp)))
+#define mi_recalloc_tp(tp,p,n)           ((tp*)mi_recalloc(p,n,sizeof(tp)))
 
-#define mi_theap_malloc_tp(hp,tp)        ((tp*)mi_theap_malloc(hp,sizeof(tp)))
-#define mi_theap_zalloc_tp(hp,tp)        ((tp*)mi_theap_zalloc(hp,sizeof(tp)))
-#define mi_theap_calloc_tp(hp,tp,n)      ((tp*)mi_theap_calloc(hp,n,sizeof(tp)))
-#define mi_theap_mallocn_tp(hp,tp,n)     ((tp*)mi_theap_mallocn(hp,n,sizeof(tp)))
-#define mi_theap_reallocn_tp(hp,p,tp,n)  ((tp*)mi_theap_reallocn(hp,p,n,sizeof(tp)))
-#define mi_theap_recalloc_tp(hp,p,tp,n)  ((tp*)mi_theap_recalloc(hp,p,n,sizeof(tp)))
+#define mi_heap_malloc_tp(tp,hp)         ((tp*)mi_heap_malloc(hp,sizeof(tp)))
+#define mi_heap_zalloc_tp(tp,hp)         ((tp*)mi_heap_zalloc(hp,sizeof(tp)))
+#define mi_heap_calloc_tp(tp,hp,n)       ((tp*)mi_heap_calloc(hp,n,sizeof(tp)))
+#define mi_heap_mallocn_tp(tp,hp,n)      ((tp*)mi_heap_mallocn(hp,n,sizeof(tp)))
+#define mi_heap_reallocn_tp(tp,hp,p,n)   ((tp*)mi_heap_reallocn(hp,p,n,sizeof(tp)))
+#define mi_heap_recalloc_tp(tp,hp,p,n)   ((tp*)mi_heap_recalloc(hp,p,n,sizeof(tp)))
+
+#define mi_theap_malloc_tp(tp,hp)        ((tp*)mi_theap_malloc(hp,sizeof(tp)))
+#define mi_theap_zalloc_tp(tp,hp)        ((tp*)mi_theap_zalloc(hp,sizeof(tp)))
+#define mi_theap_calloc_tp(tp,hp,n)      ((tp*)mi_theap_calloc(hp,n,sizeof(tp)))
+#define mi_theap_mallocn_tp(tp,hp,n)     ((tp*)mi_theap_mallocn(hp,n,sizeof(tp)))
+#define mi_theap_reallocn_tp(tp,hp,p,n)  ((tp*)mi_theap_reallocn(hp,p,n,sizeof(tp)))
+#define mi_theap_recalloc_tp(tp,hp,p,n)  ((tp*)mi_theap_recalloc(hp,p,n,sizeof(tp)))
 
 
 // ------------------------------------------------------

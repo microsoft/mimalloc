@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2022, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -355,8 +355,9 @@ static mi_tld_t* mi_tld_alloc(void) {
     tld->subproc = &subproc_main;
     tld->numa_node = _mi_os_numa_node();
     tld->thread_id = _mi_prim_thread_id();
-    tld->thread_seq = mi_atomic_add_acq_rel(&thread_total_count, 1);
+    tld->thread_seq = mi_atomic_increment_relaxed(&tld->subproc->thread_total_count);
     tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
+    mi_atomic_increment_relaxed(&tld->subproc->thread_count);
     return tld;
   }
 }
@@ -365,6 +366,7 @@ static mi_tld_t* mi_tld_alloc(void) {
 
 mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   if (tld != NULL && tld != MI_TLD_INVALID) {
+    mi_atomic_decrement_relaxed(&tld->subproc->thread_count);
     _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);
   }
   #if 0
@@ -373,10 +375,9 @@ mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   // (and this could happen on other systems as well, so let's never do it)
   thread_tld = MI_TLD_INVALID;
   #endif
-  mi_atomic_decrement_relaxed(&thread_count);
 }
 
-// return the thread local heap ensuring it is initialized (and not `&theap_empty`);
+// return the thread local heap ensuring it is initialized (and not `NULL` or `&_mi_theap_empty`);
 mi_theap_t* _mi_theap_default_safe(void) {
   mi_theap_t* theap = _mi_theap_default();
   if mi_likely(mi_theap_is_initialized(theap)) return theap;
@@ -440,6 +441,7 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
   return (subproc_id == NULL ? &subproc_main : (mi_subproc_t*)subproc_id);
 }
 
+// destroy all subproc resources including arena's, heap's etc.
 static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc) 
 {
   // remove from the subproc list
@@ -495,10 +497,17 @@ static void mi_subprocs_unsafe_destroy_all(void) {
 
 
 void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
+  mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   mi_tld_t* const tld = _mi_theap_default_safe()->tld;
   mi_assert(tld->subproc== &subproc_main);
-  if (tld->subproc != &subproc_main) return;
-  tld->subproc = _mi_subproc_from_id(subproc_id);
+  if (tld->subproc != &subproc_main) {
+    _mi_warning_message("unable to add thread to the subprocess as it was already in another subprocess (id: %p)\n", subproc);
+    return;
+  }
+  tld->subproc = subproc;
+  tld->thread_seq = mi_atomic_increment_relaxed(&subproc->thread_total_count);
+  mi_atomic_decrement_relaxed(&subproc_main.thread_count);
+  mi_atomic_increment_relaxed(&subproc->thread_count);
 }
 
 
@@ -655,7 +664,7 @@ mi_decl_preserve_all mi_theap_t* _mi_tls_slots_init(void) {
     _mi_theap_default_slot = TlsAlloc() + MI_TLS_USER_BASE;
     _mi_theap_cached_slot = TlsAlloc() + MI_TLS_USER_BASE;
     if (_mi_theap_cached_slot >= MI_TLS_USER_LAST_SLOT) {
-      _mi_error_message(EFAULT, "unable to allocate fast TLS user slot (%zu)\n", _mi_theap_cached_slot);
+      _mi_error_message(EFAULT, "unable to allocate fast TLS user slot (0x%zx)\n", _mi_theap_cached_slot);
     }
   }
   return (mi_theap_t*)&_mi_theap_empty;

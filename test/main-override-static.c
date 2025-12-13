@@ -23,7 +23,7 @@ static void test_process_info(void);
 static void test_reserved(void);
 static void negative_stat(void);
 static void alloc_huge(void);
-static void test_theap_walk(void);
+static void test_heap_walk(void);
 static void test_canary_leak(void);
 static void test_manage_os_memory(void);
 // static void test_large_pages(void);
@@ -254,16 +254,16 @@ static void test_manage_os_memory(void) {
   void* ptr = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
   mi_arena_id_t arena_id;
   mi_manage_os_memory_ex(ptr, size, true /* committed */, true /* pinned */, false /* is zero */, -1 /* numa node */, true /* exclusive */, &arena_id);
-  mi_theap_t* cuda_theap = mi_theap_new_in_arena(arena_id);    // you can do this in any thread
+  mi_heap_t* cuda_theap = mi_heap_new_in_arena(arena_id);    // you can do this in any thread
 
   // now allocate only in the cuda arena
-  void* p1 = mi_theap_malloc(cuda_theap, 8);
-  int* p2 = mi_theap_malloc_tp(cuda_theap, int);
+  void* p1 = mi_heap_malloc(cuda_theap, 8);
+  int* p2  = mi_heap_malloc_tp(int,cuda_theap);
   *p2 = 42;
 
   // and maybe set the cuda theap as the default theap? (but careful as now `malloc` will allocate in the cuda theap as well)
   {
-    mi_theap_t* prev_default_theap = mi_theap_set_default(cuda_theap);
+    mi_theap_t* prev_default_theap = mi_theap_set_default(mi_heap_theap(cuda_theap));
     void* p3 = mi_malloc(8);  // allocate in the cuda theap
     mi_free(p3);
   }

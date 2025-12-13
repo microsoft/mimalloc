@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2019-2024, Microsoft Research, Daan Leijen
+Copyright (c) 2019-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 /* ----------------------------------------------------------------------------
 "Arenas" are fixed area's of OS memory from which we can allocate
-large blocks (>= MI_ARENA_MIN_BLOCK_SIZE, 4MiB).
+large blocks (>= MI_ARENA_MIN_BLOCK_SIZE, 64KiB).
 In contrast to the rest of mimalloc, the arenas are shared between
 threads and need to be accessed using atomic operations.
 
@@ -345,16 +345,43 @@ static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_t* req_arena
   return true;
 }
 
+// determine the start of search; important to keep heaps and threads 
+// into their own memory regions to reduce contention. 
+static size_t mi_arena_start_idx(mi_heap_t* heap, size_t tseq, size_t arena_cycle) {
+  const size_t hseq   = heap->heap_seq;
+  const size_t hcount = mi_atomic_load_relaxed(&heap->subproc->heap_count);
+  if (arena_cycle <= 1)     return 0;
+  if (hseq==0 || hcount<=1) return (tseq % arena_cycle); // common for single heap programs
+
+  // spread heaps evenly among arena's, and then evenly for threads in their fraction
+  size_t start;
+  mi_assert_internal(arena_cycle <= 0x8FF);             // prevent overflow on 32-bit
+  const size_t frac = (arena_cycle * 256) / hcount;     // fraction in the arena_cycle; at most: arena_cycle * 0x100
+  if (frac==0) { 
+    // many heaps (> 256 per arena)
+    start = (hseq % arena_cycle); 
+  }
+  else {
+    const size_t hspot = (hseq % hcount);                
+    start = (frac * hspot) / 256;
+    if (frac >= 512) {  // at least 2 arena's per heap?
+      start = start + (tseq % (frac/256));
+    }
+  }
+  mi_assert_internal(start < arena_cycle);
+  return start;
+}
+
 #define mi_forall_arenas(heap, req_arena, tseq, name_arena) { \
   const size_t _arena_count = mi_arenas_get_count(heap->subproc); \
   const size_t _arena_cycle = (_arena_count == 0 ? 0 : _arena_count - 1); /* first search the arenas below the last one */ \
   /* always start searching in the arena's below the max */ \
-  size_t _start = (_arena_cycle <= 1 ? 0 : (tseq % _arena_cycle)); \
+  const size_t _start = mi_arena_start_idx(heap,tseq,_arena_cycle); \
   for (size_t _i = 0; _i < _arena_count; _i++) { \
     mi_arena_t* name_arena; \
     if (req_arena != NULL) { \
       name_arena = req_arena; /* if there is a specific req_arena, only search that one */\
-      if (_i > 0) break;       /* only once */ \
+      if (_i > 0) break;      /* only once */ \
     } \
     else { \
       size_t _idx; \
@@ -363,7 +390,7 @@ static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_t* req_arena
         if (_idx >= _arena_cycle) { _idx -= _arena_cycle; } /* adjust so we rotate through the cycle */ \
       } \
       else { \
-        _idx = _i; /* remaining arena's */ \
+        _idx = _i; /* remaining arena's after the cycle */ \
       } \
       name_arena = mi_arena_from_index(heap->subproc,_idx); \
     } \

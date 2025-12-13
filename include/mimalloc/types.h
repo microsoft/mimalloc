@@ -492,8 +492,9 @@ struct mi_theap_s {
 // Sub processes do not reclaim or visit pages from other sub processes.
 // These are essentially the static variables of a process, and
 // usually there is only one subprocess. This can be used for example
-// by CPython to have seperate interpreters within one process.
-// Each thread can only belong to one subprocess.
+// by CPython to have separate interpreters within one process.
+// Each thread can only belong to one subprocess 
+// (and needs to call `mi_subproc_add_current_thread` before any allocations).
 // ------------------------------------------------------
 
 #define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
@@ -508,11 +509,19 @@ struct mi_subproc_s {
   _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
   mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
   _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
+
   _Atomic(mi_heap_t*)   heap_main;                      // main heap for this sub process
   mi_heap_t*            heaps;                          // heaps belonging to this sub-process
   mi_lock_t             heaps_lock;
-  mi_stats_t            stats;
-  mi_memid_t            memid;                          // provenance of this memory block (meta or OS)  
+  
+  _Atomic(size_t)       thread_count;                   // current threads associated with this sub-process
+  _Atomic(size_t)       thread_total_count;             // total created threads associated with this sub-process
+  _Atomic(size_t)       heap_count;                     // current heaps in this sub-process (== |heaps|)
+  _Atomic(size_t)       heap_total_count;               // total created heaps in this sub-process
+  
+  mi_memid_t            memid;                          // provenance of this memory block (meta or static)  
+  mi_stats_t            stats;                          // subprocess statistics; updated for arena/OS stats like committed, 
+                                                        // and otherwise merged with heap stats when those are deleted  
 };
 
 
@@ -522,29 +531,30 @@ typedef size_t mi_thread_local_t;
 
 
 typedef struct mi_heap_s {
-  mi_subproc_t*         subproc;
-  mi_thread_local_t     theap;
+  mi_subproc_t*         subproc;                        // a heap belongs to a subprocess
+  size_t                heap_seq;                       // unique sequence number for heaps in this subprocess
   mi_heap_t*            next;                           // list of heaps in this subprocess
   mi_heap_t*            prev;
+  mi_thread_local_t     theap;                          // dynamic thread local for the thread-local theaps of this heap
 
   mi_arena_t*           exclusive_arena;                // if the heap should only allocate from a specific arena (or NULL)
-  int                   numa_node;
+  int                   numa_node;                      // if >=0, prefer this numa node for allocations
   long                  page_full_retain;               // how many full pages can be retained per queue (before abandoning them)
   bool                  allow_page_reclaim;             // `true` if this heap should not reclaim abandoned pages
   bool                  allow_page_abandon;             // `true` if this heap can abandon pages to reduce memory footprint
   bool                  allow_destroy;
 
-  mi_theap_t*           theaps;
-  mi_lock_t             theaps_lock;
+  mi_theap_t*           theaps;                         // list of all thread-local theaps belonging to this heap (using the `hnext`/`hprev` fields)
+  mi_lock_t             theaps_lock;                    // lock for the theaps list operations
   
-  _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages for this sub-process
-  mi_page_t*            os_abandoned_pages;             // list of pages that OS allocated and not in an arena (only used if `mi_option_visit_abandoned` is on)
+  _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages in this heap
+  mi_page_t*            os_abandoned_pages;             // list of pages that are OS allocated and not in an arena
   mi_lock_t             os_abandoned_pages_lock;        // lock for the os abandoned pages list (this lock protects list operations)
 
-  _Atomic(mi_arena_pages_t*) arena_pages[MI_MAX_ARENAS]; // track owned and abandoned pages in the arenas
+  _Atomic(mi_arena_pages_t*) arena_pages[MI_MAX_ARENAS]; // track owned and abandoned pages in the arenas (entries can be NULL)
   mi_lock_t             arena_pages_lock;                // lock to update the arena_pages array
 
-  mi_stats_t            stats;
+  mi_stats_t            stats;                           // statistics for this heap; periodically updated by merging from each theap
 } mi_heap_t;
 
 

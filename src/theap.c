@@ -1,5 +1,5 @@
 /*----------------------------------------------------------------------------
-Copyright (c) 2018-2021, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -782,6 +782,7 @@ mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
 
   // init fields
   heap->subproc = heap_main->subproc;
+  heap->heap_seq = mi_atomic_increment_relaxed(&heap_main->subproc->heap_total_count);
   heap->exclusive_arena = _mi_arena_from_id(exclusive_arena_id);
   heap->numa_node = -1; // no initial affinity
   heap->allow_page_reclaim = heap_main->allow_page_reclaim;
@@ -800,7 +801,7 @@ mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
     if (head!=NULL) { head->next = heap;  }
     heap->subproc->heaps = heap;
   }
-
+  mi_atomic_increment_relaxed(&heap_main->subproc->heap_count);
   return heap;
 }
 
@@ -822,6 +823,7 @@ static void mi_heap_free(mi_heap_t* heap) {
   }
   // remove the heap from the subproc
   _mi_stats_merge_from(&heap->subproc->stats, &heap->stats);
+  mi_atomic_decrement_relaxed(&heap->subproc->heap_count);
   mi_lock(&heap->subproc->heaps_lock) {
     if (heap->next!=NULL) { heap->next->prev = heap->prev; }
     if (heap->prev!=NULL) { heap->prev->next = heap->next; }
