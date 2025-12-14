@@ -712,8 +712,13 @@ bool mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_
 ----------------------------------------------------------- */
 
 void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node) {
-  if (heap == NULL) return;
+  if (heap==NULL) { heap = mi_heap_main(); }
   heap->numa_node = (numa_node < 0 ? -1 : numa_node % _mi_os_numa_node_count());
+}
+
+void mi_heap_stats_merge_to_subproc(mi_heap_t* heap) {
+  if (heap==NULL) { heap = mi_heap_main(); }
+  _mi_stats_merge_from(&heap->subproc->stats, &heap->stats);
 }
 
 static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
@@ -822,7 +827,7 @@ static void mi_heap_free(mi_heap_t* heap) {
     }
   }
   // remove the heap from the subproc
-  _mi_stats_merge_from(&heap->subproc->stats, &heap->stats);
+  mi_heap_stats_merge_to_subproc(heap);
   mi_atomic_decrement_relaxed(&heap->subproc->heap_count);
   mi_lock(&heap->subproc->heaps_lock) {
     if (heap->next!=NULL) { heap->next->prev = heap->prev; }

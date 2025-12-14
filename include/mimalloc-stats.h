@@ -107,8 +107,22 @@ typedef struct mi_stats_s
 extern "C" {
 #endif
 
-mi_decl_export void    mi_stats_get( size_t stats_size, mi_stats_t* stats ) mi_attr_noexcept;
-mi_decl_export char*   mi_stats_get_json( size_t buf_size, char* buf ) mi_attr_noexcept;    // use mi_free to free the result if the input buf == NULL
+// stats from a heap
+mi_decl_export void    mi_heap_stats_get(mi_heap_t* heap, size_t stats_size, mi_stats_t* stats) mi_attr_noexcept;
+mi_decl_export char*   mi_heap_stats_get_json(mi_heap_t* heap, size_t buf_size, char* buf) mi_attr_noexcept;      // use mi_free to free the result if the input buf == NULL
+mi_decl_export void    mi_heap_stats_print_out(mi_heap_t* heap, mi_output_fun* out, void* arg) mi_attr_noexcept;
+mi_decl_export void    mi_heap_stats_merge_to_subproc(mi_heap_t* heap);
+
+// stats from the default heap
+mi_decl_export void    mi_stats_get(size_t stats_size, mi_stats_t* stats) mi_attr_noexcept;
+mi_decl_export char*   mi_stats_get_json(size_t buf_size, char* buf) mi_attr_noexcept;      // use mi_free to free the result if the input buf == NULL
+mi_decl_export void    mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
+
+// subprocess stats
+mi_decl_export void    mi_subproc_stats_get(mi_subproc_id_t* subproc_id, size_t stats_size, mi_stats_t* stats) mi_attr_noexcept;
+mi_decl_export char*   mi_subproc_stats_get_json(mi_subproc_id_t* subproc_id, size_t buf_size, char* buf) mi_attr_noexcept;      // use mi_free to free the result if the input buf == NULL
+mi_decl_export void    mi_subproc_stats_print_out(mi_subproc_id_t* subproc_id, mi_output_fun* out, void* arg) mi_attr_noexcept;
+
 mi_decl_export size_t  mi_stats_get_bin_size(size_t bin) mi_attr_noexcept;
 
 #ifdef __cplusplus

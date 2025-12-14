@@ -136,6 +136,7 @@ mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size)     mi_attr_no
 
 // ------------------------------------------------------
 // Internals
+// See also `mimalloc-stats.h` for statistics
 // ------------------------------------------------------
 
 typedef void (mi_cdecl mi_deferred_free_fun)(bool force, unsigned long long heartbeat, void* arg);
@@ -147,14 +148,10 @@ mi_decl_export void mi_register_output(mi_output_fun* out, void* arg) mi_attr_no
 typedef void (mi_cdecl mi_error_fun)(int err, void* arg);
 mi_decl_export void mi_register_error(mi_error_fun* fun, void* arg);
 
-mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
-mi_decl_export int  mi_version(void)          mi_attr_noexcept;
-mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
-mi_decl_export void mi_stats_merge(void)      mi_attr_noexcept;
-mi_decl_export void mi_stats_print(void* out) mi_attr_noexcept;  // backward compatibility: `out` is ignored and should be NULL
-mi_decl_export void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
-mi_decl_export void mi_options_print(void)    mi_attr_noexcept;
-
+mi_decl_export void mi_collect(bool force)      mi_attr_noexcept;
+mi_decl_export int  mi_version(void)            mi_attr_noexcept;
+mi_decl_export void mi_options_print(void)      mi_attr_noexcept;
+mi_decl_export void mi_process_info_print(void) mi_attr_noexcept;
 mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs,
                                     size_t* current_rss, size_t* peak_rss,
                                     size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept;
@@ -184,8 +181,8 @@ mi_decl_nodiscard mi_decl_export void* mi_realloc_aligned_at(void* p, size_t new
 
 
 // -------------------------------------------------------------------------------------
-// Heaps: first-class.
-// Allocation through a `heap` is a tiny bit slower than using plain malloc (which use the default heap)
+// Heaps: first-class. Can allocate from any thread (and free'd)
+// Heaps keep allocations in separate pages from each other (but share the arena's)
 // -------------------------------------------------------------------------------------
 
 struct mi_heap_s;
@@ -210,7 +207,8 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc_small(mi_
 
 
 // -------------------------------------------------------------------------------------
-// a "theap" is a thread-local heap. First-class, but can only allocate from the same thread that created it.
+// A "theap" is a thread-local heap. This API is not needed for regular programs.
+// Theaps are first-class, but can only allocate from the same thread that created it.
 // Allocation through a `theap` is a tiny bit faster than using plain malloc (as we don't need to lookup 
 // the thread local variable). This API is only provided for special circumstances like runtimes 
 // that already have a thread-local context and can store the theap there for (slightly) faster allocations.
@@ -275,7 +273,7 @@ mi_decl_nodiscard mi_decl_export void* mi_theap_recalloc_aligned_at(mi_theap_t* 
 
 
 // ------------------------------------------------------
-// Analysis
+// Visiting pages and individual blocks in a heap.
 // ------------------------------------------------------
 
 mi_decl_export bool mi_check_owned(const void* p);
@@ -296,7 +294,11 @@ typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_
 mi_decl_export bool   mi_heap_visit_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 mi_decl_export bool   mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
-// Advanced
+
+// ------------------------------------------------------
+// Arena memory management
+// ------------------------------------------------------
+
 mi_decl_nodiscard mi_decl_export bool mi_is_redirected(void) mi_attr_noexcept;
 
 mi_decl_export int    mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t timeout_msecs) mi_attr_noexcept;
@@ -309,7 +311,6 @@ mi_decl_export void   mi_debug_show_arenas(void) mi_attr_noexcept;
 mi_decl_export void   mi_arenas_print(void) mi_attr_noexcept;
 mi_decl_export size_t mi_arena_min_alignment(void);
 
-// Advanced: memory arena's are large memory areas where the heaps allocate in
 typedef void* mi_arena_id_t;
 mi_decl_export void*  mi_arena_area(mi_arena_id_t arena_id, size_t* size);
 mi_decl_export int    mi_reserve_huge_os_pages_at_ex(size_t pages, int numa_node, size_t timeout_msecs, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
@@ -320,14 +321,23 @@ mi_decl_export bool   mi_arena_contains(mi_arena_id_t arena_id, const void* p);
 // Create a heap that only allocates in the specified arena
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id);
 
+
+// ------------------------------------------------------
+// Subprocesses
 // Advanced: allow sub-processes whose memory areas stay separated (and no reclamation between them)
 // Used for example for separate interpreters in one process.
+// ------------------------------------------------------
+
 typedef void* mi_subproc_id_t;
 mi_decl_export mi_subproc_id_t mi_subproc_main(void);
 mi_decl_export mi_subproc_id_t mi_subproc_new(void);
 mi_decl_export void mi_subproc_destroy(mi_subproc_id_t subproc);
 mi_decl_export void mi_subproc_add_current_thread(mi_subproc_id_t subproc); // this should be called right after a thread is created (and no allocation has taken place yet)
 
+
+// ------------------------------------------------------
+// Experimental
+// ------------------------------------------------------
 
 // Experimental: objects followed by a guard page.
 // Setting the sample rate on a specific theap can be used to test parts of the program more
@@ -348,13 +358,22 @@ mi_decl_export bool  mi_manage_memory(void* start, size_t size, bool is_committe
 //mi_decl_export void  mi_theap_unload(mi_theap_t* theap);
 
 
+// ------------------------------------------------------
 // Deprecated
+// ------------------------------------------------------
+
 mi_decl_export void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
 mi_decl_export bool mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
-mi_decl_export int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
+mi_decl_export int  mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
 mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexcept;
+
+mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
+mi_decl_export void mi_stats_merge(void)      mi_attr_noexcept;
+mi_decl_export void mi_stats_print(void* out) mi_attr_noexcept;  // backward compatibility: `out` is ignored and should be NULL
+
+mi_decl_export void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;  // not deprecated but declared in `mimalloc-stats.h` now.
 
 
 // ------------------------------------------------------
