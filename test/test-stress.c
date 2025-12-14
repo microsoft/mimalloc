@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2020 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license.
 -----------------------------------------------------------------------------*/
@@ -132,7 +132,7 @@ static bool chance(size_t perc, random_t r) {
 static void* alloc_items(size_t items, random_t r) {
   if (chance(1, r)) {
     if (chance(1, r) && allow_large_objects) items *= 10000;       // 0.01% giant
-    // else if (chance(10, r) && allow_large_objects) items *= 1000;  // 0.1% huge
+    else if (chance(10, r) && allow_large_objects) items *= 1000;  // 0.1% huge
     else items *= 100;                                             // 1% large objects;
   }
   if (items>=32 && items<=40) items*=2;              // pthreads uses 320b allocations (this shows that more clearly in the stats)

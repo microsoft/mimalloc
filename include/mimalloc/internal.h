@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2023, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -174,7 +174,6 @@ bool          _mi_preloading(void);           // true while the C runtime is not
 void          _mi_thread_done(mi_theap_t* theap);
 
 mi_subproc_t* _mi_subproc(void);
-mi_subproc_t* _mi_subproc_main(void);
 mi_heap_t*    _mi_subproc_heap_main(mi_subproc_t* subproc);
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 
@@ -183,7 +182,6 @@ size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
 void          _mi_theap_guarded_init(mi_theap_t* theap);
 
 bool          _mi_is_heap_main(const mi_heap_t* heap);
-// mi_heap_t*    _mi_heap_process_main(void);              // main heap of the main sub-process
 mi_theap_t*   _mi_theap_default_safe(void);             // ensure the returned theap is initialized
 
 
@@ -284,13 +282,8 @@ size_t        _mi_bin(size_t size);                // for stats
 // "theap.c"
 mi_theap_t*   _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld);
 void          _mi_theap_delete(mi_theap_t* theap);
-//void          _mi_theap_init(mi_theap_t* theap, bool noreclaim, mi_tld_t* tld);
-//void          _mi_theap_destroy_pages(mi_theap_t* theap);
-//void          _mi_theap_collect_abandon(mi_theap_t* theap);
 void          _mi_theap_default_set(mi_theap_t* theap);
 void          _mi_theap_cached_set(mi_theap_t* theap);
-//bool          _mi_theap_memid_is_suitable(mi_theap_t* theap, mi_memid_t memid);
-void          _mi_theap_unsafe_destroy_all(mi_theap_t* theap);
 
 void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
 bool          _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
@@ -304,15 +297,11 @@ mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap);
 // defined in "arena.c"
 void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);
 void          _mi_heap_destroy_pages(mi_heap_t* heap_from);
-bool          _mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
-bool          _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
-
 
 // "stats.c"
 void          _mi_stats_init(void);
 void          _mi_stats_print(mi_stats_t* stats, mi_output_fun* out, void* arg) mi_attr_noexcept;
 void          _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from);
-mi_stats_t*   _mi_stats(void);
 
 mi_msecs_t    _mi_clock_now(void);
 mi_msecs_t    _mi_clock_end(mi_msecs_t start);

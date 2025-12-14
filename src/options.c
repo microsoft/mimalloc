@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2021, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -205,13 +205,13 @@ void _mi_options_init(void) {
 #define mi_stringifyx(str)  #str                // and stringify
 #define mi_stringify(str)   mi_stringifyx(str)  // expand
 
-void mi_options_print(void) mi_attr_noexcept
+mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept
 {
   // show version
   const int vermajor = MI_MALLOC_VERSION/100;
   const int verminor = (MI_MALLOC_VERSION%100)/10;
   const int verpatch = (MI_MALLOC_VERSION%10);
-  _mi_message("v%i.%i.%i%s%s (built on %s, %s)\n", vermajor, verminor, verpatch,
+  _mi_fprintf(out, arg, "v%i.%i.%i%s%s (built on %s, %s)\n", vermajor, verminor, verpatch,
       #if defined(MI_CMAKE_BUILD_TYPE)
       ", " mi_stringify(MI_CMAKE_BUILD_TYPE)
       #else
@@ -230,19 +230,23 @@ void mi_options_print(void) mi_attr_noexcept
     mi_option_t option = (mi_option_t)i;
     long l = mi_option_get(option); MI_UNUSED(l); // possibly initialize
     mi_option_desc_t* desc = &mi_options[option];
-    _mi_message("option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : ""));
+    _mi_fprintf(out, arg, "option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : ""));
   }
 
   // show build configuration
-  _mi_message("debug level : %d\n", MI_DEBUG );
-  _mi_message("secure level: %d\n", MI_SECURE );
-  _mi_message("mem tracking: %s\n", MI_TRACK_TOOL);
+  _mi_fprintf(out, arg, "debug level : %d\n", MI_DEBUG );
+  _mi_fprintf(out, arg, "secure level: %d\n", MI_SECURE );
+  _mi_fprintf(out, arg, "mem tracking: %s\n", MI_TRACK_TOOL);
   #if MI_GUARDED
-  _mi_message("guarded build: %s\n", mi_option_get(mi_option_guarded_sample_rate) != 0 ? "enabled" : "disabled");
+  _mi_fprintf(out, arg, "guarded build: %s\n", mi_option_get(mi_option_guarded_sample_rate) != 0 ? "enabled" : "disabled");
   #endif
   #if MI_TSAN
-  _mi_message("thread santizer enabled\n");
+  _mi_fprintf(out, arg, "thread santizer enabled\n");
   #endif
+}
+
+mi_decl_export void mi_options_print(void) mi_attr_noexcept {
+  mi_options_print_out(NULL, NULL);
 }
 
 long _mi_option_get_fast(mi_option_t option) {

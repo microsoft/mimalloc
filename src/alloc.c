@@ -1,6 +1,6 @@
 
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2024, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -250,6 +250,7 @@ extern inline void* _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool z
   return _mi_theap_malloc_zero_ex(theap, size, zero, 0);
 }
 
+
 // Main allocation functions
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_malloc(mi_theap_t* theap, size_t size) mi_attr_noexcept {
@@ -264,6 +265,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t 
   return mi_theap_malloc_zero_nonnull(_mi_heap_theap(heap), size, false, 0);
 }
 
+
 // zero initialized small block
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_small(size_t size) mi_attr_noexcept {
   return mi_theap_malloc_small_zero(_mi_theap_default(), size, true);
@@ -274,7 +276,7 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_zalloc(mi_theap_
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc(size_t size) mi_attr_noexcept {
-  return mi_theap_zalloc(_mi_theap_default(),size);
+  return mi_theap_zalloc(_mi_theap_default(), size);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
@@ -291,8 +293,15 @@ mi_decl_nodiscard mi_decl_restrict void* mi_calloc(size_t count, size_t size) mi
   return mi_theap_calloc(_mi_theap_default(),count,size);
 }
 
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
+  size_t total;
+  if (mi_count_size_overflow(count, size, &total)) return NULL;
+  return mi_heap_zalloc(heap, total);
+}
+
+
 // Uninitialized `calloc`
-mi_decl_nodiscard mi_decl_restrict void* mi_theap_mallocn(mi_theap_t* theap, size_t count, size_t size) mi_attr_noexcept {
+static mi_decl_restrict void* mi_theap_mallocn(mi_theap_t* theap, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(count, size, &total)) return NULL;
   return mi_theap_malloc(theap, total);
@@ -301,6 +310,13 @@ mi_decl_nodiscard mi_decl_restrict void* mi_theap_mallocn(mi_theap_t* theap, siz
 mi_decl_nodiscard mi_decl_restrict void* mi_mallocn(size_t count, size_t size) mi_attr_noexcept {
   return mi_theap_mallocn(_mi_theap_default(),count,size);
 }
+
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_mallocn(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept {
+  size_t total;
+  if (mi_count_size_overflow(count, size, &total)) return NULL;
+  return mi_heap_malloc(heap, total);
+}
+
 
 // Expand (or shrink) in place (or fail)
 void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
@@ -352,7 +368,7 @@ mi_decl_nodiscard void* mi_theap_realloc(mi_theap_t* theap, void* p, size_t news
   return _mi_theap_realloc_zero(theap, p, newsize, false);
 }
 
-mi_decl_nodiscard void* mi_theap_reallocn(mi_theap_t* theap, void* p, size_t count, size_t size) mi_attr_noexcept {
+static void* mi_theap_reallocn(mi_theap_t* theap, void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(count, size, &total)) return NULL;
   return mi_theap_realloc(theap, p, total);
@@ -360,17 +376,17 @@ mi_decl_nodiscard void* mi_theap_reallocn(mi_theap_t* theap, void* p, size_t cou
 
 
 // Reallocate but free `p` on errors
-mi_decl_nodiscard void* mi_theap_reallocf(mi_theap_t* theap, void* p, size_t newsize) mi_attr_noexcept {
+static void* mi_theap_reallocf(mi_theap_t* theap, void* p, size_t newsize) mi_attr_noexcept {
   void* newp = mi_theap_realloc(theap, p, newsize);
   if (newp==NULL && p!=NULL) mi_free(p);
   return newp;
 }
 
-mi_decl_nodiscard void* mi_theap_rezalloc(mi_theap_t* theap, void* p, size_t newsize) mi_attr_noexcept {
+static void* mi_theap_rezalloc(mi_theap_t* theap, void* p, size_t newsize) mi_attr_noexcept {
   return _mi_theap_realloc_zero(theap, p, newsize, true);
 }
 
-mi_decl_nodiscard void* mi_theap_recalloc(mi_theap_t* theap, void* p, size_t count, size_t size) mi_attr_noexcept {
+static void* mi_theap_recalloc(mi_theap_t* theap, void* p, size_t count, size_t size) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(count, size, &total)) return NULL;
   return mi_theap_rezalloc(theap, p, total);
@@ -399,13 +415,35 @@ mi_decl_nodiscard void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_
 }
 
 
+mi_decl_nodiscard void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+  return mi_theap_realloc(_mi_heap_theap(heap), p, newsize);
+}
+
+mi_decl_nodiscard void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
+  return mi_theap_reallocn(_mi_heap_theap(heap), p, count, size);
+}
+
+// Reallocate but free `p` on errors
+mi_decl_nodiscard void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+  return mi_theap_reallocf(_mi_heap_theap(heap), p, newsize);
+}
+
+mi_decl_nodiscard void* mi_heap_rezalloc(mi_heap_t* heap, void* p, size_t newsize) mi_attr_noexcept {
+  return mi_theap_rezalloc(_mi_heap_theap(heap), p, newsize);
+}
+
+mi_decl_nodiscard void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t count, size_t size) mi_attr_noexcept {
+  return mi_theap_recalloc(_mi_heap_theap(heap), p, count, size);
+}
+
+
 
 // ------------------------------------------------------
 // strdup, strndup, and realpath
 // ------------------------------------------------------
 
 // `strdup` using mi_malloc
-mi_decl_nodiscard mi_decl_restrict char* mi_theap_strdup(mi_theap_t* theap, const char* s) mi_attr_noexcept {
+static mi_decl_nodiscard mi_decl_restrict char* mi_theap_strdup(mi_theap_t* theap, const char* s) mi_attr_noexcept {
   if (s == NULL) return NULL;
   size_t len = _mi_strlen(s);
   char* t = (char*)mi_theap_malloc(theap,len+1);
@@ -419,8 +457,12 @@ mi_decl_nodiscard mi_decl_restrict char* mi_strdup(const char* s) mi_attr_noexce
   return mi_theap_strdup(_mi_theap_default(), s);
 }
 
+mi_decl_nodiscard mi_decl_restrict char* mi_heap_strdup(mi_heap_t* heap, const char* s) mi_attr_noexcept {
+  return mi_theap_strdup(_mi_heap_theap(heap), s);
+}
+
 // `strndup` using mi_malloc
-mi_decl_nodiscard mi_decl_restrict char* mi_theap_strndup(mi_theap_t* theap, const char* s, size_t n) mi_attr_noexcept {
+static mi_decl_nodiscard mi_decl_restrict char* mi_theap_strndup(mi_theap_t* theap, const char* s, size_t n) mi_attr_noexcept {
   if (s == NULL) return NULL;
   const size_t len = _mi_strnlen(s,n);  // len <= n
   char* t = (char*)mi_theap_malloc(theap, len+1);
@@ -434,6 +476,10 @@ mi_decl_nodiscard mi_decl_restrict char* mi_strndup(const char* s, size_t n) mi_
   return mi_theap_strndup(_mi_theap_default(),s,n);
 }
 
+mi_decl_nodiscard mi_decl_restrict char* mi_heap_strndup(mi_heap_t* heap, const char* s, size_t n) mi_attr_noexcept {
+  return mi_theap_strndup(_mi_heap_theap(heap), s, n);
+}
+
 #ifndef __wasi__
 // `realpath` using mi_malloc
 #ifdef _WIN32
@@ -441,7 +487,7 @@ mi_decl_nodiscard mi_decl_restrict char* mi_strndup(const char* s, size_t n) mi_
 #define PATH_MAX MAX_PATH
 #endif
 
-mi_decl_nodiscard mi_decl_restrict char* mi_theap_realpath(mi_theap_t* theap, const char* fname, char* resolved_name) mi_attr_noexcept {
+static mi_decl_nodiscard mi_decl_restrict char* mi_theap_realpath(mi_theap_t* theap, const char* fname, char* resolved_name) mi_attr_noexcept {
   // todo: use GetFullPathNameW to allow longer file names
   char buf[PATH_MAX];
   DWORD res = GetFullPathNameA(fname, PATH_MAX, (resolved_name == NULL ? buf : resolved_name), NULL);
@@ -459,19 +505,6 @@ mi_decl_nodiscard mi_decl_restrict char* mi_theap_realpath(mi_theap_t* theap, co
   }
 }
 #else
-/*
-#include <unistd.h>  // pathconf
-static size_t mi_path_max(void) {
-  static size_t path_max = 0;
-  if (path_max <= 0) {
-    long m = pathconf("/",_PC_PATH_MAX);
-    if (m <= 0) path_max = 4096;      // guess
-    else if (m < 256) path_max = 256; // at least 256
-    else path_max = m;
-  }
-  return path_max;
-}
-*/
 char* mi_theap_realpath(mi_theap_t* theap, const char* fname, char* resolved_name) mi_attr_noexcept {
   if (resolved_name != NULL) {
     return realpath(fname,resolved_name);
@@ -484,24 +517,15 @@ char* mi_theap_realpath(mi_theap_t* theap, const char* fname, char* resolved_nam
     // note: with ASAN realpath is intercepted and mi_cfree may leak the returned pointer :-(
     return result;
   }
-  /*
-    const size_t n  = mi_path_max();
-    char* buf = (char*)mi_malloc(n+1);
-    if (buf == NULL) {
-      errno = ENOMEM;
-      return NULL;
-    }
-    char* rname  = realpath(fname,buf);
-    char* result = mi_theap_strndup(theap,rname,n); // ok if `rname==NULL`
-    mi_free(buf);
-    return result;
-  }
-  */
 }
 #endif
 
 mi_decl_nodiscard mi_decl_restrict char* mi_realpath(const char* fname, char* resolved_name) mi_attr_noexcept {
   return mi_theap_realpath(_mi_theap_default(),fname,resolved_name);
+}
+
+mi_decl_nodiscard mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
+  return mi_theap_realpath(_mi_heap_theap(heap), fname, resolved_name);
 }
 #endif
 
@@ -572,7 +596,7 @@ static bool mi_try_new_handler(bool nothrow) {
 }
 #endif
 
-mi_decl_export mi_decl_noinline void* mi_theap_try_new(mi_theap_t* theap, size_t size, bool nothrow ) {
+static mi_decl_noinline void* mi_theap_try_new(mi_theap_t* theap, size_t size, bool nothrow ) {
   void* p = NULL;
   while(p == NULL && mi_try_new_handler(nothrow)) {
     p = mi_theap_malloc(theap,size);
@@ -584,8 +608,12 @@ static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
   return mi_theap_try_new(_mi_theap_default(), size, nothrow);
 }
 
+static mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t size, bool nothrow) {
+  return mi_theap_try_new(_mi_heap_theap(heap), size, nothrow);
+}
 
-mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new(mi_theap_t* theap, size_t size) {
+
+static mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new(mi_theap_t* theap, size_t size) {
   void* p = mi_theap_malloc(theap,size);
   if mi_unlikely(p == NULL) return mi_theap_try_new(theap, size, false);
   return p;
@@ -596,11 +624,13 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
-  return mi_theap_alloc_new(_mi_heap_theap(heap), size);
+  void* p = mi_heap_malloc(heap, size);
+  if mi_unlikely(p == NULL) return mi_heap_try_new(heap, size, false);
+  return p;
 }
 
 
-mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new_n(mi_theap_t* theap, size_t count, size_t size) {
+static mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new_n(mi_theap_t* theap, size_t count, size_t size) {
   size_t total;
   if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
     mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc

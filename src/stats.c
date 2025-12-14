@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2021, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -314,6 +314,28 @@ static void mi_cdecl mi_buffered_out(const char* msg, void* arg) {
 // Print statistics
 //------------------------------------------------------------
 
+mi_decl_export void mi_process_info_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept 
+{
+  size_t elapsed;
+  size_t user_time;
+  size_t sys_time;
+  size_t current_rss;
+  size_t peak_rss;
+  size_t current_commit;
+  size_t peak_commit;
+  size_t page_faults;
+  mi_process_info(&elapsed, &user_time, &sys_time, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
+  _mi_fprintf(out, arg, "%10s: %5zu.%03zu s\n", "elapsed", elapsed/1000, elapsed%1000);
+  _mi_fprintf(out, arg, "%10s: user: %zu.%03zu s, system: %zu.%03zu s, faults: %zu, peak rss: ", "process",
+    user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, page_faults);
+  mi_printf_amount((int64_t)peak_rss, 1, out, arg, "%s");
+  if (peak_commit > 0) {
+    _mi_fprintf(out, arg, ", peak commit: ");
+    mi_printf_amount((int64_t)peak_commit, 1, out, arg, "%s");
+  }
+  _mi_fprintf(out, arg, "\n");
+}
+
 void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) mi_attr_noexcept {
   // wrap the output function to be line buffered
   char buf[256]; _mi_memzero_var(buf);
@@ -368,25 +390,9 @@ void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) mi_attr
   mi_stat_counter_print_avg(&stats->page_searches, "searches", out, arg);
   _mi_fprintf(out, arg, "%10s: %5i\n", "numa nodes", _mi_os_numa_node_count());
 
-  size_t elapsed;
-  size_t user_time;
-  size_t sys_time;
-  size_t current_rss;
-  size_t peak_rss;
-  size_t current_commit;
-  size_t peak_commit;
-  size_t page_faults;
-  mi_process_info(&elapsed, &user_time, &sys_time, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
-  _mi_fprintf(out, arg, "%10s: %5zu.%03zu s\n", "elapsed", elapsed/1000, elapsed%1000);
-  _mi_fprintf(out, arg, "%10s: user: %zu.%03zu s, system: %zu.%03zu s, faults: %zu, peak rss: ", "process",
-              user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, page_faults );
-  mi_printf_amount((int64_t)peak_rss, 1, out, arg, "%s");
-  if (peak_commit > 0) {
-    _mi_fprintf(out, arg, ", peak commit: ");
-    mi_printf_amount((int64_t)peak_commit, 1, out, arg, "%s");
-  }
-  _mi_fprintf(out, arg, "\n");
+  mi_process_info_print_out(out, arg);
 }
+
 
 static mi_msecs_t mi_process_start; // = 0
 
@@ -502,6 +508,10 @@ mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, s
   if (current_commit!=NULL) *current_commit = pinfo.current_commit;
   if (peak_commit!=NULL)    *peak_commit    = pinfo.peak_commit;
   if (page_faults!=NULL)    *page_faults    = pinfo.page_faults;
+}
+
+mi_decl_export void mi_process_info_print(void) mi_attr_noexcept {
+  mi_process_info_print_out(NULL, NULL);
 }
 
 

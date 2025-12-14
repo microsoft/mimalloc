@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2024, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -451,15 +451,6 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 #endif
 
 
-static inline mi_heap_t* _mi_heap_default(void) {
-  mi_theap_t* theap = _mi_theap_default();
-  #if MI_THEAP_INITASNULL
-  if mi_unlikely(theap==NULL) theap = __mi_theap_empty();
-  #endif
-  mi_assert_internal(theap!=NULL);
-  return theap->heap;
-}
-
 static inline mi_theap_t* _mi_theap_main(void) {
   mi_theap_t* const theap = __mi_theap_main;
   mi_assert_internal(mi_theap_is_initialized(theap));
@@ -472,7 +463,7 @@ static inline mi_theap_t* _mi_theap_main(void) {
 static inline mi_theap_t* _mi_heap_theap(const mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached();
   #if MI_THEAP_INITASNULL
-  if mi_unlikely(theap!=NULL && theap->heap==heap) return theap;
+  if mi_likely(theap!=NULL && theap->heap==heap) return theap;
   #else
   if mi_likely(theap->heap==heap) return theap;
   #endif

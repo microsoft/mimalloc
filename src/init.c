@@ -377,6 +377,11 @@ mi_theap_t* _mi_theap_default_safe(void) {
   return _mi_theap_default();
 }
 
+
+mi_subproc_t* _mi_subproc_main(void) {
+  return &subproc_main;
+}
+
 mi_subproc_t* _mi_subproc(void) {
   // should work without doing initialization (as it may be called from `_mi_tld -> mi_tld_alloc ... -> os_alloc -> _mi_subproc()`
   // todo: this will still fail on OS systems where the first access to a thread-local causes allocation.
@@ -408,8 +413,8 @@ bool _mi_is_heap_main(const mi_heap_t* heap) {
   Sub process
 ----------------------------------------------------------- */
 
-mi_subproc_t* _mi_subproc_main(void) {
-  return &subproc_main;
+mi_subproc_id_t mi_subproc_main(void) {
+  return _mi_subproc_main();
 }
 
 mi_subproc_id_t mi_subproc_new(void) {

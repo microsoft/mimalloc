@@ -480,46 +480,6 @@ bool mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena_id) {
 }
 */
 
-/* -----------------------------------------------------------
-  Analysis
------------------------------------------------------------ */
-
-// static since it is not thread safe to access theaps from other threads.
-static mi_theap_t* mi_theap_of_block(const void* p) {
-  if (p == NULL) return NULL;
-  mi_page_t* page = _mi_ptr_page(p); // TODO: check pointer validity?
-  return mi_page_theap(page);
-}
-
-bool mi_theap_contains_block(mi_theap_t* theap, const void* p) {
-  mi_assert(theap != NULL);
-  if (theap==NULL || !mi_theap_is_initialized(theap)) return false;
-  return (theap == mi_theap_of_block(p));
-}
-
-
-static bool mi_theap_page_check_owned(mi_theap_t* theap, mi_page_queue_t* pq, mi_page_t* page, void* p, void* vfound) {
-  MI_UNUSED(theap);
-  MI_UNUSED(pq);
-  bool* found = (bool*)vfound;
-  void* start = mi_page_start(page);
-  void* end   = (uint8_t*)start + (page->capacity * mi_page_block_size(page));
-  *found = (p >= start && p < end);
-  return (!*found); // continue if not found
-}
-
-bool mi_theap_check_owned(mi_theap_t* theap, const void* p) {
-  mi_assert(theap != NULL);
-  if (theap==NULL || !mi_theap_is_initialized(theap)) return false;
-  if (((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0) return false;  // only aligned pointers
-  bool found = false;
-  mi_theap_visit_pages(theap, &mi_theap_page_check_owned, (void*)p, &found);
-  return found;
-}
-
-bool mi_check_owned(const void* p) {
-  return mi_theap_check_owned(_mi_theap_default(), p);
-}
 
 /* -----------------------------------------------------------
   Visit all theap blocks and areas
@@ -711,6 +671,10 @@ bool mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_
   Heap's
 ----------------------------------------------------------- */
 
+mi_theap_t* mi_heap_theap(mi_heap_t* heap) {
+  return _mi_heap_theap(heap);
+}
+
 void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node) {
   if (heap==NULL) { heap = mi_heap_main(); }
   heap->numa_node = (numa_node < 0 ? -1 : numa_node % _mi_os_numa_node_count());
@@ -867,6 +831,11 @@ mi_heap_t* mi_heap_of(void* p) {
   return mi_page_heap(page);
 }
 
-bool mi_heap_contains(void* p) {
+bool mi_any_heap_contains(void* p) {
   return (mi_heap_of(p)!=NULL);
+}
+
+bool mi_heap_contains(mi_heap_t* heap, void* p) {
+  if (heap==NULL) { heap = mi_heap_main(); }
+  return (heap==mi_heap_of(p));
 }

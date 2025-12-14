@@ -2024,6 +2024,9 @@ static bool mi_heap_visit_page_at(size_t slice_index, size_t slice_count, mi_are
 }
 
 bool _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+  mi_assert(visitor!=NULL);
+  if (visitor==NULL) return false;
+  if (heap==NULL) { heap = mi_heap_main(); }
   // visit all pages in a heap
   // we don't have to claim because we assume we are the only thread running (with this heap).
   // (but we could atomically claim as well by first doing abandoned_reclaim and afterwards reabandoning).
@@ -2063,9 +2066,14 @@ bool _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_bloc
   return ok;
 }
 
-bool _mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+bool mi_heap_visit_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+  return _mi_heap_visit_blocks(heap, false, visit_blocks, visitor, arg);
+}
+
+bool mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
   return _mi_heap_visit_blocks(heap, true, visit_blocks, visitor, arg);
 }
+
 
 typedef struct mi_heap_delete_visit_info_s {
   mi_heap_t*  heap_target;
