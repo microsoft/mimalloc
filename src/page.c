@@ -941,8 +941,13 @@ static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_align
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
 // The `huge_alignment` is normally 0 but is set to a multiple of MI_SLICE_SIZE for
 // very large requested alignments in which case we use a huge singleton page.
-void* _mi_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept
+// Note: we put `bool zero, size_t huge_alignment` into one parameter (with zero in the low bit)
+// to use 4 parameters which compiles better on msvc for the malloc fast path.
+void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, size_t* usable) mi_attr_noexcept
 {
+  const bool zero = ((zero_huge_alignment & 1) != 0);
+  const size_t huge_alignment = (zero_huge_alignment & ~1);
+
   #if !MI_THEAP_INITASNULL
   mi_assert_internal(theap != NULL);
   #endif
@@ -995,6 +1000,7 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_
   mi_assert_internal(_mi_ptr_page(page)==page);
 
   // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc)
+  if (usable!=NULL) { *usable = mi_page_usable_block_size(page); }
   void* p;
   if mi_likely(!zero) {
     p = _mi_page_malloc(theap, page, size);

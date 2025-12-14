@@ -259,7 +259,7 @@ mi_page_t*    _mi_safe_ptr_page(const void* p);
 void          _mi_page_map_unsafe_destroy(mi_subproc_t* subproc);
 
 // "page.c"
-void*         _mi_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment)  mi_attr_noexcept mi_attr_malloc;
+void*         _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, size_t* usable)  mi_attr_noexcept mi_attr_malloc;
 
 void          _mi_page_retire(mi_page_t* page) mi_attr_noexcept;       // free the page if there are no other pages with many free blocks
 void          _mi_page_unfull(mi_page_t* page);
@@ -310,9 +310,9 @@ mi_msecs_t    _mi_clock_start(void);
 // "alloc.c"
 void*         _mi_page_malloc(mi_theap_t* theap, mi_page_t* page, size_t size) mi_attr_noexcept;                  // called from `_mi_theap_malloc_aligned`
 void*         _mi_page_malloc_zeroed(mi_theap_t* theap, mi_page_t* page, size_t size) mi_attr_noexcept;           // called from `_mi_theap_malloc_aligned`
-void*         _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept;
-void*         _mi_theap_malloc_zero_ex(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept;     // called from `_mi_theap_malloc_aligned`
-void*         _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
+void*         _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero, size_t* usable) mi_attr_noexcept;
+void*         _mi_theap_malloc_zero_ex(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, size_t* usable) mi_attr_noexcept;     // called from `_mi_theap_malloc_aligned`
+void*         _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool zero, size_t* usable_pre, size_t* usable_post) mi_attr_noexcept;
 mi_block_t*   _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
 void          _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
 

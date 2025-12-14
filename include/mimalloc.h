@@ -203,6 +203,21 @@ mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_set_in_threadpool(void) mi_attr_noexcept; // communicate that a thread is in a threadpool
 
 
+// -----------------------------------------------------------------
+// Return allocated block size (if the return value is not NULL)
+// -----------------------------------------------------------------
+
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_umalloc(size_t size, size_t* block_size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_ucalloc(size_t count, size_t size, size_t* block_size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(1,2);
+mi_decl_nodiscard mi_decl_export void* mi_urealloc(void* p, size_t newsize, size_t* block_size_pre, size_t* block_size_post) mi_attr_noexcept mi_attr_alloc_size(2);
+mi_decl_export void mi_ufree(void* p, size_t* block_size) mi_attr_noexcept;
+
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* block_size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* block_size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
+
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* block_size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_uzalloc_small(size_t size, size_t* block_size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
+
 
 // -------------------------------------------------------------------------------------
 // Heaps: first-class. Can allocate from any thread (and be free'd from any thread)
@@ -334,11 +349,11 @@ mi_decl_export void mi_subproc_add_current_thread(mi_subproc_id_t subproc); // t
 
 
 // -------------------------------------------------------------------------------------
-// A "theap" is a thread-local heap. This API is only provided for special circumstances like runtimes 
+// A "theap" is a thread-local heap. This API is only provided for special circumstances like runtimes
 // that already have a thread-local context and can store the theap there for (slightly) faster allocations.
 // Theaps are first-class, but can only allocate from the same thread that created it.
-// Allocation through a `theap` is a tiny bit faster than using plain malloc 
-// (as we don't need to lookup the thread local variable). 
+// Allocation through a `theap` is a tiny bit faster than using plain malloc
+// (as we don't need to lookup the thread local variable).
 // -------------------------------------------------------------------------------------
 
 struct mi_theap_s;

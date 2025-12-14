@@ -163,11 +163,12 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
 
 // Free a block
 // Fast path written carefully to prevent register spilling on the stack
-void mi_free(void* p) mi_attr_noexcept
+static inline void mi_free_ex(void* p, size_t* usable) mi_attr_noexcept
 {
   mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");
   if mi_unlikely(page==NULL) return;  // page will be NULL if p==NULL
   mi_assert_internal(p!=NULL && page!=NULL);
+  if (usable!=NULL) { *usable = mi_page_usable_block_size(page); }
 
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ mi_page_xthread_id(page));
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
@@ -191,6 +192,13 @@ void mi_free(void* p) mi_attr_noexcept
   }
 }
 
+void mi_free(void* p) mi_attr_noexcept {
+  mi_free_ex(p,NULL);
+}
+
+void mi_ufree(void* p, size_t* usable) mi_attr_noexcept {
+  mi_free_ex(p,usable);
+}
 
 // --------------------------------------------------------------------------------------------
 // `mi_free_try_collect_mt`: Potentially collect a page in a free in an abandoned page.
@@ -223,15 +231,14 @@ static bool mi_abandoned_page_try_reabandon_to_mapped(mi_page_t* page)
 
 // Release ownership of a page. This may free or reabandond the page if other blocks are concurrently
 // freed in the meantime. Returns `true` if the page was freed.
-// By passing the captured `mt_free`, we can often avoid calling `mi_page_free_collect`.
-static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* mt_free) {
+// By passing the captured `expected_thread_free`, we can often avoid calling `mi_page_free_collect`.
+static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* expected_thread_free) {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
-  mi_assert_internal(mt_free != NULL);
   mi_assert_internal(!mi_page_all_free(page));
   // try to cas atomically the original free list (`mt_free`) back with the ownership cleared.
-  mi_thread_free_t tf_expect = mi_tf_create(mt_free, true);
-  mi_thread_free_t tf_new    = mi_tf_create(mt_free, false);
+  mi_thread_free_t tf_expect = mi_tf_create(expected_thread_free, true);
+  mi_thread_free_t tf_new    = mi_tf_create(expected_thread_free, false);
   while mi_unlikely(!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_expect, tf_new)) {
     mi_assert_internal(mi_tf_is_owned(tf_expect));
     // while the xthread_free list is not empty..
@@ -318,13 +325,13 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     // use the `_partly` version to avoid atomic operations since we already have the `mt_free` pointing into the thread free list
     // (after this the `used` count might be too high (as some blocks may have been concurrently added to the thread free list and are yet uncounted).
     //  however, if the page became completely free, the used count is guaranteed to be 0.)
-    _mi_page_free_collect_partly(page, mt_free);
+    mi_assert_internal(page->reserved>=16); // below this even one freed block goes from full to no longer mostly used.
+    _mi_page_free_collect_partly(page, mt_free);    
   }
   else {
-    // for larger blocks we use the regular collect
-    // note: this means for blocks larger than ~8 KiB (1/8th of a slice) we have !mi_page_is_mostly_used when even a single block is free.
-    //       (and thus, those can be reabandoned to mapped)
+    // for larger blocks we use the regular collect 
     _mi_page_free_collect(page,false /* no force */);
+    mt_free = NULL; // expected page->xthread_free value after collection
   }
   const long reclaim_on_free = _mi_option_get_fast(mi_option_page_reclaim_on_free);
   #if MI_DEBUG > 1
@@ -363,8 +370,7 @@ static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_page_t* p
   return aligned_size;
 }
 
-static inline size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noexcept {
-  const mi_page_t* const page = mi_validate_ptr_page(p,msg);
+static inline size_t _mi_usable_size(const void* p, const mi_page_t* page) mi_attr_noexcept {
   if mi_unlikely(page==NULL) return 0;
   if mi_likely(!mi_page_has_interior_pointers(page)) {
     const mi_block_t* block = (const mi_block_t*)p;
@@ -377,7 +383,8 @@ static inline size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noe
 }
 
 mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
-  return _mi_usable_size(p, "mi_usable_size");
+  const mi_page_t* const page = mi_validate_ptr_page(p,"mi_usable_size");
+  return _mi_usable_size(p,page);
 }
 
 
@@ -388,7 +395,8 @@ mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
 void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   MI_UNUSED_RELEASE(size);
   #if MI_DEBUG
-  const size_t available = _mi_usable_size(p,"mi_free_size");
+  const mi_page_t* const page = mi_validate_ptr_page(p,"mi_free_size");  
+  const size_t available = _mi_usable_size(p,page);
   mi_assert(p == NULL || size <= available || available == 0 /* invalid pointer */ );
   #endif
   mi_free(p);
