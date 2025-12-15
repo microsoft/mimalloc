@@ -163,7 +163,7 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
 
 // Free a block
 // Fast path written carefully to prevent register spilling on the stack
-static inline void mi_free_ex(void* p, size_t* usable) mi_attr_noexcept
+static mi_decl_forceinline void mi_free_ex(void* p, size_t* usable)  
 {
   mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");
   if mi_unlikely(page==NULL) return;  // page will be NULL if p==NULL
@@ -193,11 +193,11 @@ static inline void mi_free_ex(void* p, size_t* usable) mi_attr_noexcept
 }
 
 void mi_free(void* p) mi_attr_noexcept {
-  mi_free_ex(p,NULL);
+  mi_free_ex(p, NULL);
 }
 
 void mi_ufree(void* p, size_t* usable) mi_attr_noexcept {
-  mi_free_ex(p,usable);
+  mi_free_ex(p, usable);
 }
 
 // --------------------------------------------------------------------------------------------

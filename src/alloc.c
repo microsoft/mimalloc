@@ -40,7 +40,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   // check the free list
   mi_block_t* const block = page->free;
   if mi_unlikely(block == NULL) {
-    return _mi_malloc_generic(theap, size, zero, usable);
+    return _mi_malloc_generic(theap, size, (zero ? 1 : 0), usable); 
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   if (usable != NULL) { *usable = mi_page_usable_block_size(page); };
@@ -180,7 +180,7 @@ static mi_decl_forceinline void* mi_theap_malloc_generic(mi_theap_t* theap, size
   #endif
   mi_assert(theap==NULL || theap->tld->thread_id == 0 || theap->tld->thread_id == _mi_thread_id());   // theaps are thread local
   mi_assert((huge_alignment & 1)==0);
-  void* const p = _mi_malloc_generic(theap, size + MI_PADDING_SIZE, zero | huge_alignment, usable);  // note: size can overflow but it is detected in malloc_generic
+  void* const p = _mi_malloc_generic(theap, size + MI_PADDING_SIZE, (zero ? 1 : 0) | huge_alignment, usable);  // note: size can overflow but it is detected in malloc_generic
   mi_track_malloc(p, size, zero);
 
   #if MI_DEBUG>3
