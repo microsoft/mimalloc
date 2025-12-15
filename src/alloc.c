@@ -372,7 +372,9 @@ void* _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool ze
     size = _mi_usable_size(p,page);
     if (usable_pre!=NULL) { *usable_pre = mi_page_usable_block_size(page); }
   }
-  if mi_unlikely(newsize <= size && newsize >= (size / 2) && newsize > 0) {  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
+  if mi_unlikely(newsize<=size && newsize>=(size/2) && newsize>0  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
+                  && mi_page_heap(page)==theap->heap)             // and within the same heap
+  {
     mi_assert_internal(p!=NULL);
     // todo: do not track as the usable size is still the same in the free; adjust potential padding?
     // mi_track_resize(p,size,newsize)
@@ -394,7 +396,7 @@ void* _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool ze
       const size_t copysize = (newsize > size ? size : newsize);
       mi_track_mem_defined(p,copysize);  // _mi_useable_size may be too large for byte precise memory tracking..
       _mi_memcpy(newp, p, copysize);
-      mi_free(p); // only free the original pointer if successful
+      mi_free(p); // only free the original pointer if successful  // todo: optimize since page is known?
     }
   }
   return newp;
