@@ -304,7 +304,6 @@ void          _mi_heap_destroy_pages(mi_heap_t* heap_from);
 
 // "stats.c"
 void          _mi_stats_init(void);
-void          _mi_stats_print(mi_stats_t* stats, mi_output_fun* out, void* arg) mi_attr_noexcept;
 void          _mi_stats_merge_from(mi_stats_t* to, mi_stats_t* from);
 
 mi_msecs_t    _mi_clock_now(void);

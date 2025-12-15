@@ -913,7 +913,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   //_mi_page_map_unsafe_destroy(_mi_subproc_main());
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
-    _mi_stats_print(&_mi_subproc_main()->stats, NULL, NULL);
+    mi_subproc_stats_print_out(NULL, NULL, NULL);
   }
   mi_lock_done(&subprocs_lock);
   _mi_allocator_done();

@@ -119,9 +119,9 @@ mi_decl_export char*   mi_stats_get_json(size_t buf_size, char* buf) mi_attr_noe
 mi_decl_export void    mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
 
 // subprocess stats
-mi_decl_export void    mi_subproc_stats_get(mi_subproc_id_t* subproc_id, size_t stats_size, mi_stats_t* stats) mi_attr_noexcept;
-mi_decl_export char*   mi_subproc_stats_get_json(mi_subproc_id_t* subproc_id, size_t buf_size, char* buf) mi_attr_noexcept;      // use mi_free to free the result if the input buf == NULL
-mi_decl_export void    mi_subproc_stats_print_out(mi_subproc_id_t* subproc_id, mi_output_fun* out, void* arg) mi_attr_noexcept;
+mi_decl_export void    mi_subproc_stats_get(mi_subproc_id_t subproc_id, size_t stats_size, mi_stats_t* stats) mi_attr_noexcept;
+mi_decl_export char*   mi_subproc_stats_get_json(mi_subproc_id_t subproc_id, size_t buf_size, char* buf) mi_attr_noexcept;      // use mi_free to free the result if the input buf == NULL
+mi_decl_export void    mi_subproc_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* out, void* arg) mi_attr_noexcept;
 
 mi_decl_export size_t  mi_stats_get_bin_size(size_t bin) mi_attr_noexcept;
 
