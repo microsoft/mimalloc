@@ -480,7 +480,7 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   {
     theap = _mi_heap_theap_get_peek(heap);  // don't update the cache on a query (?)
   }
-  mi_assert(theap->heap==heap);
+  mi_assert(theap==NULL || theap->heap==heap);
   return theap;
 }
 

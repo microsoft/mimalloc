@@ -22,8 +22,9 @@ terms of the MIT license.
 #include <string.h>
 #include <assert.h>
 
-// #define MI_GUARDED
-// #define USE_STD_MALLOC
+// #define MI_GUARDED         1
+// #define USE_STD_MALLOC     1
+#define MI_USE_HEAPS       1
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
@@ -74,19 +75,31 @@ static size_t use_one_size = 0;               // use single object size of `N * 
 static bool   main_participates = false;       // main thread participates as a worker too
 
 #ifdef USE_STD_MALLOC
+
 #define custom_calloc(n,s)    calloc(n,s)
 #define custom_realloc(p,s)   realloc(p,s)
 #define custom_free(p)        free(p)
+
 #else
+
 #include <mimalloc.h>
 #include <mimalloc-stats.h>
+
+#ifdef MI_USE_HEAPS
+static mi_heap_t* current_heap;
+#define custom_calloc(n,s)    mi_heap_calloc(current_heap,n,s)
+#define custom_realloc(p,s)   mi_heap_realloc(current_heap,p,s)
+#define custom_free(p)        mi_free(p)
+#else
 #define custom_calloc(n,s)    mi_calloc(n,s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
+#endif
 
 #ifndef NDEBUG
-#define xHEAP_WALK             // walk the theap objects?
+#define xMI_HEAP_WALK             // walk the theap objects?
 #endif
+
 #endif
 
 // transfer pointer between threads
@@ -162,7 +175,7 @@ static void free_items(void* p) {
   custom_free(p);
 }
 
-#ifdef HEAP_WALK
+#ifdef MI_HEAP_WALK
 static bool visit_blocks(const mi_theap_t* theap, const mi_theap_area_t* area, void* block, size_t block_size, void* arg) {
   (void)(theap); (void)(area);
   size_t* total = (size_t*)arg;
@@ -217,7 +230,7 @@ static void stress(intptr_t tid) {
     }
   }
 
-  #ifdef HEAP_WALK
+  #ifdef MI_HEAP_WALK
   // walk the theap
   size_t total = 0;
   mi_theap_visit_blocks(mi_theap_get_default(), true, visit_blocks, &total);
@@ -238,27 +251,40 @@ static void stress(intptr_t tid) {
 static void run_os_threads(size_t nthreads, void (*entry)(intptr_t tid));
 
 static void test_stress(void) {
+  #ifdef MI_USE_HEAPS
+  mi_heap_t* prev_heap = NULL;
+  #endif
   uintptr_t r = rand();
   for (int n = 0; n < ITER; n++) {
+    
+    #ifdef MI_USE_HEAPS
+    // new heap for each iteration
+    if (prev_heap != NULL) {
+      mi_heap_delete(prev_heap);   // delete from one iteration ago
+    }
+    prev_heap = current_heap;
+    current_heap = mi_heap_new();
+    #endif  
+
     run_os_threads(THREADS, &stress);
+
     #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     // switch between arena and OS allocation for testing
     // mi_option_set_enabled(mi_option_disallow_arena_alloc, (n%2)==1);
     #endif
-    #ifdef HEAP_WALK
+    #if defined(MI_HEAP_WALK) && defined(MI_USE_HEAPS)
     size_t total = 0;
-    mi_abandoned_visit_blocks(mi_subproc_main(), -1, true, visit_blocks, &total);
+    // mi_abandoned_visit_blocks(mi_subproc_main(), -1, true, visit_blocks, &total);
+    mi_heap_visit_blocks(heap, true, visit_blocks, &total);
     #endif
+
     for (int i = 0; i < TRANSFERS; i++) {
       if (chance(50, &r) || n + 1 == ITER) { // free all on last run, otherwise free half of the transfers
         void* p = atomic_exchange_ptr(&transfer[i], NULL);
         free_items(p);
       }
     }
-    #ifndef NDEBUG
-    //mi_collect(false);
-    //mi_debug_show_arenas(true);
-    #endif
+    
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) {
       printf("- iterations left: %3d\n", ITER - (n + 1));
@@ -270,7 +296,13 @@ static void test_stress(void) {
     }
     #endif
   }
-  // clean up
+  
+  // clean up  (a bit too early to test the final free_items still works correctly)
+  #ifdef MI_USE_HEAPS
+  mi_heap_delete(prev_heap); prev_heap = NULL;
+  mi_heap_delete(current_heap); current_heap = NULL;
+  #endif
+
   for (int i = 0; i < TRANSFERS; i++) {
     void* p = atomic_exchange_ptr(&transfer[i], NULL);
     if (p != NULL) {
@@ -312,7 +344,7 @@ int main(int argc, char** argv) {
   #ifdef MI_LINK_VERSION
     mi_version();
   #endif
-  #ifdef HEAP_WALK
+  #ifdef MI_HEAP_WALK
     mi_option_enable(mi_option_visit_abandoned);
   #endif
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)

@@ -263,6 +263,13 @@ void _mi_theap_guarded_init(mi_theap_t* theap) {
 }
 #endif
 
+/* -----------------------------------------------------------
+  Initialization
+  Note: on some platforms lock_init or just a thread local access 
+  can cause allocation and induce recursion during initialization.
+----------------------------------------------------------- */
+
+
 // Initialize main subproc
 static void mi_subproc_main_init(void) {
   if (subproc_main.memid.memkind != MI_MEM_STATIC) {
@@ -302,7 +309,7 @@ static void mi_theap_main_init(mi_heap_t* heap) {
 
 // Initialize main heap
 static void mi_heap_main_init(void) {
-  if mi_unlikely(heap_main.subproc==NULL) {
+  if mi_unlikely(heap_main.subproc == NULL) {
     heap_main.subproc = &subproc_main;
     heap_main.theaps = &theap_main;
 
@@ -397,7 +404,15 @@ mi_subproc_t* _mi_subproc(void) {
 }
 
 mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
-  return mi_atomic_load_relaxed(&subproc->heap_main);
+  mi_heap_t* heap = mi_atomic_load_relaxed(&subproc->heap_main);
+  if mi_likely(heap!=NULL) {
+    return heap;
+  }
+  else {
+    mi_heap_main_init();
+    mi_assert_internal(mi_atomic_load_relaxed(&subproc->heap_main) != NULL);
+    return mi_atomic_load_relaxed(&subproc->heap_main);
+  }
 }
 
 mi_heap_t* mi_heap_main(void) {
@@ -438,7 +453,7 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
 }
 
 // destroy all subproc resources including arena's, heap's etc.
-static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc) 
+static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc)
 {
   // remove from the subproc list
   mi_lock(&subprocs_lock) {
@@ -446,8 +461,8 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc)
     if (subproc->prev!=NULL) { subproc->prev->next = subproc->next;  }
                         else { mi_assert_internal(subprocs==subproc);  subprocs = subproc->next; }
   }
-  
-  // destroy all subproc heaps 
+
+  // destroy all subproc heaps
   mi_lock(&subproc->heaps_lock) {
     mi_heap_t* heap = subproc->heaps;
     while (heap != NULL) {
@@ -458,7 +473,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc)
     mi_assert_internal(subproc->heaps == subproc->heap_main);
     mi_heap_destroy(subproc->heap_main);
   }
-  
+
   // merge stats back into the main subproc?
   if (subproc!=&subproc_main) {
     _mi_arenas_unsafe_destroy_all(subproc);
@@ -469,7 +484,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc)
     mi_lock_done(&subproc->arena_reserve_lock);
     mi_lock_done(&subproc->heaps_lock);
     _mi_meta_free(subproc, sizeof(mi_subproc_t), subproc->memid);
-  }  
+  }
 }
 
 void mi_subproc_destroy(mi_subproc_id_t subproc_id) {
@@ -540,10 +555,10 @@ static mi_theap_t* _mi_thread_init_theap_default(void) {
 static void mi_thread_theaps_done(mi_tld_t* tld)
 {
   // reset the thread local theaps
-  __mi_theap_main = NULL; 
+  __mi_theap_main = NULL;
   _mi_theap_default_set((mi_theap_t*)&_mi_theap_empty);
   _mi_theap_cached_set((mi_theap_t*)&_mi_theap_empty);
-  
+
   // delete all theaps in this thread
   mi_theap_t* curr = tld->theaps;
   while (curr != NULL) {
@@ -553,6 +568,7 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
     _mi_theap_delete(curr);
     curr = next;
   }
+  mi_assert(_mi_theap_default()==(mi_theap_t*)&_mi_theap_empty); // careful to not re-initialize the default theap during theap_delete
   mi_assert(!mi_theap_is_initialized(_mi_theap_default()));
 }
 
@@ -701,7 +717,7 @@ void _mi_theap_default_set(mi_theap_t* theap)  {
   #if MI_TLS_MODEL_THREAD_LOCAL
     __mi_theap_default = theap;
   #elif MI_TLS_MODEL_FIXED_SLOT
-    mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_SLOT_DEFAULT, theap);    
+    mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_SLOT_DEFAULT, theap);
   #elif MI_TLS_MODEL_DYNAMIC_WIN32
     _mi_tls_slots_init();
     mi_prim_tls_slot_set(_mi_theap_default_slot, theap);
@@ -747,7 +763,7 @@ void _mi_auto_process_init(void) {
   // volatile mi_theap_t* dummy = __mi_theap_default; // access TLS to allocate it before setting tls_initialized to true;
   // if (dummy == NULL) return;                       // use dummy or otherwise the access may get optimized away (issue #697)
   // #endif
-  
+
   os_preloading = false;
   mi_assert_internal(_mi_is_main_thread());
   if (__mi_theap_main == NULL) return;
@@ -823,7 +839,7 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
 
   mi_detect_cpu_features();
-  _mi_options_init();  
+  _mi_options_init();
   _mi_stats_init();
   _mi_os_init();
   // the following can potentially allocate (on freeBSD for locks and thread keys)
@@ -888,7 +904,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   // since after process_done there might still be other code running that calls `free` (like at_exit routines,
   // or C-runtime termination code.
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
-    mi_subprocs_unsafe_destroy_all(); 
+    mi_subprocs_unsafe_destroy_all();
     _mi_page_map_unsafe_destroy(_mi_subproc_main());
   }
   else {

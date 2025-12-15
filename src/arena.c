@@ -1058,6 +1058,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap) {
   mi_abandoned_page_unown(page, current_theap);
 }
 
+
 // this is called from `free.c:mi_free_try_collect_mt` only.
 bool _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page) {
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
@@ -1567,16 +1568,17 @@ static int mi_page_commit_usage(mi_page_t* page) {
   return (int)(used_size * 100 / committed_size);
 }
 
-static size_t mi_debug_show_page_bfield(mi_bfield_t field, char* buf, size_t* k, mi_arena_t* arena, size_t slice_index, long* pbit_of_page, mi_ansi_color_t* pcolor_of_page ) {
+static size_t mi_debug_show_page_bfield(char* buf, size_t* k, mi_arena_t* arena, size_t slice_index, long* pbit_of_page, mi_ansi_color_t* pcolor_of_page ) {
   size_t bit_set_count = 0;
   long bit_of_page = *pbit_of_page;
   mi_ansi_color_t color = *pcolor_of_page;
   mi_ansi_color_t prev_color = MI_GRAY;
   for (int bit = 0; bit < MI_BFIELD_BITS; bit++, bit_of_page--) {
-    bool is_set = ((((mi_bfield_t)1 << bit) & field) != 0);
+    // bool is_set = ((((mi_bfield_t)1 << bit) & field) != 0);
     void* start = mi_arena_slice_start(arena, slice_index + bit);
+    mi_page_t* page = _mi_safe_ptr_page(start);
     char c = ' ';
-    if (is_set) {
+    if (start==page) {
       mi_assert_internal(bit_of_page <= 0);
       bit_set_count++;
       c = 'p';
@@ -1638,8 +1640,7 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
     }
 
     size_t k = 0;
-    mi_bchunk_t* chunk = &chunks[i];
-
+    
     if (i<10)        { buf[k++] = ('0' + (char)i); buf[k++] = ' '; buf[k++] = ' '; }
     else if (i<100)  { buf[k++] = ('0' + (char)(i/10)); buf[k++] = ('0' + (char)(i%10)); buf[k++] = ' '; }
     else if (i<1000) { buf[k++] = ('0' + (char)(i/100)); buf[k++] = ('0' + (char)((i%100)/10)); buf[k++] = ('0' + (char)(i%10)); }
@@ -1667,10 +1668,13 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
         _mi_memset(buf, ' ', 5); k = 5;
       }
       if (bit_count < slice_count) {
-        mi_bfield_t bfield = chunk->bfields[j];
+        mi_bfield_t bfield = 0;
+        if (chunks!=NULL) {
+          bfield = chunks[i].bfields[j];
+        }
         if (invert) bfield = ~bfield;
-        size_t xcount = (arena!=NULL ? mi_debug_show_page_bfield(bfield, buf, &k, arena, bit_count, &bit_of_page, &color_of_page)
-                                     : mi_debug_show_bfield(bfield, buf, &k));
+        size_t xcount = (chunks==NULL ? mi_debug_show_page_bfield(buf, &k, arena, bit_count, &bit_of_page, &color_of_page)
+                                      : mi_debug_show_bfield(bfield, buf, &k));
         if (invert) xcount = MI_BFIELD_BITS - xcount;
         bit_set_count += xcount;
         buf[k++] = ' ';
@@ -1687,7 +1691,8 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
   return bit_set_count;
 }
 
-static size_t mi_debug_show_bitmap_binned(const char* header1, const char* header2, const char* header3, size_t slice_count, mi_bitmap_t* bitmap, mi_bchunkmap_t* chunk_bins, bool invert, mi_arena_t* arena, bool narrow) {
+static size_t mi_debug_show_bitmap_binned(const char* header1, const char* header2, const char* header3, size_t slice_count, 
+                                           size_t chunk_count, mi_bitmap_t* bitmap, mi_bchunkmap_t* chunk_bins, bool invert, mi_arena_t* arena, bool narrow) {
   return mi_debug_show_chunks(header1, header2, header3, slice_count, mi_bitmap_chunk_count(bitmap), &bitmap->chunks[0], chunk_bins, invert, arena, narrow);
 }
 
@@ -1715,12 +1720,15 @@ static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narro
     //  purge_total += mi_debug_show_bitmap("purgeable slices", arena->slice_count, arena->slices_purge, false, NULL);
     //}
     if (show_pages) {
-      mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
-      if (arena_pages != NULL) {
+      // mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
+      // if (arena_pages != NULL) 
+      {
         const char* header1 = "pages (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info, m:meta-data, ~:free-purgable, _:free-committed, .:free-reserved)";
         const char* header2 = (narrow ? "\n      " : " ");
         const char* header3 = "(chunk bin: S:small, M : medium, L : large, X : other)";
-        page_total += mi_debug_show_bitmap_binned(header1, header2, header3, arena->slice_count, arena_pages->pages, arena->slices_free->chunkmap_bins, false, arena, narrow);
+        page_total += mi_debug_show_chunks(header1, header2, header3, arena->slice_count, 
+                                           mi_bbitmap_chunk_count(arena->slices_free), NULL,
+                                           arena->slices_free->chunkmap_bins, false, arena, narrow);
       }
     }
   }
@@ -1997,15 +2005,17 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_subproc_t* subpro
 ----------------------------------------------------------- */
 
 typedef struct mi_heap_visit_info_s {
+  mi_heap_t* heap;
   mi_block_visit_fun* visitor;
-  void* arg;
+  void* arg;  
   bool visit_blocks;
 } mi_heap_visit_info_t;
 
 static bool mi_heap_visit_page(mi_page_t* page, mi_heap_visit_info_t* vinfo) {
   mi_heap_area_t area;
   _mi_heap_area_init(&area, page);
-  if (!vinfo->visitor(NULL, &area, NULL, area.block_size, vinfo->arg)) {
+  mi_assert_internal(vinfo->heap == mi_page_heap(page));
+  if (!vinfo->visitor(vinfo->heap, &area, NULL, area.block_size, vinfo->arg)) {
     return false;
   }
   if (vinfo->visit_blocks) {
@@ -2030,7 +2040,7 @@ bool _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_bloc
   // visit all pages in a heap
   // we don't have to claim because we assume we are the only thread running (with this heap).
   // (but we could atomically claim as well by first doing abandoned_reclaim and afterwards reabandoning).
-  mi_heap_visit_info_t visit_info = { visitor, arg, visit_blocks };  
+  mi_heap_visit_info_t visit_info = { heap, visitor, arg, visit_blocks };  
   bool ok = true;
   mi_forall_arenas(heap, NULL, 0, arena) {
     mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena); 
@@ -2110,9 +2120,18 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
   }
   else {
     // move the page to `heap_target` as an abandoned page
+    size_t slice_index;
+    size_t slice_count;
+    mi_arena_pages_t* arena_pages = NULL;
+    mi_arena_t* const arena = mi_page_arena_pages(page, &slice_index, &slice_count, &arena_pages); 
+    mi_assert_internal(mi_bitmap_is_set(arena_pages->pages, slice_index));
+    mi_bitmap_clear(arena_pages->pages, slice_index);
+    mi_arena_pages_t* arena_pages_target = mi_heap_arena_pages(heap_target, arena);
+    mi_assert_internal(mi_bitmap_is_clear(arena_pages_target->pages, slice_index));
+    mi_bitmap_set(arena_pages_target->pages, slice_index);
+    page->heap = heap_target;    
+    // todo: stats?
     mi_theap_t* const theap_target = info->theap_target;
-    page->heap = heap_target;
-    mi_page_set_theap(page,theap_target);
     _mi_arenas_page_abandon(page,theap_target);
   }
   return true;
@@ -2126,7 +2145,7 @@ static void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
   #if MI_DEBUG>1
   // no more arena pages?
   for (size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
-    mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, NULL);
+    mi_arena_pages_t* const arena_pages = mi_atomic_load_relaxed(&heap->arena_pages[i]);
     if (arena_pages!=NULL) {
       mi_assert_internal(mi_bitmap_is_all_clear(arena_pages->pages));
     }

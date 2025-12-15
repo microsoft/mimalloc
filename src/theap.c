@@ -146,6 +146,7 @@ void mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept {
 }
 
 void mi_collect(bool force) mi_attr_noexcept {
+  // cannot really collect process wide, just a theap..
   mi_theap_collect(_mi_theap_default(), force);
 }
 
@@ -223,12 +224,13 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   // allocate and initialize a theap
   mi_memid_t memid;
   mi_theap_t* theap;
-  if (!_mi_is_heap_main(heap)) {
-    theap = (mi_theap_t*)mi_heap_zalloc(mi_heap_main(),sizeof(mi_theap_t));
-    memid = _mi_memid_create(MI_MEM_HEAP_MAIN);
-    memid.initially_zero = memid.initially_committed = true;
-  }
-  else if (heap->exclusive_arena == NULL) {
+  //if (!_mi_is_heap_main(heap)) {  
+  //  theap = (mi_theap_t*)mi_heap_zalloc(mi_heap_main(),sizeof(mi_theap_t));
+  //  memid = _mi_memid_create(MI_MEM_HEAP_MAIN);
+  //  memid.initially_zero = memid.initially_committed = true;
+  //}
+  //else 
+  if (heap->exclusive_arena == NULL) {
     theap = (mi_theap_t*)_mi_meta_zalloc(sizeof(mi_theap_t), &memid);
   }
   else {
@@ -274,7 +276,7 @@ static void mi_theap_free(mi_theap_t* theap, bool do_free_mem) {
 
   // and free the used memory
   if (do_free_mem) {
-    if (theap->memid.memkind == MI_MEM_HEAP_MAIN) {
+    if (theap->memid.memkind == MI_MEM_HEAP_MAIN) {  // note: for now unused as it would access theap_default stats in mi_free of the current theap
       mi_assert_internal(_mi_is_heap_main(mi_heap_of(theap)));
       mi_free(theap);
     }
@@ -693,8 +695,16 @@ static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
 {
   mi_heap_t* heap = (mi_heap_t*)const_heap;
   mi_assert_internal(heap!=NULL);
-  mi_assert_internal(!_mi_is_heap_main(heap));
 
+  if (_mi_is_heap_main(heap)) {
+    // this can be called if the (main) thread is not yet initialized (as no allocation happened)
+    mi_thread_init();
+    mi_theap_t* theap = _mi_heap_theap(heap);
+    mi_assert_internal(theap!=NULL);
+    return theap;
+  }
+
+  // otherwise initialize the theap for this heap
   // get the thread local
   mi_theap_t* theap = NULL;
   if (heap->theap==0) {
@@ -726,7 +736,7 @@ static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
 // get the theap for a heap without initializing (and return NULL in that case)
 mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap) {
   if (heap==NULL || _mi_is_heap_main(heap)) {
-    return _mi_theap_main();
+    return __mi_theap_main;  // don't call _mi_theap_main as it may still be NULL
   }
   else {
     return (mi_theap_t*)_mi_prim_thread_local_get(heap->theap);
@@ -786,14 +796,17 @@ mi_heap_t* mi_heap_new(void) {
 static void mi_heap_free(mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL && !_mi_is_heap_main(heap));
   // free all theaps belonging to this heap
-  mi_lock(&heap->theaps_lock) {
-    mi_theap_t* theap = heap->theaps;
-    while (theap != NULL) {
-      mi_theap_t* next = theap->hnext; // load upfront as the theap gets free'd
-      mi_theap_free(theap, true);      // note: enters same lock
-      theap = next;
-    }
+  mi_theap_t* theap = NULL;
+  mi_lock(&heap->theaps_lock) { theap = heap->theaps; }
+  while(theap != NULL) {
+    mi_theap_t* next = NULL;
+    mi_lock(&heap->theaps_lock) { next = theap->hnext; }
+    mi_theap_free(theap, true);
+    theap = next;
   }
+  mi_lock(&heap->theaps_lock) { theap = heap->theaps; }
+  mi_assert_internal(theap==NULL);
+
   // remove the heap from the subproc
   mi_heap_stats_merge_to_subproc(heap);
   mi_atomic_decrement_relaxed(&heap->subproc->heap_count);
