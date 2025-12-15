@@ -891,6 +891,9 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
     mi_subprocs_unsafe_destroy_all(); 
     _mi_page_map_unsafe_destroy(_mi_subproc_main());
   }
+  else {
+    mi_heap_stats_merge_to_subproc(mi_heap_main());
+  }
   //_mi_page_map_unsafe_destroy(_mi_subproc_main());
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {

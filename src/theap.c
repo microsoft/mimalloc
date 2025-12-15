@@ -149,6 +149,10 @@ void mi_collect(bool force) mi_attr_noexcept {
   mi_theap_collect(_mi_theap_default(), force);
 }
 
+void mi_heap_collect(mi_heap_t* heap, bool force) {
+  // cannot really collect a heap, just a theap..
+  mi_theap_collect(mi_heap_theap(heap), force);
+}
 
 /* -----------------------------------------------------------
   Heap new

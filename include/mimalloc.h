@@ -231,6 +231,7 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new(void);
 mi_decl_export void mi_heap_delete(mi_heap_t* heap);
 mi_decl_export void mi_heap_destroy(mi_heap_t* heap);
 mi_decl_export void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node);
+mi_decl_export void mi_heap_collect(mi_heap_t* heap, bool force);
 
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_main(void);
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_of(void* p);

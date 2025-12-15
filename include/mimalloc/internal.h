@@ -52,7 +52,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          __thread
 #define mi_decl_align(a)        __attribute__((aligned(a)))
 #define mi_decl_noreturn        __attribute__((noreturn))
-#if NDEBUG && !MI_SECURE && !MI_GUARDED
+#if NDEBUG && !MI_SECURE && !MI_GUARDED && !defined(__cplusplus)
 #define mi_decl_preserve_all    __attribute__((preserve_all))
 #else
 #define mi_decl_preserve_all    // otherwise we get warnings in debug compilation
