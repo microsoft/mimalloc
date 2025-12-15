@@ -43,12 +43,16 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_hidden
 #define mi_decl_cold
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
+#if !MI_TRACK_ASAN
 #define mi_decl_forceinline     __attribute__((always_inline))
+#else
+#define mi_decl_forceinline     inline
+#endif
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
 #define mi_decl_align(a)        __attribute__((aligned(a)))
 #define mi_decl_noreturn        __attribute__((noreturn))
-#if NDEBUG
+#if NDEBUG && !MI_SECURE && !MI_GUARDED
 #define mi_decl_preserve_all    __attribute__((preserve_all))
 #else
 #define mi_decl_preserve_all    // otherwise we get warnings in debug compilation

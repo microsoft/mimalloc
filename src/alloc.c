@@ -40,7 +40,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   // check the free list
   mi_block_t* const block = page->free;
   if mi_unlikely(block == NULL) {
-    return _mi_malloc_generic(theap, size, (zero ? 1 : 0), usable); 
+    return _mi_malloc_generic(theap, size, (zero ? 1 : 0), usable);
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   if (usable != NULL) { *usable = mi_page_usable_block_size(page); };
@@ -759,7 +759,8 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
   mi_assert_internal(_mi_is_aligned(block, os_page_size));
   mi_assert_internal(_mi_is_aligned(guard_page, os_page_size));
   if (!page->memid.is_pinned && _mi_is_aligned(guard_page, os_page_size)) {
-    _mi_os_protect(guard_page, os_page_size);
+    const bool ok = _mi_os_protect(guard_page, os_page_size);
+    MI_UNUSED(ok);
   }
   else {
     _mi_warning_message("unable to set a guard page behind an object due to pinned memory (large OS pages?) (object %p of size %zu)\n", block, block_size);
@@ -789,7 +790,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   const size_t obj_size = (mi_option_is_enabled(mi_option_guarded_precise) ? size : _mi_align_up(size, MI_MAX_ALIGN_SIZE));
   const size_t bsize    = _mi_align_up(_mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
   const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);
-  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(theap, req_size, zero, 0 /* huge_alignment */, NULL);
+  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(theap, req_size, (zero ? 1 : 0), NULL);
   if (block==NULL) return NULL;
   void* const p = mi_block_ptr_set_guarded(block, obj_size);
 
