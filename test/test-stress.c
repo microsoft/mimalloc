@@ -24,7 +24,7 @@ terms of the MIT license.
 
 // #define MI_GUARDED         1
 // #define USE_STD_MALLOC     1
-#define MI_USE_HEAPS       1
+// #define MI_USE_HEAPS       1
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
@@ -398,8 +398,9 @@ int main(int argc, char** argv) {
 
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
-  mi_debug_show_arenas();
   mi_collect(true);
+  mi_debug_show_arenas();
+  //mi_collect(true);
   char* json = mi_stats_get_json(0, NULL);
   if (json != NULL) {
     fputs(json,stderr);

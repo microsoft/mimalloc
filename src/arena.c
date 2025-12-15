@@ -14,7 +14,7 @@ threads and need to be accessed using atomic operations.
 Arenas are also used to for huge OS page (1GiB) reservations or for reserving
 OS memory upfront which can be improve performance or is sometimes needed
 on embedded devices. We can also employ this with WASI or `sbrk` systems
-to reserve large arenas upfront and be able to reuse the memory more effectively.
+to reserve large arenas upfront and be able to reuse the memory more effectively. 
 
 The arena allocation needs to be thread safe and we use an atomic bitmap to allocate.
 -----------------------------------------------------------------------------*/
@@ -1583,7 +1583,6 @@ static size_t mi_debug_show_page_bfield(char* buf, size_t* k, mi_arena_t* arena,
       bit_set_count++;
       c = 'p';
       color = MI_GRAY;
-      mi_page_t* page = (mi_page_t*)start;
       if (mi_page_is_singleton(page)) { c = 's'; }
       else if (mi_page_is_full(page)) { c = 'f'; }
       if (!mi_page_is_abandoned(page)) { c = _mi_toupper(c); }
@@ -1691,10 +1690,10 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
   return bit_set_count;
 }
 
-static size_t mi_debug_show_bitmap_binned(const char* header1, const char* header2, const char* header3, size_t slice_count, 
-                                           size_t chunk_count, mi_bitmap_t* bitmap, mi_bchunkmap_t* chunk_bins, bool invert, mi_arena_t* arena, bool narrow) {
-  return mi_debug_show_chunks(header1, header2, header3, slice_count, mi_bitmap_chunk_count(bitmap), &bitmap->chunks[0], chunk_bins, invert, arena, narrow);
-}
+//static size_t mi_debug_show_bitmap_binned(const char* header1, const char* header2, const char* header3, size_t slice_count, 
+//                                           mi_bitmap_t* bitmap, mi_bchunkmap_t* chunk_bins, bool invert, mi_arena_t* arena, bool narrow) {
+//  return mi_debug_show_chunks(header1, header2, header3, slice_count, mi_bitmap_chunk_count(bitmap), &bitmap->chunks[0], chunk_bins, invert, arena, narrow);
+//}
 
 static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narrow) mi_attr_noexcept {
   mi_subproc_t* subproc = heap->subproc;
@@ -2120,18 +2119,25 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
   }
   else {
     // move the page to `heap_target` as an abandoned page
+    const size_t bin = _mi_page_bin(page);
     size_t slice_index;
     size_t slice_count;
     mi_arena_pages_t* arena_pages = NULL;
     mi_arena_t* const arena = mi_page_arena_pages(page, &slice_index, &slice_count, &arena_pages); 
     mi_assert_internal(mi_bitmap_is_set(arena_pages->pages, slice_index));
     mi_bitmap_clear(arena_pages->pages, slice_index);
+    mi_theap_stat_decrease(theap, page_bins[bin], 1);
+    mi_theap_stat_decrease(theap, pages, 1);
+    
     mi_arena_pages_t* arena_pages_target = mi_heap_arena_pages(heap_target, arena);
     mi_assert_internal(mi_bitmap_is_clear(arena_pages_target->pages, slice_index));
     mi_bitmap_set(arena_pages_target->pages, slice_index);
     page->heap = heap_target;    
-    // todo: stats?
     mi_theap_t* const theap_target = info->theap_target;
+    mi_theap_stat_increase(theap_target, page_bins[bin], 1);
+    mi_theap_stat_increase(theap_target, pages, 1);
+    
+    // and abandon in the new heap
     _mi_arenas_page_abandon(page,theap_target);
   }
   return true;

@@ -691,6 +691,11 @@ void mi_heap_stats_merge_to_subproc(mi_heap_t* heap) {
   _mi_stats_merge_from(&heap->subproc->stats, &heap->stats);
 }
 
+void mi_heap_stats_merge_to_main(mi_heap_t* heap) {
+  if (heap==NULL) return;
+  _mi_stats_merge_from(&mi_heap_main()->stats, &heap->stats);
+}
+
 static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
 {
   mi_heap_t* heap = (mi_heap_t*)const_heap;
@@ -795,6 +800,7 @@ mi_heap_t* mi_heap_new(void) {
 // free the heap resources (assuming the pages are already moved/destroyed)
 static void mi_heap_free(mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL && !_mi_is_heap_main(heap));
+
   // free all theaps belonging to this heap
   mi_theap_t* theap = NULL;
   mi_lock(&heap->theaps_lock) { theap = heap->theaps; }
@@ -807,8 +813,19 @@ static void mi_heap_free(mi_heap_t* heap) {
   mi_lock(&heap->theaps_lock) { theap = heap->theaps; }
   mi_assert_internal(theap==NULL);
 
+  // free all arena pages infos
+  mi_lock(&heap->arena_pages_lock) {
+    for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
+      mi_arena_pages_t* arena_pages = mi_atomic_load_relaxed(&heap->arena_pages[i]);
+      if (arena_pages!=NULL) {
+        mi_atomic_store_relaxed(&heap->arena_pages[i], NULL);
+        mi_free(arena_pages);
+      }
+    }
+  }
+
   // remove the heap from the subproc
-  mi_heap_stats_merge_to_subproc(heap);
+  mi_heap_stats_merge_to_main(heap);
   mi_atomic_decrement_relaxed(&heap->subproc->heap_count);
   mi_lock(&heap->subproc->heaps_lock) {
     if (heap->next!=NULL) { heap->next->prev = heap->prev; }
