@@ -448,7 +448,7 @@ typedef struct mi_heap_print_visit_info_s {
   void* out_arg;
 } mi_heap_print_visit_info_t;
 
-static mi_cdecl bool mi_heap_print_visitor(mi_heap_t* heap, void* arg) {
+static bool mi_cdecl mi_heap_print_visitor(mi_heap_t* heap, void* arg) {
   mi_heap_print_visit_info_t* vinfo = (mi_heap_print_visit_info_t*)(arg);
   mi_heap_stats_print_out(heap, vinfo->out, vinfo->out_arg);
   return true;
