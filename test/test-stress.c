@@ -25,7 +25,7 @@ terms of the MIT license.
 // #define MI_GUARDED         1
 // #define USE_STD_MALLOC     1
 #ifndef USE_STD_MALLOC
-#define MI_USE_HEAPS       1
+// #define MI_USE_HEAPS       1
 #endif
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
@@ -43,7 +43,7 @@ static int ITER    = 20;
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
-#elif  1
+#elif  0
 static int THREADS = 4;
 static int SCALE   = 10;
 static int ITER    = 20;
