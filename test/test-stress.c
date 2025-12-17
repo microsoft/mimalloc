@@ -297,6 +297,8 @@ static void test_stress(void) {
     #endif
   }
   
+  mi_stats_print(NULL);
+  
   // clean up  (a bit too early to test the final free_items still works correctly)
   #ifdef MI_USE_HEAPS
   mi_heap_delete(prev_heap); prev_heap = NULL;

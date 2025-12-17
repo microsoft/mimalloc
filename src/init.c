@@ -274,6 +274,7 @@ void _mi_theap_guarded_init(mi_theap_t* theap) {
 static void mi_subproc_main_init(void) {
   if (subproc_main.memid.memkind != MI_MEM_STATIC) {
     subproc_main.memid = _mi_memid_create(MI_MEM_STATIC);
+    subproc_main.heaps = &heap_main;
     mi_atomic_store_release(&subproc_main.heap_main, &heap_main);
     mi_lock_init(&subproc_main.arena_reserve_lock);
     mi_lock_init(&subproc_main.heaps_lock);
@@ -433,10 +434,12 @@ mi_subproc_id_t mi_subproc_main(void) {
 }
 
 mi_subproc_id_t mi_subproc_new(void) {
+  static _Atomic(size_t) subproc_total_count;
   mi_memid_t memid;
   mi_subproc_t* subproc = (mi_subproc_t*)_mi_meta_zalloc(sizeof(mi_subproc_t),&memid);
   if (subproc == NULL) return NULL;
   subproc->memid = memid;
+  subproc->subproc_seq = mi_atomic_increment_relaxed(&subproc_total_count) + 1;
   mi_lock_init(&subproc->arena_reserve_lock);
   mi_lock_init(&subproc->heaps_lock);
   mi_lock(&subprocs_lock) {
@@ -521,6 +524,17 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
   mi_atomic_increment_relaxed(&subproc->thread_count);
 }
 
+
+bool mi_subproc_visit_heaps(mi_subproc_id_t subproc_id, mi_heap_visit_fun* visitor, void* arg) {
+  mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
+  if (subproc==NULL) return false;
+  mi_lock(&subproc->heaps_lock) {
+    bool ok = true;
+    for (mi_heap_t* heap = subproc->heaps; heap!=NULL && ok; heap = heap->next) {
+      ok = (*visitor)(heap, arg);
+    }
+  }
+}
 
 
 /* -----------------------------------------------------------

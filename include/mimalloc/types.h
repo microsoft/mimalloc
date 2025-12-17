@@ -503,6 +503,7 @@ struct mi_theap_s {
 
 typedef struct mi_subproc_s mi_subproc_t;
 struct mi_subproc_s {
+  size_t                subproc_seq;                    // unique id for sub-processes
   mi_subproc_t*         next;                           // list of all sub-processes
   mi_subproc_t*         prev;
  

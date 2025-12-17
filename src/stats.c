@@ -438,18 +438,32 @@ void mi_stats_reset(void) mi_attr_noexcept {
 }
 
 
-void mi_subproc_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* out, void* arg) mi_attr_noexcept {
-  mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
-  if (subproc== NULL) return;
-  _mi_stats_print("subproc", 0, &_mi_subproc_from_id(subproc_id)->stats, out, arg);
-}
-
 void mi_heap_stats_print_out(mi_heap_t* heap, mi_output_fun* out, void* arg) mi_attr_noexcept {
+  if (heap==NULL) { heap = mi_heap_main(); }
   _mi_stats_print("heap", heap->heap_seq, mi_heap_get_stats(heap), out, arg);
 }
 
+typedef struct mi_heap_visit_info_s {
+  mi_output_fun* out;
+  void* out_arg;
+} mi_heap_visit_info_t;
+
+static bool cdecl mi_heap_visitor(mi_heap_t* heap, void* arg) {
+  mi_heap_visit_info_t* vinfo = (mi_heap_visit_info_t*)(arg);
+  mi_heap_stats_print_out(heap, vinfo->out, vinfo->out_arg);
+  return true;
+}
+
+void mi_subproc_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* out, void* arg) mi_attr_noexcept {
+  mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
+  if (subproc==NULL) return;
+  mi_heap_visit_info_t vinfo = { out, arg };
+  mi_subproc_visit_heaps(subproc, &mi_heap_visitor, &vinfo);
+  _mi_stats_print("subproc", subproc->subproc_seq, &subproc->stats, out, arg);
+}
+
 void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
-  mi_heap_stats_print_out(mi_heap_main(),out, arg);
+  mi_subproc_stats_print_out(mi_subproc_main(),out, arg);
 }
 
 // deprecated

@@ -123,7 +123,7 @@ mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
     mi_heap_t* head = heap->subproc->heaps;
     heap->prev = NULL;
     heap->next = head;
-    if (head!=NULL) { head->next = heap;  }
+    if (head!=NULL) { head->prev = heap;  }
     heap->subproc->heaps = heap;
   }
   mi_atomic_increment_relaxed(&heap_main->subproc->heap_count);

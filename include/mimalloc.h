@@ -342,18 +342,21 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t a
 // Used for example for separate interpreters in one process.
 // ------------------------------------------------------
 
-typedef void* mi_subproc_id_t;
+typedef void* mi_subproc_id_t;                        
 mi_decl_export mi_subproc_id_t mi_subproc_main(void);
 mi_decl_export mi_subproc_id_t mi_subproc_new(void);
 mi_decl_export void mi_subproc_destroy(mi_subproc_id_t subproc);
 mi_decl_export void mi_subproc_add_current_thread(mi_subproc_id_t subproc); // this should be called right after a thread is created (and no allocation has taken place yet)
+
+typedef bool (mi_cdecl mi_heap_visit_fun)(mi_heap_t* heap, void* arg);
+mi_decl_export bool mi_subproc_visit_heaps(mi_subproc_id_t subproc, mi_heap_visit_fun* visitor, void* arg);
 
 
 // -------------------------------------------------------------------------------------
 // A "theap" is a thread-local heap. This API is only provided for special circumstances like runtimes
 // that already have a thread-local context and can store the theap there for (slightly) faster allocations.
 // Theaps are first-class, but can only allocate from the same thread that created it.
-// Allocation through a `theap` is a tiny bit faster than using plain malloc
+// Allocation through a `theap` may be a tiny bit faster than using plain malloc
 // (as we don't need to lookup the thread local variable).
 // -------------------------------------------------------------------------------------
 
