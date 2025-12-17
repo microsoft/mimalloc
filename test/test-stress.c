@@ -43,7 +43,7 @@ static int ITER    = 20;
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
-#elif  0
+#elif  1
 static int THREADS = 4;
 static int SCALE   = 10;
 static int ITER    = 20;
@@ -407,11 +407,11 @@ int main(int argc, char** argv) {
   mi_collect(true);
   mi_debug_show_arenas();
   //mi_collect(true);
-  char* json = mi_stats_get_json(0, NULL);
-  if (json != NULL) {
-    fputs(json,stderr);
-    mi_free(json);
-  }
+  //char* json = mi_stats_get_json(0, NULL);
+  //if (json != NULL) {
+  //  fputs(json,stderr);
+  //  mi_free(json);
+  //}
   #endif
   mi_collect(true);
   mi_stats_print(NULL);
