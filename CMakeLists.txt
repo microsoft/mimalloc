@@ -60,7 +60,7 @@ set(mi_sources
     src/arena.c
     src/arena-meta.c
     src/bitmap.c
-    src/theap.c
+    src/heap.c
     src/init.c
     src/libc.c
     src/options.c
@@ -69,6 +69,7 @@ set(mi_sources
     src/page-map.c
     src/random.c
     src/stats.c
+    src/theap.c
     src/prim/prim.c)
 
 set(mi_cflags "")

@@ -183,9 +183,8 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
-void          _mi_theap_guarded_init(mi_theap_t* theap);
-
 bool          _mi_is_heap_main(const mi_heap_t* heap);
+void          _mi_theap_guarded_init(mi_theap_t* theap);
 mi_theap_t*   _mi_theap_default_safe(void);             // ensure the returned theap is initialized
 
 
@@ -269,7 +268,6 @@ void          _mi_page_retire(mi_page_t* page) mi_attr_noexcept;       // free t
 void          _mi_page_unfull(mi_page_t* page);
 void          _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);     // free the page
 void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);  // abandon the page, to be picked up by another thread...
-void          _mi_theap_collect_retired(mi_theap_t* theap, bool force);
 
 size_t        _mi_page_queue_append(mi_theap_t* theap, mi_page_queue_t* pq, mi_page_queue_t* append);
 void          _mi_deferred_free(mi_theap_t* theap, bool force);
@@ -288,19 +286,18 @@ mi_theap_t*   _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld);
 void          _mi_theap_delete(mi_theap_t* theap);
 void          _mi_theap_default_set(mi_theap_t* theap);
 void          _mi_theap_cached_set(mi_theap_t* theap);
-
-void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
+void          _mi_theap_collect_retired(mi_theap_t* theap, bool force);
 bool          _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
 void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
+void          _mi_theap_free(mi_theap_t* theap);
 
-// heaps
-// defined in "theap.c"
+// "heap.c"
+void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
 mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap); // get (and possible create) the theap belonging to a heap
 mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap);    // get the theap for a heap without initializing (and return NULL in that case)
+void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);  // in "arena.c"
+void          _mi_heap_destroy_pages(mi_heap_t* heap_from);                   // in "arena.c"
 
-// defined in "arena.c"
-void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);
-void          _mi_heap_destroy_pages(mi_heap_t* heap_from);
 
 // "stats.c"
 void          _mi_stats_init(void);
