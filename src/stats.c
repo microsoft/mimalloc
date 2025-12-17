@@ -268,12 +268,12 @@ static bool mi_stats_print_bins(const mi_stat_count_t* bins, size_t max, const c
   for (size_t i = 0; i <= max; i++) {
     if (bins[i].total > 0) {
       found = true;
-      int64_t unit = _mi_bin_size((uint8_t)i);
+      const size_t unit = _mi_bin_size((uint8_t)i);
       const char* pagekind = (unit <= MI_SMALL_MAX_OBJ_SIZE ? "S" : 
                                (unit <= MI_MEDIUM_MAX_OBJ_SIZE ? "M" : 
                                  (unit <= MI_LARGE_MAX_OBJ_SIZE ? "L" : "H")));
       _mi_snprintf(buf, 64, "%5s%2s%3lu", fmt, pagekind, (long)i);
-      mi_stat_print(&bins[i], buf, unit, out, arg);
+      mi_stat_print(&bins[i], buf, (int64_t)unit, out, arg);
     }
   }
   if (found) {
@@ -443,13 +443,13 @@ void mi_heap_stats_print_out(mi_heap_t* heap, mi_output_fun* out, void* arg) mi_
   _mi_stats_print("heap", heap->heap_seq, mi_heap_get_stats(heap), out, arg);
 }
 
-typedef struct mi_heap_visit_info_s {
+typedef struct mi_heap_print_visit_info_s {
   mi_output_fun* out;
   void* out_arg;
-} mi_heap_visit_info_t;
+} mi_heap_print_visit_info_t;
 
-static bool cdecl mi_heap_visitor(mi_heap_t* heap, void* arg) {
-  mi_heap_visit_info_t* vinfo = (mi_heap_visit_info_t*)(arg);
+static mi_cdecl bool mi_heap_print_visitor(mi_heap_t* heap, void* arg) {
+  mi_heap_print_visit_info_t* vinfo = (mi_heap_print_visit_info_t*)(arg);
   mi_heap_stats_print_out(heap, vinfo->out, vinfo->out_arg);
   return true;
 }
@@ -457,8 +457,8 @@ static bool cdecl mi_heap_visitor(mi_heap_t* heap, void* arg) {
 void mi_subproc_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* out, void* arg) mi_attr_noexcept {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   if (subproc==NULL) return;
-  mi_heap_visit_info_t vinfo = { out, arg };
-  mi_subproc_visit_heaps(subproc, &mi_heap_visitor, &vinfo);
+  mi_heap_print_visit_info_t vinfo = { out, arg };
+  mi_subproc_visit_heaps(subproc, &mi_heap_print_visitor, &vinfo);
   _mi_stats_print("subproc", subproc->subproc_seq, &subproc->stats, out, arg);
 }
 

@@ -244,7 +244,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
       size_t already_committed_count = 0;
       mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed_count);
       mi_bitmap_clearN(arena->slices_committed, slice_index, slice_count);
-      mi_os_stat_decrease(committed, mi_size_of_slices(already_committed_count));
+      mi_subproc_stat_decrease(arena->subproc, committed, mi_size_of_slices(already_committed_count));
     }
   }
 
@@ -996,7 +996,7 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
       const size_t extra = page->slice_committed % MI_ARENA_SLICE_SIZE;
       if (extra > 0) {
         // pretend it was decommitted already
-        mi_os_stat_decrease(committed, extra);
+        mi_subproc_stat_decrease(arena->subproc, committed, extra);
       }
     }
     else {
@@ -1844,13 +1844,13 @@ static bool mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_c
     // no longer committed
     mi_bitmap_clearN(arena->slices_committed, slice_index, slice_count);
     // we just counted in the purge to decommit all, but the some part was not committed so adjust that here
-    // mi_os_stat_decrease(committed, mi_size_of_slices(slice_count - already_committed));
+    // mi_subproc_stat_decrease(arena->subproc, committed, mi_size_of_slices(slice_count - already_committed));
   }
   else if (!all_committed) {
     // we cannot assume any of these are committed any longer (even with reset since we did setN and may have marked uncommitted slices as committed)
     mi_bitmap_clearN(arena->slices_committed, slice_index, slice_count);
     // we adjust the commit count as parts will be re-committed
-    // mi_os_stat_decrease(committed, mi_size_of_slices(already_committed));
+    // mi_subproc_stat_decrease(arena->subproc, committed, mi_size_of_slices(already_committed));
   }
 
   return needs_recommit;

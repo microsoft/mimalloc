@@ -528,12 +528,13 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
 bool mi_subproc_visit_heaps(mi_subproc_id_t subproc_id, mi_heap_visit_fun* visitor, void* arg) {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   if (subproc==NULL) return false;
+  bool ok = true;    
   mi_lock(&subproc->heaps_lock) {
-    bool ok = true;
     for (mi_heap_t* heap = subproc->heaps; heap!=NULL && ok; heap = heap->next) {
       ok = (*visitor)(heap, arg);
     }
   }
+  return ok;
 }
 
 

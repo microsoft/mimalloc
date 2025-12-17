@@ -24,7 +24,9 @@ terms of the MIT license.
 
 // #define MI_GUARDED         1
 // #define USE_STD_MALLOC     1
+#ifndef USE_STD_MALLOC
 #define MI_USE_HEAPS       1
+#endif
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
@@ -41,7 +43,7 @@ static int ITER    = 20;
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
-#elif 1
+#elif  1
 static int THREADS = 4;
 static int SCALE   = 10;
 static int ITER    = 20;
@@ -297,7 +299,9 @@ static void test_stress(void) {
     #endif
   }
   
+  #ifndef USE_STD_MALLOC
   mi_stats_print(NULL);
+  #endif
   
   // clean up  (a bit too early to test the final free_items still works correctly)
   #ifdef MI_USE_HEAPS

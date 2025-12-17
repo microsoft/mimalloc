@@ -372,11 +372,11 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_heap_stat_adjust_increase(heap,stat,amnt)            __mi_stat_adjust_increase_mt( &(heap)->stats.stat, amnt)
 #define mi_heap_stat_adjust_decrease(heap,stat,amnt)            __mi_stat_adjust_decrease_mt( &(heap)->stats.stat, amnt)
 
-#define mi_subproc_stat_counter_increase(subproc,stat,amount)   mi_heap_stat_counter_increase( _mi_subproc_heap_main(subproc), stat, amount)
-#define mi_subproc_stat_increase(subproc,stat,amount)           mi_heap_stat_increase( _mi_subproc_heap_main(subproc), stat, amount)
-#define mi_subproc_stat_decrease(subproc,stat,amount)           mi_heap_stat_decrease( _mi_subproc_heap_main(subproc), stat, amount)
-#define mi_subproc_stat_adjust_increase(subproc,stat,amnt)      mi_heap_stat_adjust_increase( _mi_subproc_heap_main(subproc), stat, amnt)
-#define mi_subproc_stat_adjust_decrease(subproc,stat,amnt)      mi_heap_stat_adjust_decrease( _mi_subproc_heap_main(subproc), stat, amnt)
+#define mi_subproc_stat_counter_increase(subproc,stat,amount)   __mi_stat_counter_increase_mt( &(subproc)->stats.stat, amount)
+#define mi_subproc_stat_increase(subproc,stat,amount)           __mi_stat_increase_mt( &(subproc)->stats.stat, amount)
+#define mi_subproc_stat_decrease(subproc,stat,amount)           __mi_stat_decrease_mt( &(subproc)->stats.stat, amount)
+#define mi_subproc_stat_adjust_increase(subproc,stat,amount)    __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amount)
+#define mi_subproc_stat_adjust_decrease(subproc,stat,amount)    __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amount)
 
 #define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
 #define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
