@@ -535,11 +535,7 @@ typedef struct mi_heap_s {
 
   mi_arena_t*           exclusive_arena;                // if the heap should only allocate from a specific arena (or NULL)
   int                   numa_node;                      // if >=0, prefer this numa node for allocations
-  long                  page_full_retain;               // how many full pages can be retained per queue (before abandoning them)
-  bool                  allow_page_reclaim;             // `true` if this heap should not reclaim abandoned pages
-  bool                  allow_page_abandon;             // `true` if this heap can abandon pages to reduce memory footprint
-  bool                  allow_destroy;
-
+  
   mi_theap_t*           theaps;                         // list of all thread-local theaps belonging to this heap (using the `hnext`/`hprev` fields)
   mi_lock_t             theaps_lock;                    // lock for the theaps list operations
   

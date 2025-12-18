@@ -185,8 +185,8 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
 bool          _mi_is_heap_main(const mi_heap_t* heap);
 void          _mi_theap_guarded_init(mi_theap_t* theap);
+void          _mi_theap_options_init(mi_theap_t* theap);
 mi_theap_t*   _mi_theap_default_safe(void);             // ensure the returned theap is initialized
-
 
 // os.c
 void          _mi_os_init(void);                                            // called from process init

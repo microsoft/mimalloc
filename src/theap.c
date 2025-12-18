@@ -178,9 +178,8 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   theap->memid = memid;
   theap->heap  = heap;
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
-  theap->allow_page_reclaim = heap->allow_page_reclaim;
-  theap->allow_page_abandon = heap->allow_page_abandon;
-  theap->page_full_retain = heap->page_full_retain;
+  
+  _mi_theap_options_init(theap);
   if (theap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our theap.
     // this is checked in `free.c:mi_free_try_collect_mt`

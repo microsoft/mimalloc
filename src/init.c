@@ -291,8 +291,14 @@ static void mi_tld_main_init(void) {
   }
 }
 
+void _mi_theap_options_init(mi_theap_t* theap) {
+  theap->allow_page_reclaim = (mi_option_get(mi_option_page_reclaim_on_free) >= 0);
+  theap->allow_page_abandon = (mi_option_get(mi_option_page_full_retain) >= 0);
+  theap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
+}
+
 // Initialization of the (statically allocated) main theap, and the main tld and subproc.
-static void mi_theap_main_init(mi_heap_t* heap) {
+static void mi_theap_main_init(void) {
   if mi_unlikely(theap_main.memid.memkind != MI_MEM_STATIC) {
     // theap
     theap_main.memid = _mi_memid_create(MI_MEM_STATIC);
@@ -302,11 +308,8 @@ static void mi_theap_main_init(mi_heap_t* heap) {
       _mi_random_init(&theap_main.random);
     #endif
     theap_main.cookie  = _mi_theap_random_next(&theap_main);
+    _mi_theap_options_init(&theap_main);
     _mi_theap_guarded_init(&theap_main);
-
-    theap_main.allow_page_reclaim = heap->allow_page_reclaim;
-    theap_main.allow_page_abandon = heap->allow_page_abandon;
-    theap_main.page_full_retain   = heap->page_full_retain;
   }
 }
 
@@ -316,17 +319,13 @@ static void mi_heap_main_init(void) {
     heap_main.subproc = &subproc_main;
     heap_main.theaps = &theap_main;
 
-    heap_main.allow_page_reclaim = (mi_option_get(mi_option_page_reclaim_on_free) >= 0);
-    heap_main.allow_page_abandon = (mi_option_get(mi_option_page_full_retain) >= 0);
-    heap_main.page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
+    mi_theap_main_init();
+    mi_subproc_main_init();
+    mi_tld_main_init();
 
     mi_lock_init(&heap_main.theaps_lock);
     mi_lock_init(&heap_main.os_abandoned_pages_lock);
     mi_lock_init(&heap_main.arena_pages_lock);
-
-    mi_theap_main_init(&heap_main);
-    mi_subproc_main_init();
-    mi_tld_main_init();
   }
 }
 
