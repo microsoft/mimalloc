@@ -147,16 +147,16 @@ terms of the MIT license. A copy of the license can be found in the file
   #endif
 #endif
 
-#define MI_BCHUNK_BITS                    (1 << MI_BCHUNK_BITS_SHIFT)         // sub-bitmaps are "bchunks" of 512 bits
+#define MI_BCHUNK_BITS                    (1 << MI_BCHUNK_BITS_SHIFT)         // sub-bitmaps in arena's are "bchunks" of 512 bits
 #define MI_ARENA_SLICE_SIZE               (MI_ZU(1) << MI_ARENA_SLICE_SHIFT)  // arena's allocate in slices of 64 KiB
 #define MI_ARENA_SLICE_ALIGN              (MI_ARENA_SLICE_SIZE)
 
 #define MI_ARENA_MIN_OBJ_SLICES           (1)
-#define MI_ARENA_MAX_CHUNK_OBJ_SLICES     (MI_BCHUNK_BITS)            // 32 MiB (for now, cannot cross chunk boundaries) (or 8 MiB on 32-bit)
+#define MI_ARENA_MAX_CHUNK_OBJ_SLICES     (MI_BCHUNK_BITS)                    // 32 MiB (or 8 MiB on 32-bit)
 
 #define MI_ARENA_MIN_OBJ_SIZE             (MI_ARENA_MIN_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
 #define MI_ARENA_MAX_CHUNK_OBJ_SIZE       (MI_ARENA_MAX_CHUNK_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
-#define MI_ARENA_MAX_OBJ_SIZE             (MI_SIZE_BITS * MI_ARENA_MAX_CHUNK_OBJ_SIZE)  // 1 GiB (or 256 MiB on 32-bit)
+#define MI_ARENA_MAX_OBJ_SIZE             (MI_SIZE_BITS * MI_ARENA_MAX_CHUNK_OBJ_SIZE)  // 1 GiB (or 256 MiB on 32-bit), larger than this is alloc'd by the OS
 
 #if MI_ARENA_MAX_CHUNK_OBJ_SIZE < MI_SIZE_SIZE*1024
 #error maximum object size may be too small to hold local thread data
@@ -191,7 +191,24 @@ terms of the MIT license. A copy of the license can be found in the file
 // A large memory arena where pages are allocated in.
 typedef struct mi_arena_s mi_arena_t;     // defined below
 
+
+// ------------------------------------------------------
+// Heaps contain allocated blocks. Heaps are self-contained
+// but share the (sub-process) memory in the arena's.
+// ------------------------------------------------------
+
+// A first-class heap.
 typedef struct mi_heap_s mi_heap_t;       // heaps
+
+// ------------------------------------------------------
+// We can have sub-processes that are fully separated 
+// from each other (for running multiple Python interpreters
+// for example). A sub-process holds the memory arenas and heaps.
+// ------------------------------------------------------
+
+// A sub-process 
+typedef struct mi_subproc_s mi_subproc_t;
+
 
 // ---------------------------------------------------------------
 // a memory id tracks the provenance of arena/OS allocated memory
@@ -289,9 +306,10 @@ typedef struct mi_block_s {
 #define MI_PAGE_FLAG_MASK               MI_ZU(0x03)
 typedef size_t mi_page_flags_t;
 
-// There are two special threadid's: 0 for abandoned threads, and 4 for abandoned & mapped threads --
-// abandoned-mapped pages are abandoned but also mapped in an arena (in `mi_arena_t.pages_abandoned`)
-// so these can be quickly found for reuse.
+// There are two special threadid's: 0 for pages that are abandoned (and not in a theap queue), 
+// and 4 for abandoned & mapped threads -- abandoned-mapped pages are abandoned but also mapped 
+// in an arena (in `mi_heap_t.arena_pages.pages_abandoned`) so these can be quickly found for reuse.
+// Abondoning partially used pages allows for sharing of this memory between threads (in particular if threads are blocked)
 #define MI_THREADID_ABANDONED           MI_ZU(0)
 #define MI_THREADID_ABANDONED_MAPPED    (MI_PAGE_FLAG_MASK + 1)
 
@@ -364,11 +382,11 @@ typedef struct mi_page_s {
 // Object sizes
 // ------------------------------------------------------
 
-#define MI_PAGE_ALIGN                     MI_ARENA_SLICE_ALIGN // pages must be aligned on this for the page map.
-#define MI_PAGE_MIN_START_BLOCK_ALIGN     MI_MAX_ALIGN_SIZE    // minimal block alignment for the first block in a page (16b)
-#define MI_PAGE_MAX_START_BLOCK_ALIGN2    (4*MI_KiB)           // maximal block alignment for "power of 2"-sized blocks (such that we guarantee natural alignment)
-#define MI_PAGE_OSPAGE_BLOCK_ALIGN2       (4*MI_KiB)           // also aligns any multiple of this size to avoid TLB misses.
-#define MI_PAGE_MAX_OVERALLOC_ALIGN       MI_ARENA_SLICE_SIZE  // (64 KiB) limit for which we overallocate in arena pages, beyond this use OS allocation
+#define MI_PAGE_ALIGN                     MI_ARENA_SLICE_ALIGN      // pages must be aligned on this for the page map.
+#define MI_PAGE_MIN_START_BLOCK_ALIGN     MI_MAX_ALIGN_SIZE         // minimal block alignment for the first block in a page (16b)
+#define MI_PAGE_MAX_START_BLOCK_ALIGN2    (4*MI_KiB)                // maximal block alignment for "power of 2"-sized blocks (such that we guarantee natural alignment)
+#define MI_PAGE_OSPAGE_BLOCK_ALIGN2       (4*MI_KiB)                // also aligns any multiple of this size to avoid TLB misses.
+#define MI_PAGE_MAX_OVERALLOC_ALIGN       MI_ARENA_SLICE_SIZE       // (64 KiB) limit for which we overallocate in arena pages, beyond this use OS allocation
 
 #if (MI_ENCODE_FREELIST || MI_PADDING) && MI_SIZE_SIZE == 8
 #define MI_PAGE_INFO_SIZE                 ((MI_INTPTR_SHIFT+2)*32)  // 160    >= sizeof(mi_page_t)
@@ -397,26 +415,28 @@ typedef struct mi_page_s {
 // ------------------------------------------------------
 
 typedef enum mi_page_kind_e {
-  MI_PAGE_SMALL,    // small blocks go into 64KiB pages
-  MI_PAGE_MEDIUM,   // medium blocks go into 512KiB pages
-  MI_PAGE_LARGE,    // larger blocks go into 4MiB pages (if `MI_ENABLE_LARGE_PAGES==1`)
-  MI_PAGE_SINGLETON // page containing a single block.
-                    // used for blocks `> MI_LARGE_MAX_OBJ_SIZE` or an aligment `> MI_PAGE_MAX_OVERALLOC_ALIGN`.
+  MI_PAGE_SMALL,      // small blocks go into 64KiB pages
+  MI_PAGE_MEDIUM,     // medium blocks go into 512KiB pages
+  MI_PAGE_LARGE,      // larger blocks go into 4MiB pages (if `MI_ENABLE_LARGE_PAGES==1`)
+  MI_PAGE_SINGLETON   // page containing a single block.
+                      // used for blocks `> MI_LARGE_MAX_OBJ_SIZE` or an aligment `> MI_PAGE_MAX_OVERALLOC_ALIGN`.
 } mi_page_kind_t;
 
 
 
 // ------------------------------------------------------
 // A "theap" is a thread local heap which owns pages.
+// (making them thread-local avoids atomic operations)
 //
+// All theaps belong to a (non-thread-local) heap.
 // A theap just owns a set of pages for allocation and
 // can only be allocate/reallocate from the thread that created it.
 // Freeing blocks can be done from any thread though.
 //
 // Per thread, there is always a default theap that belongs
 // to the default heap. It is initialized to statically
-// point initially to an empty theap to avoid initialization checks
-// in the fast path.
+// point initially to an empty theap to avoid initialization 
+// checks in the fast path.
 // ------------------------------------------------------
 
 // Thread local data
@@ -470,7 +490,7 @@ struct mi_theap_s {
   
   mi_theap_t*           tnext;                               // list of theaps in this thread
   mi_theap_t*           tprev;
-  mi_theap_t*           hnext;                               // list of theaps of the `heap`
+  mi_theap_t*           hnext;                               // list of theaps of the owning `heap`
   mi_theap_t*           hprev;
   
   long                  page_full_retain;                    // how many full pages can be retained per queue (before abandoning them)
@@ -489,48 +509,22 @@ struct mi_theap_s {
 };
 
 
+
+
 // ------------------------------------------------------
-// Sub processes do not reclaim or visit pages from other sub processes.
-// These are essentially the static variables of a process, and
-// usually there is only one subprocess. This can be used for example
-// by CPython to have separate interpreters within one process.
-// Each thread can only belong to one subprocess 
-// (and needs to call `mi_subproc_add_current_thread` before any allocations).
+// Heaps contain allocated blocks. Heaps are self-contained
+// but share the (sub-process) memory in the arena's.
 // ------------------------------------------------------
+
+// Keep track of all owned and abandoned pages in the arena's
+struct mi_arena_pages_s;
+typedef struct mi_arena_pages_s mi_arena_pages_t;
 
 #define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
                                 // 160 arenas is enough for ~2 TiB memory
 
-typedef struct mi_subproc_s mi_subproc_t;
-struct mi_subproc_s {
-  size_t                subproc_seq;                    // unique id for sub-processes
-  mi_subproc_t*         next;                           // list of all sub-processes
-  mi_subproc_t*         prev;
- 
-  _Atomic(size_t)       arena_count;                    // current count of arena's
-  _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
-  mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
-  _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
-
-  _Atomic(mi_heap_t*)   heap_main;                      // main heap for this sub process
-  mi_heap_t*            heaps;                          // heaps belonging to this sub-process
-  mi_lock_t             heaps_lock;
-  
-  _Atomic(size_t)       thread_count;                   // current threads associated with this sub-process
-  _Atomic(size_t)       thread_total_count;             // total created threads associated with this sub-process
-  _Atomic(size_t)       heap_count;                     // current heaps in this sub-process (== |heaps|)
-  _Atomic(size_t)       heap_total_count;               // total created heaps in this sub-process
-  
-  mi_memid_t            memid;                          // provenance of this memory block (meta or static)  
-  mi_stats_t            stats;                          // subprocess statistics; updated for arena/OS stats like committed, 
-                                                        // and otherwise merged with heap stats when those are deleted  
-};
-
-
-struct mi_arena_pages_s;
-typedef struct mi_arena_pages_s mi_arena_pages_t;
+// A dynamic thread-local variable
 typedef size_t mi_thread_local_t;
-
 
 typedef struct mi_heap_s {
   mi_subproc_t*         subproc;                        // a heap belongs to a subprocess
@@ -558,6 +552,40 @@ typedef struct mi_heap_s {
 
   mi_stats_t            stats;                           // statistics for this heap; periodically updated by merging from each theap
 } mi_heap_t;
+
+
+// ------------------------------------------------------
+// Sub processes do not reclaim or visit pages from other sub processes.
+// These are essentially the static variables of a process, and
+// usually there is only one subprocess. This can be used for example
+// by CPython to have separate interpreters within one process.
+// Each thread can only belong to one subprocess 
+// (and needs to call `mi_subproc_add_current_thread` before any allocations).
+// ------------------------------------------------------
+
+struct mi_subproc_s {
+  size_t                subproc_seq;                    // unique id for sub-processes
+  mi_subproc_t*         next;                           // list of all sub-processes
+  mi_subproc_t*         prev;
+ 
+  _Atomic(size_t)       arena_count;                    // current count of arena's
+  _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
+  mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
+  _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
+
+  _Atomic(mi_heap_t*)   heap_main;                      // main heap for this sub process
+  mi_heap_t*            heaps;                          // heaps belonging to this sub-process
+  mi_lock_t             heaps_lock;
+  
+  _Atomic(size_t)       thread_count;                   // current threads associated with this sub-process
+  _Atomic(size_t)       thread_total_count;             // total created threads associated with this sub-process
+  _Atomic(size_t)       heap_count;                     // current heaps in this sub-process (== |heaps|)
+  _Atomic(size_t)       heap_total_count;               // total created heaps in this sub-process
+  
+  mi_memid_t            memid;                          // provenance of this memory block (meta or static)  
+  mi_stats_t            stats;                          // subprocess statistics; updated for arena/OS stats like committed, 
+                                                        // and otherwise merged with heap stats when those are deleted  
+};
 
 
 // ------------------------------------------------------

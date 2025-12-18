@@ -187,12 +187,12 @@ mi_decl_export void mi_collect(bool force)      mi_attr_noexcept;
 mi_decl_export int  mi_version(void)            mi_attr_noexcept;
 mi_decl_export void mi_options_print(void)      mi_attr_noexcept;
 mi_decl_export void mi_process_info_print(void) mi_attr_noexcept;
+mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg)      mi_attr_noexcept;
+mi_decl_export void mi_process_info_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
 mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs,
                                     size_t* current_rss, size_t* peak_rss,
                                     size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept;
 
-mi_decl_export void mi_process_info_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
-mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg)      mi_attr_noexcept;
 
 
 // Generally do not use the following as these are usually called automatically
@@ -221,15 +221,15 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_uzalloc_small(size_t 
 
 // -------------------------------------------------------------------------------------
 // Heaps: first-class. Can allocate from any thread (and be free'd from any thread)
-// Heaps keep allocations in separate pages from each other (but share the arena's)
+// Heaps keep allocations in separate pages from each other (but share the arena's and free'd pages)
 // -------------------------------------------------------------------------------------
 
 struct mi_heap_s;
 typedef struct mi_heap_s mi_heap_t;
 
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new(void);
-mi_decl_export void mi_heap_delete(mi_heap_t* heap);
-mi_decl_export void mi_heap_destroy(mi_heap_t* heap);
+mi_decl_export void mi_heap_delete(mi_heap_t* heap);            // move live blocks to the main heap
+mi_decl_export void mi_heap_destroy(mi_heap_t* heap);           // free all live blocks
 mi_decl_export void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node);
 mi_decl_export void mi_heap_collect(mi_heap_t* heap, bool force);
 
@@ -356,6 +356,8 @@ mi_decl_export bool mi_subproc_visit_heaps(mi_subproc_id_t subproc, mi_heap_visi
 // -------------------------------------------------------------------------------------
 // A "theap" is a thread-local heap. This API is only provided for special circumstances like runtimes
 // that already have a thread-local context and can store the theap there for (slightly) faster allocations.
+// This also allows to set a default theap for the current thread so that `malloc` etc. allocate from
+// that theap (instead of the main (t)heap).
 // Theaps are first-class, but can only allocate from the same thread that created it.
 // Allocation through a `theap` may be a tiny bit faster than using plain malloc
 // (as we don't need to lookup the thread local variable).
