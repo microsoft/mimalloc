@@ -74,7 +74,7 @@ const mi_page_t _mi_page_empty = {
   { 0 }, { 0 }, { 0 }, { 0 }, \
   { 0 }, { 0 }, { 0 }, { 0 }, \
   \
-  { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
+  { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, {0}, \
   MI_INIT4(MI_STAT_COUNT_NULL), \
   { 0 }, { 0 }, { 0 }, { 0 },  \
   \
@@ -265,7 +265,7 @@ void _mi_theap_guarded_init(mi_theap_t* theap) {
 
 /* -----------------------------------------------------------
   Initialization
-  Note: on some platforms lock_init or just a thread local access 
+  Note: on some platforms lock_init or just a thread local access
   can cause allocation and induce recursion during initialization.
 ----------------------------------------------------------- */
 
@@ -276,6 +276,8 @@ static void mi_subproc_main_init(void) {
     subproc_main.memid = _mi_memid_create(MI_MEM_STATIC);
     subproc_main.heaps = &heap_main;
     mi_atomic_store_release(&subproc_main.heap_main, &heap_main);
+    __mi_stat_increase_mt(&subproc_main.stats.heaps, 1);
+    __mi_stat_increase_mt(&subproc_main.stats.threads, 1);
     mi_lock_init(&subproc_main.arena_reserve_lock);
     mi_lock_init(&subproc_main.heaps_lock);
     mi_lock_init(&subprocs_lock);
@@ -433,6 +435,10 @@ mi_subproc_id_t mi_subproc_main(void) {
   return _mi_subproc_main();
 }
 
+mi_subproc_id_t mi_subproc_current(void) {
+  return _mi_subproc();
+}
+
 mi_subproc_id_t mi_subproc_new(void) {
   static _Atomic(size_t) subproc_total_count;
   mi_memid_t memid;
@@ -480,7 +486,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc)
   // merge stats back into the main subproc?
   if (subproc!=&subproc_main) {
     _mi_arenas_unsafe_destroy_all(subproc);
-    _mi_stats_merge_from(&subproc_main.stats, &subproc->stats);
+    _mi_stats_merge_into(&subproc_main.stats, &subproc->stats);
 
     // safe to release
     // todo: should we refcount subprocesses?
@@ -528,7 +534,7 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
 bool mi_subproc_visit_heaps(mi_subproc_id_t subproc_id, mi_heap_visit_fun* visitor, void* arg) {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   if (subproc==NULL) return false;
-  bool ok = true;    
+  bool ok = true;
   mi_lock(&subproc->heaps_lock) {
     for (mi_heap_t* heap = subproc->heaps; heap!=NULL && ok; heap = heap->next) {
       ok = (*visitor)(heap, arg);

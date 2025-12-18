@@ -344,6 +344,7 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t a
 
 typedef void* mi_subproc_id_t;                        
 mi_decl_export mi_subproc_id_t mi_subproc_main(void);
+mi_decl_export mi_subproc_id_t mi_subproc_current(void);
 mi_decl_export mi_subproc_id_t mi_subproc_new(void);
 mi_decl_export void mi_subproc_destroy(mi_subproc_id_t subproc);
 mi_decl_export void mi_subproc_add_current_thread(mi_subproc_id_t subproc); // this should be called right after a thread is created (and no allocation has taken place yet)

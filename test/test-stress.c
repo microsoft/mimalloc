@@ -25,7 +25,7 @@ terms of the MIT license.
 // #define MI_GUARDED         1
 // #define USE_STD_MALLOC     1
 #ifndef USE_STD_MALLOC
-// #define MI_USE_HEAPS       1
+#define MI_USE_HEAPS       4
 #endif
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
@@ -43,7 +43,7 @@ static int ITER    = 20;
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
-#elif  1
+#elif  0
 static int THREADS = 4;
 static int SCALE   = 10;
 static int ITER    = 20;
@@ -254,17 +254,20 @@ static void run_os_threads(size_t nthreads, void (*entry)(intptr_t tid));
 
 static void test_stress(void) {
   #ifdef MI_USE_HEAPS
-  mi_heap_t* prev_heap = NULL;
+  mi_heap_t* prev_heaps[MI_USE_HEAPS] = { NULL };
   #endif
   uintptr_t r = rand();
   for (int n = 0; n < ITER; n++) {
     
     #ifdef MI_USE_HEAPS
     // new heap for each iteration
-    if (prev_heap != NULL) {
-      mi_heap_delete(prev_heap);   // delete from one iteration ago
+    if (prev_heaps[MI_USE_HEAPS-1] != NULL) {
+      mi_heap_delete(prev_heaps[MI_USE_HEAPS-1]);   // delete from N iterations ago
     }
-    prev_heap = current_heap;
+    for(int i = MI_USE_HEAPS-1; i > 0; i--) {
+      prev_heaps[i] = prev_heaps[i-1];
+    }
+    prev_heaps[0] = current_heap;
     current_heap = mi_heap_new();
     #endif  
 
@@ -305,7 +308,9 @@ static void test_stress(void) {
   
   // clean up  (a bit too early to test the final free_items still works correctly)
   #ifdef MI_USE_HEAPS
-  mi_heap_delete(prev_heap); prev_heap = NULL;
+  for (int i = 0; i < MI_USE_HEAPS; i++) {
+    mi_heap_delete(prev_heaps[i]); prev_heaps[i] = NULL;
+  }
   mi_heap_delete(current_heap); current_heap = NULL;
   #endif
 

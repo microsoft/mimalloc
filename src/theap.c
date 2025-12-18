@@ -107,7 +107,7 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
 
 static void mi_theap_merge_stats(mi_theap_t* theap) {
   mi_assert_internal(mi_theap_is_initialized(theap));
-  _mi_stats_merge_from(&theap->heap->stats, &theap->stats);
+  _mi_stats_merge_into(&theap->heap->stats, &theap->stats);
 }
 
 static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
@@ -224,12 +224,12 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   // allocate and initialize a theap
   mi_memid_t memid;
   mi_theap_t* theap;
-  //if (!_mi_is_heap_main(heap)) {  
+  //if (!_mi_is_heap_main(heap)) {
   //  theap = (mi_theap_t*)mi_heap_zalloc(mi_heap_main(),sizeof(mi_theap_t));
   //  memid = _mi_memid_create(MI_MEM_HEAP_MAIN);
   //  memid.initially_zero = memid.initially_committed = true;
   //}
-  //else 
+  //else
   if (heap->exclusive_arena == NULL) {
     theap = (mi_theap_t*)_mi_meta_zalloc(sizeof(mi_theap_t), &memid);
   }
@@ -284,7 +284,7 @@ void _mi_theap_free(mi_theap_t* theap) {
   }
   else {
     _mi_arenas_free(theap, _mi_align_up(sizeof(*theap),MI_ARENA_MIN_OBJ_SIZE), theap->memid ); // issue #1168, avoid assertion failure
-  }  
+  }
 }
 
 

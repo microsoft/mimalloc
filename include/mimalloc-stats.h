@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <mimalloc.h>
 #include <stdint.h>
 
-#define MI_STAT_VERSION   2   // increased on every backward incompatible change
+#define MI_STAT_VERSION   3   // increased on every backward incompatible change
 
 // count allocation over time
 typedef struct mi_stat_count_s {
@@ -59,11 +59,11 @@ typedef struct mi_stat_counter_s {
   MI_STAT_COUNT(segments_cache) \
   MI_STAT_COUNT(_segments_reserved) \
   /* only on v3 */ \
+  MI_STAT_COUNT(heaps) \
   MI_STAT_COUNTER(pages_reclaim_on_alloc) \
   MI_STAT_COUNTER(pages_reclaim_on_free) \
   MI_STAT_COUNTER(pages_reabandon_full) \
-  MI_STAT_COUNTER(pages_unabandon_busy_wait) \
-
+  MI_STAT_COUNTER(pages_unabandon_busy_wait)
 
 // Size bins for chunks
 typedef enum mi_chunkbin_e {
@@ -113,15 +113,19 @@ mi_decl_export char*   mi_heap_stats_get_json(mi_heap_t* heap, size_t buf_size, 
 mi_decl_export void    mi_heap_stats_print_out(mi_heap_t* heap, mi_output_fun* out, void* arg) mi_attr_noexcept;
 mi_decl_export void    mi_heap_stats_merge_to_subproc(mi_heap_t* heap);
 
-// stats from the default heap
-mi_decl_export void    mi_stats_get(size_t stats_size, mi_stats_t* stats) mi_attr_noexcept;
-mi_decl_export char*   mi_stats_get_json(size_t buf_size, char* buf) mi_attr_noexcept;      // use mi_free to free the result if the input buf == NULL
-mi_decl_export void    mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
-
 // subprocess stats
 mi_decl_export void    mi_subproc_stats_get(mi_subproc_id_t subproc_id, size_t stats_size, mi_stats_t* stats) mi_attr_noexcept;
 mi_decl_export char*   mi_subproc_stats_get_json(mi_subproc_id_t subproc_id, size_t buf_size, char* buf) mi_attr_noexcept;      // use mi_free to free the result if the input buf == NULL
 mi_decl_export void    mi_subproc_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* out, void* arg) mi_attr_noexcept;
+
+// subprocess and its heap stats segregated
+mi_decl_export void    mi_subproc_heap_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* out, void* arg) mi_attr_noexcept;
+
+// stats aggregated for the current subprocess and all its heaps.
+mi_decl_export void    mi_stats_get(size_t stats_size, mi_stats_t* stats) mi_attr_noexcept;
+mi_decl_export char*   mi_stats_get_json(size_t buf_size, char* buf) mi_attr_noexcept;      // use mi_free to free the result if the input buf == NULL
+mi_decl_export void    mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
+
 
 mi_decl_export size_t  mi_stats_get_bin_size(size_t bin) mi_attr_noexcept;
 

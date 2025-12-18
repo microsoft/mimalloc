@@ -25,12 +25,12 @@ void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node) {
 
 void mi_heap_stats_merge_to_subproc(mi_heap_t* heap) {
   if (heap==NULL) { heap = mi_heap_main(); }
-  _mi_stats_merge_from(&heap->subproc->stats, &heap->stats);
+  _mi_stats_merge_into(&heap->subproc->stats, &heap->stats);
 }
 
 void mi_heap_stats_merge_to_main(mi_heap_t* heap) {
   if (heap==NULL) return;
-  _mi_stats_merge_from(&mi_heap_main()->stats, &heap->stats);
+  _mi_stats_merge_into(&mi_heap_main()->stats, &heap->stats);
 }
 
 static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
@@ -127,6 +127,7 @@ mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
     heap->subproc->heaps = heap;
   }
   mi_atomic_increment_relaxed(&heap_main->subproc->heap_count);
+  mi_subproc_stat_increase(heap_main->subproc, heaps, 1);
   return heap;
 }
 
@@ -164,6 +165,7 @@ static void mi_heap_free(mi_heap_t* heap) {
   // remove the heap from the subproc
   mi_heap_stats_merge_to_main(heap);
   mi_atomic_decrement_relaxed(&heap->subproc->heap_count);
+  mi_subproc_stat_decrease(heap->subproc, heaps, 1);
   mi_lock(&heap->subproc->heaps_lock) {
     if (heap->next!=NULL) { heap->next->prev = heap->prev; }
     if (heap->prev!=NULL) { heap->prev->next = heap->next; }
