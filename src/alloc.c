@@ -171,6 +171,9 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_non
 static mi_decl_forceinline void* mi_theap_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, size_t* usable) mi_attr_noexcept
 {
   #if MI_GUARDED
+  #if MI_THEAP_INITASNULL
+  if (theap!=NULL)
+  #endif
   if (huge_alignment==0 && mi_theap_malloc_use_guarded(theap, size)) {
     return _mi_theap_malloc_guarded(theap, size, zero);
   }
