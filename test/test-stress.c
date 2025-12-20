@@ -26,7 +26,7 @@ terms of the MIT license.
 // #define USE_STD_MALLOC     1
 
 #ifndef USE_STD_MALLOC
-// #define MI_USE_HEAPS       4
+#define MI_USE_HEAPS       4
 #endif
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
@@ -387,7 +387,11 @@ int main(int argc, char** argv) {
   if (SCALE > 100) {
     allow_large_objects = true;
   }
-  printf("Using %d threads with a %d%% load-per-thread and %d iterations %s\n", THREADS, SCALE, ITER, (allow_large_objects ? "(allow large objects)" : ""));
+  printf("Using %d threads with a %d%% load-per-thread and %d iterations%s", THREADS, SCALE, ITER, (allow_large_objects ? " (allow large objects)" : ""));
+  #if MI_USE_HEAPS
+  printf(" (using %d rolling heaps)", MI_USE_HEAPS);
+  #endif
+  printf("\n");
 
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
   mi_stats_reset();
