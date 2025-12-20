@@ -24,8 +24,9 @@ terms of the MIT license.
 
 // #define MI_GUARDED         1
 // #define USE_STD_MALLOC     1
+
 #ifndef USE_STD_MALLOC
-#define MI_USE_HEAPS       4
+// #define MI_USE_HEAPS       4
 #endif
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
