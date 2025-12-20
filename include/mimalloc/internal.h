@@ -38,7 +38,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          __declspec(thread)
 #define mi_decl_align(a)        __declspec(align(a))
 #define mi_decl_noreturn        __declspec(noreturn)
-#define mi_decl_preserve_all
+#define mi_decl_preserve_most
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
@@ -52,10 +52,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          __thread
 #define mi_decl_align(a)        __attribute__((aligned(a)))
 #define mi_decl_noreturn        __attribute__((noreturn))
-#if NDEBUG && !MI_SECURE && !MI_GUARDED && !defined(__cplusplus)
-#define mi_decl_preserve_all    __attribute__((preserve_all))
+#if NDEBUG && __clang_major__ >= 17
+#define mi_decl_preserve_most    __attribute__((preserve_most))
 #else
-#define mi_decl_preserve_all    // otherwise we get warnings in debug compilation
+#define mi_decl_preserve_most    // otherwise we get warnings in debug compilation
 #endif
 #define mi_decl_weak            __attribute__((weak))
 #define mi_decl_hidden          __attribute__((visibility("hidden")))
@@ -70,7 +70,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          thread_local
 #define mi_decl_align(a)        alignas(a)
 #define mi_decl_noreturn        [[noreturn]]
-#define mi_decl_preserve_all
+#define mi_decl_preserve_most
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
@@ -80,7 +80,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_align(a)
 #define mi_decl_noreturn
-#define mi_decl_preserve_all
+#define mi_decl_preserve_most
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
@@ -293,8 +293,8 @@ void          _mi_theap_free(mi_theap_t* theap);
 
 // "heap.c"
 void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
-mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap); // get (and possible create) the theap belonging to a heap
-mi_decl_preserve_all mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap);    // get the theap for a heap without initializing (and return NULL in that case)
+mi_decl_preserve_most mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap); // get (and possible create) the theap belonging to a heap
+mi_decl_preserve_most mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap);    // get the theap for a heap without initializing (and return NULL in that case)
 void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);  // in "arena.c"
 void          _mi_heap_destroy_pages(mi_heap_t* heap_from);                   // in "arena.c"
 

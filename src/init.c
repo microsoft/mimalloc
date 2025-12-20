@@ -672,7 +672,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 }
 
 
-mi_decl_preserve_all mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
+mi_decl_preserve_most mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
   return (mi_theap_t*)&_mi_theap_empty;
 }
 
@@ -691,7 +691,7 @@ mi_decl_preserve_all mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
 mi_decl_hidden size_t _mi_theap_default_slot = MI_TLS_USER_LAST_SLOT;
 mi_decl_hidden size_t _mi_theap_cached_slot  = MI_TLS_USER_LAST_SLOT;
 
-mi_decl_preserve_all mi_theap_t* _mi_tls_slots_init(void) {
+mi_decl_preserve_most mi_theap_t* _mi_tls_slots_init(void) {
   if (_mi_theap_default_slot==MI_TLS_USER_LAST_SLOT) {
     _mi_theap_default_slot = TlsAlloc() + MI_TLS_USER_BASE;
     _mi_theap_cached_slot = TlsAlloc() + MI_TLS_USER_BASE;
@@ -708,7 +708,7 @@ mi_decl_preserve_all mi_theap_t* _mi_tls_slots_init(void) {
 mi_decl_hidden size_t _mi_theap_default_key = 0;
 mi_decl_hidden size_t _mi_theap_cached_key = 0;
 
-mi_decl_preserve_all mi_theap_t* _mi_tls_keys_init(void) {
+mi_decl_preserve_most mi_theap_t* _mi_tls_keys_init(void) {
   if (_mi_theap_default_key==0) {
     pthread_key_create(&_mi_theap_default_key, NULL);
     pthread_key_create(&_mi_theap_cached_key, NULL);
