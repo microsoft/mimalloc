@@ -485,6 +485,7 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 
 #elif defined(MI_USE_PTHREADS)
 
+#include <string.h> // memcpy
 void _mi_error_message(int err, const char* fmt, ...);
 
 #define mi_lock_t  pthread_mutex_t
@@ -502,7 +503,10 @@ static inline void mi_lock_release(mi_lock_t* lock) {
   pthread_mutex_unlock(lock);
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
-  pthread_mutex_init(lock, NULL);
+  if(lock==NULL) return;
+  // use instead of pthread_mutex_init since that can cause allocation on some platforms (and recursively initialize)
+  const mi_lock_t temp_lock = PTHREAD_MUTEX_INITIALIZER;  
+  memcpy(lock,&temp_lock,sizeof(temp_lock));
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
   pthread_mutex_destroy(lock);
