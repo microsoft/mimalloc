@@ -275,6 +275,8 @@ static void mi_subproc_main_init(void) {
   if (subproc_main.memid.memkind != MI_MEM_STATIC) {
     subproc_main.memid = _mi_memid_create(MI_MEM_STATIC);
     subproc_main.heaps = &heap_main;
+    subproc_main.heap_total_count = 1;
+    subproc_main.heap_count = 1;
     mi_atomic_store_release(&subproc_main.heap_main, &heap_main);
     __mi_stat_increase_mt(&subproc_main.stats.heaps, 1);
     __mi_stat_increase_mt(&subproc_main.stats.threads, 1);

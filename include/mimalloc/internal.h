@@ -1171,11 +1171,11 @@ extern mi_decl_hidden bool _mi_cpu_has_fsrm;
 extern mi_decl_hidden bool _mi_cpu_has_erms;
 
 static inline void _mi_movsb(void* dst, const void* src, size_t n) {
-  __asm volatile("rep movsb" : : "D"(dst), "S"(src), "c"(n) : "memory");
+  __asm volatile("rep movsb" : "+D"(dst), "+c"(n), "+S"(src) : : "memory");
 }
 
 static inline void _mi_stosb(void* dst, uint8_t val, size_t n) {
-  __asm volatile("rep stosb" : : "D"(dst), "a"(val), "c"(n) : "memory");
+  __asm volatile("rep stosb" : "+D"(dst), "+c"(n) : "a"(val) : "memory");
 }
 
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
