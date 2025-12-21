@@ -184,7 +184,6 @@ static bool mi_option_has_size_in_kib(mi_option_t option) {
 
 void _mi_options_init(void) {
   // called on process load
-  mi_add_stderr_output(); // now it safe to use stderr for output
   for(int i = 0; i < _mi_option_last; i++ ) {
     mi_option_t option = (mi_option_t)i;
     long l = mi_option_get(option); MI_UNUSED(l); // initialize
@@ -198,7 +197,12 @@ void _mi_options_init(void) {
       _mi_warning_message("option 'allow_large_os_pages' is disabled to allow for guarded objects\n");
     }
   }
-  #endif
+  #endif  
+}
+
+// called at actual process load, it should be safe to print now
+void _mi_options_post_init(void) {
+  mi_add_stderr_output(); // now it safe to use stderr for output
   if (mi_option_is_enabled(mi_option_verbose)) { mi_options_print(); }
 }
 

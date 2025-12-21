@@ -790,6 +790,7 @@ void _mi_auto_process_init(void) {
   mi_assert_internal(_mi_is_main_thread());
   if (__mi_theap_main == NULL) return;
   mi_process_init();
+  _mi_options_post_init();  // now we can print to stderr
   if (_mi_is_redirected()) _mi_verbose_message("malloc is redirected.\n");
 
   // show message from the redirector (if present)
@@ -880,7 +881,6 @@ void mi_process_init(void) mi_attr_noexcept {
 
   // mi_stats_reset();  // only call stat reset *after* thread init (or the theap tld == NULL)
   mi_track_init();
-
   if (mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
     size_t pages = mi_option_get_clamp(mi_option_reserve_huge_os_pages, 0, 128*1024);
     int reserve_at  = (int)mi_option_get_clamp(mi_option_reserve_huge_os_pages_at, -1, INT_MAX);
