@@ -34,6 +34,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 #endif
 
+// alignment
+#if defined(_MSC_VER)
+#define mi_decl_align(a)        __declspec(align(a))
+#elif defined(__GNUC__)
+#define mi_decl_align(a)        __attribute__((aligned(a)))
+#elif __cplusplus >= 201103L
+#define mi_decl_align(a)        alignas(a)
+#else
+#define mi_decl_align(a)
+#endif
+
+
 // ------------------------------------------------------
 // Variants
 // ------------------------------------------------------
@@ -567,6 +579,7 @@ struct mi_subproc_s {
   _Atomic(size_t)       arena_count;                    // current count of arena's
   _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
   mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
+  mi_decl_align(8)                                      // needed on some 32-bit platforms
   _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
 
   _Atomic(mi_heap_t*)   heap_main;                      // main heap for this sub process
@@ -579,6 +592,7 @@ struct mi_subproc_s {
   _Atomic(size_t)       heap_total_count;               // total created heaps in this sub-process
   
   mi_memid_t            memid;                          // provenance of this memory block (meta or static)  
+  mi_decl_align(8)                                      // needed on some 32-bit platforms  
   mi_stats_t            stats;                          // subprocess statistics; updated for arena/OS stats like committed, 
                                                         // and otherwise merged with heap stats when those are deleted  
 };
@@ -640,6 +654,7 @@ typedef struct mi_arena_s {
   size_t              info_slices;          // initial slices reserved for the arena bitmaps
   int                 numa_node;            // associated NUMA node
   bool                is_exclusive;         // only allow allocations if specifically for this arena
+  mi_decl_align(8)                          // needed on some 32-bit platforms
   _Atomic(mi_msecs_t) purge_expire;         // expiration time when slices can be purged from `slices_purge`.
   mi_commit_fun_t*    commit_fun;           // custom commit/decommit memory
   void*               commit_fun_arg;       // user argument for a custom commit function
