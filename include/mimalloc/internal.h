@@ -36,7 +36,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_forceinline     __forceinline
 #define mi_decl_noinline        __declspec(noinline)
 #define mi_decl_thread          __declspec(thread)
-#define mi_decl_align(a)        __declspec(align(a))
 #define mi_decl_noreturn        __declspec(noreturn)
 #define mi_decl_preserve_most
 #define mi_decl_weak
@@ -50,7 +49,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #define mi_decl_noinline        __attribute__((noinline))
 #define mi_decl_thread          __thread
-#define mi_decl_align(a)        __attribute__((aligned(a)))
 #define mi_decl_noreturn        __attribute__((noreturn))
 #if NDEBUG && __clang_major__ >= 17
 #define mi_decl_preserve_most    __attribute__((preserve_most))
@@ -68,7 +66,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_forceinline     inline
 #define mi_decl_noinline
 #define mi_decl_thread          thread_local
-#define mi_decl_align(a)        alignas(a)
 #define mi_decl_noreturn        [[noreturn]]
 #define mi_decl_preserve_most
 #define mi_decl_weak
@@ -78,7 +75,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_forceinline     inline
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
-#define mi_decl_align(a)
 #define mi_decl_noreturn
 #define mi_decl_preserve_most
 #define mi_decl_weak
