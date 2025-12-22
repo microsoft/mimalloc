@@ -135,7 +135,7 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
   MI_MEMID_STATIC,
-  { MI_STAT_VERSION, 0, MI_STATS_NULL },      // stats
+  { MI_STAT_VERSION, MI_STATS_NULL },      // stats
 };
 
 mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
@@ -158,7 +158,7 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
   MI_MEMID_STATIC,
-  { MI_STAT_VERSION, 0, MI_STATS_NULL },      // stats
+  { MI_STAT_VERSION, MI_STATS_NULL },      // stats
 };
 
 // Heap for the main thread
@@ -197,7 +197,7 @@ mi_decl_cache_align mi_theap_t theap_main = {
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
   MI_MEMID_STATIC,
-  { MI_STAT_VERSION, 0, MI_STATS_NULL },      // stats
+  { MI_STAT_VERSION, MI_STATS_NULL },      // stats
 };
 
 mi_decl_cache_align mi_heap_t heap_main
@@ -223,7 +223,7 @@ mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached = (mi_theap_t*)&_mi_
 
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
-mi_stats_t _mi_stats_main = { MI_STAT_VERSION, 0, MI_STATS_NULL };
+mi_stats_t _mi_stats_main = { MI_STAT_VERSION, MI_STATS_NULL };
 
 #if MI_GUARDED
 mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed) {

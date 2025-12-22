@@ -34,17 +34,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 #endif
 
-// alignment
-#if defined(_MSC_VER)
-#define mi_decl_align(a)        __declspec(align(a))
-#elif defined(__GNUC__)
-#define mi_decl_align(a)        __attribute__((aligned(a)))
-#elif __cplusplus >= 201103L
-#define mi_decl_align(a)        alignas(a)
-#else
-#define mi_decl_align(a)
-#endif
-
 
 // ------------------------------------------------------
 // Variants

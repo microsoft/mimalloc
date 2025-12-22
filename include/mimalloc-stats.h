@@ -13,6 +13,18 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define MI_STAT_VERSION   3   // increased on every backward incompatible change
 
+// alignment for atomic fields
+#if defined(_MSC_VER)
+#define mi_decl_align(a)        __declspec(align(a))
+#elif defined(__GNUC__)
+#define mi_decl_align(a)        __attribute__((aligned(a)))
+#elif __cplusplus >= 201103L
+#define mi_decl_align(a)        alignas(a)
+#else
+#define mi_decl_align(a)
+#endif
+
+
 // count allocation over time
 typedef struct mi_stat_count_s {
   int64_t total;                              // total allocated
@@ -85,9 +97,8 @@ typedef enum mi_chunkbin_e {
 typedef struct mi_stats_s
 {
   int version;
-  int _padding;
 
-  MI_STAT_FIELDS()
+  mi_decl_align(8)  MI_STAT_FIELDS()
 
   // future extension
   mi_stat_count_t   _stat_reserved[4];
