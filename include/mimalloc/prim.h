@@ -363,10 +363,10 @@ static inline mi_theap_t* _mi_theap_cached(void);
   #define MI_TLS_MODEL_FIXED_SLOT_CACHED    109
   // we used before __PTK_FRAMEWORK_OLDGC_KEY9 (89) but that seems used now.
   // see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
-#elif defined(__OpenBSD__) || defined(__ANDROID__)
-  #define MI_TLS_DYNAMIC_PTHREADS     1
+#elif defined(__OpenBSD__) // || defined(__ANDROID__)
+  #define MI_TLS_MODEL_DYNAMIC_PTHREADS     1
 #else
-  #define MI_TLS_MODEL_THREAD_LOCAL   1
+  #define MI_TLS_MODEL_THREAD_LOCAL         1
 #endif
 
 // Declared this way to optimize register spills and branches
