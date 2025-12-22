@@ -85,6 +85,7 @@ typedef enum mi_chunkbin_e {
 typedef struct mi_stats_s
 {
   int version;
+  int _padding;
 
   MI_STAT_FIELDS()
 
