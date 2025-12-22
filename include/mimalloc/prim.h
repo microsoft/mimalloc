@@ -365,6 +365,7 @@ static inline mi_theap_t* _mi_theap_cached(void);
   // see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
 #elif defined(__OpenBSD__) // || defined(__ANDROID__)
   #define MI_TLS_MODEL_DYNAMIC_PTHREADS     1
+  // #define MI_TLS_MODEL_DYNAMIC_PTHREADS_DEFAULT_ENTRY_IS_NULL  1
 #else
   #define MI_TLS_MODEL_THREAD_LOCAL         1
 #endif
@@ -433,7 +434,7 @@ extern mi_decl_hidden pthread_key_t _mi_theap_default_key;
 extern mi_decl_hidden pthread_key_t _mi_theap_cached_key;
 
 static inline mi_theap_t* _mi_theap_default(void) {
-  #ifndef MI_TLS_MODEL_DYNAMIC_PTHREADS_DEFAULT_ENTRY_IS_NULL
+  #if !MI_TLS_MODEL_DYNAMIC_PTHREADS_DEFAULT_ENTRY_IS_NULL
   // we can skip this check if using the initial key will return NULL from pthread_getspecific
   if mi_unlikely(_mi_theap_default_key==0) { return NULL; }
   #endif
@@ -441,7 +442,7 @@ static inline mi_theap_t* _mi_theap_default(void) {
 }
 
 static inline mi_theap_t* _mi_theap_cached(void) {
-  #ifndef MI_TLS_MODEL_DYNAMIC_PTHREADS_DEFAULT_ENTRY_IS_NULL
+  #if !MI_TLS_MODEL_DYNAMIC_PTHREADS_DEFAULT_ENTRY_IS_NULL
   // we can skip this check if using the initial key will return NULL from pthread_getspecific
   if mi_unlikely(_mi_theap_cached_key==0) { return NULL; }
   #endif

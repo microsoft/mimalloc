@@ -707,11 +707,12 @@ mi_decl_preserve_most mi_theap_t* _mi_tls_slots_init(void) {
 #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
 
 // only for pthreads for now
-mi_decl_hidden size_t _mi_theap_default_key = 0;
-mi_decl_hidden size_t _mi_theap_cached_key = 0;
+static mi_atomic_once_t mi_tls_keys_init;
+mi_decl_hidden pthread_key_t _mi_theap_default_key = 0;
+mi_decl_hidden pthread_key_t _mi_theap_cached_key = 0;
 
 mi_decl_preserve_most mi_theap_t* _mi_tls_keys_init(void) {
-  if (_mi_theap_default_key==0) {
+  if (mi_atomic_once(&mi_tls_keys_init)) {
     pthread_key_create(&_mi_theap_default_key, NULL);
     pthread_key_create(&_mi_theap_cached_key, NULL);
   }
@@ -730,7 +731,7 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
     mi_prim_tls_slot_set(_mi_theap_cached_slot, theap);
   #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
     _mi_tls_keys_init();
-    pthread_setspecific(_mi_theap_cached_key, theap);
+    if (_mi_theap_cached_key!=0) pthread_setspecific(_mi_theap_cached_key, theap);
   #endif
 }
 
@@ -745,7 +746,7 @@ void _mi_theap_default_set(mi_theap_t* theap)  {
     mi_prim_tls_slot_set(_mi_theap_default_slot, theap);
   #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
     _mi_tls_keys_init();
-    pthread_setspecific(_mi_theap_default_key, theap);
+    if (_mi_theap_default_key!=0) pthread_setspecific(_mi_theap_default_key, theap);
   #endif
 
   // set theap main if needed
