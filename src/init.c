@@ -674,7 +674,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 }
 
 
-mi_decl_preserve_most mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
+mi_decl_cold mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
   return (mi_theap_t*)&_mi_theap_empty;
 }
 
@@ -693,7 +693,7 @@ mi_decl_preserve_most mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
 mi_decl_hidden size_t _mi_theap_default_slot = MI_TLS_USER_LAST_SLOT;
 mi_decl_hidden size_t _mi_theap_cached_slot  = MI_TLS_USER_LAST_SLOT;
 
-mi_decl_preserve_most mi_theap_t* _mi_tls_slots_init(void) {
+mi_decl_cold mi_theap_t* _mi_tls_slots_init(void) {
   static mi_atomic_once_t tls_slots_init;
   if (mi_atomic_once(&tls_slots_init)) {
     _mi_theap_default_slot = TlsAlloc() + MI_TLS_USER_BASE;
@@ -711,7 +711,7 @@ mi_decl_preserve_most mi_theap_t* _mi_tls_slots_init(void) {
 mi_decl_hidden pthread_key_t _mi_theap_default_key = 0;
 mi_decl_hidden pthread_key_t _mi_theap_cached_key = 0;
 
-mi_decl_preserve_most mi_theap_t* _mi_tls_keys_init(void) {
+mi_decl_cold mi_theap_t* _mi_tls_keys_init(void) {
   static mi_atomic_once_t tls_keys_init;
   if (mi_atomic_once(&tls_keys_init)) {
     pthread_key_create(&_mi_theap_default_key, NULL);
@@ -738,7 +738,7 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
 
 void _mi_theap_default_set(mi_theap_t* theap)  {
   mi_assert_internal(theap != NULL);
-  mi_assert_internal(theap->tld->thread_id==0 || theap->tld->thread_id==_mi_thread_id());  
+  mi_assert_internal(theap->tld->thread_id==0 || theap->tld->thread_id==_mi_thread_id());
   #if MI_TLS_MODEL_THREAD_LOCAL
     __mi_theap_default = theap;
   #elif MI_TLS_MODEL_FIXED_SLOT
@@ -791,9 +791,9 @@ void _mi_auto_process_init(void) {
 
   os_preloading = false;
   mi_assert_internal(_mi_is_main_thread());
-  
+
   mi_process_init();
-  mi_process_setup_auto_thread_done();  
+  mi_process_setup_auto_thread_done();
   _mi_options_post_init();  // now we can print to stderr
   if (_mi_is_redirected()) _mi_verbose_message("malloc is redirected.\n");
 

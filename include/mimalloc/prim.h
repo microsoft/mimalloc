@@ -371,7 +371,7 @@ static inline mi_theap_t* _mi_theap_cached(void);
 #endif
 
 // Declared this way to optimize register spills and branches
-mi_decl_preserve_most mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void);
+mi_decl_cold mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void);
 
 static inline mi_theap_t* __mi_theap_empty(void) {
   #if __GNUC__
