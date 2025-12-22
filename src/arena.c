@@ -2093,7 +2093,7 @@ typedef struct mi_heap_delete_visit_info_s {
 static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
   MI_UNUSED(block); MI_UNUSED(block_size); MI_UNUSED(heap);
   mi_heap_delete_visit_info_t* info = (mi_heap_delete_visit_info_t*)arg;
-  mi_heap_t*  const heap_target     = info->heap_target;
+  mi_heap_t*  heap_target           = info->heap_target;
   mi_theap_t* const theap           = info->theap;       mi_assert_internal(theap->heap == heap);
   mi_page_t*  const page            = (mi_page_t*)area->reserved1;  
   
@@ -2119,6 +2119,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
   }
   else {
     // move the page to `heap_target` as an abandoned page
+    // first remove it from the current heap
     const size_t bin = _mi_page_bin(page);
     size_t slice_index;
     size_t slice_count;
@@ -2128,12 +2129,20 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
     mi_bitmap_clear(arena_pages->pages, slice_index);
     mi_theap_stat_decrease(theap, page_bins[bin], 1);
     mi_theap_stat_decrease(theap, pages, 1);
-    
-    mi_arena_pages_t* arena_pages_target = mi_heap_arena_pages(heap_target, arena);
+    mi_theap_t* theap_target = info->theap_target;
+
+    // and then add it to the new target heap
+    mi_arena_pages_t* arena_pages_target = mi_heap_ensure_arena_pages(heap_target, arena);
+    if mi_unlikely(arena_pages_target==NULL) {
+      // if we cannot allocate this, we move it to the main heap instead (which does not require allocation)
+      heap_target = mi_heap_main();
+      theap_target = mi_heap_theap(heap_target);
+      arena_pages_target = mi_heap_ensure_arena_pages(heap_target, arena);
+      mi_assert_internal(arena_pages_target!=NULL);
+    }
     mi_assert_internal(mi_bitmap_is_clear(arena_pages_target->pages, slice_index));
     mi_bitmap_set(arena_pages_target->pages, slice_index);
     page->heap = heap_target;    
-    mi_theap_t* const theap_target = info->theap_target;
     mi_theap_stat_increase(theap_target, page_bins[bin], 1);
     mi_theap_stat_increase(theap_target, pages, 1);
     
