@@ -1273,6 +1273,7 @@ static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_
   size_t i;
   for (i = 0; i < count; i++) {
     if (mi_arena_from_index(subproc,i) == NULL) {
+      arena->arena_idx = i;
       mi_arena_t* expected = NULL;
       if (mi_atomic_cas_ptr_strong_release(mi_arena_t, &subproc->arenas[i], &expected, arena)) {
         // success
@@ -1284,6 +1285,7 @@ static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_
 
   // otherwise increase the max
   i = mi_atomic_increment_acq_rel(&subproc->arena_count);
+  arena->arena_idx = i;      
   if (i >= MI_MAX_ARENAS) {
     mi_atomic_decrement_acq_rel(&subproc->arena_count);
     arena->subproc = NULL;
