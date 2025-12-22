@@ -694,9 +694,10 @@ mi_decl_hidden size_t _mi_theap_default_slot = MI_TLS_USER_LAST_SLOT;
 mi_decl_hidden size_t _mi_theap_cached_slot  = MI_TLS_USER_LAST_SLOT;
 
 mi_decl_preserve_most mi_theap_t* _mi_tls_slots_init(void) {
-  if (_mi_theap_default_slot==MI_TLS_USER_LAST_SLOT) {
+  static mi_atomic_once_t tls_slots_init;
+  if (mi_atomic_once(&tls_slots_init)) {
     _mi_theap_default_slot = TlsAlloc() + MI_TLS_USER_BASE;
-    _mi_theap_cached_slot = TlsAlloc() + MI_TLS_USER_BASE;
+    _mi_theap_cached_slot  = TlsAlloc() + MI_TLS_USER_BASE;
     if (_mi_theap_cached_slot >= MI_TLS_USER_LAST_SLOT) {
       _mi_error_message(EFAULT, "unable to allocate fast TLS user slot (0x%zx)\n", _mi_theap_cached_slot);
     }
@@ -707,12 +708,12 @@ mi_decl_preserve_most mi_theap_t* _mi_tls_slots_init(void) {
 #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
 
 // only for pthreads for now
-static mi_atomic_once_t mi_tls_keys_init;
 mi_decl_hidden pthread_key_t _mi_theap_default_key = 0;
 mi_decl_hidden pthread_key_t _mi_theap_cached_key = 0;
 
 mi_decl_preserve_most mi_theap_t* _mi_tls_keys_init(void) {
-  if (mi_atomic_once(&mi_tls_keys_init)) {
+  static mi_atomic_once_t tls_keys_init;
+  if (mi_atomic_once(&tls_keys_init)) {
     pthread_key_create(&_mi_theap_default_key, NULL);
     pthread_key_create(&_mi_theap_cached_key, NULL);
   }
@@ -737,6 +738,7 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
 
 void _mi_theap_default_set(mi_theap_t* theap)  {
   mi_assert_internal(theap != NULL);
+  mi_assert_internal(theap->tld->thread_id==0 || theap->tld->thread_id==_mi_thread_id());  
   #if MI_TLS_MODEL_THREAD_LOCAL
     __mi_theap_default = theap;
   #elif MI_TLS_MODEL_FIXED_SLOT
@@ -789,8 +791,9 @@ void _mi_auto_process_init(void) {
 
   os_preloading = false;
   mi_assert_internal(_mi_is_main_thread());
-  if (__mi_theap_main == NULL) return;
+  
   mi_process_init();
+  mi_process_setup_auto_thread_done();  
   _mi_options_post_init();  // now we can print to stderr
   if (_mi_is_redirected()) _mi_verbose_message("malloc is redirected.\n");
 
@@ -866,11 +869,10 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_options_init();
   _mi_stats_init();
   _mi_os_init();
-  // the following can potentially allocate (on freeBSD for locks and thread keys)
-  // todo: do 2-phase so we can use stats at first, then later init locks?
+  // the following can potentially allocate (on freeBSD for pthread keys)
+  // todo: do 2-phase so we can use stats at first, then later init the keys?
   mi_heap_main_init(); // before page_map_init so stats are working
   _mi_page_map_init(); // todo: this could fail.. should we abort in that case?
-  mi_process_setup_auto_thread_done();
   mi_thread_init();
 
   #if defined(_WIN32) && defined(MI_WIN_USE_FLS)
