@@ -1263,37 +1263,50 @@ void _mi_arenas_unsafe_destroy_all(mi_subproc_t* subproc) {
   Add an arena.
 ----------------------------------------------------------- */
 
-static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_t* arena_id) {
+static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_t* arena_id) 
+{
   mi_assert_internal(arena != NULL);
   mi_assert_internal(arena->slice_count > 0);
   if (arena_id != NULL) { *arena_id = NULL; }
-  while(true) {
-    // try to find a NULL entry (from top to bottom)
-    size_t i = mi_arenas_get_count(subproc);
-    while(i>0) {
-      i--;
-      if (mi_arena_from_index(subproc,i) == NULL) {
-        arena->arena_idx = i;
-        mi_arena_t* expected = NULL;
-        if (mi_atomic_cas_ptr_strong_release(mi_arena_t, &subproc->arenas[i], &expected, arena)) {
-          // success
-          if (arena_id != NULL) { *arena_id = arena; }
-          return true;
-        }
+  
+  // try to find a NULL entry
+  mi_arena_t* expected;
+  size_t count = mi_arenas_get_count(subproc);
+  for( size_t i = 0; i < count; i++) {  
+    if (mi_arena_from_index(subproc,i) == NULL) {
+      arena->arena_idx = i;
+      expected = NULL;
+      if (mi_atomic_cas_ptr_strong_release(mi_arena_t, &subproc->arenas[i], &expected, arena)) {
+        // success
+        if (arena_id != NULL) { *arena_id = arena; }
+        return true;
       }
     }
-
-    // otherwise increase the max
-    i = mi_atomic_increment_acq_rel(&subproc->arena_count);
-    if (i >= MI_MAX_ARENAS) {
-      mi_atomic_decrement_acq_rel(&subproc->arena_count);
-      arena->arena_idx = 0;
-      arena->subproc = NULL;
-      return false;
-    }
-    mi_subproc_stat_counter_increase(arena->subproc, arena_count, 1);
-    // try again
   }
+
+  // otherwise, try to use a slot beyond the count
+  while (count<MI_MAX_ARENAS) {
+    arena->arena_idx = count;
+    expected = NULL;
+    if (mi_atomic_cas_ptr_strong_release(mi_arena_t, &subproc->arenas[count], &expected, arena)) {
+      // success
+      mi_atomic_increment_acq_rel(&subproc->arena_count);
+      mi_subproc_stat_counter_increase(arena->subproc, arena_count, 1);
+      if (arena_id != NULL) { *arena_id = arena; }
+      return true;
+    }
+    else {
+      // try again
+      const size_t newcount = mi_atomic_load_acquire(&subproc->arena_count);
+      if (newcount==count) {
+        mi_assert_internal(false); // no progress.. (should never happen)
+        break;
+      }
+    }      
+  };
+  arena->arena_idx = 0;
+  arena->subproc = NULL;
+  return false;
 }
 
 static size_t mi_arena_pages_size(size_t slice_count, size_t* bitmap_base) {
@@ -2167,6 +2180,7 @@ static void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
   }
   // nor os abandoned pages?
   mi_lock(&heap->os_abandoned_pages_lock) {
+
     mi_assert_internal(heap->os_abandoned_pages == NULL);
   }
   // nor arena abandoned pages?
