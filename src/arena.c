@@ -1284,26 +1284,20 @@ static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_
     }
   }
 
-  // otherwise, try to use a slot beyond the count
-  while (count<MI_MAX_ARENAS) {
-    arena->arena_idx = count;
-    expected = NULL;
-    if (mi_atomic_cas_ptr_strong_release(mi_arena_t, &subproc->arenas[count], &expected, arena)) {
-      // success
-      mi_atomic_increment_acq_rel(&subproc->arena_count);
-      mi_subproc_stat_counter_increase(arena->subproc, arena_count, 1);
-      if (arena_id != NULL) { *arena_id = arena; }
-      return true;
-    }
-    else {
-      // try again
-      const size_t newcount = mi_atomic_load_acquire(&subproc->arena_count);
-      if (newcount==count) {
-        mi_assert_internal(false); // no progress.. (should never happen)
-        break;
+  // otherwise, try to allocate a fresh slot
+  while(count<MI_MAX_ARENAS) {
+    if (mi_atomic_cas_strong_release(&subproc->arena_count, &count, count+1)) {
+      arena->arena_idx = count;
+      expected = NULL;
+      if (mi_atomic_cas_ptr_strong_release(mi_arena_t, &subproc->arenas[count], &expected, arena)) {
+        mi_subproc_stat_counter_increase(arena->subproc, arena_count, 1);
+        if (arena_id != NULL) { *arena_id = arena; }
+        return true;
       }
-    }      
-  };
+    }
+  }
+
+  // failed
   arena->arena_idx = 0;
   arena->subproc = NULL;
   return false;
@@ -1635,7 +1629,7 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
                                    size_t slice_count, size_t chunk_count,
                                    mi_bchunk_t* chunks, mi_bchunkmap_t* chunk_bins, bool invert, mi_arena_t* arena, bool narrow)
 {
-  _mi_raw_message("\x1B[37m%s%s%s (use/commit: \x1B[31m0 - 25%%\x1B[33m - 50%%\x1B[36m - 75%%\x1B[32m - 100%%\x1B[0m)\n", header1, header2, header3);
+  _mi_raw_message("\x1B[37m%s%s%s\n       (use/commit: \x1B[31m0 - 25%%\x1B[33m - 50%%\x1B[36m - 75%%\x1B[32m - 100%%\x1B[0m)\n", header1, header2, header3);
   const size_t fields_per_line = (narrow ? 2 : 4);
   const size_t used_slice_count = mi_arena_used_slices(arena);
   size_t bit_count = 0;
@@ -1735,8 +1729,8 @@ static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narro
       // mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
       // if (arena_pages != NULL) 
       {
-        const char* header1 = "pages (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info, m:meta-data, ~:free-purgable, _:free-committed, .:free-reserved)";
-        const char* header2 = (narrow ? "\n      " : " ");
+        const char* header1 = "pages  (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info,\n        m:meta-data, ~:free-purgable, _:free-committed, .:free-reserved)";
+        const char* header2 = (narrow ? "\n       " : " ");
         const char* header3 = "(chunk bin: S:small, M : medium, L : large, X : other)";
         page_total += mi_debug_show_chunks(header1, header2, header3, arena->slice_count, 
                                            mi_bbitmap_chunk_count(arena->slices_free), NULL,
