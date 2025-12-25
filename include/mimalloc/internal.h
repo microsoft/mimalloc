@@ -177,7 +177,7 @@ void*       _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, boo
 void*       _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
 
 void*       _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
-bool        _mi_os_use_large_page(size_t size, size_t alignment);
+bool        _mi_os_canuse_large_page(size_t size, size_t alignment);
 size_t      _mi_os_large_page_size(void);
 void*       _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
 

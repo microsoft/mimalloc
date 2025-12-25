@@ -62,9 +62,9 @@ size_t _mi_os_large_page_size(void) {
   return (mi_os_mem_config.large_page_size != 0 ? mi_os_mem_config.large_page_size : _mi_os_page_size());
 }
 
-bool _mi_os_use_large_page(size_t size, size_t alignment) {
+bool _mi_os_canuse_large_page(size_t size, size_t alignment) {
   // if we have access, check the size and alignment requirements
-  if (mi_os_mem_config.large_page_size == 0 || !mi_option_is_enabled(mi_option_allow_large_os_pages)) return false;
+  if (mi_os_mem_config.large_page_size == 0) return false;
   return ((size % mi_os_mem_config.large_page_size) == 0 && (alignment % mi_os_mem_config.large_page_size) == 0);
 }
 
@@ -329,7 +329,7 @@ void* _mi_os_alloc(size_t size, mi_memid_t* memid) {
   void* p = mi_os_prim_alloc(size, 0, true, false, &os_is_large, &os_is_zero);
   if (p == NULL) return NULL;
 
-  *memid = _mi_memid_create_os(p, size, true, os_is_zero, os_is_large);  
+  *memid = _mi_memid_create_os(p, size, true, os_is_zero, os_is_large);
   mi_assert_internal(memid->mem.os.size >= size);
   mi_assert_internal(memid->initially_committed);
   return p;
@@ -355,7 +355,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
 
   mi_assert_internal(memid->mem.os.size >= size);
   mi_assert_internal(_mi_is_aligned(p,alignment));
-  if (commit) { mi_assert_internal(memid->initially_committed); }  
+  if (commit) { mi_assert_internal(memid->initially_committed); }
   return p;
 }
 
