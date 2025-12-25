@@ -57,7 +57,7 @@ size_t _mi_os_minimal_purge_size(void) {
   if (minsize != 0) {
     return _mi_align_up(minsize, _mi_os_page_size());
   }
-  else if (mi_os_mem_config.has_transparent_huge_pages) {
+  else if (mi_os_mem_config.has_transparent_huge_pages && mi_option_is_enabled(mi_option_allow_thp)) {
     return _mi_os_large_page_size();
   }
   else {
