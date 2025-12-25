@@ -219,6 +219,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   if (!mi_option_is_enabled(mi_option_allow_thp)) // disable THP if requested through an option
   #endif
   {
+    config->has_transparent_huge_pages = false;
     int val = 0;
     if (prctl(PR_GET_THP_DISABLE, &val, 0, 0, 0) != 0) {
       // Most likely since distros often come with always/madvise settings.
