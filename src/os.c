@@ -73,9 +73,9 @@ size_t _mi_os_virtual_address_bits(void) {
   return vbits;
 }
 
-bool _mi_os_use_large_page(size_t size, size_t alignment) {
+bool _mi_os_canuse_large_page(size_t size, size_t alignment) {
   // if we have access, check the size and alignment requirements
-  if (mi_os_mem_config.large_page_size == 0 || !mi_option_is_enabled(mi_option_allow_large_os_pages)) return false;
+  if (mi_os_mem_config.large_page_size == 0) return false;
   return ((size % mi_os_mem_config.large_page_size) == 0 && (alignment % mi_os_mem_config.large_page_size) == 0);
 }
 

@@ -104,6 +104,14 @@ int mi_version(void) mi_attr_noexcept {
 #define MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM  32
 #endif
 
+#ifndef MI_DEFAULT_ALLOW_THP
+#if defined(__ANDROID__)
+#define MI_DEFAULT_ALLOW_THP  0
+#else
+#define MI_DEFAULT_ALLOW_THP  1
+#endif
+#endif
+
 // Static options
 static mi_option_desc_t mi_options[_mi_option_last] =
 {
@@ -174,6 +182,8 @@ static mi_option_desc_t mi_options[_mi_option_last] =
          MI_OPTION_UNINIT, MI_OPTION(page_max_reclaim) },         // don't reclaim (small) pages of the same originating heap if we already own N pages in that size class
   { MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM,
          MI_OPTION_UNINIT, MI_OPTION(page_cross_thread_max_reclaim) }, // don't reclaim (small) pages across threads if we already own N pages in that size class
+  { MI_DEFAULT_ALLOW_THP,
+         MI_OPTION_UNINIT, MI_OPTION(allow_thp) }                 // allow transparent huge pages?
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
