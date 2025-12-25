@@ -28,7 +28,8 @@ static mi_os_mem_config_t mi_os_mem_config = {
   MI_MAX_VABITS, // in `bits.h`
   true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
   false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
-  true      // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
+  true,     // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
+  false     // has transparent huge pages? (if true we purge in (aligned) large page size chunks only to not fragment such pages)
 };
 
 bool _mi_os_has_overcommit(void) {
@@ -50,6 +51,20 @@ size_t _mi_os_large_page_size(void) {
   return (mi_os_mem_config.large_page_size != 0 ? mi_os_mem_config.large_page_size : _mi_os_page_size());
 }
 
+// minimal purge size. Can be larger than the page size if transparent huge pages are enabled.
+size_t _mi_os_minimal_purge_size(void) {
+  size_t minsize = mi_option_get_size(mi_option_minimal_purge_size);
+  if (minsize != 0) {
+    return _mi_align_up(minsize, _mi_os_page_size());
+  }
+  else if (mi_os_mem_config.has_transparent_huge_pages && mi_option_is_enabled(mi_option_allow_thp)) {
+    return _mi_os_large_page_size();
+  }
+  else {
+    return _mi_os_page_size();
+  }
+}
+
 size_t _mi_os_guard_page_size(void) {
   const size_t gsize = _mi_os_page_size();
   mi_assert(gsize <= (MI_ARENA_SLICE_SIZE/4)); // issue #1166
@@ -62,9 +77,9 @@ size_t _mi_os_virtual_address_bits(void) {
   return vbits;
 }
 
-bool _mi_os_use_large_page(size_t size, size_t alignment) {
+bool _mi_os_canuse_large_page(size_t size, size_t alignment) {
   // if we have access, check the size and alignment requirements
-  if (mi_os_mem_config.large_page_size == 0 || !mi_option_is_enabled(mi_option_allow_large_os_pages)) return false;
+  if (mi_os_mem_config.large_page_size == 0) return false;
   return ((size % mi_os_mem_config.large_page_size) == 0 && (alignment % mi_os_mem_config.large_page_size) == 0);
 }
 

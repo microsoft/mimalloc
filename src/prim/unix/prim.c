@@ -145,6 +145,24 @@ static bool unix_detect_overcommit(void) {
   return os_overcommit;
 }
 
+static bool unix_detect_thp(void) {
+  bool thp_enabled = false;
+  #if defined(__linux__)
+  int fd = mi_prim_open("/sys/kernel/mm/transparent_hugepage/enabled", O_RDONLY);
+  if (fd >= 0) {
+    char buf[32];
+    ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+    mi_prim_close(fd);
+    // <https://www.kernel.org/doc/html/latest/admin-guide/mm/transhuge.html>
+    // between brackets is the current value, for example: always [madvise] never
+    if (nread >= 1) {
+      thp_enabled = (_mi_strnstr(buf,32,"[never]") == NULL);
+    }
+  }
+  #endif
+  return thp_enabled;
+}
+
 // try to detect the physical memory dynamically (if possible)
 static void unix_detect_physical_memory( size_t page_size, size_t* physical_memory_in_kib ) {
   #if defined(CTL_HW) && (defined(HW_PHYSMEM64) || defined(HW_MEMSIZE))  // freeBSD, macOS
@@ -191,15 +209,17 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_overcommit = unix_detect_overcommit();
   config->has_partial_free = true;    // mmap can free in parts
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
+  config->has_transparent_huge_pages = unix_detect_thp();
 
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
   #if defined(MI_NO_THP)
   if (true)
   #else
-  if (!mi_option_is_enabled(mi_option_allow_large_os_pages)) // disable THP also if large OS pages are not allowed in the options
+  if (!mi_option_is_enabled(mi_option_allow_thp)) // disable THP if requested through an option
   #endif
   {
+    config->has_transparent_huge_pages = false;
     int val = 0;
     if (prctl(PR_GET_THP_DISABLE, &val, 0, 0, 0) != 0) {
       // Most likely since distros often come with always/madvise settings.
@@ -326,7 +346,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   protect_flags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
   #endif
   // huge page allocation
-  if (allow_large && (large_only || (_mi_os_use_large_page(size, try_alignment) && mi_option_get(mi_option_allow_large_os_pages) == 1))) {
+  if (allow_large && (large_only || (_mi_os_canuse_large_page(size, try_alignment) && mi_option_is_enabled(mi_option_allow_large_os_pages)))) {
     static _Atomic(size_t) large_page_try_ok; // = 0;
     size_t try_ok = mi_atomic_load_acquire(&large_page_try_ok);
     if (!large_only && try_ok > 0) {
@@ -385,7 +405,8 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   if (p == NULL) {
     *is_large = false;
     p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, flags, fd);
-    if (p != NULL) {
+    #if !defined(MI_NO_THP)
+    if (p != NULL && allow_large && mi_option_is_enabled(mi_option_allow_thp) && _mi_os_canuse_large_page(size, try_alignment)) {
       #if defined(MADV_HUGEPAGE)
       // Many Linux systems don't allow MAP_HUGETLB but they support instead
       // transparent huge pages (THP). Generally, it is not required to call `madvise` with MADV_HUGE
@@ -393,22 +414,19 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       // in that case -- in particular for our large regions (in `memory.c`).
       // However, some systems only allow THP if called with explicit `madvise`, so
       // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
-      if (allow_large && _mi_os_use_large_page(size, try_alignment)) {
-        if (unix_madvise(p, size, MADV_HUGEPAGE) == 0) {
-          // *is_large = true; // possibly
-        };
-      }
+      if (unix_madvise(p, size, MADV_HUGEPAGE) == 0) {
+        // *is_large = true; // possibly
+      };
       #elif defined(__sun)
-      if (allow_large && _mi_os_use_large_page(size, try_alignment)) {
-        struct memcntl_mha cmd = {0};
-        cmd.mha_pagesize = _mi_os_large_page_size();
-        cmd.mha_cmd = MHA_MAPSIZE_VA;
-        if (memcntl((caddr_t)p, size, MC_HAT_ADVISE, (caddr_t)&cmd, 0, 0) == 0) {
-          // *is_large = true; // possibly
-        }
+      struct memcntl_mha cmd = {0};
+      cmd.mha_pagesize = _mi_os_large_page_size();
+      cmd.mha_cmd = MHA_MAPSIZE_VA;
+      if (memcntl((caddr_t)p, size, MC_HAT_ADVISE, (caddr_t)&cmd, 0, 0) == 0) {
+        // *is_large = true; // possibly
       }
       #endif
     }
+    #endif
   }
   return p;
 }

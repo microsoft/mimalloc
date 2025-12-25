@@ -10,12 +10,16 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // --------------------------------------------------------------------------
 // This file contains the main type definitions for mimalloc:
-// mi_theap_t      : all data for a thread-local theap, contains
-//                  lists of all managed theap pages.
+// mi_heap_t      : all data for a heap; usually there is just one main default heap.
+// mi_theap_t     : a thread local heap belonging to a specific heap:
+//                  maintains lists of thread-local heap pages that have free space.
 // mi_page_t      : a mimalloc page (usually 64KiB or 512KiB) from
 //                  where objects of a single size are allocated.
 //                  Note: we write "OS page" for OS memory pages while
 //                  using plain "page" for mimalloc pages (`mi_page_t`).
+// mi_arena_t     : a large memory area where pages are allocated (process shared)
+// mi_tld_t       : thread local data
+// mi_subproc_t   : all heaps belong to a sub-process (usually just the main one)
 // --------------------------------------------------------------------------
 
 
@@ -113,7 +117,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Enable large pages for objects between 64KiB and 512KiB.
-// This should perhaps be disabled by default as for many workloads the block sizes above 64 KiB 
+// This should perhaps be disabled by default as for many workloads the block sizes above 64 KiB
 // are quite random which can lead to too many partially used large pages (but see issue #1104).
 #ifndef MI_ENABLE_LARGE_PAGES
 #define MI_ENABLE_LARGE_PAGES  1
@@ -179,7 +183,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_MAX_ALLOC_SIZE        PTRDIFF_MAX
 
 // Minimal commit for a page on-demand commit (should be >= OS page size)
-#define MI_PAGE_MIN_COMMIT_SIZE  MI_ARENA_SLICE_SIZE 
+#define MI_PAGE_MIN_COMMIT_SIZE  MI_ARENA_SLICE_SIZE
 
 
 // ------------------------------------------------------
@@ -202,12 +206,12 @@ typedef struct mi_arena_s mi_arena_t;     // defined below
 typedef struct mi_heap_s mi_heap_t;       // heaps
 
 // ------------------------------------------------------
-// We can have sub-processes that are fully separated 
+// We can have sub-processes that are fully separated
 // from each other (for running multiple Python interpreters
 // for example). A sub-process holds the memory arenas and heaps.
 // ------------------------------------------------------
 
-// A sub-process 
+// A sub-process
 typedef struct mi_subproc_s mi_subproc_t;
 
 
@@ -307,8 +311,8 @@ typedef struct mi_block_s {
 #define MI_PAGE_FLAG_MASK               MI_ZU(0x03)
 typedef size_t mi_page_flags_t;
 
-// There are two special threadid's: 0 for pages that are abandoned (and not in a theap queue), 
-// and 4 for abandoned & mapped threads -- abandoned-mapped pages are abandoned but also mapped 
+// There are two special threadid's: 0 for pages that are abandoned (and not in a theap queue),
+// and 4 for abandoned & mapped threads -- abandoned-mapped pages are abandoned but also mapped
 // in an arena (in `mi_heap_t.arena_pages.pages_abandoned`) so these can be quickly found for reuse.
 // Abondoning partially used pages allows for sharing of this memory between threads (in particular if threads are blocked)
 #define MI_THREADID_ABANDONED           MI_ZU(0)
@@ -364,13 +368,13 @@ typedef struct mi_page_s {
 
   size_t                    block_size;        // const: size available in each block (always `>0`)
   uint8_t*                  page_start;        // const: start of the blocks
-                                               
+
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t                 keys[2];           // const: two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
 
   mi_theap_t*               theap;             // the theap owning this page (may not be valid or NULL for abandoned pages)
-  mi_heap_t*                heap;              // const: the heap owning this page 
+  mi_heap_t*                heap;              // const: the heap owning this page
 
   struct mi_page_s*         next;              // next page owned by the theap with the same `block_size`
   struct mi_page_s*         prev;              // previous page owned by the theap with the same `block_size`
@@ -436,7 +440,7 @@ typedef enum mi_page_kind_e {
 //
 // Per thread, there is always a default theap that belongs
 // to the default heap. It is initialized to statically
-// point initially to an empty theap to avoid initialization 
+// point initially to an empty theap to avoid initialization
 // checks in the fast path.
 // ------------------------------------------------------
 
@@ -488,12 +492,12 @@ struct mi_theap_s {
   size_t                page_retired_max;                    // largest retired index into the `pages` array.
   long                  generic_count;                       // how often is `_mi_malloc_generic` called?
   long                  generic_collect_count;               // how often is `_mi_malloc_generic` called without collecting?
-  
+
   mi_theap_t*           tnext;                               // list of theaps in this thread
   mi_theap_t*           tprev;
   mi_theap_t*           hnext;                               // list of theaps of the owning `heap`
   mi_theap_t*           hprev;
-  
+
   long                  page_full_retain;                    // how many full pages can be retained per queue (before abandoning them)
   bool                  allow_page_reclaim;                  // `true` if this theap should not reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
@@ -536,10 +540,10 @@ typedef struct mi_heap_s {
 
   mi_arena_t*           exclusive_arena;                // if the heap should only allocate from a specific arena (or NULL)
   int                   numa_node;                      // if >=0, prefer this numa node for allocations
-  
+
   mi_theap_t*           theaps;                         // list of all thread-local theaps belonging to this heap (using the `hnext`/`hprev` fields)
   mi_lock_t             theaps_lock;                    // lock for the theaps list operations
-  
+
   _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages in this heap
   mi_page_t*            os_abandoned_pages;             // list of pages that are OS allocated and not in an arena
   mi_lock_t             os_abandoned_pages_lock;        // lock for the os abandoned pages list (this lock protects list operations)
@@ -556,7 +560,7 @@ typedef struct mi_heap_s {
 // These are essentially the static variables of a process, and
 // usually there is only one subprocess. This can be used for example
 // by CPython to have separate interpreters within one process.
-// Each thread can only belong to one subprocess 
+// Each thread can only belong to one subprocess
 // (and needs to call `mi_subproc_add_current_thread` before any allocations).
 // ------------------------------------------------------
 
@@ -564,7 +568,7 @@ struct mi_subproc_s {
   size_t                subproc_seq;                    // unique id for sub-processes
   mi_subproc_t*         next;                           // list of all sub-processes
   mi_subproc_t*         prev;
- 
+
   _Atomic(size_t)       arena_count;                    // current count of arena's
   _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
   mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
@@ -574,16 +578,16 @@ struct mi_subproc_s {
   _Atomic(mi_heap_t*)   heap_main;                      // main heap for this sub process
   mi_heap_t*            heaps;                          // heaps belonging to this sub-process
   mi_lock_t             heaps_lock;
-  
+
   _Atomic(size_t)       thread_count;                   // current threads associated with this sub-process
   _Atomic(size_t)       thread_total_count;             // total created threads associated with this sub-process
   _Atomic(size_t)       heap_count;                     // current heaps in this sub-process (== |heaps|)
   _Atomic(size_t)       heap_total_count;               // total created heaps in this sub-process
-  
-  mi_memid_t            memid;                          // provenance of this memory block (meta or static)  
-  mi_decl_align(8)                                      // needed on some 32-bit platforms  
-  mi_stats_t            stats;                          // subprocess statistics; updated for arena/OS stats like committed, 
-                                                        // and otherwise merged with heap stats when those are deleted  
+
+  mi_memid_t            memid;                          // provenance of this memory block (meta or static)
+  mi_decl_align(8)                                      // needed on some 32-bit platforms
+  mi_stats_t            stats;                          // subprocess statistics; updated for arena/OS stats like committed,
+                                                        // and otherwise merged with heap stats when those are deleted
 };
 
 
@@ -628,8 +632,8 @@ typedef struct mi_bbitmap_s mi_bbitmap_t;   // atomic binned bitmap (defined in 
 
 typedef struct mi_arena_pages_s {
   mi_bitmap_t* pages;                // all registered pages (abandoned and owned)
-  mi_bitmap_t* pages_abandoned[MI_ARENA_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)  
-  // followed by the bitmaps (whose sizes depend on the arena size)  
+  mi_bitmap_t* pages_abandoned[MI_ARENA_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)
+  // followed by the bitmaps (whose sizes depend on the arena size)
 } mi_arena_pages_t;
 
 
@@ -637,7 +641,7 @@ typedef struct mi_arena_pages_s {
 typedef struct mi_arena_s {
   mi_memid_t          memid;                // provenance of the memory area
   mi_subproc_t*       subproc;              // subprocess this arena belongs to (`this 'element-of' this->subproc->arenas`)
-  size_t              arena_idx;            // index in the arenas array 
+  size_t              arena_idx;            // index in the arenas array
 
   size_t              slice_count;          // total size of the area in arena slices (of `MI_ARENA_SLICE_SIZE`)
   size_t              info_slices;          // initial slices reserved for the arena bitmaps
@@ -653,7 +657,7 @@ typedef struct mi_arena_s {
   mi_bitmap_t*        slices_dirty;         // is the slice potentially non-zero?
   mi_bitmap_t*        slices_purge;         // slices that can be purged
   mi_arena_pages_t    pages_main;           // arena page bitmaps for the main heap are allocated up front as well
-                                              
+
   // followed by the bitmaps (whose sizes depend on the arena size)
   // note: when adding bitmaps revise `mi_arena_info_slices_needed`
 } mi_arena_t;

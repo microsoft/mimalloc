@@ -130,6 +130,7 @@ void          _mi_strlcpy(char* dest, const char* src, size_t dest_size);
 void          _mi_strlcat(char* dest, const char* src, size_t dest_size);
 size_t        _mi_strlen(const char* s);
 size_t        _mi_strnlen(const char* s, size_t max_len);
+char*         _mi_strnstr(char* s, size_t max_len, const char* pat);
 bool          _mi_getenv(const char* name, char* result, size_t result_size);
 
 // "options.c"
@@ -190,6 +191,7 @@ size_t        _mi_os_good_alloc_size(size_t size);
 bool          _mi_os_has_overcommit(void);
 bool          _mi_os_has_virtual_reserve(void);
 size_t        _mi_os_virtual_address_bits(void);
+size_t        _mi_os_minimal_purge_size(void);
 
 bool          _mi_os_reset(void* addr, size_t size);
 bool          _mi_os_decommit(void* addr, size_t size);
@@ -214,7 +216,7 @@ void*         _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, b
 void*         _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
 
 void*         _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
-bool          _mi_os_use_large_page(size_t size, size_t alignment);
+bool          _mi_os_canuse_large_page(size_t size, size_t alignment);
 size_t        _mi_os_large_page_size(void);
 void*         _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
 
