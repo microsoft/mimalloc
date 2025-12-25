@@ -1263,12 +1263,12 @@ void _mi_arenas_unsafe_destroy_all(mi_subproc_t* subproc) {
   Add an arena.
 ----------------------------------------------------------- */
 
-static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_t* arena_id) 
+static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_t* arena_id)
 {
   mi_assert_internal(arena != NULL);
   mi_assert_internal(arena->slice_count > 0);
   if (arena_id != NULL) { *arena_id = NULL; }
-  
+
   // try to find a NULL entry
   mi_arena_t* expected;
   size_t count = mi_arenas_get_count(subproc);
@@ -1629,7 +1629,7 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
                                    size_t slice_count, size_t chunk_count,
                                    mi_bchunk_t* chunks, mi_bchunkmap_t* chunk_bins, bool invert, mi_arena_t* arena, bool narrow)
 {
-  _mi_raw_message("\x1B[37m%s%s%s\n       (use/commit: \x1B[31m0 - 25%%\x1B[33m - 50%%\x1B[36m - 75%%\x1B[32m - 100%%\x1B[0m)\n", header1, header2, header3);
+  _mi_raw_message("\x1B[37m%s%s%s (use/commit: \x1B[31m0 - 25%%\x1B[33m - 50%%\x1B[36m - 75%%\x1B[32m - 100%%\x1B[0m)\n", header1, header2, header3);
   const size_t fields_per_line = (narrow ? 2 : 4);
   const size_t used_slice_count = mi_arena_used_slices(arena);
   size_t bit_count = 0;
@@ -1729,7 +1729,7 @@ static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narro
       // mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
       // if (arena_pages != NULL) 
       {
-        const char* header1 = "pages  (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info,\n        m:meta-data, ~:free-purgable, _:free-committed, .:free-reserved)";
+        const char* header1 = "pages  (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info, m:meta-data, ~:free-purgable, _:free-committed, .:free-reserved)";
         const char* header2 = (narrow ? "\n       " : " ");
         const char* header3 = "(chunk bin: S:small, M : medium, L : large, X : other)";
         page_total += mi_debug_show_chunks(header1, header2, header3, arena->slice_count, 
