@@ -1559,7 +1559,7 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
     }
     _mi_raw_message("  %s\n\x1B[37m", buf);
   }
-  _mi_raw_message("\x1B[0m  total ('x'): %zu\n", bit_set_count);
+  _mi_raw_message("\x1B[0m  total pages: %zu\n", bit_set_count);
   return bit_set_count;
 }
 
@@ -1591,7 +1591,7 @@ static void mi_debug_show_arenas_ex(bool show_pages, bool narrow) mi_attr_noexce
     //  purge_total += mi_debug_show_bitmap("purgeable slices", arena->slice_count, arena->slices_purge, false, NULL);
     //}
     if (show_pages) {
-      const char* header1 = "pages  (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info, m:meta-data, ~:free-purgable, _:free-committed, .:free-reserved)";
+      const char* header1 = "chunks (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info, m:meta-data, ~:free-purgable, _:free-committed, .:free-reserved)";
       const char* header2 = (narrow ? "\n       " : " ");
       const char* header3 = "(chunk bin: S:small, M : medium, L : large, X : other)";
       page_total += mi_debug_show_bitmap_binned(header1, header2, header3, arena->slice_count, arena->pages, arena->slices_free->chunkmap_bins, false, arena, narrow);
