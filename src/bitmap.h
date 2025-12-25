@@ -217,6 +217,10 @@ bool _mi_bitmap_forall_set(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_a
 // Ranges will never cross chunk boundaries though (and `slice_count <= MI_BCHUNK_BITS`)
 bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg);
 
+// Visit all set bits in a bitmap with at least `rngslices` at a time (and aligned to `rngslices`). 
+// This is used by purging to not break up transparent huge pages for example.
+// Ranges will never cross chunk boundaries (and `slice_count <= MI_BCHUNK_BITS`).
+bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg);
 
 // Count all set bits in given range in the bitmap. 
 size_t mi_bitmap_popcountN( mi_bitmap_t* bitmap, size_t idx, size_t n);

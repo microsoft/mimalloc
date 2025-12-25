@@ -1412,19 +1412,19 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
       mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
-        mi_bfield_t b = mi_atomic_exchange_acq_rel(&chunk->bfields[j], 0); // can be relaxed?
-        #if MI_DEBUG > 1
+        mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], 0);
+#if MI_DEBUG > 1
         const size_t bpopcount = mi_popcount(b);
         size_t rngcount = 0;
-        #endif
+#endif
         size_t bidx;
         while (mi_bfield_find_least_bit(b, &bidx)) {
-          const size_t rng = mi_ctz(~(b>>bidx)); // all the set bits from bidx
-          #if MI_DEBUG > 1
+          size_t rng = mi_ctz(~(b>>bidx)); // all the set bits from bidx
+#if MI_DEBUG > 1
           rngcount += rng;
-          #endif
-          mi_assert_internal(rng>=1 && rng<=MI_BFIELD_BITS);
+#endif
           const size_t idx = base_idx + bidx;
+          mi_assert_internal(rng>=1 && rng<=MI_BFIELD_BITS);
           mi_assert_internal((idx % MI_BFIELD_BITS) + rng <= MI_BFIELD_BITS);
           mi_assert_internal((idx / MI_BCHUNK_BITS) < mi_bitmap_chunk_count(bitmap));
           if (!visit(idx, rng, arena, arg)) return false;
@@ -1438,6 +1438,60 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
   return true;
 }
 
+// Visit all set bits in a bitmap but try to return ranges (within bfields) if possible,
+// but only in chunks of at least `rngslices` slices (that are also aligned at `rngslices`). 
+// and clear those ranges atomically.
+// Used by purging to purge larger ranges when possible. With transparent huge pages we only
+// want to purge whole huge pages (2 MiB) at a time which is what the `rngslices` parameter achieves.
+bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg) 
+{
+  // use the generic routine for `rngslices<=1` (as that one finds longest ranges at a time)
+  if (rngslices<=1) {
+    return _mi_bitmap_forall_setc_ranges(bitmap, visit, arena, arg);
+  }
+  mi_assert_internal(rngslices <= MI_BFIELD_BITS);
+  if (rngslices > MI_BFIELD_BITS) { rngslices = MI_BFIELD_BITS;  }
+
+  // for all chunkmap entries
+  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  for (size_t i = 0; i < chunkmap_max; i++) {
+    mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
+    size_t cmap_idx;
+    // for each chunk (corresponding to a set bit in a chunkmap entry)
+    while (mi_bfield_foreach_bit(&cmap_entry, &cmap_idx)) {
+      const size_t chunk_idx = i*MI_BFIELD_BITS + cmap_idx;
+      // for each chunk field
+      mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
+      for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
+        const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
+        mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], 0);
+        mi_bfield_t skipped = 0;
+        mi_bfield_t rngmask = mi_bfield_mask(rngslices, 0);
+        do {
+          if ((b & rngmask) == rngmask) {
+            const size_t idx = base_idx + mi_ctz(rngmask);
+            if (!visit(idx, rngslices, arena, arg)) {
+              // break early
+              if (skipped != 0) {
+                mi_atomic_or_relaxed(&chunk->bfields[j], skipped);
+                return false;
+              }
+            }
+          }
+          else {
+            skipped = skipped | (b & rngmask);
+          }
+          rngmask <<= rngslices;
+        } while (rngmask != 0);
+        
+        if (skipped != 0) {
+          mi_atomic_or_relaxed(&chunk->bfields[j], skipped);
+        }
+      }
+    }
+  }
+  return true;
+}
 
 
 /* --------------------------------------------------------------------------------

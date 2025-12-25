@@ -126,6 +126,7 @@ void          _mi_strlcpy(char* dest, const char* src, size_t dest_size);
 void          _mi_strlcat(char* dest, const char* src, size_t dest_size);
 size_t        _mi_strlen(const char* s);
 size_t        _mi_strnlen(const char* s, size_t max_len);
+char*         _mi_strnstr(char* s, size_t max_len, const char* pat);
 bool          _mi_getenv(const char* name, char* result, size_t result_size);
 
 // "options.c"
@@ -184,6 +185,7 @@ size_t        _mi_os_good_alloc_size(size_t size);
 bool          _mi_os_has_overcommit(void);
 bool          _mi_os_has_virtual_reserve(void);
 size_t        _mi_os_virtual_address_bits(void);
+size_t        _mi_os_minimal_purge_size(void);
 
 bool          _mi_os_reset(void* addr, size_t size);
 bool          _mi_os_decommit(void* addr, size_t size);
@@ -814,7 +816,7 @@ static inline void mi_page_set_heap(mi_page_t* page, mi_heap_t* heap) {
   }
   const mi_threadid_t tid = (heap == NULL ? MI_THREADID_ABANDONED : heap->tld->thread_id);
   mi_assert_internal((tid & MI_PAGE_FLAG_MASK) == 0);
-  
+
   // we need to use an atomic cas since a concurrent thread may still set the MI_PAGE_HAS_INTERIOR_POINTERS flag (see `alloc_aligned.c`).
   mi_threadid_t xtid_old = mi_page_xthread_id(page);
   mi_threadid_t xtid;

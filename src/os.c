@@ -28,7 +28,8 @@ static mi_os_mem_config_t mi_os_mem_config = {
   MI_MAX_VABITS, // in `bits.h`
   true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
   false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
-  true      // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
+  true,     // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
+  false     // has transparent huge pages? (if true we purge in (aligned) large page size chunks only to not fragment such pages)
 };
 
 bool _mi_os_has_overcommit(void) {
@@ -48,6 +49,16 @@ size_t _mi_os_page_size(void) {
 // if large OS pages are supported (2 or 4MiB), then return the size, otherwise return the small page size (4KiB)
 size_t _mi_os_large_page_size(void) {
   return (mi_os_mem_config.large_page_size != 0 ? mi_os_mem_config.large_page_size : _mi_os_page_size());
+}
+
+// minimal purge size. Can be larger than the page size if transparent huge pages are enabled.
+size_t _mi_os_minimal_purge_size(void) {
+  if (mi_os_mem_config.has_transparent_huge_pages) {
+    return _mi_os_large_page_size();
+  }
+  else {
+    return _mi_os_page_size();
+  }
 }
 
 size_t _mi_os_guard_page_size(void) {
@@ -354,7 +365,7 @@ void* _mi_os_alloc(size_t size, mi_memid_t* memid) {
   void* p = mi_os_prim_alloc(size, 0, true, false, &os_is_large, &os_is_zero);
   if (p == NULL) return NULL;
 
-  *memid = _mi_memid_create_os(p, size, true, os_is_zero, os_is_large);  
+  *memid = _mi_memid_create_os(p, size, true, os_is_zero, os_is_large);
   mi_assert_internal(memid->mem.os.size >= size);
   mi_assert_internal(memid->initially_committed);
   return p;
@@ -380,7 +391,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
 
   mi_assert_internal(memid->mem.os.size >= size);
   mi_assert_internal(_mi_is_aligned(p,alignment));
-  if (commit) { mi_assert_internal(memid->initially_committed); }  
+  if (commit) { mi_assert_internal(memid->initially_committed); }
   return p;
 }
 

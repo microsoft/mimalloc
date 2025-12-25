@@ -65,6 +65,21 @@ size_t _mi_strnlen(const char* s, size_t max_len) {
   return len;
 }
 
+char* _mi_strnstr(char* s, size_t max_len, const char* pat) {
+  if (s==NULL) return NULL;
+  if (pat==NULL) return s;
+  const size_t m = _mi_strnlen(s, max_len);
+  const size_t n = _mi_strlen(pat);  
+  for (size_t start = 0; start + n <= m; start++) {
+    size_t i = 0;
+    while (i<n && pat[i]==s[start+i]) {
+      i++;
+    }
+    if (i==n) return &s[start];
+  }
+  return NULL;
+}
+
 #ifdef MI_NO_GETENV
 bool _mi_getenv(const char* name, char* result, size_t result_size) {
   MI_UNUSED(name);

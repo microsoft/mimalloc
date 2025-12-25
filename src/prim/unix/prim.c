@@ -145,6 +145,25 @@ static bool unix_detect_overcommit(void) {
   return os_overcommit;
 }
 
+static bool unix_detect_thp(void) {
+  bool thp_enabled = false;
+  #if defined(__linux__)
+    int fd = mi_prim_open("/sys/kernel/mm/transparent_hugepage/enabled", O_RDONLY);
+    if (fd >= 0) {
+      char buf[32];
+      ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+      mi_prim_close(fd);
+      // <https://www.kernel.org/doc/html/latest/admin-guide/mm/transhuge.html>
+      // between brackets is the current value, for example: always [madvise] never
+      if (nread >= 1) {
+        thp_enabled = (_mi_strnstr(buf,32,"[never]") == NULL);
+      }
+    }
+  }
+  #endif
+  return thp_enabled;
+}
+
 // try to detect the physical memory dynamically (if possible)
 static void unix_detect_physical_memory( size_t page_size, size_t* physical_memory_in_kib ) {
   #if defined(CTL_HW) && (defined(HW_PHYSMEM64) || defined(HW_MEMSIZE))  // freeBSD, macOS
@@ -191,6 +210,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_overcommit = unix_detect_overcommit();
   config->has_partial_free = true;    // mmap can free in parts
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
+  config->has_transparent_huge_pages = unix_detect_thp();
 
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)

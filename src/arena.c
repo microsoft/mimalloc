@@ -1813,8 +1813,11 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
   // this also clears those ranges atomically (so any newly freed blocks will get purged next
   // time around)
   mi_purge_visit_info_t vinfo = { now, mi_arena_purge_delay(), true /*all?*/, false /*any?*/};
-  _mi_bitmap_forall_setc_ranges(arena->slices_purge, &mi_arena_try_purge_visitor, arena, &vinfo);
 
+  // we purge by at least `minslices` to not fragment transparent huge pages for example
+  const size_t minslices = mi_slice_count_of_size(_mi_os_minimal_purge_size());
+  _mi_bitmap_forall_setc_rangesn(arena->slices_purge, minslices, &mi_arena_try_purge_visitor, arena, &vinfo);
+  
   return vinfo.any_purged;
 }
 
