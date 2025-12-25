@@ -53,7 +53,11 @@ size_t _mi_os_large_page_size(void) {
 
 // minimal purge size. Can be larger than the page size if transparent huge pages are enabled.
 size_t _mi_os_minimal_purge_size(void) {
-  if (mi_os_mem_config.has_transparent_huge_pages) {
+  size_t minsize = mi_option_get_size(mi_option_minimal_purge_size);
+  if (minsize != 0) {
+    return _mi_align_up(minsize, _mi_os_page_size());
+  }
+  else if (mi_os_mem_config.has_transparent_huge_pages) {
     return _mi_os_large_page_size();
   }
   else {
