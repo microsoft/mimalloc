@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2024, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -10,12 +10,16 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // --------------------------------------------------------------------------
 // This file contains the main type definitions for mimalloc:
-// mi_heap_t      : all data for a thread-local heap, contains
-//                  lists of all managed heap pages.
+// mi_heap_t      : all data for a heap; usually there is just one main default heap.
+// mi_theap_t     : a thread local heap belonging to a specific heap: 
+//                  maintains lists of thread-local heap pages that have free space.
 // mi_page_t      : a mimalloc page (usually 64KiB or 512KiB) from
 //                  where objects of a single size are allocated.
 //                  Note: we write "OS page" for OS memory pages while
 //                  using plain "page" for mimalloc pages (`mi_page_t`).
+// mi_arena_t     : a large memory area where pages are allocated (process shared)
+// mi_tld_t       : thread local data
+// mi_subproc_t   : all heaps belong to a sub-process (usually just the main one)
 // --------------------------------------------------------------------------
 
 
