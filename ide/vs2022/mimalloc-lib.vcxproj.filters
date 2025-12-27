@@ -64,6 +64,9 @@
     <ClCompile Include="..\..\src\heap.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\threadlocal.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\mimalloc\atomic.h">

@@ -657,6 +657,9 @@ void _mi_thread_done(mi_theap_t* _theap_main)
     return;
   }
 
+  // release dynamic thread_local's
+  _mi_thread_locals_thread_done();
+
   // note: we store the tld as we should avoid reading `thread_tld` at this point (to avoid reinitializing the thread local storage)
   mi_tld_t* const tld = _theap_main->tld;
 
@@ -794,6 +797,7 @@ void _mi_auto_process_init(void) {
 
   mi_process_init();
   mi_process_setup_auto_thread_done();
+  _mi_thread_locals_init();
   _mi_options_post_init();  // now we can print to stderr
   if (_mi_is_redirected()) _mi_verbose_message("malloc is redirected.\n");
 
@@ -911,11 +915,11 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   process_done = true;
 
   mi_assert_internal(_mi_theap_default() != NULL);
+  _mi_thread_locals_done();
 
   // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
   _mi_prim_thread_done_auto_done();
-
-
+  
   #ifndef MI_SKIP_COLLECT_ON_EXIT
     #if (MI_DEBUG || !defined(MI_SHARED_LIB))
     // free all memory if possible on process exit. This is not needed for a stand-alone process

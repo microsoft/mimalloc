@@ -220,6 +220,15 @@ bool          _mi_os_canuse_large_page(size_t size, size_t alignment);
 size_t        _mi_os_large_page_size(void);
 void*         _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
 
+// threadlocal.c
+
+mi_thread_local_t _mi_thread_local_create(void);
+void          _mi_thread_local_free( mi_thread_local_t key );
+bool          _mi_thread_local_set(  mi_thread_local_t key, void* val );
+void*         _mi_thread_local_get(  mi_thread_local_t key );
+void          _mi_thread_locals_init(void);
+void          _mi_thread_locals_done(void);
+void          _mi_thread_locals_thread_done(void);
 
 // arena.c
 mi_arena_id_t _mi_arena_id_none(void);

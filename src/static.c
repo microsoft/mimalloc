@@ -36,6 +36,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "random.c"
 #include "stats.c"
 #include "theap.c"
+#include "threadlocal.c"
 #include "prim/prim.c"
 #if MI_OSX_ZONE
 #include "prim/osx/alloc-override-zone.c"

@@ -509,6 +509,7 @@
     <ClCompile Include="..\..\src\page.c" />
     <ClCompile Include="..\..\src\random.c" />
     <ClCompile Include="..\..\src\stats.c" />
+    <ClCompile Include="..\..\src\threadlocal.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

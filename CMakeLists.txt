@@ -70,6 +70,7 @@ set(mi_sources
     src/random.c
     src/stats.c
     src/theap.c
+    src/threadlocal.c
     src/prim/prim.c)
 
 set(mi_cflags "")

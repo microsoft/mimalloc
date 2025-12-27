@@ -126,14 +126,6 @@ void _mi_prim_thread_associate_default_theap(mi_theap_t* theap);
 // Is this thread part of a thread pool?
 bool _mi_prim_thread_is_in_threadpool(void);
 
-// The thread local storage primitives are optional (and fall back to phtreads otherwise)
-typedef size_t mi_thread_local_t;
-mi_thread_local_t _mi_prim_thread_local_create(void);
-void  _mi_prim_thread_local_free(mi_thread_local_t key);
-void* _mi_prim_thread_local_get(mi_thread_local_t key);
-void  _mi_prim_thread_local_set(mi_thread_local_t key, void* value);
-
-
 
 //-------------------------------------------------------------------
 // Access to TLS (thread local storage) slots.

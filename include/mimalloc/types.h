@@ -528,7 +528,7 @@ typedef struct mi_arena_pages_s mi_arena_pages_t;
 #define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
                                 // 160 arenas is enough for ~2 TiB memory
 
-// A dynamic thread-local variable
+// A dynamic thread-local variable; 0 for an invalid thread-local
 typedef size_t mi_thread_local_t;
 
 typedef struct mi_heap_s {

@@ -481,6 +481,7 @@
     <ClCompile Include="..\..\src\random.c" />
     <ClCompile Include="..\..\src\os.c" />
     <ClCompile Include="..\..\src\stats.c" />
+    <ClCompile Include="..\..\src\threadlocal.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc.h" />

@@ -51,7 +51,7 @@ static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
   mi_theap_t* theap = NULL;
   if (heap->theap==0) {
     // initialize thread locals
-    heap->theap = _mi_prim_thread_local_create();
+    heap->theap = _mi_thread_local_create();
     if (heap->theap==0) {
       _mi_error_message(EFAULT, "unable to dynamically create a thread local for a heap\n");
       return NULL;
@@ -59,7 +59,7 @@ static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
   }
   else {
     // get current thread local
-    theap = (mi_theap_t*)_mi_prim_thread_local_get(heap->theap);
+    theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   }
 
   // create a fresh theap?
@@ -69,7 +69,10 @@ static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
       _mi_error_message(EFAULT, "unable to allocate memory for a thread local heap\n");
       return NULL;
     }
-    _mi_prim_thread_local_set(heap->theap, theap);
+    if (!_mi_thread_local_set(heap->theap, theap)) {
+      _mi_error_message(EFAULT, "unable to allocate memory for a thread local storage\n");
+      return NULL;
+    }
   }
   return theap;
 }
@@ -81,7 +84,7 @@ mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap) {
     return __mi_theap_main;  // don't call _mi_theap_main as it may still be NULL
   }
   else {
-    return (mi_theap_t*)_mi_prim_thread_local_get(heap->theap);
+    return (mi_theap_t*)_mi_thread_local_get(heap->theap);
   }
 }
 
@@ -169,7 +172,7 @@ static void mi_heap_free(mi_heap_t* heap) {
                      else { heap->subproc->heaps = heap->next; }
   }
 
-  _mi_prim_thread_local_free(heap->theap);
+  _mi_thread_local_free(heap->theap);
   mi_lock_done(&heap->theaps_lock);
   mi_lock_done(&heap->os_abandoned_pages_lock);
   mi_free(heap);
