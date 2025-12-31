@@ -348,6 +348,10 @@ void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount);
 void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
 void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 
+// averages can just be increased
+void __mi_stat_average_increase(mi_stat_average_t* stat, size_t amount);
+void __mi_stat_average_increase_mt(mi_stat_average_t* stat, size_t amount);
+
 #define mi_subproc_stat_counter_increase(subproc,stat,amount)   __mi_stat_counter_increase_mt( &(subproc)->stats.stat, amount)
 #define mi_subproc_stat_increase(subproc,stat,amount)           __mi_stat_increase_mt( &(subproc)->stats.stat, amount)
 #define mi_subproc_stat_decrease(subproc,stat,amount)           __mi_stat_decrease_mt( &(subproc)->stats.stat, amount)
@@ -355,6 +359,7 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_subproc_stat_adjust_decrease(subproc,stat,amnt)      __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amnt)
 
 #define mi_tld_stat_counter_increase(tld,stat,amount)           __mi_stat_counter_increase( &(tld)->stats.stat, amount)
+#define mi_tld_stat_average_increase(tld,stat,amount)           __mi_stat_average_increase( &(tld)->stats.stat, amount)
 #define mi_tld_stat_increase(tld,stat,amount)                   __mi_stat_increase( &(tld)->stats.stat, amount)
 #define mi_tld_stat_decrease(tld,stat,amount)                   __mi_stat_decrease( &(tld)->stats.stat, amount)
 #define mi_tld_stat_adjust_increase(tld,stat,amnt)              __mi_stat_adjust_increase( &(tld)->stats.stat, amnt)
@@ -365,6 +370,7 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
 
 #define mi_heap_stat_counter_increase(heap,stat,amount)         mi_tld_stat_counter_increase(heap->tld, stat, amount)
+#define mi_heap_stat_average_increase(heap,stat,amount)         mi_tld_stat_average_increase(heap->tld, stat, amount)
 #define mi_heap_stat_increase(heap,stat,amount)                 mi_tld_stat_increase( heap->tld, stat, amount)
 #define mi_heap_stat_decrease(heap,stat,amount)                 mi_tld_stat_decrease( heap->tld, stat, amount)
 #define mi_heap_stat_adjust_decrease(heap,stat,amount)          mi_tld_stat_adjust_decrease( heap->tld, stat, amount)

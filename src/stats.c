@@ -46,6 +46,16 @@ void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {
   stat->total += amount;
 }
 
+void __mi_stat_average_increase_mt(mi_stat_average_t* stat, size_t amount) {
+  mi_atomic_addi64_relaxed( &stat->count, (int64_t)1 );
+  mi_atomic_addi64_relaxed( &stat->total, (int64_t)amount );
+}
+
+void __mi_stat_average_increase(mi_stat_average_t* stat, size_t amount) {
+  stat->count++;
+  stat->total += amount;
+}
+
 void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount) {
   mi_stat_update_mt(stat, (int64_t)amount);
 }
@@ -111,8 +121,15 @@ static void mi_stat_counter_add_mt(mi_stat_counter_t* stat, const mi_stat_counte
   mi_atomic_void_addi64_relaxed(&stat->total, &src->total);
 }
 
+static void mi_stat_average_add_mt(mi_stat_average_t* stat, const mi_stat_average_t* src) {
+  if (stat==src) return;
+  mi_atomic_void_addi64_relaxed(&stat->count, &src->count);
+  mi_atomic_void_addi64_relaxed(&stat->total, &src->total);
+}
+
 #define MI_STAT_COUNT(stat)    mi_stat_count_add_mt(&stats->stat, &src->stat);
 #define MI_STAT_COUNTER(stat)  mi_stat_counter_add_mt(&stats->stat, &src->stat);
+#define MI_STAT_AVERAGE(stat)  mi_stat_average_add_mt(&stats->stat, &src->stat);
 
 // must be thread safe as it is called from stats_merge
 static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
@@ -133,6 +150,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
 
 #undef MI_STAT_COUNT
 #undef MI_STAT_COUNTER
+#undef MI_STAT_AVERAGE
 
 /* -----------------------------------------------------------
   Display statistics
@@ -225,12 +243,6 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
   mi_stat_print_ex(stat, msg, unit, out, arg, NULL);
 }
 
-static void mi_stat_peak_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg) {
-  _mi_fprintf(out, arg, "%10s:", msg);
-  mi_print_amount(stat->peak, unit, out, arg);
-  _mi_fprintf(out, arg, "\n");
-}
-
 #if MI_STAT>1
 static void mi_stat_total_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg) {
   _mi_fprintf(out, arg, "%10s:", msg);
@@ -246,14 +258,12 @@ static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg
   _mi_fprintf(out, arg, "\n");
 }
 
-
-static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg) {
-  const int64_t avg_tens = (stat->total == 0 ? 0 : (stat->total*10 / stat->total));
+static void mi_stat_average_print(const mi_stat_average_t* stat, const char* msg, mi_output_fun* out, void* arg) {
+  const int64_t avg_tens = (stat->count == 0 ? 0 : (stat->total*10 / stat->count));
   const long avg_whole = (long)(avg_tens/10);
   const long avg_frac1 = (long)(avg_tens%10);
   _mi_fprintf(out, arg, "%10s: %5ld.%ld avg\n", msg, avg_whole, avg_frac1);
 }
-
 
 static void mi_print_header(mi_output_fun* out, void* arg ) {
   _mi_fprintf(out, arg, "%10s: %11s %11s %11s %11s %11s\n", "heap stats", "peak   ", "total   ", "current   ", "block   ", "total#   ");
@@ -341,8 +351,8 @@ void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) mi_attr
   #endif
   mi_stat_print_ex(&stats->reserved, "reserved", 1, out, arg, "");
   mi_stat_print_ex(&stats->committed, "committed", 1, out, arg, "");
-  mi_stat_peak_print(&stats->reset, "reset", 1, out, arg );
-  mi_stat_peak_print(&stats->purged, "purged", 1, out, arg );
+  mi_stat_counter_print(&stats->reset, "reset", out, arg );
+  mi_stat_counter_print(&stats->purged, "purged", out, arg );
   mi_stat_print_ex(&stats->page_committed, "touched", 1, out, arg, "");
   // mi_stat_print(&stats->segments, "segments", -1, out, arg);
   // mi_stat_print(&stats->segments_abandoned, "-abandoned", -1, out, arg);
@@ -365,7 +375,7 @@ void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) mi_attr
   mi_stat_counter_print(&stats->purge_calls, "purges", out, arg);
   mi_stat_counter_print(&stats->malloc_guarded_count, "guarded", out, arg);
   mi_stat_print(&stats->threads, "threads", -1, out, arg);
-  mi_stat_counter_print_avg(&stats->page_searches, "searches", out, arg);
+  mi_stat_average_print(&stats->page_searches, "searches", out, arg);
   _mi_fprintf(out, arg, "%10s: %5i\n", "numa nodes", _mi_os_numa_node_count());
 
   size_t elapsed;
@@ -619,8 +629,16 @@ static void mi_heap_buf_print_counter_value(mi_heap_buf_t* hbuf, const char* nam
   mi_heap_buf_print_value(hbuf, name, stat->total);
 }
 
+static void mi_heap_buf_print_average_value(mi_heap_buf_t* hbuf, const char* name, mi_stat_average_t* stat) {
+  char buf[128];
+  _mi_snprintf(buf, 128, "  \"%s\": { \"count\": %lld, \"total\": %lld },\n", name, stat->count, stat->total);
+  buf[127] = 0;
+  mi_heap_buf_print(hbuf, buf);
+}
+
 #define MI_STAT_COUNT(stat)    mi_heap_buf_print_count_value(&hbuf, #stat, &stats->stat);
 #define MI_STAT_COUNTER(stat)  mi_heap_buf_print_counter_value(&hbuf, #stat, &stats->stat);
+#define MI_STAT_AVERAGE(stat)  mi_heap_buf_print_average_value(&hbuf, #stat, &stats->stat);
 
 char* mi_stats_get_json(size_t output_size, char* output_buf) mi_attr_noexcept {
   mi_stats_merge();

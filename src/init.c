@@ -65,16 +65,19 @@ const mi_page_t _mi_page_empty = {
     QNULL(MI_LARGE_MAX_OBJ_WSIZE + 2) /* Full queue */ }
 
 #define MI_STAT_COUNT_NULL()  {0,0,0}
+#define MI_STAT_AVERAGE_NULL() {0,0}
 
 // Empty statistics
 #define MI_STATS_NULL  \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  { 0 }, { 0 }, \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   { 0 }, { 0 }, { 0 }, { 0 }, \
   { 0 }, { 0 }, { 0 }, { 0 }, \
   \
-  { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
+  { 0 }, { 0 }, { 0 }, { 0 }, \
+  MI_STAT_AVERAGE_NULL(), \
   MI_INIT4(MI_STAT_COUNT_NULL), \
   { 0 }, { 0 }, { 0 }, { 0 },  \
   \
