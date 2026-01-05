@@ -38,7 +38,7 @@ static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_sta
 }
 
 //static void mi_page_init(mi_theap_t* theap, mi_page_t* page, size_t size, mi_tld_t* tld);
-static mi_decl_nodiscard bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page);
+mi_decl_nodiscard bool static mi_page_extend_free(mi_theap_t* theap, mi_page_t* page);
 
 #if (MI_DEBUG>=3)
 static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
@@ -607,7 +607,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 // Note: we also experimented with "bump" allocation on the first
 // allocations but this did not speed up any benchmark (due to an
 // extra test in malloc? or cache effects?)
-static mi_decl_nodiscard bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
+mi_decl_nodiscard bool static mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
   #if (MI_SECURE<3)
   mi_assert(page->free == NULL);
