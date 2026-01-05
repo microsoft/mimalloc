@@ -1,4 +1,4 @@
-/* The standard CSS for doxygen 1.13.1*/
+/* The standard CSS for doxygen 1.11.0*/
 
 body {
     background-color: white;
@@ -1057,7 +1057,7 @@ table.fieldtable {
         padding: 3px 7px 2px;
 }
 
-.fieldtable td.fieldtype, .fieldtable td.fieldname, .fieldtable td.fieldinit {
+.fieldtable td.fieldtype, .fieldtable td.fieldname {
         white-space: nowrap;
         border-right: 1px solid #697273;
         border-bottom: 1px solid #697273;
@@ -1067,12 +1067,6 @@ table.fieldtable {
 .fieldtable td.fieldname {
         padding-top: 3px;
 }
-
-.fieldtable td.fieldinit {
-        padding-top: 3px;
-        text-align: right;
-}
-
 
 .fieldtable td.fielddoc {
         border-bottom: 1px solid #697273;
@@ -1422,11 +1416,6 @@ dl.invariant dt, dl.pre dt, dl.post dt {
 	padding: 2px 0px;
 }
 
-#side-nav #projectname
-{
-	font-size: 130%;
-}
-
 #projectbrief
 {
 	font-size: 90%;
@@ -1533,17 +1522,20 @@ div.toc ul {
         padding: 0px;
 }
 
-div.toc li[class^='level'] {
-        margin-left: 15px;
-}
-
 div.toc li.level1 {
         margin-left: 0px;
 }
 
-div.toc li.empty {
-        background-image: none;
-        margin-top: 0px;
+div.toc li.level2 {
+        margin-left: 15px;
+}
+
+div.toc li.level3 {
+        margin-left: 15px;
+}
+
+div.toc li.level4 {
+        margin-left: 15px;
 }
 
 span.emoji {
@@ -1814,13 +1806,9 @@ th.markdownTableHeadCenter, td.markdownTableBodyCenter {
 	text-align: center
 }
 
-tt, code, kbd
+tt, code, kbd, samp
 {
   display: inline-block;
-}
-tt, code, kbd
-{
-  vertical-align: top;
 }
 /* @end */
 

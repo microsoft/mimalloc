@@ -68,7 +68,7 @@ var searchData=
   ['mi_5fmalloc_5fsmall_65',['mi_malloc_small',['../group__extended.html#ga7f050bc6b897da82692174f5fce59cde',1,'mimalloc-doc.h']]],
   ['mi_5fmalloc_5fusable_5fsize_66',['mi_malloc_usable_size',['../group__posix.html#ga06d07cf357bbac5c73ba5d0c0c421e17',1,'mimalloc-doc.h']]],
   ['mi_5fmallocn_67',['mi_mallocn',['../group__malloc.html#ga61f46bade3db76ca24aaafedc40de7b6',1,'mimalloc-doc.h']]],
-  ['mi_5fmanage_5fos_5fmemory_68',['mi_manage_os_memory',['../group__extended.html#ga4c6486a1fdcd7a423b5f25fe4be8e0cf',1,'mimalloc-doc.h']]],
+  ['mi_5fmanage_5fos_5fmemory_68',['mi_manage_os_memory',['../group__extended.html#gaee14003b3ae120dc3e30f55c10d2854a',1,'mimalloc-doc.h']]],
   ['mi_5fmanage_5fos_5fmemory_5fex_69',['mi_manage_os_memory_ex',['../group__extended.html#ga41ce8525d77bbb60f618fa1029994f6e',1,'mimalloc-doc.h']]],
   ['mi_5fmbsdup_70',['mi_mbsdup',['../group__posix.html#ga7b82a44094fdec4d2084eb4288a979b0',1,'mimalloc-doc.h']]],
   ['mi_5fmemalign_71',['mi_memalign',['../group__posix.html#ga726867f13fd29ca36064954c0285b1d8',1,'mimalloc-doc.h']]],

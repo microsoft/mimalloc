@@ -139,9 +139,7 @@ function initResizable(treeview) {
   {
     $("#splitbar").bind("dragstart", _preventDefault).bind("selectstart", _preventDefault);
     $(".ui-resizable-handle").dblclick(collapseExpand);
-    // workaround for firefox
-    $("body").css({overflow: "hidden"});
   }
-  $(window).on('load',function() { resizeHeight(treeview); });
+  $(window).on('load',resizeHeight);
 }
 /* @license-end */
