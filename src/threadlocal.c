@@ -131,7 +131,7 @@ static mi_thread_local_t mi_thread_local_create_expand(void) {
   const size_t oldcount = (slots==NULL ? 0 : mi_bitmap_max_bits(slots));
   const size_t newcount = 1024 + oldcount;
   const size_t newsize = mi_bitmap_size( newcount, NULL );
-  slots = (mi_bitmap_t*)mi_realloc(slots, newsize);
+  slots = (mi_bitmap_t*)mi_realloc_aligned(slots, newsize, MI_BCHUNK_SIZE);
   if (slots != NULL) {
     mi_bitmap_init(slots, newcount, true /* or otherwise we would zero all old entries */);
     mi_bitmap_unsafe_setN(slots, oldcount, newcount - oldcount);
