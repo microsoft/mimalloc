@@ -344,7 +344,7 @@ completely and redirect all calls to the _mimalloc_ library instead .
 You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)), or via environment variables:
 
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
-- `MIMALLOC_VERBOSE=1`: show verbose messages.
+- `MIMALLOC_VERBOSE=1`: show verbose messages (including statistics).
 - `MIMALLOC_SHOW_ERRORS=1`: show error and warning messages.
 
 Advanced options:
@@ -355,11 +355,10 @@ Advanced options:
    as well (like Windows or macOS) which may improve performance (as the whole arena is committed at once).
    Note that eager commit only increases the commit but not the actual the peak resident set
    (rss) so it is generally ok to enable this.
-- `MIMALLOC_PURGE_DELAY=N`: the delay in `N` milli-seconds (by default `10`) after which mimalloc will purge
+- `MIMALLOC_PURGE_DELAY=N`: the delay in `N` milli-seconds (by default `1000` in v3) after which mimalloc will purge
    OS pages that are not in use. This signals to the OS that the underlying physical memory can be reused which
    can reduce memory fragmentation especially in long running (server) programs. Setting `N` to `0` purges immediately when
-   a page becomes unused which can improve memory usage but also decreases performance. Setting `N` to a higher
-   value like `100` can improve performance (sometimes by a lot) at the cost of potentially using more memory at times.
+   a page becomes unused which can improve memory usage but also decreases performance.
    Setting it to `-1` disables purging completely.
 - `MIMALLOC_PURGE_DECOMMITS=1`: By default "purging" memory means unused memory is decommitted (`MEM_DECOMMIT` on Windows,
    `MADV_DONTNEED` (which decresease rss immediately) on `mmap` systems). Set this to 0 to instead "reset" unused
