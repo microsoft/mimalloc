@@ -1,7 +1,7 @@
 
 <img align="left" width="100" height="100" src="doc/mimalloc-logo.png"/>
 
-[<img align="right" src="https://dev.azure.com/Daan0324/mimalloc/_apis/build/status/microsoft.mimalloc?branchName=dev"/>](https://dev.azure.com/Daan0324/mimalloc/_build?definitionId=1&_a=summary)
+[<img align="right" src="https://dev.azure.com/Daan0324/mimalloc/_apis/build/status/microsoft.mimalloc?branchName=dev3"/>](https://dev.azure.com/Daan0324/mimalloc/_build?definitionId=1&_a=summary)
 
 # mimalloc
 
@@ -12,9 +12,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.1.5` (beta) (2025-06-13).  
-Latest v2 release: `v2.2.4` (2025-06-09).  
-Latest v1 release: `v1.9.4` (2024-06-09).
+Latest release   : `v3.2.6` (2026-01-08) release candidate 1, please report any issues.  
+Latest v2 release: `v2.2.6` (2026-01-08).  
+Latest v1 release: `v1.9.6` (2026-01-08).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -57,6 +57,7 @@ Notable aspects of the design include:
   over our benchmarks.
 - __first-class heaps__: efficiently create and use multiple heaps to allocate across different regions.
   A heap can be destroyed at once instead of deallocating each object separately.
+  New: v3 has true first-class heaps where one can allocate in a heap from any thread.   
 - __bounded__: it does not suffer from _blowup_ \[1\], has bounded worst-case allocation
   times (_wcat_) (upto OS primitives), bounded space overhead (~0.2% meta-data, with low
   internal fragmentation), and has no internal points of contention using only atomic operations.
@@ -77,12 +78,20 @@ Enjoy!
 * `dev2`: development branch for mimalloc v2. This branch is downstream of `dev` 
           (and is essentially equal to `dev` except for `src/segment.c`). Uses larger sliced segments to manage
           mimalloc pages that can reduce fragmentation.
-* `dev3`: development branch for mimalloc v3 beta. This branch is downstream of `dev`. This version 
+* `dev3`: development branch for mimalloc v3 rc1. This branch is downstream of `dev`. This version 
           simplifies the lock-free ownership of previous versions, and improves sharing of memory between 
           threads. On certain large workloads this version may use (much) less memory.
+          Also support true first-class heaps and more efficient heap-walking.
 
 ### Releases
 
+* 2026-01-08, `v1.9.6`, `v2.2.6`, `v3.2.6` (rc1) : Important bug fixes. Many improvements to v3 including 
+  true first-class heaps where one can allocate in heap from any thread, and track statistics per heap as well.
+  Added `MIMALLOC_ALLOW_THP` option. This is by default enabled except on Android. When THP is detected on v3,
+  mimalloc will set the `MIMALLOC_MINIMAL_PURGE_SIZE` to 2MiB to avoid breaking up potential THP huge pages.
+  v3 uses faster TLS access on Windows, and has improved performance for `mi_calloc` and aligned allocations.
+  Fixed rare race condition on older v3, fixed potential buffer overflow in debug statistics, add API for returning
+  allocated sizes on allocation and free.
 * 2025-06-13, `v3.1.5`: Bug fix release where memory was not always correctly committed (issue #1098).
 * 2025-06-09, `v1.9.4`, `v2.2.4`, `v3.1.4` (beta) : Some important bug fixes, including a case where OS memory
   was not always fully released. Improved v3 performance, build on XBox, fix build on Android, support interpose 
@@ -296,7 +305,7 @@ completely and redirect all calls to the _mimalloc_ library instead .
 You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)), or via environment variables:
 
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
-- `MIMALLOC_VERBOSE=1`: show verbose messages.
+- `MIMALLOC_VERBOSE=1`: show verbose messages (including statistics).
 - `MIMALLOC_SHOW_ERRORS=1`: show error and warning messages.
 
 Advanced options:
@@ -307,11 +316,10 @@ Advanced options:
    as well (like Windows or macOS) which may improve performance (as the whole arena is committed at once).
    Note that eager commit only increases the commit but not the actual the peak resident set
    (rss) so it is generally ok to enable this.
-- `MIMALLOC_PURGE_DELAY=N`: the delay in `N` milli-seconds (by default `10`) after which mimalloc will purge
+- `MIMALLOC_PURGE_DELAY=N`: the delay in `N` milli-seconds (by default `1000` in v3) after which mimalloc will purge
    OS pages that are not in use. This signals to the OS that the underlying physical memory can be reused which
    can reduce memory fragmentation especially in long running (server) programs. Setting `N` to `0` purges immediately when
-   a page becomes unused which can improve memory usage but also decreases performance. Setting `N` to a higher
-   value like `100` can improve performance (sometimes by a lot) at the cost of potentially using more memory at times.
+   a page becomes unused which can improve memory usage but also decreases performance.
    Setting it to `-1` disables purging completely.
 - `MIMALLOC_PURGE_DECOMMITS=1`: By default "purging" memory means unused memory is decommitted (`MEM_DECOMMIT` on Windows,
    `MADV_DONTNEED` (which decresease rss immediately) on `mmap` systems). Set this to 0 to instead "reset" unused
@@ -321,13 +329,16 @@ Advanced options:
 
 Further options for large workloads and services:
 
+- `MIMALLOC_ALLOW_THP=1`: By default always allow transparent huge pages (THP) on Linux systems. On Android only this is
+   by default off. When set to `0`, THP is disabled for the process that mimalloc runs in. If enabled, mimalloc also sets
+   the `MIMALLOC_MINIMAL_PURGE_SIZE` in v3 to 2MiB to avoid potentially breaking up transparent huge pages.
 - `MIMALLOC_USE_NUMA_NODES=N`: pretend there are at most `N` NUMA nodes. If not set, the actual NUMA nodes are detected
    at runtime. Setting `N` to 1 may avoid problems in some virtual environments. Also, setting it to a lower number than
    the actual NUMA nodes is fine and will only cause threads to potentially allocate more memory across actual NUMA
    nodes (but this can happen in any case as NUMA local allocation is always a best effort but not guaranteed).
-- `MIMALLOC_ALLOW_LARGE_OS_PAGES=0`: Set to 1 to use large OS pages (2 or 4MiB) when available; for some workloads this can significantly
-   improve performance. When this option is disabled (default), it also disables transparent huge pages (THP) for the process
-   (on Linux and Android). On Linux the default setting is 2 -- this enables the use of large pages through THP only.
+- `MIMALLOC_ALLOW_LARGE_OS_PAGES=0`: Set to 1 to use large OS pages (2 or 4MiB) when available; for some workloads this can
+   significantly improve performance. However, large OS pages cannot be purged or shared with other processes so may lead
+   to increased memory usage in some cases.
    Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
    to explicitly give permissions for large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
    the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
@@ -339,11 +350,6 @@ Further options for large workloads and services:
    contiguous physical memory can take a long time when memory is fragmented (but reserving the huge pages is done at
    startup only once).
    Note that we usually need to explicitly give permission for huge OS pages (as on [Windows][windows-huge] and [Linux][linux-huge])).
-   With huge OS pages, it may be beneficial to set the setting
-   `MIMALLOC_EAGER_COMMIT_DELAY=N` (`N` is 1 by default) to delay the initial `N` segments (of 4MiB)
-   of a thread to not allocate in the huge OS pages; this prevents threads that are short lived
-   and allocate just a little to take up space in the huge OS page area (which cannot be purged as huge OS pages are pinned
-   to physical memory).
    The huge pages are usually allocated evenly among NUMA nodes.
    We can use `MIMALLOC_RESERVE_HUGE_OS_PAGES_AT=N` where `N` is the numa node (starting at 0) to allocate all
    the huge pages at a specific numa node instead.
