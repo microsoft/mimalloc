@@ -291,7 +291,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   mi_assert_internal(full_block_size >= block_size);
   mi_page_init(heap, page, full_block_size, heap->tld);
   mi_heap_stat_increase(heap, pages, 1);
-  mi_heap_stat_increase(heap, page_bins[_mi_page_bin(page)], 1);
+  mi_heap_stat_increase(heap, page_bins[_mi_page_stats_bin(page)], 1);
   if (pq != NULL) { mi_page_queue_push(heap, pq, page); }
   mi_assert_expensive(_mi_page_is_valid(page));
   return page;
