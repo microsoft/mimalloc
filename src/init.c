@@ -71,13 +71,14 @@ const mi_page_t _mi_page_empty = {
 
 // Empty statistics
 #define MI_STATS_NULL  \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
+  { 0 }, { 0 }, \
+  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
   { 0 }, { 0 }, { 0 }, { 0 }, \
   { 0 }, { 0 }, { 0 }, { 0 }, \
   \
-  { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
+  { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
   MI_INIT4(MI_STAT_COUNT_NULL), \
   { 0 }, { 0 }, { 0 }, { 0 },  \
   \

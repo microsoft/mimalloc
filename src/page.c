@@ -817,6 +817,7 @@ static mi_page_t* mi_page_queue_find_free_ex(mi_heap_t* heap, mi_page_queue_t* p
   } // for each page
 
   mi_heap_stat_counter_increase(heap, page_searches, count);
+  mi_heap_stat_counter_increase(heap, page_searches_count, 1);
 
   // set the page to the best candidate
   if (page_candidate != NULL) {
