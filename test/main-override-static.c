@@ -37,7 +37,7 @@ int main() {
 
   // test_manage_os_memory();
   // test_large_pages();
-  // detect double frees and heap corruption
+  // detect double frees and theap corruption
   // double_free1();
   // double_free2();
   // corrupt_free();
@@ -48,7 +48,7 @@ int main() {
   // invalid_free();
   // test_reserved();
   // negative_stat();
-  // test_heap_walk();
+  // test_theap_walk();
   // alloc_huge();
 
 
@@ -59,8 +59,8 @@ int main() {
   char* s = strdup("hello\n");
   free(p2);
 
-  mi_heap_t* h = mi_heap_new();
-  mi_heap_set_default(h);
+  // mi_theap_t* h = mi_theap_new();
+  // mi_theap_set_default(h);
 
   p2 = malloc(16);
   p1 = realloc(p1, 32);
@@ -137,7 +137,7 @@ static void double_free2() {
 }
 
 
-// Try to corrupt the heap through buffer overflow
+// Try to corrupt the theap through buffer overflow
 #define N   256
 #define SZ  64
 
@@ -254,17 +254,17 @@ static void test_manage_os_memory(void) {
   void* ptr = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
   mi_arena_id_t arena_id;
   mi_manage_os_memory_ex(ptr, size, true /* committed */, true /* pinned */, false /* is zero */, -1 /* numa node */, true /* exclusive */, &arena_id);
-  mi_heap_t* cuda_heap = mi_heap_new_in_arena(arena_id);    // you can do this in any thread
+  mi_heap_t* cuda_theap = mi_heap_new_in_arena(arena_id);    // you can do this in any thread
 
   // now allocate only in the cuda arena
-  void* p1 = mi_heap_malloc(cuda_heap, 8);
-  int* p2 = mi_heap_malloc_tp(cuda_heap, int);
+  void* p1 = mi_heap_malloc(cuda_theap, 8);
+  int* p2  = mi_heap_malloc_tp(int,cuda_theap);
   *p2 = 42;
 
-  // and maybe set the cuda heap as the default heap? (but careful as now `malloc` will allocate in the cuda heap as well)
+  // and maybe set the cuda theap as the default theap? (but careful as now `malloc` will allocate in the cuda theap as well)
   {
-    mi_heap_t* prev_default_heap = mi_heap_set_default(cuda_heap);
-    void* p3 = mi_malloc(8);  // allocate in the cuda heap
+    mi_theap_t* prev_default_theap = mi_theap_set_default(mi_heap_theap(cuda_theap));
+    void* p3 = mi_malloc(8);  // allocate in the cuda theap
     mi_free(p3);
   }
   mi_free(p1);

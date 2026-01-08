@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2023, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 316   // major + 2 digits minor
+#define MI_MALLOC_VERSION 3206   // major + minor + 2 digits patch
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -117,7 +117,7 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_strndup(const char* s
 mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_realpath(const char* fname, char* resolved_name) mi_attr_noexcept mi_attr_malloc;
 
 // ------------------------------------------------------
-// Extended functionality
+// Extended allocation functions
 // ------------------------------------------------------
 #define MI_SMALL_WSIZE_MAX  (128)
 #define MI_SMALL_SIZE_MAX   (MI_SMALL_WSIZE_MAX*sizeof(void*))
@@ -134,8 +134,44 @@ mi_decl_nodiscard mi_decl_export size_t mi_usable_size(const void* p) mi_attr_no
 mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size)     mi_attr_noexcept;
 
 
+// -------------------------------------------------------------------------------------
+// Aligned allocation
+// Note that `alignment` always follows `size` for consistency with unaligned
+// allocation, but unfortunately this differs from `posix_memalign` and `aligned_alloc`.
+// -------------------------------------------------------------------------------------
+
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_malloc_aligned(size_t size, size_t alignment) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_malloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_zalloc_aligned(size_t size, size_t alignment) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_zalloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_calloc_aligned(size_t count, size_t size, size_t alignment) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(1, 2) mi_attr_alloc_align(3);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_calloc_aligned_at(size_t count, size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(1, 2);
+mi_decl_nodiscard mi_decl_export void* mi_realloc_aligned(void* p, size_t newsize, size_t alignment) mi_attr_noexcept mi_attr_alloc_size(2) mi_attr_alloc_align(3);
+mi_decl_nodiscard mi_decl_export void* mi_realloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_alloc_size(2);
+
+
+// ------------------------------------------------------
+// Typed allocation, the type is always the first parameter
+// ------------------------------------------------------
+
+#define mi_malloc_tp(tp)                 ((tp*)mi_malloc(sizeof(tp)))
+#define mi_zalloc_tp(tp)                 ((tp*)mi_zalloc(sizeof(tp)))
+#define mi_calloc_tp(tp,n)               ((tp*)mi_calloc(n,sizeof(tp)))
+#define mi_mallocn_tp(tp,n)              ((tp*)mi_mallocn(n,sizeof(tp)))
+#define mi_reallocn_tp(tp,p,n)           ((tp*)mi_reallocn(p,n,sizeof(tp)))
+#define mi_recalloc_tp(tp,p,n)           ((tp*)mi_recalloc(p,n,sizeof(tp)))
+
+#define mi_heap_malloc_tp(tp,hp)         ((tp*)mi_heap_malloc(hp,sizeof(tp)))
+#define mi_heap_zalloc_tp(tp,hp)         ((tp*)mi_heap_zalloc(hp,sizeof(tp)))
+#define mi_heap_calloc_tp(tp,hp,n)       ((tp*)mi_heap_calloc(hp,n,sizeof(tp)))
+#define mi_heap_mallocn_tp(tp,hp,n)      ((tp*)mi_heap_mallocn(hp,n,sizeof(tp)))
+#define mi_heap_reallocn_tp(tp,hp,p,n)   ((tp*)mi_heap_reallocn(hp,p,n,sizeof(tp)))
+#define mi_heap_recalloc_tp(tp,hp,p,n)   ((tp*)mi_heap_recalloc(hp,p,n,sizeof(tp)))
+
+
 // ------------------------------------------------------
 // Internals
+// See also `mimalloc-stats.h` for statistics
 // ------------------------------------------------------
 
 typedef void (mi_cdecl mi_deferred_free_fun)(bool force, unsigned long long heartbeat, void* arg);
@@ -147,18 +183,16 @@ mi_decl_export void mi_register_output(mi_output_fun* out, void* arg) mi_attr_no
 typedef void (mi_cdecl mi_error_fun)(int err, void* arg);
 mi_decl_export void mi_register_error(mi_error_fun* fun, void* arg);
 
-mi_decl_export void mi_collect(bool force)    mi_attr_noexcept;
-mi_decl_export int  mi_version(void)          mi_attr_noexcept;
-mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
-mi_decl_export void mi_stats_merge(void)      mi_attr_noexcept;
-mi_decl_export void mi_stats_print(void* out) mi_attr_noexcept;  // backward compatibility: `out` is ignored and should be NULL
-mi_decl_export void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
-mi_decl_export void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
-mi_decl_export void mi_options_print(void)    mi_attr_noexcept;
-
+mi_decl_export void mi_collect(bool force)      mi_attr_noexcept;
+mi_decl_export int  mi_version(void)            mi_attr_noexcept;
+mi_decl_export void mi_options_print(void)      mi_attr_noexcept;
+mi_decl_export void mi_process_info_print(void) mi_attr_noexcept;
+mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg)      mi_attr_noexcept;
+mi_decl_export void mi_process_info_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
 mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs,
                                     size_t* current_rss, size_t* peak_rss,
                                     size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept;
+
 
 
 // Generally do not use the following as these are usually called automatically
@@ -166,22 +200,7 @@ mi_decl_export void mi_process_init(void)     mi_attr_noexcept;
 mi_decl_export void mi_cdecl mi_process_done(void) mi_attr_noexcept;
 mi_decl_export void mi_thread_init(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
-
-
-// -------------------------------------------------------------------------------------
-// Aligned allocation
-// Note that `alignment` always follows `size` for consistency with unaligned
-// allocation, but unfortunately this differs from `posix_memalign` and `aligned_alloc`.
-// -------------------------------------------------------------------------------------
-
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_malloc_aligned(size_t size, size_t alignment) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_malloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_zalloc_aligned(size_t size, size_t alignment) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_zalloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_calloc_aligned(size_t count, size_t size, size_t alignment) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(1,2) mi_attr_alloc_align(3);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_calloc_aligned_at(size_t count, size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(1,2);
-mi_decl_nodiscard mi_decl_export void* mi_realloc_aligned(void* p, size_t newsize, size_t alignment) mi_attr_noexcept mi_attr_alloc_size(2) mi_attr_alloc_align(3);
-mi_decl_nodiscard mi_decl_export void* mi_realloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_alloc_size(2);
+mi_decl_export void mi_thread_set_in_threadpool(void) mi_attr_noexcept; // communicate that a thread is in a threadpool
 
 
 // -----------------------------------------------------------------
@@ -201,29 +220,33 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_uzalloc_small(size_t 
 
 
 // -------------------------------------------------------------------------------------
-// Heaps: first-class, but can only allocate from the same thread that created it.
+// Heaps: first-class. Can allocate from any thread (and be free'd from any thread)
+// Heaps keep allocations in separate pages from each other (but share the arena's and free'd pages)
 // -------------------------------------------------------------------------------------
 
 struct mi_heap_s;
 typedef struct mi_heap_s mi_heap_t;
 
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new(void);
-mi_decl_export void       mi_heap_delete(mi_heap_t* heap);
-mi_decl_export void       mi_heap_destroy(mi_heap_t* heap);
-mi_decl_export mi_heap_t* mi_heap_set_default(mi_heap_t* heap);
-mi_decl_export mi_heap_t* mi_heap_get_default(void);
-mi_decl_export mi_heap_t* mi_heap_get_backing(void);
-mi_decl_export void       mi_heap_collect(mi_heap_t* heap, bool force) mi_attr_noexcept;
+mi_decl_export void mi_heap_delete(mi_heap_t* heap);            // move live blocks to the main heap
+mi_decl_export void mi_heap_destroy(mi_heap_t* heap);           // free all live blocks
+mi_decl_export void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node);
+mi_decl_export void mi_heap_collect(mi_heap_t* heap, bool force);
 
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2, 3);
+mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_main(void);
+mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_of(void* p);
+mi_decl_nodiscard mi_decl_export bool       mi_heap_contains(mi_heap_t* heap, void* p);
+mi_decl_nodiscard mi_decl_export bool       mi_any_heap_contains(void* p);
+
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc(mi_heap_t* theap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2, 3);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_mallocn(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2, 3);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc_small(mi_heap_t* theap, size_t size)   mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 
 mi_decl_nodiscard mi_decl_export void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize)              mi_attr_noexcept mi_attr_alloc_size(3);
-mi_decl_nodiscard mi_decl_export void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size)  mi_attr_noexcept mi_attr_alloc_size2(3,4);
-mi_decl_nodiscard mi_decl_export void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize)             mi_attr_noexcept mi_attr_alloc_size(3);
+mi_decl_nodiscard mi_decl_export void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size)  mi_attr_noexcept mi_attr_alloc_size2(3, 4);
+mi_decl_nodiscard mi_decl_export void* mi_heap_reallocf(mi_heap_t* theap, void* p, size_t newsize)            mi_attr_noexcept mi_attr_alloc_size(3);
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_heap_strdup(mi_heap_t* heap, const char* s)            mi_attr_noexcept mi_attr_malloc;
 mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_heap_strndup(mi_heap_t* heap, const char* s, size_t n) mi_attr_noexcept mi_attr_malloc;
@@ -255,39 +278,41 @@ mi_decl_nodiscard mi_decl_export void* mi_recalloc_aligned(void* p, size_t newco
 mi_decl_nodiscard mi_decl_export void* mi_recalloc_aligned_at(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_alloc_size2(2,3);
 
 mi_decl_nodiscard mi_decl_export void* mi_heap_rezalloc(mi_heap_t* heap, void* p, size_t newsize)                mi_attr_noexcept mi_attr_alloc_size(3);
-mi_decl_nodiscard mi_decl_export void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t newcount, size_t size)  mi_attr_noexcept mi_attr_alloc_size2(3,4);
+mi_decl_nodiscard mi_decl_export void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t newcount, size_t size)  mi_attr_noexcept mi_attr_alloc_size2(3, 4);
 
 mi_decl_nodiscard mi_decl_export void* mi_heap_rezalloc_aligned(mi_heap_t* heap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept mi_attr_alloc_size(3) mi_attr_alloc_align(4);
 mi_decl_nodiscard mi_decl_export void* mi_heap_rezalloc_aligned_at(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_alloc_size(3);
-mi_decl_nodiscard mi_decl_export void* mi_heap_recalloc_aligned(mi_heap_t* heap, void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept mi_attr_alloc_size2(3,4) mi_attr_alloc_align(5);
-mi_decl_nodiscard mi_decl_export void* mi_heap_recalloc_aligned_at(mi_heap_t* heap, void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_alloc_size2(3,4);
+mi_decl_nodiscard mi_decl_export void* mi_heap_recalloc_aligned(mi_heap_t* heap, void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept mi_attr_alloc_size2(3, 4) mi_attr_alloc_align(5);
+mi_decl_nodiscard mi_decl_export void* mi_heap_recalloc_aligned_at(mi_heap_t* heap, void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_alloc_size2(3, 4);
+
 
 
 // ------------------------------------------------------
-// Analysis
+// Visiting pages and individual blocks in a heap.
 // ------------------------------------------------------
-
-mi_decl_export bool mi_heap_contains_block(mi_heap_t* heap, const void* p);
-mi_decl_export bool mi_heap_check_owned(mi_heap_t* heap, const void* p);
-mi_decl_export bool mi_check_owned(const void* p);
 
 // An area of heap space contains blocks of a single size.
 typedef struct mi_heap_area_s {
-  void*  blocks;      // start of the area containing heap blocks
+  void*  blocks;      // start of the area containing theap blocks
   size_t reserved;    // bytes reserved for this area (virtual)
   size_t committed;   // current available bytes for this area
   size_t used;        // number of allocated blocks
   size_t block_size;  // size in bytes of each block
   size_t full_block_size; // size in bytes of a full block including padding and metadata.
-  int    heap_tag;    // heap tag associated with this area
+  void*  reserved1;   // internal
 } mi_heap_area_t;
 
 typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
 
-mi_decl_export bool   mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
+mi_decl_export bool   mi_heap_visit_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
+mi_decl_export bool   mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
-// Advanced
-mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
+
+// ------------------------------------------------------
+// Arena memory management
+// Arena's are larger memory area's provided by the OS or user
+// ------------------------------------------------------
+
 mi_decl_nodiscard mi_decl_export bool mi_is_redirected(void) mi_attr_noexcept;
 
 mi_decl_export int    mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t timeout_msecs) mi_attr_noexcept;
@@ -300,87 +325,102 @@ mi_decl_export void   mi_debug_show_arenas(void) mi_attr_noexcept;
 mi_decl_export void   mi_arenas_print(void) mi_attr_noexcept;
 mi_decl_export size_t mi_arena_min_alignment(void);
 
-// Advanced: heaps associated with specific memory arena's
 typedef void* mi_arena_id_t;
 mi_decl_export void*  mi_arena_area(mi_arena_id_t arena_id, size_t* size);
 mi_decl_export int    mi_reserve_huge_os_pages_at_ex(size_t pages, int numa_node, size_t timeout_msecs, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
 mi_decl_export int    mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
 mi_decl_export bool   mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept;
+mi_decl_export bool   mi_arena_contains(mi_arena_id_t arena_id, const void* p);
 
-#if MI_MALLOC_VERSION >= 182
 // Create a heap that only allocates in the specified arena
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t arena_id);
-#endif
 
 
-// Advanced: allow sub-processes whose memory areas stay separated (and no reclamation between them)
+// ------------------------------------------------------
+// Subprocesses
+// Advanced: allow sub-processes whose memory arena's stay fully separated (and no reclamation between them).
 // Used for example for separate interpreters in one process.
-typedef void* mi_subproc_id_t;
+// ------------------------------------------------------
+
+typedef void* mi_subproc_id_t;                        
 mi_decl_export mi_subproc_id_t mi_subproc_main(void);
+mi_decl_export mi_subproc_id_t mi_subproc_current(void);
 mi_decl_export mi_subproc_id_t mi_subproc_new(void);
-mi_decl_export void mi_subproc_delete(mi_subproc_id_t subproc);
+mi_decl_export void mi_subproc_destroy(mi_subproc_id_t subproc);
 mi_decl_export void mi_subproc_add_current_thread(mi_subproc_id_t subproc); // this should be called right after a thread is created (and no allocation has taken place yet)
 
-// Advanced: visit abandoned heap areas (that are not owned by a specific heap)
-mi_decl_export bool mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int heap_tag, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
+typedef bool (mi_cdecl mi_heap_visit_fun)(mi_heap_t* heap, void* arg);
+mi_decl_export bool mi_subproc_visit_heaps(mi_subproc_id_t subproc, mi_heap_visit_fun* visitor, void* arg);
 
-// Experimental: set numa-affinity of a heap
-mi_decl_export void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node);
+
+// -------------------------------------------------------------------------------------
+// A "theap" is a thread-local heap. This API is only provided for special circumstances like runtimes
+// that already have a thread-local context and can store the theap there for (slightly) faster allocations.
+// This also allows to set a default theap for the current thread so that `malloc` etc. allocate from
+// that theap (instead of the main (t)heap).
+// Theaps are first-class, but can only allocate from the same thread that created it.
+// Allocation through a `theap` may be a tiny bit faster than using plain malloc
+// (as we don't need to lookup the thread local variable).
+// -------------------------------------------------------------------------------------
+
+struct mi_theap_s;
+typedef struct mi_theap_s mi_theap_t;
+
+mi_decl_export mi_theap_t* mi_heap_theap(mi_heap_t* heap);
+mi_decl_export mi_theap_t* mi_theap_set_default(mi_theap_t* theap);
+mi_decl_export mi_theap_t* mi_theap_get_default(void);
+mi_decl_export void        mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept;
+
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_malloc(mi_theap_t* theap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_zalloc(mi_theap_t* theap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_calloc(mi_theap_t* theap, size_t count, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2, 3);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_malloc_small(mi_theap_t* theap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_malloc_aligned(mi_theap_t* theap, size_t size, size_t alignment) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2) mi_attr_alloc_align(3);
+mi_decl_nodiscard mi_decl_export                  void* mi_theap_realloc(mi_theap_t* theap, void* p, size_t newsize)              mi_attr_noexcept mi_attr_alloc_size(3);
+
+
+// ------------------------------------------------------
+// Experimental
+// ------------------------------------------------------
 
 // Experimental: objects followed by a guard page.
-// Setting the sample rate on a specific heap can be used to test parts of the program more
-// specifically (in combination with `mi_heap_set_default`).
+// Setting the sample rate on a specific theap can be used to test parts of the program more
+// specifically (in combination with `mi_theap_set_default`).
 // A sample rate of 0 disables guarded objects, while 1 uses a guard page for every object.
 // A seed of 0 uses a random start point. Only objects within the size bound are eligable for guard pages.
-mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed);
-mi_decl_export void mi_heap_guarded_set_size_bound(mi_heap_t* heap, size_t min, size_t max);
+mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed);
+mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t min, size_t max);
 
-// Experimental: communicate that the thread is part of a threadpool
-mi_decl_export void mi_thread_set_in_threadpool(void) mi_attr_noexcept;
-
-// Experimental: create a new heap with a specified heap tag. Set `allow_destroy` to false to allow the thread
-// to reclaim abandoned memory (with a compatible heap_tag and arena_id) but in that case `mi_heap_destroy` will
-// fall back to `mi_heap_delete`.
-mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id);
-
-// deprecated
-mi_decl_export int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
-mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexcept;
-
-
-
-// experimental
+// very experimental
 typedef bool (mi_cdecl mi_commit_fun_t)(bool commit, void* start, size_t size, bool* is_zero, void* user_arg);
 mi_decl_export bool  mi_manage_memory(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive,
                                       mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id) mi_attr_noexcept;
 
-mi_decl_export bool  mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t* accessed_size, size_t* size);
-mi_decl_export bool  mi_arena_reload(void* start, size_t size, mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id);
-mi_decl_export bool  mi_heap_reload(mi_heap_t* heap, mi_arena_id_t arena);
-mi_decl_export void  mi_heap_unload(mi_heap_t* heap);
-
-
-// Is a pointer contained in the given arena area?
-mi_decl_export bool  mi_arena_contains(mi_arena_id_t arena_id, const void* p);
+//mi_decl_export bool  mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t* accessed_size, size_t* size);
+//mi_decl_export bool  mi_arena_reload(void* start, size_t size, mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id);
+//mi_decl_export bool  mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena);
+//mi_decl_export void  mi_theap_unload(mi_theap_t* theap);
 
 
 // ------------------------------------------------------
-// Convenience
+// Deprecated
 // ------------------------------------------------------
 
-#define mi_malloc_tp(tp)                ((tp*)mi_malloc(sizeof(tp)))
-#define mi_zalloc_tp(tp)                ((tp*)mi_zalloc(sizeof(tp)))
-#define mi_calloc_tp(tp,n)              ((tp*)mi_calloc(n,sizeof(tp)))
-#define mi_mallocn_tp(tp,n)             ((tp*)mi_mallocn(n,sizeof(tp)))
-#define mi_reallocn_tp(p,tp,n)          ((tp*)mi_reallocn(p,n,sizeof(tp)))
-#define mi_recalloc_tp(p,tp,n)          ((tp*)mi_recalloc(p,n,sizeof(tp)))
+mi_decl_export bool mi_check_owned(const void* p);
 
-#define mi_heap_malloc_tp(hp,tp)        ((tp*)mi_heap_malloc(hp,sizeof(tp)))
-#define mi_heap_zalloc_tp(hp,tp)        ((tp*)mi_heap_zalloc(hp,sizeof(tp)))
-#define mi_heap_calloc_tp(hp,tp,n)      ((tp*)mi_heap_calloc(hp,n,sizeof(tp)))
-#define mi_heap_mallocn_tp(hp,tp,n)     ((tp*)mi_heap_mallocn(hp,n,sizeof(tp)))
-#define mi_heap_reallocn_tp(hp,p,tp,n)  ((tp*)mi_heap_reallocn(hp,p,n,sizeof(tp)))
-#define mi_heap_recalloc_tp(hp,p,tp,n)  ((tp*)mi_heap_recalloc(hp,p,n,sizeof(tp)))
+mi_decl_export void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export bool mi_is_in_heap_region(const void* p) mi_attr_noexcept;
+mi_decl_export bool mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
+
+mi_decl_export int  mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
+mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexcept;
+
+mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
+mi_decl_export void mi_stats_merge(void)      mi_attr_noexcept;
+mi_decl_export void mi_stats_print(void* out) mi_attr_noexcept;  // backward compatibility: `out` is ignored and should be NULL
+
+mi_decl_export void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;  // not deprecated but declared in `mimalloc-stats.h` now.
+
 
 
 // ------------------------------------------------------
@@ -418,20 +458,20 @@ typedef enum mi_option_e {
   mi_option_deprecated_purge_extend_delay,
   mi_option_disallow_arena_alloc,       // 1 = do not use arena's for allocation (except if using specific arena id's)
   mi_option_retry_on_oom,               // retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries. (only on windows)
-  mi_option_visit_abandoned,            // allow visiting heap blocks from abandoned threads (=0)
+  mi_option_visit_abandoned,            // allow visiting theap blocks from abandoned threads (=0)
   mi_option_guarded_min,                // only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
   mi_option_guarded_max,                // only used when building with MI_GUARDED: maximal rounded object size for guarded objects (=0)
   mi_option_guarded_precise,            // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
   mi_option_guarded_sample_rate,        // 1 out of N allocations in the min/max range will be guarded (=1000)
   mi_option_guarded_sample_seed,        // can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
-  mi_option_generic_collect,            // collect heaps every N (=10000) generic allocation calls
-  mi_option_page_reclaim_on_free,       // reclaim abandoned pages on a free (=0). -1 disallowr always, 0 allows if the page originated from the current heap, 1 allow always
+  mi_option_generic_collect,            // collect theaps every N (=10000) generic allocation calls
+  mi_option_page_reclaim_on_free,       // reclaim abandoned pages on a free (=0). -1 disallowr always, 0 allows if the page originated from the current theap, 1 allow always
   mi_option_page_full_retain,           // retain N full (small) pages per size class (=2)
   mi_option_page_max_candidates,        // max candidate pages to consider for allocation (=4)
   mi_option_max_vabits,                 // max user space virtual address bits to consider (=48)
   mi_option_pagemap_commit,             // commit the full pagemap (to always catch invalid pointer uses) (=0)
   mi_option_page_commit_on_demand,      // commit page memory on-demand
-  mi_option_page_max_reclaim,           // don't reclaim pages of the same originating heap if we already own N pages (in that size class) (=-1 (unlimited))
+  mi_option_page_max_reclaim,           // don't reclaim pages of the same originating theap if we already own N pages (in that size class) (=-1 (unlimited))
   mi_option_page_cross_thread_max_reclaim, // don't reclaim pages across threads if we already own N pages (in that size class) (=16)
   mi_option_allow_thp,                  // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
   mi_option_minimal_purge_size,         // set minimal purge size (in KiB) (=0). By default set to either 64 or 2048 if THP is enabled.
@@ -462,7 +502,7 @@ mi_decl_export void mi_option_set_default(mi_option_t option, long value);
 // -------------------------------------------------------------------------------------------------------
 // "mi" prefixed implementations of various posix, Unix, Windows, and C++ allocation functions.
 // (This can be convenient when providing overrides of these functions as done in `mimalloc-override.h`.)
-// note: we use `mi_cfree` as "checked free" and it checks if the pointer is in our heap before free-ing.
+// note: we use `mi_cfree` as "checked free" and it checks if the pointer is in our theap before free-ing.
 // -------------------------------------------------------------------------------------------------------
 
 mi_decl_export void  mi_cfree(void* p) mi_attr_noexcept;
@@ -501,7 +541,7 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_new_n(size_t count, s
 mi_decl_nodiscard mi_decl_export void* mi_new_realloc(void* p, size_t newsize)                mi_attr_alloc_size(2);
 mi_decl_nodiscard mi_decl_export void* mi_new_reallocn(void* p, size_t newcount, size_t size) mi_attr_alloc_size2(2, 3);
 
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size_t size)                mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size_t size)                 mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) mi_attr_malloc mi_attr_alloc_size2(2, 3);
 
 #ifdef __cplusplus
@@ -579,7 +619,7 @@ template<class T1,class T2> bool operator!=(const mi_stl_allocator<T1>& , const 
 
 #include <memory>      // std::shared_ptr
 
-// Common base class for STL allocators in a specific heap
+// Common base class for STL allocators in a specific theap
 template<class T, bool _mi_destroy> struct _mi_heap_stl_allocator_common : public _mi_stl_allocator_common<T> {
   using typename _mi_stl_allocator_common<T>::size_type;
   using typename _mi_stl_allocator_common<T>::value_type;

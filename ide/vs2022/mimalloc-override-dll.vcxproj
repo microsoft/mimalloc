@@ -479,6 +479,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\..\src\heap.c" />
+    <ClCompile Include="..\..\src\theap.c" />
     <ClCompile Include="..\..\src\init.c" />
     <ClCompile Include="..\..\src\libc.c" />
     <ClCompile Include="..\..\src\page-map.c" />
@@ -508,6 +509,7 @@
     <ClCompile Include="..\..\src\page.c" />
     <ClCompile Include="..\..\src\random.c" />
     <ClCompile Include="..\..\src\stats.c" />
+    <ClCompile Include="..\..\src\threadlocal.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

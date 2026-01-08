@@ -122,9 +122,9 @@ function initNavTree(toroot,relpath) {
     if (ancParent.hasClass('memItemLeft') || ancParent.hasClass('memtitle')  ||
         ancParent.hasClass('fieldname')   || ancParent.hasClass('fieldtype') ||
         ancParent.is(':header')) {
-      pos = ancParent.offset().top;
+      pos = ancParent.position().top;
     } else if (anchor.position()) {
-      pos = anchor.offset().top;
+      pos = anchor.position().top;
     }
     if (pos) {
       const dcOffset    = docContent.offset().top;

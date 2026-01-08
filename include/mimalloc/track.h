@@ -47,7 +47,7 @@ defined, undefined, or not accessible at all:
 // valgrind tool
 
 #define MI_TRACK_ENABLED      1
-#define MI_TRACK_HEAP_DESTROY 1           // track free of individual blocks on heap_destroy
+#define MI_TRACK_HEAP_DESTROY 1           // track free of individual blocks on theap_destroy
 #define MI_TRACK_TOOL         "valgrind"
 
 #include <valgrind/valgrind.h>

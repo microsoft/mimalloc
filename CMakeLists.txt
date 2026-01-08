@@ -69,6 +69,8 @@ set(mi_sources
     src/page-map.c
     src/random.c
     src/stats.c
+    src/theap.c
+    src/threadlocal.c
     src/prim/prim.c)
 
 set(mi_cflags "")
@@ -209,7 +211,7 @@ if(MI_OVERRIDE)
     if(MI_OSX_ZONE)
       # use zone's on macOS
       message(STATUS "  Use malloc zone to override malloc (MI_OSX_ZONE=ON)")
-      list(APPEND mi_sources src/prim/osx/alloc-override-zone.c)      
+      list(APPEND mi_sources src/prim/osx/alloc-override-zone.c)
       list(APPEND mi_defines MI_OSX_ZONE=1)
       if (NOT MI_OSX_INTERPOSE)
         message(STATUS "  WARNING: zone overriding usually also needs interpose (use -DMI_OSX_INTERPOSE=ON)")
@@ -357,13 +359,13 @@ if(MI_DEBUG_TSAN)
 endif()
 
 if(MI_DEBUG_UBSAN)
-  if(CMAKE_BUILD_TYPE MATCHES "Debug")    
+  if(CMAKE_BUILD_TYPE MATCHES "Debug")
     if(MI_USE_CXX)
       if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         message(STATUS "Build with undefined-behavior sanitizer (MI_DEBUG_UBSAN=ON)")
         list(APPEND mi_defines MI_UBSAN=1)
         list(APPEND mi_cflags -fsanitize=undefined -g -fno-sanitize-recover=undefined)
-        list(APPEND mi_libraries -fsanitize=undefined)        
+        list(APPEND mi_libraries -fsanitize=undefined)
       else()
         message(WARNING "Can only use undefined-behavior sanitizer with clang++ (MI_DEBUG_UBSAN=ON but ignored)")
       endif()

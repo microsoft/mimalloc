@@ -20,10 +20,10 @@ std::string TestAllocInDll::GetString()
 
 void TestAllocInDll::TestHeapAlloc()
 {
-	HANDLE heap = GetProcessHeap();
-	int* p = (int*)HeapAlloc(heap, 0, sizeof(int));
+	HANDLE theap = GetProcessHeap();
+	int* p = (int*)HeapAlloc(theap, 0, sizeof(int));
 	*p = 42;
-	HeapFree(heap, 0, p);
+	HeapFree(theap, 0, p);
 }
 
 class Static {

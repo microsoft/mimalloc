@@ -192,7 +192,7 @@ static void mi_os_prim_free(void* addr, size_t size, size_t commit_size, mi_subp
   if (err != 0) {
     _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
-  if (subproc == NULL) { subproc = _mi_subproc(); } // from `mi_arenas_unsafe_destroy` we pass subproc_main explicitly as we can no longer use the heap pointer
+  if (subproc == NULL) { subproc = _mi_subproc(); } // from `mi_arenas_unsafe_destroy` we pass subproc_main explicitly as we can no longer use the theap pointer
   if (commit_size > 0) {
     mi_subproc_stat_decrease(subproc, committed, commit_size);
   }
@@ -664,7 +664,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
       // Initialize the start address after the 32TiB area
       start = ((uintptr_t)8 << 40);   // 8TiB virtual start address
     #if (MI_SECURE>0 || MI_DEBUG==0)  // security: randomize start of huge pages unless in debug mode
-      uintptr_t r = _mi_heap_random_next(mi_prim_get_default_heap());
+      uintptr_t r = _mi_theap_random_next(_mi_theap_default());
       start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x0FFF));  // (randomly 12bits)*1GiB == between 0 to 4TiB
     #endif
     }

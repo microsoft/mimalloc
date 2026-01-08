@@ -1,5 +1,5 @@
 /*----------------------------------------------------------------------------
-Copyright (c) 2023-2024, Microsoft Research, Daan Leijen
+Copyright (c) 2023-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -10,7 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "bitmap.h"
 
 static void mi_page_map_cannot_commit(void) {
-  _mi_warning_message("unable to commit the allocation page-map on-demand\n" );  
+  _mi_warning_message("unable to commit the allocation page-map on-demand\n" );
 }
 
 #if MI_PAGE_MAP_FLAT
@@ -110,7 +110,7 @@ static bool mi_page_map_ensure_committed(size_t idx, size_t slice_count) {
           mi_page_map_cannot_commit();
           return false;
         }
-        if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(start, size); }        
+        if (!is_zero && !mi_page_map_memid.initially_zero) { _mi_memzero(start, size); }
         mi_bitmap_set(mi_page_map_commit, i);
       }
     }
@@ -169,9 +169,9 @@ void _mi_page_map_unregister_range(void* start, size_t size) {
   const size_t slice_count = _mi_divide_up(size, MI_ARENA_SLICE_SIZE);
   const uintptr_t index = _mi_page_map_index(start);
   // todo: scan the commit bits and clear only those ranges?
-  if (!mi_page_map_ensure_committed(index, slice_count)) { // we commit the range in total; 
+  if (!mi_page_map_ensure_committed(index, slice_count)) { // we commit the range in total;
     return;
-  }        
+  }
   _mi_memzero(&_mi_page_map[index], slice_count);
 }
 
@@ -205,7 +205,7 @@ static _Atomic(mi_bfield_t)  mi_page_map_commit;
 
 mi_decl_nodiscard static inline bool mi_page_map_is_committed(size_t idx, size_t* pbit_idx) {
   mi_bfield_t commit = mi_atomic_load_relaxed(&mi_page_map_commit);
-  const size_t bit_idx = idx/MI_PAGE_MAP_ENTRIES_PER_CBIT; 
+  const size_t bit_idx = idx/MI_PAGE_MAP_ENTRIES_PER_CBIT;
   mi_assert_internal(bit_idx < MI_BFIELD_BITS);
   if (pbit_idx != NULL) { *pbit_idx = bit_idx; }
   return ((commit & (MI_ZU(1) << bit_idx)) != 0);
@@ -295,7 +295,7 @@ void _mi_page_map_unsafe_destroy(mi_subproc_t* subproc) {
       mi_submap_t sub = _mi_page_map_at(idx);
       if (sub != NULL) {
         mi_memid_t memid = _mi_memid_create_os(sub, MI_PAGE_MAP_SUB_SIZE, true, false, false);
-        _mi_os_free_ex(memid.mem.os.base, memid.mem.os.size, true, memid, subproc);  
+        _mi_os_free_ex(memid.mem.os.base, memid.mem.os.size, true, memid, subproc);
         mi_atomic_store_ptr_release(mi_page_t*, &_mi_page_map[idx], NULL);
       }
     }
@@ -310,7 +310,7 @@ void _mi_page_map_unsafe_destroy(mi_subproc_t* subproc) {
 
 
 mi_decl_nodiscard static bool mi_page_map_ensure_submap_at(size_t idx, mi_submap_t* submap) {
-  mi_assert_internal(submap!=NULL && *submap==NULL);  
+  mi_assert_internal(submap!=NULL && *submap==NULL);
   mi_submap_t sub = NULL;
   if (!mi_page_map_ensure_committed(idx, &sub)) {
     return false;
@@ -328,9 +328,9 @@ mi_decl_nodiscard static bool mi_page_map_ensure_submap_at(size_t idx, mi_submap
     if (!mi_atomic_cas_ptr_strong_acq_rel(mi_page_t*, &_mi_page_map[idx], &expect, sub)) {
       // another thread already allocated it.. free and continue
       _mi_os_free(sub, submap_size, memid);
-      sub = expect;      
+      sub = expect;
     }
-  }  
+  }
   mi_assert_internal(sub!=NULL);
   *submap = sub;
   return true;
@@ -348,7 +348,7 @@ static bool mi_page_map_set_range_prim(mi_page_t* page, size_t idx, size_t sub_i
     while (slice_count > 0 && sub_idx < MI_PAGE_MAP_SUB_COUNT) {
       sub[sub_idx] = page;
       slice_count--;
-      sub_idx++;      
+      sub_idx++;
     }
     idx++; // potentially wrap around to the next idx
     sub_idx = 0;

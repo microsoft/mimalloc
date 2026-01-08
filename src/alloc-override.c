@@ -136,14 +136,14 @@ typedef void* mi_nothrow_t;
   mi_decl_export void* malloc(size_t size)              MI_FORWARD1(mi_malloc, size)
   mi_decl_export void* calloc(size_t size, size_t n)    MI_FORWARD2(mi_calloc, size, n)
   mi_decl_export void* realloc(void* p, size_t newsize) MI_FORWARD2(mi_realloc, p, newsize)
-  mi_decl_export void  free(void* p)                    MI_FORWARD0(mi_free, p)  
+  mi_decl_export void  free(void* p)                    MI_FORWARD0(mi_free, p)
   // In principle we do not need to forward `strdup`/`strndup` but on some systems these do not use `malloc` internally (but a more primitive call)
   // We only override if `strdup` is not a macro (as on some older libc's, see issue #885)
   #if !defined(strdup)
   mi_decl_export char* strdup(const char* str)             MI_FORWARD1(mi_strdup, str)
   #endif
   #if !defined(strndup) && (!defined(__APPLE__) || (defined(MAC_OS_X_VERSION_10_7) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7))
-  mi_decl_export char* strndup(const char* str, size_t n)  MI_FORWARD2(mi_strndup, str, n)   
+  mi_decl_export char* strndup(const char* str, size_t n)  MI_FORWARD2(mi_strndup, str, n)
   #endif
 #endif
 
@@ -204,17 +204,17 @@ typedef void* mi_nothrow_t;
   void _ZdaPv(void* p)            MI_FORWARD0(mi_free,p) // delete[]
   void _ZdlPvm(void* p, size_t n) MI_FORWARD02(mi_free_size,p,n)
   void _ZdaPvm(void* p, size_t n) MI_FORWARD02(mi_free_size,p,n)
-  
+
   void _ZdlPvSt11align_val_t(void* p, size_t al)            { mi_free_aligned(p,al); }
   void _ZdaPvSt11align_val_t(void* p, size_t al)            { mi_free_aligned(p,al); }
   void _ZdlPvmSt11align_val_t(void* p, size_t n, size_t al) { mi_free_size_aligned(p,n,al); }
   void _ZdaPvmSt11align_val_t(void* p, size_t n, size_t al) { mi_free_size_aligned(p,n,al); }
 
-  void _ZdlPvRKSt9nothrow_t(void* p, mi_nothrow_t tag)      { MI_UNUSED(tag); mi_free(p); }  // operator delete(void*, std::nothrow_t const&) 
+  void _ZdlPvRKSt9nothrow_t(void* p, mi_nothrow_t tag)      { MI_UNUSED(tag); mi_free(p); }  // operator delete(void*, std::nothrow_t const&)
   void _ZdaPvRKSt9nothrow_t(void* p, mi_nothrow_t tag)      { MI_UNUSED(tag); mi_free(p); }  // operator delete[](void*, std::nothrow_t const&)
-  void _ZdlPvSt11align_val_tRKSt9nothrow_t(void* p, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); mi_free_aligned(p,al); } // operator delete(void*, std::align_val_t, std::nothrow_t const&) 
-  void _ZdaPvSt11align_val_tRKSt9nothrow_t(void* p, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); mi_free_aligned(p,al); } // operator delete[](void*, std::align_val_t, std::nothrow_t const&) 
-  
+  void _ZdlPvSt11align_val_tRKSt9nothrow_t(void* p, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); mi_free_aligned(p,al); } // operator delete(void*, std::align_val_t, std::nothrow_t const&)
+  void _ZdaPvSt11align_val_tRKSt9nothrow_t(void* p, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); mi_free_aligned(p,al); } // operator delete[](void*, std::align_val_t, std::nothrow_t const&)
+
   #if (MI_INTPTR_SIZE==8)
     void* _Znwm(size_t n)                             MI_FORWARD1(mi_new,n)  // new 64-bit
     void* _Znam(size_t n)                             MI_FORWARD1(mi_new,n)  // new[] 64-bit

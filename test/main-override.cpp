@@ -23,16 +23,16 @@ static void msleep(unsigned long msecs) { Sleep(msecs); }
 static void msleep(unsigned long msecs) { usleep(msecs * 1000UL); }
 #endif
 
-static void heap_thread_free_large(); // issue #221
-static void heap_no_delete();         // issue #202
-static void heap_late_free();         // issue #204
+static void theap_thread_free_large(); // issue #221
+static void theap_no_delete();         // issue #202
+static void theap_late_free();         // issue #204
 static void padding_shrink();         // issue #209
 static void various_tests();
 static void test_mt_shutdown();
 static void fail_aslr();              // issue #372
 static void tsan_numa_test();         // issue #414
 static void strdup_test();            // issue #445
-static void heap_thread_free_huge();
+static void theap_thread_free_huge();
 static void test_std_string();        // issue #697
 static void test_thread_local();      // issue #944
 // static void test_mixed0();             // issue #942
@@ -63,11 +63,11 @@ int main() {
 
   //test_std_string();
   //test_thread_local();
-  // heap_thread_free_huge();
+  // theap_thread_free_huge();
   /*
-  heap_thread_free_large();
-  heap_no_delete();
-  heap_late_free();
+  theap_thread_free_large();
+  theap_no_delete();
+  theap_late_free();
   padding_shrink();
 
   tsan_numa_test();
@@ -338,7 +338,7 @@ static void t1main() {
   mi_heap_delete(heap);
 }
 
-static void heap_late_free() {
+static void theap_late_free() {
   auto t1 = std::thread(t1main);
 
   msleep(2000);
@@ -364,26 +364,26 @@ static void padding_shrink(void)
 
 
 // Issue #221
-static void heap_thread_free_large_worker() {
+static void theap_thread_free_large_worker() {
   mi_free(shared_p);
 }
 
-static void heap_thread_free_large() {
+static void theap_thread_free_large() {
   for (int i = 0; i < 100; i++) {
     shared_p = mi_malloc_aligned(2*1024*1024 + 1, 8);
-    auto t1 = std::thread(heap_thread_free_large_worker);
+    auto t1 = std::thread(theap_thread_free_large_worker);
     t1.join();
   }
 }
 
-static void heap_thread_free_huge_worker() {
+static void theap_thread_free_huge_worker() {
   mi_free(shared_p);
 }
 
-static void heap_thread_free_huge() {
+static void theap_thread_free_huge() {
   for (int i = 0; i < 10; i++) {
     shared_p = mi_malloc(1024 * 1024 * 1024);
-    auto t1 = std::thread(heap_thread_free_huge_worker);
+    auto t1 = std::thread(theap_thread_free_huge_worker);
     t1.join();
   }
 }
@@ -492,7 +492,7 @@ thread_local void* s_ptr = mi_malloc(1);
 void test_join() {
   std::thread thread([]() { mi_free(s_ptr); });
   thread.join();
-  mi_free(s_ptr);  
+  mi_free(s_ptr);
 }
 
 

@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2021, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -160,7 +160,7 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   MI_OPTION_UNINIT, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)
   { 400, MI_OPTION_UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
 #if defined(MI_VISIT_ABANDONED)
-  { 1,   MI_OPTION_INITIALIZED, MI_OPTION(visit_abandoned) },     // allow visiting heap blocks in abandoned segments; requires taking locks during reclaim.
+  { 1,   MI_OPTION_INITIALIZED, MI_OPTION(visit_abandoned) },     // allow visiting theap blocks in abandoned segments; requires taking locks during reclaim.
 #else
   { 0,   MI_OPTION_UNINIT, MI_OPTION(visit_abandoned) },
 #endif
@@ -170,8 +170,8 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { MI_DEFAULT_GUARDED_SAMPLE_RATE,
          MI_OPTION_UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)
   { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_sample_seed)},
-  { 10000, MI_OPTION_UNINIT, MI_OPTION(generic_collect) },        // collect heaps every N (=10000) generic allocation calls
-  { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim abandoned (small) pages on a free: -1 = disable completely, 0 = only reclaim into the originating heap, 1 = reclaim on free across heaps
+  { 10000, MI_OPTION_UNINIT, MI_OPTION(generic_collect) },        // collect theaps every N (=10000) generic allocation calls
+  { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim abandoned (small) pages on a free: -1 = disable completely, 0 = only reclaim into the originating theap, 1 = reclaim on free across theaps
   { 2,   MI_OPTION_UNINIT, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues
   { 4,   MI_OPTION_UNINIT, MI_OPTION(page_max_candidates) },      // max search to find a best page candidate
   { 0,   MI_OPTION_UNINIT, MI_OPTION(max_vabits) },               // max virtual address space bits
@@ -179,7 +179,7 @@ static mi_option_desc_t mi_options[_mi_option_last] =
          MI_OPTION_UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
   { 0,   MI_OPTION_UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
   { MI_DEFAULT_PAGE_MAX_RECLAIM,
-         MI_OPTION_UNINIT, MI_OPTION(page_max_reclaim) },         // don't reclaim (small) pages of the same originating heap if we already own N pages in that size class
+         MI_OPTION_UNINIT, MI_OPTION(page_max_reclaim) },         // don't reclaim (small) pages of the same originating theap if we already own N pages in that size class
   { MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM,
          MI_OPTION_UNINIT, MI_OPTION(page_cross_thread_max_reclaim) }, // don't reclaim (small) pages across threads if we already own N pages in that size class
   { MI_DEFAULT_ALLOW_THP,
@@ -195,7 +195,6 @@ static bool mi_option_has_size_in_kib(mi_option_t option) {
 
 void _mi_options_init(void) {
   // called on process load
-  mi_add_stderr_output(); // now it safe to use stderr for output
   for(int i = 0; i < _mi_option_last; i++ ) {
     mi_option_t option = (mi_option_t)i;
     long l = mi_option_get(option); MI_UNUSED(l); // initialize
@@ -209,20 +208,25 @@ void _mi_options_init(void) {
       _mi_warning_message("option 'allow_large_os_pages' is disabled to allow for guarded objects\n");
     }
   }
-  #endif
+  #endif  
+}
+
+// called at actual process load, it should be safe to print now
+void _mi_options_post_init(void) {
+  mi_add_stderr_output(); // now it safe to use stderr for output
   if (mi_option_is_enabled(mi_option_verbose)) { mi_options_print(); }
 }
 
 #define mi_stringifyx(str)  #str                // and stringify
 #define mi_stringify(str)   mi_stringifyx(str)  // expand
 
-void mi_options_print(void) mi_attr_noexcept
+mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept
 {
   // show version
-  const int vermajor = MI_MALLOC_VERSION/100;
-  const int verminor = (MI_MALLOC_VERSION%100)/10;
-  const int verpatch = (MI_MALLOC_VERSION%10);
-  _mi_message("v%i.%i.%i%s%s (built on %s, %s)\n", vermajor, verminor, verpatch,
+  const int vermajor = MI_MALLOC_VERSION/1000;
+  const int verminor = (MI_MALLOC_VERSION%1000)/100;
+  const int verpatch = (MI_MALLOC_VERSION%100);
+  _mi_fprintf(out, arg, "v%i.%i.%i%s%s (built on %s, %s)\n", vermajor, verminor, verpatch,
       #if defined(MI_CMAKE_BUILD_TYPE)
       ", " mi_stringify(MI_CMAKE_BUILD_TYPE)
       #else
@@ -241,19 +245,23 @@ void mi_options_print(void) mi_attr_noexcept
     mi_option_t option = (mi_option_t)i;
     long l = mi_option_get(option); MI_UNUSED(l); // possibly initialize
     mi_option_desc_t* desc = &mi_options[option];
-    _mi_message("option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : ""));
+    _mi_fprintf(out, arg, "option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : ""));
   }
 
   // show build configuration
-  _mi_message("debug level : %d\n", MI_DEBUG );
-  _mi_message("secure level: %d\n", MI_SECURE );
-  _mi_message("mem tracking: %s\n", MI_TRACK_TOOL);
+  _mi_fprintf(out, arg, "debug level : %d\n", MI_DEBUG );
+  _mi_fprintf(out, arg, "secure level: %d\n", MI_SECURE );
+  _mi_fprintf(out, arg, "mem tracking: %s\n", MI_TRACK_TOOL);
   #if MI_GUARDED
-  _mi_message("guarded build: %s\n", mi_option_get(mi_option_guarded_sample_rate) != 0 ? "enabled" : "disabled");
+  _mi_fprintf(out, arg, "guarded build: %s\n", mi_option_get(mi_option_guarded_sample_rate) != 0 ? "enabled" : "disabled");
   #endif
   #if MI_TSAN
-  _mi_message("thread santizer enabled\n");
+  _mi_fprintf(out, arg, "thread santizer enabled\n");
   #endif
+}
+
+mi_decl_export void mi_options_print(void) mi_attr_noexcept {
+  mi_options_print_out(NULL, NULL);
 }
 
 long _mi_option_get_fast(mi_option_t option) {

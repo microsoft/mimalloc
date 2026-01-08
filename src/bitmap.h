@@ -79,7 +79,7 @@ typedef size_t mi_bfield_t;
 #else
 #define mi_decl_bchunk_align  mi_decl_align(MI_BCHUNK_SIZE)
 #endif
- 
+
 
 // A bitmap chunk contains 512 bits on 64-bit  (256 on 32-bit)
 typedef mi_decl_bchunk_align struct mi_bchunk_s {
@@ -164,6 +164,9 @@ bool mi_bitmap_clearN(mi_bitmap_t* bitmap, size_t idx, size_t n);
 // Is a sequence of n bits already all set/cleared?
 bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n);
 
+// Is the bitmap completely clear?
+bool mi_bitmap_is_all_clear(mi_bitmap_t* bitmap);
+
 // Is a sequence of n bits already set?
 // (Used to check if a memory range is already committed)
 static inline bool mi_bitmap_is_setN(mi_bitmap_t* bitmap, size_t idx, size_t n) {
@@ -184,13 +187,13 @@ static inline bool mi_bitmap_is_clear(mi_bitmap_t* bitmap, size_t idx) {
 }
 
 // Called once a bit is cleared to see if the memory slice can be claimed.
-typedef bool (mi_claim_fun_t)(size_t slice_index, mi_arena_t* arena, mi_heaptag_t heap_tag, bool* keep_set);
+typedef bool (mi_claim_fun_t)(size_t slice_index, mi_arena_t* arena, bool* keep_set);
 
 // Find a set bits in the bitmap, atomically clear it, and check if `claim` returns true.
 // If not claimed, continue on (potentially setting the bit again depending on `keep_set`).
 // Returns true on success, and in that case sets the index: `0 <= *pidx <= MI_BITMAP_MAX_BITS-n`.
 mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t tseq, size_t* pidx,
-                                                    mi_claim_fun_t* claim, mi_arena_t* arena, mi_heaptag_t heap_tag );
+                                                    mi_claim_fun_t* claim, mi_arena_t* arena );
 
 
 // Atomically clear a bit but only if it is set. Will block otherwise until the bit is set.
@@ -222,7 +225,7 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
 // Ranges will never cross chunk boundaries (and `slice_count <= MI_BCHUNK_BITS`).
 bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg);
 
-// Count all set bits in given range in the bitmap. 
+// Count all set bits in given range in the bitmap.
 size_t mi_bitmap_popcountN( mi_bitmap_t* bitmap, size_t idx, size_t n);
 
 /* ----------------------------------------------------------------------------
@@ -260,8 +263,8 @@ typedef mi_decl_bchunk_align struct mi_bbitmap_s {
   #if (MI_BCHUNK_SIZE / MI_SIZE_SIZE) > 2
   size_t           _padding[MI_BCHUNK_SIZE/MI_SIZE_SIZE - 2];    // suppress warning on msvc by aligning manually
   #endif
-  mi_bchunkmap_t   chunkmap;                                    
-  mi_bchunkmap_t   chunkmap_bins[MI_CBIN_COUNT - 1];             // chunkmaps with bit set if the chunk is in that size class (excluding MI_CBIN_NONE)  
+  mi_bchunkmap_t   chunkmap;
+  mi_bchunkmap_t   chunkmap_bins[MI_CBIN_COUNT - 1];             // chunkmaps with bit set if the chunk is in that size class (excluding MI_CBIN_NONE)
   mi_bchunk_t      chunks[MI_BITMAP_DEFAULT_CHUNK_COUNT];        // usually dynamic MI_BITMAP_MAX_CHUNK_COUNT
 } mi_bbitmap_t;
 
