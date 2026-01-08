@@ -256,9 +256,9 @@ void        _mi_deferred_free(mi_heap_t* heap, bool force);
 void        _mi_page_free_collect(mi_page_t* page,bool force);
 void        _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback from segments
 
-size_t      _mi_page_bin(const mi_page_t* page); // for stats
-size_t      _mi_bin_size(size_t bin);            // for stats
-size_t      _mi_bin(size_t size);                // for stats
+size_t      _mi_page_stats_bin(const mi_page_t* page); // for stats
+size_t      _mi_bin_size(size_t bin);                  // for stats
+size_t      _mi_bin(size_t size);                      // for stats
 
 // "heap.c"
 void        _mi_heap_init(mi_heap_t* heap, mi_tld_t* tld, mi_arena_id_t arena_id, bool noreclaim, uint8_t tag);
