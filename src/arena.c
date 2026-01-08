@@ -1408,7 +1408,8 @@ static size_t mi_debug_show_bfield(mi_bfield_t field, char* buf, size_t* k) {
   for (int bit = 0; bit < MI_BFIELD_BITS; bit++) {
     bool is_set = ((((mi_bfield_t)1 << bit) & field) != 0);
     if (is_set) bit_set_count++;
-    buf[*k++] = (is_set ? 'x' : '.');
+    buf[*k] = (is_set ? 'x' : '.');
+    *k = *k + 1;
   }
   return bit_set_count;
 }
