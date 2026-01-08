@@ -37,8 +37,7 @@ static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_sta
   return (mi_block_t*)((uint8_t*)page_start + (i * block_size));
 }
 
-//static void mi_page_init(mi_theap_t* theap, mi_page_t* page, size_t size, mi_tld_t* tld);
-mi_decl_nodiscard bool static mi_page_extend_free(mi_theap_t* theap, mi_page_t* page);
+static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page);
 
 #if (MI_DEBUG>=3)
 static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
