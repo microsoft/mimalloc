@@ -689,7 +689,10 @@ static inline bool mi_page_is_full(mi_page_t* page) {
 // is more than 7/8th of a page in use?
 static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
-  uint16_t frac = page->reserved / 8U;
+  uint16_t frac = 0;      // by default only fully used pages are mostly used
+  if (mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE) {  // only for small page objects we take a fraction (> 7/8th is mostly used)
+    frac = page->reserved / 8U;
+  }
   return (page->reserved - page->used <= frac);
 }
 
