@@ -838,7 +838,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
 
   // stats
   mi_theap_stat_increase(theap, pages, 1);
-  mi_theap_stat_increase(theap, page_bins[_mi_page_bin(page)], 1);
+  mi_theap_stat_increase(theap, page_bins[_mi_page_stats_bin(page)], 1);
 
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
@@ -940,12 +940,12 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(current_theapx == NULL || _mi_thread_id()==current_theapx->tld->thread_id);
 
   if (current_theapx != NULL) {
-    mi_theap_stat_decrease(current_theapx, page_bins[_mi_page_bin(page)], 1);
+    mi_theap_stat_decrease(current_theapx, page_bins[_mi_page_stats_bin(page)], 1);
     mi_theap_stat_decrease(current_theapx, pages, 1);
   }
   else {
     mi_heap_t* const heap = mi_page_heap(page);
-    mi_heap_stat_decrease(heap, page_bins[_mi_page_bin(page)], 1);
+    mi_heap_stat_decrease(heap, page_bins[_mi_page_stats_bin(page)], 1);
     mi_heap_stat_decrease(heap, pages, 1);
   }
 
@@ -1541,7 +1541,8 @@ static size_t mi_debug_show_bfield(mi_bfield_t field, char* buf, size_t* k) {
   for (int bit = 0; bit < MI_BFIELD_BITS; bit++) {
     bool is_set = ((((mi_bfield_t)1 << bit) & field) != 0);
     if (is_set) bit_set_count++;
-    buf[*k++] = (is_set ? 'x' : '.');
+    buf[*k] = (is_set ? 'x' : '.');
+    *k = *k + 1;
   }
   return bit_set_count;
 }
@@ -2131,14 +2132,14 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
   else {
     // move the page to `heap_target` as an abandoned page
     // first remove it from the current heap
-    const size_t bin = _mi_page_bin(page);
+    const size_t sbin = _mi_page_stats_bin(page);
     size_t slice_index;
     size_t slice_count;
     mi_arena_pages_t* arena_pages = NULL;
     mi_arena_t* const arena = mi_page_arena_pages(page, &slice_index, &slice_count, &arena_pages);
     mi_assert_internal(mi_bitmap_is_set(arena_pages->pages, slice_index));
     mi_bitmap_clear(arena_pages->pages, slice_index);
-    mi_theap_stat_decrease(theap, page_bins[bin], 1);
+    mi_theap_stat_decrease(theap, page_bins[sbin], 1);
     mi_theap_stat_decrease(theap, pages, 1);
     mi_theap_t* theap_target = info->theap_target;
 
@@ -2154,7 +2155,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
     mi_assert_internal(mi_bitmap_is_clear(arena_pages_target->pages, slice_index));
     mi_bitmap_set(arena_pages_target->pages, slice_index);
     page->heap = heap_target;
-    mi_theap_stat_increase(theap_target, page_bins[bin], 1);
+    mi_theap_stat_increase(theap_target, page_bins[sbin], 1);
     mi_theap_stat_increase(theap_target, pages, 1);
 
     // and abandon in the new heap

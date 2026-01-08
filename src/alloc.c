@@ -765,7 +765,9 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
   mi_assert_internal(_mi_is_aligned(guard_page, os_page_size));
   if (!page->memid.is_pinned && _mi_is_aligned(guard_page, os_page_size)) {
     const bool ok = _mi_os_protect(guard_page, os_page_size);
-    MI_UNUSED(ok);
+    if mi_unlikely(!ok) {
+      _mi_warning_message("failed to set a guard page behind an object (object %p of size %zu)\n", block, block_size);
+    }
   }
   else {
     _mi_warning_message("unable to set a guard page behind an object due to pinned memory (large OS pages?) (object %p of size %zu)\n", block, block_size);

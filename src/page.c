@@ -794,6 +794,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
   } // for each page
 
   mi_theap_stat_counter_increase(theap, page_searches, count);
+  mi_theap_stat_counter_increase(theap, page_searches_count, 1);
 
   // set the page to the best candidate
   if (page_candidate != NULL) {
