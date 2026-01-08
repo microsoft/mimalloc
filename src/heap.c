@@ -199,7 +199,11 @@ void _mi_heap_init(mi_heap_t* heap, mi_arena_id_t arena_id, bool allow_destroy, 
 
   if (heap->tld->heap_backing == NULL) {
     heap->tld->heap_backing = heap;  // first heap becomes the backing heap
-    _mi_random_init(&heap->random);
+    #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+      _mi_random_init_weak(&heap->random);    // prevent allocation failure during bcrypt dll initialization with static linking (issue #1185)
+    #else
+      _mi_random_init(&heap->random);
+    #endif
   }
   else {
     _mi_random_split(&heap->tld->heap_backing->random, &heap->random);

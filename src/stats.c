@@ -225,12 +225,6 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
   mi_stat_print_ex(stat, msg, unit, out, arg, NULL);
 }
 
-static void mi_stat_peak_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg) {
-  _mi_fprintf(out, arg, "%10s:", msg);
-  mi_print_amount(stat->peak, unit, out, arg);
-  _mi_fprintf(out, arg, "\n");
-}
-
 #if MI_STAT>1
 static void mi_stat_total_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg) {
   _mi_fprintf(out, arg, "%10s:", msg);
@@ -247,8 +241,8 @@ static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg
 }
 
 
-static void mi_stat_counter_print_avg(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg) {
-  const int64_t avg_tens = (stat->total == 0 ? 0 : (stat->total*10 / stat->total));
+static void mi_stat_average_print(size_t count, size_t total, const char* msg, mi_output_fun* out, void* arg) {
+  const int64_t avg_tens = (count == 0 ? 0 : (total*10 / count));
   const long avg_whole = (long)(avg_tens/10);
   const long avg_frac1 = (long)(avg_tens%10);
   _mi_fprintf(out, arg, "%10s: %5ld.%ld avg\n", msg, avg_whole, avg_frac1);
@@ -341,8 +335,8 @@ void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) mi_attr
   #endif
   mi_stat_print_ex(&stats->reserved, "reserved", 1, out, arg, "");
   mi_stat_print_ex(&stats->committed, "committed", 1, out, arg, "");
-  mi_stat_peak_print(&stats->reset, "reset", 1, out, arg );
-  mi_stat_peak_print(&stats->purged, "purged", 1, out, arg );
+  mi_stat_counter_print(&stats->reset, "reset", out, arg );
+  mi_stat_counter_print(&stats->purged, "purged", out, arg );
   mi_stat_print_ex(&stats->page_committed, "touched", 1, out, arg, "");
   // mi_stat_print(&stats->segments, "segments", -1, out, arg);
   // mi_stat_print(&stats->segments_abandoned, "-abandoned", -1, out, arg);
@@ -365,7 +359,7 @@ void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) mi_attr
   mi_stat_counter_print(&stats->purge_calls, "purges", out, arg);
   mi_stat_counter_print(&stats->malloc_guarded_count, "guarded", out, arg);
   mi_stat_print(&stats->threads, "threads", -1, out, arg);
-  mi_stat_counter_print_avg(&stats->page_searches, "searches", out, arg);
+  mi_stat_average_print(stats->page_searches_count.total, stats->page_searches.total, "searches", out, arg);
   _mi_fprintf(out, arg, "%10s: %5i\n", "numa nodes", _mi_os_numa_node_count());
 
   size_t elapsed;
