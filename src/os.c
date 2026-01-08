@@ -528,7 +528,7 @@ bool _mi_os_reset(void* addr, size_t size) {
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return true;  // || _mi_os_is_huge_reserved(addr)
-  mi_os_stat_increase(reset, csize);
+  mi_os_stat_counter_increase(reset, csize);
   mi_os_stat_counter_increase(reset_calls, 1);
 
   #if (MI_DEBUG>1) && !MI_SECURE && !MI_TRACK_ENABLED // && !MI_TSAN
@@ -560,7 +560,7 @@ bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stat_size)
 {
   if (mi_option_get(mi_option_purge_delay) < 0) return false;  // is purging allowed?
   mi_os_stat_counter_increase(purge_calls, 1);
-  mi_os_stat_increase(purged, size);
+  mi_os_stat_counter_increase(purged, size);
 
   if (mi_option_is_enabled(mi_option_purge_decommits) &&   // should decommit?
     !_mi_preloading())                                     // don't decommit during preloading (unsafe)
