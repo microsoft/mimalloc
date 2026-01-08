@@ -263,9 +263,9 @@ void          _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
 mi_decl_nodiscard bool _mi_page_init(mi_heap_t* heap, mi_page_t* page);
 bool          _mi_page_queue_is_valid(mi_heap_t* heap, const mi_page_queue_t* pq);
 
-size_t        _mi_page_bin(const mi_page_t* page); // for stats
-size_t        _mi_bin_size(size_t bin);            // for stats
-size_t        _mi_bin(size_t size);                // for stats
+size_t        _mi_page_stats_bin(const mi_page_t* page); // for stats
+size_t        _mi_bin_size(size_t bin);                  // for stats
+size_t        _mi_bin(size_t size);                      // for stats
 
 // "heap.c"
 mi_heap_t*    _mi_heap_create(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id, mi_tld_t* tld);

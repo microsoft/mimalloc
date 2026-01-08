@@ -750,7 +750,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(size_t slice_count, size_t block_si
 
   // stats
   mi_tld_stat_increase(tld, pages, 1);
-  mi_tld_stat_increase(tld, page_bins[_mi_page_bin(page)], 1);
+  mi_tld_stat_increase(tld, page_bins[_mi_page_stats_bin(page)], 1);
 
   mi_assert_internal(_mi_ptr_page(page)==page);
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
@@ -854,11 +854,11 @@ void _mi_arenas_page_free(mi_page_t* page, mi_tld_t* stats_tld /* can be NULL */
   mi_assert_internal(page->next==NULL && page->prev==NULL);
 
   if (stats_tld != NULL) { 
-    mi_tld_stat_decrease(stats_tld, page_bins[_mi_page_bin(page)], 1);
+    mi_tld_stat_decrease(stats_tld, page_bins[_mi_page_stats_bin(page)], 1);
     mi_tld_stat_decrease(stats_tld, pages, 1);
   }
   else {
-    mi_os_stat_decrease(page_bins[_mi_page_bin(page)], 1);
+    mi_os_stat_decrease(page_bins[_mi_page_stats_bin(page)], 1);
     mi_os_stat_decrease(pages, 1);
   }
 
