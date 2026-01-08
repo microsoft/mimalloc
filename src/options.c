@@ -43,10 +43,6 @@ int mi_version(void) mi_attr_noexcept {
 #define MI_DEFAULT_VERBOSE 0
 #endif
 
-#ifndef MI_DEFAULT_EAGER_COMMIT
-#define MI_DEFAULT_EAGER_COMMIT 1
-#endif
-
 #ifndef MI_DEFAULT_ARENA_EAGER_COMMIT
 #define MI_DEFAULT_ARENA_EAGER_COMMIT 2
 #endif
@@ -121,8 +117,7 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { MI_DEFAULT_VERBOSE, MI_OPTION_UNINIT, MI_OPTION(verbose) },
 
   // some of the following options are experimental and not all combinations are allowed.
-  { MI_DEFAULT_EAGER_COMMIT,
-       MI_OPTION_UNINIT, MI_OPTION(eager_commit) },               // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
+  { 1, MI_OPTION_UNINIT, MI_OPTION(deprecated_eager_commit) },  
   { MI_DEFAULT_ARENA_EAGER_COMMIT,
        MI_OPTION_UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
   { 1, MI_OPTION_UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },        // purge decommits memory (instead of reset) (note: on linux this uses MADV_DONTNEED for decommit)
@@ -135,12 +130,12 @@ static mi_option_desc_t mi_options[_mi_option_last] =
        MI_OPTION_UNINIT, MI_OPTION(reserve_os_memory)     },      // reserve N KiB OS memory in advance (use `option_get_size`)
   { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_segment_cache) },   // cache N segments per thread
   { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_page_reset) },      // reset page memory on free
-  { 0, MI_OPTION_UNINIT, MI_OPTION(abandoned_page_purge) },       // purge free page memory when a thread terminates
+  { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_abandoned_page_purge) }, 
   { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_segment_reset) },   // reset segment memory on free (needs eager commit)
 #if defined(__NetBSD__)
   { 0, MI_OPTION_UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed
 #else
-  { 1, MI_OPTION_UNINIT, MI_OPTION(eager_commit_delay) },         // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
+  { 1, MI_OPTION_UNINIT, MI_OPTION(deprecated_eager_commit_delay) },  
 #endif
   { 1000,MI_OPTION_UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
   { 0,   MI_OPTION_UNINIT, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.

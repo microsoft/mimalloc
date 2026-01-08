@@ -433,7 +433,7 @@ typedef enum mi_option_e {
   mi_option_show_stats,                 // print statistics on termination
   mi_option_verbose,                    // print verbose messages
   // advanced options
-  mi_option_eager_commit,               // eager commit segments? (after `eager_commit_delay` segments) (=1)
+  mi_option_deprecated_eager_commit,    
   mi_option_arena_eager_commit,         // eager commit arenas? Use 2 to enable just on overcommit systems (=2)
   mi_option_purge_decommits,            // should a memory purge decommit? (=1). Set to 0 to use memory reset on a purge (instead of decommit)
   mi_option_allow_large_os_pages,       // allow use of large (2 or 4 MiB) OS pages, implies eager commit.
@@ -442,9 +442,9 @@ typedef enum mi_option_e {
   mi_option_reserve_os_memory,          // reserve specified amount of OS memory in an arena at startup (internally, this value is in KiB; use `mi_option_get_size`)
   mi_option_deprecated_segment_cache,
   mi_option_deprecated_page_reset,
-  mi_option_abandoned_page_purge,       // immediately purge delayed purges on thread termination
+  mi_option_deprecated_abandoned_page_purge,
   mi_option_deprecated_segment_reset,
-  mi_option_eager_commit_delay,         // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
+  mi_option_deprecated_eager_commit_delay, 
   mi_option_purge_delay,                // memory purging is delayed by N milli seconds; use 0 for immediate purging or -1 for no purging at all. (=10)
   mi_option_use_numa_nodes,             // 0 = use all available numa nodes, otherwise use at most N nodes.
   mi_option_disallow_os_alloc,          // 1 = do not use OS memory for allocation (but only programmatically reserved arenas)
@@ -481,7 +481,6 @@ typedef enum mi_option_e {
   mi_option_eager_region_commit = mi_option_arena_eager_commit,
   mi_option_reset_decommits = mi_option_purge_decommits,
   mi_option_reset_delay = mi_option_purge_delay,
-  mi_option_abandoned_page_reset = mi_option_abandoned_page_purge,
   mi_option_limit_os_alloc = mi_option_disallow_os_alloc
 } mi_option_t;
 
