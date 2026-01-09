@@ -620,7 +620,7 @@ static std_new_handler_t mi_get_new_handler(void) {
 }
 #else
 // note: on windows we could dynamically link to `?get_new_handler@std@@YAP6AXXZXZ`.
-static std_new_handler_t mi_get_new_handler() {
+static std_new_handler_t mi_get_new_handler(void) {
   return NULL;
 }
 #endif
