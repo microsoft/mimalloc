@@ -595,7 +595,7 @@ static mi_arena_pages_t* mi_heap_arena_pages(mi_heap_t* heap, mi_arena_t* arena)
   mi_assert_internal(arena!=NULL);
   mi_assert_internal(heap!=NULL);
   mi_assert(arena->arena_idx < MI_MAX_ARENAS);
-  return mi_atomic_load_relaxed(&heap->arena_pages[arena->arena_idx]);
+  return mi_atomic_load_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[arena->arena_idx]);
 }
 
 static mi_arena_t* mi_page_arena_pages(mi_page_t* page, size_t* slice_index, size_t* slice_count, mi_arena_pages_t** parena_pages) {
@@ -619,7 +619,7 @@ static mi_arena_pages_t* mi_heap_ensure_arena_pages(mi_heap_t* heap, mi_arena_t*
   mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
   if (arena_pages==NULL) {
     mi_lock(&heap->arena_pages_lock) {
-      arena_pages = mi_atomic_load_acquire(&heap->arena_pages[arena->arena_idx]);
+      arena_pages = mi_atomic_load_ptr_acquire(mi_arena_pages_t, &heap->arena_pages[arena->arena_idx]);
       if (arena_pages == NULL) {  // still NULL?
         if (_mi_is_heap_main(heap)) {
           // the page info for the main heap is always allocated as part of an arena
@@ -630,7 +630,7 @@ static mi_arena_pages_t* mi_heap_ensure_arena_pages(mi_heap_t* heap, mi_arena_t*
           // todo: allocate into the current arena?
           arena_pages = mi_arena_pages_alloc(arena);
         }
-        mi_atomic_store_release(&heap->arena_pages[arena->arena_idx], arena_pages);
+        mi_atomic_store_ptr_release(mi_arena_pages_t, &heap->arena_pages[arena->arena_idx], arena_pages);
       }
     }
   }

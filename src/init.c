@@ -278,7 +278,7 @@ static void mi_subproc_main_init(void) {
     subproc_main.heaps = &heap_main;
     subproc_main.heap_total_count = 1;
     subproc_main.heap_count = 1;
-    mi_atomic_store_release(&subproc_main.heap_main, &heap_main);
+    mi_atomic_store_ptr_release(mi_heap_t, &subproc_main.heap_main, &heap_main);
     __mi_stat_increase_mt(&subproc_main.stats.heaps, 1);
     __mi_stat_increase_mt(&subproc_main.stats.threads, 1);
     mi_lock_init(&subproc_main.arena_reserve_lock);
@@ -409,14 +409,14 @@ mi_subproc_t* _mi_subproc(void) {
 }
 
 mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
-  mi_heap_t* heap = mi_atomic_load_relaxed(&subproc->heap_main);
+  mi_heap_t* heap = mi_atomic_load_ptr_relaxed(mi_heap_t,&subproc->heap_main);
   if mi_likely(heap!=NULL) {
     return heap;
   }
   else {
     mi_heap_main_init();
     mi_assert_internal(mi_atomic_load_relaxed(&subproc->heap_main) != NULL);
-    return mi_atomic_load_relaxed(&subproc->heap_main);
+    return mi_atomic_load_ptr_relaxed(mi_heap_t,&subproc->heap_main);
   }
 }
 
