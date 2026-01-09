@@ -250,7 +250,7 @@ extern mi_decl_forceinline void* _mi_theap_malloc_zero_ex(mi_theap_t* theap, siz
   }
 }
 
-inline void* _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero, size_t* usable) mi_attr_noexcept {
+void* _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero, size_t* usable) mi_attr_noexcept {
   return _mi_theap_malloc_zero_ex(theap, size, zero, 0, usable);
 }
 
