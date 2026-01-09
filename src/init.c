@@ -887,13 +887,46 @@ static void mi_detect_cpu_features(void) {
 
 // Initialize the process; called by thread_init or the process loader
 void mi_process_init(void) mi_attr_noexcept {
-  // ensure we are called once
-  static mi_atomic_once_t process_init;
-	// #if _MSC_VER < 1920
-	// mi_heap_main_init(); // vs2017 can dynamically re-initialize theap_main
-	// #endif
-  if (!mi_atomic_once(&process_init)) return;
-  _mi_process_is_initialized = true;
+  // Ensure initialization runs exactly once.
+  //
+  // Note: we cannot use `mi_atomic_once` directly because it is non-blocking:
+  // other threads may observe initialization as "done" while it is still in
+  // progress, which can lead to asserts like `_mi_page_map != NULL`.
+  //
+  // At the same time, `mi_process_init()` is re-entrant on the initializing
+  // thread (via `mi_thread_init()` calling back into `mi_process_init()`), so
+  // we must not block the owner thread while it is initializing.
+  //
+  // State: 0 = not started, 1 = in progress, 2 = done.
+  static mi_atomic_once_t process_init_state;
+  static _Atomic(uintptr_t) process_init_owner_tid;
+
+  const uintptr_t tid = (uintptr_t)_mi_thread_id();
+  uintptr_t state = mi_atomic_load_acquire(&process_init_state);
+  if (state == 2) return;
+
+  if (state == 1) {
+    // If we re-enter on the initializing thread, return immediately.
+    if (mi_atomic_load_relaxed(&process_init_owner_tid) == tid) return;
+    // Otherwise wait until the initialization completes.
+    do {
+      mi_atomic_yield();
+      state = mi_atomic_load_acquire(&process_init_state);
+    } while (state != 2);
+    return;
+  }
+
+  uintptr_t expected = 0;
+  if (!mi_atomic_cas_strong_acq_rel(&process_init_state, &expected, (uintptr_t)1)) {
+    // Someone else raced us; follow the waiting path.
+    do {
+      mi_atomic_yield();
+      state = mi_atomic_load_acquire(&process_init_state);
+    } while (state != 2);
+    return;
+  }
+
+  mi_atomic_store_release(&process_init_owner_tid, tid);
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
 
   mi_detect_cpu_features();
@@ -930,6 +963,9 @@ void mi_process_init(void) mi_attr_noexcept {
       mi_reserve_os_memory((size_t)ksize*MI_KiB, true, true);
     }
   }
+
+  _mi_process_is_initialized = true;
+  mi_atomic_store_release(&process_init_state, (uintptr_t)2);
 }
 
 // Called when the process is done (cdecl as it is used with `at_exit` on some platforms)

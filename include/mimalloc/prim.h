@@ -347,6 +347,16 @@ We have 4 models:
 static inline mi_theap_t* _mi_theap_default(void);
 static inline mi_theap_t* _mi_theap_cached(void);
 
+// On Windows, accessing `__declspec(thread)` storage can trigger on-demand TLS
+// initialization (`__dyn_tls_init`) which may run user TLS constructors that
+// allocate memory. During mimalloc process initialization this can cause
+// recursive allocations before global state is ready.
+// Guard against this by avoiding TLS access before `mi_process_init` completes
+// (used by the MI_TLS_MODEL_THREAD_LOCAL path).
+#if defined(_WIN32) && !defined(MI_TLS_RECURSE_GUARD)
+#define MI_TLS_RECURSE_GUARD 1
+#endif
+
 #if defined(_WIN32)
   #define MI_TLS_MODEL_DYNAMIC_WIN32   1
 #elif defined(__APPLE__)  // macOS
