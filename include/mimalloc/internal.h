@@ -1130,21 +1130,37 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
 
 
 // ---------------------------------------------------------------------------------
-// Provide our own `_mi_memcpy` for potential performance optimizations.
+// Provide our own `_mi_memcpy/set` for potential performance optimizations.
 //
 // For now, only on x64/x86 we optimize to `rep movsb/stosb`.
 // Generally, we check for "fast short rep movsb" (FSRM) or "fast enhanced rep movsb" (ERMS) support
 // (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017). See also issue #201 and pr #253.
 // ---------------------------------------------------------------------------------
 
-#if !MI_TRACK_ENABLED && defined(_WIN32) && (MI_ARCH_X64 || MI_ARCH_X86)
+#if !MI_TRACK_ENABLED && (MI_ARCH_X64 || MI_ARCH_X86) && (defined(_WIN32) || defined(__GNUC__))
 
-extern mi_decl_hidden bool _mi_cpu_has_fsrm;
-extern mi_decl_hidden bool _mi_cpu_has_erms;
+extern mi_decl_hidden size_t _mi_cpu_movsb_max;  // in init.c
+extern mi_decl_hidden size_t _mi_cpu_stosb_max;
+
+static inline void mi_rep_movsb(void* dst, const void* src, size_t n) {
+  #if defined(__GNUC__)
+  __asm volatile("rep movsb" : "+D"(dst), "+c"(n), "+S"(src) : : "memory");
+  #else
+  __movsb((unsigned char*)dst, (const unsigned char*)src, n);
+  #endif
+}
+
+static inline void mi_rep_stosb(void* dst, uint8_t val, size_t n) {
+  #if defined(__GNUC__)
+  __asm volatile("rep stosb" : "+D"(dst), "+c"(n) : "a"(val) : "memory");
+  #else
+  __stosb((unsigned char*)dst, val, n);
+  #endif
+}
 
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
-  if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
-    __movsb((unsigned char*)dst, (const unsigned char*)src, n);
+  if (n <= _mi_cpu_movsb_max) {  // has fsrm && n <= 127  (todo: and maybe has erms?)
+    mi_rep_movsb(dst, src, n);
   }
   else {
     memcpy(dst, src, n);
@@ -1152,8 +1168,8 @@ static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
 }
 
 static inline void _mi_memset(void* dst, int val, size_t n) {
-  if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
-    __stosb((unsigned char*)dst, (uint8_t)val, n);
+  if (n <= _mi_cpu_stosb_max) {  // has fsrs && n <= 127 
+    mi_rep_stosb(dst, (uint8_t)val, n);
   }
   else {
     memset(dst, val, n);
@@ -1162,42 +1178,8 @@ static inline void _mi_memset(void* dst, int val, size_t n) {
 
 static inline void _mi_memset_small(void* dst, int val, size_t n) {
   mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
-  __stosb((unsigned char*)dst, (uint8_t)val, n);
-}
-
-#elif !MI_TRACK_ENABLED && defined(__GNUC__) && (MI_ARCH_X64 || MI_ARCH_X86)
-
-extern mi_decl_hidden bool _mi_cpu_has_fsrm;
-extern mi_decl_hidden bool _mi_cpu_has_erms;
-
-static inline void _mi_movsb(void* dst, const void* src, size_t n) {
-  __asm volatile("rep movsb" : "+D"(dst), "+c"(n), "+S"(src) : : "memory");
-}
-
-static inline void _mi_stosb(void* dst, uint8_t val, size_t n) {
-  __asm volatile("rep stosb" : "+D"(dst), "+c"(n) : "a"(val) : "memory");
-}
-
-static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
-  if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
-    _mi_movsb(dst,src,n);
-  }
-  else {
-    memcpy(dst,src,n);
-  }
-}
-
-static inline void _mi_memset(void* dst, int val, size_t n) {
-  if ((_mi_cpu_has_fsrm && n <= 128) || (_mi_cpu_has_erms && n > 128)) {
-    _mi_stosb(dst, (uint8_t)val, n);
-  }
-  else {
-    memset(dst,val,n);
-  }
-}
-
-static inline void _mi_memset_small(void* dst, int val, size_t n) {
-  _mi_stosb(dst,val,n);
+  // mi_rep_stosb(dst, (uint8_t)val, n);  // unfortunately, rep stosb seems still slower on n>=128
+  _mi_memset(dst, val, n);
 }
 
 #else

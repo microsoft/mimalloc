@@ -814,39 +814,65 @@ void _mi_auto_process_init(void) {
 }
 
 // CPU features
-mi_decl_cache_align bool _mi_cpu_has_fsrm = false;
-mi_decl_cache_align bool _mi_cpu_has_erms = false;
+mi_decl_cache_align size_t _mi_cpu_movsb_max = 0;  // for size <= max, rep movsb is fast
+mi_decl_cache_align size_t _mi_cpu_stosb_max = 0;  // for size <= max, rep stosb is fast
 mi_decl_cache_align bool _mi_cpu_has_popcnt = false;
 
 #if (MI_ARCH_X64 || MI_ARCH_X86)
 #if defined(__GNUC__)
-#include <cpuid.h>
-static bool mi_cpuid(uint32_t* regs4, uint32_t level) {
-  return (__get_cpuid(level, &regs4[0], &regs4[1], &regs4[2], &regs4[3]) == 1);
+// #include <cpuid.h>
+static bool mi_cpuid(uint32_t* regs4, uint32_t level, uint32_t sublevel) {
+  // note: use explicit assembly instead of __get_cpuid as we need the sublevel (in ecx)
+  // (on Ubuntu 22 with WSL the __get_cpuid does not clear ecx for level 7 which is incorrect).
+  uint32_t eax, ebx, ecx, edx;
+  asm __volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(level), "c"(sublevel) : );
+  regs4[0] = eax;
+  regs4[1] = ebx;
+  regs4[2] = ecx;
+  regs4[3] = edx;
+  return true;
 }
 
 #elif defined(_MSC_VER)
-static bool mi_cpuid(uint32_t* regs4, uint32_t level) {
-  __cpuid((int32_t*)regs4, (int32_t)level);
+static bool mi_cpuid(uint32_t* regs4, uint32_t level, uint32_t sublevel) {
+  __cpuidex((int32_t*)regs4, (int32_t)level, (int32_t)sublevel);
   return true;
 }
 #else
-static bool mi_cpuid(uint32_t* regs4, uint32_t level) {
-  MI_UNUSED(regs4); MI_UNUSED(level);
+static bool mi_cpuid(uint32_t* regs4, uint32_t level, uint32_t sublevel) {
+  MI_UNUSED(regs4); MI_UNUSED(level); MI_UNUSED(sublevel);
   return false;
 }
 #endif
 
 static void mi_detect_cpu_features(void) {
-  // FSRM for fast short rep movsb/stosb support (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017))
-  // EMRS for fast enhanced rep movsb/stosb support
+  // FSRM for fast short rep movsb support (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017))
+  // EMRS for fast enhanced rep movsb/stosb support (not used at the moment, memcpy always seems faster?)
+  // FSRS for fast short rep stosb
+  bool amd = false;
+  bool fsrm = false;
+  bool erms = false;  
+  bool fsrs = false;
   uint32_t cpu_info[4];
-  if (mi_cpuid(cpu_info, 7)) {
-    _mi_cpu_has_fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
-    _mi_cpu_has_erms = ((cpu_info[1] & (1 << 9)) != 0); // bit 9 of EBX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+  if (mi_cpuid(cpu_info, 0, 0)) {
+    amd = (cpu_info[2]==0x444d4163); // (Auth enti cAMD)
   }
-  if (mi_cpuid(cpu_info, 1)) {
+  if (mi_cpuid(cpu_info, 7, 0)) {
+    fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
+    erms = ((cpu_info[1] & (1 << 9)) != 0); // bit 9 of EBX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>        
+  }
+  if (mi_cpuid(cpu_info, 7, 1)) {
+    fsrs = ((cpu_info[1] & (1 << 11)) != 0); // bit 11 of EBX: see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=1:_Extended_Features>
+  }
+  if (mi_cpuid(cpu_info, 1, 0)) {
     _mi_cpu_has_popcnt = ((cpu_info[2] & (1 << 23)) != 0); // bit 23 of ECX : see <https://en.wikipedia.org/wiki/CPUID#EAX=1:_Processor_Info_and_Feature_Bits>
+  }
+  
+  if (fsrm) {
+    _mi_cpu_movsb_max = 127;
+  }
+  if (fsrs || (amd && fsrm)) {  // fsrm on amd implies fsrs, see: https://marc.info/?l=git-commits-head&m=168186277717803
+    _mi_cpu_stosb_max = 127; 
   }
 }
 
