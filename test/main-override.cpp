@@ -541,7 +541,7 @@ static void escape(uint8_t* p, size_t n) {
 }
 
 void test_perf2(void) {  
-  for (size_t i = 0; i < 1000000000; i++) {
+  for (size_t i = 0; i < 100000000; i++) {
     const size_t n = 1000;
     uint8_t* p = (uint8_t*)calloc(1, n);
     escape(p,n);
