@@ -851,7 +851,7 @@ static void mi_detect_cpu_features(void) {
   // FSRS for fast short rep stosb
   bool amd = false;
   bool fsrm = false;
-  bool erms = false;  
+  // bool erms = false;
   bool fsrs = false;
   uint32_t cpu_info[4];
   if (mi_cpuid(cpu_info, 0, 0)) {
@@ -859,7 +859,7 @@ static void mi_detect_cpu_features(void) {
   }
   if (mi_cpuid(cpu_info, 7, 0)) {
     fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
-    erms = ((cpu_info[1] & (1 << 9)) != 0); // bit 9 of EBX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>        
+    // erms = ((cpu_info[1] & (1 << 9)) != 0); // bit 9 of EBX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>        
   }
   if (mi_cpuid(cpu_info, 7, 1)) {
     fsrs = ((cpu_info[1] & (1 << 11)) != 0); // bit 11 of EBX: see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=1:_Extended_Features>
