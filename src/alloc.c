@@ -44,6 +44,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   if (usable != NULL) { *usable = mi_page_usable_block_size(page); };
+
   // pop from the free list
   page->free = mi_block_next(page, block);
   page->used++;
@@ -76,17 +77,16 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
 
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_likely(!zero) {
+    // #if MI_SECURE
+    block->next = 0;  // don't leak internal data
+    // #endif
     #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
       if (!mi_page_is_huge(page)) { memset(block, MI_DEBUG_UNINIT, bsize); }
-    #endif
-    #if MI_SECURE
-      block->next = 0;  // don't leak internal data
-    #endif
+    #endif    
   }
   else {
-    mi_assert_internal(bsize<=2*MI_SMALL_SIZE_MAX);  // allow faster zero'ing for small blocks
     if (!page->free_is_zero) {
-      _mi_memzero_aligned_small(block, bsize);
+      _mi_memzero_aligned(block, bsize);
     }
     else {
       block->next = 0;
@@ -115,19 +115,9 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   return block;
 }
 
-// extra entries for improved efficiency in `alloc-aligned.c`.
-extern void* _mi_page_malloc(mi_theap_t* theap, mi_page_t* page, size_t size) mi_attr_noexcept {
-  return mi_page_malloc_zero(theap, page, size, false, NULL);
-}
-extern void* _mi_page_malloc_zeroed(mi_theap_t* theap, mi_page_t* page, size_t size) mi_attr_noexcept {
-  if mi_likely(size<=MI_SMALL_SIZE_MAX) {
-    return mi_page_malloc_zero(theap, page, size, true, NULL);
-  }
-  else {
-    void* p = mi_page_malloc_zero(theap, page, size, false, NULL);
-    if mi_likely(p!=NULL) { _mi_memzero_aligned(p, size - MI_PADDING_SIZE); } // todo: zero usable size?
-    return p;
-  }
+// extra entries for improved efficiency in `alloc-aligned.c` (and in `page.c:mi_malloc_generic`.
+extern void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept {
+  return mi_page_malloc_zero(theap, page, size, zero, NULL);
 }
 
 #if MI_GUARDED
@@ -826,8 +816,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
 
 #ifdef __cplusplus
 void* _mi_externs[] = {
-  (void*)&_mi_page_malloc,
-  (void*)&_mi_page_malloc_zeroed,
+  (void*)&_mi_page_malloc_zero,
   (void*)&_mi_theap_malloc_zero,
   (void*)&_mi_theap_malloc_zero_ex,
   (void*)&mi_theap_malloc,

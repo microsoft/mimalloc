@@ -308,8 +308,7 @@ mi_msecs_t    _mi_clock_end(mi_msecs_t start);
 mi_msecs_t    _mi_clock_start(void);
 
 // "alloc.c"
-void*         _mi_page_malloc(mi_theap_t* theap, mi_page_t* page, size_t size) mi_attr_noexcept;                  // called from `_mi_theap_malloc_aligned`
-void*         _mi_page_malloc_zeroed(mi_theap_t* theap, mi_page_t* page, size_t size) mi_attr_noexcept;           // called from `_mi_theap_malloc_aligned`
+void*         _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept;                  // called from `_mi_theap_malloc_aligned`
 void*         _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero, size_t* usable) mi_attr_noexcept;
 void*         _mi_theap_malloc_zero_ex(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, size_t* usable) mi_attr_noexcept;     // called from `_mi_theap_malloc_aligned`
 void*         _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool zero, size_t* usable_pre, size_t* usable_post) mi_attr_noexcept;
@@ -1176,12 +1175,6 @@ static inline void _mi_memset(void* dst, int val, size_t n) {
   }
 }
 
-static inline void _mi_memset_small(void* dst, int val, size_t n) {
-  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
-  // mi_rep_stosb(dst, (uint8_t)val, n);  // unfortunately, rep stosb seems still slower on n>=128
-  _mi_memset(dst, val, n);
-}
-
 #else
 
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
@@ -1189,11 +1182,6 @@ static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
 }
 
 static inline void _mi_memset(void* dst, int val, size_t n) {
-  memset(dst, val, n);
-}
-
-static inline void _mi_memset_small(void* dst, int val, size_t n) {
-  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
   memset(dst, val, n);
 }
 
@@ -1220,12 +1208,6 @@ static inline void _mi_memset_aligned(void* dst, int val, size_t n) {
   _mi_memset(adst, val, n);
 }
 
-static inline void _mi_memset_aligned_small(void* dst, int val, size_t n) {
-  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
-  void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
-  _mi_memset_small(adst, val, n);
-}
-
 #else
 
 // Default fallback on `_mi_memcpy`
@@ -1239,31 +1221,16 @@ static inline void _mi_memset_aligned(void* dst, int val, size_t n) {
   _mi_memset(dst, val, n);
 }
 
-static inline void _mi_memset_aligned_small(void* dst, int val, size_t n) {
-  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
-  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
-  _mi_memset_small(dst, val, n);
-}
-
 #endif
 
 static inline void _mi_memzero(void* dst, size_t n) {
   _mi_memset(dst, 0, n);
 }
 
-static inline void _mi_memzero_small(void* dst, size_t n) {
-  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
-  _mi_memset_small(dst, 0, n);
-}
-
 static inline void _mi_memzero_aligned(void* dst, size_t n) {
   _mi_memset_aligned(dst, 0, n);
 }
 
-static inline void _mi_memzero_aligned_small(void* dst, size_t n) {
-  mi_assert_internal(n<=2*MI_SMALL_SIZE_MAX);
-  _mi_memset_aligned_small(dst, 0, n);
-}
 
 
 #endif  // MI_INTERNAL_H

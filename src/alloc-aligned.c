@@ -214,7 +214,7 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, con
         if mi_likely(is_aligned)
         {
           if (usable!=NULL) { *usable = mi_page_usable_block_size(page); }
-          void* p = (zero ? _mi_page_malloc_zeroed(theap, page, padsize) : _mi_page_malloc(theap, page, padsize)); // call specific page malloc for better codegen
+          void* p = _mi_page_malloc_zero(theap, page, padsize, zero);
           mi_assert_internal(p != NULL);
           mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
           mi_track_malloc(p, size, zero);
