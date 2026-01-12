@@ -40,7 +40,7 @@ static void test_mixed1();             // issue #942
 static void test_stl_allocators();
 static void test_thread_leak(void);   // issue #1104
 static void test_perf(void);          // issue #1104
-
+static void test_perf2(void);         // issue #1104
 
 #if _WIN32
 #include "main-override-dep.h"
@@ -56,7 +56,8 @@ int main() {
   // test_dep();
 
   // test_thread_leak();
-  test_perf();
+  // test_perf();
+  test_perf2();
 
   //test_std_string();
   //test_thread_local();
@@ -529,4 +530,21 @@ void test_perf(void)
 {
   test_perf_run();
   std::cout << "gsum: " << gsum.load() << "\n";
+}
+
+
+static int sum2;
+
+static void escape(uint8_t* p, size_t n) { 
+  p[std::rand() % n] = 42;
+  sum2 += p[std::rand() % n];
+}
+
+void test_perf2(void) {  
+  for (size_t i = 0; i < 1000000000; i++) {
+    const size_t n = 1000;
+    uint8_t* p = (uint8_t*)calloc(1, n);
+    escape(p,n);
+    free(p);
+  }
 }
