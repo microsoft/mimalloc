@@ -41,6 +41,7 @@ static void test_stl_allocators();
 static void test_thread_leak(void);   // issue #1104
 static void test_perf(void);          // issue #1104
 static void test_perf2(void);         // issue #1104
+static void test_perf3(void);         // issue #1104
 
 #if _WIN32
 #include "main-override-dep.h"
@@ -57,7 +58,8 @@ int main() {
 
   // test_thread_leak();
   // test_perf();
-  test_perf2();
+  // test_perf2();
+  test_perf3();
 
   //test_std_string();
   //test_thread_local();
@@ -545,6 +547,15 @@ void test_perf2(void) {
     const size_t n = 1000;
     uint8_t* p = (uint8_t*)calloc(1, n);
     escape(p,n);
+    free(p);
+  }
+}
+
+void test_perf3(void) {
+  for (size_t i = 0; i < 5; i++) {
+    const size_t n = (size_t)16*1024*1024*1024;
+    uint8_t* p = (uint8_t*)calloc(1, n);
+    escape(p, n);
     free(p);
   }
 }
