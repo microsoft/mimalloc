@@ -2,12 +2,12 @@
 #include <assert.h>
 #include <mimalloc.h>
 
-void test_theap(void* p_out) {
-  mi_theap_t* theap = mi_theap_new();
-  void* p1 = mi_theap_malloc(theap,32);
-  void* p2 = mi_theap_malloc(theap,48);
+void test_heap(void* p_out) {
+  mi_heap_t* heap = mi_heap_new();
+  void* p1 = mi_heap_malloc(heap,32);
+  void* p2 = mi_heap_malloc(heap,48);
   mi_free(p_out);
-  mi_theap_destroy(theap);
+  mi_heap_destroy(heap);
   //mi_theap_delete(theap); mi_free(p1); mi_free(p2);
 }
 
@@ -32,7 +32,7 @@ int main() {
   mi_free(p1);
   mi_free(p2);
 
-  test_theap(mi_malloc(32));
+  test_heap(mi_malloc(32));
 
   p1 = mi_malloc_aligned(64, 16);
   p2 = mi_malloc_aligned(160,24);
