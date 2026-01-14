@@ -1440,8 +1440,9 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
 }
 
 // Visit all set bits in a bitmap but try to return ranges (within bfields) if possible,
-// but only in chunks of at least `rngslices` slices (that are also aligned at `rngslices`). 
+// but only in chunks of at least `rngslices` slices (that are also aligned at `rngslices`)
 // and clear those ranges atomically.
+// However, the `rngslices` are capped at `MI_BFIELD_BITS` at most.
 // Used by purging to purge larger ranges when possible. With transparent huge pages we only
 // want to purge whole huge pages (2 MiB) at a time which is what the `rngslices` parameter achieves.
 bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg) 
@@ -1450,8 +1451,8 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
   if (rngslices<=1) {
     return _mi_bitmap_forall_setc_ranges(bitmap, visit, arena, arg);
   }
-  mi_assert_internal(rngslices <= MI_BFIELD_BITS);
-  if (rngslices > MI_BFIELD_BITS) { rngslices = MI_BFIELD_BITS;  }
+  // mi_assert_internal(rngslices <= MI_BFIELD_BITS);  
+  if (rngslices > MI_BFIELD_BITS) { rngslices = MI_BFIELD_BITS;  } // cap at MI_BFIELD_BITS at most
 
   // for all chunkmap entries
   const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
