@@ -198,17 +198,22 @@ void mi_heap_destroy(mi_heap_t* heap) {
   mi_heap_free(heap);
 }
 
-mi_heap_t* mi_heap_of(void* p) {
+mi_heap_t* mi_heap_of(const void* p) {
   mi_page_t* page = _mi_safe_ptr_page(p);
   if (page==NULL) return NULL;
   return mi_page_heap(page);
 }
 
-bool mi_any_heap_contains(void* p) {
+bool mi_any_heap_contains(const void* p) {
   return (mi_heap_of(p)!=NULL);
 }
 
-bool mi_heap_contains(mi_heap_t* heap, void* p) {
+bool mi_heap_contains(const mi_heap_t* heap, const void* p) {
   if (heap==NULL) { heap = mi_heap_main(); }
   return (heap==mi_heap_of(p));
+}
+
+// deprecated
+bool mi_check_owned(const void* p) {
+  return mi_any_heap_contains(p);
 }

@@ -234,9 +234,9 @@ mi_decl_export void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node);
 mi_decl_export void mi_heap_collect(mi_heap_t* heap, bool force);
 
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_main(void);
-mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_of(void* p);
-mi_decl_nodiscard mi_decl_export bool       mi_heap_contains(mi_heap_t* heap, void* p);
-mi_decl_nodiscard mi_decl_export bool       mi_any_heap_contains(void* p);
+mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_of(const void* p);
+mi_decl_nodiscard mi_decl_export bool       mi_heap_contains(const mi_heap_t* heap, const void* p);
+mi_decl_nodiscard mi_decl_export bool       mi_any_heap_contains(const void* p);
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc(mi_heap_t* theap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
