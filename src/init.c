@@ -941,7 +941,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   if (process_done) return;
   process_done = true;
 
-  mi_assert_internal(_mi_theap_default() != NULL);
+  // free dynamic thread locals (if used at all)
   _mi_thread_locals_done();
 
   // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
@@ -965,8 +965,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   }
   else {
     mi_heap_stats_merge_to_subproc(mi_heap_main());
-  }
-  //_mi_page_map_unsafe_destroy(_mi_subproc_main());
+  }  
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
     mi_subproc_stats_print_out(NULL, NULL, NULL);
