@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 3011   // major + minor + 2 digits patch
+#define MI_MALLOC_VERSION 3012   // major + minor + 2 digits patch
 
 // ------------------------------------------------------
 // Compiler specific attributes
