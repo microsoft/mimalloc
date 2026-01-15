@@ -42,7 +42,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_cold
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #if !MI_TRACK_ASAN
-#define mi_decl_forceinline     __attribute__((always_inline))
+#define mi_decl_forceinline     __attribute__((always_inline)) inline
 #else
 #define mi_decl_forceinline     inline
 #endif
