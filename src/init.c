@@ -858,7 +858,7 @@ static void mi_detect_cpu_features(void) {
   }
   if (mi_cpuid(cpu_info, 7, 0)) {
     fsrm = ((cpu_info[3] & (1 << 4)) != 0); // bit 4 of EDX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
-    // erms = ((cpu_info[1] & (1 << 9)) != 0); // bit 9 of EBX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>        
+    // erms = ((cpu_info[1] & (1 << 9)) != 0); // bit 9 of EBX : see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=0:_Extended_Features>
   }
   if (mi_cpuid(cpu_info, 7, 1)) {
     fsrs = ((cpu_info[1] & (1 << 11)) != 0); // bit 11 of EBX: see <https://en.wikipedia.org/wiki/CPUID#EAX=7,_ECX=1:_Extended_Features>
@@ -866,12 +866,12 @@ static void mi_detect_cpu_features(void) {
   if (mi_cpuid(cpu_info, 1, 0)) {
     _mi_cpu_has_popcnt = ((cpu_info[2] & (1 << 23)) != 0); // bit 23 of ECX : see <https://en.wikipedia.org/wiki/CPUID#EAX=1:_Processor_Info_and_Feature_Bits>
   }
-  
+
   if (fsrm) {
     _mi_cpu_movsb_max = 127;
   }
   if (fsrs || (amd && fsrm)) {  // fsrm on amd implies fsrs, see: https://marc.info/?l=git-commits-head&m=168186277717803
-    _mi_cpu_stosb_max = 127; 
+    _mi_cpu_stosb_max = 127;
   }
 }
 
@@ -945,7 +945,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
 
   // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
   _mi_prim_thread_done_auto_done();
-  
+
   #ifndef MI_SKIP_COLLECT_ON_EXIT
     #if (MI_DEBUG || !defined(MI_SHARED_LIB))
     // free all memory if possible on process exit. This is not needed for a stand-alone process
@@ -964,7 +964,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   }
   else {
     mi_heap_stats_merge_to_subproc(mi_heap_main());
-  }  
+  }
 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
     mi_subproc_stats_print_out(NULL, NULL, NULL);

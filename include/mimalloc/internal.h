@@ -1132,8 +1132,9 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
 // Provide our own `_mi_memcpy/set` for potential performance optimizations.
 //
 // For now, only on x64/x86 we optimize to `rep movsb/stosb`.
-// Generally, we check for "fast short rep movsb" (FSRM) or "fast enhanced rep movsb" (ERMS) support
+// Generally, we check for "fast short rep movsb/stosb" (FSRM/FSRS) or "fast enhanced rep movsb" (ERMS) support
 // (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017). See also issue #201 and pr #253.
+// Todo: we see improvements on win32 but less with glibc; we might want to only enable this on windows.
 // ---------------------------------------------------------------------------------
 
 #if !MI_TRACK_ENABLED && (MI_ARCH_X64 || MI_ARCH_X86) && (defined(_WIN32) || defined(__GNUC__))
@@ -1158,7 +1159,7 @@ static inline void mi_rep_stosb(void* dst, uint8_t val, size_t n) {
 }
 
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
-  if (n <= _mi_cpu_movsb_max) {  // has fsrm && n <= 127  (todo: and maybe has erms?)
+  if mi_likely(n <= _mi_cpu_movsb_max) {  // has fsrm && n <= 127  (todo: and maybe has erms?)
     mi_rep_movsb(dst, src, n);
   }
   else {
@@ -1167,7 +1168,7 @@ static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
 }
 
 static inline void _mi_memset(void* dst, int val, size_t n) {
-  if (n <= _mi_cpu_stosb_max) {  // has fsrs && n <= 127
+  if mi_likely(n <= _mi_cpu_stosb_max) {  // has fsrs && n <= 127
     mi_rep_stosb(dst, (uint8_t)val, n);
   }
   else {
