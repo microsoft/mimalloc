@@ -94,9 +94,11 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
   mi_collect_t collect = *((mi_collect_t*)arg_collect);
   _mi_page_free_collect(page, collect >= MI_FORCE);
   if (mi_page_all_free(page)) {
-    // no more used blocks, free the page.
-    // note: this will free retired pages as well.
-    _mi_page_free(page, pq);
+    // no more used blocks, possibly free the page.
+    if (collect >= MI_FORCE || page->retire_expire == 0) {  // either forced/abandon, or not already retired
+      // note: this will potentially free retired pages as well.
+      _mi_page_free(page, pq);
+    }
   }
   else if (collect == MI_ABANDON) {
     // still used blocks but the thread is done; abandon the page
@@ -120,8 +122,6 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
 
   // python/cpython#112532: we may be called from a thread that is not the owner of the theap
   // const bool is_main_thread = (_mi_is_main_thread() && theap->thread_id == _mi_thread_id());
-
-  // if (_mi_is_main_thread()) { mi_debug_show_arenas(true, false, false); }
 
   // collect retired pages
   _mi_theap_collect_retired(theap, force);
