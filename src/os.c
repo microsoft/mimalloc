@@ -786,7 +786,7 @@ int _mi_os_numa_node_count(void) {
                             else { count = n; }
     }
     mi_atomic_store_release(&mi_numa_node_count, count); // save it
-    _mi_verbose_message("using %zd numa regions\n", count);
+    if (count>1) { _mi_verbose_message("using %zd numa regions\n", count); }
   }
   mi_assert_internal(count > 0 && count <= INT_MAX);
   return (int)count;

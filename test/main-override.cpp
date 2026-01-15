@@ -61,8 +61,8 @@ int main() {
 
   // test_thread_leak();
   // test_perf();
-  test_perf2();
-  // test_perf3();
+  // test_perf2();
+  test_perf3();
 
   //test_std_string();
   //test_thread_local();
