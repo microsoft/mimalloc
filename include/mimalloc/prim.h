@@ -447,7 +447,7 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 
 static inline mi_theap_t* _mi_theap_main(void) {
   mi_theap_t* const theap = __mi_theap_main;
-  mi_assert_internal(mi_theap_is_initialized(theap));
+  mi_assert_internal(theap==NULL || mi_theap_is_initialized(theap));
   return theap;
 }
 
@@ -479,10 +479,15 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
 }
 
 static inline mi_theap_t* _mi_page_associated_theap(mi_page_t* page) {
-  mi_heap_t* const heap = page->heap;
+  mi_heap_t* heap = page->heap;
   mi_theap_t* theap;
-  if mi_likely(heap==NULL) { theap = _mi_theap_main(); }
-                      else { theap = _mi_heap_theap(heap); }
+  if mi_likely(heap==NULL) { 
+    theap = _mi_theap_main(); 
+    if mi_unlikely(theap==NULL) { theap = _mi_heap_theap(mi_heap_main()); }
+  }
+  else { 
+    theap = _mi_heap_theap(heap); 
+  }
   mi_assert_internal(theap!=NULL && _mi_thread_id()==theap->tld->thread_id);
   return theap;
 }
