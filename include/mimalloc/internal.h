@@ -411,7 +411,7 @@ typedef struct mi_option_desc_s {
   Inlined definitions
 ----------------------------------------------------------- */
 #define MI_UNUSED(x)     (void)(x)
-#if (MI_DEBUG>0)
+#ifndef NDEBUG
 #define MI_UNUSED_RELEASE(x)
 #else
 #define MI_UNUSED_RELEASE(x)  MI_UNUSED(x)
@@ -1167,7 +1167,7 @@ static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
 }
 
 static inline void _mi_memset(void* dst, int val, size_t n) {
-  if (n <= _mi_cpu_stosb_max) {  // has fsrs && n <= 127 
+  if (n <= _mi_cpu_stosb_max) {  // has fsrs && n <= 127
     mi_rep_stosb(dst, (uint8_t)val, n);
   }
   else {
