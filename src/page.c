@@ -418,6 +418,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
 // Retire a page with no more used blocks
 // Important to not retire too quickly though as new
 // allocations might coming.
+// 
 // Note: called from `mi_free` and benchmarks often
 // trigger this due to freeing everything and then
 // allocating again so careful when changing this.
@@ -426,8 +427,9 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(mi_page_all_free(page));
 
+  if (page->retire_expire!=0) return;  // already retired, just keep it retired
   mi_page_set_has_interior_pointers(page, false);
-
+  
   // don't retire too often..
   // (or we end up retiring and re-allocating most of the time)
   // NOTE: refine this more: we should not retire if this
