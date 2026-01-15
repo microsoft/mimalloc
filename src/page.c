@@ -193,7 +193,7 @@ static bool mi_page_free_quick_collect(mi_page_t* page) {
   page->free = page->local_free;
   page->local_free = NULL;
   page->free_is_zero = false;
-  return true;  
+  return true;
 }
 
 void _mi_page_free_collect(mi_page_t* page, bool force) {
@@ -418,7 +418,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
 // Retire a page with no more used blocks
 // Important to not retire too quickly though as new
 // allocations might coming.
-// 
+//
 // Note: called from `mi_free` and benchmarks often
 // trigger this due to freeing everything and then
 // allocating again so careful when changing this.
@@ -429,7 +429,7 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
 
   if (page->retire_expire!=0) return;  // already retired, just keep it retired
   mi_page_set_has_interior_pointers(page, false);
-  
+
   // don't retire too often..
   // (or we end up retiring and re-allocating most of the time)
   // NOTE: refine this more: we should not retire if this
@@ -470,8 +470,8 @@ void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
     if (page != NULL && page->retire_expire != 0) {
       if (mi_page_all_free(page)) {
         page->retire_expire--;
-        if (force || page->retire_expire == 0) {
-          _mi_page_free(pq->first, pq);
+        if (page->retire_expire == 0 || force) {
+          _mi_page_free(page, pq);
         }
         else {
           // keep retired, update min/max
@@ -987,6 +987,8 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
     theap->generic_count = 0;
     // call potential deferred free routines
     _mi_deferred_free(theap, false);
+    // free retired pages
+    _mi_theap_collect_retired(theap, false);
 
     // collect every once in a while (10000 by default)
     const long generic_collect = mi_option_get_clamp(mi_option_generic_collect, 1, 1000000L);
