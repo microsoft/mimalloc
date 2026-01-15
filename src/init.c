@@ -825,7 +825,7 @@ static bool mi_cpuid(uint32_t* regs4, uint32_t level, uint32_t sublevel) {
   // note: use explicit assembly instead of __get_cpuid as we need the sublevel (in ecx)
   // (on Ubuntu 22 with WSL the __get_cpuid does not clear ecx for level 7 which is incorrect).
   uint32_t eax, ebx, ecx, edx;
-  asm __volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(level), "c"(sublevel) : );
+  __asm __volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(level), "c"(sublevel) : );
   regs4[0] = eax;
   regs4[1] = ebx;
   regs4[2] = ecx;
