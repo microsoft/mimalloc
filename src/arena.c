@@ -284,8 +284,9 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
   }
 
   // try to accommodate the requested size for huge allocations
+  req_size = _mi_align_up(req_size + MI_ARENA_MAX_CHUNK_OBJ_SIZE, MI_ARENA_MAX_CHUNK_OBJ_SIZE); // over-reserve for meta-info
   if (arena_reserve < req_size) {
-    arena_reserve = _mi_align_up(req_size + MI_ARENA_MAX_CHUNK_OBJ_SIZE, MI_ARENA_MAX_CHUNK_OBJ_SIZE); // over-reserve for meta-info
+    arena_reserve = req_size;
   }
 
   // check arena bounds
