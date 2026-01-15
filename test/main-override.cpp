@@ -61,8 +61,8 @@ int main() {
 
   // test_thread_leak();
   // test_perf();
-  // test_perf2();
-  test_perf3();
+  test_perf2();
+  // test_perf3();
 
   //test_std_string();
   //test_thread_local();
@@ -563,7 +563,7 @@ void test_perf2(void) {
 
 void test_perf3(void) {
   for (size_t i = 0; i < 5; i++) {
-    const size_t n = (size_t)16*1024*1024*1024;
+    const size_t n = (size_t)1*1024*1024*1024;
     uint8_t* p = (uint8_t*)calloc(1, n);
     escape(p, n);
     free(p);

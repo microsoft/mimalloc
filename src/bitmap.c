@@ -1843,7 +1843,7 @@ bool mi_bbitmap_try_find_and_clearN_(mi_bbitmap_t* bbitmap, size_t tseq, size_t 
 
   // iterate through the chunks
   size_t chunk_idx = 0;
-  while (chunk_idx < chunk_max - chunk_req)
+  while (chunk_idx <= chunk_max - chunk_req)
   {
     size_t count = 0;  // chunk count
     do {
