@@ -79,6 +79,20 @@ size_t mi_arena_min_alignment(void) {
   return MI_ARENA_SLICE_ALIGN;
 }
 
+static size_t mi_arena_max_object_size(void) {
+  size_t max_size = mi_option_get_size(mi_option_arena_max_object_size);
+  max_size = _mi_align_up(max_size, MI_ARENA_SLICE_SIZE);
+  if (max_size <= MI_ARENA_MIN_OBJ_SIZE) {
+    return MI_ARENA_MIN_OBJ_SIZE;
+  }
+  else if (max_size >= MI_ARENA_MAX_SIZE - MI_BCHUNK_SIZE) {  // minus a bchunk to accommodate meta info
+    return (MI_ARENA_MAX_SIZE - MI_BCHUNK_SIZE);
+  }
+  else {
+    return max_size;
+  }
+}
+
 mi_decl_nodiscard static bool mi_arena_commit(mi_arena_t* arena, void* start, size_t size, bool* is_zero, size_t already_committed) {
   if (arena != NULL && arena->commit_fun != NULL) {
     return (*arena->commit_fun)(true, start, size, is_zero, arena->commit_fun_arg);
@@ -519,9 +533,9 @@ void* _mi_arenas_alloc_aligned( mi_heap_t* heap,
   mi_assert_internal(size > 0);
 
   // try to allocate in an arena if the alignment is small enough and the object is not too small (as for theap meta data)
-  if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) &&           // is arena allocation allowed?
-      size >= MI_ARENA_MIN_OBJ_SIZE && size <= MI_ARENA_MAX_OBJ_SIZE &&               // and not too small or too large
-      alignment <= MI_ARENA_SLICE_ALIGN && align_offset == 0)            // and good alignment
+  if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) &&                // is arena allocation allowed?
+      size >= MI_ARENA_MIN_OBJ_SIZE && size <= mi_arena_max_object_size() &&  // and not too small or too large
+      alignment <= MI_ARENA_SLICE_ALIGN && align_offset == 0)                 // and good alignment
   {
     const size_t slice_count = mi_slice_count_of_size(size);
     void* p = mi_arenas_try_alloc(heap, slice_count, alignment, commit, allow_large, req_arena, tseq, numa_node, memid);
@@ -712,9 +726,9 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   mi_memid_t memid = _mi_memid_none();
   mi_page_t* page = NULL;
   const size_t alloc_size = mi_size_of_slices(slice_count);
-  if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) &&      // allowed to allocate from arena's?
-      !os_align &&                                                  // not large alignment
-      slice_count <= (MI_ARENA_MAX_OBJ_SIZE / MI_ARENA_SLICE_SIZE)) // and not too large
+  if (!mi_option_is_enabled(mi_option_disallow_arena_alloc) &&       // allowed to allocate from arena's?
+      !os_align &&                                                   // not large alignment
+      slice_count <= mi_arena_max_object_size()/MI_ARENA_SLICE_SIZE) // and not too large
   {
     page = (mi_page_t*)mi_arenas_try_alloc(heap, slice_count, page_alignment, commit, allow_large, req_arena, tld->thread_seq, numa_node, &memid);
     if (page != NULL) {

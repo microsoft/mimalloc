@@ -161,7 +161,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #define MI_ARENA_MIN_OBJ_SIZE             (MI_ARENA_MIN_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
 #define MI_ARENA_MAX_CHUNK_OBJ_SIZE       (MI_ARENA_MAX_CHUNK_OBJ_SLICES * MI_ARENA_SLICE_SIZE)
-#define MI_ARENA_MAX_OBJ_SIZE             (MI_SIZE_BITS * MI_ARENA_MAX_CHUNK_OBJ_SIZE)  // 2 GiB (or 256 MiB on 32-bit), larger than this is alloc'd by the OS
 
 #if MI_ARENA_MAX_CHUNK_OBJ_SIZE < MI_SIZE_SIZE*1024
 #error maximum object size may be too small to hold local thread data

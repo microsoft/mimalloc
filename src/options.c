@@ -56,6 +56,10 @@ int mi_version(void) mi_attr_noexcept {
  #endif
 #endif
 
+#ifndef MI_DEFAULT_ARENA_MAX_OBJECT_SIZE
+#define MI_DEFAULT_ARENA_MAX_OBJECT_SIZE   ((MI_SIZE_BITS * MI_ARENA_MAX_CHUNK_OBJ_SIZE)/MI_KiB)  /* 2 GiB (or 256 MiB on 32-bit), larger than this is alloc'd by the OS */
+#endif
+
 #ifndef MI_DEFAULT_DISALLOW_ARENA_ALLOC
 #define MI_DEFAULT_DISALLOW_ARENA_ALLOC 0
 #endif
@@ -176,12 +180,15 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { MI_DEFAULT_ALLOW_THP,
          MI_OPTION_UNINIT, MI_OPTION(allow_thp) },                // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
   { 0,   MI_OPTION_UNINIT, MI_OPTION(minimal_purge_size) },       // set minimal purge size (in KiB) (=0). By default set to either 64 or 2048 if THP is enabled.
+  { MI_DEFAULT_ARENA_MAX_OBJECT_SIZE,   
+         MI_OPTION_UNINIT, MI_OPTION(arena_max_object_size) },    // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit). 
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
 
 static bool mi_option_has_size_in_kib(mi_option_t option) {
-  return (option == mi_option_reserve_os_memory || option == mi_option_arena_reserve || option == mi_option_minimal_purge_size );
+  return (option == mi_option_reserve_os_memory || option == mi_option_arena_reserve || 
+          option == mi_option_minimal_purge_size || option == mi_option_arena_max_object_size);
 }
 
 void _mi_options_init(void) {

@@ -475,6 +475,7 @@ typedef enum mi_option_e {
   mi_option_page_cross_thread_max_reclaim, // don't reclaim pages across threads if we already own N pages (in that size class) (=16)
   mi_option_allow_thp,                  // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
   mi_option_minimal_purge_size,         // set minimal purge size (in KiB) (=0). By default set to either 64 or 2048 if THP is enabled.
+  mi_option_arena_max_object_size,      // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit). 
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,
