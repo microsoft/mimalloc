@@ -77,6 +77,7 @@ static inline mi_bfield_t mi_bfield_all_set(void) {
 static inline mi_bfield_t mi_bfield_mask(size_t bit_count, size_t shiftl) {
   mi_assert_internal(bit_count > 0);
   mi_assert_internal(bit_count + shiftl <= MI_BFIELD_BITS);
+  mi_assert_internal(shiftl < MI_BFIELD_BITS);
   const mi_bfield_t mask0 = (bit_count < MI_BFIELD_BITS ? (mi_bfield_one() << bit_count)-1 : mi_bfield_all_set());
   return (mask0 << shiftl);
 }
@@ -1466,12 +1467,12 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
       mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
-        mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], 0);
-        mi_bfield_t skipped = 0;
-        mi_bfield_t rngmask = mi_bfield_mask(rngslices, 0);
-        do {
+        mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], 0);                // atomic clear
+        mi_bfield_t skipped = 0;                                                          // but track which bits we skip so we can restore them
+        for(size_t shift = 0; rngslices + shift <= MI_BFIELD_BITS; shift += rngslices) {  // per `rngslices` to keep alignment
+          const mi_bfield_t rngmask = mi_bfield_mask(rngslices, shift);
           if ((b & rngmask) == rngmask) {
-            const size_t idx = base_idx + mi_ctz(rngmask);
+            const size_t idx = base_idx + shift;
             if (!visit(idx, rngslices, arena, arg)) {
               // break early
               if (skipped != 0) {
@@ -1482,9 +1483,8 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
           }
           else {
             skipped = skipped | (b & rngmask);
-          }
-          rngmask <<= rngslices;
-        } while (rngmask != 0);
+          }          
+        } 
         
         if (skipped != 0) {
           mi_atomic_or_relaxed(&chunk->bfields[j], skipped);
