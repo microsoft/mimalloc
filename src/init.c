@@ -280,7 +280,6 @@ static void mi_subproc_main_init(void) {
     subproc_main.heap_count = 1;
     mi_atomic_store_ptr_release(mi_heap_t, &subproc_main.heap_main, &heap_main);
     __mi_stat_increase_mt(&subproc_main.stats.heaps, 1);
-    __mi_stat_increase_mt(&subproc_main.stats.threads, 1);
     mi_lock_init(&subproc_main.arena_reserve_lock);
     mi_lock_init(&subproc_main.heaps_lock);
     mi_lock_init(&subprocs_lock);
