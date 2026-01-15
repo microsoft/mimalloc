@@ -185,6 +185,17 @@ static void mi_page_thread_free_collect(mi_page_t* page)
   mi_page_thread_collect_to_local(page, head);
 }
 
+// returns `true` if after collection `mi_page_immediate_available` is true.
+static bool mi_page_free_quick_collect(mi_page_t* page) {
+  if (page->free != NULL) return true;
+  if (page->local_free == NULL) return false;
+  // move local_free to free
+  page->free = page->local_free;
+  page->local_free = NULL;
+  page->free_is_zero = false;
+  return true;  
+}
+
 void _mi_page_free_collect(mi_page_t* page, bool force) {
   mi_assert_internal(page!=NULL);
 
@@ -842,7 +853,7 @@ static mi_page_t* mi_find_free_page(mi_theap_t* theap, mi_page_queue_t* pq) {
 
   // check the first page: we even do this with candidate search or otherwise we re-search every time
   mi_page_t* page = pq->first;
-  if mi_likely(page != NULL && mi_page_immediate_available(page)) {
+  if mi_likely(page != NULL && mi_page_free_quick_collect(page)) {
     #if (MI_SECURE>=3) // in secure mode, we extend half the time to increase randomness
     if (page->capacity < page->reserved && ((_mi_theap_random_next(theap) & 1) == 1)) {
       (void)mi_page_extend_free(theap, page);  // ok if this fails
