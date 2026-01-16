@@ -12,9 +12,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.2.6` (2026-01-08) release candidate 1, please report any issues.  
-Latest v2 release: `v2.2.6` (2026-01-08).  
-Latest v1 release: `v1.9.6` (2026-01-08).
+Latest release   : `v3.2.7` (2026-01-15) release candidate 2, please report any issues.  
+Latest v2 release: `v2.2.7` (2026-01-15).  
+Latest v1 release: `v1.9.7` (2026-01-15).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -85,6 +85,8 @@ Enjoy!
 
 ### Releases
 
+* 2026-01-15, `v1.9.7`, `v2.2.7`, `v3.2.7` (rc2) : Fix zero initializing blocks that were OS allocated.  
+  For v3 various bug and performance fixes. Fix Debian 32-bit compilation.
 * 2026-01-08, `v1.9.6`, `v2.2.6`, `v3.2.6` (rc1) : Important bug fixes. Many improvements to v3 including 
   true first-class heaps where one can allocate in heap from any thread, and track statistics per heap as well.
   Added `MIMALLOC_ALLOW_THP` option. This is by default enabled except on Android. When THP is detected on v3,
@@ -111,15 +113,13 @@ Enjoy!
   thread local destructors (in Rust/C++); macOS tag change; macOS TLS slot fix; improve stats; 
   consistent `mimalloc.dll` on Windows (instead of `mimalloc-override.dll`); fix mimalloc-redirect on Win11 H2; 
   add 0-byte to canary; upstream CPython fixes; reduce .bss size; allow fixed TLS slot on Windows for improved performance.
-* 2024-05-21, `v1.8.7`, `v2.1.7`: Fix build issues on less common platforms. Started upstreaming patches
-  from the CPython [integration](https://github.com/python/cpython/issues/113141#issuecomment-2119255217). Upstream `vcpkg` patches.
 
 * [Older release notes](#older-release-notes)
 
 Special thanks to:
 
 * Sergiy Kuryata for his contributions on reducing memory commit -- especially on Windows with the Windows thread pool (now implemented in v3).
-* [David Carlier](https://devnexen.blogspot.com/) (@devnexen) for his _many_ contributions, and making
+* [David Carlier](https://devnexen.blogspot.com/) (@devnexen) for his many contributions, and making
   mimalloc work better on many less common operating systems, like Haiku, Dragonfly, etc.
 * Mary Feofanova (@mary3000), Evgeniy Moiseenko, and Manuel Pöter (@mpoeter) for making mimalloc TSAN checkable, and finding
   memory model bugs using the [genMC] model checker.
@@ -872,6 +872,8 @@ provided by the bot. You will only need to do this once across all repos using o
 
 # Older Release Notes
 
+* 2024-05-21, `v1.8.7`, `v2.1.7`: Fix build issues on less common platforms. Started upstreaming patches
+  from the CPython [integration](https://github.com/python/cpython/issues/113141#issuecomment-2119255217). Upstream `vcpkg` patches.
 * 2024-05-13, `v1.8.6`, `v2.1.6`: Fix build errors on various (older) platforms. Refactored aligned allocation.
 * 2024-04-22, `v1.8.4`, `v2.1.4`: Fixes various bugs and build issues. Add `MI_LIBC_MUSL` cmake flag for musl builds.
   Free-ing code is refactored into a separate module (`free.c`). Mimalloc page info is simplified with the block size
