@@ -12,9 +12,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.2.6` (2026-01-08) release candidate 1, please report any issues.  
-Latest v2 release: `v2.2.6` (2026-01-08).  
-Latest v1 release: `v1.9.6` (2026-01-08).
+Latest release   : `v3.2.7` (2026-01-15) release candidate 2, please report any issues.  
+Latest v2 release: `v2.2.7` (2026-01-15).  
+Latest v1 release: `v1.9.7` (2026-01-15).
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -85,6 +85,8 @@ Enjoy!
 
 ### Releases
 
+* 2026-01-15, `v1.9.7`, `v2.2.7`, `v3.2.7` (rc2) : Fix zero initializing blocks that were OS allocated.  
+  For v3 various bug and performance fixes. Fix Debian 32-bit compilation.
 * 2026-01-08, `v1.9.6`, `v2.2.6`, `v3.2.6` (rc1) : Important bug fixes. Many improvements to v3 including 
   true first-class heaps where one can allocate in heap from any thread, and track statistics per heap as well.
   Added `MIMALLOC_ALLOW_THP` option. This is by default enabled except on Android. When THP is detected on v3,

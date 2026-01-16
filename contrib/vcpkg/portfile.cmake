@@ -3,7 +3,7 @@ vcpkg_from_github(
   REPO microsoft/mimalloc
   HEAD_REF master
 
-  # The "REF" can be a commit hash, branch name (dev2), or a version (v2.2.1).
+  # The "REF" can be a commit hash, branch name (dev3), or a version (v3.2.7).
   REF "v${VERSION}"
   # REF e2db21e9ba9fb9172b7b0aa0fe9b8742525e8774
 
