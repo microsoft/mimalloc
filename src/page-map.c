@@ -378,10 +378,10 @@ static size_t mi_page_map_get_idx(mi_page_t* page, size_t* sub_idx, size_t* slic
 bool _mi_page_map_register(mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
-  mi_assert_internal(_mi_page_map != NULL);  // should be initialized before multi-thread access!
   if mi_unlikely(_mi_page_map == NULL) {
     if (!_mi_page_map_init()) return false;
   }
+  mi_assert_internal(_mi_page_map != NULL);  // should be initialized before multi-thread access!
   mi_assert(_mi_page_map!=NULL);
   size_t   slice_count;
   size_t   sub_idx;
