@@ -3,8 +3,7 @@ vcpkg_from_github(
   REPO microsoft/mimalloc
   HEAD_REF master
 
-  # The `REF` can be a commit hash, branch name (`dev3`), or a version (`v3.1.4`).
-  # Use `"v${VERSION}"` to use the version specified in `vcpkg.json`.
+  # The "REF" can be a commit hash, branch name (dev3), or a version (v3.2.7).
   REF "v${VERSION}"
   
   # The sha512 is the hash of the tar.gz bundle.
