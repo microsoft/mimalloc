@@ -410,12 +410,30 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 
 extern mi_decl_hidden size_t _mi_theap_default_slot;
 extern mi_decl_hidden size_t _mi_theap_cached_slot;
+extern mi_decl_hidden bool   _mi_theap_use_win_tls_api;
+extern mi_decl_hidden bool   _mi_theap_use_compiler_tls;
+extern mi_decl_hidden size_t _mi_theap_default_tls_index;
+extern mi_decl_hidden size_t _mi_theap_cached_tls_index;
+extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default_fallback;
+extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached_fallback;
 
 static inline mi_theap_t* _mi_theap_default(void) {
+  if mi_unlikely(_mi_theap_use_compiler_tls) {
+    return __mi_theap_default_fallback;
+  }
+  if mi_unlikely(_mi_theap_use_win_tls_api && _mi_theap_default_tls_index != (size_t)TLS_OUT_OF_INDEXES) {
+    return (mi_theap_t*)TlsGetValue((DWORD)_mi_theap_default_tls_index);
+  }
   return (mi_theap_t*)mi_prim_tls_slot(_mi_theap_default_slot); // valid initial "last user slot" so it returns NULL at first leading to slot initialization
 }
 
 static inline mi_theap_t* _mi_theap_cached(void) {
+  if mi_unlikely(_mi_theap_use_compiler_tls) {
+    return __mi_theap_cached_fallback;
+  }
+  if mi_unlikely(_mi_theap_use_win_tls_api && _mi_theap_cached_tls_index != (size_t)TLS_OUT_OF_INDEXES) {
+    return (mi_theap_t*)TlsGetValue((DWORD)_mi_theap_cached_tls_index);
+  }
   return (mi_theap_t*)mi_prim_tls_slot(_mi_theap_cached_slot);
 }
 
