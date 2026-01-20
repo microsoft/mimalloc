@@ -223,6 +223,19 @@ on Windows to build with the `clang-cl` compiler directly:
 > cmake ../.. -G "Visual Studio 17 2022" -T ClangCl
 ```
 
+## Building Mimalloc - Using vcpkg
+
+You can download and install Mimalloc using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
+
+```
+> git clone https://github.com/Microsoft/vcpkg.git
+> cd vcpkg
+> ./bootstrap-vcpkg.sh
+> ./vcpkg integrate install
+> vcpkg install mimalloc
+```
+
+The Mimalloc port in vcpkg is kept up to date by Microsoft team members and community contributors. If the version is out of date, please [create an issue or pull request](https://github.com/Microsoft/vcpkg) on the vcpkg repository.
 
 ## Single Source
 
