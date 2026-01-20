@@ -649,8 +649,7 @@ as [mimalloc-bench](https://github.com/daanx/mimalloc-bench).
 
 ## Benchmark Results on a 16-core AMD 5950x (Zen3)
 
-Testing on the 16-core AMD 5950x processor at 3.4Ghz (4.9Ghz boost), with
-with 32GiB memory at 3600Mhz, running	Ubuntu 20.04 with glibc 2.31 and GCC 9.3.0.
+Testing on the 16-core AMD 5950x processor at 3.4Ghz (4.9Ghz boost), with 32GiB memory at 3600Mhz, running	Ubuntu 20.04 with glibc 2.31 and GCC 9.3.0.
 
 We measure three versions of _mimalloc_: the main version `mi` (tag:v1.7.0),
 the new v2.0 beta version as `xmi` (tag:v2.0.0), and the main version in secure mode as `smi` (tag:v1.7.0).
