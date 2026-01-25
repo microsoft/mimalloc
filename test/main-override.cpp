@@ -62,8 +62,9 @@ int main() {
 
   // test_thread_leak();
   // test_perf();
-  test_perf2();
+  // test_perf2();
   // test_perf3();
+  test_perf4();
 
   //test_std_string();
   //test_thread_local();
@@ -549,6 +550,7 @@ void test_perf(void)
 static int sum2;
 
 static void escape(uint8_t* p, size_t n) { 
+  if (n==0) return;
   p[std::rand() % n] = 42;
   sum2 += p[std::rand() % n];
 }
@@ -572,10 +574,11 @@ void test_perf3(void) {
 }
 
 
-static void local_alloc() {
-  for (int i = 0; i < 500000; i++) {
-    uint8_t* p = (uint8_t*)calloc(1, i % 1000);
-    escape(p, i%1000);
+static void local_alloc4() {
+  for (int i = 0; i < 1000000; i++) {
+    const size_t n = i%1000;
+    uint8_t* p = (uint8_t*)calloc(1,n);
+    escape(p,n);
     if (i % 4 > 0) {
       free(p);
     }
@@ -585,7 +588,7 @@ static void local_alloc() {
 static void test_perf4(void) {
   std::vector<std::thread> threads;
   for (int i = 1; i <= 100; ++i) {
-    threads.emplace_back(std::thread(&local_alloc));
+    threads.emplace_back(std::thread(&local_alloc4));
   }
   for (auto& th : threads) {
     th.join();
