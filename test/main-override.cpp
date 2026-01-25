@@ -42,6 +42,7 @@ static void test_thread_leak(void);   // issue #1104
 static void test_perf(void);          // issue #1104
 static void test_perf2(void);         // issue #1104
 static void test_perf3(void);         // issue #1104
+static void test_perf4(void);         // issue #1104
 
 #if _WIN32
 #include "main-override-dep.h"
@@ -557,5 +558,26 @@ void test_perf3(void) {
     uint8_t* p = (uint8_t*)calloc(1, n);
     escape(p, n);
     free(p);
+  }
+}
+
+
+static void local_alloc() {
+  for (int i = 0; i < 500000; i++) {
+    uint8_t* p = (uint8_t*)calloc(1, i % 1000);
+    escape(p, i%1000);
+    if (i % 4 > 0) {
+      free(p);
+    }
+  }
+}
+
+static void test_perf4(void) {
+  std::vector<std::thread> threads;
+  for (int i = 1; i <= 100; ++i) {
+    threads.emplace_back(std::thread(&local_alloc));
+  }
+  for (auto& th : threads) {
+    th.join();
   }
 }
