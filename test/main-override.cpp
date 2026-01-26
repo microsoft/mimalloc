@@ -43,6 +43,7 @@ static void test_perf(void);          // issue #1104
 static void test_perf2(void);         // issue #1104
 static void test_perf3(void);         // issue #1104
 static void test_perf4(void);         // issue #1104
+static void test_perf5(void);         // issue #1104
 
 #if _WIN32
 #include "main-override-dep.h"
@@ -61,7 +62,8 @@ int main() {
   // test_perf();
   // test_perf2();
   // test_perf3();
-  test_perf4();
+  // test_perf4();
+  test_perf5();
 
   //test_std_string();
   //test_thread_local();
@@ -583,4 +585,41 @@ static void test_perf4(void) {
   for (auto& th : threads) {
     th.join();
   }
+}
+
+
+void escape5(uint8_t* p, size_t n) {
+  if (n==0) return;
+  for (size_t i = 0; i < n; i++) {
+    p[i] = (uint8_t)(i & 0xFF);
+  }
+  p[rand() % n] = (uint8_t)(n&0xFF);
+  // asm volatile("" : : "g"(p) : "memory");   
+}
+
+static long gsum5;
+
+static void local_alloc5() {
+  long sum = 0;
+  for (int i = 0; i < 500000; i++) {
+    const size_t n = i % 1000;
+    uint8_t* p = (uint8_t*)mi_malloc(n);
+    escape5(p, n);
+    if (i % 4 > 0) {
+      if (n>0) { sum += p[n-1]; }
+      mi_free(p);
+    }
+  }
+  gsum5 += sum;
+}
+
+static void test_perf5(void) {
+  std::vector<std::thread> threads;
+  for (int i = 1; i <= 100; ++i) {
+    threads.emplace_back(std::thread(&local_alloc5));
+  }
+  for (auto& th : threads) {
+    th.join();
+  }
+  printf("gsum5: %li\n", gsum5);
 }
