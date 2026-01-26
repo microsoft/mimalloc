@@ -168,6 +168,7 @@ bool          _mi_preloading(void);           // true while the C runtime is not
 void          _mi_thread_done(mi_theap_t* theap);
 
 mi_subproc_t* _mi_subproc(void);
+mi_subproc_t* _mi_subproc_main(void);
 mi_heap_t*    _mi_subproc_heap_main(mi_subproc_t* subproc);
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 

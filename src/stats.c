@@ -469,7 +469,7 @@ static bool mi_cdecl mi_heap_print_visitor(mi_heap_t* heap, void* arg) {
 
 
 // show each heap and then the subproc
-void mi_subproc_heap_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* out, void* arg) mi_attr_noexcept {  
+void mi_subproc_heap_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* out, void* arg) mi_attr_noexcept {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   if (subproc==NULL) return;
   mi_heap_print_visit_info_t vinfo = { out, arg };
@@ -482,7 +482,7 @@ void mi_subproc_heap_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* 
 void mi_subproc_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* out, void* arg) mi_attr_noexcept {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   if (subproc==NULL) return;
-  mi_stats_t stats; 
+  mi_stats_t stats;
   mi_stats_get(sizeof(stats), &stats);
   _mi_stats_print("subproc", subproc->subproc_seq, &stats, out, arg);
 }
@@ -536,12 +536,12 @@ mi_msecs_t _mi_clock_end(mi_msecs_t start) {
 
 mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults) mi_attr_noexcept
 {
-  mi_heap_t* const heap = mi_heap_main();
+  mi_subproc_t* subproc = _mi_subproc_main();
   mi_process_info_t pinfo;
   _mi_memzero_var(pinfo);
   pinfo.elapsed        = _mi_clock_end(mi_process_start);
-  pinfo.current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&heap->stats.committed.current)));
-  pinfo.peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&heap->stats.committed.peak)));
+  pinfo.current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&subproc->stats.committed.current)));
+  pinfo.peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&subproc->stats.committed.peak)));
   pinfo.current_rss    = pinfo.current_commit;
   pinfo.peak_rss       = pinfo.peak_commit;
   pinfo.utime          = 0;
@@ -783,7 +783,7 @@ char* mi_heap_stats_get_json(mi_heap_t* heap, size_t buf_size, char* buf) mi_att
 }
 
 char* mi_stats_get_json(size_t buf_size, char* buf) mi_attr_noexcept {
-  mi_stats_t stats; 
+  mi_stats_t stats;
   mi_stats_get(sizeof(stats), &stats);
   return mi_stats_get_json_from(&stats, buf_size, buf);
 }
