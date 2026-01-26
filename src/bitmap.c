@@ -1211,29 +1211,31 @@ bool mi_bitmap_is_all_clear(mi_bitmap_t* bitmap) {
   mi_assert_internal(start <= cycle); \
   mi_assert_internal(start < MI_BFIELD_BITS); \
   mi_assert_internal(cycle <= MI_BFIELD_BITS); \
-  mi_bfield_t _cycle_mask##SUF = mi_bfield_mask(cycle - start, start); \
+  const mi_bfield_t _cycle_mask##SUF = mi_bfield_mask(cycle - start, start); \
   size_t _bcount##SUF = mi_bfield_popcount(bfield); \
   mi_bfield_t _b##SUF = bfield & _cycle_mask##SUF; /* process [start, cycle> first*/\
   while(_bcount##SUF > 0) { \
     _bcount##SUF--;\
     if (_b##SUF==0) { _b##SUF = bfield & ~_cycle_mask##SUF; } /* process [0,start> + [cycle, MI_BFIELD_BITS> next */ \
     /* size_t name_idx; */ \
-    bool _found##SUF = mi_bfield_find_least_bit(_b##SUF,&name_idx); \
+    const bool _found##SUF = mi_bfield_find_least_bit(_b##SUF,&name_idx); \
+    _b##SUF = mi_bfield_clear_least_bit(_b##SUF); /* clear early so `continue` works */ \
     mi_assert_internal(_found##SUF); MI_UNUSED(_found##SUF); \
     { \
 
 #define mi_bfield_iterate_end(SUF) \
     } \
-    _b##SUF = mi_bfield_clear_least_bit(_b##SUF); \
   } \
 }
+
 
 #define mi_bfield_cycle_iterate(bfield,tseq,cycle,name_idx,SUF) { \
   const size_t _start##SUF = (uint32_t)(tseq) % (uint32_t)(cycle); /* or: 0 to always search from the start? */\
   mi_bfield_iterate(bfield,_start##SUF,cycle,name_idx,SUF)
 
 #define mi_bfield_cycle_iterate_end(SUF) \
-  mi_bfield_iterate_end(SUF); }
+  mi_bfield_iterate_end(SUF); \
+}
 
 
 /* --------------------------------------------------------------------------------
@@ -1716,7 +1718,9 @@ static inline bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, 
     // and for each chunkmap entry we iterate over its bits to find the chunks
     const mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bbitmap->chunkmap.bfields[cmap_idx]);
     const size_t cmap_entry_cycle = (cmap_idx != cmap_acc ? MI_BFIELD_BITS : cmap_acc_bits);
-    if (cmap_entry == 0) continue;
+    if (cmap_entry == 0) {
+      continue;
+    }
 
     // get size bin masks
     mi_bfield_t cmap_bins[MI_CBIN_COUNT] = { 0 };
