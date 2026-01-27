@@ -444,13 +444,9 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 
 #endif
 
-
-static inline mi_theap_t* _mi_theap_main(void) {
-  mi_theap_t* const theap = __mi_theap_main;
-  mi_assert_internal(theap==NULL || mi_theap_is_initialized(theap));
-  return theap;
+static inline bool _mi_thread_is_initialized(void) {
+  return (mi_theap_is_initialized(_mi_theap_default()));
 }
-
 
 // Get (and possible create) the theap belonging to a heap
 // We cache the last accessed theap in `_mi_theap_cached` for better performance.
@@ -478,26 +474,12 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   return theap;
 }
 
-static inline mi_theap_t* _mi_page_associated_theap(mi_page_t* page) {
-  mi_heap_t* heap = page->heap;
-  mi_theap_t* theap;
-  if mi_likely(heap==NULL) { 
-    theap = _mi_theap_main(); 
-    if mi_unlikely(theap==NULL) { theap = _mi_heap_theap(mi_heap_main()); }
-  }
-  else { 
-    theap = _mi_heap_theap(heap); 
-  }
-  mi_assert_internal(theap!=NULL && _mi_thread_id()==theap->tld->thread_id);
-  return theap;
-}
-
 // Find the associated theap or NULL if it does not exist (during shutdown)
 // Should be fast as it is called in `free.c:mi_free_try_collect`.
 static inline mi_theap_t* _mi_page_associated_theap_peek(mi_page_t* page) {
   mi_heap_t* const heap = page->heap;
   mi_theap_t* theap;
-  if mi_likely(heap==NULL) { theap = _mi_theap_main(); }
+  if mi_likely(heap==NULL) { theap = __mi_theap_main; }  // note: on macOS accessing the thread_local can cause allocation during thread shutdown (and reinitialize the thread)! 
                       else { theap = _mi_heap_theap_peek(heap); }
   mi_assert_internal(theap==NULL || _mi_thread_id()==theap->tld->thread_id);
   return theap;
