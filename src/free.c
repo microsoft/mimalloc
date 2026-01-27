@@ -280,9 +280,11 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
   mi_assert_internal(page->block_size <= MI_SMALL_SIZE_MAX);
   mi_assert_internal(reclaim_on_free >= 0);
 
-  // get our theap 
-  // note: don't use `mi_heap_theap()` as we may just have terminated this thread and we should
+  // dont reclaim if we just have terminated this thread and we should
   // not reinitialize the theap for this thread. (can happen due to thread-local destructors for example -- issue #944)
+  if (!_mi_thread_is_initialized()) return false;
+
+  // get our theap 
   mi_theap_t* const theap = _mi_page_associated_theap_peek(page);
   if (theap==NULL || !theap->allow_page_reclaim) return false;
   
@@ -321,7 +323,6 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(mt_free != NULL);
-
   // we own the page now, and it is safe to collect the thread atomic free list
   if (page->block_size <= MI_SMALL_SIZE_MAX) {
     // use the `_partly` version to avoid atomic operations since we already have the `mt_free` pointing into the thread free list
@@ -347,7 +348,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     if (mi_abandoned_page_try_reclaim(page, reclaim_on_free)) return;
   }
   if (mi_abandoned_page_try_reabandon_to_mapped(page)) return;
-
+  
   // otherwise unown the page again
   mi_abandoned_page_unown_from_free(page, mt_free);
 }
@@ -575,7 +576,9 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
 #if (MI_STAT>0)
 static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(block);
-  mi_theap_t* const theap = mi_theap_get_default();
+  mi_theap_t* const theap = _mi_theap_default();
+  if (!mi_theap_is_initialized(theap)) return; // (for now) skip statistics if free'd after thread_done was called (usually a thread cleanup call by the OS)
+
   const size_t bsize = mi_page_usable_block_size(page);
   // #if (MI_STAT>1)
   // const size_t usize = mi_page_usable_size_of(page, block);

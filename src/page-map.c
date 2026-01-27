@@ -320,6 +320,7 @@ mi_decl_nodiscard static bool mi_page_map_ensure_submap_at(size_t idx, mi_submap
     mi_memid_t memid;
     const size_t submap_size = MI_PAGE_MAP_SUB_SIZE;
     sub = (mi_submap_t)_mi_os_zalloc(submap_size, &memid);
+    mi_subproc_stat_counter_increase(_mi_subproc(),reset_calls,1);
     if (sub==NULL) {
       _mi_warning_message("internal error: unable to extend the page map\n");
       return false;

@@ -568,7 +568,6 @@ static mi_theap_t* _mi_thread_init_theap_default(void) {
   // associate the theap with this thread
   // (this is safe, on macOS for example, the theap is set in a dedicated TLS slot and thus does not cause recursive allocation)
   _mi_theap_default_set(theap);
-  mi_assert_internal(_mi_theap_main()==theap);
   return theap;
 }
 
@@ -632,13 +631,14 @@ void mi_thread_init(void) mi_attr_noexcept
 {
   // ensure our process has started already
   mi_process_init();
-  if (mi_theap_is_initialized(_mi_theap_default())) return;
+  // if the theap_default is already set we have already initialized
+  if (_mi_thread_is_initialized()) return;
 
   // initialize the default theap
   _mi_thread_init_theap_default();
 
   mi_heap_stat_increase(mi_heap_main(), threads, 1);
-  //_mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
+  // _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
 void mi_thread_done(void) mi_attr_noexcept {
