@@ -2187,7 +2187,7 @@ static void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
   #if MI_DEBUG>1
   // no more arena pages?
   for (size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
-    mi_arena_pages_t* const arena_pages = mi_atomic_load_relaxed(&heap->arena_pages[i]);
+    mi_arena_pages_t* const arena_pages = (mi_arena_pages_t*)mi_atomic_load_relaxed(&heap->arena_pages[i]);
     if (arena_pages!=NULL) {
       mi_assert_internal(mi_bitmap_is_all_clear(arena_pages->pages));
     }
