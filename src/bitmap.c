@@ -1213,12 +1213,12 @@ bool mi_bitmap_is_xsetN(mi_xset_t set, mi_bitmap_t* bitmap, size_t idx, size_t n
     if (_b##SUF==0) { _b##SUF = bfield & ~_cycle_mask##SUF; } /* process [0,start> + [cycle, MI_BFIELD_BITS> next */ \
     /* size_t name_idx; */ \
     bool _found##SUF = mi_bfield_find_least_bit(_b##SUF,&name_idx); \
+    _b##SUF = mi_bfield_clear_least_bit(_b##SUF); /* clear early so `continue` works in the loop */ \
     mi_assert_internal(_found##SUF); MI_UNUSED(_found##SUF); \
     { \
 
 #define mi_bfield_iterate_end(SUF) \
     } \
-    _b##SUF = mi_bfield_clear_least_bit(_b##SUF); \
   } \
 }
 
