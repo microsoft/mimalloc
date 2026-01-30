@@ -12,7 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // This file contains the main type definitions for mimalloc:
 // mi_heap_t      : all data for a thread-local heap, contains
 //                  lists of all managed heap pages.
-// mi_segment_t   : a larger chunk of memory (32GiB) from where pages
+// mi_segment_t   : a larger chunk of memory (32MiB on 64-bit) from where pages
 //                  are allocated. A segment is divided in slices (64KiB) from
 //                  which pages are allocated.
 // mi_page_t      : a "mimalloc" page (usually 64KiB or 512KiB) from
@@ -192,7 +192,7 @@ typedef int32_t  mi_ssize_t;
 #define MI_SEGMENT_ALIGN                  MI_SEGMENT_SIZE
 #define MI_SEGMENT_MASK                   ((uintptr_t)(MI_SEGMENT_ALIGN - 1))
 #define MI_SEGMENT_SLICE_SIZE             (MI_ZU(1)<< MI_SEGMENT_SLICE_SHIFT)
-#define MI_SLICES_PER_SEGMENT             (MI_SEGMENT_SIZE / MI_SEGMENT_SLICE_SIZE) // 1024
+#define MI_SLICES_PER_SEGMENT             (MI_SEGMENT_SIZE / MI_SEGMENT_SLICE_SIZE) // 512 on 64-bit, 128 on 32-bit
 
 #define MI_SMALL_PAGE_SIZE                (MI_ZU(1)<<MI_SMALL_PAGE_SHIFT)
 #define MI_MEDIUM_PAGE_SIZE               (MI_ZU(1)<<MI_MEDIUM_PAGE_SHIFT)
