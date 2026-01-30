@@ -696,13 +696,46 @@ mi_decl_cold mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
 mi_decl_hidden size_t _mi_theap_default_slot = MI_TLS_USER_LAST_SLOT;
 mi_decl_hidden size_t _mi_theap_cached_slot  = MI_TLS_USER_LAST_SLOT;
 
+// Fallback if we cannot allocate a TLS index in the first 63 TLS slots.
+// In that case we use the Win32 TLS APIs (TlsGetValue/TlsSetValue) instead of directly
+// accessing the TEB TLS user slots.
+mi_decl_hidden bool   _mi_theap_use_win_tls_api = false;
+mi_decl_hidden size_t _mi_theap_default_tls_index = (size_t)TLS_OUT_OF_INDEXES;
+mi_decl_hidden size_t _mi_theap_cached_tls_index  = (size_t)TLS_OUT_OF_INDEXES;
+
+// Last-resort fallback if the process has exhausted TLS indices (TlsAlloc returns TLS_OUT_OF_INDEXES).
+// We then store the theap pointers in compiler thread-local storage instead.
+mi_decl_hidden bool _mi_theap_use_compiler_tls = false;
+mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default_fallback = (mi_theap_t*)&_mi_theap_empty;
+mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached_fallback  = (mi_theap_t*)&_mi_theap_empty;
+
 mi_decl_cold mi_theap_t* _mi_tls_slots_init(void) {
   static mi_atomic_once_t tls_slots_init;
   if (mi_atomic_once(&tls_slots_init)) {
-    _mi_theap_default_slot = TlsAlloc() + MI_TLS_USER_BASE;
-    _mi_theap_cached_slot  = TlsAlloc() + MI_TLS_USER_BASE;
-    if (_mi_theap_cached_slot >= MI_TLS_USER_LAST_SLOT) {
-      _mi_error_message(EFAULT, "unable to allocate fast TLS user slot (0x%zx)\n", _mi_theap_cached_slot);
+    const DWORD default_index = TlsAlloc();
+    const DWORD cached_index  = TlsAlloc();
+
+    // If we cannot allocate any TLS index at all, we cannot function.
+    if (default_index == TLS_OUT_OF_INDEXES || cached_index == TLS_OUT_OF_INDEXES) {
+      // The process has exhausted all TLS indices. Fall back to compiler TLS.
+      _mi_theap_use_compiler_tls = true;
+      _mi_theap_use_win_tls_api = false;
+      // keep fast slots at sentinel values; do not write to TEB slots.
+    }
+    // We can only use the fast TEB TLS user slots if the TLS index fits in the first 63 slots.
+    // Slot 63 is reserved as the initial sentinel value (so a first read returns NULL).
+    else if (default_index < 63 && cached_index < 63) {
+      _mi_theap_default_slot = (size_t)default_index + MI_TLS_USER_BASE;
+      _mi_theap_cached_slot  = (size_t)cached_index  + MI_TLS_USER_BASE;
+      _mi_theap_use_win_tls_api = false;
+      _mi_theap_use_compiler_tls = false;
+    }
+    else {
+      // Fall back to Win32 TLS APIs for correctness in TLS-slot-heavy processes.
+      _mi_theap_default_tls_index = (size_t)default_index;
+      _mi_theap_cached_tls_index  = (size_t)cached_index;
+      _mi_theap_use_win_tls_api = true;
+      _mi_theap_use_compiler_tls = false;
     }
   }
   return (mi_theap_t*)&_mi_theap_empty;
@@ -732,7 +765,15 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
     mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_SLOT_CACHED, theap);
   #elif MI_TLS_MODEL_DYNAMIC_WIN32
     _mi_tls_slots_init();
-    mi_prim_tls_slot_set(_mi_theap_cached_slot, theap);
+    if (mi_unlikely(_mi_theap_use_compiler_tls)) {
+      __mi_theap_cached_fallback = theap;
+    }
+    else if (mi_unlikely(_mi_theap_use_win_tls_api)) {
+      TlsSetValue((DWORD)_mi_theap_cached_tls_index, theap);
+    }
+    else {
+      mi_prim_tls_slot_set(_mi_theap_cached_slot, theap);
+    }
   #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
     _mi_tls_keys_init();
     if (_mi_theap_cached_key!=0) pthread_setspecific(_mi_theap_cached_key, theap);
@@ -748,7 +789,15 @@ void _mi_theap_default_set(mi_theap_t* theap)  {
     mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_SLOT_DEFAULT, theap);
   #elif MI_TLS_MODEL_DYNAMIC_WIN32
     _mi_tls_slots_init();
-    mi_prim_tls_slot_set(_mi_theap_default_slot, theap);
+    if (mi_unlikely(_mi_theap_use_compiler_tls)) {
+      __mi_theap_default_fallback = theap;
+    }
+    else if (mi_unlikely(_mi_theap_use_win_tls_api)) {
+      TlsSetValue((DWORD)_mi_theap_default_tls_index, theap);
+    }
+    else {
+      mi_prim_tls_slot_set(_mi_theap_default_slot, theap);
+    }
   #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
     _mi_tls_keys_init();
     if (_mi_theap_default_key!=0) pthread_setspecific(_mi_theap_default_key, theap);
