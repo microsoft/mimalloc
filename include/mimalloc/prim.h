@@ -412,10 +412,18 @@ extern mi_decl_hidden size_t _mi_theap_default_slot;
 extern mi_decl_hidden size_t _mi_theap_cached_slot;
 
 static inline mi_theap_t* _mi_theap_default(void) {
+  // Guard against early initialization before TLS slots are set up
+  if mi_unlikely(!_mi_process_is_initialized) {
+    return NULL;
+  }
   return (mi_theap_t*)mi_prim_tls_slot(_mi_theap_default_slot); // valid initial "last user slot" so it returns NULL at first leading to slot initialization
 }
 
 static inline mi_theap_t* _mi_theap_cached(void) {
+  // Guard against early initialization before TLS slots are set up
+  if mi_unlikely(!_mi_process_is_initialized) {
+    return NULL;
+  }
   return (mi_theap_t*)mi_prim_tls_slot(_mi_theap_cached_slot);
 }
 

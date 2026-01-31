@@ -892,17 +892,28 @@ void mi_process_init(void) mi_attr_noexcept {
 	// mi_heap_main_init(); // vs2017 can dynamically re-initialize theap_main
 	// #endif
   if (!mi_atomic_once(&process_init)) return;
-  _mi_process_is_initialized = true;
+
+  // Note: _mi_process_is_initialized is set AFTER _mi_page_map_init() to avoid
+  // premature TLS access during early initialization
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
 
   mi_detect_cpu_features();
   _mi_options_init();
   _mi_stats_init();
   _mi_os_init();
+
   // the following can potentially allocate (on freeBSD for pthread keys)
   // todo: do 2-phase so we can use stats at first, then later init the keys?
   mi_heap_main_init(); // before page_map_init so stats are working
-  _mi_page_map_init(); // todo: this could fail.. should we abort in that case?
+
+  bool page_map_ok = _mi_page_map_init(); // todo: this could fail.. should we abort in that case?
+  MI_UNUSED(page_map_ok);
+
+  // Set _mi_process_is_initialized AFTER _mi_page_map_init completes
+  // This allows _mi_theap_default() to return NULL during early init,
+  // which causes _mi_subproc() to safely return _mi_subproc_main()
+  _mi_process_is_initialized = true;
+
   mi_thread_init();
 
   #if defined(_WIN32) && defined(MI_WIN_USE_FLS)
