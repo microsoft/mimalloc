@@ -304,13 +304,11 @@ bool _mi_bitmap_try_find_from_claim_across(mi_bitmap_t bitmap, const size_t bitm
   for (size_t visited = 0; visited < bitmap_fields; visited++, idx++) {
     if (idx >= bitmap_fields) { idx = 0; } // wrap
     // first try to claim inside a field
-    /*
     if (count <= MI_BITMAP_FIELD_BITS) {
       if (_mi_bitmap_try_find_claim_field(bitmap, idx, count, bitmap_idx)) {
         return true;
       }
     }
-    */
     // if that fails, then try to claim across fields
     if (mi_bitmap_try_find_claim_field_across(bitmap, bitmap_fields, idx, count, 0, bitmap_idx)) {
       return true;

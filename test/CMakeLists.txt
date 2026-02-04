@@ -54,3 +54,7 @@ target_link_libraries(static-override-cxx PUBLIC mimalloc-static)
 ## test memory errors
 add_executable(test-wrong  test-wrong.c)
 target_link_libraries(test-wrong PUBLIC mimalloc)
+
+## test large memory allocations in a preallocated arena
+add_executable(test-large-arena-alloc  test-large-arena-alloc.c)
+target_link_libraries(test-large-arena-alloc PUBLIC mimalloc)
