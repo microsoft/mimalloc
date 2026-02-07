@@ -648,7 +648,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all )
     }
     if (all_visited) {
       // all arena's were visited and purged: reset global expire
-      mi_atomic_storei64_release(&mi_arenas_purge_expire, 0);
+      mi_atomic_storei64_release(&mi_arenas_purge_expire, (mi_msecs_t)0);
     }
   }
 }
