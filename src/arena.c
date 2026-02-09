@@ -1262,7 +1262,7 @@ static void mi_arenas_unsafe_destroy(mi_subproc_t* subproc) {
   }
   // try to lower the max arena.
   size_t expected = arena_count;
-  mi_atomic_cas_strong_acq_rel(&subproc->arena_count, &expected, 0);
+  mi_atomic_cas_strong_acq_rel(&subproc->arena_count, &expected, (size_t)0);
 }
 
 
@@ -2020,7 +2020,7 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_subproc_t* subpro
       }
     }
     if (all_visited && !any_purged) {
-      mi_atomic_storei64_release(&subproc->purge_expire, 0);
+      mi_atomic_storei64_release(&subproc->purge_expire, (mi_msecs_t)0);
     }
   }
 }

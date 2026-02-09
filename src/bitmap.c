@@ -1428,7 +1428,7 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
       mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
-        mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], 0);
+        mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], (mi_bfield_t)0);
 #if MI_DEBUG > 1
         const size_t bpopcount = mi_popcount(b);
         size_t rngcount = 0;
@@ -1481,7 +1481,7 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
       mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
-        mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], 0);                // atomic clear
+        mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], (mi_bfield_t)0);   // atomic clear
         mi_bfield_t skipped = 0;                                                          // but track which bits we skip so we can restore them
         for(size_t shift = 0; rngslices + shift <= MI_BFIELD_BITS; shift += rngslices) {  // per `rngslices` to keep alignment
           const mi_bfield_t rngmask = mi_bfield_mask(rngslices, shift);
