@@ -844,12 +844,12 @@ static inline bool mi_page_is_abandoned_mapped(const mi_page_t* page) {
 
 static inline void mi_page_set_abandoned_mapped(mi_page_t* page) {
   mi_assert_internal(mi_page_is_abandoned(page));
-  mi_atomic_or_relaxed(&page->xthread_id, MI_THREADID_ABANDONED_MAPPED);
+  mi_atomic_or_relaxed(&page->xthread_id, (mi_threadid_t)MI_THREADID_ABANDONED_MAPPED);
 }
 
 static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
   mi_assert_internal(mi_page_is_abandoned_mapped(page));
-  mi_atomic_and_relaxed(&page->xthread_id, MI_PAGE_FLAG_MASK);
+  mi_atomic_and_relaxed(&page->xthread_id, (mi_threadid_t)MI_PAGE_FLAG_MASK);
 }
 
 
@@ -907,7 +907,7 @@ static inline bool mi_page_is_owned(const mi_page_t* page) {
 
 // get ownership; returns true if the page was not owned before.
 static inline bool mi_page_claim_ownership(mi_page_t* page) {
-  const uintptr_t old = mi_atomic_or_acq_rel(&page->xthread_free, 1);
+  const uintptr_t old = mi_atomic_or_acq_rel(&page->xthread_free, (uintptr_t)1);
   return ((old&1)==0);
 }
 

@@ -308,7 +308,7 @@ void _mi_page_map_unsafe_destroy(mi_subproc_t* subproc) {
   mi_page_map_count = 0;
   mi_page_map_memid = _mi_memid_none();
   mi_page_map_max_address = NULL;
-  mi_atomic_store_release(&mi_page_map_commit, 0);
+  mi_atomic_store_release(&mi_page_map_commit, (mi_bfield_t)0);
 }
 
 
