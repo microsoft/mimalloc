@@ -12,7 +12,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdio.h>      // stdin/stdout
 #include <stdlib.h>     // abort
 
-
+#ifndef MI_CRAN_COMPLIANT
+#define MI_CRAN_COMPLIANT 0
+#else
+#if MI_CRAN_COMPLIANT
+#include <R.h>
+#endif
+#endif
 
 static long mi_max_error_count   = 16; // stop outputting errors after this (use < 0 for no limit)
 static long mi_max_warning_count = 16; // stop outputting warnings after this (use < 0 for no limit)
@@ -207,7 +213,13 @@ void mi_options_print(void) mi_attr_noexcept
   const int vermajor = MI_MALLOC_VERSION/100;
   const int verminor = (MI_MALLOC_VERSION%100)/10;
   const int verpatch = (MI_MALLOC_VERSION%10);
-  _mi_message("v%i.%i.%i%s%s (built on %s, %s)\n", vermajor, verminor, verpatch,
+  _mi_message(
+    #if MI_CRAN_COMPLIANT
+    "v%i.%i.%i%s%s\n"
+    #else
+    "v%i.%i.%i%s%s (built on %s, %s)\n",
+    #endif
+    ,  vermajor, verminor, verpatch,
       #if defined(MI_CMAKE_BUILD_TYPE)
       ", " mi_stringify(MI_CMAKE_BUILD_TYPE)
       #else
@@ -219,7 +231,10 @@ void mi_options_print(void) mi_attr_noexcept
       #else
       ""
       #endif
-      , __DATE__, __TIME__);
+    #if !MI_CRAN_COMPLIANT
+    , __DATE__, __TIME__
+    #endif
+    );
 
   // show options
   for (int i = 0; i < _mi_option_last; i++) {
@@ -446,7 +461,11 @@ static void mi_recurse_exit(void) {
 }
 
 void _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message) {
+#if MI_CRAN_COMPLIANT
+  if (out==NULL) {
+#else 
   if (out==NULL || (void*)out==(void*)stdout || (void*)out==(void*)stderr) { // TODO: use mi_out_stderr for stderr?
+#endif
     if (!mi_recurse_enter()) return;
     out = mi_out_get_default(&arg);
     if (prefix != NULL) out(prefix, arg);
@@ -534,7 +553,11 @@ void _mi_warning_message(const char* fmt, ...) {
 #if MI_DEBUG
 mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, const char* func ) mi_attr_noexcept {
   _mi_fprintf(NULL, NULL, "mimalloc: assertion failed: at \"%s\":%u, %s\n  assertion: \"%s\"\n", fname, line, (func==NULL?"":func), assertion);
+  #if MI_CRAN_COMPLIANT
+  Rf_error("mimalloc: assertion failed");
+  #else
   abort();
+  #endif
 }
 #endif
 
@@ -552,17 +575,29 @@ static void mi_error_default(int err) {
     #ifdef _MSC_VER
     __debugbreak();
     #endif
+    #if MI_CRAN_COMPLIANT
+    Rf_error("mimalloc: error: EFAULT");
+    #else
     abort();
+    #endif
   }
 #endif
 #if (MI_SECURE>0)
   if (err==EFAULT) {  // abort on serious errors in secure mode (corrupted meta-data)
+    #if MI_CRAN_COMPLIANT
+    Rf_error("mimalloc: error: EFAULT");
+    #else
     abort();
+    #endif
   }
 #endif
 #if defined(MI_XMALLOC)
   if (err==ENOMEM || err==EOVERFLOW) { // abort on memory allocation fails in xmalloc mode
+    #if MI_CRAN_COMPLIANT
+    Rf_error("mimalloc: error: out of memory");
+    #else
     abort();
+    #endif
   }
 #endif
 }

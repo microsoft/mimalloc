@@ -8,6 +8,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #define _DEFAULT_SOURCE   // for realpath() on Linux
 #endif
 
+#ifndef MI_CRAN_COMPLIANT
+#define MI_CRAN_COMPLIANT 0
+#else
+#if MI_CRAN_COMPLIANT
+#include <R.h>
+#endif
+#endif
+
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
 #include "mimalloc/atomic.h"
@@ -536,10 +544,15 @@ static std_new_handler_t mi_get_new_handler(void) {
 static bool mi_try_new_handler(bool nothrow) {
   std_new_handler_t h = mi_get_new_handler();
   if (h==NULL) {
+    #if MI_CRAN_COMPLIANT
+    if (!nothrow)    
+      Rf_error("out of memory in 'new'"); // R's error mechanism
+    #else
     _mi_error_message(ENOMEM, "out of memory in 'new'");
     if (!nothrow) {
       abort();  // cannot throw in plain C, use abort
     }
+    #endif
     return false;
   }
   else {

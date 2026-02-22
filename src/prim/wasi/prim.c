@@ -14,6 +14,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdio.h>   // fputs
 #include <stdlib.h>  // getenv
 
+#ifndef MI_CRAN_COMPLIANT
+#define MI_CRAN_COMPLIANT 0
+#endif
+
 //---------------------------------------------
 // Initialize
 //---------------------------------------------
@@ -230,7 +234,11 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
 //----------------------------------------------------------------
 
 void _mi_prim_out_stderr( const char* msg ) {
+  #if MI_CRAN_COMPLIANT
+  return;
+  #else
   fputs(msg,stderr);
+  #endif
 }
 
 
