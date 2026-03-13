@@ -15,16 +15,16 @@
   </metadata>
   <files>
     <!-- Header files -->
-    <file src="..\include\mimalloc.h" target="include" />
+    <file src="include\mimalloc.h" target="include" />
 
     <!-- x64 Release binaries -->
-    <file src="..\build-x64\Release\mimalloc.dll"        target="runtimes\win-x64\native" />
-    <file src="..\build-x64\Release\mimalloc.lib"        target="runtimes\win-x64\native" />
-    <file src="..\build-x64\Release\mimalloc-static.lib" target="runtimes\win-x64\native" />
+    <file src="build-x64\Release\mimalloc.dll"        target="runtimes\win-x64\native" />
+    <file src="build-x64\Release\mimalloc.dll.lib"    target="runtimes\win-x64\native" />
+    <file src="build-x64\Release\mimalloc.lib"        target="runtimes\win-x64\native" />
 
     <!-- ARM64 Release binaries -->
-    <file src="..\build-arm64\Release\mimalloc.dll"        target="runtimes\win-arm64\native" />
-    <file src="..\build-arm64\Release\mimalloc.lib"        target="runtimes\win-arm64\native" />
-    <file src="..\build-arm64\Release\mimalloc-static.lib" target="runtimes\win-arm64\native" />
+    <file src="build-arm64\Release\mimalloc.dll"        target="runtimes\win-arm64\native" />
+    <file src="build-arm64\Release\mimalloc.dll.lib"    target="runtimes\win-arm64\native" />
+    <file src="build-arm64\Release\mimalloc.lib"        target="runtimes\win-arm64\native" />
   </files>
 </package>
