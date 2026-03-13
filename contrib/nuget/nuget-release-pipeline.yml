@@ -33,7 +33,7 @@ parameters:
     default: false
 
 variables:
-  nuspecPath: '$(Build.SourcesDirectory)/nuget/Microsoft.Mimalloc.nuspec'
+  nuspecPath: '$(Build.SourcesDirectory)/contrib/nuget/Microsoft.Mimalloc.nuspec'
   artifactStaging: '$(Build.ArtifactStagingDirectory)'
 
 stages:
