@@ -621,7 +621,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all )
   // check if any arena needs purging?
   const mi_msecs_t now = _mi_clock_now();
   mi_msecs_t arenas_expire = mi_atomic_loadi64_acquire(&mi_arenas_purge_expire);
-  if (!force && (arenas_expire == 0 || arenas_expire < now)) return;
+  if (!force && (arenas_expire == 0 || arenas_expire > now)) return;
 
   const size_t max_arena = mi_atomic_load_acquire(&mi_arena_count);
   if (max_arena == 0) return;
