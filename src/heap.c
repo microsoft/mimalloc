@@ -735,3 +735,19 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_vis
   mi_visit_blocks_args_t args = { visit_blocks, visitor, arg };
   return mi_heap_visit_areas(heap, &mi_heap_area_visitor, &args);
 }
+
+//Visiting all blocks of all heaps in a thread
+bool mi_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+  mi_assert_internal(heap != NULL);
+  if (heap == NULL) return false;
+  mi_heap_t* curr = heap->tld->heaps;
+  while (curr != NULL) {
+    mi_heap_t* next = curr->next;
+    if(!mi_heap_visit_blocks(curr, visit_blocks, visitor, arg)){
+      return false;
+    }
+    curr = next;
+  }
+  return true;
+}
+
