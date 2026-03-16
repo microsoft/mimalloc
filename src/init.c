@@ -64,23 +64,22 @@ const mi_page_t _mi_page_empty = {
     QNULL(MI_LARGE_MAX_OBJ_WSIZE + 1  /* 655360, Huge queue */), \
     QNULL(MI_LARGE_MAX_OBJ_WSIZE + 2) /* Full queue */ }
 
-#define MI_STAT_COUNT_NULL()  {0,0,0}
+#define MI_STAT_COUNT_NULL()    {0,0,0}
+#define MI_STAT_COUNTER_NULL()  {0}
 
 // Empty statistics
 #define MI_STATS_NULL  \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  { 0 }, { 0 }, \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  { 0 }, { 0 }, { 0 }, { 0 }, \
-  { 0 }, { 0 }, { 0 }, { 0 }, \
+  MI_INIT3(MI_STAT_COUNT_NULL), \
+  MI_INIT2(MI_STAT_COUNTER_NULL), \
+  MI_INIT6(MI_STAT_COUNT_NULL), \
+  MI_INIT8(MI_STAT_COUNTER_NULL), \
   \
-  { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
+  MI_INIT6(MI_STAT_COUNTER_NULL), \
   MI_INIT5(MI_STAT_COUNT_NULL), \
-  { 0 }, { 0 }, { 0 }, { 0 },  \
+  MI_INIT4(MI_STAT_COUNTER_NULL), \
   \
   { MI_INIT4(MI_STAT_COUNT_NULL) }, \
-  { { 0 }, { 0 }, { 0 }, { 0 } }, \
+  { MI_INIT4(MI_STAT_COUNTER_NULL) }, \
   \
   { MI_INIT74(MI_STAT_COUNT_NULL) }, \
   { MI_INIT74(MI_STAT_COUNT_NULL) }, \

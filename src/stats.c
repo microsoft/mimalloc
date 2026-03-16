@@ -192,10 +192,10 @@ static void mi_stat_print_ex(const mi_stat_count_t* stat, const char* msg, int64
       mi_print_count(stat->total, unit, out, arg);
     }
     else {
-      mi_print_amount(stat->peak, -1, out, arg);
-      mi_print_amount(stat->total, -1, out, arg);
-      // mi_print_amount(stat->freed, -1, out, arg);
-      mi_print_amount(stat->current, -1, out, arg);
+      mi_print_amount(stat->peak, -unit, out, arg);
+      mi_print_amount(stat->total, -unit, out, arg);
+      // mi_print_amount(stat->freed, -unit, out, arg);
+      mi_print_amount(stat->current, -unit, out, arg);
       if (unit == -1) {
         _mi_fprintf(out, arg, "%24s", "");
       }
@@ -214,10 +214,10 @@ static void mi_stat_print_ex(const mi_stat_count_t* stat, const char* msg, int64
     }
   }
   else {
-    mi_print_amount(stat->peak, 1, out, arg);
-    mi_print_amount(stat->total, 1, out, arg);
+    mi_print_amount(stat->peak, unit, out, arg);
+    mi_print_amount(stat->total, unit, out, arg);
     _mi_fprintf(out, arg, "%11s", " ");  // no freed
-    mi_print_amount(stat->current, 1, out, arg);
+    mi_print_amount(stat->current, unit, out, arg);
     _mi_fprintf(out, arg, "\n");
   }
 }
@@ -235,9 +235,9 @@ static void mi_stat_total_print(const mi_stat_count_t* stat, const char* msg, in
 }
 #endif
 
-static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg ) {
+static void mi_stat_counter_print_ex(const mi_stat_counter_t* stat, const char* msg, const int64_t unit, mi_output_fun* out, void* arg ) {
   _mi_fprintf(out, arg, "  %-10s:", msg);
-  mi_print_amount(stat->total, -1, out, arg);
+  mi_print_amount(stat->total, unit, out, arg);
   _mi_fprintf(out, arg, "\n");
 }
 
@@ -373,12 +373,12 @@ void _mi_stats_print(const char* name, size_t id, mi_stats_t* stats, mi_output_f
     // mi_stat_print(&stats->segments_cache, "-cached", -1, out, arg);
     mi_stat_print(&stats->pages, "pages", -1, out, arg);
     mi_stat_print(&stats->pages_abandoned, "abandoned", -1, out, arg);
-    mi_stat_counter_print(&stats->pages_reclaim_on_alloc, "reclaima", out, arg);
-    mi_stat_counter_print(&stats->pages_reclaim_on_free, "reclaimf", out, arg);
-    mi_stat_counter_print(&stats->pages_reabandon_full, "reabandon", out, arg);
-    mi_stat_counter_print(&stats->pages_unabandon_busy_wait, "waits", out, arg);
-    mi_stat_counter_print(&stats->pages_extended, "extended", out, arg);
-    mi_stat_counter_print(&stats->pages_retire, "retire", out, arg);
+    mi_stat_counter_print_ex(&stats->pages_reclaim_on_alloc, "reclaima", 0, out, arg);
+    mi_stat_counter_print_ex(&stats->pages_reclaim_on_free, "reclaimf", 0,out, arg);
+    mi_stat_counter_print_ex(&stats->pages_reabandon_full, "reabandon", 0, out, arg);
+    mi_stat_counter_print_ex(&stats->pages_unabandon_busy_wait, "waits", 0, out, arg);
+    mi_stat_counter_print_ex(&stats->pages_extended, "extended", 0, out, arg);
+    mi_stat_counter_print_ex(&stats->pages_retire, "retire", 0, out, arg);
     mi_stat_average_print(stats->page_searches_count.total, stats->page_searches.total, "searches", out, arg);
     _mi_fprintf(out, arg, "\n");
   }
@@ -387,25 +387,25 @@ void _mi_stats_print(const char* name, size_t id, mi_stats_t* stats, mi_output_f
     mi_print_header("arenas", out, arg);
     mi_stat_print_ex(&stats->reserved, "reserved", 1, out, arg, "");
     mi_stat_print_ex(&stats->committed, "committed", 1, out, arg, "");
-    mi_stat_counter_print(&stats->reset, "reset", out, arg);
-    mi_stat_counter_print(&stats->purged, "purged", out, arg);
+    mi_stat_counter_print_ex(&stats->reset, "reset", 1, out, arg);
+    mi_stat_counter_print_ex(&stats->purged, "purged", 1, out, arg);
 
-    mi_stat_counter_print(&stats->arena_count, "arenas", out, arg);
-    mi_stat_counter_print(&stats->arena_rollback_count, "rollback", out, arg);
-    mi_stat_counter_print(&stats->mmap_calls, "mmaps", out, arg);
-    mi_stat_counter_print(&stats->commit_calls, "commits", out, arg);
-    mi_stat_counter_print(&stats->reset_calls, "resets", out, arg);
-    mi_stat_counter_print(&stats->purge_calls, "purges", out, arg);
-    mi_stat_counter_print(&stats->malloc_guarded_count, "guarded", out, arg);
-    mi_stat_print_ex(&stats->heaps, "heaps", -1, out, arg, "");
+    mi_stat_counter_print_ex(&stats->arena_count, "arenas", 0, out, arg);
+    mi_stat_counter_print_ex(&stats->arena_rollback_count, "rollback", 0, out, arg);
+    mi_stat_counter_print_ex(&stats->mmap_calls, "mmaps", 0, out, arg);
+    mi_stat_counter_print_ex(&stats->commit_calls, "commits", 0, out, arg);
+    mi_stat_counter_print_ex(&stats->reset_calls, "resets", 0, out, arg);
+    mi_stat_counter_print_ex(&stats->purge_calls, "purges", 0, out, arg);
+    mi_stat_counter_print_ex(&stats->malloc_guarded_count, "guarded", 0, out, arg);
+    mi_stat_print_ex(&stats->heaps, "heaps", 0, out, arg, "");
     _mi_fprintf(out, arg, "\n");
 
     mi_print_header("process", out, arg);
-    mi_stat_print_ex(&stats->threads, "threads", -1, out, arg, "");
+    mi_stat_print_ex(&stats->threads, "threads", 0, out, arg, "");
     _mi_fprintf(out, arg, "  %-10s: %5i\n", "numa nodes", _mi_os_numa_node_count());
     mi_process_info_print_out(out, arg);
+    _mi_fprintf(out, arg, "\n");
   }
-  _mi_fprintf(out, arg, "\n");
 }
 
 
