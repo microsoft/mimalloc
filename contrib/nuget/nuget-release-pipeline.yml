@@ -6,18 +6,15 @@ trigger: none
 pr: none
 
 parameters:
-  - name: version
-    displayName: 'NuGet package version'
+  - name: branch
+    displayName: 'Branch to build'
     type: string
-    default: '1.0.0'
+    default: 'dev'
 
-  - name: buildConfig
-    displayName: 'Build configuration'
+  - name: version
+    displayName: 'NuGet package version (major.minor)'
     type: string
-    default: 'Release'
-    values:
-      - Release
-      - Debug
+    default: '1.0'
 
   - name: signBinaries
     displayName: 'Sign binaries (ESRP)?'
@@ -30,11 +27,24 @@ parameters:
   - name: publishToFeed
     displayName: 'Publish NuGet to artifact feed?'
     type: boolean
-    default: false
+    default: true
+
+resources:
+  repositories:
+    - repository: self
+      type: github
+      name: microsoft/mimalloc
+      endpoint: microsoft
+      ref: refs/heads/${{ parameters.branch }}
 
 variables:
   nuspecPath: '$(Build.SourcesDirectory)/contrib/nuget/Microsoft.Mimalloc.nuspec'
   artifactStaging: '$(Build.ArtifactStagingDirectory)'
+  patch: $[counter(format('{0}-{1}', '${{ parameters.branch }}', '${{ parameters.version }}'), 1)]
+  ${{ if eq(parameters.branch, 'main') }}:
+    packageVersion: '${{ parameters.version }}.$(patch)'
+  ${{ else }}:
+    packageVersion: '${{ parameters.version }}.0-${{ parameters.branch }}.$(patch)'
 
 stages:
 
@@ -60,15 +70,15 @@ stages:
               cmakeArgs: '.. -A x64 -DMI_BUILD_TESTS=OFF'
 
           - task: CMake@1
-            displayName: 'CMake build (x64 ${{ parameters.buildConfig }})'
+            displayName: 'CMake build (x64 Release)'
             inputs:
               workingDirectory: '$(Build.SourcesDirectory)/build-x64'
-              cmakeArgs: '--build . --config ${{ parameters.buildConfig }} --parallel'
+              cmakeArgs: '--build . --config Release --parallel'
 
           - task: PublishPipelineArtifact@1
             displayName: 'Publish x64 binaries'
             inputs:
-              targetPath: '$(Build.SourcesDirectory)/build-x64/${{ parameters.buildConfig }}'
+              targetPath: '$(Build.SourcesDirectory)/build-x64/Release'
               artifactName: 'binaries-x64'
 
       # --- ARM64 Build (cross-compilation) ---
@@ -86,15 +96,15 @@ stages:
               cmakeArgs: '.. -A ARM64 -DMI_BUILD_TESTS=OFF'
 
           - task: CMake@1
-            displayName: 'CMake build (ARM64 ${{ parameters.buildConfig }})'
+            displayName: 'CMake build (ARM64 Release)'
             inputs:
               workingDirectory: '$(Build.SourcesDirectory)/build-arm64'
-              cmakeArgs: '--build . --config ${{ parameters.buildConfig }} --parallel'
+              cmakeArgs: '--build . --config Release --parallel'
 
           - task: PublishPipelineArtifact@1
             displayName: 'Publish ARM64 binaries'
             inputs:
-              targetPath: '$(Build.SourcesDirectory)/build-arm64/${{ parameters.buildConfig }}'
+              targetPath: '$(Build.SourcesDirectory)/build-arm64/Release'
               artifactName: 'binaries-arm64'
 
   # ============================================================
@@ -241,21 +251,21 @@ stages:
             displayName: 'Download x64 binaries'
             inputs:
               artifactName: '$(x64Artifact)'
-              targetPath: '$(Build.SourcesDirectory)/build-x64/${{ parameters.buildConfig }}'
+              targetPath: '$(Build.SourcesDirectory)/build-x64/Release'
 
           - task: DownloadPipelineArtifact@2
             displayName: 'Download ARM64 binaries'
             inputs:
               artifactName: '$(arm64Artifact)'
-              targetPath: '$(Build.SourcesDirectory)/build-arm64/${{ parameters.buildConfig }}'
+              targetPath: '$(Build.SourcesDirectory)/build-arm64/Release'
 
           # Pack NuGet
           - task: NuGetToolInstaller@1
             displayName: 'Install NuGet'
 
           - script: |
-              nuget pack "$(nuspecPath)" -Version ${{ parameters.version }} -OutputDirectory "$(artifactStaging)" -NoPackageAnalysis
-            displayName: 'NuGet pack (v${{ parameters.version }})'
+              nuget pack "$(nuspecPath)" -Version $(packageVersion) -OutputDirectory "$(artifactStaging)" -BasePath "$(Build.SourcesDirectory)" -NoPackageAnalysis
+            displayName: 'NuGet pack (v$(packageVersion))'
 
           # Publish .nupkg as pipeline artifact
           - task: PublishPipelineArtifact@1
