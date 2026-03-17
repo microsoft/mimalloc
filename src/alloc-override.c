@@ -32,7 +32,6 @@ typedef void* mi_nothrow_t;
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__APPLE__) && !MI_TRACK_ENABLED
   // gcc, clang: use aliasing to alias the exported function to one of our `mi_` functions
   #if (defined(__GNUC__) && __GNUC__ >= 9)
-    #pragma GCC diagnostic ignored "-Wattributes"  // or we get warnings that nodiscard is ignored on a forward
     #define MI_FORWARD(fun)      __attribute__((alias(#fun), used, visibility("default"), copy(fun)));
   #else
     #define MI_FORWARD(fun)      __attribute__((alias(#fun), used, visibility("default")));
