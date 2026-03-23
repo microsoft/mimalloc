@@ -333,7 +333,7 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
   size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size - (size / 2))
       && (((uintptr_t)p + offset) % alignment) == 0) {
-    return p;  // reallocation still fits, is aligned and not more than 50% waste
+    return p;  // reallocation still fits, is aligned and not more than 25% waste
   }
   else {
     // note: we don't zero allocate upfront so we only zero initialize the expanded part
@@ -354,8 +354,7 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
 static void* mi_theap_realloc_zero_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment, bool zero) mi_attr_noexcept {
   mi_assert(alignment > 0);
   if (alignment <= sizeof(uintptr_t)) return _mi_theap_realloc_zero(theap,p,newsize,zero,NULL,NULL);
-  size_t offset = ((uintptr_t)p % alignment); // use offset of previous allocation (p can be NULL)
-  return mi_theap_realloc_zero_aligned_at(theap,p,newsize,alignment,offset,zero);
+  return mi_theap_realloc_zero_aligned_at(theap,p,newsize,alignment,0,zero);
 }
 
 static void* mi_theap_realloc_aligned_at(mi_theap_t* theap, void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
