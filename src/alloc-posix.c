@@ -100,7 +100,12 @@ mi_decl_nodiscard mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size
 }
 
 mi_decl_nodiscard void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  // BSD
-  void* newp = mi_reallocn(p,count,size);
+  size_t total;
+  if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
+    errno = EOVERFLOW;
+    return NULL;
+  }
+  void* newp = mi_realloc(p,total);
   if (newp==NULL) { errno = ENOMEM; }
   return newp;
 }
@@ -108,12 +113,15 @@ mi_decl_nodiscard void* mi_reallocarray( void* p, size_t count, size_t size ) mi
 mi_decl_nodiscard int mi_reallocarr( void* p, size_t count, size_t size ) mi_attr_noexcept { // NetBSD
   mi_assert(p != NULL);
   if (p == NULL) {
-    errno = EINVAL;
-    return EINVAL;
+    return (errno = EINVAL);
+  }
+  size_t total;
+  if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
+    return (errno = EOVERFLOW);
   }
   void** op = (void**)p;
-  void* newp = mi_reallocarray(*op, count, size);
-  if mi_unlikely(newp == NULL) { return errno; }
+  void* newp = mi_realloc(*op,total);
+  if (newp == NULL) { return ENOMEM; }
   *op = newp;
   return 0;
 }
