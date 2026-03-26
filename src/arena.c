@@ -2045,15 +2045,21 @@ static bool mi_arena_try_purge_visitor(size_t slice_index, size_t slice_count, m
   return true; // continue
 }
 
-// returns true if anything was purged
-static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
+// returns 
+// -1 = nothing was purged 
+// 0  = nothing was purged yet because have not yet reached the expire time
+// 1  = some pages in the arena were purged
+static int mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
 {
   // check pre-conditions
-  if (arena->memid.is_pinned) return false;
+  if (arena->memid.is_pinned) return -1;
 
   // expired yet?
   mi_msecs_t expire = mi_atomic_loadi64_relaxed(&arena->purge_expire);
-  if (!force && (expire == 0 || expire > now)) return false;
+  if (!force) {
+    if (expire==0) return -1;
+    if (expire > now) return 0;
+  }
 
   // reset expire
   mi_atomic_storei64_release(&arena->purge_expire, (mi_msecs_t)0);
@@ -2068,7 +2074,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
   const size_t minslices = mi_slice_count_of_size(_mi_os_minimal_purge_size());
   _mi_bitmap_forall_setc_rangesn(arena->slices_purge, minslices, &mi_arena_try_purge_visitor, arena, &vinfo);
 
-  return vinfo.any_purged;
+  return (vinfo.any_purged ? 1 : -1);
 }
 
 
@@ -2101,13 +2107,16 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_subproc_t* subpro
       if (i >= max_arena) { i -= max_arena; }
       mi_arena_t* arena = mi_arena_from_index(subproc,i);
       if (arena != NULL) {
-        if (mi_arena_try_purge(arena, now, force)) {
+        const int purged = mi_arena_try_purge(arena, now, force);
+        if (purged >= 0) {      // purged, or arena expire is not yet reached
           any_purged = true;
-          if (max_purge_count <= 1) {
-            all_visited = false;
-            break;
+          if (purged >= 1) {    // purged
+            if (max_purge_count <= 1) {
+              all_visited = false;
+              break;
+            }
+            max_purge_count--;
           }
-          max_purge_count--;
         }
       }
     }
