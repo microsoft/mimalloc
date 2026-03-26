@@ -270,7 +270,9 @@ mi_decl_nodiscard size_t mi_option_get_size(mi_option_t option) {
   const long x = mi_option_get(option);
   size_t size = (x < 0 ? 0 : (size_t)x);
   if (mi_option_has_size_in_kib(option)) {
-    size *= MI_KiB;
+    if (mi_mul_overflow(size, MI_KiB, &size)) {
+      size = MI_MAX_ALLOC_SIZE;
+    }
   }
   return size;
 }
