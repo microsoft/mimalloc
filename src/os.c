@@ -290,8 +290,8 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
   if (!(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0))) return NULL;
   size = _mi_align_up(size, _mi_os_page_size());
 
-  // try a direct allocation if the alignment is below the default, or if larger than 1/8 fraction of the size.
-  const bool try_direct_alloc = (alignment <= mi_os_mem_config.alloc_granularity || alignment > size/8);
+  // try a direct allocation if the alignment is below the default, or less than or equal to 1/4 fraction of the size.
+  const bool try_direct_alloc = (alignment <= mi_os_mem_config.alloc_granularity || alignment <= size/4);
 
   void* p = NULL;
   if (try_direct_alloc) {
