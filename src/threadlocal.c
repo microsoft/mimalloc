@@ -69,6 +69,7 @@ static mi_decl_noinline bool mi_thread_local_set_expand( mi_thread_local_t key, 
 bool _mi_thread_local_set( mi_thread_local_t key, void* val ) {
   mi_thread_locals_t* tls = mi_thread_locals;
   mi_assert_internal(tls!=NULL);
+  mi_assert_internal(key!=0);
   if mi_likely(key < tls->count) {
     tls->slots[key] = val;
     return true;
@@ -82,6 +83,7 @@ bool _mi_thread_local_set( mi_thread_local_t key, void* val ) {
 void* _mi_thread_local_get( mi_thread_local_t key ) {
   const mi_thread_locals_t* const tls = mi_thread_locals;
   mi_assert_internal(tls!=NULL);
+  mi_assert_internal(key!=0);
   if mi_likely(key < tls->count) {
     return tls->slots[key];
   }

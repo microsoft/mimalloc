@@ -48,19 +48,12 @@ static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
 
   // otherwise initialize the theap for this heap
   // get the thread local
-  mi_theap_t* theap = NULL;
-  if (heap->theap==0) {
-    // initialize thread locals
-    heap->theap = _mi_thread_local_create();
-    if (heap->theap==0) {
-      _mi_error_message(EFAULT, "unable to dynamically create a thread local for a heap\n");
-      return NULL;
-    }
+  mi_assert_internal(heap->theap != 0);
+  if (heap->theap==0) {  // paranoia
+    _mi_error_message(EFAULT, "no thread-local reserved for heap (%p)\n", heap);
+    return NULL;
   }
-  else {
-    // get current thread local
-    theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
-  }
+  mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
 
   // create a fresh theap?
   if (theap==NULL) {
@@ -103,12 +96,21 @@ mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
 
 mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
   // always allocate heap data in the (subprocess) main heap
-  mi_heap_t* heap_main = mi_heap_main();
+  mi_heap_t* const heap_main = mi_heap_main();
   // todo: allocate heap data in the exclusive arena ?
-  mi_heap_t* heap = (mi_heap_t*)mi_heap_zalloc( heap_main, sizeof(mi_heap_t) );
+  mi_heap_t* const heap = (mi_heap_t*)mi_heap_zalloc( heap_main, sizeof(mi_heap_t) );
   if (heap==NULL) return NULL;
 
+  // reserve a thread local slot for this heap (see also issue #1230)
+  const mi_thread_local_t theap_slot = _mi_thread_local_create();
+  if (theap_slot == 0) {
+    _mi_error_message(EFAULT, "unable to dynamically create a thread local for a heap\n");
+    mi_free(heap);
+    return NULL;
+  }
+
   // init fields
+  heap->theap = theap_slot;
   heap->subproc = heap_main->subproc;
   heap->heap_seq = mi_atomic_increment_relaxed(&heap_main->subproc->heap_total_count);
   heap->exclusive_arena = _mi_arena_from_id(exclusive_arena_id);
