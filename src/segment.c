@@ -275,13 +275,23 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
   mi_assert_internal(segment->abandoned <= segment->used);
   mi_assert_internal(segment->thread_id == 0 || segment->thread_id == _mi_thread_id());
   mi_assert_internal(mi_commit_mask_all_set(&segment->commit_mask, &segment->purge_mask)); // can only decommit committed blocks
+
+  // [specbot S-NEW-1] segment must have at least one slice (L1, O(1))
+  mi_assert_internal(segment->segment_slices > 0);
+  // [specbot S-NEW-2] info slices must leave room for at least one data slice (L1, O(1))
+  mi_assert_internal(segment->segment_info_slices < segment->segment_slices);
+  // [specbot S-NEW-3] slice_entries must not exceed array bounds (L1, O(1))
+  mi_assert_internal(segment->slice_entries <= MI_SLICES_PER_SEGMENT);
+
   //mi_assert_internal(segment->segment_info_size % MI_SEGMENT_SLICE_SIZE == 0);
   mi_slice_t* slice = &segment->slices[0];
   const mi_slice_t* end = mi_segment_slices_end(segment);
   size_t used_count = 0;
+  size_t total_slice_count = 0;
   mi_span_queue_t* sq;
   while(slice < end) {
     mi_assert_internal(slice->slice_count > 0);
+    total_slice_count += slice->slice_count;
     mi_assert_internal(slice->slice_offset == 0);
     size_t index = mi_slice_index(slice);
     size_t maxindex = (index + slice->slice_count >= segment->slice_entries ? segment->slice_entries : index + slice->slice_count) - 1;
@@ -316,6 +326,8 @@ static bool mi_segment_is_valid(mi_segment_t* segment, mi_segments_tld_t* tld) {
     slice = &segment->slices[maxindex+1];
   }
   mi_assert_internal(slice == end);
+  // [specbot S-NEW-5] Total slice counts must sum to segment_slices (L2, O(n))
+  mi_assert_internal(total_slice_count == segment->segment_slices);
   mi_assert_internal(used_count == segment->used + 1);
   return true;
 }

@@ -79,8 +79,16 @@ static bool mi_page_list_is_valid(mi_page_t* page, mi_block_t* p) {
 
 static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_block_size(page) > 0);
+  
   mi_assert_internal(page->used <= page->capacity);
   mi_assert_internal(page->capacity <= page->reserved);
+
+  // [specbot P-NEW-1] block_size_shift must be consistent with block_size (L1, O(1))
+  mi_assert_internal(page->block_size_shift == 0 || (mi_page_block_size(page) == ((size_t)1 << page->block_size_shift)));
+  // [specbot P-NEW-2] capacity must be nonzero when blocks are in use (L1, O(1))
+  mi_assert_internal(page->used == 0 || page->capacity > 0);
+  // [specbot P-NEW-4] page_start must be non-null when capacity > 0 (L1, O(1))
+  mi_assert_internal(page->capacity == 0 || mi_page_start(page) != NULL);
 
   uint8_t* start = mi_page_start(page);
   mi_assert_internal(start == _mi_segment_page_start(_mi_page_segment(page), page, NULL));
@@ -89,6 +97,18 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
 
   mi_assert_internal(mi_page_list_is_valid(page,page->free));
   mi_assert_internal(mi_page_list_is_valid(page,page->local_free));
+
+  // [specbot P-NEW-7] All free list blocks are aligned to block_size (L2, O(n))
+  {
+    size_t bsize = mi_page_block_size(page);
+    uint8_t* pstart = mi_page_start(page);
+    for (mi_block_t* b = page->free; b != NULL; b = mi_block_next(page, b)) {
+      mi_assert_internal(((uint8_t*)b - pstart) % bsize == 0);
+    }
+    for (mi_block_t* b = page->local_free; b != NULL; b = mi_block_next(page, b)) {
+      mi_assert_internal(((uint8_t*)b - pstart) % bsize == 0);
+    }
+  }
 
   #if MI_DEBUG>3 // generally too expensive to check this
   if (page->free_is_zero) {
@@ -121,6 +141,9 @@ bool _mi_page_is_valid(mi_page_t* page) {
   #endif
   if (mi_page_heap(page)!=NULL) {
     mi_segment_t* segment = _mi_page_segment(page);
+
+    // [specbot P-NEW-6] heap_tag must match owning heap's tag (L1, O(1))
+    mi_assert_internal(page->heap_tag == mi_page_heap(page)->tag);
 
     mi_assert_internal(!_mi_process_is_initialized || segment->thread_id==0 || segment->thread_id == mi_page_heap(page)->thread_id);
     #if MI_HUGE_PAGE_ABANDON
