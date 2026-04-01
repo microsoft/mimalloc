@@ -381,7 +381,7 @@ endif()
 if(CMAKE_SYSTEM_NAME MATCHES "Linux|Android")
   if(MI_NO_THP)
     message(STATUS "Disable transparent huge pages support (MI_NO_THP=ON)")
-    list(APPEND mi_defines MI_NO_THP=1)
+    list(APPEND mi_defines MI_DEFAULT_ALLOW_THP=0)
   endif()
 endif()
 
