@@ -111,6 +111,7 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
   0,                      // default numa node
   &subproc_main,          // subproc
   NULL,                   // theaps list
+  {0},                    // theaps lock
   false,                  // recurse
   false,                  // is_in_threadpool
   MI_MEMID_STATIC         // memid
@@ -173,6 +174,7 @@ static mi_decl_cache_align mi_tld_t tld_main = {
   0,                      // numa node
   &subproc_main,          // subproc
   &theap_main,            // theaps list
+  {0},                    // theaps lock
   false,                  // recurse
   false,                  // is_in_threadpool
   MI_MEMID_STATIC         // memid
@@ -283,6 +285,7 @@ static void mi_subproc_main_init(void) {
     mi_lock_init(&subproc_main.arena_reserve_lock);
     mi_lock_init(&subproc_main.heaps_lock);
     mi_lock_init(&subprocs_lock);
+    mi_lock_init(&tld_empty.theaps_lock); 
   }
 }
 
@@ -290,6 +293,7 @@ static void mi_subproc_main_init(void) {
 static void mi_tld_main_init(void) {
   if (tld_main.thread_id == 0) {
     tld_main.thread_id = _mi_prim_thread_id();
+    mi_lock_init(&tld_main.theaps_lock);
   }
 }
 
@@ -354,6 +358,7 @@ static mi_tld_t* mi_tld_alloc(void) {
     }
     tld->memid = memid;
     tld->theaps = NULL;
+    mi_lock_init(&tld->theaps_lock);
     tld->subproc = &subproc_main;
     tld->numa_node = _mi_os_numa_node();
     tld->thread_id = _mi_prim_thread_id();
@@ -367,6 +372,7 @@ static mi_tld_t* mi_tld_alloc(void) {
 #define MI_TLD_INVALID  ((mi_tld_t*)1)
 
 mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
+  mi_lock_done(&tld->theaps_lock);
   if (tld != NULL && tld != MI_TLD_INVALID) {
     mi_atomic_decrement_relaxed(&tld->subproc->thread_count);
     _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);
@@ -581,13 +587,15 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
   _mi_theap_cached_set((mi_theap_t*)&_mi_theap_empty);
 
   // delete all theaps in this thread
-  mi_theap_t* curr = tld->theaps;
-  while (curr != NULL) {
-    mi_theap_t* next = curr->tnext; // save `tnext` as `curr` will be freed
-    // never destroy theaps; if a dll is linked statically with mimalloc,
-    // there may still be delete/free calls after the mi_fls_done is called. Issue #207
-    _mi_theap_delete(curr);
-    curr = next;
+  mi_lock(&tld->theaps_lock) {
+    mi_theap_t* curr = tld->theaps;
+    while (curr != NULL) {
+      mi_theap_t* next = curr->tnext; // save `tnext` as `curr` will be freed
+      // never destroy theaps; if a dll is linked statically with mimalloc,
+      // there may still be delete/free calls after the mi_fls_done is called. Issue #207
+      _mi_theap_delete(curr,false /* don't re-acquire the theaps lock*/);
+      curr = next;
+    }
   }
   mi_assert(_mi_theap_default()==(mi_theap_t*)&_mi_theap_empty); // careful to not re-initialize the default theap during theap_delete
   mi_assert(!mi_theap_is_initialized(_mi_theap_default()));

@@ -439,46 +439,55 @@ static inline void mi_atomic_yield(void) {
 #pragma warning(disable:26110)  // unlock with holding lock
 #endif
 
-#define mi_lock(lock)    for(bool _go = (mi_lock_acquire(lock),true); _go; (mi_lock_release(lock), _go=false) )
+#define mi_lock(lock)                  for(bool _go = (mi_lock_acquire(lock),true); _go; (mi_lock_release(lock), _go=false) )
+#define mi_lock_maybe(lock,acquire)    for(bool _go = (acquire ? (mi_lock_acquire(lock),true) : true); _go; _go = (acquire ? (mi_lock_release(lock),false) : false) )
 
 #if defined(_WIN32)
 
 #if 1
-#define mi_lock_t  SRWLOCK   // slim reader-writer lock
+
+typedef union mi_lock_u {
+  size_t   _init;    // for static initialization
+  SRWLOCK  mutex;    // slim reader-writer lock
+} mi_lock_t;
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
-  return TryAcquireSRWLockExclusive(lock);
+  return TryAcquireSRWLockExclusive(&lock->mutex);
 }
 static inline void mi_lock_acquire(mi_lock_t* lock) {
-  AcquireSRWLockExclusive(lock);
+  AcquireSRWLockExclusive(&lock->mutex);
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
-  ReleaseSRWLockExclusive(lock);
+  ReleaseSRWLockExclusive(&lock->mutex);
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
-  InitializeSRWLock(lock);
+  InitializeSRWLock(&lock->mutex);
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
 }
 
 #else
-#define mi_lock_t  CRITICAL_SECTION
+
+typedef union mi_lock_u {
+  size_t           _init;    // for static initialization
+  CRITICAL_SECTION mutex;
+} mi_lock_t;
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
-  return TryEnterCriticalSection(lock);
+  return TryEnterCriticalSection(&lock->mutex);
 }
 static inline void mi_lock_acquire(mi_lock_t* lock) {
-  EnterCriticalSection(lock);
+  EnterCriticalSection(&lock->mutex);
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
-  LeaveCriticalSection(lock);
+  LeaveCriticalSection(&lock->mutex);
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
-  InitializeCriticalSection(lock);
+  InitializeCriticalSection(&lock->mutex);
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
-  DeleteCriticalSection(lock);
+  DeleteCriticalSection(&lock->mutex);
 }
 
 #endif
@@ -488,43 +497,50 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 #include <string.h> // memcpy
 void _mi_error_message(int err, const char* fmt, ...);
 
-#define mi_lock_t  pthread_mutex_t
+typedef union mi_lock_u {
+  size_t          _init;    // for static initialization
+  pthread_mutex_t mutex;
+} mi_lock_t;
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
-  return (pthread_mutex_trylock(lock) == 0);
+  return (pthread_mutex_trylock(&lock->mutex) == 0);
 }
 static inline void mi_lock_acquire(mi_lock_t* lock) {
-  const int err = pthread_mutex_lock(lock);
+  const int err = pthread_mutex_lock(&lock->mutex);
   if (err != 0) {
     _mi_error_message(err, "internal error: lock cannot be acquired (err %i)\n", err);
   }
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
-  pthread_mutex_unlock(lock);
+  pthread_mutex_unlock(&lock->mutex);
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
   if(lock==NULL) return;
   // use instead of pthread_mutex_init since that can cause allocation on some platforms (and recursively initialize)
-  const mi_lock_t temp_lock = PTHREAD_MUTEX_INITIALIZER;  
-  memcpy(lock,&temp_lock,sizeof(temp_lock));
+  const pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;  
+  memcpy(&lock->mutex,&mutex,sizeof(mutex));
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
-  pthread_mutex_destroy(lock);
+  pthread_mutex_destroy(&lock->mutex);
 }
 
 #elif defined(__cplusplus)
 
 #include <mutex>
-#define mi_lock_t  std::mutex
+typedef union mi_lock_u {
+  size_t     _init;    // for static initialization
+  std::mutex mutex;
+} mi_lock_t;
+
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
-  return lock->try_lock();
+  return lock->mutex.try_lock();
 }
 static inline void mi_lock_acquire(mi_lock_t* lock) {
-  lock->lock();
+  lock->mutex.lock();
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
-  lock->unlock();
+  lock->mutex.unlock();
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
   (void)(lock);
@@ -538,23 +554,26 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 // fall back to poor man's locks.
 // this should only be the case in a single-threaded environment (like __wasi__)
 
-#define mi_lock_t  _Atomic(uintptr_t)
+typedef union mi_lock_u {
+  size_t             _init;    // for static initialization
+  _Atomic(uintptr_t) mutex;
+} mi_lock_t;
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   uintptr_t expected = 0;
-  return mi_atomic_cas_strong_acq_rel(lock, &expected, (uintptr_t)1);
+  return mi_atomic_cas_strong_acq_rel(&lock->mutex, &expected, (uintptr_t)1);
 }
 static inline void mi_lock_acquire(mi_lock_t* lock) {
   for (int i = 0; i < 1000; i++) {  // for at most 1000 tries?
-    if (mi_lock_try_acquire(lock)) return;
+    if (mi_lock_try_acquire(&lock->mutex)) return;
     mi_atomic_yield();
   }
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
-  mi_atomic_store_release(lock, (uintptr_t)0);
+  mi_atomic_store_release(&lock->mutex, (uintptr_t)0);
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
-  mi_lock_release(lock);
+  mi_lock_release(&lock->mutex);
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);

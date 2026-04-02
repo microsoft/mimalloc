@@ -116,7 +116,13 @@ typedef struct mi_stats_s
 #undef MI_STAT_COUNTER
 
 // helper
-#define mi_stats_t_decl(name)  mi_stats_t name = { 0 }; name.size = sizeof(mi_stats_t); name.version = MI_STAT_VERSION;
+#if __cplusplus
+#define MI_STATS_ZERO_INIT  { }     /* empty initializer to prevent running the constructor (with msvc) */
+#else
+#define MI_STATS_ZERO_INIT  { 0 }   /* C zero initialize */
+#endif
+
+#define mi_stats_t_decl(name)  mi_stats_t name = MI_STATS_ZERO_INIT; name.size = sizeof(mi_stats_t); name.version = MI_STAT_VERSION;
 
 // Exported definitions
 #ifdef __cplusplus

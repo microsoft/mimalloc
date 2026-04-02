@@ -284,13 +284,13 @@ size_t        _mi_bin(size_t size);                      // for stats
 
 // "theap.c"
 mi_theap_t*   _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld);
-void          _mi_theap_delete(mi_theap_t* theap);
+void          _mi_theap_delete(mi_theap_t* theap, bool acquire_tld_theaps_lock);
 void          _mi_theap_default_set(mi_theap_t* theap);
 void          _mi_theap_cached_set(mi_theap_t* theap);
 void          _mi_theap_collect_retired(mi_theap_t* theap, bool force);
 bool          _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
 void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
-void          _mi_theap_free(mi_theap_t* theap);
+void          _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acquire_tld_theaps_lock);
 
 // "heap.c"
 void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);

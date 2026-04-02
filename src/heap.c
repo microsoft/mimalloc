@@ -143,15 +143,17 @@ static void mi_heap_free(mi_heap_t* heap) {
 
   // free all theaps belonging to this heap
   mi_theap_t* theap = NULL;
-  mi_lock(&heap->theaps_lock) { theap = heap->theaps; }
-  while(theap != NULL) {
-    mi_theap_t* next = NULL;
-    mi_lock(&heap->theaps_lock) { next = theap->hnext; }
-    _mi_theap_free(theap);
-    theap = next;
+  mi_lock(&heap->theaps_lock) { 
+    theap = heap->theaps; 
+    while(theap != NULL) {
+      mi_theap_t* next = NULL;
+      next = theap->hnext;
+      _mi_theap_free(theap, false /* dont re-acquire the heap->theaps_lock */, true /* acquire the tld->theaps_lock though */ );
+      theap = next;
+    }
+    theap = heap->theaps;
+    mi_assert_internal(theap==NULL);
   }
-  mi_lock(&heap->theaps_lock) { theap = heap->theaps; }
-  mi_assert_internal(theap==NULL);
 
   // free all arena pages infos
   mi_lock(&heap->arena_pages_lock) {

@@ -173,6 +173,7 @@ mi_theap_t* mi_theap_get_default(void) {
 void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
 {
   mi_assert_internal(theap!=NULL);
+  mi_assert_internal(heap!=NULL);
   mi_memid_t memid = theap->memid;
   _mi_memcpy_aligned(theap, &_mi_theap_empty, sizeof(mi_theap_t));
   theap->memid = memid;
@@ -191,11 +192,14 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   }
 
   // push on the thread local theaps list
-  mi_theap_t* head = theap->tld->theaps;
-  theap->tprev = NULL;
-  theap->tnext = head;
-  if (head!=NULL) { head->tprev = theap; }
-  theap->tld->theaps = theap;
+  mi_theap_t* head = NULL;
+  mi_lock(&theap->tld->theaps_lock) {
+    mi_theap_t* head = theap->tld->theaps;
+    theap->tprev = NULL;
+    theap->tnext = head;
+    if (head!=NULL) { head->tprev = theap; }
+    theap->tld->theaps = theap;
+  }
 
   // initialize random
   if (head == NULL) {  // first theap in this thread?
@@ -257,7 +261,7 @@ uintptr_t _mi_theap_random_next(mi_theap_t* theap) {
 }
 
 // called from `mi_theap_delete` to free the internal theap resources.
-void _mi_theap_free(mi_theap_t* theap) {
+void _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acquire_tld_theaps_lock) {
   mi_assert(theap != NULL);
   mi_assert_internal(mi_theap_is_initialized(theap));
   if (theap==NULL || !mi_theap_is_initialized(theap)) return;
@@ -266,16 +270,21 @@ void _mi_theap_free(mi_theap_t* theap) {
   mi_theap_merge_stats(theap);
 
   // remove ourselves from the heap theaps list
-  mi_lock(&theap->heap->theaps_lock) {
+  mi_lock_maybe(&theap->heap->theaps_lock, acquire_heap_theaps_lock) {
     if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
     if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
                          else { mi_assert_internal(theap->heap->theaps == theap); theap->heap->theaps = theap->hnext; }
+    theap->hnext = theap->hprev = NULL;
   }
 
   // remove ourselves from the thread local theaps list
-  if (theap->tnext != NULL) { theap->tnext->tprev = theap->tprev;  }
-  if (theap->tprev != NULL) { theap->tprev->tnext = theap->tnext;  }
-                       else { mi_assert_internal(theap->tld->theaps == theap); theap->tld->theaps = theap->tnext; }
+  // todo: needs a lock in case different threads free heaps at the same time
+  mi_lock_maybe(&theap->tld->theaps_lock, acquire_tld_theaps_lock) {
+    if (theap->tnext != NULL) { theap->tnext->tprev = theap->tprev;  }
+    if (theap->tprev != NULL) { theap->tprev->tnext = theap->tnext;  }
+                        else { mi_assert_internal(theap->tld->theaps == theap); theap->tld->theaps = theap->tnext; }
+    theap->tnext = theap->tprev = NULL;                        
+  }
 
   // and free the used memory
   if (theap->memid.memkind == MI_MEM_HEAP_MAIN) {  // note: for now unused as it would access theap_default stats in mi_free of the current theap
@@ -411,7 +420,7 @@ void _mi_theap_unsafe_destroy_all(mi_theap_t* theap) {
 ----------------------------------------------------------- */
 
 // Safe delete a theap without freeing any still allocated blocks in that theap.
-void _mi_theap_delete(mi_theap_t* theap)
+void _mi_theap_delete(mi_theap_t* theap, bool acquire_tld_theaps_lock)
 {
   mi_assert(theap != NULL);
   mi_assert(mi_theap_is_initialized(theap));
@@ -422,7 +431,7 @@ void _mi_theap_delete(mi_theap_t* theap)
   _mi_theap_collect_abandon(theap);
 
   mi_assert_internal(theap->page_count==0);
-  _mi_theap_free(theap);
+  _mi_theap_free(theap, true /* acquire heap->theaps_lock */, acquire_tld_theaps_lock);
 }
 
 

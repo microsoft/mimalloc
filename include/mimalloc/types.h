@@ -493,10 +493,10 @@ struct mi_theap_s {
   long                  generic_collect_count;               // how often is `_mi_malloc_generic` called without collecting?
 
   mi_theap_t*           tnext;                               // list of theaps in this thread
-  mi_theap_t*           tprev;
+  mi_theap_t*           tprev;  
   mi_theap_t*           hnext;                               // list of theaps of the owning `heap`
   mi_theap_t*           hprev;
-
+  
   long                  page_full_retain;                    // how many full pages can be retained per queue (before abandoning them)
   bool                  allow_page_reclaim;                  // `true` if this theap should not reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
@@ -604,6 +604,7 @@ struct mi_tld_s {
   int                   numa_node;            // thread preferred numa node
   mi_subproc_t*         subproc;              // sub-process this thread belongs to.
   mi_theap_t*           theaps;               // list of theaps in this thread (so we can abandon all when the thread terminates)
+  mi_lock_t             theaps_lock;          // lock as the theaps list is sometimes accessed from another thread (on `mi_heap_free`)
   bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
   bool                  is_in_threadpool;     // true if this thread is part of a threadpool (and can run arbitrary tasks)
   mi_memid_t            memid;                // provenance of the tld memory itself (meta or OS)
