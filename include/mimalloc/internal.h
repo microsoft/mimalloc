@@ -566,7 +566,7 @@ extern mi_decl_hidden const mi_theap_t _mi_theap_empty_wrong; // read-only empty
 
 
 static inline mi_heap_t* _mi_theap_heap(const mi_theap_t* theap) {
-  return mi_atomic_load_ptr_relaxed(mi_heap_t,&theap->heap);
+  return mi_atomic_load_ptr_acquire(mi_heap_t,&theap->heap);
 }
 
 static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {

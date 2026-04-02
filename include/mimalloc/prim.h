@@ -508,8 +508,7 @@ static inline mi_theap_t* _mi_heap_theap(const mi_heap_t* heap) {
 
 // Get the theap belonging to a heap without creating in if it is not yet initialized.
 static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
-  mi_theap_t* theap_cached = _mi_theap_cached();
-  mi_theap_t* theap = theap_cached;
+  mi_theap_t* theap = _mi_theap_cached();
   #if MI_THEAP_INITASNULL
   if mi_unlikely(theap==NULL || _mi_theap_heap(theap)!=heap)
   #else
@@ -518,7 +517,7 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   {
     theap = _mi_heap_theap_get_peek(heap);  // don't update the cache on a query (?)
   }
-  mi_assert(theap==NULL || _mi_theap_heap(theap)==heap || _mi_theap_heap(theap_cached)==heap);
+  mi_assert(theap==NULL || _mi_theap_heap(theap)==heap);
   return theap;
 }
 
