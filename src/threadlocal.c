@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2019-2025, Microsoft Research, Daan Leijen
+Copyright (c) 2019-2026, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -16,21 +16,54 @@ that can be allocated.
 #include "mimalloc/prim.h"
 
 /* -----------------------------------------------------------
-Each thread can have (a dynamically expanding) array of
-thread-local values.
+  Each thread can have (a dynamically expanding) array of
+  thread-local values. Each slot has a value and a version.
+  The version is used to safely reuse slots.
 ----------------------------------------------------------- */
+typedef struct mi_tls_slot_s {
+  size_t  version;
+  void*   value;
+} mi_tls_slot_t;
 
 typedef struct mi_thread_locals_s {
-  size_t count;
-  void*  slots[1];
+  size_t        count;
+  mi_tls_slot_t slots[1];
 } mi_thread_locals_t;
 
-static mi_thread_locals_t mi_thread_locals_empty = { 0, {NULL} };
+static mi_thread_locals_t mi_thread_locals_empty = { 0, {{0,NULL}} };
 
 mi_decl_thread mi_thread_locals_t* mi_thread_locals = &mi_thread_locals_empty;  // always point to a valid `mi_thread_locals_t`
 
+
+/* -----------------------------------------------------------
+  Each key consists of the slot index in the lower bits,
+  and its version it the top bits. When we get a value
+  the version must match or we return NULL. When we set
+  a value, we also set the version of the key.
+----------------------------------------------------------- */
+
+#define MI_TLS_IDX_BITS  (MI_SIZE_BITS/2)
+#define MI_TLS_IDX_MASK  ((MI_ZU(1)<<MI_TLS_IDX_BITS)-1)
+
+static size_t mi_key_index( size_t key ) {
+  return (key & MI_TLS_IDX_MASK);
+}
+
+static size_t mi_key_version( size_t key ) {
+  return (key >> MI_TLS_IDX_BITS);
+}
+
+static mi_thread_local_t mi_key_create( size_t index, size_t version ) {
+  mi_assert_internal(version != 0);
+  mi_assert_internal(index <= MI_TLS_IDX_MASK);
+  const mi_thread_local_t key = ((version << MI_TLS_IDX_BITS) | index);
+  mi_assert_internal(key != 0);
+  return key;
+}
+
+
 // dynamically reallocate the thread local slots when needed
-static mi_thread_locals_t* mi_thread_locals_expand(mi_thread_local_t atleast) {
+static mi_thread_locals_t* mi_thread_locals_expand(size_t least_idx) {
   mi_thread_locals_t* tls_old = mi_thread_locals;
   const size_t count_old = tls_old->count;
   size_t count;
@@ -44,10 +77,10 @@ static mi_thread_locals_t* mi_thread_locals_expand(mi_thread_local_t atleast) {
   else {
     count = 2*count_old;       // and double initially
   }
-  if (count <= atleast) {
-    count = atleast + 1;
+  if (count <= least_idx) {
+    count = least_idx + 1;
   }
-  mi_thread_locals_t* tls = (mi_thread_locals_t*)mi_rezalloc(tls_old, sizeof(mi_thread_locals_t) + count*sizeof(void*));
+  mi_thread_locals_t* tls = (mi_thread_locals_t*)mi_rezalloc(tls_old, sizeof(mi_thread_locals_t) + count*sizeof(mi_tls_slot_t));
   if mi_unlikely(tls==NULL) return NULL;
   tls->count = count;
   mi_thread_locals = tls;
@@ -56,11 +89,13 @@ static mi_thread_locals_t* mi_thread_locals_expand(mi_thread_local_t atleast) {
 
 static mi_decl_noinline bool mi_thread_local_set_expand( mi_thread_local_t key, void* val ) {
   if (val==NULL) return true;
-  mi_thread_locals_t* tls = mi_thread_locals_expand(key);
+  const size_t idx = mi_key_index(key);  
+  mi_thread_locals_t* tls = mi_thread_locals_expand(idx);
   if (tls==NULL) return false;
-  mi_assert_internal(key < tls->count);
   mi_assert_internal(tls == mi_thread_locals);
-  tls->slots[key] = val;
+  mi_assert_internal(idx < tls->count);
+  tls->slots[idx].value = val;
+  tls->slots[idx].version = mi_key_version(key);
   return true;
 }
 
@@ -70,8 +105,10 @@ bool _mi_thread_local_set( mi_thread_local_t key, void* val ) {
   mi_thread_locals_t* tls = mi_thread_locals;
   mi_assert_internal(tls!=NULL);
   mi_assert_internal(key!=0);
-  if mi_likely(key < tls->count) {
-    tls->slots[key] = val;
+  const size_t idx = mi_key_index(key);
+  if mi_likely(idx < tls->count) {
+    tls->slots[idx].value = val;
+    tls->slots[idx].version = mi_key_version(key);
     return true;
   }
   else {
@@ -84,11 +121,12 @@ void* _mi_thread_local_get( mi_thread_local_t key ) {
   const mi_thread_locals_t* const tls = mi_thread_locals;
   mi_assert_internal(tls!=NULL);
   mi_assert_internal(key!=0);
-  if mi_likely(key < tls->count) {
-    return tls->slots[key];
+  const size_t idx = mi_key_index(key);
+  if mi_likely(idx < tls->count && mi_key_version(key) == tls->slots[idx].version) {
+    return tls->slots[idx].value;
   }
   else {
-    return NULL;
+    return NULL;  
   }
 }
 
@@ -107,6 +145,7 @@ Create and free fresh TLS key's
 
 static mi_lock_t    mi_thread_locals_lock;    // we need a lock in order to re-allocate the slot bits
 static mi_bitmap_t* mi_thread_locals_free;    // reuse an arena bitmap to track which slots were assigned (1=free, 0=in-use)
+static size_t       mi_thread_locals_version; // version to be able to reuse slots safely
 
 void _mi_thread_locals_init(void) {
   mi_lock_init(&mi_thread_locals_lock);
@@ -121,43 +160,51 @@ void _mi_thread_locals_done(void) {
 }
 
 // strange signature but allows us to reuse the arena code for claiming free pages
-static bool mi_thread_local_claim(size_t _slice_index, mi_arena_t* _arena, bool* keep_set) {
+static bool mi_thread_local_claim_fun(size_t _slice_index, mi_arena_t* _arena, bool* keep_set) {
   MI_UNUSED(_slice_index); MI_UNUSED(_arena);
   *keep_set = false;
   return true;
 }
 
-static mi_thread_local_t mi_thread_local_create_expand(void) {
-  size_t key = 0;
+// When we claim a free slot, we increase the global version counter 
+// (so if we reuse a slot it will be returning NULL initially when a thread tries to get it)
+static mi_thread_local_t mi_thread_local_claim(void) {
+  size_t idx = 0;
+  if (mi_thread_locals_free != NULL && mi_bitmap_try_find_and_claim(mi_thread_locals_free,0,&idx,&mi_thread_local_claim_fun,NULL)) {
+    mi_thread_locals_version++;
+    if (mi_thread_locals_version == SIZE_MAX/2) { mi_thread_locals_version = 1; }
+    return mi_key_create( idx, mi_thread_locals_version);
+  }
+  else {
+    return 0;
+  }
+}
+
+static bool mi_thread_local_create_expand(void) {
   mi_bitmap_t* slots = mi_thread_locals_free;
   // 1024 bits at a time
   const size_t oldcount = (slots==NULL ? 0 : mi_bitmap_max_bits(slots));
   const size_t newcount = 1024 + oldcount;
+  if (newcount > MI_TLS_IDX_MASK) { return false; }
   const size_t newsize = mi_bitmap_size( newcount, NULL );
   slots = (mi_bitmap_t*)mi_realloc_aligned(slots, newsize, MI_BCHUNK_SIZE);
-  if (slots != NULL) {
-    mi_bitmap_init(slots, newcount, true /* or otherwise we would zero all old entries */);
-    mi_bitmap_unsafe_setN(slots, oldcount, newcount - oldcount);
-    mi_thread_locals_free = slots;
-    size_t idx = 0;
-    if mi_likely(slots!=NULL && mi_bitmap_try_find_and_claim(slots,0,&idx,&mi_thread_local_claim,NULL)) {
-      key = idx+1;
-    }
-  }
-  return key;
+  if (slots == NULL) { return false; }
+  mi_bitmap_init(slots, newcount, true /* or otherwise we would zero all old entries */);
+  mi_bitmap_unsafe_setN(slots, oldcount, newcount - oldcount);
+  mi_thread_locals_free = slots;
+  return true;
 }
+
 
 // create a fresh key
 mi_thread_local_t _mi_thread_local_create(void) {
   mi_thread_local_t key = 0;
   mi_lock(&mi_thread_locals_lock) {
-    mi_bitmap_t* slots = mi_thread_locals_free;
-    size_t idx = 0;
-    if mi_likely(slots!=NULL && mi_bitmap_try_find_and_claim(slots,0,&idx,&mi_thread_local_claim,NULL)) {
-      key = idx+1;
-    }
-    else {
-      key = mi_thread_local_create_expand();
+    key = mi_thread_local_claim();
+    if (key==0) {
+      if (mi_thread_local_create_expand()) {
+        key = mi_thread_local_claim();
+      }
     }
   }
   return key;
@@ -166,11 +213,11 @@ mi_thread_local_t _mi_thread_local_create(void) {
 // free a key
 void _mi_thread_local_free(mi_thread_local_t key) {
   if (key==0) return;
-  const size_t idx = key-1;
+  const size_t idx = mi_key_index(key);
   mi_lock(&mi_thread_locals_lock) {
     mi_bitmap_t* const slots = mi_thread_locals_free;
     if (slots!=NULL && idx < mi_bitmap_max_bits(slots)) {
-      mi_bitmap_set(slots,key-1);
+      mi_bitmap_set(slots,idx);
     }
   }
 }
