@@ -215,6 +215,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   }
   theap->cookie  = _mi_theap_random_next(theap) | 1;
   _mi_theap_guarded_init(theap);
+  mi_subproc_stat_increase(_mi_subproc(),theaps,1);
 
   // push on the heap's theap list
   mi_lock(&heap->theaps_lock) {
@@ -261,12 +262,9 @@ uintptr_t _mi_theap_random_next(mi_theap_t* theap) {
   return _mi_random_next(&theap->random);
 }
 
-void _mi_theap_incref(mi_theap_t* theap) {
-  mi_atomic_increment_acq_rel(&theap->refcount);
-}
-
-void _mi_theap_decref(mi_theap_t* theap) {
-  if (mi_atomic_decrement_acq_rel(&theap->refcount) == 0) {
+static void mi_theap_free_mem(mi_theap_t* theap) {
+  if (theap!=NULL) {
+    mi_subproc_stat_decrease(_mi_subproc(),theaps,1);
     // free the used memory
     if (theap->memid.memkind == MI_MEM_HEAP_MAIN) {  // note: for now unused as it would access theap_default stats in mi_free of the current theap
       mi_assert_internal(_mi_is_heap_main(mi_heap_of(theap)));
@@ -281,11 +279,24 @@ void _mi_theap_decref(mi_theap_t* theap) {
   }
 }
 
+void _mi_theap_incref(mi_theap_t* theap) {
+  if (theap!=NULL && theap->memid.memkind > MI_MEM_STATIC) {
+    mi_atomic_increment_acq_rel(&theap->refcount);
+  }
+}
+
+void _mi_theap_decref(mi_theap_t* theap) {
+  if (theap!=NULL && theap->memid.memkind > MI_MEM_STATIC) {
+    if (mi_atomic_decrement_acq_rel(&theap->refcount) == 1) {
+      mi_theap_free_mem(theap);
+    }
+  }
+}
+
 
 // called from `mi_theap_delete` to free the internal theap resources.
 bool _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acquire_tld_theaps_lock) {
   mi_assert(theap != NULL);
-  mi_assert_internal(mi_theap_is_initialized(theap));
   if (theap==NULL) return true;
 
   mi_heap_t* const heap = mi_atomic_exchange_ptr_acq_rel(mi_heap_t, &theap->heap, NULL);

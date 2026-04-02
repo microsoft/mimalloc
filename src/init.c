@@ -76,7 +76,7 @@ const mi_page_t _mi_page_empty = {
   { 0 }, { 0 }, { 0 }, { 0 }, \
   \
   { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
-  MI_INIT5(MI_STAT_COUNT_NULL), \
+  MI_INIT6(MI_STAT_COUNT_NULL), \
   { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
   \
   { MI_INIT4(MI_STAT_COUNT_NULL) }, \
@@ -808,6 +808,9 @@ mi_decl_cold mi_theap_t* _mi_tls_keys_init(void) {
 #endif
 
 void _mi_theap_cached_set(mi_theap_t* theap) {
+  mi_theap_t* prev = _mi_theap_cached();
+  if (prev==theap) return;
+  // set
   #if MI_TLS_MODEL_THREAD_LOCAL
     __mi_theap_cached = theap;
   #elif MI_TLS_MODEL_FIXED_SLOT
@@ -819,6 +822,9 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
     _mi_tls_keys_init();
     if (_mi_theap_cached_key!=0) pthread_setspecific(_mi_theap_cached_key, theap);
   #endif
+  // update refcounts (so cached theap memory keeps available until no longer cached)
+  _mi_theap_incref(theap);
+  _mi_theap_decref(prev);    
 }
 
 void _mi_theap_default_set(mi_theap_t* theap)  {

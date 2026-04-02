@@ -73,6 +73,7 @@ typedef struct mi_stat_counter_s {
   MI_STAT_COUNT(_segments_reserved) \
   /* only on v3 */ \
   MI_STAT_COUNT(heaps) \
+  MI_STAT_COUNT(theaps) \
   MI_STAT_COUNTER(pages_reclaim_on_alloc) \
   MI_STAT_COUNTER(pages_reclaim_on_free) \
   MI_STAT_COUNTER(pages_reabandon_full) \

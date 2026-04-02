@@ -397,6 +397,7 @@ void _mi_stats_print(const char* name, size_t id, mi_stats_t* stats, mi_output_f
     mi_stat_counter_print(&stats->reset_calls, "resets", out, arg);
     mi_stat_counter_print(&stats->purge_calls, "purges", out, arg);
     mi_stat_counter_print(&stats->malloc_guarded_count, "guarded", out, arg);
+    mi_stat_print_ex(&stats->theaps, "theaps", -1, out, arg, "");
     mi_stat_print_ex(&stats->heaps, "heaps", -1, out, arg, "");
     mi_stat_counter_print(&stats->heaps_delete_wait, "heap waits", out, arg);
     _mi_fprintf(out, arg, "\n");
