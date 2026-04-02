@@ -77,7 +77,7 @@ const mi_page_t _mi_page_empty = {
   \
   { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
   MI_INIT5(MI_STAT_COUNT_NULL), \
-  { 0 }, { 0 }, { 0 }, { 0 },  \
+  { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
   \
   { MI_INIT4(MI_STAT_COUNT_NULL) }, \
   { { 0 }, { 0 }, { 0 }, { 0 } }, \
@@ -620,7 +620,7 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
         theap = next;
       }
     }
-    if (!all_freed) { mi_atomic_yield(); }
+    if (!all_freed) { mi_subproc_stat_counter_increase(tld->subproc,heaps_delete_wait,1); mi_atomic_yield(); }
                else { mi_assert_internal(tld->theaps==NULL); }       
   } while (!all_freed);
 

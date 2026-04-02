@@ -288,19 +288,12 @@ bool _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acqui
   mi_assert_internal(mi_theap_is_initialized(theap));
   if (theap==NULL) return true;
 
-  #define MI_INVALID_HEAP  ((mi_heap_t*)(-1))
-
-  mi_heap_t* heap = _mi_theap_heap(theap);
-  if (heap == MI_INVALID_HEAP) { heap = NULL; }
-  if (!mi_atomic_cas_ptr_strong_acq_rel(mi_heap_t, &theap->heap, &heap, MI_INVALID_HEAP)) {
+  mi_heap_t* const heap = mi_atomic_exchange_ptr_acq_rel(mi_heap_t, &theap->heap, NULL);
+  if (heap==NULL) {
     // concurrent interaction, retry in an outer loop (as the other thread may be blocked on our lock)
     return false;
   }
   else {
-    mi_assert_internal(heap != MI_INVALID_HEAP);  // as we never use this as the expected value
-    mi_assert_internal(heap != NULL);             // as we set it to NULL after being removed from the lists
-    if (heap == NULL) { return true; }            // paranoia
-
     // merge stats to the owning heap
     _mi_stats_merge_into(&heap->stats, &theap->stats);
 
@@ -320,7 +313,6 @@ bool _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acqui
       theap->tnext = theap->tprev = NULL;                        
     }
     theap->tld = NULL;
-    mi_atomic_store_ptr_release(mi_heap_t,&theap->heap,NULL);
     _mi_theap_decref(theap);
     return true;
   }

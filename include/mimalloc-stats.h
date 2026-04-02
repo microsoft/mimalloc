@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <mimalloc.h>
 #include <stdint.h>
 
-#define MI_STAT_VERSION   4  // increased on every backward incompatible change
+#define MI_STAT_VERSION   5  // increased on every backward incompatible change
 
 // alignment for atomic fields
 #if defined(_MSC_VER)
@@ -76,7 +76,8 @@ typedef struct mi_stat_counter_s {
   MI_STAT_COUNTER(pages_reclaim_on_alloc) \
   MI_STAT_COUNTER(pages_reclaim_on_free) \
   MI_STAT_COUNTER(pages_reabandon_full) \
-  MI_STAT_COUNTER(pages_unabandon_busy_wait)
+  MI_STAT_COUNTER(pages_unabandon_busy_wait) \
+  MI_STAT_COUNTER(heaps_delete_wait)
 
 // Size bins for chunks
 typedef enum mi_chunkbin_e {
