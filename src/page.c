@@ -686,7 +686,7 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
 mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert(page != NULL);
   mi_assert(theap!=NULL);
-  page->heap = (_mi_is_heap_main(theap->heap) ? NULL : theap->heap); // faster for `mi_page_associated_theap`
+  page->heap = (_mi_is_heap_main(_mi_theap_heap(theap)) ? NULL : _mi_theap_heap(theap)); // faster for `mi_page_associated_theap`
   mi_page_set_theap(page, theap);
 
   size_t page_size;

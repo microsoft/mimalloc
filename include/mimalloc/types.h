@@ -482,7 +482,8 @@ typedef struct mi_padding_s {
 // A thread-local heap ("theap") owns a set of thread-local pages.
 struct mi_theap_s {
   mi_tld_t*             tld;                                 // thread-local data
-  mi_heap_t*            heap;                                // the heap this theap belongs to.
+  _Atomic(mi_heap_t*)   heap;                                // the heap this theap belongs to.
+  _Atomic(size_t)       refcount;                            // reference count
   unsigned long long    heartbeat;                           // monotonic heartbeat count
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   mi_random_ctx_t       random;                              // random number context used for secure allocation

@@ -137,23 +137,35 @@ mi_heap_t* mi_heap_new(void) {
   return mi_heap_new_in_arena(0);
 }
 
-// free the heap resources (assuming the pages are already moved/destroyed)
+// free all theaps belonging to this heap (without deleting their pages as we do this arena wise for efficiency)
+static void mi_heap_free_theaps(mi_heap_t* heap) {
+  // This can run concurrently with a thread that terminates (see `init.c:mi_thread_theaps_done`), 
+  // and we need to ensure we free theaps atomically.
+  // We do this in a loop where we release the theaps_lock at every potential re-iteration to unblock 
+  // potential concurrent thread termination which tries to remove the theap from our theaps list.
+  bool all_freed;
+  do {
+    all_freed = true;
+    mi_theap_t* theap = NULL;
+    mi_lock(&heap->theaps_lock) { 
+      theap = heap->theaps; 
+      while(theap != NULL) {
+        mi_theap_t* next = theap->hnext;
+        if (!_mi_theap_free(theap, false /* dont re-acquire the heap->theaps_lock */, true /* acquire the tld->theaps_lock though */ )) {
+          all_freed = false;
+        }
+        theap = next;
+      }      
+    }
+    if (!all_freed) { mi_atomic_yield(); }
+               else { mi_assert_internal(heap->theaps==NULL); }               
+  }
+  while(!all_freed);
+}
+
+// free the heap resources (assuming the pages are already moved/destroyed, and all theaps have been freed)
 static void mi_heap_free(mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL && !_mi_is_heap_main(heap));
-
-  // free all theaps belonging to this heap
-  mi_theap_t* theap = NULL;
-  mi_lock(&heap->theaps_lock) { 
-    theap = heap->theaps; 
-    while(theap != NULL) {
-      mi_theap_t* next = NULL;
-      next = theap->hnext;
-      _mi_theap_free(theap, false /* dont re-acquire the heap->theaps_lock */, true /* acquire the tld->theaps_lock though */ );
-      theap = next;
-    }
-    theap = heap->theaps;
-    mi_assert_internal(theap==NULL);
-  }
 
   // free all arena pages infos
   mi_lock(&heap->arena_pages_lock) {
@@ -188,6 +200,7 @@ void mi_heap_delete(mi_heap_t* heap) {
     _mi_warning_message("cannot delete the main heap\n");
     return;
   }
+  mi_heap_free_theaps(heap);
   _mi_heap_move_pages(heap, mi_heap_main());
   mi_heap_free(heap);
 }
@@ -198,6 +211,7 @@ void mi_heap_destroy(mi_heap_t* heap) {
     _mi_warning_message("cannot destroy the main heap\n");
     return;
   }
+  mi_heap_free_theaps(heap);
   _mi_heap_destroy_pages(heap);
   mi_heap_free(heap);
 }

@@ -675,7 +675,7 @@ static mi_arena_pages_t* mi_heap_ensure_arena_pages(mi_heap_t* heap, mi_arena_t*
 
 static mi_page_t* mi_arenas_page_try_find_abandoned(mi_theap_t* theap, size_t slice_count, size_t block_size)
 {
-  mi_heap_t* const heap = theap->heap;
+  mi_heap_t* const heap = _mi_theap_heap(theap);
   const size_t tseq = theap->tld->thread_seq;
   mi_arena_t* const req_arena = heap->exclusive_arena;
 
@@ -736,7 +736,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   const bool os_align = (block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN);
   const size_t page_alignment = MI_ARENA_SLICE_ALIGN;
 
-  mi_heap_t*  const heap = theap->heap;
+  mi_heap_t*  const heap = _mi_theap_heap(theap);
   mi_tld_t*   const tld  = theap->tld;
   mi_arena_t* const req_arena = heap->exclusive_arena;
   const int numa_node = (heap->numa_node >= 0 ? heap->numa_node : tld->numa_node);
@@ -1055,7 +1055,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap) {
   mi_assert_internal(_mi_thread_id()==current_theap->tld->thread_id);
   // mi_assert_internal(current_theap == _mi_page_associated_theap(page));
 
-  mi_heap_t* heap = mi_page_heap(page); mi_assert_internal(heap==current_theap->heap);
+  mi_heap_t* heap = mi_page_heap(page); mi_assert_internal(heap==_mi_theap_heap(current_theap));
   if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
     // make available for allocations
     size_t bin = _mi_bin(mi_page_block_size(page));
@@ -2222,7 +2222,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
   MI_UNUSED(block); MI_UNUSED(block_size); MI_UNUSED(heap);
   mi_heap_delete_visit_info_t* info = (mi_heap_delete_visit_info_t*)arg;
   mi_heap_t*  heap_target           = info->heap_target;
-  mi_theap_t* const theap           = info->theap;       mi_assert_internal(theap->heap == heap);
+  mi_theap_t* const theap           = NULL; // info->theap;       mi_assert_internal(_mi_theap_heap(theap) == heap);
   mi_page_t*  const page            = (mi_page_t*)area->reserved1;
 
   mi_page_claim_ownership(page);       // claim ownership
@@ -2255,8 +2255,14 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
     mi_arena_t* const arena = mi_page_arena_pages(page, &slice_index, &slice_count, &arena_pages);
     mi_assert_internal(mi_bitmap_is_set(arena_pages->pages, slice_index));
     mi_bitmap_clear(arena_pages->pages, slice_index);
-    mi_theap_stat_decrease(theap, page_bins[sbin], 1);
-    mi_theap_stat_decrease(theap, pages, 1);
+    if (theap != NULL) {
+      mi_theap_stat_decrease(theap, page_bins[sbin], 1);
+      mi_theap_stat_decrease(theap, pages, 1);
+    }
+    else {
+      mi_heap_stat_decrease((mi_heap_t*)heap, page_bins[_mi_page_stats_bin(page)], 1);
+      mi_heap_stat_decrease((mi_heap_t*)heap, pages, 1);
+    }
     mi_theap_t* theap_target = info->theap_target;
 
     // and then add it to the new target heap
@@ -2282,8 +2288,8 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
 
 static void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
   mi_theap_t* const theap_target = (heap_target != NULL ? _mi_heap_theap(heap_target) : NULL);
-  mi_theap_t* const theap = _mi_heap_theap(heap);
-  mi_heap_delete_visit_info_t info = { heap_target, theap_target, theap };
+  // mi_theap_t* const theap = _mi_heap_theap(heap);
+  mi_heap_delete_visit_info_t info = { heap_target, theap_target, NULL };
   _mi_heap_visit_blocks(heap, false, false, &mi_heap_delete_page, &info);
   #if MI_DEBUG>1
   // no more arena pages?

@@ -288,9 +288,12 @@ void          _mi_theap_delete(mi_theap_t* theap, bool acquire_tld_theaps_lock);
 void          _mi_theap_default_set(mi_theap_t* theap);
 void          _mi_theap_cached_set(mi_theap_t* theap);
 void          _mi_theap_collect_retired(mi_theap_t* theap, bool force);
+void          _mi_theap_collect_abandon(mi_theap_t* theap);
 bool          _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
 void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
-void          _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acquire_tld_theaps_lock);
+bool          _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acquire_tld_theaps_lock);
+void          _mi_theap_incref(mi_theap_t* theap);
+void          _mi_theap_decref(mi_theap_t* theap);
 
 // "heap.c"
 void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
@@ -560,8 +563,13 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
 extern mi_decl_hidden const mi_theap_t _mi_theap_empty;       // read-only empty theap, initial value of the thread local default theap (in the MI_TLS_MODEL_THREAD_LOCAL)
 extern mi_decl_hidden const mi_theap_t _mi_theap_empty_wrong; // read-only empty theap used to signal that a theap for a heap could not be allocated
 
+
+static inline mi_heap_t* _mi_theap_heap(const mi_theap_t* theap) {
+  return mi_atomic_load_ptr_relaxed(mi_heap_t,&theap->heap);
+}
+
 static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {
-  return (theap != NULL && theap->heap != NULL);
+  return (theap != NULL && _mi_theap_heap(theap) != NULL);
 }
 
 static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t size) {

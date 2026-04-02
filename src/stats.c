@@ -431,7 +431,7 @@ void _mi_stats_merge_into(mi_stats_t* to, mi_stats_t* from) {
 
 static mi_stats_t* mi_stats_merge_theap_to_heap(mi_theap_t* theap) mi_attr_noexcept {
   mi_stats_t* stats = &theap->stats;
-  mi_stats_t* heap_stats = &theap->heap->stats;
+  mi_stats_t* heap_stats = &_mi_theap_heap(theap)->stats;
   _mi_stats_merge_into( heap_stats, stats );
   return heap_stats;
 }
@@ -502,7 +502,7 @@ void mi_stats_print(void* out) mi_attr_noexcept {
 void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
   mi_theap_t* theap = _mi_theap_default();
   if (theap==NULL || !mi_theap_is_initialized(theap)) return;
-  _mi_stats_print("heap", theap->heap->heap_seq, &theap->stats, out, arg);
+  _mi_stats_print("heap", _mi_theap_heap(theap)->heap_seq, &theap->stats, out, arg);
   mi_stats_merge_theap_to_heap(_mi_theap_default());
 }
 

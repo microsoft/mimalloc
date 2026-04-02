@@ -366,7 +366,7 @@ void* _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool ze
     if (usable_pre!=NULL) { *usable_pre = mi_page_usable_block_size(page); }
   }
   if mi_unlikely(newsize<=size && newsize>=(size/2) && newsize>0  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
-                  && mi_page_heap(page)==theap->heap)             // and within the same heap
+                  && mi_page_heap(page)==_mi_theap_heap(theap))             // and within the same heap
   {
     mi_assert_internal(p!=NULL);
     // todo: do not track as the usable size is still the same in the free; adjust potential padding?

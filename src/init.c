@@ -119,7 +119,8 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
 
 mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   &tld_empty,             // tld
-  NULL,                   // heap
+  MI_ATOMIC_VAR_INIT(NULL), // heap
+  MI_ATOMIC_VAR_INIT(1),  // refcount
   0,                      // heartbeat
   0,                      // cookie
   { {0}, {0}, 0, true },  // random
@@ -142,7 +143,8 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
 
 mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
   &tld_empty,             // tld
-  NULL,                   // heap
+  MI_ATOMIC_VAR_INIT(NULL), // heap
+  MI_ATOMIC_VAR_INIT(1),  // refcount
   0,                      // heartbeat
   0,                      // cookie
   { {0}, {0}, 0, true },  // random
@@ -182,7 +184,8 @@ static mi_decl_cache_align mi_tld_t tld_main = {
 
 mi_decl_cache_align mi_theap_t theap_main = {
   &tld_main,              // thread local data
-  &heap_main,             // main heap
+  MI_ATOMIC_VAR_INIT(&heap_main), // main heap
+  MI_ATOMIC_VAR_INIT(1),  // refcount
   0,                      // heartbeat
   0,                      // initial cookie
   { {0x846ca68b}, {0}, 0, true },  // random
@@ -586,17 +589,41 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
   _mi_theap_default_set((mi_theap_t*)&_mi_theap_empty);
   _mi_theap_cached_set((mi_theap_t*)&_mi_theap_empty);
 
-  // delete all theaps in this thread
+  // abandon the pages of all theaps in this thread
   mi_lock(&tld->theaps_lock) {
-    mi_theap_t* curr = tld->theaps;
-    while (curr != NULL) {
-      mi_theap_t* next = curr->tnext; // save `tnext` as `curr` will be freed
+    mi_theap_t* theap = tld->theaps;
+    while (theap != NULL) {
+      mi_theap_t* next = theap->tnext; 
       // never destroy theaps; if a dll is linked statically with mimalloc,
       // there may still be delete/free calls after the mi_fls_done is called. Issue #207
-      _mi_theap_delete(curr,false /* don't re-acquire the theaps lock*/);
-      curr = next;
+      _mi_theap_collect_abandon(theap);
+      mi_assert_internal(theap->page_count==0);
+      theap = next;
     }
   }
+
+  // free the theaps of this thread.
+  // This can run concurrently with a `mi_heap_free_theaps` and we need to ensure we free theaps atomically.
+  // We do this in a loop where we release the theaps_lock at every potential re-iteration to unblock 
+  // potential concurrent `mi_heap_free_theaps` which tries to remove the theap from our theaps list.
+  bool all_freed;
+  do {
+    all_freed = true;
+    mi_lock(&tld->theaps_lock) {
+      mi_theap_t* theap = tld->theaps;
+      while (theap != NULL) {
+        mi_theap_t* next = theap->tnext;
+        mi_assert_internal(theap->page_count==0);
+        if (!_mi_theap_free(theap, true /* acquire heap->theaps_lock */, false /* dont re-acquire the tld->theaps_lock*/ )) {
+          all_freed = false;
+        }
+        theap = next;
+      }
+    }
+    if (!all_freed) { mi_atomic_yield(); }
+               else { mi_assert_internal(tld->theaps==NULL); }       
+  } while (!all_freed);
+
   mi_assert(_mi_theap_default()==(mi_theap_t*)&_mi_theap_empty); // careful to not re-initialize the default theap during theap_delete
   mi_assert(!mi_theap_is_initialized(_mi_theap_default()));
 }
@@ -813,7 +840,7 @@ void _mi_theap_default_set(mi_theap_t* theap)  {
   if (mi_theap_is_initialized(theap)) {
     // ensure the default theap is passed to `_mi_thread_done` as on some platforms we cannot access TLS at thread termination (as it would allocate again)
     _mi_prim_thread_associate_default_theap(theap);
-    if (_mi_is_heap_main(theap->heap)) {
+    if (_mi_is_heap_main(_mi_theap_heap(theap))) {
       __mi_theap_main = theap;
     }
   }

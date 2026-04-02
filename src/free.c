@@ -298,7 +298,7 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
   else if (reclaim_on_free == 1 &&               // if cross-thread is allowed
             !theap->tld->is_in_threadpool &&      // and we are not part of a threadpool
             !mi_page_is_mostly_used(page) &&     // and the page is not too full
-            _mi_arena_memid_is_suitable(page->memid, theap->heap->exclusive_arena)) {   // and it fits our memory
+            _mi_arena_memid_is_suitable(page->memid, _mi_theap_heap(theap)->exclusive_arena)) {   // and it fits our memory
     // across threads
     max_reclaim = _mi_option_get_fast(mi_option_page_cross_thread_max_reclaim);
   }
