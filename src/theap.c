@@ -195,7 +195,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   // push on the thread local theaps list
   mi_theap_t* head = NULL;
   mi_lock(&theap->tld->theaps_lock) {
-    mi_theap_t* head = theap->tld->theaps;
+    head = theap->tld->theaps;
     theap->tprev = NULL;
     theap->tnext = head;
     if (head!=NULL) { head->tprev = theap; }
