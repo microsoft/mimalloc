@@ -778,9 +778,6 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
 
 mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept
 {
-  #if defined(MI_PADDING_SIZE)
-  mi_assert(MI_PADDING_SIZE==0);
-  #endif
   // allocate multiple of page size ending in a guard page
   // ensure minimal alignment requirement?
   const size_t os_page_size = _mi_os_page_size();
@@ -792,10 +789,11 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   void* const p = mi_block_ptr_set_guarded(block, obj_size);
 
   // stats
-  mi_track_malloc(p, size, zero);
+  mi_track_malloc(p, _mi_align_up(size, MI_MAX_ALIGN_SIZE), zero);  
   if (p != NULL) {
     if (!mi_theap_is_initialized(theap)) { theap = _mi_theap_default(); }
     #if MI_STAT>1
+    // adjust stats to only count the allocated size of the block (and not the guard page)
     mi_theap_stat_adjust_decrease(theap, malloc_requested, req_size);
     mi_theap_stat_increase(theap, malloc_requested, size);
     #endif

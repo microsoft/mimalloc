@@ -925,17 +925,23 @@ static inline bool mi_page_claim_ownership(mi_page_t* page) {
   Guarded objects
 ------------------------------------------------------------------- */
 #if MI_GUARDED
-
 // we always align guarded pointers in a block at an offset
 // the block `next` field is then used as a tag to distinguish regular offset aligned blocks from guarded ones
 #define MI_BLOCK_TAG_ALIGNED   ((mi_encoded_t)(0))
 #define MI_BLOCK_TAG_GUARDED   (~MI_BLOCK_TAG_ALIGNED)
+#endif
 
 static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* p) {
+#if MI_GUARDED
   const ptrdiff_t offset = (uint8_t*)p - (uint8_t*)block;
   return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && block->next == MI_BLOCK_TAG_GUARDED);
+#else
+  MI_UNUSED(block); MI_UNUSED(p);
+  return false;
+#endif  
 }
 
+#if MI_GUARDED
 static inline bool mi_theap_malloc_use_guarded(mi_theap_t* theap, size_t size) {
   // this code is written to result in fast assembly as it is on the hot path for allocation
   const size_t count = theap->guarded_sample_count - 1;  // if the rate was 0, this will underflow and count for a long time..
