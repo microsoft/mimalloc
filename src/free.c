@@ -27,14 +27,13 @@ static void   mi_stat_free(const mi_page_t* page, const mi_block_t* block);
 // fast path written carefully to prevent spilling on the stack
 static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool track_stats, bool check_full)
 {
+  MI_UNUSED(was_guarded);
   // checks  
   if mi_unlikely(mi_check_is_double_free(page, block)) return;
-  if (!was_guarded) { mi_check_padding(page, block); }
+  mi_check_padding(page, block);
   if (track_stats) { mi_stat_free(page, block); }
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
-  if (!was_guarded) {
-    memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
-  }
+  memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
   #endif
   if (track_stats) { mi_track_free_size(block, mi_page_usable_size_of(page, block, was_guarded)); } // faster then mi_usable_size as we already know the page and that p is unaligned
 

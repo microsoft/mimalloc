@@ -789,7 +789,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   void* const p = mi_block_ptr_set_guarded(block, obj_size);
 
   // stats
-  mi_track_malloc(p, _mi_align_up(size, MI_MAX_ALIGN_SIZE), zero);  
+  mi_track_malloc(p, obj_size, zero);  
   if (p != NULL) {
     if (!mi_theap_is_initialized(theap)) { theap = _mi_theap_default(); }
     #if MI_STAT>1

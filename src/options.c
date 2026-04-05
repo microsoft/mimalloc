@@ -77,7 +77,7 @@ int mi_version(void) mi_attr_noexcept {
 #endif
 
 #ifndef MI_DEFAULT_GUARDED_SAMPLE_RATE
-#if MI_GUARDED
+#if MI_GUARDED && !MI_DEBUG
 #define MI_DEFAULT_GUARDED_SAMPLE_RATE 4000
 #else
 #define MI_DEFAULT_GUARDED_SAMPLE_RATE 0
