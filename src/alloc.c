@@ -680,9 +680,6 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
 
 mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept
 {
-  #if defined(MI_PADDING_SIZE)
-  mi_assert(MI_PADDING_SIZE==0);
-  #endif
   // allocate multiple of page size ending in a guard page
   // ensure minimal alignment requirement?
   const size_t os_page_size = _mi_os_page_size();
@@ -694,10 +691,11 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   void* const p   = mi_block_ptr_set_guarded(block, obj_size);
 
   // stats
-  mi_track_malloc(p, size, zero);
+  mi_track_malloc(p, _mi_align_up(size, MI_MAX_ALIGN_SIZE), zero);  
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
     #if MI_STAT>1
+    // adjust stats to only count the allocated size of the block (and not the guard page)
     mi_heap_stat_adjust_decrease(heap, malloc_requested, req_size);
     mi_heap_stat_increase(heap, malloc_requested, size);
     #endif
