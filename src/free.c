@@ -30,12 +30,13 @@ static mi_decl_noinline void mi_free_block_mt(mi_page_t* page, mi_segment_t* seg
 // fast path written carefully to prevent spilling on the stack
 static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool track_stats, bool check_full)
 {
+  MI_UNUSED(was_guarded);
   // checks  
   if mi_unlikely(mi_check_is_double_free(page, block)) return;
-  if (!was_guarded) { mi_check_padding(page, block); }
+  mi_check_padding(page, block);
   if (track_stats) { mi_stat_free(page, block); }
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
-  if (!mi_page_is_huge(page) && !was_guarded) {   // huge page content may be already decommitted
+  if (!mi_page_is_huge(page)) {   // huge page content may be already decommitted
     memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
   }
   #endif
@@ -268,6 +269,8 @@ static void mi_decl_noinline mi_free_block_delayed_mt( mi_page_t* page, mi_block
 // Multi-threaded free (`_mt`) (or free in huge block if compiled with MI_HUGE_PAGE_ABANDON)
 static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_segment_t* segment, mi_block_t* block, void* p, bool was_guarded)
 {
+  MI_UNUSED(was_guarded);
+
   // first see if the segment was abandoned and if we can reclaim it into our thread
   if (_mi_option_get_fast(mi_option_abandoned_reclaim_on_free) != 0 &&
       #if MI_HUGE_PAGE_ABANDON
@@ -287,14 +290,14 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_segment_t* seg
 
   // The padding check may access the non-thread-owned page for the key values.
   // that is safe as these are constant and the page won't be freed (as the block is not freed yet).
-  if (!was_guarded) { mi_check_padding(page, block); }
+  mi_check_padding(page, block);
 
   // adjust stats (after padding check and potentially recursive `mi_free` above)
   mi_stat_free(page, block);    // stat_free may access the padding
   mi_track_free_size(block, mi_page_usable_size_of(page,block,was_guarded));
 
   // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
-  if (!was_guarded) { _mi_padding_shrink(page, block, sizeof(mi_block_t)); }
+  _mi_padding_shrink(page, block, sizeof(mi_block_t));
 
   if (segment->kind == MI_SEGMENT_HUGE) {
     #if MI_HUGE_PAGE_ABANDON
@@ -310,7 +313,7 @@ static void mi_decl_noinline mi_free_block_mt(mi_page_t* page, mi_segment_t* seg
   }
   else {
     #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
-    if (!was_guarded) { memset(block, MI_DEBUG_FREED, mi_usable_size(block)); }
+    memset(block, MI_DEBUG_FREED, mi_usable_size(block));
     #endif
   }
 

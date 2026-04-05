@@ -91,7 +91,7 @@ typedef struct mi_option_desc_s {
 #endif
 
 #ifndef MI_DEFAULT_GUARDED_SAMPLE_RATE
-#if MI_GUARDED
+#if MI_GUARDED && !MI_DEBUG
 #define MI_DEFAULT_GUARDED_SAMPLE_RATE 4000
 #else
 #define MI_DEFAULT_GUARDED_SAMPLE_RATE 0

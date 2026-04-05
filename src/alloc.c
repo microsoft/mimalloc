@@ -691,7 +691,7 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   void* const p   = mi_block_ptr_set_guarded(block, obj_size);
 
   // stats
-  mi_track_malloc(p, _mi_align_up(size, MI_MAX_ALIGN_SIZE), zero);  
+  mi_track_malloc(p, obj_size, zero);  
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
     #if MI_STAT>1
