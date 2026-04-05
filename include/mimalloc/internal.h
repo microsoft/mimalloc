@@ -671,6 +671,7 @@ static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* 
   const ptrdiff_t offset = (uint8_t*)p - (uint8_t*)block;
   return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && block->next == MI_BLOCK_TAG_GUARDED);
 #else
+  MI_UNUSED(block); MI_UNUSED(p);
   return false;
 #endif  
 }
