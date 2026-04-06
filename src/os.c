@@ -140,7 +140,7 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     uintptr_t init = MI_HINT_BASE;
     #if (MI_SECURE>0 || MI_DEBUG==0 || defined(NDEBUG))  // security: randomize start of aligned allocations unless in debug mode
-    const uintptr_t r = _mi_heap_random_next(mi_heap_main());
+    const uintptr_t r = _mi_theap_random_next(mi_theap_get_default());
     init = init + ((MI_HINT_ALIGN * ((r>>17) & 0xFFFFF)) % MI_HINT_AREA);  // (randomly 20 bits)*4MiB == 0 to 4TiB
     #endif
     uintptr_t expected = hint + size;
