@@ -469,9 +469,9 @@ static void* mi_os_page_align_areax(bool conservative, void* addr, size_t size, 
 
   // page align conservatively within the range, or liberally straddling pages outside the range
   void* start = (conservative ? _mi_align_up_ptr(addr, _mi_os_page_size())
-    : mi_align_down_ptr(addr, _mi_os_page_size()));
-  void* end = (conservative ? mi_align_down_ptr((uint8_t*)addr + size, _mi_os_page_size())
-    : _mi_align_up_ptr((uint8_t*)addr + size, _mi_os_page_size()));
+                              : _mi_align_down_ptr(addr, _mi_os_page_size()));
+  void* end = (conservative ? _mi_align_down_ptr((uint8_t*)addr + size, _mi_os_page_size())
+                            : _mi_align_up_ptr((uint8_t*)addr + size, _mi_os_page_size()));
   ptrdiff_t diff = (uint8_t*)end - (uint8_t*)start;
   if (diff <= 0) return NULL;
 
