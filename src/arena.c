@@ -756,7 +756,7 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
       !os_align &&                                                   // not large alignment
       slice_count <= mi_arena_max_object_size()/MI_ARENA_SLICE_SIZE) // and not too large
   {
-    start = mi_arenas_try_alloc(heap, slice_count, page_alignment, commit, allow_large, req_arena, tld->thread_seq, numa_node, memid);
+    start = (uint8_t*)mi_arenas_try_alloc(heap, slice_count, page_alignment, commit, allow_large, req_arena, tld->thread_seq, numa_node, memid);
     if (start != NULL) {
       mi_arena_pages_t* const arena_pages = mi_heap_ensure_arena_pages(heap, memid->mem.arena.arena);
       if (arena_pages==NULL) {
@@ -775,10 +775,10 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
     if (os_align) {
       // note: slice_count already includes the page
       mi_assert_internal(slice_count >= mi_slice_count_of_size(block_size) + mi_slice_count_of_size(page_alignment));
-      start = mi_arena_os_alloc_aligned(alloc_size, block_alignment, page_alignment /* align offset */, commit, allow_large, req_arena, memid);
+      start = (uint8_t*)mi_arena_os_alloc_aligned(alloc_size, block_alignment, page_alignment /* align offset */, commit, allow_large, req_arena, memid);
     }
     else {
-      start = mi_arena_os_alloc_aligned(alloc_size, page_alignment, 0 /* align offset */, commit, allow_large, req_arena, memid);
+      start = (uint8_t*)mi_arena_os_alloc_aligned(alloc_size, page_alignment, 0 /* align offset */, commit, allow_large, req_arena, memid);
     }
   }
 
