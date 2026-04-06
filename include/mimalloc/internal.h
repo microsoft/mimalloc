@@ -443,7 +443,7 @@ static inline bool _mi_is_power_of_two(uintptr_t x) {
 }
 
 // Is a pointer aligned?
-static inline bool _mi_is_aligned(void* p, size_t alignment) {
+static inline bool _mi_is_aligned(const void* p, size_t alignment) {
   mi_assert_internal(alignment != 0);
   return (((uintptr_t)p % alignment) == 0);
 }
@@ -462,7 +462,7 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
 
 
 // Align a pointer upwards
-static inline uint8_t* _mi_align_up_ptr(void* p, size_t alignment) {
+static inline uint8_t* _mi_align_up_ptr(const void* p, size_t alignment) {
   return (uint8_t*)_mi_align_up((uintptr_t)p, alignment);
 }
 
@@ -478,7 +478,7 @@ static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
   }
 }
 
-static inline void* mi_align_down_ptr(void* p, size_t alignment) {
+static inline void* _mi_align_down_ptr(const void* p, size_t alignment) {
   return (void*)_mi_align_down((uintptr_t)p, alignment);
 }
 
@@ -718,19 +718,35 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
   return mi_page_block_size(page) - MI_PADDING_SIZE;
 }
 
-// This may change if we locate page info outside the page data slices
-static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
-  return (uint8_t*)page;
+static inline bool mi_page_info_is_separate(const mi_page_t* page) {
+  #if MI_PAGE_INFO_IS_SEPARATE
+  return (page != _mi_align_down_ptr(page->page_start, MI_PAGE_ALIGN) && page->memid.memkind == MI_MEM_ARENA);
+  #else
+  MI_UNUSED(page);
+  return false;
+  #endif
 }
 
-// This gives the offset relative to the start slice of a page. This may change if we ever
-// locate page info outside the page-data itself.
+// This may change if we locate page info outside the page data slices
+static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
+  if (mi_page_info_is_separate(page)) {  // page is in front of the slice
+    // page info is at a separate location (at `arena->pages`)
+    mi_assert_internal(_mi_is_aligned(page->page_start,MI_PAGE_ALIGN));
+    return page->page_start;
+  }
+  else {
+    return (uint8_t*)page;
+  }
+}
+
+// This gives the offset relative to the start slice of a page. 
 static inline size_t mi_page_slice_offset_of(const mi_page_t* page, size_t offset_relative_to_page_start) {
   return (page->page_start - mi_page_slice_start(page)) + offset_relative_to_page_start;
 }
 
+// Currently committed part of a page
 static inline size_t mi_page_committed(const mi_page_t* page) {
-  return (page->slice_committed == 0 ? mi_page_size(page) : page->slice_committed - (page->page_start - mi_page_slice_start(page)));
+  return (page->slice_committed == 0 ? mi_page_size(page) : page->slice_committed - mi_page_slice_offset_of(page,0));
 }
 
 // are all blocks in a page freed?

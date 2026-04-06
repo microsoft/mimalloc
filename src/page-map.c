@@ -127,13 +127,14 @@ static size_t mi_page_map_get_idx(mi_page_t* page, uint8_t** page_start, size_t*
   size_t page_size;
   *page_start = mi_page_area(page, &page_size);
   if (page_size > MI_LARGE_PAGE_SIZE) { page_size = MI_LARGE_PAGE_SIZE - MI_ARENA_SLICE_SIZE; }  // furthest interior pointer
-  *slice_count = mi_slice_count_of_size(page_size) + (((uint8_t*)*page_start - (uint8_t*)page)/MI_ARENA_SLICE_SIZE); // add for large aligned blocks
-  return _mi_page_map_index(page);
+  *slice_count = mi_slice_count_of_size(page_size) + (((uint8_t*)*page_start - (uint8_t*)mi_page_slice_start(page))/MI_ARENA_SLICE_SIZE); // add for large aligned blocks
+  return _mi_page_map_index(page_start);
 }
 
 bool _mi_page_map_register(mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(_mi_page_map != NULL);  // should be initialized before multi-thread access!
   if mi_unlikely(_mi_page_map == NULL) {
     if (!_mi_page_map_init()) return false;
@@ -383,13 +384,13 @@ static size_t mi_page_map_get_idx(mi_page_t* page, size_t* sub_idx, size_t* slic
   size_t page_size;
   uint8_t* page_start = mi_page_area(page, &page_size);
   if (page_size > MI_LARGE_PAGE_SIZE) { page_size = MI_LARGE_PAGE_SIZE - MI_ARENA_SLICE_SIZE; }  // furthest interior pointer
-  *slice_count = mi_slice_count_of_size(page_size) + ((page_start - (uint8_t*)page)/MI_ARENA_SLICE_SIZE); // add for large aligned blocks
-  return _mi_page_map_index(page, sub_idx);
+  *slice_count = mi_slice_count_of_size(page_size) + ((page_start - mi_page_slice_start(page))/MI_ARENA_SLICE_SIZE); // add for large aligned blocks
+  return _mi_page_map_index(page_start, sub_idx);
 }
 
 bool _mi_page_map_register(mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_assert_internal(_mi_page_map != NULL);  // should be initialized before multi-thread access!
   if mi_unlikely(_mi_page_map == NULL) {
     if (!_mi_page_map_init()) return false;
@@ -404,7 +405,7 @@ bool _mi_page_map_register(mi_page_t* page) {
 void _mi_page_map_unregister(mi_page_t* page) {
   mi_assert_internal(_mi_page_map != NULL);
   mi_assert_internal(page != NULL);
-  mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
+  mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   if mi_unlikely(_mi_page_map == NULL) return;
   // get index and count
   size_t slice_count;

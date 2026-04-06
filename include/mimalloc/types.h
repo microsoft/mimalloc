@@ -121,6 +121,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ENABLE_LARGE_PAGES  1
 #endif
 
+// Place page meta info inside pages or keep it separate?
+#if !defined(MI_PAGE_INFO_IS_SEPARATE) || MI_SECURE
+#define MI_PAGE_INFO_IS_SEPARATE   1
+#endif
+
 // --------------------------------------------------------------
 // Sizes of internal data-structures
 // (comments specify sizes on 64-bit, usually 32-bit is halved)
@@ -632,7 +637,7 @@ typedef struct mi_bbitmap_s mi_bbitmap_t;   // atomic binned bitmap (defined in 
 typedef struct mi_arena_pages_s {
   mi_bitmap_t* pages;                // all registered pages (abandoned and owned)
   mi_bitmap_t* pages_abandoned[MI_ARENA_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)
-  // followed by the bitmaps (whose sizes depend on the arena size)
+  // followed by the bitmaps (whose siz`es depend on the arena size)
 } mi_arena_pages_t;
 
 
@@ -658,6 +663,7 @@ typedef struct mi_arena_s {
   mi_bitmap_t*        slices_committed;     // is the slice committed? (i.e. accessible)
   mi_bitmap_t*        slices_dirty;         // is the slice potentially non-zero?
   mi_bitmap_t*        slices_purge;         // slices that can be purged
+  mi_page_t*          pages_meta;           // pre-allocated `slice_count` page meta info -- only used if `MI_PAGE_INFO_IS_SEPARATE != 0`
   mi_arena_pages_t    pages_main;           // arena page bitmaps for the main heap are allocated up front as well
 
   // followed by the bitmaps (whose sizes depend on the arena size)

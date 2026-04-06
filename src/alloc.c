@@ -33,8 +33,8 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
 {
   if (page->block_size != 0) { // not the empty theap
     mi_assert_internal(mi_page_block_size(page) >= size);
-    mi_assert_internal(_mi_is_aligned(page, MI_PAGE_ALIGN));
-    mi_assert_internal(_mi_ptr_page(page)==page);
+    mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
+    mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
   }
 
   // check the free list

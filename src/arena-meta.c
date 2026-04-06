@@ -46,7 +46,7 @@ static mi_decl_cache_align _Atomic(mi_meta_page_t*)  mi_meta_pages = MI_ATOMIC_V
 
 #if MI_DEBUG > 1
 static mi_meta_page_t* mi_meta_page_of_ptr(void* p, size_t* block_idx) {
-  mi_meta_page_t* mpage = (mi_meta_page_t*)((uint8_t*)mi_align_down_ptr(p,MI_META_PAGE_ALIGN) + _mi_os_secure_guard_page_size());
+  mi_meta_page_t* mpage = (mi_meta_page_t*)((uint8_t*)_mi_align_down_ptr(p,MI_META_PAGE_ALIGN) + _mi_os_secure_guard_page_size());
   if (block_idx != NULL) {
     *block_idx = ((uint8_t*)p - (uint8_t*)mpage) / MI_META_BLOCK_SIZE;
   }
