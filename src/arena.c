@@ -899,6 +899,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   page->slice_committed = commit_size;
   page->memid = memid;
   page->free_is_zero = memid.initially_zero;
+  mi_assert_internal(page->free==NULL);
   mi_assert_internal((block_start==0) == mi_page_info_is_separate(page));
 
   // and own it
@@ -1043,7 +1044,7 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   // we must do this since we may later allocate large spans over this page and cannot have a guard page in between
   #if MI_SECURE >= 2
   if (!page->memid.is_pinned) {
-    _mi_os_secure_guard_page_reset_before((uint8_t*)page + mi_page_full_size(page), page->memid);
+    _mi_os_secure_guard_page_reset_before(mi_page_slice_start(page) + mi_page_full_size(page), page->memid);
   }
   #endif
 
