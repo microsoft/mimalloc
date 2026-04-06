@@ -121,9 +121,20 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ENABLE_LARGE_PAGES  1
 #endif
 
-// Place page meta info inside pages or keep it separate?
+// Place page meta info inside pages or keep it separate? 
+// Separate keeps the page info at the arena start which is more secure 
+// and reduces wasted space due to alignment and block sizes 
+// (but also commits more memory up front (about 2MiB per GiB))
 #if !defined(MI_PAGE_INFO_IS_SEPARATE) || MI_SECURE
 #define MI_PAGE_INFO_IS_SEPARATE   1
+#endif
+
+#if MI_PAGE_INFO_IS_SEPARATE && MI_PAGE_MAP_FLAT
+#error "cannot have a flat page map with separate page info"
+#endif
+
+#if MI_DEBUG && NDEBUG
+#warning "mimalloc assertions enabled in a release build"
 #endif
 
 // --------------------------------------------------------------
