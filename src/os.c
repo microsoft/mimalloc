@@ -106,11 +106,57 @@ void _mi_os_init(void) {
 bool _mi_os_decommit(void* addr, size_t size);
 bool _mi_os_commit(void* addr, size_t size, bool* is_zero);
 
-void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
-  MI_UNUSED(try_alignment); MI_UNUSED(size);
-  return NULL;
-}
+// On systems with enough virtual address bits, we can do efficient aligned allocation by using
+// the 2TiB to 30TiB area to allocate those. If we have at least 46 bits of virtual address
+// space (64TiB) we use this technique. (but see issue #939)
+#if (MI_INTPTR_SIZE >= 8) && !defined(MI_NO_ALIGNED_HINT) // && !defined(WIN32) && !defined(ANDROID)
 
+// Return a MI_HINT_ALIGN (4MiB) aligned address that is probably available.
+// If this returns NULL, the OS will determine the address but on some OS's that may not be
+// properly aligned which can be more costly as it needs to be adjusted afterwards.
+// For a size > 16GiB this always returns NULL in order to guarantee good ASLR randomization;
+// (otherwise an initial large allocation of say 2TiB has a 50% chance to include (known) addresses
+//  in the middle of the 2TiB - 6TiB address range (see issue #372))
+
+#define MI_HINT_ALIGN ((uintptr_t)4 << 20)  // 4MiB alignment
+#define MI_HINT_BASE  ((uintptr_t)2 << 40)  // 2TiB start
+#define MI_HINT_AREA  ((uintptr_t)6 << 40)  // upto 6TiB   (since before win8 there is "only" 8TiB available to processes)
+#define MI_HINT_MAX   ((uintptr_t)30 << 40) // wrap after 30TiB (area after 32TiB is used for huge OS pages)
+
+void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
+{
+  static mi_decl_cache_align _Atomic(uintptr_t) aligned_base; // = 0
+
+  // todo: perhaps only do alignment hints if THP is enabled?
+  if (try_alignment <= mi_os_mem_config.alloc_granularity || try_alignment > MI_HINT_ALIGN) return NULL;
+  if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
+  size = _mi_align_up(size, MI_ARENA_SLICE_SIZE);
+  if (size > 16*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at least 1/(MI_HINT_AREA / 1<<34) 
+  #if (MI_SECURE>0)
+  size += MI_ARENA_SLICE_SIZE;        // put in virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
+  #endif
+
+  uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
+  if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
+    uintptr_t init = MI_HINT_BASE;
+    #if (MI_SECURE>0 || MI_DEBUG==0 || defined(NDEBUG))  // security: randomize start of aligned allocations unless in debug mode
+    const uintptr_t r = _mi_heap_random_next(mi_heap_main());
+    init = init + ((MI_HINT_ALIGN * ((r>>17) & 0xFFFFF)) % MI_HINT_AREA);  // (randomly 20 bits)*4MiB == 0 to 4TiB
+    #endif
+    uintptr_t expected = hint + size;
+    mi_atomic_cas_strong_acq_rel(&aligned_base, &expected, init);
+    hint = mi_atomic_add_acq_rel(&aligned_base, size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
+  }
+  if (hint%try_alignment != 0) return NULL;
+  return (void*)hint;
+}
+#else
+void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
+   MI_UNUSED(try_alignment); MI_UNUSED(size);
+   return NULL;
+}
+#endif
+ 
 
 /* -----------------------------------------------------------
   Guard page allocation
