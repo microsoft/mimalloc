@@ -672,7 +672,8 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
     // give up to place it right in front of the guard page if the offset is too large for unalignment
     offset = MI_BLOCK_ALIGNMENT_MAX;
   }
-  void* p = (uint8_t*)block + offset;
+  uint8_t* const p = (uint8_t*)block + offset;
+  mi_assert_internal(p == guard_page - obj_size);
   mi_track_align(block, p, offset, obj_size);
   mi_track_mem_defined(block, sizeof(mi_block_t));
   return p;
@@ -686,9 +687,12 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   const size_t obj_size = (mi_option_is_enabled(mi_option_guarded_precise) ? size : _mi_align_up(size, MI_MAX_ALIGN_SIZE));
   const size_t bsize    = _mi_align_up(_mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
   const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);
-  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(heap, req_size, zero, 0 /* huge_alignment */, NULL);
+  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(heap, req_size, false /* don't zero */, 0 /* huge_alignment */, NULL);
   if (block==NULL) return NULL;
   void* const p   = mi_block_ptr_set_guarded(block, obj_size);
+  if (zero) {
+    _mi_memzero(p,obj_size);  // we have to zero afterwards as padding might have written inside the block (if the `blocksize > reqsize + os_page_size`)
+  }
 
   // stats
   mi_track_malloc(p, obj_size, zero);  
