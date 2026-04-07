@@ -120,7 +120,7 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero);
 
 #define MI_HINT_ALIGN ((uintptr_t)4 << 20)  // 4MiB alignment
 #define MI_HINT_BASE  ((uintptr_t)2 << 40)  // 2TiB start
-#define MI_HINT_AREA  ((uintptr_t)6 << 40)  // upto 6TiB   (since before win8 there is "only" 8TiB available to processes)
+#define MI_HINT_AREA  ((uintptr_t)4 << 40)  // upto (2+4) 6TiB  (since before win8 there is "only" 8TiB available to processes)
 #define MI_HINT_MAX   ((uintptr_t)30 << 40) // wrap after 30TiB (area after 32TiB is used for huge OS pages)
 
 void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
@@ -132,10 +132,8 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
   size = _mi_align_up(size, MI_ARENA_SLICE_SIZE);
   if (size > 16*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at least 1/(MI_HINT_AREA / 1<<34) 
-  #if (MI_SECURE>0)
   size += MI_ARENA_SLICE_SIZE;        // put in virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
-  #endif
-
+  
   uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     uintptr_t init = MI_HINT_BASE;
