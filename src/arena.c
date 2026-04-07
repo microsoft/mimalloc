@@ -827,20 +827,20 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   if (!slice_start) return NULL;
 
   // guard page at the end of mimalloc page?
-  #if MI_SECURE < 2
-  const size_t page_noguard_size = alloc_size;
-  #else
+  #if (MI_SECURE >= 2 && MI_PAGE_INFO_IS_AT_SLICE_START) || MI_SECURE >= 4
   mi_assert(alloc_size > _mi_os_secure_guard_page_size());
   const size_t page_noguard_size = alloc_size - _mi_os_secure_guard_page_size();
   if (memid.initially_committed) {
     _mi_os_secure_guard_page_set_at(slice_start + page_noguard_size, memid);
   }
+  #else
+  const size_t page_noguard_size = alloc_size;  
   #endif
 
   // allocate the page meta info
   mi_page_t* page = NULL;  
   size_t block_start = 0;
-  #if MI_PAGE_INFO_IS_SEPARATE
+  #if !MI_PAGE_INFO_IS_AT_SLICE_START
   if (memid.memkind == MI_MEM_ARENA) {
     mi_arena_t* const arena = memid.mem.arena.arena;
     if (arena->pages_meta != NULL) {
@@ -900,7 +900,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   page->memid = memid;
   page->free_is_zero = memid.initially_zero;
   mi_assert_internal(page->free==NULL);
-  mi_assert_internal((block_start==0) == mi_page_info_is_separate(page));
+  mi_assert_internal((block_start==0) == !mi_page_info_is_at_slice_start(page)); 
 
   // and own it
   mi_page_claim_ownership(page);
@@ -1042,7 +1042,7 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
 
   // recommit guard page at the end?
   // we must do this since we may later allocate large spans over this page and cannot have a guard page in between
-  #if MI_SECURE >= 2
+  #if (MI_SECURE >= 2 && MI_PAGE_INFO_IS_AT_SLICE_START) || MI_SECURE >= 4
   if (!page->memid.is_pinned) {
     _mi_os_secure_guard_page_reset_before(mi_page_slice_start(page) + mi_page_full_size(page), page->memid);
   }
@@ -1077,7 +1077,7 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
       mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
     }
   }
-  if (mi_page_info_is_separate(page)) { page->block_size = 0; }  // for assertion checking
+  if (!mi_page_info_is_at_slice_start(page)) { page->block_size = 0; }  // for assertion checking
   _mi_arenas_free( mi_page_slice_start(page), mi_page_full_size(page), page->memid);  
 }
 
@@ -1411,10 +1411,10 @@ static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_bas
   const size_t base_size = _mi_align_up(sizeof(mi_arena_t), MI_BCHUNK_SIZE);
   const size_t bitmaps_count = 4 + MI_ARENA_BIN_COUNT; // commit, dirty, purge, pages, and abandoned
   const size_t bitmaps_size = bitmaps_count * mi_bitmap_size(slice_count, NULL) + mi_bbitmap_size(slice_count, NULL); // + free
-  #if MI_PAGE_INFO_IS_SEPARATE
-  const size_t pages_size = slice_count * sizeof(mi_page_t);
-  #else
+  #if MI_PAGE_INFO_IS_AT_SLICE_START
   const size_t pages_size = 0;
+  #else
+  const size_t pages_size = slice_count * sizeof(mi_page_t);
   #endif
   const size_t size = base_size + bitmaps_size + pages_size;
 
@@ -1498,7 +1498,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
     }
   }
   else if (!memid.is_pinned) {
-    // if MI_SECURE, set a guard page at the end
+    // if MI_SECURE, set a guard page at the end of the arena info
     // todo: this does not respect the commit_fun as the memid is of external memory
     _mi_os_secure_guard_page_set_before((uint8_t*)arena + mi_size_of_slices(info_slices), memid);
   }
@@ -1529,11 +1529,11 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
   for (size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
     arena->pages_main.pages_abandoned[i] = mi_arena_bitmap_init(slice_count, &base);
   }
-  #if MI_PAGE_INFO_IS_SEPARATE
+  #if MI_PAGE_INFO_IS_AT_SLICE_START
+  arena->pages_meta = NULL;
+  #else
   arena->pages_meta = (mi_page_t*)base;
   base += (slice_count * sizeof(mi_page_t));
-  #else
-  arena->pages_meta = NULL;
   #endif
   mi_assert_internal(mi_size_of_slices(info_slices) >= (size_t)(base - mi_arena_start(arena)));
 

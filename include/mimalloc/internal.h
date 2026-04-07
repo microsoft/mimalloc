@@ -718,24 +718,25 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
   return mi_page_block_size(page) - MI_PADDING_SIZE;
 }
 
-static inline bool mi_page_info_is_separate(const mi_page_t* page) {
-  #if MI_PAGE_INFO_IS_SEPARATE
-  return (page != _mi_align_down_ptr(page->page_start, MI_PAGE_ALIGN) && page->memid.memkind == MI_MEM_ARENA);
-  #else
+static inline bool mi_page_info_is_at_slice_start(const mi_page_t* page) {
+  #if MI_PAGE_INFO_IS_AT_SLICE_START
   MI_UNUSED(page);
-  return false;
+  return true;
+  #else
+  // usually separated but can still be in front for direct OS allocations (due to size or alignment)
+  return (page->memid.memkind != MI_MEM_ARENA || page == _mi_align_down_ptr(page->page_start, MI_PAGE_ALIGN));
   #endif
 }
 
 // This may change if we locate page info outside the page data slices
 static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
-  if (mi_page_info_is_separate(page)) {  // page is in front of the slice
+  if (mi_page_info_is_at_slice_start(page)) {  // page is in front of the slice?
+    return (uint8_t*)page;
+  }
+  else {
     // page info is at a separate location (at `arena->pages`)
     mi_assert_internal(_mi_is_aligned(page->page_start,MI_PAGE_ALIGN));
     return page->page_start;
-  }
-  else {
-    return (uint8_t*)page;
   }
 }
 
