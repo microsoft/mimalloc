@@ -130,9 +130,9 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   // todo: perhaps only do alignment hints if THP is enabled?
   if (try_alignment <= mi_os_mem_config.alloc_granularity || try_alignment > MI_HINT_ALIGN) return NULL;
   if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
-  size = _mi_align_up(size, MI_ARENA_SLICE_SIZE);
+  size = _mi_align_up(size, MI_HINT_ALIGN);
   if (size > 16*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at least 1/(MI_HINT_AREA / 1<<34) 
-  size += MI_ARENA_SLICE_SIZE;        // put in virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
+  size += MI_HINT_ALIGN;              // put in virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
   
   uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
@@ -145,6 +145,7 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
     mi_atomic_cas_strong_acq_rel(&aligned_base, &expected, init);
     hint = mi_atomic_add_acq_rel(&aligned_base, size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
   }
+  mi_assert_internal(hint%MI_HINT_ALIGN == 0);
   if (hint%try_alignment != 0) return NULL;
   return (void*)hint;
 }
