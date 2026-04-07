@@ -770,7 +770,7 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
     // give up to place it right in front of the guard page if the offset is too large for unalignment
     offset = MI_PAGE_MAX_OVERALLOC_ALIGN;
   }
-  uint8_t* p = (uint8_t*)block + offset;  
+  uint8_t* const p = (uint8_t*)block + offset;
   mi_assert_internal(p == guard_page - obj_size);
   mi_track_align(block, p, offset, obj_size);
   mi_track_mem_defined(block, sizeof(mi_block_t));
