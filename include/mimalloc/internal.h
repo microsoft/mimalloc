@@ -406,12 +406,12 @@ static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
 }
 
 // Align a pointer upwards
-static inline void* mi_align_up_ptr(void* p, size_t alignment) {
+static inline void* _mi_align_up_ptr(const void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
 }
 
 // Align a pointer downwards
-static inline void* mi_align_down_ptr(void* p, size_t alignment) {
+static inline void* _mi_align_down_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_down((uintptr_t)p, alignment);
 }
 
