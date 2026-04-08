@@ -460,12 +460,10 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   }
 }
 
-
 // Align a pointer upwards
-static inline uint8_t* _mi_align_up_ptr(const void* p, size_t alignment) {
-  return (uint8_t*)_mi_align_up((uintptr_t)p, alignment);
+static inline void* _mi_align_up_ptr(const void* p, size_t alignment) {
+  return (void*)_mi_align_up((uintptr_t)p, alignment);
 }
-
 
 static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
   mi_assert_internal(alignment != 0);
@@ -478,6 +476,7 @@ static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
   }
 }
 
+// align a pointer downwards
 static inline void* _mi_align_down_ptr(const void* p, size_t alignment) {
   return (void*)_mi_align_down((uintptr_t)p, alignment);
 }
