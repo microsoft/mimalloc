@@ -123,18 +123,23 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Place page meta info at the start of the page area or keep it separate? 
-// Separate is default and keeps the page info at the arena start which is more secure 
+// Separate keeps the page info at the arena start which is more secure 
 // and reduces wasted space due to alignment and block sizes 
 // (but also reserves more memory up front (about 2MiB per GiB))
+// For now, the default is to not use separated page info.
 #if !defined(MI_PAGE_INFO_IS_AT_SLICE_START)
-#define MI_PAGE_INFO_IS_AT_SLICE_START  0
+#define MI_PAGE_INFO_IS_AT_SLICE_START    (MI_SECURE==0)
 #endif
 
 // We can choose to only put page info of small pages at the start of the page area.
 // This can be used to have a slightly faster `mi_free_small` function for specialized
 // cases (like language runtime systems).
 #if !defined(MI_FAST_FREE_SMALL)
-#define MI_FAST_FREE_SMALL  (MI_PAGE_INFO_IS_AT_SLICE_START)
+#if MI_GUARDED || !MI_PAGE_INFO_IS_AT_SLICE_START
+#define MI_FAST_FREE_SMALL   0
+#else 
+#define MI_FAST_FREE_SMALL   1
+#endif
 #endif
 
 // Configuration checks
