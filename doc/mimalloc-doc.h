@@ -572,12 +572,17 @@ void* mi_heap_malloc(mi_heap_t* heap, size_t size);
 
 /// Allocate a small object in a specific heap.
 /// \a size must be smaller or equal to MI_SMALL_SIZE_MAX().
-/// @see mi_malloc()
+/// @see mi_malloc_small()
 void* mi_heap_malloc_small(mi_heap_t* heap, size_t size);
 
 /// Allocate zero-initialized in a specific heap.
 /// @see mi_zalloc()
 void* mi_heap_zalloc(mi_heap_t* heap, size_t size);
+
+/// Allocate a small object in a specific heap.
+/// \a size must be smaller or equal to MI_SMALL_SIZE_MAX().
+/// @see mi_zalloc_small()
+void* mi_heap_zalloc_small(mi_heap_t* heap, size_t size);
 
 /// Allocate \a count zero-initialized elements in a specific heap.
 /// @see mi_calloc()
@@ -877,7 +882,8 @@ bool mi_subproc_visit_heaps(mi_subproc_id_t subproc, mi_heap_visit_fun* visitor,
 /// \{
 
 /// Maximum size allowed for small allocations in
-/// #mi_malloc_small and #mi_zalloc_small (usually `128*sizeof(void*)` (= 1KB on 64-bit systems))
+/// #mi_malloc_small, #mi_zalloc_small, #mi_heap_malloc_small, #mi_heap_zalloc_small, 
+/// #mi_theap_malloc_small, and #mi_theap_zalloc_small (usually `128*sizeof(void*)` (= 1KB on 64-bit systems))
 #define MI_SMALL_SIZE_MAX   (128*sizeof(void*))
 
 /// @brief Return the mimalloc version.
@@ -1000,7 +1006,25 @@ void* mi_malloc_small(size_t size);
 /// with care!
 void* mi_zalloc_small(size_t size);
 
+/// __v3__: Can be used to free an object that was allocated with #mi_malloc_small et al.
+/// @param p Pointer that was returned from #mi_malloc_small et al.
+/// @details
+/// This function is meant for use in run-time systems for best
+/// performance and does not check if the pointer was _indeed_ allocated
+/// with #mi_malloc_small (et al) -- use with care!
+/// This function has a small perf benefit but only if mimalloc was built with `MI_FAST_FREE_SMALL=1`
+/// @see mi_malloc_small()
+/// @see mi_zalloc_small()
+/// @see mi_heap_malloc_small()
+/// @see mi_heap_zalloc_small()
+/// @see mi_theap_malloc_small()
+/// @see mi_theap_zalloc_small()
+void mi_free_small(void* p);
+
 /// \}
+
+
+
 
 
 // ------------------------------------------------------
@@ -1302,11 +1326,25 @@ mi_theap_t* mi_theap_set_default(mi_theap_t* theap);
 /// @returns The current default theap.
 mi_theap_t* mi_theap_get_default();
 
-
+/// Allocate in a specific theap.
+/// @see mi_malloc()
 void* mi_theap_malloc(mi_theap_t* theap, size_t size);
-void* mi_theap_zalloc(mi_theap_t* theap, size_t size);
-void* mi_theap_calloc(mi_theap_t* theap, size_t count, size_t size);
+
+/// Allocate a small object in a specific theap.
+/// \a size must be smaller or equal to MI_SMALL_SIZE_MAX().
+/// @see mi_malloc_small()
 void* mi_theap_malloc_small(mi_theap_t* theap, size_t size);
+
+/// Allocate zero-initialized in a specific heap.
+/// @see mi_zalloc()
+void* mi_theap_zalloc(mi_theap_t* theap, size_t size);
+
+/// Allocate a small object in a specific theap.
+/// \a size must be smaller or equal to MI_SMALL_SIZE_MAX().
+/// @see mi_zalloc_small()
+void* mi_theap_zalloc_small(mi_theap_t* theap, size_t size);
+
+void* mi_theap_calloc(mi_theap_t* theap, size_t count, size_t size);
 void* mi_theap_malloc_aligned(mi_theap_t* theap, size_t size, size_t alignment);
 void* mi_theap_realloc(mi_theap_t* theap, void* p, size_t newsize);
 

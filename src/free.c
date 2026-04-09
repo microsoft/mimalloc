@@ -190,6 +190,11 @@ void mi_ufree(void* p, size_t* usable) mi_attr_noexcept {
   mi_free_ex(p,usable);
 }
 
+void mi_free_small(void* p) mi_attr_noexcept {
+  mi_free(p);
+}
+
+
 // return true if successful
 bool _mi_free_delayed_block(mi_block_t* block) {
   // get segment and page

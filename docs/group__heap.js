@@ -35,5 +35,6 @@ var group__heap =
     [ "mi_heap_zalloc", "group__heap.html#gabebc796399619d964d8db77aa835e8c1", null ],
     [ "mi_heap_zalloc_aligned", "group__heap.html#ga6466bde8b5712aa34e081a8317f9f471", null ],
     [ "mi_heap_zalloc_aligned_at", "group__heap.html#ga484e3d01cd174f78c7e53370e5a7c819", null ],
+    [ "mi_heap_zalloc_small", "group__heap.html#ga0994f44cc595f9c1840a9af162d98597", null ],
     [ "mi_is_in_heap_region", "group__heap.html#ga5f071b10d4df1c3658e04e7fd67a94e6", null ]
 ];
