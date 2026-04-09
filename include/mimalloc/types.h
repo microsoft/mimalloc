@@ -93,7 +93,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Enable guard pages behind objects of a certain size (set by the MIMALLOC_GUARDED_MIN/MAX/SAMPLE_RATE options)
-#if !defined(MI_GUARDED) && MI_DEBUG
+#if !defined(MI_GUARDED) && MI_DEBUG && !MI_FAST_FREE_SMALL
 #define MI_GUARDED  1
 #endif
 
@@ -130,17 +130,27 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_PAGE_INFO_IS_AT_SLICE_START  0
 #endif
 
+// We can choose to only put page info of small pages at the start of the page area.
+// This can be used to have a slightly faster `mi_free_small` function for specialized
+// cases (like language runtime systems).
+#if !defined(MI_FAST_FREE_SMALL)
+#define MI_FAST_FREE_SMALL  (MI_PAGE_INFO_IS_AT_SLICE_START)
+#endif
+
+// Configuration checks
 #if MI_PAGE_INFO_IS_AT_SLICE_START && MI_SECURE
 #error "secure mode should use separated page infos"
 #endif
-
+#if MI_FAST_FREE_SMALL && MI_SECURE
+#error "secure mode cannot use MI_FAST_FREE_SMALL"
+#endif
 #if !MI_PAGE_INFO_IS_AT_SLICE_START && MI_PAGE_MAP_FLAT
 #error "cannot have a flat page map with separated page infos"
 #endif
-
 #if MI_DEBUG && NDEBUG
 #warning "mimalloc assertions enabled in a release build"
 #endif
+
 
 // --------------------------------------------------------------
 // Sizes of internal data-structures
@@ -679,7 +689,7 @@ typedef struct mi_arena_s {
   mi_bitmap_t*        slices_committed;     // is the slice committed? (i.e. accessible)
   mi_bitmap_t*        slices_dirty;         // is the slice potentially non-zero?
   mi_bitmap_t*        slices_purge;         // slices that can be purged
-  mi_page_t*          pages_meta;           // pre-allocated `slice_count` page meta info -- only used if `MI_PAGE_INFO_IS_AT_SLICE_START == 0`
+  mi_page_t*          pages_meta;           // pre-allocated `slice_count` page meta info -- only used if `MI_PAGE_INFO_(SMALL_)IS_AT_SLICE_START == 0`
   mi_arena_pages_t    pages_main;           // arena page bitmaps for the main heap are allocated up front as well
 
   // followed by the bitmaps (whose sizes depend on the arena size)

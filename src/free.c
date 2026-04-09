@@ -176,9 +176,8 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
 
 // Free a block
 // Fast path written carefully to prevent register spilling on the stack
-static mi_decl_forceinline void mi_free_ex(void* p, size_t* usable)  
+static mi_decl_forceinline void mi_free_ex(void* p, size_t* usable, mi_page_t* page)  
 {
-  mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");
   if mi_unlikely(page==NULL) return;  // page will be NULL if p==NULL
   mi_assert_internal(p!=NULL && page!=NULL);
   if (usable!=NULL) { *usable = mi_page_usable_block_size(page); }
@@ -206,12 +205,36 @@ static mi_decl_forceinline void mi_free_ex(void* p, size_t* usable)
 }
 
 void mi_free(void* p) mi_attr_noexcept {
-  mi_free_ex(p, NULL);
+  mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");  
+  mi_free_ex(p, NULL, page);
 }
 
 void mi_ufree(void* p, size_t* usable) mi_attr_noexcept {
-  mi_free_ex(p, usable);
+  mi_page_t* const page = mi_validate_ptr_page(p,"mi_ufree");  
+  mi_free_ex(p, usable, page);
 }
+
+void mi_free_small(void* p) mi_attr_noexcept {
+  // We can only call `mi_free_small` for pointers allocated with `mi_(heap_)malloc_small`.
+  // If we keep page info in front of the page area for small objects, we can find the info
+  // just by aligning down the pointer instead of looking it up in the page map.
+  #if MI_FAST_FREE_SMALL 
+    #if MI_GUARDED 
+    #warning "MI_FAST_FREE_SMALL ignored as MI_GUARDED is defined"
+    #elif MI_ARENA_SLICE_ALIGN < MI_SMALL_PAGE_SIZE
+    #warning "MI_FAST_FREE_SMALL ignored as the MI_ARENA_SLICE_ALIGN is less than the small page size"
+    #else
+      mi_page_t* const page = (mi_page_t*)_mi_align_down_ptr(p,MI_SMALL_PAGE_SIZE);
+      mi_assert(page == mi_validate_ptr_page(p,"mi_free_small"));
+      mi_assert((void*)page == _mi_align_down_ptr(page->page_start,MI_SMALL_PAGE_SIZE));
+      mi_assert(page->block_size <= MI_SMALL_SIZE_MAX);  // note: not `MI_SMALL_MAX_OBJ_SIZE` as we need to match `mi_(heap_)malloc_small`
+      mi_free_ex(p, NULL, page);
+    #endif
+  #else
+  mi_free(p);
+  #endif  
+}
+
 
 // --------------------------------------------------------------------------------------------
 // `mi_free_try_collect_mt`: Potentially collect a page in a free in an abandoned page.
