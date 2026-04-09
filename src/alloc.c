@@ -265,6 +265,15 @@ mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_small(size_t size) mi_attr_no
   return mi_theap_malloc_small_zero(_mi_theap_default(), size, true, NULL);
 }
 
+mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_zalloc_small(mi_theap_t* theap, size_t size) mi_attr_noexcept {
+  return mi_theap_malloc_small_zero(theap, size, true, NULL);
+}
+
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_zalloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_theap_malloc_small_zero_nonnull(_mi_heap_theap(heap), size, true, NULL);
+}
+
+
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_zalloc(mi_theap_t* theap, size_t size) mi_attr_noexcept {
   return _mi_theap_malloc_zero(theap, size, true, NULL);
 }
