@@ -10,5 +10,6 @@ var group__theap =
     [ "mi_theap_malloc_small", "group__theap.html#ga1fc65302a212daaecb21abda96ff247c", null ],
     [ "mi_theap_realloc", "group__theap.html#ga11943128dc354313c4189e72f4299dbb", null ],
     [ "mi_theap_set_default", "group__theap.html#ga04420ce52785019412397e4de24a984a", null ],
-    [ "mi_theap_zalloc", "group__theap.html#gaa7fd973dcd8c75eb05707bdeffbc06f7", null ]
+    [ "mi_theap_zalloc", "group__theap.html#gaa7fd973dcd8c75eb05707bdeffbc06f7", null ],
+    [ "mi_theap_zalloc_small", "group__theap.html#gaa85fccf9d40af3e826c5932aded1d534", null ]
 ];

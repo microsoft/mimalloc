@@ -160,6 +160,10 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_malloc_small(mi_h
   return mi_heap_malloc_small_zero(heap, size, false, NULL);
 }
 
+mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_zalloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_heap_malloc_small_zero(heap, size, true, NULL);
+}
+
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc_small(size_t size) mi_attr_noexcept {
   return mi_heap_malloc_small(mi_prim_get_default_heap(), size);
 }
@@ -206,7 +210,7 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc(size_t size) mi
 
 // zero initialized small block
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_small(size_t size) mi_attr_noexcept {
-  return mi_heap_malloc_small_zero(mi_prim_get_default_heap(), size, true, NULL);
+  return mi_heap_zalloc_small(mi_prim_get_default_heap(), size);
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
