@@ -717,25 +717,24 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
   return mi_page_block_size(page) - MI_PADDING_SIZE;
 }
 
-static inline bool mi_page_info_is_at_slice_start(const mi_page_t* page) {
-  #if MI_PAGE_INFO_IS_AT_SLICE_START
-  MI_UNUSED(page);
-  return true;
+static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
+  #if MI_PAGE_META_IS_SEPARATED
+  // usually separated but can still be in front for direct OS allocations (due to size or alignment) or due to MI_FAST_FREE_SMALL
+  return (page->memid.memkind == MI_MEM_ARENA && page != _mi_align_down_ptr(page->page_start, MI_ARENA_SLICE_ALIGN));
   #else
-  // usually separated but can still be in front for direct OS allocations (due to size or alignment)
-  return (page->memid.memkind != MI_MEM_ARENA || page == _mi_align_down_ptr(page->page_start, MI_PAGE_ALIGN));
+  MI_UNUSED(page);
+  return false;  
   #endif
 }
 
-// This may change if we locate page info outside the page data slices
 static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
-  if (mi_page_info_is_at_slice_start(page)) {  // page is in front of the slice?
-    return (uint8_t*)page;
+  if (mi_page_meta_is_separated(page)) {  
+    // page meta info is at a separate location (at `arena->pages`)
+    return (uint8_t*)_mi_align_down_ptr(page->page_start, MI_ARENA_SLICE_ALIGN);
   }
   else {
-    // page info is at a separate location (at `arena->pages`)
-    mi_assert_internal(_mi_is_aligned(page->page_start,MI_PAGE_ALIGN));
-    return page->page_start;
+    // page meta info is at the start of the page slices
+    return (uint8_t*)page;
   }
 }
 

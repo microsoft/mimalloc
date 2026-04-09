@@ -58,13 +58,13 @@ terms of the MIT license. A copy of the license can be found in the file
 // but protects most metadata with guard pages:
 //   #define MI_SECURE 1  // guard page around metadata; check pointer validity on free
 //
-// Level 2 is only used if `MI_PAGE_INFO_IS_AT_SLICE_START` is defined (which it is not by default)
+// Level 2 is only used if `MI_PAGE_META_IS_SEPARATED==0` (which it is not by default) 
 //   #define MI_SECURE 2  // guard page around each mimalloc page (can fragment VMA's with large theaps..)
 //
 // Level 3 has slightly more performance overhead
 //   #define MI_SECURE 3  // randomize allocations, encode free lists (detect corrupted free list (buffer overflow), and invalid pointer free)
 //
-// Level 4 is much more overhead. It also adds guard pages around each mimalloc page (even if `MI_PAGE_INFO_IS_AT_SLICE_START` is not defined).
+// Level 4 has (much) more overhead. It also adds guard pages around each mimalloc page (even if `MI_PAGE_META_IS_SEPARATED` is defined).
 //   #define MI_SECURE 4  // checks also for double free. 
 
 #if !defined(MI_SECURE)
@@ -123,33 +123,32 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Place page meta info at the start of the page area or keep it separate? 
-// Separate keeps the page info at the arena start which is more secure 
-// and reduces wasted space due to alignment and block sizes 
+// Separate keeps the page info at the arena start (default) which is more secure 
+// and reduces wasted space due to alignment and block sizes. 
 // (but also reserves more memory up front (about 2MiB per GiB))
-// For now, the default is to not use separated page info.
-#if !defined(MI_PAGE_INFO_IS_AT_SLICE_START)
-#define MI_PAGE_INFO_IS_AT_SLICE_START    (MI_SECURE==0)
+#if !defined(MI_PAGE_META_IS_SEPARATED)
+#if MI_PAGE_MAP_FLAT
+#define MI_PAGE_META_IS_SEPARATED    0
+#else
+#define MI_PAGE_META_IS_SEPARATED    1
+#endif
 #endif
 
 // We can choose to only put page info of small pages at the start of the page area.
 // This can be used to have a slightly faster `mi_free_small` function for specialized
 // cases (like language runtime systems).
 #if !defined(MI_FAST_FREE_SMALL)
-#if MI_GUARDED || !MI_PAGE_INFO_IS_AT_SLICE_START
 #define MI_FAST_FREE_SMALL   0
-#else 
-#define MI_FAST_FREE_SMALL   1
-#endif
 #endif
 
 // Configuration checks
-#if MI_PAGE_INFO_IS_AT_SLICE_START && MI_SECURE
+#if !MI_PAGE_META_IS_SEPARATED && MI_SECURE
 #error "secure mode should use separated page infos"
 #endif
 #if MI_FAST_FREE_SMALL && MI_SECURE
 #error "secure mode cannot use MI_FAST_FREE_SMALL"
 #endif
-#if !MI_PAGE_INFO_IS_AT_SLICE_START && MI_PAGE_MAP_FLAT
+#if MI_PAGE_META_IS_SEPARATED && MI_PAGE_MAP_FLAT
 #error "cannot have a flat page map with separated page infos"
 #endif
 #if MI_DEBUG && NDEBUG
@@ -426,12 +425,6 @@ typedef struct mi_page_s {
 #define MI_PAGE_OSPAGE_BLOCK_ALIGN2       (4*MI_KiB)                // also aligns any multiple of this size to avoid TLB misses.
 #define MI_PAGE_MAX_OVERALLOC_ALIGN       MI_ARENA_SLICE_SIZE       // (64 KiB) limit for which we overallocate in arena pages, beyond this use OS allocation
 
-#if (MI_ENCODE_FREELIST || MI_PADDING) && MI_SIZE_SIZE == 8
-#define MI_PAGE_INFO_SIZE                 ((MI_INTPTR_SHIFT+2)*32)  // 160    >= sizeof(mi_page_t)
-#else
-#define MI_PAGE_INFO_SIZE                 ((MI_INTPTR_SHIFT+1)*32)  // 128/96 >= sizeof(mi_page_t)
-#endif
-
 // The max object sizes are intended to not waste more than ~ 12.5% internally over the page sizes.
 #define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_OSPAGE_BLOCK_ALIGN2)/6)   // = 10 KiB
 #if MI_ENABLE_LARGE_PAGES
@@ -694,7 +687,7 @@ typedef struct mi_arena_s {
   mi_bitmap_t*        slices_committed;     // is the slice committed? (i.e. accessible)
   mi_bitmap_t*        slices_dirty;         // is the slice potentially non-zero?
   mi_bitmap_t*        slices_purge;         // slices that can be purged
-  mi_page_t*          pages_meta;           // pre-allocated `slice_count` page meta info -- only used if `MI_PAGE_INFO_(SMALL_)IS_AT_SLICE_START == 0`
+  mi_page_t*          pages_meta;           // pre-allocated `slice_count` page meta info -- only used if `MI_PAGE_META_IS_SEPARATED!=0`
   mi_arena_pages_t    pages_main;           // arena page bitmaps for the main heap are allocated up front as well
 
   // followed by the bitmaps (whose sizes depend on the arena size)
