@@ -1014,7 +1014,8 @@ void mi_process_init(void) mi_attr_noexcept {
 	// #endif
   if (!mi_atomic_once(&process_init)) return;
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
-
+    // Release reserved page-map and arena allocations at process shutdown for verifier runs.
+  mi_option_enable(mi_option_destroy_on_exit);
   mi_detect_cpu_features();
   _mi_options_init();
   _mi_stats_init();
