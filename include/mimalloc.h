@@ -428,24 +428,6 @@ mi_decl_export void mi_stats_print(void* out) mi_attr_noexcept;  // backward com
 mi_decl_export void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;  // not deprecated but declared in `mimalloc-stats.h` now.
 
 
-
-// ------------------------------------------------------
-// Compatibility with v3
-// ------------------------------------------------------
-
-typedef mi_heap_t  mi_theap_t;
-
-#define mi_theap_get_default()            mi_heap_get_default()      
-#define mi_theap_set_default(hp)          mi_heap_set_default(hp)      
-#define mi_theap_collect(hp,force)        mi_heap_collect(hp,force)
-#define mi_theap_malloc(hp,sz)            mi_heap_malloc(hp,sz)
-#define mi_theap_zalloc(hp,sz)            mi_heap_zalloc(hp,sz)
-#define mi_theap_calloc(hp,cnt,sz)        mi_heap_malloc(hp,cnt,sz)
-#define mi_theap_malloc_small(hp,sz)      mi_heap_malloc_small(hp,sz)
-#define mi_theap_malloc_aligned(hp,sz,a)  mi_heap_malloc_aligned(hp,sz,a)
-#define mi_theap_realloc(hp,p,newsz)      mi_heap_realloc(hp,p,newsz)
-
-
 // ------------------------------------------------------
 // Options
 // ------------------------------------------------------
