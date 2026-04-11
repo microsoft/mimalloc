@@ -18,9 +18,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # we build on the oldest ubuntu version for better binary compatibility.
         branch: [dev,dev2,dev3]
-        os: [windows-latest, macOS-latest, ubuntu-22.04]  
+        os: [windows-latest, macOS-latest, ubuntu-22.04]
 
     steps:
       # Checkout: https://github.com/actions/checkout
@@ -41,15 +40,18 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           ./bin/bundle.sh
-      
-      # Create a release: https://github.com/softprops/action-gh-release (MIT license)
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        if: ${{ env.RELEASE != '' && env.RELEASE != 'no' }} 
-        with:
-          name: ${{ env.RELEASE }}
-          draft: true
-          files: |
-            out/bundle/*.tar.gz            
-          # body_path: release.md
 
+      # Release
+      - name: Create release
+        if: ${{ env.RELEASE != '' && env.RELEASE != 'no' }} 
+        run: |
+          gh release create ${{ env.RELEASE }} --title "${{ env.RELEASE }}" --draft --notes "auto"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload assets
+        if: ${{ env.RELEASE != '' && env.RELEASE != 'no' }} 
+        run: |
+          gh release upload ${{ env.RELEASE }} out/bundle/*.tar.gz --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}      

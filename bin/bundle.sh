@@ -159,7 +159,7 @@ build_test_install() { # <type> <bundledir> <prefix> <cmake args>
   mkdir -p "$build_dir"
   cmake . -B "$build_dir" $4
   cmake --build "$build_dir" --parallel 4
-  # ctest --test-dir "$build_dir"
+  ctest --test-dir "$build_dir"
   cmake --install "$build_dir" --prefix "$3"
 }
 
