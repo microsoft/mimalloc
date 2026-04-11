@@ -863,11 +863,11 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
         page = page_meta;
         page_meta_is_separate = true;
         block_start = 0;
-        #if !defined(MI_PAGE_BLOCK_START_OFFSET)
-        #define MI_PAGE_BLOCK_START_OFFSET  (2*MI_INTPTR_BITS) /* 128 */
+        #if !defined(MI_PAGE_BLOCK_START_MAX_OFFSET)
+        #define MI_PAGE_BLOCK_START_MAX_OFFSET  (8*MI_INTPTR_BITS) /* 512 */
         #endif
-        if (block_size >= MI_INTPTR_SIZE && block_size <= MI_PAGE_BLOCK_START_OFFSET) { 
-          block_start += MI_PAGE_BLOCK_START_OFFSET;
+        if (block_size >= MI_INTPTR_SIZE && block_size <= MI_PAGE_BLOCK_START_MAX_OFFSET && _mi_is_power_of_two(block_size)) { 
+          block_start += block_size;
         }
         mi_assert_internal(page->block_size == 0);
         _mi_memzero_aligned(page, sizeof(*page));
