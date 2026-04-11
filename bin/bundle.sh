@@ -1,4 +1,4 @@
-#!/bin/sh -e 
+#!/bin/sh -e
 
 #-----------------------------------------------------------------------------
 # Bundle release
@@ -40,7 +40,23 @@ on_path() {
 
 
 #---------------------------------------------------------
-# Detect OS and cpu architecture 
+# Detect git tag and commit
+#---------------------------------------------------------
+
+detect_git_tag() {
+  if [ -z "$MI_COMMIT" ] ; then
+    MI_COMMIT=`git rev-parse HEAD`
+  fi
+  if [ -z "$MI_TAG" ] ; then
+    MI_TAG=`git describe --tag`
+  fi
+  info "Tag        : $MI_TAG"
+  info "Commit     : $MI_COMMIT"
+}
+
+
+#---------------------------------------------------------
+# Detect OS and cpu architecture
 #---------------------------------------------------------
 
 contains() {
@@ -99,8 +115,6 @@ detect_osarch() {
   fi
 }
 
-
-
 #---------------------------------------------------------
 # Command line options
 #---------------------------------------------------------
@@ -121,10 +135,6 @@ process_options() {
           PREFIX="$1";;
       -p=*|--prefix=*)
           PREFIX=`eval echo $flag_arg`;;  # no quotes so ~ gets expanded (issue #412)
-      -t) shift
-          MI_TAG="$1";;
-      -t=*|--tag=*)
-          MI_TAG="$flag_arg";;
       -h|--help|-\?|help|\?)
           MODE="help";;
       *) case "$flag" in
@@ -133,26 +143,15 @@ process_options() {
     esac
     shift
   done
-
-  if [ -z "$MI_COMMIT" ] ; then
-    MI_COMMIT=`git log -n 1 --pretty=format:"%H"`
-  fi
-  if [ -z "$MI_TAG" ] ; then
-    MI_TAG=`git describe --tag`    
-  fi
-  info "Tag        : $MI_TAG"
-  info "Commit     : $MI_COMMIT"
 }
 
-
-
 #---------------------------------------------------------
-# Download 
+# Download
 #---------------------------------------------------------
 
 download_failed() { # <program> <url>
   warn ""
-  warn "unable to download: $2"  
+  warn "unable to download: $2"
   stop ""
 }
 
@@ -180,25 +179,9 @@ download_file() {  # <url|file> <destination file>
   esac
 }
 
-download_available() {  # <url|file>
-  case "$1" in
-    ftp://*|http://*|https://*)
-      if has_cmd curl ; then
-        if ! curl -sS --proto =https --tlsv1.2 -L -I "$1" | grep -E "^HTTP/2 200" ; then  # -I is headers only
-          return 1
-        fi
-      fi;;
-    *)
-      if ! [ -f "$1" ] ; then
-        return 1
-      fi;;
-  esac
-  return 0
-}
-
-download_source_at_tag() { # <tag> <output file>
-  download_file "https://github.com/microsoft/mimalloc/archive/refs/tags/$1.tar.gz" "$2"
-}
+#---------------------------------------------------------
+# Bundle
+#---------------------------------------------------------
 
 download_source_at_commit() { # <commit> <output file>
   download_file "https://github.com/microsoft/mimalloc/archive/$1.tar.gz" "$2"
@@ -210,24 +193,15 @@ build_test_install() { # <type> <bundledir> <prefix> <cmake args>
   mkdir -p "$build_dir"
   cmake . -B "$build_dir" $4
   cmake --build "$build_dir"
-  ctest --test-dir "$build_dir" 
+  ctest --test-dir "$build_dir"
   cmake --install "$build_dir" --prefix "$3"
 }
- 
-#---------------------------------------------------------
-# Main
-#---------------------------------------------------------
 
 main_bundle() {
   # config
   bundle_dir="out/bundle"
   mkdir -p "$bundle_dir"
 
-  # source archive
-  info "Download source archive for $MI_TAG"
-  source_archive="$bundle_dir/mimalloc-$MI_TAG-source.tar.gz"
-  download_source_at_commit "$MI_COMMIT" "$source_archive"
-  
   # build
   prefix_dir="$bundle_dir/prefix"
   build_test_install "debug"   "$bundle_dir" "$prefix_dir" "-DCMAKE_BUILD_TYPE=Debug"
@@ -237,20 +211,28 @@ main_bundle() {
   # archive binaries
   binary_archive_name="mimalloc-$MI_TAG-$OSARCH.tar.gz"
   binary_archive="$bundle_dir/$binary_archive_name"
-  info "Create binary archive: $binary_archive_name"  
-  pushd $bundle_dir
-  tar -czvf "$binary_archive_name" prefix
+  info "Create binary archive: $binary_archive_name"
+  pushd "$prefix_dir"
+  tar -czvf "../$binary_archive_name" .
   popd
+
+  # source archive
+  info "Download source archive for $MI_TAG"
+  source_archive="$bundle_dir/mimalloc-$MI_TAG-source.tar.gz"
+  download_source_at_commit "$MI_COMMIT" "$source_archive"
 
   # done
   info ""
-  info "Created:"  
+  info "Created:"
   info "  - $binary_archive"
   info "  - $source_archive"
   info ""
-  info "Done."  
+  info "Done."
 }
 
+#---------------------------------------------------------
+# Main
+#---------------------------------------------------------
 
 main_help() {
   info "command:"
