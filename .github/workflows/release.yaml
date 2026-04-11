@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  RELEASE: "v3.3.0-draft"
+  RELEASE: v3.3.0-draft
   
 name: bundle
 jobs:
@@ -31,17 +31,17 @@ jobs:
 
       # Build
       - name: Build (Windows)
-        if: runner.os == "Windows"
+        if: runner.os == 'Windows'
         run: ./bin/bundle.bat
 
       - name: Build (Linux, macOS)
-        if: runner.os != "Windows"
+        if: runner.os != 'Windows'
         run: ./bin/bundle.sh
       
       # Create a release: https://github.com/softprops/action-gh-release (MIT license)
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: $RELEASE != "" && $RELEASE != "no"
+        if: $RELEASE' != '' && $RELEASE != 'no'
         with:
           name: $RELEASE
           draft: true
