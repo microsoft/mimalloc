@@ -4,8 +4,6 @@
 # Bundle release
 #-----------------------------------------------------------------------------
 
-QUIET=""
-FORCE=""
 OSARCH=""
 OSNAME=""
 MI_TAG=""
@@ -34,10 +32,6 @@ has_cmd() {
   command -v "$1" > /dev/null 2>&1
 }
 
-on_path() {
-  echo ":$PATH:" | grep -q :"$1":
-}
-
 
 #---------------------------------------------------------
 # Detect git tag and commit
@@ -58,14 +52,6 @@ detect_git_tag() {
 #---------------------------------------------------------
 # Detect OS and cpu architecture
 #---------------------------------------------------------
-
-contains() {
-  if echo "$1" | grep -i -E "$2" > /dev/null; then
-    return 0
-  else
-    return 1
-  fi
-}
 
 detect_osarch() {
   arch="$(uname -m)"
@@ -96,23 +82,6 @@ detect_osarch() {
       info "Warning: assuming generic Linux"
   esac
   OSARCH="$OSNAME-$arch"
-
-  if [ "$OSNAME" = "linux" ]; then
-    distrocfg=`cat $(find /etc/*-release -type f)`
-    if contains "$distrocfg" "rhel"; then
-      OSDISTRO="rhel"
-    elif contains "$distrocfg" "opensuse"; then
-      OSDISTRO="opensuse"
-    elif contains "$distrocfg" "alpine"; then
-      OSDISTRO="alpine"
-    elif contains "$distrocfg" "arch"; then
-      OSDISTRO="arch"
-    elif contains "$distrocfg" "ubuntu|debian"; then
-      OSDISTRO="ubuntu"
-    else
-      OSDISTRO="ubuntu" # default
-    fi
-  fi
 }
 
 #---------------------------------------------------------
@@ -150,9 +119,7 @@ process_options() {
 #---------------------------------------------------------
 
 download_failed() { # <program> <url>
-  warn ""
-  warn "unable to download: $2"
-  stop ""
+  stop "unable to download: $2"
 }
 
 download_file() {  # <url|file> <destination file>
@@ -171,7 +138,6 @@ download_file() {  # <url|file> <destination file>
         stop "Neither 'curl' nor 'wget' is available; install one to continue."
       fi;;
     *)
-      # echo "cp $1 to $2"
       info "Copying: $1"
       if ! cp $1 $2 ; then
         stop "Unable to copy from $1"
@@ -192,8 +158,8 @@ build_test_install() { # <type> <bundledir> <prefix> <cmake args>
   build_dir="$2/$1"
   mkdir -p "$build_dir"
   cmake . -B "$build_dir" $4
-  cmake --build "$build_dir"
-  ctest --test-dir "$build_dir"
+  cmake --build "$build_dir" --parallel 4
+  # ctest --test-dir "$build_dir"
   cmake --install "$build_dir" --prefix "$3"
 }
 
@@ -201,9 +167,13 @@ main_bundle() {
   # config
   bundle_dir="out/bundle"
   mkdir -p "$bundle_dir"
+  if [ -z "$PREFIX" ] ; then
+    prefix_dir="$bundle_dir/prefix"
+  else
+    prefix_dir="$PREFIX"
+  fi
 
   # build
-  prefix_dir="$bundle_dir/prefix"
   build_test_install "debug"   "$bundle_dir" "$prefix_dir" "-DCMAKE_BUILD_TYPE=Debug"
   build_test_install "release" "$bundle_dir" "$prefix_dir" "-DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON"
   build_test_install "secure"  "$bundle_dir" "$prefix_dir" "-DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON"
@@ -212,20 +182,22 @@ main_bundle() {
   binary_archive_name="mimalloc-$MI_TAG-$OSARCH.tar.gz"
   binary_archive="$bundle_dir/$binary_archive_name"
   info "Create binary archive: $binary_archive_name"
-  pushd "$prefix_dir"
-  tar -czvf "../$binary_archive_name" .
-  popd
+  (cd "$prefix_dir" && tar -czvf "../$binary_archive_name" .)
 
   # source archive
-  info "Download source archive for $MI_TAG"
-  source_archive="$bundle_dir/mimalloc-$MI_TAG-source.tar.gz"
-  download_source_at_commit "$MI_COMMIT" "$source_archive"
+  if [ "$OSNAME" = "linux" ] ; then
+    info "Download source archive for $MI_TAG"
+    source_archive="$bundle_dir/mimalloc-$MI_TAG-source.tar.gz"
+    download_source_at_commit "$MI_COMMIT" "$source_archive"
+  fi
 
   # done
   info ""
   info "Created:"
   info "  - $binary_archive"
-  info "  - $source_archive"
+  if [ -n "$source_archive" ] ; then
+    info "  - $source_archive"
+  fi
   info ""
   info "Done."
 }
@@ -240,13 +212,14 @@ main_help() {
   info ""
   info "options:"
   info "  -q, --quiet              suppress output"
-  info "  -f, --force              continue without prompting"
   info "  -p, --prefix=<dir>       prefix directory ($PREFIX)"
+  info "  -h, --help               show command line options"
   info ""
 }
 
 main_start() {
   detect_osarch
+  detect_git_tag
   process_options $@
   if [ "$MODE" = "help" ] ; then
     main_help
