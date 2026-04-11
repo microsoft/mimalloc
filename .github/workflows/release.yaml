@@ -1,8 +1,8 @@
 on:
   workflow_dispatch:   # run the workflow manually 
   push:
-      branches:
-        - dev
+    branches:
+      - dev
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
