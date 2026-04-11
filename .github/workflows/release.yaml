@@ -15,7 +15,7 @@ env:
 name: bundle
 jobs:
   build:
-    name: Bundle mimalloc release
+    name: Bundle
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
