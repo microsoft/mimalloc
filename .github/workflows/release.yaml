@@ -41,9 +41,9 @@ jobs:
       # Create a release: https://github.com/softprops/action-gh-release (MIT license)
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: $RELEASE != '' && $RELEASE != 'no'
+        if: ${{ env.RELEASE != '' && env.RELEASE != 'no' }}
         with:
-          name: $RELEASE
+          name: ${{ env.RELEASE }}
           draft: true
           files: |
             out/bundle/*.tar.gz            
