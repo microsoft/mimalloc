@@ -1,8 +1,5 @@
 on:
   workflow_dispatch:   # run the workflow manually 
-  push:
-    branches:
-      - dev
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,7 +20,7 @@ jobs:
       matrix:
         # we build on the oldest ubuntu version for better binary compatibility.
         branch: [dev,dev2,dev3]
-        os: [macOS-latest, ubuntu-22.04]  # windows-latest, 
+        os: [windows-latest, macOS-latest, ubuntu-22.04]  
 
     steps:
       # Checkout: https://github.com/actions/checkout
