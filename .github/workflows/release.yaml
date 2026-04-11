@@ -31,18 +31,18 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ matrix.branch }}
+          fetch-tags: true
+          fetch-depth: 0
 
       # Build
       - name: Build (Windows)
         if: runner.os == 'Windows'
         run: |
-          git fetch --tags
           ./bin/bundle.bat
 
       - name: Build (Linux, macOS)
         if: runner.os != 'Windows'
         run: |
-          git fetch --tags
           ./bin/bundle.sh
       
       # Create a release: https://github.com/softprops/action-gh-release (MIT license)
