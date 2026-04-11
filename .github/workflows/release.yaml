@@ -26,7 +26,8 @@ jobs:
       # Checkout: https://github.com/actions/checkout
       - name: Checkout repository
         uses: actions/checkout@v6
-        ref: ${{ matrix.branch }}
+        with:
+          ref: ${{ matrix.branch }}
 
       # Build
       - name: Build (Windows)
