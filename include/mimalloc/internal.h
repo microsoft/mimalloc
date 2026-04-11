@@ -393,7 +393,7 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
 
 
 // Align a pointer upwards
-static inline void* mi_align_up_ptr(void* p, size_t alignment) {
+static inline void* _mi_align_up_ptr(const void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
 }
 
@@ -666,12 +666,17 @@ static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
 /* -------------------------------------------------------------------
   Guarded objects
 ------------------------------------------------------------------- */
-#if MI_GUARDED
 static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* p) {
+#if MI_GUARDED
   const ptrdiff_t offset = (uint8_t*)p - (uint8_t*)block;
   return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && block->next == MI_BLOCK_TAG_GUARDED);
+#else
+  MI_UNUSED(block); MI_UNUSED(p);
+  return false;
+#endif  
 }
 
+#if MI_GUARDED
 static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
   // this code is written to result in fast assembly as it is on the hot path for allocation
   const size_t count = heap->guarded_sample_count - 1;  // if the rate was 0, this will underflow and count for a long time..

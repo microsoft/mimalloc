@@ -34,7 +34,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;v1.9,  v2.2,  v3.2</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;1.8/2.1</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -118,7 +118,7 @@ $(function(){initNavTree('group__extended.html',''); initResizable(true); });
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="define-members" name="define-members"></a>
 Macros</h2></td></tr>
 <tr class="memitem:ga1ea64283508718d9d645c38efc2f4305" id="r_ga1ea64283508718d9d645c38efc2f4305"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga1ea64283508718d9d645c38efc2f4305">MI_SMALL_SIZE_MAX</a></td></tr>
-<tr class="memdesc:ga1ea64283508718d9d645c38efc2f4305"><td class="mdescLeft">&#160;</td><td class="mdescRight">Maximum size allowed for small allocations in <a class="el" href="#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small</a> and <a class="el" href="#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small</a> (usually <code>128*sizeof(void*)</code> (= 1KB on 64-bit systems))  <br /></td></tr>
+<tr class="memdesc:ga1ea64283508718d9d645c38efc2f4305"><td class="mdescLeft">&#160;</td><td class="mdescRight">Maximum size allowed for small allocations in <a class="el" href="#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small</a>, <a class="el" href="#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small</a>, <a class="el" href="group__heap.html#ga012c5c8abe22b10043de39ff95909541" title="Allocate a small object in a specific heap.">mi_heap_malloc_small</a>, <a class="el" href="group__heap.html#ga0994f44cc595f9c1840a9af162d98597" title="Allocate a small object in a specific heap.">mi_heap_zalloc_small</a>, <a class="el" href="group__theap.html#ga1fc65302a212daaecb21abda96ff247c" title="Allocate a small object in a specific theap. size must be smaller or equal to MI_SMALL_SIZE_MAX().">mi_theap_malloc_small</a>, and <a class="el" href="group__theap.html#gaa85fccf9d40af3e826c5932aded1d534" title="Allocate a small object in a specific theap. size must be smaller or equal to MI_SMALL_SIZE_MAX().">mi_theap_zalloc_small</a> (usually <code>128*sizeof(void*)</code> (= 1KB on 64-bit systems))  <br /></td></tr>
 <tr class="separator:ga1ea64283508718d9d645c38efc2f4305"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="typedef-members" name="typedef-members"></a>
@@ -168,6 +168,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga51c47637e81df0e2f13a2d7a2dec123e" id="r_ga51c47637e81df0e2f13a2d7a2dec123e"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga51c47637e81df0e2f13a2d7a2dec123e">mi_zalloc_small</a> (size_t size)</td></tr>
 <tr class="memdesc:ga51c47637e81df0e2f13a2d7a2dec123e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate a zero initialized small object.  <br /></td></tr>
 <tr class="separator:ga51c47637e81df0e2f13a2d7a2dec123e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga2a8469764c38dcaf878f36e5f50e3610" id="r_ga2a8469764c38dcaf878f36e5f50e3610"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga2a8469764c38dcaf878f36e5f50e3610">mi_free_small</a> (void *p)</td></tr>
+<tr class="memdesc:ga2a8469764c38dcaf878f36e5f50e3610"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Can be used to free an object that was allocated with <a class="el" href="#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small</a> et al.  <br /></td></tr>
+<tr class="separator:ga2a8469764c38dcaf878f36e5f50e3610"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>Internal functionality. </p>
@@ -184,7 +187,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Maximum size allowed for small allocations in <a class="el" href="#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small</a> and <a class="el" href="#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small</a> (usually <code>128*sizeof(void*)</code> (= 1KB on 64-bit systems)) </p>
+<p>Maximum size allowed for small allocations in <a class="el" href="#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small</a>, <a class="el" href="#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small</a>, <a class="el" href="group__heap.html#ga012c5c8abe22b10043de39ff95909541" title="Allocate a small object in a specific heap.">mi_heap_malloc_small</a>, <a class="el" href="group__heap.html#ga0994f44cc595f9c1840a9af162d98597" title="Allocate a small object in a specific heap.">mi_heap_zalloc_small</a>, <a class="el" href="group__theap.html#ga1fc65302a212daaecb21abda96ff247c" title="Allocate a small object in a specific theap. size must be smaller or equal to MI_SMALL_SIZE_MAX().">mi_theap_malloc_small</a>, and <a class="el" href="group__theap.html#gaa85fccf9d40af3e826c5932aded1d534" title="Allocate a small object in a specific theap. size must be smaller or equal to MI_SMALL_SIZE_MAX().">mi_theap_zalloc_small</a> (usually <code>128*sizeof(void*)</code> (= 1KB on 64-bit systems)) </p>
 
 </div>
 </div>
@@ -289,6 +292,42 @@ Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="ga2a8469764c38dcaf878f36e5f50e3610" name="ga2a8469764c38dcaf878f36e5f50e3610"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga2a8469764c38dcaf878f36e5f50e3610">&#9670;&#160;</a></span>mi_free_small()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_free_small </td>
+          <td>(</td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>p</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Can be used to free an object that was allocated with <a class="el" href="#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small</a> et al. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">p</td><td>Pointer that was returned from <a class="el" href="#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small</a> et al.</td></tr>
+  </table>
+  </dd>
+</dl>
+<p>This function is meant for use in run-time systems for best performance and does not check if the pointer was <em>indeed</em> allocated with <a class="el" href="#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small</a> (et al) &ndash; use with care! This function has a small perf benefit but only if mimalloc was built with <code>MI_FAST_FREE_SMALL=1</code> </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a> </dd>
+<dd>
+<a class="el" href="#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small()</a> </dd>
+<dd>
+<a class="el" href="group__heap.html#ga012c5c8abe22b10043de39ff95909541" title="Allocate a small object in a specific heap.">mi_heap_malloc_small()</a> </dd>
+<dd>
+<a class="el" href="group__heap.html#ga0994f44cc595f9c1840a9af162d98597" title="Allocate a small object in a specific heap.">mi_heap_zalloc_small()</a> </dd>
+<dd>
+<a class="el" href="group__theap.html#ga1fc65302a212daaecb21abda96ff247c" title="Allocate a small object in a specific theap. size must be smaller or equal to MI_SMALL_SIZE_MAX().">mi_theap_malloc_small()</a> </dd>
+<dd>
+<a class="el" href="group__theap.html#gaa85fccf9d40af3e826c5932aded1d534" title="Allocate a small object in a specific theap. size must be smaller or equal to MI_SMALL_SIZE_MAX().">mi_theap_zalloc_small()</a> </dd></dl>
+
+</div>
+</div>
 <a id="gaad25050b19f30cd79397b227e0157a3f" name="gaad25050b19f30cd79397b227e0157a3f"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#gaad25050b19f30cd79397b227e0157a3f">&#9670;&#160;</a></span>mi_is_redirected()</h2>
 
@@ -328,7 +367,7 @@ Functions</h2></td></tr>
 <p>Allocate a small object. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">size</td><td>The size in bytes, can be at most <a class="el" href="#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small and mi_zalloc_small (usually 128*sizeof...">MI_SMALL_SIZE_MAX</a>. </td></tr>
+    <tr><td class="paramname">size</td><td>The size in bytes, can be at most <a class="el" href="#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small, mi_zalloc_small, mi_heap_malloc_small,...">MI_SMALL_SIZE_MAX</a>. </td></tr>
   </table>
   </dd>
 </dl>
@@ -533,7 +572,7 @@ Functions</h2></td></tr>
 <p>Allocate a zero initialized small object. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">size</td><td>The size in bytes, can be at most <a class="el" href="#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small and mi_zalloc_small (usually 128*sizeof...">MI_SMALL_SIZE_MAX</a>. </td></tr>
+    <tr><td class="paramname">size</td><td>The size in bytes, can be at most <a class="el" href="#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small, mi_zalloc_small, mi_heap_malloc_small,...">MI_SMALL_SIZE_MAX</a>. </td></tr>
   </table>
   </dd>
 </dl>
