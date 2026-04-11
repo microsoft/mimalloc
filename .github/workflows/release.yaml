@@ -21,7 +21,7 @@ jobs:
       matrix:
         branch: [dev,dev2,dev3]
         # we build on the oldest ubuntu version for better binary compatibility.
-        os: [windows-latest, macOS-latest, ubuntu-22.04]  
+        os: [windows-latest, macOS-latest, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm64]  
 
     steps:
       # Checkout: https://github.com/actions/checkout
@@ -50,7 +50,8 @@ jobs:
         with:
           name: ${{ env.RELEASE }}
           draft: true
+          body_path: doc/release-notes.md
           files: |
             out/bundle/*.tar.gz            
-          # body_path: release.md
+          
 
