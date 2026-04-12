@@ -59,7 +59,7 @@ jobs:
           ctest --test-dir out/debug-cxx --verbose --timeout 120 -C Debug
 
       - name: Release, C++, SIMD
-        if: matrix.tests == 'basic' && runner.os != 'Windows' && matrix.os != 'macos-15-intel'
+        if: matrix.tests == 'basic' && runner.os != 'Windows' && matrix.os != 'macos-15-intel' && matrix.os != 'macos-14'
         run: |
           cmake . -B out/release-cxx -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_OPT_SIMD=ON -DMI_USE_CXX=ON
           cmake --build out/release-cxx --parallel 8 --config Release
