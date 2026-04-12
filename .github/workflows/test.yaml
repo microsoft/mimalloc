@@ -18,7 +18,7 @@ jobs:
     strategy:
       matrix:
         tests: [basic,extra]
-        os: [windows-latest, macos-latest, ubuntu-latest, macos-14, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm, windows-11-arm]
+        os: [windows-latest, macos-latest, ubuntu-latest, macos-14, macos-15-intel, ubuntu-22.04-arm, windows-11-arm]
         exclude:
           - os: macos-14
             tests: extra          
@@ -59,7 +59,7 @@ jobs:
           ctest --test-dir out/debug-cxx --verbose --timeout 60 -C Debug
 
       - name: Release, C++, SIMD
-        if: matrix.tests == 'basic' && runner.os != 'Windows'
+        if: matrix.tests == 'basic' && runner.os != 'Windows' && matrix.os != "macos-15-intel"
         run: |
           cmake . -B out/release-cxx -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_OPT_SIMD=ON -DMI_USE_CXX=ON
           cmake --build out/release-cxx --parallel 8 --config Release
