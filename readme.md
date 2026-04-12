@@ -1,9 +1,10 @@
-
 <img align="left" width="100" height="100" src="doc/mimalloc-logo.png"/>
-
-[<img align="right" src="https://dev.azure.com/Daan0324/mimalloc/_apis/build/status/microsoft.mimalloc?branchName=dev3"/>](https://dev.azure.com/Daan0324/mimalloc/_build?definitionId=1&_a=summary)
-
-[<img align="right" src="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml/badge.svg?branch=dev3"/>](https://github.com/microsoft/mimalloc/actions/workflows/test.yaml)
+<div align="right">
+<sup> v3:</sup><a href="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml"><img src="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml/badge.svg?branch=dev3"/></a>
+<sup> v2:</sup><a href="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml"><img src="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml/badge.svg?branch=dev2"/></a>
+<sup> v1:</sup><a href="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml"><img src="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml/badge.svg?branch=dev"/></a>
+&nbsp;&nbsp;&nbsp;<sup>v3</sup><a href="https://dev.azure.com/Daan0324/mimalloc/_build?definitionId=1&_a=summary"><img src="https://dev.azure.com/Daan0324/mimalloc/_apis/build/status/microsoft.mimalloc?branchName=dev3"/></a>
+</div>
 
 # mimalloc
 
