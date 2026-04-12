@@ -204,10 +204,9 @@ static void mi_stat_print_ex(const mi_stat_count_t* stat, const char* msg, int64
     }
   }
   else {
-    mi_print_amount(stat->peak, 1, out, arg);
-    mi_print_amount(stat->total, 1, out, arg);
-    _mi_fprintf(out, arg, "%11s", " ");  // no freed
-    mi_print_amount(stat->current, 1, out, arg);
+    mi_print_amount(stat->peak, 0, out, arg);
+    mi_print_amount(stat->total, 0, out, arg);
+    mi_print_amount(stat->current, 0, out, arg);
     _mi_fprintf(out, arg, "\n");
   }
 }
@@ -227,10 +226,15 @@ static void mi_stat_total_print(const mi_stat_count_t* stat, const char* msg, in
 
 static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg ) {
   _mi_fprintf(out, arg, "%10s:", msg);
-  mi_print_amount(stat->total, -1, out, arg);
+  mi_print_amount(stat->total, 0, out, arg);
   _mi_fprintf(out, arg, "\n");
 }
 
+static void mi_stat_counter_print_size(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg ) {
+  _mi_fprintf(out, arg, "%10s:", msg);
+  mi_print_amount(stat->total, 1, out, arg);
+  _mi_fprintf(out, arg, "\n");
+}
 
 static void mi_stat_average_print(size_t count, size_t total, const char* msg, mi_output_fun* out, void* arg) {
   const int64_t avg_tens = (count == 0 ? 0 : (total*10 / count));
@@ -313,9 +317,8 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stats_print_bins(stats->malloc_bins, MI_BIN_HUGE, "bin",out,arg);
   #endif
   #if MI_STAT
-  mi_stat_print(&stats->malloc_normal, "binned", (stats->malloc_normal_count.total == 0 ? 1 : -1), out, arg);
-  // mi_stat_print(&stats->malloc_large, "large", (stats->malloc_large_count.total == 0 ? 1 : -1), out, arg);
-  mi_stat_print(&stats->malloc_huge, "huge", (stats->malloc_huge_count.total == 0 ? 1 : -1), out, arg);
+  mi_stat_print(&stats->malloc_normal, "binned", (stats->malloc_normal_count.total == 0 ? -1 : 1), out, arg);
+  mi_stat_print(&stats->malloc_huge, "huge", (stats->malloc_huge_count.total == 0 ? -1 : 1), out, arg);
   mi_stat_count_t total = { 0,0,0 };
   mi_stat_count_add_mt(&total, &stats->malloc_normal);
   // mi_stat_count_add(&total, &stats->malloc_large);
@@ -328,14 +331,14 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   #endif
   mi_stat_print_ex(&stats->reserved, "reserved", 1, out, arg, "");
   mi_stat_print_ex(&stats->committed, "committed", 1, out, arg, "");
-  mi_stat_counter_print(&stats->reset, "reset", out, arg );
-  mi_stat_counter_print(&stats->purged, "purged", out, arg );
+  mi_stat_counter_print_size(&stats->reset, "reset", out, arg );
+  mi_stat_counter_print_size(&stats->purged, "purged", out, arg );
   mi_stat_print_ex(&stats->page_committed, "touched", 1, out, arg, "");
-  mi_stat_print(&stats->segments, "segments", -1, out, arg);
-  mi_stat_print(&stats->segments_abandoned, "-abandoned", -1, out, arg);
-  mi_stat_print(&stats->segments_cache, "-cached", -1, out, arg);
-  mi_stat_print(&stats->pages, "pages", -1, out, arg);
-  mi_stat_print(&stats->pages_abandoned, "-abandoned", -1, out, arg);
+  mi_stat_print(&stats->segments, "segments", 0, out, arg);
+  mi_stat_print(&stats->segments_abandoned, "-abandoned", 0, out, arg);
+  mi_stat_print(&stats->segments_cache, "-cached", 0, out, arg);
+  mi_stat_print(&stats->pages, "pages", 0, out, arg);
+  mi_stat_print(&stats->pages_abandoned, "-abandoned", 0, out, arg);
   mi_stat_counter_print(&stats->pages_extended, "-extended", out, arg);
   mi_stat_counter_print(&stats->pages_retire, "-retire", out, arg);
   mi_stat_counter_print(&stats->arena_count, "arenas", out, arg);
@@ -346,7 +349,7 @@ static void _mi_stats_print(mi_stats_t* stats, mi_output_fun* out0, void* arg0) 
   mi_stat_counter_print(&stats->reset_calls, "resets", out, arg);
   mi_stat_counter_print(&stats->purge_calls, "purges", out, arg);
   mi_stat_counter_print(&stats->malloc_guarded_count, "guarded", out, arg);
-  mi_stat_print(&stats->threads, "threads", -1, out, arg);
+  mi_stat_print(&stats->threads, "threads", 0, out, arg);
   mi_stat_average_print(stats->page_searches_count.total, stats->page_searches.total, "searches", out, arg);
   _mi_fprintf(out, arg, "%10s: %5i\n", "numa nodes", _mi_os_numa_node_count());
 
