@@ -25,7 +25,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      # Test
+      # Basic
       - name: Debug
         if: matrix.tests == 'basic'
         run: |
@@ -47,16 +47,31 @@ jobs:
           cmake --build out/secure --parallel 4 --config Release
           ctest --test-dir out/secure --verbose --timeout 60 -C Release
 
-      # Windows
+      # Basic, C++
+      - name: Debug, C++
+        if: matrix.tests == 'basic' && runner.os != 'Windows'
+        run: |
+          cmake . -B out/debug-cxx -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
+          cmake --build out/debug-cxx --parallel 8 --config Debug
+          ctest --test-dir out/debug-cxx --verbose --timeout 60 -C Debug
+
+      - name: Release, C++, SIMD
+        if: matrix.tests == 'basic' && runner.os != 'Windows'
+        run: |
+          cmake . -B out/release-cxx -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_OPT_SIMD=ON -DMI_USE_CXX=ON
+          cmake --build out/release-cxx --parallel 8 --config Release
+          ctest --test-dir out/release-cxx --verbose --timeout 60 -C Release
+
+      # Basic, Windows
       - name: Debug, Win32
-        if: runner.os == 'Windows' && matrix.tests == 'basic'
+        if: matrix.tests == 'basic' && runner.os == 'Windows'
         run: |
           cmake . -B out/debug-x86 -DCMAKE_BUILD_TYPE=Debug -A Win32
           cmake --build out/debug-x86 --parallel 4 --config Debug
           ctest --test-dir out/debug-x86 --verbose --timeout 60 -C Debug
 
       - name: Release, Win32
-        if: runner.os == 'Windows' && matrix.tests == 'basic'
+        if: matrix.tests == 'basic' && runner.os == 'Windows'
         run: |
           cmake . -B out/release-x86 -DCMAKE_BUILD_TYPE=Release -A Win32
           cmake --build out/release-x86 --parallel 4 --config Release
@@ -73,9 +88,9 @@ jobs:
       - name: Debug, C++, clang
         if: matrix.tests == 'extra' && runner.os != 'Windows'
         run: |
-          CC=clang CXX=clang++ cmake . -B out/debug-cxx -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
-          cmake --build out/debug-cxx --parallel 8 --config Debug
-          ctest --test-dir out/debug-cxx --verbose --timeout 60 -C Debug
+          CC=clang CXX=clang++ cmake . -B out/debug-clang-cxx -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
+          cmake --build out/debug-clang-cxx --parallel 8 --config Debug
+          ctest --test-dir out/debug-clang-cxx --verbose --timeout 60 -C Debug
 
       - name: Debug, ASAN
         if: matrix.tests == 'extra' && runner.os == 'Linux'
