@@ -18,7 +18,10 @@ jobs:
     strategy:
       matrix:
         tests: [basic,extra]
-        os: [windows-latest, macOS-latest, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm]  
+        os: [windows-latest, macos-latest, ubuntu-latest, macos-14, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm, windows-11-arm]
+        exclude:
+          - os: macos-14
+            tests: extra          
         
     steps:
       # Checkout: https://github.com/actions/checkout
