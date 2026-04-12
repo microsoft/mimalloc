@@ -3,6 +3,8 @@
 
 [<img align="right" src="https://dev.azure.com/Daan0324/mimalloc/_apis/build/status/microsoft.mimalloc?branchName=dev3"/>](https://dev.azure.com/Daan0324/mimalloc/_build?definitionId=1&_a=summary)
 
+[<img align="right" src="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml/badge.svg?branch=dev3"/>](https://github.com/microsoft/mimalloc/actions/workflows/test.yaml)
+
 # mimalloc
 
 &nbsp;
