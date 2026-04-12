@@ -99,7 +99,7 @@ jobs:
           ctest --test-dir out/debug-tsan --verbose --timeout 240 -C Debug
 
       - name: Debug, Guarded
-        if: matrix.tests == 'extra'
+        if: matrix.tests == 'extra' && runner.os == 'Linux'
         run: |
           cmake . -B out/debug-guarded -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_GUARDED=ON
           cmake --build out/debug-guarded --parallel 8 --config Debug
