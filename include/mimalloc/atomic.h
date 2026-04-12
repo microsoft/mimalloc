@@ -388,7 +388,7 @@ static inline void mi_atomic_yield(void) {
 }
 #elif defined(__aarch64__)
 static inline void mi_atomic_yield(void) {
-  __asm__ volatile("wfe");
+  __asm__ volatile("isb");
 }
 #elif defined(__arm__)
 #if __ARM_ARCH >= 7
