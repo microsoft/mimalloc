@@ -67,7 +67,7 @@ size_t mi_arenas_get_count(mi_subproc_t* subproc) {
 
 mi_arena_t* mi_arena_from_index(mi_subproc_t* subproc, size_t idx) {
   mi_assert_internal(idx < mi_arenas_get_count(subproc));
-  return mi_atomic_load_ptr_relaxed(mi_arena_t, &subproc->arenas[idx]);
+  return mi_atomic_load_ptr_acquire(mi_arena_t, &subproc->arenas[idx]);
 }
 
 static size_t mi_arena_info_slices(mi_arena_t* arena) {
