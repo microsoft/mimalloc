@@ -221,8 +221,10 @@ void mi_free_small(void* p) mi_attr_noexcept {
   #if MI_PAGE_META_ALIGNED_FREE_SMALL 
     #if MI_GUARDED 
     #warning "MI_PAGE_META_ALIGNED_FREE_SMALL ignored as MI_GUARDED is defined"
+    mi_free(p);
     #elif MI_ARENA_SLICE_ALIGN < MI_SMALL_PAGE_SIZE
     #warning "MI_PAGE_META_ALIGNED_FREE_SMALL ignored as the MI_ARENA_SLICE_ALIGN is less than the small page size"
+    mi_free(p);
     #else
       mi_page_t* const page = (mi_page_t*)_mi_align_down_ptr(p,MI_SMALL_PAGE_SIZE);
       mi_assert(page == mi_validate_ptr_page(p,"mi_free_small"));

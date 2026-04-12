@@ -93,7 +93,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Enable guard pages behind objects of a certain size (set by the MIMALLOC_GUARDED_MIN/MAX/SAMPLE_RATE options)
-#if !defined(MI_GUARDED) && MI_DEBUG && !defined(NDEBUG)
+#if !defined(MI_GUARDED) && MI_DEBUG && !defined(NDEBUG) && !MI_PAGE_META_ALIGNED_FREE_SMALL 
 #define MI_GUARDED  1
 #endif
 
