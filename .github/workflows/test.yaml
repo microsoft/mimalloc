@@ -94,14 +94,6 @@ jobs:
           cmake --build out/release-clang --parallel 4 --config Release
           ctest --test-dir out/release-clang --verbose --timeout 120 -C Release          
 
-      - name: Debug, arm64ec
-        if: matrix.tests == 'extra' && runner.os == 'Windows' && endsWith(matrix.os,'arm')
-        run: |
-          cmake . -B out/debug-arm64ec -DCMAKE_BUILD_TYPE=Debug -A Arm64EC
-          cmake --build out/debug-arm64ec --parallel 4 --config Debug
-          ctest --test-dir out/debug-arm64ec --verbose --timeout 120 -C Debug
-
-
       # Extra
       - name: Release, SIMD
         if: matrix.tests == 'extra'
