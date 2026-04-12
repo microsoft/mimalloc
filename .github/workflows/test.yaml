@@ -67,14 +67,14 @@ jobs:
 
       # Basic, Windows
       - name: Debug, Win32
-        if: matrix.tests == 'basic' && runner.os == 'Windows'
+        if: matrix.tests == 'basic' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
         run: |
           cmake . -B out/debug-x86 -DCMAKE_BUILD_TYPE=Debug -A Win32
           cmake --build out/debug-x86 --parallel 4 --config Debug
           ctest --test-dir out/debug-x86 --verbose --timeout 60 -C Debug
 
       - name: Release, Win32
-        if: matrix.tests == 'basic' && runner.os == 'Windows'
+        if: matrix.tests == 'basic' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
         run: |
           cmake . -B out/release-x86 -DCMAKE_BUILD_TYPE=Release -A Win32
           cmake --build out/release-x86 --parallel 4 --config Release
