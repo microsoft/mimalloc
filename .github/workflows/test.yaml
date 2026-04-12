@@ -25,15 +25,50 @@ jobs:
         uses: actions/checkout@v6
 
       # Test
-      - name: Test Debug
+      - name: Debug
         run: |
           cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
           cmake --build out/debug --parallel 4 --config Debug
-          ctest --test-dir out/debug -C Debug
+          ctest --test-dir out/debug --verbose --timeout 60 -C Debug
 
-      - name: Test Release
+      - name: Release
         run: |
           cmake . -B out/release -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON
           cmake --build out/release --parallel 4 --config Release
-          ctest --test-dir out/release -C Release
+          ctest --test-dir out/release --verbose --timeout 60 -C Release
 
+      - name: Secure
+        run: |
+          cmake . -B out/secure -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure --parallel 4 --config Release
+          ctest --test-dir out/secure --verbose --timeout 60 -C Release
+
+      # Windows tests
+      - name: Debug, Win32
+        if: runner.os == 'Windows'
+        run: |
+          cmake . -B out/debug-x86 -DCMAKE_BUILD_TYPE=Debug -A Win32
+          cmake --build out/debug-x86 --parallel 4 --config Debug
+          ctest --test-dir out/debug-x86 --verbose --timeout 60 -C Debug
+
+      # Ubuntu tests
+      - name: Release, SIMD
+        if: startsWith( runner.os, 'ubuntu' )
+        run: |
+          cmake . -B out/release -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_OPT_SIMD=ON
+          cmake --build out/release --parallel 8 --config Release
+          ctest --test-dir out/release --verbose --timeout 60 -C Release
+
+      - name: Debug, C++
+        if: startsWith( runner.os, 'ubuntu' )
+        run: |
+          CC=clang CXX=clang++ cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
+          cmake --build out/debug --parallel 8 --config Debug
+          ctest --test-dir out/debug --verbose --timeout 60 -C Debug
+
+      - name: Debug, ASAN
+        if: startsWith( runner.os, 'ubuntu' )
+        run: |
+          CC=clang CXX=clang++ cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_TRACK_ASAN=ON
+          cmake --build out/debug --parallel 8 --config Debug
+          ctest --test-dir out/debug --verbose --timeout 60 -C Debug
