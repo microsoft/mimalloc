@@ -1,0 +1,33 @@
+on:
+  workflow_dispatch:   # allow running the workflow manually 
+  push:
+    branches:
+      - 'dev*'
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true # Cancel any in-progress runs of this workflow when a new run is triggered on the same ref (branch or tag)
+  
+name: test
+jobs:
+  build:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macOS-latest, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm]  
+
+    steps:
+      # Checkout: https://github.com/actions/checkout
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      # Test
+      - name: Test Debug
+        run: |
+          cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug --parallel 4
+          ctest --test-dir out/debug
+          

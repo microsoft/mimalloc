@@ -1,8 +1,8 @@
 Binary and source releases for mimalloc.
 
-- __v3__: latest mimalloc design that usually uses less memory then v2 but should perform similarly (or better).
-- __v2__: stable, most widely used.
-- __v1__: legacy, only use this if you are already using it.
+- __v3__: recommended: latest mimalloc design that tends to use less memory then v2 but should perform similarly.
+- __v2__: stable: most widely used.
+- __v1__: legacy.
 
 Notes:
 
