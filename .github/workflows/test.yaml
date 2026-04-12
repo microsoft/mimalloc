@@ -53,22 +53,36 @@ jobs:
 
       # Ubuntu tests
       - name: Release, SIMD
-        if: startsWith( runner.os, 'ubuntu' )
+        if: runner.os == 'Linux'
         run: |
           cmake . -B out/release -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_OPT_SIMD=ON
           cmake --build out/release --parallel 8 --config Release
           ctest --test-dir out/release --verbose --timeout 60 -C Release
 
-      - name: Debug, C++
-        if: startsWith( runner.os, 'ubuntu' )
+      - name: Debug, C++, clang
+        if: runner.os == 'Linux'
         run: |
           CC=clang CXX=clang++ cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
           cmake --build out/debug --parallel 8 --config Debug
           ctest --test-dir out/debug --verbose --timeout 60 -C Debug
 
       - name: Debug, ASAN
-        if: startsWith( runner.os, 'ubuntu' )
+        if: runner.os == 'Linux'
         run: |
           CC=clang CXX=clang++ cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_TRACK_ASAN=ON
           cmake --build out/debug --parallel 8 --config Debug
           ctest --test-dir out/debug --verbose --timeout 60 -C Debug
+
+      - name: Debug, UBSAN
+        if: runner.os == 'Linux'
+        run: |
+          CC=clang CXX=clang++ cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_DEBUG_UBSAN=ON
+          cmake --build out/debug --parallel 8 --config Debug
+          ctest --test-dir out/debug --verbose --timeout 60 -C Debug
+
+      - name: Debug, TSAN
+        if: runner.os == 'Linux'
+        run: |
+          CC=clang CXX=clang++ cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_DEBUG_TSAN=ON
+          cmake --build out/debug --parallel 8 --config Debug
+          ctest --test-dir out/debug --verbose --timeout 240 -C Debug
