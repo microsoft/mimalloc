@@ -12,7 +12,7 @@ env:
   RELEASE: v3.3.0-draft
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   
-name: bundle
+name: Release
 jobs:
   build:
     name: Bundle
