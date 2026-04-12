@@ -146,14 +146,14 @@ mi_page_t* mi_arena_page_at_slice(mi_arena_t* arena, size_t slice_index) {
   mi_assert_internal(slice_index < arena->slice_count);
   if (arena->pages_meta != NULL) {
     mi_page_t* const page = &arena->pages_meta[slice_index];
-    #if MI_FAST_FREE_SMALL
+    #if MI_PAGE_META_ALIGNED_FREE_SMALL
     // pages with small blocks still have the page at the start of the slice (and set the `block_size` in pages_meta to 0)
     if (page->block_size>0) return page;
     #else
     return page;
     #endif    
   }
-  // fall through (for MI_FAST_FREE_SMALL)
+  // fall through (for MI_PAGE_META_ALIGNED_FREE_SMALL)
   return (mi_page_t*)mi_arena_slice_start(arena,slice_index);  
 }
 
@@ -832,7 +832,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   if (!slice_start) return NULL;
 
   // guard page at the end of mimalloc page?
-  #if (MI_SECURE >= 2 && (!MI_PAGE_META_IS_SEPARATED || MI_FAST_FREE_SMALL)) || MI_SECURE >= 4
+  #if (MI_SECURE >= 2 && (!MI_PAGE_META_IS_SEPARATED || MI_PAGE_META_ALIGNED_FREE_SMALL)) || MI_SECURE >= 4
   mi_assert(alloc_size > _mi_os_secure_guard_page_size());
   const size_t page_noguard_size = alloc_size - _mi_os_secure_guard_page_size();
   if (memid.initially_committed) {
@@ -854,7 +854,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
       mi_assert_internal(MI_PAGE_META_IS_SEPARATED!=0);
       mi_page_t* const page_meta = &arena->pages_meta[memid.mem.arena.slice_index];      
       mi_assert_internal(page_meta->block_size == 0);
-      #if MI_FAST_FREE_SMALL
+      #if MI_PAGE_META_ALIGNED_FREE_SMALL
       // if `block_size <= MI_SMALL_SIZE_MAX` we put the page info in front of the slice, 
       // (note: it is important that `page_meta->block_size == 0` for `mi_arena_page_at_slice`)
       if (block_size > MI_SMALL_SIZE_MAX)        
@@ -1065,7 +1065,7 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
 
   // recommit guard page at the end?
   // we must do this since we may later allocate large spans over this page and cannot have a guard page in between
-  #if (MI_SECURE >= 2 && (!MI_PAGE_META_IS_SEPARATED || MI_FAST_FREE_SMALL)) || MI_SECURE >= 4
+  #if (MI_SECURE >= 2 && (!MI_PAGE_META_IS_SEPARATED || MI_PAGE_META_ALIGNED_FREE_SMALL)) || MI_SECURE >= 4
   if (!page->memid.is_pinned) {
     _mi_os_secure_guard_page_reset_before(mi_page_slice_start(page) + mi_page_full_size(page), page->memid);
   }

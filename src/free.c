@@ -218,11 +218,11 @@ void mi_free_small(void* p) mi_attr_noexcept {
   // We can only call `mi_free_small` for pointers allocated with `mi_(heap_)malloc_small`.
   // If we keep page info in front of the page area for small objects, we can find the info
   // just by aligning down the pointer instead of looking it up in the page map.
-  #if MI_FAST_FREE_SMALL 
+  #if MI_PAGE_META_ALIGNED_FREE_SMALL 
     #if MI_GUARDED 
-    #warning "MI_FAST_FREE_SMALL ignored as MI_GUARDED is defined"
+    #warning "MI_PAGE_META_ALIGNED_FREE_SMALL ignored as MI_GUARDED is defined"
     #elif MI_ARENA_SLICE_ALIGN < MI_SMALL_PAGE_SIZE
-    #warning "MI_FAST_FREE_SMALL ignored as the MI_ARENA_SLICE_ALIGN is less than the small page size"
+    #warning "MI_PAGE_META_ALIGNED_FREE_SMALL ignored as the MI_ARENA_SLICE_ALIGN is less than the small page size"
     #else
       mi_page_t* const page = (mi_page_t*)_mi_align_down_ptr(p,MI_SMALL_PAGE_SIZE);
       mi_assert(page == mi_validate_ptr_page(p,"mi_free_small"));
