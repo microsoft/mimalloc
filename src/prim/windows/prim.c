@@ -767,11 +767,13 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 
   static void NTAPI mi_win_main_attach(PVOID module, DWORD reason, LPVOID reserved) {
     if (reason == DLL_PROCESS_ATTACH || reason == DLL_THREAD_ATTACH) {
+      printf("mi_win_main_attach\n");
       mi_win_main(module, reason, reserved);
     }
   }
   static void NTAPI mi_win_main_detach(PVOID module, DWORD reason, LPVOID reserved) {
     if (reason == DLL_PROCESS_DETACH || reason == DLL_THREAD_DETACH) {
+      printf("mi_win_main_detach\n");
       mi_win_main(module, reason, reserved);
     }
   }

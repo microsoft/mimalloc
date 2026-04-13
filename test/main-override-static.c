@@ -28,10 +28,19 @@ static void test_canary_leak(void);
 static void test_manage_os_memory(void);
 // static void test_large_pages(void);
 
+#if _WIN32
+#include "main-static-dep.h"
+static void test_dep();               // test static mimalloc in a separate DLL
+#else
+static void test_dep() {};
+#endif
+
 
 int main() {
   mi_version();
   mi_stats_reset();
+
+  test_dep();
 
   // mi_bins();
 
@@ -273,6 +282,20 @@ static void test_manage_os_memory(void) {
 #else
 static void test_manage_os_memory(void) {
   // empty
+}
+#endif
+
+#if _WIN32
+
+static void test_dep(void) {
+  HMODULE dll = LoadLibraryA("mimalloc-test-static-dep.dll");
+  if (dll != NULL) {
+    TestFun fun = (TestFun)GetProcAddress(dll, "Test");
+    if (fun != NULL) {
+      fun();
+    }
+    bool ok = FreeLibrary(dll);
+  }
 }
 #endif
 
