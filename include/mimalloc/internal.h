@@ -175,10 +175,12 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
 bool          _mi_is_heap_main(const mi_heap_t* heap);
+bool          _mi_is_theap_main(const mi_theap_t* theap);
 void          _mi_theap_guarded_init(mi_theap_t* theap);
 void          _mi_theap_options_init(mi_theap_t* theap);
 mi_theap_t*   _mi_theap_default_safe(void);             // ensure the returned theap is initialized
-
+mi_theap_t*   _mi_theap_main_safe(void);
+   
 // os.c
 void          _mi_os_init(void);                                            // called from process init
 void*         _mi_os_alloc(size_t size, mi_memid_t* memid);

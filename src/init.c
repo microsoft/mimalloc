@@ -216,12 +216,12 @@ mi_decl_cache_align mi_heap_t heap_main
   = { 0 };   // C zero initialize
 #endif
 
+// the theap belonging to the main heap
+mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main = NULL;
+
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
   return _mi_prim_thread_id();
 }
-
-// the theap belonging to the main heap
-mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main = NULL;
 
 #if MI_TLS_MODEL_THREAD_LOCAL
 // the thread-local main theap for allocation
@@ -400,6 +400,22 @@ mi_theap_t* _mi_theap_default_safe(void) {
   return _mi_theap_default();
 }
 
+// return the main theap ensuring it is initialized. 
+mi_theap_t* _mi_theap_main_safe(void) {
+  mi_theap_t* theap = __mi_theap_main;
+  if mi_unlikely(theap==NULL) {  // if thread_init or default_set was never called
+    mi_thread_init();            // sets the default slot to the main theap
+    theap = _mi_theap_default();
+    mi_assert_internal(theap!=NULL);
+    mi_assert_internal(_mi_is_theap_main(theap));
+    if (_mi_is_theap_main(theap)) {
+      __mi_theap_main = theap;
+    }
+  }
+  mi_assert_internal(theap!=NULL && _mi_is_theap_main(theap));    
+  return theap;
+}
+
 
 mi_subproc_t* _mi_subproc_main(void) {
   return &subproc_main;
@@ -432,12 +448,16 @@ mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
 }
 
 mi_heap_t* mi_heap_main(void) {
-  return _mi_subproc_heap_main(_mi_subproc()); // don't use _mi_theap_main() so this call works during process_init
+  return _mi_subproc_heap_main(_mi_subproc()); // don't use mi_theap_main_init_get() so this call works during process_init
 }
 
 bool _mi_is_heap_main(const mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL);
   return (_mi_subproc_heap_main(heap->subproc) == heap);
+}
+
+bool _mi_is_theap_main(const mi_theap_t* theap) {
+  return (mi_theap_is_initialized(theap) && _mi_is_heap_main(_mi_theap_heap(theap)));
 }
 
 /* -----------------------------------------------------------
@@ -588,10 +608,10 @@ static mi_theap_t* _mi_thread_init_theap_default(void) {
 static void mi_thread_theaps_done(mi_tld_t* tld)
 {
   // reset the thread local theaps
-  __mi_theap_main = NULL;
   _mi_theap_default_set((mi_theap_t*)&_mi_theap_empty);
   _mi_theap_cached_set((mi_theap_t*)&_mi_theap_empty);
-
+  __mi_theap_main = NULL;
+  
   // abandon the pages of all theaps in this thread
   mi_lock(&tld->theaps_lock) {
     mi_theap_t* theap = tld->theaps;
@@ -687,7 +707,11 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 {
   // NULL can be passed on some platforms
   if (_theap_main==NULL) {
-    _theap_main = __mi_theap_main;
+    _theap_main = __mi_theap_main;  // don't call `mi_theap_main_safe` as that re-initializes the thread
+    if (_theap_main==NULL) {        // can happen if `mi_theap_main_safe` is never called; but then the default is main
+      _theap_main = _mi_theap_default();
+      mi_assert_internal(_theap_main==NULL || _mi_is_theap_main(_theap_main));
+    }
   }
 
   // prevent re-entrancy through theap_done/theap_set_default_direct (issue #699)
@@ -831,6 +855,7 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
 }
 
 void _mi_theap_default_set(mi_theap_t* theap)  {
+  mi_theap_t* const theap_old = _mi_theap_default();
   mi_assert_internal(theap != NULL);
   mi_assert_internal(theap->tld->thread_id==0 || theap->tld->thread_id==_mi_thread_id());
   #if MI_TLS_MODEL_THREAD_LOCAL
@@ -852,6 +877,11 @@ void _mi_theap_default_set(mi_theap_t* theap)  {
     if (_mi_is_heap_main(_mi_theap_heap(theap))) {
       __mi_theap_main = theap;
     }
+  }
+
+  // ensure either the default slot contains the main theap, or __mi_theap_main is initialized 
+  if (mi_theap_is_initialized(theap_old) && _mi_is_heap_main(_mi_theap_heap(theap_old))) {
+    __mi_theap_main = theap_old;
   }
 }
 
