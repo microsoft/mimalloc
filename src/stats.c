@@ -246,11 +246,11 @@ static void mi_stat_counter_print_size(const mi_stat_counter_t* stat, const char
   _mi_fprintf(out, arg, "\n");
 }
 
-static void mi_stat_average_print(size_t count, size_t total, const char* msg, mi_output_fun* out, void* arg) {
+static void mi_stat_average_print(int64_t count, int64_t total, const char* msg, mi_output_fun* out, void* arg) {
   const int64_t avg_tens = (count == 0 ? 0 : (total*10 / count));
-  const long avg_whole = (long)(avg_tens/10);
-  const long avg_frac1 = (long)(avg_tens%10);
-  _mi_fprintf(out, arg, "  %-10s: %5ld.%ld avg\n", msg, avg_whole, avg_frac1);
+  const int64_t avg_whole = avg_tens/10;
+  const int64_t avg_frac1 = avg_tens%10;
+  _mi_fprintf(out, arg, "  %10s: %5lld.%lld avg\n", msg, avg_whole, avg_frac1);
 }
 
 
