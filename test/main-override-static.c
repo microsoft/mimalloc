@@ -28,11 +28,20 @@ static void test_canary_leak(void);
 static void test_manage_os_memory(void);
 // static void test_large_pages(void);
 
+#if _WIN32
+#include "main-static-dep.h"
+static void test_dep();               // test static mimalloc in a separate DLL
+#else
+static void test_dep() {};
+#endif
+
 
 int main() {
   mi_version();
   mi_stats_reset();
-  
+
+  test_dep();
+
   // mi_bins();
 
   // test_manage_os_memory();
@@ -251,7 +260,7 @@ static void test_canary_leak(void) {
 #if _WIN32
 static void test_manage_os_memory(void) {
   size_t size = 256 * 1024 * 1024;
-  void* ptr = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); 
+  void* ptr = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
   mi_arena_id_t arena_id;
   mi_manage_os_memory_ex(ptr, size, true /* committed */, true /* pinned */, false /* is zero */, -1 /* numa node */, true /* exclusive */, &arena_id);
   mi_heap_t* cuda_heap = mi_heap_new_in_arena(arena_id);    // you can do this in any thread
@@ -260,11 +269,11 @@ static void test_manage_os_memory(void) {
   void* p1 = mi_heap_malloc(cuda_heap, 8);
   int* p2 = mi_heap_malloc_tp(cuda_heap, int);
   *p2 = 42;
-  
+
   // and maybe set the cuda heap as the default heap? (but careful as now `malloc` will allocate in the cuda heap as well)
   {
     mi_heap_t* prev_default_heap = mi_heap_set_default(cuda_heap);
-    void* p3 = mi_malloc(8);  // allocate in the cuda heap 
+    void* p3 = mi_malloc(8);  // allocate in the cuda heap
     mi_free(p3);
   }
   mi_free(p1);
@@ -273,6 +282,20 @@ static void test_manage_os_memory(void) {
 #else
 static void test_manage_os_memory(void) {
   // empty
+}
+#endif
+
+#if _WIN32
+
+static void test_dep(void) {
+  HMODULE dll = LoadLibraryA("mimalloc-test-static-dep.dll");
+  if (dll != NULL) {
+    TestFun fun = (TestFun)GetProcAddress(dll, "Test");
+    if (fun != NULL) {
+      fun();
+    }
+    bool ok = FreeLibrary(dll);
+  }
 }
 #endif
 

@@ -66,7 +66,7 @@ static void mi_stat_adjust(mi_stat_count_t* stat, int64_t amount) {
   if (amount == 0) return;
   if mi_unlikely(mi_is_in_main(stat))
   {
-    // adjust atomically 
+    // adjust atomically
     mi_atomic_addi64_relaxed(&stat->current, amount);
     mi_atomic_addi64_relaxed(&stat->total,amount);
   }
@@ -85,14 +85,14 @@ void _mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount) {
 // must be thread safe as it is called from stats_merge
 static void mi_stat_count_add_mt(mi_stat_count_t* stat, const mi_stat_count_t* src) {
   if (stat==src) return;
-  mi_atomic_void_addi64_relaxed(&stat->total, &src->total); 
+  mi_atomic_void_addi64_relaxed(&stat->total, &src->total);
   const int64_t prev_current = mi_atomic_addi64_relaxed(&stat->current, src->current);
 
   // Global current plus thread peak approximates new global peak
   // note: peak scores do really not work across threads.
   // we used to just add them together but that often overestimates in practice.
   // similarly, max does not seem to work well. The current approach
-  // by Artem Kharytoniuk (@artem-lunarg) seems to work better, see PR#1112 
+  // by Artem Kharytoniuk (@artem-lunarg) seems to work better, see PR#1112
   // for a longer description.
   mi_atomic_maxi64_relaxed(&stat->peak, prev_current + src->peak);
 }
@@ -118,8 +118,8 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   }
   #endif
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
-    mi_stat_count_add_mt(&stats->page_bins[i], &src->page_bins[i]);    
-  }  
+    mi_stat_count_add_mt(&stats->page_bins[i], &src->page_bins[i]);
+  }
 }
 
 #undef MI_STAT_COUNT
@@ -623,7 +623,7 @@ char* mi_stats_get_json(size_t output_size, char* output_buf) mi_attr_noexcept {
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
     mi_heap_buf_print_count_bin(&hbuf, "    ", &stats->page_bins[i], i, i!=MI_BIN_HUGE);
   }
-  mi_heap_buf_print(&hbuf, "  ]\n");  
+  mi_heap_buf_print(&hbuf, "  ]\n");
   mi_heap_buf_print(&hbuf, "}\n");
   if (hbuf.used >= hbuf.size) {
     // failed
