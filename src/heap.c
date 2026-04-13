@@ -24,7 +24,7 @@ terms of the MIT license. A copy of the license can be found in the file
 typedef bool (heap_page_visitor_fun)(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2);
 
 // Visit all pages in a heap; returns `false` if break was called.
-static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void* arg1, void* arg2)
+static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, bool include_full, void* arg1, void* arg2)
 {
   if (heap==NULL || heap->page_count==0) return 0;
 
@@ -34,7 +34,8 @@ static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void
   size_t count = 0;
   #endif
 
-  for (size_t i = 0; i <= MI_BIN_FULL; i++) {
+  const size_t max_bin = (include_full ? MI_BIN_FULL : MI_BIN_FULL - 1);
+  for (size_t i = 0; i <= max_bin; i++) {
     mi_page_queue_t* pq = &heap->pages[i];
     mi_page_t* page = pq->first;
     while(page != NULL) {
@@ -47,7 +48,7 @@ static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, void
       page = next; // and continue
     }
   }
-  mi_assert_internal(count == total);
+  mi_assert_internal(!include_full || count == total);
   return true;
 }
 
@@ -67,7 +68,7 @@ static bool mi_heap_page_is_valid(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
 #if MI_DEBUG>=3
 static bool mi_heap_is_valid(mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL);
-  mi_heap_visit_pages(heap, &mi_heap_page_is_valid, NULL, NULL);
+  mi_heap_visit_pages(heap, &mi_heap_page_is_valid, true, NULL, NULL);
   return true;
 }
 #endif
@@ -143,7 +144,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // if abandoning, mark all pages to no longer add to delayed_free
   if (collect == MI_ABANDON) {
-    mi_heap_visit_pages(heap, &mi_heap_page_never_delayed_free, NULL, NULL);
+    mi_heap_visit_pages(heap, &mi_heap_page_never_delayed_free, true, NULL, NULL);
   }
 
   // free all current thread delayed blocks.
@@ -154,7 +155,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   _mi_heap_collect_retired(heap, force);
 
   // collect all pages owned by this thread
-  mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
+  mi_heap_visit_pages(heap, &mi_heap_page_collect, (collect!=MI_NORMAL), &collect, NULL); // normally don't visit full pages, issue #1220
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
   // collect segments (purge pages, this can be expensive so don't force on abandonment)
@@ -359,7 +360,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
 }
 
 void _mi_heap_destroy_pages(mi_heap_t* heap) {
-  mi_heap_visit_pages(heap, &_mi_heap_page_destroy, NULL, NULL);
+  mi_heap_visit_pages(heap, &_mi_heap_page_destroy, true, NULL, NULL);
   mi_heap_reset_pages(heap);
 }
 
@@ -530,7 +531,7 @@ bool mi_heap_check_owned(mi_heap_t* heap, const void* p) {
   if (heap==NULL || !mi_heap_is_initialized(heap)) return false;
   if (((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0) return false;  // only aligned pointers
   bool found = false;
-  mi_heap_visit_pages(heap, &mi_heap_page_check_owned, (void*)p, &found);
+  mi_heap_visit_pages(heap, &mi_heap_page_check_owned, true, (void*)p, &found);
   return found;
 }
 
@@ -696,7 +697,7 @@ static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
 // Visit all heap pages as areas
 static bool mi_heap_visit_areas(const mi_heap_t* heap, mi_heap_area_visit_fun* visitor, void* arg) {
   if (visitor == NULL) return false;
-  return mi_heap_visit_pages((mi_heap_t*)heap, &mi_heap_visit_areas_page, (void*)(visitor), arg); // note: function pointer to void* :-{
+  return mi_heap_visit_pages((mi_heap_t*)heap, &mi_heap_visit_areas_page, true, (void*)(visitor), arg); // note: function pointer to void* :-{
 }
 
 // Just to pass arguments
