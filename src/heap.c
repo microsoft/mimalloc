@@ -41,7 +41,7 @@ static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
   if (_mi_is_heap_main(heap)) {
     // this can be called if the (main) thread is not yet initialized (as no allocation happened)
     mi_thread_init();
-    mi_theap_t* theap = _mi_heap_theap(heap);
+    mi_theap_t* theap = __mi_theap_main; // _mi_heap_theap(heap);
     mi_assert_internal(theap!=NULL);
     return theap;
   }
@@ -73,8 +73,18 @@ static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
 
 // get the theap for a heap without initializing (and return NULL in that case)
 mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap) {
+  #if __APPLE__
+  // ensure initialization of thread local storage
+  // this will call thread_init if needed and set __mi_theap_main
+  // if the tls allocates itself, this will set __mi_theap_main to NULL again and we need to re-initialize in that case.
+  if mi_unlikely(__mi_theap_main==NULL) { 
+    mi_theap_t* const theap = _mi_theap_default_safe(); 
+    mi_assert_internal(_mi_is_heap_main(_mi_theap_heap(theap))); 
+    _mi_theap_default_set(theap); 
+  }
+  #endif
   if (heap==NULL || _mi_is_heap_main(heap)) {
-    return __mi_theap_main;  // don't call _mi_theap_main as it may still be NULL
+    return __mi_theap_main;  // don't call _mi_theap_main() as it may still be NULL
   }
   else {
     return (mi_theap_t*)_mi_thread_local_get(heap->theap);
