@@ -106,6 +106,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   { {0}, {0}, 0, true }, // random
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
+  0,                // pages_full_size
   0, 0,             // generic count
   NULL,             // next
   false,            // can reclaim
@@ -149,6 +150,7 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
   { {0x846ca68b}, {0}, 0, true },  // random
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
+  0,                // pages_full_size
   0, 0,             // generic count
   NULL,             // next heap
   false,            // can reclaim
