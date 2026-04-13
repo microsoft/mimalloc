@@ -220,13 +220,13 @@ static inline bool mi_bfield_atomic_try_clearX(_Atomic(mi_bfield_t)*b, bool* all
 
 // Check if a bit is set
 static inline bool mi_bfield_atomic_is_set(const _Atomic(mi_bfield_t)*b, const size_t idx) {
-  const mi_bfield_t x = mi_atomic_load_relaxed(b);
+  const mi_bfield_t x = mi_atomic_load_acquire(b);
   return ((x & mi_bfield_mask(1,idx)) != 0);
 }
 
 // Check if a bit is clear
 static inline bool mi_bfield_atomic_is_clear(const _Atomic(mi_bfield_t)*b, const size_t idx) {
-  const mi_bfield_t x = mi_atomic_load_relaxed(b);
+  const mi_bfield_t x = mi_atomic_load_acquire(b);
   return ((x & mi_bfield_mask(1, idx)) == 0);
 }
 
@@ -239,14 +239,14 @@ static inline bool mi_bfield_atomic_is_xset(mi_xset_t set, const _Atomic(mi_bfie
 // Check if all bits corresponding to a mask are set.
 static inline bool mi_bfield_atomic_is_set_mask(const _Atomic(mi_bfield_t)* b, mi_bfield_t mask) {
   mi_assert_internal(mask != 0);
-  const mi_bfield_t x = mi_atomic_load_relaxed(b);
+  const mi_bfield_t x = mi_atomic_load_acquire(b);
   return ((x & mask) == mask);
 }
 
 // Check if all bits corresponding to a mask are clear.
 static inline bool mi_bfield_atomic_is_clear_mask(const _Atomic(mi_bfield_t)* b, mi_bfield_t mask) {
   mi_assert_internal(mask != 0);
-  const mi_bfield_t x = mi_atomic_load_relaxed(b);
+  const mi_bfield_t x = mi_atomic_load_acquire(b);
   return ((x & mask) == 0);
 }
 
@@ -259,7 +259,7 @@ static inline bool mi_bfield_atomic_is_xset_mask(mi_xset_t set, const _Atomic(mi
 
 // Count bits in a mask
 static inline size_t mi_bfield_atomic_popcount_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask) {
-  const mi_bfield_t x = mi_atomic_load_relaxed(b);
+  const mi_bfield_t x = mi_atomic_load_acquire(b);
   return mi_bfield_popcount(x & mask);
 }
 
