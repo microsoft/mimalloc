@@ -21,7 +21,7 @@ terms of the MIT license. A copy of the license can be found in the file
 typedef bool (theap_page_visitor_fun)(mi_theap_t* theap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2);
 
 // Visit all pages in a theap; returns `false` if break was called.
-static bool mi_theap_visit_pages(mi_theap_t* theap, theap_page_visitor_fun* fn, void* arg1, void* arg2)
+static bool mi_theap_visit_pages(mi_theap_t* theap, theap_page_visitor_fun* fn, bool include_full, void* arg1, void* arg2)
 {
   if (theap==NULL || theap->page_count==0) return 0;
 
@@ -31,7 +31,8 @@ static bool mi_theap_visit_pages(mi_theap_t* theap, theap_page_visitor_fun* fn, 
   size_t count = 0;
   #endif
 
-  for (size_t i = 0; i <= MI_BIN_FULL; i++) {
+  const size_t max_bin = (include_full ? MI_BIN_FULL : MI_BIN_FULL - 1);
+  for (size_t i = 0; i <= max_bin; i++) {
     mi_page_queue_t* pq = &theap->pages[i];
     mi_page_t* page = pq->first;
     while(page != NULL) {
@@ -44,7 +45,7 @@ static bool mi_theap_visit_pages(mi_theap_t* theap, theap_page_visitor_fun* fn, 
       page = next; // and continue
     }
   }
-  mi_assert_internal(count == total);
+  mi_assert_internal(!include_full || count == total);
   return true;
 }
 
@@ -62,7 +63,7 @@ static bool mi_theap_page_is_valid(mi_theap_t* theap, mi_page_queue_t* pq, mi_pa
 #if MI_DEBUG>=3
 static bool mi_theap_is_valid(mi_theap_t* theap) {
   mi_assert_internal(theap!=NULL);
-  mi_theap_visit_pages(theap, &mi_theap_page_is_valid, NULL, NULL);
+  mi_theap_visit_pages(theap, &mi_theap_page_is_valid, true, NULL, NULL);
   for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
     mi_assert_internal(_mi_page_queue_is_valid(theap, &theap->pages[bin]));
   }
@@ -127,7 +128,7 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   _mi_theap_collect_retired(theap, force);
 
   // collect all pages owned by this thread
-  mi_theap_visit_pages(theap, &mi_theap_page_collect, &collect, NULL);
+  mi_theap_visit_pages(theap, &mi_theap_page_collect, (collect!=MI_NORMAL), &collect, NULL);  // dont normally visit full pages, see issue #1220
 
   // collect arenas (this is program wide so don't force purges on abandonment of threads)
   //mi_atomic_storei64_release(&theap->tld->subproc->purge_expire, 1);
@@ -684,7 +685,7 @@ static bool mi_theap_visit_areas_page(mi_theap_t* theap, mi_page_queue_t* pq, mi
 // Visit all theap pages as areas
 static bool mi_theap_visit_areas(const mi_theap_t* theap, mi_theap_area_visit_fun* visitor, void* arg) {
   if (visitor == NULL) return false;
-  return mi_theap_visit_pages((mi_theap_t*)theap, &mi_theap_visit_areas_page, (void*)(visitor), arg); // note: function pointer to void* :-{
+  return mi_theap_visit_pages((mi_theap_t*)theap, &mi_theap_visit_areas_page, true, (void*)(visitor), arg); // note: function pointer to void* :-{
 }
 
 // Just to pass arguments
