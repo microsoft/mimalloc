@@ -126,6 +126,7 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   { {0}, {0}, 0, true },  // random
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
+  0,                      // pages_full_size
   0, 0,                   // generic count
   NULL, NULL,             // tnext, tprev
   NULL, NULL,             // hnext, hprev
@@ -150,6 +151,7 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
   { {0}, {0}, 0, true },  // random
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
+  0,                      // pages_full_size
   0, 0,                   // generic count
   NULL, NULL,             // tnext, tprev
   NULL, NULL,             // hnext, hprev
@@ -191,6 +193,7 @@ mi_decl_cache_align mi_theap_t theap_main = {
   { {0x846ca68b}, {0}, 0, true },  // random
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
+  0,                      // pages_full_size
   0, 0,                   // generic count
   NULL, NULL,             // tnext, tprev
   NULL, NULL,             // hnext, hprev

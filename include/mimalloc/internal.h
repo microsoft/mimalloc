@@ -822,9 +822,11 @@ static inline mi_page_flags_t mi_page_flags(const mi_page_t* page) {
   return (mi_page_xthread_id(page) & MI_PAGE_FLAG_MASK);
 }
 
-static inline void mi_page_flags_set(mi_page_t* page, bool set, mi_page_flags_t newflag) {
-  if (set) { mi_atomic_or_relaxed(&page->xthread_id, newflag); }
-      else { mi_atomic_and_relaxed(&page->xthread_id, ~newflag); }
+static inline bool mi_page_flags_set(mi_page_t* page, bool set, mi_page_flags_t newflag) {
+  mi_page_flags_t old;
+  if (set) { old = mi_atomic_or_relaxed(&page->xthread_id, newflag); }
+      else { old = mi_atomic_and_relaxed(&page->xthread_id, ~newflag); }
+  return ((old & newflag) == newflag);
 }
 
 static inline bool mi_page_is_in_full(const mi_page_t* page) {
@@ -832,7 +834,17 @@ static inline bool mi_page_is_in_full(const mi_page_t* page) {
 }
 
 static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
-  mi_page_flags_set(page, in_full, MI_PAGE_IN_FULL_QUEUE);
+  const bool was_in_full = mi_page_flags_set(page, in_full, MI_PAGE_IN_FULL_QUEUE);
+  if (was_in_full != in_full) {
+    // optimize: maintain pages_full_size to avoid visiting the full queue (issue #1220)
+    mi_theap_t* const theap = page->theap;
+    mi_assert_internal(theap!=NULL);
+    if (theap != NULL) {
+      const size_t size = page->capacity * mi_page_block_size(page);
+      if (in_full) { theap->pages_full_size += size; }
+              else { mi_assert_internal(size <= theap->pages_full_size); theap->pages_full_size -= size; }
+    }
+  }
 }
 
 static inline bool mi_page_has_interior_pointers(const mi_page_t* page) {
