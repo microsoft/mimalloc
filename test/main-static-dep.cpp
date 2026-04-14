@@ -39,6 +39,7 @@ BOOL WINAPI DllMain(HINSTANCE module, DWORD reason, LPVOID reserved) {
     printf("static-dep: dll attach\n");
   }
   else if (reason==DLL_PROCESS_DETACH) {
+    mi_option_enable(mi_option_destroy_on_exit);
     printf("static-dep: dll detach\n");
   }
   return TRUE;

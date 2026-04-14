@@ -287,7 +287,7 @@ static void test_manage_os_memory(void) {
 
 #if _WIN32
 
-static void test_dep(void) {
+static void call_library(void) {
   HMODULE dll = LoadLibraryA("mimalloc-test-static-dep.dll");
   if (dll != NULL) {
     TestFun fun = (TestFun)GetProcAddress(dll, "Test");
@@ -296,6 +296,11 @@ static void test_dep(void) {
     }
     bool ok = FreeLibrary(dll);
   }
+}
+
+static void test_dep(void) {
+  call_library();
+  call_library();
 }
 #endif
 
