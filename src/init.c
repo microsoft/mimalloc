@@ -546,6 +546,7 @@ static void mi_subprocs_unsafe_destroy_all(void) {
     }
   }
   mi_subproc_unsafe_destroy(&subproc_main);
+  _mi_arenas_unsafe_destroy_all(&subproc_main);  // free main subproc arenas (needed for DLL unload)
 }
 
 
@@ -772,8 +773,13 @@ mi_decl_hidden size_t _mi_theap_default_expansion_slot = MI_TLS_INITIAL_EXPANSIO
 mi_decl_hidden size_t _mi_theap_cached_slot            = MI_TLS_INITIAL_SLOT;
 mi_decl_hidden size_t _mi_theap_cached_expansion_slot  = MI_TLS_INITIAL_EXPANSION_SLOT;
 
-static size_t mi_win_tls_slot_alloc(size_t* extended) {
+// Raw TLS indices for cleanup via TlsFree (avoids reverse-engineering the stored slot)
+static DWORD mi_tls_raw_default = TLS_OUT_OF_INDEXES;
+static DWORD mi_tls_raw_cached  = TLS_OUT_OF_INDEXES;
+
+static size_t mi_win_tls_slot_alloc(size_t* extended, DWORD* raw_tls_index) {
   const DWORD slot = TlsAlloc();
+  if (raw_tls_index != NULL) { *raw_tls_index = slot; }
   if (slot==TLS_OUT_OF_INDEXES || slot >= MI_TLS_DIRECT_SLOTS + MI_TLS_EXPANSION_SLOTS - 1) {
     // note: we also fail if the program already allocated the maximum number of expansion slots (as we use the last one as the default)
     *extended = 0;
@@ -797,13 +803,26 @@ static size_t mi_win_tls_slot_alloc(size_t* extended) {
 mi_decl_cold mi_theap_t* _mi_win_tls_slots_init(void) {
   static mi_atomic_once_t tls_slots_init;
   if (mi_atomic_once(&tls_slots_init)) {
-    _mi_theap_default_slot = mi_win_tls_slot_alloc(&_mi_theap_default_expansion_slot);
-    _mi_theap_cached_slot = mi_win_tls_slot_alloc(&_mi_theap_cached_expansion_slot);
+    _mi_theap_default_slot = mi_win_tls_slot_alloc(&_mi_theap_default_expansion_slot, &mi_tls_raw_default);
+    _mi_theap_cached_slot = mi_win_tls_slot_alloc(&_mi_theap_cached_expansion_slot, &mi_tls_raw_cached);
     if (_mi_theap_cached_slot==0) {
       _mi_error_message(EFAULT, "unable to allocate fast TLS user slot (0x%zx)\n", _mi_theap_cached_slot);
     }
   }
   return (mi_theap_t*)&_mi_theap_empty;
+}
+
+static void mi_win_tls_slots_done(void) {
+  if (mi_tls_raw_default != TLS_OUT_OF_INDEXES) {
+    TlsFree(mi_tls_raw_default);
+    mi_tls_raw_default = TLS_OUT_OF_INDEXES;
+  }
+  if (mi_tls_raw_cached != TLS_OUT_OF_INDEXES) {
+    TlsFree(mi_tls_raw_cached);
+    mi_tls_raw_cached = TLS_OUT_OF_INDEXES;
+  }
+  _mi_theap_default_slot = MI_TLS_INITIAL_SLOT;
+  _mi_theap_cached_slot = MI_TLS_INITIAL_SLOT;
 }
 
 static void mi_win_tls_slot_set(size_t slot, size_t extended_slot, void* value) {
@@ -1092,6 +1111,9 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
     mi_subproc_stats_print_out(NULL, NULL, NULL);
   }
   mi_lock_done(&subprocs_lock);
+  #if MI_TLS_MODEL_DYNAMIC_WIN32
+  mi_win_tls_slots_done();
+  #endif
   _mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", tld_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
