@@ -746,7 +746,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 }
 
 
-#if 1  /* we use a combination of _pRawDllMain and TLS init/fini for both static and dynamic linkage */
+#if !MI_WIN_NO_RAW_DLLMAIN  /* we use a combination of _pRawDllMain and TLS sections for both static and dynamic linkage */
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
@@ -755,7 +755,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     MI_UNUSED(theap);
   }
 
-  // If linked into a DLL module, this raw entry is called before the CRT attach and 
+  // If linked into a DLL module, this raw entry is called before the CRT attach and
   // after the CRT detach through the CRT _pRawDllMain pointer.
   static BOOL NTAPI mi_dll_main_raw(PVOID module, DWORD reason, LPVOID reserved) {
     //if (reason == DLL_PROCESS_ATTACH)      { mi_debug_out("dll process attach\n"); }
@@ -790,6 +790,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
       }
     }
   }
+
   static void NTAPI mi_tls_detach(PVOID module, DWORD reason, LPVOID reserved) {
     if (reason == DLL_PROCESS_DETACH || reason == DLL_THREAD_DETACH) {
       if (!mi_module_is_dll(module)) {
@@ -835,6 +836,9 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   }
   #endif
 
+/* ----------------------------------------
+   legacy options: DllMain, TLS, and FLS
+*/
 #elif defined(MI_SHARED_LIB)
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
@@ -864,7 +868,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
       mi_win_main(module, reason, reserved);
     }
   }
-  
+
   // Set up TLS callbacks in a statically linked library by using special data sections.
   // See <https://stackoverflow.com/questions/14538159/tls-callback-in-windows>
   // We use 2 entries to ensure we call attach events before constructors
@@ -884,7 +888,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma const_seg(".CRT$XLY")
     extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[];
     const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
-    #pragma const_seg()    
+    #pragma const_seg()
   #else
     #pragma comment(linker, "/INCLUDE:__tls_used")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
