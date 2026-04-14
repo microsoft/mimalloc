@@ -364,14 +364,9 @@ typedef _Atomic(uintptr_t) mi_atomic_guard_t;
 // Yield
 // ----------------------------------------------------------------------
 
-#if defined(__cplusplus)
-#include <thread>
+#if defined(_WIN32)
 static inline void mi_atomic_yield(void) {
-  std::this_thread::yield();
-}
-#elif defined(_WIN32)
-static inline void mi_atomic_yield(void) {
-  YieldProcessor();
+  YieldProcessor();  // see issue #1215 and #1225 why this is preferred over __yield or SwitchToThread
 }
 #elif defined(__SSE2__)
 #include <emmintrin.h>
@@ -412,7 +407,6 @@ static inline void mi_atomic_yield(void) {
 #endif
 #endif
 #elif defined(__sun)
-// Fallback for other archs
 #include <synch.h>
 static inline void mi_atomic_yield(void) {
   smt_pause();
@@ -421,6 +415,12 @@ static inline void mi_atomic_yield(void) {
 #include <sched.h>
 static inline void mi_atomic_yield(void) {
   sched_yield();
+}
+// Fallback for other archs
+#elif defined(__cplusplus)  
+#include <thread>
+static inline void mi_atomic_yield(void) {
+  std::this_thread::yield();
 }
 #else
 #include <unistd.h>
