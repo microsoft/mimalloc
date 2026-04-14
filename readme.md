@@ -1,7 +1,10 @@
-
 <img align="left" width="100" height="100" src="doc/mimalloc-logo.png"/>
-
-[<img align="right" src="https://dev.azure.com/Daan0324/mimalloc/_apis/build/status/microsoft.mimalloc?branchName=dev3"/>](https://dev.azure.com/Daan0324/mimalloc/_build?definitionId=1&_a=summary)
+<div align="right">
+<sup> v3:</sup><a href="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml"><img src="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml/badge.svg?branch=dev3"/></a>
+<sup> v2:</sup><a href="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml"><img src="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml/badge.svg?branch=dev2"/></a>
+<sup> v1:</sup><a href="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml"><img src="https://github.com/microsoft/mimalloc/actions/workflows/test.yaml/badge.svg?branch=dev"/></a>
+&nbsp;&nbsp;&nbsp;<sup>v3:</sup><a href="https://dev.azure.com/Daan0324/mimalloc/_build?definitionId=1&_a=summary"><img src="https://dev.azure.com/Daan0324/mimalloc/_apis/build/status/microsoft.mimalloc?branchName=dev3"/></a>
+</div>
 
 # mimalloc
 
@@ -144,7 +147,7 @@ mimalloc is used in various large scale low-latency services and programs, for e
 <a href="https://azure.microsoft.com/"><img height="50" align="left" src="https://upload.wikimedia.org/wikipedia/commons/a/a8/Microsoft_Azure_Logo.svg"></a>
 <a href="https://deathstrandingpc.505games.com"><img height="100" src="doc/ds-logo.png"></a>
 <a href="https://docs.unrealengine.com/4.26/en-US/WhatsNew/Builds/ReleaseNotes/4_25/"><img height="100" src="doc/unreal-logo.svg"></a>
-<a href="https://cab.spbu.ru/software/spades/"><img height="100" src="doc/spades-logo.png"></a>
+<a href="https://ablab.github.io/software/spades/"><img height="100" src="doc/spades-logo.png"></a>
 
 
 # Building

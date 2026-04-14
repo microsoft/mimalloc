@@ -194,11 +194,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
 
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
-  #if defined(MI_NO_THP)
-  if (true)
-  #else
   if (!mi_option_is_enabled(mi_option_allow_thp)) // disable THP if requested through an option
-  #endif
   {
     int val = 0;
     if (prctl(PR_GET_THP_DISABLE, &val, 0, 0, 0) != 0) {

@@ -659,7 +659,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all )
     }
     if (all_visited && !any_purged) {
       // all arena's were visited and nothing needed to be purged: reset global expire
-      mi_atomic_storei64_release(&mi_arenas_purge_expire, 0);
+      mi_atomic_storei64_release(&mi_arenas_purge_expire, (mi_msecs_t)0);
     }
   }
 }
@@ -834,7 +834,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
     mi_assert_internal(memid.initially_committed && memid.is_pinned);
   }
   if (!_mi_is_aligned(start, MI_SEGMENT_ALIGN)) {
-    void* const aligned_start = mi_align_up_ptr(start, MI_SEGMENT_ALIGN);
+    void* const aligned_start = _mi_align_up_ptr(start, MI_SEGMENT_ALIGN);
     const size_t diff = (uint8_t*)aligned_start - (uint8_t*)start;
     if (diff >= size || (size - diff) < MI_ARENA_BLOCK_SIZE) {
       _mi_warning_message("after alignment, the size of the arena becomes too small (memory at %p with size %zu)\n", start, size);
