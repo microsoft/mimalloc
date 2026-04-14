@@ -66,7 +66,7 @@ static void mi_stat_adjust(mi_stat_count_t* stat, int64_t amount) {
   if (amount == 0) return;
   if mi_unlikely(mi_is_in_main(stat))
   {
-    // adjust atomically 
+    // adjust atomically
     mi_atomic_addi64_relaxed(&stat->current, amount);
     mi_atomic_addi64_relaxed(&stat->total,amount);
   }
@@ -85,14 +85,14 @@ void _mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount) {
 // must be thread safe as it is called from stats_merge
 static void mi_stat_count_add_mt(mi_stat_count_t* stat, const mi_stat_count_t* src) {
   if (stat==src) return;
-  mi_atomic_void_addi64_relaxed(&stat->total, &src->total); 
+  mi_atomic_void_addi64_relaxed(&stat->total, &src->total);
   const int64_t prev_current = mi_atomic_addi64_relaxed(&stat->current, src->current);
 
   // Global current plus thread peak approximates new global peak
   // note: peak scores do really not work across threads.
   // we used to just add them together but that often overestimates in practice.
   // similarly, max does not seem to work well. The current approach
-  // by Artem Kharytoniuk (@artem-lunarg) seems to work better, see PR#1112 
+  // by Artem Kharytoniuk (@artem-lunarg) seems to work better, see PR#1112
   // for a longer description.
   mi_atomic_maxi64_relaxed(&stat->peak, prev_current + src->peak);
 }
@@ -236,11 +236,11 @@ static void mi_stat_counter_print_size(const mi_stat_counter_t* stat, const char
   _mi_fprintf(out, arg, "\n");
 }
 
-static void mi_stat_average_print(size_t count, size_t total, const char* msg, mi_output_fun* out, void* arg) {
+static void mi_stat_average_print(int64_t count, int64_t total, const char* msg, mi_output_fun* out, void* arg) {
   const int64_t avg_tens = (count == 0 ? 0 : (total*10 / count));
-  const long avg_whole = (long)(avg_tens/10);
-  const long avg_frac1 = (long)(avg_tens%10);
-  _mi_fprintf(out, arg, "%10s: %5ld.%ld avg\n", msg, avg_whole, avg_frac1);
+  const int64_t avg_whole = avg_tens/10;
+  const int64_t avg_frac1 = avg_tens%10;
+  _mi_fprintf(out, arg, "%10s: %5lld.%lld avg\n", msg, avg_whole, avg_frac1);
 }
 
 
