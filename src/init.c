@@ -509,23 +509,31 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc)
     mi_heap_t* heap = subproc->heaps;
     while (heap != NULL) {
       mi_heap_t* next = heap->next;
-      if (heap!=subproc->heap_main) {mi_heap_destroy(heap); }
+      if (heap!=subproc->heap_main) { mi_heap_destroy(heap); }
       heap = next;
     }
     mi_assert_internal(subproc->heaps == subproc->heap_main);
-    mi_heap_destroy(subproc->heap_main);
+    _mi_heap_force_destroy(subproc->heap_main);  // no warning if destroying the main heap
   }
+
+  // remove associated arenas
+  _mi_arenas_unsafe_destroy_all(subproc);
 
   // merge stats back into the main subproc?
   if (subproc!=&subproc_main) {
-    _mi_arenas_unsafe_destroy_all(subproc);
     _mi_stats_merge_into(&subproc_main.stats, &subproc->stats);
+  }
 
-    // safe to release
-    // todo: should we refcount subprocesses?
-    mi_lock_done(&subproc->arena_reserve_lock);
-    mi_lock_done(&subproc->heaps_lock);
+  // safe to release
+  // todo: should we refcount subprocesses?
+  mi_lock_done(&subproc->arena_reserve_lock);
+  mi_lock_done(&subproc->heaps_lock);
+  if (subproc!=&subproc_main) {
     _mi_meta_free(subproc, sizeof(mi_subproc_t), subproc->memid);
+  }
+  else {
+    // for the main subproc, also release the global page map
+    _mi_page_map_unsafe_destroy(&subproc_main);
   }
 }
 
@@ -761,8 +769,8 @@ mi_decl_cold mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
 #else
 // with only direct entries, use the "arbitrary user data" field 
 // and assume it is NULL (see also <http://www.nynaeve.net/?p=98>)
-#define MI_TLS_INITIAL_EXPANSION_SLOT   (0)
 #define MI_TLS_INITIAL_SLOT             (5)
+#define MI_TLS_INITIAL_EXPANSION_SLOT   (0)
 #endif
 
 // we initially use the last of the expansion slots as the default NULL.
@@ -772,38 +780,63 @@ mi_decl_hidden size_t _mi_theap_default_expansion_slot = MI_TLS_INITIAL_EXPANSIO
 mi_decl_hidden size_t _mi_theap_cached_slot            = MI_TLS_INITIAL_SLOT;
 mi_decl_hidden size_t _mi_theap_cached_expansion_slot  = MI_TLS_INITIAL_EXPANSION_SLOT;
 
-static size_t mi_win_tls_slot_alloc(size_t* extended) {
-  const DWORD slot = TlsAlloc();
-  if (slot==TLS_OUT_OF_INDEXES || slot >= MI_TLS_DIRECT_SLOTS + MI_TLS_EXPANSION_SLOTS - 1) {
-    // note: we also fail if the program already allocated the maximum number of expansion slots (as we use the last one as the default)
+static DWORD mi_tls_raw_index_default = TLS_OUT_OF_INDEXES;
+static DWORD mi_tls_raw_index_cached  = TLS_OUT_OF_INDEXES;
+
+static bool mi_win_tls_slot_alloc(size_t* slot, size_t* extended, DWORD* raw_index) {
+  const DWORD index = TlsAlloc();
+  *raw_index = index;
+  if (index==TLS_OUT_OF_INDEXES) {
     *extended = 0;
-    return 0;
+    *slot = 0;
+    return false;
   }
-  else if (slot<MI_TLS_DIRECT_SLOTS) {
+  else if (index<MI_TLS_DIRECT_SLOTS) {
     *extended = 0;
-    return (slot + MI_TLS_DIRECT_FIRST);
+    *slot = index + MI_TLS_DIRECT_FIRST;
+    return true;
   }
+  #if !MI_WIN_DIRECT_TLS
+  else if (index < MI_TLS_DIRECT_SLOTS + MI_TLS_EXPANSION_SLOTS - 1) { // check maximum number of expansion slots - 1 (as we use the last one as the default)    
+    *extended = index - MI_TLS_DIRECT_SLOTS;
+    *slot = MI_TLS_EXPANSION_SLOT;
+    return true;
+  }
+  #endif
   else {
-    #if MI_WIN_DIRECT_TLS
+    // to high an index for us
+    _mi_error_message(EFAULT, "returned tls index was too high (%u)\n", index);
+    TlsFree(index);
+    *raw_index = TLS_OUT_OF_INDEXES; 
     *extended = 0;
-    return 0;
-    #else
-    *extended = (slot - MI_TLS_DIRECT_SLOTS);
-    return MI_TLS_EXPANSION_SLOT;
-    #endif
+    *slot = 0;
+    return false;
   }
 }
 
-mi_decl_cold mi_theap_t* _mi_win_tls_slots_init(void) {
+static void mi_win_tls_slot_free(DWORD* raw_index) {
+  if (*raw_index != TLS_OUT_OF_INDEXES) {
+    TlsFree(*raw_index);
+    *raw_index = TLS_OUT_OF_INDEXES;
+  }
+}
+
+static void mi_tls_slots_init(void) {
   static mi_atomic_once_t tls_slots_init;
   if (mi_atomic_once(&tls_slots_init)) {
-    _mi_theap_default_slot = mi_win_tls_slot_alloc(&_mi_theap_default_expansion_slot);
-    _mi_theap_cached_slot = mi_win_tls_slot_alloc(&_mi_theap_cached_expansion_slot);
-    if (_mi_theap_cached_slot==0) {
+    bool ok = mi_win_tls_slot_alloc(&_mi_theap_default_slot, &_mi_theap_default_expansion_slot, &mi_tls_raw_index_default);
+    if (ok) {
+      ok = mi_win_tls_slot_alloc(&_mi_theap_cached_slot, &_mi_theap_cached_expansion_slot, &mi_tls_raw_index_cached);
+    }
+    if (!ok) {
       _mi_error_message(EFAULT, "unable to allocate fast TLS user slot (0x%zx)\n", _mi_theap_cached_slot);
     }
   }
-  return (mi_theap_t*)&_mi_theap_empty;
+}
+
+static void mi_tls_slots_done(void) {
+  mi_win_tls_slot_free(&mi_tls_raw_index_default);
+  mi_win_tls_slot_free(&mi_tls_raw_index_cached );
 }
 
 static void mi_win_tls_slot_set(size_t slot, size_t extended_slot, void* value) {
@@ -823,13 +856,38 @@ static void mi_win_tls_slot_set(size_t slot, size_t extended_slot, void* value) 
 mi_decl_hidden pthread_key_t _mi_theap_default_key = 0;
 mi_decl_hidden pthread_key_t _mi_theap_cached_key = 0;
 
-mi_decl_cold mi_theap_t* _mi_tls_keys_init(void) {
+static void mi_tls_slots_init(void) {
   static mi_atomic_once_t tls_keys_init;
   if (mi_atomic_once(&tls_keys_init)) {
-    pthread_key_create(&_mi_theap_default_key, NULL);
-    pthread_key_create(&_mi_theap_cached_key, NULL);
+    int err = pthread_key_create(&_mi_theap_default_key, NULL);
+    if (err==0) {
+      err = pthread_key_create(&_mi_theap_cached_key, NULL);
+    }
+    if (err!=0) {
+      _mi_error_message(EFAULT, "unable to allocate pthread keys (error %d)\n", err);
+    }
   }
-  return (mi_theap_t*)&_mi_theap_empty;
+}
+
+static void mi_tls_slots_done(void) {
+  if (_mi_theap_default_key != 0) {
+    pthread_key_delete(_mi_theap_default_key);
+    _mi_theap_default_key = 0;
+  }
+  if (_mi_theap_cached_key != 0) {
+    pthread_key_delete(_mi_theap_cached_key);
+    _mi_theap_cached_key = 0;
+  }
+}
+
+#else
+
+static void mi_tls_slots_init(void) {
+  // nothing
+}
+
+static void mi_tls_slots_done(void) {
+  // nothing
 }
 
 #endif
@@ -838,15 +896,14 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
   mi_theap_t* prev = _mi_theap_cached();
   if (prev==theap) return;
   // set
+  mi_tls_slots_init();
   #if MI_TLS_MODEL_THREAD_LOCAL
     __mi_theap_cached = theap;
   #elif MI_TLS_MODEL_FIXED_SLOT
     mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_SLOT_CACHED, theap);
   #elif MI_TLS_MODEL_DYNAMIC_WIN32
-    _mi_win_tls_slots_init();
     mi_win_tls_slot_set(_mi_theap_cached_slot, _mi_theap_cached_expansion_slot, theap);
   #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
-    _mi_tls_keys_init();
     if (_mi_theap_cached_key!=0) pthread_setspecific(_mi_theap_cached_key, theap);
   #endif
   // update refcounts (so cached theap memory keeps available until no longer cached)
@@ -858,15 +915,14 @@ void _mi_theap_default_set(mi_theap_t* theap)  {
   mi_theap_t* const theap_old = _mi_theap_default();
   mi_assert_internal(theap != NULL);
   mi_assert_internal(theap->tld->thread_id==0 || theap->tld->thread_id==_mi_thread_id());
+  mi_tls_slots_init();
   #if MI_TLS_MODEL_THREAD_LOCAL
     __mi_theap_default = theap;
   #elif MI_TLS_MODEL_FIXED_SLOT
     mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_SLOT_DEFAULT, theap);
   #elif MI_TLS_MODEL_DYNAMIC_WIN32
-    _mi_win_tls_slots_init();
     mi_win_tls_slot_set(_mi_theap_default_slot, _mi_theap_default_expansion_slot, theap);
   #elif MI_TLS_MODEL_DYNAMIC_PTHREADS
-    _mi_tls_keys_init();
     if (_mi_theap_default_key!=0) pthread_setspecific(_mi_theap_default_key, theap);
   #endif
 
@@ -1080,17 +1136,18 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   // since after process_done there might still be other code running that calls `free` (like at_exit routines,
   // or C-runtime termination code.
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
-    mi_subprocs_unsafe_destroy_all();
-    _mi_page_map_unsafe_destroy(_mi_subproc_main());
+    mi_subprocs_unsafe_destroy_all(); // destroys all subprocs, arenas, and the page_map!    
   }
   else {
     mi_heap_stats_merge_to_subproc(mi_heap_main());
   }
-
+  
+  // careful now to no longer access any allocator functionality 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
     mi_subproc_stats_print_out(NULL, NULL, NULL);
   }
   mi_lock_done(&subprocs_lock);
+  mi_tls_slots_done();
   _mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", tld_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore

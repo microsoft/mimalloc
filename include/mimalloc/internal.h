@@ -303,7 +303,7 @@ mi_decl_cold  mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap);  //
 mi_decl_cold  mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap);     // get the theap for a heap without initializing (and return NULL in that case)
 void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);  // in "arena.c"
 void          _mi_heap_destroy_pages(mi_heap_t* heap_from);                   // in "arena.c"
-
+void          _mi_heap_force_destroy(mi_heap_t* heap);                        // allow destroying the main heap
 
 // "stats.c"
 void          _mi_stats_init(void);

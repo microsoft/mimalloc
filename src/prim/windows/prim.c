@@ -698,42 +698,14 @@ bool _mi_prim_thread_is_in_threadpool(void) {
 // Process & Thread Init/Done
 //----------------------------------------------------------------
 
-#if MI_WIN_USE_FIXED_TLS==1
-mi_decl_cache_align size_t _mi_win_tls_offset = 0;
-#endif
-
 //static void mi_debug_out(const char* s) {
 //  HANDLE h = GetStdHandle(STD_ERROR_HANDLE);
 //  WriteConsole(h, s, (DWORD)_mi_strlen(s), NULL, NULL);
 //}
 
-static void mi_win_tls_init(DWORD reason) {
-  if (reason==DLL_PROCESS_ATTACH || reason==DLL_THREAD_ATTACH) {
-    #if MI_WIN_USE_FIXED_TLS==1  // we must allocate a TLS slot dynamically
-    if (_mi_win_tls_offset == 0 && reason == DLL_PROCESS_ATTACH) {
-      const DWORD tls_slot = TlsAlloc();  // usually returns slot 1
-      if (tls_slot == TLS_OUT_OF_INDEXES) {
-        _mi_error_message(EFAULT, "unable to allocate the a TLS slot (rebuild without MI_WIN_USE_FIXED_TLS?)\n");
-      }
-      _mi_win_tls_offset = (size_t)tls_slot * sizeof(void*);
-    }
-    #endif
-    #if MI_HAS_TLS_SLOT >= 2  // we must initialize the TLS slot before any allocation
-    if (_mi_theap_default() == NULL) {
-      _mi_theap_default_set((mi_theap_t*)&_mi_theap_empty);
-      #if MI_DEBUG && MI_WIN_USE_FIXED_TLS==1
-      void* const p = TlsGetValue((DWORD)(_mi_win_tls_offset / sizeof(void*)));
-      mi_assert_internal(p == (void*)&_mi_theap_empty);
-      #endif
-    }
-    #endif
-  }
-}
-
 static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   MI_UNUSED(reserved);
   MI_UNUSED(module);
-  mi_win_tls_init(reason);
   if (reason==DLL_PROCESS_ATTACH) {
     _mi_auto_process_init();
   }
@@ -748,10 +720,10 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 
 /* ----------------------------------------------------------------------
    Auto initialize and finalize mimalloc on process and thread start/end.
-   By default we use a combination of _pRawDllMain and TLS sections for 
-   both static and dynamic linkage 
+   By default we use a combination of _pRawDllMain and TLS sections for
+   both static and dynamic linkage
 ------------------------------------------------------------------------- */
-#ifndef MI_WIN_NO_RAW_DLLMAIN  
+#ifndef MI_WIN_NO_RAW_DLLMAIN
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
@@ -993,7 +965,6 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #endif
   mi_decl_export void _mi_redirect_entry(DWORD reason) {
     // called on redirection; careful as this may be called before DllMain
-    mi_win_tls_init(reason);
     if (reason == DLL_PROCESS_ATTACH) {
       mi_redirected = true;
     }

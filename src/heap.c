@@ -205,15 +205,20 @@ void mi_heap_delete(mi_heap_t* heap) {
   mi_heap_free(heap);
 }
 
+void _mi_heap_force_destroy(mi_heap_t* heap) {
+  if (heap==NULL) return;
+  mi_heap_free_theaps(heap);
+  _mi_heap_destroy_pages(heap);
+  if (!_mi_is_heap_main(heap)) { mi_heap_free(heap); }
+}
+
 void mi_heap_destroy(mi_heap_t* heap) {
   if (heap==NULL) return;
   if (_mi_is_heap_main(heap)) {
     _mi_warning_message("cannot destroy the main heap\n");
     return;
   }
-  mi_heap_free_theaps(heap);
-  _mi_heap_destroy_pages(heap);
-  mi_heap_free(heap);
+  _mi_heap_force_destroy(heap);
 }
 
 mi_heap_t* mi_heap_of(const void* p) {
