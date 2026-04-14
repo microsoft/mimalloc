@@ -705,7 +705,12 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 }
 
 
-#if !MI_WIN_NO_RAW_DLLMAIN  /* we use a combination of _pRawDllMain and TLS sections for both static and dynamic linkage */
+/* ----------------------------------------------------------------------
+   Auto initialize and finalize mimalloc on process and thread start/end.
+   By default we use a combination of _pRawDllMain and TLS sections for 
+   both static and dynamic linkage 
+------------------------------------------------------------------------- */
+#ifndef MI_WIN_NO_RAW_DLLMAIN  
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
