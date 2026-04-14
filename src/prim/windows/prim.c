@@ -705,13 +705,13 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 }
 
 
-#if 1  /* we use a combination of _pRawDllMain and TLS init/fini for both static and dynamic linkage */
+#if !MI_WIN_NO_RAW_DLLMAIN  /* we use a combination of _pRawDllMain and TLS sections for both static and dynamic linkage */
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
   void _mi_prim_thread_done_auto_done(void) {}
-  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
-    MI_UNUSED(theap);
+  void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
+    MI_UNUSED(heap);
   }
 
   // If linked into a DLL module, this raw entry is called before the CRT attach and 
@@ -749,6 +749,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
       }
     }
   }
+
   static void NTAPI mi_tls_detach(PVOID module, DWORD reason, LPVOID reserved) {
     if (reason == DLL_PROCESS_DETACH || reason == DLL_THREAD_DETACH) {
       if (!mi_module_is_dll(module)) {
@@ -794,6 +795,9 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   }
   #endif
 
+/* ----------------------------------------
+   legacy options: DllMain, TLS, and FLS
+*/
 #elif defined(MI_SHARED_LIB)
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 

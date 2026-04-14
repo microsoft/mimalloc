@@ -199,10 +199,10 @@ static void test_process_info(void) {
 }
 
 static void test_reserved(void) {
-#define KiB 1024ULL
+#define KiB 1024UL
 #define MiB (KiB*KiB)
 #define GiB (MiB*KiB)
-  mi_reserve_os_memory(4*GiB, false, true);
+  mi_reserve_os_memory(3500*MiB, false, true);
   void* p1 = malloc(100);
   void* p2 = malloc(100000);
   void* p3 = malloc(2*GiB);
