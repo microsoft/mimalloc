@@ -88,7 +88,8 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 - __v1__: legacy version: initial design of mimalloc (release tags: `v1.9.x`, development branch `dev`). Send PR's against this version if possible.
 
 ### Releases
-* 2026-04-15, `v1.9.8`, `v2.3.0`, `v3.3.0`: fix visiting of full pages during collection (performance),
+* 2026-04-15, `v1.9.8`, `v2.3.0`, `v3.3.0`: initial support for github (binary) releases, 
+  fix visiting of full pages during collection (performance),
   fix THP alignment (performance), fix arm64 cross-compilation on Windows, enable guard pages in debug mode,
   always use uncommitted areas between arenas (security), enable static overloading of `malloc` etc. on Windows with the 
   static CRT (by @Noxybot), fix TLS slot leak on Windows (v3), enable clean DLL load/unload with statically linked
