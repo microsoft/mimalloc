@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  RELEASE: v3.3.0
+  RELEASE: Release v3.3.0
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   
 name: Release
