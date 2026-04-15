@@ -734,7 +734,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #if defined(__cplusplus)
   extern "C"
   #endif
-  PVOID _pRawDllMain = &mi_dll_main_raw;
+  PVOID _pRawDllMain = (PVOID)&mi_dll_main_raw;
 
   // We also hook into the Windows loader TLS initialization and finalization.
   // If we are linked into an EXE module we rely on these as `mi_dll_main_raw`

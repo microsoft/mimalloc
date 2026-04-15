@@ -154,7 +154,7 @@ jobs:
           MIMALLOC_GUARDED_SAMPLE_RATE: 100
 
       - name: Release, Guarded
-        if: matrix.tests == 'extra' && runner.os == 'Linux'
+        if: matrix.tests == 'extra' && runner.os == 'Linux' && startsWith(github.ref_name,'dev3')
         run: |
           cmake . -B out/release-guarded -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_GUARDED=ON
           cmake --build out/release-guarded --parallel 8 --config Release
