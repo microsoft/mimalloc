@@ -95,7 +95,7 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
   mimalloc (v3), fix race in `mi_heap_destroy` (v3), by default put page meta info separate from allocated 
   objects (v3,security), fix C++ overrides for emscripten. Various bugs found by DeepTest include: 
   fix offset for `mi_heap_realloc_aligned`, fix `mi_(w)dupenv_s` buffer size, fix potential overflow in size options,
-  and error codes for `mi_reallocarr(ay)`=
+  and error codes for `mi_reallocarr(ay)`. 
 * 2026-02-03, `v3.2.8` (rc3): Fix thread reinitialize issue on macOS. Fix SIMD codegen bug on older
   GCC versions. Extend Windows TLS slot limit from 64 to 1088. Report commit statistics more precise.
   Fixes issue in free-page search in arenas.
