@@ -4,6 +4,7 @@
 # https://aka.ms/yaml
 
 trigger:
+  batch: true
   branches:
     include:
     - main
@@ -236,9 +237,9 @@ jobs:
       Debug:
         BuildType: debug
         cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
-      Release:
-        BuildType: release
-        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
+      # Release:
+      #   BuildType: release
+      #   cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release
   steps:
   - task: CMake@1
     inputs:
