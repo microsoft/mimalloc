@@ -33,7 +33,7 @@ void mi_heap_stats_merge_to_main(mi_heap_t* heap) {
   _mi_stats_merge_into(&mi_heap_main()->stats, &heap->stats);
 }
 
-static mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
+static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
 {
   mi_heap_t* heap = (mi_heap_t*)const_heap;
   mi_assert_internal(heap!=NULL);
