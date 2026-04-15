@@ -119,7 +119,6 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
-    <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
@@ -128,22 +127,18 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
-    <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
     <OutDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
-    <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64EC'">
     <OutDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
-    <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
-    <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
     <OutDir>$(ProjectDir)..\..\out\msvc-$(Platform)\$(Configuration)\</OutDir>
@@ -228,7 +223,6 @@
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions);NDEBUG;MI_MALLOC_OVERRIDE</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <WholeProgramOptimization>false</WholeProgramOptimization>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -268,7 +262,6 @@
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions);NDEBUG;MI_MALLOC_OVERRIDE</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <WholeProgramOptimization>false</WholeProgramOptimization>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -288,7 +281,6 @@
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions);NDEBUG;MI_MALLOC_OVERRIDE</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <WholeProgramOptimization>false</WholeProgramOptimization>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
