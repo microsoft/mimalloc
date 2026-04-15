@@ -5,6 +5,7 @@ var group__extended =
     [ "mi_error_fun", "group__extended.html#ga83fc6a688b322261e1c2deab000b0591", null ],
     [ "mi_output_fun", "group__extended.html#gadf31cea7d0332a81c8b882cbbdbadb8d", null ],
     [ "mi_collect", "group__extended.html#ga421430e2226d7d468529cec457396756", null ],
+    [ "mi_free_small", "group__extended.html#ga2a8469764c38dcaf878f36e5f50e3610", null ],
     [ "mi_is_redirected", "group__extended.html#gaad25050b19f30cd79397b227e0157a3f", null ],
     [ "mi_malloc_small", "group__extended.html#ga7f050bc6b897da82692174f5fce59cde", null ],
     [ "mi_register_deferred_free", "group__extended.html#ga3460a6ca91af97be4058f523d3cb8ece", null ],

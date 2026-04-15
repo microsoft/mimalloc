@@ -30,7 +30,7 @@ static mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, si
   mi_assert_internal(alignment > 0 && alignment < MI_BLOCK_ALIGNMENT_MAX);
   const size_t oversize = size + alignment - 1;
   void* base = _mi_heap_malloc_guarded(heap, oversize, zero);
-  void* p = mi_align_up_ptr(base, alignment);
+  void* p = _mi_align_up_ptr(base, alignment);
   mi_track_align(base, p, (uint8_t*)p - (uint8_t*)base, size);
   mi_assert_internal(mi_usable_size(p) >= size);
   mi_assert_internal(_mi_is_aligned(p, alignment));
@@ -291,7 +291,7 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
   size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size - (size / 2))
       && (((uintptr_t)p + offset) % alignment) == 0) {
-    return p;  // reallocation still fits, is aligned and not more than 50% waste
+    return p;  // reallocation still fits, is aligned and not more than 25% waste
   }
   else {
     // note: we don't zero allocate upfront so we only zero initialize the expanded part
@@ -312,8 +312,7 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
 static void* mi_heap_realloc_zero_aligned(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, bool zero) mi_attr_noexcept {
   mi_assert(alignment > 0);
   if (alignment <= sizeof(uintptr_t)) return _mi_heap_realloc_zero(heap,p,newsize,zero,NULL,NULL);
-  size_t offset = ((uintptr_t)p % alignment); // use offset of previous allocation (p can be NULL)
-  return mi_heap_realloc_zero_aligned_at(heap,p,newsize,alignment,offset,zero);
+  return mi_heap_realloc_zero_aligned_at(heap,p,newsize,alignment,0,zero);
 }
 
 mi_decl_nodiscard void* mi_heap_realloc_aligned_at(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {

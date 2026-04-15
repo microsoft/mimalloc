@@ -110,7 +110,7 @@ static mi_decl_cache_align _Atomic(uintptr_t)aligned_base;
 //  in the middle of the 2TiB - 6TiB address range (see issue #372))
 
 #define MI_HINT_BASE ((uintptr_t)2 << 40)  // 2TiB start
-#define MI_HINT_AREA ((uintptr_t)4 << 40)  // upto 6TiB   (since before win8 there is "only" 8TiB available to processes)
+#define MI_HINT_AREA ((uintptr_t)4 << 40)  // upto (2+4) 6TiB  (since before win8 there is "only" 8TiB available to processes)
 #define MI_HINT_MAX  ((uintptr_t)30 << 40) // wrap after 30TiB (area after 32TiB is used for huge OS pages)
 
 void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
@@ -119,10 +119,8 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
   size = _mi_align_up(size, MI_SEGMENT_SIZE);
   if (size > 1*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<30) = 1/4096.
-  #if (MI_SECURE>0)
-  size += MI_SEGMENT_SIZE;        // put in `MI_SEGMENT_SIZE` virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
-  #endif
-
+  size += MI_SEGMENT_SIZE;           // put in `MI_SEGMENT_SIZE` virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
+  
   uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     uintptr_t init = MI_HINT_BASE;
@@ -282,7 +280,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       // note: this is dangerous on Windows as VirtualFree needs the actual base pointer
       // this is handled though by having the `base` field in the memid's
       *base = p; // remember the base
-      p = mi_align_up_ptr(p, alignment);
+      p = _mi_align_up_ptr(p, alignment);
 
       // explicitly commit only the aligned part
       if (commit) {
@@ -298,7 +296,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       if (p == NULL) return NULL;
 
       // and selectively unmap parts around the over-allocated area.
-      void* aligned_p = mi_align_up_ptr(p, alignment);
+      void* aligned_p = _mi_align_up_ptr(p, alignment);
       size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
       size_t mid_size = _mi_align_up(size, _mi_os_page_size());
       size_t post_size = over_size - pre_size - mid_size;
@@ -430,10 +428,10 @@ static void* mi_os_page_align_areax(bool conservative, void* addr, size_t size, 
   if (size == 0 || addr == NULL) return NULL;
 
   // page align conservatively within the range
-  void* start = (conservative ? mi_align_up_ptr(addr, _mi_os_page_size())
-    : mi_align_down_ptr(addr, _mi_os_page_size()));
-  void* end = (conservative ? mi_align_down_ptr((uint8_t*)addr + size, _mi_os_page_size())
-    : mi_align_up_ptr((uint8_t*)addr + size, _mi_os_page_size()));
+  void* start = (conservative ? _mi_align_up_ptr(addr, _mi_os_page_size())
+                              : _mi_align_down_ptr(addr, _mi_os_page_size()));
+  void* end   = (conservative ? _mi_align_down_ptr((uint8_t*)addr + size, _mi_os_page_size())
+                              : _mi_align_up_ptr((uint8_t*)addr + size, _mi_os_page_size()));
   ptrdiff_t diff = (uint8_t*)end - (uint8_t*)start;
   if (diff <= 0) return NULL;
 

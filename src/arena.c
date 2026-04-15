@@ -554,16 +554,22 @@ static bool mi_arena_purge_range(mi_arena_t* arena, size_t idx, size_t startidx,
   return all_purged;
 }
 
-// returns true if anything was purged
-static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
+// returns 
+// -1 = nothing was purged 
+// 0  = nothing was purged yet because have not yet reached the expire time
+// 1  = some pages in the arena were purged
+static int mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
 {
   // check pre-conditions
-  if (arena->memid.is_pinned) return false;
+  if (arena->memid.is_pinned) return -1;
 
   // expired yet?
   mi_msecs_t expire = mi_atomic_loadi64_relaxed(&arena->purge_expire);
-  if (!force && (expire == 0 || expire > now)) return false;
-
+  if (!force) {
+    if (expire == 0)  return -1;
+    if (expire > now) return 0;
+  }
+  
   // reset expire (if not already set concurrently)
   mi_atomic_casi64_strong_acq_rel(&arena->purge_expire, &expire, (mi_msecs_t)0);
   _mi_stat_counter_increase(&_mi_stats_main.arena_purges, 1);
@@ -611,7 +617,7 @@ static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
     mi_msecs_t expected = 0;
     mi_atomic_casi64_strong_acq_rel(&arena->purge_expire,&expected,_mi_clock_now() + delay);
   }
-  return any_purged;
+  return (any_purged ? 1 : -1);
 }
 
 static void mi_arenas_try_purge( bool force, bool visit_all )
@@ -621,7 +627,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all )
   // check if any arena needs purging?
   const mi_msecs_t now = _mi_clock_now();
   mi_msecs_t arenas_expire = mi_atomic_loadi64_acquire(&mi_arenas_purge_expire);
-  if (!force && (arenas_expire == 0 || arenas_expire < now)) return;
+  if (!force && (arenas_expire == 0 || arenas_expire > now)) return;
 
   const size_t max_arena = mi_atomic_load_acquire(&mi_arena_count);
   if (max_arena == 0) return;
@@ -634,21 +640,26 @@ static void mi_arenas_try_purge( bool force, bool visit_all )
     mi_atomic_storei64_release(&mi_arenas_purge_expire, now + mi_arena_purge_delay());
     size_t max_purge_count = (visit_all ? max_arena : 2);
     bool all_visited = true;
+    bool any_purged = false;
     for (size_t i = 0; i < max_arena; i++) {
       mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &mi_arenas[i]);
       if (arena != NULL) {
-        if (mi_arena_try_purge(arena, now, force)) {
-          if (max_purge_count <= 1) {
-            all_visited = false;
-            break;
+        int purged = mi_arena_try_purge(arena, now, force);
+        if (purged >= 0) {    // purged, or not yet the expire-time reached
+          any_purged = true;
+          if (purged >= 1) {  // purged at least one page
+            if (max_purge_count <= 1) {
+              all_visited = false;
+              break;
+            }
+            max_purge_count--;
           }
-          max_purge_count--;
         }
       }
     }
-    if (all_visited) {
-      // all arena's were visited and purged: reset global expire
-      mi_atomic_storei64_release(&mi_arenas_purge_expire, 0);
+    if (all_visited && !any_purged) {
+      // all arena's were visited and nothing needed to be purged: reset global expire
+      mi_atomic_storei64_release(&mi_arenas_purge_expire, (mi_msecs_t)0);
     }
   }
 }
@@ -823,7 +834,7 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
     mi_assert_internal(memid.initially_committed && memid.is_pinned);
   }
   if (!_mi_is_aligned(start, MI_SEGMENT_ALIGN)) {
-    void* const aligned_start = mi_align_up_ptr(start, MI_SEGMENT_ALIGN);
+    void* const aligned_start = _mi_align_up_ptr(start, MI_SEGMENT_ALIGN);
     const size_t diff = (uint8_t*)aligned_start - (uint8_t*)start;
     if (diff >= size || (size - diff) < MI_ARENA_BLOCK_SIZE) {
       _mi_warning_message("after alignment, the size of the arena becomes too small (memory at %p with size %zu)\n", start, size);

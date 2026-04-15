@@ -34,7 +34,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;v1.9,  v2.2,  v3.2</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;1.8/2.1</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -135,13 +135,19 @@ Functions</h2></td></tr>
 <tr class="memdesc:ga78afbb07c1e0cd333c7539cf7403dfd5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get the default theap that is used for <a class="el" href="group__malloc.html#gae1dd97b542420c87ae085e822b1229e8" title="Allocate size bytes.">mi_malloc()</a> et al. for the current thread.  <br /></td></tr>
 <tr class="separator:ga78afbb07c1e0cd333c7539cf7403dfd5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gac7308e029c59e6675dd5ab5ec54f304a" id="r_gac7308e029c59e6675dd5ab5ec54f304a"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#gac7308e029c59e6675dd5ab5ec54f304a">mi_theap_malloc</a> (<a class="el" href="#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
+<tr class="memdesc:gac7308e029c59e6675dd5ab5ec54f304a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate in a specific theap.  <br /></td></tr>
 <tr class="separator:gac7308e029c59e6675dd5ab5ec54f304a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga1fc65302a212daaecb21abda96ff247c" id="r_ga1fc65302a212daaecb21abda96ff247c"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga1fc65302a212daaecb21abda96ff247c">mi_theap_malloc_small</a> (<a class="el" href="#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
+<tr class="memdesc:ga1fc65302a212daaecb21abda96ff247c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate a small object in a specific theap. <em>size</em> must be smaller or equal to <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small, mi_zalloc_small, mi_heap_malloc_small,...">MI_SMALL_SIZE_MAX()</a>.  <br /></td></tr>
+<tr class="separator:ga1fc65302a212daaecb21abda96ff247c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaa7fd973dcd8c75eb05707bdeffbc06f7" id="r_gaa7fd973dcd8c75eb05707bdeffbc06f7"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#gaa7fd973dcd8c75eb05707bdeffbc06f7">mi_theap_zalloc</a> (<a class="el" href="#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
+<tr class="memdesc:gaa7fd973dcd8c75eb05707bdeffbc06f7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate zero-initialized in a specific heap.  <br /></td></tr>
 <tr class="separator:gaa7fd973dcd8c75eb05707bdeffbc06f7"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaa85fccf9d40af3e826c5932aded1d534" id="r_gaa85fccf9d40af3e826c5932aded1d534"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#gaa85fccf9d40af3e826c5932aded1d534">mi_theap_zalloc_small</a> (<a class="el" href="#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
+<tr class="memdesc:gaa85fccf9d40af3e826c5932aded1d534"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate a small object in a specific theap. <em>size</em> must be smaller or equal to <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small, mi_zalloc_small, mi_heap_malloc_small,...">MI_SMALL_SIZE_MAX()</a>.  <br /></td></tr>
+<tr class="separator:gaa85fccf9d40af3e826c5932aded1d534"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gadbf8f27bfe9edf7834e19d32cab63edc" id="r_gadbf8f27bfe9edf7834e19d32cab63edc"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#gadbf8f27bfe9edf7834e19d32cab63edc">mi_theap_calloc</a> (<a class="el" href="#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t count, size_t size)</td></tr>
 <tr class="separator:gadbf8f27bfe9edf7834e19d32cab63edc"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga1fc65302a212daaecb21abda96ff247c" id="r_ga1fc65302a212daaecb21abda96ff247c"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga1fc65302a212daaecb21abda96ff247c">mi_theap_malloc_small</a> (<a class="el" href="#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
-<tr class="separator:ga1fc65302a212daaecb21abda96ff247c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga84503fc2bd83fbfb7f789b7d80d76f36" id="r_ga84503fc2bd83fbfb7f789b7d80d76f36"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga84503fc2bd83fbfb7f789b7d80d76f36">mi_theap_malloc_aligned</a> (<a class="el" href="#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size, size_t alignment)</td></tr>
 <tr class="separator:ga84503fc2bd83fbfb7f789b7d80d76f36"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga11943128dc354313c4189e72f4299dbb" id="r_ga11943128dc354313c4189e72f4299dbb"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga11943128dc354313c4189e72f4299dbb">mi_theap_realloc</a> (<a class="el" href="#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, void *p, size_t newsize)</td></tr>
@@ -191,7 +197,7 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The theap that serves thread-local allocations for the given <code>heap</code>. This can be used by runtime systems to request the thread-local theap once and then use it in its allocation functions (like <a class="el" href="#gac7308e029c59e6675dd5ab5ec54f304a">mi_theap_malloc()</a> or <a class="el" href="#ga1fc65302a212daaecb21abda96ff247c">mi_theap_malloc_small()</a> ) to avoid re-looking up the theap at each allocation call. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The theap that serves thread-local allocations for the given <code>heap</code>. This can be used by runtime systems to request the thread-local theap once and then use it in its allocation functions (like <a class="el" href="#gac7308e029c59e6675dd5ab5ec54f304a" title="Allocate in a specific theap.">mi_theap_malloc()</a> or <a class="el" href="#ga1fc65302a212daaecb21abda96ff247c" title="Allocate a small object in a specific theap. size must be smaller or equal to MI_SMALL_SIZE_MAX().">mi_theap_malloc_small()</a> ) to avoid re-looking up the theap at each allocation call. </dd></dl>
 
 </div>
 </div>
@@ -283,6 +289,9 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
+<p>Allocate in a specific theap. </p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__malloc.html#gae1dd97b542420c87ae085e822b1229e8" title="Allocate size bytes.">mi_malloc()</a> </dd></dl>
+
 </div>
 </div>
 <a id="ga84503fc2bd83fbfb7f789b7d80d76f36" name="ga84503fc2bd83fbfb7f789b7d80d76f36"></a>
@@ -329,6 +338,9 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+
+<p>Allocate a small object in a specific theap. <em>size</em> must be smaller or equal to <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small, mi_zalloc_small, mi_heap_malloc_small,...">MI_SMALL_SIZE_MAX()</a>. </p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a> </dd></dl>
 
 </div>
 </div>
@@ -402,6 +414,33 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+
+<p>Allocate zero-initialized in a specific heap. </p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__malloc.html#gae6e38c4403247a7b40d80419e093bfb8" title="Allocate zero-initialized size bytes.">mi_zalloc()</a> </dd></dl>
+
+</div>
+</div>
+<a id="gaa85fccf9d40af3e826c5932aded1d534" name="gaa85fccf9d40af3e826c5932aded1d534"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaa85fccf9d40af3e826c5932aded1d534">&#9670;&#160;</a></span>mi_theap_zalloc_small()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void * mi_theap_zalloc_small </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>theap</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Allocate a small object in a specific theap. <em>size</em> must be smaller or equal to <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small, mi_zalloc_small, mi_heap_malloc_small,...">MI_SMALL_SIZE_MAX()</a>. </p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small()</a> </dd></dl>
 
 </div>
 </div>
