@@ -8,7 +8,16 @@
 int main() {
   mi_version();       // ensure mimalloc library is linked
   void* p1 = malloc(78);
+  if (!mi_is_in_heap_region(p1)) {
+     printf("p1: malloc failed to allocate in heap region\n");
+     return 1;
+  }
+ 
   void* p2 = malloc(24);
+  if (!mi_is_in_heap_region(p2)) {
+     printf("p2: malloc failed to allocate in heap region\n");
+     return 1;
+  }
   free(p1);
   p1 = malloc(8);
   //char* s = strdup("hello\n");
