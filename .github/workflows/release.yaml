@@ -19,7 +19,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        branch: [dev,dev2,dev3]
+        branch: [v1.9.8,v2.3.0,v3.3.0]  # [dev,dev2,dev3]
         # we build on the oldest ubuntu version for better binary compatibility.
         os: [windows-latest, macOS-latest, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm]  
 
