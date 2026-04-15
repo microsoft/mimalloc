@@ -204,9 +204,9 @@ void _mi_options_init(void) {
 void mi_options_print(void) mi_attr_noexcept
 {
   // show version
-  const int vermajor = MI_MALLOC_VERSION/100;
-  const int verminor = (MI_MALLOC_VERSION%100)/10;
-  const int verpatch = (MI_MALLOC_VERSION%10);
+  const int vermajor = MI_MALLOC_VERSION/10000;
+  const int verminor = (MI_MALLOC_VERSION%10000)/100;
+  const int verpatch = (MI_MALLOC_VERSION%100);
   _mi_message("v%i.%i.%i%s%s (built on %s, %s)\n", vermajor, verminor, verpatch,
       #if defined(MI_CMAKE_BUILD_TYPE)
       ", " mi_stringify(MI_CMAKE_BUILD_TYPE)
