@@ -241,24 +241,22 @@ bool mi_check_owned(const void* p) {
   return mi_any_heap_contains(p);
 }
 
-
 // unsafe heap utilization function for DragonFly (see issue #1258)
 // If the page of pointer `p` belongs to `heap` (or `heap==NULL`) and has less than `perc_threshold` used blocks in its used area return `true`.
 // This function is unsafe in general as it assumes we are the only thread accessing the page of `p`.
 bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void* p, size_t perc_threshold) mi_attr_noexcept {
   if (p==NULL) return false;
   const mi_page_t* const page = _mi_safe_ptr_page(p);   // Get the page containing this pointer
-  if (page==NULL || mi_page_is_full(page)) return false;
-  const mi_heap_t* const page_heap = mi_page_heap(page);
-  if (page_heap==NULL) return false;
-
-  // match heap?
-  if (heap!=NULL && page_heap!=heap) return false;
-  
+  if (page==NULL || page->used==page->capacity || page->capacity < page->reserved) return false;
   // If the page is the head of the queue, it is currently being used for 
   // allocations; we skip it to avoid immediate thrashing.
   if (page->prev == NULL)  return false;
 
+  // match heap?
+  const mi_heap_t* const page_heap = mi_page_heap(page);
+  if (page_heap==NULL) return false;
+  if (heap!=NULL && page_heap!=heap) return false;
+    
   // check utilization
   if (page->capacity==0)   return false;
   if (perc_threshold>=100) return true;
