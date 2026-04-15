@@ -736,3 +736,37 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_vis
   mi_visit_blocks_args_t args = { visit_blocks, visitor, arg };
   return mi_heap_visit_areas(heap, &mi_heap_area_visitor, &args);
 }
+
+
+
+static const mi_page_t* mi_safe_ptr_page(void* p) {
+  const mi_segment_t* const segment = _mi_ptr_segment(p);
+  if mi_unlikely(segment==NULL) return NULL;
+  #ifndef NDEBUG
+  if mi_unlikely(!mi_is_in_heap_region(p)) return NULL;
+  #endif
+  if mi_unlikely(_mi_ptr_cookie(segment) != segment->cookie) return NULL;
+  return _mi_segment_page_of(segment, p);
+}
+
+// unsafe heap utilization function for DragonFly (see issue #1258)
+// If the page of pointer `p` belongs to `heap` (or `heap==NULL`) and has less than `perc_threshold` used blocks in its used area return `true`.
+// This function is unsafe in general as it assumes we are the only thread accessing the page of `p`.
+bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void* p, size_t perc_threshold) mi_attr_noexcept {
+  if (p==NULL) return false;
+  const mi_page_t* const page = mi_safe_ptr_page(p);   // Get the page containing this pointer
+  if (page==NULL || page->used==page->capacity || page->capacity < page->reserved) return false;
+  // If the page is the head of the queue, it is currently being used for 
+  // allocations; we skip it to avoid immediate thrashing.
+  if (page->prev == NULL)  return false;
+
+  // match heap?
+  const mi_heap_t* const page_heap = mi_page_heap(page);
+  if (page_heap==NULL) return false;
+  if (heap!=NULL && page_heap!=heap) return false;
+    
+  // check utilization
+  if (page->capacity==0)   return false;
+  if (perc_threshold>=100) return true;
+  return (perc_threshold >= ((100*page->used) / page->capacity));
+}

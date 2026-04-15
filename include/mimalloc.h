@@ -341,6 +341,9 @@ mi_decl_export void mi_thread_set_in_threadpool(void) mi_attr_noexcept;
 // fall back to `mi_heap_delete`.
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id);
 
+// Experimental and unsafe: assumes the page of `p` is only accessed by the calling thread
+mi_decl_nodiscard mi_decl_export bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void* p, size_t perc_threshold) mi_attr_noexcept;
+
 // deprecated
 mi_decl_export int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;
 mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexcept;
