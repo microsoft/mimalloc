@@ -772,7 +772,7 @@ static inline bool mi_page_is_expandable(const mi_page_t* page) {
 }
 
 
-static inline bool mi_page_is_full(mi_page_t* page) {
+static inline bool mi_page_is_full(const mi_page_t* page) {
   const bool full = (page->reserved == page->used);
   mi_assert_internal(!full || page->free == NULL);
   return full;
