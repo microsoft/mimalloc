@@ -113,7 +113,7 @@ static void mi_segment_insert_in_free_queue(mi_segment_t* segment, mi_segments_t
  Invariant checking
 ----------------------------------------------------------- */
 
-#if (MI_DEBUG >= 2) || (MI_SECURE >= 2)
+#if (MI_DEBUG >= 2) || (MI_SECURE >= 5)
 static size_t mi_segment_page_size(const mi_segment_t* segment) {
   if (segment->capacity > 1) {
     mi_assert_internal(segment->page_kind <= MI_PAGE_MEDIUM);
@@ -199,7 +199,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect) {
     mi_assert_internal((segment->segment_info_size - os_psize) >= (sizeof(mi_segment_t) + ((segment->capacity - 1) * sizeof(mi_page_t))));
     mi_assert_internal(((uintptr_t)segment + segment->segment_info_size) % os_psize == 0);
     mi_segment_protect_range((uint8_t*)segment + segment->segment_info_size - os_psize, os_psize, protect);
-    #if (MI_SECURE >= 2)
+    #if (MI_SECURE >= 5)
     if (segment->capacity == 1)
     #endif
     {
@@ -218,7 +218,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect) {
         mi_segment_protect_range(start, os_psize, protect);
       }
     }
-    #if (MI_SECURE >= 2)
+    #if (MI_SECURE >= 5)
     else {
       // or protect every page
       const size_t page_size = mi_segment_page_size(segment);
@@ -237,7 +237,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect) {
 ----------------------------------------------------------- */
 
 static void mi_page_purge(mi_segment_t* segment, mi_page_t* page, mi_segments_tld_t* tld) {
-  // todo: should we purge the guard page as well when MI_SECURE>=2 ?
+  // todo: should we purge the guard page as well when MI_SECURE>=5 ?
   mi_assert_internal(page->is_committed);
   mi_assert_internal(!page->segment_in_use);
   if (!segment->allow_purge) return;
@@ -258,7 +258,7 @@ static bool mi_page_ensure_committed(mi_segment_t* segment, mi_page_t* page, mi_
   size_t psize;
   uint8_t* start = mi_segment_raw_page_start(segment, page, &psize);
   bool is_zero = false;
-  const size_t gsize = (MI_SECURE >= 2 ? _mi_os_page_size() : 0);
+  const size_t gsize = (MI_SECURE >= 5 ? _mi_os_page_size() : 0);
   bool ok = _mi_os_commit(start, psize + gsize, &is_zero);
   if (!ok) return false; // failed to commit!
   page->is_committed = true;
@@ -408,9 +408,9 @@ static uint8_t* mi_segment_raw_page_start(const mi_segment_t* segment, const mi_
     psize -= segment->segment_info_size;
   }
 
-#if (MI_SECURE > 1)  // every page has an os guard page
+#if (MI_SECURE>=5)  // every page has an os guard page
   psize -= _mi_os_page_size();
-#elif (MI_SECURE==1) // the last page has an os guard page at the end
+#elif (MI_SECURE>=1) // the last page has an os guard page at the end
   if (page->segment_idx == segment->capacity - 1) {
     psize -= _mi_os_page_size();
   }
