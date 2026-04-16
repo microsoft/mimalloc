@@ -47,6 +47,10 @@ option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_NO_USE_CXX        "Use plain C compilation (has priority over MI_USE_CXX)" OFF)
 option(MI_NO_OPT_ARCH       "Do not use architecture specific optimizations (like '-march=armv8.1-a' for example) (has priority over MI_OPT_ARCH)" OFF)
 
+# experimental
+option(MI_WIN_INIT_USE_RAW_DLLMAIN "Use the raw DLL main entry point for mimalloc initialization; can be more robust but can also lead to link errors with other libraries" OFF)
+option(MI_WIN_INIT_USE_TLS_DLLMAIN "Use legacy TLS entries with DllMain for mimalloc initialization" OFF)
+
 # deprecated options
 option(MI_WIN_USE_FLS       "Use Fiber local storage on Windows to detect thread termination (deprecated)" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
@@ -410,14 +414,24 @@ if(MI_LIBC_MUSL)
   list(APPEND mi_defines MI_LIBC_MUSL=1)
 endif()
 
-if(MI_WIN_USE_FLS)
-  message(STATUS "Use the Fiber API to detect thread termination (deprecated) (MI_WIN_USE_FLS=ON)")
-  list(APPEND mi_defines MI_WIN_USE_FLS=1)
-endif()
-
 if(MI_WIN_DIRECT_TLS)
   message(STATUS "Use only direct TLS slots on Windows to avoid extra tests in the malloc fast path -- this only works if the program uses less than 64 TlsAlloc'd slots in total! (MI_WIN_USE_ONLY_DIRECT_TLS=ON)")
   list(APPEND mi_defines MI_WIN_DIRECT_TLS=1)
+endif()
+
+if(MI_WIN_INIT_USE_RAW_DLLMAIN)
+  message(STATUS "Use raw Dll main entry on Windows to initialize and finalize mimalloc (MI_WIN_INIT_USE_RAW_DLLMAIN=ON)")
+  message(STATUS "Note: this can lead to link errors if other libraries also try to define a raw Dll main entry point")
+  list(APPEND mi_defines MI_WIN_INIT_USE_RAW_DLLMAIN=1)
+elseif(MI_WIN_INIT_USE_TLS_DLLMAIN)
+  message(STATUS "Use Dll main entry with TLS entries on Windows to initialize and finalize mimalloc (MI_WIN_INIT_USE_TLS_DLLMAIN=ON)")
+  list(APPEND mi_defines MI_WIN_INIT_USE_TLS_DLLMAIN=1)
+elseif(MI_WIN_USE_FLS)
+  message(STATUS "Deprecated: Use the Fiber API to detect thread termination (deprecated) (MI_WIN_USE_FLS=ON)")
+  list(APPEND mi_defines MI_WIN_INIT_USE_FLS=1)
+else()
+  # default uses CRT with TLS entries for initialization and finalization
+  # list(APPEND mi_defines MI_WIN_INIT_USE_CRT_TLS=1)
 endif()
 
 # Check /proc/cpuinfo for an SV39 MMU and limit the virtual address bits.
