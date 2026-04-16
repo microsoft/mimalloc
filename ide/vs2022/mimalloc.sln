@@ -14,6 +14,9 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mimalloc-test-override-dep", "mimalloc-override-test-dep.vcxproj", "{FEF7869F-750E-4C21-A04D-22707CC66879}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mimalloc-test-static", "mimalloc-test.vcxproj", "{FEF7858F-750E-4C21-A04D-22707CC66878}"
+	ProjectSection(ProjectDependencies) = postProject
+		{FEF78690-750E-4C21-A04D-22707CC66879} = {FEF78690-750E-4C21-A04D-22707CC66879}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mimalloc-test-static-dep", "mimalloc-test-dep.vcxproj", "{FEF78690-750E-4C21-A04D-22707CC66879}"
 EndProject

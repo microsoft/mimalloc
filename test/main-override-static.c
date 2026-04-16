@@ -295,6 +295,7 @@ static void call_library(void) {
       fun();
     }
     bool ok = FreeLibrary(dll);
+    if (!ok) printf("unable to free library: %i\n", ok);
   }
 }
 
