@@ -32,6 +32,7 @@ option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS"
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" ON)
 option(MI_WIN_REDIRECT      "Use redirection module ('mimalloc-redirect') on Windows if compiling mimalloc as a DLL" ON)
 option(MI_WIN_DIRECT_TLS    "Use only direct TLS slots on Windows to avoid extra tests in the malloc fast path (only works if the program uses less than 64 TlsAlloc'd slots in total)" OFF)
+option(MI_WIN_CRT_XIU_FALLBACK "Use .CRT$XIU/atexit for process attach/detach and TLS callbacks only for thread detach on Windows static builds when _pRawDllMain conflicts" OFF)
 option(MI_LOCAL_DYNAMIC_TLS "Use local-dynamic-tls, a slightly slower but dlopen-compatible thread local storage mechanism (Unix)" OFF)
 option(MI_LIBC_MUSL         "Enable this when linking with musl libc" OFF)
 
@@ -413,6 +414,11 @@ endif()
 if(MI_WIN_USE_FLS)
   message(STATUS "Use the Fiber API to detect thread termination (deprecated) (MI_WIN_USE_FLS=ON)")
   list(APPEND mi_defines MI_WIN_USE_FLS=1)
+endif()
+
+if(MI_WIN_CRT_XIU_FALLBACK)
+  message(STATUS "Use .CRT$XIU/atexit process lifecycle and TLS callbacks only for thread detach on Windows static builds (MI_WIN_CRT_XIU_FALLBACK=ON)")
+  list(APPEND mi_defines MI_WIN_CRT_XIU_FALLBACK=1)
 endif()
 
 if(MI_WIN_DIRECT_TLS)

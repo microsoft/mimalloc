@@ -723,7 +723,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
    By default we use a combination of _pRawDllMain and TLS sections for
    both static and dynamic linkage
 ------------------------------------------------------------------------- */
-#ifndef MI_WIN_NO_RAW_DLLMAIN
+#if !defined(MI_WIN_NO_RAW_DLLMAIN) && !defined(MI_WIN_CRT_XIU_FALLBACK)
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
@@ -824,6 +824,82 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     mi_win_main((PVOID)inst,reason,reserved);
     return TRUE;
   }
+
+  // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
+  void _mi_prim_thread_init_auto_done(void) { }
+  void _mi_prim_thread_done_auto_done(void) { }
+  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+    MI_UNUSED(theap);
+  }
+
+#elif defined(MI_WIN_CRT_XIU_FALLBACK)
+  #define MI_PRIM_HAS_PROCESS_ATTACH  1
+
+  // TLS callbacks for per-thread attach/detach only.
+  // Process-level init and cleanup are handled separately via .CRT$XIU + atexit
+  // so mi_process_done runs after DllMain(DLL_PROCESS_DETACH) during FreeLibrary.
+  static void NTAPI mi_win_main_attach(PVOID module, DWORD reason, LPVOID reserved) {
+    if (reason == DLL_THREAD_ATTACH) {
+      mi_win_main(module, reason, reserved);
+    }
+  }
+  static void NTAPI mi_win_main_detach(PVOID module, DWORD reason, LPVOID reserved) {
+    if (reason == DLL_THREAD_DETACH) {
+      mi_win_main(module, reason, reserved);
+    }
+  }
+
+  // Set up TLS callbacks in a statically linked library by using special data sections.
+  // These callbacks only handle per-thread notifications in this fallback mode.
+  #if defined(__cplusplus)
+  extern "C" {
+  #endif
+
+  #if defined(_WIN64)
+    #pragma comment(linker, "/INCLUDE:_tls_used")
+    #pragma comment(linker, "/INCLUDE:_mi_tls_callback_pre")
+    #pragma comment(linker, "/INCLUDE:_mi_tls_callback_post")
+    #pragma const_seg(".CRT$XLB")
+    extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[];
+    const PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[] = { &mi_win_main_attach };
+    #pragma const_seg()
+    #pragma const_seg(".CRT$XLY")
+    extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[];
+    const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
+    #pragma const_seg()
+  #else
+    #pragma comment(linker, "/INCLUDE:__tls_used")
+    #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
+    #pragma comment(linker, "/INCLUDE:__mi_tls_callback_post")
+    #pragma data_seg(".CRT$XLB")
+    PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[] = { &mi_win_main_attach };
+    #pragma data_seg()
+    #pragma data_seg(".CRT$XLY")
+    PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
+    #pragma data_seg()
+  #endif
+
+  #if defined(__cplusplus)
+  }
+  #endif
+
+  #if defined(_MSC_VER)
+    static int mi_process_attach_crt(void) {
+      mi_win_main(NULL, DLL_PROCESS_ATTACH, NULL);
+      atexit(&_mi_auto_process_done);
+      return 0;
+    }
+    typedef int(*mi_crt_callback_t)(void);
+    #if defined(_WIN64)
+      #pragma comment(linker, "/INCLUDE:_mi_crt_init")
+      #pragma section(".CRT$XIU", long, read)
+    #else
+      #pragma comment(linker, "/INCLUDE:__mi_crt_init")
+    #endif
+    #pragma data_seg(".CRT$XIU")
+    mi_decl_externc mi_crt_callback_t _mi_crt_init[] = { &mi_process_attach_crt };
+    #pragma data_seg()
+  #endif
 
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) { }
