@@ -553,6 +553,7 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 
 // fall back to poor man's locks.
 // this should only be the case in a single-threaded environment (like __wasi__)
+void _mi_error_message(int err, const char* fmt, ...);
 
 typedef union mi_lock_u {
   size_t             _init;    // for static initialization
@@ -564,10 +565,11 @@ static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return mi_atomic_cas_strong_acq_rel(&lock->mutex, &expected, (uintptr_t)1);
 }
 static inline void mi_lock_acquire(mi_lock_t* lock) {
-  for (int i = 0; i < 1000; i++) {  // for at most 1000 tries?
+  for (int i = 0; i < 10000; i++) {  // for at most 10000 tries?
     if (mi_lock_try_acquire(lock)) return;
     mi_atomic_yield();
   }
+  _mi_error_message(EFAULT, "internal error: lock cannot be acquired (due to lack of native lock primitives)\n");
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
   mi_atomic_store_release(&lock->mutex, (uintptr_t)0);
