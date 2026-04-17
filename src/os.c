@@ -138,7 +138,9 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     uintptr_t init = MI_HINT_BASE;
     #if (MI_SECURE>=1 || defined(NDEBUG))  // security: randomize start of aligned allocations unless in debug mode
-    const uintptr_t r = _mi_theap_random_next(mi_theap_get_default());
+    mi_theap_t* const theap = _mi_theap_default();     // don't use `mi_theap_get_default()` as that can cause allocation recursively (issue #1267)
+    if (!mi_theap_is_initialized(theap)) return NULL;  // no hint as we lack randomness at this point 
+    const uintptr_t r = _mi_theap_random_next(theap);
     init = init + ((MI_HINT_ALIGN * ((r>>17) & 0xFFFFF)) % MI_HINT_AREA);  // (randomly 20 bits)*4MiB == 0 to 4TiB
     #endif
     uintptr_t expected = hint + size;
