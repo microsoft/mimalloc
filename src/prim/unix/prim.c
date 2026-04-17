@@ -448,7 +448,7 @@ int _mi_prim_alloc(void* hint_addr, size_t size, size_t try_alignment, bool comm
 //---------------------------------------------
 
 static void unix_mprotect_hint(int err) {
-  #if defined(__linux__) && ((MI_SECURE >= 2 && (!MI_PAGE_META_IS_SEPARATED || MI_PAGE_META_ALIGNED_FREE_SMALL)) || MI_SECURE >= 4) // guard page around every mimalloc page
+  #if defined(__linux__) && (MI_SECURE>=5) // guard page around every mimalloc page
   if (err == ENOMEM) {
     _mi_warning_message("The next warning may be caused by a low memory map limit.\n"
                         "  On Linux this is controlled by the vm.max_map_count -- maybe increase it?\n"

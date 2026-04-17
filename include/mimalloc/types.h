@@ -54,18 +54,12 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
 // #define MI_STAT 1
 
-// Define MI_SECURE to enable security mitigations. Level 1 has minimal performance impact,
-// but protects most metadata with guard pages:
-//   #define MI_SECURE 1  // guard page around metadata; check pointer validity on free
-//
-// Level 2 is only used if `MI_PAGE_META_IS_SEPARATED==0` (which it is not by default) 
-//   #define MI_SECURE 2  // guard page around each mimalloc page (can fragment VMA's with large theaps..)
-//
-// Level 3 has slightly more performance overhead
-//   #define MI_SECURE 3  // randomize allocations, encode free lists (detect corrupted free list (buffer overflow), and invalid pointer free)
-//
-// Level 4 has (much) more overhead. It also adds guard pages around each mimalloc page (even if `MI_PAGE_META_IS_SEPARATED` is defined).
-//   #define MI_SECURE 4  // checks also for double free. 
+// Define MI_SECURE to enable security mitigations
+// #define MI_SECURE 1  // guard pages around meta data, randomize arena allocation addresses (like ASLR), abort on detected meta data corruption
+// #define MI_SECURE 2  // randomize relative allocation addresses (within mimalloc pages)
+// #define MI_SECURE 3  // encode free lists (detect corrupted free list (buffer overflow), and invalid pointer free)
+// #define MI_SECURE 4  // checks for double free (may be more expensive) (`-DMI_SECURE=ON`)
+// #define MI_SECURE 5  // guard page at the end of each mimalloc page (expensive!) (`-DMI_SECURE_FULL=ON`)
 
 #if !defined(MI_SECURE)
 #define MI_SECURE 0
@@ -165,7 +159,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MI_ARENA_SLICE_SHIFT
   #ifdef  MI_SMALL_PAGE_SHIFT   // backward compatibility
   #define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
-  #elif MI_SECURE && __APPLE__ && MI_ARCH_ARM64
+  #elif MI_SECURE>=5 && __APPLE__ && MI_ARCH_ARM64
   #define MI_ARENA_SLICE_SHIFT              (17)                        // 128 KiB to not waste too much due to 16 KiB guard pages
   #else
   #define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)

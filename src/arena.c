@@ -745,7 +745,7 @@ static mi_page_t* mi_arenas_page_try_find_abandoned(mi_theap_t* theap, size_t sl
 
 static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_count, size_t block_size, size_t block_alignment, bool os_align, bool commit, mi_memid_t* memid) {
   MI_UNUSED_RELEASE(block_size);
-  const bool allow_large = (MI_SECURE < 2); // 2 = guard page at end of each arena page
+  const bool allow_large = (MI_SECURE < 5); // 5 = guard page at end of each arena page
   const size_t page_alignment = MI_ARENA_SLICE_ALIGN;
 
   mi_heap_t*  const heap = _mi_theap_heap(theap);
@@ -832,7 +832,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   if (!slice_start) return NULL;
 
   // guard page at the end of mimalloc page?
-  #if (MI_SECURE >= 2 && (!MI_PAGE_META_IS_SEPARATED || MI_PAGE_META_ALIGNED_FREE_SMALL)) || MI_SECURE >= 4
+  #if MI_SECURE>=5
   mi_assert(alloc_size > _mi_os_secure_guard_page_size());
   const size_t page_noguard_size = alloc_size - _mi_os_secure_guard_page_size();
   if (memid.initially_committed) {
@@ -1065,7 +1065,7 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
 
   // recommit guard page at the end?
   // we must do this since we may later allocate large spans over this page and cannot have a guard page in between
-  #if (MI_SECURE >= 2 && (!MI_PAGE_META_IS_SEPARATED || MI_PAGE_META_ALIGNED_FREE_SMALL)) || MI_SECURE >= 4
+  #if MI_SECURE >= 5
   if (!page->memid.is_pinned) {
     _mi_os_secure_guard_page_reset_before(mi_page_slice_start(page) + mi_page_full_size(page), page->memid);
   }
