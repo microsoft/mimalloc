@@ -92,12 +92,12 @@ typedef void* mi_nothrow_t;
     MI_INTERPOSE_FUN(vfree,mi_cfree),
     #endif
   };
-  MI_INTERPOSE_DECLS(_mi_interposes_10_7) __OSX_AVAILABLE(10.7) = {
-    MI_INTERPOSE_MI(strndup),
-  };
-  MI_INTERPOSE_DECLS(_mi_interposes_10_15) __OSX_AVAILABLE(10.15) = {
-    MI_INTERPOSE_MI(aligned_alloc),
-  };
+  #if defined(MAC_OS_X_VERSION_10_7) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7)
+  MI_INTERPOSE_DECLS(_mi_interposes_10_7)  = { MI_INTERPOSE_MI(strndup) };
+  #endif
+  #if defined(MAC_OS_X_VERSION_10_15) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_15)
+  MI_INTERPOSE_DECLS(_mi_interposes_10_15) = { MI_INTERPOSE_MI(aligned_alloc) };
+  #endif
 
   #ifdef __cplusplus
   extern "C" {
