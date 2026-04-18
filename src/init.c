@@ -827,8 +827,7 @@ static void mi_win_tls_slot_free(DWORD* raw_index) {
 }
 
 static void mi_tls_slots_init(void) {
-  static mi_atomic_once_t tls_slots_init;
-  if (mi_atomic_once(&tls_slots_init)) {
+  mi_atomic_do_once {
     bool ok = mi_win_tls_slot_alloc(&_mi_theap_default_slot, &_mi_theap_default_expansion_slot, &mi_tls_raw_index_default);
     if (ok) {
       ok = mi_win_tls_slot_alloc(&_mi_theap_cached_slot, &_mi_theap_cached_expansion_slot, &mi_tls_raw_index_cached);
@@ -862,8 +861,7 @@ mi_decl_hidden pthread_key_t _mi_theap_default_key = 0;
 mi_decl_hidden pthread_key_t _mi_theap_cached_key = 0;
 
 static void mi_tls_slots_init(void) {
-  static mi_atomic_once_t tls_keys_init;
-  if (mi_atomic_once(&tls_keys_init)) {
+  mi_atomic_do_once {
     int err = pthread_key_create(&_mi_theap_default_key, NULL);
     if (err==0) {
       err = pthread_key_create(&_mi_theap_cached_key, NULL);
