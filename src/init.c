@@ -860,11 +860,29 @@ static void mi_win_tls_slot_set(size_t slot, size_t extended_slot, void* value) 
 mi_decl_hidden pthread_key_t _mi_theap_default_key = 0;
 mi_decl_hidden pthread_key_t _mi_theap_cached_key = 0;
 
+// create a non-zero pthread key
+static int mi_pthread_key_create( pthread_key_t* pkey ) {
+  pthread_key_t key;
+  int err = pthread_key_create(&key, NULL);
+  if (err!=0) return err;
+  if (key==0) {
+    // if we get a zero key, create another one as we use 0 for an invalid key
+    pthread_key_t key2;
+    err = pthread_key_create(&key2, NULL);
+    pthread_key_delete(key);  // delete the old key
+    if (err!=0) return err;
+    key = key2;
+  }
+  mi_assert_internal(key!=0);    
+  *pkey = key;
+  return 0;
+}
+
 static void mi_tls_slots_init(void) {
   mi_atomic_do_once {
-    int err = pthread_key_create(&_mi_theap_default_key, NULL);
+    int err = mi_pthread_key_create(&_mi_theap_default_key);
     if (err==0) {
-      err = pthread_key_create(&_mi_theap_cached_key, NULL);
+      err = mi_pthread_key_create(&_mi_theap_cached_key);
     }
     if (err!=0) {
       _mi_error_message(EFAULT, "unable to allocate pthread keys (error %d)\n", err);
