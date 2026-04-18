@@ -602,14 +602,8 @@ static void mi_detect_cpu_features(void) {
 #endif
 
 // Initialize the process; called by thread_init or the process loader
-void mi_process_init(void) mi_attr_noexcept {
-  // ensure we are called once
-  static mi_atomic_once_t process_init;
-	#if _MSC_VER < 1920
-	mi_heap_main_init(); // vs2017 can dynamically re-initialize _mi_heap_main
-	#endif
-  if (!mi_atomic_once(&process_init)) return;
-  _mi_process_is_initialized = true;
+static void mi_process_init_once(void) mi_attr_noexcept {
+  _mi_process_is_initialized = true;  
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
   mi_process_setup_auto_thread_done();
 
@@ -642,6 +636,22 @@ void mi_process_init(void) mi_attr_noexcept {
     if (ksize > 0) {
       mi_reserve_os_memory((size_t)ksize*MI_KiB, true, true);
     }
+  }
+}
+
+// Initialize the process; called by thread_init or the process loader
+void mi_process_init(void) mi_attr_noexcept {
+  #if _MSC_VER < 1920
+	mi_heap_main_init(); // vs2017 can dynamically re-initialize _mi_heap_main
+	#endif
+  static mi_atomic_once_t _once = { ATOMIC_VAR_INIT(0), MI_LOCK_INIT };
+  for(bool _exec = _mi_atomic_once_enter(&_once); 
+        _exec; 
+        (_mi_atomic_once_release(&_once),
+         _exec=false)
+  )
+  {
+    mi_process_init_once();
   }
 }
 

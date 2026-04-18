@@ -204,7 +204,7 @@ static void mi_segment_protect(mi_segment_t* segment, bool protect) {
     #endif
     {
       // and protect the last (or only) page too
-      mi_assert_internal(MI_SECURE <= 1 || segment->page_kind >= MI_PAGE_LARGE);
+      mi_assert_internal(MI_SECURE >= 1 || segment->page_kind >= MI_PAGE_LARGE);
       uint8_t* start = (uint8_t*)segment + segment->segment_size - os_psize;
       if (protect && !segment->memid.initially_committed) {
         if (protect) {

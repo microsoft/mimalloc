@@ -77,17 +77,13 @@ static PGetLargePageMinimum pGetLargePageMinimum = NULL;
 // Available after Windows XP
 typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
 
+
 //---------------------------------------------
 // Enable large page support dynamically (if possible)
 //---------------------------------------------
 
-static bool win_enable_large_os_pages(size_t* large_page_size)
+static bool win_enable_large_os_pages_once(size_t* large_page_size)
 {
-  static mi_atomic_once_t large_initialized;
-  if (!mi_atomic_once(&large_initialized)) {     
-    return (_mi_os_large_page_size() > 0);
-  }
-
   if (pGetLargePageMinimum==NULL) return false;  // no large page support (xbox etc.)
 
   // Try to see if large OS pages are supported
@@ -119,6 +115,13 @@ static bool win_enable_large_os_pages(size_t* large_page_size)
     _mi_warning_message("cannot enable large OS page support, error %lu\n", err);
   }
   return (ok!=0);
+}
+
+static bool win_enable_large_os_pages(size_t* large_page_size) {
+  mi_atomic_do_once {
+    win_enable_large_os_pages_once(large_page_size);
+  }
+  return (_mi_os_large_page_size() > 0);
 }
 
 
