@@ -22,11 +22,21 @@ char _mi_toupper(char c) {
 }
 
 int _mi_strnicmp(const char* s, const char* t, size_t n) {
+  mi_assert_internal(s!=NULL && t!=NULL);
   if (n == 0) return 0;
   for (; *s != 0 && *t != 0 && n > 0; s++, t++, n--) {
     if (_mi_toupper(*s) != _mi_toupper(*t)) break;
   }
   return (n == 0 ? 0 : *s - *t);
+}
+
+bool _mi_streq(const char* s, const char* t) {
+  if (s==NULL && t==NULL) return true;
+  if (s==NULL || t==NULL) return false;
+  for (; *s != 0 && *t != 0; s++, t++) {
+    if (*s != *t) break;
+  }
+  return (*s == *t);
 }
 
 void _mi_strlcpy(char* dest, const char* src, size_t dest_size) {
@@ -78,6 +88,43 @@ bool _mi_getenv(const char* name, char* result, size_t result_size) {
   return _mi_prim_getenv(name,result,result_size);
 }
 #endif
+
+
+// --------------------------------------------------------
+// Define our own primitives for doing an action once
+// --------------------------------------------------------
+
+// Returns `true` only on the first invocation, signifying we can execute an action once.
+// If it returns `true`, the caller should call `_mi_atomic_once_release` after performing the action.
+// Other threads (than the initial thread that entered) will block until `_mi_atomic_once_release` has been called.
+bool _mi_atomic_once_enter(mi_atomic_once_t* once) {
+  const uintptr_t once_tid = mi_atomic_load_acquire(&once->tid);
+  if mi_likely(once_tid == 1) {
+    return false; // already executed
+  }
+  const mi_threadid_t current_tid = _mi_thread_id();
+  if (once_tid == current_tid) {
+    return false; // recursive invocation; we need this for process_init for example
+  }  
+
+  mi_lock_acquire(&once->lock);
+  uintptr_t expected = 0;
+  if (mi_atomic_cas_strong_acq_rel(&once->tid, &expected, current_tid)) {  // could use atomic_load/store as well
+    return true;  // should execute and release
+  } 
+  else {
+    mi_lock_release(&once->lock);
+    return false; // already another thread entered and released
+  }
+}
+
+void _mi_atomic_once_release(mi_atomic_once_t* once) {
+  if (mi_atomic_load_acquire(&once->tid)>1) {  // paranoia
+    mi_atomic_store_release(&once->tid,1);     // done executing
+    mi_lock_release(&once->lock);
+  }  
+}
+
 
 // --------------------------------------------------------
 // Define our own limited `_mi_vsnprintf` and `_mi_snprintf`
