@@ -112,7 +112,8 @@ mi_decl_nodiscard void* mi_reallocarray( void* p, size_t count, size_t size ) mi
 
 mi_decl_nodiscard int mi_reallocarr( void* p, size_t count, size_t size ) mi_attr_noexcept { // NetBSD <https://man.netbsd.org/reallocarr.3>
   mi_assert(size != 0);
-  if (size == 0) {
+  mi_assert(p != NULL);
+  if (p == NULL || size == 0) {
     return (errno = EINVAL);
   }
   size_t total;
@@ -127,7 +128,7 @@ mi_decl_nodiscard int mi_reallocarr( void* p, size_t count, size_t size ) mi_att
   }
   else {
     void* newp = mi_realloc(*op,total);
-    if (newp == NULL) { return ENOMEM; }
+    if (newp == NULL) { return (errno = ENOMEM); }
     *op = newp;
     return 0;
   }
