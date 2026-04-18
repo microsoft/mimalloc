@@ -126,6 +126,9 @@ void _mi_prim_thread_associate_default_theap(mi_theap_t* theap);
 // Is this thread part of a thread pool?
 bool _mi_prim_thread_is_in_threadpool(void);
 
+// Yield to other threads. Should be similar to `sleep(0)`. 
+// Is called only in rare situations and does not have to be lightning fast.
+void _mi_prim_thread_yield(void);
 
 //-------------------------------------------------------------------
 // Access to TLS (thread local storage) slots.

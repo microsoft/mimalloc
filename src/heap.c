@@ -157,8 +157,13 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
         theap = next;
       }      
     }
-    if (!all_freed) { mi_heap_stat_counter_increase(heap,heaps_delete_wait,1); mi_atomic_yield(); }
-               else { mi_assert_internal(heap->theaps==NULL); }               
+    if (!all_freed) { 
+      mi_heap_stat_counter_increase(heap,heaps_delete_wait,1); 
+      _mi_prim_thread_yield();
+    }
+    else { 
+      mi_assert_internal(heap->theaps==NULL); 
+    }               
   }
   while(!all_freed);
 }

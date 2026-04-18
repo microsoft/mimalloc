@@ -25,7 +25,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim.h"
 
 #include <sys/mman.h>  // mmap
-#include <unistd.h>    // sysconf
+#include <unistd.h>    // sysconf, sleep
 #include <fcntl.h>     // open, close, read, access
 #include <stdlib.h>    // getenv, arc4random_buf
 
@@ -992,4 +992,8 @@ void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
 
 bool _mi_prim_thread_is_in_threadpool(void) {
   return false;
+}
+
+void _mi_prim_thread_yield(void) {
+  sleep(0);
 }

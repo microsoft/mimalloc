@@ -698,6 +698,9 @@ bool _mi_prim_thread_is_in_threadpool(void) {
   return false;
 }
 
+void _mi_prim_thread_yield(void) {
+  SwitchToThread();
+}
 
 //----------------------------------------------------------------
 // Process & Thread Init/Done

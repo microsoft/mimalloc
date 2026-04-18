@@ -651,8 +651,13 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
         theap = next;
       }
     }
-    if (!all_freed) { mi_subproc_stat_counter_increase(tld->subproc,heaps_delete_wait,1); mi_atomic_yield(); }
-               else { mi_assert_internal(tld->theaps==NULL); }       
+    if (!all_freed) { 
+      mi_subproc_stat_counter_increase(tld->subproc,heaps_delete_wait,1); 
+      _mi_prim_thread_yield(); 
+    }
+    else { 
+      mi_assert_internal(tld->theaps==NULL); 
+    }
   } while (!all_freed);
 
   mi_assert(_mi_theap_default()==(mi_theap_t*)&_mi_theap_empty); // careful to not re-initialize the default theap during theap_delete
