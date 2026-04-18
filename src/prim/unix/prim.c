@@ -167,8 +167,16 @@ static void unix_detect_physical_memory( size_t page_size, size_t* physical_memo
     MI_UNUSED(page_size);
     struct sysinfo info; _mi_memzero_var(info);
     const int err = sysinfo(&info);
-    if (err==0 && info.totalram > 0 && info.totalram <= SIZE_MAX) {
-      *physical_memory_in_kib = (size_t)info.totalram / MI_KiB;
+    if (err==0 && info.mem_unit > 0 && info.totalram <= SIZE_MAX) {
+      if (info.mem_unit==MI_KiB) {
+        *physical_memory_in_kib = (size_t)info.totalram;
+      }
+      else {
+        size_t total = 0;
+        if (!mi_mul_overflow((size_t)info.totalram, (size_t)info.mem_unit, &total)) {
+          *physical_memory_in_kib = (total / MI_KiB);
+        }
+      }
     }
   #elif defined(_SC_PHYS_PAGES)  // do not use by default as it might cause allocation (by using `fopen` to parse /proc/meminfo) (issue #1100)
     const long pphys = sysconf(_SC_PHYS_PAGES);
