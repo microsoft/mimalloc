@@ -495,10 +495,10 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
 }
 
 // destroy all subproc resources including arena's, heap's etc.
-static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc)
+static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subprocs_lock)
 {
   // remove from the subproc list
-  mi_lock(&subprocs_lock) {
+  mi_lock_maybe(&subprocs_lock, acquire_subprocs_lock) {
     if (subproc->next!=NULL) { subproc->next->prev = subproc->prev;  }
     if (subproc->prev!=NULL) { subproc->prev->next = subproc->next;  }
                         else { mi_assert_internal(subprocs==subproc);  subprocs = subproc->next; }
@@ -539,7 +539,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc)
 
 void mi_subproc_destroy(mi_subproc_id_t subproc_id) {
   if (subproc_id == NULL) return;
-  mi_subproc_unsafe_destroy(_mi_subproc_from_id(subproc_id));
+  mi_subproc_unsafe_destroy(_mi_subproc_from_id(subproc_id), true /* take lock */);
 }
 
 static void mi_subprocs_unsafe_destroy_all(void) {
@@ -548,12 +548,12 @@ static void mi_subprocs_unsafe_destroy_all(void) {
     while (subproc!=NULL) {
       mi_subproc_t* next = subproc->next;
       if (subproc!=&subproc_main) {
-        mi_subproc_unsafe_destroy(subproc);
+        mi_subproc_unsafe_destroy(subproc, false /* take subprocs lock */);
       }
       subproc = next;
     }
-  }
-  mi_subproc_unsafe_destroy(&subproc_main);
+  }  
+  mi_subproc_unsafe_destroy(&subproc_main, true /* take subprocs lock */);
 }
 
 
