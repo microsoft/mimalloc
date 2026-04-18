@@ -618,10 +618,10 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
     if (start == 0) {
       // Initialize the start address after the 32TiB area
       start = ((uintptr_t)32 << 40);  // 32TiB virtual start address
-    #if (MI_SECURE>0 || MI_DEBUG==0)      // security: randomize start of huge pages unless in debug mode
+      #if (MI_SECURE>0 || MI_DEBUG==0)      // security: randomize start of huge pages unless in debug mode
       uintptr_t r = _mi_heap_random_next(mi_prim_get_default_heap());
       start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x0FFF));  // (randomly 12bits)*1GiB == between 0 to 4TiB
-    #endif
+      #endif
     }
     end = start + size;
     mi_assert_internal(end % MI_SEGMENT_SIZE == 0);
@@ -695,16 +695,17 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
       }
     }
   }
-  mi_assert_internal(page*MI_HUGE_OS_PAGE_SIZE <= size);
+  const size_t allocated = page * MI_HUGE_OS_PAGE_SIZE;
+  mi_assert_internal(allocated <= size);
   if (pages_reserved != NULL) { *pages_reserved = page; }
-  if (psize != NULL) { *psize = page * MI_HUGE_OS_PAGE_SIZE; }
+  if (psize != NULL) { *psize = allocated; }
   if (page != 0) {
     mi_assert(start != NULL);
-    *memid = _mi_memid_create_os(start, size, true /* is committed */, all_zero, true /* is_large */);
+    *memid = _mi_memid_create_os(start, allocated, true /* is committed */, all_zero, true /* is_large */);
     memid->memkind = MI_MEM_OS_HUGE;
     mi_assert(memid->is_pinned);
     #ifdef MI_TRACK_ASAN
-    if (all_zero) { mi_track_mem_defined(start,size); }
+    if (all_zero) { mi_track_mem_defined(start,allocated); }
     #endif
   }
   return (page == 0 ? NULL : start);

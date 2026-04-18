@@ -439,35 +439,40 @@ mi_decl_nodiscard mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const
     return mi_heap_strndup(heap, buf, PATH_MAX);
   }
 }
+
 #else
-/*
+
 #include <unistd.h>  // pathconf
+
 static size_t mi_path_max(void) {
-  static size_t path_max = 0;
-  if (path_max <= 0) {
-    long m = pathconf("/",_PC_PATH_MAX);
-    if (m <= 0) path_max = 4096;      // guess
-    else if (m < 256) path_max = 256; // at least 256
-    else path_max = m;
+  static _Atomic(size_t) path_max = 0;
+  size_t pmax = mi_atomic_load_acquire(&path_max);
+  if (pmax == 0) {
+    const long m = pathconf("/",_PC_PATH_MAX);
+    if (m <= 0) pmax = 4096;      // guess
+    else if (m < 256) pmax = 256; // at least 256
+    else pmax = m;
+    size_t expected = 0;
+    mi_atomic_cas_strong_acq_rel(&path_max, &expected, pmax);
   }
-  return path_max;
+  return pmax;
 }
-*/
+
 char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
   if (resolved_name != NULL) {
     return realpath(fname,resolved_name);
   }
   else {
+  /*
     char* rname = realpath(fname, NULL);
     if (rname == NULL) return NULL;
     char* result = mi_heap_strdup(heap, rname);
-    mi_cfree(rname);  // use checked free (which may be redirected to our free but that's ok)
+    free(rname);  // todo: use checked free instead? 
     // note: with ASAN realpath is intercepted and mi_cfree may leak the returned pointer :-(
-    return result;
-  }
-  /*
+    return result;  
+  */
     const size_t n  = mi_path_max();
-    char* buf = (char*)mi_malloc(n+1);
+    char* const buf = (char*)mi_zalloc(n+1);
     if (buf == NULL) {
       errno = ENOMEM;
       return NULL;
@@ -476,8 +481,7 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
     char* result = mi_heap_strndup(heap,rname,n); // ok if `rname==NULL`
     mi_free(buf);
     return result;
-  }
-  */
+  }  
 }
 #endif
 

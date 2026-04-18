@@ -693,6 +693,9 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
     #endif
   #endif
 
+  // done with tracking tools
+  mi_track_done()
+
   // Forcefully release all retained memory; this can be dangerous in general if overriding regular malloc/free
   // since after process_done there might still be other code running that calls `free` (like at_exit routines,
   // or C-runtime termination code.
