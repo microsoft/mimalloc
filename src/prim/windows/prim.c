@@ -644,6 +644,8 @@ typedef LONG (NTAPI *PBCryptGenRandom)(HANDLE, PUCHAR, ULONG, ULONG);
 static  PBCryptGenRandom pBCryptGenRandom = NULL;
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+  mi_assert(buf_len <= ULONG_MAX);
+  if (buf_len > ULONG_MAX) return false;
   if (pBCryptGenRandom == NULL) {
     HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
