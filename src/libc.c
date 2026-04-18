@@ -104,6 +104,43 @@ bool _mi_getenv(const char* name, char* result, size_t result_size) {
 }
 #endif
 
+
+// --------------------------------------------------------
+// Define our own primitives for doing an action once
+// --------------------------------------------------------
+
+// Returns `true` only on the first invocation, signifying we can execute an action once.
+// If it returns `true`, the caller should call `_mi_atomic_once_release` after performing the action.
+// Other threads (than the initial thread that entered) will block until `_mi_atomic_once_release` has been called.
+bool _mi_atomic_once_enter(mi_atomic_once_t* once) {
+  const uintptr_t once_tid = mi_atomic_load_acquire(&once->tid);
+  if mi_likely(once_tid == 1) {
+    return false; // already executed
+  }
+  const mi_threadid_t current_tid = _mi_thread_id();
+  if (once_tid == current_tid) {
+    return false; // recursive invocation; we need this for process_init for example
+  }  
+
+  mi_lock_acquire(&once->lock);
+  uintptr_t expected = 0;
+  if (mi_atomic_cas_strong_acq_rel(&once->tid, &expected, current_tid)) {  // could use atomic_load/store as well
+    return true;  // should execute and release
+  } 
+  else {
+    mi_lock_release(&once->lock);
+    return false; // already another thread entered and released
+  }
+}
+
+void _mi_atomic_once_release(mi_atomic_once_t* once) {
+  if (mi_atomic_load_acquire(&once->tid)>1) {  // paranoia
+    mi_atomic_store_release(&once->tid,1);     // done executing
+    mi_lock_release(&once->lock);
+  }  
+}
+
+
 // --------------------------------------------------------
 // Define our own limited `_mi_vsnprintf` and `_mi_snprintf`
 // This is mostly to avoid calling these when libc is not yet

@@ -111,7 +111,7 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
   0,                      // default numa node
   &subproc_main,          // subproc
   NULL,                   // theaps list
-  {0},                    // theaps lock
+  MI_LOCK_INIT,           // theaps lock
   false,                  // recurse
   false,                  // is_in_threadpool
   MI_MEMID_STATIC         // memid
@@ -178,7 +178,7 @@ static mi_decl_cache_align mi_tld_t tld_main = {
   0,                      // numa node
   &subproc_main,          // subproc
   &theap_main,            // theaps list
-  {0},                    // theaps lock
+  MI_LOCK_INIT,           // theaps lock
   false,                  // recurse
   false,                  // is_in_threadpool
   MI_MEMID_STATIC         // memid
@@ -1062,13 +1062,8 @@ static void mi_detect_cpu_features(void) {
 
 
 // Initialize the process; called by thread_init or the process loader
-void mi_process_init(void) mi_attr_noexcept {
-  // ensure we are called once
-  static mi_atomic_once_t process_init;
-	// #if _MSC_VER < 1920
-	// mi_heap_main_init(); // vs2017 can dynamically re-initialize theap_main
-	// #endif
-  if (!mi_atomic_once(&process_init)) return;
+static void mi_process_init_once(void) mi_attr_noexcept {
+  _mi_process_is_initialized = true;  
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
 
   mi_detect_cpu_features();
@@ -1105,6 +1100,22 @@ void mi_process_init(void) mi_attr_noexcept {
     if (ksize > 0) {
       mi_reserve_os_memory((size_t)ksize*MI_KiB, true, true);
     }
+  }
+}
+
+// Initialize the process; called by thread_init or the process loader
+void mi_process_init(void) mi_attr_noexcept {
+  // #if _MSC_VER < 1920
+	// mi_heap_main_init(); // vs2017 can dynamically re-initialize _mi_heap_main
+	// #endif
+  static mi_atomic_once_t _once = { ATOMIC_VAR_INIT(0), MI_LOCK_INIT };
+  for(bool _exec = _mi_atomic_once_enter(&_once); 
+        _exec; 
+        (_mi_atomic_once_release(&_once),
+         _exec=false)
+  )
+  {
+    mi_process_init_once();
   }
 }
 

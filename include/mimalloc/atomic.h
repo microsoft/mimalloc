@@ -340,18 +340,9 @@ static inline intptr_t mi_atomic_subi(_Atomic(intptr_t)*p, intptr_t sub) {
 // Once and Guard
 // ----------------------------------------------------------------------
 
-typedef _Atomic(uintptr_t) mi_atomic_once_t;
-
-// Returns true only on the first invocation
-static inline bool mi_atomic_once( mi_atomic_once_t* once ) {
-  if (mi_atomic_load_relaxed(once) != 0) return false;     // quick test
-  uintptr_t expected = 0;
-  return mi_atomic_cas_strong_acq_rel(once, &expected, (uintptr_t)1); // try to set to 1
-}
-
 typedef _Atomic(uintptr_t) mi_atomic_guard_t;
 
-// Allows only one thread to execute at a time
+// Allows only one thread to execute at a time (without blocking anyone)
 #define mi_atomic_guard(guard) \
   uintptr_t _mi_guard_expected = 0; \
   for(bool _mi_guard_once = true; \
@@ -439,17 +430,17 @@ static inline void mi_atomic_yield(void) {
 #pragma warning(disable:26110)  // unlock with holding lock
 #endif
 
-#define mi_lock(lock)                  for(bool _go = (mi_lock_acquire(lock),true); _go; (mi_lock_release(lock), _go=false) )
-#define mi_lock_maybe(lock,acquire)    for(bool _go = (acquire ? (mi_lock_acquire(lock),true) : true); _go; _go = (acquire ? (mi_lock_release(lock),false) : false) )
+#define mi_lock(lock)                  for(bool _mi_go = (mi_lock_acquire(lock),true); _mi_go; (mi_lock_release(lock), _mi_go=false) )
+#define mi_lock_maybe(lock,acquire)    for(bool _mi_go = (acquire ? (mi_lock_acquire(lock),true) : true); _mi_go; _mi_go = (acquire ? (mi_lock_release(lock),false) : false) )
+
 
 #if defined(_WIN32)
 
-#if 1
-
-typedef union mi_lock_u {
-  size_t   _init;    // for static initialization
-  SRWLOCK  mutex;    // slim reader-writer lock
+typedef struct mi_lock_s {
+  SRWLOCK mutex;    // slim reader-writer lock
 } mi_lock_t;
+
+#define MI_LOCK_INIT   { SRWLOCK_INIT }
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return TryAcquireSRWLockExclusive(&lock->mutex);
@@ -467,40 +458,16 @@ static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
 }
 
-#else
-
-typedef union mi_lock_u {
-  size_t           _init;    // for static initialization
-  CRITICAL_SECTION mutex;
-} mi_lock_t;
-
-static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
-  return TryEnterCriticalSection(&lock->mutex);
-}
-static inline void mi_lock_acquire(mi_lock_t* lock) {
-  EnterCriticalSection(&lock->mutex);
-}
-static inline void mi_lock_release(mi_lock_t* lock) {
-  LeaveCriticalSection(&lock->mutex);
-}
-static inline void mi_lock_init(mi_lock_t* lock) {
-  InitializeCriticalSection(&lock->mutex);
-}
-static inline void mi_lock_done(mi_lock_t* lock) {
-  DeleteCriticalSection(&lock->mutex);
-}
-
-#endif
-
 #elif defined(MI_USE_PTHREADS)
 
 #include <string.h> // memcpy
 void _mi_error_message(int err, const char* fmt, ...);
 
-typedef union mi_lock_u {
-  size_t          _init;    // for static initialization
+typedef struct mi_lock_s {
   pthread_mutex_t mutex;
 } mi_lock_t;
+
+#define MI_LOCK_INIT  { PTHREAD_MUTEX_INITIALIZER }
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return (pthread_mutex_trylock(&lock->mutex) == 0);
@@ -516,7 +483,7 @@ static inline void mi_lock_release(mi_lock_t* lock) {
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
   if(lock==NULL) return;
-  // use instead of pthread_mutex_init since that can cause allocation on some platforms (and recursively initialize)
+  // use this instead of pthread_mutex_init since that can cause allocation on some platforms (and recursively initialize)
   const pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;  
   memcpy(&lock->mutex,&mutex,sizeof(mutex));
 }
@@ -526,12 +493,15 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 
 #elif defined(__cplusplus)
 
+#include <thread>
 #include <mutex>
-typedef union mi_lock_u {
-  size_t     _init;    // for static initialization
+#include <new>
+
+typedef struct mi_lock_s {
   std::mutex mutex;
 } mi_lock_t;
 
+#define MI_LOCK_INIT   { }
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return lock->mutex.try_lock();
@@ -543,7 +513,7 @@ static inline void mi_lock_release(mi_lock_t* lock) {
   lock->mutex.unlock();
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
-  (void)(lock);
+  new(&lock->mutex) std::mutex();  
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
@@ -553,12 +523,17 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 
 // fall back to poor man's locks.
 // this should only be the case in a single-threaded environment (like __wasi__)
+#include <errno.h>
+#ifndef EFAULT
+#define EFAULT (14)
+#endif
 void _mi_error_message(int err, const char* fmt, ...);
 
-typedef union mi_lock_u {
-  size_t             _init;    // for static initialization
+typedef struct mi_lock_s {
   _Atomic(uintptr_t) mutex;
 } mi_lock_t;
+
+#define MI_LOCK_INIT  { ATOMIC_VAR_INIT(0) }
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   uintptr_t expected = 0;
@@ -567,7 +542,7 @@ static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
 static inline void mi_lock_acquire(mi_lock_t* lock) {
   for (int i = 0; i < 10000; i++) {  // for at most 10000 tries?
     if (mi_lock_try_acquire(lock)) return;
-    mi_atomic_yield();
+    mi_atomic_yield();               // todo: add sleep at some point? 
   }
   _mi_error_message(EFAULT, "internal error: lock cannot be acquired (due to lack of native lock primitives)\n");
 }
@@ -584,4 +559,20 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 #endif
 
 
-#endif // MI_ATOMIC_H
+typedef struct mi_atomic_once_s {
+  _Atomic(uintptr_t) tid;
+  mi_lock_t          lock;
+} mi_atomic_once_t;
+
+// Returns `true` only on the first invocation, signifying we can execute an action once.
+// If it returns `true`, the caller should call `_mi_atomic_once_release` after performing the action.
+// Other threads (than the initial thread that entered) will block until `_mi_atomic_once_release` has been called.
+bool _mi_atomic_once_enter(mi_atomic_once_t* once);        // defined in `libc.c`
+void _mi_atomic_once_release(mi_atomic_once_t* once);      // defined in `libc.c`
+
+#define mi_atomic_do_once  \
+  static mi_atomic_once_t _mi_once = { ATOMIC_VAR_INIT(0), MI_LOCK_INIT }; \
+  for(bool _mi_exec = _mi_atomic_once_enter(&_mi_once); _mi_exec; (_mi_atomic_once_release(&_mi_once),_mi_exec=false))
+
+
+#endif // __MIMALLOC_ATOMIC_H
