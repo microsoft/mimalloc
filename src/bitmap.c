@@ -1072,7 +1072,6 @@ static void mi_bchunks_unsafe_setN(mi_bchunk_t* chunks, mi_bchunkmap_t* cmap, si
   // last chunk
   if (n > 0) {
     mi_assert_internal(n < MI_BCHUNK_BITS);
-    mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
     mi_bchunk_setN(&chunks[chunk_idx], 0, n, NULL);
   }
 }
