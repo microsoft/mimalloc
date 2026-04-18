@@ -607,6 +607,8 @@ bool mi_subproc_stats_get(mi_subproc_id_t subproc_id, mi_stats_t* stats) mi_attr
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   if (stats == NULL || stats->size != sizeof(mi_stats_t) || stats->version != MI_STAT_VERSION) return false;
   _mi_memzero(stats,stats->size);
+  stats->size = sizeof(mi_stats_t);
+  stats->version = MI_STAT_VERSION;
   mi_subproc_visit_heaps(subproc, &mi_heap_aggregate_visitor, stats);
   mi_stats_add_into(stats, &subproc->stats);
   return true;
