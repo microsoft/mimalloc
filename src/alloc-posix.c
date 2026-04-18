@@ -99,7 +99,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size
   return p;
 }
 
-mi_decl_nodiscard void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  // BSD
+mi_decl_nodiscard void* mi_reallocarray( void* p, size_t count, size_t size ) mi_attr_noexcept {  // BSD <https://man.freebsd.org/cgi/man.cgi?query=reallocarray>
   size_t total;
   if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
     errno = EOVERFLOW;
@@ -110,9 +110,9 @@ mi_decl_nodiscard void* mi_reallocarray( void* p, size_t count, size_t size ) mi
   return newp;
 }
 
-mi_decl_nodiscard int mi_reallocarr( void* p, size_t count, size_t size ) mi_attr_noexcept { // NetBSD
-  mi_assert(p != NULL);
-  if (p == NULL) {
+mi_decl_nodiscard int mi_reallocarr( void* p, size_t count, size_t size ) mi_attr_noexcept { // NetBSD <https://man.netbsd.org/reallocarr.3>
+  mi_assert(size != 0);
+  if (size == 0) {
     return (errno = EINVAL);
   }
   size_t total;
@@ -120,10 +120,17 @@ mi_decl_nodiscard int mi_reallocarr( void* p, size_t count, size_t size ) mi_att
     return (errno = EOVERFLOW);
   }
   void** op = (void**)p;
-  void* newp = mi_realloc(*op,total);
-  if (newp == NULL) { return ENOMEM; }
-  *op = newp;
-  return 0;
+  if (total == 0) {
+    free(*op);
+    *op = NULL;
+    return 0;
+  }
+  else {
+    void* newp = mi_realloc(*op,total);
+    if (newp == NULL) { return ENOMEM; }
+    *op = newp;
+    return 0;
+  }
 }
 
 void* mi__expand(void* p, size_t newsize) mi_attr_noexcept {  // Microsoft
