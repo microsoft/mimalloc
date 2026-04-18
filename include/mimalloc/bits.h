@@ -276,7 +276,9 @@ static inline bool mi_bsr(size_t x, size_t* idx) {
   #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__)  && (!defined(__clang_major__) || __clang_major__ >= 9)
     // on x64 the carry flag is set on zero which gives better codegen
     bool is_zero;
-    __asm ("lzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(*idx) : "r"(x) : "cc");
+    size_t r;
+    __asm ("lzcnt\t%2, %1" : "=@ccc"(is_zero), "=r"(r) : "r"(x) : "cc");
+    *idx = MI_SIZE_BITS - 1 - r;
     return !is_zero;
   #elif 0 && defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long i;
