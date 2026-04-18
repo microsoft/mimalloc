@@ -84,7 +84,8 @@ defined, undefined, or not accessible at all:
 
 #include "../src/prim/windows/etw.h"
 
-#define mi_track_init()                           EventRegistermicrosoft_windows_mimalloc();
+#define mi_track_init()                           EventRegistermicrosoft_windows_mimalloc()
+#define mi_track_done()                           EventUnregistermicrosoft_windows_mimalloc()
 #define mi_track_malloc_size(p,reqsize,size,zero) EventWriteETW_MI_ALLOC((UINT64)(p), size)
 #define mi_track_free_size(p,size)                EventWriteETW_MI_FREE((UINT64)(p), size)
 
@@ -113,6 +114,10 @@ defined, undefined, or not accessible at all:
 
 #ifndef mi_track_init
 #define mi_track_init()
+#endif
+
+#ifndef mi_track_done
+#define mi_track_done()
 #endif
 
 #ifndef mi_track_mem_defined
