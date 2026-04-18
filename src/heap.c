@@ -196,6 +196,7 @@ static void mi_heap_free(mi_heap_t* heap) {
   _mi_thread_local_free(heap->theap);
   mi_lock_done(&heap->theaps_lock);
   mi_lock_done(&heap->os_abandoned_pages_lock);
+  mi_lock_done(&heap->arena_pages_lock);
   mi_free(heap);
 }
 
@@ -214,7 +215,7 @@ void _mi_heap_force_destroy(mi_heap_t* heap) {
   if (heap==NULL) return;
   mi_heap_free_theaps(heap);
   _mi_heap_destroy_pages(heap);
-  if (!_mi_is_heap_main(heap)) { mi_heap_free(heap); }
+  if (!_mi_is_heap_main(heap)) { mi_heap_free(heap); }  // todo: release locks of the main heap?
 }
 
 void mi_heap_destroy(mi_heap_t* heap) {
