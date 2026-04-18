@@ -395,8 +395,8 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
 
   MI_MEM_EXTENDED_PARAMETER params[3] = { {{0,0},{0}},{{0,0},{0}},{{0,0},{0}} };
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
-  static bool mi_huge_pages_available = true;
-  if (pNtAllocateVirtualMemoryEx != NULL && mi_huge_pages_available) {
+  static _Atomic(size_t) mi_huge_pages_available = ATOMIC_VAR_INIT(1);
+  if (pNtAllocateVirtualMemoryEx != NULL && mi_atomic_load_acquire(&mi_huge_pages_available) != 0) {
     params[0].Type.Type = MiMemExtendedParameterAttributeFlags;
     params[0].Arg.ULong64 = MI_MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
     ULONG param_count = 1;
@@ -413,7 +413,7 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
     }
     else {
       // fall back to regular large pages
-      mi_huge_pages_available = false; // don't try further huge pages
+      mi_atomic_store_release(&mi_huge_pages_available,0); // don't try further huge pages
       _mi_warning_message("unable to allocate using huge (1GiB) pages, trying large (2MiB) pages instead (status 0x%lx)\n", err);
     }
   }
