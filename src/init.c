@@ -644,13 +644,7 @@ void mi_process_init(void) mi_attr_noexcept {
   #if _MSC_VER < 1920
 	mi_heap_main_init(); // vs2017 can dynamically re-initialize _mi_heap_main
 	#endif
-  static mi_atomic_once_t _once = { ATOMIC_VAR_INIT(0), MI_LOCK_INIT };
-  for(bool _exec = _mi_atomic_once_enter(&_once); 
-        _exec; 
-        (_mi_atomic_once_release(&_once),
-         _exec=false)
-  )
-  {
+  mi_atomic_do_once {
     mi_process_init_once();
   }
 }

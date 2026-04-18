@@ -434,7 +434,7 @@ typedef struct mi_lock_s {
   SRWLOCK mutex;    // slim reader-writer lock
 } mi_lock_t;
 
-#define MI_LOCK_INIT   { SRWLOCK_INIT }
+#define MI_LOCK_INITIALIZER   { SRWLOCK_INIT }
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return TryAcquireSRWLockExclusive(&lock->mutex);
@@ -461,7 +461,7 @@ typedef struct mi_lock_s {
   pthread_mutex_t mutex;
 } mi_lock_t;
 
-#define MI_LOCK_INIT  { PTHREAD_MUTEX_INITIALIZER }
+#define MI_LOCK_INITIALIZER { PTHREAD_MUTEX_INITIALIZER }
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return (pthread_mutex_trylock(&lock->mutex) == 0);
@@ -495,7 +495,7 @@ typedef struct mi_lock_s {
   std::mutex mutex;
 } mi_lock_t;
 
-#define MI_LOCK_INIT   { }
+#define MI_LOCK_INITIALIZER   { }
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return lock->mutex.try_lock();
@@ -527,7 +527,7 @@ typedef struct mi_lock_s {
   _Atomic(uintptr_t) mutex;
 } mi_lock_t;
 
-#define MI_LOCK_INIT  { ATOMIC_VAR_INIT(0) }
+#define MI_LOCK_INITIALIZER  { ATOMIC_VAR_INIT(0) }
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   uintptr_t expected = 0;
@@ -565,7 +565,7 @@ bool _mi_atomic_once_enter(mi_atomic_once_t* once);        // defined in `libc.c
 void _mi_atomic_once_release(mi_atomic_once_t* once);      // defined in `libc.c`
 
 #define mi_atomic_do_once  \
-  static mi_atomic_once_t _mi_once = { ATOMIC_VAR_INIT(0), MI_LOCK_INIT }; \
+  static mi_atomic_once_t _mi_once = { ATOMIC_VAR_INIT(0), MI_LOCK_INITIALIZER }; \
   for(bool _mi_exec = _mi_atomic_once_enter(&_mi_once); _mi_exec; (_mi_atomic_once_release(&_mi_once),_mi_exec=false))
 
 
