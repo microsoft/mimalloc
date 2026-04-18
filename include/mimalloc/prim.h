@@ -368,14 +368,14 @@ static inline mi_theap_t* _mi_theap_cached(void);
 
 #if defined(_WIN32)
   #define MI_TLS_MODEL_DYNAMIC_WIN32        1    
-#elif defined(__APPLE__) && !defined(__POWERPC__)  // macOS on arm64 or x64
+#elif defined(__APPLE__) && MI_HAS_TLS_SLOT && !defined(__POWERPC__)  // macOS on arm64 or x64
   // #define MI_TLS_MODEL_DYNAMIC_PTHREADS  1    // also works but a bit slower
   #define MI_TLS_MODEL_FIXED_SLOT           1
   #define MI_TLS_MODEL_FIXED_SLOT_DEFAULT   108  // seems unused. @apple: it would be great to get 2 official slots for custom allocators :-)
   #define MI_TLS_MODEL_FIXED_SLOT_CACHED    109
   // we used before __PTK_FRAMEWORK_OLDGC_KEY9 (89) but that seems used now.
   // see <https://github.com/rweichler/substrate/blob/master/include/pthread_machdep.h>
-#elif defined(__OpenBSD__) || defined(__ANDROID__)
+#elif defined(__APPLE__) || defined(__OpenBSD__) || defined(__ANDROID__)
   #define MI_TLS_MODEL_DYNAMIC_PTHREADS     1
   // #define MI_TLS_MODEL_DYNAMIC_PTHREADS_DEFAULT_ENTRY_IS_NULL  1
 #else
