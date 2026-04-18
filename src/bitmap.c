@@ -1442,16 +1442,16 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
         mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], (mi_bfield_t)0);
-#if MI_DEBUG > 1
+        #if MI_DEBUG > 1
         const size_t bpopcount = mi_popcount(b);
         size_t rngcount = 0;
-#endif
+        #endif
         size_t bidx;
         while (mi_bfield_find_least_bit(b, &bidx)) {
           size_t rng = mi_ctz(~(b>>bidx)); // all the set bits from bidx
-#if MI_DEBUG > 1
+          #if MI_DEBUG > 1
           rngcount += rng;
-#endif
+          #endif
           const size_t idx = base_idx + bidx;
           mi_assert_internal(rng>=1 && rng<=MI_BFIELD_BITS);
           mi_assert_internal((idx % MI_BFIELD_BITS) + rng <= MI_BFIELD_BITS);
@@ -1504,8 +1504,8 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
               // break early
               if (skipped != 0) {
                 mi_atomic_or_relaxed(&chunk->bfields[j], skipped);
-                return false;
               }
+              return false;
             }
           }
           else {
