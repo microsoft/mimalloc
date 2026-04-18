@@ -358,7 +358,7 @@ void  cfree(void* p)                                    { mi_free(p); }
 void* pvalloc(size_t size)                              { return mi_pvalloc(size); }
 void* memalign(size_t alignment, size_t size)           { return mi_memalign(alignment, size); }
 #if !defined(_WIN32)
-void* _aligned_malloc(size_t alignment, size_t size)    { return mi_aligned_alloc(alignment, size); }
+void* _aligned_malloc(size_t size, size_t alignment)    { return mi_malloc_aligned(size,alignment); }
 #endif
 void* reallocarray(void* p, size_t count, size_t size)  { return mi_reallocarray(p, count, size); }
 // some systems define reallocarr so mark it as a weak symbol (#751)
