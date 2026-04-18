@@ -328,7 +328,7 @@ static bool zone_check(malloc_zone_t* zone) {
 
 static malloc_zone_t* zone_from_ptr(const void* p) {
   MI_UNUSED(p);
-  return (mi_is_in_heap_region(p) ? mi_get_default_zone() : NULL);
+  return (mi_any_heap_contains(p) ? mi_get_default_zone() : NULL);
 }
 
 static void zone_log(malloc_zone_t* zone, void* p) {
