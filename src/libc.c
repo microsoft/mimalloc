@@ -22,11 +22,21 @@ char _mi_toupper(char c) {
 }
 
 int _mi_strnicmp(const char* s, const char* t, size_t n) {
+  mi_assert_internal(s!=NULL && t!=NULL);
   if (n == 0) return 0;
   for (; *s != 0 && *t != 0 && n > 0; s++, t++, n--) {
     if (_mi_toupper(*s) != _mi_toupper(*t)) break;
   }
   return (n == 0 ? 0 : *s - *t);
+}
+
+bool _mi_streq(const char* s, const char* t) {
+  if (s==NULL && t==NULL) return true;
+  if (s==NULL || t==NULL) return false;
+  for (; *s != 0 && *t != 0; s++, t++) {
+    if (*s != *t) break;
+  }
+  return (*s == *t);
 }
 
 void _mi_strlcpy(char* dest, const char* src, size_t dest_size) {

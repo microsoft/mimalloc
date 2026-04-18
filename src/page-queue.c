@@ -115,8 +115,11 @@ mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size) mi_attr_noexce
   if (size <= MI_LARGE_MAX_OBJ_SIZE) {
     return _mi_bin_size(mi_bin(size + MI_PADDING_SIZE));
   }
-  else {
+  else if (size <= MI_MAX_ALLOC_SIZE) {
     return _mi_align_up(size + MI_PADDING_SIZE,_mi_os_page_size());
+  }
+  else {
+    return size;
   }
 }
 
