@@ -83,9 +83,11 @@ typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalM
 
 static bool win_enable_large_os_pages(size_t* large_page_size)
 {
-  static bool large_initialized = false;
-  if (large_initialized) return (_mi_os_large_page_size() > 0);
-  large_initialized = true;
+  static mi_atomic_once_t large_initialized;
+  if (!mi_atomic_once(&large_initialized)) {     
+    return (_mi_os_large_page_size() > 0);
+  }
+
   if (pGetLargePageMinimum==NULL) return false;  // no large page support (xbox etc.)
 
   // Try to see if large OS pages are supported
