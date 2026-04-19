@@ -542,13 +542,14 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   pinfo->stime = filetime_msecs(&st);
 
   // load psapi on demand
-  if (pGetProcessMemoryInfo == NULL) {
+  mi_atomic_do_once {
     HINSTANCE hDll = LoadLibrary(TEXT("psapi.dll"));
     if (hDll != NULL) {
       pGetProcessMemoryInfo = (PGetProcessMemoryInfo)(void (*)(void))GetProcAddress(hDll, "GetProcessMemoryInfo");
+      FreeLibrary(hDll);
     }
   }
-
+  
   // get process info
   PROCESS_MEMORY_COUNTERS info; _mi_memzero_var(info);
   if (pGetProcessMemoryInfo != NULL) {
@@ -645,14 +646,15 @@ static  PBCryptGenRandom pBCryptGenRandom = NULL;
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   mi_assert(buf_len <= ULONG_MAX);
-  if (buf_len > ULONG_MAX) return false;
-  if (pBCryptGenRandom == NULL) {
+  if (buf_len > ULONG_MAX) return false;  
+  mi_atomic_do_once {
     HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
       pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
+      FreeLibrary(hDll);
     }
-    if (pBCryptGenRandom == NULL) return false;
   }
+  if (pBCryptGenRandom == NULL) return false;
   return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
 }
 
