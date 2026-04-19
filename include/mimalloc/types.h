@@ -444,7 +444,7 @@ typedef enum mi_page_kind_e {
   MI_PAGE_MEDIUM,     // medium blocks go into 512KiB pages
   MI_PAGE_LARGE,      // larger blocks go into 4MiB pages (if `MI_ENABLE_LARGE_PAGES==1`)
   MI_PAGE_SINGLETON   // page containing a single block.
-                      // used for blocks `> MI_LARGE_MAX_OBJ_SIZE` or an aligment `> MI_PAGE_MAX_OVERALLOC_ALIGN`.
+                      // used for blocks `> MI_LARGE_MAX_OBJ_SIZE` or an alignment `> MI_PAGE_MAX_OVERALLOC_ALIGN`.
 } mi_page_kind_t;
 
 
