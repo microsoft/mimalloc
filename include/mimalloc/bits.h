@@ -108,6 +108,9 @@ typedef int32_t  mi_ssize_t;
 #if MI_ARCH_X64 && (defined(__AVX2__) || defined(__BMI2__)) && !defined(__BMI1__) // msvc
 #define __BMI1__  1
 #endif
+#if MI_ARCH_X64 && defined(__AVX2__) && !defined(__LZCNT__) // msvc
+#define __LZCNT__  1
+#endif
 
 // Define big endian if needed
 // #define MI_BIG_ENDIAN  1
@@ -222,11 +225,11 @@ static inline size_t mi_ctz(size_t x) {
 }
 
 static inline size_t mi_clz(size_t x) {
-  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__BMI1__) // on x64 lzcnt is defined for 0
+  #if defined(__GNUC__) && MI_ARCH_X64 && defined(__LZCNT__) // on x64 lzcnt is defined for 0
     size_t r;
     __asm ("lzcnt\t%1, %0" : "=r"(r) : "r"(x) : "cc");
     return r;
-  #elif defined(_MSC_VER) && MI_ARCH_X64 && defined(__BMI1__) 
+  #elif defined(_MSC_VER) && MI_ARCH_X64 && defined(__LZCNT__) 
     return _lzcnt_u64(x);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
     unsigned long idx;
