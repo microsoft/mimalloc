@@ -570,7 +570,7 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
     HINSTANCE hDll = LoadLibrary(TEXT("psapi.dll"));
     if (hDll != NULL) {
       pGetProcessMemoryInfo = (PGetProcessMemoryInfo)(void (*)(void))GetProcAddress(hDll, "GetProcessMemoryInfo");
-      FreeLibrary(hDll);
+      // FreeLibrary(hDll);  // don't free
     }
   }
   
@@ -675,7 +675,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
     HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
       pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
-      FreeLibrary(hDll);
+      // FreeLibrary(hDll);  // don't free
     }
   }
   if (pBCryptGenRandom == NULL) return false;
