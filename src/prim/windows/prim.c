@@ -720,9 +720,11 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
    By default we use a combination of CRT init and TLS sections for
    both static and dynamic linkage (`MI_WIN_INIT_USE_CRT_TLS`).
 ------------------------------------------------------------------------- */
-#ifndef MI_WIN_INIT_USE_CRT_TLS
-  #if !defined(MI_WIN_INIT_USE_RAW_DLLMAIN) && !defined(MI_WIN_INIT_USE_TLS_DLLMAIN) && !defined(MI_WIN_INIT_USE_FLS)
-    #define MI_WIN_INIT_USE_CRT_TLS 1
+#if !defined(MI_WIN_INIT_USE_CRT_TLS) && !defined(MI_WIN_INIT_USE_RAW_DLLMAIN) && !defined(MI_WIN_INIT_USE_TLS_DLLMAIN) && !defined(MI_WIN_INIT_USE_FLS)
+  #if !defined(__INTEL_LLVM_COMPILER) && !defined(__INTEL_COMPILER)
+    #define MI_WIN_INIT_USE_CRT_TLS      1  
+  #else
+    #define MI_WIN_INIT_USE_TLS_DLLMAIN  1  /* default for Intel ICX, see issue #1268 */  
   #endif
 #endif
 
