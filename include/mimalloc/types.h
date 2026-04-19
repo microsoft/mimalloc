@@ -366,7 +366,7 @@ typedef enum mi_page_kind_e {
   MI_PAGE_MEDIUM,   // medium blocks go into 512KiB pages inside a segment
   MI_PAGE_LARGE,    // larger blocks go into a single page spanning a whole segment
   MI_PAGE_HUGE      // a huge page is a single page in a segment of variable size
-                    // used for blocks `> MI_LARGE_OBJ_SIZE_MAX` or an aligment `> MI_BLOCK_ALIGNMENT_MAX`.
+                    // used for blocks `> MI_LARGE_OBJ_SIZE_MAX` or an alignment `> MI_BLOCK_ALIGNMENT_MAX`.
 } mi_page_kind_t;
 
 typedef enum mi_segment_kind_e {
