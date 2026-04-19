@@ -1266,7 +1266,7 @@ void _mi_arenas_free(void* p, size_t size, mi_memid_t memid) {
     }
     mi_assert_internal(slice_index < arena->slice_count);
     mi_assert_internal(slice_index >= mi_arena_info_slices(arena));
-    if (slice_index < mi_arena_info_slices(arena) || slice_index > arena->slice_count) {
+    if (slice_index < mi_arena_info_slices(arena) || slice_index >= arena->slice_count) {
       _mi_error_message(EINVAL, "trying to free from an invalid arena block: %p, size %zu, memid: 0x%zx\n", p, size, memid);
       return;
     }
