@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal.h"
 #include "mimalloc/prim.h"
 #include <stdio.h>   // fputs, stderr
+#include <stdlib.h>  // atexit
 
 // xbox has no console IO
 #if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM)
@@ -398,7 +399,7 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
 
   MI_MEM_EXTENDED_PARAMETER params[3] = { {{0,0},{0}},{{0,0},{0}},{{0,0},{0}} };
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
-  static _Atomic(size_t) mi_huge_pages_available = ATOMIC_VAR_INIT(1);
+  static _Atomic(size_t) mi_huge_pages_available = MI_ATOMIC_VAR_INIT(1);
   if (pNtAllocateVirtualMemoryEx != NULL && mi_atomic_load_acquire(&mi_huge_pages_available) != 0) {
     params[0].Type.Type = MiMemExtendedParameterAttributeFlags;
     params[0].Arg.ULong64 = MI_MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
@@ -542,10 +543,11 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   pinfo->stime = filetime_msecs(&st);
 
   // load psapi on demand
-  if (pGetProcessMemoryInfo == NULL) {
+  mi_atomic_do_once {
     HINSTANCE hDll = LoadLibrary(TEXT("psapi.dll"));
     if (hDll != NULL) {
       pGetProcessMemoryInfo = (PGetProcessMemoryInfo)(void (*)(void))GetProcAddress(hDll, "GetProcessMemoryInfo");
+      // FreeLibrary(hDll);  // don't free
     }
   }
 
@@ -644,13 +646,16 @@ typedef LONG (NTAPI *PBCryptGenRandom)(HANDLE, PUCHAR, ULONG, ULONG);
 static  PBCryptGenRandom pBCryptGenRandom = NULL;
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
-  if (pBCryptGenRandom == NULL) {
+  mi_assert(buf_len <= ULONG_MAX);
+  if (buf_len > ULONG_MAX) return false;
+  mi_atomic_do_once {
     HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
       pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
+      // FreeLibrary(hDll);  // don't free
     }
-    if (pBCryptGenRandom == NULL) return false;
   }
+  if (pBCryptGenRandom == NULL) return false;
   return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
 }
 
@@ -713,9 +718,9 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 /* -----------------------------------------------------------------------
    Auto initialize and finalize mimalloc on process and thread start/end.
    By default we use a combination of CRT init and TLS sections for
-   both static and dynamic linkage (`MI_WIN_INIT_USE_CRT_TLS`). 
+   both static and dynamic linkage (`MI_WIN_INIT_USE_CRT_TLS`).
 ------------------------------------------------------------------------- */
-#ifndef MI_WIN_INIT_USE_CRT_TLS 
+#ifndef MI_WIN_INIT_USE_CRT_TLS
   #if !defined(MI_WIN_INIT_USE_RAW_DLLMAIN) && !defined(MI_WIN_INIT_USE_TLS_DLLMAIN) && !defined(MI_WIN_INIT_USE_FLS)
     #define MI_WIN_INIT_USE_CRT_TLS 1
   #endif
@@ -729,7 +734,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   void _mi_prim_thread_associate_default_heap(mi_heap_t* heap) {
     MI_UNUSED(heap);
   }
-  
+
   static bool mi_module_is_dll(PVOID mod) {
     if (mod==NULL) return false;
     PIMAGE_DOS_HEADER imageDosHeader = (PIMAGE_DOS_HEADER)mod;
@@ -739,7 +744,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 
   static bool mi_current_module_is_dll(void) {
     HMODULE mod = NULL;
-    const BOOL ok = GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCTSTR)mi_current_module_is_dll, &mod);
+    const BOOL ok = GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)mi_current_module_is_dll, &mod);
     return (ok && mi_module_is_dll(mod));
   }
 
@@ -750,7 +755,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   }
 
   static int mi_cdecl mi_crt_init(void) {
-    // mi_debug_out(mi_current_module_is_dll() ? "crt dll init\n" : "crt exe init\n");    
+    // mi_debug_out(mi_current_module_is_dll() ? "crt dll init\n" : "crt exe init\n");
     if (mi_current_module_is_dll()) {
       // in a dll, atexit (crt_done) is called after tls process detach
       atexit(&mi_crt_done);
@@ -770,7 +775,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
       mi_win_main(module, reason, reserved);
     }
   }
-  
+
   static void NTAPI mi_tls_detach(PVOID module, DWORD reason, LPVOID reserved) {
     if (reason == DLL_THREAD_DETACH) {
       //mi_debug_out("tls thread detach\n");
@@ -846,7 +851,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     MI_UNUSED(heap);
   }
 
-  // If linked into a DLL module, this raw entry is called before the CRT attach and 
+  // If linked into a DLL module, this raw entry is called before the CRT attach and
   // after the CRT detach through the CRT _pRawDllMain pointer.
   static BOOL NTAPI mi_dll_main_raw(PVOID module, DWORD reason, LPVOID reserved) {
     mi_win_main(module, reason, reserved);
@@ -953,7 +958,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
       mi_win_main(module, reason, reserved);
     }
   }
-  
+
   // Set up TLS callbacks in a statically linked library by using special data sections.
   // See <https://stackoverflow.com/questions/14538159/tls-callback-in-windows>
   // We use 2 entries to ensure we call attach events before constructors
@@ -973,7 +978,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma const_seg(".CRT$XLY")
     extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[];
     const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
-    #pragma const_seg()    
+    #pragma const_seg()
   #else
     #pragma comment(linker, "/INCLUDE:__tls_used")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
