@@ -724,7 +724,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #if !defined(__INTEL_LLVM_COMPILER) && !defined(__INTEL_COMPILER)
     #define MI_WIN_INIT_USE_CRT_TLS      1  
   #else
-    #define MI_WIN_INIT_USE_TLS_DLL_MAIN 1  /* default for Intel ICX, see issue #1268 */  
+    #define MI_WIN_INIT_USE_TLS_DLLMAIN  1  /* default for Intel ICX, see issue #1268 */  
   #endif
 #endif
 
