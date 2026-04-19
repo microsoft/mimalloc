@@ -340,7 +340,7 @@ typedef size_t mi_page_flags_t;
 // There are two special threadid's: 0 for pages that are abandoned (and not in a theap queue),
 // and 4 for abandoned & mapped threads -- abandoned-mapped pages are abandoned but also mapped
 // in an arena (in `mi_heap_t.arena_pages.pages_abandoned`) so these can be quickly found for reuse.
-// Abondoning partially used pages allows for sharing of this memory between threads (in particular if threads are blocked)
+// Abandoning partially used pages allows for sharing of this memory between threads (in particular if threads are blocked)
 #define MI_THREADID_ABANDONED           MI_ZU(0)
 #define MI_THREADID_ABANDONED_MAPPED    (MI_PAGE_FLAG_MASK + 1)
 
