@@ -25,9 +25,15 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
 }
 
 #if MI_GUARDED
-static mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, size_t size, size_t alignment, bool zero) mi_attr_noexcept {
+static mi_decl_noinline mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, size_t size, size_t alignment, bool zero) mi_attr_noexcept {
   // use over allocation for guarded blocksl
   mi_assert_internal(alignment > 0 && alignment < MI_BLOCK_ALIGNMENT_MAX);
+  if mi_unlikely(alignment >= MI_BLOCK_ALIGNMENT_MAX || size > (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE - alignment)) {
+    #if MI_DEBUG > 0
+    _mi_error_message(EOVERFLOW, "(guarded) aligned allocation request is too large (size %zu, alignment %zu)\n", size, alignment);
+    #endif
+    return NULL;
+  }
   const size_t oversize = size + alignment - 1;
   void* base = _mi_heap_malloc_guarded(heap, oversize, zero);
   void* p = _mi_align_up_ptr(base, alignment);
@@ -65,9 +71,9 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
     // first (and single) page such that the segment info is `MI_SEGMENT_SIZE` bytes before it (so it can be found by aligning the pointer down)
     if mi_unlikely(offset != 0) {
       // todo: cannot support offset alignment for very large alignments yet
-#if MI_DEBUG > 0
+      #if MI_DEBUG > 0
       _mi_error_message(EOVERFLOW, "aligned allocation with a very large alignment cannot be used with an alignment offset (size %zu, alignment %zu, offset %zu)\n", size, alignment, offset);
-#endif
+      #endif
       return NULL;
     }
     oversize = (size <= MI_SMALL_SIZE_MAX ? MI_SMALL_SIZE_MAX + 1 /* ensure we use generic malloc path */ : size);
@@ -78,6 +84,13 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
   }
   else {
     // otherwise over-allocate
+    mi_assert_internal(size <= (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE) && alignment <= MI_BLOCK_ALIGNMENT_MAX);
+    if mi_unlikely(size + alignment >= MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE) {
+      #if MI_DEBUG > 0
+      _mi_error_message(EOVERFLOW, "aligned allocation size is too large (size %zu, alignment %zu)\n", size, alignment);
+      #endif
+      return NULL;
+    }
     oversize = (size < MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : size) + alignment - 1;  // adjust for size <= 16; with size 0 and alignment 64k, we would allocate a 64k block and pointing just beyond that.
     p = mi_heap_malloc_zero_no_guarded(heap, oversize, zero, usable);
     if (p == NULL) return NULL;
