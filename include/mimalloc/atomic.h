@@ -158,7 +158,9 @@ static inline void mi_atomic_maxi64_relaxed(volatile int64_t* p, int64_t x) {
 
 #elif defined(_MSC_VER)
 
-// Legacy MSVC plain C compilation wrapper that uses Interlocked operations to model C11 atomics.
+// Deprecated: MSVC plain C compilation wrapper that uses Interlocked operations to model C11 atomics.
+// It is recommended to always compile as C++ when using MSVC
+
 #include <intrin.h>
 #ifdef _WIN64
 typedef LONG64   msc_intptr_t;
@@ -251,7 +253,7 @@ static inline int64_t mi_atomic_loadi64_explicit(_Atomic(int64_t)*p, mi_memory_o
 }
 static inline void mi_atomic_storei64_explicit(_Atomic(int64_t)*p, int64_t x, mi_memory_order mo) {
   (void)(mo);
-#if defined(x_M_IX86) || defined(_M_X64)
+#if defined(_M_X64)
   *p = x;
 #else
   InterlockedExchange64(p, x);
@@ -412,7 +414,7 @@ static inline void mi_lock_release(mi_lock_t* lock) {
 static inline void mi_lock_init(mi_lock_t* lock) {
   if(lock==NULL) return;
   // use this instead of pthread_mutex_init since that can cause allocation on some platforms (and recursively initialize)
-  const pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;  
+  const pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   memcpy(&lock->mutex,&mutex,sizeof(mutex));
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
@@ -441,7 +443,7 @@ static inline void mi_lock_release(mi_lock_t* lock) {
   lock->mutex.unlock();
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
-  new(&lock->mutex) std::mutex();  
+  new(&lock->mutex) std::mutex();
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
@@ -462,7 +464,7 @@ typedef struct mi_lock_s {
   _Atomic(uintptr_t) mutex;
 } mi_lock_t;
 
-#define MI_LOCK_INITIALIZER  { ATOMIC_VAR_INIT(0) }
+#define MI_LOCK_INITIALIZER  { MI_ATOMIC_VAR_INIT(0) }
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   uintptr_t expected = 0;
@@ -500,7 +502,7 @@ bool _mi_atomic_once_enter(mi_atomic_once_t* once);        // defined in `libc.c
 void _mi_atomic_once_release(mi_atomic_once_t* once);      // defined in `libc.c`
 
 #define mi_atomic_do_once  \
-  static mi_atomic_once_t _mi_once = { ATOMIC_VAR_INIT(0), MI_LOCK_INITIALIZER }; \
+  static mi_atomic_once_t _mi_once = { MI_ATOMIC_VAR_INIT(0), MI_LOCK_INITIALIZER }; \
   for(bool _mi_exec = _mi_atomic_once_enter(&_mi_once); _mi_exec; (_mi_atomic_once_release(&_mi_once),_mi_exec=false))
 
 

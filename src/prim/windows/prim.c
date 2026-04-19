@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal.h"
 #include "mimalloc/prim.h"
 #include <stdio.h>   // fputs, stderr
+#include <stdlib.h>  // atexit
 
 // xbox has no console IO
 #if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM)
@@ -422,7 +423,7 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
 
   MI_MEM_EXTENDED_PARAMETER params[3] = { {{0,0},{0}},{{0,0},{0}},{{0,0},{0}} };
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
-  static _Atomic(size_t) mi_huge_pages_available = ATOMIC_VAR_INIT(1);
+  static _Atomic(size_t) mi_huge_pages_available = MI_ATOMIC_VAR_INIT(1);
   if (pNtAllocateVirtualMemoryEx != NULL && mi_atomic_load_acquire(&mi_huge_pages_available) != 0) {
     params[0].Type.Type = MiMemExtendedParameterAttributeFlags;
     params[0].Arg.ULong64 = MI_MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
@@ -573,7 +574,7 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
       // FreeLibrary(hDll);  // don't free
     }
   }
-  
+
   // get process info
   PROCESS_MEMORY_COUNTERS info; _mi_memzero_var(info);
   if (pGetProcessMemoryInfo != NULL) {
@@ -670,7 +671,7 @@ static  PBCryptGenRandom pBCryptGenRandom = NULL;
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   mi_assert(buf_len <= ULONG_MAX);
-  if (buf_len > ULONG_MAX) return false;  
+  if (buf_len > ULONG_MAX) return false;
   mi_atomic_do_once {
     HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
@@ -761,7 +762,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 
   static bool mi_current_module_is_dll(void) {
     HMODULE mod = NULL;
-    const BOOL ok = GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCTSTR)mi_current_module_is_dll, &mod);
+    const BOOL ok = GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)mi_current_module_is_dll, &mod);
     return (ok && mi_module_is_dll(mod));
   }
 
