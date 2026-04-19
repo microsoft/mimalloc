@@ -481,7 +481,7 @@ typedef struct mi_segment_s {
   bool              free_is_zero;       // if free spans are zero
 
   size_t            abandoned;          // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
-  size_t            abandoned_visits;   // count how often this segment is visited during abondoned reclamation (to force reclaim if it takes too long)
+  size_t            abandoned_visits;   // count how often this segment is visited during abandoned reclamation (to force reclaim if it takes too long)
   size_t            used;               // count of pages in use
   uintptr_t         cookie;             // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
 
