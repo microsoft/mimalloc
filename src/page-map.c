@@ -35,12 +35,15 @@ static mi_bitmap_t* mi_page_map_commit; // one bit per committed 64 KiB entries
 mi_decl_nodiscard static bool mi_page_map_ensure_committed(size_t idx, size_t slice_count);
 
 bool _mi_page_map_init(void) {
-  size_t vbits = (size_t)mi_option_get_clamp(mi_option_max_vabits, MI_ARENA_SLICE_SHIFT, MI_SIZE_BITS);
+  size_t vbits = (size_t)mi_option_get_clamp(mi_option_max_vabits, 0, MI_SIZE_BITS);
   if (vbits == 0) {
     vbits = _mi_os_virtual_address_bits();
     #if MI_ARCH_X64  // canonical address is limited to the first 128 TiB
     if (vbits >= 48) { vbits = 47; }
     #endif
+  }
+  if (vbits < MI_ARENA_SLICE_SHIFT) {
+    vbits = MI_ARENA_SLICE_SHIFT;
   }
 
   // Allocate the page map and commit bits
@@ -229,12 +232,15 @@ mi_decl_nodiscard static bool mi_page_map_ensure_committed(size_t idx, mi_submap
 
 // initialize the page map
 bool _mi_page_map_init(void) {
-  size_t vbits = (size_t)mi_option_get_clamp(mi_option_max_vabits, MI_PAGE_MAP_SUB_SHIFT + MI_ARENA_SLICE_SHIFT, MI_SIZE_BITS);
+  size_t vbits = (size_t)mi_option_get_clamp(mi_option_max_vabits, 0, MI_SIZE_BITS);
   if (vbits == 0) {
     vbits = _mi_os_virtual_address_bits();
     #if MI_ARCH_X64  // canonical address is limited to the first 128 TiB
     if (vbits >= 48) { vbits = 47; }
     #endif
+  }
+  if (vbits < MI_PAGE_MAP_SUB_SHIFT + MI_ARENA_SLICE_SHIFT) {
+    vbits = MI_PAGE_MAP_SUB_SHIFT + MI_ARENA_SLICE_SHIFT;
   }
 
   // Allocate the page map and commit bits
