@@ -34,10 +34,10 @@ not accidentally mix pointers from different allocators).
 
 #define _strdup(s)              mi_strdup(s)
 #define _strndup(s,n)           mi_strndup(s,n)
-#define _wcsdup(s)              (wchar_t*)mi_wcsdup((const unsigned short*)(s))
+#define _wcsdup(s)              mi_wcsdup(s)
 #define _mbsdup(s)              mi_mbsdup(s)
 #define _dupenv_s(b,n,v)        mi_dupenv_s(b,n,v)
-#define _wdupenv_s(b,n,v)       mi_wdupenv_s((unsigned short*)(b),n,(const unsigned short*)(v))
+#define _wdupenv_s(b,n,v)       mi_wdupenv_s(b,n,v)
 
 // Various Posix and Unix variants
 #define reallocf(p,n)           mi_reallocf(p,n)
