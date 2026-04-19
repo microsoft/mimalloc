@@ -557,7 +557,10 @@ static size_t mi_path_max(void) {
   static _Atomic(size_t) path_max = 0;
   size_t pmax = mi_atomic_load_acquire(&path_max);
   if (pmax == 0) {
-    const long m = pathconf("/",_PC_PATH_MAX);
+    long m = 0;
+    #ifdef _PC_PATH_MAX
+    m = pathconf("/",_PC_PATH_MAX);
+    #endif
     if (m <= 0) pmax = 4096;      // guess
     else if (m < 256) pmax = 256; // at least 256
     else pmax = m;
@@ -576,7 +579,7 @@ char* mi_theap_realpath(mi_theap_t* theap, const char* fname, char* resolved_nam
     char* rname = realpath(fname, NULL);
     if (rname == NULL) return NULL;
     char* result = mi_heap_strdup(heap, rname);
-    free(rname);  // todo: use checked free instead? 
+    mi_cfree(rname);  // note: may leak the original pointer if allocated internally with the system allocator 
     // note: with ASAN realpath is intercepted and mi_cfree may leak the returned pointer :-(
     return result;  
   */
@@ -590,7 +593,7 @@ char* mi_theap_realpath(mi_theap_t* theap, const char* fname, char* resolved_nam
     char* result = mi_theap_strndup(theap,rname,n); // ok if `rname==NULL`
     mi_free(buf);
     return result;
-  }  
+  }
 }
 #endif
 
