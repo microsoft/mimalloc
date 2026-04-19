@@ -262,7 +262,8 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
                                else x = va_arg(args, unsigned int);
         }
         else if (c == 'p') {
-          x = va_arg(args, uintptr_t);
+          void* const p = va_arg(args, void*);
+          x = (uintptr_t)p;
           mi_outs("0x", &out, end);
           start = out;
           width = (width >= 2 ? width - 2 : 0);
