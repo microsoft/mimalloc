@@ -254,6 +254,7 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
 void mi_subproc_delete(mi_subproc_id_t subproc_id) {
   if (subproc_id == NULL) return;
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
+  if (subproc==NULL) return;
   // check if there are no abandoned segments still..
   bool safe_to_delete = false;
   mi_lock(&subproc->abandoned_os_lock) {
