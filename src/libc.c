@@ -61,18 +61,15 @@ void _mi_strlcat(char* dest, const char* src, size_t dest_size) {
   _mi_strlcpy(dest, src, dest_size);
 }
 
-size_t _mi_strlen(const char* s) {
-  if (s==NULL) return 0;
-  size_t len = 0;
-  while(s[len] != 0) { len++; }
-  return len;
-}
-
 size_t _mi_strnlen(const char* s, size_t max_len) {
   if (s==NULL) return 0;
   size_t len = 0;
   while(s[len] != 0 && len < max_len) { len++; }
   return len;
+}
+
+size_t _mi_strlen(const char* s) {
+  return _mi_strnlen(s,PTRDIFF_MAX);
 }
 
 char* _mi_strnstr(char* s, size_t max_len, const char* pat) {
