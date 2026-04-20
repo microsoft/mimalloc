@@ -105,7 +105,7 @@ defined, undefined, or not accessible at all:
 // Utility definitions
 
 #ifndef mi_track_resize
-#define mi_track_resize(p,oldsize,newsize)      mi_track_free_size(p,oldsize); mi_track_malloc(p,newsize,false)
+#define mi_track_resize(p,oldsize,newsize)      do{ mi_track_free_size(p,oldsize); mi_track_malloc(p,newsize,false); } while(0)
 #endif
 
 #ifndef mi_track_align
