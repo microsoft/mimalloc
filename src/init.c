@@ -459,11 +459,10 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
 
 // Set up handlers so `mi_thread_done` is called automatically
 static void mi_process_setup_auto_thread_done(void) {
-  static bool tls_initialized = false; // fine if it races
-  if (tls_initialized) return;
-  tls_initialized = true;
-  _mi_prim_thread_init_auto_done();
-  _mi_heap_set_default_direct(&_mi_heap_main);
+  mi_atomic_do_once {
+    _mi_prim_thread_init_auto_done();
+    _mi_heap_set_default_direct(&_mi_heap_main);
+  }
 }
 
 
