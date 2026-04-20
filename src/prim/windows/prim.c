@@ -637,7 +637,7 @@ void _mi_prim_out_stderr( const char* msg )
 // Note: on windows, environment names are not case sensitive.
 bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   result[0] = 0;
-  size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
+  const size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
   return (len > 0 && len < result_size);
 }
 

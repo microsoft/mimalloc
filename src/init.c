@@ -684,11 +684,10 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
 
 // Set up handlers so `mi_thread_done` is called automatically
 static void mi_process_setup_auto_thread_done(void) {
-  static bool tls_initialized = false; // fine if it races
-  if (tls_initialized) return;
-  tls_initialized = true;
-  _mi_prim_thread_init_auto_done();
-  _mi_theap_default_set(&theap_main);
+  mi_atomic_do_once {
+    _mi_prim_thread_init_auto_done();
+    _mi_theap_default_set(&theap_main);
+  }
 }
 
 

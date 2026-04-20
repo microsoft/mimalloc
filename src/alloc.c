@@ -837,23 +837,22 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(theap, req_size, 0 /* don't zero */, NULL);
   if (block==NULL) return NULL;
   void* const p = mi_block_ptr_set_guarded(block, obj_size);
+  if (p == NULL) return p;
   if (zero) { 
     _mi_memzero_aligned(p,obj_size);  // we have to zero here as padding might have written here (if the blocksize > reqsize + os_page_size)
   }
 
   // stats
-  mi_track_malloc(p, obj_size, zero);  
-  if (p != NULL) {
-    if (!mi_theap_is_initialized(theap)) { theap = _mi_theap_default(); }
-    #if MI_STAT>1
-    // adjust stats to only count the allocated size of the block (and not the guard page)
-    mi_theap_stat_adjust_decrease(theap, malloc_requested, req_size);
-    mi_theap_stat_increase(theap, malloc_requested, size);
-    #endif
-    mi_theap_stat_counter_increase(theap, malloc_guarded_count, 1);
-  }
+  mi_track_malloc(p, obj_size, zero);    
+  if (!mi_theap_is_initialized(theap)) { theap = _mi_theap_default(); }
+  mi_theap_stat_counter_increase(theap, malloc_guarded_count, 1);
+  #if MI_STAT>1
+  // adjust stats to only count the allocated size of the block (and not the guard page)
+  mi_theap_stat_adjust_decrease(theap, malloc_requested, req_size);
+  mi_theap_stat_increase(theap, malloc_requested, size);
+  #endif
   #if MI_DEBUG>3
-  if (p != NULL && zero) {
+  if (zero) {
     mi_assert_expensive(mi_mem_is_zero(p, size));
   }
   #endif
