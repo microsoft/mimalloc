@@ -54,10 +54,11 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_STAT 1
 
 // Define MI_SECURE to enable security mitigations
-// #define MI_SECURE 1  // guard page around metadata
-// #define MI_SECURE 2  // guard page around each mimalloc page
+// #define MI_SECURE 1  // guard pages around meta data, randomize arena allocation addresses (like ASLR), abort on detected meta data corruption
+// #define MI_SECURE 2  // randomize relative allocation addresses (within mimalloc pages)
 // #define MI_SECURE 3  // encode free lists (detect corrupted free list (buffer overflow), and invalid pointer free)
-// #define MI_SECURE 4  // checks for double free. (may be more expensive)
+// #define MI_SECURE 4  // checks for double free (may be more expensive) (`-DMI_SECURE=ON`)
+// #define MI_SECURE 5  // guard page at the end of each mimalloc page (expensive!) (`-DMI_SECURE_FULL=ON`)
 
 #if !defined(MI_SECURE)
 #define MI_SECURE 0
@@ -365,7 +366,7 @@ typedef enum mi_page_kind_e {
   MI_PAGE_MEDIUM,   // medium blocks go into 512KiB pages inside a segment
   MI_PAGE_LARGE,    // larger blocks go into a single page spanning a whole segment
   MI_PAGE_HUGE      // a huge page is a single page in a segment of variable size
-                    // used for blocks `> MI_LARGE_OBJ_SIZE_MAX` or an aligment `> MI_BLOCK_ALIGNMENT_MAX`.
+                    // used for blocks `> MI_LARGE_OBJ_SIZE_MAX` or an alignment `> MI_BLOCK_ALIGNMENT_MAX`.
 } mi_page_kind_t;
 
 typedef enum mi_segment_kind_e {
@@ -481,7 +482,7 @@ typedef struct mi_segment_s {
   bool              free_is_zero;       // if free spans are zero
 
   size_t            abandoned;          // abandoned pages (i.e. the original owning thread stopped) (`abandoned <= used`)
-  size_t            abandoned_visits;   // count how often this segment is visited during abondoned reclamation (to force reclaim if it takes too long)
+  size_t            abandoned_visits;   // count how often this segment is visited during abandoned reclamation (to force reclaim if it takes too long)
   size_t            used;               // count of pages in use
   uintptr_t         cookie;             // verify addresses in debug mode: `mi_ptr_cookie(segment) == segment->cookie`
 

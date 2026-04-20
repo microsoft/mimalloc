@@ -110,8 +110,11 @@ size_t mi_good_size(size_t size) mi_attr_noexcept {
   if (size <= MI_MEDIUM_OBJ_SIZE_MAX) {
     return _mi_bin_size(mi_bin(size + MI_PADDING_SIZE));
   }
-  else {
+  else if (size <= MI_MAX_ALLOC_SIZE) {
     return _mi_align_up(size + MI_PADDING_SIZE,_mi_os_page_size());
+  }
+  else {
+    return size;
   }
 }
 
@@ -177,25 +180,25 @@ static mi_page_queue_t* mi_page_queue_of(const mi_page_t* page) {
 // range of entries in `_mi_page_small_free`.
 static inline void mi_heap_queue_first_update(mi_heap_t* heap, const mi_page_queue_t* pq) {
   mi_assert_internal(mi_heap_contains_queue(heap,pq));
-  size_t size = pq->block_size;
+  const size_t size = pq->block_size;
   if (size > MI_SMALL_SIZE_MAX) return;
 
   mi_page_t* page = pq->first;
   if (pq->first == NULL) page = (mi_page_t*)&_mi_page_empty;
 
   // find index in the right direct page array
-  size_t start;
-  size_t idx = _mi_wsize_from_size(size);
-  mi_page_t** pages_free = heap->pages_free_direct;
-
+  const size_t idx = _mi_wsize_from_size(size);
+  mi_page_t** const pages_free = heap->pages_free_direct;
   if (pages_free[idx] == page) return;  // already set
 
   // find start slot
+  size_t start;
   if (idx<=1) {
     start = 0;
   }
   else {
     // find previous size; due to minimal alignment upto 3 previous bins may need to be skipped
+    mi_assert_internal(pq > &heap->pages[0]); // since idx > 1    
     size_t bin = mi_bin(size);
     const mi_page_queue_t* prev = pq - 1;
     while( bin == mi_bin(prev->block_size) && prev > &heap->pages[0]) {

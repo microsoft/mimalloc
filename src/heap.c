@@ -768,5 +768,5 @@ bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void* p, size_t perc
   // check utilization
   if (page->capacity==0)   return false;
   if (perc_threshold>=100) return true;
-  return (perc_threshold >= ((100*page->used) / page->capacity));
+  return (perc_threshold >= ((100UL*page->used) / page->capacity));
 }
