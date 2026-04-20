@@ -389,6 +389,7 @@ mi_decl_nodiscard void* mi_recalloc(void* p, size_t count, size_t size) mi_attr_
 mi_decl_nodiscard mi_decl_restrict char* mi_heap_strdup(mi_heap_t* heap, const char* s) mi_attr_noexcept {
   if (s == NULL) return NULL;
   size_t len = _mi_strlen(s);
+  if (len > MI_MAX_ALLOC_SIZE - 1) return NULL;  // prevent overflow on len+1
   char* t = (char*)mi_heap_malloc(heap,len+1);
   if (t == NULL) return NULL;
   _mi_memcpy(t, s, len);
@@ -404,6 +405,7 @@ mi_decl_nodiscard mi_decl_restrict char* mi_strdup(const char* s) mi_attr_noexce
 mi_decl_nodiscard mi_decl_restrict char* mi_heap_strndup(mi_heap_t* heap, const char* s, size_t n) mi_attr_noexcept {
   if (s == NULL) return NULL;
   const size_t len = _mi_strnlen(s,n);  // len <= n
+  if (len > MI_MAX_ALLOC_SIZE - 1) return NULL;  // prevent overflow on len+1
   char* t = (char*)mi_heap_malloc(heap, len+1);
   if (t == NULL) return NULL;
   _mi_memcpy(t, s, len);
@@ -439,35 +441,44 @@ mi_decl_nodiscard mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const
     return mi_heap_strndup(heap, buf, PATH_MAX);
   }
 }
+
 #else
-/*
+
 #include <unistd.h>  // pathconf
+
 static size_t mi_path_max(void) {
-  static size_t path_max = 0;
-  if (path_max <= 0) {
-    long m = pathconf("/",_PC_PATH_MAX);
-    if (m <= 0) path_max = 4096;      // guess
-    else if (m < 256) path_max = 256; // at least 256
-    else path_max = m;
+  static _Atomic(size_t) path_max = 0;
+  size_t pmax = mi_atomic_load_acquire(&path_max);
+  if (pmax == 0) {
+    long m = 0;
+    #ifdef _PC_PATH_MAX
+    m = pathconf("/",_PC_PATH_MAX);
+    #endif
+    if (m <= 0) pmax = 4096;      // guess
+    else if (m < 256) pmax = 256; // at least 256
+    else if (m > 64*1024) pmax = 64*1024;  // at most 64 KiB
+    else pmax = m;
+    size_t expected = 0;
+    mi_atomic_cas_strong_acq_rel(&path_max, &expected, pmax);
   }
-  return path_max;
+  return pmax;
 }
-*/
+
 char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
   if (resolved_name != NULL) {
     return realpath(fname,resolved_name);
   }
   else {
+  /*
     char* rname = realpath(fname, NULL);
     if (rname == NULL) return NULL;
     char* result = mi_heap_strdup(heap, rname);
-    mi_cfree(rname);  // use checked free (which may be redirected to our free but that's ok)
+    mi_cfree(rname);  // note: may leak the original pointer if allocated internally with the system allocator 
     // note: with ASAN realpath is intercepted and mi_cfree may leak the returned pointer :-(
-    return result;
-  }
-  /*
+    return result;  
+  */
     const size_t n  = mi_path_max();
-    char* buf = (char*)mi_malloc(n+1);
+    char* const buf = (char*)mi_zalloc(n+1);
     if (buf == NULL) {
       errno = ENOMEM;
       return NULL;
@@ -477,7 +488,6 @@ char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) 
     mi_free(buf);
     return result;
   }
-  */
 }
 #endif
 
@@ -687,6 +697,10 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
 {
   // allocate multiple of page size ending in a guard page
   // ensure minimal alignment requirement?
+  if mi_unlikely(size >= MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE) {  // check up front so the `req_size` won't overflow    
+    _mi_error_message(EOVERFLOW, "(guarded) allocation request is too large (%zu bytes)\n", size);
+    return NULL;
+  }
   const size_t os_page_size = _mi_os_page_size();
   const size_t obj_size = (mi_option_is_enabled(mi_option_guarded_precise) ? size : _mi_align_up(size, MI_MAX_ALIGN_SIZE));
   const size_t bsize    = _mi_align_up(_mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);

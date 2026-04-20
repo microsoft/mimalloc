@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  RELEASE: Release v3.3.0
+  RELEASE: Release v3.3.1
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   
 name: Release
@@ -19,7 +19,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        branch: [v1.9.8,v2.3.0,v3.3.0]  # [dev,dev2,dev3]
+        branch: [v1.9.9,v2.3.1,v3.3.1]  # [dev,dev2,dev3]
         # we build on the oldest ubuntu version for better binary compatibility.
         os: [windows-latest, macOS-latest, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm]  
 

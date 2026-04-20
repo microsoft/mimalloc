@@ -445,7 +445,7 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
   // free if not the main thread
   if (heap != &_mi_heap_main) {
     // the following assertion does not always hold for huge segments as those are always treated
-    // as abondened: one may allocate it in one thread, but deallocate in another in which case
+    // as abandoned: one may allocate it in one thread, but deallocate in another in which case
     // the count can be too large or negative. todo: perhaps not count huge segments? see issue #363
     // mi_assert_internal(heap->tld->segments.count == 0 || heap->thread_id != _mi_thread_id());
     mi_thread_data_free((mi_thread_data_t*)heap);
@@ -624,14 +624,8 @@ static void mi_detect_cpu_features(void) {
 #endif
 
 // Initialize the process; called by thread_init or the process loader
-void mi_process_init(void) mi_attr_noexcept {
-  // ensure we are called once
-  static mi_atomic_once_t process_init;
-	#if _MSC_VER < 1920
-	mi_heap_main_init(); // vs2017 can dynamically re-initialize _mi_heap_main
-	#endif
-  if (!mi_atomic_once(&process_init)) return;
-  _mi_process_is_initialized = true;
+static void mi_process_init_once(void) mi_attr_noexcept {
+  _mi_process_is_initialized = true;  
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
   mi_process_setup_auto_thread_done();
 
@@ -667,6 +661,16 @@ void mi_process_init(void) mi_attr_noexcept {
   }
 }
 
+// Initialize the process; called by thread_init or the process loader
+void mi_process_init(void) mi_attr_noexcept {
+  #if _MSC_VER < 1920
+	mi_heap_main_init(); // vs2017 can dynamically re-initialize _mi_heap_main
+	#endif
+  mi_atomic_do_once {
+    mi_process_init_once();
+  }
+}
+
 // Called when the process is done (cdecl as it is used with `at_exit` on some platforms)
 void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   // only shutdown if we were initialized
@@ -692,6 +696,9 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
     mi_heap_collect(heap, true /* force */ );
     #endif
   #endif
+
+  // done with tracking tools
+  mi_track_done()
 
   // Forcefully release all retained memory; this can be dangerous in general if overriding regular malloc/free
   // since after process_done there might still be other code running that calls `free` (like at_exit routines,

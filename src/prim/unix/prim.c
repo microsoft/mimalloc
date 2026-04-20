@@ -167,8 +167,16 @@ static void unix_detect_physical_memory( size_t page_size, size_t* physical_memo
     MI_UNUSED(page_size);
     struct sysinfo info; _mi_memzero_var(info);
     const int err = sysinfo(&info);
-    if (err==0 && info.totalram > 0 && info.totalram <= SIZE_MAX) {
-      *physical_memory_in_kib = (size_t)info.totalram / MI_KiB;
+    if (err==0 && info.mem_unit > 0 && info.totalram <= SIZE_MAX) {
+      if (info.mem_unit==MI_KiB) {
+        *physical_memory_in_kib = (size_t)info.totalram;
+      }
+      else {
+        size_t total = 0;
+        if (!mi_mul_overflow((size_t)info.totalram, (size_t)info.mem_unit, &total)) {
+          *physical_memory_in_kib = (total / MI_KiB);
+        }
+      }
     }
   #elif defined(_SC_PHYS_PAGES)  // do not use by default as it might cause allocation (by using `fopen` to parse /proc/meminfo) (issue #1100)
     const long pphys = sysconf(_SC_PHYS_PAGES);
@@ -196,12 +204,10 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
   if (!mi_option_is_enabled(mi_option_allow_thp)) // disable THP if requested through an option
   {
-    int val = 0;
-    if (prctl(PR_GET_THP_DISABLE, &val, 0, 0, 0) != 0) {
+    if (prctl(PR_GET_THP_DISABLE, 0, 0, 0, 0) == 0) {   // -1 on error, 1 if already disabled
       // Most likely since distros often come with always/madvise settings.
-      val = 1;
       // Disabling only for mimalloc process rather than touching system wide settings
-      (void)prctl(PR_SET_THP_DISABLE, &val, 0, 0, 0);
+      (void)prctl(PR_SET_THP_DISABLE, 1, 0, 0, 0);
     }
   }
   #endif
@@ -427,7 +433,7 @@ int _mi_prim_alloc(void* hint_addr, size_t size, size_t try_alignment, bool comm
 //---------------------------------------------
 
 static void unix_mprotect_hint(int err) {
-  #if defined(__linux__) && (MI_SECURE>=2) // guard page around every mimalloc page
+  #if defined(__linux__) && (MI_SECURE>=5) // guard page around every mimalloc page
   if (err == ENOMEM) {
     _mi_warning_message("The next warning may be caused by a low memory map limit.\n"
                         "  On Linux this is controlled by the vm.max_map_count -- maybe increase it?\n"
