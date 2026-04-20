@@ -142,9 +142,10 @@ void* mi__expand(void* p, size_t newsize) mi_attr_noexcept {  // Microsoft
 
 mi_decl_nodiscard mi_decl_restrict wchar_t* mi_wcsdup(const wchar_t* s) mi_attr_noexcept {
   if (s==NULL) return NULL;
-  size_t len;
-  for(len = 0; s[len] != 0; len++) { }
-  size_t size = (len+1)*sizeof(wchar_t);
+  size_t wlen;
+  for(wlen = 0; s[wlen] != 0 && wlen < PTRDIFF_MAX; wlen++) { }  // prevent overflow on wlen+1
+  size_t size; 
+  if (mi_mul_overflow(wlen+1, sizeof(wchar_t), &size) || size > PTRDIFF_MAX) return NULL;
   wchar_t* p = (wchar_t*)mi_malloc(size);
   if (p != NULL) {
     _mi_memcpy(p,s,size);
@@ -166,7 +167,7 @@ int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
   else {
     *buf = mi_strdup(p);
     if (*buf==NULL) return ENOMEM;
-    if (size != NULL) { *size = _mi_strlen(p) + 1; }
+    if (size != NULL) { *size = _mi_strlen(p) + 1; }    // cannot overflow as mi_strdup is limited to PTRDIFF_MAX
   }
   return 0;
 }
@@ -186,7 +187,7 @@ int mi_wdupenv_s(wchar_t** buf, size_t* size, const wchar_t* name) mi_attr_noexc
   else {
     *buf = mi_wcsdup(p);
     if (*buf==NULL) return ENOMEM;
-    if (size != NULL) { *size = wcslen(p) + 1; }
+    if (size != NULL) { *size = wcslen(p) + 1; }  // cannot overflow as wcsdup is limited to PTRDIFF_MAX
   }
   return 0;
 #endif
