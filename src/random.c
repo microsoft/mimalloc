@@ -111,6 +111,7 @@ static void chacha_init(mi_random_ctx_t* ctx, const uint8_t key[32], uint64_t no
 
 static void chacha_split(mi_random_ctx_t* ctx, uint64_t nonce, mi_random_ctx_t* ctx_new) {
   _mi_memzero(ctx_new, sizeof(*ctx_new));
+  ctx_new->weak = ctx->weak;
   _mi_memcpy(ctx_new->input, ctx->input, sizeof(ctx_new->input));
   ctx_new->input[12] = 0;
   ctx_new->input[13] = 0;
