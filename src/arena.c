@@ -769,7 +769,9 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
         start = NULL;
       }
       else {
-        mi_assert_internal(mi_bitmap_is_clearN(arena_pages->pages, memid->mem.arena.slice_index, memid->mem.arena.slice_count));
+        // note: the following assert should hold if we could check it atomically, but in a concurrent setting we may already allocate in slice_count
+        // mi_assert_internal(mi_bitmap_is_clearN(arena_pages->pages, memid->mem.arena.slice_index, memid->mem.arena.slice_count));        
+        mi_assert_internal(mi_bitmap_is_clear(arena_pages->pages, memid->mem.arena.slice_index));        
         mi_bitmap_set(arena_pages->pages, memid->mem.arena.slice_index);
       }
     }
