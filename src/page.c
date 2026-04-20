@@ -202,8 +202,13 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
     tail = next;
   }
   // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
-  if (count > max_count) {
+  if mi_unlikely(count > max_count) {
     _mi_error_message(EFAULT, "corrupted thread-free list\n");
+    return; // the thread-free items cannot be freed
+  }
+  // if `count > page->used` there was another kind memory corruption (either in the page meta-data or in the linked list)
+  else if mi_unlikely(count > page->used) {
+    _mi_error_message(EFAULT, "corrupted meta-data in thread-free list\n");
     return; // the thread-free items cannot be freed
   }
 
@@ -212,7 +217,9 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   page->local_free = head;
 
   // update counts now
-  page->used -= (uint16_t)count;
+  mi_assert_internal(count <= UINT16_MAX);
+  mi_assert_internal(page->used >= (uint16_t)count);
+  page->used = page->used - (uint16_t)count;
 }
 
 void _mi_page_free_collect(mi_page_t* page, bool force) {
