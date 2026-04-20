@@ -274,6 +274,8 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
       const size_t stat_commit_size = commit_size - mi_arena_block_size(already_committed);
       bool commit_zero = false;
       if (!_mi_os_commit_ex(p, commit_size, &commit_zero, stat_commit_size)) {
+        // set all as uncommitted on commit failure
+        _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
         memid->initially_committed = false;
       }
       else {
