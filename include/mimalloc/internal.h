@@ -1162,5 +1162,43 @@ static inline void _mi_memzero_aligned(void* dst, size_t n) {
 }
 #endif
 
+// ------------------------------------------------------------------
+// Heap profiler fast-path hooks (profile.c / profile.h)
+//
+// Inlined here so that the common case (profiling disabled or no
+// sample due) adds only a handful of instructions at each call site.
+// The slow paths are noinline and defined in profile.c.
+//
+// Thread safety: see profile.h for the acquire/release protocol on
+// _mi_profiler.enabled.
+// ------------------------------------------------------------------
+#include "mimalloc/profile.h"
+
+static inline void _mi_profiler_on_alloc(mi_heap_t* heap, mi_page_t* page, void* ptr, size_t size) {
+  // Relaxed load: we only need to know whether to do any work.  The acquire
+  // that synchronizes on_alloc/on_free/record_extra_bytes visibility is in
+  // the slow path, which is the first place we actually read those fields.
+  if mi_likely(!mi_atomic_load_relaxed(&_mi_profiler.enabled)) return;
+  mi_profiler_tld_t* ptld = &heap->tld->profiler;
+  if (ptld->in_profiler) return;
+  ptld->bytes_since_sample += size;  // unsigned: wraps at 2^64 bytes (~18 EB), harmless in practice
+  if mi_likely(ptld->bytes_since_sample < ptld->next_threshold) return;
+  _mi_profiler_on_alloc_slow(heap, page, ptr, size);
+}
+
+static inline void _mi_profiler_on_free_local(mi_page_t* page, void* ptr) {
+  // No acquire load on enabled: has_metadata is only ever set by the owning thread
+  // after it observed enabled=true via an acquire load in _mi_profiler_on_alloc.
+  // If has_metadata is true, all profiler fields are already visible to this thread.
+  if mi_likely(!page->has_metadata) return;
+  _mi_profiler_on_free_local_slow(page, ptr);
+}
+
+static inline void _mi_profiler_on_free_collected(mi_page_t* page, mi_block_t* head) {
+  // Same argument as _mi_profiler_on_free_local.
+  if mi_likely(!page->has_metadata) return;
+  _mi_profiler_on_free_collected_slow(page, head);
+}
+
 
 #endif

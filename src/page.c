@@ -211,6 +211,8 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
     return; // the thread-free items cannot be freed
   }
 
+  _mi_profiler_on_free_collected(page, head);
+
   // and append the current local free list
   mi_block_set_next(page,tail, page->local_free);
   page->local_free = head;

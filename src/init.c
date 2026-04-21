@@ -20,6 +20,7 @@ const mi_page_t _mi_page_empty = {
   0,       // reserved capacity
   { 0 },   // flags
   false,   // is_zero
+  false,   // has_metadata
   0,       // retire_expire
   NULL,    // free
   NULL,    // local_free
@@ -34,7 +35,7 @@ const mi_page_t _mi_page_empty = {
   MI_ATOMIC_VAR_INIT(0), // xthread_free
   MI_ATOMIC_VAR_INIT(0), // xheap
   NULL, NULL
-  , { 0 }  // padding
+  , NULL   // metadata
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&_mi_page_empty)
@@ -140,7 +141,8 @@ mi_decl_cache_align static const mi_tld_t tld_empty = {
   false,
   NULL, NULL,
   { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, &mi_subproc_default, tld_empty_stats }, // segments
-  { sizeof(mi_stats_t), MI_STAT_VERSION, MI_STATS_NULL }       // stats
+  { sizeof(mi_stats_t), MI_STAT_VERSION, MI_STATS_NULL },      // stats
+  { 0, 0, false }                                              // profiler
 };
 
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
@@ -156,7 +158,8 @@ static mi_decl_cache_align mi_tld_t tld_main = {
   0, false,
   &_mi_heap_main, & _mi_heap_main,
   { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, 0, &mi_subproc_default, &tld_main.stats }, // segments
-  { sizeof(mi_stats_t), MI_STAT_VERSION, MI_STATS_NULL }       // stats
+  { sizeof(mi_stats_t), MI_STAT_VERSION, MI_STATS_NULL },      // stats
+  { 0, 0, false }                                              // profiler
 };
 
 mi_decl_cache_align mi_heap_t _mi_heap_main = {
