@@ -737,7 +737,7 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_vis
 }
 
 //Visiting all blocks of all heaps in a thread
-bool mi_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+bool mi_visit_blocks(bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
   mi_assert_internal(heap != NULL);
   if (heap == NULL) return false;
   mi_heap_t* curr = heap->tld->heaps;
