@@ -184,17 +184,22 @@ static mi_thread_local_t mi_thread_local_claim(void) {
 }
 
 static bool mi_thread_local_create_expand(void) {
-  mi_bitmap_t* slots = mi_thread_locals_free;
+  mi_bitmap_t* const slots = mi_thread_locals_free;
   // 1024 bits at a time
   const size_t oldcount = (slots==NULL ? 0 : mi_bitmap_max_bits(slots));
   const size_t newcount = 1024 + oldcount;
   if (newcount > MI_TLS_IDX_MASK) { return false; }
   const size_t newsize = mi_bitmap_size( newcount, NULL );
-  slots = (mi_bitmap_t*)mi_realloc_aligned(slots, newsize, MI_BCHUNK_SIZE);
-  if (slots == NULL) { return false; }
-  mi_bitmap_init(slots, newcount, true /* or otherwise we would zero all old entries */);
-  mi_bitmap_unsafe_setN(slots, oldcount, newcount - oldcount);
-  mi_thread_locals_free = slots;
+  mi_bitmap_t* newslots = (mi_bitmap_t*)mi_zalloc_aligned(newsize, MI_BCHUNK_SIZE);
+  if (newslots==NULL) { return false; }
+  if (slots!=NULL) {
+    // copy over the previous bitmap
+    _mi_memcpy_aligned(newslots, slots, mi_bitmap_size(oldcount, NULL)); 
+    mi_free(slots);
+  }
+  mi_bitmap_init(newslots, newcount, true /* pretend already zero'd so we do not zero out the copied old entries */);
+  mi_bitmap_unsafe_setN(newslots, oldcount, newcount - oldcount);  /* set the new expanded slots as available */
+  mi_thread_locals_free = newslots;
   return true;
 }
 
