@@ -885,6 +885,7 @@ static mi_page_t* mi_find_free_page(mi_theap_t* theap, mi_page_queue_t* pq) {
   a certain number of allocations.
 ----------------------------------------------------------- */
 
+// The program should only install a single deferred free handler before doing allocation.
 static _Atomic(void*) deferred_free; // is `mi_deferred_free_fun*` (but some platforms don't support atomic function pointers)
 static _Atomic(void*) deferred_arg;   
 
