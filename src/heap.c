@@ -64,11 +64,11 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
     }    
     // then allocate the theap
     theap = _mi_theap_create(heap, _mi_theap_default_safe()->tld);
+    _mi_thread_local_set(heap->theap, theap);  // Cannot fail now as it was set before. Always set so the local is valid or NULL (and not 1)
     if (theap==NULL) {
       _mi_error_message(EFAULT, "unable to allocate memory for a thread local heap\n");
       return NULL;
-    }
-    _mi_thread_local_set(heap->theap, theap); // this cannot fail now as it was set before to a non-zero value
+    }    
   }
   return theap;
 }
