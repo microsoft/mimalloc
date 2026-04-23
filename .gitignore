@@ -11,3 +11,4 @@ docs/
 *.gz
 .vscode
 .DS_STore
+.idea

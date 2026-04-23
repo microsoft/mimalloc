@@ -153,6 +153,17 @@ jobs:
         env:
           MIMALLOC_GUARDED_SAMPLE_RATE: 100
 
+      - name: Debug, plain C guarded, Windows ARM64
+        if: matrix.tests == 'extra' && matrix.os == 'windows-11-arm'
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
+          if not defined VSINSTALL exit /b 1
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=arm64
+          if not exist out\plain-c-arm64 mkdir out\plain-c-arm64
+          cl /nologo /TC /std:c11 /Iinclude /Isrc /DMI_DEBUG=3 /DMI_SHOW_ERRORS=1 /DMI_GUARDED=1 test\test-win-msvc-c-guarded.c src\static.c /Feout\plain-c-arm64\mimalloc-test-win-msvc-c-guarded.exe /link psapi.lib shell32.lib user32.lib advapi32.lib bcrypt.lib
+          out\plain-c-arm64\mimalloc-test-win-msvc-c-guarded.exe
+
       - name: Release, Guarded
         if: matrix.tests == 'extra' && runner.os == 'Linux' && startsWith(github.ref_name,'dev3')
         run: |

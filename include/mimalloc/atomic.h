@@ -219,15 +219,26 @@ static inline void mi_atomic_thread_fence(mi_memory_order mo) {
   mi_atomic_exchange_explicit(&x, 1, mo);
 }
 static inline uintptr_t mi_atomic_load_explicit(_Atomic(uintptr_t) const* p, mi_memory_order mo) {
-  (void)(mo);
 #if defined(_M_IX86) || defined(_M_X64)
+  (void)(mo);
   return *p;
-#else
-  uintptr_t x = *p;
+#elif defined(_M_ARM64) || defined(_M_ARM64EC)
   if (mo > mi_memory_order_relaxed) {
-    while (!mi_atomic_compare_exchange_weak_explicit((_Atomic(uintptr_t)*)p, &x, x, mo, mi_memory_order_relaxed)) { /* nothing */ };
+    return (uintptr_t)__ldar64((unsigned __int64 volatile*)p);
   }
-  return x;
+  else {
+    return *(volatile const uintptr_t*)p;
+  }
+#elif defined(_M_ARM)
+  if (mo > mi_memory_order_relaxed) {
+    return (uintptr_t)__ldar32((unsigned __int32 volatile*)p);
+  }
+  else {
+    return *(volatile const uintptr_t*)p;
+  }
+#else
+  (void)(mo);
+  return *(volatile const uintptr_t*)p;
 #endif
 }
 static inline void mi_atomic_store_explicit(_Atomic(uintptr_t)*p, uintptr_t x, mi_memory_order mo) {
@@ -239,9 +250,16 @@ static inline void mi_atomic_store_explicit(_Atomic(uintptr_t)*p, uintptr_t x, m
 #endif
 }
 static inline int64_t mi_atomic_loadi64_explicit(_Atomic(int64_t)*p, mi_memory_order mo) {
-  (void)(mo);
 #if defined(_M_X64)
+  (void)(mo);
   return *p;
+#elif defined(_M_ARM64) || defined(_M_ARM64EC)
+  if (mo > mi_memory_order_relaxed) {
+    return (int64_t)__ldar64((unsigned __int64 volatile*)p);
+  }
+  else {
+    return *(volatile const int64_t*)p;
+  }
 #else
   int64_t old = *p;
   int64_t x = old;
@@ -305,8 +323,8 @@ static inline bool mi_atomic_casi64_strong_acq_rel(volatile _Atomic(int64_t*)p, 
 }
 
 // The pointer macros cast to `uintptr_t`.
-#define mi_atomic_load_ptr_acquire(tp,p)                (tp*)mi_atomic_load_acquire((_Atomic(uintptr_t)*)(p))
-#define mi_atomic_load_ptr_relaxed(tp,p)                (tp*)mi_atomic_load_relaxed((_Atomic(uintptr_t)*)(p))
+#define mi_atomic_load_ptr_acquire(tp,p)                (tp*)mi_atomic_load_acquire((_Atomic(uintptr_t) const*)(p))
+#define mi_atomic_load_ptr_relaxed(tp,p)                (tp*)mi_atomic_load_relaxed((_Atomic(uintptr_t) const*)(p))
 #define mi_atomic_store_ptr_release(tp,p,x)             mi_atomic_store_release((_Atomic(uintptr_t)*)(p),(uintptr_t)(x))
 #define mi_atomic_store_ptr_relaxed(tp,p,x)             mi_atomic_store_relaxed((_Atomic(uintptr_t)*)(p),(uintptr_t)(x))
 #define mi_atomic_cas_ptr_weak_release(tp,p,exp,des)    mi_atomic_cas_weak_release((_Atomic(uintptr_t)*)(p),(uintptr_t*)exp,(uintptr_t)des)
