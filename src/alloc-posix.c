@@ -61,14 +61,14 @@ int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept 
   if (alignment==0 || !_mi_is_power_of_two(alignment)) return EINVAL;  // not a power of 2
   void* q = mi_malloc_aligned(size, alignment);
   if (q==NULL && size != 0) return ENOMEM;
-  mi_assert_internal(((uintptr_t)q % alignment) == 0);
+  mi_assert_internal(_mi_is_aligned(q,alignment));
   *p = q;
   return 0;
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept {
   void* p = mi_malloc_aligned(size, alignment);
-  mi_assert_internal(((uintptr_t)p % alignment) == 0);
+  mi_assert_internal(_mi_is_aligned(p,alignment));
   return p;
 }
 
@@ -95,7 +95,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size
   */
   // C11 also requires alignment to be a power-of-two (and > 0) which is checked in mi_malloc_aligned
   void* p = mi_malloc_aligned(size, alignment);
-  mi_assert_internal(((uintptr_t)p % alignment) == 0);
+  mi_assert_internal(_mi_is_aligned(p,alignment));
   return p;
 }
 
