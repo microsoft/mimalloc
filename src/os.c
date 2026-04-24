@@ -327,12 +327,11 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
 
 // Primitive aligned allocation from the OS.
 // This function guarantees the allocated memory is aligned.
-static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** base) {
+static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid) {
+  mi_assert_internal(memid!=NULL);
   mi_assert_internal(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0));
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
-  mi_assert_internal(is_large != NULL);
-  mi_assert_internal(is_zero != NULL);
-  mi_assert_internal(base != NULL);
+  _mi_memzero(memid,sizeof(*memid));
   if (!commit) allow_large = false;
   if (!(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0))) return NULL;
   size = _mi_align_up(size, _mi_os_page_size());
@@ -340,14 +339,19 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
   // try a direct allocation if the alignment is below the default, or less than or equal to 1/4 fraction of the size.
   const bool try_direct_alloc = (alignment <= mi_os_mem_config.alloc_granularity || alignment <= size/4);
 
+  bool os_is_large = false;
+  bool os_is_zero = false;
+  void*  os_base = NULL;
+  size_t os_size = size;
   void* p = NULL;
   if (try_direct_alloc) {
-    p = mi_os_prim_alloc(size, alignment, commit, allow_large, is_large, is_zero);
+    p = mi_os_prim_alloc(size, alignment, commit, allow_large, &os_is_large, &os_is_zero);
   }
+  if (p == NULL) return NULL;
 
   // aligned already?
-  if (p != NULL && ((uintptr_t)p % alignment) == 0) {
-    *base = p;
+  if (p != NULL && _mi_is_aligned(p,alignment)) {
+    os_base = p;
   }
   else {
     // if not aligned, free it, overallocate, and unmap around it
@@ -362,43 +366,47 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
 
     if (!mi_os_mem_config.has_partial_free) {  // win32 virtualAlloc cannot free parts of an allocated block
       // over-allocate uncommitted (virtual) memory
-      p = mi_os_prim_alloc(over_size, 1 /*alignment*/, false /* commit? */, false /* allow_large */, is_large, is_zero);
+      p = mi_os_prim_alloc(over_size, 1 /*alignment*/, false /* commit? */, false /* allow_large */, &os_is_large, &os_is_zero);
       if (p == NULL) return NULL;
 
       // set p to the aligned part in the full region
-      // note: on Windows VirtualFree needs the actual base pointer
-      // this is handledby having the `base` field in the memid.
-      *base = p; // remember the base
+      // note: Windows VirtualFree needs the actual base pointer
+      // this is handled though by having the `base` field in the memid
+      os_base = p; // remember the base
+      os_size = over_size;
       p = _mi_align_up_ptr(p, alignment);
 
       // explicitly commit only the aligned part
       if (commit) {
         if (!_mi_os_commit(p, size, NULL)) {
-          mi_os_prim_free(*base, over_size, 0, NULL);
+          mi_os_prim_free(os_base, over_size, 0, NULL);
           return NULL;
         }
       }
     }
     else  { // mmap can free inside an allocation
       // overallocate...
-      p = mi_os_prim_alloc(over_size, 1, commit, false, is_large, is_zero);
+      p = mi_os_prim_alloc(over_size, 1, commit, false, &os_is_large, &os_is_zero);
       if (p == NULL) return NULL;
 
       // and selectively unmap parts around the over-allocated area.
-      void* aligned_p = _mi_align_up_ptr(p, alignment);
-      size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
-      size_t mid_size = _mi_align_up(size, _mi_os_page_size());
-      size_t post_size = over_size - pre_size - mid_size;
+      void* const aligned_p = _mi_align_up_ptr(p, alignment);
+      const size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
+      const size_t mid_size = _mi_align_up(size, _mi_os_page_size());
+      const size_t post_size = over_size - pre_size - mid_size;
       mi_assert_internal(pre_size < over_size&& post_size < over_size&& mid_size >= size);
       if (pre_size > 0)  { mi_os_prim_free(p, pre_size, (commit ? pre_size : 0), NULL); }
       if (post_size > 0) { mi_os_prim_free((uint8_t*)aligned_p + mid_size, post_size, (commit ? post_size : 0), NULL); }
       // we can return the aligned pointer on `mmap` systems
       p = aligned_p;
-      *base = aligned_p; // since we freed the pre part, `*base == p`.
+      os_base = aligned_p; // since we freed the pre part, `*base == p`.
+      os_size = mid_size;
     }
   }
 
-  mi_assert_internal(p == NULL || (p != NULL && *base != NULL && ((uintptr_t)p % alignment) == 0));
+  mi_assert_internal(p != NULL && os_base != NULL && _mi_is_aligned(p,alignment));
+  mi_assert_internal(os_base <= p && size <= os_size);
+  *memid = _mi_memid_create_os(os_base,os_size,commit,os_is_zero,os_is_large);
   return p;
 }
 
@@ -430,15 +438,8 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   size = _mi_os_good_alloc_size(size);
   alignment = _mi_align_up(alignment, _mi_os_page_size());
 
-  bool os_is_large = false;
-  bool os_is_zero  = false;
-  void* os_base = NULL;
-  void* p = mi_os_prim_alloc_aligned(size, alignment, commit, allow_large, &os_is_large, &os_is_zero, &os_base );
+  void* p = mi_os_prim_alloc_aligned(size, alignment, commit, allow_large, memid );
   if (p == NULL) return NULL;
-
-  *memid = _mi_memid_create_os(p, size, commit, os_is_zero, os_is_large);
-  memid->mem.os.base = os_base;
-  memid->mem.os.size += ((uint8_t*)p - (uint8_t*)os_base);  // todo: return from prim_alloc_aligned?
 
   mi_assert_internal(memid->mem.os.size >= size);
   mi_assert_internal(_mi_is_aligned(p,alignment));

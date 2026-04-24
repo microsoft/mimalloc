@@ -220,7 +220,9 @@ mi_decl_cache_align mi_heap_t heap_main
 mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main = NULL;
 
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
-  return _mi_prim_thread_id();
+  mi_threadid_t tid = _mi_prim_thread_id();
+  mi_assert_internal( (tid & 0x03) == 0 ); // mimalloc reserves the bottom 2 bits
+  return tid;
 }
 
 #if MI_TLS_MODEL_THREAD_LOCAL
