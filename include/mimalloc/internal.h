@@ -378,8 +378,7 @@ static inline bool _mi_is_power_of_two(uintptr_t x) {
 
 // Is a pointer aligned?
 static inline bool _mi_is_aligned(void* p, size_t alignment) {
-  mi_assert_internal(alignment != 0);
-  return (((uintptr_t)p % alignment) == 0);
+  return (alignment==0 || ((uintptr_t)p % alignment) == 0);
 }
 
 // Align upwards
