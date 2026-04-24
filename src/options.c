@@ -338,33 +338,39 @@ static void mi_cdecl mi_out_stderr(const char* msg, void* arg) {
 #endif
 static char out_buf[MI_MAX_DELAY_OUTPUT+1];
 static _Atomic(size_t) out_len;
+static mi_lock_t out_buf_lock = MI_LOCK_INITIALIZER;
 
 static void mi_cdecl mi_out_buf(const char* msg, void* arg) {
   MI_UNUSED(arg);
   if (msg==NULL) return;
-  if (mi_atomic_load_relaxed(&out_len)>=MI_MAX_DELAY_OUTPUT) return;
+  if (mi_atomic_load_acquire(&out_len)>=MI_MAX_DELAY_OUTPUT) return;
   size_t n = _mi_strlen(msg);
-  if (n==0) return;
-  // claim space
-  size_t start = mi_atomic_add_acq_rel(&out_len, n);
-  if (start >= MI_MAX_DELAY_OUTPUT) return;
-  // check bound
-  if (start+n >= MI_MAX_DELAY_OUTPUT) {
-    n = MI_MAX_DELAY_OUTPUT-start-1;
+  if (n==0 || n >= MI_MAX_DELAY_OUTPUT) return;
+  // copy msg into the buffer
+  mi_lock(&out_buf_lock) {
+    const size_t start = mi_atomic_add_acq_rel(&out_len, n);
+    if (start < MI_MAX_DELAY_OUTPUT) {
+      // check bound
+      if (start+n >= MI_MAX_DELAY_OUTPUT) {
+        n = MI_MAX_DELAY_OUTPUT-start-1;
+      }
+      _mi_memcpy(&out_buf[start], msg, n);
+    }
   }
-  _mi_memcpy(&out_buf[start], msg, n);
 }
 
 static void mi_out_buf_flush(mi_output_fun* out, bool no_more_buf, void* arg) {
   if (out==NULL) return;
   // claim (if `no_more_buf == true`, no more output will be added after this point)
-  size_t count = mi_atomic_add_acq_rel(&out_len, (no_more_buf ? MI_MAX_DELAY_OUTPUT : 1));
-  // and output the current contents
-  if (count>MI_MAX_DELAY_OUTPUT) count = MI_MAX_DELAY_OUTPUT;
-  out_buf[count] = 0;
-  out(out_buf,arg);
-  if (!no_more_buf) {
-    out_buf[count] = '\n'; // if continue with the buffer, insert a newline
+  mi_lock(&out_buf_lock) {
+    size_t count = mi_atomic_add_acq_rel(&out_len, (no_more_buf ? MI_MAX_DELAY_OUTPUT : 1));
+    // and output the current contents
+    if (count>MI_MAX_DELAY_OUTPUT) count = MI_MAX_DELAY_OUTPUT;
+    out_buf[count] = 0;
+    out(out_buf,arg);
+    if (!no_more_buf) {
+      out_buf[count] = '\n'; // if continue with the buffer, insert a newline
+    }
   }
 }
 
