@@ -604,6 +604,7 @@ static mi_theap_t* _mi_thread_init_theap_default(void) {
     // note: we cannot access thread-locals yet as that can cause (recursive) allocation
     // (on macOS <= 14 for example where the loader allocates thread-local data on demand).
     mi_tld_t* tld = mi_tld_alloc();
+    if (tld==NULL) return NULL;  // things are very wrong if this fails (out of memory)
     // allocate and initialize the theap for the main heap
     theap = _mi_theap_create(mi_heap_main(), tld);
   }
@@ -707,7 +708,7 @@ void mi_thread_init(void) mi_attr_noexcept
   if (_mi_thread_is_initialized()) return;
 
   // initialize the default theap
-  _mi_thread_init_theap_default();
+  if (_mi_thread_init_theap_default() == NULL) return; // out-of-memory on tld/theap allocation
 
   mi_heap_stat_increase(mi_heap_main(), threads, 1);
   // _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
