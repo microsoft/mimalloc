@@ -331,7 +331,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
   mi_assert_internal(memid!=NULL);
   mi_assert_internal(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0));
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
-  _mi_memzero(memid,sizeof(*memid));
+  *memid = _mi_memid_none();
   if (!commit) allow_large = false;
   if (!(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0))) return NULL;
   size = _mi_align_up(size, _mi_os_page_size());
@@ -347,7 +347,6 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
   if (try_direct_alloc) {
     p = mi_os_prim_alloc(size, alignment, commit, allow_large, &os_is_large, &os_is_zero);
   }
-  if (p == NULL) return NULL;
 
   // aligned already?
   if (p != NULL && _mi_is_aligned(p,alignment)) {
