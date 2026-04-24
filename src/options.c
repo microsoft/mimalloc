@@ -388,28 +388,29 @@ static void mi_cdecl mi_out_buf_stderr(const char* msg, void* arg) {
 // Default output handler
 // --------------------------------------------------------
 
-// Should be atomic but gives errors on many platforms as generally we cannot cast a function pointer to a uintptr_t.
-// For now, don't register output from multiple threads.
-static mi_output_fun* volatile mi_out_default; // = NULL
+// The program should only install a single output handler from a single thread
+// since otherwise the argument and output function may not match.
+static _Atomic(void*) mi_out_default; // = // is `mi_output_fun*` (but some platforms don't support atomic function pointers)
 static _Atomic(void*) mi_out_arg; // = NULL
 
 static mi_output_fun* mi_out_get_default(void** parg) {
+  mi_output_fun* const out = (mi_output_fun*)mi_atomic_load_ptr_acquire(void,&mi_out_default);
   if (parg != NULL) { *parg = mi_atomic_load_ptr_acquire(void,&mi_out_arg); }
-  mi_output_fun* out = mi_out_default;
   return (out == NULL ? &mi_out_buf : out);
 }
 
 void mi_register_output(mi_output_fun* out, void* arg) mi_attr_noexcept {
-  mi_out_default = (out == NULL ? &mi_out_stderr : out); // stop using the delayed output buffer
+  mi_atomic_store_ptr_release(void,&mi_out_default, (void*)(out == NULL ? &mi_out_stderr : out)); // stop using the delayed output buffer
   mi_atomic_store_ptr_release(void,&mi_out_arg, arg);
-  if (out!=NULL) mi_out_buf_flush(out,true,arg);         // output all the delayed output now
+  if (out!=NULL) { mi_out_buf_flush(out,true,arg); }        // output all the delayed output now
 }
 
 // add stderr to the delayed output after the module is loaded
 static void mi_add_stderr_output(void) {
   mi_assert_internal(mi_out_default == NULL);
   mi_out_buf_flush(&mi_out_stderr, false, NULL); // flush current contents to stderr
-  mi_out_default = &mi_out_buf_stderr;           // and add stderr to the delayed output
+  mi_atomic_store_ptr_release(void,&mi_out_default,(void*)&mi_out_buf_stderr);  // and add stderr to the delayed output
+  mi_atomic_store_ptr_release(void,&mi_out_arg,NULL);
 }
 
 // --------------------------------------------------------
