@@ -347,7 +347,7 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t a
 // Used for example for separate interpreters in one process.
 // ------------------------------------------------------
 
-typedef void* mi_subproc_id_t;                        
+typedef struct { void* _mi_subproc_id; } mi_subproc_id_t;  // abstract type
 mi_decl_export mi_subproc_id_t mi_subproc_main(void);
 mi_decl_export mi_subproc_id_t mi_subproc_current(void);
 mi_decl_export mi_subproc_id_t mi_subproc_new(void);

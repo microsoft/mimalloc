@@ -466,19 +466,29 @@ bool _mi_is_theap_main(const mi_theap_t* theap) {
   Sub process
 ----------------------------------------------------------- */
 
+
+mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
+  return (mi_subproc_t*)(subproc_id._mi_subproc_id);
+}
+
+mi_subproc_id_t _mi_subproc_to_id(mi_subproc_t* subproc) {
+  mi_subproc_id_t id = { subproc };
+  return id;
+}
+
 mi_subproc_id_t mi_subproc_main(void) {
-  return _mi_subproc_main();
+  return _mi_subproc_to_id(_mi_subproc_main());
 }
 
 mi_subproc_id_t mi_subproc_current(void) {
-  return _mi_subproc();
+  return _mi_subproc_to_id(_mi_subproc());
 }
 
 mi_subproc_id_t mi_subproc_new(void) {
   static _Atomic(size_t) subproc_total_count;
   mi_memid_t memid;
   mi_subproc_t* subproc = (mi_subproc_t*)_mi_meta_zalloc(sizeof(mi_subproc_t),&memid);
-  if (subproc == NULL) return NULL;
+  if (subproc == NULL) return _mi_subproc_to_id(NULL);
   subproc->memid = memid;
   subproc->subproc_seq = mi_atomic_increment_relaxed(&subproc_total_count) + 1;
   mi_lock_init(&subproc->arena_reserve_lock);
@@ -489,16 +499,14 @@ mi_subproc_id_t mi_subproc_new(void) {
     if (subprocs!=NULL) { subprocs->prev = subproc; }
     subprocs = subproc;
   }
-  return subproc;
-}
-
-mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
-  return (subproc_id == NULL ? &subproc_main : (mi_subproc_t*)subproc_id);
+  return _mi_subproc_to_id(subproc);
 }
 
 // destroy all subproc resources including arena's, heap's etc.
 static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subprocs_lock)
 {
+  if (subproc==NULL) return;
+
   // remove from the subproc list
   mi_lock_maybe(&subprocs_lock, acquire_subprocs_lock) {
     if (subproc->next!=NULL) { subproc->next->prev = subproc->prev;  }
@@ -540,8 +548,9 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
 }
 
 void mi_subproc_destroy(mi_subproc_id_t subproc_id) {
-  if (subproc_id == NULL) return;
-  mi_subproc_unsafe_destroy(_mi_subproc_from_id(subproc_id), true /* take lock */);
+  mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
+  if (subproc==NULL || subproc==&subproc_main) return;
+  mi_subproc_unsafe_destroy(subproc, true /* take lock */);
 }
 
 static void mi_subprocs_unsafe_destroy_all(void) {
@@ -1175,7 +1184,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   
   // careful now to no longer access any allocator functionality 
   if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
-    mi_subproc_stats_print_out(NULL, NULL, NULL);
+    mi_subproc_stats_print_out(mi_subproc_main(), NULL, NULL);
   }
   mi_lock_done(&subprocs_lock);
   mi_tls_slots_done();
