@@ -181,6 +181,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   theap->refcount = 1;
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
   mi_atomic_store_ptr_relaxed(mi_heap_t,&theap->heap,heap);
+  mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
   
   _mi_theap_options_init(theap);
   if (theap->tld->is_in_threadpool) {

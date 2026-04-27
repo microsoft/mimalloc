@@ -118,7 +118,7 @@ mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
   heap->heap_seq = mi_atomic_increment_relaxed(&heap_main->subproc->heap_total_count);
   heap->exclusive_arena = _mi_arena_from_id(exclusive_arena_id);
   heap->numa_node = -1; // no initial affinity
-
+  mi_stats_header_init(&heap->stats);
   mi_lock_init(&heap->theaps_lock);
   mi_lock_init(&heap->os_abandoned_pages_lock);
   mi_lock_init(&heap->arena_pages_lock);

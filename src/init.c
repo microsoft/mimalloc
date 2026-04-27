@@ -67,17 +67,11 @@ const mi_page_t _mi_page_empty = {
 #define MI_STAT_COUNT_NULL()  {0,0,0}
 
 // Empty statistics
+#define MI_STAT_COUNT(stat)     {0,0,0},
+#define MI_STAT_COUNTER(stat)   {0},
+
 #define MI_STATS_NULL  \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  { 0 }, { 0 }, \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), MI_STAT_COUNT_NULL(), \
-  { 0 }, { 0 }, { 0 }, { 0 }, \
-  { 0 }, { 0 }, { 0 }, { 0 }, \
-  \
-  { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
-  MI_INIT6(MI_STAT_COUNT_NULL), \
-  { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, \
+  MI_STAT_FIELDS() \
   \
   { MI_INIT4(MI_STAT_COUNT_NULL) }, \
   { { 0 }, { 0 }, { 0 }, { 0 } }, \
@@ -97,9 +91,9 @@ const mi_page_t _mi_page_empty = {
 
 static mi_decl_cache_align mi_subproc_t subproc_main
 #if __cplusplus
-= { };     // empty initializer to prevent running the constructor (with msvc)
+  = { };     // empty initializer to prevent running the constructor (with msvc)
 #else
-= { 0 };   // C zero initialize
+  = { 0 };   // C zero initialize
 #endif
 
 static mi_subproc_t* subprocs = &subproc_main;
@@ -236,6 +230,10 @@ bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
 mi_stats_t _mi_stats_main = { sizeof(mi_stats_t), MI_STAT_VERSION, MI_STATS_NULL };
 
+#undef MI_STAT_COUNT
+#undef MI_STAT_COUNTER
+
+
 #if MI_GUARDED
 mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed) {
   theap->guarded_sample_rate  = sample_rate;
@@ -290,6 +288,7 @@ static void mi_subproc_main_init(void) {
     subproc_main.heap_count = 1;
     mi_atomic_store_ptr_release(mi_heap_t, &subproc_main.heap_main, &heap_main);
     __mi_stat_increase_mt(&subproc_main.stats.heaps, 1);
+    mi_stats_header_init(&subproc_main.stats);
     mi_lock_init(&subproc_main.arena_reserve_lock);
     mi_lock_init(&subproc_main.heaps_lock);
     mi_lock_init(&subprocs_lock);
@@ -491,6 +490,7 @@ mi_subproc_id_t mi_subproc_new(void) {
   if (subproc == NULL) return _mi_subproc_to_id(NULL);
   subproc->memid = memid;
   subproc->subproc_seq = mi_atomic_increment_relaxed(&subproc_total_count) + 1;
+  mi_stats_header_init(&subproc->stats);
   mi_lock_init(&subproc->arena_reserve_lock);
   mi_lock_init(&subproc->heaps_lock);
   mi_lock(&subprocs_lock) {
