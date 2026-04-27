@@ -313,7 +313,7 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(!mi_page_all_free(page));
-  mi_assert_internal(page->block_size <= MI_SMALL_SIZE_MAX);
+  mi_assert_internal(page->block_size <= MI_MEDIUM_MAX_OBJ_SIZE);
   mi_assert_internal(reclaim_on_free >= 0);
 
   // dont reclaim if we just have terminated this thread and we should
@@ -380,7 +380,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
 
   // try to: 1. free it, 2. reclaim it, or 3. reabandon it to be mapped
   if (mi_abandoned_page_try_free(page)) return;
-  if (page->block_size <= MI_SMALL_SIZE_MAX && reclaim_on_free >= 0) {  // early test for better codegen
+  if (page->block_size <= MI_MEDIUM_MAX_OBJ_SIZE && reclaim_on_free >= 0) {  // early test for better codegen
     if (mi_abandoned_page_try_reclaim(page, reclaim_on_free)) return;
   }
   if (mi_abandoned_page_try_reabandon_to_mapped(page)) return;
