@@ -175,7 +175,7 @@ static mi_option_desc_t mi_options[_mi_option_last] =
          MI_OPTION_UNINIT, MI_OPTION(page_cross_thread_max_reclaim) }, // don't reclaim (small) pages across threads if we already own N pages in that size class
   { MI_DEFAULT_ALLOW_THP,
          MI_OPTION_UNINIT, MI_OPTION(allow_thp) },                // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(minimal_purge_size) },       // set minimal purge size (in KiB) (=0). By default set to either 64 or 2048 if THP is enabled.
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(minimal_purge_size) },       // set minimal purge size (in KiB) (=0). Using 0 resolves to either 64 (or 2048 if `mi_option_allow_thp==2`).
   { MI_DEFAULT_ARENA_MAX_OBJECT_SIZE,   
          MI_OPTION_UNINIT, MI_OPTION(arena_max_object_size) },    // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit). 
 };
