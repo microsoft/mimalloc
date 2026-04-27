@@ -229,7 +229,7 @@ int _mi_prim_free(void* addr, size_t size ) {
 // mmap
 //---------------------------------------------
 
-// return errno on failure 
+// return errno on failure
 static int unix_madvise(void* addr, size_t size, int advice) {
   #if defined(__sun)
   const int res = madvise((caddr_t)addr, size, advice);  // Solaris needs cast (issue #520)
@@ -419,10 +419,6 @@ int _mi_prim_alloc(void* hint_addr, size_t size, size_t try_alignment, bool comm
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(commit || !allow_large);
   mi_assert_internal(try_alignment > 0);
-  if (hint_addr == NULL && size >= 8*MI_UNIX_LARGE_PAGE_SIZE && try_alignment > 1 && _mi_is_power_of_two(try_alignment) && try_alignment < MI_UNIX_LARGE_PAGE_SIZE) {
-    try_alignment = MI_UNIX_LARGE_PAGE_SIZE; // try to align along large page size for larger allocations
-  }
-
   *is_zero = true;
   int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
   *addr = unix_mmap(hint_addr, size, try_alignment, protect_flags, false, allow_large, is_large);

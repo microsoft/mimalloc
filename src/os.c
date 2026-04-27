@@ -213,6 +213,13 @@ static void* mi_os_prim_alloc_at(void* hint_addr, size_t size, size_t try_alignm
   if (size == 0) return NULL;
   if (!commit) { allow_large = false; }
   if (try_alignment == 0) { try_alignment = 1; } // avoid 0 to ensure there will be no divide by zero when aligning
+  
+  // try to align along large OS page size for larger allocations
+  const size_t large_page_size = mi_os_mem_config.large_page_size;
+  if (large_page_size > 0 && hint_addr == NULL && size >= 8*large_page_size && _mi_is_power_of_two(try_alignment) && try_alignment < large_page_size) {
+    try_alignment = large_page_size; 
+  }
+
   *is_zero = false;
   void* p = NULL;
   int err = _mi_prim_alloc(hint_addr, size, try_alignment, commit, allow_large, is_large, is_zero, &p);
