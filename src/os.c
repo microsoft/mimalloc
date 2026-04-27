@@ -480,8 +480,7 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero) {
 
 static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit, size_t stat_size) {
   mi_assert_internal(needs_recommit!=NULL);
-  mi_os_stat_decrease(committed, stat_size);
-
+  
   // page align
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
@@ -492,6 +491,9 @@ static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit, siz
   int err = _mi_prim_decommit(start,csize,needs_recommit);
   if (err != 0) {
     _mi_warning_message("cannot decommit OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
+  }
+  else if (*needs_recommit) {   
+    mi_os_stat_decrease(committed, stat_size);
   }
   mi_assert_internal(err == 0);
   return (err == 0);
