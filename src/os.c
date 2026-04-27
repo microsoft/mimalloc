@@ -57,7 +57,7 @@ size_t _mi_os_minimal_purge_size(void) {
   if (minsize != 0) {
     return _mi_align_up(minsize, _mi_os_page_size());
   }
-  else if (mi_os_mem_config.has_transparent_huge_pages && mi_option_is_enabled(mi_option_allow_thp)) {
+  else if (mi_os_mem_config.has_transparent_huge_pages && mi_option_get(mi_option_allow_thp) == 2) {
     return _mi_os_large_page_size();
   }
   else {
@@ -131,15 +131,15 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   if (try_alignment <= mi_os_mem_config.alloc_granularity || try_alignment > MI_HINT_ALIGN) return NULL;
   if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
   size = _mi_align_up(size, MI_HINT_ALIGN);
-  if (size > 16*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at least 1/(MI_HINT_AREA / 1<<34) 
+  if (size > 16*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at least 1/(MI_HINT_AREA / 1<<34)
   size += MI_HINT_ALIGN;              // put in virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
-  
+
   uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     uintptr_t init = MI_HINT_BASE;
     #if (MI_SECURE>=1 || defined(NDEBUG))  // security: randomize start of aligned allocations unless in debug mode
     mi_theap_t* const theap = _mi_theap_default();     // don't use `mi_theap_get_default()` as that can cause allocation recursively (issue #1267)
-    if (!mi_theap_is_initialized(theap)) return NULL;  // no hint as we lack randomness at this point 
+    if (!mi_theap_is_initialized(theap)) return NULL;  // no hint as we lack randomness at this point
     const uintptr_t r = _mi_theap_random_next(theap);
     init = init + ((MI_HINT_ALIGN * ((r>>17) & 0xFFFFF)) % MI_HINT_AREA);  // (randomly 20 bits)*4MiB == 0 to 4TiB
     #endif
@@ -157,7 +157,7 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
    return NULL;
 }
 #endif
- 
+
 
 /* -----------------------------------------------------------
   Guard page allocation
@@ -298,11 +298,11 @@ static void* mi_os_prim_alloc_at(void* hint_addr, size_t size, size_t try_alignm
   if (size == 0) return NULL;
   if (!commit) { allow_large = false; }
   if (try_alignment == 0) { try_alignment = 1; } // avoid 0 to ensure there will be no divide by zero when aligning
-  
+
   // try to align along large OS page size for larger allocations
   const size_t large_page_size = mi_os_mem_config.large_page_size;
   if (large_page_size > 0 && hint_addr == NULL && size >= 8*large_page_size && _mi_is_power_of_two(try_alignment) && try_alignment < large_page_size) {
-    try_alignment = large_page_size; 
+    try_alignment = large_page_size;
   }
 
   *is_zero = false;
@@ -575,7 +575,7 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero) {
 
 static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit, size_t stat_size) {
   mi_assert_internal(needs_recommit!=NULL);
-  
+
   // page align
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
@@ -587,7 +587,7 @@ static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit, siz
   if (err != 0) {
     _mi_warning_message("cannot decommit OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
-  else if (*needs_recommit) {   
+  else if (*needs_recommit) {
     mi_os_stat_decrease(committed, stat_size);
   }
   mi_assert_internal(err == 0);
