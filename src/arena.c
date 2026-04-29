@@ -399,7 +399,7 @@ static size_t mi_arena_start_idx(mi_heap_t* heap, size_t tseq, size_t arena_cycl
   const size_t hseq   = heap->heap_seq;
   const size_t hcount = mi_atomic_load_relaxed(&heap->subproc->heap_count);
   if (arena_cycle <= 1)     return 0;
-  if (hseq==0 || hcount<=1) return (tseq % arena_cycle); // common for single heap programs
+  if (hseq==0 || hcount<=1 || arena_cycle > 0x8FF) return (tseq % arena_cycle); // common for single heap programs
 
   // spread heaps evenly among arena's, and then evenly for threads in their fraction
   size_t start;
@@ -410,8 +410,8 @@ static size_t mi_arena_start_idx(mi_heap_t* heap, size_t tseq, size_t arena_cycl
     start = (hseq % arena_cycle);
   }
   else {
-    const size_t hspot = (hseq % hcount);
-    start = (frac * hspot) / 256;
+    const size_t hspot = (hseq % hcount);  
+    start = (frac * hspot) / 256;           // (arena_cycle * (hseq % hcount)) / hcount
     if (frac >= 512) {  // at least 2 arena's per heap?
       start = start + (tseq % (frac/256));
     }
@@ -1537,7 +1537,12 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
   arena->is_exclusive = exclusive;
   arena->slice_count = slice_count;
   arena->info_slices = info_slices;
-  arena->numa_node = numa_node; // TODO: or get the current numa node if -1? (now it allows anyone to allocate on -1)
+  if (numa_node<0 && mi_option_is_enabled(mi_option_arena_is_numa_local)) {
+    arena->numa_node = _mi_os_numa_node();
+  }
+  else {
+    arena->numa_node = numa_node;
+  }
   arena->purge_expire = 0;
   arena->commit_fun = commit_fun;
   arena->commit_fun_arg = commit_fun_arg;
