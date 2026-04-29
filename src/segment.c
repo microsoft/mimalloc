@@ -693,7 +693,7 @@ static mi_slice_t* mi_segment_span_free_coalesce(mi_slice_t* slice, mi_segments_
   }
 
   // otherwise coalesce the span and add to the free span queues
-  const bool is_abandoned = (segment->thread_id == 0); // mi_segment_is_abandoned(segment);
+  const bool is_abandoned = mi_segment_is_abandoned(segment);
   size_t slice_count = slice->slice_count;
   mi_slice_t* next = slice + slice->slice_count;
   mi_assert_internal(next <= mi_segment_slices_end(segment));
