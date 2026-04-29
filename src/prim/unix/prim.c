@@ -229,15 +229,17 @@ int _mi_prim_free(void* addr, size_t size ) {
 // mmap
 //---------------------------------------------
 
+// return errno on failure
 static int unix_madvise(void* addr, size_t size, int advice) {
   #if defined(__sun)
-  int res = madvise((caddr_t)addr, size, advice);  // Solaris needs cast (issue #520)
-  #elif defined(__QNX__)
-  int res = posix_madvise(addr, size, advice);
-  #else
-  int res = madvise(addr, size, advice);
-  #endif
+  const int res = madvise((caddr_t)addr, size, advice);  // Solaris needs cast (issue #520)
   return (res==0 ? 0 : errno);
+  #elif defined(__QNX__)
+  return posix_madvise(addr, size, advice);              // posix returns errno
+  #else
+  const int res = madvise(addr, size, advice);           // linux returns -1 on failure and sets errno
+  return (res==0 ? 0 : errno);
+  #endif
 }
 
 static void* unix_mmap_prim(void* addr, size_t size, int protect_flags, int flags, int fd) {
@@ -417,10 +419,6 @@ int _mi_prim_alloc(void* hint_addr, size_t size, size_t try_alignment, bool comm
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
   mi_assert_internal(commit || !allow_large);
   mi_assert_internal(try_alignment > 0);
-  if (hint_addr == NULL && size >= 8*MI_UNIX_LARGE_PAGE_SIZE && try_alignment > 1 && _mi_is_power_of_two(try_alignment) && try_alignment < MI_UNIX_LARGE_PAGE_SIZE) {
-    try_alignment = MI_UNIX_LARGE_PAGE_SIZE; // try to align along large page size for larger allocations
-  }
-
   *is_zero = true;
   int protect_flags = (commit ? (PROT_WRITE | PROT_READ) : PROT_NONE);
   *addr = unix_mmap(hint_addr, size, try_alignment, protect_flags, false, allow_large, is_large);
@@ -510,8 +508,8 @@ int _mi_prim_reset(void* start, size_t size) {
   // default `MADV_DONTNEED` is used though.
   static _Atomic(size_t) advice = MI_ATOMIC_VAR_INIT(MADV_FREE);
   int oadvice = (int)mi_atomic_load_relaxed(&advice);
-  while ((err = unix_madvise(start, size, oadvice)) != 0 && errno == EAGAIN) { errno = 0;  };
-  if (err != 0 && errno == EINVAL && oadvice == MADV_FREE) {
+  while ((err = unix_madvise(start, size, oadvice)) != 0 && err == EAGAIN) { /* try again */ };
+  if (err == EINVAL && oadvice == MADV_FREE) {
     // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
     mi_atomic_store_release(&advice, (size_t)MADV_DONTNEED);
     err = unix_madvise(start, size, MADV_DONTNEED);

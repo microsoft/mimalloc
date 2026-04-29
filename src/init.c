@@ -144,7 +144,9 @@ mi_decl_cache_align static const mi_tld_t tld_empty = {
 };
 
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
-  return _mi_prim_thread_id();
+  mi_threadid_t tid = _mi_prim_thread_id();
+  mi_assert_internal( (tid & 0x03) == 0 ); // mimalloc reserves the bottom 2 bits
+  return tid;
 }
 
 // the thread-local default heap for allocation
@@ -273,6 +275,7 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
 void mi_subproc_delete(mi_subproc_id_t subproc_id) {
   if (subproc_id == NULL) return;
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
+  if (subproc==NULL) return;
   // check if there are no abandoned segments still..
   bool safe_to_delete = false;
   mi_lock(&subproc->abandoned_os_lock) {
@@ -481,11 +484,10 @@ static bool _mi_thread_heap_done(mi_heap_t* heap) {
 
 // Set up handlers so `mi_thread_done` is called automatically
 static void mi_process_setup_auto_thread_done(void) {
-  static bool tls_initialized = false; // fine if it races
-  if (tls_initialized) return;
-  tls_initialized = true;
-  _mi_prim_thread_init_auto_done();
-  _mi_heap_set_default_direct(&_mi_heap_main);
+  mi_atomic_do_once {
+    _mi_prim_thread_init_auto_done();
+    _mi_heap_set_default_direct(&_mi_heap_main);
+  }
 }
 
 

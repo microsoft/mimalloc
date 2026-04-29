@@ -213,6 +213,13 @@ static void* mi_os_prim_alloc_at(void* hint_addr, size_t size, size_t try_alignm
   if (size == 0) return NULL;
   if (!commit) { allow_large = false; }
   if (try_alignment == 0) { try_alignment = 1; } // avoid 0 to ensure there will be no divide by zero when aligning
+  
+  // try to align along large OS page size for larger allocations
+  const size_t large_page_size = mi_os_mem_config.large_page_size;
+  if (large_page_size > 0 && hint_addr == NULL && size >= 8*large_page_size && _mi_is_power_of_two(try_alignment) && try_alignment < large_page_size) {
+    try_alignment = large_page_size; 
+  }
+
   *is_zero = false;
   void* p = NULL;
   int err = _mi_prim_alloc(hint_addr, size, try_alignment, commit, allow_large, is_large, is_zero, &p);
@@ -244,23 +251,26 @@ static void* mi_os_prim_alloc(size_t size, size_t try_alignment, bool commit, bo
 
 // Primitive aligned allocation from the OS.
 // This function guarantees the allocated memory is aligned.
-static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** base) {
+static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid) {
+  mi_assert_internal(memid!=NULL);
   mi_assert_internal(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0));
   mi_assert_internal(size > 0 && (size % _mi_os_page_size()) == 0);
-  mi_assert_internal(is_large != NULL);
-  mi_assert_internal(is_zero != NULL);
-  mi_assert_internal(base != NULL);
+  _mi_memzero(memid,sizeof(*memid));
   if (!commit) allow_large = false;
   if (!(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0))) return NULL;
   size = _mi_align_up(size, _mi_os_page_size());
 
   // try first with a requested alignment hint (this will usually be aligned directly on Win 10+ or BSD)
-  void* p = mi_os_prim_alloc(size, alignment, commit, allow_large, is_large, is_zero);
+  bool os_is_large = false;
+  bool os_is_zero = false;
+  void* os_base = NULL;
+  size_t os_size = size;
+  void* p = mi_os_prim_alloc(size, alignment, commit, allow_large, &os_is_large, &os_is_zero);
   if (p == NULL) return NULL;
 
   // aligned already?
   if (((uintptr_t)p % alignment) == 0) {
-    *base = p;
+    os_base = p;
   }
   else {
     // if not aligned, free it, overallocate, and unmap around it
@@ -273,43 +283,47 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
 
     if (!mi_os_mem_config.has_partial_free) {  // win32 virtualAlloc cannot free parts of an allocated block
       // over-allocate uncommitted (virtual) memory
-      p = mi_os_prim_alloc(over_size, 1 /*alignment*/, false /* commit? */, false /* allow_large */, is_large, is_zero);
+      p = mi_os_prim_alloc(over_size, 1 /*alignment*/, false /* commit? */, false /* allow_large */, &os_is_large, &os_is_zero);
       if (p == NULL) return NULL;
 
       // set p to the aligned part in the full region
       // note: this is dangerous on Windows as VirtualFree needs the actual base pointer
       // this is handled though by having the `base` field in the memid's
-      *base = p; // remember the base
+      os_base = p; // remember the base
+      os_size = over_size;
       p = _mi_align_up_ptr(p, alignment);
 
       // explicitly commit only the aligned part
       if (commit) {
         if (!_mi_os_commit(p, size, NULL)) {
-          mi_os_prim_free(*base, over_size, 0);
+          mi_os_prim_free(os_base, over_size, 0);
           return NULL;
         }
       }
     }
     else  { // mmap can free inside an allocation
       // overallocate...
-      p = mi_os_prim_alloc(over_size, 1, commit, false, is_large, is_zero);
+      p = mi_os_prim_alloc(over_size, 1, commit, false, &os_is_large, &os_is_zero);
       if (p == NULL) return NULL;
 
       // and selectively unmap parts around the over-allocated area.
-      void* aligned_p = _mi_align_up_ptr(p, alignment);
-      size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
-      size_t mid_size = _mi_align_up(size, _mi_os_page_size());
-      size_t post_size = over_size - pre_size - mid_size;
+      void* const aligned_p = _mi_align_up_ptr(p, alignment);
+      const size_t pre_size = (uint8_t*)aligned_p - (uint8_t*)p;
+      const size_t mid_size = _mi_align_up(size, _mi_os_page_size());
+      const size_t post_size = over_size - pre_size - mid_size;
       mi_assert_internal(pre_size < over_size&& post_size < over_size&& mid_size >= size);
       if (pre_size > 0)  { mi_os_prim_free(p, pre_size, (commit ? pre_size : 0)); }
       if (post_size > 0) { mi_os_prim_free((uint8_t*)aligned_p + mid_size, post_size, (commit ? post_size : 0)); }
       // we can return the aligned pointer on `mmap` systems
       p = aligned_p;
-      *base = aligned_p; // since we freed the pre part, `*base == p`.
+      os_base = aligned_p; // since we freed the pre part, `*base == p`.
+      os_size = mid_size;
     }
   }
 
-  mi_assert_internal(p == NULL || (p != NULL && *base != NULL && ((uintptr_t)p % alignment) == 0));
+  mi_assert_internal(p != NULL && os_base != NULL && _mi_is_aligned(p,alignment));
+  mi_assert_internal(os_base <= p && size <= os_size);
+  *memid = _mi_memid_create_os(os_base,os_size,commit,os_is_zero,os_is_large);
   return p;
 }
 
@@ -341,15 +355,8 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   size = _mi_os_good_alloc_size(size);
   alignment = _mi_align_up(alignment, _mi_os_page_size());
 
-  bool os_is_large = false;
-  bool os_is_zero  = false;
-  void* os_base = NULL;
-  void* p = mi_os_prim_alloc_aligned(size, alignment, commit, allow_large, &os_is_large, &os_is_zero, &os_base );
+  void* p = mi_os_prim_alloc_aligned(size, alignment, commit, allow_large, memid );
   if (p == NULL) return NULL;
-
-  *memid = _mi_memid_create_os(p, size, commit, os_is_zero, os_is_large);
-  memid->mem.os.base = os_base;
-  memid->mem.os.size += ((uint8_t*)p - (uint8_t*)os_base);  // todo: return from prim_alloc_aligned?
 
   mi_assert_internal(memid->mem.os.size >= size);
   mi_assert_internal(_mi_is_aligned(p,alignment));
@@ -394,7 +401,7 @@ void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offse
   mi_assert(offset <= size);
   mi_assert((alignment % _mi_os_page_size()) == 0);
   *memid = _mi_memid_none();
-  if (offset > MI_SEGMENT_SIZE) return NULL;
+  if (offset > MI_SEGMENT_SIZE || offset > size) return NULL;
   if (offset == 0) {
     // regular aligned allocation
     return _mi_os_alloc_aligned(size, alignment, commit, allow_large, memid);
@@ -402,6 +409,7 @@ void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offse
   else {
     // overallocate to align at an offset
     const size_t extra = _mi_align_up(offset, alignment) - offset;
+    if (size >= SIZE_MAX - extra) return NULL;  // too large
     const size_t oversize = size + extra;
     void* const start = _mi_os_alloc_aligned(oversize, alignment, commit, allow_large, memid);
     if (start == NULL) return NULL;
@@ -409,7 +417,7 @@ void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offse
     void* const p = (uint8_t*)start + extra;
     mi_assert(_mi_is_aligned((uint8_t*)p + offset, alignment));
     // decommit the overallocation at the start
-    if (commit && extra > _mi_os_page_size()) {
+    if (commit && extra >= _mi_os_page_size()) {
       _mi_os_decommit(start, extra);
     }
     return p;
@@ -479,8 +487,7 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero) {
 
 static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit, size_t stat_size) {
   mi_assert_internal(needs_recommit!=NULL);
-  mi_os_stat_decrease(committed, stat_size);
-
+  
   // page align
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
@@ -491,6 +498,9 @@ static bool mi_os_decommit_ex(void* addr, size_t size, bool* needs_recommit, siz
   int err = _mi_prim_decommit(start,csize,needs_recommit);
   if (err != 0) {
     _mi_warning_message("cannot decommit OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
+  }
+  else if (*needs_recommit) {   
+    mi_os_stat_decrease(committed, stat_size);
   }
   mi_assert_internal(err == 0);
   return (err == 0);

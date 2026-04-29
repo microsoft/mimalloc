@@ -61,12 +61,18 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
 
   size_t diff = (uint8_t*)p - page->page_start;
-  size_t adjust;
+  size_t adjust = 0;
   if mi_likely(page->block_size_shift != 0) {
     adjust = diff & (((size_t)1 << page->block_size_shift) - 1);
   }
   else {
-    adjust = diff % mi_page_block_size(page);
+    const size_t block_size = page->block_size;
+    if mi_likely(block_size != 0) {
+      adjust = diff % block_size;
+    }
+    else {
+      _mi_error_message(EFAULT, "reading from invalid page, possibly corrupted meta-data (address=%p, page=%p)\n", p, page);      
+    }
   }
 
   return (mi_block_t*)((uintptr_t)p - adjust);
@@ -144,7 +150,7 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
     }
   }
   #endif
-  #if (MI_DEBUG>0 || MI_SECURE>=4)
+  #if (MI_DEBUG>0 || MI_SECURE>=3)
   if mi_unlikely(_mi_ptr_cookie(segment) != segment->cookie) {
     _mi_error_message(EINVAL, "%s: pointer does not point to a valid heap space: %p\n", msg, p);
     return NULL;

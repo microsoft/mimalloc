@@ -274,6 +274,8 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
       const size_t stat_commit_size = commit_size - mi_arena_block_size(already_committed);
       bool commit_zero = false;
       if (!_mi_os_commit_ex(p, commit_size, &commit_zero, stat_commit_size)) {
+        // set all as uncommitted on commit failure
+        _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, needed_bcount, bitmap_index);
         memid->initially_committed = false;
       }
       else {
@@ -392,7 +394,7 @@ static bool mi_arena_reserve(size_t req_size, bool allow_large, mi_arena_id_t *a
 
   // commit eagerly?
   bool arena_commit = false;
-  if (mi_option_get(mi_option_arena_eager_commit) == 2)      { arena_commit = _mi_os_has_overcommit(); }
+  if (mi_option_get(mi_option_arena_eager_commit) == 2)      { arena_commit = _mi_os_has_overcommit() || mi_option_is_enabled(mi_option_allow_large_os_pages); }
   else if (mi_option_get(mi_option_arena_eager_commit) == 1) { arena_commit = true; }
 
   return (mi_reserve_os_memory_ex(arena_reserve, arena_commit, allow_large, false /* exclusive? */, arena_id) == 0);
