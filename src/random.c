@@ -99,7 +99,8 @@ static void chacha_init(mi_random_ctx_t* ctx, const uint8_t key[32], uint64_t no
   // since we only use chacha for randomness (and not encryption) we
   // do not _need_ to read 32-bit values as little endian but we do anyways
   // just for being compatible :-)
-  memset(ctx, 0, sizeof(*ctx));
+  ctx->output_available = 0;
+  _mi_memzero(ctx->output,sizeof(ctx->output));
   for (size_t i = 0; i < 4; i++) {
     const uint8_t* sigma = (uint8_t*)"expand 32-byte k";
     ctx->input[i] = read32(sigma,i);
@@ -114,7 +115,8 @@ static void chacha_init(mi_random_ctx_t* ctx, const uint8_t key[32], uint64_t no
 }
 
 static void chacha_split(mi_random_ctx_t* ctx, uint64_t nonce, mi_random_ctx_t* ctx_new) {
-  memset(ctx_new, 0, sizeof(*ctx_new));
+  _mi_memzero(ctx_new, sizeof(*ctx_new));
+  ctx_new->weak = ctx->weak;
   _mi_memcpy(ctx_new->input, ctx->input, sizeof(ctx_new->input));
   ctx_new->input[12] = 0;
   ctx_new->input[13] = 0;

@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 20301  // major + 2 digits minor + 2 digits patch
+#define MI_MALLOC_VERSION 20302  // major + 2 digits minor + 2 digits patch
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -380,7 +380,7 @@ typedef mi_heap_t  mi_theap_t;
 #define mi_theap_collect(hp,force)        mi_heap_collect(hp,force)
 #define mi_theap_malloc(hp,sz)            mi_heap_malloc(hp,sz)
 #define mi_theap_zalloc(hp,sz)            mi_heap_zalloc(hp,sz)
-#define mi_theap_calloc(hp,cnt,sz)        mi_heap_malloc(hp,cnt,sz)
+#define mi_theap_calloc(hp,cnt,sz)        mi_heap_calloc(hp,cnt,sz)
 #define mi_theap_malloc_small(hp,sz)      mi_heap_malloc_small(hp,sz)
 #define mi_theap_malloc_aligned(hp,sz,a)  mi_heap_malloc_aligned(hp,sz,a)
 #define mi_theap_realloc(hp,p,newsz)      mi_heap_realloc(hp,p,newsz)

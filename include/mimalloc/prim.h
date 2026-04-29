@@ -282,7 +282,9 @@ static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept;
 #if defined(MI_PRIM_THREAD_ID)
 
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept {
-  return MI_PRIM_THREAD_ID();  // used for example by CPython for a free threaded build (see python/cpython#115488)
+  const mi_threadid_t tid = MI_PRIM_THREAD_ID();  // used for example by CPython for a free threaded build (see python/cpython#115488)
+  mi_assert_internal( (tid & 0x03) == 0 );        // mimalloc reserves the bottom 2 bits
+  return tid;
 }
 
 #elif defined(_WIN32)

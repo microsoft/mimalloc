@@ -246,6 +246,10 @@ static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
 }
 
 
+#if MI_DEBUG >= 3
+static bool mi_page_queue_is_consistent(const mi_page_queue_t* queue);
+#endif
+
 static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(mi_page_heap(page) == heap);
   mi_assert_internal(!mi_page_queue_contains(queue, page));
@@ -272,7 +276,34 @@ static void mi_page_queue_push(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_
   // update direct
   mi_heap_queue_first_update(heap, queue);
   heap->page_count++;
+
+  // [specbot Q-NEW-1] first/last must be both null or both non-null (L1, O(1))
+  mi_assert_internal((queue->first == NULL) == (queue->last == NULL));
+  // [specbot Q-NEW-2] last element must have no next (L1, O(1))
+  mi_assert_internal(queue->last == NULL || queue->last->next == NULL);
+  mi_assert_expensive(mi_page_queue_is_consistent(queue));
 }
+
+#if MI_DEBUG >= 3
+// [specbot Q-NEW-3] Verify doubly-linked list forward/backward consistency (L2, O(n))
+static bool mi_page_queue_is_consistent(const mi_page_queue_t* queue) {
+  if (queue->first == NULL) return (queue->last == NULL);
+  if (queue->last == NULL) return false;
+  // forward: first -> ... -> last
+  const mi_page_t* p = queue->first;
+  const mi_page_t* prev = NULL;
+  size_t count = 0;
+  while (p != NULL) {
+    mi_assert_internal(p->prev == prev);
+    prev = p;
+    p = p->next;
+    count++;
+    if (count > 100000) return false; // cycle guard
+  }
+  mi_assert_internal(prev == queue->last);
+  return true;
+}
+#endif
 
 static void mi_page_queue_move_to_front(mi_heap_t* heap, mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(mi_page_heap(page) == heap);
