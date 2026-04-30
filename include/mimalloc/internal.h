@@ -1100,10 +1100,25 @@ static inline size_t mi_popcount(size_t x) {
 // (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017). See also issue #201 and pr #253.
 // ---------------------------------------------------------------------------------
 
+// Check for AArch64 SVE compiler capability
+#if defined(__aarch64__) && \
+    ((defined(__GNUC__) && __GNUC__ >= 10) || \
+     (defined(__clang__) && __clang_major__ >= 11))
+  #define MI_HAS_SVE_SUPPORT
+#endif
+
+// Platform-specific memory primitive overrides (e.g. SVE on AArch64)
+#if defined(MI_HAS_SVE_SUPPORT)
+extern mi_decl_hidden void _mi_prim_memcpy(void* dst, const void* src, size_t n);
+extern mi_decl_hidden void _mi_prim_memzero(void* dst, size_t n);
+#endif
+
 #if !MI_TRACK_ENABLED && defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
 #include <intrin.h>
 extern mi_decl_hidden bool _mi_cpu_has_fsrm;
 extern mi_decl_hidden bool _mi_cpu_has_erms;
+
+// Optimization for x86/x64 using Fast Short REP MOVSB (FSRM)
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
   if (_mi_cpu_has_fsrm && n <= 127) { // || (_mi_cpu_has_erms && n > 128)) {
     __movsb((unsigned char*)dst, (const unsigned char*)src, n);
@@ -1120,7 +1135,16 @@ static inline void _mi_memzero(void* dst, size_t n) {
     memset(dst, 0, n);
   }
 }
+#elif defined(MI_HAS_SVE_SUPPORT) // Use our new compiler-safe gate
+  // Bridge to AArch64 optimized primitives (SVE accelerated)
+  static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
+    _mi_prim_memcpy(dst, src, n);
+  }
+  static inline void _mi_memzero(void* dst, size_t n) {
+    _mi_prim_memzero(dst, n);
+  }
 #else
+// Default fallback to standard library
 static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
   memcpy(dst, src, n);
 }

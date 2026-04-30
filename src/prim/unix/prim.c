@@ -911,6 +911,149 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 
 #endif
 
+#include <string.h> // For memset and memcpy fallbacks
+#include <stdint.h> // For uint8_t, uint64_t types
+
+// 1. Detect compiler support for SVE ACLE
+#if defined(__aarch64__) && \
+    ((defined(__GNUC__) && __GNUC__ >= 10) || \
+     (defined(__clang__) && __clang_major__ >= 11))
+  #define MI_HAS_SVE_SUPPORT
+  #include <arm_sve.h> // Only include SVE headers if the compiler supports them
+  #include <sys/auxv.h>
+  #include <asm/hwcap.h>
+#endif
+
+#if defined(MI_HAS_SVE_SUPPORT)
+// Runtime check for SVE capability and it's vector length.
+// Executes getauxval only once per process lifetime.
+#if defined(__clang__)
+  __attribute__((target("sve")))
+#else
+  __attribute__((target("+sve")))
+#endif
+static inline bool _mi_prim_has_sve(void) {
+  static int has_sve_optimized = -1; // -1: Uninitialized
+  if (has_sve_optimized < 0) {
+    unsigned long hwcap = getauxval(AT_HWCAP);
+    if (hwcap & HWCAP_SVE) {
+      // Hardware supports SVE. Now check if VL is at least 256-bit (32 bytes)
+      // to ensure we outperform optimized 128-bit Neon/Scalar paths.
+      if (svcntb() >= 32) {
+        has_sve_optimized = 1;
+      } else {
+        has_sve_optimized = 0; // SVE exists but is only 128-bit (e.g., Graviton 4)
+      }
+    } else {
+      has_sve_optimized = 0; // No SVE support
+    }
+  }
+  return (has_sve_optimized > 0);
+}
+
+// SVE-accelerated memory zeroing.
+// Uses target attributes to allow compilation with base ARMv8-A architecture
+// while generating SVE instructions for the optimized path.
+#if defined(__clang__)
+  __attribute__((target("sve")))
+#else
+  __attribute__((target("+sve")))
+#endif
+static void _mi_prim_sve_memzero(void* p, size_t n) {
+  uint8_t* ptr = (uint8_t*)p;
+  uint64_t remaining = (uint64_t)n;
+  const uint64_t vl = svcntb(); // Vector length in bytes
+  const uint64_t vl4 = vl * 4;
+
+  // Bulk Path: 4x unrolled to maximize pipeline throughput
+  while (remaining >= vl4) {
+    svbool_t pg = svptrue_b8();
+    svst1_u8(pg, ptr,          svdup_u8(0));
+    svst1_u8(pg, ptr + vl,     svdup_u8(0));
+    svst1_u8(pg, ptr + vl * 2, svdup_u8(0));
+    svst1_u8(pg, ptr + vl * 3, svdup_u8(0));
+    ptr += vl4;
+    remaining -= vl4;
+  }
+
+  // Tail Path: Predicated stores handle remaining bytes (Vector Length Agnostic)
+  uint64_t offset = 0;
+  while (offset < remaining) {
+    svbool_t pg = svwhilelt_b8_u64(offset, remaining);
+    svst1_u8(pg, ptr + offset, svdup_u8(0));
+    offset += vl;
+  }
+}
+
+// SVE-accelerated memory copy
+#if defined(__clang__)
+  __attribute__((target("sve")))
+#else
+  __attribute__((target("+sve")))
+#endif
+static void _mi_prim_sve_memcpy(void* restrict dest, const void* restrict src, size_t n) {
+  uint8_t* d = (uint8_t*)dest;
+  const uint8_t* s = (const uint8_t*)src;
+  uint64_t remaining = (uint64_t)n;
+  const uint64_t vl = svcntb();
+  const uint64_t vl4 = vl * 4;
+
+  // Bulk Path: 4x unrolled to saturate memory bandwidth
+  while (remaining >= vl4) {
+    svbool_t pg = svptrue_b8();
+    svuint8_t r0 = svld1_u8(pg, s);
+    svuint8_t r1 = svld1_u8(pg, s + vl);
+    svuint8_t r2 = svld1_u8(pg, s + vl * 2);
+    svuint8_t r3 = svld1_u8(pg, s + vl * 3);
+
+    svst1_u8(pg, d, r0);
+    svst1_u8(pg, d + vl, r1);
+    svst1_u8(pg, d + vl * 2, r2);
+    svst1_u8(pg, d + vl * 3, r3);
+
+    d += vl4;
+    s += vl4;
+    remaining -= vl4;
+  }
+
+  // Tail Path: Predicated loads/stores for the remainder
+  uint64_t offset = 0;
+  while (offset < remaining) {
+    svbool_t pg = svwhilelt_b8_u64(offset, remaining);
+    svuint8_t r = svld1_u8(pg, s + offset);
+    svst1_u8(pg, d + offset, r);
+    offset += vl;
+  }
+}
+#endif // MI_HAS_SVE_SUPPORT
+
+// --- Public Primitive API ---
+
+void _mi_prim_memzero(void* p, size_t n) {
+  if (p == NULL || n == 0) return;
+#if defined(MI_HAS_SVE_SUPPORT)
+  // Use SVE for n >= 2KB if VL >= 256-bit. Smaller sizes or 128-bit VL systems (e.g., Graviton 4)
+  // utilize standard paths to avoid setup overhead and maximize instruction efficiency.
+  if (n >= 2048 && _mi_prim_has_sve()) {
+    _mi_prim_sve_memzero(p, n);
+    return;
+  }
+#endif
+  memset(p, 0, n);
+}
+
+void _mi_prim_memcpy(void* dest, const void* src, size_t n) {
+  if (dest == NULL || src == NULL || n == 0) return;
+#if defined(MI_HAS_SVE_SUPPORT)
+  // Use SVE for n >= 2KB if VL >= 256-bit. Smaller sizes or 128-bit VL systems (e.g., Graviton 4)
+  // utilize standard paths to avoid setup overhead and maximize instruction efficiency.
+  if (n >= 2048 && _mi_prim_has_sve()) {
+    _mi_prim_sve_memcpy(dest, src, n);
+    return;
+  }
+#endif
+  memcpy(dest, src, n);
+}
 
 //----------------------------------------------------------------
 // Thread init/done
