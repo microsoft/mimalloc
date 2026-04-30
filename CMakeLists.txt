@@ -72,6 +72,7 @@ set(mi_sources
     src/options.c
     src/os.c
     src/page.c
+    src/profile.c
     src/random.c
     src/segment.c
     src/segment-map.c
@@ -746,7 +747,7 @@ if (MI_BUILD_TESTS)
   enable_testing()
 
   # static link tests
-  foreach(TEST_NAME api api-fill stress)
+  foreach(TEST_NAME api api-fill stress profile)
     add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
     target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
     target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})

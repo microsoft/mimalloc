@@ -1046,6 +1046,9 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
     _mi_os_reset(start, psize);
   }
 
+  // profiler records must have been freed before the page is recycled
+  mi_assert_internal(page->metadata == NULL && !page->has_metadata);
+
   // zero the page data, but not the segment fields and heap tag
   page->is_zero_init = false;
   uint8_t heap_tag = page->heap_tag;

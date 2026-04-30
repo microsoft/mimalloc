@@ -111,6 +111,7 @@ extern inline void* _mi_page_malloc_zero(mi_heap_t* heap, mi_page_t* page, size_
     #endif
   #endif
 
+  _mi_profiler_on_alloc(heap, page, block, size - MI_PADDING_SIZE);
   return block;
 }
 
@@ -303,6 +304,10 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero,
     // mi_track_resize(p,size,newsize)
     // if (newsize < size) { mi_track_mem_noaccess((uint8_t*)p + newsize, size - newsize); }
     if (usable_post!=NULL) { *usable_post = mi_page_usable_block_size(page); }
+    // TODO(profiler): if p has a live profiler record, notify the profiler of the
+    // resize so it can update the recorded size.  The allocate-and-copy path below
+    // is handled correctly because it goes through mi_free + mi_heap_umalloc which
+    // hit the existing on_free and on_alloc hooks.
     return p;  // reallocation still fits and not more than 50% waste
   }
   void* newp = mi_heap_umalloc(heap,newsize,usable_post);
