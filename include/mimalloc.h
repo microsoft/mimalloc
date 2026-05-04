@@ -95,7 +95,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Includes
 // ------------------------------------------------------
 
-#include <stddef.h>     // size_t
+#include <stddef.h>     // size_t, wchar_t
 #include <stdbool.h>    // bool
 
 #ifdef __cplusplus
@@ -536,7 +536,6 @@ mi_decl_export void mi_free_aligned(void* p, size_t alignment)                  
 mi_decl_export int  mi_dupenv_s(char** buf, size_t* size, const char* name)      mi_attr_noexcept;
 
 // wide characters
-#include <wchar.h>  // wchar_t
 mi_decl_export int mi_wdupenv_s(wchar_t** buf, size_t* size, const wchar_t* name)       mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export mi_decl_restrict wchar_t* mi_wcsdup(const wchar_t* s)  mi_attr_noexcept mi_attr_malloc;
 mi_decl_nodiscard mi_decl_export mi_decl_restrict unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexcept mi_attr_malloc;
