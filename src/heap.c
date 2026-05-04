@@ -729,6 +729,7 @@ bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_vis
 
 
 
+
 static const mi_page_t* mi_safe_ptr_page(void* p) {
   const mi_segment_t* const segment = _mi_ptr_segment(p);
   if mi_unlikely(segment==NULL) return NULL;
@@ -759,4 +760,21 @@ bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void* p, size_t perc
   if (page->capacity==0)   return false;
   if (perc_threshold>=100) return true;
   return (perc_threshold >= ((100UL*page->used) / page->capacity));
+}
+
+//Visiting all blocks of all heaps in a thread
+bool mi_thread_visit_blocks(bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+  mi_heap_t* heap = mi_heap_get_default();
+  if (heap == NULL) return false;
+
+  mi_heap_t* curr = heap->tld->heaps;
+  while (curr != NULL) {
+    mi_heap_t* next = curr->next;
+    if (!mi_heap_visit_blocks(curr, visit_blocks, visitor, arg)) {
+      return false;
+    }
+    curr = next;
+  }
+
+  return true;
 }
