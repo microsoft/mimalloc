@@ -946,6 +946,7 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
 void _mi_theap_default_set(mi_theap_t* theap)  {
   mi_theap_t* const theap_old = _mi_theap_default();
   mi_assert_internal(theap != NULL);
+  mi_assert_internal(theap->tld != NULL);
   mi_assert_internal(theap->tld->thread_id==0 || theap->tld->thread_id==_mi_thread_id());
   mi_tls_slots_init();
   #if MI_TLS_MODEL_THREAD_LOCAL

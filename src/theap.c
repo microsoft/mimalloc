@@ -175,6 +175,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
 {
   mi_assert_internal(theap!=NULL);
   mi_assert_internal(heap!=NULL);
+  mi_assert_internal(tld!=NULL);
   mi_memid_t memid = theap->memid;
   _mi_memcpy_aligned(theap, &_mi_theap_empty, sizeof(mi_theap_t));
   theap->memid = memid;
