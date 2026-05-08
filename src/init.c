@@ -163,13 +163,13 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
 
 // Heap for the main thread
 
-#define MI_THREADID_UNINIT ((mi_threadid_t)(~0))
+#define MI_THREADID_INVALID ((mi_threadid_t)(~0))
 
 extern mi_decl_hidden mi_decl_cache_align mi_theap_t theap_main;
 extern mi_decl_hidden mi_decl_cache_align mi_heap_t  heap_main;
 
 static mi_decl_cache_align mi_tld_t tld_main = {
-  MI_THREADID_UNINIT,     // thread_id
+  0,                      // thread_id
   0,                      // thread_seq
   0,                      // numa node
   &subproc_main,          // subproc
@@ -300,7 +300,7 @@ static void mi_subproc_main_init(void) {
 
 // Initialize main tld
 static void mi_tld_main_init(void) {
-  if (tld_main.thread_id == MI_THREADID_UNINIT) {
+  if (tld_main.thread_id == 0) {
     tld_main.thread_id = _mi_prim_thread_id();
     mi_lock_init(&tld_main.theaps_lock);
   }
@@ -383,7 +383,7 @@ static mi_tld_t* mi_tld_alloc(void) {
 mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   if (tld==NULL || tld==MI_TLD_INVALID) return; 
   mi_atomic_decrement_relaxed(&tld->subproc->thread_count);
-  tld->thread_id = 0;
+  tld->thread_id = MI_THREADID_INVALID;              // note: not 0 as that would re-initialize tld_main
   mi_lock_done(&tld->theaps_lock);  
   _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);  // note: safe for static tld_main
 }
@@ -700,7 +700,7 @@ static void mi_process_setup_auto_thread_done(void) {
 
 
 bool _mi_is_main_thread(void) {
-  return (tld_main.thread_id==MI_THREADID_UNINIT || tld_main.thread_id == _mi_thread_id());
+  return (tld_main.thread_id==0 || tld_main.thread_id == _mi_thread_id());
 }
 
 
