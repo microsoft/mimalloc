@@ -384,6 +384,8 @@ mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   if (tld==NULL || tld==MI_TLD_INVALID) return; 
   mi_atomic_decrement_relaxed(&tld->subproc->thread_count);
   tld->thread_id = MI_THREADID_INVALID;              // note: not 0 as that would re-initialize tld_main
+                                                     // we also need to set an invalid tid for tld_main as sometimes the same thread-id
+                                                     // is reused by the OS after a thread has terminated. (see issue #1287)
   mi_lock_done(&tld->theaps_lock);  
   _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);  // note: safe for static tld_main
 }
