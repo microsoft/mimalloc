@@ -289,7 +289,7 @@ void _mi_theap_incref(mi_theap_t* theap) {
 }
 
 void _mi_theap_decref(mi_theap_t* theap) {
-  if (theap!=NULL && theap->memid.memkind > MI_MEM_STATIC) {
+  if (theap!=NULL && !mi_memid_needs_no_free(theap->memid)) {
     if (mi_atomic_decrement_acq_rel(&theap->refcount) == 1) {
       mi_theap_free_mem(theap);
     }
@@ -324,8 +324,9 @@ bool _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acqui
       if (theap->tnext != NULL) { theap->tnext->tprev = theap->tprev;  }
       if (theap->tprev != NULL) { theap->tprev->tnext = theap->tnext;  }
                           else { mi_assert_internal(theap->tld->theaps == theap); theap->tld->theaps = theap->tnext; }
-      theap->tnext = theap->tprev = NULL;                        
+      theap->tnext = theap->tprev = NULL;           
     }
+
     theap->tld = NULL;
     _mi_theap_decref(theap);
     return true;

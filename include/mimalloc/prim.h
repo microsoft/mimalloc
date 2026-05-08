@@ -248,9 +248,8 @@ extern mi_decl_hidden bool _mi_process_is_initialized;                // has mi_
 // fast path of `_mi_free` and we specialize for various platforms as
 // inlined definitions. Regular code should call `init.c:_mi_thread_id()`.
 // We only require _mi_prim_thread_id() to return a unique id
-// for each thread (unequal to zero).
+// for each thread (unequal to zero) with the bottom 2 bits clear.
 //-------------------------------------------------------------------
-
 
 // Do we have __builtin_thread_pointer? This would be the preferred way to get a unique thread id
 // but unfortunately, it seems we cannot test for this reliably at this time (see issue #883)

@@ -163,11 +163,13 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
 
 // Heap for the main thread
 
+#define MI_THREADID_UNINIT ((mi_threadid_t)(~0))
+
 extern mi_decl_hidden mi_decl_cache_align mi_theap_t theap_main;
 extern mi_decl_hidden mi_decl_cache_align mi_heap_t  heap_main;
 
 static mi_decl_cache_align mi_tld_t tld_main = {
-  0,                      // thread_id
+  MI_THREADID_UNINIT,     // thread_id
   0,                      // thread_seq
   0,                      // numa node
   &subproc_main,          // subproc
@@ -214,7 +216,7 @@ mi_decl_cache_align mi_heap_t heap_main
 mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main = NULL;
 
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
-  mi_threadid_t tid = _mi_prim_thread_id();
+  const mi_threadid_t tid = _mi_prim_thread_id();
   mi_assert_internal( (tid & 0x03) == 0 ); // mimalloc reserves the bottom 2 bits
   return tid;
 }
@@ -298,7 +300,7 @@ static void mi_subproc_main_init(void) {
 
 // Initialize main tld
 static void mi_tld_main_init(void) {
-  if (tld_main.thread_id == 0) {
+  if (tld_main.thread_id == MI_THREADID_UNINIT) {
     tld_main.thread_id = _mi_prim_thread_id();
     mi_lock_init(&tld_main.theaps_lock);
   }
@@ -379,17 +381,11 @@ static mi_tld_t* mi_tld_alloc(void) {
 #define MI_TLD_INVALID  ((mi_tld_t*)1)
 
 mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
-  mi_lock_done(&tld->theaps_lock);
-  if (tld != NULL && tld != MI_TLD_INVALID) {
-    mi_atomic_decrement_relaxed(&tld->subproc->thread_count);
-    _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);
-  }
-  #if 0
-  // do not read/write to `thread_tld` on older macOS <= 14 as that will re-initialize the thread local storage
-  // (since we are calling this during pthread shutdown)
-  // (and this could happen on other systems as well, so let's never do it)
-  thread_tld = MI_TLD_INVALID;
-  #endif
+  if (tld==NULL || tld==MI_TLD_INVALID) return; 
+  mi_atomic_decrement_relaxed(&tld->subproc->thread_count);
+  tld->thread_id = 0;
+  mi_lock_done(&tld->theaps_lock);  
+  _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);  // note: safe for static tld_main
 }
 
 // return the thread local heap ensuring it is initialized (and not `NULL` or `&_mi_theap_empty`);
@@ -704,7 +700,7 @@ static void mi_process_setup_auto_thread_done(void) {
 
 
 bool _mi_is_main_thread(void) {
-  return (tld_main.thread_id==0 || tld_main.thread_id == _mi_thread_id());
+  return (tld_main.thread_id==MI_THREADID_UNINIT || tld_main.thread_id == _mi_thread_id());
 }
 
 
