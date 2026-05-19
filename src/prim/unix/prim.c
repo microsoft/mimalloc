@@ -156,7 +156,7 @@ static bool unix_detect_thp(void) {
     // <https://www.kernel.org/doc/html/latest/admin-guide/mm/transhuge.html>
     // between brackets is the current value, for example: always [madvise] never
     if (nread >= 1) {
-      thp_enabled = (_mi_strnstr(buf,32,"[never]") == NULL);
+      thp_enabled = (_mi_strnstr(buf,nread,"[never]") == NULL);
     }
   }
   #endif
