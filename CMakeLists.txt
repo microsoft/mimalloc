@@ -422,16 +422,6 @@ else()
   # list(APPEND mi_defines MI_WIN_INIT_USE_CRT_TLS=1)
 endif()
 
-# Check /proc/cpuinfo for an SV39 MMU and limit the virtual address bits.
-# (this will skip the aligned hinting in that case. Issue #939, #949)
-if (EXISTS /proc/cpuinfo)
-  file(STRINGS /proc/cpuinfo mi_sv39_mmu REGEX "^mmu[ \t]+:[ \t]+sv39$")
-  if (mi_sv39_mmu)
-    MESSAGE( STATUS "Set virtual address bits to 39 (SV39 MMU detected)" )
-    list(APPEND mi_defines MI_DEFAULT_VIRTUAL_ADDRESS_BITS=39)
-  endif()
-endif()
-
 # On Haiku use `-DCMAKE_INSTALL_PREFIX` instead, issue #788
 # if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
 #   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)

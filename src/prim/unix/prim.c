@@ -41,6 +41,13 @@ terms of the MIT license. A copy of the license can be found in the file
   #else
   #include <sys/mman.h>
   #endif
+  #if defined(__riscv) || defined(_M_RISCV)
+    #if __has_include(<sys/hwprobe.h>)
+      #include <sys/hwprobe.h>
+    #elif __has_include(<asm/hwprobe.h>)
+      #include <asm/hwprobe.h>
+    #endif
+  #endif
 #elif defined(__APPLE__)
   #include <AvailabilityMacros.h>
   #include <TargetConditionals.h>
@@ -187,6 +194,52 @@ static void unix_detect_physical_memory( size_t page_size, size_t* physical_memo
   #endif
 }
 
+// Detect the virtual address bits (currently Linux/RISC-V only)
+static size_t unix_detect_virtual_address_bits(void)
+{
+  #if defined(__riscv) || defined(_M_RISCV)
+    #ifdef RISCV_HWPROBE_KEY_HIGHEST_VIRT_ADDRESS
+      struct riscv_hwprobe probe = {
+          .key = RISCV_HWPROBE_KEY_HIGHEST_VIRT_ADDRESS,
+      };
+
+      // Prefer the GNU libc interface if available, as it can also use the VDSO
+      #if __has_include(<sys/hwprobe.h>)
+      if (__riscv_hwprobe(&probe, 1, 0, NULL, 0) == 0) {
+      #else
+      if (syscall(__NR_riscv_hwprobe, &probe, 1, 0, NULL, 0) == 0) {
+      #endif
+        // If a key is unknown to the kernel, its key field will be cleared to -1.
+        if (probe.key != -1) {
+          return MI_SIZE_BITS - mi_clz((uintptr_t)probe.value);
+        }
+      }
+    #endif
+
+    // Fallback to checking /proc/cpuinfo for older kernels
+    int fd = mi_prim_open("/proc/cpuinfo", O_RDONLY);
+    if (fd >= 0) {
+      char buf[4096];
+      ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+      mi_prim_close(fd);
+      if (nread >= 1) {
+        if (_mi_strnstr(buf, nread, "sv39")) {
+          return 39;
+        }
+        if (_mi_strnstr(buf, nread, "sv48")) {
+          return 48;
+        }
+        if (_mi_strnstr(buf, nread, "sv57")) {
+          return 57;
+        }
+      }
+    }
+  #endif
+
+  // default: MI_MAX_VABITS
+  return MI_MAX_VABITS;
+}
+
 void _mi_prim_mem_init( mi_os_mem_config_t* config )
 {
   long psize = sysconf(_SC_PAGESIZE);
@@ -199,6 +252,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_overcommit = unix_detect_overcommit();
   config->has_partial_free = true;    // mmap can free in parts
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
+  config->virtual_address_bits = unix_detect_virtual_address_bits();
 
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
