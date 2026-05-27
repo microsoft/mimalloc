@@ -367,8 +367,21 @@ This incurs an extra check in the fast path (but can often be combined in an exi
 static inline mi_theap_t* _mi_theap_default(void);
 static inline mi_theap_t* _mi_theap_cached(void);
 
+// Set MI_APPLE_TLS_THREAD_LOCAL=1 to use THREAD_LOCAL + RECURSE_GUARD on Apple
+// instead of the default FIXED_SLOT. Needed when multiple images in one process
+// each statically link mimalloc (e.g. Node.js napi addons via dlopen), since
+// FIXED_SLOT uses a hardcoded TCB slot shared across all images.
+#ifndef MI_APPLE_TLS_THREAD_LOCAL
+#define MI_APPLE_TLS_THREAD_LOCAL  0
+#endif
+
 #if defined(_WIN32)
-  #define MI_TLS_MODEL_DYNAMIC_WIN32        1    
+  #define MI_TLS_MODEL_DYNAMIC_WIN32        1
+#elif defined(__APPLE__) && MI_APPLE_TLS_THREAD_LOCAL && !defined(__POWERPC__)  // macOS: opt-in thread local
+  #define MI_TLS_MODEL_THREAD_LOCAL         1
+  #ifndef MI_TLS_RECURSE_GUARD
+  #define MI_TLS_RECURSE_GUARD              1
+  #endif
 #elif defined(__APPLE__) && MI_HAS_TLS_SLOT && !defined(__POWERPC__)  // macOS on arm64 or x64
   // #define MI_TLS_MODEL_DYNAMIC_PTHREADS  1    // also works but a bit slower
   #define MI_TLS_MODEL_FIXED_SLOT           1
