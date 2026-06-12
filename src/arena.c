@@ -107,6 +107,31 @@ static size_t mi_arena_max_object_size(void) {
   }
 }
 
+static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_base);  // defined in the arena creation section below
+
+// The largest slice count an arena can actually be created with: at most
+// `MI_BITMAP_MAX_BIT_COUNT` slices (the bitmap limit), reduced until the
+// arena meta-info stays under `MI_ARENA_MAX_CHUNK_OBJ_SLICES`
+// (`mi_arena_initialize` rejects the arena otherwise). Without this bound a
+// reservation clamped to the full `MI_ARENA_MAX_SIZE` can never initialize:
+// once the exponential reserve growth reaches that clamp every later
+// reservation fails, and each subsequent allocation falls back to a separate
+// OS allocation until the process exhausts the OS mapping limit (issue #1309).
+static size_t mi_arena_max_slice_count(void) {
+  static _Atomic(size_t) max_slice_count_cache;  // computed once; benign to race
+  size_t slice_count = mi_atomic_load_relaxed(&max_slice_count_cache);
+  if (slice_count == 0) {
+    slice_count = MI_BITMAP_MAX_BIT_COUNT;
+    while (slice_count > MI_BCHUNK_BITS &&
+           mi_arena_info_slices_needed(slice_count, NULL) >= MI_ARENA_MAX_CHUNK_OBJ_SLICES)
+    {
+      slice_count -= MI_BCHUNK_BITS;
+    }
+    mi_atomic_store_relaxed(&max_slice_count_cache, slice_count);
+  }
+  return slice_count;
+}
+
 mi_decl_nodiscard static bool mi_arena_commit(mi_arena_t* arena, void* start, size_t size, bool* is_zero, size_t already_committed) {
   if (arena != NULL && arena->commit_fun != NULL) {
     return (*arena->commit_fun)(true, start, size, is_zero, arena->commit_fun_arg);
@@ -336,9 +361,11 @@ static bool mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_
     arena_reserve = req_size;
   }
 
-  // check arena bounds
+  // check arena bounds; the upper bound is just below 16 GiB: the largest
+  // size whose meta-info still fits (a full `MI_ARENA_MAX_SIZE` arena fails
+  // `mi_arena_initialize`, so clamping to it would wedge all reservations)
   const size_t min_reserve = MI_ARENA_MIN_SIZE;
-  const size_t max_reserve = MI_ARENA_MAX_SIZE;   // 16 GiB
+  const size_t max_reserve = mi_size_of_slices(mi_arena_max_slice_count());
   if (arena_reserve < min_reserve) {
     arena_reserve = min_reserve;
   }
@@ -1613,8 +1640,8 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
   do {
     // counting down on the total_slice_count
     size_t slice_count = total_slice_count;
-    if (slice_count > MI_BITMAP_MAX_BIT_COUNT) {  // 16 GiB for now (with 64KiB slices)
-      slice_count = MI_BITMAP_MAX_BIT_COUNT;
+    if (slice_count > mi_arena_max_slice_count()) {  // just below 16 GiB (with 64KiB slices): a full-bitmap arena has no room for its own meta-info
+      slice_count = mi_arena_max_slice_count();
     }
 
     // initialize
