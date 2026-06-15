@@ -174,6 +174,14 @@ static boolean_t intro_zone_locked(malloc_zone_t* zone) {
   return false;
 }
 
+// Required whenever the zone advertises version >= 9: macOS calls this from the
+// atfork_child handler (_malloc_fork_child) without a NULL check. mimalloc keeps
+// no zone-level locks that need reinitializing after fork, so a no-op is safe.
+// Leaving it NULL makes the forked child jump to address 0 and crash in fork().
+static void intro_reinit_lock(malloc_zone_t* zone) {
+  MI_UNUSED(zone);
+}
+
 
 /* ------------------------------------------------------
   At process start, override the default allocator
@@ -198,6 +206,7 @@ static malloc_introspection_t mi_introspect = {
 #if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6) && !defined(__ppc__)
   .statistics = &intro_statistics,
   .zone_locked = &intro_zone_locked,
+  .reinit_lock = &intro_reinit_lock,
 #endif
 };
 
