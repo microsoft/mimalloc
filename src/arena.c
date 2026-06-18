@@ -697,7 +697,9 @@ static mi_page_t* mi_arenas_page_try_find_abandoned(mi_theap_t* theap, size_t sl
 
   MI_UNUSED(slice_count);
   const size_t bin = _mi_bin(block_size);
-  mi_assert_internal(bin < MI_BIN_COUNT);
+  if (bin >= MI_ARENA_BIN_COUNT) {
+    return NULL; // singleton page size
+  }
 
   // any abandoned in our size class?
   mi_assert_internal(heap != NULL);
@@ -1000,6 +1002,8 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block
 
 mi_page_t* _mi_arenas_page_alloc(mi_theap_t* theap, size_t block_size, size_t block_alignment) {
   mi_page_t* page;
+  // semi static assert: ensure that all non-singleton block size bins are covered.
+  mi_assert(_mi_bin(MI_LARGE_MAX_OBJ_SIZE)  < MI_ARENA_BIN_COUNT);
   if mi_unlikely(block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN) {
     mi_assert_internal(_mi_is_power_of_two(block_alignment));
     page = mi_arenas_page_singleton_alloc(theap, block_size, block_alignment);
@@ -1120,41 +1124,46 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap) {
   mi_assert_internal(_mi_thread_id()==current_theap->tld->thread_id);
   // mi_assert_internal(current_theap == _mi_page_associated_theap(page));
 
+  // add to abandoned?
   mi_heap_t* heap = mi_page_heap(page); mi_assert_internal(heap==_mi_theap_heap(current_theap));
   if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
     // make available for allocations
     size_t bin = _mi_bin(mi_page_block_size(page));
-    size_t slice_index;
-    size_t slice_count;
-    mi_arena_pages_t* arena_pages = NULL;
-    mi_arena_t* const arena = mi_page_arena_pages(page, &slice_index, &slice_count, &arena_pages); MI_UNUSED(arena);
+    mi_assert_internal(bin < MI_ARENA_BIN_COUNT);
+    if (bin < MI_ARENA_BIN_COUNT) { // paranoia
+      size_t slice_index;
+      size_t slice_count;
+      mi_arena_pages_t* arena_pages = NULL;
+      mi_arena_t* const arena = mi_page_arena_pages(page, &slice_index, &slice_count, &arena_pages); MI_UNUSED(arena);
 
-    mi_assert_internal(!mi_page_is_singleton(page));
-    mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
-    mi_assert_internal(page->slice_committed > 0 || mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
-    mi_assert_internal(mi_bitmap_is_setN(arena->slices_dirty, slice_index, slice_count));
+      mi_assert_internal(!mi_page_is_singleton(page));
+      mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
+      mi_assert_internal(page->slice_committed > 0 || mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
+      mi_assert_internal(mi_bitmap_is_setN(arena->slices_dirty, slice_index, slice_count));
 
-    mi_page_set_abandoned_mapped(page);
-    const bool was_clear = mi_bitmap_set(arena_pages->pages_abandoned[bin], slice_index);
-    MI_UNUSED(was_clear); mi_assert_internal(was_clear);
-    mi_atomic_increment_relaxed(&heap->abandoned_count[bin]);
-    mi_theap_stat_increase(current_theap, pages_abandoned, 1);
-  }
-  else {
-    // page is full (or a singleton), or the page is OS/externally allocated
-    // leave as is; it will be reclaimed when an object is free'd in the page
-    // but for non-arena pages, add to the subproc list so these can be visited
-    if (page->memid.memkind != MI_MEM_ARENA && mi_option_is_enabled(mi_option_visit_abandoned)) {
-      mi_lock(&heap->os_abandoned_pages_lock) {
-        // push in front
-        page->prev = NULL;
-        page->next = heap->os_abandoned_pages;
-        if (page->next != NULL) { page->next->prev = page; }
-        heap->os_abandoned_pages = page;
-      }
+      mi_page_set_abandoned_mapped(page);
+      const bool was_clear = mi_bitmap_set(arena_pages->pages_abandoned[bin], slice_index);
+      MI_UNUSED(was_clear); mi_assert_internal(was_clear);
+      mi_atomic_increment_relaxed(&heap->abandoned_count[bin]);
+      mi_theap_stat_increase(current_theap, pages_abandoned, 1);
+      mi_abandoned_page_unown(page, current_theap);
+      return;
     }
-    mi_theap_stat_increase(current_theap, pages_abandoned, 1);
   }
+  // otherwise,
+  // page is full (or a singleton), or the page is OS/externally allocated
+  // leave as is; it will be reclaimed when an object is free'd in the page
+  // but for non-arena pages, add to the subproc list so these can be visited
+  if (page->memid.memkind != MI_MEM_ARENA && mi_option_is_enabled(mi_option_visit_abandoned)) {
+    mi_lock(&heap->os_abandoned_pages_lock) {
+      // push in front
+      page->prev = NULL;
+      page->next = heap->os_abandoned_pages;
+      if (page->next != NULL) { page->next->prev = page; }
+      heap->os_abandoned_pages = page;
+    }
+  }
+  mi_theap_stat_increase(current_theap, pages_abandoned, 1);
   mi_abandoned_page_unown(page, current_theap);
 }
 
@@ -1199,7 +1208,8 @@ void _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx) {
   if (mi_page_is_abandoned_mapped(page)) {
     mi_assert_internal(page->memid.memkind==MI_MEM_ARENA);
     // remove from the abandoned map
-    size_t bin = _mi_bin(mi_page_block_size(page));
+    const size_t bin = _mi_bin(mi_page_block_size(page));
+    mi_assert_internal(bin < MI_ARENA_BIN_COUNT);
     size_t slice_index;
     size_t slice_count;
     mi_arena_pages_t* arena_pages;
@@ -2254,7 +2264,7 @@ bool _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_bloc
     mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
     if (ok && arena_pages != NULL) {
       if (abandoned_only) {
-        for (size_t bin = 0; ok && bin < MI_BIN_COUNT; bin++) {
+        for (size_t bin = 0; ok && bin < MI_ARENA_BIN_COUNT; bin++) {
           // todo: if we had a single abandoned page map as well, this can be faster.
           if (mi_atomic_load_relaxed(&heap->abandoned_count[bin]) > 0) {
             ok = _mi_bitmap_forall_set(arena_pages->pages_abandoned[bin], &mi_heap_visit_page_at, arena, &visit_info);
@@ -2386,7 +2396,7 @@ static void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
     mi_assert_internal(heap->os_abandoned_pages == NULL);
   }
   // nor arena abandoned pages?
-  for (size_t i = 0; i < MI_BIN_COUNT; i++) {
+  for (size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
     mi_assert_internal(mi_atomic_load_relaxed(&heap->abandoned_count[i])==0);
   }
   #endif
@@ -2443,7 +2453,7 @@ mi_decl_export bool mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t*
 
   // adjust abandoned page count
   mi_subproc_t* const subproc = arena->subproc;
-  for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
+  for (size_t bin = 0; bin < MI_ARENA_BIN_COUNT; bin++) {
     const size_t count = mi_bitmap_popcount(arena->pages_abandoned[bin]);
     if (count > 0) { mi_atomic_decrement_acq_rel(&subproc->abandoned_count[bin]); }
   }
@@ -2503,7 +2513,7 @@ mi_decl_export bool mi_arena_reload(void* start, size_t size, mi_commit_fun_t* c
   }
 
   // adjust abandoned page count
-  for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
+  for (size_t bin = 0; bin < MI_ARENA_BIN_COUNT; bin++) {
     const size_t count = mi_bitmap_popcount(arena->pages_abandoned[bin]);
     if (count > 0) { mi_atomic_decrement_acq_rel(&arena->subproc->abandoned_count[bin]); }
   }

@@ -423,7 +423,7 @@ typedef struct mi_page_s {
 #define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_OSPAGE_BLOCK_ALIGN2)/6)   // = 10 KiB
 #if MI_ENABLE_LARGE_PAGES
 #define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_OSPAGE_BLOCK_ALIGN2)/6)  // ~ 84 KiB
-#define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/8)    // <= 512 KiB // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
+#define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/8)    // <= 512 KiB. note: this must be a nice power of 2 or we get rounding issues with `_mi_bin` 
 #else
 #define MI_MEDIUM_MAX_OBJ_SIZE            (MI_MEDIUM_PAGE_SIZE/8)   // <= 64 KiB
 #define MI_LARGE_MAX_OBJ_SIZE             MI_MEDIUM_MAX_OBJ_SIZE    // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
@@ -434,6 +434,16 @@ typedef struct mi_page_s {
 #error "mimalloc internal: define more bins"
 #endif
 
+// static invariant: MI_MAX_SINGLETON_BIN >= _mi_bin(MI_LARGE_MAX_OBJ_SIZE) (See init.c for the size bins)
+#if (MI_LARGE_MAX_OBJ_WSIZE <= 8192)     // 64 KiB
+#define MI_MAX_SINGLETON_BIN   (48)
+#elif (MI_LARGE_MAX_OBJ_WSIZE <= 32768)  // 256KiB
+#define MI_MAX_SINGLETON_BIN   (56)
+#elif (MI_LARGE_MAX_OBJ_WSIZE <= 65536)  // 512KiB
+#define MI_MAX_SINGLETON_BIN   (60)
+#else
+#define MI_MAX_SINGLETON_BIN   MI_BIN_HUGE
+#endif
 
 // ------------------------------------------------------
 // Page kinds
@@ -646,7 +656,7 @@ struct mi_tld_s {
   to reserve large arenas upfront and be able to reuse the memory more effectively.
 -----------------------------------------------------------------------------*/
 
-#define MI_ARENA_BIN_COUNT      (MI_BIN_COUNT)
+#define MI_ARENA_BIN_COUNT      (MI_MAX_SINGLETON_BIN+1)  
 #define MI_ARENA_MIN_SIZE       (MI_BCHUNK_BITS * MI_ARENA_SLICE_SIZE)           // 32 MiB (or 8 MiB on 32-bit)
 #define MI_ARENA_MAX_SIZE       (MI_BITMAP_MAX_BIT_COUNT * MI_ARENA_SLICE_SIZE)
 
