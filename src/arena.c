@@ -1498,10 +1498,10 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
     _mi_warning_message("cannot use OS memory since it is not large enough (size %zu KiB, minimum required is %zu KiB)", mi_size_of_slices(slice_count)/MI_KiB, mi_size_of_slices(info_slices+1)/MI_KiB);
     return NULL;
   }
-  else if (info_slices >= MI_ARENA_MAX_CHUNK_OBJ_SLICES) {
-    _mi_warning_message("cannot use OS memory since it is too large with respect to the maximum object size (size %zu MiB, meta-info slices %zu, maximum object slices are %zu)", mi_size_of_slices(slice_count)/MI_MiB, info_slices, MI_ARENA_MAX_CHUNK_OBJ_SLICES);
-    return NULL;
-  }
+  // else if (info_slices >= MI_ARENA_MAX_CHUNK_OBJ_SLICES) {
+  //   _mi_warning_message("cannot use OS memory since it is too large with respect to the maximum object size (size %zu MiB, meta-info slices %zu, maximum object slices are %zu)", mi_size_of_slices(slice_count)/MI_MiB, info_slices, MI_ARENA_MAX_CHUNK_OBJ_SLICES);
+  //   return NULL;
+  // }
 
   mi_arena_t* arena = (mi_arena_t*)start;
 
