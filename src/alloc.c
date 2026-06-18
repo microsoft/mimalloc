@@ -375,6 +375,9 @@ void* _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool ze
     if (usable_pre!=NULL) { *usable_pre = mi_page_usable_block_size(page); }
   }
   if mi_unlikely(newsize<=size && newsize>=(size/2) && newsize>0  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
+                  #if MI_THEAP_INITASNULL
+                  && mi_theap_is_initialized(theap)  // the default theap can be NULL if realloc is the first allocation on a thread; skip the in-place check then (issue #1304)
+                  #endif
                   && mi_page_heap(page)==_mi_theap_heap(theap))             // and within the same heap
   {
     mi_assert_internal(p!=NULL);
