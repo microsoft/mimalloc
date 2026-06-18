@@ -374,16 +374,24 @@ void* _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool ze
     size = _mi_usable_size(p,page);
     if (usable_pre!=NULL) { *usable_pre = mi_page_usable_block_size(page); }
   }
-  if mi_unlikely(newsize<=size && newsize>=(size/2) && newsize>0  // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
-                  && mi_page_heap(page)==_mi_theap_heap(theap))             // and within the same heap
-  {
-    mi_assert_internal(p!=NULL);
-    // todo: do not track as the usable size is still the same in the free; adjust potential padding?
-    // mi_track_resize(p,size,newsize)
-    // if (newsize < size) { mi_track_mem_noaccess((uint8_t*)p + newsize, size - newsize); }
-    if (usable_post!=NULL) { *usable_post = mi_page_usable_block_size(page); }
-    return p;  // reallocation still fits and not more than 50% waste
+  // check if we can reuse the existing block
+  if mi_unlikely(newsize<=size && newsize>=(size/2) && newsize>0) { // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)                 
+    mi_assert_internal(page!=NULL); // note: page!=NULL (since if p==NULL, we have size=0 and size>=newsize>0
+    #if MI_THEAP_INITASNULL
+    if (theap!=NULL)
+    #endif
+    {
+      if (mi_page_heap(page)==_mi_theap_heap(theap)) {  // and within the same heap
+        mi_assert_internal(p!=NULL);
+        // todo: do not track as the usable size is still the same in the free; adjust potential padding?
+        // mi_track_resize(p,size,newsize)
+        // if (newsize < size) { mi_track_mem_noaccess((uint8_t*)p + newsize, size - newsize); }
+        if (usable_post!=NULL) { *usable_post = mi_page_usable_block_size(page); }
+        return p;  // reallocation still fits and not more than 50% waste
+      }
+    }
   }
+  // otherwise allocate a fresh block
   void* newp = mi_theap_umalloc(theap,newsize,usable_post);
   if mi_likely(newp != NULL) {
     if (zero && newsize > size) {
