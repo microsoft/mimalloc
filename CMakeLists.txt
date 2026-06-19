@@ -47,6 +47,7 @@ option(MI_SEE_ASM           "Generate assembly files" OFF)
 # negated options for vcpkg features
 option(MI_NO_USE_CXX        "Use plain C compilation (has priority over MI_USE_CXX)" OFF)
 option(MI_NO_OPT_ARCH       "Do not use architecture specific optimizations (like '-march=armv8.1-a' for example) (has priority over MI_OPT_ARCH)" OFF)
+option(MI_NO_DEBUG          "Disable all assertion checks even in debug builds" OFF)
 
 # experimental
 option(MI_WIN_INIT_USE_RAW_DLLMAIN "Use the raw DLL main entry point for mimalloc initialization; can be more robust but can also lead to link errors with other libraries" OFF)
@@ -330,7 +331,11 @@ if (MI_SKIP_COLLECT_ON_EXIT)
   list(APPEND mi_defines MI_SKIP_COLLECT_ON_EXIT=1)
 endif()
 
-if(MI_DEBUG_FULL)
+if(MI_NO_DEBUG)
+  message(STATUS "Set debug level zero, all assertions are disabled (MI_NO_DEBUG=ON)")
+  set(MI_DEBUG OFF)
+  list(APPEND mi_defines MI_DEBUG=0)
+elseif(MI_DEBUG_FULL)
   message(STATUS "Set debug level to full assertion and internal invariant checking (MI_DEBUG_FULL=ON, expensive)")
   set(MI_DEBUG ON)
   list(APPEND mi_defines MI_DEBUG=3)   # full invariant checking (mi_assert, mi_assert_internal, and mi_assert_expensive)
