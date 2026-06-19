@@ -555,9 +555,15 @@ void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const si
   mi_track_mem_noaccess(padding,sizeof(mi_padding_t));
 }
 #else
-static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool is_guarded) {
-  MI_UNUSED(is_guarded); MI_UNUSED(block);
-  return mi_page_usable_block_size(page);
+static inline size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool is_guarded) {
+  MI_UNUSED(block);
+  if (is_guarded) {
+    const size_t bsize = mi_page_block_size(page);
+    return (bsize - _mi_os_page_size());
+  }
+  else {
+    return mi_page_usable_block_size(page);
+  }
 }
 
 void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
