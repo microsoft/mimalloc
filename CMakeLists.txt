@@ -29,6 +29,7 @@ option(MI_BUILD_STATIC      "Build static library" ON)
 option(MI_BUILD_OBJECT      "Build object library" ON)
 option(MI_BUILD_TESTS       "Build test executables" ON)
 
+# OS specific
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" ON)
 option(MI_WIN_REDIRECT      "Use redirection module ('mimalloc-redirect') on Windows if compiling mimalloc as a DLL" ON)
@@ -36,6 +37,7 @@ option(MI_WIN_DIRECT_TLS    "Use only direct TLS slots on Windows to avoid extra
 option(MI_LOCAL_DYNAMIC_TLS "Use local-dynamic-tls, a slightly slower but dlopen-compatible thread local storage mechanism (Unix)" OFF)
 option(MI_LIBC_MUSL         "Enable this when linking with musl libc" OFF)
 
+# advanced
 option(MI_PADDING           "Enable padding to detect heap block overflow (always on in DEBUG or SECURE mode, or with Valgrind/ASAN)" OFF)
 option(MI_SKIP_COLLECT_ON_EXIT "Skip collecting memory on program exit" OFF)
 option(MI_NO_PADDING        "Force no use of padding even in DEBUG mode etc." OFF)
@@ -52,6 +54,10 @@ option(MI_NO_DEBUG          "Disable all assertion checks even in debug builds" 
 # experimental
 option(MI_WIN_INIT_USE_RAW_DLLMAIN "Use the raw DLL main entry point for mimalloc initialization; can be more robust but can also lead to link errors with other libraries" OFF)
 option(MI_WIN_INIT_USE_TLS_DLLMAIN "Use legacy TLS entries with DllMain for mimalloc initialization" OFF)
+
+option(MI_TLS_MODEL_LOCAL    "Force TLS model based on thread local variables" OFF)
+option(MI_TLS_MODEL_PTHREADS "Force TLS model based on pthreads" OFF)
+option(MI_TLS_RECURSE_GUARD  "Force a recursion check on thread local access (MI_TLS_MODEL_LOCAL only)" OFF)
 
 # deprecated options
 option(MI_WIN_USE_FLS       "Use Fiber local storage on Windows to detect thread termination (deprecated)" OFF)
@@ -422,6 +428,19 @@ endif()
 if(MI_LIBC_MUSL)
   message(STATUS "Assume using musl libc (MI_LIBC_MUSL=ON)")
   list(APPEND mi_defines MI_LIBC_MUSL=1)
+endif()
+
+if(MI_TLS_MODEL_LOCAL)
+  message(STATUS "Use TLS model based on thread local (MI_TLS_MODEL_LOCAL=ON)")
+  list(APPEND mi_defines MI_TLS_MODEL_THREAD_LOCAL=1)
+elseif(MI_TLS_MODEL_PTHREADS)
+  message(STATUS "Use TLS model based on pthreads (MI_TLS_MODEL_PTHREADS=ON)")
+  list(APPEND mi_defines MI_TLS_MODEL_DYNAMIC_PTHREADS=1)
+endif()
+
+if(MI_TLS_RECURSE_GUARD)
+  message(STATUS "Use TLS recursion guard (for MI_TLS_MODEL_LOCAL only)")
+  list(APPEND mi_defines MI_TLS_RECURSE_GUARD=1)
 endif()
 
 if(MI_WIN_DIRECT_TLS)

@@ -522,7 +522,7 @@ static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* bloc
 
 // Return the exact usable size of a block.
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool is_guarded) {
-  if (is_guarded) {
+  if mi_unlikely(is_guarded) {
     const size_t bsize = mi_page_block_size(page);
     return (bsize - _mi_os_page_size());
   }
@@ -557,7 +557,7 @@ void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const si
 #else
 static inline size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool is_guarded) {
   MI_UNUSED(block);
-  if (is_guarded) {
+  if mi_unlikely(is_guarded) {
     const size_t bsize = mi_page_block_size(page);
     return (bsize - _mi_os_page_size());
   }
