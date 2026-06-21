@@ -683,7 +683,7 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
 
 // Page start
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
-  return page->page_start;
+  return (uint8_t*)page + (page->page_woffset * MI_SIZE_SIZE);
 }
 
 static inline size_t mi_page_size(const mi_page_t* page) {
@@ -722,7 +722,7 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
 static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
   #if MI_PAGE_META_IS_SEPARATED
   // usually separated but can still be in front for direct OS allocations (due to size or alignment) or due to MI_PAGE_META_ALIGNED_FREE_SMALL
-  return (page->memid.memkind == MI_MEM_ARENA && page != _mi_align_down_ptr(page->page_start, MI_ARENA_SLICE_ALIGN));
+  return (page->memid.memkind == MI_MEM_ARENA && page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
   #else
   MI_UNUSED(page);
   return false;  
@@ -732,7 +732,7 @@ static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
 static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
   if (mi_page_meta_is_separated(page)) {  
     // page meta info is at a separate location (at `arena->pages`)
-    return (uint8_t*)_mi_align_down_ptr(page->page_start, MI_ARENA_SLICE_ALIGN);
+    return (uint8_t*)_mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN);
   }
   else {
     // page meta info is at the start of the page slices
@@ -742,7 +742,7 @@ static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
 
 // This gives the offset relative to the start slice of a page. 
 static inline size_t mi_page_slice_offset_of(const mi_page_t* page, size_t offset_relative_to_page_start) {
-  return (page->page_start - mi_page_slice_start(page)) + offset_relative_to_page_start;
+  return (mi_page_start(page) - mi_page_slice_start(page)) + offset_relative_to_page_start;
 }
 
 // Currently committed part of a page

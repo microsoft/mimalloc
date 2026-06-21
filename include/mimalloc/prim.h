@@ -521,7 +521,7 @@ static inline mi_theap_t* _mi_heap_theap(const mi_heap_t* heap) {
   return _mi_heap_theap_get_or_init(heap);
 }
 
-// Get the theap belonging to a heap without creating in if it is not yet initialized.
+// Get the theap belonging to a heap without creating it if it is not yet initialized.
 static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached();
   #if MI_THEAP_INITASNULL

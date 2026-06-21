@@ -393,7 +393,8 @@ typedef struct mi_page_s {
   _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads (= `mi_block_t* | (1 if owned)`)
 
   size_t                    block_size;        // const: size available in each block (always `>0`)
-  uint8_t*                  page_start;        // const: start of the blocks
+  uint32_t                  page_woffset;      // const: offset relative to the page (in machine words) to the start of the blocks
+  uint32_t                  slice_committed;   // committed size relative to the first arena slice of the page data (or 0 if the page is fully committed already)
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t                 keys[2];           // const: two random keys to encode the free lists (see `_mi_block_next`) or padding canary
@@ -404,7 +405,6 @@ typedef struct mi_page_s {
 
   struct mi_page_s*         next;              // next page owned by the theap with the same `block_size`
   struct mi_page_s*         prev;              // previous page owned by the theap with the same `block_size`
-  size_t                    slice_committed;   // committed size relative to the first arena slice of the page data (or 0 if the page is fully committed already)
   mi_memid_t                memid;             // const: provenance of the page memory
 } mi_page_t;
 

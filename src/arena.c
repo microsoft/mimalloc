@@ -24,6 +24,10 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 #include "mimalloc/prim.h"
 #include "bitmap.h"
 
+#if (MI_ARENA_MAX_SIZE >= MI_SIZE_SIZE*UINT32_MAX)
+#error "The page_t.page_woffset field is not large enough to cover a full arena (redefine it to be an offset in MI_MAX_ALIGN_SIZE sizes?)"
+#endif
+
 /* -----------------------------------------------------------
   Arena id's
 ----------------------------------------------------------- */
@@ -918,13 +922,22 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   const size_t reserved = (os_align ? 1 : (page_noguard_size - block_start) / block_size);
   mi_assert_internal(reserved > 0 && reserved <= UINT16_MAX);
 
+  // initialize the page start
+  uint8_t* const start = slice_start + block_start;
+  mi_assert_internal(start > (uint8_t*)page);
+  const size_t offset = start - (uint8_t*)page;
+  mi_assert_internal((offset % MI_SIZE_SIZE) == 0 && (offset / MI_SIZE_SIZE) < UINT32_MAX);
+  page->page_woffset = (uint32_t)(offset / MI_SIZE_SIZE);
+
   // initialize
-  page->reserved = (uint16_t)reserved;
-  page->page_start = slice_start + block_start;
+  page->reserved = (uint16_t)reserved;  
   page->block_size = block_size;
-  page->slice_committed = commit_size;
   page->memid = memid;
   page->free_is_zero = memid.initially_zero;
+
+  mi_assert_internal((commit && commit_size==0) || (!commit && commit_size < UINT32_MAX));
+  page->slice_committed = (uint32_t)commit_size;
+
   mi_assert_internal(page->free==NULL);
   mi_assert_internal(page_meta_is_separate == mi_page_meta_is_separated(page));
   mi_assert_internal(mi_page_slice_start(page) == slice_start);
@@ -963,7 +976,8 @@ static mi_page_t* mi_arenas_page_regular_alloc(mi_theap_t* theap, size_t slice_c
   // 2. find a free block, potentially allocating a new arena
   const long commit_on_demand = mi_option_get(mi_option_page_commit_on_demand);
   const bool commit = (slice_count <= mi_slice_count_of_size(MI_PAGE_MIN_COMMIT_SIZE) ||  // always commit small pages
-                       (commit_on_demand == 2 && _mi_os_has_overcommit()) || (commit_on_demand == 0));
+                       (slice_count >= mi_slice_count_of_size(UINT32_MAX)) ||             // always commit pages too large to hold a 32-bit slice_committed
+                        (commit_on_demand == 2 && _mi_os_has_overcommit()) || (commit_on_demand == 0));
   page = mi_arenas_page_alloc_fresh(theap, slice_count, block_size, 1, commit);
   if (page == NULL) return NULL;
 

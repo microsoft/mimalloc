@@ -41,7 +41,7 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page);
 
 #if (MI_DEBUG>=3)
 static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
-  mi_assert_internal(_mi_ptr_page(page->page_start) == page);
+  mi_assert_internal(_mi_ptr_page(mi_page_start(page)) == page);
   const uint8_t* slice_start = mi_page_slice_start(page);
   mi_assert_internal(_mi_is_aligned(slice_start,MI_PAGE_ALIGN));
   size_t count = 0;
@@ -669,7 +669,8 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
       if (!_mi_os_commit(mi_page_slice_start(page) + page->slice_committed, needed_commit - page->slice_committed, NULL)) {
         return false;
       }
-      page->slice_committed = needed_commit;
+      mi_assert_internal(needed_commit < UINT32_MAX);
+      page->slice_committed = (uint32_t)needed_commit;
     }
   }
 

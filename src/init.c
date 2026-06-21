@@ -26,14 +26,14 @@ const mi_page_t _mi_page_empty = {
   NULL,                   // local_free
   MI_ATOMIC_VAR_INIT(0),  // xthread_free
   0,                      // block_size
-  NULL,                   // page_start
+  0,                      // page_woffset
+  MI_ARENA_SLICE_SIZE,    // page_committed
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   { 0, 0 },               // keys
   #endif
   NULL,                   // theap
   NULL,                   // heap
   NULL, NULL,             // next, prev
-  MI_ARENA_SLICE_SIZE,    // page_committed
   MI_MEMID_STATIC         // memid
 };
 
