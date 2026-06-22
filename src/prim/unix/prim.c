@@ -150,13 +150,14 @@ static bool unix_detect_thp(void) {
   #if defined(__linux__)
   int fd = mi_prim_open("/sys/kernel/mm/transparent_hugepage/enabled", O_RDONLY);
   if (fd >= 0) {
-    char buf[32];
+    char buf[64];
     ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
     mi_prim_close(fd);
     // <https://www.kernel.org/doc/html/latest/admin-guide/mm/transhuge.html>
     // between brackets is the current value, for example: always [madvise] never
     if (nread >= 1) {
-      thp_enabled = (_mi_strnstr(buf,32,"[never]") == NULL);
+      if (nread > 64) { nread = 64; }
+      thp_enabled = (_mi_strnstr(buf,nread,"[never]") == NULL);
     }
   }
   #endif
