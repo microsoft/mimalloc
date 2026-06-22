@@ -89,7 +89,7 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was
 
 // Adjust a block that was allocated aligned, to the actual start of the block in the page.
 // note: this can be called from `mi_free_generic_mt` where a non-owning thread accesses the
-// `page_start` and `block_size` fields; however these are constant and the page won't be
+// `page_woffset` and `block_size` fields; however these are constant and the page won't be
 // deallocated (as the block we are freeing keeps it alive) and thus safe to read concurrently.
 mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   mi_assert_internal(page!=NULL && p!=NULL);
@@ -228,7 +228,7 @@ void mi_free_small(void* p) mi_attr_noexcept {
     #else
       mi_page_t* const page = (mi_page_t*)_mi_align_down_ptr(p,MI_SMALL_PAGE_SIZE);
       mi_assert(page == mi_validate_ptr_page(p,"mi_free_small"));
-      mi_assert((void*)page == _mi_align_down_ptr(page->page_start,MI_SMALL_PAGE_SIZE));
+      mi_assert((void*)page == _mi_align_down_ptr(mi_page_start(page),MI_SMALL_PAGE_SIZE));
       mi_assert(page->block_size <= MI_SMALL_SIZE_MAX);  // note: not `MI_SMALL_MAX_OBJ_SIZE` as we need to match `mi_(heap_)malloc_small`
       mi_free_ex(p, NULL, page);
     #endif
