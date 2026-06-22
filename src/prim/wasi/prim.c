@@ -238,9 +238,9 @@ void _mi_prim_out_stderr( const char* msg ) {
 // Environment
 //----------------------------------------------------------------
 
-bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
+int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   // cannot call getenv() when still initializing the C runtime.
-  if (_mi_preloading()) return false;
+  if (_mi_preloading()) return -1;  // error, try again later
   const char* s = getenv(name);
   if (s == NULL) {
     // we check the upper case name too.
@@ -252,9 +252,9 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
     buf[len] = 0;
     s = getenv(buf);
   }
-  if (s == NULL || _mi_strnlen(s,result_size) >= result_size)  return false;
+  if (s == NULL || _mi_strnlen(s,result_size) >= result_size)  return 0; // not found
   _mi_strlcpy(result, s, result_size);
-  return true;
+  return 1; // found
 }
 
 

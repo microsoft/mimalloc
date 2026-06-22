@@ -110,7 +110,7 @@ void        _mi_strlcat(char* dest, const char* src, size_t dest_size);
 size_t      _mi_strlen(const char* s);
 size_t      _mi_strnlen(const char* s, size_t max_len);
 bool        _mi_streq(const char* s, const char* t);
-bool        _mi_getenv(const char* name, char* result, size_t result_size);
+int         _mi_getenv(const char* name, char* result, size_t result_size);
 
 // "options.c"
 void        _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
@@ -317,6 +317,9 @@ bool        _mi_page_is_valid(mi_page_t* page);
 #endif
 #ifndef EOVERFLOW      // count*size overflow
 #define EOVERFLOW (75)
+#endif
+#ifndef ENOENT         // environment variable not found
+#define ENOENT (2)
 #endif
 
 
@@ -680,7 +683,7 @@ static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* 
 #else
   MI_UNUSED(block); MI_UNUSED(p);
   return false;
-#endif  
+#endif
 }
 
 #if MI_GUARDED
