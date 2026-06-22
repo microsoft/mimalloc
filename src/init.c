@@ -435,14 +435,14 @@ mi_subproc_t* _mi_subproc(void) {
 }
 
 mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
-  mi_heap_t* heap = mi_atomic_load_ptr_relaxed(mi_heap_t,&subproc->heap_main);
+  mi_heap_t* heap = mi_atomic_load_ptr_acquire(mi_heap_t,&subproc->heap_main);
   if mi_likely(heap!=NULL) {
     return heap;
   }
   else {
     mi_heap_main_init();
-    mi_assert_internal(mi_atomic_load_relaxed(&subproc->heap_main) != NULL);
-    return mi_atomic_load_ptr_relaxed(mi_heap_t,&subproc->heap_main);
+    mi_assert_internal(mi_atomic_load_ptr_acquire(mi_heap_t,&subproc->heap_main) != NULL);
+    return mi_atomic_load_ptr_acquire(mi_heap_t,&subproc->heap_main);
   }
 }
 
