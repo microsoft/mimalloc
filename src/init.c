@@ -426,7 +426,7 @@ mi_subproc_t* _mi_subproc(void) {
   //       on such systems we can check for this with the _mi_prim_get_default_theap as those are protected (by being
   //       stored in a TLS slot for example)
   mi_theap_t* theap = _mi_theap_default();
-  if (theap == NULL || theap->tld == NULL) {
+  if (theap == NULL || theap->tld == NULL) {  // see issue #1289
     return _mi_subproc_main();
   }
   else {

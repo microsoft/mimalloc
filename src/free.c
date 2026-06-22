@@ -322,7 +322,7 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
 
   // get our theap 
   mi_theap_t* const theap = _mi_page_associated_theap_peek(page);
-  if (theap==NULL || !theap->allow_page_reclaim) return false;
+  if (theap==NULL || theap->tld==NULL || !theap->allow_page_reclaim) return false;  // see issue #1289
   
   // todo: cache `is_in_threadpool` and `exclusive_arena` directly in the theap for performance?
   // set max_reclaim limit
