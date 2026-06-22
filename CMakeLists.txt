@@ -475,13 +475,21 @@ else()
   # list(APPEND mi_defines MI_WIN_INIT_USE_CRT_TLS=1)
 endif()
 
-# Check /proc/cpuinfo for an SV39 MMU and limit the virtual address bits.
-# (this will skip the aligned hinting in that case. Issue #939, #949)
+# Check /proc/cpuinfo for an SV39/48/57 MMU and limit the virtual address bits.
+# (for sv39, this will skip the aligned hinting in that case. Issue #939, #949)
 if (EXISTS /proc/cpuinfo)
   file(STRINGS /proc/cpuinfo mi_sv39_mmu REGEX "^mmu[ \t]+:[ \t]+sv39$")
+  file(STRINGS /proc/cpuinfo mi_sv48_mmu REGEX "^mmu[ \t]+:[ \t]+sv48$")
+  file(STRINGS /proc/cpuinfo mi_sv57_mmu REGEX "^mmu[ \t]+:[ \t]+sv57$")
   if (mi_sv39_mmu)
     MESSAGE( STATUS "Set virtual address bits to 39 (SV39 MMU detected)" )
     list(APPEND mi_defines MI_DEFAULT_VIRTUAL_ADDRESS_BITS=39)
+  elseif (mi_sv48_mmu)
+    MESSAGE( STATUS "Set virtual address bits to 48 (SV48 MMU detected)" )
+    list(APPEND mi_defines MI_DEFAULT_VIRTUAL_ADDRESS_BITS=48)
+  elseif (mi_sv57_mmu)
+    MESSAGE( STATUS "Set virtual address bits to 57 (SV57 MMU detected)" )
+    list(APPEND mi_defines MI_DEFAULT_VIRTUAL_ADDRESS_BITS=57)
   endif()
 endif()
 
