@@ -821,28 +821,28 @@ static char** mi_get_environ(void) {
   return environ;
 }
 #endif
-bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
-  if (name==NULL) return false;
+int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
+  if (name==NULL) return -1;
   const size_t len = _mi_strlen(name);
-  if (len == 0) return false;
+  if (len == 0) return -1;
   char** env = mi_get_environ();
-  if (env == NULL) return false;
+  if (env == NULL) return -1;
   // compare up to 10000 entries
   for (int i = 0; i < 10000 && env[i] != NULL; i++) {
     const char* s = env[i];
     if (_mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
       // found it
       _mi_strlcpy(result, s + len + 1, result_size);
-      return true;
+      return 1;  // success
     }
   }
-  return false;
+  return 0; // not found
 }
 #else
 // fallback: use standard C `getenv` but this cannot be used while initializing the C runtime
-bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
+int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   // cannot call getenv() when still initializing the C runtime.
-  if (_mi_preloading()) return false;
+  if (_mi_preloading()) return -1;  // error, try again later
   const char* s = getenv(name);
   if (s == NULL) {
     // we check the upper case name too.
@@ -854,9 +854,9 @@ bool _mi_prim_getenv(const char* name, char* result, size_t result_size) {
     buf[len] = 0;
     s = getenv(buf);
   }
-  if (s == NULL || _mi_strnlen(s,result_size) >= result_size)  return false;
+  if (s == NULL || _mi_strnlen(s,result_size) >= result_size)  return 0; // not found
   _mi_strlcpy(result, s, result_size);
-  return true;
+  return 1;  // success
 }
 #endif  // !MI_USE_ENVIRON
 

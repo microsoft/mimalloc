@@ -132,7 +132,7 @@ size_t        _mi_strlen(const char* s);
 size_t        _mi_strnlen(const char* s, size_t max_len);
 char*         _mi_strnstr(char* s, size_t max_len, const char* pat);
 bool          _mi_streq(const char* s, const char* t);
-bool          _mi_getenv(const char* name, char* result, size_t result_size);
+int           _mi_getenv(const char* name, char* result, size_t result_size);
 
 // "options.c"
 void          _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
@@ -181,7 +181,7 @@ void          _mi_theap_guarded_init(mi_theap_t* theap);
 void          _mi_theap_options_init(mi_theap_t* theap);
 mi_theap_t*   _mi_theap_default_safe(void);             // ensure the returned theap is initialized
 mi_theap_t*   _mi_theap_main_safe(void);
-   
+
 // os.c
 void          _mi_os_init(void);                                            // called from process init
 void*         _mi_os_alloc(size_t size, mi_memid_t* memid);
@@ -725,12 +725,12 @@ static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
   return (page->memid.memkind == MI_MEM_ARENA && page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
   #else
   MI_UNUSED(page);
-  return false;  
+  return false;
   #endif
 }
 
 static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
-  if (mi_page_meta_is_separated(page)) {  
+  if (mi_page_meta_is_separated(page)) {
     // page meta info is at a separate location (at `arena->pages`)
     return (uint8_t*)_mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN);
   }
@@ -740,7 +740,7 @@ static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
   }
 }
 
-// This gives the offset relative to the start slice of a page. 
+// This gives the offset relative to the start slice of a page.
 static inline size_t mi_page_slice_offset_of(const mi_page_t* page, size_t offset_relative_to_page_start) {
   return (mi_page_start(page) - mi_page_slice_start(page)) + offset_relative_to_page_start;
 }
@@ -967,7 +967,7 @@ static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* 
 #else
   MI_UNUSED(block); MI_UNUSED(p);
   return false;
-#endif  
+#endif
 }
 
 #if MI_GUARDED

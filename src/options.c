@@ -121,7 +121,7 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { MI_DEFAULT_VERBOSE, MI_OPTION_UNINIT, MI_OPTION(verbose) },
 
   // some of the following options are experimental and not all combinations are allowed.
-  { 1, MI_OPTION_UNINIT, MI_OPTION(deprecated_eager_commit) },  
+  { 1, MI_OPTION_UNINIT, MI_OPTION(deprecated_eager_commit) },
   { MI_DEFAULT_ARENA_EAGER_COMMIT,
        MI_OPTION_UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
   { 1, MI_OPTION_UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },        // purge decommits memory (instead of reset) (note: on linux this uses MADV_DONTNEED for decommit)
@@ -134,9 +134,9 @@ static mi_option_desc_t mi_options[_mi_option_last] =
        MI_OPTION_UNINIT, MI_OPTION(reserve_os_memory)     },      // reserve N KiB OS memory in advance (use `option_get_size`)
   { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_segment_cache) },   // cache N segments per thread
   { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_page_reset) },      // reset page memory on free
-  { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_abandoned_page_purge) }, 
+  { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_abandoned_page_purge) },
   { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_segment_reset) },   // reset segment memory on free (needs eager commit)
-  { 1, MI_OPTION_UNINIT, MI_OPTION(deprecated_eager_commit_delay) },  
+  { 1, MI_OPTION_UNINIT, MI_OPTION(deprecated_eager_commit_delay) },
   { 1000,MI_OPTION_UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
   { 0,   MI_OPTION_UNINIT, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.
   { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(disallow_os_alloc,limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)
@@ -176,15 +176,15 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { MI_DEFAULT_ALLOW_THP,
          MI_OPTION_UNINIT, MI_OPTION(allow_thp) },                // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
   { 0,   MI_OPTION_UNINIT, MI_OPTION(minimal_purge_size) },       // set minimal purge size (in KiB) (=0). Using 0 resolves to either 64 (or 2048 if `mi_option_allow_thp==2`).
-  { MI_DEFAULT_ARENA_MAX_OBJECT_SIZE,   
-         MI_OPTION_UNINIT, MI_OPTION(arena_max_object_size) },    // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit). 
+  { MI_DEFAULT_ARENA_MAX_OBJECT_SIZE,
+         MI_OPTION_UNINIT, MI_OPTION(arena_max_object_size) },    // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
   { 0,   MI_OPTION_UNINIT, MI_OPTION(arena_is_numa_local) },      // associate local numa node with an initial arena allocation
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
 
 static bool mi_option_has_size_in_kib(mi_option_t option) {
-  return (option == mi_option_reserve_os_memory || option == mi_option_arena_reserve || 
+  return (option == mi_option_reserve_os_memory || option == mi_option_arena_reserve ||
           option == mi_option_minimal_purge_size || option == mi_option_arena_max_object_size);
 }
 
@@ -203,7 +203,7 @@ void _mi_options_init(void) {
       _mi_warning_message("option 'allow_large_os_pages' is disabled to allow for guarded objects\n");
     }
   }
-  #endif  
+  #endif
 }
 
 // called at actual process load, it should be safe to print now
@@ -636,17 +636,17 @@ static void mi_option_init(mi_option_desc_t* desc) {
   char buf[64+1];
   _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
   _mi_strlcat(buf, desc->name, sizeof(buf));
-  bool found = _mi_getenv(buf, s, sizeof(s));
-  if (!found && desc->legacy_name != NULL) {
+  int err = _mi_getenv(buf, s, sizeof(s));
+  if (err==ENOENT && desc->legacy_name != NULL) {
     _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
     _mi_strlcat(buf, desc->legacy_name, sizeof(buf));
-    found = _mi_getenv(buf, s, sizeof(s));
-    if (found) {
+    err = _mi_getenv(buf, s, sizeof(s));
+    if (err==0) {
       _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name);
     }
   }
 
-  if (found) {
+  if (err==0) {
     size_t len = _mi_strnlen(s, sizeof(buf) - 1);
     for (size_t i = 0; i < len; i++) {
       buf[i] = _mi_toupper(s[i]);
@@ -656,7 +656,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
       desc->value = 1;
       desc->init = MI_OPTION_INITIALIZED;
     }
-    else if (_mi_streq(buf,"0") || _mi_streq(buf,"FALSE") || _mi_streq(buf,"NO") || _mi_streq(buf,"OFF")) {      
+    else if (_mi_streq(buf,"0") || _mi_streq(buf,"FALSE") || _mi_streq(buf,"NO") || _mi_streq(buf,"OFF")) {
       desc->value = 0;
       desc->init = MI_OPTION_INITIALIZED;
     }
@@ -698,7 +698,8 @@ static void mi_option_init(mi_option_desc_t* desc) {
     }
     mi_assert_internal(desc->init != MI_OPTION_UNINIT);
   }
-  else if (!_mi_preloading()) {
+  else if (err==ENOENT) {
     desc->init = MI_OPTION_DEFAULTED;
   }
+  // and on another error, keep unitialized to try again (can happen during preloading if getenv is not available)
 }
