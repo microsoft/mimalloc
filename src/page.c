@@ -161,8 +161,9 @@ bool _mi_page_is_valid(mi_page_t* page) {
 #endif
 
 void _mi_page_use_delayed_free(mi_page_t* page, mi_delayed_t delay, bool override_never) {
+  size_t ticks = 0;
   while (!_mi_page_try_use_delayed_free(page, delay, override_never)) {
-    mi_atomic_yield();
+    mi_atomic_yield_sleep(&ticks,10);
   }
 }
 
@@ -342,8 +343,9 @@ static mi_page_t* mi_page_fresh(mi_heap_t* heap, mi_page_queue_t* pq) {
    (put there by other threads if they deallocated in a full page)
 ----------------------------------------------------------- */
 void _mi_heap_delayed_free_all(mi_heap_t* heap) {
+  size_t ticks = 0;
   while (!_mi_heap_delayed_free_partial(heap)) {
-    mi_atomic_yield();
+    mi_atomic_yield_sleep(&ticks,10);
   }
 }
 

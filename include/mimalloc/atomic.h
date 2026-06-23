@@ -469,6 +469,32 @@ static inline void mi_atomic_yield(void) {
 }
 #endif
 
+#if defined(_WIN32)
+static inline void mi_sleep0(void) {
+  Sleep(0);
+}
+#else
+#include <unistd.h>
+static inline void mi_sleep0(void) {
+  sleep(0);
+}
+#endif
+
+static inline void mi_atomic_yield_sleep( size_t* ticks, const size_t ticks_until_sleep ) {
+  const size_t n = *ticks;
+  if (n==0 || n > ticks_until_sleep) {
+    *ticks = ticks_until_sleep; // reset
+  }
+  else {
+    *ticks = n-1;    
+  }
+  if (n>1) {
+    mi_atomic_yield();
+  }
+  else {
+    mi_sleep0();
+  }
+}
 
 // ----------------------------------------------------------------------
 // Locks
@@ -589,9 +615,10 @@ static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
   return mi_atomic_cas_strong_acq_rel(&lock->mutex, &expected, (uintptr_t)1);
 }
 static inline void mi_lock_acquire(mi_lock_t* lock) {
+  size_t ticks = 0;
   for (int i = 0; i < 10000; i++) {  // for at most 10000 tries?
     if (mi_lock_try_acquire(lock)) return;
-    mi_atomic_yield();
+    mi_atomic_yield_sleep(&ticks,100);
   }
   _mi_error_message(EFAULT, "internal error: lock cannot be acquired (due to lack of native lock primitives)\n");
 }
