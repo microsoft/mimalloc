@@ -806,12 +806,14 @@ static bool mi_win_tls_slot_alloc(size_t* slot, size_t* extended, DWORD* raw_ind
     return false;
   }
   else if (index<MI_TLS_DIRECT_SLOTS) {
+    TlsSetValue(index,NULL);
     *extended = 0;
     *slot = index + MI_TLS_DIRECT_FIRST;
     return true;
   }
   #if !MI_WIN_DIRECT_TLS
   else if (index < MI_TLS_DIRECT_SLOTS + MI_TLS_EXPANSION_SLOTS - 1) { // check maximum number of expansion slots - 1 (as we use the last one as the default)    
+    TlsSetValue(index,NULL);
     *extended = index - MI_TLS_DIRECT_SLOTS;
     *slot = MI_TLS_EXPANSION_SLOT;
     return true;
@@ -830,6 +832,7 @@ static bool mi_win_tls_slot_alloc(size_t* slot, size_t* extended, DWORD* raw_ind
 
 static void mi_win_tls_slot_free(DWORD* raw_index) {
   if (*raw_index != TLS_OUT_OF_INDEXES) {
+    TlsSetValue(*raw_index,NULL);
     TlsFree(*raw_index);
     *raw_index = TLS_OUT_OF_INDEXES;
   }
