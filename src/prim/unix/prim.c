@@ -214,48 +214,36 @@ static void unix_detect_physical_memory( size_t page_size, size_t* physical_memo
 }
 
 // Detect the virtual address bits (currently Linux/RISC-V only)
-static size_t unix_detect_virtual_address_bits(void)
-{
+static size_t unix_detect_virtual_address_bits(void) {
   #if defined(__riscv) || defined(_M_RISCV)
     #if defined(RISCV_HWPROBE_KEY_HIGHEST_VIRT_ADDRESS)
-      struct riscv_hwprobe probe = {
-        .key = RISCV_HWPROBE_KEY_HIGHEST_VIRT_ADDRESS,
-      };
-
+      struct riscv_hwprobe probe = { .key = RISCV_HWPROBE_KEY_HIGHEST_VIRT_ADDRESS, };
       // Prefer the GNU libc interface if available, as it can also use the VDSO
       #if defined(MI_HAS_SYS_HWPROBEH)
-      if (__riscv_hwprobe(&probe, 1, 0, NULL, 0) == 0) {
+      if (__riscv_hwprobe(&probe, 1, 0, NULL, 0) == 0)
       #else
-      if (syscall(__NR_riscv_hwprobe, &probe, 1, 0, NULL, 0) == 0) {
+      if (syscall(__NR_riscv_hwprobe, &probe, 1, 0, NULL, 0) == 0)
       #endif
-        // If a key is unknown to the kernel, its key field will be cleared to -1.
-        if (probe.key != -1) {
-          return MI_SIZE_BITS - mi_clz((uintptr_t)probe.value);
+      {
+        if (probe.key != -1) { // If a key is unknown to the kernel, its key field will be cleared to -1.
+          return (MI_SIZE_BITS - mi_clz((uintptr_t)probe.value));
         }
       }
     #endif
-
     // Fallback to checking /proc/cpuinfo for older kernels
     const int fd = mi_prim_open("/proc/cpuinfo", O_RDONLY);
     if (fd >= 0) {
       char buf[2048];
-      ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
-      mi_prim_close(fd);
+      const ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+      mi_prim_close(fd);      
       if ((nread >= 1) && (nread <= (ssize_t)sizeof(buf))) {
-        if (_mi_strnstr(buf, nread, "sv39")) {
-          return 39;
-        }
-        if (_mi_strnstr(buf, nread, "sv48")) {
-          return 48;
-        }
-        if (_mi_strnstr(buf, nread, "sv57")) {
-          return 57;
-        }
+        if (_mi_strnstr(buf, nread, "sv39")) { return 39; }
+        else if (_mi_strnstr(buf, nread, "sv48")) { return 48; }
+        else if (_mi_strnstr(buf, nread, "sv57")) { return 57; }
       }
     }
-  #endif
-
-  // default: MI_MAX_VABITS
+  #endif // riscv
+  // default
   return MI_MAX_VABITS;
 }
 
