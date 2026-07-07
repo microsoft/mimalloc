@@ -1287,13 +1287,13 @@ void _mi_arenas_free(void* p, size_t size, mi_memid_t memid) {
     mi_assert_internal(mi_arena_slice_start(arena,slice_index) + mi_size_of_slices(slice_count) > (uint8_t*)p);
     // checks
     if (arena == NULL) {
-      _mi_error_message(EINVAL, "trying to free from an invalid arena: %p, size %zu, memid: 0x%zx\n", p, size, memid);
+      _mi_error_message(EINVAL, "trying to free from an invalid arena: %p, size %zu, memkind: 0x%x\n", p, size, memid.memkind);
       return;
     }
     mi_assert_internal(slice_index < arena->slice_count);
     mi_assert_internal(slice_index >= mi_arena_info_slices(arena));
     if (slice_index < mi_arena_info_slices(arena) || slice_index >= arena->slice_count) {
-      _mi_error_message(EINVAL, "trying to free from an invalid arena block: %p, size %zu, memid: 0x%zx\n", p, size, memid);
+      _mi_error_message(EINVAL, "trying to free from an invalid arena block: %p, size %zu, memkind: 0x%x\n", p, size, memid.memkind);
       return;
     }
 

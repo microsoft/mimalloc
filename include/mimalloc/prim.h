@@ -149,7 +149,7 @@ void _mi_prim_thread_yield(void);
 // We also use it on Apple OS as we use a TLS slot for the default theap there.
 #if (defined(_WIN32)) || \
     (defined(__GNUC__) && ( \
-           (defined(__GLIBC__)   && (defined(__x86_64__) || defined(__i386__) || (defined(__arm__) && __ARM_ARCH >= 7) || defined(__aarch64__))) \
+           (defined(__GLIBC__)   && (defined(__x86_64__) || defined(__i386__) || (defined(__arm__) && __ARM_ARCH >= 7) || defined(__aarch64__) || defined(__riscv))) \
         || (defined(__APPLE__)   && (defined(__x86_64__) || defined(__aarch64__) || defined(__POWERPC__))) \
         || (defined(__BIONIC__)  && (defined(__x86_64__) || defined(__i386__) || (defined(__arm__) && __ARM_ARCH >= 7) || defined(__aarch64__))) \
         || (defined(__FreeBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
@@ -186,6 +186,10 @@ static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
     #else
     __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
     #endif
+    res = tcb[slot];
+  #elif defined(__riscv)
+    void** tcb; MI_UNUSED(ofs);
+    __asm__ volatile ("mv %0, tp" : "=r" (tcb));
     res = tcb[slot];
   #elif defined(__APPLE__) && defined(__POWERPC__) // ppc, issue #781
     MI_UNUSED(ofs);
@@ -227,6 +231,10 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
     __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
     #endif
     tcb[slot] = value;
+  #elif defined(__riscv)
+    void** tcb; MI_UNUSED(ofs);
+    __asm__ volatile ("mv %0, tp" : "=r" (tcb));
+    tcb[slot] = value;
   #elif defined(__APPLE__) && defined(__POWERPC__) // ppc, issue #781
     MI_UNUSED(ofs);
     pthread_setspecific(slot, value);
@@ -263,6 +271,7 @@ extern mi_decl_hidden bool _mi_process_is_initialized;                // has mi_
       && !defined(MI_LIBC_MUSL) \
       && (!defined(__clang_major__) || __clang_major__ >= 14)  /* older clang versions emit bad code; fall back to using the TLS slot (<https://lore.kernel.org/linux-arm-kernel/202110280952.352F66D8@keescook/T/>) */
     #if    (defined(__GNUC__) && (__GNUC__ >= 7)  && defined(__aarch64__)) /* aarch64 for older gcc versions (issue #851) */ \
+        || (defined(__GNUC__) && (__GNUC__ >= 7)  && defined(__riscv)) \
         || (defined(__GNUC__) && (__GNUC__ >= 11) && defined(__x86_64__)) \
         || (defined(__clang_major__) && (__clang_major__ >= 14) && (defined(__aarch64__) || defined(__x86_64__)))
       #define MI_USE_BUILTIN_THREAD_POINTER  1
