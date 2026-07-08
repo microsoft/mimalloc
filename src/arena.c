@@ -2345,6 +2345,9 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
     _mi_arenas_page_free(page, theap);
   }
   else if (heap_target==NULL) {
+    #if MI_GUARDED
+    _mi_page_unguard_all(page);          // remove potential interior guard pages 
+    #endif
     // destroy the page
     page->used=0;                        // note: invariant `|local_free| + |free| == reserved - used`  does not hold in this case
     _mi_arenas_page_free(page, theap);

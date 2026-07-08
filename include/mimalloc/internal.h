@@ -297,6 +297,7 @@ void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
 bool          _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acquire_tld_theaps_lock);
 void          _mi_theap_incref(mi_theap_t* theap);
 void          _mi_theap_decref(mi_theap_t* theap);
+bool          _mi_page_visit_blocks( mi_page_t* page, mi_block_visit_fun* visitor, void* arg );
 
 // "heap.c"
 void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
@@ -321,6 +322,9 @@ void*         _mi_theap_malloc_zero_ex(mi_theap_t* theap, size_t size, bool zero
 void*         _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool zero, size_t* usable_pre, size_t* usable_post) mi_attr_noexcept;
 mi_block_t*   _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
 void          _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
+
+// "free.c"
+void          _mi_page_unguard_all(mi_page_t* page);
 
 #if MI_DEBUG>1
 bool          _mi_page_is_valid(mi_page_t* page);

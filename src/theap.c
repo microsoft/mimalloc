@@ -683,6 +683,11 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
   return true;
 }
 
+bool _mi_page_visit_blocks( mi_page_t* page, mi_block_visit_fun* visitor, void* arg ) {
+  mi_heap_area_t area;
+  _mi_heap_area_init(&area, page);
+  return _mi_theap_area_visit_blocks(&area, page, visitor, arg);
+}
 
 
 // Separate struct to keep `mi_page_t` out of the public interface

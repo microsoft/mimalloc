@@ -661,4 +661,17 @@ static void mi_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
   mi_assert_internal(_mi_is_aligned(gpage, psize));
   _mi_os_unprotect(gpage, psize);
 }
+
+// unguard a whole page (called from `mi_heap_destroy`)
+void _mi_page_unguard_all(mi_page_t* page) {      
+  if mi_likely(!mi_page_has_interior_pointers(page)) return;
+  uint8_t* const start = mi_page_start(page);
+  const size_t psize = mi_page_committed(page);
+  _mi_os_unprotect(start,psize);  // unprotect all at once as we cannot know which blocks are guarded
+}
+#else
+void _mi_page_unguard_all(mi_page_t* page) {
+  MI_UNUSED(page);
+  // nothing to do 
+}
 #endif
