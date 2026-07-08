@@ -172,9 +172,10 @@ mi_theap_t* mi_theap_get_default(void) {
 }
 
 mi_theap_t* mi_theap_set_default(mi_theap_t* theap) {
-  if (!mi_theap_is_initialized(theap)) return;
   mi_theap_t* const previous = mi_theap_get_default();
-  _mi_theap_default_set(theap);
+  if (mi_theap_is_initialized(theap)) {
+    _mi_theap_default_set(theap);
+  }
   return previous;
 }
 
