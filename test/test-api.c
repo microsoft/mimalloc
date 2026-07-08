@@ -336,6 +336,15 @@ int main(void) {
     mi_free(p);
   };
 
+  CHECK_BODY("realloc-guarded") {      // issue #1304
+ 	  void* shared_ptr = NULL;
+    for (int iterations = 0; iterations < 64; ++iterations) {
+      for (int i = 0; i < 1024; ++i) {
+        shared_ptr = mi_realloc(shared_ptr, i * 64);
+      }
+    }
+  }
+
   // ---------------------------------------------------
   // Returned block sizes
   // ---------------------------------------------------
