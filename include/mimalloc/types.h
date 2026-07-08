@@ -515,6 +515,7 @@ struct mi_theap_s {
   mi_tld_t*             tld;                                 // thread-local data
   _Atomic(mi_heap_t*)   heap;                                // the heap this theap belongs to.
   _Atomic(size_t)       refcount;                            // reference count
+  _Atomic(size_t)       freed;                               // ensure atomic free-ing
   unsigned long long    heartbeat;                           // monotonic heartbeat count
   uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   mi_random_ctx_t       random;                              // random number context used for secure allocation

@@ -110,7 +110,8 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
 
 static void mi_theap_merge_stats(mi_theap_t* theap) {
   mi_assert_internal(mi_theap_is_initialized(theap));
-  _mi_stats_merge_into(&_mi_theap_heap(theap)->stats, &theap->stats);
+  mi_heap_t* const heap = _mi_theap_heap(theap);
+  _mi_stats_merge_into(&heap->stats, &theap->stats);
 }
 
 static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
@@ -179,8 +180,9 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   mi_memid_t memid = theap->memid;
   _mi_memcpy_aligned(theap, &_mi_theap_empty, sizeof(mi_theap_t));
   theap->memid = memid;
-  theap->refcount = 1;
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
+  mi_atomic_store_release(&theap->refcount,1);
+  mi_atomic_store_release(&theap->freed,0);
   mi_atomic_store_ptr_relaxed(mi_heap_t,&theap->heap,heap);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
   
@@ -282,6 +284,7 @@ static void mi_theap_free_mem(mi_theap_t* theap) {
   }
 }
 
+// we need to reference count theaps due to the _mi_theap_cached thread locals
 void _mi_theap_incref(mi_theap_t* theap) {
   if (theap!=NULL && theap->memid.memkind > MI_MEM_STATIC) {
     mi_atomic_increment_acq_rel(&theap->refcount);
@@ -302,13 +305,15 @@ bool _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acqui
   mi_assert(theap != NULL);
   if (theap==NULL) return true;
 
-  mi_heap_t* const heap = mi_atomic_exchange_ptr_acq_rel(mi_heap_t, &theap->heap, NULL);
-  if (heap==NULL) {
+  // ensure only one thread actually frees the theap
+  const size_t freed = mi_atomic_exchange_acq_rel( &theap->freed, 1 );
+  if (freed!=0) {
     // concurrent interaction, retry in an outer loop (as the other thread may be blocked on our lock)
     return false;
   }
   else {
     // merge stats to the owning heap
+    mi_heap_t* const heap = _mi_theap_heap(theap);
     _mi_stats_merge_into(&heap->stats, &theap->stats);
 
     // remove ourselves from the heap theaps list
@@ -327,6 +332,11 @@ bool _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acqui
       theap->tnext = theap->tprev = NULL;           
     }
 
+    // Set heap to NULL only after we are removed from the thread local theaps list since
+    // we may concurrently traverse it to collect (in `init.c:mi_thread_theaps_done`)
+    // (We need to set it to NULL to avoid an ABA problem where the _mi_theap_cached
+    // has a heap address that is reused for a newly allocated heap.)
+    mi_atomic_store_ptr_release(mi_heap_t, &theap->heap, NULL);
     theap->tld = NULL;
     _mi_theap_decref(theap);
     return true;

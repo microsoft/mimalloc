@@ -115,6 +115,7 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   &tld_empty,             // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(1),  // refcount
+  MI_ATOMIC_VAR_INIT(0),  // freed
   0,                      // heartbeat
   0,                      // cookie
   { {0}, {0}, 0, true },  // random
@@ -140,6 +141,7 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
   &tld_empty,             // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(1),  // refcount
+  MI_ATOMIC_VAR_INIT(0),  // freed
   0,                      // heartbeat
   0,                      // cookie
   { {0}, {0}, 0, true },  // random
@@ -184,6 +186,7 @@ mi_decl_cache_align mi_theap_t theap_main = {
   &tld_main,              // thread local data
   MI_ATOMIC_VAR_INIT(&heap_main), // main heap
   MI_ATOMIC_VAR_INIT(1),  // refcount
+  MI_ATOMIC_VAR_INIT(0),  // freed
   0,                      // heartbeat
   0,                      // initial cookie
   { {0x846ca68b}, {0}, 0, true },  // random
