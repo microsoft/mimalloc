@@ -171,6 +171,13 @@ mi_theap_t* mi_theap_get_default(void) {
   return theap;
 }
 
+mi_theap_t* mi_theap_set_default(mi_theap_t* theap) {
+  if (!mi_theap_is_initialized(theap)) return;
+  mi_theap_t* const previous = mi_theap_get_default();
+  _mi_theap_default_set(theap);
+  return previous;
+}
+
 // todo: make order of parameters consistent (but would that break compat with CPython?)
 void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
 {
