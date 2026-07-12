@@ -76,8 +76,9 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
 
 // get the theap for a heap without initializing (and return NULL in that case)
 mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap) {
-  if (heap==NULL || _mi_is_heap_main(heap)) {
-    return _mi_theap_main_safe(); 
+  if (heap==NULL || _mi_is_process_heap_main(heap)) {
+    // don't initalize a thread on peek (as it can be called at thread shutdown)
+    return (_mi_thread_is_initialized() ? _mi_theap_main_safe() : NULL);
   }
   else {
     return (mi_theap_t*)_mi_thread_local_get(heap->theap);
@@ -96,26 +97,12 @@ mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
   return theap;
 }
 
-
-mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
-  // always allocate heap data in the (subprocess) main heap
-  mi_heap_t* const heap_main = mi_heap_main();
-  // todo: allocate heap data in the exclusive arena ?
-  mi_heap_t* const heap = (mi_heap_t*)mi_heap_zalloc( heap_main, sizeof(mi_heap_t) );
-  if (heap==NULL) return NULL;
-
-  // reserve a thread local slot for this heap (see also issue #1230)
-  const mi_thread_local_t theap_slot = _mi_thread_local_create();
-  if (theap_slot == 0) {
-    _mi_error_message(EFAULT, "unable to dynamically create a thread local for a heap\n");
-    mi_free(heap);
-    return NULL;
-  }
-
+static void mi_heap_initialize(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id) 
+{ 
   // init fields
   heap->theap = theap_slot;
-  heap->subproc = heap_main->subproc;
-  heap->heap_seq = mi_atomic_increment_relaxed(&heap_main->subproc->heap_total_count);
+  heap->subproc = subproc;
+  heap->heap_seq = mi_atomic_increment_relaxed(&subproc->heap_total_count);
   heap->exclusive_arena = _mi_arena_from_id(exclusive_arena_id);
   heap->numa_node = -1; // no initial affinity
   mi_stats_header_init(&heap->stats);
@@ -131,9 +118,29 @@ mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
     if (head!=NULL) { head->prev = heap;  }
     heap->subproc->heaps = heap;
   }
-  mi_atomic_increment_relaxed(&heap_main->subproc->heap_count);
-  mi_subproc_stat_increase(heap_main->subproc, heaps, 1);
+  mi_atomic_increment_relaxed(&subproc->heap_count);
+  mi_subproc_stat_increase(subproc, heaps, 1);
+}
+
+mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id) {
+  // heap data is allocated in the current subproc 
+  mi_heap_t* const heap_main = mi_heap_main();
+  // todo: allocate heap data in the exclusive arena ?
+  mi_heap_t* const heap = (mi_heap_t*)mi_heap_zalloc( heap_main, sizeof(mi_heap_t) );
+  if (heap==NULL) return NULL;
+  // reserve a thread local slot for this heap (see also issue #1230)
+  const mi_thread_local_t theap_slot = _mi_thread_local_create();
+  if (theap_slot == 0) {
+    _mi_error_message(EFAULT, "unable to dynamically create a thread local for a heap\n");
+    mi_free(heap);
+    return NULL;
+  }
+  mi_heap_initialize(heap, theap_slot, subproc, exclusive_arena_id);
   return heap;
+}
+
+mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
+  return _mi_heap_new_for_subproc(_mi_subproc(), exclusive_arena_id);
 }
 
 mi_heap_t* mi_heap_new(void) {
@@ -181,7 +188,7 @@ static void mi_heap_free(mi_heap_t* heap) {
       mi_arena_pages_t* arena_pages = mi_atomic_load_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i]);
       if (arena_pages!=NULL) {
         mi_atomic_store_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i], NULL);
-        mi_free(arena_pages);
+        _mi_free_subproc_safe(arena_pages);
       }
     }
   }
@@ -200,7 +207,7 @@ static void mi_heap_free(mi_heap_t* heap) {
   mi_lock_done(&heap->theaps_lock);
   mi_lock_done(&heap->os_abandoned_pages_lock);
   mi_lock_done(&heap->arena_pages_lock);
-  mi_free(heap);
+  _mi_free_subproc_safe(heap);
 }
 
 void mi_heap_delete(mi_heap_t* heap) {
@@ -231,13 +238,14 @@ void mi_heap_destroy(mi_heap_t* heap) {
 }
 
 mi_heap_t* mi_heap_of(const void* p) {
-  mi_page_t* page = _mi_safe_ptr_page(p);
+  mi_page_t* const page = _mi_safe_ptr_page(p);
   if (page==NULL) return NULL;
   return mi_page_heap(page);
 }
 
 bool mi_any_heap_contains(const void* p) {
-  return (mi_heap_of(p)!=NULL);
+  mi_page_t* const page = _mi_safe_ptr_page(p);
+  return (page!=NULL);
 }
 
 bool mi_heap_contains(const mi_heap_t* heap, const void* p) {

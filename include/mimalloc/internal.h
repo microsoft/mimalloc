@@ -165,6 +165,7 @@ bool          _mi_is_redirected(void);
 bool          _mi_allocator_init(const char** message);
 void          _mi_allocator_done(void);
 bool          _mi_is_main_thread(void);
+bool          _mi_is_process_heap_main(const mi_heap_t* heap);
 bool          _mi_preloading(void);           // true while the C runtime is not initialized yet
 void          _mi_thread_done(mi_theap_t* theap);
 
@@ -253,9 +254,9 @@ void          _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_the
 bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page);
 
 // arena-meta.c
-void*         _mi_meta_zalloc( size_t size, mi_memid_t* memid );
+void*         _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid );
 void          _mi_meta_free(void* p, size_t size, mi_memid_t memid);
-bool          _mi_meta_is_meta_page(void* p);
+bool          _mi_meta_is_meta_page(mi_subproc_t* subproc, void* p);
 
 // "page-map.c"
 bool          _mi_page_map_init(void);
@@ -306,6 +307,7 @@ mi_decl_cold  mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap);     //
 void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);  // in "arena.c"
 void          _mi_heap_destroy_pages(mi_heap_t* heap_from);                   // in "arena.c"
 void          _mi_heap_force_destroy(mi_heap_t* heap);                        // allow destroying the main heap
+mi_heap_t*    _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id);
 
 // "stats.c"
 void          _mi_stats_init(void);
@@ -324,6 +326,7 @@ mi_block_t*   _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
 void          _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
 
 // "free.c"
+void          _mi_free_subproc_safe(void* p);
 void          _mi_page_unguard_all(mi_page_t* page);
 
 #if MI_DEBUG>1
@@ -912,9 +915,14 @@ static inline mi_tld_t* mi_page_tld(const mi_page_t* page) {
 static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
   mi_heap_t* heap = page->heap;
   // we use NULL for the main heap to make `_mi_page_get_associated_theap` fast in `free.c:mi_abandoned_page_try_reclaim`.
-  if mi_likely(heap==NULL) heap = mi_heap_main();
+  if mi_likely(heap==NULL) { heap = mi_heap_main(); }
   mi_assert_internal(heap != NULL);
   return heap;
+}
+
+static inline mi_subproc_t* mi_page_subproc(const mi_page_t* page) {
+  mi_heap_t* const heap = mi_page_heap(page);
+  return heap->subproc;
 }
 
 //-----------------------------------------------------------
@@ -1141,7 +1149,7 @@ static inline mi_memid_t _mi_memid_create_os(void* base, size_t size, bool commi
   return memid;
 }
 
-static inline mi_memid_t _mi_memid_create_meta(void* mpage, size_t block_idx, size_t block_count) {
+static inline mi_memid_t _mi_memid_create_meta(mi_meta_page_t* mpage, size_t block_idx, size_t block_count) {
   mi_memid_t memid = _mi_memid_create(MI_MEM_META);
   memid.mem.meta.meta_page = mpage;
   memid.mem.meta.block_index = (uint32_t)block_idx;

@@ -659,7 +659,8 @@ static mi_arena_t* mi_page_arena_pages(mi_page_t* page, size_t* slice_index, siz
   mi_arena_t* const arena = mi_arena_from_memid(page->memid, slice_index, slice_count);
   mi_assert_internal(arena != NULL);
   if (parena_pages != NULL) {
-    mi_arena_pages_t* const arena_pages = mi_heap_arena_pages(mi_page_heap(page), arena);
+    mi_heap_t* heap = mi_page_heap(page);
+    mi_arena_pages_t* const arena_pages = mi_heap_arena_pages(heap, arena);
     mi_assert_internal(arena_pages != NULL);
     mi_assert_internal(slice_index==NULL || mi_bitmap_is_set(arena_pages->pages, *slice_index));
     *parena_pages = arena_pages;
@@ -1139,7 +1140,8 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap) {
   // mi_assert_internal(current_theap == _mi_page_associated_theap(page));
 
   // add to abandoned?
-  mi_heap_t* heap = mi_page_heap(page); mi_assert_internal(heap==_mi_theap_heap(current_theap));
+  mi_heap_t* heap = mi_page_heap(page); 
+  mi_assert_internal(heap==_mi_theap_heap(current_theap));
   if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
     // make available for allocations
     size_t bin = _mi_bin(mi_page_block_size(page));
@@ -1813,7 +1815,7 @@ static size_t mi_debug_show_page_bfield(char* buf, size_t* k, mi_arena_t* arena,
     else {
       c = '?';
       if (bit_of_page > 0) { c = '-'; }
-      else if (_mi_meta_is_meta_page(start)) { c = 'm'; color = MI_GRAY; }
+      else if (_mi_meta_is_meta_page(_mi_subproc(),start)) { c = 'm'; color = MI_GRAY; }
       else if (slice_index + bit < arena->info_slices) { c = 'i'; color = MI_GRAY; }
       // else if (mi_bitmap_is_setN(arena->pages_purge, slice_index + bit, NULL)) { c = '*'; }
       else if (mi_bbitmap_is_setN(arena->slices_free, slice_index+bit,1)) {

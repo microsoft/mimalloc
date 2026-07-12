@@ -267,6 +267,7 @@ static inline bool mi_memkind_needs_no_free(mi_memkind_t memkind) {
   return (memkind <= MI_MEM_STATIC);
 }
 
+typedef struct mi_meta_page_s mi_meta_page_t;
 
 typedef struct mi_memid_os_info {
   void*         base;               // actual base address of the block (used for offset aligned allocations)
@@ -281,9 +282,9 @@ typedef struct mi_memid_arena_info {
 } mi_memid_arena_info_t;
 
 typedef struct mi_memid_meta_info {
-  void*         meta_page;          // meta-page that contains the block
-  uint32_t      block_index;        // block index in the meta-data page
-  uint32_t      block_count;        // allocated blocks
+  mi_meta_page_t* meta_page;        // meta-page that contains the block
+  uint32_t        block_index;      // block index in the meta-data page
+  uint32_t        block_count;      // allocated blocks
 } mi_memid_meta_info_t;
 
 typedef struct mi_memid_s {
@@ -601,6 +602,7 @@ struct mi_subproc_s {
   size_t                subproc_seq;                    // unique id for sub-processes
   mi_subproc_t*         next;                           // list of all sub-processes
   mi_subproc_t*         prev;
+  _Atomic(mi_meta_page_t*) meta_pages;                  // meta data pages
 
   _Atomic(size_t)       arena_count;                    // current count of arena's
   _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process

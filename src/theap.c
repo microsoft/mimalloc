@@ -253,7 +253,7 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   //}
   //else
   if (heap->exclusive_arena == NULL) {
-    theap = (mi_theap_t*)_mi_meta_zalloc(sizeof(mi_theap_t), &memid);
+    theap = (mi_theap_t*)_mi_meta_zalloc(heap->subproc, sizeof(mi_theap_t), &memid);
   }
   else {
     // theaps associated with a specific arena are allocated in that arena
@@ -281,7 +281,7 @@ static void mi_theap_free_mem(mi_theap_t* theap) {
     // free the used memory
     if (theap->memid.memkind == MI_MEM_HEAP_MAIN) {  // note: for now unused as it would access theap_default stats in mi_free of the current theap
       mi_assert_internal(_mi_is_heap_main(mi_heap_of(theap)));
-      mi_free(theap);
+      _mi_free_subproc_safe(theap);
     }
     else if (theap->memid.memkind == MI_MEM_META) {
       _mi_meta_free(theap, sizeof(*theap), theap->memid);
@@ -294,7 +294,7 @@ static void mi_theap_free_mem(mi_theap_t* theap) {
 
 // we need to reference count theaps due to the _mi_theap_cached thread locals
 void _mi_theap_incref(mi_theap_t* theap) {
-  if (theap!=NULL && theap->memid.memkind > MI_MEM_STATIC) {
+  if (theap!=NULL && !mi_memid_needs_no_free(theap->memid)) {
     mi_atomic_increment_acq_rel(&theap->refcount);
   }
 }

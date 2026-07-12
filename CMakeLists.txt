@@ -766,6 +766,7 @@ install(FILES cmake/mimalloc-config-version.cmake DESTINATION ${mi_install_cmake
 if (MI_BUILD_OBJECT)
   add_library(mimalloc-obj OBJECT src/static.c)
   set_property(TARGET mimalloc-obj PROPERTY POSITION_INDEPENDENT_CODE ON)
+  # set_property(TARGET mimalloc-obj APPEND PROPERTY OBJECT_DEPENDS ${mi_sources})
   target_compile_definitions(mimalloc-obj PRIVATE ${mi_defines})
   target_compile_options(mimalloc-obj PRIVATE ${mi_cflags} ${mi_cflags_static})
   target_include_directories(mimalloc-obj PUBLIC
@@ -780,9 +781,9 @@ if (MI_BUILD_OBJECT)
     set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}")
   endif()
   set(mimalloc-obj-out "${CMAKE_CURRENT_BINARY_DIR}/${mi_libname}${CMAKE_C_OUTPUT_EXTENSION}")
-  add_custom_command(OUTPUT ${mimalloc-obj-out} DEPENDS mimalloc-obj COMMAND "${CMAKE_COMMAND}" -E copy "${mimalloc-obj-static}" "${mimalloc-obj-out}")
+  add_custom_command(OUTPUT ${mimalloc-obj-out} DEPENDS mimalloc-obj mimalloc-static COMMAND "${CMAKE_COMMAND}" -E copy "${mimalloc-obj-static}" "${mimalloc-obj-out}")
   add_custom_target(mimalloc-obj-target ALL DEPENDS ${mimalloc-obj-out})
-
+  
 
   # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
   # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_objdir})

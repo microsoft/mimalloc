@@ -152,6 +152,7 @@ Create and free fresh TLS key's
 
 static mi_lock_t    mi_thread_locals_lock;    // we need a lock in order to re-allocate the slot bits
 static mi_bitmap_t* mi_thread_locals_free;    // reuse an arena bitmap to track which slots were assigned (1=free, 0=in-use)
+static mi_memid_t   mi_thread_locals_memid;   // provenance of mi_thread_locals_free
 static size_t       mi_thread_locals_version; // version to be able to reuse slots safely
 
 void _mi_thread_locals_init(void) {
@@ -161,7 +162,11 @@ void _mi_thread_locals_init(void) {
 void _mi_thread_locals_done(void) {
   mi_lock(&mi_thread_locals_lock) {
     mi_bitmap_t* const slots = mi_thread_locals_free;
-    mi_free(slots);
+    if (slots!=NULL) {
+      const size_t slots_count = mi_bitmap_max_bits(slots);
+      const size_t slots_size  = mi_bitmap_size(slots_count,NULL);
+      _mi_meta_free(slots,slots_size,mi_thread_locals_memid);
+    }
   }
   mi_lock_done(&mi_thread_locals_lock);
 }
@@ -194,16 +199,21 @@ static bool mi_thread_local_create_expand(void) {
   const size_t newcount = 1024 + oldcount;
   if (newcount > MI_TLS_IDX_MAX) { return false; }
   const size_t newsize = mi_bitmap_size( newcount, NULL );
-  mi_bitmap_t* newslots = (mi_bitmap_t*)mi_zalloc_aligned(newsize, MI_BCHUNK_SIZE);
+  // mi_bitmap_t* newslots = (mi_bitmap_t*)mi_zalloc_aligned(newsize, MI_BCHUNK_SIZE);
+  mi_memid_t memid;
+  mi_bitmap_t* newslots = (mi_bitmap_t*)_mi_meta_zalloc(_mi_subproc_main(), newsize, &memid); // always allocate thread locals in the main subprocess
+  mi_assert_internal(_mi_is_aligned(newslots,MI_BCHUNK_SIZE));
   if (newslots==NULL) { return false; }
   if (slots!=NULL) {
     // copy over the previous bitmap
-    _mi_memcpy_aligned(newslots, slots, mi_bitmap_size(oldcount, NULL)); 
-    mi_free(slots);
+    const size_t oldsize = mi_bitmap_size(oldcount,NULL);
+    _mi_memcpy_aligned(newslots, slots, oldsize); 
+    _mi_meta_free(slots,oldsize,mi_thread_locals_memid);
   }
   mi_bitmap_init(newslots, newcount, true /* pretend already zero'd so we do not zero out the copied old entries */);
   mi_bitmap_unsafe_setN(newslots, oldcount, newcount - oldcount);  /* set the new expanded slots as available */
   mi_thread_locals_free = newslots;
+  mi_thread_locals_memid = memid;
   return true;
 }
 
