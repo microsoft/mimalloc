@@ -1585,14 +1585,18 @@ bool mi_bbitmap_bsr_inv(mi_bbitmap_t* bbitmap, size_t* idx) {
       partial_bits_at_top = 0;   // only for the first iteration
       cmap |= mask_top;
     }
-    if (mi_bsr(~cmap, &cmap_idx)) {
-      // highest chunk
-      const size_t chunk_idx = i*MI_BFIELD_BITS + cmap_idx;
-      mi_assert_internal(chunk_idx < chunk_count);
-      size_t cidx;
-      if (mi_bchunk_bsr_inv(&bbitmap->chunks[chunk_idx], &cidx)) {
-        *idx = (chunk_idx * MI_BCHUNK_BITS) + cidx;
-        return true;
+    if (mi_bsr(~cmap, &cmap_idx)) {      
+      // scan all from highest chunk to lowest (in case the cmap is stale)
+      for( int j = (int)cmap_idx; j >= 0; j-- ) {
+        if (~cmap & mi_bfield_mask(1,j)) {
+          const size_t chunk_idx = i*MI_BFIELD_BITS + j;
+          mi_assert_internal(chunk_idx < chunk_count);
+          size_t cidx;
+          if (mi_bchunk_bsr_inv(&bbitmap->chunks[chunk_idx], &cidx)) {
+            *idx = (chunk_idx * MI_BCHUNK_BITS) + cidx;
+            return true;
+          }
+        }
       }
     }
   }
