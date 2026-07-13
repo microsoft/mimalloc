@@ -16,6 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stddef.h>   // size_t
 #include <stdint.h>   // int64_t etc
 #include <stdbool.h>  // bool
+#include <limits.h>   // LONG_MAX
 
 // ------------------------------------------------------
 // Size of a pointer.
