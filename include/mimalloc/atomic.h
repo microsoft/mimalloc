@@ -496,10 +496,10 @@ static inline void mi_lock_release(mi_lock_t* lock) {
   lock->mutex.unlock();
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
-  new(&lock->mutex) std::mutex();
+  new(&lock->mutex) std::mutex();  // in-place constructor
 }
 static inline void mi_lock_done(mi_lock_t* lock) {
-  (void)(lock);
+  lock->mutex.~mutex(); // in-place destructor
 }
 
 #else
