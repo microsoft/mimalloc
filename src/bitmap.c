@@ -1574,20 +1574,21 @@ void mi_bbitmap_unsafe_setN(mi_bbitmap_t* bbitmap, size_t idx, size_t n) {
 bool mi_bbitmap_bsr_inv(mi_bbitmap_t* bbitmap, size_t* idx) {
   const size_t chunk_count = mi_bbitmap_chunk_count(bbitmap);
   const size_t chunkmap_max = _mi_divide_up(chunk_count, MI_BFIELD_BITS);
-  size_t skip_at_top = chunk_count % MI_BFIELD_BITS;
+  size_t partial_bits_at_top = (chunk_count % MI_BFIELD_BITS);  
   for (size_t i = chunkmap_max; i > 0; ) {
     i--;
     mi_bfield_t cmap = mi_atomic_load_relaxed(&bbitmap->chunkmap.bfields[i]);
     size_t cmap_idx;
     // don't consider top 0 bits; set those to 1 here
-    if (skip_at_top > 0) {
-      const size_t mask_top = (~mi_bfield_zero()) << (MI_BFIELD_BITS - skip_at_top);
-      skip_at_top = 0;   // only for the first iteration
+    if (partial_bits_at_top > 0) {
+      const size_t mask_top = (~mi_bfield_zero()) << partial_bits_at_top;
+      partial_bits_at_top = 0;   // only for the first iteration
       cmap |= mask_top;
     }
     if (mi_bsr(~cmap, &cmap_idx)) {
       // highest chunk
       const size_t chunk_idx = i*MI_BFIELD_BITS + cmap_idx;
+      mi_assert_internal(chunk_idx < chunk_count);
       size_t cidx;
       if (mi_bchunk_bsr_inv(&bbitmap->chunks[chunk_idx], &cidx)) {
         *idx = (chunk_idx * MI_BCHUNK_BITS) + cidx;
