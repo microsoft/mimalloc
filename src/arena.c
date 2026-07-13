@@ -2074,7 +2074,14 @@ int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserv
 
 static long mi_arena_purge_delay(void) {
   // <0 = no purging allowed, 0=immediate purging, >0=milli-second delay
-  return (mi_option_get(mi_option_purge_delay) * mi_option_get(mi_option_arena_purge_mult));
+  const long delay = mi_option_get(mi_option_purge_delay);
+  const long mult  = mi_option_get(mi_option_arena_purge_mult);
+  if (delay<0 || mult<0)   { return -1; }
+  if (delay==0 || mult==0) { return 0; }
+  size_t total;
+  if (mi_mul_overflow((size_t)delay, (size_t)mult, &total)) { return delay; }
+  if (total < 0 || total > LONG_MAX) { return delay; }
+  return (long)total;
 }
 
 // reset or decommit in an arena and update the commit bitmap
