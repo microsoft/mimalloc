@@ -728,7 +728,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
         start = start + ((uintptr_t)MI_HUGE_OS_PAGE_SIZE * ((r>>17) & 0x0FFF));  // (randomly 12bits)*1GiB == between 0 to 4TiB
       }
       else {
-        _mi_warning_message("failed to randomize the start address of huge pages allocation (%zu bytes at %p)", size, start);
+        _mi_warning_message("failed to randomize the start address of huge pages allocation (%zu bytes at %p)", size, (void*)start);
       }
       #endif
     }
