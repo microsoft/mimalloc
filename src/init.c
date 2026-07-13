@@ -1097,7 +1097,6 @@ static void mi_detect_cpu_features(void) {
 
 // Initialize the process; called by thread_init or the process loader
 static void mi_process_init_once(void) mi_attr_noexcept {
-  _mi_process_is_initialized = true;  
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
 
   mi_detect_cpu_features();
@@ -1110,7 +1109,7 @@ static void mi_process_init_once(void) mi_attr_noexcept {
   _mi_page_map_init(); // todo: this could fail.. should we abort in that case?
   mi_thread_init();
   _mi_process_is_initialized = true;
-
+  
   #if defined(_WIN32) && defined(MI_WIN_USE_FLS)
   // On windows, when building as a static lib the FLS cleanup happens to early for the main thread.
   // To avoid this, set the FLS value for the main thread to NULL so the fls cleanup
