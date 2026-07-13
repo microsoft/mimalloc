@@ -22,12 +22,11 @@ terms of the MIT license.
 #include <string.h>
 #include <assert.h>
 
+#include <mimalloc.h>
+#include <mimalloc-stats.h>
+
 // #define MI_GUARDED         1
 // #define USE_STD_MALLOC     1
-
-#ifndef USE_STD_MALLOC
-#define MI_USE_HEAPS       4
-#endif
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
@@ -64,12 +63,18 @@ static int ITER    = 50;      // N full iterations destructing and re-creating a
 #endif
 
 
-
-#define STRESS                // undefine for leak test
+#define TEST_STRESS_SUBPROCS   1 
+#define TEST_STRESS            1    
+// #define TEST_LEAK              1
 
 #ifndef ALLOW_LARGE
 #define ALLOW_LARGE  false
 #endif
+
+#if !TEST_STRESS_SUBPROCS && !defined(USE_STD_MALLOC)
+#define MI_USE_HEAPS       4
+#endif
+
 
 static bool   allow_large_objects = ALLOW_LARGE;    // allow very large objects? (set to `true` if SCALE>100)
 
@@ -84,9 +89,6 @@ static bool   main_participates = false;       // main thread participates as a 
 #define custom_free(p)        free(p)
 
 #else
-
-#include <mimalloc.h>
-#include <mimalloc-stats.h>
 
 #ifdef MI_USE_HEAPS
 static mi_heap_t* current_heap;
@@ -107,7 +109,7 @@ static mi_heap_t* current_heap;
 
 // transfer pointer between threads
 #define TRANSFERS     (1000)
-static volatile void* transfer[TRANSFERS];
+// static volatile void* transfer[TRANSFERS];
 
 
 #if (UINTPTR_MAX != UINT32_MAX)
@@ -189,7 +191,11 @@ static bool visit_blocks(const mi_theap_t* theap, const mi_theap_area_t* area, v
 }
 #endif
 
-static void stress(intptr_t tid) {
+static void stress(intptr_t tid, void* vtransfers) {
+  #ifndef USE_STD_MALLOC
+  // printf("test stress thread: subproc: %p, tid: %zi\n", mi_subproc_current()._mi_subproc_id, tid);
+  #endif
+  volatile void** transfers = (volatile void**)vtransfers;
   //bench_start_thread();
   uintptr_t r = ((tid + 1) * 43); // rand();
   const size_t max_item_shift = 5; // 128
@@ -228,7 +234,7 @@ static void stress(intptr_t tid) {
       size_t data_idx = pick(&r) % data_top;
       size_t transfer_idx = pick(&r) % TRANSFERS;
       void* p = data[data_idx];
-      void* q = atomic_exchange_ptr(&transfer[transfer_idx], p);
+      void* q = atomic_exchange_ptr(&transfers[transfer_idx], p);
       data[data_idx] = q;
     }
   }
@@ -251,9 +257,17 @@ static void stress(intptr_t tid) {
   //bench_end_thread();
 }
 
-static void run_os_threads(size_t nthreads, void (*entry)(intptr_t tid));
+static mi_subproc_id_t subproc_null = { NULL };
 
-static void test_stress(void) {
+typedef void (thread_entry_fun_t)(intptr_t tid, void* arg);
+
+static void run_os_threads(mi_subproc_id_t subproc, size_t nthreads, thread_entry_fun_t* fun, void* arg);
+
+static void test_stress(mi_subproc_id_t subproc) {
+  // printf("test stress: subproc: %p\n", subproc._mi_subproc_id);
+  volatile void* transfers[TRANSFERS];
+  memset(transfers,0,sizeof(transfers));
+
   #ifdef MI_USE_HEAPS
   mi_heap_t* prev_heaps[MI_USE_HEAPS] = { NULL };
   #endif
@@ -268,11 +282,11 @@ static void test_stress(void) {
     for(int i = MI_USE_HEAPS-1; i > 0; i--) {
       prev_heaps[i] = prev_heaps[i-1];
     }
-    prev_heaps[0] = current_heap;
+    prev_heaps[0] = current_heap; 
     current_heap = mi_heap_new();
     #endif  
 
-    run_os_threads(THREADS, &stress);
+    run_os_threads(subproc, THREADS, &stress, transfers);
 
     #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     // switch between arena and OS allocation for testing
@@ -286,7 +300,7 @@ static void test_stress(void) {
 
     for (int i = 0; i < TRANSFERS; i++) {
       if (chance(50, &r) || n + 1 == ITER) { // free all on last run, otherwise free half of the transfers
-        void* p = atomic_exchange_ptr(&transfer[i], NULL);
+        void* p = atomic_exchange_ptr(&transfers[i], NULL);
         free_items(p);
       }
     }
@@ -316,14 +330,38 @@ static void test_stress(void) {
   #endif
 
   for (int i = 0; i < TRANSFERS; i++) {
-    void* p = atomic_exchange_ptr(&transfer[i], NULL);
+    void* p = atomic_exchange_ptr(&transfers[i], NULL);
     if (p != NULL) {
       free_items(p);
     }
   }
 }
 
-#ifndef STRESS
+#if TEST_STRESS_SUBPROCS && !defined(USE_STD_MALLOC)
+#define NSUBPROCS (2)
+static mi_subproc_id_t subprocs[NSUBPROCS];
+
+static void test_stress_subproc( intptr_t i, void* arg ) {
+  (void)arg;
+  mi_subproc_id_t subproc = subprocs[i];
+  mi_subproc_add_current_thread(subproc);
+  test_stress(subproc);
+}
+
+static void test_stress_subprocs(void) {
+  printf(" (for %d subprocesses)\n", NSUBPROCS);
+  // current_heap = mi_heap_main();
+  for(int i = 0; i < NSUBPROCS; i++) {
+    subprocs[i] = mi_subproc_new();
+  }
+  run_os_threads(subproc_null, NSUBPROCS, &test_stress_subproc, NULL);
+  for(int i = 0; i < NSUBPROCS; i++) {
+    mi_subproc_destroy(subprocs[i]);
+  }
+}
+#endif
+
+#if TEST_LEAK
 static void leak(intptr_t tid) {
   uintptr_t r = rand();
   void* p = alloc_items(1 /*pick(&r)%128*/, &r);
@@ -336,7 +374,7 @@ static void leak(intptr_t tid) {
 
 static void test_leak(void) {
   for (int n = 0; n < ITER; n++) {
-    run_os_threads(THREADS, &leak);
+    run_os_threads(subproc_null, THREADS, &leak, NULL);
     mi_collect(false);
 #ifndef NDEBUG
     if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
@@ -406,9 +444,11 @@ int main(int argc, char** argv) {
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
   srand(0x7feb352d);
   // mi_stats_reset();
-#ifdef STRESS
-    test_stress();
-#else
+#if TEST_STRESS_SUBPROCS && !defined(USE_STD_MALLOC)
+    test_stress_subprocs();  
+#elif TEST_STRESS
+    test_stress(subproc_null);
+#elif TEST_LEAK
     test_leak();
 #endif
 
@@ -431,14 +471,31 @@ int main(int argc, char** argv) {
 }
 
 
-static void (*thread_entry_fun)(intptr_t) = &stress;
+typedef struct callback_s {
+  thread_entry_fun_t* fun;
+  intptr_t tid;
+  void*    arg;
+  mi_subproc_id_t subproc;
+} callback_t;
+
+static void* thread_entry(void* param) {
+  callback_t* cb = (callback_t*)param;
+  #ifndef USE_STD_MALLOC
+  if (cb->subproc._mi_subproc_id != NULL) {
+    mi_subproc_add_current_thread(cb->subproc);
+  }
+  #endif
+  cb->fun(cb->tid,cb->arg);
+  return NULL;
+}
+
 
 #ifdef _WIN32
 
 #include <windows.h>
 
-static DWORD WINAPI thread_entry(LPVOID param) {
-  thread_entry_fun((intptr_t)param);
+static DWORD WINAPI win_thread_entry(LPVOID param) {
+  thread_entry(param);
   return 0;
 }
 
@@ -446,18 +503,26 @@ static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
   thread_entry_fun = fun;
   DWORD* tids = (DWORD*)custom_calloc(nthreads,sizeof(DWORD));
   HANDLE* thandles = (HANDLE*)custom_calloc(nthreads,sizeof(HANDLE));
+  callback_t* callbacks = (callback_t*)custom_calloc(nthreads,sizeof(callback_t));
   thandles[0] = GetCurrentThread(); // avoid lint warning
   const size_t start = (main_participates ? 1 : 0);
   for (size_t i = start; i < nthreads; i++) {
-    thandles[i] = CreateThread(0, 8*1024L, &thread_entry, (void*)(i), 0, &tids[i]);
+    callbacks[i].fun = fun;
+    callbacks[i].tid = i;
+    callbacks[i].arg = arg;
+    callbacks[i].subproc = subproc;
+    thandles[i] = CreateThread(0, 8*1024L, &win_thread_entry, (void*)&callbacks[i], 0, &tids[i]);
   }
-  if (main_participates) fun(0); // run the main thread as well
+  if (main_participates) {
+    fun(0,arg); // run the main thread as well
+  }
   for (size_t i = start; i < nthreads; i++) {
     WaitForSingleObject(thandles[i], INFINITE);
   }
   for (size_t i = start; i < nthreads; i++) {
     CloseHandle(thandles[i]);
   }
+  custom_free(callbacks);
   custom_free(tids);
   custom_free(thandles);
 }
@@ -473,24 +538,25 @@ static void* atomic_exchange_ptr(volatile void** p, void* newval) {
 
 #include <pthread.h>
 
-static void* thread_entry(void* param) {
-  thread_entry_fun((uintptr_t)param);
-  return NULL;
-}
-
-static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
-  thread_entry_fun = fun;
+static void run_os_threads(mi_subproc_id_t subproc, size_t nthreads, thread_entry_fun_t* fun, void* arg) {
   pthread_t* threads = (pthread_t*)custom_calloc(nthreads,sizeof(pthread_t));
-  memset(threads, 0, sizeof(pthread_t) * nthreads);
+  callback_t* callbacks = (callback_t*)custom_calloc(nthreads,sizeof(callback_t));
   const size_t start = (main_participates ? 1 : 0);
   //pthread_setconcurrency(nthreads);
   for (size_t i = start; i < nthreads; i++) {
-    pthread_create(&threads[i], NULL, &thread_entry, (void*)i);
+    callbacks[i].fun = fun;
+    callbacks[i].tid = i;
+    callbacks[i].arg = arg;
+    callbacks[i].subproc = subproc;
+    pthread_create(&threads[i], NULL, &thread_entry, (void*)&callbacks[i]);
   }
-  if (main_participates) fun(0); // run the main thread as well
+  if (main_participates) {
+    fun(0,arg); // run the main thread as well
+  }
   for (size_t i = start; i < nthreads; i++) {
     pthread_join(threads[i], NULL);
   }
+  custom_free(callbacks);
   custom_free(threads);
 }
 
