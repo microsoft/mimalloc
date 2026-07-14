@@ -105,7 +105,7 @@ static mi_decl_cache_align _Atomic(uintptr_t)aligned_base;
 // Return a MI_SEGMENT_SIZE aligned address that is probably available.
 // If this returns NULL, the OS will determine the address but on some OS's that may not be
 // properly aligned which can be more costly as it needs to be adjusted afterwards.
-// For a size > 1GiB this always returns NULL in order to guarantee good ASLR randomization;
+// In secure mode, for a size > 1GiB this always returns NULL in order to guarantee good ASLR randomization.
 // (otherwise an initial large allocation of say 2TiB has a 50% chance to include (known) addresses
 //  in the middle of the 2TiB - 6TiB address range (see issue #372))
 
@@ -118,7 +118,9 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   if (try_alignment <= 1 || try_alignment > MI_SEGMENT_SIZE) return NULL;
   if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
   size = _mi_align_up(size, MI_SEGMENT_SIZE);
+  #if (MI_SECURE>0)
   if (size > 1*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<30) = 1/4096.
+  #endif
   size += MI_SEGMENT_SIZE;           // put in `MI_SEGMENT_SIZE` virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
   
   uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
