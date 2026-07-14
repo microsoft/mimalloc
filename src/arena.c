@@ -954,6 +954,9 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   mi_assert_internal((commit && commit_size==0) || (!commit && commit_size < UINT32_MAX));
   page->slice_committed = (uint32_t)commit_size;
 
+  page->heap = _mi_theap_heap(theap);
+  mi_page_set_theap(page,theap);
+
   mi_assert_internal(page->free==NULL);
   mi_assert_internal(page_meta_is_separate == mi_page_meta_is_separated(page));
   mi_assert_internal(mi_page_slice_start(page) == slice_start);

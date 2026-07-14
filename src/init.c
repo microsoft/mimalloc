@@ -215,9 +215,6 @@ mi_decl_cache_align mi_heap_t mi_process_heap_main
   = { 0 };   // C zero initialize
 #endif
 
-// the theap belonging to the main heap
-mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main = NULL;
-
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
   const mi_threadid_t tid = _mi_prim_thread_id();
   mi_assert_internal( (tid & 0x03) == 0 ); // mimalloc reserves the bottom 2 bits
@@ -404,6 +401,7 @@ mi_theap_t* _mi_theap_default_safe(void) {
 }
 
 // return the main theap ensuring it is initialized. 
+/*
 mi_theap_t* _mi_theap_main_safe(void) {
   mi_theap_t* theap = __mi_theap_main;
   if mi_unlikely(theap==NULL) {  // if thread_init or default_set was never called
@@ -418,6 +416,7 @@ mi_theap_t* _mi_theap_main_safe(void) {
   mi_assert_internal(theap!=NULL && _mi_is_theap_main(theap));    
   return theap;
 }
+*/
 
 
 mi_subproc_t* _mi_subproc_main(void) {
@@ -466,6 +465,24 @@ bool _mi_is_heap_main(const mi_heap_t* heap) {
 
 bool _mi_is_theap_main(const mi_theap_t* theap) {
   return (mi_theap_is_initialized(theap) && _mi_is_heap_main(_mi_theap_heap(theap)));
+}
+
+mi_theap_t* _mi_heap_theap_get(mi_heap_t* heap) {
+  if (_mi_is_process_heap_main(heap)) {
+    return __mi_theap_main;
+  }
+  else {
+    return (mi_theap_t*)_mi_thread_local_get(heap->theap);
+  }
+}
+
+void _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap) {
+  if (_mi_is_process_heap_main(heap)) {
+    __mi_theap_main = theap;
+  }
+  else {
+    _mi_thread_local_set(heap->theap,theap);
+  }
 }
 
 /* -----------------------------------------------------------

@@ -537,13 +537,11 @@ static inline mi_theap_t* _mi_heap_theap(const mi_heap_t* heap) {
 static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached();
   #if MI_THEAP_INITASNULL
-  if mi_unlikely(theap==NULL || _mi_theap_heap(theap)!=heap)
+  if mi_likely(theap!=NULL && _mi_theap_heap(theap)==heap) return theap;
   #else
-  if mi_unlikely(_mi_theap_heap(theap)!=heap)
+  if mi_likely(_mi_theap_heap(theap)==heap) return theap;
   #endif
-  {
-    theap = _mi_heap_theap_get_peek(heap);  // don't update the cache on a query (?)
-  }
+  theap = _mi_heap_theap_get_peek(heap);  // don't update the cache on a query 
   mi_assert(theap==NULL || _mi_theap_heap(theap)==heap);
   return theap;
 }
@@ -551,10 +549,8 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
 // Find the associated theap or NULL if it does not exist (during shutdown)
 // Should be fast as it is called in `free.c:mi_free_try_collect`.
 static inline mi_theap_t* _mi_page_associated_theap_peek(mi_page_t* page) {
-  mi_heap_t* const heap = page->heap;
-  mi_theap_t* theap;
-  if mi_likely(heap==NULL) { theap = __mi_theap_main; }  // note: on macOS accessing the thread_local can cause allocation during thread shutdown (and reinitialize the thread)!
-                      else { theap = _mi_heap_theap_peek(heap); }
+  mi_heap_t* const heap = mi_page_heap(page);  
+  mi_theap_t* const theap = _mi_heap_theap_peek(heap);
   mi_assert_internal(theap==NULL || _mi_thread_id()==theap->tld->thread_id);
   return theap;
 }

@@ -99,7 +99,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
       mi_assert_expensive(mi_mem_is_zero(block + 1, ubsize - sizeof(mi_block_t)));
     }
   }
-  #endif
+  #endif 
 
   #if !MI_TRACK_ENABLED && !MI_TSAN
   mi_block_t* tfree = mi_page_thread_free(page);
@@ -123,6 +123,8 @@ bool _mi_page_is_valid(mi_page_t* page) {
   #endif
   if (!mi_page_is_abandoned(page)) {
     //mi_assert_internal(!_mi_process_is_initialized);
+    mi_assert_internal(page->heap!=NULL);
+    mi_assert_internal(mi_page_theap(page)==mi_heap_theap(page->heap));
     {
       mi_page_queue_t* pq = mi_page_queue_of(page);
       mi_assert_internal(mi_page_queue_contains(pq, page));
@@ -694,8 +696,8 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
 mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert(page != NULL);
   mi_assert(theap!=NULL);
-  page->heap = (_mi_is_heap_main(_mi_theap_heap(theap)) ? NULL : _mi_theap_heap(theap)); // faster for `mi_page_associated_theap`
-  mi_page_set_theap(page, theap);
+  // page->heap = (_mi_is_heap_main(_mi_theap_heap(theap)) ? NULL : _mi_theap_heap(theap)); // faster for `mi_page_associated_theap`
+  // mi_page_set_theap(page, theap);
 
   size_t page_size;
   uint8_t* page_start = mi_page_area(page, &page_size); MI_UNUSED(page_start);
@@ -713,6 +715,8 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   }
   #endif
 
+  mi_assert_internal(page->heap != NULL);
+  mi_assert_internal(page->heap == _mi_theap_heap(theap));
   mi_assert_internal(page->theap!=NULL);
   mi_assert_internal(page->theap == mi_page_theap(page));
   mi_assert_internal(page->capacity == 0);

@@ -181,7 +181,7 @@ bool          _mi_is_theap_main(const mi_theap_t* theap);
 void          _mi_theap_guarded_init(mi_theap_t* theap);
 void          _mi_theap_options_init(mi_theap_t* theap);
 mi_theap_t*   _mi_theap_default_safe(void);             // ensure the returned theap is initialized
-mi_theap_t*   _mi_theap_main_safe(void);
+// mi_theap_t*   _mi_theap_main_safe(void);
 
 // os.c
 void          _mi_os_init(void);                                            // called from process init
@@ -588,7 +588,6 @@ static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t
   return theap->pages_free_direct[idx];
 }
 
-
 //static inline uintptr_t _mi_ptr_cookie(const void* p) {
 //  extern mi_theap_t _mi_theap_main;
 //  mi_assert_internal(_mi_theap_main.cookie != 0);
@@ -914,8 +913,6 @@ static inline mi_tld_t* mi_page_tld(const mi_page_t* page) {
 
 static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
   mi_heap_t* heap = page->heap;
-  // we use NULL for the main heap to make `_mi_page_get_associated_theap` fast in `free.c:mi_abandoned_page_try_reclaim`.
-  if mi_likely(heap==NULL) { heap = mi_heap_main(); }
   mi_assert_internal(heap != NULL);
   return heap;
 }
