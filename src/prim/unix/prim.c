@@ -413,8 +413,8 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       lflags |= MAP_HUGETLB;
       #endif
       #ifdef MAP_HUGE_1GB
-      static bool mi_huge_pages_available = true;
-      if (large_only && (size % MI_GiB) == 0 && mi_huge_pages_available) {
+      static _Atomic(size_t) mi_huge_1gib_pages_unavailable;
+      if (large_only && (size % MI_GiB) == 0 && (mi_atomic_load_relaxed(&mi_huge_1gib_pages_unavailable)==0)) {
         lflags |= MAP_HUGE_1GB;
       }
       else
@@ -433,7 +433,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags, lfd);
         #ifdef MAP_HUGE_1GB
         if (p == NULL && (lflags & MAP_HUGE_1GB) == MAP_HUGE_1GB) {
-          mi_huge_pages_available = false; // don't try huge 1GiB pages again
+          mi_atomic_store_relaxed(&mi_huge_1gib_pages_unavailable,1); // don't try huge 1GiB pages again
           if (large_only) {
             _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
           }
@@ -1002,7 +1002,11 @@ static void mi_pthread_done(void* value) {
 
 void _mi_prim_thread_init_auto_done(void) {
   mi_assert_internal(_mi_heap_default_key == (pthread_key_t)(-1));
-  pthread_key_create(&_mi_heap_default_key, &mi_pthread_done);
+  const int err = pthread_key_create(&_mi_heap_default_key, &mi_pthread_done);
+  if (err!=0) {
+    _mi_error_message(err,"unable to create a pthread thread local key (error %d (0x%x))", err, err);
+    _mi_heap_default_key = (pthread_key_t)(-1);
+  };
 }
 
 void _mi_prim_thread_done_auto_done(void) {

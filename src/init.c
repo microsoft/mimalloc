@@ -1146,8 +1146,9 @@ void mi_process_init(void) mi_attr_noexcept {
   }
 }
 
-// Called when the process is done (cdecl as it is used with `at_exit` on some platforms)
-void mi_cdecl mi_process_done(void) mi_attr_noexcept {
+
+// Called when the process is done 
+static void mi_process_done_once(void) {
   // only shutdown if we were initialized
   if (!_mi_process_is_initialized) return;
   // ensure we are called once
@@ -1192,6 +1193,14 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   _mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", tld_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
+}
+
+
+// Called when the process is done (cdecl as it is used with `at_exit` on some platforms)
+void mi_cdecl mi_process_done(void) mi_attr_noexcept {
+  mi_atomic_do_once {
+    mi_process_done_once();
+  }
 }
 
 void mi_cdecl _mi_auto_process_done(void) mi_attr_noexcept {
