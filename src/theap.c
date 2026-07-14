@@ -207,15 +207,19 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
 
   // push on the thread local theaps list
   mi_theap_t* head = NULL;
+  mi_random_ctx_t head_random;
   mi_lock(&theap->tld->theaps_lock) {
     head = theap->tld->theaps;
     theap->tprev = NULL;
     theap->tnext = head;
-    if (head!=NULL) { head->tprev = theap; }
     theap->tld->theaps = theap;
+    if (head!=NULL) { 
+      head->tprev = theap; 
+      head_random = head->random;
+    }    
   }
 
-  // initialize random
+  // initialize random if heap==NULL
   if (head == NULL) {  // first theap in this thread?
     #if defined(_WIN32) && !defined(MI_SHARED_LIB)
       _mi_random_init_weak(&theap->random);    // prevent allocation failure during bcrypt dll initialization with static linking (issue #1185)
@@ -224,7 +228,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
     #endif
   }
   else {
-    _mi_random_split(&head->random, &theap->random);
+    _mi_random_split(&head_random, &theap->random); // &theap->random is used as nonce so it is ok if threads capture the same head->random
   }
   theap->cookie  = _mi_theap_random_next(theap) | 1;
   _mi_theap_guarded_init(theap);

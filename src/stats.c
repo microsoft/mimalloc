@@ -130,6 +130,9 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
     mi_stat_count_add_mt(&stats->page_bins[i], &src->page_bins[i]);
   }
+  for (size_t i = 0; i < MI_CBIN_COUNT; i++) {
+    mi_stat_count_add_mt(&stats->chunk_bins[i], &src->chunk_bins[i]);
+  }
 }
 
 #undef MI_STAT_COUNT

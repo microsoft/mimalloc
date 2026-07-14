@@ -1144,7 +1144,6 @@ static void mi_detect_cpu_features(void) {
 
 // Initialize the process; called by thread_init or the process loader
 static void mi_process_init_once(void) mi_attr_noexcept {
-  _mi_process_is_initialized = true;  
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
 
   mi_detect_cpu_features();
@@ -1157,7 +1156,7 @@ static void mi_process_init_once(void) mi_attr_noexcept {
   _mi_page_map_init(); // todo: this could fail.. should we abort in that case?
   mi_thread_init();
   _mi_process_is_initialized = true;
-
+  
   #if defined(_WIN32) && defined(MI_WIN_USE_FLS)
   // On windows, when building as a static lib the FLS cleanup happens to early for the main thread.
   // To avoid this, set the FLS value for the main thread to NULL so the fls cleanup
@@ -1194,8 +1193,9 @@ void mi_process_init(void) mi_attr_noexcept {
   }
 }
 
-// Called when the process is done (cdecl as it is used with `at_exit` on some platforms)
-void mi_cdecl mi_process_done(void) mi_attr_noexcept {
+
+// Called when the process is done 
+static void mi_process_done_once(void) {
   // only shutdown if we were initialized
   if (!_mi_process_is_initialized) return;
   // ensure we are called once
@@ -1219,7 +1219,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   #endif
 
   // done with tracking tools
-  mi_track_done()
+  mi_track_done();
 
   // Forcefully release all retained memory; this can be dangerous in general if overriding regular malloc/free
   // since after process_done there might still be other code running that calls `free` (like at_exit routines,
@@ -1240,6 +1240,14 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   _mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", tld_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
+}
+
+
+// Called when the process is done (cdecl as it is used with `at_exit` on some platforms)
+void mi_cdecl mi_process_done(void) mi_attr_noexcept {
+  mi_atomic_do_once {
+    mi_process_done_once();
+  }
 }
 
 void mi_cdecl _mi_auto_process_done(void) mi_attr_noexcept {
