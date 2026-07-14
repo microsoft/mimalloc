@@ -114,7 +114,7 @@ bool _mi_os_commit(void* addr, size_t size, bool* is_zero);
 // Return a MI_HINT_ALIGN (4MiB) aligned address that is probably available.
 // If this returns NULL, the OS will determine the address but on some OS's that may not be
 // properly aligned which can be more costly as it needs to be adjusted afterwards.
-// For a size > 16GiB this always returns NULL in order to guarantee good ASLR randomization;
+// In secure mode, for a size > 16GiB this always returns NULL in order to guarantee good ASLR randomization;
 // (otherwise an initial large allocation of say 2TiB has a 50% chance to include (known) addresses
 //  in the middle of the 2TiB - 6TiB address range (see issue #372))
 
@@ -131,7 +131,9 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   if (try_alignment <= mi_os_mem_config.alloc_granularity || try_alignment > MI_HINT_ALIGN) return NULL;
   if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
   size = _mi_align_up(size, MI_HINT_ALIGN);
-  if (size > 16*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at least 1/(MI_HINT_AREA / 1<<34)
+  #if (MI_SECURE>=1)
+  if (size > 16*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<34) = 1/256
+  #endif
   size += MI_HINT_ALIGN;              // put in virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
 
   uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
