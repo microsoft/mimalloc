@@ -92,9 +92,7 @@ size_t _mi_commit_mask_committed_size(const mi_commit_mask_t* cm, size_t total) 
       count += MI_COMMIT_MASK_FIELD_BITS;
     }
     else {
-      for (; mask != 0; mask >>= 1) {  // todo: use popcount
-        if ((mask&1)!=0) count++;
-      }
+      count += mi_popcount(mask);
     }
   }
   // we use total since for huge segments each commit bit may represent a larger size

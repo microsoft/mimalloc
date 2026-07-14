@@ -155,7 +155,11 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // free all current thread delayed blocks.
   // (if abandoning, after this there are no more thread-delayed references into the pages.)
-  _mi_heap_delayed_free_all(heap);
+  if (collect >= MI_ABANDON) {
+    _mi_heap_delayed_free_all(heap);      // free all
+  } else {
+    _mi_heap_delayed_free_partial(heap);  // best-effort; contended blocks are retried next time
+  }
 
   // collect retired pages
   _mi_heap_collect_retired(heap, force);
