@@ -938,7 +938,11 @@ static void mi_pthread_done(void* value) {
 
 void _mi_prim_thread_init_auto_done(void) {
   mi_assert_internal(_mi_heap_default_key == (pthread_key_t)(-1));
-  pthread_key_create(&_mi_heap_default_key, &mi_pthread_done);
+  const int err = pthread_key_create(&_mi_heap_default_key, &mi_pthread_done);
+  if (err!=0) {
+    _mi_error_message(err,"unable to create a pthread thread local key (error %d (0x%x))", err, err);
+    _mi_heap_default_key = (pthread_key_t)(-1);
+  };
 }
 
 void _mi_prim_thread_done_auto_done(void) {
