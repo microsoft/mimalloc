@@ -41,10 +41,19 @@ extern malloc_zone_t* malloc_default_purgeable_zone(void) __attribute__((weak_im
    malloc zone members
 ------------------------------------------------------ */
 
+static bool is_mimalloc_zone( malloc_zone_t* zone );
+
 static size_t zone_size(malloc_zone_t* zone, const void* p) {
   MI_UNUSED(zone);
-  if (!mi_is_in_heap_region(p)){ return 0; } // not our pointer, bail out
-  return mi_usable_size(p);
+  if (mi_is_in_heap_region(p)) {
+    return mi_usable_size(p);
+  }
+  else if (!is_mimalloc_zone(zone)) {  // can happen due to interpose
+    return zone->size(zone,p);
+  }
+  else {
+    return 0;
+  }
 }
 
 static void* zone_malloc(malloc_zone_t* zone, size_t size) {
@@ -63,13 +72,24 @@ static void* zone_valloc(malloc_zone_t* zone, size_t size) {
 }
 
 static void zone_free(malloc_zone_t* zone, void* p) {
-  MI_UNUSED(zone);
-  mi_cfree(p);
+  if (mi_is_in_heap_region(p)) {
+    mi_free(p);
+  }
+  else if (!is_mimalloc_zone(zone)) {  // can happen due to interpose
+    zone->free(zone,p);
+  }
 }
 
 static void* zone_realloc(malloc_zone_t* zone, void* p, size_t newsize) {
-  MI_UNUSED(zone);
-  return mi_realloc(p, newsize);
+  if (p == NULL || mi_is_in_heap_region(p)) {
+    return mi_realloc(p, newsize);
+  }
+  else if (!is_mimalloc_zone(zone)) {  // can happen due to interpose
+    return zone->realloc(zone,p,newsize);
+  }
+  else {
+    return NULL;
+  }
 }
 
 static void* zone_memalign(malloc_zone_t* zone, size_t alignment, size_t size) {
@@ -78,8 +98,9 @@ static void* zone_memalign(malloc_zone_t* zone, size_t alignment, size_t size) {
 }
 
 static void zone_destroy(malloc_zone_t* zone) {
-  MI_UNUSED(zone);
-  // todo: ignore for now?
+  if (!is_mimalloc_zone(zone)) {
+    zone->destroy(zone);
+  }
 }
 
 static unsigned zone_batch_malloc(malloc_zone_t* zone, size_t size, void** ps, unsigned count) {
@@ -113,7 +134,6 @@ static boolean_t zone_claimed_address(malloc_zone_t* zone, void* p) {
   MI_UNUSED(zone);
   return mi_is_in_heap_region(p);
 }
-
 
 /* ------------------------------------------------------
    Introspection members
@@ -244,6 +264,11 @@ static malloc_zone_t mi_malloc_zone = {
   .version = 4,
 #endif
 };
+
+static bool is_mimalloc_zone( malloc_zone_t* zone ) {
+  return (zone==NULL || zone==&mi_malloc_zone);
+}
+
 
 #ifdef __cplusplus
 }
