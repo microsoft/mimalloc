@@ -263,8 +263,7 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
     // theaps associated with a specific arena are allocated in that arena
     // note: takes up at least one slice which is quite wasteful...
     const size_t size = _mi_align_up(sizeof(mi_theap_t),MI_ARENA_MIN_OBJ_SIZE);
-    theap = (mi_theap_t*)_mi_arenas_alloc(heap, size, true, true, heap->exclusive_arena, tld->thread_seq, tld->numa_node, &memid);
-    mi_assert_internal(memid.mem.os.size >= size);
+    theap = (mi_theap_t*)_mi_arenas_alloc(heap, size, true, true, heap->exclusive_arena, tld->thread_seq, tld->numa_node, &memid);    
   }
   if (theap==NULL) {
     _mi_error_message(ENOMEM, "unable to allocate theap meta-data\n");
