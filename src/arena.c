@@ -2080,7 +2080,7 @@ static long mi_arena_purge_delay(void) {
   if (delay==0 || mult==0) { return 0; }
   size_t total;
   if (mi_mul_overflow((size_t)delay, (size_t)mult, &total)) { return delay; }
-  if (total < 0 || total > LONG_MAX) { return delay; }
+  if (total > LONG_MAX) { return delay; }
   return (long)total;
 }
 
