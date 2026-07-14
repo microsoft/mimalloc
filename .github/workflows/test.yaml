@@ -59,7 +59,7 @@ jobs:
           ctest --test-dir out/debug-cxx --verbose --timeout 240 -C Debug
 
       - name: Release, C++
-        if: matrix.tests == 'basic' && runner.os == 'Linux'      # windows already uses C++ by default; macOS interpose does not work well with C++
+        if: matrix.tests == 'basic' && runner.os != 'Windows'      # windows already uses C++ by default
         run: |
           cmake . -B out/release-cxx -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_USE_CXX=ON
           cmake --build out/release-cxx --parallel 8 --config Release

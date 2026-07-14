@@ -134,7 +134,6 @@ static boolean_t zone_claimed_address(malloc_zone_t* zone, void* p) {
   return mi_is_in_heap_region(p);
 }
 
-
 /* ------------------------------------------------------
    Introspection members
 ------------------------------------------------------ */
