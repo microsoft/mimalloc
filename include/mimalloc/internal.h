@@ -303,11 +303,14 @@ bool          _mi_page_visit_blocks( mi_page_t* page, mi_block_visit_fun* visito
 // "heap.c"
 void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
 mi_decl_cold  mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap);  // get (and possible create) the theap belonging to a heap
-mi_decl_cold  mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap);     // get the theap for a heap without initializing (and return NULL in that case)
+// mi_decl_cold  mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap);     // get the theap for a heap without initializing (and return NULL in that case)
 void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);  // in "arena.c"
 void          _mi_heap_destroy_pages(mi_heap_t* heap_from);                   // in "arena.c"
 void          _mi_heap_force_destroy(mi_heap_t* heap);                        // allow destroying the main heap
 mi_heap_t*    _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id);
+
+mi_theap_t*   _mi_heap_theap_get(const mi_heap_t* heap);
+bool          _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap);
 
 // "stats.c"
 void          _mi_stats_init(void);

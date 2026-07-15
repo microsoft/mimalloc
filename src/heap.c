@@ -38,52 +38,42 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
   mi_heap_t* heap = (mi_heap_t*)const_heap;
   mi_assert_internal(heap!=NULL);
 
-  if (_mi_is_heap_main(heap)) {
-    // this can be called if the (main) thread is not yet initialized (as no allocation happened)
-    // but `theap_main_init_get()` will call `mi_thread_init()`
-    mi_theap_t* const theap = _mi_theap_main_safe();
-    mi_assert_internal(theap!=NULL && _mi_is_heap_main(_mi_theap_heap(theap)));
-    return theap;
+  // if (_mi_is_process_heap_main(heap)) {
+  //   // this can be called if the (main) thread is not yet initialized (as no allocation happened)
+  //   // but `theap_main_init_get()` will call `mi_thread_init()`
+  //   mi_theap_t* const theap = _mi_theap_main_safe();
+  //   mi_assert_internal(theap!=NULL && _mi_is_heap_main(_mi_theap_heap(theap)));
+  //   return theap;
+  // }
+  
+  // initialize thread first in case this is the main heap
+  // (which may allocate the default theap already for the main heap)
+  if (!_mi_thread_is_initialized()) {
+    mi_thread_init();
   }
 
-  // otherwise initialize the theap for this heap
-  // get the thread local
-  mi_assert_internal(heap->theap != 0);
-  if (heap->theap==0) {  // paranoia
-    _mi_error_message(EFAULT, "no thread-local reserved for heap (%p)\n", heap);
-    return NULL;
-  }
-  mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
+  // get the thread local theap
+  mi_theap_t* theap = _mi_heap_theap_get(heap);
 
   // create a fresh theap?
   if (theap==NULL) {
     // set first an invalid value to ensure the thread local storage is allocated
-    if (!_mi_thread_local_set(heap->theap, (mi_theap_t*)1)) {
+    if (!_mi_heap_theap_set(heap, (mi_theap_t*)1)) {
       _mi_error_message(EFAULT, "unable to allocate memory for thread local storage\n");
       return NULL;
-    }    
+    }
     // then allocate the theap
     theap = _mi_theap_create(heap, _mi_theap_default_safe()->tld);
-    _mi_thread_local_set(heap->theap, theap);  // Cannot fail now as it was set before. Always set so the local is valid or NULL (and not 1)
+    bool ok = _mi_heap_theap_set(heap, theap);  // Cannot fail now as it was set before. Always set so the local is valid or NULL (and not 1)
+    mi_assert_internal(ok);
     if (theap==NULL) {
       _mi_error_message(EFAULT, "unable to allocate memory for a thread local heap\n");
       return NULL;
-    }    
+    }
   }
   return theap;
 }
 
-
-// get the theap for a heap without initializing (and return NULL in that case)
-mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap) {
-  if (heap==NULL || _mi_is_process_heap_main(heap)) {
-    // don't initalize a thread on peek (as it can be called at thread shutdown)
-    return (_mi_thread_is_initialized() ? _mi_theap_main_safe() : NULL);
-  }
-  else {
-    return (mi_theap_t*)_mi_thread_local_get(heap->theap);
-  }
-}
 
 // get (and possibly create) the theap belonging to a heap
 mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
