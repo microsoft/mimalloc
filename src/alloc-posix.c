@@ -47,7 +47,7 @@ mi_decl_nodiscard size_t mi_malloc_good_size(size_t size) mi_attr_noexcept {
 }
 
 void mi_cfree(void* p) mi_attr_noexcept {
-  if (mi_is_in_heap_region(p)) {
+  if (mi_is_in_heap_region(p) || mi_check_owned(p)) {
     mi_free(p);
   }
 }
