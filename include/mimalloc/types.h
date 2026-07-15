@@ -465,7 +465,7 @@ typedef struct mi_subproc_s mi_subproc_t;
 typedef struct mi_segment_s {
   // constant fields
   mi_memid_t        memid;              // memory id for arena/OS allocation
-  bool              allow_decommit;     // can we decommmit the memory
+  bool              allow_decommit;     // can we decommit the memory
   bool              allow_purge;        // can we purge the memory (reset or decommit)
   size_t            segment_size;
   mi_subproc_t*     subproc;            // segment belongs to sub process
