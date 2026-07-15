@@ -535,27 +535,28 @@ int _mi_prim_reuse(void* start, size_t size) {
 
 int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   int err = 0;
-  #if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
-    // decommit on macOS: use MADV_FREE_REUSABLE as it does immediate rss accounting (issue #1097)
-    err = unix_madvise(start, size, MADV_FREE_REUSABLE);
-    if (err) { err = unix_madvise(start, size, MADV_DONTNEED); }
+  #if 1
+    #if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+      // decommit on macOS: use MADV_FREE_REUSABLE as it does immediate rss accounting (issue #1097)
+      err = unix_madvise(start, size, MADV_FREE_REUSABLE);
+      if (err) { err = unix_madvise(start, size, MADV_DONTNEED); }
+    #else
+      // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
+      err = unix_madvise(start, size, MADV_DONTNEED);
+    #endif
+    #if !MI_DEBUG && MI_SECURE<=2
+      *needs_recommit = false;
+    #else
+      *needs_recommit = true;
+      mprotect(start, size, PROT_NONE);
+    #endif
   #else
-    // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
-    err = unix_madvise(start, size, MADV_DONTNEED);
-  #endif
-  #if !MI_DEBUG && MI_SECURE<=2
-    *needs_recommit = false;
-  #else
+    // decommit: use mmap with MAP_FIXED and PROT_NONE to discard the existing memory (and reduce rss)
     *needs_recommit = true;
-    mprotect(start, size, PROT_NONE);
+    const int fd = unix_mmap_fd();
+    void* p = mmap(start, size, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), fd, 0);
+    if (p != start) { err = errno; }
   #endif
-  /*
-  // decommit: use mmap with MAP_FIXED and PROT_NONE to discard the existing memory (and reduce rss)
-  *needs_recommit = true;
-  const int fd = unix_mmap_fd();
-  void* p = mmap(start, size, PROT_NONE, (MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE), fd, 0);
-  if (p != start) { err = errno; }
-  */
   return err;
 }
 

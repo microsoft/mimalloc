@@ -52,7 +52,7 @@ void mi_cfree(void* p) mi_attr_noexcept {
   }
 }
 
-int mi_posix_memalign(void** p, size_t alignment, size_t size) mi_attr_noexcept {
+int mi_posix_memalign(void** p, size_t alignment, size_t size) {  // mi_attr_noexcept (issue #794)
   // Note: The spec dictates we should not modify `*p` on an error. (issue#27)
   // <http://man7.org/linux/man-pages/man3/posix_memalign.3.html>
   if (p == NULL) return EINVAL;
