@@ -956,7 +956,8 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
 
   page->heap = _mi_theap_heap(theap);
   mi_page_set_theap(page,theap);
-
+  // mi_assert_internal(mi_page_theap(page) == _mi_heap_theap_peek(page->heap));
+  
   mi_assert_internal(page->free==NULL);
   mi_assert_internal(page_meta_is_separate == mi_page_meta_is_separated(page));
   mi_assert_internal(mi_page_slice_start(page) == slice_start);

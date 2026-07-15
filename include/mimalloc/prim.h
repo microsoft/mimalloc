@@ -247,8 +247,8 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 
 
 // defined in `init.c`; do not use these directly
-extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_process_theap_main;     // theap belonging to the main heap of the main process subproc
-extern mi_decl_hidden bool _mi_process_is_initialized;                        // has mi_process_init been called?
+extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main;     // theap belonging to the main heap (of any subproc)
+extern mi_decl_hidden bool _mi_process_is_initialized;                // has mi_process_init been called?
 
 
 //-------------------------------------------------------------------
@@ -330,7 +330,7 @@ static inline mi_threadid_t __mi_prim_thread_id(void) mi_attr_noexcept {
 
 // otherwise use portable C, taking the address of a thread local variable (this is still very fast on most platforms).
 static inline mi_threadid_t __mi_prim_thread_id(void) mi_attr_noexcept {
-  return (uintptr_t)&__mi_process_theap_main;
+  return (uintptr_t)&__mi_theap_main;
 }
 
 #endif
@@ -541,7 +541,7 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   #else
   if mi_likely(_mi_theap_heap(theap)==heap) return theap;
   #endif
-  theap = _mi_heap_theap_get(heap);  // don't update the cache on a query 
+  theap = _mi_heap_theap_get_peek(heap);  // don't update the cache on a query 
   mi_assert(theap==NULL || _mi_theap_heap(theap)==heap);
   return theap;
 }

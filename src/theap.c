@@ -247,15 +247,19 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
 mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   mi_assert_internal(tld!=NULL);
   mi_assert_internal(heap!=NULL);
+  mi_assert_internal(_mi_thread_id() == tld->thread_id);
+  // mi_assert_internal(_mi_heap_theap_peek(heap)==NULL);  // don't access thread locals as this is called on thread init
+
+  // set first an invalid thread local value to ensure the thread local storage is allocated
+  if (!_mi_heap_theap_set(heap, (mi_theap_t*)1)) {
+    _mi_error_message(EFAULT, "unable to allocate memory for thread local storage\n");
+    return NULL;
+  }
+  
   // allocate and initialize a theap
   mi_memid_t memid;
   mi_theap_t* theap;
-  //if (!_mi_is_heap_main(heap)) {
-  //  theap = (mi_theap_t*)mi_heap_zalloc(mi_heap_main(),sizeof(mi_theap_t));
-  //  memid = _mi_memid_create(MI_MEM_HEAP_MAIN);
-  //  memid.initially_zero = memid.initially_committed = true;
-  //}
-  //else
+  
   if (heap->exclusive_arena == NULL) {
     theap = (mi_theap_t*)_mi_meta_zalloc(heap->subproc, sizeof(mi_theap_t), &memid);
   }
@@ -266,11 +270,17 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
     theap = (mi_theap_t*)_mi_arenas_alloc(heap, size, true, true, heap->exclusive_arena, tld->thread_seq, tld->numa_node, &memid);    
   }
   if (theap==NULL) {
+    _mi_heap_theap_set(heap, NULL);
     _mi_error_message(ENOMEM, "unable to allocate theap meta-data\n");
     return NULL;
   }
+
   theap->memid = memid;
   _mi_theap_init(theap, heap, tld);
+  bool ok = _mi_heap_theap_set(heap, theap);  // cannot fail now as it was set before. Always set so the local is valid or NULL (and not 1)
+  mi_assert_internal(ok);
+  mi_assert_internal(_mi_heap_theap_peek(heap)==theap);
+  
   return theap;
 }
 
