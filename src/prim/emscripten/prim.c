@@ -77,7 +77,7 @@ extern void* emmalloc_memalign(size_t alignment, size_t size);
 int _mi_prim_alloc(void* hint_addr, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
   MI_UNUSED(try_alignment); MI_UNUSED(allow_large); MI_UNUSED(commit); MI_UNUSED(hint_addr);
   *is_large = false;
-  // TODO: Track the highest address ever seen; first uses of it are zeroes.
+  // todo: Track the highest address ever seen; first uses of it are zeroes.
   //       That assumes no one else uses sbrk but us (they could go up,
   //       scribble, and then down), but we could assert on that perhaps.
   *is_zero = false;
@@ -101,7 +101,7 @@ int _mi_prim_alloc(void* hint_addr, size_t size, size_t try_alignment, bool comm
 
 int _mi_prim_commit(void* addr, size_t size, bool* is_zero) {
   MI_UNUSED(addr); MI_UNUSED(size);
-  // See TODO above.
+  // See todo above.
   *is_zero = false;
   return 0;
 }

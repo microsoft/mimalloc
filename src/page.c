@@ -267,24 +267,6 @@ void _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
   Page fresh and retire
 ----------------------------------------------------------- */
 
-/*
-// called from segments when reclaiming abandoned pages
-void _mi_page_reclaim(mi_theap_t* theap, mi_page_t* page) {
-  // mi_page_set_theap(page, theap);
-  // _mi_page_use_delayed_free(page, MI_USE_DELAYED_FREE, true); // override never (after theap is set)
-  _mi_page_free_collect(page, false); // ensure used count is up to date
-
-  mi_assert_expensive(mi_page_is_valid_init(page));
-  // mi_assert_internal(mi_page_theap(page) == theap);
-  // mi_assert_internal(mi_page_thread_free_flag(page) != MI_NEVER_DELAYED_FREE);
-
-  // TODO: push on full queue immediately if it is full?
-  mi_page_queue_t* pq = mi_theap_page_queue_of(theap, page);
-  mi_page_queue_push(theap, pq, page);
-  mi_assert_expensive(_mi_page_is_valid(page));
-}
-*/
-
 // called from `mi_free` on a reclaim, and fresh_alloc if we get an abandoned page
 void _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page)
 {
@@ -668,7 +650,7 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
     const size_t needed_commit = _mi_align_up( mi_page_slice_offset_of(page, needed_size), MI_PAGE_MIN_COMMIT_SIZE );
     if (needed_commit > page->slice_committed) {
       mi_assert_internal(((needed_commit - page->slice_committed) % _mi_os_page_size()) == 0);
-      if (!_mi_os_commit(mi_page_slice_start(page) + page->slice_committed, needed_commit - page->slice_committed, NULL)) {
+      if (!_mi_os_commit(_mi_theap_subproc(theap), mi_page_slice_start(page) + page->slice_committed, needed_commit - page->slice_committed, NULL)) {
         return false;
       }
       mi_assert_internal(needed_commit < UINT32_MAX);

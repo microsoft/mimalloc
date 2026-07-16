@@ -92,7 +92,7 @@ static mi_meta_page_t* mi_meta_page_zalloc(mi_subproc_t* subproc) {
   // initialize the page and free block bitmap
   mi_meta_page_t* mpage = (mi_meta_page_t*)(base + _mi_os_secure_guard_page_size());
   mpage->memid = memid;
-  mi_bbitmap_init(&mpage->blocks_free, MI_META_BLOCKS_PER_PAGE, true /* already_zero */);
+  mi_bbitmap_init(subproc, &mpage->blocks_free, MI_META_BLOCKS_PER_PAGE, true /* already_zero */);
   const size_t mpage_size  = offsetof(mi_meta_page_t,blocks_free) + mi_bbitmap_size(MI_META_BLOCKS_PER_PAGE, NULL);
   const size_t info_blocks = _mi_divide_up(mpage_size,MI_META_BLOCK_SIZE);
   const size_t guard_blocks = _mi_divide_up(_mi_os_secure_guard_page_size(), MI_META_BLOCK_SIZE);
@@ -147,11 +147,11 @@ mi_decl_noinline void* _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_m
     }
   }
   // if all this failed, allocate from the OS
-  return _mi_os_alloc(size, pmemid);
+  return _mi_os_alloc(subproc, size, pmemid);
 }
 
 // free meta-data
-mi_decl_noinline void _mi_meta_free(void* p, size_t size, mi_memid_t memid) {
+mi_decl_noinline void _mi_meta_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t memid) {
   if (p==NULL) return;
   if (memid.memkind == MI_MEM_META) {
     mi_assert_internal(_mi_divide_up(size, MI_META_BLOCK_SIZE) == memid.mem.meta.block_count);
@@ -166,7 +166,7 @@ mi_decl_noinline void _mi_meta_free(void* p, size_t size, mi_memid_t memid) {
     mi_bbitmap_setN(&mpage->blocks_free, block_idx, block_count);
   }
   else {
-    _mi_arenas_free(p,size,memid);
+    _mi_arenas_free(subproc, p, size, memid);
   }
 }
 

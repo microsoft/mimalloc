@@ -220,7 +220,7 @@ mi_decl_nodiscard static bool mi_page_map_ensure_committed(size_t idx, mi_submap
   size_t bit_idx;
   if mi_unlikely(!mi_page_map_is_committed(idx, &bit_idx)) {
     uint8_t* start = (uint8_t*)&_mi_page_map[bit_idx * MI_PAGE_MAP_ENTRIES_PER_CBIT];
-    if (!_mi_os_commit(start, MI_PAGE_MAP_ENTRIES_PER_CBIT * sizeof(mi_submap_t), NULL)) {
+    if (!_mi_os_commit(_mi_subproc_main(), start, MI_PAGE_MAP_ENTRIES_PER_CBIT * sizeof(mi_submap_t), NULL)) {
       mi_page_map_cannot_commit();
       return false;
     }
@@ -258,7 +258,8 @@ bool _mi_page_map_init(void) {
   const bool commit = page_map_size <= 64*MI_KiB ||
                       mi_option_is_enabled(mi_option_pagemap_commit) || _mi_os_has_overcommit();
   #endif
-  _mi_page_map = (_Atomic(mi_page_t**)*)_mi_os_alloc_aligned(reserve_size, 1, commit, true /* allow large */, &mi_page_map_memid);
+  mi_subproc_t* const subproc = _mi_subproc_main();
+  _mi_page_map = (_Atomic(mi_page_t**)*)_mi_os_alloc_aligned(subproc, reserve_size, 1, commit, true /* allow large */, &mi_page_map_memid);
   if (_mi_page_map==NULL) {
     _mi_error_message(ENOMEM, "unable to reserve virtual memory for the page map (%zu KiB)\n", page_map_size / MI_KiB);
     return false;
@@ -272,7 +273,7 @@ bool _mi_page_map_init(void) {
   // ensure there is a submap for the NULL address
   mi_page_t** const sub0 = (mi_page_t**)((uint8_t*)_mi_page_map + page_map_size);  // we reserved a submap part at the end already
   if (!mi_page_map_memid.initially_committed) {
-    if (!_mi_os_commit(sub0, submap_size, NULL)) {  // commit full submap (issue #1087)
+    if (!_mi_os_commit(subproc, sub0, submap_size, NULL)) {  // commit full submap (issue #1087)
       mi_page_map_cannot_commit();
       return false;
     }
@@ -293,10 +294,10 @@ bool _mi_page_map_init(void) {
 }
 
 
-void _mi_page_map_unsafe_destroy(mi_subproc_t* subproc) {
-  mi_assert_internal(subproc != NULL);
+void _mi_page_map_unsafe_destroy(void) {
   mi_assert_internal(_mi_page_map != NULL);
   if (_mi_page_map == NULL) return;
+  mi_subproc_t* const subproc = _mi_subproc_main();
   mi_lock_done(&mi_page_map_lock);  
   for (size_t idx = 1; idx < mi_page_map_count; idx++) {  // skip entry 0 (as we allocate that submap at the end of the page_map)
     // free all sub-maps
@@ -304,12 +305,12 @@ void _mi_page_map_unsafe_destroy(mi_subproc_t* subproc) {
       mi_submap_t sub = _mi_page_map_at(idx);
       if (sub != NULL) {
         mi_memid_t memid = _mi_memid_create_os(sub, MI_PAGE_MAP_SUB_SIZE, true, false, false);
-        _mi_os_free_ex(memid.mem.os.base, memid.mem.os.size, true, memid, subproc);
+        _mi_os_free_ex(subproc, memid.mem.os.base, memid.mem.os.size, true, memid);
         mi_atomic_store_ptr_release(mi_page_t*, &_mi_page_map[idx], NULL);
       }
     }
   }
-  _mi_os_free_ex(_mi_page_map, mi_page_map_memid.mem.os.size, true, mi_page_map_memid, subproc);
+  _mi_os_free_ex(subproc, _mi_page_map, mi_page_map_memid.mem.os.size, true, mi_page_map_memid);
   _mi_page_map = NULL;
   mi_page_map_count = 0;
   mi_page_map_memid = _mi_memid_none();
@@ -331,9 +332,10 @@ mi_decl_nodiscard static bool mi_page_map_ensure_submap_at(size_t idx, mi_submap
       sub = mi_atomic_load_ptr_acquire(mi_page_t*, &_mi_page_map[idx]); // reload
       if (sub==NULL) // not yet allocated by another thread?      
       {
+        mi_subproc_t* const subproc = _mi_subproc_main();
         mi_memid_t memid;
-        const size_t submap_size = MI_PAGE_MAP_SUB_SIZE;
-        sub = (mi_submap_t)_mi_os_zalloc(submap_size, &memid);        
+        const size_t submap_size = MI_PAGE_MAP_SUB_SIZE;        
+        sub = (mi_submap_t)_mi_os_zalloc(subproc, submap_size, &memid);        
         if (sub==NULL) {
           _mi_warning_message("internal error: unable to extend the page map\n");          
         }
@@ -341,7 +343,7 @@ mi_decl_nodiscard static bool mi_page_map_ensure_submap_at(size_t idx, mi_submap
           mi_submap_t expect = NULL;
           if (!mi_atomic_cas_ptr_strong_acq_rel(mi_page_t*, &_mi_page_map[idx], &expect, sub)) {
             // another thread already allocated it.. free and continue
-            _mi_os_free(sub, submap_size, memid);
+            _mi_os_free(subproc, sub, submap_size, memid);
             sub = expect;
           }
         }

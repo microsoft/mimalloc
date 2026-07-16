@@ -369,7 +369,7 @@ static inline bool mi_bchunk_clearN(mi_bchunk_t* chunk, size_t cidx, size_t n, b
   if (n==1) return mi_bchunk_clear(chunk, cidx, maybe_all_clear);
   // if (n==8) return mi_bchunk_clear8(chunk, cidx, maybe_all_clear);
   // if (n==MI_BFIELD_BITS) return mi_bchunk_clearX(chunk, cidx, maybe_all_clear);
-  // TODO: implement mi_bchunk_xsetNX instead of setNX
+  // todo: implement mi_bchunk_xsetNX instead of setNX
   return mi_bchunk_xsetNC(MI_BIT_CLEAR, chunk, cidx, n, NULL, maybe_all_clear);
 }
 
@@ -1557,7 +1557,7 @@ size_t mi_bbitmap_size(size_t bit_count, size_t* pchunk_count) {
 
 // initialize a bitmap to all unset; avoid a mem_zero if `already_zero` is true
 // returns the size of the bitmap
-size_t mi_bbitmap_init(mi_bbitmap_t* bbitmap, size_t bit_count, bool already_zero) {
+size_t mi_bbitmap_init(mi_subproc_t* subproc, mi_bbitmap_t* bbitmap, size_t bit_count, bool already_zero) {
   size_t chunk_count;
   const size_t size = mi_bbitmap_size(bit_count, &chunk_count);
   if (!already_zero) {
@@ -1565,6 +1565,7 @@ size_t mi_bbitmap_init(mi_bbitmap_t* bbitmap, size_t bit_count, bool already_zer
   }
   mi_atomic_store_release(&bbitmap->chunk_count, chunk_count);
   mi_assert_internal(mi_atomic_load_relaxed(&bbitmap->chunk_count) <= MI_BITMAP_MAX_CHUNK_COUNT);
+  bbitmap->subproc = subproc;
   return size;
 }
 
@@ -1600,11 +1601,11 @@ static void mi_bbitmap_set_chunk_bin(mi_bbitmap_t* bbitmap, size_t chunk_idx, mi
   for (mi_chunkbin_t ibin = MI_CBIN_SMALL; ibin < MI_CBIN_NONE; ibin = mi_chunkbin_inc(ibin)) {
     if (ibin == bin) {
       const bool was_clear = mi_bchunk_set(& bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
-      if (was_clear) { mi_os_stat_increase(chunk_bins[ibin],1); }
+      if (was_clear) { mi_subproc_stat_increase(bbitmap->subproc, chunk_bins[ibin],1); }
     }
     else {
       const bool was_set = mi_bchunk_clear(&bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
-      if (was_set) { mi_os_stat_decrease(chunk_bins[ibin],1); }
+      if (was_set) { mi_subproc_stat_decrease(bbitmap->subproc,chunk_bins[ibin],1); }
     }
   }
 }

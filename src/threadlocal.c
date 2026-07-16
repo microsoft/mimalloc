@@ -165,7 +165,7 @@ void _mi_thread_locals_done(void) {
     if (slots!=NULL) {
       const size_t slots_count = mi_bitmap_max_bits(slots);
       const size_t slots_size  = mi_bitmap_size(slots_count,NULL);
-      _mi_meta_free(slots,slots_size,mi_thread_locals_memid);
+      _mi_meta_free(_mi_subproc_main(), slots,slots_size,mi_thread_locals_memid);
     }
   }
   mi_lock_done(&mi_thread_locals_lock);
@@ -208,7 +208,7 @@ static bool mi_thread_local_create_expand(void) {
     // copy over the previous bitmap
     const size_t oldsize = mi_bitmap_size(oldcount,NULL);
     _mi_memcpy_aligned(newslots, slots, oldsize); 
-    _mi_meta_free(slots,oldsize,mi_thread_locals_memid);
+    _mi_meta_free(_mi_subproc_main(), slots,oldsize,mi_thread_locals_memid);
   }
   mi_bitmap_init(newslots, newcount, true /* pretend already zero'd so we do not zero out the copied old entries */);
   mi_bitmap_unsafe_setN(newslots, oldcount, newcount - oldcount);  /* set the new expanded slots as available */

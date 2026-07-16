@@ -515,6 +515,7 @@ typedef struct mi_padding_s {
 struct mi_theap_s {
   mi_tld_t*             tld;                                 // thread-local data
   _Atomic(mi_heap_t*)   heap;                                // the heap this theap belongs to.
+  _Atomic(mi_subproc_t*)subproc;                             // subproc this belongs too (always `subproc == heap->subproc` but needed for safe destruction)
   _Atomic(size_t)       refcount;                            // reference count
   _Atomic(size_t)       freed;                               // ensure atomic free-ing
   unsigned long long    heartbeat;                           // monotonic heartbeat count
@@ -620,6 +621,7 @@ struct mi_subproc_s {
   _Atomic(size_t)       heap_total_count;               // total created heaps in this sub-process
 
   mi_memid_t            memid;                          // provenance of this memory block (meta or static)
+  mi_subproc_t*         parent;                         // subproc in which this one was allocated
   mi_decl_align(8)                                      // needed on some 32-bit platforms
   mi_stats_t            stats;                          // subprocess statistics; updated for arena/OS stats like committed,
                                                         // and otherwise merged with heap stats when those are deleted

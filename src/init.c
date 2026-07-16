@@ -114,6 +114,7 @@ static mi_decl_cache_align mi_tld_t tld_empty = {
 mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   &tld_empty,             // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap
+  MI_ATOMIC_VAR_INIT(NULL), // subproc
   MI_ATOMIC_VAR_INIT(1),  // refcount
   MI_ATOMIC_VAR_INIT(0),  // freed
   0,                      // heartbeat
@@ -140,6 +141,7 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
 mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
   &tld_empty,             // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap
+  MI_ATOMIC_VAR_INIT(NULL), // subproc
   MI_ATOMIC_VAR_INIT(1),  // refcount
   MI_ATOMIC_VAR_INIT(0),  // freed
   0,                      // heartbeat
@@ -185,6 +187,7 @@ static mi_decl_cache_align mi_tld_t mi_process_tld_main = {
 mi_decl_cache_align mi_theap_t mi_theap_main = {
   &mi_process_tld_main,              // thread local data
   MI_ATOMIC_VAR_INIT(&mi_process_heap_main), // main heap
+  MI_ATOMIC_VAR_INIT(&subproc_main),         // main subproc
   MI_ATOMIC_VAR_INIT(1),  // refcount
   MI_ATOMIC_VAR_INIT(0),  // freed
   0,                      // heartbeat
@@ -391,7 +394,7 @@ mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
                                                      // we also need to set an invalid tid for tld_main as sometimes the same thread-id
                                                      // is reused by the OS after a thread has terminated. (see issue #1287)
   mi_lock_done(&tld->theaps_lock);  
-  _mi_meta_free(tld, sizeof(mi_tld_t), tld->memid);  // note: safe for static tld_main
+  _mi_meta_free(tld->subproc, tld, sizeof(mi_tld_t), tld->memid);  // note: safe for static tld_main
 }
 
 
@@ -496,12 +499,14 @@ mi_subproc_id_t mi_subproc_current(void) {
 
 mi_subproc_id_t mi_subproc_new(void) {
   static _Atomic(size_t) subproc_total_count;
+  mi_subproc_t* const parent = _mi_subproc();
   mi_memid_t memid;
-  mi_subproc_t* subproc = (mi_subproc_t*)_mi_meta_zalloc(_mi_subproc(), sizeof(mi_subproc_t),&memid);
+  mi_subproc_t* subproc = (mi_subproc_t*)_mi_meta_zalloc(parent, sizeof(mi_subproc_t),&memid);
   if (subproc == NULL) { return _mi_subproc_to_id(NULL); }
   
   // init subproc
   subproc->memid = memid;  
+  subproc->parent = parent;
   subproc->subproc_seq = mi_atomic_increment_relaxed(&subproc_total_count) + 1;
   mi_stats_header_init(&subproc->stats);
   mi_lock_init(&subproc->arena_reserve_lock);
@@ -563,11 +568,11 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   mi_lock_done(&subproc->arena_reserve_lock);
   mi_lock_done(&subproc->heaps_lock);
   if (subproc!=&subproc_main) {
-    _mi_meta_free( subproc, sizeof(mi_subproc_t), subproc->memid);
+    _mi_meta_free( subproc->parent, subproc, sizeof(mi_subproc_t), subproc->memid);
   }
   else {
     // for the main subproc, also release the global page map
-    _mi_page_map_unsafe_destroy(&subproc_main);
+    _mi_page_map_unsafe_destroy();
   }
 }
 

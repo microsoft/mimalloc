@@ -787,7 +787,7 @@ mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
 // and the first word to `~0` for guarded allocations to have a correct `mi_usable_size`
 
 static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
-  // TODO: we can still make padding work by moving it out of the guard page area
+  // todo: we can still make padding work by moving it out of the guard page area
   mi_page_t* const page = _mi_ptr_page(block);
   mi_page_set_has_interior_pointers(page, true);
   block->next = MI_BLOCK_TAG_GUARDED;

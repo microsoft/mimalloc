@@ -79,7 +79,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MADV_FREE  POSIX_MADV_FREE
 #endif
 
-#define MI_UNIX_LARGE_PAGE_SIZE (2*MI_MiB) // TODO: can we query the OS for this?
+#define MI_UNIX_LARGE_PAGE_SIZE (2*MI_MiB) // todo: can we query the OS for this?
 
 //------------------------------------------------------------------------------------
 // Use syscalls for some primitives to allow for libraries that override open/read/close etc.
@@ -625,7 +625,7 @@ int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bo
   *addr = unix_mmap(hint_addr, size, MI_ARENA_SLICE_ALIGN, PROT_READ | PROT_WRITE, true, true, &is_large);
   if (*addr != NULL && numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) { // at most 64 nodes
     unsigned long numa_mask = (1UL << numa_node);
-    // TODO: does `mbind` work correctly for huge OS pages? should we
+    // todo: does `mbind` work correctly for huge OS pages? should we
     // use `set_mempolicy` before calling mmap instead?
     // see: <https://lkml.org/lkml/2017/2/9/875>
     long err = mi_prim_mbind(*addr, size, MPOL_PREFERRED, &numa_mask, 8*MI_INTPTR_SIZE, 0);
@@ -700,7 +700,7 @@ size_t _mi_prim_numa_node_count(void) {
 #elif defined(__DragonFly__)
 
 size_t _mi_prim_numa_node(void) {
-  // TODO: DragonFly does not seem to provide any userland means to get this information.
+  // todo: DragonFly does not seem to provide any userland means to get this information.
   return 0ul;
 }
 

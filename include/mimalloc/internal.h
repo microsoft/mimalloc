@@ -183,10 +183,10 @@ void          _mi_theap_options_init(mi_theap_t* theap);
 
 // os.c
 void          _mi_os_init(void);                                            // called from process init
-void*         _mi_os_alloc(size_t size, mi_memid_t* memid);
-void*         _mi_os_zalloc(size_t size, mi_memid_t* memid);
-void          _mi_os_free(void* p, size_t size, mi_memid_t memid);
-void          _mi_os_free_ex(void* p, size_t size, bool still_committed, mi_memid_t memid, mi_subproc_t* subproc );
+void*         _mi_os_alloc(mi_subproc_t* subproc, size_t size, mi_memid_t* memid);
+void*         _mi_os_zalloc(mi_subproc_t* subproc, size_t size, mi_memid_t* memid);
+void          _mi_os_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t memid);
+void          _mi_os_free_ex(mi_subproc_t* subproc, void* p, size_t size, bool still_committed, mi_memid_t memid );
 
 size_t        _mi_os_page_size(void);
 size_t        _mi_os_guard_page_size(void);
@@ -196,15 +196,15 @@ bool          _mi_os_has_virtual_reserve(void);
 size_t        _mi_os_virtual_address_bits(void);
 size_t        _mi_os_minimal_purge_size(void);
 
-bool          _mi_os_reset(void* addr, size_t size);
-bool          _mi_os_decommit(void* addr, size_t size);
-void          _mi_os_reuse(void* p, size_t size);
-mi_decl_nodiscard bool _mi_os_commit(void* p, size_t size, bool* is_zero);
-mi_decl_nodiscard bool _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size);
+bool          _mi_os_reset(mi_subproc_t* subproc, void* addr, size_t size);
+bool          _mi_os_decommit(mi_subproc_t* subproc, void* addr, size_t size);
+void          _mi_os_reuse(mi_subproc_t* subproc, void* p, size_t size);
+mi_decl_nodiscard bool _mi_os_commit(mi_subproc_t* subproc, void* p, size_t size, bool* is_zero);
+mi_decl_nodiscard bool _mi_os_commit_ex(mi_subproc_t* subproc, void* addr, size_t size, bool* is_zero, size_t stat_size);
 mi_decl_nodiscard bool _mi_os_protect(void* addr, size_t size);
 bool          _mi_os_unprotect(void* addr, size_t size);
-bool          _mi_os_purge(void* p, size_t size);
-bool          _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stats_size, mi_commit_fun_t* commit_fun, void* commit_fun_arg);
+bool          _mi_os_purge(mi_subproc_t* subproc, void* p, size_t size);
+bool          _mi_os_purge_ex(mi_subproc_t* subproc, void* p, size_t size, bool allow_reset, size_t stats_size, mi_commit_fun_t* commit_fun, void* commit_fun_arg);
 
 size_t        _mi_os_secure_guard_page_size(void);
 bool          _mi_os_secure_guard_page_set_at(void* addr, mi_memid_t memid);
@@ -215,13 +215,13 @@ bool          _mi_os_secure_guard_page_reset_before(void* addr, mi_memid_t memid
 int           _mi_os_numa_node(void);
 int           _mi_os_numa_node_count(void);
 
-void*         _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid);
-void*         _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
+void*         _mi_os_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid);
+void*         _mi_os_alloc_aligned_at_offset(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
 
 void*         _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 bool          _mi_os_canuse_large_page(size_t size, size_t alignment);
 size_t        _mi_os_large_page_size(void);
-void*         _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
+void*         _mi_os_alloc_huge_os_pages(mi_subproc_t* subproc, size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
 
 // threadlocal.c
 
@@ -240,7 +240,7 @@ bool          _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_t* request_
 
 void*         _mi_arenas_alloc(mi_heap_t* heap, size_t size, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid);
 void*         _mi_arenas_alloc_aligned(mi_heap_t* heap, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid);
-void          _mi_arenas_free(void* p, size_t size, mi_memid_t memid);
+void          _mi_arenas_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t memid);
 bool          _mi_arenas_contain(const void* p);
 void          _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld);
 void          _mi_arenas_unsafe_destroy_all(mi_subproc_t* subproc);
@@ -253,7 +253,7 @@ bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page);
 
 // arena-meta.c
 void*         _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid );
-void          _mi_meta_free(void* p, size_t size, mi_memid_t memid);
+void          _mi_meta_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t memid);
 bool          _mi_meta_is_meta_page(mi_subproc_t* subproc, void* p);
 
 // "page-map.c"
@@ -262,7 +262,7 @@ mi_decl_nodiscard bool _mi_page_map_register(mi_page_t* page);
 void          _mi_page_map_unregister(mi_page_t* page);
 void          _mi_page_map_unregister_range(void* start, size_t size);
 mi_page_t*    _mi_safe_ptr_page(const void* p);
-void          _mi_page_map_unsafe_destroy(mi_subproc_t* subproc);
+void          _mi_page_map_unsafe_destroy(void);
 
 // "page.c"
 void*         _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, size_t* usable)  mi_attr_noexcept mi_attr_malloc;
@@ -392,9 +392,9 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_subproc_stat_adjust_increase(subproc,stat,amount)    __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amount)
 #define mi_subproc_stat_adjust_decrease(subproc,stat,amount)    __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amount)
 
-#define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
-#define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
-#define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
+// #define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
+// #define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
+// #define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
 
 #define mi_theap_stat_counter_increase(theap,stat,amount)       __mi_stat_counter_increase( &(theap)->stats.stat, amount)
 #define mi_theap_stat_increase(theap,stat,amount)               __mi_stat_increase( &(theap)->stats.stat, amount)
@@ -575,11 +575,20 @@ extern mi_decl_hidden const mi_theap_t _mi_theap_empty_wrong; // read-only empty
 
 
 static inline mi_heap_t* _mi_theap_heap(const mi_theap_t* theap) {
-  return mi_atomic_load_ptr_acquire(mi_heap_t,&theap->heap);
+  mi_heap_t* const heap = mi_atomic_load_ptr_relaxed(mi_heap_t,&theap->heap);
+  mi_assert_internal(heap!=NULL);
+  return heap;
 }
 
 static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {
-  return (theap != NULL && _mi_theap_heap(theap) != NULL);
+  return (theap != NULL && mi_atomic_load_ptr_acquire(mi_heap_t,&theap->heap) != NULL);
+}
+
+static inline mi_subproc_t* _mi_theap_subproc(const mi_theap_t* theap) {
+  // mi_heap_t* heap = _mi_theap_heap(theap);
+  mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);
+  mi_assert_internal(!mi_theap_is_initialized(theap) || _mi_theap_heap(theap)->subproc == subproc);
+  return subproc;
 }
 
 static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t size) {
