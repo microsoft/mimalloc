@@ -659,7 +659,7 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
   // associate the theap with this thread
   // (this is safe, on macOS for example, the theap is set in a dedicated TLS slot and thus does not cause recursive allocation)
   _mi_theap_default_set(theap);
-  mi_assert_internal(heap_main==NULL || mi_heap_theap(heap_main) == theap);  
+  mi_assert_internal(heap_main==NULL || _mi_heap_theap_peek(heap_main) == theap);  // don't use heap_theap to avoid setting the cached slot
   return theap;
 }
 
