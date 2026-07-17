@@ -56,6 +56,8 @@ static bool mi_theap_page_is_valid(mi_theap_t* theap, mi_page_queue_t* pq, mi_pa
   MI_UNUSED(arg2);
   MI_UNUSED(pq);
   mi_assert_internal(mi_page_theap(page) == theap);
+  mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
+  mi_assert_internal(page_theap == NULL || theap == page_theap);
   mi_assert_expensive(_mi_page_is_valid(page));
   return true;
 }
@@ -63,6 +65,10 @@ static bool mi_theap_page_is_valid(mi_theap_t* theap, mi_page_queue_t* pq, mi_pa
 #if MI_DEBUG>=3
 static bool mi_theap_is_valid(mi_theap_t* theap) {
   mi_assert_internal(theap!=NULL);
+  mi_heap_t* const heap = _mi_theap_heap_peek(theap);
+  mi_assert_internal(heap != NULL);
+  mi_theap_t* const heap_theap = _mi_heap_theap_peek(heap);  // don't use mi_heap_theap as that may re-initialize the thread
+  mi_assert_internal(heap_theap==NULL || heap_theap == theap);
   mi_theap_visit_pages(theap, &mi_theap_page_is_valid, true, NULL, NULL);
   for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
     mi_assert_internal(_mi_page_queue_is_valid(theap, &theap->pages[bin]));
@@ -233,7 +239,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   }
   theap->cookie  = _mi_theap_random_next(theap) | 1;
   _mi_theap_guarded_init(theap);
-  mi_subproc_stat_increase(_mi_subproc(),theaps,1);
+  mi_subproc_stat_increase(_mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem
 
   // push on the heap's theap list
   mi_lock(&heap->theaps_lock) {
@@ -279,8 +285,9 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   theap->memid = memid;
   _mi_theap_init(theap, heap, tld);
   bool ok = _mi_heap_theap_set(heap, theap);  // cannot fail now as it was set before. Always set so the local is valid or NULL (and not 1)
-  mi_assert_internal(ok);
-  mi_assert_internal(_mi_heap_theap_peek(heap)==theap);
+  mi_assert_internal(ok); MI_UNUSED_RELEASE(ok);
+  mi_theap_t* const heap_theap = _mi_heap_theap_peek(heap);
+  mi_assert_internal(heap_theap==theap); MI_UNUSED_RELEASE(heap_theap);
   
   return theap;
 }
@@ -291,7 +298,7 @@ uintptr_t _mi_theap_random_next(mi_theap_t* theap) {
 
 static void mi_theap_free_mem(mi_theap_t* theap) {
   if (theap!=NULL) {
-    mi_subproc_stat_decrease(_mi_subproc(),theaps,1);
+    mi_subproc_stat_decrease(_mi_theap_subproc(theap),theaps,1);
     // free the used memory
     if (theap->memid.memkind == MI_MEM_HEAP_MAIN) {  // note: for now unused as it would access theap_default stats in mi_free of the current theap
       mi_assert_internal(_mi_is_heap_main(mi_heap_of(theap)));

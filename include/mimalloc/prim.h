@@ -523,12 +523,12 @@ static inline bool _mi_thread_is_initialized(void) {
 
 // Get (and possible create) the theap belonging to a heap
 // We cache the last accessed theap in `_mi_theap_cached` for better performance.
-static inline mi_theap_t* _mi_heap_theap(const mi_heap_t* heap) {
+static inline mi_theap_t* _mi_heap_theap(mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached();  
   #if MI_THEAP_INITASNULL
   if mi_likely(theap!=NULL && _mi_theap_heap(theap)==heap) return theap;
   #else
-  if mi_likely(_mi_theap_heap(theap)==heap) return theap;
+  if mi_likely(_mi_theap_heap_peek(theap)==heap) return theap;
   #endif
   return _mi_heap_theap_get_or_init(heap);
 }
@@ -539,7 +539,7 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   #if MI_THEAP_INITASNULL
   if mi_likely(theap!=NULL && _mi_theap_heap(theap)==heap) return theap;
   #else
-  if mi_likely(_mi_theap_heap(theap)==heap) return theap;
+  if mi_likely(_mi_theap_heap_peek(theap)==heap) return theap;
   #endif
   theap = _mi_heap_theap_get_peek(heap);  // don't update the cache on a query 
   mi_assert(theap==NULL || _mi_theap_heap(theap)==heap);

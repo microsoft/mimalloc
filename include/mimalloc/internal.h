@@ -574,14 +574,18 @@ extern mi_decl_hidden const mi_theap_t _mi_theap_empty;       // read-only empty
 extern mi_decl_hidden const mi_theap_t _mi_theap_empty_wrong; // read-only empty theap used to signal that a theap for a heap could not be allocated
 
 
+static inline mi_heap_t* _mi_theap_heap_peek(const mi_theap_t* theap) {
+  return mi_atomic_load_ptr_relaxed(mi_heap_t,&theap->heap);
+}
+
 static inline mi_heap_t* _mi_theap_heap(const mi_theap_t* theap) {
-  mi_heap_t* const heap = mi_atomic_load_ptr_relaxed(mi_heap_t,&theap->heap);
+  mi_heap_t* const heap = _mi_theap_heap_peek(theap);
   mi_assert_internal(heap!=NULL);
   return heap;
 }
 
 static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {
-  return (theap != NULL && mi_atomic_load_ptr_acquire(mi_heap_t,&theap->heap) != NULL);
+  return (theap != NULL && _mi_theap_heap_peek(theap) != NULL);
 }
 
 static inline mi_subproc_t* _mi_theap_subproc(const mi_theap_t* theap) {
@@ -1095,7 +1099,7 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   #if MI_ENCODE_FREELIST
   mi_block_t* next = mi_block_nextx(page,block,page->keys);
   // check for free list corruption: is `next` at least in the same page?
-  // TODO: check if `next` is `page->block_size` aligned?
+  // todo: check if `next` is `page->block_size` aligned?
   if mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next)) {
     _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (uintptr_t)next);
     next = NULL;

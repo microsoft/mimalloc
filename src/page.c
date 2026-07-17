@@ -124,7 +124,8 @@ bool _mi_page_is_valid(mi_page_t* page) {
   if (!mi_page_is_abandoned(page)) {
     //mi_assert_internal(!_mi_process_is_initialized);
     mi_assert_internal(page->heap!=NULL);
-    mi_assert_internal(mi_page_theap(page)==mi_heap_theap(page->heap));
+    mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
+    mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap);
     {
       mi_page_queue_t* pq = mi_page_queue_of(page);
       mi_assert_internal(mi_page_queue_contains(pq, page));

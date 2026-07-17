@@ -605,7 +605,7 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
   mi_assert_internal(subproc->heap_main!=NULL);
   if (subproc->heap_main==NULL) return;
   mi_theap_t* theap = _mi_theap_default();
-  if (theap!=NULL) {
+  if (mi_theap_is_initialized(theap)) {
     if (theap->tld!=NULL && theap->tld->subproc != subproc) {
       _mi_warning_message("unable to add thread to the subprocess as it was already in another subprocess (at %p)\n", theap->tld->subproc);      
     }
@@ -659,6 +659,7 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
   // associate the theap with this thread
   // (this is safe, on macOS for example, the theap is set in a dedicated TLS slot and thus does not cause recursive allocation)
   _mi_theap_default_set(theap);
+  mi_assert_internal(heap_main==NULL || mi_heap_theap(heap_main) == theap);  
   return theap;
 }
 
@@ -759,9 +760,10 @@ static void mi_thread_init_ex(mi_heap_t* heap_main) mi_attr_noexcept
   if (_mi_thread_is_initialized()) return;
 
   // initialize the default theap
-  if (_mi_thread_init_theap_default(heap_main) == NULL) return; // out-of-memory on tld/theap allocation
+  mi_theap_t* const theap = _mi_thread_init_theap_default(heap_main);
+  if (theap == NULL) return; // out-of-memory on tld/theap allocation
 
-  mi_heap_stat_increase(mi_heap_main(), threads, 1);
+  mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?
   // _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
