@@ -641,6 +641,7 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
   if (_mi_is_main_thread()) {
     mi_heap_main_init();
     theap = &mi_theap_main;
+    _mi_theap_default_set(theap);
   }
   else {
     // allocates tld data
@@ -651,15 +652,25 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
       mi_assert_internal(heap_main == &mi_process_heap_main);
     } 
     mi_assert_internal(heap_main!=NULL);
+
+    // allocated the tld
     mi_tld_t* tld = mi_tld_alloc(heap_main->subproc);
-    if (tld==NULL) return NULL;  // things are very wrong if this fails (out of memory)
+    if (tld==NULL) return NULL;    // things are very wrong if this fails (out of memory)
+    
     // allocate and initialize the theap for the main heap
     theap = _mi_theap_create( heap_main, tld);
+    if (theap==NULL) return NULL;  // things are very wrong if this fails (out of memory)
+
+    // now initialize the thread
+    _mi_theap_default_set(theap);
+  
+    // and only then set the heap_theap field as that accesses thread locals
+    const bool ok = _mi_heap_theap_set(heap_main, theap);  // todo: can fail
+    mi_assert_internal(ok); MI_UNUSED_RELEASE(ok);
   }
-  // associate the theap with this thread
-  // (this is safe, on macOS for example, the theap is set in a dedicated TLS slot and thus does not cause recursive allocation)
-  _mi_theap_default_set(theap);
-  mi_assert_internal(heap_main==NULL || _mi_heap_theap_peek(heap_main) == theap);  // don't use heap_theap to avoid setting the cached slot
+  mi_assert_internal(mi_theap_is_initialized(theap));
+  mi_theap_t* const heap_theap = (heap_main==NULL ? NULL : _mi_heap_theap_peek(heap_main));
+  mi_assert_internal(heap_main==NULL || heap_theap == theap); MI_UNUSED_RELEASE(heap_theap);
   return theap;
 }
 

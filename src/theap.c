@@ -237,7 +237,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   else {
     _mi_random_split(&head_random, &theap->random); // &theap->random is used as nonce so it is ok if threads capture the same head->random
   }
-  theap->cookie  = _mi_theap_random_next(theap) | 1;
+  theap->cookie = _mi_theap_random_next(theap) | 1;
   _mi_theap_guarded_init(theap);
   mi_subproc_stat_increase(_mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem
 
@@ -257,11 +257,11 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   mi_assert_internal(_mi_thread_id() == tld->thread_id);
   // mi_assert_internal(_mi_heap_theap_peek(heap)==NULL);  // don't access thread locals as this is called on thread init
 
-  // set first an invalid thread local value to ensure the thread local storage is allocated
-  if (!_mi_heap_theap_set(heap, (mi_theap_t*)1)) {
-    _mi_error_message(EFAULT, "unable to allocate memory for thread local storage\n");
-    return NULL;
-  }
+  // // set first an invalid thread local value to ensure the thread local storage is allocated
+  // if (!_mi_heap_theap_set(heap, (mi_theap_t*)1)) {
+  //   _mi_error_message(EFAULT, "unable to allocate memory for thread local storage\n");
+  //   return NULL;
+  // }
   
   // allocate and initialize a theap
   mi_memid_t memid;
@@ -277,17 +277,17 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
     theap = (mi_theap_t*)_mi_arenas_alloc(heap, size, true, true, heap->exclusive_arena, tld->thread_seq, tld->numa_node, &memid);    
   }
   if (theap==NULL) {
-    _mi_heap_theap_set(heap, NULL);
+    // _mi_heap_theap_set(heap, NULL);
     _mi_error_message(ENOMEM, "unable to allocate theap meta-data\n");
     return NULL;
   }
 
   theap->memid = memid;
   _mi_theap_init(theap, heap, tld);
-  bool ok = _mi_heap_theap_set(heap, theap);  // cannot fail now as it was set before. Always set so the local is valid or NULL (and not 1)
-  mi_assert_internal(ok); MI_UNUSED_RELEASE(ok);
-  mi_theap_t* const heap_theap = _mi_heap_theap_peek(heap);
-  mi_assert_internal(heap_theap==theap); MI_UNUSED_RELEASE(heap_theap);
+  // bool ok = _mi_heap_theap_set(heap, theap);  // cannot fail now as it was set before. Always set so the local is valid or NULL (and not 1)
+  // mi_assert_internal(ok); MI_UNUSED_RELEASE(ok);
+  // mi_theap_t* const heap_theap = _mi_heap_theap_peek(heap);
+  // mi_assert_internal(heap_theap==theap); MI_UNUSED_RELEASE(heap_theap);
   
   return theap;
 }
