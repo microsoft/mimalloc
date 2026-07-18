@@ -446,24 +446,28 @@ bool _mi_is_theap_main(const mi_theap_t* theap) {
 }
 
 mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap) {
+  mi_theap_t* theap;
   if mi_likely(_mi_is_heap_main(heap)) {
     mi_assert_internal(heap->theap == 0);
-    return __mi_theap_main;
+    theap = __mi_theap_main;
   }
   else {
     mi_assert_internal(heap->theap != 0);
     if mi_likely(heap->theap!=0) {  // paranoia
-      return (mi_theap_t*)_mi_thread_local_get(heap->theap);
+      theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
     } 
     else {
       _mi_error_message(EFAULT, "no thread-local reserved for heap (%p)\n", heap);
       return NULL;
     }
   }
+  mi_assert_internal(!_mi_is_empty_theap(theap));
+  return theap;
 }
 
 bool _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap) {
   mi_assert_internal((uintptr_t)theap == 1 || _mi_theap_heap(theap)==heap);
+  mi_assert_internal(!_mi_is_empty_theap(theap));
   if mi_likely(_mi_is_heap_main(heap)) {
     mi_assert_internal(heap->theap == 0);
     __mi_theap_main = theap;
@@ -634,6 +638,20 @@ bool mi_subproc_visit_heaps(mi_subproc_id_t subproc_id, mi_heap_visit_fun* visit
   Allocate theap data
 ----------------------------------------------------------- */
 
+static mi_theap_t* mi_heap_check_for_existing_theap(mi_heap_t* heap) {
+  const mi_threadid_t tid = _mi_thread_id();
+  mi_theap_t* thread_theap = NULL;
+  mi_lock(&heap->theaps_lock) {
+    for(mi_theap_t* theap = heap->theaps; theap != NULL; theap = theap->hnext ) {
+      if (theap->tld->thread_id == tid) {
+        thread_theap = theap;
+        break;
+      }
+    }
+  }
+  return thread_theap;
+}
+
 // Initialize the thread local default theap, called from `mi_thread_init`
 static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
   mi_theap_t* theap = _mi_theap_default();
@@ -641,7 +659,8 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
   if (_mi_is_main_thread()) {
     mi_heap_main_init();
     theap = &mi_theap_main;
-    _mi_theap_default_set(theap);
+    mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?  
+    _mi_theap_default_set(theap);    
   }
   else {
     // allocates tld data
@@ -652,15 +671,18 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
       mi_assert_internal(heap_main == &mi_process_heap_main);
     } 
     mi_assert_internal(heap_main!=NULL);
-
-    // allocated the tld
-    mi_tld_t* tld = mi_tld_alloc(heap_main->subproc);
-    if (tld==NULL) return NULL;    // things are very wrong if this fails (out of memory)
-    
-    // allocate and initialize the theap for the main heap
-    theap = _mi_theap_create( heap_main, tld);
-    if (theap==NULL) return NULL;  // things are very wrong if this fails (out of memory)
-
+    theap = mi_heap_check_for_existing_theap(heap_main);
+    if (theap==NULL) 
+    {
+      // allocated the tld
+      mi_tld_t* tld = mi_tld_alloc(heap_main->subproc);
+      if (tld==NULL) return NULL;    // out-of-memory on tld allocation
+      
+      // allocate and initialize the theap for the main heap
+      theap = _mi_theap_create( heap_main, tld);
+      if (theap==NULL) return NULL;  // out-of-memory on theap allocation
+      mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?  
+    }
     // now initialize the thread
     _mi_theap_default_set(theap);
   
@@ -668,6 +690,7 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
     const bool ok = _mi_heap_theap_set(heap_main, theap);  // todo: can fail
     mi_assert_internal(ok); MI_UNUSED_RELEASE(ok);
   }
+
   mi_assert_internal(mi_theap_is_initialized(theap));
   mi_theap_t* const heap_theap = (heap_main==NULL ? NULL : _mi_heap_theap_peek(heap_main));
   mi_assert_internal(heap_main==NULL || heap_theap == theap); MI_UNUSED_RELEASE(heap_theap);
@@ -696,9 +719,7 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
   // belonging to the right subprocess
   _mi_theap_default_set((mi_theap_t*)&_mi_theap_empty);
   _mi_theap_cached_set((mi_theap_t*)&_mi_theap_empty);
-  __mi_theap_main = (mi_theap_t*)&_mi_theap_empty;
   
-
   // free the theaps of this thread.
   // This can run concurrently with a `mi_heap_free_theaps` and we need to ensure we free theaps atomically.
   // We do this in a loop where we release the theaps_lock at every potential re-iteration to unblock 
@@ -731,7 +752,6 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
 }
 
 
-
 // --------------------------------------------------------
 // Try to run `mi_thread_done()` automatically so any memory
 // owned by the thread but not yet released can be abandoned
@@ -762,23 +782,41 @@ bool _mi_is_main_thread(void) {
 }
 
 
+#include <execinfo.h>
+#include <dlfcn.h>
+
+typedef struct mi_tlv_desc_s {
+  void* tlv_get_addr;
+  unsigned long key;
+  unsigned long offset;
+} mi_tlv_desc_t;
+
+static void* tlv_get_addr_ptr;
+
+
 // Initialize thread
 static void mi_thread_init_ex(mi_heap_t* heap_main) mi_attr_noexcept
 {
   // ensure our process has started already
   mi_process_init();
+  
   // if the theap_default is already set we have already initialized
   if (_mi_thread_is_initialized()) return;
+
+  // if (tlv_get_addr_ptr != NULL) {
+  //   void* callstack[20]; 
+  //   int frame_count = backtrace(callstack,20);
+  //   backtrace_symbols_fd(callstack, frame_count, 2);
+  // }
 
   // initialize the default theap
   mi_theap_t* const theap = _mi_thread_init_theap_default(heap_main);
   if (theap == NULL) return; // out-of-memory on tld/theap allocation
 
-  mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?
   // _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
-void mi_thread_init(void) mi_attr_noexcept {
+void mi_decl_noinline mi_thread_init(void) mi_attr_noexcept {
   mi_thread_init_ex(NULL);
 }
 
@@ -805,7 +843,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
   _mi_thread_locals_thread_done();
 
   // adjust stats
-  mi_heap_stat_decrease(_mi_subproc_heap_main(tld->subproc), threads, 1);  // todo: or `_theap_main->heap`?
+  mi_subproc_stat_decrease(tld->subproc, threads, 1);  // todo: or `_theap_main->heap`?
 
   // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local theaps...
   if (tld->thread_id != _mi_prim_thread_id()) return;
@@ -821,6 +859,11 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 mi_decl_cold mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
   return (mi_theap_t*)&_mi_theap_empty;
 }
+
+bool _mi_is_empty_theap(const mi_theap_t* theap) {
+  return (theap == &_mi_theap_empty);
+}
+
 
 #if MI_TLS_MODEL_DYNAMIC_WIN32
 
@@ -1054,6 +1097,15 @@ void _mi_auto_process_init(void) {
   mi_process_init();
   mi_process_setup_auto_thread_done();
   _mi_thread_locals_init();
+
+  if (tlv_get_addr_ptr == NULL) {
+    void* reg_x8 = NULL;
+    mi_tlv_desc_t* tlv_desc = (mi_tlv_desc_t*)&__mi_theap_main;
+    asm( "mov %0, x8" : "=r" (reg_x8) : :  );
+    tlv_get_addr_ptr = reg_x8;
+  }
+
+
   _mi_options_post_init();  // now we can print to stderr
   if (_mi_is_redirected()) _mi_verbose_message("malloc is redirected.\n");
 

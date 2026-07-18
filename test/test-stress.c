@@ -28,6 +28,10 @@ terms of the MIT license.
 // #define MI_GUARDED         1
 // #define USE_STD_MALLOC     1
 
+// #define TEST_STRESS_SUBPROCS   1 
+#define TEST_STRESS            1    
+// #define TEST_LEAK              1
+
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
 // argument defaults
@@ -56,24 +60,23 @@ static int THREADS = 32;
 static int SCALE   = 25;
 static int ITER    = 50;
 #define ALLOW_LARGE true
+#elif TEST_STRESS_SUBPROCS && !USE_STD_MALLOC
+static int THREADS = 8;
+static int SCALE   = 25;
+static int ITER    = 10;
 #else
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 50;      // scaling factor
 static int ITER    = 50;      // N full iterations destructing and re-creating all threads
 #endif
 
-
-#define TEST_STRESS_SUBPROCS   1 
-#define TEST_STRESS            1    
-// #define TEST_LEAK              1
-
 #ifndef ALLOW_LARGE
 #define ALLOW_LARGE  false
 #endif
 
-#if !TEST_STRESS_SUBPROCS && !defined(USE_STD_MALLOC)
-#define MI_USE_HEAPS       4
-#endif
+// #if !TEST_STRESS_SUBPROCS && !defined(USE_STD_MALLOC)
+// #define MI_USE_HEAPS       4
+// #endif
 
 
 static bool   allow_large_objects = ALLOW_LARGE;    // allow very large objects? (set to `true` if SCALE>100)
@@ -429,7 +432,7 @@ int main(int argc, char** argv) {
   #if MI_USE_HEAPS
   printf(" (using %d rolling heaps)", MI_USE_HEAPS);
   #endif
-  printf("\n");
+  printf("\n"); fflush(stdout);
 
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
   mi_stats_reset();

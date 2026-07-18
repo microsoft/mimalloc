@@ -368,7 +368,9 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(mt_free != NULL);
+  #if !defined(__APPLE__)  // subproc access thread local after thread_done
   mi_assert_internal(_mi_subproc() == mi_page_subproc(page));  // never collect across subprocesses
+  #endif
   
   // we own the page now, and it is safe to collect the thread atomic free list
   if (page->block_size <= MI_SMALL_SIZE_MAX) {
@@ -629,7 +631,7 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
 #if (MI_STAT>0)
 static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(block);
-  mi_theap_t* const theap = _mi_theap_default();
+  mi_theap_t* const theap = (mi_page_is_abandoned(page) ? NULL : _mi_theap_default());
   if (!mi_theap_is_initialized(theap)) return; // (for now) skip statistics if free'd after thread_done was called (usually a thread cleanup call by the OS)
 
   const size_t bsize = mi_page_usable_block_size(page);

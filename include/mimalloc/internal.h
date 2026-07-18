@@ -168,6 +168,7 @@ bool          _mi_is_main_thread(void);
 bool          _mi_is_process_heap_main(const mi_heap_t* heap);
 bool          _mi_preloading(void);           // true while the C runtime is not initialized yet
 void          _mi_thread_done(mi_theap_t* theap);
+bool          _mi_is_empty_theap(const mi_theap_t* theap);
 
 mi_subproc_t* _mi_subproc(void);
 mi_subproc_t* _mi_subproc_main(void);
@@ -578,9 +579,14 @@ static inline mi_heap_t* _mi_theap_heap_peek(const mi_theap_t* theap) {
   return mi_atomic_load_ptr_relaxed(mi_heap_t,&theap->heap);
 }
 
+mi_theap_t* _mi_heap_theap_peek_ex(const mi_heap_t* heap);
+
 static inline mi_heap_t* _mi_theap_heap(const mi_theap_t* theap) {
-  mi_heap_t* const heap = _mi_theap_heap_peek(theap);
+  mi_heap_t* const heap = _mi_theap_heap_peek(theap);  
   mi_assert_internal(heap!=NULL);
+  // note: don't access heap_theap as that might read a thread-local which can cause allocation during thread initialization
+  // mi_theap_t* const heap_theap = _mi_heap_theap_peek_ex(heap);
+  // mi_assert_internal(heap_theap==NULL || heap_theap == theap); MI_UNUSED_RELEASE(heap_theap);
   return heap;
 }
 
@@ -589,7 +595,6 @@ static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {
 }
 
 static inline mi_subproc_t* _mi_theap_subproc(const mi_theap_t* theap) {
-  // mi_heap_t* heap = _mi_theap_heap(theap);
   mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);
   mi_assert_internal(!mi_theap_is_initialized(theap) || _mi_theap_heap(theap)->subproc == subproc);
   return subproc;
@@ -914,7 +919,7 @@ static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
 
 static inline mi_theap_t* mi_page_theap(const mi_page_t* page) {
   mi_assert_internal(!mi_page_is_abandoned(page));
-  mi_assert_internal(page->theap != NULL);
+  mi_assert_internal(page->theap != NULL && page->theap != &_mi_theap_empty);
   return page->theap;
 }
 

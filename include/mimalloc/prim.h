@@ -416,7 +416,6 @@ static inline mi_theap_t* __mi_theap_empty(void) {
 
 #if MI_TLS_MODEL_THREAD_LOCAL
 // Thread local with an initial value (default on Linux). Very efficient.
-
 extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default;  // default theap to allocate from
 extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached;   // theap from the last used heap
 
@@ -526,7 +525,7 @@ static inline bool _mi_thread_is_initialized(void) {
 static inline mi_theap_t* _mi_heap_theap(mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached();  
   #if MI_THEAP_INITASNULL
-  if mi_likely(theap!=NULL && _mi_theap_heap(theap)==heap) return theap;
+  if mi_likely(theap!=NULL && _mi_theap_heap_peek(theap)==heap) return theap;
   #else
   if mi_likely(_mi_theap_heap_peek(theap)==heap) return theap;
   #endif
@@ -537,12 +536,12 @@ static inline mi_theap_t* _mi_heap_theap(mi_heap_t* heap) {
 static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached();
   #if MI_THEAP_INITASNULL
-  if mi_likely(theap!=NULL && _mi_theap_heap(theap)==heap) return theap;
+  if mi_likely(theap!=NULL && _mi_theap_heap_peek(theap)==heap) return theap;
   #else
   if mi_likely(_mi_theap_heap_peek(theap)==heap) return theap;
   #endif
   theap = _mi_heap_theap_get_peek(heap);  // don't update the cache on a query 
-  mi_assert(theap==NULL || _mi_theap_heap(theap)==heap);
+  mi_assert_internal(theap==NULL || (!_mi_is_empty_theap(theap) && theap->heap==heap));
   return theap;
 }
 
@@ -551,7 +550,7 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
 static inline mi_theap_t* _mi_page_associated_theap_peek(mi_page_t* page) {
   mi_heap_t* const heap = mi_page_heap(page);  
   mi_theap_t* const theap = _mi_heap_theap_peek(heap);
-  mi_assert_internal(theap==NULL || _mi_thread_id()==theap->tld->thread_id);
+  mi_assert_internal(theap==NULL || (!_mi_is_empty_theap(theap) && _mi_thread_id()==theap->tld->thread_id));
   return theap;
 }
 

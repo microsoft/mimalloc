@@ -84,6 +84,10 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_block_size(page) > 0);
   mi_assert_internal(page->used <= page->capacity);
   mi_assert_internal(page->capacity <= page->reserved);
+  
+  mi_assert_internal(page->heap!=NULL);
+  mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
+  mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap);
 
   // const size_t bsize = mi_page_block_size(page);
   // uint8_t* start = mi_page_start(page);

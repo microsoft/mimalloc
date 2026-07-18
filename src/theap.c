@@ -50,7 +50,7 @@ static bool mi_theap_visit_pages(mi_theap_t* theap, theap_page_visitor_fun* fn, 
 }
 
 
-#if MI_DEBUG>=2
+#if MI_DEBUG>=3
 static bool mi_theap_page_is_valid(mi_theap_t* theap, mi_page_queue_t* pq, mi_page_t* page, void* arg1, void* arg2) {
   MI_UNUSED(arg1);
   MI_UNUSED(arg2);
@@ -61,8 +61,7 @@ static bool mi_theap_page_is_valid(mi_theap_t* theap, mi_page_queue_t* pq, mi_pa
   mi_assert_expensive(_mi_page_is_valid(page));
   return true;
 }
-#endif
-#if MI_DEBUG>=3
+
 static bool mi_theap_is_valid(mi_theap_t* theap) {
   mi_assert_internal(theap!=NULL);
   mi_heap_t* const heap = _mi_theap_heap_peek(theap);
@@ -97,7 +96,7 @@ typedef enum mi_collect_e {
 static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_page_t* page, void* arg_collect, void* arg2 ) {
   MI_UNUSED(arg2);
   MI_UNUSED(theap);
-  mi_assert_internal(mi_theap_page_is_valid(theap, pq, page, NULL, NULL));
+  mi_assert_expensive(mi_theap_page_is_valid(theap, pq, page, NULL, NULL));
   mi_collect_t collect = *((mi_collect_t*)arg_collect);
   _mi_page_free_collect(page, collect >= MI_FORCE);
   if (mi_page_all_free(page)) {

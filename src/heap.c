@@ -272,3 +272,7 @@ bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void* p, size_t perc
   if (perc_threshold>=100) return true;
   return (perc_threshold >= ((100UL*page->used) / page->capacity));
 }
+
+mi_theap_t* _mi_heap_theap_peek_ex(const mi_heap_t* heap) {
+  return _mi_heap_theap_peek(heap);
+}
