@@ -53,7 +53,8 @@ bool _mi_page_map_init(void) {
   const size_t commit_bits = _mi_divide_up(page_map_size, MI_PAGE_MAP_ENTRIES_PER_COMMIT_BIT);
   const size_t bitmap_size = (commit ? 0 : mi_bitmap_size(commit_bits, NULL));
   const size_t reserve_size = bitmap_size + page_map_size;
-  uint8_t* const base = (uint8_t*)_mi_os_alloc_aligned(reserve_size, 1, commit, true /* allow large */, &mi_page_map_memid);
+  mi_subproc_t* const subproc = _mi_subproc_main();
+  uint8_t* const base = (uint8_t*)_mi_os_alloc_aligned(subproc, reserve_size, 1, commit, true /* allow large */, &mi_page_map_memid);
   if (base==NULL) {
     _mi_error_message(ENOMEM, "unable to reserve virtual memory for the page map (%zu KiB)\n", page_map_size / MI_KiB);
     return false;
@@ -64,7 +65,7 @@ bool _mi_page_map_init(void) {
   }
   if (bitmap_size > 0) {
     mi_page_map_commit = (mi_bitmap_t*)base;
-    if (!_mi_os_commit(mi_page_map_commit, bitmap_size, NULL)) {
+    if (!_mi_os_commit(subproc, mi_page_map_commit, bitmap_size, NULL)) {
       mi_page_map_cannot_commit();
       return false;
     }
@@ -84,11 +85,10 @@ bool _mi_page_map_init(void) {
   return true;
 }
 
-void _mi_page_map_unsafe_destroy(mi_subproc_t* subproc) {
-  mi_assert_internal(subproc != NULL);
+void _mi_page_map_unsafe_destroy(void) {
   mi_assert_internal(_mi_page_map != NULL);
   if (_mi_page_map == NULL) return;
-  _mi_os_free_ex(mi_page_map_memid.mem.os.base, mi_page_map_memid.mem.os.size, true, mi_page_map_memid, subproc);
+  _mi_os_free_ex(_mi_subproc_main(), mi_page_map_memid.mem.os.base, mi_page_map_memid.mem.os.size, true, mi_page_map_memid);
   _mi_page_map = NULL;
   mi_page_map_commit = NULL;
   mi_page_map_max_address = NULL;
@@ -109,7 +109,7 @@ static bool mi_page_map_ensure_committed(size_t idx, size_t slice_count) {
         bool is_zero;
         uint8_t* const start = _mi_page_map + (i * MI_PAGE_MAP_ENTRIES_PER_COMMIT_BIT);
         const size_t   size  = MI_PAGE_MAP_ENTRIES_PER_COMMIT_BIT;
-        if (!_mi_os_commit(start, size, &is_zero)) {
+        if (!_mi_os_commit(_mi_subproc_main(), start, size, &is_zero)) {
           mi_page_map_cannot_commit();
           return false;
         }
