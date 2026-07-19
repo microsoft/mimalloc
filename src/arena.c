@@ -1966,10 +1966,10 @@ static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narro
     if (arena == NULL) break;
     mi_assert(arena->subproc == subproc);
     // slice_total += arena->slice_count;
-    _mi_raw_message("%sarena %zu at %p: %zu slices (%zu MiB)%s%s, subproc: %p, numa: %i\n",
+    _mi_raw_message("%sarena %zu at %p: %zu slices (%zu MiB)%s%s, subproc: %zu, numa: %i\n",
         (arena->parent==NULL ? "" : "(sub)"), i, arena, arena->slice_count, (size_t)(mi_size_of_slices(arena->slice_count)/MI_MiB),
         (arena->memid.is_pinned ? ", pinned" : ""), (arena->is_exclusive ? ", exclusive" : ""),
-        arena->subproc, arena->numa_node);
+        arena->subproc->subproc_seq, arena->numa_node);
     //if (show_inuse) {
     //  free_total += mi_debug_show_bbitmap("in-use slices", arena->slice_count, arena->slices_free, true, NULL);
     //}

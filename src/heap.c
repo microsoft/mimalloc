@@ -104,12 +104,13 @@ static void mi_heap_initialize(mi_heap_t* heap, mi_thread_local_t theap_slot, mi
   }
   mi_atomic_increment_relaxed(&subproc->heap_count);
   mi_subproc_stat_increase(subproc, heaps, 1);
-  mi_assert_internal(_mi_is_heap_main(heap) ? heap->theap == 0 : heap->theap != 0);
+  mi_assert_internal(_mi_is_heap_main(heap) ? heap->theap == mi_thread_local_key_fast : heap->theap != 0);
 }
 
 mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_main_heap) {
+  mi_assert_internal(is_main_heap ? (subproc->heap_main == NULL && subproc->parent != NULL) : subproc->heap_main != NULL);  
   // heap data is allocated in the current subproc 
-  mi_heap_t* const heap_main = subproc->heap_main;
+  mi_heap_t* const heap_main = (is_main_heap ? subproc->parent->heap_main : subproc->heap_main);
   // todo: allocate heap data in the exclusive arena ?
   mi_heap_t* const heap = (mi_heap_t*)mi_heap_zalloc( heap_main, sizeof(mi_heap_t) );
   if (heap==NULL) return NULL;

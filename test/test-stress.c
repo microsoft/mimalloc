@@ -28,9 +28,12 @@ terms of the MIT license.
 // #define MI_GUARDED         1
 // #define USE_STD_MALLOC     1
 
+// #define MI_USE_HEAPS        1
+// #define ALLOW_LARGE         1
 // #define TEST_STRESS_SUBPROCS   1 
-#define TEST_STRESS            1    
 // #define TEST_LEAK              1
+
+#define TEST_STRESS            1    
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
@@ -47,23 +50,11 @@ static int ITER    = 20;
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;
-#elif  0
-static int THREADS = 4;
-static int SCALE   = 10;
-static int ITER    = 20;
-#elif 0
-static int THREADS = 32;
-static int SCALE   = 50;
-static int ITER    = 50;
 #elif 0
 static int THREADS = 32;
 static int SCALE   = 25;
 static int ITER    = 50;
 #define ALLOW_LARGE true
-#elif TEST_STRESS_SUBPROCS && !USE_STD_MALLOC
-static int THREADS = 8;
-static int SCALE   = 25;
-static int ITER    = 10;
 #else
 static int THREADS = 32;      // more repeatable if THREADS <= #processors
 static int SCALE   = 50;      // scaling factor
@@ -73,10 +64,6 @@ static int ITER    = 50;      // N full iterations destructing and re-creating a
 #ifndef ALLOW_LARGE
 #define ALLOW_LARGE  false
 #endif
-
-// #if !TEST_STRESS_SUBPROCS && !defined(USE_STD_MALLOC)
-// #define MI_USE_HEAPS       4
-// #endif
 
 
 static bool   allow_large_objects = ALLOW_LARGE;    // allow very large objects? (set to `true` if SCALE>100)
@@ -94,6 +81,9 @@ static bool   main_participates = false;       // main thread participates as a 
 #else
 
 #ifdef MI_USE_HEAPS
+#if TEST_STRESS_SUBPROCS
+#error "cannot test rolling heaps with multiple subprocesses (for now)"
+#endif
 static mi_heap_t* current_heap;
 #define custom_calloc(n,s)    mi_heap_calloc(current_heap,n,s)
 #define custom_realloc(p,s)   mi_heap_realloc(current_heap,p,s)
@@ -341,7 +331,9 @@ static void test_stress(mi_subproc_id_t subproc) {
 }
 
 #if TEST_STRESS_SUBPROCS && !defined(USE_STD_MALLOC)
+#ifndef NSUBPROCS
 #define NSUBPROCS (2)
+#endif
 static mi_subproc_id_t subprocs[NSUBPROCS];
 
 static void test_stress_subproc( intptr_t i, void* arg ) {
@@ -353,7 +345,7 @@ static void test_stress_subproc( intptr_t i, void* arg ) {
 
 static void test_stress_subprocs(void) {
   printf(" (for %d subprocesses)\n", NSUBPROCS);
-  // current_heap = mi_heap_main();
+  
   for(int i = 0; i < NSUBPROCS; i++) {
     subprocs[i] = mi_subproc_new();
   }
