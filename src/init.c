@@ -224,7 +224,7 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
   return tid;
 }
 
-mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_main = NULL;
+mi_decl_hidden mi_decl_thread void* __mi_thread_id_helper = NULL;
 
 #if MI_TLS_MODEL_THREAD_LOCAL
 // the thread-local main theap for allocation
@@ -333,16 +333,24 @@ static void mi_theap_main_init(void) {
   }
 }
 
+static void mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap) {
+  mi_assert_internal((uintptr_t)theap == 1 || _mi_theap_heap(theap)==heap);
+  mi_assert_internal(!_mi_is_empty_theap(theap));
+  mi_assert_internal(heap->theap != 0);
+  _mi_thread_local_set(heap->theap,theap);
+}
+
 // Initialize main heap
 static void mi_heap_main_init(void) {
   if mi_unlikely(mi_process_heap_main.subproc == NULL) {
     mi_process_heap_main.subproc = &subproc_main;
-    mi_process_heap_main.theaps = &mi_theap_main;
+    mi_process_heap_main.theaps  = &mi_theap_main;
+    mi_process_heap_main.theap   = mi_thread_local_key_fast;
 
     mi_theap_main_init();
     mi_subproc_main_init();
     mi_tld_main_init();
-    _mi_heap_theap_set(&mi_process_heap_main,&mi_theap_main); // initialize __mi_theap_main
+    mi_heap_theap_set(&mi_process_heap_main,&mi_theap_main); // initialize __mi_theap_main
 
     mi_lock_init(&mi_process_heap_main.theaps_lock);
     mi_lock_init(&mi_process_heap_main.os_abandoned_pages_lock);
@@ -447,37 +455,18 @@ bool _mi_is_theap_main(const mi_theap_t* theap) {
 
 mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap) {
   mi_theap_t* theap;
-  if mi_likely(_mi_is_heap_main(heap)) {
-    mi_assert_internal(heap->theap == 0);
-    theap = __mi_theap_main;
-  }
+  mi_assert_internal(heap->theap != 0);
+  if mi_likely(heap->theap!=0) {  // paranoia
+    theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
+  } 
   else {
-    mi_assert_internal(heap->theap != 0);
-    if mi_likely(heap->theap!=0) {  // paranoia
-      theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
-    } 
-    else {
-      _mi_error_message(EFAULT, "no thread-local reserved for heap (%p)\n", heap);
-      return NULL;
-    }
+    _mi_error_message(EFAULT, "no thread-local reserved for heap (%p)\n", heap);
+    return NULL;
   }
   mi_assert_internal(!_mi_is_empty_theap(theap));
   return theap;
 }
 
-bool _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap) {
-  mi_assert_internal((uintptr_t)theap == 1 || _mi_theap_heap(theap)==heap);
-  mi_assert_internal(!_mi_is_empty_theap(theap));
-  if mi_likely(_mi_is_heap_main(heap)) {
-    mi_assert_internal(heap->theap == 0);
-    __mi_theap_main = theap;
-    return true;
-  }
-  else {
-    mi_assert_internal(heap->theap != 0);
-    return _mi_thread_local_set(heap->theap,theap);
-  }
-}
 
 /* -----------------------------------------------------------
   Sub process
@@ -656,11 +645,11 @@ static mi_theap_t* mi_heap_check_for_existing_theap(mi_heap_t* heap) {
 static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
   mi_theap_t* theap = _mi_theap_default();
   if (mi_theap_is_initialized(theap)) return theap;
-  if (_mi_is_main_thread()) {
+  if (_mi_is_main_thread() && heap_main==NULL) {
+    heap_main = &mi_process_heap_main;
     mi_heap_main_init();
     theap = &mi_theap_main;
     mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?  
-    _mi_theap_default_set(theap);    
   }
   else {
     // allocates tld data
@@ -683,13 +672,12 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
       if (theap==NULL) return NULL;  // out-of-memory on theap allocation
       mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?  
     }
-    // now initialize the thread
-    _mi_theap_default_set(theap);
-  
-    // and only then set the heap_theap field as that accesses thread locals
-    const bool ok = _mi_heap_theap_set(heap_main, theap);  // todo: can fail
-    mi_assert_internal(ok); MI_UNUSED_RELEASE(ok);
   }
+  // now initialize the thread
+  _mi_theap_default_set(theap);
+
+  // and only then set the heap_theap field as that accesses thread locals
+  mi_heap_theap_set(heap_main, theap);  // todo: can fail?    
 
   mi_assert_internal(mi_theap_is_initialized(theap));
   mi_theap_t* const heap_theap = (heap_main==NULL ? NULL : _mi_heap_theap_peek(heap_main));
@@ -781,19 +769,6 @@ bool _mi_is_main_thread(void) {
   return (mi_process_tld_main.thread_id==0 || mi_process_tld_main.thread_id == _mi_thread_id());
 }
 
-
-#include <execinfo.h>
-#include <dlfcn.h>
-
-typedef struct mi_tlv_desc_s {
-  void* tlv_get_addr;
-  unsigned long key;
-  unsigned long offset;
-} mi_tlv_desc_t;
-
-static void* tlv_get_addr_ptr;
-
-
 // Initialize thread
 static void mi_thread_init_ex(mi_heap_t* heap_main) mi_attr_noexcept
 {
@@ -802,12 +777,6 @@ static void mi_thread_init_ex(mi_heap_t* heap_main) mi_attr_noexcept
   
   // if the theap_default is already set we have already initialized
   if (_mi_thread_is_initialized()) return;
-
-  // if (tlv_get_addr_ptr != NULL) {
-  //   void* callstack[20]; 
-  //   int frame_count = backtrace(callstack,20);
-  //   backtrace_symbols_fd(callstack, frame_count, 2);
-  // }
 
   // initialize the default theap
   mi_theap_t* const theap = _mi_thread_init_theap_default(heap_main);
@@ -949,7 +918,7 @@ static void mi_tls_slots_init(void) {
 
 static void mi_tls_slots_done(void) {
   mi_win_tls_slot_free(&mi_tls_raw_index_default);
-  mi_win_tls_slot_free(&mi_tls_raw_index_cached );
+  mi_win_tls_slot_free(&mi_tls_raw_index_cached );  
 }
 
 static void mi_win_tls_slot_set(size_t slot, size_t extended_slot, void* value) {
@@ -1097,14 +1066,6 @@ void _mi_auto_process_init(void) {
   mi_process_init();
   mi_process_setup_auto_thread_done();
   _mi_thread_locals_init();
-
-  if (tlv_get_addr_ptr == NULL) {
-    void* reg_x8 = NULL;
-    mi_tlv_desc_t* tlv_desc = (mi_tlv_desc_t*)&__mi_theap_main;
-    asm( "mov %0, x8" : "=r" (reg_x8) : :  );
-    tlv_get_addr_ptr = reg_x8;
-  }
-
 
   _mi_options_post_init();  // now we can print to stderr
   if (_mi_is_redirected()) _mi_verbose_message("malloc is redirected.\n");
@@ -1286,7 +1247,7 @@ static void mi_process_done_once(void) {
     mi_subproc_stats_print_out(mi_subproc_main(), NULL, NULL);
   }
   mi_lock_done(&subprocs_lock);
-  mi_tls_slots_done();
+  mi_tls_slots_done();  
   _mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", mi_process_tld_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore

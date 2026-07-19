@@ -631,7 +631,7 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
 #if (MI_STAT>0)
 static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(block);
-  mi_theap_t* const theap = (mi_page_is_abandoned(page) ? NULL : _mi_theap_default());
+  mi_theap_t* const theap = _mi_theap_default();
   if (!mi_theap_is_initialized(theap)) return; // (for now) skip statistics if free'd after thread_done was called (usually a thread cleanup call by the OS)
 
   const size_t bsize = mi_page_usable_block_size(page);

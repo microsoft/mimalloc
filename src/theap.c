@@ -256,12 +256,6 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   mi_assert_internal(_mi_thread_id() == tld->thread_id);
   // mi_assert_internal(_mi_heap_theap_peek(heap)==NULL);  // don't access thread locals as this is called on thread init
 
-  // // set first an invalid thread local value to ensure the thread local storage is allocated
-  // if (!_mi_heap_theap_set(heap, (mi_theap_t*)1)) {
-  //   _mi_error_message(EFAULT, "unable to allocate memory for thread local storage\n");
-  //   return NULL;
-  // }
-  
   // allocate and initialize a theap
   mi_memid_t memid;
   mi_theap_t* theap;

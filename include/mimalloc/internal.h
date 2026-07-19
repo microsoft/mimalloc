@@ -40,6 +40,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
+#define mi_decl_unused        
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #if !MI_TRACK_ASAN
 #define mi_decl_forceinline     __attribute__((always_inline)) inline
@@ -51,6 +52,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noreturn        __attribute__((noreturn))
 #define mi_decl_weak            __attribute__((weak))
 #define mi_decl_hidden          __attribute__((visibility("hidden")))
+#define mi_decl_unused          __attribute__((unused))
 #if (__GNUC__ >= 4) || defined(__clang__)
 #define mi_decl_cold            __attribute__((cold))
 #else
@@ -64,6 +66,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
+#if __cplusplus >= 201703L    // c++17
+#define mi_decl_unused          [[maybe_unused]]
+#else
+#define mi_decl_unused        
+#endif
 #else
 #define mi_decl_forceinline     inline
 #define mi_decl_noinline
@@ -72,6 +79,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
+#define mi_decl_unused        
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -225,10 +233,11 @@ size_t        _mi_os_large_page_size(void);
 void*         _mi_os_alloc_huge_os_pages(mi_subproc_t* subproc, size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);
 
 // threadlocal.c
+#define mi_thread_local_key_fast  ((mi_thread_local_t)1)
 
 mi_thread_local_t _mi_thread_local_create(void);
 void          _mi_thread_local_free( mi_thread_local_t key );
-bool          _mi_thread_local_set(  mi_thread_local_t key, void* val );
+void          _mi_thread_local_set(  mi_thread_local_t key, void* val );
 void*         _mi_thread_local_get(  mi_thread_local_t key );
 void          _mi_thread_locals_init(void);
 void          _mi_thread_locals_done(void);
@@ -309,7 +318,7 @@ void          _mi_heap_force_destroy(mi_heap_t* heap);                        //
 mi_heap_t*    _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_heap_main);
 
 mi_theap_t*   _mi_heap_theap_get_peek(const mi_heap_t* heap);
-bool          _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap);
+
 
 // "stats.c"
 void          _mi_stats_init(void);

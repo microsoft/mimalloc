@@ -15,7 +15,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #include <windows.h>
 #elif !defined(__wasi__) && (!defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__))
-#define  MI_USE_PTHREADS
+#define  MI_USE_PTHREADS  1
 #include <pthread.h>
 #endif
 
